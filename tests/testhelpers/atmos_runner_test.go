@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -273,6 +274,7 @@ func Test_findRepoRoot(t *testing.T) {
 		assert.NoError(t, statErr, ".git should exist")
 	} else {
 		// If no repo found, should have specific error.
+		assert.ErrorIs(t, err, errUtils.ErrNotInGitRepository)
 		assert.ErrorContains(t, err, "not inside a git repository")
 	}
 
@@ -282,6 +284,7 @@ func Test_findRepoRoot(t *testing.T) {
 
 	_, err = FindRepoRoot()
 	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNotInGitRepository)
 	assert.ErrorContains(t, err, "not inside a git repository")
 }
 

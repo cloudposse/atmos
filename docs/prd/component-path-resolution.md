@@ -497,7 +497,7 @@ Error: --stack flag is required when using path-based component resolution
 ❌ **Glob patterns** - No support for `atmos terraform plan components/*`
 ❌ **Multi-component commands** - No batch operations across multiple paths
 ❌ **IDE integration** - No special support for editor plugins (future enhancement)
-❌ **Shell completion** - No autocomplete for paths (future enhancement)
+✅ **Shell completion** - Basic path directory completion (Phase 3)
 
 ## Tab Completion Details
 

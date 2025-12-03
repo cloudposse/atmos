@@ -6,8 +6,8 @@ import (
 )
 
 // ExecStackLoader implements the component.StackLoader interface.
-// This allows internal/exec to provide stack loading functionality to pkg/component
-// without creating a circular dependency.
+// This allows internal/exec to provide stack loading functionality to pkg/component.
+// This avoids a circular dependency.
 type ExecStackLoader struct{}
 
 // NewStackLoader creates a new stack loader.

@@ -184,7 +184,7 @@ golangci-lint custom  # Reads .custom-gcl.yml
 
 **`.custom-gcl.yml`** - Defines which plugins to compile into the binary:
 ```yaml
-version: v2.6.1
+version: v2.5.0
 plugins:
   - module: 'github.com/cloudposse/atmos/tools/lintroller'
     import: 'github.com/cloudposse/atmos/tools/lintroller'

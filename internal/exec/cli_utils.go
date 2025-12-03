@@ -714,9 +714,9 @@ func processArgsAndFlags(
 					info.ComponentFromArg = secondArg
 					// Check if argument is an explicit path that needs resolution.
 					// Only resolve as a filesystem path if the argument explicitly indicates a path:
-					// - "." (current directory)
-					// - Starts with "./" or "../" (relative path)
-					// - Starts with "/" (absolute path)
+					// - "." (current directory).
+					// - Starts with "./" or "../" (relative path).
+					// - Starts with "/" (absolute path).
 					// Otherwise, treat it as a component name (even if it contains slashes).
 					if comp.IsExplicitComponentPath(secondArg) {
 						info.NeedsPathResolution = true

@@ -449,9 +449,10 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// 12. Normalize external absolute paths to avoid environment-specific paths in snapshots.
 	// Replace common absolute path prefixes with generic placeholders.
 	// This handles paths outside the repo (e.g., /Users/username/other-projects/).
-	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:\Users\, etc.).
+	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:/Users/, etc.).
+	// Note: Windows paths use forward slashes here because filepath.ToSlash normalizes them earlier.
 	// The pattern matches the entire path including subdirectories by not excluding slashes in the final segment.
-	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^\s":]+|/home/[^/]+/[^/]+/[^/]+/[^\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
+	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^\s":]+|/home/[^/]+/[^/]+/[^/]+/[^\s":]+|C:/Users/[^/]+/[^/]+/[^/]+/[^\s":]+)`)
 	result = externalPathRegex.ReplaceAllString(result, "/absolute/path/to/external")
 
 	// 13. Normalize "Last Updated" timestamps in auth whoami output.

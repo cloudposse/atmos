@@ -3,6 +3,7 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -616,6 +617,7 @@ func TestValidatePathWithinBase(t *testing.T) {
 		wantRelPath   string
 		wantErr       bool
 		errContains   string
+		skipWindows   bool // Skip test on Windows due to Unix-style hardcoded paths.
 	}{
 		{
 			name:          "valid path within base",
@@ -624,6 +626,7 @@ func TestValidatePathWithinBase(t *testing.T) {
 			componentType: "terraform",
 			wantRelPath:   "vpc",
 			wantErr:       false,
+			skipWindows:   true,
 		},
 		{
 			name:          "nested path within base",
@@ -632,6 +635,7 @@ func TestValidatePathWithinBase(t *testing.T) {
 			componentType: "terraform",
 			wantRelPath:   filepath.Join("networking", "vpc"),
 			wantErr:       false,
+			skipWindows:   true,
 		},
 		{
 			name:          "path outside base (parent directory)",
@@ -640,6 +644,7 @@ func TestValidatePathWithinBase(t *testing.T) {
 			componentType: "terraform",
 			wantErr:       true,
 			errContains:   "not within",
+			skipWindows:   true,
 		},
 		{
 			name:          "path equals base (component base error)",
@@ -648,11 +653,16 @@ func TestValidatePathWithinBase(t *testing.T) {
 			componentType: "terraform",
 			wantErr:       true,
 			errContains:   "must specify a component directory, not the base directory",
+			skipWindows:   true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.skipWindows && runtime.GOOS == "windows" {
+				t.Skipf("Skipping Unix path test on Windows")
+			}
+
 			result, err := validatePathWithinBase(tt.absPath, tt.basePath, tt.componentType)
 
 			if tt.wantErr {
@@ -673,23 +683,30 @@ func TestBuildComponentBaseError(t *testing.T) {
 		absPath       string
 		basePath      string
 		componentType string
+		skipWindows   bool // Skip test on Windows due to Unix-style hardcoded paths.
 	}{
 		{
 			name:          "terraform base error",
 			absPath:       "/project/components/terraform",
 			basePath:      "/project/components/terraform",
 			componentType: "terraform",
+			skipWindows:   true,
 		},
 		{
 			name:          "helmfile base error",
 			absPath:       "/project/components/helmfile",
 			basePath:      "/project/components/helmfile",
 			componentType: "helmfile",
+			skipWindows:   true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.skipWindows && runtime.GOOS == "windows" {
+				t.Skipf("Skipping Unix path test on Windows")
+			}
+
 			err := buildComponentBaseError(tt.absPath, tt.basePath, tt.componentType)
 
 			require.Error(t, err)
