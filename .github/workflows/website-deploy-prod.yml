@@ -50,12 +50,17 @@ jobs:
         with:
           node-version-file: "website/.nvmrc"
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Install Dependencies and Build Website
         run: |
           node --version
           cd website
-          npm install --only=production
-          npm run build:site
+          pnpm install --frozen-lockfile
+          pnpm run build:site
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
