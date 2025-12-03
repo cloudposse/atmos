@@ -48,16 +48,16 @@ func TestConvertEnvVars(t *testing.T) {
 }
 
 func TestEnvironToMap(t *testing.T) {
-	// This test verifies the function works with the real environment.
+	// Set a known env var for deterministic testing.
+	t.Setenv("TEST_ENVIRON_TO_MAP", "test_value")
+
 	result := EnvironToMap()
 
 	// Should have at least some environment variables.
 	assert.NotEmpty(t, result, "Environment should not be empty")
 
-	// PATH should typically exist.
-	if path, ok := result["PATH"]; ok {
-		assert.NotEmpty(t, path, "PATH should not be empty")
-	}
+	// Verify our test variable is present.
+	assert.Equal(t, "test_value", result["TEST_ENVIRON_TO_MAP"])
 }
 
 func TestSplitStringAtFirstOccurrence(t *testing.T) {
