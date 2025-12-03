@@ -250,7 +250,7 @@ func execTerraformShellCommand(
 
 	// Merge env vars, ensuring componentEnvList takes precedence.
 	// Include global env from atmos.yaml (lowest priority after system env).
-	mergedEnv := mergeEnvVarsWithGlobal(componentEnvList, atmosConfig.Env)
+	mergedEnv := envpkg.MergeSystemEnvWithGlobal(componentEnvList, atmosConfig.Env)
 
 	// Transfer stdin, stdout, and stderr to the new process and also set the target directory for the shell to start in
 	pa := os.ProcAttr{
@@ -355,7 +355,7 @@ func ExecAuthShellCommand(
 
 	// Merge env vars, ensuring authEnvList takes precedence.
 	// Include global env from atmos.yaml (lowest priority after system env).
-	mergedEnv := mergeEnvVarsSimpleWithGlobal(authEnvList, atmosConfig.Env)
+	mergedEnv := envpkg.MergeSystemEnvSimpleWithGlobal(authEnvList, atmosConfig.Env)
 
 	// Determine shell command and args.
 	shellCommand, shellCommandArgs := determineShell(shellOverride, shellArgs)
@@ -496,30 +496,6 @@ func findAvailableShell() string {
 
 	// If nothing found, return empty (will cause error later).
 	return ""
-}
-
-// mergeEnvVars adds a list of environment variables to the system environment variables.
-// Delegates to envpkg.MergeSystemEnv which handles TF_CLI_ARGS_* special handling.
-func mergeEnvVars(componentEnvList []string) []string {
-	return envpkg.MergeSystemEnv(componentEnvList)
-}
-
-// mergeEnvVarsWithGlobal is like mergeEnvVars but also includes global env from atmos.yaml.
-// Delegates to envpkg.MergeSystemEnvWithGlobal.
-func mergeEnvVarsWithGlobal(componentEnvList []string, globalEnv map[string]string) []string {
-	return envpkg.MergeSystemEnvWithGlobal(componentEnvList, globalEnv)
-}
-
-// mergeEnvVarsSimple adds a list of environment variables to the system environment variables without special handling.
-// Delegates to envpkg.MergeSystemEnvSimple.
-func mergeEnvVarsSimple(newEnvList []string) []string {
-	return envpkg.MergeSystemEnvSimple(newEnvList)
-}
-
-// mergeEnvVarsSimpleWithGlobal is like mergeEnvVarsSimple but includes global env from atmos.yaml.
-// Delegates to envpkg.MergeSystemEnvSimpleWithGlobal.
-func mergeEnvVarsSimpleWithGlobal(newEnvList []string, globalEnv map[string]string) []string {
-	return envpkg.MergeSystemEnvSimpleWithGlobal(newEnvList, globalEnv)
 }
 
 // printShellEnterMessage prints a user-facing message when entering an Atmos-managed shell.
