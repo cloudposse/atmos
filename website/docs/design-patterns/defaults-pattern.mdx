@@ -170,17 +170,14 @@ Just remember to:
 
 ## Common Misunderstandings
 
-### ❌ Myth: Atmos automatically processes `_defaults.yaml` files
-**Reality**: Atmos has no special knowledge of this naming pattern. These files must be explicitly imported like any other YAML file.
+Here are some clarifications about how `_defaults.yaml` files work in Atmos:
 
-### ❌ Myth: The underscore has special meaning to Atmos
-**Reality**: The underscore is purely for lexicographic sorting and visual distinction. Atmos treats `_defaults.yaml` the same as `defaults.yaml` or any other name.
-
-### ❌ Myth: `_defaults.yaml` files are always inherited
-**Reality**: Nothing is inherited unless explicitly imported. You have complete control over what gets imported and when.
-
-### ❌ Myth: Files must be named `_defaults.yaml` for inheritance to work
-**Reality**: You can import any YAML file. The `_defaults.yaml` name is just a helpful convention.
+| What You Might Think | How It Actually Works |
+|---------------------|----------------------|
+| Atmos automatically processes `_defaults.yaml` files | Atmos has no special knowledge of this naming pattern. These files must be explicitly imported like any other YAML file. |
+| The underscore has special meaning to Atmos | The underscore is purely for lexicographic sorting and visual distinction. Atmos treats `_defaults.yaml` the same as `defaults.yaml` or any other name. |
+| `_defaults.yaml` files are always inherited | Nothing is inherited unless explicitly imported. You have complete control over what gets imported and when. |
+| Files must be named `_defaults.yaml` for inheritance to work | You can import any YAML file. The `_defaults.yaml` name is just a helpful convention. |
 
 ## Best Practices
 
