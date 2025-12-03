@@ -67,6 +67,11 @@ Atmos processes the templates first, and then executes the `!terraform.state` fu
 the function dynamically.
 :::
 
+:::note Type-Aware Merging
+Atmos supports type-aware merging of YAML functions and concrete values, allowing them to coexist in the inheritance chain without type conflicts.
+See the full explanation: [YAML Function Merging](/reference/yaml-function-merging)
+:::
+
 ## `!terraform.state` Function Execution Flow
 
 When processing the `!terraform.state` YAML function for a component in a stack, Atmos executes the following steps:
@@ -128,7 +133,40 @@ For more details, review the following docs:
 
 ## Handling YQ Expressions with Bracket Notation and Quotes
 
-`!terraform.state` shares the same parser as `!terraform.output`, so the quoting rules are identical. When you need double quotes inside a YQ expression (for example, to reference `["github-dependabot"]`), wrap the entire expression in single quotes. Refer to the [!terraform.output guidance](/functions/yaml/terraform.output#handling-yq-expressions-with-bracket-notation-and-quotes) for detailed examples and escape rules.
+When you access map keys that contain special characters (such as hyphens) by using YQ bracket notation, you must wrap the key in double quotes like `["github-dependabot"]`. This often clashes with the surrounding quotes that protect the entire expression in YAML.
+
+To avoid conflicting quotes, wrap the entire YQ expression in single quotes while keeping the double quotes inside the brackets:
+
+```yaml
+# Use single quotes around the expression to allow double quotes inside brackets
+access_key_id: !terraform.state security '.outputs.users["github-dependabot"].access_key_id'
+```
+
+Additional examples:
+
+```yaml
+# Access map keys with special characters
+api_key: !terraform.state config '.outputs.api_keys["service-account-1"]'
+
+# Access nested maps with special characters in multiple levels
+endpoint: !terraform.state services '.outputs.endpoints["my-service"]["production"]'
+
+# Combine with stack templating
+token: !terraform.state identity {{ .stack }} '.outputs.tokens["github-actions"]'
+
+# Escape single quotes by doubling them when needed inside the expression
+app_name: !terraform.state config '.outputs.apps["app''s-name"].display_name'
+```
+
+**Quote escaping rules**
+
+- Wrap the entire YQ expression in single quotes when it contains double quotes.
+- Use double quotes inside brackets for string keys in YQ expressions.
+- If you need single quotes inside the expression, escape them by doubling: `''`.
+
+:::tip
+This quoting pattern works for every Atmos YAML function that accepts YQ expressions, including [!terraform.output](/functions/yaml/terraform.output) and [!include](/functions/yaml/include).
+:::
 
 ## Using YQ Expressions to provide a default value
 
@@ -483,4 +521,5 @@ vars:
 
  - Be mindful of disaster recovery (DR) implications when using it across regions.
 
- - Consider cold-start scenarios: if the dependent component has not yet been provisioned, `terraform output` will fail.
+ - Consider cold-start scenarios: if the referenced component's state file doesn't exist (e.g., not yet provisioned), `!terraform.state` returns `null`.
+   Use the YQ `//` operator to provide default values for components that may not be provisioned yet (see [Using YQ Expressions to provide a default value](#using-yq-expressions-to-provide-a-default-value)).

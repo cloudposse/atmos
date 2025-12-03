@@ -73,6 +73,11 @@ Atmos processes the templates first, and then executes the `!store` function, al
 the function dynamically.
 :::
 
+:::note Type-Aware Merging
+Atmos supports type-aware merging of YAML functions and concrete values, allowing them to coexist in the inheritance chain without type conflicts.
+See the full explanation: [YAML Function Merging](/reference/yaml-function-merging)
+:::
+
 ## Using YQ Expressions to retrieve individual values
 
 To retrieve individual values from complex types such as maps and lists, or do any kind of filtering or querying,
