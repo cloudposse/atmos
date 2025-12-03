@@ -251,14 +251,14 @@ html[data-theme="dark"] .hero__link:hover {
 }
 
 html[data-theme="dark"] .hero-demo-intro h2 {
-  background: linear-gradient(
+  color: transparent;
+  background-image: linear-gradient(
       to right bottom,
       rgb(255, 255, 255) 30%,
       rgba(255, 255, 255, 0.5)
-    )
-    text;
+    );
+  background-clip: text;
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .hero-demo-intro p {
@@ -311,17 +311,17 @@ html[data-theme="dark"] .landing-page main h2.section {
   background: rgb(0 0 0 / 21%);
 }
 html[data-theme="dark"] .hero h1,
-html[data-theme="dark"] .hero h1 *,
+html[data-theme="dark"] .hero h1 .hero__title-line,
+html[data-theme="dark"] .hero h1 .typing-text,
 html[data-theme="dark"] .section__description h2 {
-  color: unset;
-  background: linear-gradient(
+  color: transparent;
+  background-image: linear-gradient(
       to right bottom,
       rgb(255, 255, 255) 30%,
       rgba(255, 255, 255, 0.5)
-    )
-    text;
+    );
+  background-clip: text;
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .landing-page main h3 {
