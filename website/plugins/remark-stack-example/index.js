@@ -9,6 +9,12 @@
  *   timeout: 30
  * ```
  *
+ * With title:
+ * ```yaml title="atmos.yaml" stack-example
+ * settings:
+ *   region: !env AWS_REGION
+ * ```
+ *
  * This will generate equivalent YAML, JSON, and HCL versions with proper
  * function syntax translation.
  */
@@ -27,6 +33,15 @@ function walkTree(node, type, callback, parent = null, index = 0) {
       walkTree(child, type, callback, node, i);
     });
   }
+}
+
+/**
+ * Extract title from meta string.
+ * Supports: title="filename.yaml" or title='filename.yaml'
+ */
+function extractTitle(meta) {
+  const match = meta.match(/title=["']([^"']+)["']/);
+  return match ? match[1] : null;
 }
 
 module.exports = function remarkStackExample(options = {}) {
@@ -49,27 +64,42 @@ module.exports = function remarkStackExample(options = {}) {
         // Convert YAML to all formats.
         const formats = convertYamlToFormats(node.value);
 
+        // Extract title if present.
+        const title = extractTitle(meta);
+
+        // Build attributes array.
+        const attributes = [
+          {
+            type: 'mdxJsxAttribute',
+            name: 'yaml',
+            value: formats.yaml,
+          },
+          {
+            type: 'mdxJsxAttribute',
+            name: 'json',
+            value: formats.json,
+          },
+          {
+            type: 'mdxJsxAttribute',
+            name: 'hcl',
+            value: formats.hcl,
+          },
+        ];
+
+        // Add title attribute if present.
+        if (title) {
+          attributes.push({
+            type: 'mdxJsxAttribute',
+            name: 'title',
+            value: title,
+          });
+        }
+
         // Create JSX element for StackExample component.
         const jsxNode = {
           type: 'mdxJsxFlowElement',
           name: 'StackExample',
-          attributes: [
-            {
-              type: 'mdxJsxAttribute',
-              name: 'yaml',
-              value: formats.yaml,
-            },
-            {
-              type: 'mdxJsxAttribute',
-              name: 'json',
-              value: formats.json,
-            },
-            {
-              type: 'mdxJsxAttribute',
-              name: 'hcl',
-              value: formats.hcl,
-            },
-          ],
+          attributes,
           children: [],
         };
 
