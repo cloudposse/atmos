@@ -328,7 +328,7 @@ Affected components and stacks:
     <dd>
         Exclude the locked components (`metadata.locked: true`) from the output.
 
-        Refer to [Locking Components with `metadata.locked`](/learn/stacks/define-components/#locking-components-with-metadatalocked)
+        Refer to [Locking Components with `metadata.locked`](/stacks/components#locking-components-metalocked)
 
         `atmos describe affected --exclude-locked`
     </dd>
@@ -806,7 +806,7 @@ where:
 [Abstract Atmos components](/design-patterns/abstract-component) (`metadata.type` is set to `abstract`)
 are not included in the output since they serve as blueprints for other Atmos components and are not meant to be provisioned.
 
-[Disabled Atmos components](/learn/stacks/define-components/#disabling-components-with-metadataenabled) (`metadata.enabled` is set to `false`)
+[Disabled Atmos components](/stacks/components#disabling-components-metadataenabled) (`metadata.enabled` is set to `false`)
 are also not included in the output since they are explicitly disabled.
 
 :::
