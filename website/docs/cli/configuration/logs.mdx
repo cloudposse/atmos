@@ -1,0 +1,153 @@
+---
+title: Logs
+sidebar_position: 50
+sidebar_label: logs
+sidebar_class_name: command
+description: Configure Atmos logging behavior, log levels, and output destinations.
+id: logs
+slug: /cli/configuration/logs
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Configure where Atmos writes logs and at what verbosity level. Proper log configuration is essential for debugging and for CI/CD pipelines where you need to separate log output from command results.
+</Intro>
+
+## Configuration
+
+Logs are configured in the `logs` section:
+
+<File title="atmos.yaml">
+```yaml
+logs:
+  # File or standard file descriptor to write logs to
+  # Can also be set using 'ATMOS_LOGS_FILE' ENV var, or '--logs-file' command-line argument
+  file: "/dev/stderr"
+  # Supported log levels: Trace, Debug, Info, Warning, Off
+  # Can also be set using 'ATMOS_LOGS_LEVEL' ENV var, or '--logs-level' command-line argument
+  level: Info
+```
+</File>
+
+<dl>
+  <dt>`logs.file`</dt>
+  <dd>
+    The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including `/dev/stdout`, `/dev/stderr` and `/dev/null`. If omitted, `/dev/stdout` will be used. Can also be set using `ATMOS_LOGS_FILE` environment variable.
+  </dd>
+
+  <dt>`logs.level`</dt>
+  <dd>
+    Log level. Supported log levels are `Trace`, `Debug`, `Info`, `Warning`, `Off`. If the log level is set to `Off`, Atmos will not log any messages (note that this does not prevent other tools like Terraform from logging). Can also be set using `ATMOS_LOGS_LEVEL` environment variable.
+  </dd>
+</dl>
+
+## Disabling Logs
+
+To prevent Atmos from logging any messages (except for the outputs of the executed commands), you can do one of the following:
+
+- Set `logs.file` or the ENV variable `ATMOS_LOGS_FILE` to `/dev/null`
+- Set `logs.level` or the ENV variable `ATMOS_LOGS_LEVEL` to `Off`
+
+## Logs in CI/CD Pipelines
+
+When you set the log level to `Debug` or `Trace`, Atmos will log additional messages before printing the output of an executed command.
+
+### Problem: Mixed Output
+
+Consider the `atmos describe affected` command with verbose logging:
+
+<File title="atmos.yaml">
+```yaml
+logs:
+  file: "/dev/stdout"
+  level: Trace
+```
+</File>
+
+<Terminal title="atmos describe affected">
+```console
+Checking out Git ref 'refs/remotes/origin/HEAD' ...
+Checked out Git ref 'refs/remotes/origin/HEAD'
+
+Current HEAD: ffd2154e1daa32357b75460b9f45d268922b51e1 refs/heads/update-logs
+BASE: f7aa382aa8b3d48be8f06cfdb27aad344b89aff4 HEAD
+
+Changed files:
+
+examples/quick-start-advanced/Dockerfile
+examples/quick-start-advanced/atmos.yaml
+
+Affected components and stacks:
+
+[
+   {
+      "component": "vpc",
+      "component_type": "terraform",
+      "component_path": "examples/quick-start-advanced/components/terraform/vpc",
+      "stack": "plat-uw2-prod",
+      "stack_slug": "plat-uw2-prod-vpc",
+      "affected": "stack.vars"
+   }
+]
+```
+</Terminal>
+
+With `logs.level: Trace` and `logs.file: "/dev/stdout"`, all messages and JSON output go to the same stream. This breaks JSON parsing with tools like `jq`.
+
+### Solution: Separate Streams
+
+Set `logs.file` to `/dev/stderr` in `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+logs:
+  file: "/dev/stderr"
+  level: Trace
+```
+</File>
+
+Now log messages go to `/dev/stderr` while command output goes to `/dev/stdout`:
+
+<Terminal title="atmos describe affected">
+```console
+# NOTE: These messages are printed to /dev/stderr
+
+Checking out Git ref 'refs/remotes/origin/HEAD' ...
+Checked out Git ref 'refs/remotes/origin/HEAD'
+Current HEAD: ffd2154e1daa32357b75460b9f45d268922b51e1 refs/heads/update-logs
+BASE: f7aa382aa8b3d48be8f06cfdb27aad344b89aff4 HEAD
+
+
+# NOTE: This JSON output is printed to /dev/stdout
+
+[
+   {
+      "component": "vpc",
+      "component_type": "terraform",
+      "component_path": "examples/quick-start-advanced/components/terraform/vpc",
+      "stack": "plat-uw2-prod",
+      "stack_slug": "plat-uw2-prod-vpc",
+      "affected": "stack.vars"
+   }
+]
+```
+</Terminal>
+
+This allows `jq` to parse the JSON output without errors while still logging debug information.
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_LOGS_FILE`</dt>
+  <dd>File or standard file descriptor to write logs to.</dd>
+
+  <dt>`ATMOS_LOGS_LEVEL`</dt>
+  <dd>Log level: `Trace`, `Debug`, `Info`, `Warning`, `Off`.</dd>
+</dl>
+
+## See Also
+
+- [CLI Configuration](/cli/configuration) — Overview of CLI configuration
+- [Environment Variables](/cli/environment-variables) — All configuration environment variables
