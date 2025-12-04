@@ -11,6 +11,11 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// Log field constants for terraform.output function.
+const (
+	logFieldFunction = "function"
+)
+
 // processTagTerraformOutput processes `!terraform.output` YAML tag.
 //
 //nolint:unparam // stackInfo is used via processTagTerraformOutputWithContext
@@ -62,7 +67,7 @@ func processTagTerraformOutputWithContext(
 ) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagTerraformOutputWithContext")()
 
-	log.Debug("Executing Atmos YAML function", "function", input)
+	log.Debug("Executing Atmos YAML function", logFieldFunction, input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformOutput)
 	if err != nil {
@@ -93,7 +98,7 @@ func processTagTerraformOutputWithContext(
 		stack = currentStack
 		output = strings.TrimSpace(parts[1])
 		log.Debug("Executing Atmos YAML function with component and output parameters; using current stack",
-			"function", input,
+			logFieldFunction, input,
 			"stack", currentStack,
 		)
 	default:
@@ -120,7 +125,7 @@ func processTagTerraformOutputWithContext(
 		// For API/infrastructure errors, check if we can use YQ default.
 		if hasYqDefault(output) {
 			log.Debug("Evaluating YQ default for output error",
-				"function", input,
+				logFieldFunction, input,
 				"error", err.Error(),
 			)
 			// Evaluate YQ against an empty map to get the default value.
@@ -138,7 +143,7 @@ func processTagTerraformOutputWithContext(
 	if !exists {
 		if hasYqDefault(output) {
 			log.Debug("Evaluating YQ default for non-existent output",
-				"function", input,
+				logFieldFunction, input,
 				"component", component,
 				"stack", stack,
 				"output", output,
@@ -148,7 +153,7 @@ func processTagTerraformOutputWithContext(
 			if yqErr != nil {
 				// If YQ evaluation fails, return nil (backward compatible).
 				log.Debug("YQ default evaluation failed, returning nil",
-					"function", input,
+					logFieldFunction, input,
 					"error", yqErr.Error(),
 				)
 				return nil, nil

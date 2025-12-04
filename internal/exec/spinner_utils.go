@@ -6,9 +6,9 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 

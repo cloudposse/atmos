@@ -127,7 +127,7 @@ func processTagTerraformStateWithContext(
 			defaultValue, yqErr := evaluateYqDefault(atmosConfig, output)
 			if yqErr != nil {
 				// If YQ evaluation fails, return the original error.
-				return nil, fmt.Errorf("%w: failed to evaluate YQ default: %v", err, yqErr)
+				return nil, fmt.Errorf("%w: failed to evaluate YQ default: %w", err, yqErr)
 			}
 			return defaultValue, nil
 		}
