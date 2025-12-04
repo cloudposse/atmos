@@ -27,9 +27,6 @@ import (
 // maxGCSRetryCount defines the max attempts to read a state file from a GCS bucket.
 const maxGCSRetryCount = 2
 
-// Log field constants for GCS operations.
-const logFieldBucketGCS = "bucket"
-
 // GetGCSBackendCredentials returns the credentials configuration from the GCS backend config.
 // This is a thin wrapper around the unified GCP authentication utility.
 // https://developer.hashicorp.com/terraform/language/settings/backends/gcs#credentials
@@ -239,7 +236,7 @@ func ReadTerraformBackendGCSInternal(
 			// Check if the error is because the object doesn't exist.
 			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
 			if errors.Is(err, storage.ErrObjectNotExist) || status.Code(err) == codes.NotFound {
-				log.Debug("Terraform state file doesn't exist in the GCS bucket; returning 'null'", "file", tfStateFilePath, logFieldBucketGCS, bucket)
+				log.Debug("Terraform state file doesn't exist in the GCS bucket; returning 'null'", "file", tfStateFilePath, log.FieldBucket, bucket)
 				return nil, nil
 			}
 
@@ -250,7 +247,7 @@ func ReadTerraformBackendGCSInternal(
 				log.Debug("Failed to read Terraform state file from GCS bucket",
 					"attempt", attempt+1,
 					"file", tfStateFilePath,
-					logFieldBucketGCS, bucket,
+					log.FieldBucket, bucket,
 					"error", err,
 					"backoff", backoff,
 				)
@@ -293,7 +290,7 @@ func logGCSRetryExhausted(err error, tfStateFilePath, bucket string, maxRetries 
 	log.Warn(
 		"Failed to read Terraform state after all retries exhausted",
 		"file", tfStateFilePath,
-		logFieldBucketGCS, bucket,
+		log.FieldBucket, bucket,
 		"attempts", maxRetries+1,
 		"error_code", errorCode,
 		"error", err,

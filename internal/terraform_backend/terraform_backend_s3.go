@@ -25,9 +25,6 @@ import (
 // maxRetryCount defines the max attempts to read a state file from an S3 bucket.
 const maxRetryCount = 2
 
-// Log field constants for S3 operations.
-const logFieldBucketS3 = "bucket"
-
 // GetS3BackendAssumeRoleArn returns the s3 backend role ARN from the S3 backend config.
 // https://developer.hashicorp.com/terraform/language/backend/s3#assume-role-configuration
 func GetS3BackendAssumeRoleArn(backend *map[string]any) string {
@@ -148,7 +145,7 @@ func ReadTerraformBackendS3Internal(
 			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
 			var nsk *types.NoSuchKey
 			if errors.As(err, &nsk) {
-				log.Debug("Terraform state file doesn't exist in the S3 bucket; returning 'null'", "file", tfStateFilePath, logFieldBucketS3, bucket)
+				log.Debug("Terraform state file doesn't exist in the S3 bucket; returning 'null'", "file", tfStateFilePath, log.FieldBucket, bucket)
 				return nil, nil
 			}
 
@@ -159,7 +156,7 @@ func ReadTerraformBackendS3Internal(
 				log.Debug("Failed to read Terraform state file from the S3 bucket",
 					"attempt", attempt+1,
 					"file", tfStateFilePath,
-					logFieldBucketS3, bucket,
+					log.FieldBucket, bucket,
 					"error", err,
 					"backoff", backoff,
 				)
@@ -204,7 +201,7 @@ func logS3RetryExhausted(err error, tfStateFilePath, bucket string, maxRetries i
 	log.Warn(
 		"Failed to read Terraform state after all retries exhausted",
 		"file", tfStateFilePath,
-		logFieldBucketS3, bucket,
+		log.FieldBucket, bucket,
 		"attempts", maxRetries+1,
 		"error_code", errorCode,
 		"error", err,
