@@ -98,17 +98,17 @@ var (
 
 	// API/infrastructure errors - should cause non-zero exit.
 	// These errors indicate backend API failures that should not use YQ defaults.
-	ErrTerraformBackendAPIError = errors.New("terraform backend API error")
-	ErrUnsupportedBackendType           = errors.New("unsupported backend type")
-	ErrProcessTerraformStateFile        = errors.New("error processing terraform state file")
-	ErrLoadAwsConfig                    = errors.New("failed to load AWS config")
-	ErrGetObjectFromS3                  = errors.New("failed to get object from S3")
-	ErrReadS3ObjectBody                 = errors.New("failed to read S3 object body")
-	ErrCreateGCSClient                  = errors.New("failed to create GCS client")
-	ErrGetObjectFromGCS                 = errors.New("failed to get object from GCS")
-	ErrReadGCSObjectBody                = errors.New("failed to read GCS object body")
-	ErrGCSBucketRequired                = errors.New("bucket is required for gcs backend")
-	ErrInvalidBackendConfig             = errors.New("invalid backend configuration")
+	ErrTerraformBackendAPIError  = errors.New("terraform backend API error")
+	ErrUnsupportedBackendType    = errors.New("unsupported backend type")
+	ErrProcessTerraformStateFile = errors.New("error processing terraform state file")
+	ErrLoadAwsConfig             = errors.New("failed to load AWS config")
+	ErrGetObjectFromS3           = errors.New("failed to get object from S3")
+	ErrReadS3ObjectBody          = errors.New("failed to read S3 object body")
+	ErrCreateGCSClient           = errors.New("failed to create GCS client")
+	ErrGetObjectFromGCS          = errors.New("failed to get object from GCS")
+	ErrReadGCSObjectBody         = errors.New("failed to read GCS object body")
+	ErrGCSBucketRequired         = errors.New("bucket is required for gcs backend")
+	ErrInvalidBackendConfig      = errors.New("invalid backend configuration")
 
 	// Azure Blob Storage specific errors.
 	ErrGetBlobFromAzure       = errors.New("failed to get blob from Azure Blob Storage")
