@@ -17,6 +17,56 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// backendConfigValidationResult represents the result of validating backend configuration.
+type backendConfigValidationResult struct {
+	// Valid indicates whether the backend configuration is valid for generation.
+	Valid bool
+	// BackendSection contains the backend configuration if valid.
+	BackendSection map[string]any
+	// BackendType contains the backend type string if valid.
+	BackendType string
+	// SkipReason contains the reason for skipping if not valid.
+	SkipReason string
+}
+
+// validateBackendConfig validates a component's backend configuration for backend generation.
+// It returns a validation result indicating whether the configuration is valid and ready for generation.
+// This function is pure and testable, separating validation logic from side effects (logging).
+func validateBackendConfig(componentSection map[string]any) backendConfigValidationResult {
+	// Check for backend section.
+	backendSection, ok := componentSection[cfg.BackendSectionName].(map[string]any)
+	if !ok {
+		return backendConfigValidationResult{
+			Valid:      false,
+			SkipReason: "no 'backend' section configured",
+		}
+	}
+
+	// Check for backend_type.
+	backendType, ok := componentSection[cfg.BackendTypeSectionName].(string)
+	if !ok {
+		return backendConfigValidationResult{
+			Valid:      false,
+			SkipReason: "no 'backend_type' configured",
+		}
+	}
+
+	return backendConfigValidationResult{
+		Valid:          true,
+		BackendSection: backendSection,
+		BackendType:    backendType,
+	}
+}
+
+// checkBackendTypeAfterProcessing validates that backend_type is not empty after template processing.
+// Returns the skip reason if invalid, or empty string if valid.
+func checkBackendTypeAfterProcessing(backendType string) string {
+	if backendType == "" {
+		return "'backend_type' is empty after template processing"
+	}
+	return ""
+}
+
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command.
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendsCmd")()
@@ -132,21 +182,16 @@ func ExecuteTerraformGenerateBackends(
 					}
 				}
 
-				// Component backend
-				if backendSection, ok = componentSection[cfg.BackendSectionName].(map[string]any); !ok {
-					log.Warn("Skipping backend generation: no 'backend' section configured. "+
+				// Validate backend configuration.
+				validationResult := validateBackendConfig(componentSection)
+				if !validationResult.Valid {
+					log.Warn("Skipping backend generation: "+validationResult.SkipReason+". "+
 						"Set 'components.terraform.auto_generate_backend_file: false' in atmos.yaml to disable.",
 						"component", componentName, "stack", stackFileName)
 					continue
 				}
-
-				// Backend type
-				if backendTypeSection, ok = componentSection[cfg.BackendTypeSectionName].(string); !ok {
-					log.Warn("Skipping backend generation: no 'backend_type' configured. "+
-						"Set 'components.terraform.auto_generate_backend_file: false' in atmos.yaml to disable.",
-						"component", componentName, "stack", stackFileName)
-					continue
-				}
+				backendSection = validationResult.BackendSection
+				backendTypeSection = validationResult.BackendType
 
 				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[string]any); !ok {
 					varsSection = map[string]any{}
@@ -302,8 +347,8 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				// Skip if backend_type is empty after template processing.
-				if backendTypeSection == "" {
-					log.Warn("Skipping backend generation: 'backend_type' is empty after template processing. "+
+				if skipReason := checkBackendTypeAfterProcessing(backendTypeSection); skipReason != "" {
+					log.Warn("Skipping backend generation: "+skipReason+". "+
 						"Set 'components.terraform.auto_generate_backend_file: false' in atmos.yaml to disable.",
 						"component", componentName, "stack", stackName)
 					continue
