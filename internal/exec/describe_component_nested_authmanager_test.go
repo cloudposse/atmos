@@ -12,8 +12,9 @@ import (
 )
 
 // setupMockStateGetter configures the global stateGetter to return mock values
-// for terraform state lookups. This allows tests to run without actual terraform state files.
-// Returns a cleanup function that must be deferred to restore the original state getter.
+// for terraform state lookups. This allows tests to run without actual terraform
+// state files. Returns a cleanup function that must be deferred to restore the
+// original state getter.
 func setupMockStateGetter(t *testing.T, ctrl *gomock.Controller) func() {
 	t.Helper()
 
@@ -21,7 +22,8 @@ func setupMockStateGetter(t *testing.T, ctrl *gomock.Controller) func() {
 	originalGetter := stateGetter
 
 	// Configure mock to return values for all components in the fixture.
-	// Level 3 components (no dependencies).
+
+	// Level 3 components have no dependencies.
 	mockStateGetter.EXPECT().
 		GetState(gomock.Any(), gomock.Any(), "test", "level3-component", "subnet_id", gomock.Any(), gomock.Any(), gomock.Any()).
 		Return("subnet-level3-12345", nil).
@@ -31,7 +33,7 @@ func setupMockStateGetter(t *testing.T, ctrl *gomock.Controller) func() {
 		Return("10.0.3.0/24", nil).
 		AnyTimes()
 
-	// Level 2 components.
+	// Level 2 components depend on level 3.
 	mockStateGetter.EXPECT().
 		GetState(gomock.Any(), gomock.Any(), "test", "level2-component", "vpc_id", gomock.Any(), gomock.Any(), gomock.Any()).
 		Return("vpc-level2-67890", nil).
@@ -41,7 +43,7 @@ func setupMockStateGetter(t *testing.T, ctrl *gomock.Controller) func() {
 		Return("subnet-level3-12345", nil).
 		AnyTimes()
 
-	// Auth override scenario components.
+	// Auth override scenario components test middle-level auth override.
 	mockStateGetter.EXPECT().
 		GetState(gomock.Any(), gomock.Any(), "test", "auth-override-level3", "database_host", gomock.Any(), gomock.Any(), gomock.Any()).
 		Return("db.example.com", nil).
@@ -55,7 +57,7 @@ func setupMockStateGetter(t *testing.T, ctrl *gomock.Controller) func() {
 		Return("db.example.com", nil).
 		AnyTimes()
 
-	// Multi-auth scenario components.
+	// Multi-auth scenario components test multiple auth overrides in chain.
 	mockStateGetter.EXPECT().
 		GetState(gomock.Any(), gomock.Any(), "test", "multi-auth-level3", "shared_resource_id", gomock.Any(), gomock.Any(), gomock.Any()).
 		Return("shared-12345", nil).
@@ -69,7 +71,7 @@ func setupMockStateGetter(t *testing.T, ctrl *gomock.Controller) func() {
 		Return("shared-12345", nil).
 		AnyTimes()
 
-	// Mixed inheritance scenario components.
+	// Mixed inheritance scenario components test selective auth override.
 	mockStateGetter.EXPECT().
 		GetState(gomock.Any(), gomock.Any(), "test", "mixed-inherit-component", "config_value", gomock.Any(), gomock.Any(), gomock.Any()).
 		Return("inherited-auth-config", nil).
@@ -79,7 +81,7 @@ func setupMockStateGetter(t *testing.T, ctrl *gomock.Controller) func() {
 		Return("override-specific-value", nil).
 		AnyTimes()
 
-	// Deep nesting scenario components.
+	// Deep nesting scenario components test 4-level deep auth override.
 	mockStateGetter.EXPECT().
 		GetState(gomock.Any(), gomock.Any(), "test", "deep-level4", "data_source", gomock.Any(), gomock.Any(), gomock.Any()).
 		Return("primary-db", nil).

@@ -174,14 +174,14 @@ func TestProcessYAMLNode_Utils(t *testing.T) {
 // TestEvaluateYqExpression_NilDataWithDefault verifies that YQ default
 // values work when the input data is nil.
 //
-// BUG: Currently converts nil to "null\n" YAML which causes YQ to error
-// when accessing a key with the fallback operator.
+// Regression guard: Previously, nil was converted to "null\n" YAML which
+// caused YQ to error when accessing a key with the fallback operator.
 // Expected: `.missing // "default"` should return "default" when data is nil.
-// Actual: Returns error because YQ can't process key access on null.
+// This test ensures the fix continues to work correctly.
 func TestEvaluateYqExpression_NilDataWithDefault(t *testing.T) {
 	result, err := EvaluateYqExpression(nil, nil, `.missing // "default"`)
 
-	// BUG: Currently returns error because YQ can't process "null" with key access.
+	// Verify that YQ correctly processes nil data with default values.
 	require.NoError(t, err)
 	assert.Equal(t, "default", result)
 }
@@ -201,7 +201,7 @@ func TestEvaluateYqExpression_EmptyMapWithDefault(t *testing.T) {
 // TestEvaluateYqExpression_NilDataWithListDefault verifies that YQ default
 // values work with list fallback expressions when input is nil.
 //
-// BUG: Same as above - nil input causes YQ error before fallback is evaluated.
+// Regression guard: Ensures nil input with list defaults works correctly.
 func TestEvaluateYqExpression_NilDataWithListDefault(t *testing.T) {
 	result, err := EvaluateYqExpression(nil, nil, `.items // ["a", "b", "c"]`)
 
@@ -212,7 +212,7 @@ func TestEvaluateYqExpression_NilDataWithListDefault(t *testing.T) {
 // TestEvaluateYqExpression_NilDataWithMapDefault verifies that YQ default
 // values work with map fallback expressions when input is nil.
 //
-// BUG: Same as above - nil input causes YQ error before fallback is evaluated.
+// Regression guard: Ensures nil input with map defaults works correctly.
 func TestEvaluateYqExpression_NilDataWithMapDefault(t *testing.T) {
 	result, err := EvaluateYqExpression(nil, nil, `.config // {"key": "value"}`)
 

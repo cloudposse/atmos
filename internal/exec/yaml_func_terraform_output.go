@@ -117,9 +117,10 @@ func processTagTerraformOutputWithContext(
 
 	value, exists, err := outputGetter.GetOutput(atmosConfig, stack, component, output, false, authContext, authManager)
 	if err != nil {
-		// For API/infrastructure errors, check if we can use YQ default.
-		if hasYqDefault(output) {
-			log.Debug("Evaluating YQ default for output error",
+		// Only use YQ defaults for recoverable terraform errors (state not provisioned, output not found).
+		// Non-recoverable errors (API failures, auth errors, infrastructure issues) should fail hard.
+		if isRecoverableTerraformError(err) && hasYqDefault(output) {
+			log.Debug("Evaluating YQ default for recoverable error",
 				log.FieldFunction, input,
 				"error", err.Error(),
 			)
