@@ -1,0 +1,16 @@
+.step-number {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.step-number-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  color: var(--ifm-color-primary);
+}
+
+html[data-theme="dark"] .step-number-icon {
+  color: var(--ifm-color-primary-light);
+}

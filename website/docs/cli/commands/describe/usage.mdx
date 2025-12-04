@@ -5,7 +5,23 @@ sidebar_class_name: command
 description: "Describe Atmos Configurations"
 ---
 import Screengrab from '@site/src/components/Screengrab'
-import DocCardList from '@theme/DocCardList';
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use these subcommands to inspect and describe your Atmos configurations, stacks, components, and workflows.
+</Intro>
+
+<ActionCard title="Configure Stacks">
+    Learn how to configure stacks, components, and inheritance in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/stacks">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Usage
 
 <Screengrab title="atmos describe --help" slug="atmos-describe--help" />
 

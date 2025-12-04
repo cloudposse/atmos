@@ -1,0 +1,85 @@
+---
+title: Why Atmos?
+sidebar_position: 1
+sidebar_label: Why Atmos?
+description: Discover how Atmos helps teams manage complex Terraform infrastructure at scale
+id: why-atmos
+---
+import Intro from '@site/src/components/Intro'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Atmos is a framework that helps teams succeed with Terraform from day one. It provides proven patterns, conventions, and tooling to manage complex, multi-environment infrastructure without the growing pains.
+</Intro>
+
+## The Challenge
+
+As Terraform infrastructure grows, teams encounter predictable challenges:
+
+- **Configuration sprawl**: Duplicate code across environments (dev, staging, prod)
+- **Complexity growth**: Managing dozens or hundreds of AWS accounts and regions
+- **Team coordination**: Multiple teams working on shared infrastructure
+- **Consistency**: Ensuring standards and security policies across all deployments
+
+Most teams solve these problems by trial and error, progressing through stages of increasing sophistication. This journey can take months or years, with each stage introducing new complexities.
+
+## The Atmos Approach
+
+Atmos lets you skip ahead by providing a complete framework with:
+
+**Separation of Configuration from Code**
+- Keep your Terraform components generic and reusable
+- Configure environments with YAML, not code duplication
+- Components work anywhere without modification
+
+**DRY Without Templates**
+- Deep-merge configurations for inheritance
+- Import shared settings across stacks
+- Override specific values where needed
+- No code generation or messy templating
+
+**Built for Scale**
+- Manage hundreds of environments from a single repository
+- Multi-account, multi-region, multi-tenant patterns
+- Component catalogs for standardization
+- Workflow orchestration for complex deployments
+
+**Enterprise-Ready**
+- Validation with OPA and JSON Schema
+- GitOps integration (GitHub Actions, Spacelift, Atlantis)
+- Vendoring for supply chain management
+- Comprehensive CLI for all operations
+
+## When to Use Atmos
+
+Atmos is ideal when you need to:
+
+- **Manage multiple environments** (dev, staging, prod across regions)
+- **Scale Terraform** across teams and accounts
+- **Enforce consistency** without code duplication
+- **Reduce configuration complexity** as infrastructure grows
+
+If you're managing a single environment or simple infrastructure, vanilla Terraform might be sufficient. But when you find yourself copying and pasting configurations or struggling with environment management, it's time for Atmos.
+
+## Your Journey with Atmos
+
+Most Terraform teams progress through 10+ stages of maturity—from ClickOps to enterprise scale. Each stage solves previous problems but introduces new complexity.
+
+**Atmos helps you skip these growing pains** by providing battle-tested solutions for every stage.
+
+<PrimaryCTA to="/intro/why-atmos">
+  See the Terraform Maturity Journey
+</PrimaryCTA>
+
+## Next Steps
+
+Ready to get started? Follow our guided learning path:
+
+1. [Understand Core Concepts](/learn/concepts-overview) - Component and Stack fundamentals
+2. [Create Your First Stack](/learn/first-stack) - Simplest possible example
+3. [Learn YAML in Atmos](/learn/yaml) - Deep merge, scope, and functions
+4. [Install Atmos](/install) - Get up and running
+
+Or if you're migrating from another tool:
+- [Coming from Terragrunt](/migration/terragrunt)
+- [Coming from Terraform Workspaces](/migration/terraform-workspaces)
