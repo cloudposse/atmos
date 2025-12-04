@@ -285,6 +285,8 @@ func GetContext() Context {
 // This is primarily used in tests to ensure clean state between test executions.
 // The next call to Initialize() will pick up the current os.Stdout/os.Stderr values.
 func Reset() {
+	defer perf.Track(nil, "io.Reset")()
+
 	globalMu.Lock()
 	defer globalMu.Unlock()
 

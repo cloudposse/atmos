@@ -47,6 +47,8 @@ func SetMarkdownRenderer(renderer MarkdownRenderer) {
 // Reset clears the global I/O context and markdown renderer.
 // This is primarily used in tests to ensure clean state between test executions.
 func Reset() {
+	defer perf.Track(nil, "data.Reset")()
+
 	ioMu.Lock()
 	defer ioMu.Unlock()
 	globalIOContext = nil

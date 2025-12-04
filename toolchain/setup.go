@@ -11,6 +11,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
+const (
+	// defaultDirPermissions is the default permission mask for created directories.
+	defaultDirPermissions = 0o755
+)
+
 var (
 	DefaultToolVersionsFilePath = ".tool-versions"
 	DefaultInstallPath          = ".tools"
@@ -55,7 +60,7 @@ func GetInstallPath() string {
 	}
 
 	// Try to use XDG-compliant data directory
-	dataDir, err := xdg.GetXDGDataDir("toolchain", 0o755)
+	dataDir, err := xdg.GetXDGDataDir("toolchain", defaultDirPermissions)
 	if err == nil && dataDir != "" {
 		return dataDir
 	}

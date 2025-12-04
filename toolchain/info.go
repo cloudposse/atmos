@@ -543,6 +543,8 @@ type versionFetchModel struct {
 }
 
 func (m *versionFetchModel) Init() tea.Cmd {
+	defer perf.Track(nil, "toolchain.versionFetchModel.Init")()
+
 	return tea.Batch(
 		m.spinner.Tick,
 		fetchVersionsCmd(m.owner, m.repo),
@@ -550,6 +552,8 @@ func (m *versionFetchModel) Init() tea.Cmd {
 }
 
 func (m *versionFetchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	defer perf.Track(nil, "toolchain.versionFetchModel.Update")()
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return m, tea.Quit
@@ -571,6 +575,8 @@ func (m *versionFetchModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *versionFetchModel) View() string {
+	defer perf.Track(nil, "toolchain.versionFetchModel.View")()
+
 	if m.done {
 		return ""
 	}

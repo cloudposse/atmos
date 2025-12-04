@@ -704,6 +704,8 @@ func sortResults(results []scoredTool) {
 // GetLastSearchTotal returns the total number of search results before pagination.
 // This is set by the most recent Search() call.
 func (ar *AquaRegistry) GetLastSearchTotal() int {
+	defer perf.Track(nil, "aqua.AquaRegistry.GetLastSearchTotal")()
+
 	return ar.lastSearchTotal
 }
 

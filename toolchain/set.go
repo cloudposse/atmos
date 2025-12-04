@@ -19,6 +19,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+const (
+	// versionListUIReservedHeight is the number of lines reserved for title, borders, and status bar.
+	versionListUIReservedHeight = 6
+
+	// focusList indicates the list pane has focus in the version selector UI.
+	focusList = "list"
+
+	// focusViewport indicates the viewport pane has focus in the version selector UI.
+	focusViewport = "viewport"
+)
+
 type versionItem struct {
 	version      string
 	title        string
@@ -74,10 +85,10 @@ func (m versionListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "tab":
 			// Toggle focus between list and viewport
-			if m.focused == "list" {
-				m.focused = "viewport"
+			if m.focused == focusList {
+				m.focused = focusViewport
 			} else {
-				m.focused = "list"
+				m.focused = focusList
 			}
 			return m, nil
 		case "enter":
@@ -94,7 +105,7 @@ func (m versionListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		rightWidth := msg.Width - leftWidth - 2 // Account for separator only
 
 		// Calculate height accounting for page title and borders - ensure it fits on screen
-		contentHeight := msg.Height - 6 // Subtract more for title, borders, and status bar
+		contentHeight := msg.Height - versionListUIReservedHeight // Subtract for title, borders, and status bar
 
 		// Update list size with more height to show more items, but ensure it fits
 		m.list.SetSize(leftWidth-2, contentHeight)
@@ -120,7 +131,7 @@ func (m versionListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	// Update list only if it has focus, or for window size changes
-	if m.focused == "list" {
+	if m.focused == focusList {
 		m.list, cmd = m.list.Update(msg)
 	} else {
 		// Still handle window size for layout, but don't process navigation keys
@@ -208,7 +219,7 @@ func (m versionListModel) View() string {
 
 	// Add border styling with focus indication - just change color, no thick borders
 	var leftStyle, rightStyle lipgloss.Style
-	if m.focused == "list" {
+	if m.focused == focusList {
 		leftStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("62"))
 		rightStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240"))
 	} else {
@@ -296,7 +307,7 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 			repo:        repo,
 			items:       items,
 			title:       fmt.Sprintf("Select version for %s/%s", owner, repo),
-			focused:     "list",
+			focused:     focusList,
 			scrollSpeed: scrollSpeed,
 		}
 

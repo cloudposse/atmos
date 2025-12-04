@@ -27,6 +27,9 @@ const (
 
 	// Progress bar format string.
 	progressBarFormat = "%s %s"
+
+	// latestVersion is the special version identifier for the latest installed version.
+	latestVersion = "latest"
 )
 
 // Refactored runUninstall to accept an optional installer parameter for testability.
@@ -102,7 +105,7 @@ func parseToolSpecLenient(installer *Installer, tool string) (owner, repo string
 
 // uninstallToolVersion handles uninstalling a specific version including "latest" resolution.
 func uninstallToolVersion(installer *Installer, owner, repo, version string) error {
-	if version != "latest" {
+	if version != latestVersion {
 		return uninstallSingleTool(installer, owner, repo, version, true)
 	}
 
@@ -110,7 +113,7 @@ func uninstallToolVersion(installer *Installer, owner, repo, version string) err
 	actualVersion, err := installer.ReadLatestFile(owner, repo)
 	if err != nil {
 		// If the latest file does not exist, return error (test expects this)
-		latestFilePath := filepath.Join(installer.binDir, owner, repo, "latest")
+		latestFilePath := filepath.Join(installer.binDir, owner, repo, latestVersion)
 		return errUtils.Build(errUtils.ErrLatestFileNotFound).
 			WithExplanationf("Tool `%s/%s@latest` is not installed", owner, repo).
 			WithHint("Install with `atmos toolchain install "+repo+"@latest`").
@@ -128,7 +131,7 @@ func uninstallToolVersion(installer *Installer, owner, repo, version string) err
 func uninstallLatestVersion(installer *Installer, owner, repo, version string) error {
 	// Check if the versioned binary exists
 	binaryPath := installer.getBinaryPath(owner, repo, version, "")
-	latestFilePath := filepath.Join(installer.binDir, owner, repo, "latest")
+	latestFilePath := filepath.Join(installer.binDir, owner, repo, latestVersion)
 	toolDir := filepath.Join(installer.binDir, owner, repo)
 
 	if _, statErr := os.Stat(binaryPath); os.IsNotExist(statErr) {
@@ -353,7 +356,7 @@ func getVersionsToUninstall(toolDir string) ([]string, error) {
 
 	var versions []string
 	for _, entry := range entries {
-		if entry.IsDir() && entry.Name() != "latest" {
+		if entry.IsDir() && entry.Name() != latestVersion {
 			versions = append(versions, entry.Name())
 		}
 	}
@@ -392,7 +395,7 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 	}
 
 	// Remove the latest file if it exists.
-	latestFile := filepath.Join(toolDir, "latest")
+	latestFile := filepath.Join(toolDir, latestVersion)
 	if _, err := os.Stat(latestFile); err == nil {
 		_ = os.Remove(latestFile)
 	}
