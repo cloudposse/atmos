@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	fn "github.com/cloudposse/atmos/pkg/function"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -40,7 +41,7 @@ func processTagTerraformStateWithContext(
 	// Parse function arguments using the purpose-built parser.
 	// Format: component [stack] expression
 	// Stack is optional - if not provided, uses currentStack.
-	component, stack, output := u.ParseFunctionArgs(str)
+	component, stack, output := fn.ParseArgs(str)
 
 	if component == "" {
 		er := fmt.Errorf("%w: missing component: %s", errUtils.ErrYamlFuncInvalidArguments, input)

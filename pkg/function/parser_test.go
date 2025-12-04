@@ -1,4 +1,4 @@
-package utils
+package function
 
 import (
 	"testing"
@@ -19,7 +19,7 @@ type testCase struct {
 func runTestCases(t *testing.T, cases []testCase) {
 	for _, tt := range cases {
 		t.Run(tt.name, func(t *testing.T) {
-			c, s, e := ParseFunctionArgs(tt.input)
+			c, s, e := ParseArgs(tt.input)
 			assert.Equal(t, tt.component, c, "component mismatch")
 			assert.Equal(t, tt.stack, s, "stack mismatch")
 			assert.Equal(t, tt.expr, e, "expr mismatch")
@@ -27,7 +27,7 @@ func runTestCases(t *testing.T, cases []testCase) {
 	}
 }
 
-func TestParseFunctionArgs_BackwardCompatibility(t *testing.T) {
+func TestParseArgs_BackwardCompatibility(t *testing.T) {
 	cases := []testCase{
 		// Simple cases - fully backward compatible.
 		{"Simple output", "component-1 vpc_id", "component-1", "", "vpc_id"},
@@ -40,7 +40,7 @@ func TestParseFunctionArgs_BackwardCompatibility(t *testing.T) {
 	runTestCases(t, cases)
 }
 
-func TestParseFunctionArgs_NewSyntax(t *testing.T) {
+func TestParseArgs_NewSyntax(t *testing.T) {
 	cases := []testCase{
 		// New clean syntax - dot expressions.
 		{"Dot expression no stack", "component-2 .output", "component-2", "", ".output"},
@@ -77,7 +77,7 @@ func TestParseFunctionArgs_NewSyntax(t *testing.T) {
 	runTestCases(t, cases)
 }
 
-func TestParseFunctionArgs_EdgeCases(t *testing.T) {
+func TestParseArgs_EdgeCases(t *testing.T) {
 	cases := []testCase{
 		// Empty and minimal inputs.
 		{"Empty string", "", "", "", ""},
@@ -111,7 +111,7 @@ func TestParseFunctionArgs_EdgeCases(t *testing.T) {
 	runTestCases(t, cases)
 }
 
-func TestParseFunctionArgs_YAMLBlockScalars(t *testing.T) {
+func TestParseArgs_YAMLBlockScalars(t *testing.T) {
 	// These test cases simulate what YAML block scalars produce after parsing.
 	// Folded block (>-) folds newlines to spaces.
 	// Literal block (|) preserves newlines.

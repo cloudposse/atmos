@@ -1,4 +1,4 @@
-package utils
+package function
 
 import (
 	"strings"
@@ -20,7 +20,7 @@ func isExpressionStart(c byte) bool {
 	}
 }
 
-// ParseFunctionArgs parses YAML function arguments.
+// ParseArgs parses YAML function arguments.
 // Format: component [stack] expression
 //
 // Rules:
@@ -36,8 +36,8 @@ func isExpressionStart(c byte) bool {
 //	"component-2 .output"                   -> component="component-2", stack="", expr=".output"
 //	"component-2 prod .output"              -> component="component-2", stack="prod", expr=".output"
 //	`component-2 .output // {"key": "val"}` -> component="component-2", stack="", expr=`.output // {"key": "val"}`
-func ParseFunctionArgs(input string) (component, stack, expr string) {
-	defer perf.Track(nil, "utils.ParseFunctionArgs")()
+func ParseArgs(input string) (component, stack, expr string) {
+	defer perf.Track(nil, "function.ParseArgs")()
 
 	input = strings.TrimSpace(input)
 	if input == "" {
