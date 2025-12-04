@@ -7,12 +7,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestTerraformOutput_APIErrorWithDefaultUsesDefault verifies that when GetOutput
-// returns an error AND the expression has a YQ default, the default is used.
-func TestTerraformOutput_APIErrorWithDefaultUsesDefault(t *testing.T) {
+// TestTerraformOutput_RecoverableErrorWithDefaultUsesDefault verifies that when
+// GetOutput returns a recoverable error (state not provisioned) AND the expression
+// has a YQ default, the default is used.
+func TestTerraformOutput_RecoverableErrorWithDefaultUsesDefault(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -27,7 +29,8 @@ func TestTerraformOutput_APIErrorWithDefaultUsesDefault(t *testing.T) {
 
 	expectedYqExpr := `.bucket_name // "default-bucket"`
 
-	// Mock returns error - simulating terraform output failure.
+	// Mock returns a recoverable error - state not provisioned.
+	// This is a recoverable error that should use the YQ default.
 	mockOutputGetter.EXPECT().
 		GetOutput(
 			atmosConfig,
@@ -38,7 +41,7 @@ func TestTerraformOutput_APIErrorWithDefaultUsesDefault(t *testing.T) {
 			gomock.Any(),
 			gomock.Any(),
 		).
-		Return(nil, false, fmt.Errorf("terraform output failed: state not found")).
+		Return(nil, false, fmt.Errorf("component not provisioned: %w", errUtils.ErrTerraformStateNotProvisioned)).
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
@@ -47,10 +50,55 @@ func TestTerraformOutput_APIErrorWithDefaultUsesDefault(t *testing.T) {
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
 
-	// With a YQ default and an error, the default should be used.
+	// With a YQ default and a recoverable error, the default should be used.
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	assert.Equal(t, "default-bucket", result["bucket"])
+}
+
+// TestTerraformOutput_APIErrorWithDefaultReturnsError verifies that when GetOutput
+// returns a non-recoverable API error, even with a YQ default, the error propagates.
+// This ensures that infrastructure/API failures don't silently use defaults.
+func TestTerraformOutput_APIErrorWithDefaultReturnsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOutputGetter := NewMockTerraformOutputGetter(ctrl)
+	originalGetter := outputGetter
+	outputGetter = mockOutputGetter
+	defer func() { outputGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	expectedYqExpr := `.bucket_name // "default-bucket"`
+
+	// Mock returns a non-recoverable API error (S3 connection failure).
+	// This should NOT use the YQ default - it should return the error.
+	mockOutputGetter.EXPECT().
+		GetOutput(
+			atmosConfig,
+			"test-stack",
+			"vpc",
+			expectedYqExpr,
+			false,
+			gomock.Any(),
+			gomock.Any(),
+		).
+		Return(nil, false, fmt.Errorf("S3 connection timeout: %w", errUtils.ErrGetObjectFromS3)).
+		Times(1)
+
+	input := schema.AtmosSectionMapType{
+		"bucket": `!terraform.output vpc test-stack ".bucket_name // ""default-bucket"""`,
+	}
+
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+
+	// API errors should propagate even when a YQ default is present.
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "S3 connection timeout")
 }
 
 // TestTerraformOutput_YqDefaultWhenOutputNotExists verifies that YQ default
