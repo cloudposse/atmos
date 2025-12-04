@@ -900,6 +900,65 @@ func TestExtractBackendConfig(t *testing.T) {
 
 		assert.ErrorIs(t, result.Err, errUtils.ErrBackendSectionMissing)
 	})
+
+	t.Run("returns error when backend section is empty for s3 backend", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend":      map[string]any{},
+			"backend_type": "s3",
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendConfigEmpty)
+		assert.Nil(t, result.BackendSection)
+		assert.Empty(t, result.BackendType)
+	})
+
+	t.Run("returns error when backend section is empty for gcs backend", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend":      map[string]any{},
+			"backend_type": "gcs",
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendConfigEmpty)
+	})
+
+	t.Run("returns error when backend section is empty for azurerm backend", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend":      map[string]any{},
+			"backend_type": "azurerm",
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendConfigEmpty)
+	})
+
+	t.Run("returns error when backend section is empty for cloud backend", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend":      map[string]any{},
+			"backend_type": "cloud",
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendConfigEmpty)
+	})
+
+	t.Run("allows empty backend section for local backend", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend":      map[string]any{},
+			"backend_type": "local",
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.NoError(t, result.Err)
+		assert.Equal(t, "local", result.BackendType)
+		assert.Empty(t, result.BackendSection)
+	})
 }
 
 // TestCheckBackendTypeAfterProcessing tests the checkBackendTypeAfterProcessing pure function.

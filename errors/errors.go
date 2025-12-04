@@ -123,6 +123,7 @@ var (
 	ErrBackendSectionMissing       = errors.New("no 'backend' section configured")
 	ErrBackendTypeMissing          = errors.New("no 'backend_type' configured")
 	ErrBackendTypeEmptyAfterRender = errors.New("'backend_type' is empty after template processing")
+	ErrBackendConfigEmpty          = errors.New("'backend' section is empty but 'backend_type' requires configuration")
 
 	// Git-related errors.
 	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")

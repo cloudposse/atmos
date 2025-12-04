@@ -36,6 +36,13 @@ func extractBackendConfig(componentSection map[string]any) backendConfig {
 		return backendConfig{Err: errUtils.ErrBackendTypeMissing}
 	}
 
+	// Check if backend section is empty for backends that require configuration.
+	// The "local" backend can work without any configuration, but remote backends
+	// like s3, gcs, azurerm, and cloud require at least some configuration.
+	if len(backendSection) == 0 && backendType != cfg.BackendTypeLocal {
+		return backendConfig{Err: errUtils.ErrBackendConfigEmpty}
+	}
+
 	return backendConfig{
 		BackendSection: backendSection,
 		BackendType:    backendType,
