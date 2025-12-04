@@ -146,12 +146,21 @@ func ExecuteDescribeStacks(
 	var backendSection map[string]any
 	var backendTypeSection string
 	var stackName string
+	var stackManifestName string
 
 	for stackFileName, stackSection := range stacksMap {
 		var context schema.Context
 
 		// Delete the stack-wide imports.
 		delete(stackSection.(map[string]any), "imports")
+
+		// Extract the stack-level 'name' field (logical name override).
+		stackManifestName = ""
+		if nameValue, ok := stackSection.(map[string]any)[cfg.NameSectionName]; ok {
+			if name, ok := nameValue.(string); ok {
+				stackManifestName = name
+			}
+		}
 
 		// Check if the `components` section exists and has explicit components.
 		hasExplicitComponents := false
@@ -255,6 +264,7 @@ func ExecuteDescribeStacks(
 						configAndStacksInfo := schema.ConfigAndStacksInfo{
 							ComponentFromArg:          componentName,
 							Stack:                     stackName,
+							StackManifestName:         stackManifestName,
 							ComponentMetadataSection:  metadataSection,
 							ComponentVarsSection:      varsSection,
 							ComponentSettingsSection:  settingsSection,
@@ -291,19 +301,24 @@ func ExecuteDescribeStacks(
 							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 						}
 
-						// Stack name.
-						if atmosConfig.Stacks.NameTemplate != "" {
+						// Stack name precedence: name (from manifest) > name_template > name_pattern > filename.
+						if stackManifestName != "" {
+							stackName = stackManifestName
+						} else if atmosConfig.Stacks.NameTemplate != "" {
 							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
-						} else {
+						} else if GetStackNamePattern(atmosConfig) != "" {
 							context = cfg.GetContextFromVars(varsSection)
 							configAndStacksInfo.Context = context
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 							if err != nil {
 								return nil, err
 							}
+						} else {
+							// Default: use stack filename when no name, template, or pattern is configured.
+							stackName = stackFileName
 						}
 
 						if filterByStack != "" && filterByStack != stackFileName && filterByStack != stackName {
@@ -497,6 +512,7 @@ func ExecuteDescribeStacks(
 						configAndStacksInfo := schema.ConfigAndStacksInfo{
 							ComponentFromArg:          componentName,
 							Stack:                     stackName,
+							StackManifestName:         stackManifestName,
 							ComponentMetadataSection:  metadataSection,
 							ComponentVarsSection:      varsSection,
 							ComponentSettingsSection:  settingsSection,
@@ -533,19 +549,24 @@ func ExecuteDescribeStacks(
 							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 						}
 
-						// Stack name.
-						if atmosConfig.Stacks.NameTemplate != "" {
+						// Stack name precedence: name (from manifest) > name_template > name_pattern > filename.
+						if stackManifestName != "" {
+							stackName = stackManifestName
+						} else if atmosConfig.Stacks.NameTemplate != "" {
 							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
-						} else {
+						} else if GetStackNamePattern(atmosConfig) != "" {
 							context = cfg.GetContextFromVars(varsSection)
 							configAndStacksInfo.Context = context
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 							if err != nil {
 								return nil, err
 							}
+						} else {
+							// Default: use stack filename when no name, template, or pattern is configured.
+							stackName = stackFileName
 						}
 
 						if filterByStack != "" && filterByStack != stackFileName && filterByStack != stackName {
@@ -716,6 +737,7 @@ func ExecuteDescribeStacks(
 						configAndStacksInfo := schema.ConfigAndStacksInfo{
 							ComponentFromArg:          componentName,
 							Stack:                     stackName,
+							StackManifestName:         stackManifestName,
 							ComponentMetadataSection:  metadataSection,
 							ComponentVarsSection:      varsSection,
 							ComponentSettingsSection:  settingsSection,
@@ -752,19 +774,24 @@ func ExecuteDescribeStacks(
 							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 						}
 
-						// Stack name.
-						if atmosConfig.Stacks.NameTemplate != "" {
+						// Stack name precedence: name (from manifest) > name_template > name_pattern > filename.
+						if stackManifestName != "" {
+							stackName = stackManifestName
+						} else if atmosConfig.Stacks.NameTemplate != "" {
 							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
 								return nil, err
 							}
-						} else {
+						} else if GetStackNamePattern(atmosConfig) != "" {
 							context = cfg.GetContextFromVars(varsSection)
 							configAndStacksInfo.Context = context
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 							if err != nil {
 								return nil, err
 							}
+						} else {
+							// Default: use stack filename when no name, template, or pattern is configured.
+							stackName = stackFileName
 						}
 
 						if filterByStack != "" && filterByStack != stackFileName && filterByStack != stackName {

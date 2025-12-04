@@ -103,6 +103,9 @@ A Stack file contains a manifest defined in YAML that follows a simple, extensib
 
 <File title="stack.yaml">
 ```yaml
+# Optional: Override the logical stack name (takes precedence over name_template and name_pattern)
+# name: "custom-stack-name"
+
 # Configurations that should get deep-merged into this one
 import:
   # each import is a "Stack" file. The `.yaml` extension is optional, and we do not recommend using it.
@@ -150,6 +153,39 @@ components:
 ### Stack Attributes
 
 <dl>
+  <dt>`name`</dt>
+  <dd>
+  Optional. Overrides the logical stack name for this stack manifest. When specified, this value takes precedence
+  over `name_template` and `name_pattern` from `atmos.yaml`. This is useful for legacy infrastructure that doesn't
+  follow naming conventions, or when you need a stack name that differs from what the filename or naming patterns
+  would produce.
+
+  **Precedence order:**
+  1. `name` (highest) - Literal name from stack manifest
+  2. `name_template` - From `atmos.yaml`, Go template
+  3. `name_pattern` - From `atmos.yaml`, token replacement
+  4. Default - Basename of the stack file (zero-config)
+
+  Example:
+
+  ```yaml
+  # stacks/legacy-prod.yaml
+  name: "my-legacy-prod-stack"  # Overrides the default stack name
+
+  import:
+    - catalog/base
+
+  components:
+    terraform:
+      vpc:
+        vars:
+          cidr: "10.0.0.0/16"
+  ```
+
+  With this configuration, the stack will be identified as `my-legacy-prod-stack` instead of `legacy-prod`
+  (which would be derived from the filename). The Terraform workspace will also use `my-legacy-prod-stack`.
+  </dd>
+
   <dt>`components`</dt>
   <dd>
   The `components` is the list of all the building blocks.
