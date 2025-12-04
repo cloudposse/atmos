@@ -107,12 +107,14 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// UpdatePathForTools updates PATH environment variable to include tool binaries.
-func UpdatePathForTools(atmosConfig *schema.AtmosConfiguration, dependencies map[string]string) error {
-	defer perf.Track(atmosConfig, "dependencies.UpdatePathForTools")()
+// BuildToolchainPATH constructs a PATH string with toolchain binaries prepended.
+// This function does NOT modify the global environment - it returns the PATH string
+// which should be added to ComponentEnvList for subprocess execution.
+func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map[string]string) (string, error) {
+	defer perf.Track(atmosConfig, "dependencies.BuildToolchainPATH")()
 
 	if len(dependencies) == 0 {
-		return nil
+		return os.Getenv("PATH"), nil
 	}
 
 	// Guard against nil atmosConfig.
@@ -123,25 +125,42 @@ func UpdatePathForTools(atmosConfig *schema.AtmosConfiguration, dependencies map
 
 	var paths []string
 	for tool, version := range dependencies {
-		// Resolve tool to owner/repo
+		// Resolve tool to owner/repo.
 		owner, repo, err := resolveToolPath(tool)
 		if err != nil {
-			continue // Skip invalid tools
+			continue // Skip invalid tools.
 		}
 
-		// Add versioned bin directory to PATH
+		// Add versioned bin directory to PATH.
 		binPath := filepath.Join(toolsDir, "bin", owner, repo, version)
 		paths = append(paths, binPath)
 	}
 
+	// Prepend toolchain paths to existing PATH.
+	currentPath := os.Getenv("PATH")
 	if len(paths) == 0 {
-		return nil
+		return currentPath, nil
 	}
 
-	// Prepend to existing PATH.
-	currentPath := os.Getenv("PATH")
 	newPath := strings.Join(append(paths, currentPath), string(os.PathListSeparator))
-	os.Setenv("PATH", newPath)
+	return newPath, nil
+}
+
+// UpdatePathForTools updates PATH environment variable to include tool binaries.
+// DEPRECATED: Use BuildToolchainPATH() instead and add to ComponentEnvList.
+// This function is kept for backwards compatibility but should not be used.
+func UpdatePathForTools(atmosConfig *schema.AtmosConfiguration, dependencies map[string]string) error {
+	defer perf.Track(atmosConfig, "dependencies.UpdatePathForTools")()
+
+	newPath, err := BuildToolchainPATH(atmosConfig, dependencies)
+	if err != nil {
+		return err
+	}
+
+	// Only set if PATH actually changed.
+	if newPath != os.Getenv("PATH") {
+		os.Setenv("PATH", newPath)
+	}
 
 	return nil
 }

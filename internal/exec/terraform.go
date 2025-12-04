@@ -54,17 +54,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	if info.SubCommand == "version" {
-		return ExecuteShellCommand(
-			atmosConfig,
-			info.Command,
-			[]string{info.SubCommand},
-			"",
-			nil,
-			false,
-			info.RedirectStdErr)
-	}
-
 	// Skip stack processing when cleaning with the `--force` flag to allow cleaning without requiring stack configuration.
 	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
 
@@ -211,13 +200,15 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				return fmt.Errorf("failed to install component dependencies: %w", err)
 			}
 
-			// Update PATH to include installed tools.
-			if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
-				return fmt.Errorf("failed to update PATH for component: %w", err)
+			// Build PATH with toolchain binaries and add to component environment.
+			// This does NOT modify the global process environment - only the subprocess environment.
+			toolchainPATH, err := dependencies.BuildToolchainPATH(&atmosConfig, deps)
+			if err != nil {
+				return fmt.Errorf("failed to build toolchain PATH: %w", err)
 			}
 
-			// Propagate updated PATH into environment for subprocess.
-			info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", os.Getenv("PATH")))
+			// Propagate toolchain PATH into environment for subprocess.
+			info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
 		}
 	}
 

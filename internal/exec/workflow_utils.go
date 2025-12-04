@@ -102,6 +102,10 @@ func ExecuteWorkflow(
 		return fmt.Errorf("failed to resolve workflow dependencies: %w", err)
 	}
 
+	// Build base environment with toolchain PATH for workflow steps.
+	// Steps will either use this directly (no identity) or merge it with auth credentials (with identity).
+	var baseWorkflowEnv []string
+
 	if len(deps) > 0 {
 		log.Debug("Installing workflow dependencies", "tools", deps)
 		installer := dependencies.NewInstaller(&atmosConfig)
@@ -109,15 +113,17 @@ func ExecuteWorkflow(
 			return fmt.Errorf("failed to install workflow dependencies: %w", err)
 		}
 
-		// Update PATH to include installed tools
-		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
-			return fmt.Errorf("failed to update PATH for workflow dependencies: %w", err)
+		// Build PATH with toolchain binaries for workflow environment.
+		// This does NOT modify the global process environment - only the workflow subprocess environment.
+		toolchainPATH, err := dependencies.BuildToolchainPATH(&atmosConfig, deps)
+		if err != nil {
+			return fmt.Errorf("failed to build toolchain PATH: %w", err)
 		}
+		baseWorkflowEnv = []string{fmt.Sprintf("PATH=%s", toolchainPATH)}
+	} else {
+		// No toolchain dependencies, use current PATH.
+		baseWorkflowEnv = []string{fmt.Sprintf("PATH=%s", os.Getenv("PATH"))}
 	}
-
-	// Create base environment with updated PATH for workflow steps.
-	// Steps will either use this directly (no identity) or merge it with auth credentials (with identity).
-	baseWorkflowEnv := []string{fmt.Sprintf("PATH=%s", os.Getenv("PATH"))}
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err := u.PrintAsYAMLToFileDescriptor(&atmosConfig, workflowDefinition)

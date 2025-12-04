@@ -1,3 +1,6 @@
+vars:
+  stage: "dev"
+
 components:
   terraform:
     # Component WITH toolchain dependencies
