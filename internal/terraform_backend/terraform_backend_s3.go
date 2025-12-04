@@ -151,8 +151,16 @@ func ReadTerraformBackendS3Internal(
 
 			lastErr = err
 			if attempt < maxRetryCount {
-				log.Debug("Failed to read Terraform state file from the S3 bucket", "attempt", attempt+1, "file", tfStateFilePath, "bucket", bucket, "error", err)
-				time.Sleep(time.Second * 2) // backoff
+				// Exponential backoff: 1s, 2s, 4s for attempts 0, 1, 2.
+				backoff := time.Second * time.Duration(1<<attempt)
+				log.Debug("Failed to read Terraform state file from the S3 bucket",
+					"attempt", attempt+1,
+					"file", tfStateFilePath,
+					"bucket", bucket,
+					"error", err,
+					"backoff", backoff,
+				)
+				time.Sleep(backoff)
 				continue
 			}
 			// Retries exhausted - log warning with error details to help diagnose the issue.
