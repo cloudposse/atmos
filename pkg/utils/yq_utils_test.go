@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v3"
 )
 
@@ -168,4 +169,90 @@ func TestProcessYAMLNode_Utils(t *testing.T) {
 		// This should not panic
 		processYAMLNode(nil)
 	})
+}
+
+// TestEvaluateYqExpression_NilDataWithDefault verifies that YQ default
+// values work when the input data is nil.
+//
+// BUG: Currently converts nil to "null\n" YAML which causes YQ to error
+// when accessing a key with the fallback operator.
+// Expected: `.missing // "default"` should return "default" when data is nil.
+// Actual: Returns error because YQ can't process key access on null.
+func TestEvaluateYqExpression_NilDataWithDefault(t *testing.T) {
+	result, err := EvaluateYqExpression(nil, nil, `.missing // "default"`)
+
+	// BUG: Currently returns error because YQ can't process "null" with key access.
+	require.NoError(t, err)
+	assert.Equal(t, "default", result)
+}
+
+// TestEvaluateYqExpression_EmptyMapWithDefault verifies that YQ default
+// values work when the input data is an empty map.
+//
+// This should work correctly - YQ can access missing keys on empty maps
+// and the fallback operator should return the default value.
+func TestEvaluateYqExpression_EmptyMapWithDefault(t *testing.T) {
+	result, err := EvaluateYqExpression(nil, map[string]any{}, `.missing // "default"`)
+
+	require.NoError(t, err)
+	assert.Equal(t, "default", result)
+}
+
+// TestEvaluateYqExpression_NilDataWithListDefault verifies that YQ default
+// values work with list fallback expressions when input is nil.
+//
+// BUG: Same as above - nil input causes YQ error before fallback is evaluated.
+func TestEvaluateYqExpression_NilDataWithListDefault(t *testing.T) {
+	result, err := EvaluateYqExpression(nil, nil, `.items // ["a", "b", "c"]`)
+
+	require.NoError(t, err)
+	assert.Equal(t, []any{"a", "b", "c"}, result)
+}
+
+// TestEvaluateYqExpression_NilDataWithMapDefault verifies that YQ default
+// values work with map fallback expressions when input is nil.
+//
+// BUG: Same as above - nil input causes YQ error before fallback is evaluated.
+func TestEvaluateYqExpression_NilDataWithMapDefault(t *testing.T) {
+	result, err := EvaluateYqExpression(nil, nil, `.config // {"key": "value"}`)
+
+	require.NoError(t, err)
+	expected := map[string]any{"key": "value"}
+	assert.Equal(t, expected, result)
+}
+
+// TestEvaluateYqExpression_EmptyMapNestedKeyWithDefault verifies that YQ default
+// values work when accessing nested keys on empty maps.
+func TestEvaluateYqExpression_EmptyMapNestedKeyWithDefault(t *testing.T) {
+	result, err := EvaluateYqExpression(nil, map[string]any{}, `.parent.child // "default"`)
+
+	require.NoError(t, err)
+	assert.Equal(t, "default", result)
+}
+
+// TestEvaluateYqExpression_ExistingKeyNoDefault verifies that existing keys
+// return their values even when a default is provided.
+func TestEvaluateYqExpression_ExistingKeyNoDefault(t *testing.T) {
+	data := map[string]any{
+		"bucket": "my-bucket",
+	}
+	result, err := EvaluateYqExpression(nil, data, `.bucket // "default-bucket"`)
+
+	require.NoError(t, err)
+	assert.Equal(t, "my-bucket", result)
+}
+
+// TestEvaluateYqExpression_NullValueWithDefault verifies that YQ default
+// values work when a key exists but has a null value.
+//
+// This tests the YQ semantics of null // "default".
+func TestEvaluateYqExpression_NullValueWithDefault(t *testing.T) {
+	data := map[string]any{
+		"bucket": nil,
+	}
+	result, err := EvaluateYqExpression(nil, data, `.bucket // "default-bucket"`)
+
+	require.NoError(t, err)
+	// YQ's // operator returns the alternative when the value is null.
+	assert.Equal(t, "default-bucket", result)
 }

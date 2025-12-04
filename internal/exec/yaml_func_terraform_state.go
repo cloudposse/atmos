@@ -1,10 +1,12 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -19,8 +21,24 @@ func processTagTerraformState(
 	input string,
 	currentStack string,
 	stackInfo *schema.ConfigAndStacksInfo,
-) any {
+) (any, error) {
 	return processTagTerraformStateWithContext(atmosConfig, input, currentStack, nil, stackInfo)
+}
+
+// isRecoverableTerraformError checks if an error is recoverable (can use YQ default).
+func isRecoverableTerraformError(err error) bool {
+	return errors.Is(err, errUtils.ErrTerraformStateNotProvisioned) ||
+		errors.Is(err, errUtils.ErrTerraformOutputNotFound)
+}
+
+// hasYqDefault checks if a YQ expression contains a default (fallback) operator.
+func hasYqDefault(yqExpr string) bool {
+	return strings.Contains(yqExpr, "//")
+}
+
+// evaluateYqDefault evaluates a YQ expression against an empty map to get the default value.
+func evaluateYqDefault(atmosConfig *schema.AtmosConfiguration, yqExpr string) (any, error) {
+	return tb.GetTerraformBackendVariable(atmosConfig, map[string]any{}, yqExpr)
 }
 
 // processTagTerraformStateWithContext processes `!terraform.state` YAML tag with cycle detection.
@@ -30,13 +48,15 @@ func processTagTerraformStateWithContext(
 	currentStack string,
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
-) any {
+) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagTerraformStateWithContext")()
 
 	log.Debug("Executing Atmos YAML function", "function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformState)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return nil, err
+	}
 
 	var component string
 	var stack string
@@ -46,7 +66,9 @@ func processTagTerraformStateWithContext(
 	// while also ignoring leading and trailing whitespace.
 	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
 	parts, err := u.SplitStringByDelimiter(str, ' ')
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return nil, err
+	}
 
 	partsLen := len(parts)
 
@@ -64,8 +86,7 @@ func processTagTerraformStateWithContext(
 			"stack", currentStack,
 		)
 	default:
-		er := fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
 	// Check for circular dependencies if resolution context is provided.
@@ -79,7 +100,7 @@ func processTagTerraformStateWithContext(
 
 		// Check and record this dependency.
 		if err := resolutionCtx.Push(atmosConfig, node); err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return nil, err
 		}
 
 		// Defer pop to ensure we clean up even if there's an error.
@@ -95,6 +116,24 @@ func processTagTerraformStateWithContext(
 	}
 
 	value, err := stateGetter.GetState(atmosConfig, input, stack, component, output, false, authContext, authManager)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-	return value
+	if err != nil {
+		// Check if this is a recoverable error AND the expression has a YQ default.
+		if isRecoverableTerraformError(err) && hasYqDefault(output) {
+			log.Debug("Evaluating YQ default for recoverable error",
+				"function", input,
+				"error", err.Error(),
+			)
+			// Evaluate YQ against an empty map to get the default value.
+			defaultValue, yqErr := evaluateYqDefault(atmosConfig, output)
+			if yqErr != nil {
+				// If YQ evaluation fails, return the original error.
+				return nil, fmt.Errorf("%w: failed to evaluate YQ default: %v", err, yqErr)
+			}
+			return defaultValue, nil
+		}
+		// Non-recoverable error or no default available.
+		return nil, err
+	}
+
+	return value, nil
 }

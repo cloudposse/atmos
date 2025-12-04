@@ -90,6 +90,15 @@ var (
 	ErrDescribeComponent                = errors.New("failed to describe component")
 	ErrReadTerraformState               = errors.New("failed to read Terraform state")
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
+
+	// Recoverable YAML function errors - use YQ default if available.
+	// These errors indicate the data is not available but do not represent API failures.
+	ErrTerraformStateNotProvisioned = errors.New("terraform state not provisioned")
+	ErrTerraformOutputNotFound      = errors.New("terraform output not found")
+
+	// API/infrastructure errors - should cause non-zero exit.
+	// These errors indicate backend API failures that should not use YQ defaults.
+	ErrTerraformBackendAPIError = errors.New("terraform backend API error")
 	ErrUnsupportedBackendType           = errors.New("unsupported backend type")
 	ErrProcessTerraformStateFile        = errors.New("error processing terraform state file")
 	ErrLoadAwsConfig                    = errors.New("failed to load AWS config")
