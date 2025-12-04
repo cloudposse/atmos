@@ -795,8 +795,8 @@ func TestGenerateComponentBackendConfigFunction(t *testing.T) {
 	})
 }
 
-// TestValidateBackendConfig tests the validateBackendConfig pure function.
-func TestValidateBackendConfig(t *testing.T) {
+// TestExtractBackendConfig tests the extractBackendConfig pure function.
+func TestExtractBackendConfig(t *testing.T) {
 	t.Run("returns valid result when backend and backend_type are configured", func(t *testing.T) {
 		componentSection := map[string]any{
 			"backend": map[string]any{
@@ -806,7 +806,7 @@ func TestValidateBackendConfig(t *testing.T) {
 			"backend_type": "s3",
 		}
 
-		result := validateBackendConfig(componentSection)
+		result := extractBackendConfig(componentSection)
 
 		assert.True(t, result.Valid)
 		assert.Equal(t, "s3", result.BackendType)
@@ -822,7 +822,7 @@ func TestValidateBackendConfig(t *testing.T) {
 			},
 		}
 
-		result := validateBackendConfig(componentSection)
+		result := extractBackendConfig(componentSection)
 
 		assert.False(t, result.Valid)
 		assert.Equal(t, "no 'backend' section configured", result.SkipReason)
@@ -840,7 +840,7 @@ func TestValidateBackendConfig(t *testing.T) {
 			},
 		}
 
-		result := validateBackendConfig(componentSection)
+		result := extractBackendConfig(componentSection)
 
 		assert.False(t, result.Valid)
 		assert.Equal(t, "no 'backend_type' configured", result.SkipReason)
@@ -854,7 +854,7 @@ func TestValidateBackendConfig(t *testing.T) {
 			"backend_type": "s3",
 		}
 
-		result := validateBackendConfig(componentSection)
+		result := extractBackendConfig(componentSection)
 
 		assert.False(t, result.Valid)
 		assert.Equal(t, "no 'backend' section configured", result.SkipReason)
@@ -868,7 +868,7 @@ func TestValidateBackendConfig(t *testing.T) {
 			"backend_type": map[string]any{"invalid": "type"},
 		}
 
-		result := validateBackendConfig(componentSection)
+		result := extractBackendConfig(componentSection)
 
 		assert.False(t, result.Valid)
 		assert.Equal(t, "no 'backend_type' configured", result.SkipReason)
@@ -881,7 +881,7 @@ func TestValidateBackendConfig(t *testing.T) {
 			},
 		}
 
-		result := validateBackendConfig(componentSection)
+		result := extractBackendConfig(componentSection)
 
 		assert.False(t, result.Valid)
 		// Should fail on backend first.
@@ -891,7 +891,7 @@ func TestValidateBackendConfig(t *testing.T) {
 	t.Run("handles empty component section", func(t *testing.T) {
 		componentSection := map[string]any{}
 
-		result := validateBackendConfig(componentSection)
+		result := extractBackendConfig(componentSection)
 
 		assert.False(t, result.Valid)
 		assert.Equal(t, "no 'backend' section configured", result.SkipReason)
@@ -903,7 +903,7 @@ func TestValidateBackendConfig(t *testing.T) {
 			"backend_type": nil,
 		}
 
-		result := validateBackendConfig(componentSection)
+		result := extractBackendConfig(componentSection)
 
 		assert.False(t, result.Valid)
 		assert.Equal(t, "no 'backend' section configured", result.SkipReason)

@@ -17,19 +17,19 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// backendValidation holds the result of validating a component's backend configuration.
-type backendValidation struct {
+// backendConfig holds extracted backend configuration from a component section.
+type backendConfig struct {
 	Valid          bool
 	BackendSection map[string]any
 	BackendType    string
 	SkipReason     string
 }
 
-// validateBackendConfig validates a component's backend configuration for backend generation.
-func validateBackendConfig(componentSection map[string]any) backendValidation {
+// extractBackendConfig extracts and validates backend configuration from a component section.
+func extractBackendConfig(componentSection map[string]any) backendConfig {
 	backendSection, ok := componentSection[cfg.BackendSectionName].(map[string]any)
 	if !ok {
-		return backendValidation{
+		return backendConfig{
 			Valid:      false,
 			SkipReason: "no 'backend' section configured",
 		}
@@ -37,13 +37,13 @@ func validateBackendConfig(componentSection map[string]any) backendValidation {
 
 	backendType, ok := componentSection[cfg.BackendTypeSectionName].(string)
 	if !ok {
-		return backendValidation{
+		return backendConfig{
 			Valid:      false,
 			SkipReason: "no 'backend_type' configured",
 		}
 	}
 
-	return backendValidation{
+	return backendConfig{
 		Valid:          true,
 		BackendSection: backendSection,
 		BackendType:    backendType,
@@ -174,16 +174,16 @@ func ExecuteTerraformGenerateBackends(
 					}
 				}
 
-				// Validate backend configuration.
-				validationResult := validateBackendConfig(componentSection)
-				if !validationResult.Valid {
-					log.Warn("Skipping backend generation: "+validationResult.SkipReason+". "+
+				// Extract backend configuration.
+				backend := extractBackendConfig(componentSection)
+				if !backend.Valid {
+					log.Warn("Skipping backend generation: "+backend.SkipReason+". "+
 						"Set 'components.terraform.auto_generate_backend_file: false' in atmos.yaml to disable.",
 						"component", componentName, "stack", stackFileName)
 					continue
 				}
-				backendSection = validationResult.BackendSection
-				backendTypeSection = validationResult.BackendType
+				backendSection = backend.BackendSection
+				backendTypeSection = backend.BackendType
 
 				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[string]any); !ok {
 					varsSection = map[string]any{}
