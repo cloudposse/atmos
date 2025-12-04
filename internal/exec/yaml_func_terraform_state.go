@@ -2,7 +2,6 @@ package exec
 
 import (
 	"fmt"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -38,34 +37,28 @@ func processTagTerraformStateWithContext(
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformState)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
-	var component string
-	var stack string
-	var output string
+	// Parse function arguments using the purpose-built parser.
+	// Format: component [stack] expression
+	// Stack is optional - if not provided, uses currentStack.
+	component, stack, output := u.ParseFunctionArgs(str)
 
-	// Split the string into slices based on any whitespace (one or more spaces, tabs, or newlines),
-	// while also ignoring leading and trailing whitespace.
-	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
-	parts, err := u.SplitStringByDelimiter(str, ' ')
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if component == "" {
+		er := fmt.Errorf("%w: missing component: %s", errUtils.ErrYamlFuncInvalidArguments, input)
+		errUtils.CheckErrorPrintAndExit(er, "", "")
+	}
 
-	partsLen := len(parts)
+	if output == "" {
+		er := fmt.Errorf("%w: missing output expression: %s", errUtils.ErrYamlFuncInvalidArguments, input)
+		errUtils.CheckErrorPrintAndExit(er, "", "")
+	}
 
-	switch partsLen {
-	case 3:
-		component = strings.TrimSpace(parts[0])
-		stack = strings.TrimSpace(parts[1])
-		output = strings.TrimSpace(parts[2])
-	case 2:
-		component = strings.TrimSpace(parts[0])
+	// If no stack was specified, use the current stack.
+	if stack == "" {
 		stack = currentStack
-		output = strings.TrimSpace(parts[1])
 		log.Debug("Executing Atmos YAML function with component and output parameters; using current stack",
 			"function", input,
 			"stack", currentStack,
 		)
-	default:
-		er := fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
 	}
 
 	// Check for circular dependencies if resolution context is provided.
