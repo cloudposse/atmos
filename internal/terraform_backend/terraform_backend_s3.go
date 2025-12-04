@@ -13,6 +13,7 @@ import (
 	_ "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsUtils "github.com/cloudposse/atmos/internal/aws_utils"
@@ -154,6 +155,8 @@ func ReadTerraformBackendS3Internal(
 				time.Sleep(time.Second * 2) // backoff
 				continue
 			}
+			// Retries exhausted - log warning with error details to help diagnose the issue.
+			logS3RetryExhausted(err, tfStateFilePath, bucket, maxRetryCount)
 			return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromS3, lastErr)
 		}
 
@@ -168,4 +171,31 @@ func ReadTerraformBackendS3Internal(
 	}
 
 	return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromS3, lastErr)
+}
+
+// logS3RetryExhausted logs a warning when all retries are exhausted for S3 operations.
+// This helps users report issues by providing the error code and details.
+func logS3RetryExhausted(err error, tfStateFilePath, bucket string, maxRetries int) {
+	defer perf.Track(nil, "terraform_backend.logS3RetryExhausted")()
+
+	// Extract AWS API error code if available.
+	var apiErr smithy.APIError
+	errorCode := "unknown"
+	if errors.As(err, &apiErr) {
+		errorCode = apiErr.ErrorCode()
+	}
+
+	// Check for context timeout.
+	if errors.Is(err, context.DeadlineExceeded) {
+		errorCode = "timeout"
+	}
+
+	log.Warn(
+		"Failed to read Terraform state after all retries exhausted",
+		"file", tfStateFilePath,
+		"bucket", bucket,
+		"attempts", maxRetries+1,
+		"error_code", errorCode,
+		"error", err,
+	)
 }
