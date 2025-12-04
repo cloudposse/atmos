@@ -17,41 +17,33 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// backendConfigValidationResult represents the result of validating backend configuration.
-type backendConfigValidationResult struct {
-	// Valid indicates whether the backend configuration is valid for generation.
-	Valid bool
-	// BackendSection contains the backend configuration if valid.
+// backendValidation holds the result of validating a component's backend configuration.
+type backendValidation struct {
+	Valid          bool
 	BackendSection map[string]any
-	// BackendType contains the backend type string if valid.
-	BackendType string
-	// SkipReason contains the reason for skipping if not valid.
-	SkipReason string
+	BackendType    string
+	SkipReason     string
 }
 
 // validateBackendConfig validates a component's backend configuration for backend generation.
-// It returns a validation result indicating whether the configuration is valid and ready for generation.
-// This function is pure and testable, separating validation logic from side effects (logging).
-func validateBackendConfig(componentSection map[string]any) backendConfigValidationResult {
-	// Check for backend section.
+func validateBackendConfig(componentSection map[string]any) backendValidation {
 	backendSection, ok := componentSection[cfg.BackendSectionName].(map[string]any)
 	if !ok {
-		return backendConfigValidationResult{
+		return backendValidation{
 			Valid:      false,
 			SkipReason: "no 'backend' section configured",
 		}
 	}
 
-	// Check for backend_type.
 	backendType, ok := componentSection[cfg.BackendTypeSectionName].(string)
 	if !ok {
-		return backendConfigValidationResult{
+		return backendValidation{
 			Valid:      false,
 			SkipReason: "no 'backend_type' configured",
 		}
 	}
 
-	return backendConfigValidationResult{
+	return backendValidation{
 		Valid:          true,
 		BackendSection: backendSection,
 		BackendType:    backendType,
