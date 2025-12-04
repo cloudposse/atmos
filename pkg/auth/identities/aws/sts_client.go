@@ -10,6 +10,7 @@ import (
 
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -21,6 +22,8 @@ func NewSTSClientWithCredentials(
 	region string,
 	identityConfig *schema.Identity,
 ) (*sts.Client, string, error) {
+	defer perf.Track(nil, "aws.NewSTSClientWithCredentials")()
+
 	// Resolve region with fallback.
 	finalRegion := region
 	if finalRegion == "" {
