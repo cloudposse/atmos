@@ -955,5 +955,4 @@ components:
 		assert.True(t, os.IsNotExist(errTF), "backend.tf should not be created when backend_type is missing")
 		assert.True(t, os.IsNotExist(errJSON), "backend.tf.json should not be created when backend_type is missing")
 	})
-
 }
