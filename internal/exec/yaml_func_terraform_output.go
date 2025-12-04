@@ -19,36 +19,8 @@ func processTagTerraformOutput(
 	input string,
 	currentStack string,
 	stackInfo *schema.ConfigAndStacksInfo,
-) any {
+) (any, error) {
 	return processTagTerraformOutputWithContext(atmosConfig, input, currentStack, nil, stackInfo)
-}
-
-// trackOutputDependency records the dependency in the resolution context and returns a cleanup function.
-func trackOutputDependency(
-	atmosConfig *schema.AtmosConfiguration,
-	resolutionCtx *ResolutionContext,
-	component string,
-	stack string,
-	input string,
-) func() {
-	if resolutionCtx == nil {
-		return func() {}
-	}
-
-	node := DependencyNode{
-		Component:    component,
-		Stack:        stack,
-		FunctionType: "terraform.output",
-		FunctionCall: input,
-	}
-
-	// Check and record this dependency.
-	if err := resolutionCtx.Push(atmosConfig, node); err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-	}
-
-	// Return cleanup function.
-	return func() { resolutionCtx.Pop(atmosConfig) }
 }
 
 // processTagTerraformOutputWithContext processes `!terraform.output` YAML tag with cycle detection.
@@ -58,13 +30,15 @@ func processTagTerraformOutputWithContext(
 	currentStack string,
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
-) any {
+) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagTerraformOutputWithContext")()
 
 	log.Debug("Executing Atmos YAML function", "function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformOutput)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return nil, err
+	}
 
 	// Parse function arguments using the purpose-built parser.
 	// Format: component [stack] expression
@@ -72,13 +46,11 @@ func processTagTerraformOutputWithContext(
 	component, stack, output := fn.ParseArgs(str)
 
 	if component == "" {
-		er := fmt.Errorf("%w: missing component: %s", errUtils.ErrYamlFuncInvalidArguments, input)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, fmt.Errorf("%w: missing component: %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
 	if output == "" {
-		er := fmt.Errorf("%w: missing output expression: %s", errUtils.ErrYamlFuncInvalidArguments, input)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, fmt.Errorf("%w: missing output expression: %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
 	// If no stack was specified, use the current stack.
@@ -90,8 +62,23 @@ func processTagTerraformOutputWithContext(
 		)
 	}
 
-	// Track dependency and defer cleanup.
-	defer trackOutputDependency(atmosConfig, resolutionCtx, component, stack, input)()
+	// Check for circular dependencies if resolution context is provided.
+	if resolutionCtx != nil {
+		node := DependencyNode{
+			Component:    component,
+			Stack:        stack,
+			FunctionType: "terraform.output",
+			FunctionCall: input,
+		}
+
+		// Check and record this dependency.
+		if err := resolutionCtx.Push(atmosConfig, node); err != nil {
+			return nil, err
+		}
+
+		// Defer pop to ensure we clean up even if there's an error.
+		defer resolutionCtx.Pop(atmosConfig)
+	}
 
 	// Extract authContext and authManager from stackInfo if available.
 	var authContext *schema.AuthContext
@@ -103,17 +90,16 @@ func processTagTerraformOutputWithContext(
 
 	value, exists, err := outputGetter.GetOutput(atmosConfig, stack, component, output, false, authContext, authManager)
 	if err != nil {
-		er := fmt.Errorf("failed to get terraform output for component %s in stack %s, output %s: %w", component, stack, output, err)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, fmt.Errorf("failed to get terraform output for component %s in stack %s, output %s: %w", component, stack, output, err)
 	}
 
 	// If the output doesn't exist, return nil (backward compatible).
 	// This allows YAML functions to reference outputs that don't exist yet.
 	// Use yq fallback syntax (.output // "default") for default values.
 	if !exists {
-		return nil
+		return nil, nil
 	}
 
 	// value may be nil here if the terraform output is legitimately null, which is valid.
-	return value
+	return value, nil
 }

@@ -19,7 +19,7 @@ func processTagTerraformState(
 	input string,
 	currentStack string,
 	stackInfo *schema.ConfigAndStacksInfo,
-) any {
+) (any, error) {
 	return processTagTerraformStateWithContext(atmosConfig, input, currentStack, nil, stackInfo)
 }
 
@@ -30,13 +30,15 @@ func processTagTerraformStateWithContext(
 	currentStack string,
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
-) any {
+) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagTerraformStateWithContext")()
 
 	log.Debug("Executing Atmos YAML function", "function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformState)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return nil, err
+	}
 
 	// Parse function arguments using the purpose-built parser.
 	// Format: component [stack] expression
@@ -44,13 +46,11 @@ func processTagTerraformStateWithContext(
 	component, stack, output := fn.ParseArgs(str)
 
 	if component == "" {
-		er := fmt.Errorf("%w: missing component: %s", errUtils.ErrYamlFuncInvalidArguments, input)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, fmt.Errorf("%w: missing component: %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
 	if output == "" {
-		er := fmt.Errorf("%w: missing output expression: %s", errUtils.ErrYamlFuncInvalidArguments, input)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, fmt.Errorf("%w: missing output expression: %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
 	// If no stack was specified, use the current stack.
@@ -73,7 +73,7 @@ func processTagTerraformStateWithContext(
 
 		// Check and record this dependency.
 		if err := resolutionCtx.Push(atmosConfig, node); err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return nil, err
 		}
 
 		// Defer pop to ensure we clean up even if there's an error.
@@ -89,6 +89,8 @@ func processTagTerraformStateWithContext(
 	}
 
 	value, err := stateGetter.GetState(atmosConfig, input, stack, component, output, false, authContext, authManager)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-	return value
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
 }
