@@ -50,18 +50,21 @@ type ComponentProcessorResult struct {
 	ComponentSettings          map[string]any
 	ComponentEnv               map[string]any
 	ComponentMetadata          map[string]any
+	ComponentDependencies      map[string]any
 	ComponentCommand           string
 	ComponentOverrides         map[string]any
 	ComponentOverridesVars     map[string]any
 	ComponentOverridesSettings map[string]any
 	ComponentOverridesEnv      map[string]any
 	ComponentOverridesAuth     map[string]any
+	ComponentOverridesDeps     map[string]any
 	ComponentOverridesCommand  string
 	BaseComponentName          string
 	BaseComponentVars          map[string]any
 	BaseComponentSettings      map[string]any
 	BaseComponentEnv           map[string]any
 	BaseComponentAuth          map[string]any
+	BaseComponentDependencies  map[string]any
 	BaseComponentCommand       string
 	ComponentInheritanceChain  []string
 	BaseComponents             []string

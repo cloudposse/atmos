@@ -68,6 +68,7 @@ const (
 	VarsSectionName                   = "vars"
 	SettingsSectionName               = "settings"
 	EnvSectionName                    = "env"
+	DependenciesSectionName           = "dependencies"
 	BackendSectionName                = "backend"
 	BackendTypeSectionName            = "backend_type"
 	RemoteStateBackendSectionName     = "remote_state_backend"

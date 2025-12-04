@@ -1513,6 +1513,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentSettings map[string]any
 	var baseComponentEnv map[string]any
 	var baseComponentAuth map[string]any
+	var baseComponentDependencies map[string]any
 	var baseComponentProviders map[string]any
 	var baseComponentHooks map[string]any
 	var baseComponentCommand string
@@ -1637,6 +1638,13 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		if baseComponentDependenciesSection, baseComponentDependenciesSectionExist := baseComponentMap[cfg.DependenciesSectionName]; baseComponentDependenciesSectionExist {
+			baseComponentDependencies, ok = baseComponentDependenciesSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: '%s.dependencies' in the stack '%s'", errUtils.ErrInvalidComponentDependencies, baseComponent, stack)
+			}
+		}
+
 		if baseComponentProvidersSection, baseComponentProvidersSectionExist := baseComponentMap[cfg.ProvidersSectionName]; baseComponentProvidersSectionExist {
 			baseComponentProviders, ok = baseComponentProvidersSection.(map[string]any)
 			if !ok {
@@ -1720,6 +1728,13 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentAuth = merged
+
+		// Base component `dependencies`
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentDependencies, baseComponentDependencies})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentDependencies = merged
 
 		// Base component `providers`
 		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentProviders, baseComponentProviders})
