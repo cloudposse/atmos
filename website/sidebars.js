@@ -254,6 +254,7 @@ module.exports = {
                         {type: 'doc', id: 'components/terraform/backends', label: 'State Backends'},
                         {type: 'doc', id: 'components/terraform/workspaces', label: 'Workspaces'},
                         {type: 'doc', id: 'components/terraform/providers', label: 'Provider Generation'},
+                        {type: 'doc', id: 'components/terraform/planfiles', label: 'Planfiles'},
                         {type: 'doc', id: 'components/terraform/brownfield', label: 'Brownfield'},
                     ]
                 },

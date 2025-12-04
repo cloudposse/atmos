@@ -53,6 +53,15 @@ const config = {
                         from: '/introduction',
                         to: '/intro'
                     },
+                    // Redirects for introduction subpages
+                    {from: '/introduction/faq', to: '/faq'},
+                    {from: '/introduction/features', to: '/features'},
+                    {from: '/introduction/use-cases', to: '/use-cases'},
+                    {from: '/introduction/index', to: '/intro'},
+                    {from: '/introduction/why-atmos/why-atmos', to: '/intro/why-atmos'},
+                    // Redirects for integrations pages moved to cli/configuration
+                    {from: '/integrations/atlantis', to: '/cli/configuration/integrations/atlantis'},
+                    {from: '/integrations/integrations', to: '/cli/configuration/integrations'},
                     {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'
