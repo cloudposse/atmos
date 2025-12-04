@@ -34,7 +34,7 @@ The recommended way to vendor the components is to execute the `atmos vendor pul
 
 For more information about Atmos Vendoring and the `atmos vendor pull` CLI command, refer to:
 
-- [Atmos Vendoring](/core-concepts/vendor)
+- [Atmos Vendoring](/vendor/)
 - [atmos vendor pull](/cli/commands/vendor/pull)
 
 :::
@@ -223,7 +223,7 @@ The [remote-state](https://github.com/cloudposse/terraform-yaml-stack-config/tre
 Terraform provider to read Atmos configuration and obtain the remote state for Atmos components.
 
 Both the `atmos` CLI and [terraform-provider-utils](https://github.com/cloudposse/terraform-provider-utils) Terraform provider use the same `Go` code,
-which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/core-concepts/stacks).
+which try to locate the [CLI config](/cli/configuration) `atmos.yaml` file before parsing and processing [Atmos stacks](/learn/stacks).
 
 This means that `atmos.yaml` file must be at a location in the file system where all processes can find it.
 
@@ -262,4 +262,4 @@ For this to work for both the `atmos` CLI and the Terraform `utils` provider, we
   uses [Geodesic](https://github.com/cloudposse/geodesic) as the base Docker image. [Geodesic](https://github.com/cloudposse/geodesic) sets the ENV
   var `ATMOS_BASE_PATH` automatically to the absolute path of the root of the repo on local host
 
-For a complete description of how Atmos components use remote state, refer to [Component Remote State](/core-concepts/share-data/remote-state).
+For a complete description of how Atmos components use remote state, refer to [Component Remote State](/stacks/remote-state).

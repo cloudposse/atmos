@@ -1,0 +1,243 @@
+---
+title: Using External Stores
+sidebar_position: 4
+sidebar_label: External Stores
+description: Read data from external stores like SSM Parameter Store, Vault, and more
+id: stores
+slug: /stacks/sharing-state/stores
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+The `!store` YAML function reads data from external key-value stores like AWS SSM Parameter Store, HashiCorp Vault,
+Artifactory, Redis, and other backends. Use this when you need to share data that isn't stored in Terraform state.
+</Intro>
+
+:::tip When to Use Stores vs Terraform State
+- Use [`!terraform.state`](/stacks/sharing-state/terraform-state) for reading Terraform outputs (recommended)
+- Use `!store` for reading from external systems like SSM, Vault, or other key-value stores
+:::
+
+<KeyPoints>
+- Read from external key-value stores (SSM, Vault, Redis, etc.)
+- Configured in `atmos.yaml` with named store definitions
+- Supports default values for missing keys
+- Works with YQ expressions for complex data
+</KeyPoints>
+
+## When to Use Stores
+
+Use `!store` when you need to:
+- Read secrets from HashiCorp Vault or AWS Secrets Manager
+- Access configuration stored in SSM Parameter Store
+- Share data that isn't managed by Terraform
+- Integrate with external configuration management systems
+
+For Terraform outputs, use [`!terraform.state`](/stacks/sharing-state/terraform-state) instead.
+
+## Configuring Stores
+
+Define stores in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  # AWS SSM Parameter Store
+  ssm/prod:
+    backend: aws/ssm
+    config:
+      region: us-east-1
+
+  # HashiCorp Vault
+  vault/secrets:
+    backend: vault
+    config:
+      address: https://vault.example.com
+      auth_method: aws
+
+  # Redis
+  redis/cache:
+    backend: redis
+    config:
+      address: redis.example.com:6379
+```
+</File>
+
+## Basic Usage
+
+Read values from a configured store:
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        # Read from SSM Parameter Store
+        api_key: !store ssm/prod app api_key
+
+        # Read from Vault
+        db_password: !store vault/secrets database password
+```
+</File>
+
+## Syntax
+
+```yaml
+# Get key from store for component in current stack
+!store <store_name> <component> <key>
+
+# Get key from store for component in a different stack
+!store <store_name> <stack> <component> <key>
+
+# With default value
+!store <store_name> <component> <key> | default <default-value>
+
+# With YQ query
+!store <store_name> <component> <key> | query <yq-expression>
+```
+
+## Cross-Stack References
+
+Read from stores for components in different stacks:
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        # Read from a component in a different stack
+        shared_config: !store ssm/prod shared-services config settings
+
+        # Use template expressions for dynamic stack names
+        vpc_id: !store ssm/prod {{ printf "%s-network" .vars.environment }} vpc vpc_id
+```
+</File>
+
+## Default Values
+
+Provide fallback values for missing keys:
+
+```yaml
+# String default
+api_endpoint: !store ssm/prod api endpoint | default "https://api.example.com"
+
+# The default is used if the key doesn't exist in the store
+feature_flag: !store ssm/prod config feature_enabled | default false
+```
+
+## Working with Complex Data
+
+Use YQ expressions to extract values from structured data:
+
+```yaml
+# Get a specific field from JSON stored in the store
+db_host: !store ssm/prod database config | query .host
+
+# Get first item from a list
+primary_endpoint: !store ssm/prod cluster endpoints | query .[0]
+
+# Navigate nested structures
+api_key: !store vault/secrets app credentials | query .api.production.key
+```
+
+## Supported Store Backends
+
+<dl>
+  <dt>`aws/ssm`</dt>
+  <dd>AWS Systems Manager Parameter Store.</dd>
+
+  <dt>`aws/secretsmanager`</dt>
+  <dd>AWS Secrets Manager.</dd>
+
+  <dt>`vault`</dt>
+  <dd>HashiCorp Vault.</dd>
+
+  <dt>`redis`</dt>
+  <dd>Redis key-value store.</dd>
+
+  <dt>`artifactory`</dt>
+  <dd>JFrog Artifactory.</dd>
+</dl>
+
+## Example: Multi-Store Configuration
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  # Production SSM store
+  ssm/prod:
+    backend: aws/ssm
+    config:
+      region: us-east-1
+      # Optional: assume role for cross-account access
+      assume_role_arn: arn:aws:iam::123456789012:role/ssm-reader
+
+  # Development SSM store
+  ssm/dev:
+    backend: aws/ssm
+    config:
+      region: us-west-2
+
+  # Vault for secrets
+  vault/secrets:
+    backend: vault
+    config:
+      address: https://vault.example.com
+      namespace: infrastructure
+```
+</File>
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        # Infrastructure config from SSM
+        vpc_id: !store ssm/prod vpc vpc_id
+        subnet_ids: !store ssm/prod subnets private_subnet_ids
+
+        # Secrets from Vault
+        database_password: !store vault/secrets app db_password
+        api_secret: !store vault/secrets app api_secret
+```
+</File>
+
+## Writing to Stores
+
+Stores are typically populated by Terraform components using provider resources:
+
+<File title="components/terraform/vpc/outputs.tf">
+```hcl
+# Output to Terraform state (for !terraform.state)
+output "vpc_id" {
+  value = aws_vpc.this.id
+}
+
+# Also write to SSM for !store access
+resource "aws_ssm_parameter" "vpc_id" {
+  name  = "/atmos/${var.stack}/vpc/vpc_id"
+  type  = "String"
+  value = aws_vpc.this.id
+}
+```
+</File>
+
+## Considerations
+
+- **Secrets exposure**: Store values may appear in stdout when describing stacks
+- **Permissions**: You need read access to all referenced stores
+- **Cold starts**: Returns error if the key doesn't exist (use `| default` to handle)
+- **Latency**: External store calls add latency compared to `!terraform.state`
+- **Consistency**: Ensure store values are updated when Terraform state changes
+
+<ActionCard title="Use !terraform.state for Terraform Outputs">
+If you're reading Terraform outputs, `!terraform.state` is faster and doesn't require separate store configuration.
+<PrimaryCTA to="/stacks/sharing-state/terraform-state">Learn More</PrimaryCTA>
+</ActionCard>

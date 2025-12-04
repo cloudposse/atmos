@@ -111,7 +111,7 @@ ENV ATMOS_XDG_DATA_HOME=$HOME/.local/share
 ENV ATMOS_XDG_CACHE_HOME=$HOME/.cache
 ```
 
-This ensures Atmos credentials are stored in mounted directories (`~/.config`) rather than non-mounted system directories (`/etc/xdg_config_home`). See [Configuring Geodesic](/cli/commands/auth/tutorials/configuring-geodesic) for details.
+This ensures Atmos credentials are stored in mounted directories (`~/.config`) rather than non-mounted system directories (`/etc/xdg_config_home`). See [Configuring Geodesic](/tutorials/configuring-geodesic) for details.
 
 ### Consistent Cross-Platform Paths
 
@@ -156,7 +156,7 @@ This ensures **all code** in Atmos (even code that directly imports `github.com/
 
 ## Documentation Updates
 
-- [Configuring Geodesic with Atmos Auth](/cli/commands/auth/tutorials/configuring-geodesic) - Simplified configuration (no setup needed!)
+- [Configuring Geodesic with Atmos Auth](/tutorials/configuring-geodesic) - Simplified configuration (no setup needed!)
 - [Auth Usage Guide](/cli/commands/auth/usage) - Updated with correct macOS paths.
 
 ## Migration Support

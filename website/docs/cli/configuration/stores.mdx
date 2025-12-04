@@ -1,0 +1,194 @@
+---
+title: Stores Configuration
+sidebar_position: 21
+sidebar_label: stores
+sidebar_class_name: command
+id: stores
+description: Configure external stores for sharing data between components in atmos.yaml.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `stores` section in `atmos.yaml` configures external key-value stores that can be used to share data between components using the [`!store`](/stacks/sharing-state/stores) YAML function and [hooks](/stacks/hooks).
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  # AWS SSM Parameter Store
+  prod/ssm:
+    backend: aws/ssm
+    config:
+      region: us-east-1
+
+  # AWS Secrets Manager
+  prod/secrets:
+    backend: aws/secretsmanager
+    config:
+      region: us-east-1
+
+  # Azure Key Vault
+  prod/azure:
+    backend: azure/keyvault
+    config:
+      vault_name: my-keyvault
+
+  # Google Secret Manager
+  prod/gcp:
+    backend: gcp/secretmanager
+    config:
+      project_id: my-project
+
+  # Redis
+  cache:
+    backend: redis
+    config:
+      host: localhost
+      port: 6379
+
+  # Artifactory
+  artifacts:
+    backend: artifactory
+    config:
+      url: https://artifactory.example.com
+```
+</File>
+
+## Store Name Convention
+
+Store names follow the pattern `<environment>/<type>` by convention:
+- `prod/ssm` - Production SSM Parameter Store
+- `dev/secrets` - Development Secrets Manager
+- `shared/config` - Shared configuration store
+
+You can reference stores in stack configuration using the `!store` function:
+
+```yaml
+vars:
+  database_password: !store prod/secrets::database/password
+  api_key: !store prod/ssm::/app/api-key
+```
+
+## Supported Backends
+
+<dl>
+  <dt>`aws/ssm`</dt>
+  <dd>AWS Systems Manager Parameter Store. Stores and retrieves parameters from SSM.</dd>
+
+  <dt>`aws/secretsmanager`</dt>
+  <dd>AWS Secrets Manager. Stores and retrieves secrets with automatic rotation support.</dd>
+
+  <dt>`azure/keyvault`</dt>
+  <dd>Azure Key Vault. Stores and retrieves secrets from Azure.</dd>
+
+  <dt>`gcp/secretmanager`</dt>
+  <dd>Google Cloud Secret Manager. Stores and retrieves secrets from GCP.</dd>
+
+  <dt>`redis`</dt>
+  <dd>Redis key-value store. Useful for caching and temporary data.</dd>
+
+  <dt>`artifactory`</dt>
+  <dd>JFrog Artifactory. Stores and retrieves artifacts and metadata.</dd>
+</dl>
+
+## Backend Configuration
+
+### AWS SSM Parameter Store
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  prod/ssm:
+    backend: aws/ssm
+    config:
+      region: us-east-1
+      # Optional: assume role for cross-account access
+      role_arn: arn:aws:iam::123456789012:role/SSMReader
+```
+</File>
+
+### AWS Secrets Manager
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  prod/secrets:
+    backend: aws/secretsmanager
+    config:
+      region: us-east-1
+      # Optional: version stage (AWSCURRENT, AWSPREVIOUS, or custom)
+      version_stage: AWSCURRENT
+```
+</File>
+
+### Azure Key Vault
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  prod/azure:
+    backend: azure/keyvault
+    config:
+      vault_name: my-keyvault
+      # Optional: specific tenant ID
+      tenant_id: 12345678-1234-1234-1234-123456789012
+```
+</File>
+
+### Google Secret Manager
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  prod/gcp:
+    backend: gcp/secretmanager
+    config:
+      project_id: my-project
+```
+</File>
+
+### Redis
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  cache:
+    backend: redis
+    config:
+      host: localhost
+      port: 6379
+      # Optional: authentication
+      password: ${REDIS_PASSWORD}
+      db: 0
+```
+</File>
+
+## Using Stores in Hooks
+
+You can write values to stores using [hooks](/stacks/hooks):
+
+```yaml
+components:
+  terraform:
+    vpc:
+      hooks:
+        store-outputs:
+          events:
+            - after-terraform-apply
+          command: store
+          name: prod/ssm
+          outputs:
+            - vpc_id
+            - subnet_ids
+```
+
+This writes Terraform outputs to the configured store after apply completes.
+
+## Related
+
+- [External Stores](/stacks/sharing-state/stores) - Using `!store` function in stacks
+- [Hooks](/stacks/hooks) - Writing to stores with hooks
+- [Terraform State](/stacks/sharing-state/terraform-state) - Alternative data sharing method

@@ -5,13 +5,24 @@ sidebar_class_name: command
 description: "List Atmos Stacks and Components"
 ---
 
-import Screengrab from '@site/src/components/Screengrab';
-import DocCardList from '@theme/DocCardList';
+import Screengrab from '@site/src/components/Screengrab'
+import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Use these subcommands to list sections of Atmos configurations.
 </Intro>
+
+<ActionCard title="Configure Stacks">
+    Learn how to configure stacks, components, and the list command column customization.
+    <div>
+      <PrimaryCTA to="/cli/configuration/stacks">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Usage
 
 <Screengrab title="atmos list --help" slug="atmos-list--help" />
 

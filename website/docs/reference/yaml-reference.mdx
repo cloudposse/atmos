@@ -1,0 +1,971 @@
+---
+title: YAML Configuration Reference
+sidebar_position: 2
+sidebar_label: YAML Reference
+description: Comprehensive guide to YAML in Atmos with best practices and common pitfalls
+id: yaml
+slug: /reference/yaml
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import KeyTakeaways from '@site/src/components/KeyTakeaways'
+
+<Intro>
+YAML is the configuration language for Atmos stacks. Understanding YAML's features, gotchas, and best practices is essential for writing maintainable stack configurations at scale.
+</Intro>
+
+This guide covers everything you need to know about YAML in Atmos, from anchors and references to avoiding common pitfalls when mixing YAML with Go templates.
+
+## YAML is a Superset of JSON
+
+**Any valid JSON is also valid YAML.** This means you can embed JSON objects anywhere in your YAML configuration:
+
+<File title="stacks/prod.yaml">
+```yaml
+vars:
+  # YAML-style map
+  tags:
+    Environment: production
+    Team: platform
+
+  # JSON-style map (also valid!)
+  metadata: {"created": "2024-01-01", "version": "1.0"}
+
+components:
+  terraform:
+    vpc:
+      # Mixing YAML and JSON
+      vars:
+        cidr_block: "10.0.0.0/16"
+        tags: {"Name": "prod-vpc", "ManagedBy": "atmos"}
+```
+</File>
+
+**When to use JSON in YAML:**
+- ✅ Compact, single-line objects
+- ✅ Generated configuration from scripts
+- ✅ Copying from JSON sources
+
+**When to use YAML syntax:**
+- ✅ Multi-line configuration (more readable)
+- ✅ Configuration that needs comments
+- ✅ Nested structures (cleaner indentation)
+
+## Dot Notation for Nested Keys
+
+When you only need to set a single value deep in a nested structure, you can use **dot notation** instead of creating the full hierarchy. This makes your configuration more concise and readable.
+
+### Traditional Nesting vs Dot Notation
+
+**Traditional approach (verbose):**
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc-base
+        inherits:
+          - vpc-defaults
+      settings:
+        spacelift:
+          workspace_enabled: true
+          autodeploy: false
+        validation:
+          check_cloudformation: true
+```
+</File>
+
+**Dot notation (concise):**
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata.component: vpc-base
+      metadata.inherits:
+        - vpc-defaults
+      settings.spacelift.workspace_enabled: true
+      settings.spacelift.autodeploy: false
+      settings.validation.check_cloudformation: true
+```
+</File>
+
+Both configurations produce the exact same result. Dot notation is purely a syntax convenience for writing cleaner YAML.
+
+### Mixing Dot Notation and Traditional Nesting
+
+You can mix both approaches in the same configuration. Use dot notation for single values, traditional nesting for groups:
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      # Dot notation for single deep values
+      metadata.component: vpc-base
+      settings.spacelift.workspace_enabled: true
+
+      # Traditional nesting for related groups
+      vars:
+        cidr_block: "10.0.0.0/16"
+        enable_dns_hostnames: true
+        enable_dns_support: true
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
+
+      # Dot notation again for another single value
+      settings.validation.check_cloudformation: true
+```
+</File>
+
+### When to Use Dot Notation
+
+**✅ Use dot notation when:**
+- Setting a single value deep in the tree
+- You want more concise, readable configuration
+- The nested path is clear and self-documenting
+
+**❌ Use traditional nesting when:**
+- Setting multiple related values in the same section
+- You want to emphasize the structure
+- You're defining complex nested objects with many fields
+
+### Dot Notation Works Everywhere
+
+Dot notation isn't limited to component configuration—it works in any YAML section:
+
+<File title="stacks/globals.yaml">
+```yaml
+# Top-level vars with dot notation
+vars.tags.ManagedBy: Atmos
+vars.tags.Environment: production
+
+# Settings with dot notation
+settings.spacelift.workspace_enabled: true
+settings.github.default_branch: main
+
+# Environment variables
+env.TF_LOG: DEBUG
+env.AWS_DEFAULT_REGION: us-east-1
+```
+</File>
+
+This is equivalent to:
+
+<File title="stacks/globals.yaml">
+```yaml
+vars:
+  tags:
+    ManagedBy: Atmos
+    Environment: production
+
+settings:
+  spacelift:
+    workspace_enabled: true
+  github:
+    default_branch: main
+
+env:
+  TF_LOG: DEBUG
+  AWS_DEFAULT_REGION: us-east-1
+```
+</File>
+
+:::tip Best Practice
+Use dot notation when it improves readability. If you have 2+ values in the same section, traditional nesting is often clearer.
+:::
+
+## Anchors and References (Aliases)
+
+YAML anchors (`&`) and references (`*`) let you reuse configuration within a single file. This is YAML's built-in DRY mechanism.
+
+### Basic Anchor and Reference
+
+<File title="stacks/prod.yaml">
+```yaml
+# Define an anchor with &
+vars:
+  common_tags: &common_tags
+    ManagedBy: Atmos
+    Environment: production
+    Team: Platform
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # Reference the anchor with *
+        tags: *common_tags
+
+    eks:
+      vars:
+        # Same tags reused
+        tags: *common_tags
+```
+</File>
+
+**Result after YAML processing:**
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        tags:
+          ManagedBy: Atmos
+          Environment: production
+          Team: Platform
+    eks:
+      vars:
+        tags:
+          ManagedBy: Atmos
+          Environment: production
+          Team: Platform
+```
+
+### Merging with `<<` (Merge Key)
+
+The merge key `<<` combines anchors with additional keys:
+
+<File title="stacks/prod.yaml">
+```yaml
+vars:
+  base_tags: &base_tags
+    ManagedBy: Atmos
+    Environment: production
+
+components:
+  terraform:
+    vpc:
+      vars:
+        tags:
+          <<: *base_tags  # Merge base_tags
+          Name: prod-vpc  # Add additional keys
+          Type: network
+
+    rds:
+      vars:
+        tags:
+          <<: *base_tags
+          Name: prod-database
+          Type: database
+```
+</File>
+
+**Result:**
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        tags:
+          ManagedBy: Atmos
+          Environment: production
+          Name: prod-vpc
+          Type: network
+```
+
+### Real-World Example: Component Defaults
+
+<File title="stacks/prod-us-east-1.yaml">
+```yaml
+# Define VPC defaults as an anchor
+vars: &vpc_defaults
+  enable_dns_hostnames: true
+  enable_dns_support: true
+  enable_nat_gateway: true
+  single_nat_gateway: false
+  create_igw: true
+  map_public_ip_on_launch: false
+
+components:
+  terraform:
+    vpc-prod:
+      metadata:
+        component: vpc
+      vars:
+        <<: *vpc_defaults  # Reuse VPC defaults
+        cidr_block: "10.0.0.0/16"
+        availability_zones: ["us-east-1a", "us-east-1b", "us-east-1c"]
+        single_nat_gateway: true  # Override for prod
+```
+</File>
+
+:::tip
+For cross-file reuse, use [Atmos imports and inheritance](/howto/inheritance) instead of YAML anchors.
+:::
+
+### Multiple Anchors with Merge
+
+You can merge multiple anchors:
+
+<File title="stacks/prod.yaml">
+```yaml
+vars:
+  security_tags: &security_tags
+    Compliance: SOC2
+    DataClassification: sensitive
+
+  cost_tags: &cost_tags
+    CostCenter: engineering
+    Project: infrastructure
+
+components:
+  terraform:
+    rds:
+      vars:
+        tags:
+          <<: [*security_tags, *cost_tags]  # Merge both
+          Name: prod-database
+```
+</File>
+
+**Result:**
+```yaml
+tags:
+  Compliance: SOC2
+  DataClassification: sensitive
+  CostCenter: engineering
+  Project: infrastructure
+  Name: prod-database
+```
+
+:::warning Anchor Scope
+Anchors are **file-scoped only**. They don't work across imports. Use Atmos imports and inheritance for cross-file reuse.
+:::
+
+## Type Coercion Gotchas
+
+YAML automatically converts values based on their appearance. This causes unexpected behavior if you're not careful.
+
+### The `NO` Problem (Country Codes)
+
+<File title="stacks/countries.yaml (WRONG)">
+```yaml
+vars:
+  allowed_countries:
+    - US
+    - GB
+    - NO  # ❌ Treated as boolean false!
+    - SE
+    - DK
+```
+</File>
+
+**What YAML sees:**
+```yaml
+vars:
+  allowed_countries:
+    - US
+    - GB
+    - false  # NO became false!
+    - SE
+    - DK
+```
+
+**Fix: Quote it**
+<File title="stacks/countries.yaml (CORRECT)">
+```yaml
+vars:
+  allowed_countries:
+    - US
+    - GB
+    - "NO"  # ✅ String
+    - SE
+    - DK
+```
+</File>
+
+### Boolean Conversion Table
+
+YAML interprets these as booleans:
+
+| String | Becomes |
+|--------|---------|
+| `yes`, `Yes`, `YES` | `true` |
+| `no`, `No`, `NO` | `false` |
+| `true`, `True`, `TRUE` | `true` |
+| `false`, `False`, `FALSE` | `false` |
+| `on`, `On`, `ON` | `true` |
+| `off`, `Off`, `OFF` | `false` |
+
+**Always quote these if you need them as strings:**
+
+<File title="stacks/config.yaml">
+```yaml
+vars:
+  # WRONG - Becomes boolean
+  confirmation: yes  # → true
+
+  # CORRECT - Stays string
+  confirmation: "yes"  # → "yes"
+
+  # Country codes that need quoting
+  countries: ["NO", "ON", "OFF", "YES"]
+```
+</File>
+
+### Numeric Type Coercion
+
+<File title="stacks/config.yaml">
+```yaml
+vars:
+  # These become numbers, not strings
+  version: 1.20       # → 1.2 (float, trailing zero lost!)
+  zip_code: 07094     # → 7094 (integer, leading zero lost!)
+  port: 8080          # → 8080 (integer)
+
+  # Quote to preserve as strings
+  version: "1.20"     # → "1.20"
+  zip_code: "07094"   # → "07094"
+  port: "8080"        # → "8080"
+```
+</File>
+
+### Octal Number Trap
+
+<File title="stacks/config.yaml">
+```yaml
+vars:
+  # Leading zero = octal in YAML 1.1!
+  file_mode: 0644     # → 420 in decimal (octal conversion!)
+
+  # Quote to preserve
+  file_mode: "0644"   # → "0644"
+```
+</File>
+
+## Quoting Best Practices
+
+### When You MUST Quote
+
+**1. Strings that look like other types:**
+```yaml
+vars:
+  country: "NO"           # Looks like boolean
+  version: "1.20"         # Looks like number
+  value: "true"           # Looks like boolean
+  code: "07094"           # Leading zero
+```
+
+**2. Strings with special characters:**
+```yaml
+vars:
+  url: "https://example.com"     # Contains :
+  path: "/var/log/app.log"       # Fine, but quote for safety
+  regex: "^[a-z]+$"               # Contains special chars
+  template: "{{ .vars.name }}"    # Contains braces
+```
+
+**3. Multi-line strings (see next section)**
+
+### Consistent Quoting Strategy
+
+**Recommended: Quote all string values for consistency**
+
+<File title="stacks/prod.yaml (Consistent Style)">
+```yaml
+vars:
+  environment: "production"       # Quoted
+  region: "us-east-1"             # Quoted
+  namespace: "myapp"              # Quoted
+  cidr_block: "10.0.0.0/16"       # Quoted
+  enable_vpc: true                # Boolean (no quotes)
+  instance_count: 3               # Number (no quotes)
+```
+</File>
+
+**Benefits:**
+- ✅ No mental overhead deciding when to quote
+- ✅ Prevents type coercion surprises
+- ✅ Easier to read and maintain
+- ✅ Tools like prettier/yamllint can enforce it
+
+## Multi-Line Strings
+
+YAML has multiple ways to handle multi-line strings. Choose the right one for your use case.
+
+### Literal Block Scalar (`|`)
+
+Preserves line breaks and trailing newline:
+
+<File title="stacks/config.yaml">
+```yaml
+vars:
+  script: |
+    #!/bin/bash
+    set -e
+    echo "Starting deployment"
+    terraform apply -auto-approve
+```
+</File>
+
+**Result:**
+```
+#!/bin/bash\nset -e\necho "Starting deployment"\nterraform apply -auto-approve\n
+```
+
+### Folded Block Scalar (`>`)
+
+Folds lines into a single line, preserves final newline:
+
+<File title="stacks/config.yaml">
+```yaml
+vars:
+  description: >
+    This is a very long description that spans
+    multiple lines but will be folded into a
+    single line when processed.
+```
+</File>
+
+**Result:**
+```
+This is a very long description that spans multiple lines but will be folded into a single line when processed.\n
+```
+
+### Block Chomping (Control Trailing Newlines)
+
+**`|` or `>` alone:** Keep final newline
+
+**`|-` or `>-`:** Strip final newline (clip)
+
+**`|+` or `>+`:** Keep all trailing newlines (keep)
+
+<File title="stacks/config.yaml">
+```yaml
+vars:
+  # Default: Keep final newline
+  script_keep: |
+    echo "hello"
+    echo "world"
+
+  # Strip trailing newline
+  script_strip: |-
+    echo "hello"
+    echo "world"
+
+  # Keep all trailing newlines
+  script_keep_all: |+
+    echo "hello"
+    echo "world"
+
+```
+</File>
+
+### Real-World Example: User Data Script
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    ec2:
+      vars:
+        user_data: |
+          #!/bin/bash
+          set -euo pipefail
+
+          # Install dependencies
+          apt-get update
+          apt-get install -y docker.io
+
+          # Start application
+          docker run -d -p 80:80 myapp:latest
+```
+</File>
+
+## Go Templates in YAML (Gotchas!)
+
+Atmos uses Go templates for dynamic configuration. **Go template braces conflict with YAML flow-style maps.**
+
+### The Brace Problem
+
+<File title="stacks/config.yaml (WRONG)">
+```yaml
+vars:
+  # ❌ YAML sees this as incomplete flow-style map!
+  bucket_name: {{ .vars.namespace }}-{{ .vars.environment }}-bucket
+```
+</File>
+
+**Error:**
+```
+Error parsing YAML: mapping values are not allowed in this context
+```
+
+### Solution: Quote Template Strings
+
+<File title="stacks/config.yaml (CORRECT)">
+```yaml
+vars:
+  # ✅ Quote any string containing Go templates
+  bucket_name: "{{ .vars.namespace }}-{{ .vars.environment }}-bucket"
+
+  # ✅ Also works for complex expressions
+  cluster_name: '{{ printf "%s-%s-eks" .vars.namespace .vars.region }}'
+
+  # ✅ Multi-line templates need literal block with quotes
+  complex_value: |
+    {{ range .vars.availability_zones }}
+    - {{ . }}
+    {{ end }}
+```
+</File>
+
+### Template Delimiters and YAML Conflicts
+
+**Problem: YAML flow-style syntax looks like templates:**
+
+<File title="stacks/config.yaml">
+```yaml
+vars:
+  # This is a YAML flow-style map (not a template!)
+  inline_map: {key: value, another: thing}
+
+  # This is a Go template (quote it!)
+  templated: "{{ .vars.value }}"
+```
+</File>
+
+**Best practice: Avoid flow-style maps when using templates**
+
+<File title="stacks/config.yaml (Better)">
+```yaml
+vars:
+  # Use block-style maps for clarity
+  inline_map:
+    key: value
+    another: thing
+
+  # Templates are clearly quoted
+  templated: "{{ .vars.value }}"
+```
+</File>
+
+### Nested Templates in Lists
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        # ✅ Each template quoted
+        availability_zones:
+          - "{{ .vars.region }}a"
+          - "{{ .vars.region }}b"
+          - "{{ .vars.region }}c"
+
+        # ✅ Complex template in list
+        subnet_cidrs:
+          - '{{ printf "10.%d.1.0/24" .vars.vpc_index }}'
+          - '{{ printf "10.%d.2.0/24" .vars.vpc_index }}'
+```
+</File>
+
+## Common YAML Gotchas
+
+### 1. Indentation Matters (2 Spaces Standard)
+
+<File title="WRONG: Mixed indentation">
+```yaml
+components:
+  terraform:
+	vpc:  # ❌ Tab here
+      vars:  # ❌ Spaces here (inconsistent)
+        cidr: "10.0.0.0/16"
+```
+</File>
+
+<File title="CORRECT: Consistent 2-space indentation">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+```
+</File>
+
+**Best practice:**
+- ✅ Use 2 spaces (Atmos convention)
+- ✅ Configure editor to insert spaces for Tab
+- ✅ Never mix tabs and spaces
+- ✅ Use `.editorconfig` to enforce (see [EditorConfig Validation](/validation/editorconfig-validation))
+
+### 2. Colons in Unquoted Strings
+
+<File title="WRONG">
+```yaml
+vars:
+  url: https://example.com  # ❌ Colon confuses parser
+  time: 12:30:00            # ❌ Also problematic
+```
+</File>
+
+<File title="CORRECT">
+```yaml
+vars:
+  url: "https://example.com"  # ✅ Quoted
+  time: "12:30:00"            # ✅ Quoted
+```
+</File>
+
+### 3. Lists vs Maps
+
+<File title="stacks/config.yaml">
+```yaml
+vars:
+  # This is a LIST of maps
+  servers:
+    - name: web1
+      ip: 10.0.1.10
+    - name: web2
+      ip: 10.0.1.11
+
+  # This is a MAP with nested maps
+  server_config:
+    web1:
+      ip: 10.0.1.10
+    web2:
+      ip: 10.0.1.11
+```
+</File>
+
+**In Atmos, this matters for deep merge:**
+- Maps merge recursively
+- Lists replace entirely
+
+### 4. Empty Values
+
+<File title="stacks/config.yaml">
+```yaml
+vars:
+  # These are different!
+  null_value: null           # null
+  tilde_value: ~             # null (YAML 1.1)
+  empty_string: ""           # empty string
+  no_value:                  # null (key with no value)
+
+  # For Atmos, prefer explicit empty string or null
+  description: ""            # Empty string
+  optional_field: null       # Explicitly null
+```
+</File>
+
+### 5. Duplicate Keys (Last Wins)
+
+<File title="stacks/config.yaml">
+```yaml
+vars:
+  environment: dev       # This gets overwritten
+  region: us-east-1
+  environment: prod      # ✅ This wins (last occurrence)
+```
+</File>
+
+**Result:** `environment: prod`
+
+**Best practice:** Use linters to detect duplicates (see [YAML Schema Validation](/validation/json-schema))
+
+## Best Practices for Maintainable YAML
+
+### 1. Consistent Quoting
+
+<File title="stacks/prod.yaml">
+```yaml
+# ✅ GOOD: All strings quoted
+vars:
+  namespace: "myapp"
+  environment: "production"
+  region: "us-east-1"
+  cidr_block: "10.0.0.0/16"
+```
+</File>
+
+### 2. Use Block Style for Nested Data
+
+<File title="stacks/prod.yaml">
+```yaml
+# ✅ GOOD: Block style (readable, commentable)
+vars:
+  tags:
+    Environment: production
+    Team: platform
+    ManagedBy: atmos
+
+# ❌ AVOID: Flow style (compact but hard to read/comment)
+vars:
+  tags: {Environment: production, Team: platform, ManagedBy: atmos}
+```
+</File>
+
+### 3. Leverage Comments
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        # Production VPC requires 3 AZs for HA
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
+
+        # Enable NAT gateways in each AZ (higher cost but redundant)
+        single_nat_gateway: false
+
+        # DNS support required for EKS cluster
+        enable_dns_hostnames: true
+        enable_dns_support: true
+```
+</File>
+
+### 4. Use Anchors for Repeated Config (Within File)
+
+<File title="stacks/prod.yaml">
+```yaml
+vars:
+  prod_tags: &prod_tags
+    Environment: production
+    Team: platform
+    Compliance: SOC2
+
+components:
+  terraform:
+    vpc:
+      vars:
+        tags: *prod_tags
+
+    eks:
+      vars:
+        tags: *prod_tags
+```
+</File>
+
+### 5. Separate Concerns with Imports (Across Files)
+
+<File title="stacks/_defaults/tags.yaml">
+```yaml
+vars:
+  common_tags:
+    ManagedBy: Atmos
+    Team: Platform
+```
+</File>
+
+<File title="stacks/prod.yaml">
+```yaml
+import:
+  - _defaults/tags
+
+vars:
+  environment: production
+
+components:
+  terraform:
+    vpc:
+      vars:
+        tags:
+          # Inherits common_tags from import
+          Environment: production
+```
+</File>
+
+### 6. Use YAML Schema Validation
+
+Configure JSON Schema validation to catch errors:
+
+<File title="atmos.yaml">
+```yaml
+schemas:
+  atmos:
+    manifest: "https://atmos.tools/schemas/atmos/manifest/1.0.json"
+  stacks:
+    manifest: "https://atmos.tools/schemas/stacks/stack-config/1.0.json"
+```
+</File>
+
+See [JSON Schema Validation](/validation/json-schema) for details.
+
+### 7. Validate YAML with EditorConfig
+
+Use `.editorconfig` to enforce consistent formatting:
+
+<File title=".editorconfig">
+```ini
+[*.{yaml,yml}]
+indent_style = space
+indent_size = 2
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+```
+</File>
+
+See [EditorConfig Validation](/validation/editorconfig-validation) for details.
+
+## YAML Linting Tools
+
+Use linters to catch issues early:
+
+**yamllint** - General YAML linting
+```bash
+# Install
+pip install yamllint
+
+# Lint stacks
+yamllint stacks/
+```
+
+**Atmos Validation** - Schema and policy validation
+```bash
+# Validate stack configurations
+atmos validate stacks
+
+# Validate specific component
+atmos validate component vpc -s prod
+```
+
+See [Validation](/validation/validating) for comprehensive validation strategies.
+
+## Quick Reference: YAML in Atmos
+
+| Feature | Syntax | Use Case |
+|---------|--------|----------|
+| **Anchor** | `&name` | Define reusable config within file |
+| **Reference** | `*name` | Reuse anchored config |
+| **Merge** | `<<: *name` | Combine anchor with new keys |
+| **Literal Block** | `\|` | Multi-line string, preserve newlines |
+| **Folded Block** | `>` | Multi-line string, fold to single line |
+| **Quote Strings** | `"string"` | Prevent type coercion, escape special chars |
+| **Go Template** | `"{{ .vars.x }}"` | Dynamic values (MUST quote) |
+| **JSON in YAML** | `{"key": "val"}` | Compact objects (use sparingly) |
+| **Comment** | `# comment` | Document configuration |
+
+<KeyTakeaways>
+- **Quote all string values** - Prevents type coercion surprises
+- **Quote Go templates** - Avoids YAML parsing conflicts with braces
+- **Use 2-space indentation** - Atmos standard, configure your editor
+- **Leverage anchors within files** - Use imports across files
+- **Prefer block style over flow style** - More readable and commentable
+- **Validate early and often** - Use schema validation and linters
+- **YAML is JSON-compatible** - But prefer YAML syntax for readability
+- **Watch for `NO`, `ON`, `OFF`** - Country codes and words that become booleans
+</KeyTakeaways>
+
+## See Also
+
+- **[YAML in Atmos (Learn)](/learn/yaml)** - Beginner-friendly YAML basics
+- **[Stack Configuration](/stacks)** - Advanced stack configuration
+- **[Template Functions](/functions/template/)** - Go template functions in Atmos
+- **[YAML Functions](/functions/yaml/)** - Native YAML tag functions
+- **[JSON Schema Validation](/validation/json-schema)** - Validate YAML structure
+- **[EditorConfig Validation](/validation/editorconfig-validation)** - Enforce formatting

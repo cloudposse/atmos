@@ -1,0 +1,93 @@
+---
+title: Workflows
+sidebar_position: 80
+sidebar_label: workflows
+sidebar_class_name: command
+description: Configure the base path for Atmos workflow definitions.
+id: workflows
+slug: /cli/configuration/workflows
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Configure where Atmos looks for workflow definition files. Workflows allow you to automate sequences of Atmos commands and other operations.
+</Intro>
+
+## Configuration
+
+Workflows are configured in the `workflows` section:
+
+<File title="atmos.yaml">
+```yaml
+workflows:
+  # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line argument
+  # Supports both absolute and relative paths
+  base_path: "stacks/workflows"
+```
+</File>
+
+## Configuration Options
+
+<dl>
+  <dt>`workflows.base_path`</dt>
+  <dd>
+    Base path to Atmos workflow definition files. Supports both absolute and relative paths. When `base_path` is set in the root configuration, this path is relative to it. Can also be set using `ATMOS_WORKFLOWS_BASE_PATH` environment variable or `--workflows-dir` command-line argument.
+  </dd>
+</dl>
+
+## Directory Structure
+
+A typical workflows directory structure:
+
+```
+stacks/workflows/
+├── deploy.yaml
+├── destroy.yaml
+├── validate.yaml
+└── maintenance/
+    ├── backup.yaml
+    └── rotate-credentials.yaml
+```
+
+## Example Workflow File
+
+<File title="stacks/workflows/deploy.yaml">
+```yaml
+workflows:
+  deploy-vpc:
+    description: Deploy VPC to all environments
+    steps:
+      - command: terraform apply vpc -s plat-ue2-dev --auto-approve
+      - command: terraform apply vpc -s plat-ue2-staging --auto-approve
+      - command: terraform apply vpc -s plat-ue2-prod --auto-approve
+
+  deploy-all:
+    description: Deploy all infrastructure
+    steps:
+      - command: workflow deploy-vpc
+      - command: terraform apply eks-cluster -s plat-ue2-dev --auto-approve
+      - command: terraform apply eks-cluster -s plat-ue2-staging --auto-approve
+      - command: terraform apply eks-cluster -s plat-ue2-prod --auto-approve
+```
+</File>
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_WORKFLOWS_BASE_PATH`</dt>
+  <dd>Base path to Atmos workflow definitions.</dd>
+</dl>
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/workflow', label: 'atmos workflow', description: 'Execute Atmos workflows'},
+  {type: 'link', href: '/cli/commands/list/list-workflows', label: 'atmos list workflows', description: 'List available workflows'},
+]} />
+
+## See Also
+
+- [CLI Configuration](/cli/configuration) — Overview of CLI configuration
+- [Workflows](/workflows) — Complete guide to Atmos workflows

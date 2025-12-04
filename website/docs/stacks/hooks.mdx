@@ -1,0 +1,212 @@
+---
+title: Manage Lifecycle Events with Hooks
+sidebar_position: 6
+sidebar_label: hooks
+sidebar_class_name: command
+description: Use lifecycle hooks to take action at various points in the lifecycle of your components.
+id: hooks
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+Atmos supports the ability to take action at various points in the lifecycle of your components. This is done by
+configuring the `hooks` section in your stack manifest for the component that you want to take action on.
+</Intro>
+
+
+## Hooks Schema
+
+The `hooks` section schema is as follows:
+
+```yaml
+hooks:
+  store-outputs:
+    events:
+      - after-terraform-apply
+    command: store
+    name: prod/ssm
+    outputs:
+      vpc_id: .id
+```
+
+This schema can be specified at the top level of the stack configuration (global), within the `terraform` section,
+inside individual components, or in the `overrides` section. Partial config can also be specified at various levels
+to help keep the configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself).
+
+#### An example demonstrating this concept is below:
+
+At the global level, set that the store command will run after terraform apply:
+
+```yaml
+# stacks/catalog/vpc/_defaults.yaml (global)
+hooks:
+  store-outputs:
+    events:
+      - after-terraform-apply
+    command: store
+```
+In the production account, use the `prod/ssm` store (configured in atmos.yaml):
+
+```yaml
+# stacks/orgs/acme/plat/prod/_defaults.yaml (terraform)
+terraform:
+  hooks:
+    store-outputs:
+      name: prod/ssm
+```
+
+At the component level, specify that the `id` output of the component should be stored in the store as the `vpc_id` key:
+
+```yaml
+# stacks/orgs/acme/plat/prod/us-east-2.yaml (component)
+components:
+  terraform:
+    vpc:
+      hooks:
+        store-outputs:
+          outputs:
+            vpc_id: .id
+```
+
+## Supported Lifecycle Events
+
+Atmos supports the following lifecycle events:
+
+- `after-terraform-apply` (this event is triggered after the `atmos terraform apply` or `atmos terraform deploy` command is run)
+
+## Supported Functions
+
+### store
+
+The `store` function writes data to an external store after Terraform operations complete. This enables sharing Terraform outputs with other components via the [`!store` function](/stacks/sharing-state/stores).
+
+#### Configuring Stores
+
+Before using the `store` function, you must define stores in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  # AWS SSM Parameter Store
+  prod/ssm:
+    backend: aws/ssm
+    config:
+      region: us-east-1
+
+  dev/ssm:
+    backend: aws/ssm
+    config:
+      region: us-west-2
+
+  # HashiCorp Vault
+  vault/secrets:
+    backend: vault
+    config:
+      address: https://vault.example.com
+```
+</File>
+
+The store `name` in your hook configuration (e.g., `prod/ssm`) must match one of the stores defined in `atmos.yaml`.
+
+#### Supported Store Backends
+
+<dl>
+  <dt>`aws/ssm`</dt>
+  <dd>AWS Systems Manager Parameter Store.</dd>
+
+  <dt>`aws/secretsmanager`</dt>
+  <dd>AWS Secrets Manager.</dd>
+
+  <dt>`vault`</dt>
+  <dd>HashiCorp Vault.</dd>
+
+  <dt>`redis`</dt>
+  <dd>Redis key-value store.</dd>
+
+  <dt>`artifactory`</dt>
+  <dd>JFrog Artifactory.</dd>
+</dl>
+
+#### Store Function Reference
+
+<dl>
+  <dt>`hooks.[hook_name]`</dt>
+  <dd>This map key is the name you want to give to the hook. This must be unique for each hook in the component.</dd>
+
+  <dt>`hooks.[hook_name].events`</dt>
+  <dd>
+  This is a list of [Supported Lifecycle Events](#supported-lifecycle-events) that should trigger running the command.
+  </dd>
+
+  <dt>`hooks.[hook_name].command`</dt>
+  <dd>Must be set to `store`</dd>
+
+  <dt>`hooks.[hook_name].name`</dt>
+  <dd>The name of the store to use (must match a store defined in `atmos.yaml`).</dd>
+
+  <dt>`hooks.[hook_name].outputs`</dt>
+  <dd>
+  A map of values that will be written to the store under the key for this component. The key is the name of the key in
+  the store. The value is the value to write to the store. If the value begins with a dot (`.`), it will be treated as a
+  [Terraform output](https://developer.hashicorp.com/terraform/language/values/outputs) and the value will be retrieved
+  from the Terraform state for the current component.
+  </dd>
+</dl>
+
+#### Complete Example
+
+This example shows the full workflow: configuring stores, setting up hooks, and reading stored values.
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  prod/ssm:
+    backend: aws/ssm
+    config:
+      region: us-east-1
+```
+</File>
+
+<File title="stacks/catalog/vpc/_defaults.yaml">
+```yaml
+# Define the hook at the catalog level
+hooks:
+  store-outputs:
+    events:
+      - after-terraform-apply
+    command: store
+    name: prod/ssm
+    outputs:
+      vpc_id: .vpc_id
+      private_subnet_ids: .private_subnet_ids
+      public_subnet_ids: .public_subnet_ids
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc/_defaults
+
+components:
+  terraform:
+    vpc:
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+
+    # Another component can read from the store
+    eks:
+      vars:
+        vpc_id: !store prod/ssm vpc vpc_id
+        subnet_ids: !store prod/ssm vpc private_subnet_ids
+```
+</File>
+
+For more information on reading from stores, see [External Stores](/stacks/sharing-state/stores).
+
+## Related
+
+- [External Stores](/stacks/sharing-state/stores) - Reading data from stores with `!store`
+- [Terraform State](/stacks/sharing-state/terraform-state) - Alternative method using `!terraform.state`
