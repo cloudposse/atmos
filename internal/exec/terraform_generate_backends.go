@@ -19,44 +19,35 @@ import (
 
 // backendConfig holds extracted backend configuration from a component section.
 type backendConfig struct {
-	Valid          bool
 	BackendSection map[string]any
 	BackendType    string
-	SkipReason     string
+	Err            error
 }
 
 // extractBackendConfig extracts and validates backend configuration from a component section.
 func extractBackendConfig(componentSection map[string]any) backendConfig {
 	backendSection, ok := componentSection[cfg.BackendSectionName].(map[string]any)
 	if !ok {
-		return backendConfig{
-			Valid:      false,
-			SkipReason: "no 'backend' section configured",
-		}
+		return backendConfig{Err: errUtils.ErrBackendSectionMissing}
 	}
 
 	backendType, ok := componentSection[cfg.BackendTypeSectionName].(string)
 	if !ok {
-		return backendConfig{
-			Valid:      false,
-			SkipReason: "no 'backend_type' configured",
-		}
+		return backendConfig{Err: errUtils.ErrBackendTypeMissing}
 	}
 
 	return backendConfig{
-		Valid:          true,
 		BackendSection: backendSection,
 		BackendType:    backendType,
 	}
 }
 
 // checkBackendTypeAfterProcessing validates that backend_type is not empty after template processing.
-// Returns the skip reason if invalid, or empty string if valid.
-func checkBackendTypeAfterProcessing(backendType string) string {
+func checkBackendTypeAfterProcessing(backendType string) error {
 	if backendType == "" {
-		return "'backend_type' is empty after template processing"
+		return errUtils.ErrBackendTypeEmptyAfterRender
 	}
-	return ""
+	return nil
 }
 
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command.
@@ -176,8 +167,8 @@ func ExecuteTerraformGenerateBackends(
 
 				// Extract backend configuration.
 				backend := extractBackendConfig(componentSection)
-				if !backend.Valid {
-					log.Warn("Skipping backend generation: "+backend.SkipReason+". "+
+				if backend.Err != nil {
+					log.Warn("Skipping backend generation: "+backend.Err.Error()+". "+
 						"Set 'components.terraform.auto_generate_backend_file: false' in atmos.yaml to disable.",
 						"component", componentName, "stack", stackFileName)
 					continue
@@ -339,8 +330,8 @@ func ExecuteTerraformGenerateBackends(
 				}
 
 				// Skip if backend_type is empty after template processing.
-				if skipReason := checkBackendTypeAfterProcessing(backendTypeSection); skipReason != "" {
-					log.Warn("Skipping backend generation: "+skipReason+". "+
+				if err := checkBackendTypeAfterProcessing(backendTypeSection); err != nil {
+					log.Warn("Skipping backend generation: "+err.Error()+". "+
 						"Set 'components.terraform.auto_generate_backend_file: false' in atmos.yaml to disable.",
 						"component", componentName, "stack", stackName)
 					continue

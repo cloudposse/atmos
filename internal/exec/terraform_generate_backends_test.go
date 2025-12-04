@@ -808,13 +808,12 @@ func TestExtractBackendConfig(t *testing.T) {
 
 		result := extractBackendConfig(componentSection)
 
-		assert.True(t, result.Valid)
+		assert.NoError(t, result.Err)
 		assert.Equal(t, "s3", result.BackendType)
 		assert.Equal(t, "my-bucket", result.BackendSection["bucket"])
-		assert.Empty(t, result.SkipReason)
 	})
 
-	t.Run("returns invalid result when backend section is missing", func(t *testing.T) {
+	t.Run("returns error when backend section is missing", func(t *testing.T) {
 		componentSection := map[string]any{
 			"backend_type": "s3",
 			"vars": map[string]any{
@@ -824,13 +823,12 @@ func TestExtractBackendConfig(t *testing.T) {
 
 		result := extractBackendConfig(componentSection)
 
-		assert.False(t, result.Valid)
-		assert.Equal(t, "no 'backend' section configured", result.SkipReason)
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendSectionMissing)
 		assert.Nil(t, result.BackendSection)
 		assert.Empty(t, result.BackendType)
 	})
 
-	t.Run("returns invalid result when backend_type is missing", func(t *testing.T) {
+	t.Run("returns error when backend_type is missing", func(t *testing.T) {
 		componentSection := map[string]any{
 			"backend": map[string]any{
 				"bucket": "my-bucket",
@@ -842,13 +840,12 @@ func TestExtractBackendConfig(t *testing.T) {
 
 		result := extractBackendConfig(componentSection)
 
-		assert.False(t, result.Valid)
-		assert.Equal(t, "no 'backend_type' configured", result.SkipReason)
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendTypeMissing)
 		assert.Nil(t, result.BackendSection)
 		assert.Empty(t, result.BackendType)
 	})
 
-	t.Run("returns invalid result when backend is not a map", func(t *testing.T) {
+	t.Run("returns error when backend is not a map", func(t *testing.T) {
 		componentSection := map[string]any{
 			"backend":      "invalid-string-backend",
 			"backend_type": "s3",
@@ -856,11 +853,10 @@ func TestExtractBackendConfig(t *testing.T) {
 
 		result := extractBackendConfig(componentSection)
 
-		assert.False(t, result.Valid)
-		assert.Equal(t, "no 'backend' section configured", result.SkipReason)
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendSectionMissing)
 	})
 
-	t.Run("returns invalid result when backend_type is not a string", func(t *testing.T) {
+	t.Run("returns error when backend_type is not a string", func(t *testing.T) {
 		componentSection := map[string]any{
 			"backend": map[string]any{
 				"bucket": "my-bucket",
@@ -870,11 +866,10 @@ func TestExtractBackendConfig(t *testing.T) {
 
 		result := extractBackendConfig(componentSection)
 
-		assert.False(t, result.Valid)
-		assert.Equal(t, "no 'backend_type' configured", result.SkipReason)
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendTypeMissing)
 	})
 
-	t.Run("returns invalid result when both backend and backend_type are missing", func(t *testing.T) {
+	t.Run("returns error when both backend and backend_type are missing", func(t *testing.T) {
 		componentSection := map[string]any{
 			"vars": map[string]any{
 				"name": "test",
@@ -883,9 +878,8 @@ func TestExtractBackendConfig(t *testing.T) {
 
 		result := extractBackendConfig(componentSection)
 
-		assert.False(t, result.Valid)
 		// Should fail on backend first.
-		assert.Equal(t, "no 'backend' section configured", result.SkipReason)
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendSectionMissing)
 	})
 
 	t.Run("handles empty component section", func(t *testing.T) {
@@ -893,8 +887,7 @@ func TestExtractBackendConfig(t *testing.T) {
 
 		result := extractBackendConfig(componentSection)
 
-		assert.False(t, result.Valid)
-		assert.Equal(t, "no 'backend' section configured", result.SkipReason)
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendSectionMissing)
 	})
 
 	t.Run("handles nil values in component section", func(t *testing.T) {
@@ -905,29 +898,28 @@ func TestExtractBackendConfig(t *testing.T) {
 
 		result := extractBackendConfig(componentSection)
 
-		assert.False(t, result.Valid)
-		assert.Equal(t, "no 'backend' section configured", result.SkipReason)
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendSectionMissing)
 	})
 }
 
 // TestCheckBackendTypeAfterProcessing tests the checkBackendTypeAfterProcessing pure function.
 func TestCheckBackendTypeAfterProcessing(t *testing.T) {
-	t.Run("returns empty string for valid backend type", func(t *testing.T) {
-		result := checkBackendTypeAfterProcessing("s3")
-		assert.Empty(t, result)
+	t.Run("returns nil for valid backend type", func(t *testing.T) {
+		err := checkBackendTypeAfterProcessing("s3")
+		assert.NoError(t, err)
 	})
 
-	t.Run("returns empty string for any non-empty backend type", func(t *testing.T) {
+	t.Run("returns nil for any non-empty backend type", func(t *testing.T) {
 		testCases := []string{"s3", "gcs", "azurerm", "local", "cloud", "remote", "http"}
 		for _, backendType := range testCases {
-			result := checkBackendTypeAfterProcessing(backendType)
-			assert.Empty(t, result, "backend type %q should be valid", backendType)
+			err := checkBackendTypeAfterProcessing(backendType)
+			assert.NoError(t, err, "backend type %q should be valid", backendType)
 		}
 	})
 
-	t.Run("returns skip reason for empty backend type", func(t *testing.T) {
-		result := checkBackendTypeAfterProcessing("")
-		assert.Equal(t, "'backend_type' is empty after template processing", result)
+	t.Run("returns error for empty backend type", func(t *testing.T) {
+		err := checkBackendTypeAfterProcessing("")
+		assert.ErrorIs(t, err, errUtils.ErrBackendTypeEmptyAfterRender)
 	})
 }
 
