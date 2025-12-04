@@ -59,7 +59,7 @@ Using `atmos auth` provides several advantages over external credential managers
 
 2. **Review the main documentation**:
    - [Authentication User Guide](/cli/commands/auth/usage)
-   - [Command Reference](/cli/commands/auth/login)
+   - [Command Reference](/cli/commands/auth/auth-login)
 
 3. **Try it out**:
    ```bash
