@@ -940,7 +940,8 @@ components:
 		err = ExecuteTerraformGenerateBackends(atmosConfig, "", "hcl", []string{}, []string{})
 		assert.NoError(t, err)
 
-		// Check that warning was logged
+		// Check that warning was logged - note: the YAML processor sets backend_type to empty string
+		// so we hit the "empty after template processing" path, not the "not configured" path
 		logOutput := logBuf.String()
 		assert.Contains(t, logOutput, "Skipping backend generation")
 		assert.Contains(t, logOutput, "backend_type")
@@ -954,4 +955,5 @@ components:
 		assert.True(t, os.IsNotExist(errTF), "backend.tf should not be created when backend_type is missing")
 		assert.True(t, os.IsNotExist(errJSON), "backend.tf.json should not be created when backend_type is missing")
 	})
+
 }
