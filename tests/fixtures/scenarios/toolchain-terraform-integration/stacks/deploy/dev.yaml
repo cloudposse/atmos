@@ -1,0 +1,17 @@
+components:
+  terraform:
+    # Component WITH toolchain dependencies
+    test-component:
+      dependencies:
+        tools:
+          # Use a specific terraform version from toolchain
+          terraform: "1.6.0"
+      vars:
+        environment: "dev"
+        test_var: "test-value"
+
+    # Component WITHOUT toolchain dependencies (to reproduce the issue)
+    test-component-no-deps:
+      vars:
+        environment: "dev"
+        test_var: "no-deps-value"
