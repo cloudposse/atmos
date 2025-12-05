@@ -34,16 +34,16 @@ eval $(atmos env)
 
 ```bash
 # Plan
-atmos terraform plan github-stars -s demo
+atmos terraform plan github-repo -s demo
 
 # Apply
-atmos terraform apply github-stars -s demo
+atmos terraform apply github-repo -s demo
 ```
 
 ### 3. View outputs
 
 ```bash
-atmos terraform output github-stars -s demo
+atmos terraform output github-repo -s demo
 ```
 
 Example output:
@@ -80,5 +80,5 @@ For CI/CD, use `--format=github` to write directly to `$GITHUB_ENV`:
   run: atmos env --format=github
 
 - name: Run Terraform
-  run: atmos terraform apply github-stars -s demo --auto-approve
+  run: atmos terraform apply github-repo -s demo --auto-approve
 ```

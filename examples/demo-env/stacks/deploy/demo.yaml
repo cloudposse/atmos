@@ -3,6 +3,6 @@ vars:
 
 components:
   terraform:
-    github-stars:
+    github-repo:
       vars:
         repository: cloudposse/atmos
