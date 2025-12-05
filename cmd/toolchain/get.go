@@ -9,6 +9,10 @@ import (
 	"github.com/cloudposse/atmos/toolchain"
 )
 
+const (
+	defaultVersionLimit = 10
+)
+
 var getParser *flags.StandardParser
 
 var getCmd = &cobra.Command{
@@ -40,7 +44,7 @@ func init() {
 	// Create parser with get-specific flags.
 	getParser = flags.NewStandardParser(
 		flags.WithBoolFlag("all", "", false, "Show all available versions"),
-		flags.WithIntFlag("limit", "", 10, "Limit number of versions to display"),
+		flags.WithIntFlag("limit", "", defaultVersionLimit, "Limit number of versions to display"),
 		flags.WithEnvVars("all", "ATMOS_TOOLCHAIN_ALL"),
 		flags.WithEnvVars("limit", "ATMOS_TOOLCHAIN_LIMIT"),
 	)

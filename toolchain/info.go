@@ -26,6 +26,11 @@ import (
 	"github.com/cloudposse/atmos/toolchain/registry"
 )
 
+const (
+	defaultVersionLimit   = 10
+	dateFormatYYYYMMDDLen = 10 // Length of "YYYY-MM-DD".
+)
+
 // InfoExec handles the core logic for retrieving and formatting tool information.
 func InfoExec(toolName, outputFormat string) error {
 	defer perf.Track(nil, "toolchain.InfoExec")()
@@ -104,7 +109,7 @@ func InfoExec(toolName, outputFormat string) error {
 		availableVersions = []versionItem{}
 	} else {
 		// Show latest 10 versions with full metadata.
-		limit := 10
+		limit := defaultVersionLimit
 		if len(availableVersions) < limit {
 			limit = len(availableVersions)
 		}
@@ -449,8 +454,8 @@ func extractPublishedDate(releaseNotes string) string {
 			if len(parts) == 2 {
 				dateStr := strings.TrimSpace(parts[1])
 				// Parse and format as YYYY-MM-DD.
-				if len(dateStr) >= 10 {
-					return dateStr[:10]
+				if len(dateStr) >= dateFormatYYYYMMDDLen {
+					return dateStr[:dateFormatYYYYMMDDLen]
 				}
 			}
 		}
