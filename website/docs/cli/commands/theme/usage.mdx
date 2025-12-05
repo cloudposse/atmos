@@ -5,12 +5,23 @@ sidebar_class_name: command
 description: "Manage terminal themes for Atmos CLI"
 ---
 import Screengrab from '@site/src/components/Screengrab'
-import DocCardList from '@theme/DocCardList';
+import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Customize the look and feel of Atmos to make it your own. Configure and preview terminal themes that control the appearance of Atmos, including tables and markdown rendering.
 </Intro>
+
+<ActionCard title="Configure Terminal Settings">
+    Learn how to configure terminal themes, colors, and display options in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/settings/terminal">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Usage
 
 <Screengrab title="atmos theme --help" slug="atmos-theme--help" />
 

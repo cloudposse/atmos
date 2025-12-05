@@ -1,12 +1,17 @@
 package list
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
+	f "github.com/cloudposse/atmos/pkg/list/format"
 )
 
 // TestNewCommonListParser tests the newCommonListParser helper function.
@@ -93,4 +98,430 @@ func TestAddStackCompletion_ExistingFlag(t *testing.T) {
 	// Verify flag still exists
 	stackFlag := cmd.PersistentFlags().Lookup("stack")
 	assert.NotNil(t, stackFlag)
+}
+
+// TestGetIdentityFromCommand tests the getIdentityFromCommand function.
+func TestGetIdentityFromCommand(t *testing.T) {
+	testCases := []struct {
+		name           string
+		setupCmd       func() *cobra.Command
+		setupViper     func()
+		expectedResult string
+	}{
+		{
+			name: "returns empty when no identity set",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().String("identity", "", "Identity")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+			},
+			expectedResult: "",
+		},
+		{
+			name: "returns flag value when flag is changed",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().String("identity", "", "Identity")
+				_ = cmd.Flags().Set("identity", "my-identity")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+			},
+			expectedResult: "my-identity",
+		},
+		{
+			name: "returns viper value when flag not changed",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().String("identity", "", "Identity")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+				viper.Set("identity", "env-identity")
+			},
+			expectedResult: "env-identity",
+		},
+		{
+			name: "flag takes precedence over viper",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().String("identity", "", "Identity")
+				_ = cmd.Flags().Set("identity", "flag-identity")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+				viper.Set("identity", "env-identity")
+			},
+			expectedResult: "flag-identity",
+		},
+		{
+			name: "normalizes false to disabled sentinel value",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().String("identity", "", "Identity")
+				_ = cmd.Flags().Set("identity", "false")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+			},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name: "normalizes off to disabled sentinel value",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().String("identity", "", "Identity")
+				_ = cmd.Flags().Set("identity", "off")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+			},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name: "normalizes no to disabled sentinel value from viper",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().String("identity", "", "Identity")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+				viper.Set("identity", "no")
+			},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setupViper()
+			cmd := tc.setupCmd()
+			result := getIdentityFromCommand(cmd)
+			assert.Equal(t, tc.expectedResult, result)
+		})
+	}
+}
+
+// TestNormalizeIdentityValue tests the normalizeIdentityValue function.
+func TestNormalizeIdentityValue(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "empty string returns empty",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "regular identity returns unchanged",
+			input:    "my-identity",
+			expected: "my-identity",
+		},
+		{
+			name:     "false returns disabled sentinel",
+			input:    "false",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "FALSE returns disabled sentinel",
+			input:    "FALSE",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "False returns disabled sentinel",
+			input:    "False",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "0 returns disabled sentinel",
+			input:    "0",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "no returns disabled sentinel",
+			input:    "no",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "NO returns disabled sentinel",
+			input:    "NO",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "off returns disabled sentinel",
+			input:    "off",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "OFF returns disabled sentinel",
+			input:    "OFF",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "Off returns disabled sentinel",
+			input:    "Off",
+			expected: cfg.IdentityFlagDisabledValue,
+		},
+		{
+			name:     "true returns unchanged",
+			input:    "true",
+			expected: "true",
+		},
+		{
+			name:     "1 returns unchanged",
+			input:    "1",
+			expected: "1",
+		},
+		{
+			name:     "yes returns unchanged",
+			input:    "yes",
+			expected: "yes",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := normalizeIdentityValue(tc.input)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+// TestSetDefaultCSVDelimiter tests the setDefaultCSVDelimiter function.
+func TestSetDefaultCSVDelimiter(t *testing.T) {
+	testCases := []struct {
+		name              string
+		initialDelimiter  string
+		format            string
+		expectedDelimiter string
+	}{
+		{
+			name:              "CSV format with default TSV delimiter changes to comma",
+			initialDelimiter:  f.DefaultTSVDelimiter,
+			format:            string(f.FormatCSV),
+			expectedDelimiter: f.DefaultCSVDelimiter,
+		},
+		{
+			name:              "CSV format with custom delimiter stays unchanged",
+			initialDelimiter:  "|",
+			format:            string(f.FormatCSV),
+			expectedDelimiter: "|",
+		},
+		{
+			name:              "TSV format with default TSV delimiter stays unchanged",
+			initialDelimiter:  f.DefaultTSVDelimiter,
+			format:            string(f.FormatTSV),
+			expectedDelimiter: f.DefaultTSVDelimiter,
+		},
+		{
+			name:              "JSON format with default TSV delimiter stays unchanged",
+			initialDelimiter:  f.DefaultTSVDelimiter,
+			format:            string(f.FormatJSON),
+			expectedDelimiter: f.DefaultTSVDelimiter,
+		},
+		{
+			name:              "empty format with default TSV delimiter stays unchanged",
+			initialDelimiter:  f.DefaultTSVDelimiter,
+			format:            "",
+			expectedDelimiter: f.DefaultTSVDelimiter,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			delimiter := tc.initialDelimiter
+			setDefaultCSVDelimiter(&delimiter, tc.format)
+			assert.Equal(t, tc.expectedDelimiter, delimiter)
+		})
+	}
+}
+
+// TestGetComponentFilter tests the getComponentFilter function.
+func TestGetComponentFilter(t *testing.T) {
+	testCases := []struct {
+		name           string
+		args           []string
+		expectedResult string
+	}{
+		{
+			name:           "empty args returns empty string",
+			args:           []string{},
+			expectedResult: "",
+		},
+		{
+			name:           "nil args returns empty string",
+			args:           nil,
+			expectedResult: "",
+		},
+		{
+			name:           "single arg returns first arg",
+			args:           []string{"component1"},
+			expectedResult: "component1",
+		},
+		{
+			name:           "multiple args returns first arg",
+			args:           []string{"component1", "component2", "component3"},
+			expectedResult: "component1",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := getComponentFilter(tc.args)
+			assert.Equal(t, tc.expectedResult, result)
+		})
+	}
+}
+
+// TestValidateComponentFilter tests the validateComponentFilter function.
+func TestValidateComponentFilter(t *testing.T) {
+	testCases := []struct {
+		name            string
+		componentFilter string
+		expectError     bool
+	}{
+		{
+			name:            "empty filter returns no error",
+			componentFilter: "",
+			expectError:     false,
+		},
+		// Note: Testing with actual component requires a valid atmosConfig setup.
+		// This would be an integration test. Unit tests focus on the empty case.
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// For the empty filter case, we don't need a real config
+			if tc.componentFilter == "" {
+				err := validateComponentFilter(nil, tc.componentFilter)
+				if tc.expectError {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+				}
+			}
+		})
+	}
+}
+
+// TestStackFlagCompletion tests the stackFlagCompletion function behavior.
+func TestStackFlagCompletion(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+
+	// Test with empty args - this will try to list all stacks.
+	// In unit test context without valid config, it should return ShellCompDirectiveNoFileComp.
+	_, directive := stackFlagCompletion(cmd, []string{}, "")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+
+	// Test with component arg - this will try to list stacks for the component.
+	// In unit test context without valid config, it should return ShellCompDirectiveNoFileComp.
+	_, directive = stackFlagCompletion(cmd, []string{"mycomponent"}, "")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestNewCommonListParser_FlagsRegistered tests that expected flags are registered.
+func TestNewCommonListParser_FlagsRegistered(t *testing.T) {
+	parser := newCommonListParser()
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	// Verify expected flags exist.
+	expectedFlags := []string{"format", "max-columns", "delimiter", "stack", "query"}
+	for _, flagName := range expectedFlags {
+		flag := cmd.Flags().Lookup(flagName)
+		assert.NotNil(t, flag, "Expected flag %s to be registered", flagName)
+	}
+}
+
+// TestNewCommonListParser_WithAdditionalFlags tests parser with additional flags.
+func TestNewCommonListParser_WithAdditionalFlags(t *testing.T) {
+	parser := newCommonListParser(
+		flags.WithBoolFlag("upload", "", false, "Upload flag"),
+		flags.WithStringFlag("custom", "c", "default", "Custom flag"),
+	)
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	// Verify additional flags exist.
+	uploadFlag := cmd.Flags().Lookup("upload")
+	assert.NotNil(t, uploadFlag, "Expected upload flag to be registered")
+	assert.Equal(t, "false", uploadFlag.DefValue)
+
+	customFlag := cmd.Flags().Lookup("custom")
+	assert.NotNil(t, customFlag, "Expected custom flag to be registered")
+	assert.Equal(t, "default", customFlag.DefValue)
+	assert.Equal(t, "c", customFlag.Shorthand)
+}
+
+// TestHandleNoValuesError tests the handleNoValuesError function.
+func TestHandleNoValuesError(t *testing.T) {
+	testCases := []struct {
+		name                string
+		err                 error
+		componentFilter     string
+		expectedOutput      string
+		expectedError       error
+		expectLogFuncCalled bool
+	}{
+		{
+			name:                "NoValuesFoundError calls logFunc and returns empty",
+			err:                 &listerrors.NoValuesFoundError{},
+			componentFilter:     "test-component",
+			expectedOutput:      "",
+			expectedError:       nil,
+			expectLogFuncCalled: true,
+		},
+		{
+			name:                "other error returns the error unchanged",
+			err:                 errors.New("some other error"),
+			componentFilter:     "test-component",
+			expectedOutput:      "",
+			expectedError:       errors.New("some other error"),
+			expectLogFuncCalled: false,
+		},
+		{
+			name:                "wrapped NoValuesFoundError calls logFunc",
+			err:                 errors.Join(errors.New("wrapper"), &listerrors.NoValuesFoundError{}),
+			componentFilter:     "wrapped-component",
+			expectedOutput:      "",
+			expectedError:       nil,
+			expectLogFuncCalled: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			logFuncCalled := false
+			logFuncComponent := ""
+			logFunc := func(component string) {
+				logFuncCalled = true
+				logFuncComponent = component
+			}
+
+			output, err := handleNoValuesError(tc.err, tc.componentFilter, logFunc)
+
+			assert.Equal(t, tc.expectedOutput, output)
+			if tc.expectedError != nil {
+				assert.Error(t, err)
+				assert.Equal(t, tc.expectedError.Error(), err.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tc.expectLogFuncCalled, logFuncCalled)
+			if tc.expectLogFuncCalled {
+				assert.Equal(t, tc.componentFilter, logFuncComponent)
+			}
+		})
+	}
 }

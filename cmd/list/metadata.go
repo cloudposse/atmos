@@ -1,21 +1,15 @@
 package list
 
 import (
-	"errors"
-
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
-	f "github.com/cloudposse/atmos/pkg/list/format"
-	listutils "github.com/cloudposse/atmos/pkg/list/utils"
-	"github.com/cloudposse/atmos/pkg/schema"
 	utils "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -66,7 +60,7 @@ var metadataCmd = &cobra.Command{
 			ProcessFunctions: v.GetBool("process-functions"),
 		}
 
-		output, err := listMetadataWithOptions(opts, args)
+		output, err := listMetadataWithOptions(cmd, opts, args)
 		if err != nil {
 			return err
 		}
@@ -125,33 +119,26 @@ func logNoMetadataFoundMessage(componentFilter string) {
 	}
 }
 
-func listMetadataWithOptions(opts *MetadataOptions, args []string) (string, error) {
-	// Set default delimiter for CSV
-	if f.Format(opts.Format) == f.FormatCSV && opts.Delimiter == f.DefaultTSVDelimiter {
-		opts.Delimiter = f.DefaultCSVDelimiter
-	}
+func listMetadataWithOptions(cmd *cobra.Command, opts *MetadataOptions, args []string) (string, error) {
+	// Set default delimiter for CSV.
+	setDefaultCSVDelimiter(&opts.Delimiter, opts.Format)
 
-	componentFilter := ""
-	if len(args) > 0 {
-		componentFilter = args[0]
-	}
+	componentFilter := getComponentFilter(args)
 
-	// Initialize CLI config
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	// Initialize CLI config and auth manager.
+	atmosConfig, authManager, err := initConfigAndAuth(cmd)
 	if err != nil {
-		return "", &listerrors.InitConfigError{Cause: err}
+		return "", err
 	}
 
-	if componentFilter != "" {
-		if !listutils.CheckComponentExists(&atmosConfig, componentFilter) {
-			return "", &listerrors.ComponentDefinitionNotFoundError{Component: componentFilter}
-		}
+	// Validate component exists if filter is specified.
+	if err := validateComponentFilter(&atmosConfig, componentFilter); err != nil {
+		return "", err
 	}
 
-	// Get all stacks
+	// Get all stacks.
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false,
-		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, nil)
+		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager)
 	if err != nil {
 		return "", &listerrors.DescribeStacksError{Cause: err}
 	}
@@ -164,12 +151,7 @@ func listMetadataWithOptions(opts *MetadataOptions, args []string) (string, erro
 	filterOptions := setupMetadataOptions(opts, componentFilter)
 	output, err := l.FilterAndListValues(stacksMap, filterOptions)
 	if err != nil {
-		var noValuesErr *listerrors.NoValuesFoundError
-		if errors.As(err, &noValuesErr) {
-			logNoMetadataFoundMessage(componentFilter)
-			return "", nil
-		}
-		return "", err
+		return handleNoValuesError(err, componentFilter, logNoMetadataFoundMessage)
 	}
 
 	return output, nil

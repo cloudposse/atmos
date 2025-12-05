@@ -49,7 +49,7 @@ var componentsCmd = &cobra.Command{
 			Stack: v.GetString("stack"),
 		}
 
-		output, err := listComponentsWithOptions(opts)
+		output, err := listComponentsWithOptions(cmd, opts)
 		if err != nil {
 			return err
 		}
@@ -80,14 +80,20 @@ func init() {
 	}
 }
 
-func listComponentsWithOptions(opts *ComponentsOptions) ([]string, error) {
+func listComponentsWithOptions(cmd *cobra.Command, opts *ComponentsOptions) ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, fmt.Errorf("error initializing CLI config: %v", err)
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	// Create AuthManager for authentication support.
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
 	if err != nil {
 		return nil, fmt.Errorf("error describing stacks: %v", err)
 	}

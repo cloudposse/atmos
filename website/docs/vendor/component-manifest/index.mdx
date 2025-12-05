@@ -1,0 +1,83 @@
+---
+title: Component Manifest (Legacy)
+sidebar_position: 1
+sidebar_label: Overview
+description: Configure component-level vendoring with component.yaml (legacy approach).
+id: index
+slug: /vendor/component-manifest
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos natively supports the concept of "vendoring" individual components by defining a `component.yaml` inside of the component directory, which is making a copy of 3rd-party components or other dependencies in your own repo.
+</Intro>
+
+:::warning Legacy Approach
+This component manifest approach is considered legacy. We recommend using the centralized [Vendor Configuration](/vendor/vendor-config) (`vendor.yaml`) approach instead for better dependency management across your infrastructure.
+:::
+
+## How It Works
+
+After defining the `component.yaml` vendoring manifest, the remote component can be downloaded by running the following command:
+
+```shell
+atmos vendor pull -c components/terraform/vpc
+```
+
+:::tip
+Refer to [`atmos vendor pull`](/cli/commands/vendor/pull) CLI command for more details
+:::
+
+## Basic Example
+
+To vendor a component, create a `component.yaml` file stored inside the `components/_type_/_name_/` folder (e.g. `components/terraform/vpc/`).
+
+The schema of a `component.yaml` file is as follows:
+
+```yaml
+apiVersion: atmos/v1
+kind: ComponentVendorConfig
+metadata:
+  name: vpc-flow-logs-bucket-vendor-config
+  description: Source and mixins config for vendoring of 'vpc-flow-logs-bucket' component
+spec:
+  source:
+    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc-flow-logs-bucket?ref={{.Version}}
+    version: 1.398.0
+    included_paths:
+      - "**/*.tf"
+      - "**/*.tfvars"
+      - "**/*.md"
+    excluded_paths:
+      - "**/context.tf"
+  mixins:
+    - uri: https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf
+      filename: context.tf
+```
+
+## Configuration Reference
+
+The `component.yaml` manifest supports Kubernetes-style YAML config.
+
+<dl>
+  <dt>`apiVersion`</dt>
+  <dd>Always set to `atmos/v1`.</dd>
+
+  <dt>`kind`</dt>
+  <dd>Always set to `ComponentVendorConfig`.</dd>
+
+  <dt>`metadata`</dt>
+  <dd>
+    Optional metadata about the component vendor configuration.
+    - `name`: A name for this vendor configuration
+    - `description`: A description of what this configuration vendors
+  </dd>
+
+  <dt>[`spec.source`](/vendor/component-manifest/source)</dt>
+  <dd>Defines where to download the component from, including URI, version, and path filters. See [Source](/vendor/component-manifest/source) for complete documentation.</dd>
+
+  <dt>[`spec.mixins`](/vendor/component-manifest/mixins)</dt>
+  <dd>List of additional files to download and overlay on the component. See [Mixins](/vendor/component-manifest/mixins) for complete documentation.</dd>
+</dl>
