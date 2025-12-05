@@ -27,10 +27,10 @@ import (
 )
 
 const (
-	defaultVersionLimit      = 10
-	dateFormatYYYYMMDDLen    = 10  // Length of "YYYY-MM-DD".
-	fallbackTerminalWidth    = 120 // Default terminal width when detection fails.
-	emptyValuePlaceholder    = " " // Placeholder for empty values in output.
+	defaultVersionLimit   = 10
+	dateFormatYYYYMMDDLen = 10  // Length of "YYYY-MM-DD".
+	fallbackTerminalWidth = 120 // Default terminal width when detection fails.
+	emptyValuePlaceholder = " " // Placeholder for empty values in output.
 )
 
 // InfoExec handles the core logic for retrieving and formatting tool information.
@@ -329,7 +329,7 @@ func displayVersionsWithMetadata(versions []versionItem, installedVersions []str
 	// Styling to match atmos version list exactly.
 	installedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // Green for installed.
 	configuredStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")) // Gray for configured.
-	emptyIndicator := " "
+	emptyIndicator := emptyValuePlaceholder
 	const tableBorderPadding = 8 // Account for column padding.
 
 	// Build table rows.

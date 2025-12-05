@@ -41,7 +41,7 @@ const (
 	bufferSizeBytes             = 32 * 1024
 
 	// Registry path parsing constants.
-	minRegistryPathSegments = 8        // Minimum path segments for registry.yaml parsing.
+	minRegistryPathSegments = 8          // Minimum path segments for registry.yaml parsing.
 	filenameKey             = "filename" // Key for filename in template replacements.
 )
 

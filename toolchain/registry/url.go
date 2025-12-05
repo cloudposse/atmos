@@ -16,6 +16,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	versionLogKey = "version" // Log key for version information.
+)
+
 // URLRegistry fetches tool metadata from a custom URL.
 // Supports two modes:
 // 1. Single index file (source ends with .yaml/.yml) - all packages in one file.
@@ -111,7 +115,7 @@ func (ur *URLRegistry) GetToolWithVersion(owner, repo, version string) (*Tool, e
 	// Apply version overrides if present.
 	if len(tool.VersionOverrides) > 0 {
 		if err := applyVersionOverride(tool, version); err != nil {
-			log.Warn("Failed to apply version override", "error", err, "owner", owner, "repo", repo, "version", version)
+			log.Warn("Failed to apply version override", "error", err, "owner", owner, "repo", repo, versionLogKey, version)
 		}
 	}
 
@@ -308,7 +312,7 @@ func applyVersionOverride(tool *Tool, version string) error {
 		override := &tool.VersionOverrides[i]
 		matches, err := evaluateVersionConstraint(override.VersionConstraint, version)
 		if err != nil {
-			log.Debug("Failed to evaluate version constraint", "constraint", override.VersionConstraint, "version", version, "error", err)
+			log.Debug("Failed to evaluate version constraint", "constraint", override.VersionConstraint, versionLogKey, version, "error", err)
 			continue
 		}
 
@@ -327,13 +331,13 @@ func applyVersionOverride(tool *Tool, version string) error {
 				tool.Replacements = override.Replacements
 			}
 
-			log.Debug("Applied version override", "version", version, "constraint", override.VersionConstraint, "asset", tool.Asset, "format", tool.Format)
+			log.Debug("Applied version override", versionLogKey, version, "constraint", override.VersionConstraint, "asset", tool.Asset, "format", tool.Format)
 			return nil
 		}
 	}
 
 	// No matching override found - this is not an error.
-	log.Debug("No matching version override", "version", version, "overrides_count", len(tool.VersionOverrides))
+	log.Debug("No matching version override", versionLogKey, version, "overrides_count", len(tool.VersionOverrides))
 	return nil
 }
 

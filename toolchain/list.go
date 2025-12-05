@@ -18,9 +18,10 @@ import (
 )
 
 const (
-	installedIndicator      = "✓"   // Checkmark character for installed status.
-	uninstalledIndicator    = "✗"   // X mark character for uninstalled status.
-	notAvailablePlaceholder = "N/A" // Placeholder for unavailable information.
+	installedIndicator      = "✓"       // Checkmark character for installed status.
+	uninstalledIndicator    = "✗"       // X mark character for uninstalled status.
+	notAvailablePlaceholder = "N/A"     // Placeholder for unavailable information.
+	versionLogKey           = "version" // Log key for version information.
 )
 
 // Table row data structure.
@@ -108,7 +109,7 @@ func RunList() error {
 
 		// Debug: log the binary path
 		if isInstalled {
-			log.Debug("Found binary path", "path", binaryPath, "tool", toolName, "version", version)
+			log.Debug("Found binary path", "path", binaryPath, "tool", toolName, versionLogKey, version)
 		}
 
 		// Build row data
@@ -151,7 +152,7 @@ func RunList() error {
 
 			// Debug: log the binary path
 			if isInstalled {
-				log.Debug("Found binary path", "path", binaryPath, "tool", toolName, "version", version)
+				log.Debug("Found binary path", "path", binaryPath, "tool", toolName, versionLogKey, version)
 			}
 
 			status := uninstalledIndicator
@@ -284,7 +285,7 @@ func RunList() error {
 	totalNeededWidth := aliasWidth + registryWidth + binaryWidth + versionWidth + statusWidth + installDateWidth + sizeWidth
 
 	// Debug: log the width calculation
-	log.Debug("Width calculation", "alias", aliasWidth, "registry", registryWidth, "binary", binaryWidth, "version", versionWidth, "status", statusWidth, "installDate", installDateWidth, "size", sizeWidth, "total", totalNeededWidth, "terminal", width)
+	log.Debug("Width calculation", "alias", aliasWidth, "registry", registryWidth, "binary", binaryWidth, versionLogKey, versionWidth, "status", statusWidth, "installDate", installDateWidth, "size", sizeWidth, "total", totalNeededWidth, "terminal", width)
 
 	// If screen is narrow, truncate columns proportionally
 	if totalNeededWidth > width {
@@ -318,13 +319,13 @@ func RunList() error {
 	}
 
 	// Debug: log the final column widths
-	log.Debug("Final column widths", "alias", aliasWidth, "registry", registryWidth, "binary", binaryWidth, "version", versionWidth, "status", statusWidth, "installDate", installDateWidth, "size", sizeWidth, "total_width", totalNeededWidth, "terminal_width", width)
+	log.Debug("Final column widths", "alias", aliasWidth, "registry", registryWidth, "binary", binaryWidth, versionLogKey, versionWidth, "status", statusWidth, "installDate", installDateWidth, "size", sizeWidth, "total_width", totalNeededWidth, "terminal_width", width)
 
 	// Convert rows to table format - use plain text for proper sizing
 	var tableRows []table.Row
 	for i, row := range rows {
 		// Debug: log the row data
-		log.Debug("Creating table row", "index", i, "alias", row.alias, "registry", row.registry, "binary", row.binary, "version", row.version, "status", row.status, "installDate", row.installDate, "size", row.size, "size_len", len(row.size))
+		log.Debug("Creating table row", "index", i, "alias", row.alias, "registry", row.registry, "binary", row.binary, versionLogKey, row.version, "status", row.status, "installDate", row.installDate, "size", row.size, "size_len", len(row.size))
 
 		// Check if size is empty or nil
 		if row.size == "" {
