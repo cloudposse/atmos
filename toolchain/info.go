@@ -27,8 +27,10 @@ import (
 )
 
 const (
-	defaultVersionLimit   = 10
-	dateFormatYYYYMMDDLen = 10 // Length of "YYYY-MM-DD".
+	defaultVersionLimit      = 10
+	dateFormatYYYYMMDDLen    = 10  // Length of "YYYY-MM-DD".
+	fallbackTerminalWidth    = 120 // Default terminal width when detection fails.
+	emptyValuePlaceholder    = " " // Placeholder for empty values in output.
 )
 
 // InfoExec handles the core logic for retrieving and formatting tool information.
@@ -164,7 +166,7 @@ func displayToolInfo(ctx *toolContext) {
 	// Get terminal width.
 	width, _, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil || width == 0 {
-		width = 120 // Fallback width.
+		width = fallbackTerminalWidth
 	}
 
 	// Display tool header.

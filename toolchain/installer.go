@@ -39,6 +39,10 @@ const (
 	maxUnixPermissions          = 0o7777
 	maxDecompressedSizeMB       = 3000
 	bufferSizeBytes             = 32 * 1024
+
+	// Registry path parsing constants.
+	minRegistryPathSegments = 8        // Minimum path segments for registry.yaml parsing.
+	filenameKey             = "filename" // Key for filename in template replacements.
 )
 
 // ToolResolver defines an interface for resolving tool names to owner/repo pairs
@@ -480,12 +484,12 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 			WithContext("status_code", resp.StatusCode).
 			WithExitCode(1)
 
-		switch {
-		case resp.StatusCode == http.StatusNotFound:
+		switch resp.StatusCode {
+		case http.StatusNotFound:
 			builder.
 				WithHint("Asset not found - check tool name and version are correct").
 				WithHint("Try without `v` prefix: `@1.5.0` instead of `@v1.5.0`")
-		case resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized:
+		case http.StatusForbidden, http.StatusUnauthorized:
 			builder.
 				WithHint("GitHub API rate limit exceeded or authentication required").
 				WithHint("Set `GITHUB_TOKEN` environment variable to increase rate limits").
@@ -1193,7 +1197,7 @@ func searchRegistryForTool(toolName string) (string, string, error) {
 			// Extract owner/repo from the URL
 			// path format: .../pkgs/owner/repo/registry.yaml
 			parts := strings.Split(path, "/")
-			if len(parts) >= 8 {
+			if len(parts) >= minRegistryPathSegments {
 				owner := parts[len(parts)-3]
 				repo := parts[len(parts)-2]
 				return owner, repo, nil

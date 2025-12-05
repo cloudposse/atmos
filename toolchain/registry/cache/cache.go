@@ -109,8 +109,7 @@ func (fs *FileStore) Set(ctx context.Context, key string, data []byte, ttl time.
 		return fmt.Errorf("failed to marshal cache entry: %w", err)
 	}
 
-	// Write to file.
-	//nolint:gosec // G306: Cache file needs to be readable by other processes/users
+	// Write to file. Cache file needs to be readable by other processes/users.
 	if err := os.WriteFile(cachePath, entryData, defaultFilePermissions); err != nil {
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}

@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	installedIndicator   = "✓" // Checkmark character for installed status
-	uninstalledIndicator = "✗" // X mark character for uninstalled status
+	installedIndicator      = "✓"   // Checkmark character for installed status.
+	uninstalledIndicator    = "✗"   // X mark character for uninstalled status.
+	notAvailablePlaceholder = "N/A" // Placeholder for unavailable information.
 )
 
 // Table row data structure.
@@ -112,8 +113,8 @@ func RunList() error {
 
 		// Build row data
 		status := uninstalledIndicator
-		installDate := "N/A"
-		size := "N/A"
+		installDate := notAvailablePlaceholder
+		size := notAvailablePlaceholder
 
 		if isInstalled {
 			status = installedIndicator
@@ -125,8 +126,8 @@ func RunList() error {
 			} else {
 				// Debug: log the error
 				log.Debug("Failed to get file info", "path", binaryPath, "error", err)
-				size = "N/A"
-				installDate = "N/A"
+				size = notAvailablePlaceholder
+				installDate = notAvailablePlaceholder
 			}
 		}
 
@@ -154,8 +155,8 @@ func RunList() error {
 			}
 
 			status := uninstalledIndicator
-			installDate := "N/A"
-			size := "N/A"
+			installDate := notAvailablePlaceholder
+			size := notAvailablePlaceholder
 
 			if isInstalled {
 				status = installedIndicator
@@ -167,8 +168,8 @@ func RunList() error {
 				} else {
 					// Debug: log the error
 					log.Debug("Failed to get file info", "path", binaryPath, "error", err)
-					size = "N/A"
-					installDate = "N/A"
+					size = notAvailablePlaceholder
+					installDate = notAvailablePlaceholder
 				}
 			}
 
@@ -204,7 +205,7 @@ func RunList() error {
 	// Get terminal width
 	width, _, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil || width == 0 {
-		width = 120 // fallback width
+		width = fallbackTerminalWidth
 	}
 
 	// Calculate optimal column widths based on content

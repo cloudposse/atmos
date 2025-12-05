@@ -33,18 +33,18 @@ const (
 	githubPerPage               = 100 // Maximum results per page.
 
 	// Search constants.
-	defaultSearchLimit       = 20
-	defaultListLimit         = 50
-	defaultVersionLimit      = 10
-	defaultRegistryPriority  = 10
-	registryLogKey           = "registry"
-	durationMetricKey        = "duration"
+	defaultSearchLimit      = 20
+	defaultListLimit        = 50
+	defaultVersionLimit     = 10
+	defaultRegistryPriority = 10
+	registryLogKey          = "registry"
+	durationMetricKey       = "duration"
 
 	// Search scoring weights.
-	scoreExactRepoMatch    = 100
-	scoreRepoPrefixMatch   = 70
-	scoreRepoContainsMatch = 50
-	scoreOwnerPrefixMatch  = 40
+	scoreExactRepoMatch     = 100
+	scoreRepoPrefixMatch    = 70
+	scoreRepoContainsMatch  = 50
+	scoreOwnerPrefixMatch   = 40
 	scoreOwnerContainsMatch = 20
 )
 

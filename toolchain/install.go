@@ -16,6 +16,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
+const (
+	spinnerAnimationFrames = 5 // Number of animation frames for progress spinner.
+)
+
 // Bubble Tea spinner model.
 type spinnerModel struct {
 	spinner bspinner.Model
@@ -338,7 +342,7 @@ func showProgress(
 	bar := progressBar.ViewAs(percent)
 
 	// Show animated progress bar
-	for j := 0; j < 5; j++ {
+	for j := 0; j < spinnerAnimationFrames; j++ {
 		_ = ui.Writef("\r%s %s", spinner.View(), bar)
 		spin, _ := spinner.Update(bspinner.TickMsg{})
 		spinner = &spin
