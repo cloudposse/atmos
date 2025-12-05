@@ -433,9 +433,9 @@ func renderMarkdownInline(text string) string {
 // isVersionConfigured checks if a version is in the configured list (but not necessarily installed).
 func isVersionConfigured(version string, configuredVersions []string) bool {
 	// Normalize version for comparison (strip "v" prefix if present).
-	normalizedVersion := strings.TrimPrefix(version, "v")
+	normalizedVersion := strings.TrimPrefix(version, versionPrefix)
 	for _, cv := range configuredVersions {
-		normalizedCV := strings.TrimPrefix(cv, "v")
+		normalizedCV := strings.TrimPrefix(cv, versionPrefix)
 		if normalizedCV == normalizedVersion {
 			return true
 		}
@@ -492,7 +492,7 @@ func extractMeaningfulTitle(releaseNotes, fallbackTitle, version string) string 
 	}
 
 	// If fallback title is different from version, use it.
-	if fallbackTitle != "" && fallbackTitle != version && fallbackTitle != "v"+version {
+	if fallbackTitle != "" && fallbackTitle != version && fallbackTitle != versionPrefix+version {
 		return fallbackTitle
 	}
 
@@ -528,9 +528,9 @@ func extractFirstHeading(markdown string) string {
 // isVersionInstalled checks if a version is in the installed list.
 func isVersionInstalled(version string, installedVersions []string) bool {
 	// Normalize version for comparison (strip "v" prefix if present).
-	normalizedVersion := strings.TrimPrefix(version, "v")
+	normalizedVersion := strings.TrimPrefix(version, versionPrefix)
 	for _, iv := range installedVersions {
-		normalizedIV := strings.TrimPrefix(iv, "v")
+		normalizedIV := strings.TrimPrefix(iv, versionPrefix)
 		if normalizedIV == normalizedVersion {
 			return true
 		}
