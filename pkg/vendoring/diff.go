@@ -9,6 +9,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
 
 // diffFlags holds flags specific to vendor diff command.
@@ -101,7 +102,7 @@ func executeVendorDiffWithGitOps(atmosConfig *schema.AtmosConfiguration, flags *
 	}
 
 	// Extract Git URI from source.
-	gitURI := extractGitURI(componentSource.Source)
+	gitURI := version.ExtractGitURI(componentSource.Source)
 
 	// Determine from/to refs.
 	fromRef := flags.From
@@ -123,7 +124,7 @@ func executeVendorDiffWithGitOps(atmosConfig *schema.AtmosConfiguration, flags *
 		}
 
 		// Find latest semantic version.
-		_, latestTag := findLatestSemVerTag(tags)
+		_, latestTag := version.FindLatestSemVerTag(tags)
 		if latestTag == "" {
 			// No semantic versions found, use first tag.
 			toRef = tags[0]
@@ -160,25 +161,4 @@ func executeComponentVendorDiff(atmosConfig *schema.AtmosConfiguration, flags *d
 	fmt.Fprintf(os.Stderr, "Component vendor diff for component.yaml is not yet implemented for component %s\n", flags.Component)
 
 	return errUtils.ErrNotImplemented
-}
-
-// extractGitURI extracts a clean Git URI from various vendor source formats.
-func extractGitURI(source string) string {
-	// Handle git:: prefix.
-	source = strings.TrimPrefix(source, "git::")
-
-	// Handle github.com/ shorthand.
-	if strings.HasPrefix(source, "github.com/") {
-		source = "https://" + source
-	}
-
-	// Remove query parameters and fragments (like ?ref=xxx).
-	if idx := strings.Index(source, "?"); idx != -1 {
-		source = source[:idx]
-	}
-
-	// Clean up .git suffix if present.
-	source = strings.TrimSuffix(source, ".git")
-
-	return source
 }

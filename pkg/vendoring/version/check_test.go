@@ -1,4 +1,4 @@
-package vendoring
+package version
 
 import (
 	"testing"
@@ -53,7 +53,7 @@ func TestParseSemVer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ver, err := parseSemVer(tt.version)
+			ver, err := ParseSemVer(tt.version)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -112,7 +112,7 @@ func TestFindLatestSemVerTag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ver, tag := findLatestSemVerTag(tt.tags)
+			ver, tag := FindLatestSemVerTag(tt.tags)
 
 			if tt.expectedVersion == "" {
 				assert.Nil(t, ver)
@@ -176,7 +176,7 @@ func TestIsValidCommitSHA(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isValidCommitSHA(tt.ref)
+			result := IsValidCommitSHA(tt.ref)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -222,7 +222,7 @@ func TestExtractGitURI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractGitURI(tt.source)
+			result := ExtractGitURI(tt.source)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

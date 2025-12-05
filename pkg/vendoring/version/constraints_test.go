@@ -1,4 +1,4 @@
-package vendoring
+package version
 
 import (
 	"testing"
@@ -128,7 +128,7 @@ func TestResolveVersionConstraints(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := resolveVersionConstraints(tt.versions, tt.constraints)
+			got, err := ResolveVersionConstraints(tt.versions, tt.constraints)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -193,7 +193,7 @@ func TestFilterBySemverConstraint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := filterBySemverConstraint(tt.versions, tt.constraint)
+			got, err := FilterBySemverConstraint(tt.versions, tt.constraint)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -251,7 +251,7 @@ func TestFilterExcludedVersions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := filterExcludedVersions(tt.versions, tt.excluded)
+			got := FilterExcludedVersions(tt.versions, tt.excluded)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -298,7 +298,7 @@ func TestMatchesWildcard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := matchesWildcard(tt.version, tt.pattern)
+			got := MatchesWildcard(tt.version, tt.pattern)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -344,7 +344,7 @@ func TestFilterPrereleases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := filterPrereleases(tt.versions)
+			got := FilterPrereleases(tt.versions)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -397,7 +397,7 @@ func TestSelectLatestVersion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := selectLatestVersion(tt.versions)
+			got, err := SelectLatestVersion(tt.versions)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {

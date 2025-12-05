@@ -1,4 +1,4 @@
-package vendoring
+package source
 
 import (
 	"testing"
@@ -11,60 +11,60 @@ func TestGetProviderForSource(t *testing.T) {
 		name              string
 		source            string
 		expectedType      interface{}
-		expectedSupported SourceOperation
+		expectedSupported Operation
 	}{
 		{
 			name:              "GitHub HTTPS URL",
 			source:            "https://github.com/cloudposse/terraform-aws-vpc.git",
-			expectedType:      &GitHubSourceProvider{},
+			expectedType:      &GitHubProvider{},
 			expectedSupported: OperationGetDiff,
 		},
 		{
 			name:              "GitHub shorthand",
 			source:            "github.com/cloudposse/terraform-aws-vpc",
-			expectedType:      &GitHubSourceProvider{},
+			expectedType:      &GitHubProvider{},
 			expectedSupported: OperationGetDiff,
 		},
 		{
 			name:              "GitHub SSH URL",
 			source:            "git@github.com:cloudposse/terraform-aws-vpc.git",
-			expectedType:      &GitHubSourceProvider{},
+			expectedType:      &GitHubProvider{},
 			expectedSupported: OperationGetDiff,
 		},
 		{
 			name:              "GitHub git:: prefix",
 			source:            "git::https://github.com/cloudposse/terraform-aws-vpc.git",
-			expectedType:      &GitHubSourceProvider{},
+			expectedType:      &GitHubProvider{},
 			expectedSupported: OperationGetDiff,
 		},
 		{
 			name:              "GitLab HTTPS URL",
 			source:            "https://gitlab.com/example/repo.git",
-			expectedType:      &GenericGitSourceProvider{},
+			expectedType:      &GenericGitProvider{},
 			expectedSupported: OperationListVersions,
 		},
 		{
 			name:              "Generic Git HTTPS",
 			source:            "https://git.example.com/repo.git",
-			expectedType:      &GenericGitSourceProvider{},
+			expectedType:      &GenericGitProvider{},
 			expectedSupported: OperationListVersions,
 		},
 		{
 			name:              "Generic Git SSH",
 			source:            "git@git.example.com:repo.git",
-			expectedType:      &GenericGitSourceProvider{},
+			expectedType:      &GenericGitProvider{},
 			expectedSupported: OperationListVersions,
 		},
 		{
 			name:              "OCI registry",
 			source:            "oci://registry.example.com/component",
-			expectedType:      &UnsupportedSourceProvider{},
+			expectedType:      &UnsupportedProvider{},
 			expectedSupported: "",
 		},
 		{
 			name:              "Local path",
 			source:            "/path/to/local/component",
-			expectedType:      &UnsupportedSourceProvider{},
+			expectedType:      &UnsupportedProvider{},
 			expectedSupported: "",
 		},
 	}
@@ -80,28 +80,28 @@ func TestGetProviderForSource(t *testing.T) {
 	}
 }
 
-func TestGitHubSourceProvider_SupportsOperation(t *testing.T) {
-	provider := NewGitHubSourceProvider()
+func TestGitHubProvider_SupportsOperation(t *testing.T) {
+	provider := NewGitHubProvider()
 
 	assert.True(t, provider.SupportsOperation(OperationListVersions))
 	assert.True(t, provider.SupportsOperation(OperationVerifyVersion))
 	assert.True(t, provider.SupportsOperation(OperationGetDiff))
 	assert.True(t, provider.SupportsOperation(OperationFetchSource))
-	assert.False(t, provider.SupportsOperation(SourceOperation("unknown")))
+	assert.False(t, provider.SupportsOperation(Operation("unknown")))
 }
 
-func TestGenericGitSourceProvider_SupportsOperation(t *testing.T) {
-	provider := NewGenericGitSourceProvider()
+func TestGenericGitProvider_SupportsOperation(t *testing.T) {
+	provider := NewGenericGitProvider()
 
 	assert.True(t, provider.SupportsOperation(OperationListVersions))
 	assert.True(t, provider.SupportsOperation(OperationVerifyVersion))
 	assert.False(t, provider.SupportsOperation(OperationGetDiff))
 	assert.True(t, provider.SupportsOperation(OperationFetchSource))
-	assert.False(t, provider.SupportsOperation(SourceOperation("unknown")))
+	assert.False(t, provider.SupportsOperation(Operation("unknown")))
 }
 
-func TestUnsupportedSourceProvider_SupportsOperation(t *testing.T) {
-	provider := NewUnsupportedSourceProvider()
+func TestUnsupportedProvider_SupportsOperation(t *testing.T) {
+	provider := NewUnsupportedProvider()
 
 	assert.False(t, provider.SupportsOperation(OperationListVersions))
 	assert.False(t, provider.SupportsOperation(OperationVerifyVersion))
@@ -177,7 +177,7 @@ func TestParseGitHubRepo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			owner, repo, err := parseGitHubRepo(tt.source)
+			owner, repo, err := ParseGitHubRepo(tt.source)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -224,7 +224,7 @@ func TestIsGitHubSource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isGitHubSource(tt.source)
+			got := IsGitHubSource(tt.source)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -270,7 +270,7 @@ func TestIsGitSource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isGitSource(tt.source)
+			got := IsGitSource(tt.source)
 			assert.Equal(t, tt.want, got)
 		})
 	}

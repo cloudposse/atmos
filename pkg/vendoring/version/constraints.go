@@ -1,4 +1,4 @@
-package vendoring
+package version
 
 import (
 	"errors"
@@ -12,20 +12,20 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// resolveVersionConstraints applies version constraints to filter a list of available versions.
+// ResolveVersionConstraints applies version constraints to filter a list of available versions.
 // Returns the latest version that satisfies all constraints, or an error if no version matches.
-func resolveVersionConstraints(
+func ResolveVersionConstraints(
 	availableVersions []string,
 	constraints *schema.VendorConstraints,
 ) (string, error) {
-	defer perf.Track(nil, "exec.resolveVersionConstraints")()
+	defer perf.Track(nil, "version.ResolveVersionConstraints")()
 
 	if constraints == nil {
 		// No constraints - return latest version.
 		if len(availableVersions) == 0 {
 			return "", errUtils.ErrNoVersionsAvailable
 		}
-		return selectLatestVersion(availableVersions)
+		return SelectLatestVersion(availableVersions)
 	}
 
 	// Filter through constraint pipeline.
@@ -34,7 +34,7 @@ func resolveVersionConstraints(
 	// Step 1: Filter by semver constraint.
 	if constraints.Version != "" {
 		var err error
-		filtered, err = filterBySemverConstraint(filtered, constraints.Version)
+		filtered, err = FilterBySemverConstraint(filtered, constraints.Version)
 		if err != nil {
 			return "", err
 		}
@@ -42,12 +42,12 @@ func resolveVersionConstraints(
 
 	// Step 2: Filter excluded versions.
 	if len(constraints.ExcludedVersions) > 0 {
-		filtered = filterExcludedVersions(filtered, constraints.ExcludedVersions)
+		filtered = FilterExcludedVersions(filtered, constraints.ExcludedVersions)
 	}
 
 	// Step 3: Filter pre-releases.
 	if constraints.NoPrereleases {
-		filtered = filterPrereleases(filtered)
+		filtered = FilterPrereleases(filtered)
 	}
 
 	// Step 4: Select latest from remaining versions.
@@ -55,11 +55,13 @@ func resolveVersionConstraints(
 		return "", errUtils.ErrNoVersionsMatchConstraints
 	}
 
-	return selectLatestVersion(filtered)
+	return SelectLatestVersion(filtered)
 }
 
-// filterBySemverConstraint filters versions by semantic version constraint.
-func filterBySemverConstraint(versions []string, constraint string) ([]string, error) {
+// FilterBySemverConstraint filters versions by semantic version constraint.
+func FilterBySemverConstraint(versions []string, constraint string) ([]string, error) {
+	defer perf.Track(nil, "version.FilterBySemverConstraint")()
+
 	c, err := semver.NewConstraint(constraint)
 	if err != nil {
 		return nil, errors.Join(
@@ -85,14 +87,16 @@ func filterBySemverConstraint(versions []string, constraint string) ([]string, e
 	return filtered, nil
 }
 
-// filterExcludedVersions filters out excluded versions (supports wildcards).
-func filterExcludedVersions(versions []string, excluded []string) []string {
+// FilterExcludedVersions filters out excluded versions (supports wildcards).
+func FilterExcludedVersions(versions []string, excluded []string) []string {
+	defer perf.Track(nil, "version.FilterExcludedVersions")()
+
 	var filtered []string
 
 	for _, v := range versions {
 		exclude := false
 		for _, pattern := range excluded {
-			if matchesWildcard(v, pattern) {
+			if MatchesWildcard(v, pattern) {
 				exclude = true
 				break
 			}
@@ -105,9 +109,11 @@ func filterExcludedVersions(versions []string, excluded []string) []string {
 	return filtered
 }
 
-// matchesWildcard checks if a version matches a wildcard pattern.
+// MatchesWildcard checks if a version matches a wildcard pattern.
 // Supports patterns like "1.5.*" or exact matches like "1.2.3".
-func matchesWildcard(version, pattern string) bool {
+func MatchesWildcard(version, pattern string) bool {
+	defer perf.Track(nil, "version.MatchesWildcard")()
+
 	// Exact match.
 	if version == pattern {
 		return true
@@ -122,8 +128,10 @@ func matchesWildcard(version, pattern string) bool {
 	return false
 }
 
-// filterPrereleases filters out pre-release versions.
-func filterPrereleases(versions []string) []string {
+// FilterPrereleases filters out pre-release versions.
+func FilterPrereleases(versions []string) []string {
+	defer perf.Track(nil, "version.FilterPrereleases")()
+
 	var filtered []string
 
 	for _, v := range versions {
@@ -143,8 +151,10 @@ func filterPrereleases(versions []string) []string {
 	return filtered
 }
 
-// selectLatestVersion selects the latest version from a list using semver comparison.
-func selectLatestVersion(versions []string) (string, error) {
+// SelectLatestVersion selects the latest version from a list using semver comparison.
+func SelectLatestVersion(versions []string) (string, error) {
+	defer perf.Track(nil, "version.SelectLatestVersion")()
+
 	if len(versions) == 0 {
 		return "", errUtils.ErrNoVersionsAvailable
 	}
