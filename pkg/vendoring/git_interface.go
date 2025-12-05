@@ -5,6 +5,7 @@ package vendoring
 import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
 
 // GitOperations defines the interface for Git operations used by vendor commands.
@@ -32,14 +33,14 @@ func NewGitOperations() GitOperations {
 func (g *realGitOperations) GetRemoteTags(gitURI string) ([]string, error) {
 	defer perf.Track(nil, "exec.GetRemoteTags")()
 
-	return getGitRemoteTags(gitURI)
+	return version.GetGitRemoteTags(gitURI)
 }
 
 // CheckRef implements GitOperations.CheckRef.
 func (g *realGitOperations) CheckRef(gitURI string, ref string) (bool, error) {
 	defer perf.Track(nil, "exec.CheckRef")()
 
-	return checkGitRef(gitURI, ref)
+	return version.CheckGitRef(gitURI, ref)
 }
 
 // GetDiffBetweenRefs implements GitOperations.GetDiffBetweenRefs.

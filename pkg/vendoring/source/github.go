@@ -1,4 +1,4 @@
-package vendoring
+package source
 
 import (
 	"encoding/json"
@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
 
 const (
@@ -18,37 +19,43 @@ const (
 	defaultHTTPTimeout = 30 * time.Second
 )
 
-// GitHubSourceProvider implements VendorSourceProvider for GitHub repositories.
-type GitHubSourceProvider struct {
+// GitHubProvider implements Provider for GitHub repositories.
+type GitHubProvider struct {
 	httpClient *http.Client
 }
 
-// NewGitHubSourceProvider creates a new GitHub source provider.
-func NewGitHubSourceProvider() VendorSourceProvider {
-	return &GitHubSourceProvider{
+// NewGitHubProvider creates a new GitHub source provider.
+func NewGitHubProvider() Provider {
+	defer perf.Track(nil, "source.NewGitHubProvider")()
+
+	return &GitHubProvider{
 		httpClient: &http.Client{
 			Timeout: defaultHTTPTimeout,
 		},
 	}
 }
 
-// GetAvailableVersions implements VendorSourceProvider.GetAvailableVersions.
-func (g *GitHubSourceProvider) GetAvailableVersions(source string) ([]string, error) {
-	// Use existing Git operations to get tags
-	gitURI := extractGitURI(source)
-	return getGitRemoteTags(gitURI)
+// GetAvailableVersions implements Provider.GetAvailableVersions.
+func (g *GitHubProvider) GetAvailableVersions(source string) ([]string, error) {
+	defer perf.Track(nil, "source.GitHubProvider.GetAvailableVersions")()
+
+	// Use existing Git operations to get tags.
+	gitURI := version.ExtractGitURI(source)
+	return version.GetGitRemoteTags(gitURI)
 }
 
-// VerifyVersion implements VendorSourceProvider.VerifyVersion.
-func (g *GitHubSourceProvider) VerifyVersion(source string, version string) (bool, error) {
-	gitURI := extractGitURI(source)
-	return checkGitRef(gitURI, version)
+// VerifyVersion implements Provider.VerifyVersion.
+func (g *GitHubProvider) VerifyVersion(source string, ver string) (bool, error) {
+	defer perf.Track(nil, "source.GitHubProvider.VerifyVersion")()
+
+	gitURI := version.ExtractGitURI(source)
+	return version.CheckGitRef(gitURI, ver)
 }
 
-// GetDiff implements VendorSourceProvider.GetDiff using GitHub's Compare API.
+// GetDiff implements Provider.GetDiff using GitHub's Compare API.
 //
 //nolint:revive // Seven parameters needed for comprehensive diff configuration.
-func (g *GitHubSourceProvider) GetDiff(
+func (g *GitHubProvider) GetDiff(
 	atmosConfig *schema.AtmosConfiguration,
 	source string,
 	fromVersion string,
@@ -57,15 +64,15 @@ func (g *GitHubSourceProvider) GetDiff(
 	contextLines int,
 	noColor bool,
 ) ([]byte, error) {
-	defer perf.Track(atmosConfig, "exec.GitHubSourceProvider.GetDiff")()
+	defer perf.Track(atmosConfig, "source.GitHubProvider.GetDiff")()
 
-	// Parse GitHub owner/repo from source
-	owner, repo, err := parseGitHubRepo(source)
+	// Parse GitHub owner/repo from source.
+	owner, repo, err := ParseGitHubRepo(source)
 	if err != nil {
 		return nil, err
 	}
 
-	// Use GitHub Compare API
+	// Use GitHub Compare API.
 	// https://docs.github.com/en/rest/commits/commits#compare-two-commits
 	compareURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/compare/%s...%s",
 		owner, repo, fromVersion, toVersion)
@@ -75,11 +82,11 @@ func (g *GitHubSourceProvider) GetDiff(
 		return nil, fmt.Errorf("%w: failed to create request: %s", errUtils.ErrGitDiffFailed, err)
 	}
 
-	// Add GitHub API headers
+	// Add GitHub API headers.
 	req.Header.Set("Accept", "application/vnd.github.v3.diff")
 
-	// Add authentication if available (from environment)
-	if token := getGitHubToken(); token != "" {
+	// Add authentication if available (from environment).
+	if token := GetGitHubToken(); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
@@ -100,15 +107,16 @@ func (g *GitHubSourceProvider) GetDiff(
 		return nil, fmt.Errorf("%w: failed to read diff: %s", errUtils.ErrGitDiffFailed, err)
 	}
 
-	// TODO: Apply file filtering if filePath is specified
-	// TODO: Apply context line configuration if contextLines is specified
-	// TODO: Strip ANSI codes if noColor is true
+	// TODO: Apply file filtering if filePath is specified.
+	// TODO: Apply context line configuration if contextLines is specified.
+	// TODO: Strip ANSI codes if noColor is true.
 
 	return diff, nil
 }
 
-// SupportsOperation implements VendorSourceProvider.SupportsOperation.
-func (g *GitHubSourceProvider) SupportsOperation(operation SourceOperation) bool {
+// SupportsOperation implements Provider.SupportsOperation.
+func (g *GitHubProvider) SupportsOperation(operation Operation) bool {
+	defer perf.Track(nil, "source.GitHubProvider.SupportsOperation")()
 	switch operation {
 	case OperationListVersions, OperationVerifyVersion, OperationGetDiff, OperationFetchSource:
 		return true
@@ -117,9 +125,11 @@ func (g *GitHubSourceProvider) SupportsOperation(operation SourceOperation) bool
 	}
 }
 
-// parseGitHubRepo extracts owner and repository name from a GitHub source URL.
-func parseGitHubRepo(source string) (owner, repo string, err error) {
-	// Remove common prefixes
+// ParseGitHubRepo extracts owner and repository name from a GitHub source URL.
+func ParseGitHubRepo(source string) (owner, repo string, err error) {
+	defer perf.Track(nil, "source.ParseGitHubRepo")()
+
+	// Remove common prefixes.
 	source = strings.TrimPrefix(source, "git::")
 	source = strings.TrimPrefix(source, "https://")
 	source = strings.TrimPrefix(source, "http://")
@@ -128,20 +138,20 @@ func parseGitHubRepo(source string) (owner, repo string, err error) {
 	// Handle SSH format.
 	source = strings.TrimPrefix(source, "git@github.com:")
 
-	// Remove .git suffix
+	// Remove .git suffix.
 	source = strings.TrimSuffix(source, ".git")
 
-	// Remove query parameters
+	// Remove query parameters.
 	if idx := strings.Index(source, "?"); idx != -1 {
 		source = source[:idx]
 	}
 
-	// Remove path after repo (e.g., //modules/vpc)
+	// Remove path after repo (e.g., //modules/vpc).
 	if idx := strings.Index(source, "//"); idx != -1 {
 		source = source[:idx]
 	}
 
-	// Split into owner/repo
+	// Split into owner/repo.
 	parts := strings.SplitN(source, "/", 2)
 	if len(parts) != 2 {
 		return "", "", fmt.Errorf("%w: invalid GitHub repository format: %s", errUtils.ErrParseURL, source)
@@ -150,14 +160,18 @@ func parseGitHubRepo(source string) (owner, repo string, err error) {
 	return parts[0], parts[1], nil
 }
 
-// isGitHubSource checks if a source URL is a GitHub repository.
-func isGitHubSource(source string) bool {
+// IsGitHubSource checks if a source URL is a GitHub repository.
+func IsGitHubSource(source string) bool {
+	defer perf.Track(nil, "source.IsGitHubSource")()
+
 	return strings.Contains(source, "github.com")
 }
 
-// getGitHubToken retrieves the GitHub token from Atmos settings or environment.
-func getGitHubToken() string {
-	// This would integrate with Atmos configuration system
+// GetGitHubToken retrieves the GitHub token from Atmos settings or environment.
+func GetGitHubToken() string {
+	defer perf.Track(nil, "source.GetGitHubToken")()
+
+	// This would integrate with Atmos configuration system.
 	// For now, return empty string - the actual implementation would check:
 	// 1. ATMOS_GITHUB_TOKEN
 	// 2. GITHUB_TOKEN
@@ -177,15 +191,15 @@ type GitHubRateLimitResponse struct {
 }
 
 // CheckGitHubRateLimit checks the current GitHub API rate limit.
-func (g *GitHubSourceProvider) CheckGitHubRateLimit() (*GitHubRateLimitResponse, error) {
-	defer perf.Track(nil, "exec.CheckGitHubRateLimit")()
+func (g *GitHubProvider) CheckGitHubRateLimit() (*GitHubRateLimitResponse, error) {
+	defer perf.Track(nil, "source.CheckGitHubRateLimit")()
 
 	req, err := http.NewRequest("GET", "https://api.github.com/rate_limit", nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create rate limit request: %w", errUtils.ErrFailedToCreateRequest, err)
 	}
 
-	if token := getGitHubToken(); token != "" {
+	if token := GetGitHubToken(); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
