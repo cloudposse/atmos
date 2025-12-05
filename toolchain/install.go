@@ -9,7 +9,6 @@ import (
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -91,50 +90,28 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 	if toolSpec == "" {
 		return installFromToolVersions(GetToolVersionsFilePath(), reinstallFlag)
 	}
+
 	tool, version, err := ParseToolVersionArg(toolSpec)
 	if err != nil {
 		return err
 	}
+
+	// Resolve version if not specified.
 	if version == "" {
-		// Try to look up version in .tool-versions or fallback to alias/latest.
-		toolVersions, err := LoadToolVersions(DefaultToolVersionsFilePath)
+		lookupResult, err := resolveVersionFromToolVersions(tool, toolSpec)
 		if err != nil {
-			return errUtils.Build(errUtils.ErrInvalidToolSpec).
-				WithExplanationf("Invalid tool specification: `%s`", toolSpec).
-				WithHint("Use format: `owner/repo@version` (e.g., `hashicorp/terraform@1.5.0`)").
-				WithHint("Or use alias: `terraform@1.5.0` (requires `.tool-versions` or registry alias)").
-				WithHint("File `.tool-versions` could not be loaded").
-				WithContext("tool_spec", toolSpec).
-				WithContext("tool_versions_file", DefaultToolVersionsFilePath).
-				WithContext("error", err.Error()).
-				WithExitCode(2).
-				Err()
+			return err
 		}
-		installer := NewInstaller()
-		result := LookupToolVersionOrLatest(tool, toolVersions, installer.resolver)
-		if !result.Found && !result.UsedLatest {
-			return errUtils.Build(errUtils.ErrInvalidToolSpec).
-				WithExplanationf("Invalid tool specification: `%s`", toolSpec).
-				WithHint("Use format: `owner/repo@version` (e.g., `hashicorp/terraform@1.5.0`)").
-				WithHint("Or add tool to `.tool-versions` file").
-				WithContext("tool_spec", toolSpec).
-				WithExitCode(2).
-				Err()
-		}
-		tool = result.ResolvedKey
-		version = result.Version
-	}
-	if tool == "" || version == "" {
-		return errUtils.Build(errUtils.ErrInvalidToolSpec).
-			WithExplanationf("Invalid tool specification: `%s`", toolSpec).
-			WithHint("Use format: `owner/repo@version` (e.g., `hashicorp/terraform@1.5.0`)").
-			WithHint("Or use alias: `terraform@1.5.0`").
-			WithContext("tool_spec", toolSpec).
-			WithExitCode(2).
-			Err()
+		tool = lookupResult.tool
+		version = lookupResult.version
 	}
 
-	// Use the enhanced parseToolSpec to handle both owner/repo and tool name formats.
+	// Validate tool and version.
+	if err := validateToolAndVersion(tool, version, toolSpec); err != nil {
+		return err
+	}
+
+	// Parse tool specification to get owner/repo.
 	installer := NewInstaller()
 	owner, repo, err := installer.parseToolSpec(tool)
 	if err != nil {
@@ -149,18 +126,8 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 		return err
 	}
 
-	// Update .tool-versions: add version, set as default if requested.
-	if setAsDefault {
-		if err := AddToolToVersionsAsDefault(DefaultToolVersionsFilePath, tool, version); err != nil {
-			return fmt.Errorf("failed to update .tool-versions: %w", err)
-		}
-	} else {
-		if err := AddToolToVersions(DefaultToolVersionsFilePath, tool, version); err != nil {
-			return fmt.Errorf("failed to update .tool-versions: %w", err)
-		}
-	}
-
-	return nil
+	// Update .tool-versions file.
+	return updateToolVersionsFile(tool, version, setAsDefault)
 }
 
 func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressBar bool) error {

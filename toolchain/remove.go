@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // RemoveToolVersion removes either the entire tool or a specific version from the file.
@@ -12,54 +11,35 @@ import (
 func RemoveToolVersion(filePath, tool, version string) error {
 	defer perf.Track(nil, "toolchain.RemoveToolVersionFromFile")()
 
-	if tool == "" {
-		return fmt.Errorf("%w: empty tool argument", ErrInvalidToolSpec)
+	if err := validateRemoveInput(tool); err != nil {
+		return err
 	}
 
-	toolVersions, err := LoadToolVersions(filePath)
+	toolVersions, versions, err := loadToolVersionsForRemoval(filePath, tool)
 	if err != nil {
 		return err
 	}
 
-	versions, exists := toolVersions.Tools[tool]
-	if !exists {
-		return fmt.Errorf("%w: tool '%s' not found in %s", ErrToolNotFound, tool, filePath)
-	}
-
+	var result removeResult
 	if version == "" {
-		// Remove all versions
-		delete(toolVersions.Tools, tool)
-		if err := SaveToolVersions(filePath, toolVersions); err != nil {
-			return err
-		}
-		_ = ui.Successf("Removed %s from %s", tool, filePath)
-		return nil
-	}
-
-	// Remove only the specified version
-	newVersions := make([]string, 0, len(versions))
-	removed := false
-	for _, v := range versions {
-		if v == version {
-			removed = true
-			continue
-		}
-		newVersions = append(newVersions, v)
-	}
-	if !removed {
-		return fmt.Errorf("%w: version '%s' not found for tool '%s' in %s", ErrNoVersionsFound, version, tool, filePath)
-	}
-
-	if len(newVersions) == 0 {
-		delete(toolVersions.Tools, tool)
+		// Remove all versions.
+		removeAllVersions(toolVersions, tool)
+		result = removeResult{tool: tool, removedAll: true}
 	} else {
-		toolVersions.Tools[tool] = newVersions
+		// Remove only the specified version.
+		newVersions, removed := removeSpecificVersion(versions, version)
+		if !removed {
+			return fmt.Errorf("%w: version '%s' not found for tool '%s' in %s", ErrNoVersionsFound, version, tool, filePath)
+		}
+
+		updateToolVersionsAfterRemoval(toolVersions, tool, newVersions)
+		result = removeResult{tool: tool, version: version, removedAll: false}
 	}
 
 	if err := SaveToolVersions(filePath, toolVersions); err != nil {
 		return err
 	}
 
-	_ = ui.Successf("Removed %s@%s from %s", tool, version, filePath)
+	displayRemovalSuccess(result, filePath)
 	return nil
 }

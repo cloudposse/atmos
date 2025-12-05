@@ -21,7 +21,6 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/toolchain/registry"
 )
 
@@ -165,72 +164,17 @@ type versionRow struct {
 func displayVersionsTable(versions []string, defaultVersion string, terminalWidth int, showInstalled bool) {
 	defer perf.Track(nil, "toolchain.displayVersionsTable")()
 
-	// Build row data.
-	var rows []versionRow
-	statusWidth := 2 // For checkmark character.
-	versionWidth := len("VERSION")
+	// Build row data and calculate column widths.
+	rows, statusWidth, versionWidth := buildVersionRows(versions, defaultVersion, showInstalled)
 
-	for _, v := range versions {
-		row := versionRow{
-			version:     v,
-			isDefault:   v == defaultVersion,
-			isInstalled: showInstalled, // All versions in installed list are installed.
-		}
-
-		// Set status indicator.
-		switch {
-		case row.isDefault:
-			row.status = theme.Styles.Checkmark.String() // Checkmark for default.
-		case row.isInstalled:
-			row.status = theme.Styles.Checkmark.String() // Checkmark for installed.
-		default:
-			row.status = " " // No indicator for available-only.
-		}
-
-		// Update column widths (account for " (default)" suffix).
-		versionLen := len(v)
-		if row.isDefault {
-			versionLen += len(" (default)")
-		}
-		if versionLen > versionWidth {
-			versionWidth = versionLen
-		}
-
-		rows = append(rows, row)
-	}
-
-	// Add padding.
-	statusWidth += 4
-	versionWidth += 4
-
-	// Calculate total width needed.
-	totalNeededWidth := statusWidth + versionWidth
-
-	// If screen is narrow, truncate version column.
-	if totalNeededWidth > terminalWidth {
-		excess := totalNeededWidth - terminalWidth
-		versionReduce := min(excess, versionWidth-12)
-		versionWidth -= versionReduce
-	}
+	// Adjust column widths to fit terminal.
+	statusWidth, versionWidth = adjustColumnWidths(statusWidth, versionWidth, terminalWidth)
 
 	// Create table columns.
-	columns := []table.Column{
-		{Title: " ", Width: statusWidth}, // Status column.
-		{Title: "VERSION", Width: versionWidth},
-	}
+	columns := createVersionTableColumns(statusWidth, versionWidth)
 
 	// Convert rows to table format.
-	var tableRows []table.Row
-	for _, row := range rows {
-		suffix := ""
-		if row.isDefault {
-			suffix = " (default)"
-		}
-		tableRows = append(tableRows, table.Row{
-			row.status,
-			row.version + suffix,
-		})
-	}
+	tableRows := convertVersionRowsToTableFormat(rows)
 
 	// Create and configure table.
 	t := table.New(
@@ -241,16 +185,7 @@ func displayVersionsTable(versions []string, defaultVersion string, terminalWidt
 	)
 
 	// Apply theme styles.
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(theme.ColorBorder)).
-		BorderBottom(true).
-		Bold(true)
-	s.Cell = s.Cell.PaddingLeft(1).PaddingRight(1)
-	s.Selected = s.Cell
-
-	t.SetStyles(s)
+	applyTableStyles(&t)
 
 	// Render and print.
 	_ = ui.Writeln(t.View())
