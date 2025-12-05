@@ -83,7 +83,7 @@ func resolveLatestVersionWithSpinner(owner, repo, version string, isLatest bool,
 }
 
 // handleInstallSuccess handles post-installation tasks and displays success messages.
-func handleInstallSuccess(result installResult, installer *Installer) error {
+func handleInstallSuccess(result installResult, installer *Installer) {
 	// Create latest file if this is a "latest" installation.
 	if result.isLatest {
 		if err := installer.CreateLatestFile(result.owner, result.repo, result.version); err != nil {
@@ -94,7 +94,7 @@ func handleInstallSuccess(result installResult, installer *Installer) error {
 	}
 
 	if !result.showMessage {
-		return nil
+		return
 	}
 
 	// Calculate directory size for the installed version.
@@ -110,6 +110,4 @@ func handleInstallSuccess(result installResult, installer *Installer) error {
 		_ = ui.Successf("Registered `%s %s` in `.tool-versions`", result.repo, result.version)
 		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
 	}
-
-	return nil
 }

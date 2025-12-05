@@ -65,27 +65,25 @@ func buildToolRows(toolVersions *ToolVersions, installer *Installer) []toolRow {
 		}
 
 		// Add row for default version (first in list).
-		if row, err := buildToolRow(installer, toolRowInfo{
+		row := buildToolRow(installer, toolRowInfo{
 			owner:     id.owner,
 			repo:      id.repo,
 			alias:     id.alias,
 			version:   versions[0],
 			isDefault: true,
-		}); err == nil {
-			rows = append(rows, row)
-		}
+		})
+		rows = append(rows, row)
 
 		// Add rows for additional versions.
 		for i := 1; i < len(versions); i++ {
-			if row, err := buildToolRow(installer, toolRowInfo{
+			row := buildToolRow(installer, toolRowInfo{
 				owner:     id.owner,
 				repo:      id.repo,
 				alias:     id.alias,
 				version:   versions[i],
 				isDefault: false,
-			}); err == nil {
-				rows = append(rows, row)
-			}
+			})
+			rows = append(rows, row)
 		}
 	}
 
@@ -120,7 +118,7 @@ func resolveToolInfo(toolName string, toolVersions *ToolVersions, installer *Ins
 }
 
 // buildToolRow creates a single toolRow for a specific tool version.
-func buildToolRow(installer *Installer, info toolRowInfo) (toolRow, error) {
+func buildToolRow(installer *Installer, info toolRowInfo) toolRow {
 	// Binary name defaults to repo name.
 	binaryName := info.repo
 
@@ -146,7 +144,7 @@ func buildToolRow(installer *Installer, info toolRowInfo) (toolRow, error) {
 		size:        size,
 		isDefault:   info.isDefault,
 		isInstalled: isInstalled,
-	}, nil
+	}
 }
 
 // getInstallationMetadata retrieves status, install date, and size for a binary.
