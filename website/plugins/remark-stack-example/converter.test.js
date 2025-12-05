@@ -51,7 +51,7 @@ describe('convertYamlToFormats', () => {
 
     expect(result.yaml).toContain('!env AWS_REGION');
     expect(result.json).toContain('${env:AWS_REGION}');
-    expect(result.hcl).toContain('atmos_env("AWS_REGION")');
+    expect(result.hcl).toContain('atmos.env("AWS_REGION")');
   });
 
   test('converts YAML with !exec function', () => {
@@ -60,7 +60,7 @@ describe('convertYamlToFormats', () => {
     const result = convertYamlToFormats(yaml);
 
     expect(result.json).toContain('${exec:git describe --tags}');
-    expect(result.hcl).toContain('atmos_exec("git describe --tags")');
+    expect(result.hcl).toContain('atmos.exec("git describe --tags")');
   });
 
   test('converts YAML with !terraform.output function', () => {
@@ -69,7 +69,7 @@ describe('convertYamlToFormats', () => {
     const result = convertYamlToFormats(yaml);
 
     expect(result.json).toContain('${terraform.output:vpc.id stack=prod-us-west-2}');
-    expect(result.hcl).toContain('atmos_terraform_output');
+    expect(result.hcl).toContain('atmos.terraform_output');
   });
 
   test('converts YAML with !store function', () => {
@@ -78,7 +78,7 @@ describe('convertYamlToFormats', () => {
     const result = convertYamlToFormats(yaml);
 
     expect(result.json).toContain('${store:ssm/api/key}');
-    expect(result.hcl).toContain('atmos_store("ssm", "api/key")');
+    expect(result.hcl).toContain('atmos.store("ssm", "api/key")');
   });
 
   test('preserves boolean values', () => {
