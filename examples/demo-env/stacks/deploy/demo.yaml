@@ -1,0 +1,5 @@
+components:
+  terraform:
+    github-stars:
+      vars:
+        repository: cloudposse/atmos
