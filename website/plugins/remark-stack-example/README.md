@@ -25,13 +25,13 @@ The plugin automatically translates Atmos function syntax between formats:
 
 | YAML | JSON | HCL |
 |------|------|-----|
-| `!env VAR` | `${env:VAR}` | `atmos_env("VAR")` |
-| `!exec "cmd"` | `${exec:cmd}` | `atmos_exec("cmd")` |
-| `!template "..."` | `${template:...}` | `atmos_template("...")` |
-| `!repo-root` | `${repo-root}` | `atmos_repo_root()` |
-| `!terraform.output ...` | `${terraform.output:...}` | `atmos_terraform_output(...)` |
-| `!terraform.state ...` | `${terraform.state:...}` | `atmos_terraform_state(...)` |
-| `!store provider/key` | `${store:provider/key}` | `atmos_store("provider", "key")` |
+| `!env VAR` | `${env:VAR}` | `atmos.env("VAR")` |
+| `!exec "cmd"` | `${exec:cmd}` | `atmos.exec("cmd")` |
+| `!template "..."` | `${template:...}` | `atmos.template("...")` |
+| `!repo-root` | `${repo-root}` | `atmos.repo_root()` |
+| `!terraform.output ...` | `${terraform.output:...}` | `atmos.terraform_output(...)` |
+| `!terraform.state ...` | `${terraform.state:...}` | `atmos.terraform_state(...)` |
+| `!store provider/key` | `${store:provider/key}` | `atmos.store("provider", "key")` |
 
 ## Direct Component Usage
 
@@ -49,7 +49,7 @@ import StackExample from '@site/src/components/StackExample';
   }
 }`}
   hcl={`settings = {
-  region = atmos_env("AWS_REGION")
+  region = atmos.env("AWS_REGION")
 }`}
 />
 ```

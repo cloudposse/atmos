@@ -18,6 +18,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const globWildcard = "**"
+
 // sanitizeImport redacts credentials and query values from URLs while leaving paths intact.
 // Sanitizes credentials from any URL scheme (http, https, git, ssh, s3, gcs, oci, etc.).
 func sanitizeImport(s string) string {
@@ -188,30 +190,35 @@ func SearchAtmosConfig(path string) ([]string, error) {
 	return atmosFilePathsAbsolute, nil
 }
 
-// Helper function to generate search patterns for extension yaml,yml.
+// Helper function to generate search patterns for supported stack config extensions.
+// Supports YAML (.yaml, .yml), JSON (.json), and HCL (.hcl) formats.
 func generatePatterns(path string) []string {
 	isDir := false
 	if stat, err := os.Stat(path); err == nil && stat.IsDir() {
 		isDir = true
 	}
 	if isDir {
-		// Search for all .yaml and .yml
+		// Search for all supported stack config extensions.
 		patterns := []string{
-			filepath.Join(path, "**", "*.yaml"),
-			filepath.Join(path, "**", "*.yml"),
+			filepath.Join(path, globWildcard, "*.yaml"),
+			filepath.Join(path, globWildcard, "*.yml"),
+			filepath.Join(path, globWildcard, "*.json"),
+			filepath.Join(path, globWildcard, "*.hcl"),
 		}
 		return patterns
 	}
 	ext := filepath.Ext(path)
 	if ext == "" {
-		// If no extension, append .yaml and .yml
+		// If no extension, try all supported extensions in priority order.
 		patterns := []string{
-			path + ".yaml",
-			path + ".yml",
+			path + u.YamlFileExtension,
+			path + u.YmlFileExtension,
+			path + u.JSONFileExtension,
+			path + u.HCLFileExtension,
 		}
 		return patterns
 	}
-	// If extension is present, use the path as-is
+	// If extension is present, use the path as-is.
 	return []string{path}
 }
 

@@ -1,0 +1,14 @@
+# Development stack - YAML format.
+# Tests importing from YAML catalog files.
+
+vars:
+  stage: dev
+
+import:
+  - catalog/base
+
+components:
+  terraform:
+    mock:
+      vars:
+        foo: "dev foo"

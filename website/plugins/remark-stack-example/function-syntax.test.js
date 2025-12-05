@@ -54,25 +54,25 @@ describe('translateToJson', () => {
 
 describe('translateToHcl', () => {
   test('translates env function', () => {
-    expect(translateToHcl('env', 'AWS_REGION')).toBe('atmos_env("AWS_REGION")');
+    expect(translateToHcl('env', 'AWS_REGION')).toBe('atmos.env("AWS_REGION")');
   });
 
   test('translates exec function', () => {
-    expect(translateToHcl('exec', 'git describe')).toBe('atmos_exec("git describe")');
+    expect(translateToHcl('exec', 'git describe')).toBe('atmos.exec("git describe")');
   });
 
   test('translates template function', () => {
-    expect(translateToHcl('template', '{{ .name }}')).toBe('atmos_template("{{ .name }}")');
+    expect(translateToHcl('template', '{{ .name }}')).toBe('atmos.template("{{ .name }}")');
   });
 
   test('translates repo-root function', () => {
-    expect(translateToHcl('repo-root', null)).toBe('atmos_repo_root()');
-    expect(translateToHcl('repo-root', '')).toBe('atmos_repo_root()');
+    expect(translateToHcl('repo-root', null)).toBe('atmos.repo_root()');
+    expect(translateToHcl('repo-root', '')).toBe('atmos.repo_root()');
   });
 
   test('translates terraform.output function', () => {
     const result = translateToHcl('terraform.output', 'vpc.id stack=prod');
-    expect(result).toContain('atmos_terraform_output');
+    expect(result).toContain('atmos.terraform_output');
     expect(result).toContain('"vpc"');
     expect(result).toContain('"id"');
     expect(result).toContain('stack = "prod"');
@@ -80,14 +80,14 @@ describe('translateToHcl', () => {
 
   test('translates terraform.state function', () => {
     const result = translateToHcl('terraform.state', 'network.cidr_block');
-    expect(result).toContain('atmos_terraform_state');
+    expect(result).toContain('atmos.terraform_state');
     expect(result).toContain('"network"');
     expect(result).toContain('"cidr_block"');
   });
 
   test('translates store function with provider/key format', () => {
-    expect(translateToHcl('store', 'ssm/api/key')).toBe('atmos_store("ssm", "api/key")');
-    expect(translateToHcl('store', 'vault/secrets/db')).toBe('atmos_store("vault", "secrets/db")');
+    expect(translateToHcl('store', 'ssm/api/key')).toBe('atmos.store("ssm", "api/key")');
+    expect(translateToHcl('store', 'vault/secrets/db')).toBe('atmos.store("vault", "secrets/db")');
   });
 });
 
@@ -97,7 +97,7 @@ describe('translateFunction', () => {
   });
 
   test('translates to hcl format', () => {
-    expect(translateFunction('env', 'VAR', 'hcl')).toBe('atmos_env("VAR")');
+    expect(translateFunction('env', 'VAR', 'hcl')).toBe('atmos.env("VAR")');
   });
 
   test('returns YAML style for unknown format', () => {
@@ -117,7 +117,7 @@ describe('translateFunctions', () => {
   test('translates function objects', () => {
     const fn = { __atmosFunction: 'env', __atmosArg: 'AWS_REGION' };
     expect(translateFunctions(fn, 'json')).toBe('${env:AWS_REGION}');
-    expect(translateFunctions(fn, 'hcl')).toBe('atmos_env("AWS_REGION")');
+    expect(translateFunctions(fn, 'hcl')).toBe('atmos.env("AWS_REGION")');
   });
 
   test('translates nested objects', () => {
@@ -158,6 +158,6 @@ describe('translateFunctions', () => {
     };
 
     const result = translateFunctions(data, 'hcl');
-    expect(result.level1.level2.level3.value).toBe('atmos_exec("cmd")');
+    expect(result.level1.level2.level3.value).toBe('atmos.exec("cmd")');
   });
 });

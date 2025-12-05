@@ -562,12 +562,17 @@ func TestParseHCL(t *testing.T) {
 			expected: map[string]any{},
 		},
 		{
-			name:        "hcl with blocks (not supported)",
-			input:       []byte(`resource "type" "name" { key = "value" }`),
-			filename:    "test.hcl",
-			expectedErr: true,
-			errorCheck: func(err error) bool {
-				return errors.Is(err, ErrFailedToProcessHclFile)
+			name:     "hcl with blocks (now supported)",
+			input:    []byte(`resource "type" "name" { key = "value" }`),
+			filename: "test.hcl",
+			expected: map[string]any{
+				"resource": map[string]any{
+					"type": map[string]any{
+						"name": map[string]any{
+							"key": "value",
+						},
+					},
+				},
 			},
 		},
 		{

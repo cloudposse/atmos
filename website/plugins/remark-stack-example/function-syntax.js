@@ -6,13 +6,13 @@
  * Format translations:
  * | YAML                    | JSON                         | HCL                                    |
  * |-------------------------|------------------------------|----------------------------------------|
- * | !env VAR                | ${env:VAR}                   | atmos_env("VAR")                       |
- * | !template "..."         | ${template:...}              | atmos_template("...")                  |
- * | !exec "cmd"             | ${exec:cmd}                  | atmos_exec("cmd")                      |
- * | !repo-root              | ${repo-root}                 | atmos_repo_root()                      |
- * | !terraform.output ...   | ${terraform.output:...}      | atmos_terraform_output(...)            |
- * | !terraform.state ...    | ${terraform.state:...}       | atmos_terraform_state(...)             |
- * | !store provider/key     | ${store:provider/key}        | atmos_store("provider", "key")         |
+ * | !env VAR                | ${env:VAR}                   | atmos.env("VAR")                       |
+ * | !template "..."         | ${template:...}              | atmos.template("...")                  |
+ * | !exec "cmd"             | ${exec:cmd}                  | atmos.exec("cmd")                      |
+ * | !repo-root              | ${repo-root}                 | atmos.repo_root()                      |
+ * | !terraform.output ...   | ${terraform.output:...}      | atmos.terraform_output(...)            |
+ * | !terraform.state ...    | ${terraform.state:...}       | atmos.terraform_state(...)             |
+ * | !store provider/key     | ${store:provider/key}        | atmos.store("provider", "key")         |
  */
 
 /**
@@ -87,10 +87,13 @@ function translateToJson(funcName, arg) {
 
 /**
  * Translate function to HCL function call syntax.
+ * Uses namespaced format: atmos.func_name()
  */
 function translateToHcl(funcName, arg) {
-  // Normalize function name for HCL (replace - with _ and . with _).
-  const hclFuncName = `atmos_${funcName.replace(/-/g, '_').replace(/\./g, '_')}`;
+  // Normalize function name for HCL (replace - with _, keep . for terraform functions).
+  // Result: atmos.env, atmos.exec, atmos.repo_root, atmos.terraform_output, etc.
+  const normalizedName = funcName.replace(/-/g, '_').replace(/\./g, '_');
+  const hclFuncName = `atmos.${normalizedName}`;
 
   if (funcName === 'repo-root') {
     return `${hclFuncName}()`;
