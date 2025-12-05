@@ -48,9 +48,10 @@ atmos terraform output github-stars -s demo
 
 Example output:
 ```
-repository = "cloudposse/atmos"
-stars = 850
+default_branch = "main"
 description = "Universal Tool for DevOps and Cloud Automation"
+html_url = "https://github.com/cloudposse/atmos"
+repository = "cloudposse/atmos"
 ```
 
 ## How It Works
