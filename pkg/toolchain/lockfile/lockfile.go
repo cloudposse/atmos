@@ -33,6 +33,12 @@ var (
 
 	// ErrPlatformNoChecksum indicates a platform entry is missing the checksum field.
 	ErrPlatformNoChecksum = errors.New("platform entry missing checksum")
+
+	// ErrToolEntryNil indicates a tool entry in the lock file is nil.
+	ErrToolEntryNil = errors.New("tool entry is nil")
+
+	// ErrPlatformEntryNil indicates a platform entry in the lock file is nil.
+	ErrPlatformEntryNil = errors.New("platform entry is nil")
 )
 
 // LockFile represents the toolchain.lock.yaml structure.
@@ -202,7 +208,7 @@ func Verify(filePath string) error {
 	for toolName, tool := range lockFile.Tools {
 		// Guard against nil entries.
 		if tool == nil {
-			return fmt.Errorf("nil tool entry: %s", toolName)
+			return fmt.Errorf("%w: %s", ErrToolEntryNil, toolName)
 		}
 
 		if tool.Version == "" {
@@ -216,7 +222,7 @@ func Verify(filePath string) error {
 		for platform, entry := range tool.Platforms {
 			// Guard against nil platform entries.
 			if entry == nil {
-				return fmt.Errorf("nil platform entry: %s/%s", toolName, platform)
+				return fmt.Errorf("%w: %s/%s", ErrPlatformEntryNil, toolName, platform)
 			}
 			if entry.URL == "" {
 				return fmt.Errorf("%w: %s/%s", ErrPlatformNoURL, toolName, platform)
