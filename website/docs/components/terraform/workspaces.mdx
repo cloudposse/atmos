@@ -196,7 +196,7 @@ refer to [Atmos Component Inheritance](/howto/inheritance)
 
 <PillBox>Advanced</PillBox>
 
-For more complex workspace naming requirements, use `metadata.terraform_workspace_template` which supports full [Go template](https://pkg.go.dev/text/template) syntax with access to [Sprig functions](http://masterminds.github.io/sprig/), [Gomplate functions](https://docs.gomplate.ca/functions/), and [Atmos template functions](/core-concepts/stacks/templates).
+For more complex workspace naming requirements, use `metadata.terraform_workspace_template` which supports full [Go template](https://pkg.go.dev/text/template) syntax with access to [Sprig functions](http://masterminds.github.io/sprig/), [Gomplate functions](https://docs.gomplate.ca/functions/), and [Atmos template functions](/templates).
 
 <File title="stacks/ue2-dev.yaml">
 ```yaml
@@ -317,7 +317,7 @@ For more details on versioned components and state management, see [Folder-Based
 - [Terraform Workspaces](https://developer.hashicorp.com/terraform/language/state/workspaces)
 - [Managing Terraform Workspaces](https://developer.hashicorp.com/terraform/cli/workspaces)
 - [Terraform Environment Variables](https://developer.hashicorp.com/terraform/cli/config/environment-variables)
-- [Terraform Backends](/core-concepts/components/terraform/backends)
+- [Terraform Backends](/components/terraform/backends)
 
 ## Disabling Terraform Workspaces
 

@@ -54,6 +54,25 @@ components:
 
 This allows multiple stack components to share the same Terraform root module with different configurations.
 
+### `name`
+
+Provides a stable logical identity for the component, used to generate the backend `workspace_key_prefix`. This is especially important when using [versioned component folders](/design-patterns/version-management/folder-based-versioning):
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        name: vpc              # Stable logical identity
+        component: vpc/v2      # Physical version path
+```
+
+**Why this matters:** Without `name`, the `workspace_key_prefix` is auto-generated from `component`, which includes the version (`vpc-v2`). When you upgrade to `vpc/v3`, the workspace key prefix changes, creating a new state file and losing your existing infrastructure state.
+
+**With `metadata.name`:** The workspace key prefix stays stable (`vpc`) across version upgrades, so your Terraform state path remains `vpc/{workspace}/terraform.tfstate` regardless of which version you're running.
+
+See [Workspace Key Management](/design-patterns/version-management/folder-based-versioning#workspace-key-management) for more details.
+
 ### `inherits`
 
 Defines a list of components from which this component inherits configuration:

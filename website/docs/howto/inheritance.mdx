@@ -65,7 +65,7 @@ The `metadata` section is inherited from base components, with two exceptions:
 1. **`metadata.inherits`** - Not inherited because it defines the inheritance relationship itself
 2. **`metadata.type: abstract`** - Not inherited because `abstract` is a base component designation indicating the component is not deployable. Child components that inherit from abstract components are concrete implementations and should not inherit the abstract type. Other `type` values (e.g., `real`, custom types) ARE inherited normally.
 
-This enables patterns like defining `metadata.name` once in a base component for stable [workspace key prefixes](/core-concepts/components/terraform/backends).
+This enables patterns like defining `metadata.name` once in a base component for stable [workspace key prefixes](/components/terraform/backends).
 
 To disable metadata inheritance (for backwards compatibility with older configurations):
 
