@@ -73,8 +73,9 @@ func getRunnableDescribeAffectedCmd(
 		}
 
 		// Get identity from flag and create AuthManager if provided.
+		// Use the WithAtmosConfig variant to enable stack-level default identity loading.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
-		authManager, err := CreateAuthManagerFromIdentity(identityName, &props.CLIConfig.Auth)
+		authManager, err := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &props.CLIConfig.Auth, props.CLIConfig)
 		if err != nil {
 			return err
 		}

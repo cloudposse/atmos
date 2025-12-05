@@ -1,10 +1,13 @@
 ---
 slug: azure-blob-terraform-state-support
-title: "Azure Blob Storage Support for !terraform.state Function"
-sidebar_label: "Azure Blob Storage for !terraform.state"
-authors: [jamengual]
-tags: [feature, terraform]
-date: 2025-10-21
+title: Azure Blob Storage Support for !terraform.state Function
+sidebar_label: Azure Blob Storage for !terraform.state
+authors:
+  - jamengual
+tags:
+  - feature
+date: 2025-10-21T00:00:00.000Z
+release: v1.196.0
 ---
 
 Atmos now supports Azure Blob Storage backends in the `!terraform.state` YAML function. Read Terraform outputs directly from Azure-backed state files without initializing Terraform—bringing the same blazing-fast performance to Azure that S3 users already enjoy.
@@ -293,14 +296,14 @@ atmos describe component vpc -s plat-ue2-dev
 ## Documentation
 
 - **[!terraform.state Function Reference](/functions/yaml/terraform.state)** - Complete usage documentation
-- **[Terraform Backends](/core-concepts/components/terraform/backends)** - Backend configuration guide
-- **[Remote State](/core-concepts/share-data/remote-state)** - Data sharing patterns
+- **[Terraform Backends](/components/terraform/backends)** - Backend configuration guide
+- **[Remote State](/stacks/remote-state)** - Data sharing patterns
 
 ## Get Involved
 
 We're building Atmos in the open and welcome your feedback:
 
-- 💬 **Discuss** - Share thoughts in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).
+- 💬 **Discuss** - Share thoughts in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions).
 - 🐛 **Report Issues** - Found a bug? [Open an issue](https://github.com/cloudposse/atmos/issues).
 - 🚀 **Contribute** - Want to add features? Review our [contribution guide](https://atmos.tools/community/contributing).
 

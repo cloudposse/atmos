@@ -1,12 +1,11 @@
 ---
 title: Native Azure Authentication Support
-description: Authenticate to Azure using Atmos with device code flow, OIDC, and service principals - works identically to az login
 slug: azure-authentication-support
-authors: [jamengual]
+authors:
+  - jamengual
 tags:
   - feature
-  - azure
-  - authentication
+release: v1.199.0
 ---
 
 We're thrilled to announce native Azure authentication support in Atmos! You can now authenticate to Azure using `atmos auth login` with device code flow, OIDC, and service principals - working identically to `az login` with full Terraform provider compatibility.
@@ -393,7 +392,7 @@ az role assignment create \
 
 We've created comprehensive documentation for Azure authentication:
 
-- **[Azure Authentication Guide](/cli/commands/auth/tutorials/azure-authentication)** - Complete tutorial covering all authentication methods
+- **[Azure Authentication Guide](/tutorials/azure-authentication)** - Complete tutorial covering all authentication methods
 - **[Auth Login Command](/cli/commands/auth/login)** - Updated with Azure examples
 - **[Auth Commands Reference](/cli/commands/auth/usage)** - All authentication commands
 

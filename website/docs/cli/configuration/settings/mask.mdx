@@ -1,0 +1,284 @@
+---
+title: Secret Masking Configuration
+sidebar_label: mask
+sidebar_position: 2
+sidebar_class_name: command
+description: Configure automatic secret masking for secure terminal output
+id: mask
+slug: /cli/configuration/settings/mask
+---
+
+# Secret Masking Configuration
+
+Atmos automatically masks sensitive data (secrets, API keys, tokens) in all terminal output to prevent accidental exposure in logs, screenshots, or CI/CD pipelines.
+
+## Overview
+
+Secret masking operates at the I/O layer, intercepting all output before it reaches stdout/stderr. This ensures secrets are masked regardless of:
+- Output format (plain text, JSON, YAML)
+- Output destination (terminal, file, pipe)
+- Command type (terraform, helmfile, custom commands)
+
+## Quick Start
+
+### Enable Masking (Default)
+
+Masking is enabled by default with 8 built-in patterns for common secrets:
+
+```yaml
+# atmos.yaml
+settings:
+  terminal:
+    mask:
+      enabled: true  # Default: true
+```
+
+### Disable Masking for Debugging
+
+Use the CLI flag to disable masking temporarily:
+
+```bash
+atmos terraform plan --mask=false
+```
+
+## Configuration
+
+### Full Configuration Example
+
+```yaml
+# atmos.yaml
+settings:
+  terminal:
+    mask:
+      enabled: true                    # Enable/disable masking (default: true)
+      replacement: "***MASKED***"      # Custom replacement text (default: ***MASKED***)
+```
+
+### Configuration Options
+
+<dl>
+  <dt>`enabled`</dt>
+  <dd>
+    Enable or disable secret masking globally.
+
+    - **Type:** boolean
+    - **Default:** `true`
+    - **Example:** `enabled: false`
+  </dd>
+
+  <dt>`replacement`</dt>
+  <dd>
+    Text to replace masked secrets with.
+
+    - **Type:** string
+    - **Default:** `"***MASKED***"`
+    - **Example:** `replacement: "[REDACTED]"`
+  </dd>
+</dl>
+
+## Built-In Patterns
+
+Atmos includes 8 built-in patterns for common secret formats:
+
+1. **GitHub Personal Access Tokens**
+   - Classic format: `ghp_[A-Za-z0-9]{36}`
+   - OAuth format: `gho_[A-Za-z0-9]{36}`
+   - New format: `github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59}`
+
+2. **GitLab Personal Access Tokens**
+   - Format: `glpat-[A-Za-z0-9\-_]{20}`
+
+3. **OpenAI API Keys**
+   - Format: `sk-[A-Za-z0-9]{48}`
+
+4. **AWS Access Key ID**
+   - Format: `AKIA[0-9A-Z]{16}`
+
+5. **AWS Secret Access Key**
+   - Format: 40-character base64 string
+
+6. **Bearer Tokens**
+   - Format: `Bearer [A-Za-z0-9\-._~+/]+=*`
+
+### Auto-Masked Environment Variables
+
+The following environment variables are automatically detected and masked:
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_SESSION_TOKEN`
+- `GITHUB_TOKEN`
+- `GH_TOKEN`
+- `GITLAB_TOKEN`
+- `CI_JOB_TOKEN`
+- `DATADOG_API_KEY`
+- `DD_API_KEY`
+- `ANTHROPIC_API_KEY`
+
+## CLI Flags
+
+### `--mask`
+
+Enable or disable masking for a single command:
+
+```bash
+# Disable masking for debugging
+atmos terraform plan --mask=false
+
+# Explicitly enable masking (default)
+atmos terraform plan --mask=true
+```
+
+## How It Works
+
+### Masking Flow
+
+1. **Initialization** - Atmos loads masking configuration on startup
+2. **Pattern Registration** - Built-in patterns and env var values are registered
+3. **Output Interception** - All output goes through the masking engine
+4. **Secret Detection** - Regex patterns and literal values are matched
+5. **Replacement** - Matched secrets are replaced with `***MASKED***`
+
+### Format-Aware Masking
+
+Secrets are detected in multiple formats:
+
+- **Plain text:** `sk-abc123def456`
+- **JSON:** `{"api_key": "sk-abc123def456"}`
+- **YAML:** `api_key: sk-abc123def456`
+- **URL-encoded:** `key=sk%2Dabc123def456`
+- **Base64:** `c2stYWJjMTIzZGVmNDU2`
+- **Hex:** `736b2d616263313233646566343536`
+
+### Performance
+
+Masking has minimal performance impact:
+
+- **Initialization:** &lt;50ms
+- **Per-operation:** &lt;3μs (no secrets), &lt;16μs (with secrets)
+- **Memory:** ~100KB for pattern storage
+
+## Use Cases
+
+### Production Deployments
+
+Prevent secrets from appearing in CI/CD logs:
+
+```yaml
+# atmos.yaml
+settings:
+  terminal:
+    mask:
+      enabled: true
+```
+
+```bash
+# Run deployment - secrets automatically masked
+atmos terraform apply
+```
+
+### Local Development
+
+Disable masking for debugging:
+
+```bash
+# See full output for troubleshooting
+atmos terraform plan --mask=false
+```
+
+### Screenshot Generation
+
+Enable masking when generating documentation screenshots:
+
+```yaml
+settings:
+  terminal:
+    mask:
+      enabled: true
+```
+
+```bash
+# Generate screenshots with masked secrets
+atmos terraform plan | screenshot-tool
+```
+
+## Security Considerations
+
+### What Gets Masked
+
+- AWS credentials (access keys, secret keys, session tokens)
+- GitHub/GitLab tokens and PATs
+- OpenAI API keys
+- Bearer tokens
+- Values from configured environment variables
+
+### What Does NOT Get Masked
+
+- Non-secret configuration values
+- Resource names and identifiers
+- Public URLs and endpoints
+- Log messages and status text
+
+### False Positives
+
+If legitimate values are incorrectly masked:
+
+1. **Disable masking temporarily:**
+   ```bash
+   atmos terraform plan --mask=false
+   ```
+
+2. **Report pattern issue:** Open an issue with the false positive pattern
+
+### False Negatives
+
+If secrets are NOT being masked:
+
+1. **Check pattern coverage:** Built-in patterns may not cover your secret format
+2. **Custom secret formats:** Consider contributing pattern to Atmos
+
+## Troubleshooting
+
+### Secrets Not Being Masked
+
+**Problem:** Expected secrets appear in output.
+
+**Solutions:**
+1. Verify masking is enabled:
+   ```yaml
+   settings:
+     terminal:
+       mask:
+         enabled: true
+   ```
+
+2. Check if secret format matches built-in patterns
+
+3. Check environment variables are set correctly
+
+### Legitimate Values Masked
+
+**Problem:** Non-secret values are being masked.
+
+**Solutions:**
+1. Temporarily disable masking for debugging:
+   ```bash
+   atmos terraform plan --mask=false
+   ```
+
+2. Report false positive pattern
+
+### Performance Issues
+
+**Problem:** Masking slows down output.
+
+**Solutions:**
+1. Check for extremely large output (&gt;10MB)
+2. Disable masking if performance is critical:
+   ```bash
+   atmos terraform plan --mask=false
+   ```
+
+## See Also
+
+- [Terminal Configuration](terminal.mdx) - Terminal settings and options

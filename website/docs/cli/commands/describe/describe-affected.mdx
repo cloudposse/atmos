@@ -328,7 +328,7 @@ Affected components and stacks:
     <dd>
         Exclude the locked components (`metadata.locked: true`) from the output.
 
-        Refer to [Locking Components with `metadata.locked`](/core-concepts/stacks/define-components/#locking-components-with-metadatalocked)
+        Refer to [Locking Components with `metadata.locked`](/stacks/components#locking-components-metadatalocked)
 
         `atmos describe affected --exclude-locked`
     </dd>
@@ -422,7 +422,7 @@ where:
     <dt>`atlantis_project`</dt>
     <dd>
         The affected Atlantis project name. It will be included only if the Atlantis integration is configured in
-        the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/integrations/atlantis) for more details.
+        the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/cli/configuration/integrations/atlantis) for more details.
     </dd>
 
     <dt>`file`</dt>
@@ -451,7 +451,7 @@ where:
     <dd>
         The `settings` section of the component in the stack. It will be included only if the
         command-line flag `--include-settings=true` is passed. The `settings` sections is a free-form map used to pass
-        configuration information to [integrations](/integrations).
+        configuration information to [integrations](/integrations/github-actions).
     </dd>
 
     <dt>`included_in_dependents`</dt>
@@ -803,10 +803,10 @@ where:
 
 :::note
 
-[Abstract Atmos components](/design-patterns/abstract-component) (`metadata.type` is set to `abstract`)
+[Abstract Atmos components](/design-patterns/inheritance-patterns/abstract-component) (`metadata.type` is set to `abstract`)
 are not included in the output since they serve as blueprints for other Atmos components and are not meant to be provisioned.
 
-[Disabled Atmos components](/core-concepts/stacks/define-components/#disabling-components-with-metadataenabled) (`metadata.enabled` is set to `false`)
+[Disabled Atmos components](/stacks/components#disabling-components-metadataenabled) (`metadata.enabled` is set to `false`)
 are also not included in the output since they are explicitly disabled.
 
 :::
