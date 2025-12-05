@@ -1,5 +1,6 @@
 import React from 'react';
 import Watermark from '@site/src/components/Watermark';
+import DefinitionLinkHandler from '@site/src/components/DefinitionLinkHandler';
 
 /**
  * Root component that wraps the entire site.
@@ -10,6 +11,7 @@ export default function Root({ children }: { children: React.ReactNode }): JSX.E
     <>
       {children}
       <Watermark />
+      <DefinitionLinkHandler />
     </>
   );
 }

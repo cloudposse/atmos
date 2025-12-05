@@ -83,7 +83,7 @@ func TestProcessInstances(t *testing.T) {
 	}
 
 	// Call the wrapper - it may return empty list or error depending on config.
-	instances, err := processInstances(atmosConfig)
+	instances, err := processInstances(atmosConfig, nil)
 
 	// Either result is acceptable - key is the function executes without panic.
 	// The function behavior is fully tested via processInstancesWithDeps tests.
@@ -106,7 +106,7 @@ func TestExecuteListInstancesCmd(t *testing.T) {
 	}
 
 	// Execute command - should successfully list instances.
-	err := ExecuteListInstancesCmd(info, cmd, []string{})
+	err := ExecuteListInstancesCmd(info, cmd, []string{}, nil)
 
 	// Should succeed with valid fixture.
 	assert.NoError(t, err)
@@ -124,7 +124,7 @@ func TestExecuteListInstancesCmd_InvalidConfig(t *testing.T) {
 	}
 
 	// Execute command - will error but won't panic.
-	err := ExecuteListInstancesCmd(info, cmd, []string{})
+	err := ExecuteListInstancesCmd(info, cmd, []string{}, nil)
 
 	// Error is expected with invalid config.
 	assert.Error(t, err)
@@ -141,7 +141,7 @@ func TestExecuteListInstancesCmd_UploadPath(t *testing.T) {
 	}
 
 	// Execute with upload enabled - will error in config loading before upload.
-	err := ExecuteListInstancesCmd(info, cmd, []string{})
+	err := ExecuteListInstancesCmd(info, cmd, []string{}, nil)
 
 	// Error is expected (config load will fail).
 	assert.Error(t, err)

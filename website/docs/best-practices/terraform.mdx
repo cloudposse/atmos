@@ -15,7 +15,7 @@ These are some of the best practices we recommend when using Terraform with Atmo
 > Anyone can break laws created by people, but I have yet to see anyone break the laws of physics.
 > <p className="author">— **Elon Musk**</p></q>
 
-Also, since [Terraform "root modules" are components](/core-concepts/components/terraform), be sure to review the [Component Best Practices](/best-practices/components) for additional guidance on using components with Atmos.
+Also, since [Terraform "root modules" are components](/components/terraform), be sure to review the [Component Best Practices](/best-practices/components) for additional guidance on using components with Atmos.
 
 :::tip
 [Cloud Posse](https://github.com/cloudposse) publishes their general [Terraform Best Practices](https://docs.cloudposse.com/best-practices/terraform), which are more general and not specific to Atmos.
@@ -38,7 +38,7 @@ This way, you can maintain the original component as a dependency and only overr
 Use this technique cautiously because your overrides may break if the upstream interfaces change. There’s no contract that an upstream component will remain the same.
 :::
 
-To gain a deeper understanding of how this works, you have to understand how [Terraform overrides work](https://developer.hashicorp.com/terraform/language/files/override), and then it will make sense how [vendoring with Atmos](/core-concepts/vendor) can be used to extend components.
+To gain a deeper understanding of how this works, you have to understand how [Terraform overrides work](https://developer.hashicorp.com/terraform/language/files/override), and then it will make sense how [vendoring with Atmos](/vendor/) can be used to extend components.
 
 <details>
 <summary>Comparison to Other Languages or Frameworks</summary>

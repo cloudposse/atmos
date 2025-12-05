@@ -2,6 +2,7 @@
 title: atmos completion
 sidebar_label: completion
 sidebar_class_name: command
+sidebar_position: 5
 description: Use this command to generate completion scripts for `Bash`, `Zsh`, `Fish` and `PowerShell`.
 ---
 import Screengrab from '@site/src/components/Screengrab'
@@ -23,7 +24,7 @@ Execute the `completion` command like this:
 atmos completion [bash|zsh|fish|powershell]
 ```
 
-This command generates completion scripts for `Bash`, `Zsh`, `Fish` and `powershell`.
+This command generates completion scripts for `Bash`, `Zsh`, `Fish` and `PowerShell`.
 
 When the generated completion script is loaded into the shell, pressing the tab key twice displays the available commands and the help.
 
@@ -56,7 +57,7 @@ source ~/.bashrc
 Now, you can run any `atmos` command, and pressing `<Tab>` after typing `atmos` will show the available subcommands. The same applies to `--stack` arguments and commands requiring a component (e.g., `atmos terraform plan`).
 
 </TabItem>
-<TabItem value="zsh" name="Zsh">
+<TabItem value="zsh" label="Zsh">
 
 ## Zsh Completion Setup
 
@@ -94,7 +95,7 @@ rm -f ~/.zcompdump && compinit
 </Tabs>
 
 :::warning
-The Atmos completion script statically completes [custom commands](/core-concepts/custom-commands) based on the Atmos configuration. If completions are generated without this configuration (e.g., outside a project directory), custom commands won’t be included. To ensure accuracy, generate or regenerate the script from the correct working directory. This only affects custom commands. Components, stacks, and built-in commands remain fully dynamic.
+The Atmos completion script statically completes [custom commands](/cli/configuration/commands) based on the Atmos configuration. If completions are generated without this configuration (e.g., outside a project directory), custom commands won’t be included. To ensure accuracy, generate or regenerate the script from the correct working directory. This only affects custom commands. Components, stacks, and built-in commands remain fully dynamic.
 :::
 
 ### Examples
