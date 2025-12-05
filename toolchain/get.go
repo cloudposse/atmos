@@ -36,7 +36,7 @@ func ListToolVersions(showAll bool, limit int, toolName string) error {
 	installed := markInstalled(installer, owner, repo, versions)
 	installedStyle, notInstalledStyle := selectStyles()
 
-	printVersions(versions, defaultVersion, installed, installedStyle, notInstalledStyle)
+	printVersions(versions, defaultVersion, installed, &installedStyle, &notInstalledStyle)
 	return nil
 }
 
@@ -122,7 +122,7 @@ func selectStyles() (lipgloss.Style, lipgloss.Style) {
 	return lipgloss.NewStyle().Bold(true), lipgloss.NewStyle()
 }
 
-func printVersions(versions []string, defaultVersion string, installed map[string]bool, installedStyle, notInstalledStyle lipgloss.Style) {
+func printVersions(versions []string, defaultVersion string, installed map[string]bool, installedStyle, notInstalledStyle *lipgloss.Style) {
 	for _, v := range versions {
 		indicator := " "
 		if v == defaultVersion {

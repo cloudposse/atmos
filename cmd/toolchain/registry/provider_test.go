@@ -61,7 +61,7 @@ type commandProviderTestCase struct {
 }
 
 // testCommandProvider is a helper to test command provider implementations.
-func testCommandProvider(t *testing.T, tc commandProviderTestCase) {
+func testCommandProvider(t *testing.T, tc *commandProviderTestCase) {
 	t.Helper()
 
 	// Use type assertion to access provider methods.
@@ -112,7 +112,7 @@ func testCommandProvider(t *testing.T, tc commandProviderTestCase) {
 
 // TestListCommandProvider tests ListCommandProvider implementation.
 func TestListCommandProvider(t *testing.T) {
-	testCommandProvider(t, commandProviderTestCase{
+	testCommandProvider(t, &commandProviderTestCase{
 		name:                 "list",
 		provider:             &ListCommandProvider{},
 		expectedCommandUse:   "list",
@@ -125,7 +125,7 @@ func TestListCommandProvider(t *testing.T) {
 
 // TestSearchCommandProvider tests SearchCommandProvider implementation.
 func TestSearchCommandProvider(t *testing.T) {
-	testCommandProvider(t, commandProviderTestCase{
+	testCommandProvider(t, &commandProviderTestCase{
 		name:                 "search",
 		provider:             &SearchCommandProvider{},
 		expectedCommandUse:   "search",

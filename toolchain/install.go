@@ -275,7 +275,7 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 		case "skipped":
 			alreadyInstalledCount++
 		}
-		showProgress(&spinner, progressBar, tool, progressState{index: i, total: len(toolList), result: result, err: err})
+		showProgress(&spinner, &progressBar, tool, progressState{index: i, total: len(toolList), result: result, err: err})
 	}
 
 	printSummary(installedCount, failedCount, alreadyInstalledCount, len(toolList))
@@ -321,7 +321,7 @@ type progressState struct {
 
 func showProgress(
 	spinner *bspinner.Model,
-	progressBar progress.Model,
+	progressBar *progress.Model,
 	tool toolInfo,
 	state progressState,
 ) {

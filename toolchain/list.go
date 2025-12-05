@@ -374,13 +374,13 @@ func RunList() error {
 	t.SetStyles(defaultStyle)
 
 	// Print the table with conditional styling
-	_ = ui.Writeln(renderTableWithConditionalStyling(t, rows, defaultStyle, uninstalledStyle))
+	_ = ui.Writeln(renderTableWithConditionalStyling(&t, rows, defaultStyle, uninstalledStyle))
 
 	return nil
 }
 
 // renderTableWithConditionalStyling renders the table with proper conditional styling.
-func renderTableWithConditionalStyling(t table.Model, rows []toolRow, defaultStyle, uninstalledStyle table.Styles) string {
+func renderTableWithConditionalStyling(t *table.Model, rows []toolRow, defaultStyle, uninstalledStyle table.Styles) string {
 	// Get the base table view
 	tableView := t.View()
 
