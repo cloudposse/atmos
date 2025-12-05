@@ -180,39 +180,72 @@ func addToolToVersionsInternal(filePath, tool, version string, asDefault bool) e
 // with an existing aliased version. For example, if "opentofu/opentofu 1.10.3" already exists,
 // adding "opentofu 1.10.3" would create a duplicate.
 func wouldCreateDuplicate(toolVersions *ToolVersions, tool, version string, resolver ToolResolver) bool {
-	// Check if the tool is an alias (e.g., "opentofu")
+	// Check if the tool is an alias that conflicts with an existing full name.
+	if aliasConflictsWithFullName(toolVersions, tool, version, resolver) {
+		return true
+	}
+
+	// Check if the tool is a full name that conflicts with an existing alias.
+	if fullNameConflictsWithAlias(toolVersions, tool, version, resolver) {
+		return true
+	}
+
+	return false
+}
+
+// aliasConflictsWithFullName checks if an alias conflicts with an existing full name entry.
+// For example, if "opentofu/opentofu 1.10.3" already exists, adding "opentofu 1.10.3" would be a duplicate.
+func aliasConflictsWithFullName(toolVersions *ToolVersions, tool, version string, resolver ToolResolver) bool {
+	// Check if the tool is an alias (e.g., "opentofu").
 	owner, repo, err := resolver.Resolve(tool)
-	if err == nil && owner != "" && repo != "" {
-		// This is an alias, check if the full name already exists
-		aliasKey := owner + "/" + repo
-		if versions, ok := toolVersions.Tools[aliasKey]; ok {
-			for _, v := range versions {
-				if v == version {
-					return true // Duplicate found
-				}
-			}
+	if err != nil || owner == "" || repo == "" {
+		return false
+	}
+
+	// This is an alias, check if the full name already exists.
+	aliasKey := owner + "/" + repo
+	versions, ok := toolVersions.Tools[aliasKey]
+	if !ok {
+		return false
+	}
+
+	// Check if any existing version matches.
+	for _, v := range versions {
+		if v == version {
+			return true // Duplicate found.
 		}
 	}
 
-	// Check if this is a full name (e.g., "opentofu/opentofu") and if the alias exists
-	// We need to check if there's an alias that resolves to this full name
+	return false
+}
+
+// fullNameConflictsWithAlias checks if a full name conflicts with an existing alias entry.
+// For example, if "opentofu 1.10.3" already exists, adding "opentofu/opentofu 1.10.3" would be a duplicate.
+func fullNameConflictsWithAlias(toolVersions *ToolVersions, tool, version string, resolver ToolResolver) bool {
+	// Check if this is a full name (e.g., "opentofu/opentofu") and if an alias exists
+	// that resolves to this full name.
 	for existingTool, versions := range toolVersions.Tools {
-		// Skip if it's the same tool
+		// Skip if it's the same tool.
 		if existingTool == tool {
 			continue
 		}
 
-		// Try to resolve the existing tool as an alias
+		// Try to resolve the existing tool as an alias.
 		existingOwner, existingRepo, err := resolver.Resolve(existingTool)
-		if err == nil && existingOwner != "" && existingRepo != "" {
-			existingAliasKey := existingOwner + "/" + existingRepo
-			if existingAliasKey == tool {
-				// The existing tool is an alias for this full name
-				for _, v := range versions {
-					if v == version {
-						return true // Duplicate found
-					}
-				}
+		if err != nil || existingOwner == "" || existingRepo == "" {
+			continue
+		}
+
+		existingAliasKey := existingOwner + "/" + existingRepo
+		if existingAliasKey != tool {
+			continue
+		}
+
+		// The existing tool is an alias for this full name.
+		// Check if any version matches.
+		for _, v := range versions {
+			if v == version {
+				return true // Duplicate found.
 			}
 		}
 	}
