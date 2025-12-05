@@ -49,7 +49,8 @@ var envCmd = &cobra.Command{
 			return fmt.Errorf("failed to load atmos config: %w", err)
 		}
 
-		envVars := atmosConfig.Env
+		// Get env vars with original case preserved (Viper lowercases all YAML map keys).
+		envVars := atmosConfig.GetCaseSensitiveMap("env")
 		if envVars == nil {
 			envVars = make(map[string]string)
 		}
