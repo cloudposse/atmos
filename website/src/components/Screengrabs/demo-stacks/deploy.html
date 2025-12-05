@@ -1,15 +1,11 @@
-<span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # Now, let's see what it looks like to deploy this everywhere! 🚀
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> #
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> #
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> # Deploy your component to the dev environment 🚀
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> atmos terraform deploy myapp --stack dev
 
-
 <span style="font-weight:bold;">Initializing the backend...</span>
-
 <span style="font-weight:bold;">Initializing provider plugins...</span>
-
 
 <span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">Terraform has been successfully initialized!</span><span style="color:green;"></span>
 <span style="color:red;">
@@ -20,7 +16,7 @@ You're now on a new, empty workspace. Workspaces isolate their state,
 so if you run &quot;terraform plan&quot; Terraform will not see any existing state
 for this configuration.</span>
 <span style="font-weight:bold;">data.http.weather: Reading...</span>
-<span style="font-weight:bold;">data.http.weather: Read complete after 0s 
+<span style="font-weight:bold;">data.http.weather: Read complete after 3s 
     [id=https://wttr.in/Stockholm?0&amp;format=&amp;lang=se&amp;u=m]</span>
 
 Terraform used the selected providers to generate the following execution
@@ -35,11 +31,11 @@ Terraform will perform the following actions:
 
             Weather report: Stockholm
             
-              <span style="color:#ffff00;">    \   /    </span> Clear
-              <span style="color:#ffff00;">     .-.     </span> <span style="color:#00ffff;">-1</span>(<span style="color:#00d7ff;">-6</span>) °C      
-              <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↘</span> <span style="color:#ffd700;">17</span> km/h      
-              <span style="color:#ffff00;">     `-’     </span> 10 km          
-              <span style="color:#ffff00;">    /   \    </span> 0.0 mm
+              <span style="color:#c0c0c0;">     .-.     </span> Light drizzle
+              <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#00ff87;">+5</span>(<span style="color:#00ffaf;">2</span>) °C       
+              <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">↑</span> <span style="color:#ffff00;">13</span> km/h      
+              <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 6 km           
+              <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.0 mm
 
 
       <span style="color:green;">+</span> content_base64sha256 = (known after apply)
@@ -66,18 +62,18 @@ Changes to Outputs:
 
         Weather report: Stockholm
         
-          <span style="color:#ffff00;">    \   /    </span> Clear
-          <span style="color:#ffff00;">     .-.     </span> <span style="color:#00ffff;">-1</span>(<span style="color:#00d7ff;">-6</span>) °C      
-          <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↘</span> <span style="color:#ffd700;">17</span> km/h      
-          <span style="color:#ffff00;">     `-’     </span> 10 km          
-          <span style="color:#ffff00;">    /   \    </span> 0.0 mm
+          <span style="color:#c0c0c0;">     .-.     </span> Light drizzle
+          <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#00ff87;">+5</span>(<span style="color:#00ffaf;">2</span>) °C       
+          <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">↑</span> <span style="color:#ffff00;">13</span> km/h      
+          <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 6 km           
+          <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.0 mm
 
 
 <span style="font-weight:bold;">local_file.cache: Creating...</span>
 <span style="font-weight:bold;">local_file.cache: Creation complete after 0s </span>
 <span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">
-Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
-</span><span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">
+Apply complete! Resources: 1 added, 0 changed, 0 destroyed.</span>
+<span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">
 Outputs:
 
 </span>lang = &quot;se&quot;
@@ -89,11 +85,11 @@ weather =
 
 Weather report: Stockholm
 
-  <span style="color:#ffff00;">    \   /    </span> Clear
-  <span style="color:#ffff00;">     .-.     </span> <span style="color:#00ffff;">-1</span>(<span style="color:#00d7ff;">-6</span>) °C      
-  <span style="color:#ffff00;">  ― (   ) ―  </span> <span style="font-weight:bold;">↘</span> <span style="color:#ffd700;">17</span> km/h      
-  <span style="color:#ffff00;">     `-’     </span> 10 km          
-  <span style="color:#ffff00;">    /   \    </span> 0.0 mm         
+  <span style="color:#c0c0c0;">     .-.     </span> Light drizzle
+  <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#00ff87;">+5</span>(<span style="color:#00ffaf;">2</span>) °C       
+  <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">↑</span> <span style="color:#ffff00;">13</span> km/h      
+  <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 6 km           
+  <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.0 mm         
 
 
 
@@ -106,11 +102,8 @@ Weather report: Stockholm
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> atmos terraform deploy myapp --stack staging
 
-
 <span style="font-weight:bold;">Initializing the backend...</span>
-
 <span style="font-weight:bold;">Initializing provider plugins...</span>
-
 
 <span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">Terraform has been successfully initialized!</span><span style="color:green;"></span>
 <span style="color:red;">
@@ -121,7 +114,7 @@ You're now on a new, empty workspace. Workspaces isolate their state,
 so if you run &quot;terraform plan&quot; Terraform will not see any existing state
 for this configuration.</span>
 <span style="font-weight:bold;">data.http.weather: Reading...</span>
-<span style="font-weight:bold;">data.http.weather: Read complete after 0s 
+<span style="font-weight:bold;">data.http.weather: Read complete after 2s 
     [id=https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m]</span>
 
 Terraform used the selected providers to generate the following execution
@@ -136,11 +129,11 @@ Terraform will perform the following actions:
 
             Weather report: Los+Angeles
             
-              <span style="color:#c0c0c0;">     .-.     </span> Light rain, mist
-              <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#afff00;">18</span> °C          
-              <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">←</span> <span style="color:#afff00;">7</span> km/h       
-              <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 10 km          
-              <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.0 mm
+                            Haze
+              <span style="color:#cacaca;"> _ - _ - _ - </span> <span style="color:#afff00;">16</span> °C          
+              <span style="color:#cacaca;">  _ - _ - _  </span> <span style="font-weight:bold;">←</span> <span style="color:#87ff00;">6</span> km/h       
+              <span style="color:#cacaca;"> _ - _ - _ - </span> 10 km          
+                            0.0 mm
 
 
       <span style="color:green;">+</span> content_base64sha256 = (known after apply)
@@ -167,18 +160,18 @@ Changes to Outputs:
 
         Weather report: Los+Angeles
         
-          <span style="color:#c0c0c0;">     .-.     </span> Light rain, mist
-          <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#afff00;">18</span> °C          
-          <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">←</span> <span style="color:#afff00;">7</span> km/h       
-          <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 10 km          
-          <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.0 mm
+                        Haze
+          <span style="color:#cacaca;"> _ - _ - _ - </span> <span style="color:#afff00;">16</span> °C          
+          <span style="color:#cacaca;">  _ - _ - _  </span> <span style="font-weight:bold;">←</span> <span style="color:#87ff00;">6</span> km/h       
+          <span style="color:#cacaca;"> _ - _ - _ - </span> 10 km          
+                        0.0 mm
 
 
 <span style="font-weight:bold;">local_file.cache: Creating...</span>
 <span style="font-weight:bold;">local_file.cache: Creation complete after 0s </span>
 <span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">
-Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
-</span><span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">
+Apply complete! Resources: 1 added, 0 changed, 0 destroyed.</span>
+<span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">
 Outputs:
 
 </span>lang = &quot;en&quot;
@@ -190,11 +183,11 @@ weather =
 
 Weather report: Los+Angeles
 
-  <span style="color:#c0c0c0;">     .-.     </span> Light rain, mist
-  <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#afff00;">18</span> °C          
-  <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">←</span> <span style="color:#afff00;">7</span> km/h       
-  <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 10 km          
-  <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.0 mm         
+                Haze
+  <span style="color:#cacaca;"> _ - _ - _ - </span> <span style="color:#afff00;">16</span> °C          
+  <span style="color:#cacaca;">  _ - _ - _  </span> <span style="font-weight:bold;">←</span> <span style="color:#87ff00;">6</span> km/h       
+  <span style="color:#cacaca;"> _ - _ - _ - </span> 10 km          
+                0.0 mm         
 
 
 
@@ -207,11 +200,8 @@ Weather report: Los+Angeles
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> 
 <span style="font-weight:bold;filter: contrast(70%) brightness(190%);color:green;">&gt;</span> atmos terraform deploy myapp --stack prod
 
-
 <span style="font-weight:bold;">Initializing the backend...</span>
-
 <span style="font-weight:bold;">Initializing provider plugins...</span>
-
 
 <span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">Terraform has been successfully initialized!</span><span style="color:green;"></span>
 <span style="color:red;">
@@ -222,7 +212,7 @@ You're now on a new, empty workspace. Workspaces isolate their state,
 so if you run &quot;terraform plan&quot; Terraform will not see any existing state
 for this configuration.</span>
 <span style="font-weight:bold;">data.http.weather: Reading...</span>
-<span style="font-weight:bold;">data.http.weather: Read complete after 1s 
+<span style="font-weight:bold;">data.http.weather: Read complete after 6s 
     [id=https://wttr.in/Los+Angeles?0&amp;format=&amp;lang=en&amp;u=m]</span>
 
 Terraform used the selected providers to generate the following execution
@@ -237,11 +227,11 @@ Terraform will perform the following actions:
 
             Weather report: Los+Angeles
             
-              <span style="color:#c0c0c0;">     .-.     </span> Light rain, mist
-              <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#afff00;">18</span> °C          
-              <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">←</span> <span style="color:#afff00;">7</span> km/h       
-              <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 10 km          
-              <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.0 mm
+                            Haze
+              <span style="color:#cacaca;"> _ - _ - _ - </span> <span style="color:#afff00;">16</span> °C          
+              <span style="color:#cacaca;">  _ - _ - _  </span> <span style="font-weight:bold;">←</span> <span style="color:#87ff00;">6</span> km/h       
+              <span style="color:#cacaca;"> _ - _ - _ - </span> 10 km          
+                            0.0 mm
 
 
       <span style="color:green;">+</span> content_base64sha256 = (known after apply)
@@ -268,18 +258,18 @@ Changes to Outputs:
 
         Weather report: Los+Angeles
         
-          <span style="color:#c0c0c0;">     .-.     </span> Light rain, mist
-          <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#afff00;">18</span> °C          
-          <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">←</span> <span style="color:#afff00;">7</span> km/h       
-          <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 10 km          
-          <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.0 mm
+                        Haze
+          <span style="color:#cacaca;"> _ - _ - _ - </span> <span style="color:#afff00;">16</span> °C          
+          <span style="color:#cacaca;">  _ - _ - _  </span> <span style="font-weight:bold;">←</span> <span style="color:#87ff00;">6</span> km/h       
+          <span style="color:#cacaca;"> _ - _ - _ - </span> 10 km          
+                        0.0 mm
 
 
 <span style="font-weight:bold;">local_file.cache: Creating...</span>
 <span style="font-weight:bold;">local_file.cache: Creation complete after 0s </span>
 <span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">
-Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
-</span><span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">
+Apply complete! Resources: 1 added, 0 changed, 0 destroyed.</span>
+<span style="font-weight:bold;"></span><span style="font-weight:bold;color:green;">
 Outputs:
 
 </span>lang = &quot;en&quot;
@@ -291,11 +281,10 @@ weather =
 
 Weather report: Los+Angeles
 
-  <span style="color:#c0c0c0;">     .-.     </span> Light rain, mist
-  <span style="color:#c0c0c0;">    (   ).   </span> <span style="color:#afff00;">18</span> °C          
-  <span style="color:#c0c0c0;">   (___(__)  </span> <span style="font-weight:bold;">←</span> <span style="color:#afff00;">7</span> km/h       
-  <span style="color:#87afff;">    ‘ ‘ ‘ ‘  </span> 10 km          
-  <span style="color:#87afff;">   ‘ ‘ ‘ ‘   </span> 0.0 mm         
-
+                Haze
+  <span style="color:#cacaca;"> _ - _ - _ - </span> <span style="color:#afff00;">16</span> °C          
+  <span style="color:#cacaca;">  _ - _ - _  </span> <span style="font-weight:bold;">←</span> <span style="color:#87ff00;">6</span> km/h       
+  <span style="color:#cacaca;"> _ - _ - _ - </span> 10 km          
+                0.0 mm         
 
 

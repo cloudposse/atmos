@@ -1,0 +1,388 @@
+---
+title: Inheritance Basics
+sidebar_position: 6
+sidebar_label: Inheritance
+description: Create component variations using inheritance
+id: inheritance-basics
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Inheritance lets you create variations of a component without duplicating configuration. Define a base component once, then extend it with different settings for different use cases.
+</Intro>
+
+Think of it like classes in object-oriented programming: you create a base "class" (component) and then extend it with specialized "subclasses" (component instances).
+
+## The Problem Inheritance Solves
+
+Let's say you need three VPCs:
+
+- Development VPC: Small CIDR, single NAT gateway
+- Staging VPC: Medium CIDR, redundant NAT gateways
+- Production VPC: Large CIDR, highly available NAT gateways, VPN
+
+Without inheritance, you'd configure each one separately, copying most of the same settings:
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    vpc-dev:
+      metadata:
+        component: vpc
+      vars:
+        name: dev-vpc
+        cidr_block: "10.0.0.0/16"
+        enable_dns_hostnames: true
+        enable_dns_support: true
+        enable_nat_gateway: true
+        single_nat_gateway: true
+```
+</File>
+
+<File title="stacks/staging.yaml">
+```yaml
+components:
+  terraform:
+    vpc-staging:
+      metadata:
+        component: vpc
+      vars:
+        name: staging-vpc
+        cidr_block: "10.1.0.0/16"
+        enable_dns_hostnames: true  # Duplicated
+        enable_dns_support: true     # Duplicated
+        enable_nat_gateway: true     # Duplicated
+        single_nat_gateway: false
+        # ...more settings
+```
+</File>
+
+That's a lot of duplication! Let's fix it with inheritance.
+
+## Your First Inherited Component
+
+**Step 1: Define a base component with common settings**
+
+<File title="stacks/_defaults/vpc-base.yaml">
+```yaml
+components:
+  terraform:
+    vpc-base:
+      metadata:
+        component: vpc
+        type: abstract  # This component isn't deployable on its own
+      vars:
+        # Common settings for all VPCs
+        enable_dns_hostnames: true
+        enable_dns_support: true
+        enable_nat_gateway: true
+```
+</File>
+
+**Step 2: Extend the base component**
+
+<File title="stacks/dev.yaml">
+```yaml
+import:
+  - _defaults/vpc-base
+
+components:
+  terraform:
+    vpc-dev:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc-base  # Inherit all settings from vpc-base
+      vars:
+        # Only specify what's different
+        name: dev-vpc
+        cidr_block: "10.0.0.0/16"
+        single_nat_gateway: true
+```
+</File>
+
+Now `vpc-dev` automatically has `enable_dns_hostnames`, `enable_dns_support`, and `enable_nat_gateway` from the base component—no duplication needed!
+
+## How Inheritance Works
+
+When you use `inherits`, Atmos:
+
+1. **Loads the base component's configuration**
+2. **Merges it with the current component's configuration**
+3. **Current component values override base values**
+
+The child component gets everything from the parent, and can override any setting.
+
+<File title="Base component">
+```yaml
+components:
+  terraform:
+    vpc-base:
+      metadata:
+        type: abstract
+      vars:
+        enable_nat_gateway: true
+        single_nat_gateway: true
+```
+</File>
+
+<File title="Child component">
+```yaml
+components:
+  terraform:
+    vpc-prod:
+      metadata:
+        inherits:
+          - vpc-base
+      vars:
+        single_nat_gateway: false  # Overrides base setting
+        # enable_nat_gateway: true inherited from base
+```
+</File>
+
+## Abstract vs Real Components
+
+Notice the `type: abstract` in the base component? This tells Atmos:
+
+<dl>
+  <dt>**Abstract Components**</dt>
+  <dd>Templates for inheritance. Cannot be deployed directly. Used as blueprints.</dd>
+
+  <dt>**Real Components**</dt>
+  <dd>Deployable infrastructure. Can be applied with `atmos terraform apply`.</dd>
+</dl>
+
+<File title="Abstract component (blueprint)">
+```yaml
+components:
+  terraform:
+    vpc-base:
+      metadata:
+        component: vpc
+        type: abstract  # Can't deploy this
+      vars:
+        enable_dns: true
+```
+</File>
+
+<File title="Real component (deployable)">
+```yaml
+components:
+  terraform:
+    vpc-prod:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc-base
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+Try to deploy the abstract component and Atmos will error. Only real components can be deployed.
+
+## Organizing Inherited Components
+
+A common pattern is to keep base components in a `_defaults/` directory or a `catalog/`:
+
+```
+stacks/
+├── _defaults/
+│   ├── vpc-base.yaml
+│   ├── eks-base.yaml
+│   └── rds-base.yaml
+├── dev.yaml
+├── staging.yaml
+└── prod.yaml
+```
+
+<File title="stacks/_defaults/vpc-base.yaml">
+```yaml
+components:
+  terraform:
+    vpc-base:
+      metadata:
+        component: vpc
+        type: abstract
+      vars:
+        enable_dns_hostnames: true
+        enable_dns_support: true
+```
+</File>
+
+<File title="stacks/prod.yaml">
+```yaml
+import:
+  - _defaults/vpc-base
+
+components:
+  terraform:
+    vpc-prod:
+      metadata:
+        inherits:
+          - vpc-base
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+## Common Inheritance Patterns
+
+### 1. Environment-Specific Sizing
+
+<File title="Base component">
+```yaml
+components:
+  terraform:
+    rds-base:
+      metadata:
+        component: rds
+        type: abstract
+      vars:
+        engine: postgres
+        engine_version: "14.7"
+```
+</File>
+
+<File title="Dev uses small instance">
+```yaml
+components:
+  terraform:
+    rds-dev:
+      metadata:
+        inherits:
+          - rds-base
+      vars:
+        instance_class: db.t3.small
+```
+</File>
+
+<File title="Prod uses large instance">
+```yaml
+components:
+  terraform:
+    rds-prod:
+      metadata:
+        inherits:
+          - rds-base
+      vars:
+        instance_class: db.r5.xlarge
+        multi_az: true
+```
+</File>
+
+### 2. Feature Flags
+
+<File title="Base component">
+```yaml
+components:
+  terraform:
+    app-base:
+      metadata:
+        component: application
+        type: abstract
+      vars:
+        enable_autoscaling: false
+        enable_monitoring: false
+```
+</File>
+
+<File title="Production enables all features">
+```yaml
+components:
+  terraform:
+    app-prod:
+      metadata:
+        inherits:
+          - app-base
+      vars:
+        enable_autoscaling: true
+        enable_monitoring: true
+        enable_backup: true
+```
+</File>
+
+### 3. Regional Defaults
+
+<File title="Base for US regions">
+```yaml
+components:
+  terraform:
+    vpc-us-base:
+      metadata:
+        component: vpc
+        type: abstract
+      vars:
+        availability_zones: 3
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+<File title="Base for EU regions (different CIDR)">
+```yaml
+components:
+  terraform:
+    vpc-eu-base:
+      metadata:
+        component: vpc
+        type: abstract
+      vars:
+        availability_zones: 3
+        cidr_block: "10.100.0.0/16"
+```
+</File>
+
+## Inheritance vs Imports
+
+Still confused about when to use each?
+
+<dl>
+  <dt>**Imports**</dt>
+  <dd>
+    - Bring entire stack files together<br/>
+    - Share configuration across multiple stacks<br/>
+    - Example: Global tags, regional settings
+  </dd>
+
+  <dt>**Inheritance**</dt>
+  <dd>
+    - Create component variations<br/>
+    - Share configuration within component definitions<br/>
+    - Example: Base VPC → Dev VPC, Staging VPC, Prod VPC
+  </dd>
+</dl>
+
+**You'll often use both together:**
+
+```yaml
+import:
+  - _defaults/globals       # Import stack-level settings
+  - _defaults/vpc-base      # Import base component
+
+components:
+  terraform:
+    vpc-prod:
+      metadata:
+        inherits:
+          - vpc-base        # Inherit component settings
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+
+## Key Takeaways
+
+✅ **Inheritance creates component variations** without duplication
+✅ **Abstract components** are blueprints for inheritance (not deployable)
+✅ **Real components** can be deployed and can inherit from abstract ones
+✅ **Child components override parent values**
+✅ **Use for component-level reuse** (imports are for stack-level reuse)
+
+## What's Next
+
+You've learned the basics of imports and inheritance. Now let's talk about organizing these files for real-world projects:
+
+- **[Organize your Stacks](/learn/organizing-stacks)** - Catalogs, defaults, and naming
+- **[Connect Components](/learn/connecting-components)** - Share data between components
+- **[Advanced Inheritance](/howto/inheritance)** - Multiple inheritance, mixins, and more

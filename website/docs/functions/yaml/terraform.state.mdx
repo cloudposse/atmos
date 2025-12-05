@@ -10,12 +10,12 @@ import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 
 <Intro>
-The `!terraform.state` YAML function is the **fastest** way to read Terraform/OpenTofu outputs ([remote state](/core-concepts/share-data/remote-state))
-in Atmos stack manifests. It retrieves outputs directly from the configured [backends](/core-concepts/components/terraform/backends)
+The `!terraform.state` YAML function is the **fastest** way to read Terraform/OpenTofu outputs ([remote state](/stacks/remote-state))
+in Atmos stack manifests. It retrieves outputs directly from the configured [backends](/components/terraform/backends)
 without the overhead of initializing Terraform, downloading providers, or generating configuration files - making it significantly faster than `!terraform.output`.
 </Intro>
 
-:::tip
+:::note Supported Backend Types
 The `!terraform.state` YAML function supports the following backend types:
 - `local` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/local) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/local))
 - `s3` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/s3) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/s3))
@@ -24,9 +24,8 @@ The `!terraform.state` YAML function supports the following backend types:
 
 As support for new backend types is added, this document will be updated accordingly.
 
-Meanwhile, if you are using backends other than `local`, `s3`, `gcs`, and `azurerm`, consider the [__`!store`__](/functions/yaml/store)
-or [__`!terraform.output`__](/functions/yaml/terraform.output) YAML function to read remote state
-and [share data between components](/core-concepts/share-data).
+For other backends, use [__`!store`__](/functions/yaml/store) or [__`!terraform.output`__](/functions/yaml/terraform.output) to read remote state
+and [share data between components](/stacks/share-data).
 :::
 
 ## Usage
@@ -62,9 +61,14 @@ The `!terraform.state` function can be called with either two or three parameter
 
 
 :::tip
-You can use [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) in the `!terraform.state` YAML function expressions.
+You can use [Atmos Stack Manifest Templating](/templates) in the `!terraform.state` YAML function expressions.
 Atmos processes the templates first, and then executes the `!terraform.state` function, allowing you to provide the parameters to
 the function dynamically.
+:::
+
+:::note Type-Aware Merging
+Atmos supports type-aware merging of YAML functions and concrete values, allowing them to coexist in the inheritance chain without type conflicts.
+See the full explanation: [YAML Function Merging](/reference/yaml-function-merging)
 :::
 
 ## `!terraform.state` Function Execution Flow
@@ -85,22 +89,17 @@ The relevant output variable is extracted from the state file (using a [YQ](http
 Atmos parses and interpolates the value into the final configuration structure, replacing the `!terraform.state`
 directive in the YAML stack manifest with the final value.
 
-:::tip Performance Advantage
-**`!terraform.state` is dramatically faster than `!terraform.output`** - often 10-100x faster depending on your infrastructure size.
+## Performance Comparison
 
-While `!terraform.output` must:
-- Initialize Terraform/OpenTofu
-- Download and initialize all providers
-- Generate varfiles and backend configs
-- Execute terraform commands
+`!terraform.state` is **dramatically faster than `!terraform.output`** - often 10-100x faster depending on your infrastructure size.
 
-`!terraform.state` bypasses all of this overhead by reading directly from the state backend.
+While `!terraform.output` must initialize Terraform/OpenTofu, download and initialize all providers, generate varfiles and backend configs, and execute terraform commands, `!terraform.state` bypasses all of this overhead by reading directly from the state backend.
 
+:::tip
 Use `!terraform.state` when you need the **fastest possible** access to Terraform outputs. The functions accept the same parameters and produce identical results.
-
-Compare the [!terraform.output Execution Flow](/functions/yaml/terraform.output#terraformoutput-function-execution-flow) with the
-[!terraform.state Execution Flow](/functions/yaml/terraform.state#terraformstate-function-execution-flow) to see the dramatic difference.
 :::
+
+Compare the [!terraform.output Execution Flow](/functions/yaml/terraform.output#terraformoutput-function-execution-flow) with the [!terraform.state Execution Flow](/functions/yaml/terraform.state#terraformstate-function-execution-flow) to see the difference.
 
 ## Using YQ Expressions to retrieve items from complex output types
 
@@ -128,7 +127,40 @@ For more details, review the following docs:
 
 ## Handling YQ Expressions with Bracket Notation and Quotes
 
-`!terraform.state` shares the same parser as `!terraform.output`, so the quoting rules are identical. When you need double quotes inside a YQ expression (for example, to reference `["github-dependabot"]`), wrap the entire expression in single quotes. Refer to the [!terraform.output guidance](/functions/yaml/terraform.output#handling-yq-expressions-with-bracket-notation-and-quotes) for detailed examples and escape rules.
+When you access map keys that contain special characters (such as hyphens) by using YQ bracket notation, you must wrap the key in double quotes like `["github-dependabot"]`. This often clashes with the surrounding quotes that protect the entire expression in YAML.
+
+To avoid conflicting quotes, wrap the entire YQ expression in single quotes while keeping the double quotes inside the brackets:
+
+```yaml
+# Use single quotes around the expression to allow double quotes inside brackets
+access_key_id: !terraform.state security '.outputs.users["github-dependabot"].access_key_id'
+```
+
+Additional examples:
+
+```yaml
+# Access map keys with special characters
+api_key: !terraform.state config '.outputs.api_keys["service-account-1"]'
+
+# Access nested maps with special characters in multiple levels
+endpoint: !terraform.state services '.outputs.endpoints["my-service"]["production"]'
+
+# Combine with stack templating
+token: !terraform.state identity {{ .stack }} '.outputs.tokens["github-actions"]'
+
+# Escape single quotes by doubling them when needed inside the expression
+app_name: !terraform.state config '.outputs.apps["app''s-name"].display_name'
+```
+
+**Quote escaping rules**
+
+- Wrap the entire YQ expression in single quotes when it contains double quotes.
+- Use double quotes inside brackets for string keys in YQ expressions.
+- If you need single quotes inside the expression, escape them by doubling: `''`.
+
+:::tip
+This quoting pattern works for every Atmos YAML function that accepts YQ expressions, including [!terraform.output](/functions/yaml/terraform.output) and [!include](/functions/yaml/include).
+:::
 
 ## Using YQ Expressions to provide a default value
 
@@ -411,7 +443,7 @@ The `impersonate_service_account` parameter is parsed but not yet implemented. T
 
 ## Using `!terraform.state` with `static` remote state backend
 
-Atmos supports [brownfield configuration by using the remote state of type `static`](/core-concepts/components/terraform/brownfield/#hacking-remote-state-with-static-backends).
+Atmos supports [brownfield configuration by using the remote state of type `static`](/components/terraform/brownfield/#hacking-remote-state-with-static-backends).
 
 For example:
 
@@ -483,4 +515,5 @@ vars:
 
  - Be mindful of disaster recovery (DR) implications when using it across regions.
 
- - Consider cold-start scenarios: if the dependent component has not yet been provisioned, `terraform output` will fail.
+ - Consider cold-start scenarios: if the referenced component's state file doesn't exist (e.g., not yet provisioned), `!terraform.state` returns `null`.
+   Use the YQ `//` operator to provide default values for components that may not be provisioned yet (see [Using YQ Expressions to provide a default value](#using-yq-expressions-to-provide-a-default-value)).

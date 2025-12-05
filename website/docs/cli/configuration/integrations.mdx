@@ -1,0 +1,160 @@
+---
+title: Integrations
+sidebar_position: 70
+sidebar_label: integrations
+sidebar_class_name: command
+description: Configure Atmos integrations with Atlantis, Spacelift, and other tools.
+id: integrations
+slug: /cli/configuration/integrations
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+Atmos supports native integrations with various tools that extend its core functionality. Configure integrations to generate configuration for tools like Atlantis and Spacelift.
+</Intro>
+
+## Configuration
+
+Integrations are configured in the `integrations` section:
+
+<File title="atmos.yaml">
+```yaml
+# Integrations
+integrations:
+
+  # Atlantis integration
+  # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
+  atlantis:
+    # Path and name of the Atlantis config file 'atlantis.yaml'
+    # Supports absolute and relative paths
+    # All the intermediate folders will be created automatically (e.g. 'path: /config/atlantis/atlantis.yaml')
+    # Can be overridden on the command line by using '--output-path' command-line argument in 'atmos atlantis generate repo-config' command
+    # If not specified (set to an empty string/omitted here, and set to an empty string on the command line), the content of the file will be dumped to 'stdout'
+    # On Linux/macOS, you can also use '--output-path=/dev/stdout' to dump the content to 'stdout' without setting it to an empty string in 'atlantis.path'
+    path: "atlantis.yaml"
+
+    # Config templates
+    # Select a template by using the '--config-template <config_template>' command-line argument in 'atmos atlantis generate repo-config' command
+    config_templates:
+      config-1:
+        version: 3
+        automerge: true
+        delete_source_branch_on_merge: true
+        parallel_plan: true
+        parallel_apply: true
+        allowed_regexp_prefixes:
+          - dev/
+          - staging/
+          - prod/
+
+    # Project templates
+    # Select a template by using the '--project-template <project_template>' command-line argument in 'atmos atlantis generate repo-config' command
+    project_templates:
+      project-1:
+        # generate a project entry for each component in every stack
+        name: "{tenant}-{environment}-{stage}-{component}"
+        workspace: "{workspace}"
+        dir: "{component-path}"
+        terraform_version: v1.2
+        delete_source_branch_on_merge: true
+        autoplan:
+          enabled: true
+          when_modified:
+            - "**/*.tf"
+            - "varfiles/$PROJECT_NAME.tfvars.json"
+        apply_requirements:
+          - "approved"
+
+    # Workflow templates
+    # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
+    # https://www.runatlantis.io/docs/custom-workflows.html#custom-run-command
+    workflow_templates:
+      workflow-1:
+        plan:
+          steps:
+            - run: terraform init -input=false
+            # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
+            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+            # You must output the plan using '-out $PLANFILE' because Atlantis expects plans to be in a specific location
+            - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+        apply:
+          steps:
+            - run: terraform apply $PLANFILE
+```
+</File>
+
+## Atlantis Integration
+
+The Atlantis integration generates `atlantis.yaml` repository configuration files.
+
+### Configuration Options
+
+<dl>
+  <dt>`integrations.atlantis.path`</dt>
+  <dd>
+    Path and name of the Atlantis config file. Supports absolute and relative paths. All intermediate folders will be created automatically. Can be overridden with `--output-path` command-line argument.
+  </dd>
+
+  <dt>`integrations.atlantis.config_templates`</dt>
+  <dd>
+    Named configuration templates for Atlantis repo-level settings. Select a template using `--config-template` when generating.
+  </dd>
+
+  <dt>`integrations.atlantis.project_templates`</dt>
+  <dd>
+    Named project templates for Atlantis project configuration. Select a template using `--project-template` when generating.
+  </dd>
+
+  <dt>`integrations.atlantis.workflow_templates`</dt>
+  <dd>
+    Named workflow templates for custom Atlantis workflows defining plan and apply steps.
+  </dd>
+</dl>
+
+### Template Variables
+
+Project templates support the following placeholder variables:
+
+| Variable | Description |
+|----------|-------------|
+| `{tenant}` | The tenant name from stack context |
+| `{environment}` | The environment name from stack context |
+| `{stage}` | The stage name from stack context |
+| `{component}` | The component name |
+| `{workspace}` | The Terraform workspace name |
+| `{component-path}` | The path to the component |
+
+### Usage
+
+Generate Atlantis configuration:
+
+```bash
+# Generate using default templates
+atmos atlantis generate repo-config
+
+# Generate using specific templates
+atmos atlantis generate repo-config \
+  --config-template config-1 \
+  --project-template project-1
+
+# Output to stdout
+atmos atlantis generate repo-config --output-path=/dev/stdout
+```
+
+## Available Integrations
+
+Atmos supports the following integrations:
+
+| Integration | Description |
+|-------------|-------------|
+| [Atlantis](/cli/configuration/integrations/atlantis) | Generate Atlantis repo configuration |
+| [Spacelift](/cli/configuration/integrations/spacelift) | Configure Spacelift stacks |
+| [GitHub Actions](/integrations/github-actions) | CI/CD with GitHub Actions |
+
+## See Also
+
+- [CLI Configuration](/cli/configuration) — Overview of CLI configuration
+- [Atlantis Integration](/cli/configuration/integrations/atlantis) — Complete Atlantis integration guide
+- [Spacelift Integration](/cli/configuration/integrations/spacelift) — Complete Spacelift integration guide
+- [GitHub Actions Integration](/integrations/github-actions) — GitHub Actions workflows

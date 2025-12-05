@@ -130,9 +130,32 @@ func extractIdentityFromArgs(args []string) string {
 //
 // This function delegates to auth.CreateAndAuthenticateManager to ensure consistent
 // authentication behavior across CLI commands and internal execution logic.
+//
+// Note: This function does not load stack configs for default identities.
+// Use CreateAuthManagerFromIdentityWithAtmosConfig if you need stack-level default identity resolution.
 func CreateAuthManagerFromIdentity(
 	identityName string,
 	authConfig *schema.AuthConfig,
 ) (auth.AuthManager, error) {
 	return auth.CreateAndAuthenticateManager(identityName, authConfig, IdentityFlagSelectValue)
+}
+
+// CreateAuthManagerFromIdentityWithAtmosConfig creates and authenticates an AuthManager from an identity name.
+// This version accepts the full atmosConfig to enable loading stack configs for default identities.
+//
+// When identityName is empty and atmosConfig is provided:
+//   - Loads stack configuration files for auth identity defaults
+//   - Applies stack-level defaults on top of atmos.yaml defaults
+//   - When stack defaults are present, they override atmos.yaml identity defaults (stack > atmos.yaml)
+//
+// This solves the chicken-and-egg problem where:
+//   - We need to know the default identity to authenticate
+//   - But stack configs are only loaded after authentication is configured
+//   - Stack-level defaults (auth.identities.*.default: true) would otherwise be ignored
+func CreateAuthManagerFromIdentityWithAtmosConfig(
+	identityName string,
+	authConfig *schema.AuthConfig,
+	atmosConfig *schema.AtmosConfiguration,
+) (auth.AuthManager, error) {
+	return auth.CreateAndAuthenticateManagerWithAtmosConfig(identityName, authConfig, IdentityFlagSelectValue, atmosConfig)
 }

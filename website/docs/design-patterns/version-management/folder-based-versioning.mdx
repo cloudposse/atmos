@@ -173,7 +173,7 @@ components/
 ## Workspace Key Management
 
 :::warning Workspace Key Configuration
-This pattern works best with Atmos auto-generated [backend configuration](/core-concepts/components/terraform/backends). The `workspace_key_prefix` must remain stable across version changes to prevent state conflicts:
+This pattern works best with Atmos auto-generated [backend configuration](/components/terraform/backends). The `workspace_key_prefix` must remain stable across version changes to prevent state conflicts:
 
 ```yaml
 # WRONG - Version in workspace key causes state problems

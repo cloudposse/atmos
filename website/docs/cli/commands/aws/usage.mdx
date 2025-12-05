@@ -5,15 +5,26 @@ sidebar_class_name: command
 description: Atmos AWS Commands
 ---
 import Screengrab from '@site/src/components/Screengrab'
-import DocCardList from '@theme/DocCardList';
+import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
-
-<Screengrab title="atmos aws --help" slug="atmos-aws--help" />
-
-## Subcommands
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Use these subcommands to interact with AWS.
 </Intro>
+
+<ActionCard title="Configure Authentication">
+    Learn how to configure AWS authentication providers and identities.
+    <div>
+      <PrimaryCTA to="/cli/configuration/auth">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Usage
+
+<Screengrab title="atmos aws --help" slug="atmos-aws--help" />
+
+## Subcommands
 
 <DocCardList/>

@@ -66,6 +66,42 @@ func IsKnownWorkflowError(err error) bool {
 	return false
 }
 
+// checkAndMergeDefaultIdentity checks if there's a default identity configured in atmos.yaml or stack configs.
+// If a default identity is found in stack configs, it merges it into atmosConfig.Auth.
+// Stack defaults take precedence over atmos.yaml defaults (following Atmos inheritance model).
+// Returns true if a default identity exists after merging.
+func checkAndMergeDefaultIdentity(atmosConfig *schema.AtmosConfiguration) bool {
+	if len(atmosConfig.Auth.Identities) == 0 {
+		return false
+	}
+
+	// Always load stack configs - stack defaults take precedence over atmos.yaml.
+	stackDefaults, err := config.LoadStackAuthDefaults(atmosConfig)
+	if err != nil {
+		// On error, fall back to checking atmos.yaml defaults.
+		for _, identity := range atmosConfig.Auth.Identities {
+			if identity.Default {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Merge stack defaults into auth config (stack takes precedence).
+	if len(stackDefaults) > 0 {
+		config.MergeStackAuthDefaults(&atmosConfig.Auth, stackDefaults)
+	}
+
+	// Check if we have a default after merging.
+	for _, identity := range atmosConfig.Auth.Identities {
+		if identity.Default {
+			return true
+		}
+	}
+
+	return false
+}
+
 // ExecuteWorkflow executes an Atmos workflow.
 func ExecuteWorkflow(
 	atmosConfig schema.AtmosConfiguration,
@@ -156,6 +192,13 @@ func ExecuteWorkflow(
 	needsAuth := commandLineIdentity != "" || lo.SomeBy(steps, func(step schema.WorkflowStep) bool {
 		return strings.TrimSpace(step.Identity) != ""
 	})
+
+	// Also check if there's a default identity configured (in atmos.yaml or stack configs).
+	// This enables workflows to use default identity without explicit --identity flag.
+	if !needsAuth {
+		needsAuth = checkAndMergeDefaultIdentity(&atmosConfig)
+	}
+
 	if needsAuth {
 		// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
 		// This enables YAML template functions to access authenticated credentials.
