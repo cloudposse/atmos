@@ -35,6 +35,7 @@ const (
 	versionPrefix               = "v"
 	defaultFileWritePermissions = 0o644
 	defaultMkdirPermissions     = 0o755
+	executablePermissionMask    = 0o111 // Mask for checking if file is executable.
 	maxUnixPermissions          = 0o7777
 	maxDecompressedSizeMB       = 3000
 	bufferSizeBytes             = 32 * 1024
@@ -98,7 +99,7 @@ func NewInstallerWithResolver(resolver ToolResolver) *Installer {
 	defer perf.Track(nil, "toolchain.NewInstaller")()
 
 	// Use XDG-compliant cache directory.
-	cacheDir, err := xdg.GetXDGCacheDir("toolchain", 0o755)
+	cacheDir, err := xdg.GetXDGCacheDir("toolchain", defaultMkdirPermissions)
 	if err != nil || cacheDir == "" {
 		// Fallback to manual construction if XDG fails.
 		log.Warn("XDG cache dir unavailable, falling back to manual construction", "error", err)
@@ -1023,7 +1024,7 @@ func (i *Installer) getBinaryPath(owner, repo, version, binaryName string) strin
 			}
 			entryPath := filepath.Join(versionDir, entry.Name())
 			info, err := os.Stat(entryPath)
-			if err == nil && info.Mode()&0o111 != 0 {
+			if err == nil && info.Mode()&executablePermissionMask != 0 {
 				// Found an executable.
 				return entryPath
 			}

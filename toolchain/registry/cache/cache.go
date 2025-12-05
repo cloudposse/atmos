@@ -11,6 +11,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	defaultFilePermissions = 0o644
+	defaultDirPermissions  = 0o755
+)
+
 // Store defines the interface for cache operations.
 type Store interface {
 	// Get retrieves data from cache. Returns ErrCacheMiss if not found or expired.
@@ -87,7 +92,7 @@ func (fs *FileStore) Set(ctx context.Context, key string, data []byte, ttl time.
 	cachePath := fs.getCachePath(key)
 
 	// Ensure cache directory exists.
-	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(cachePath), defaultDirPermissions); err != nil {
 		return fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
@@ -106,7 +111,7 @@ func (fs *FileStore) Set(ctx context.Context, key string, data []byte, ttl time.
 
 	// Write to file.
 	//nolint:gosec // G306: Cache file needs to be readable by other processes/users
-	if err := os.WriteFile(cachePath, entryData, 0o644); err != nil {
+	if err := os.WriteFile(cachePath, entryData, defaultFilePermissions); err != nil {
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}
 
