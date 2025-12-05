@@ -255,80 +255,34 @@ func (m versionListModel) View() string {
 func SetToolVersion(toolName, version string, scrollSpeed int) error {
 	defer perf.Track(nil, "toolchain.SetToolVersion")()
 
-	// Resolve the tool name to handle aliases
+	// Resolve the tool name to handle aliases.
 	installer := NewInstaller()
-	owner, repo, err := installer.parseToolSpec(toolName)
+	owner, repo, resolvedKey, err := resolveToolName(toolName, installer)
 	if err != nil {
-		return fmt.Errorf("invalid tool name: %w", err)
+		return err
 	}
-	resolvedKey := owner + "/" + repo
 
-	// If no version provided, fetch available versions and show interactive selection
+	// If no version provided, fetch available versions and show interactive selection.
 	if version == "" {
-		tool, err := installer.findTool(owner, repo, "")
+		// Validate tool supports interactive selection.
+		if err := validateToolForInteractiveSelection(installer, owner, repo); err != nil {
+			return err
+		}
+
+		// Fetch and validate available versions.
+		items, err := fetchAndValidateVersions(owner, repo)
 		if err != nil {
-			return fmt.Errorf("failed to find tool configuration: %w", err)
+			return err
 		}
 
-		if tool.Type != "github_release" {
-			return fmt.Errorf("%w: interactive version selection is only available for GitHub release type tools", ErrInvalidToolSpec)
-		}
+		// Create and configure the interactive UI model.
+		m := createVersionListModel(owner, repo, items, scrollSpeed)
 
-		items, err := fetchGitHubVersions(owner, repo)
+		// Run the interactive selection and get the chosen version.
+		version, err = runInteractiveSelection(m)
 		if err != nil {
-			return fmt.Errorf("failed to fetch versions from GitHub: %w", err)
+			return err
 		}
-		if len(items) == 0 {
-			return fmt.Errorf("%w: no versions found for %s/%s", ErrNoVersionsFound, owner, repo)
-		}
-
-		listItems := make([]list.Item, len(items))
-		for i, item := range items {
-			listItems[i] = item
-		}
-
-		l := list.New(listItems, newCustomDelegate(), 0, 0)
-		l.Title = "Select Version"
-		l.SetShowHelp(false)
-		l.SetShowStatusBar(true)
-		l.InfiniteScrolling = true
-
-		vp := viewport.New(0, 0)
-		vp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("62"))
-
-		if scrollSpeed < 1 {
-			scrollSpeed = 3
-		}
-
-		m := versionListModel{
-			list:        l,
-			viewport:    vp,
-			owner:       owner,
-			repo:        repo,
-			items:       items,
-			title:       fmt.Sprintf("Select version for %s/%s", owner, repo),
-			focused:     focusList,
-			scrollSpeed: scrollSpeed,
-		}
-
-		if len(items) > 0 {
-			renderedNotes := renderMarkdown(items[0].releaseNotes, m.viewport.Width)
-			m.viewport.SetContent(renderedNotes)
-			m.currentItemIndex = 0
-		}
-
-		p := tea.NewProgram(m)
-		finalModel, err := p.Run()
-		if err != nil {
-			return fmt.Errorf("failed to run interactive selection: %w", err)
-		}
-
-		finalVersionModel := finalModel.(versionListModel)
-		if finalVersionModel.selected == "" {
-			return fmt.Errorf("%w: no version selected", ErrInvalidToolSpec)
-		}
-
-		version = finalVersionModel.selected
 	}
 
 	// Add the tool with the selected version.
