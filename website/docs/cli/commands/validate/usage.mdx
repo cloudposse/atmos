@@ -5,12 +5,23 @@ sidebar_class_name: command
 description: "Validate Atmos Configurations"
 ---
 import Screengrab from '@site/src/components/Screengrab'
-import DocCardList from '@theme/DocCardList';
+import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Use these subcommands to validate Atmos configurations.
 </Intro>
+
+<ActionCard title="Configure Validation Schemas">
+    Learn how to configure JSON Schema and OPA policy paths for validating Atmos stack manifests and components.
+    <div>
+      <PrimaryCTA to="/cli/configuration/schemas">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Usage
 
 <Screengrab title="atmos validate --help" slug="atmos-validate--help" />
 

@@ -1,0 +1,203 @@
+---
+title: Configure Command Override
+sidebar_position: 17
+sidebar_label: command
+sidebar_class_name: command
+description: Use the command setting to override the default executable for Terraform, Helmfile, or Packer.
+id: command
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `command` setting allows you to override the executable that Atmos uses to run Terraform, Helmfile, or Packer commands. This is useful for using alternative tools like OpenTofu, custom wrappers, or specific binary versions.
+</Intro>
+
+## Use Cases
+
+- **OpenTofu:** Use `tofu` instead of `terraform` for your infrastructure.
+- **Custom Wrappers:** Use wrapper scripts that add logging, timing, or other functionality.
+- **Version Management:** Point to specific binary versions managed by tools like `tfenv` or `asdf`.
+- **Testing:** Use mock binaries during testing or development.
+
+## Configuration Scopes
+
+The `command` setting can be defined at two levels:
+
+### Component-Type Level
+
+Set the command for all components of a type:
+
+```yaml
+# stacks/orgs/acme/_defaults.yaml
+terraform:
+  command: tofu
+
+helmfile:
+  command: /usr/local/bin/helmfile
+```
+
+### Component Level
+
+Override the command for a specific component:
+
+```yaml
+components:
+  terraform:
+    legacy-module:
+      command: terraform  # Use terraform instead of tofu for this component
+      vars:
+        # ...
+```
+
+## Examples
+
+### Using OpenTofu
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+terraform:
+  command: tofu
+```
+</File>
+
+All Terraform components will now use `tofu` instead of `terraform`.
+
+### Using Version Manager Shims
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+terraform:
+  command: /Users/me/.asdf/shims/terraform
+```
+</File>
+
+### Custom Wrapper Script
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+terraform:
+  command: /opt/scripts/terraform-wrapper.sh
+```
+</File>
+
+Example wrapper script:
+
+```bash
+#!/bin/bash
+# /opt/scripts/terraform-wrapper.sh
+
+# Log command execution
+echo "[$(date)] Running: terraform $@" >> /var/log/terraform.log
+
+# Execute terraform with timing
+time terraform "$@"
+exit_code=$?
+
+# Log completion
+echo "[$(date)] Completed with exit code: $exit_code" >> /var/log/terraform.log
+
+exit $exit_code
+```
+
+### Mixed Tool Usage
+
+Use different tools for different components:
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+# Default to OpenTofu
+terraform:
+  command: tofu
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    # Most components use tofu (inherited default)
+    vpc:
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+
+    # This component requires terraform for a specific provider
+    legacy-provider:
+      command: terraform
+      vars:
+        # ...
+```
+</File>
+
+### Environment-Specific Commands
+
+<File title="stacks/orgs/acme/plat/dev/_defaults.yaml">
+```yaml
+terraform:
+  command: terraform  # Use standard terraform in dev
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/prod/_defaults.yaml">
+```yaml
+terraform:
+  command: /opt/terraform/1.5.7/terraform  # Use pinned version in prod
+```
+</File>
+
+### Helmfile Command Override
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+helmfile:
+  command: /usr/local/bin/helmfile-0.150.0
+```
+</File>
+
+### Packer Command Override
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+packer:
+  command: /opt/hashicorp/packer/1.9.0/packer
+```
+</File>
+
+## Precedence
+
+The command is resolved in this order:
+
+1. **Component level** (`components.terraform.<name>.command`)
+2. **Component-type level** (`terraform.command`)
+3. **Default** (the tool name itself: `terraform`, `helmfile`, or `packer`)
+
+## Best Practices
+
+1. **Use Absolute Paths:** When specifying custom binaries, use absolute paths to avoid PATH-related issues.
+
+2. **Version Pin in Production:** Consider pinning specific versions in production environments for reproducibility.
+
+3. **Test Wrapper Scripts:** Ensure wrapper scripts properly pass through all arguments and return exit codes correctly.
+
+4. **Document Tool Requirements:** If using non-standard tools like OpenTofu, document this requirement for your team.
+
+5. **Use Component-Type Defaults:** Set the command at the `terraform:` level rather than on each component to maintain consistency.
+
+## Compatibility Notes
+
+### OpenTofu
+
+OpenTofu is a drop-in replacement for Terraform. When using `command: tofu`:
+- All `atmos terraform` commands work the same way
+- State files are compatible (OpenTofu uses the same state format)
+- Most providers work without modification
+
+### Terraform vs Tofu Feature Differences
+
+Some features may differ between Terraform and OpenTofu. Refer to their respective documentation for compatibility details.
+
+## Related
+
+- [Terraform Components](/stacks/components/terraform)
+- [Helmfile Components](/stacks/components/helmfile)
+- [Packer Components](/stacks/components/packer)

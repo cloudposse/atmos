@@ -1,0 +1,231 @@
+---
+title: Your First Stack
+sidebar_position: 3
+sidebar_label: Your First Stack
+description: Create your first Atmos stack with a simple, working example
+id: first-stack
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Let's create the simplest possible Atmos stack—no imports, no inheritance, no complexity. Just a component plus configuration that works.
+</Intro>
+
+Think of this like "Hello World" for Atmos. We'll take one Terraform component and configure it with one stack file. That's it.
+
+## Prerequisites
+
+- [Atmos installed](/install)
+- Basic Terraform knowledge
+- A Terraform component (or create a simple one)
+
+## Step 1: Create a Simple Component
+
+First, create a basic Terraform component. We'll use a simple example that creates an S3 bucket:
+
+<File title="components/terraform/s3-bucket/main.tf">
+```hcl
+variable "bucket_name" {
+  description = "Name of the S3 bucket"
+  type        = string
+}
+
+variable "environment" {
+  description = "Environment name"
+  type        = string
+}
+
+resource "aws_s3_bucket" "this" {
+  bucket = var.bucket_name
+
+  tags = {
+    Environment = var.environment
+    ManagedBy   = "Atmos"
+  }
+}
+
+output "bucket_id" {
+  value = aws_s3_bucket.this.id
+}
+```
+</File>
+
+<File title="components/terraform/s3-bucket/versions.tf">
+```hcl
+terraform {
+  required_version = ">= 1.0"
+
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = ">= 4.0"
+    }
+  }
+}
+
+# Configure the AWS provider using the region variable
+provider "aws" {
+  region = var.region
+}
+
+# Additional variables passed by Atmos from stack config
+variable "region" {
+  description = "AWS region"
+  type        = string
+}
+
+variable "stage" {
+  description = "Stage name (e.g., dev, prod)"
+  type        = string
+}
+```
+</File>
+
+:::tip
+This is just an example. You can use any existing Terraform root module you have—Atmos works with vanilla Terraform.
+:::
+
+## Step 2: Create an Atmos Configuration
+
+Create `atmos.yaml` in your repository root:
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  name_pattern: "{stage}"
+```
+</File>
+
+This tells Atmos:
+- Where to find Terraform components (`components/terraform/`)
+- Where to find stack configurations (`stacks/`)
+- How to name stacks (using the `stage` variable)
+
+## Step 3: Create Your First Stack
+
+Now create a stack configuration for development:
+
+<File title="stacks/dev.yaml">
+```yaml
+# Global variables available to all components
+vars:
+  stage: dev
+  environment: development
+  region: us-east-1
+
+# Configure components
+components:
+  terraform:
+    # Component instance name (can be anything)
+    my-bucket:
+      # Which Terraform component to use
+      metadata:
+        component: s3-bucket
+
+      # Component-specific variables
+      vars:
+        bucket_name: "my-dev-bucket-12345"  # Must be globally unique; change this
+```
+</File>
+
+Let's break this down:
+
+- **`vars` (top level)**: Variables available to all components in this stack
+- **`components.terraform.my-bucket`**: This is a component instance—a configured instance of the `s3-bucket` component
+- **`metadata.component`**: Points to the actual Terraform component in `components/terraform/s3-bucket`
+- **`vars` (component level)**: Variables specific to this component instance
+
+## Step 4: Deploy Your Stack
+
+<Terminal title="atmos terraform plan my-bucket -s dev">
+```console
+Planning Terraform component 'my-bucket' in stack 'dev'...
+
+Terraform will perform the following actions:
+
+  # aws_s3_bucket.this will be created
+  + resource "aws_s3_bucket" "this" {
+      + bucket = "my-dev-bucket-12345"
+      + tags   = {
+          + "Environment" = "development"
+          + "ManagedBy"   = "Atmos"
+        }
+    }
+
+Plan: 1 to add, 0 to change, 0 to destroy.
+```
+</Terminal>
+
+If the plan looks good:
+
+```shell
+atmos terraform apply my-bucket -s dev
+```
+
+## What Just Happened?
+
+Atmos did several things automatically:
+
+1. **Found the component**: Located `components/terraform/s3-bucket` based on `metadata.component`
+2. **Merged variables**: Combined global `vars` with component-specific `vars`
+3. **Generated tfvars**: Created a `.tfvars` file with:
+   ```hcl
+   bucket_name = "my-dev-bucket-12345"
+   environment = "development"
+   stage = "dev"
+   region = "us-east-1"
+   ```
+4. **Ran Terraform**: Executed `terraform apply` in the component directory
+
+## Add Another Environment
+
+Creating a production stack is just another YAML file:
+
+<File title="stacks/prod.yaml">
+```yaml
+vars:
+  stage: prod
+  environment: production
+  region: us-east-1
+
+components:
+  terraform:
+    my-bucket:
+      metadata:
+        component: s3-bucket
+      vars:
+        bucket_name: "my-prod-bucket-67890"
+```
+</File>
+
+Deploy it:
+```shell
+atmos terraform apply my-bucket -s prod
+```
+
+Same component, different configuration—that's the power of separation.
+
+## Key Takeaways
+
+- **Stacks are YAML configurations** for components
+- **Components are generic Terraform** code
+- **Variables merge** from global to component level
+- **Component instances** let you use the same component with different names
+
+## What's Next
+
+This example is intentionally simple. In real projects, you'll want to:
+
+- **Understand YAML deeply**: Learn about [deep merge, scope, and YAML functions](/learn/yaml)
+- **Reuse configuration**: Use [imports](/learn/imports-basics) to stay DRY
+- **Create variations**: Use [inheritance](/learn/inheritance-basics) for component variants
+- **Organize at scale**: Use [catalogs and patterns](/learn/organizing-stacks)
+
+But you've now deployed your first stack—everything else builds on this foundation.

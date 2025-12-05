@@ -1,0 +1,135 @@
+---
+title: Using Packer
+sidebar_position: 5
+sidebar_label: Packer
+id: packer
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos natively supports opinionated workflows for [HashiCorp Packer](https://www.packer.io/). Packer automates the creation of machine images for multiple platforms, enabling you to build immutable infrastructure with consistent, versioned images.
+</Intro>
+
+For a complete list of supported commands, please see the Atmos [packer](/cli/commands/packer/usage) documentation.
+
+## Why Use Packer with Atmos?
+
+Packer components in Atmos allow you to:
+
+- **Build immutable infrastructure** — Create golden AMIs and machine images that are versioned and reproducible
+- **Patch images for security and compliance** — Apply security patches and compliance requirements consistently across your image library
+- **Manage images like any other component** — Use the same inheritance, imports, and configuration patterns you use for Terraform
+
+## Stack Configuration
+
+The schema for configuring Packer components in Atmos stacks:
+
+```yaml
+components:
+  packer:
+    # the slug of the component
+    ubuntu-base:
+
+      # configuration specific to atmos
+      metadata:
+        type: real
+        component: ubuntu-base
+
+      # Settings for integrations
+      settings: {}
+
+      # Variables passed to Packer
+      vars:
+        ami_name: "ubuntu-base"
+        instance_type: "t3.medium"
+        source_ami_filter_name: "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
+
+      # Environment variables
+      env:
+        PACKER_LOG: "1"
+```
+
+### Attributes
+
+<dl>
+  <dt>`vars` (optional)</dt>
+  <dd>
+  Variables passed to Packer. These are deep-merged and made available to your Packer templates.
+
+  **Example:**
+  ```yaml
+  vars:
+    ami_name: "ubuntu-base"
+    instance_type: "t3.medium"
+    region: "us-east-1"
+  ```
+  </dd>
+
+  <dt>`metadata` (optional)</dt>
+  <dd>
+  The `metadata` section extends functionality of the component. See [Common Component Attributes](/stacks/components#metadata-attributes) for details.
+
+  **Example:**
+  ```yaml
+  metadata:
+    type: real
+    component: ubuntu-base
+    inherits:
+      - base-image-defaults
+  ```
+  </dd>
+
+  <dt>`settings` (optional)</dt>
+  <dd>
+  Free-form map for integration configuration.
+  </dd>
+
+  <dt>`env` (optional)</dt>
+  <dd>
+  Environment variables to set when running Packer commands.
+
+  **Example:**
+  ```yaml
+  env:
+    PACKER_LOG: "1"
+    AWS_PROFILE: "production"
+  ```
+  </dd>
+</dl>
+
+## Example: Build a Packer Component
+
+To build a Packer component using the `atmos` CLI, run the following commands:
+
+```shell
+atmos packer init ubuntu-base --stack=ue2-dev
+atmos packer build ubuntu-base --stack=ue2-dev
+```
+
+where:
+
+- `ubuntu-base` is the Packer component to build (from the `components/packer` folder)
+- `--stack=ue2-dev` is the stack context for the build
+
+Short versions of the command-line arguments can be used:
+
+```shell
+atmos packer init ubuntu-base -s ue2-dev
+atmos packer build ubuntu-base -s ue2-dev
+```
+
+## Example: Validate a Packer Template
+
+To validate a Packer template before building:
+
+```shell
+atmos packer validate ubuntu-base -s ue2-dev
+```
+
+## Example: Inspect a Packer Template
+
+To inspect a Packer template and see its configuration:
+
+```shell
+atmos packer inspect ubuntu-base -s ue2-dev
+```

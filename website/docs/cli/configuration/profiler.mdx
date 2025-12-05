@@ -1,0 +1,120 @@
+---
+title: Profiler
+sidebar_position: 55
+sidebar_label: profiler
+sidebar_class_name: command
+description: Configure Atmos performance profiling for debugging and optimization.
+id: profiler
+slug: /cli/configuration/profiler
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Atmos includes built-in performance profiling capabilities using Go's pprof profiler. This allows you to analyze CPU usage, memory allocations, goroutines, and other performance metrics when running Atmos commands.
+</Intro>
+
+## Configuration
+
+The profiler is configured in the `profiler` section:
+
+<File title="atmos.yaml">
+```yaml
+profiler:
+  # Enable or disable the pprof profiling server
+  enabled: false
+  # Host to bind the profiling server to (default: localhost)
+  host: "localhost"
+  # Port to run the profiling server on (default: 6060)
+  port: 6060
+```
+</File>
+
+<dl>
+  <dt>`profiler.enabled`</dt>
+  <dd>
+    Enable or disable the pprof profiling server. When enabled, Atmos will start an HTTP server that serves pprof endpoints for performance analysis. Can also be set using the `--profiler-enabled` command-line flag.
+  </dd>
+
+  <dt>`profiler.host`</dt>
+  <dd>
+    The host address to bind the profiling server to. Defaults to `localhost` for security. Can also be set using the `--profiler-host` command-line flag.
+  </dd>
+
+  <dt>`profiler.port`</dt>
+  <dd>
+    The port number for the profiling server. Defaults to `6060` (the standard pprof port). Can also be set using the `--profiler-port` command-line flag.
+  </dd>
+</dl>
+
+## Using the Profiler
+
+When the profiler is enabled, Atmos will start a pprof server and display the URL when any command is run:
+
+<Terminal title="atmos terraform plan vpc -s plat-ue2-dev --profiler-enabled">
+```console
+pprof profiler available at: http://localhost:6060/debug/pprof/
+Executing 'terraform plan' command...
+```
+</Terminal>
+
+## Available Endpoints
+
+The profiler provides several endpoints for different types of analysis:
+
+| Endpoint | Description |
+|----------|-------------|
+| `http://localhost:6060/debug/pprof/profile` | 30-second CPU profile |
+| `http://localhost:6060/debug/pprof/heap` | Memory heap profile |
+| `http://localhost:6060/debug/pprof/goroutine` | Stack traces of all current goroutines |
+| `http://localhost:6060/debug/pprof/` | Interactive web interface |
+
+## Analyzing Performance Data
+
+You can use Go's pprof tool to analyze the profiling data:
+
+<Terminal title="Analyzing CPU profile">
+```console
+# Capture and analyze CPU profile
+go tool pprof http://localhost:6060/debug/pprof/profile
+
+# Capture and analyze memory profile
+go tool pprof http://localhost:6060/debug/pprof/heap
+
+# Generate a web-based visualization
+go tool pprof -http=:8080 http://localhost:6060/debug/pprof/profile
+```
+</Terminal>
+
+## Security Considerations
+
+:::warning Security Notice
+The profiler exposes detailed runtime information about your Atmos process. Only enable it when needed for debugging or performance analysis, and ensure the host/port are not accessible from untrusted networks.
+:::
+
+By default, the profiler binds to `localhost` only, which prevents external access. If you need to access the profiler from another machine, make sure to use appropriate network security measures.
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_PROFILER_ENABLED`</dt>
+  <dd>Enable or disable the pprof HTTP profiling server.</dd>
+
+  <dt>`ATMOS_PROFILER_HOST`</dt>
+  <dd>Host address for the profiling server.</dd>
+
+  <dt>`ATMOS_PROFILER_PORT`</dt>
+  <dd>Port for the profiling server.</dd>
+
+  <dt>`ATMOS_PROFILE_FILE`</dt>
+  <dd>Write profiling data to the specified file.</dd>
+
+  <dt>`ATMOS_PROFILE_TYPE`</dt>
+  <dd>Type of profile to collect: `cpu`, `heap`, `allocs`, `goroutine`, `block`, `mutex`, `threadcreate`, `trace`.</dd>
+</dl>
+
+## See Also
+
+- [CLI Configuration](/cli/configuration) — Overview of CLI configuration
+- [Environment Variables](/cli/environment-variables) — All configuration environment variables
