@@ -442,12 +442,12 @@ func TestLookupToolVersionOrLatest(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			resolver := &mockToolResolver{mapping: tt.mapping}
-			key, version, found, usedLatest := LookupToolVersionOrLatest(tt.tool, tt.toolVersions, resolver)
+			result := LookupToolVersionOrLatest(tt.tool, tt.toolVersions, resolver)
 
-			assert.Equal(t, tt.expectedKey, key, "resolvedKey mismatch")
-			assert.Equal(t, tt.expectedVersion, version, "version mismatch")
-			assert.Equal(t, tt.expectedFound, found, "found mismatch")
-			assert.Equal(t, tt.expectedLatest, usedLatest, "usedLatest mismatch")
+			assert.Equal(t, tt.expectedKey, result.ResolvedKey, "resolvedKey mismatch")
+			assert.Equal(t, tt.expectedVersion, result.Version, "version mismatch")
+			assert.Equal(t, tt.expectedFound, result.Found, "found mismatch")
+			assert.Equal(t, tt.expectedLatest, result.UsedLatest, "usedLatest mismatch")
 		})
 	}
 }

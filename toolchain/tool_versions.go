@@ -240,27 +240,34 @@ func LookupToolVersion(tool string, toolVersions *ToolVersions, resolver ToolRes
 	return "", "", false
 }
 
+// ToolVersionLookupResult holds the result of looking up a tool version.
+type ToolVersionLookupResult struct {
+	ResolvedKey string // The key found (raw tool name or owner/repo alias).
+	Version     string // The version string.
+	Found       bool   // Whether the tool was found in toolVersions.
+	UsedLatest  bool   // Whether 'latest' was used as a fallback.
+}
+
 // LookupToolVersionOrLatest attempts to find the version for a tool, trying both the raw name and its resolved alias.
 // If not found, but the alias resolves, returns 'latest' as the version and usedLatest=true.
-// Returns the key found (raw or alias), the version, whether it was found in toolVersions, and whether 'latest' was used as a fallback.
-func LookupToolVersionOrLatest(tool string, toolVersions *ToolVersions, resolver ToolResolver) (resolvedKey, version string, found bool, usedLatest bool) {
+func LookupToolVersionOrLatest(tool string, toolVersions *ToolVersions, resolver ToolResolver) ToolVersionLookupResult {
 	defer perf.Track(nil, "toolchain.LookupToolVersionOrLatest")()
 
 	// Try raw tool name first
 	if versions, ok := toolVersions.Tools[tool]; ok && len(versions) > 0 {
-		return tool, versions[0], true, false
+		return ToolVersionLookupResult{ResolvedKey: tool, Version: versions[0], Found: true, UsedLatest: false}
 	}
 	// Try alias resolution
 	owner, repo, err := resolver.Resolve(tool)
 	if err == nil {
 		aliasKey := owner + "/" + repo
 		if versions, ok := toolVersions.Tools[aliasKey]; ok && len(versions) > 0 {
-			return aliasKey, versions[0], true, false
+			return ToolVersionLookupResult{ResolvedKey: aliasKey, Version: versions[0], Found: true, UsedLatest: false}
 		}
 		// Alias resolves, but not in toolVersions: fallback to latest
-		return aliasKey, "latest", false, true
+		return ToolVersionLookupResult{ResolvedKey: aliasKey, Version: "latest", Found: false, UsedLatest: true}
 	}
-	return "", "", false, false
+	return ToolVersionLookupResult{ResolvedKey: "", Version: "", Found: false, UsedLatest: false}
 }
 
 // ParseToolVersionArg parses a CLI argument in the form tool, tool@version, or owner/repo@version.

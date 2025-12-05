@@ -112,8 +112,8 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 				Err()
 		}
 		installer := NewInstaller()
-		resolvedKey, foundVersion, found, usedLatest := LookupToolVersionOrLatest(tool, toolVersions, installer.resolver)
-		if !found && !usedLatest {
+		result := LookupToolVersionOrLatest(tool, toolVersions, installer.resolver)
+		if !result.Found && !result.UsedLatest {
 			return errUtils.Build(errUtils.ErrInvalidToolSpec).
 				WithExplanationf("Invalid tool specification: `%s`", toolSpec).
 				WithHint("Use format: `owner/repo@version` (e.g., `hashicorp/terraform@1.5.0`)").
@@ -122,8 +122,8 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 				WithExitCode(2).
 				Err()
 		}
-		tool = resolvedKey
-		version = foundVersion
+		tool = result.ResolvedKey
+		version = result.Version
 	}
 	if tool == "" || version == "" {
 		return errUtils.Build(errUtils.ErrInvalidToolSpec).

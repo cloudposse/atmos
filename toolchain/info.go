@@ -75,7 +75,8 @@ func InfoExec(toolName, outputFormat string) error {
 		}
 
 		// Try to find a version using LookupToolVersionOrLatest.
-		_, version, _, _ = LookupToolVersionOrLatest(toolName, toolVersions, installer.GetResolver())
+		result := LookupToolVersionOrLatest(toolName, toolVersions, installer.GetResolver())
+		version = result.Version
 	}
 
 	// If no version found or if it's still "latest", resolve to concrete latest version.
