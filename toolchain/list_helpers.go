@@ -11,6 +11,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// toolRowInfo holds basic information about a tool for building a row.
+type toolRowInfo struct {
+	owner     string
+	repo      string
+	alias     string
+	version   string
+	isDefault bool
+}
+
 // handleToolVersionsLoadError handles errors from loading .tool-versions file.
 func handleToolVersionsLoadError(err error, toolVersionsFile string) error {
 	// Handle missing file gracefully with a helpful message.
@@ -49,13 +58,25 @@ func buildToolRows(toolVersions *ToolVersions, installer *Installer) []toolRow {
 		}
 
 		// Add row for default version (first in list).
-		if row, err := buildToolRow(installer, owner, repo, alias, versions[0], true); err == nil {
+		if row, err := buildToolRow(installer, toolRowInfo{
+			owner:     owner,
+			repo:      repo,
+			alias:     alias,
+			version:   versions[0],
+			isDefault: true,
+		}); err == nil {
 			rows = append(rows, row)
 		}
 
 		// Add rows for additional versions.
 		for i := 1; i < len(versions); i++ {
-			if row, err := buildToolRow(installer, owner, repo, alias, versions[i], false); err == nil {
+			if row, err := buildToolRow(installer, toolRowInfo{
+				owner:     owner,
+				repo:      repo,
+				alias:     alias,
+				version:   versions[i],
+				isDefault: false,
+			}); err == nil {
 				rows = append(rows, row)
 			}
 		}
@@ -87,31 +108,31 @@ func resolveToolInfo(toolName string, toolVersions *ToolVersions, installer *Ins
 }
 
 // buildToolRow creates a single toolRow for a specific tool version.
-func buildToolRow(installer *Installer, owner, repo, alias, version string, isDefault bool) (toolRow, error) {
+func buildToolRow(installer *Installer, info toolRowInfo) (toolRow, error) {
 	// Binary name defaults to repo name.
-	binaryName := repo
+	binaryName := info.repo
 
 	// Check installation status.
-	binaryPath, err := installer.FindBinaryPath(owner, repo, version)
+	binaryPath, err := installer.FindBinaryPath(info.owner, info.repo, info.version)
 	isInstalled := err == nil
 
 	// Debug: log the binary path.
 	if isInstalled {
-		log.Debug("Found binary path", "path", binaryPath, "owner", owner, "repo", repo, versionLogKey, version)
+		log.Debug("Found binary path", "path", binaryPath, "owner", info.owner, "repo", info.repo, versionLogKey, info.version)
 	}
 
 	// Get installation metadata.
 	status, installDate, size := getInstallationMetadata(binaryPath, isInstalled)
 
 	return toolRow{
-		alias:       alias,
-		registry:    fmt.Sprintf("%s/%s", owner, repo),
+		alias:       info.alias,
+		registry:    fmt.Sprintf("%s/%s", info.owner, info.repo),
 		binary:      binaryName,
-		version:     version,
+		version:     info.version,
 		status:      status,
 		installDate: installDate,
 		size:        size,
-		isDefault:   isDefault,
+		isDefault:   info.isDefault,
 		isInstalled: isInstalled,
 	}, nil
 }

@@ -195,7 +195,14 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 	}
 
 	// Handle post-installation tasks.
-	return handleInstallSuccess(owner, repo, version, binaryPath, isLatest, showProgressBar, installer)
+	return handleInstallSuccess(installResult{
+		owner:       owner,
+		repo:        repo,
+		version:     version,
+		binaryPath:  binaryPath,
+		isLatest:    isLatest,
+		showMessage: showProgressBar,
+	}, installer)
 }
 
 func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error {

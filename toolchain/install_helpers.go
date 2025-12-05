@@ -16,6 +16,16 @@ type spinnerControl struct {
 	showingSpinner bool
 }
 
+// installResult holds information about a successful tool installation.
+type installResult struct {
+	owner       string
+	repo        string
+	version     string
+	binaryPath  string
+	isLatest    bool
+	showMessage bool
+}
+
 // startSpinner starts a spinner with the given message.
 func (sc *spinnerControl) start(message string) {
 	if !sc.showingSpinner {
@@ -73,31 +83,31 @@ func resolveLatestVersionWithSpinner(owner, repo, version string, isLatest bool,
 }
 
 // handleInstallSuccess handles post-installation tasks and displays success messages.
-func handleInstallSuccess(owner, repo, version, binaryPath string, isLatest, showProgressBar bool, installer *Installer) error {
+func handleInstallSuccess(result installResult, installer *Installer) error {
 	// Create latest file if this is a "latest" installation.
-	if isLatest {
-		if err := installer.CreateLatestFile(owner, repo, version); err != nil {
-			if showProgressBar {
-				_ = ui.Errorf("Failed to create latest file for %s/%s: %v", owner, repo, err)
+	if result.isLatest {
+		if err := installer.CreateLatestFile(result.owner, result.repo, result.version); err != nil {
+			if result.showMessage {
+				_ = ui.Errorf("Failed to create latest file for %s/%s: %v", result.owner, result.repo, err)
 			}
 		}
 	}
 
-	if !showProgressBar {
+	if !result.showMessage {
 		return nil
 	}
 
 	// Calculate directory size for the installed version.
-	versionDir := filepath.Dir(binaryPath)
+	versionDir := filepath.Dir(result.binaryPath)
 	sizeStr := ""
 	if dirSize, err := calculateDirectorySize(versionDir); err == nil {
 		sizeStr = fmt.Sprintf(" (%s)", formatBytes(dirSize))
 	}
-	_ = ui.Successf("Installed `%s/%s@%s` to `%s`%s", owner, repo, version, binaryPath, sizeStr)
+	_ = ui.Successf("Installed `%s/%s@%s` to `%s`%s", result.owner, result.repo, result.version, result.binaryPath, sizeStr)
 
 	// Register in .tool-versions.
-	if err := AddToolToVersions(DefaultToolVersionsFilePath, repo, version); err == nil {
-		_ = ui.Successf("Registered `%s %s` in `.tool-versions`", repo, version)
+	if err := AddToolToVersions(DefaultToolVersionsFilePath, result.repo, result.version); err == nil {
+		_ = ui.Successf("Registered `%s %s` in `.tool-versions`", result.repo, result.version)
 		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
 	}
 
