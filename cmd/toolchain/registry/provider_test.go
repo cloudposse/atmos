@@ -4,9 +4,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	toolchainregistry "github.com/cloudposse/atmos/toolchain/registry"
 )
 
@@ -46,28 +49,56 @@ func TestRegistryCommandProvider(t *testing.T) {
 	})
 }
 
-// TestListCommandProvider tests ListCommandProvider implementation.
-func TestListCommandProvider(t *testing.T) {
-	provider := &ListCommandProvider{}
+// commandProviderTestCase defines a test case for command provider testing.
+type commandProviderTestCase struct {
+	name                 string
+	provider             interface{}
+	expectedCommandUse   string
+	expectedName         string
+	expectedGroup        string
+	expectFlagsBuilder   bool
+	expectedFlagsBuilder interface{}
+}
+
+// testCommandProvider is a helper to test command provider implementations.
+func testCommandProvider(t *testing.T, tc commandProviderTestCase) {
+	t.Helper()
+
+	// Use type assertion to access provider methods.
+	type providerInterface interface {
+		GetCommand() *cobra.Command
+		GetName() string
+		GetGroup() string
+		GetFlagsBuilder() flags.Builder
+		GetPositionalArgsBuilder() *flags.PositionalArgsBuilder
+		GetCompatibilityFlags() map[string]compat.CompatibilityFlag
+	}
+
+	provider, ok := tc.provider.(providerInterface)
+	require.True(t, ok, "provider must implement providerInterface")
 
 	t.Run("GetCommand returns non-nil command", func(t *testing.T) {
 		cmd := provider.GetCommand()
 		require.NotNil(t, cmd)
-		assert.Contains(t, cmd.Use, "list")
+		assert.Contains(t, cmd.Use, tc.expectedCommandUse)
 	})
 
 	t.Run("GetName returns correct name", func(t *testing.T) {
-		assert.Equal(t, "list", provider.GetName())
+		assert.Equal(t, tc.expectedName, provider.GetName())
 	})
 
 	t.Run("GetGroup returns correct group", func(t *testing.T) {
-		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+		assert.Equal(t, tc.expectedGroup, provider.GetGroup())
 	})
 
-	t.Run("GetFlagsBuilder returns non-nil parser", func(t *testing.T) {
+	t.Run("GetFlagsBuilder returns expected parser", func(t *testing.T) {
 		builder := provider.GetFlagsBuilder()
-		require.NotNil(t, builder, "list command has flags and should return parser")
-		assert.Equal(t, listParser, builder)
+		if tc.expectFlagsBuilder {
+			require.NotNil(t, builder, "%s command has flags and should return parser", tc.expectedName)
+			assert.Equal(t, tc.expectedFlagsBuilder, builder)
+		} else {
+			assert.Nil(t, builder)
+		}
 	})
 
 	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
@@ -79,36 +110,29 @@ func TestListCommandProvider(t *testing.T) {
 	})
 }
 
+// TestListCommandProvider tests ListCommandProvider implementation.
+func TestListCommandProvider(t *testing.T) {
+	testCommandProvider(t, commandProviderTestCase{
+		name:                 "list",
+		provider:             &ListCommandProvider{},
+		expectedCommandUse:   "list",
+		expectedName:         "list",
+		expectedGroup:        "Toolchain Commands",
+		expectFlagsBuilder:   true,
+		expectedFlagsBuilder: listParser,
+	})
+}
+
 // TestSearchCommandProvider tests SearchCommandProvider implementation.
 func TestSearchCommandProvider(t *testing.T) {
-	provider := &SearchCommandProvider{}
-
-	t.Run("GetCommand returns non-nil command", func(t *testing.T) {
-		cmd := provider.GetCommand()
-		require.NotNil(t, cmd)
-		assert.Contains(t, cmd.Use, "search")
-	})
-
-	t.Run("GetName returns correct name", func(t *testing.T) {
-		assert.Equal(t, "search", provider.GetName())
-	})
-
-	t.Run("GetGroup returns correct group", func(t *testing.T) {
-		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
-	})
-
-	t.Run("GetFlagsBuilder returns non-nil parser", func(t *testing.T) {
-		builder := provider.GetFlagsBuilder()
-		require.NotNil(t, builder, "search command has flags and should return parser")
-		assert.Equal(t, searchParser, builder)
-	})
-
-	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
-		assert.Nil(t, provider.GetPositionalArgsBuilder())
-	})
-
-	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
-		assert.Nil(t, provider.GetCompatibilityFlags())
+	testCommandProvider(t, commandProviderTestCase{
+		name:                 "search",
+		provider:             &SearchCommandProvider{},
+		expectedCommandUse:   "search",
+		expectedName:         "search",
+		expectedGroup:        "Toolchain Commands",
+		expectFlagsBuilder:   true,
+		expectedFlagsBuilder: searchParser,
 	})
 }
 

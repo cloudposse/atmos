@@ -320,51 +320,8 @@ func displaySearchResults(tools []*toolchainregistry.Tool) {
 	t.SetStyles(s)
 
 	// Render table and apply conditional styling.
-	styled := renderSearchTableWithConditionalStyling(t.View(), rows)
+	styled := renderTableWithConditionalStyling(t.View(), rows)
 	_ = ui.Writeln(styled)
-}
-
-// renderSearchTableWithConditionalStyling applies color to status indicators and dims non-installed rows.
-func renderSearchTableWithConditionalStyling(tableView string, rows []searchRow) string {
-	lines := strings.Split(tableView, "\n")
-
-	// Define styles.
-	greenDot := lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // Green for installed.
-	grayDot := lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Gray for in config but not installed.
-	grayRow := lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Gray for entire uninstalled row.
-
-	// Apply conditional styling to each row.
-	for i, line := range lines {
-		if i == 0 || i == 1 {
-			// Header and border lines - keep as is.
-			continue
-		}
-
-		// Skip empty lines.
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-
-		// Map line to row data (adjust index for header and border).
-		rowIndex := i - 2
-		if rowIndex >= 0 && rowIndex < len(rows) {
-			rowData := rows[rowIndex]
-
-			// Color the status dot and apply row styling.
-			if rowData.isInstalled {
-				// Replace the dot with a green dot.
-				line = strings.Replace(line, statusIndicator, greenDot.Render(statusIndicator), 1)
-			} else if rowData.isInConfig {
-				// Replace the dot with a gray dot and gray the entire row.
-				line = strings.Replace(line, statusIndicator, grayDot.Render(statusIndicator), 1)
-				line = grayRow.Render(line)
-			}
-
-			lines[i] = line
-		}
-	}
-
-	return strings.Join(lines, "\n")
 }
 
 // SearchCommandProvider implements the CommandProvider interface for the 'toolchain registry search' command, wiring the search subcommand into the CLI framework with its associated flags and behaviors.
