@@ -111,13 +111,13 @@ func TestVersionListModelUpdate(t *testing.T) {
 	t.Run("Tab switches focus", func(t *testing.T) {
 		m.focused = "list"
 		result, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
-		resultModel := result.(versionListModel)
+		resultModel := result.(*versionListModel)
 		if resultModel.focused != "viewport" {
 			t.Error("Expected focus to switch to viewport")
 		}
 
 		result, _ = resultModel.Update(tea.KeyMsg{Type: tea.KeyTab})
-		resultModel = result.(versionListModel)
+		resultModel = result.(*versionListModel)
 		if resultModel.focused != "list" {
 			t.Error("Expected focus to switch back to list")
 		}
@@ -126,7 +126,7 @@ func TestVersionListModelUpdate(t *testing.T) {
 	// Test enter key
 	t.Run("Enter selects item", func(t *testing.T) {
 		result, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-		resultModel := result.(versionListModel)
+		resultModel := result.(*versionListModel)
 		if resultModel.selected == "" {
 			t.Error("Expected item to be selected")
 		}
@@ -136,7 +136,7 @@ func TestVersionListModelUpdate(t *testing.T) {
 	// Test window size message
 	t.Run("Window size update", func(t *testing.T) {
 		result, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-		resultModel := result.(versionListModel)
+		resultModel := result.(*versionListModel)
 		if resultModel.viewport.Width != 71 {
 			t.Errorf("Expected viewport width to be 71, got %d", resultModel.viewport.Width)
 		}
@@ -695,7 +695,7 @@ func TestVersionListModelWindowResize(t *testing.T) {
 
 	for _, size := range testSizes {
 		result, _ := m.Update(size)
-		resultModel := result.(versionListModel)
+		resultModel := result.(*versionListModel)
 
 		expectedLeftWidth := size.Width / 4
 		expectedRightWidth := size.Width - expectedLeftWidth - 2 - 2 // Account for separators and borders
@@ -794,7 +794,7 @@ func TestVersionListModelNoSelection(t *testing.T) {
 
 	// Test enter with no selection
 	result, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	resultModel := result.(versionListModel)
+	resultModel := result.(*versionListModel)
 
 	if resultModel.selected != "" {
 		t.Error("Expected no selection with empty list")
