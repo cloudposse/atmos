@@ -12,6 +12,7 @@ package exec
 import (
 	reflect "reflect"
 
+	auth "github.com/cloudposse/atmos/pkg/auth"
 	schema "github.com/cloudposse/atmos/pkg/schema"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -41,16 +42,16 @@ func (m *MockStacksProcessor) EXPECT() *MockStacksProcessorMockRecorder {
 }
 
 // ExecuteDescribeStacks mocks base method.
-func (m *MockStacksProcessor) ExecuteDescribeStacks(atmosConfig *schema.AtmosConfiguration, filterByStack string, components, componentTypes, sections []string, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks bool, skip []string) (map[string]any, error) {
+func (m *MockStacksProcessor) ExecuteDescribeStacks(atmosConfig *schema.AtmosConfiguration, filterByStack string, components, componentTypes, sections []string, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks bool, skip []string, authManager auth.AuthManager) (map[string]any, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExecuteDescribeStacks", atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip)
+	ret := m.ctrl.Call(m, "ExecuteDescribeStacks", atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager)
 	ret0, _ := ret[0].(map[string]any)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ExecuteDescribeStacks indicates an expected call of ExecuteDescribeStacks.
-func (mr *MockStacksProcessorMockRecorder) ExecuteDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip any) *gomock.Call {
+func (mr *MockStacksProcessorMockRecorder) ExecuteDescribeStacks(atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDescribeStacks", reflect.TypeOf((*MockStacksProcessor)(nil).ExecuteDescribeStacks), atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDescribeStacks", reflect.TypeOf((*MockStacksProcessor)(nil).ExecuteDescribeStacks), atmosConfig, filterByStack, components, componentTypes, sections, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks, skip, authManager)
 }

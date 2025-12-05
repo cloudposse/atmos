@@ -1,0 +1,45 @@
+---
+title: "Stage 2: The Monolithic Root Module"
+description: Terraform code expands into a monolithic root module.
+sidebar_label: "Stage 2: Write Terraliths"
+sidebar_position: 3
+id: stage-2
+---
+import Link from '@docusaurus/Link'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+As developers grow more comfortable with Terraform, they often transition to a more ambitious approach of automating everything. This results in creating a monolithic "root module," also known as a [Terralith](/terms/terralith).
+</Intro>
+
+This stage is characterized by an expansive,
+all-encompassing Terraform configuration that attempts to manage every aspect of the infrastructure within a single module.
+
+1. Developers begin by composing a single root module that continuously expands.
+2. Define all environments as code (dev, staging, production) within the single Terraform root module.
+3. Extensive use of feature flags for everything (e.g. `prod_cluster_size`, `staging_cluster_size`, etc.)
+
+:::warning New Problems
+1. Massive blast radius for every change
+2. Brittle and prolonged plan/apply cycles
+3. Large root modules become more complicated
+4. Far from DRY with significant code duplication
+5. Testing every parameter combination is impossible
+6. No practical way to separate responsibilities
+:::
+
+After a while, it becomes scary to apply the changes because, literally, anything can go wrong. Deployments are often interrupted by transient errors,
+expiring credentials, and API rate limits that require frequent and manual retries. To get around these problems or as a workaround
+for cycles, developers perform targeted applies (e.g. `terraform apply -target`), which is an anti-pattern.
+Unfortunately, it will take developers a few more stages of toil [to realize the inefficiencies of this approach (stage 5)](/intro/why-atmos/stage-5).
+
+## Realization
+
+When developers first started using Terraform, they didn’t appreciate the purpose behind modules.
+Everything seemed easy enough; just using plain resources worked. However, as the codebase grew, the need for structure and organization became clear. Now, it all makes sense, and developers commit to writing [everything new as a module](/intro/why-atmos/stage-3).
+
+<Link
+    to="/intro/why-atmos/nirvana"
+    className="button button--lg button--primary">
+    Try Atmos!
+</Link>

@@ -1,0 +1,261 @@
+---
+title: Using !terraform.state
+sidebar_position: 1
+sidebar_label: "!terraform.state (Recommended)"
+description: The fastest way to share state between components - reads directly from Terraform backends
+id: terraform-state
+slug: /stacks/sharing-state/terraform-state
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Terminal from '@site/src/components/Terminal'
+import KeyPoints from '@site/src/components/KeyPoints'
+
+<Intro>
+The `!terraform.state` YAML function is the **recommended and fastest** way to read Terraform/OpenTofu outputs
+from other components. It retrieves outputs directly from the configured [backends](/components/terraform/backends)
+without the overhead of initializing Terraform, downloading providers, or generating configuration files.
+</Intro>
+
+<KeyPoints>
+- **10-100x faster** than `!terraform.output` - no Terraform initialization required
+- Supports all major backends: S3, GCS, Azure, local
+- Same syntax as `!terraform.output` - easy migration
+- Automatic in-memory caching for repeated calls
+</KeyPoints>
+
+## Basic Usage
+
+The simplest form reads an output from another component in the same stack:
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+
+    eks:
+      vars:
+        # Read the vpc_id output from the vpc component
+        vpc_id: !terraform.state vpc vpc_id
+        # Read subnet IDs (a list output)
+        subnet_ids: !terraform.state vpc private_subnet_ids
+```
+</File>
+
+## Syntax
+
+```yaml
+# Get output from component in the current stack
+!terraform.state <component> <output>
+
+# Get output from component in a different stack
+!terraform.state <component> <stack> <output>
+
+# Use YQ expressions for complex outputs
+!terraform.state <component> <yq-expression>
+!terraform.state <component> <stack> <yq-expression>
+```
+
+## Cross-Stack References
+
+Read outputs from components in different stacks by specifying the stack name:
+
+<File title="stacks/prod-us-west-2.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        # Read from a component in a different stack
+        vpc_id: !terraform.state vpc prod-us-east-1 vpc_id
+
+        # Read from shared services stack
+        db_endpoint: !terraform.state rds shared-services endpoint
+```
+</File>
+
+### Dynamic Stack Names
+
+Use template expressions to construct stack names dynamically:
+
+```yaml
+# Reference the current stack
+vpc_id: !terraform.state vpc {{ .stack }} vpc_id
+
+# Construct stack name from context variables
+vpc_id: !terraform.state vpc {{ printf "%s-%s-prod" .vars.tenant .vars.environment }} vpc_id
+```
+
+## Working with Complex Outputs
+
+Use [YQ expressions](https://mikefarah.gitbook.io/yq) to extract values from complex output types:
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        # Get first item from a list
+        first_subnet: !terraform.state vpc .private_subnet_ids[0]
+
+        # Read a key from a map
+        db_host: !terraform.state config .database_config.host
+
+        # Chain multiple accessors
+        primary_az: !terraform.state vpc .availability_zones[0]
+```
+</File>
+
+### Default Values
+
+Provide default values for components that haven't been provisioned yet:
+
+```yaml
+# String default
+username: !terraform.state config ".username // ""default-user"""
+
+# List default
+subnet_ids: !terraform.state vpc ".private_subnet_ids // [""mock-subnet1"", ""mock-subnet2""]"
+
+# Map default
+config: !terraform.state settings '.config // {"env": "dev"}'
+```
+
+### String Manipulation
+
+Use YQ pipes to transform output values:
+
+```yaml
+# Prepend and append strings
+postgres_url: !terraform.state aurora-postgres ".hostname | ""jdbc:postgresql://"" + . + "":5432/db"""
+```
+
+## Why `!terraform.state` is Faster
+
+### Execution Flow Comparison
+
+**`!terraform.state` (Fast Path):**
+1. Resolve component context
+2. Read state file directly from backend
+3. Extract output value
+
+**`!terraform.output` (Slow Path):**
+1. Resolve component context
+2. Generate backend configuration
+3. Generate variable files
+4. Initialize Terraform (download providers)
+5. Run `terraform output` command
+6. Parse output
+
+The direct backend access makes `!terraform.state` **10-100x faster** depending on your setup.
+
+## Supported Backends
+
+The `!terraform.state` function supports these backend types:
+
+| Backend | Status |
+|---------|--------|
+| `s3` | Supported |
+| `gcs` | Supported |
+| `azurerm` | Supported |
+| `local` | Supported |
+
+For other backends, use [`!terraform.output`](/stacks/sharing-state/terraform-output) or [`!store`](/stacks/sharing-state/stores).
+
+## Caching
+
+Atmos automatically caches the results of `!terraform.state` calls in memory during command execution. If you reference the same component output multiple times, only the first call reads from the backend.
+
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        # These all use the cached result after the first call
+        vpc_id: !terraform.state vpc vpc_id
+        vpc_id_again: !terraform.state vpc vpc_id
+        vpc_cidr: !terraform.state vpc cidr_block
+```
+
+## Example: Multi-Tier Architecture
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    # Network layer
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+
+    # Database layer - depends on VPC
+    rds:
+      vars:
+        vpc_id: !terraform.state vpc vpc_id
+        subnet_ids: !terraform.state vpc private_subnet_ids
+
+    # Application layer - depends on VPC and RDS
+    eks:
+      vars:
+        vpc_id: !terraform.state vpc vpc_id
+        subnet_ids: !terraform.state vpc private_subnet_ids
+        database_endpoint: !terraform.state rds endpoint
+
+    # Service layer - depends on EKS
+    app:
+      vars:
+        cluster_endpoint: !terraform.state eks cluster_endpoint
+        cluster_ca: !terraform.state eks cluster_ca_certificate
+```
+</File>
+
+## Static Backend for Brownfield
+
+For brownfield scenarios where you need to inject static values without a real Terraform state:
+
+<File title="stacks/legacy.yaml">
+```yaml
+components:
+  terraform:
+    # Define static outputs
+    legacy-vpc:
+      remote_state_backend_type: static
+      remote_state_backend:
+        static:
+          vpc_id: "vpc-abc123"
+          subnet_ids:
+            - "subnet-111"
+            - "subnet-222"
+
+    # Reference static outputs like any other component
+    app:
+      vars:
+        vpc_id: !terraform.state legacy-vpc vpc_id
+        subnets: !terraform.state legacy-vpc subnet_ids
+```
+</File>
+
+## Considerations
+
+- **Secrets exposure**: Using `!terraform.state` with sensitive outputs can expose data in commands like `atmos describe component`
+- **Permissions**: You need read access to the state backend for all referenced components
+- **Cold starts**: If the source component hasn't been provisioned, the function returns `null` unless you specify a default value
+- **Cross-region DR**: Be mindful of disaster recovery implications when reading state across regions
+
+## Migration from !terraform.output
+
+Migrating from `!terraform.output` is straightforward - the syntax is identical:
+
+```yaml
+# Before
+vpc_id: !terraform.output vpc vpc_id
+
+# After
+vpc_id: !terraform.state vpc vpc_id
+```
+
+Simply replace `!terraform.output` with `!terraform.state` to get the performance benefits.

@@ -1,0 +1,38 @@
+---
+title: "Stage 1: Introduction to Terraform"
+description: Exploration into Terraform begins with a simple example.
+sidebar_label: "Stage 1: Hello World!"
+sidebar_position: 2
+id: stage-1
+---
+import Link from '@docusaurus/Link'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+At this initial stage, developers begin their Terraform journey with the basics, focusing on getting a grasp of Terraform's
+core concepts with a straightforward and simple implementation.
+</Intro>
+
+1. Developers roll up their sleeves to get a simple terraform example up and running. They create resources directly in the
+   configuration without the use of modules. This phase is characterized by hard-coded settings and a hands-on approach to learning
+   Terraform's syntax and capabilities.
+2. Local state files are used since this is just an exploration. This approach simplifies the learning process by avoiding the complexities of remote state management.
+3. Version control systems are not yet in use. Developers store their Terraform configurations directly on their local workstations
+   allowing them to focus on learning Terraform's mechanics without the added complexity of collaboration tools or best practices.
+
+:::warning New Problems
+1. How do we handle secrets?
+2. Where do we store the state file?
+3. How do we maintain something with so many hardcoded settings?
+:::
+
+## Realization
+
+With this quick win, developers realize Terraform's power, so they are eager to [Terraform everything in sight](/intro/why-atmos/stage-2).
+
+
+<Link
+    to="/intro/why-atmos/nirvana"
+    className="button button--lg button--primary">
+    Try Atmos!
+</Link>

@@ -1,0 +1,55 @@
+.key-takeaways {
+  background-color: transparent;
+  border: 1px solid #28a745;
+  border-radius: 20px;
+  padding: 20px;
+  margin-top: 2em;
+  margin-bottom: 2em;
+}
+
+[data-theme='dark'] .key-takeaways {
+  color: #67ffded2;
+  border: 1px solid #67ffded2;
+}
+
+[data-theme='dark'] .key-takeaways strong {
+  color: inherit;
+}
+
+[data-theme='dark'] .key-takeaways a {
+  color: inherit;
+}
+
+.key-takeaways a {
+  color: inherit;
+}
+
+.key-takeaways h2 {
+  margin-top: 0;
+  font-size: 1.5em;
+}
+
+.key-takeaways-content ul {
+  padding-left: 20px;
+  margin: 10px 0;
+  list-style: none;
+}
+
+.key-takeaways-content li {
+  margin-bottom: 10px;
+  font-size: 1.1em;
+  position: relative;
+  padding-left: 1.5em;
+}
+
+.key-takeaways-content li::before {
+  content: '\2713';
+  position: absolute;
+  left: 0;
+  color: #28a745;
+  font-weight: bold;
+}
+
+[data-theme='dark'] .key-takeaways-content li::before {
+  color: #67ffded2;
+}

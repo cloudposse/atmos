@@ -1,9 +1,12 @@
 ---
 slug: nested-backend-maps-support
-title: "Fixed: Nested Maps in Terraform Backend Configurations"
-authors: [atmos]
-tags: [bugfix, terraform, backend]
-date: 2025-01-04
+title: 'Fixed: Nested Maps in Terraform Backend Configurations'
+authors:
+  - osterman
+tags:
+  - bugfix
+date: 2025-01-04T00:00:00.000Z
+release: v1.198.0
 ---
 
 Atmos now properly handles nested maps in Terraform backend configurations when using HCL format. This fixes an issue where complex backend settings like `assume_role` were silently dropped.

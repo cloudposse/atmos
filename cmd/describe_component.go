@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -80,9 +81,41 @@ var describeComponentCmd = &cobra.Command{
 			return errors.Join(errUtils.ErrFailedToInitConfig, err)
 		}
 
-		// Get identity from flag and create AuthManager if provided.
+		// Get identity flag value.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
-		authManager, err := CreateAuthManagerFromIdentity(identityName, &atmosConfig.Auth)
+
+		// Get component-specific auth config and merge with global auth config.
+		// This follows the same pattern as terraform.go to handle stack-level default identities.
+		// Start with global config.
+		mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
+
+		// Get component config to extract auth section (without processing YAML functions to avoid circular dependency).
+		componentConfig, componentErr := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+			Component:            component,
+			Stack:                stack,
+			ProcessTemplates:     false,
+			ProcessYamlFunctions: false, // Avoid circular dependency with YAML functions that need auth.
+			Skip:                 nil,
+			AuthManager:          nil, // No auth manager yet - we're determining which identity to use.
+		})
+		if componentErr != nil {
+			// If component doesn't exist, exit immediately before attempting authentication.
+			// This prevents prompting for identity when the component is invalid.
+			if errors.Is(componentErr, errUtils.ErrInvalidComponent) {
+				return componentErr
+			}
+			// For other errors (e.g., permission issues), continue with global auth config.
+		} else {
+			// Merge component-specific auth with global auth.
+			mergedAuthConfig, err = auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, &atmosConfig, cfg.AuthSectionName)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Create and authenticate AuthManager using merged auth config.
+		// This enables stack-level default identity to be recognized.
+		authManager, err := CreateAuthManagerFromIdentity(identityName, mergedAuthConfig)
 		if err != nil {
 			return err
 		}
