@@ -1,0 +1,126 @@
+---
+title: "AWS Assume Root Identity for Centralized Root Access"
+slug: aws-assume-root-identity
+authors:
+  - osterman
+tags:
+  - feature
+  - security
+---
+
+Atmos now supports the `aws/assume-root` identity kind, enabling secure, centralized management of root access across your AWS Organization using the STS AssumeRoot API.
+
+<!--truncate-->
+
+## The Challenge with Root Access
+
+Root access in AWS member accounts has traditionally been problematic:
+
+- **Security risk**: Root credentials scattered across multiple accounts
+- **Audit gaps**: No centralized logging of root access
+- **Operational burden**: Managing root passwords for dozens or hundreds of accounts
+- **Compliance issues**: Difficult to prove who accessed root and when
+
+AWS introduced [Centralized Root Access](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-enable-root-access.html) to address these challenges, allowing management account administrators to assume root in member accounts using short-lived credentials. Now Atmos makes this capability accessible through its authentication system.
+
+## How It Works
+
+The `aws/assume-root` identity kind integrates with AWS STS AssumeRoot API to provide:
+
+1. **Credential chaining**: Chain from an SSO permission set to assume root in target accounts
+2. **Task-scoped access**: Use AWS-managed task policies to limit root operations
+3. **Short-lived credentials**: 15-minute maximum session duration (AWS limit)
+4. **Audit trail**: All access logged through CloudTrail
+
+### Configuration Example
+
+```yaml
+# atmos.yaml
+auth:
+  providers:
+    acme-sso:
+      kind: aws/iam-identity-center
+      start_url: https://acme.awsapps.com/start
+      region: us-east-1
+
+  identities:
+    # First, authenticate with a permission set that has sts:AssumeRoot
+    org-root-access:
+      kind: aws/permission-set
+      via:
+        provider: acme-sso
+      principal:
+        name: RootAccess
+        account:
+          name: core-root
+
+    # Then chain to assume root in the target account
+    audit/iam-audit-root:
+      kind: aws/assume-root
+      via:
+        identity: org-root-access
+      principal:
+        target_principal: "123456789012"  # Target account ID
+        task_policy_arn: arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials
+```
+
+### Usage
+
+```bash
+# Authenticate and assume root in one command
+atmos auth login --identity audit/iam-audit-root
+
+# Or use exec for one-off commands
+atmos auth exec --identity audit/iam-audit-root -- aws iam list-mfa-devices
+```
+
+## Supported Task Policies
+
+AWS provides managed task policies that scope root access to specific operations:
+
+| Policy | Use Case |
+|--------|----------|
+| `IAMAuditRootUserCredentials` | Audit root user MFA and access keys |
+| `IAMCreateRootUserPassword` | Create or reset root password |
+| `IAMDeleteRootUserCredentials` | Remove root access keys and MFA |
+| `S3UnlockBucketPolicy` | Unlock S3 buckets with restrictive policies |
+| `SQSUnlockQueuePolicy` | Unlock SQS queues with restrictive policies |
+
+These policies ensure root access is limited to the specific task at hand.
+
+## Prerequisites
+
+To use `aws/assume-root`:
+
+1. **Enable centralized root access** in your AWS Organization
+2. **Configure a permission set** with `sts:AssumeRoot` permission in your management account
+3. **Target account must be a member** of your AWS Organization
+
+## Security Benefits
+
+- **No persistent root credentials**: All access uses short-lived STS tokens
+- **Principle of least privilege**: Task policies limit what root can do
+- **Centralized audit**: All access logged in CloudTrail
+- **Credential chaining**: Leverages existing SSO infrastructure
+
+## Get Started
+
+Update to the latest Atmos and configure your first assume-root identity:
+
+```yaml
+auth:
+  identities:
+    my-account/audit-root:
+      kind: aws/assume-root
+      via:
+        identity: your-root-access-permission-set
+      principal:
+        target_principal: "YOUR_ACCOUNT_ID"
+        task_policy_arn: arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials
+```
+
+For detailed configuration options, see the [Authentication Documentation](/cli/commands/auth/usage).
+
+## Feedback
+
+We'd love to hear how assume-root works for your organization. Share your experience in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions) or report issues in [GitHub Issues](https://github.com/cloudposse/atmos/issues).
