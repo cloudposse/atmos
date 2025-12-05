@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -74,8 +77,9 @@ func (g *GitHubProvider) GetDiff(
 
 	// Use GitHub Compare API.
 	// https://docs.github.com/en/rest/commits/commits#compare-two-commits
+	// Path-escape ref names since they may contain slashes.
 	compareURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/compare/%s...%s",
-		owner, repo, fromVersion, toVersion)
+		owner, repo, url.PathEscape(fromVersion), url.PathEscape(toVersion))
 
 	req, err := http.NewRequest("GET", compareURL, nil)
 	if err != nil {
@@ -167,16 +171,16 @@ func IsGitHubSource(source string) bool {
 	return strings.Contains(source, "github.com")
 }
 
-// GetGitHubToken retrieves the GitHub token from Atmos settings or environment.
+// GetGitHubToken retrieves the GitHub token from environment.
+// Checks ATMOS_GITHUB_TOKEN first (per ATMOS_ prefix convention), then GITHUB_TOKEN.
 func GetGitHubToken() string {
 	defer perf.Track(nil, "source.GetGitHubToken")()
 
-	// This would integrate with Atmos configuration system.
-	// For now, return empty string - the actual implementation would check:
-	// 1. ATMOS_GITHUB_TOKEN
-	// 2. GITHUB_TOKEN
-	// 3. atmosConfig.Settings.AtmosGithubToken
-	return ""
+	// Use viper to check environment variables per project conventions.
+	// BindEnv maps the key to environment variables.
+	v := viper.New()
+	_ = v.BindEnv("github_token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
+	return v.GetString("github_token")
 }
 
 // GitHubRateLimitResponse represents the GitHub API rate limit response.
