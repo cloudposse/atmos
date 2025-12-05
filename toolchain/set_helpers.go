@@ -48,7 +48,7 @@ func fetchAndValidateVersions(owner, repo string) ([]versionItem, error) {
 }
 
 // createVersionListModel creates and configures the interactive version selection UI model.
-func createVersionListModel(owner, repo string, items []versionItem, scrollSpeed int) versionListModel {
+func createVersionListModel(owner, repo string, items []versionItem, scrollSpeed int) *versionListModel {
 	listItems := make([]list.Item, len(items))
 	for i, item := range items {
 		listItems[i] = item
@@ -67,7 +67,7 @@ func createVersionListModel(owner, repo string, items []versionItem, scrollSpeed
 		scrollSpeed = 3
 	}
 
-	m := versionListModel{
+	m := &versionListModel{
 		list:        l,
 		viewport:    vp,
 		owner:       owner,
@@ -89,14 +89,14 @@ func createVersionListModel(owner, repo string, items []versionItem, scrollSpeed
 }
 
 // runInteractiveSelection runs the interactive version selection UI and returns the selected version.
-func runInteractiveSelection(m versionListModel) (string, error) {
+func runInteractiveSelection(m *versionListModel) (string, error) {
 	p := tea.NewProgram(m)
 	finalModel, err := p.Run()
 	if err != nil {
 		return "", fmt.Errorf("failed to run interactive selection: %w", err)
 	}
 
-	finalVersionModel := finalModel.(versionListModel)
+	finalVersionModel := finalModel.(*versionListModel)
 	if finalVersionModel.selected == "" {
 		return "", fmt.Errorf("%w: no version selected", ErrInvalidToolSpec)
 	}

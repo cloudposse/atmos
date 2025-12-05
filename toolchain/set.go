@@ -69,13 +69,13 @@ type versionListModel struct {
 	scrollSpeed      int    // Scroll speed multiplier (1 = normal, 2 = fast, 3 = very fast, etc.)
 }
 
-func (m versionListModel) Init() tea.Cmd {
+func (m *versionListModel) Init() tea.Cmd {
 	defer perf.Track(nil, "toolchain.versionListModel.Init")()
 
 	return nil
 }
 
-func (m versionListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *versionListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	defer perf.Track(nil, "toolchain.versionListModel.Update")()
 
 	switch msg := msg.(type) {
@@ -199,7 +199,7 @@ func (m versionListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmd, vpCmd)
 }
 
-func (m versionListModel) View() string {
+func (m *versionListModel) View() string {
 	defer perf.Track(nil, "toolchain.versionListModel.View")()
 
 	if m.err != nil {
@@ -451,13 +451,13 @@ type ModelI interface {
 	Items() []list.Item
 }
 
-func (d customDelegate) RenderFooter(w int, m ModelI) string {
+func (d *customDelegate) RenderFooter(w int, m ModelI) string {
 	defer perf.Track(nil, "toolchain.customDelegate.RenderFooter")()
 
 	return fmt.Sprintf(" %d releases", len(m.Items()))
 }
 
-func newCustomDelegate() customDelegate {
+func newCustomDelegate() *customDelegate {
 	d := list.NewDefaultDelegate()
-	return customDelegate{d}
+	return &customDelegate{d}
 }
