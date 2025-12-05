@@ -1,3 +1,6 @@
+vars:
+  stage: demo
+
 components:
   terraform:
     github-stars:
