@@ -18,6 +18,13 @@ import (
 	toolchainpkg "github.com/cloudposse/atmos/toolchain"
 )
 
+const (
+	// Flag names.
+	flagGitHubToken   = "github-token"
+	flagToolVersions  = "tool-versions"
+	flagToolchainPath = "toolchain-path"
+)
+
 // ToolchainParser handles flag parsing for toolchain persistent flags.
 var toolchainParser *flags.StandardParser
 
@@ -85,32 +92,32 @@ var toolchainCmd = &cobra.Command{
 func init() {
 	// Create parser with toolchain-specific persistent flags using functional options.
 	toolchainParser = flags.NewStandardParser(
-		flags.WithStringFlag("github-token", "", "", "GitHub token for authenticated requests"),
-		flags.WithStringFlag("tool-versions", "", ".tool-versions", "Path to tool-versions file"),
-		flags.WithStringFlag("toolchain-path", "", ".tools", "Directory to store installed tools"),
-		flags.WithEnvVars("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"),
-		flags.WithEnvVars("tool-versions", "ATMOS_TOOL_VERSIONS"),
-		flags.WithEnvVars("toolchain-path", "ATMOS_TOOLCHAIN_PATH"),
+		flags.WithStringFlag(flagGitHubToken, "", "", "GitHub token for authenticated requests"),
+		flags.WithStringFlag(flagToolVersions, "", ".tool-versions", "Path to tool-versions file"),
+		flags.WithStringFlag(flagToolchainPath, "", ".tools", "Directory to store installed tools"),
+		flags.WithEnvVars(flagGitHubToken, "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"),
+		flags.WithEnvVars(flagToolVersions, "ATMOS_TOOL_VERSIONS"),
+		flags.WithEnvVars(flagToolchainPath, "ATMOS_TOOLCHAIN_PATH"),
 	)
 
 	// Register persistent flags (inherited by all subcommands).
 	toolchainParser.RegisterPersistentFlags(toolchainCmd)
 
 	// Hide the github-token flag from help.
-	if err := toolchainCmd.PersistentFlags().MarkHidden("github-token"); err != nil {
+	if err := toolchainCmd.PersistentFlags().MarkHidden(flagGitHubToken); err != nil {
 		panic(err)
 	}
 
 	// Bind flags to Viper for environment variable support.
 	// We need custom Viper keys for toolchain flags, so bind them manually.
 	v := viper.GetViper()
-	if err := v.BindPFlag("github-token", toolchainCmd.PersistentFlags().Lookup("github-token")); err != nil {
+	if err := v.BindPFlag(flagGitHubToken, toolchainCmd.PersistentFlags().Lookup(flagGitHubToken)); err != nil {
 		panic(err)
 	}
-	if err := v.BindPFlag("toolchain.tool-versions", toolchainCmd.PersistentFlags().Lookup("tool-versions")); err != nil {
+	if err := v.BindPFlag("toolchain.tool-versions", toolchainCmd.PersistentFlags().Lookup(flagToolVersions)); err != nil {
 		panic(err)
 	}
-	if err := v.BindPFlag("toolchain.path", toolchainCmd.PersistentFlags().Lookup("toolchain-path")); err != nil {
+	if err := v.BindPFlag("toolchain.path", toolchainCmd.PersistentFlags().Lookup(flagToolchainPath)); err != nil {
 		panic(err)
 	}
 
