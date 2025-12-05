@@ -13,6 +13,30 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// verifyPermissionErrorOutput verifies output when permission errors occur.
+func verifyPermissionErrorOutput(t *testing.T, output, expectedOutput, cacheDir string) {
+	t.Helper()
+
+	outputLines := strings.Split(output, "\n")
+	expectedLines := strings.Split(expectedOutput, "\n")
+	if len(outputLines) != len(expectedLines) {
+		t.Errorf("unexpected number of output lines:\nGot: %d\nWant: %d\nGot:\n%s\nWant:\n%s", len(outputLines), len(expectedLines), output, expectedOutput)
+	}
+	for i, expectedLine := range expectedLines {
+		if i >= len(outputLines) {
+			continue
+		}
+		if strings.Contains(expectedLine, "Warning") {
+			// Flexible check for warnings: must contain directory and "permission denied".
+			if !strings.Contains(outputLines[i], cacheDir) || !strings.Contains(outputLines[i], "permission denied") {
+				t.Errorf("unexpected warning line:\nGot: %s\nWant containing: %s", outputLines[i], expectedLine)
+			}
+		} else if outputLines[i] != expectedLine {
+			t.Errorf("unexpected output line:\nGot: %s\nWant: %s", outputLines[i], expectedLine)
+		}
+	}
+}
+
 func TestCleanToolsAndCaches(t *testing.T) {
 	// Helper to create a test directory with files and subdirectories
 	createTestDir := func(t *testing.T, baseDir string, files, dirs []string) {
@@ -252,24 +276,7 @@ Warning: failed to delete %s: permission denied
 
 			// Verify output
 			if strings.Contains(tt.name, "PermissionError_CacheDir") {
-				outputLines := strings.Split(output, "\n")
-				expectedLines := strings.Split(expectedOutput, "\n")
-				if len(outputLines) != len(expectedLines) {
-					t.Errorf("unexpected number of output lines:\nGot: %d\nWant: %d\nGot:\n%s\nWant:\n%s", len(outputLines), len(expectedLines), output, expectedOutput)
-				}
-				for i, expectedLine := range expectedLines {
-					if i >= len(outputLines) {
-						continue
-					}
-					if strings.Contains(expectedLine, "Warning") {
-						// Flexible check for warnings: must contain directory and "permission denied"
-						if !strings.Contains(outputLines[i], cacheDir) || !strings.Contains(outputLines[i], "permission denied") {
-							t.Errorf("unexpected warning line:\nGot: %s\nWant containing: %s", outputLines[i], expectedLine)
-						}
-					} else if outputLines[i] != expectedLine {
-						t.Errorf("unexpected output line:\nGot: %s\nWant: %s", outputLines[i], expectedLine)
-					}
-				}
+				verifyPermissionErrorOutput(t, output, expectedOutput, cacheDir)
 			} else if output != expectedOutput {
 				t.Errorf("unexpected output:\nGot:\n%s\nWant:\n%s", output, expectedOutput)
 			}

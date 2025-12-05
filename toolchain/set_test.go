@@ -1091,40 +1091,48 @@ func (m *MockGitHubClient) FetchVersions(owner, repo string) ([]versionItem, err
 	return nil, fmt.Errorf("not implemented")
 }
 
+// selectVersionInteractively fetches and selects a version for a tool.
+func selectVersionInteractively(owner, repo string, installer ToolInstaller, githubClient GitHubClient) (string, error) {
+	tool, err := installer.findTool(owner, repo, "")
+	if err != nil {
+		return "", fmt.Errorf("failed to find tool configuration: %w", err)
+	}
+
+	if tool.Type != "github_release" {
+		return "", fmt.Errorf("interactive version selection is only available for GitHub release type tools")
+	}
+
+	items, err := githubClient.FetchVersions(owner, repo)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch versions from GitHub: %w", err)
+	}
+	if len(items) == 0 {
+		return "", fmt.Errorf("no versions found for %s/%s", owner, repo)
+	}
+
+	// In a real implementation, this would show the interactive UI.
+	// For testing purposes, we'll just select the first version.
+	return items[0].version, nil
+}
+
 // Refactored SetToolVersion function that accepts dependencies.
 func SetToolVersionWithDeps(toolName, version string, scrollSpeed int, installer ToolInstaller, versionManager VersionManager, githubClient GitHubClient, configFilePath string) error {
-	// Resolve the tool name to handle aliases
+	// Resolve the tool name to handle aliases.
 	owner, repo, err := installer.parseToolSpec(toolName)
 	if err != nil {
 		return fmt.Errorf("invalid tool name: %w", err)
 	}
 	resolvedKey := owner + "/" + repo
 
-	// If no version provided, fetch available versions and show interactive selection
+	// If no version provided, fetch available versions and show interactive selection.
 	if version == "" {
-		tool, err := installer.findTool(owner, repo, "")
+		version, err = selectVersionInteractively(owner, repo, installer, githubClient)
 		if err != nil {
-			return fmt.Errorf("failed to find tool configuration: %w", err)
+			return err
 		}
-
-		if tool.Type != "github_release" {
-			return fmt.Errorf("interactive version selection is only available for GitHub release type tools")
-		}
-
-		items, err := githubClient.FetchVersions(owner, repo)
-		if err != nil {
-			return fmt.Errorf("failed to fetch versions from GitHub: %w", err)
-		}
-		if len(items) == 0 {
-			return fmt.Errorf("no versions found for %s/%s", owner, repo)
-		}
-
-		// In a real implementation, this would show the interactive UI
-		// For testing purposes, we'll just select the first version
-		version = items[0].version
 	}
 
-	// Add the tool with the selected version
+	// Add the tool with the selected version.
 	err = versionManager.AddToolToVersions(configFilePath, resolvedKey, version)
 	if err != nil {
 		return fmt.Errorf("failed to set version: %w", err)
