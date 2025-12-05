@@ -10,8 +10,8 @@ import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Use this command to describe the complete configuration for an [Atmos component](/core-concepts/components) in
-an [Atmos stack](/core-concepts/stacks).
+Use this command to describe the complete configuration for an [Atmos component](/components) in
+an [Atmos stack](/learn/stacks).
 </Intro>
 
 <Screengrab title="atmos describe component --help" slug="atmos-describe-component--help" />
@@ -146,13 +146,13 @@ The command outputs the final deep-merged component configuration.
 
 The output contains the following sections:
 
-- `atlantis_project` - Atlantis project name (if [Atlantis Integration](/integrations/atlantis) is configured for the component in the stack)
+- `atlantis_project` - Atlantis project name (if [Atlantis Integration](/cli/configuration/integrations/atlantis) is configured for the component in the stack)
 
 - `atmos_cli_config` - information about Atmos CLI configuration from `atmos.yaml`
 
-- `atmos_component` - [Atmos component](/core-concepts/components) name
+- `atmos_component` - [Atmos component](/components) name
 
-- `atmos_stack` - [Atmos stack](/core-concepts/stacks) name
+- `atmos_stack` - [Atmos stack](/learn/stacks) name
 
 - `stack` - same as `atmos_stack`
 
@@ -183,7 +183,7 @@ The output contains the following sections:
 
 - `env` - a map of ENV variables defined for the Atmos component
 
-- `inheritance` - component's [inheritance chain](/core-concepts/stacks/inheritance)
+- `inheritance` - component's [inheritance chain](/howto/inheritance)
 
 - `metadata` - component's metadata config
 
@@ -195,7 +195,7 @@ The output contains the following sections:
 
 - `sources` - sources of the values from the component's sections (`vars`, `env`, `settings`)
 
-- `spacelift_stack` - Spacelift stack name (if [Spacelift Integration](/integrations/spacelift) is configured for the component in the stack
+- `spacelift_stack` - Spacelift stack name (if [Spacelift Integration](/cli/configuration/integrations/spacelift) is configured for the component in the stack
   and `settings.spacelift.workspace_enabled` is set to `true`)
 
 - `vars` - the final deep-merged component variables that are provided to Terraform/OpenTofu and Helmfile when executing
@@ -210,7 +210,7 @@ The output contains the following sections:
 - `deps` - a list of component stack dependencies where the _final_ values of all component configurations are defined
   (after the deep-merging and processing all the inheritance chains and all the base components)
 
-- `overrides` - a map of overrides for the component. Refer to [Component Overrides](/core-concepts/stacks/overrides) for more details
+- `overrides` - a map of overrides for the component. Refer to [Component Overrides](/stacks/overrides) for more details
 
 - `providers` - a map of provider configurations for the component
 
@@ -219,10 +219,10 @@ The output contains the following sections:
 The difference between the `imports`, `deps_all` and `deps` outputs is as follows:
 
 - `imports` shows all imports in the stack for all components. This can be useful in GitHub actions and
-   in [OPA validation policies](/core-concepts/validate/opa) to check whether an import is allowed in the stack or not
+   in [OPA validation policies](/validation/opa) to check whether an import is allowed in the stack or not
 
 - `deps_all` shows all component stack dependencies (imports and root-level stacks) where any configuration for the component is present.
-  This also can be useful in GitHub Actions and [OPA validation policies](/core-concepts/validate/opa) to check whether a user or a team
+  This also can be useful in GitHub Actions and [OPA validation policies](/validation/opa) to check whether a user or a team
   is allowed to import a particular config file for the component in the stack
 
 - `deps` shows all the component stack dependencies where the __FINAL__ values from all the component sections are defined
@@ -230,7 +230,7 @@ The difference between the `imports`, `deps_all` and `deps` outputs is as follow
   to detect only the affected files that the component depends on. `deps` is usually a much smaller list than `deps_all` and can
   differ from it in the following ways:
 
-  - An Atmos component can inherit configurations from many base components, see [Component Inheritance](/core-concepts/stacks/inheritance), and
+  - An Atmos component can inherit configurations from many base components, see [Component Inheritance](/howto/inheritance), and
     import those base component configurations
 
   - The component can override all the default variables from the base components, and the final values are not dependent on the base component
@@ -721,7 +721,7 @@ Which we can interpret as follows (reading from the last to the first item in th
   section (inline). This value overrode the value set in the global `vars` section
 
 - Finally, in the `catalog/terraform/test-component` stack manifest (which was imported into the parent Atmos stack
-  via [`import`](/core-concepts/stacks/imports)), the value for `enabled` was set to `true` in the `components.terraform.vars` section of
+  via [`import`](/stacks/imports)), the value for `enabled` was set to `true` in the `components.terraform.vars` section of
   the `test/test-component-override-3` Atmos component. This value overrode all the previous values arriving at the `final_value: true` for the
   variable. This final value is then set for the `enabled` variable of the Terraform component `test/test-component` when Atmos
   executes `atmos terraform apply test/test-component-override-3 -s <stack>` command
@@ -850,7 +850,7 @@ Which we can interpret as follows (reading from the last to the first item in th
   set in the `catalog/terraform/test-component` and `catalog/terraform/test-component-override` stack manifests
 
 - Finally, in the `catalog/terraform/test-component-override-3` stack manifest (which was imported into the parent Atmos stack
-  via [`import`](/core-concepts/stacks/imports)), the value was set to `val1-override-3` in the `components.terraform.env` section of
+  via [`import`](/stacks/imports)), the value was set to `val1-override-3` in the `components.terraform.env` section of
   the `test/test-component-override-3` Atmos component. This value overrode all the previous values arriving at the `final_value: val1-override-3` for
   the ENV variable
 

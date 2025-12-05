@@ -1,57 +1,145 @@
 ---
-title: Customize Commands
+title: Custom Commands
 sidebar_position: 1
+sidebar_label: commands
+sidebar_class_name: command
 id: commands
 description: Use the `atmos.yaml` to configure any custom commands you want to add to the Atmos CLI.
 ---
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
+
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-You can extend the Atmos CLI and add as many custom commands as you want. This is a great way to increase improve the DX by exposing a consistent CLI interface to developers.
+Atmos can be easily extended to support any number of custom CLI commands. Custom commands are exposed through the `atmos` CLI when you run `atmos help`. It's a great way to centralize the way operational tools are run in order to improve DX.
 </Intro>
 
-For example, one great way to use custom commands is to tie all the miscellaneous scripts into one consistent CLI interface.
-Then we can kiss those ugly, inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script.
-Then, developers can just run `atmos help` and discover all available commands.
+For example, one great way to use custom commands is to tie all the miscellaneous scripts into one consistent CLI interface. Then we can kiss those
+ugly, inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. Then developers can just run `atmos help`
+and discover all available commands.
 
-Here are some examples to play around with to get started.
+## Simple Example
 
-<File title="atmos.yaml">
+Here is an example to play around with to get started.
+
+Adding the following to `atmos.yaml` will introduce a new `hello` command.
+
 ```yaml
 # Custom CLI commands
 commands:
-  - name: tf
-    description: Execute 'terraform' commands
+  - name: hello
+    description: This command says Hello world
+    steps:
+      - "echo Hello world!"
+```
 
-    # subcommands
-    commands:
-      - name: plan
-        description: This command plans terraform components
-        arguments:
-          - name: component
-            description: Name of the component
-        flags:
-          - name: stack
-            shorthand: s
-            description: Name of the stack
-            required: true
-        env:
-          - key: ENV_VAR_1
-            value: ENV_VAR_1_value
-          - key: ENV_VAR_2
-            # 'valueCommand' is an external command to execute to get the value for the ENV var
-            # Either 'value' or 'valueCommand' can be specified for the ENV var, but not both
-            valueCommand: echo ENV_VAR_2_value
-        # steps support Go templates
-        steps:
-          - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
+We can run this example like this:
 
+```shell
+atmos hello
+```
+
+## Positional Arguments
+
+Atmos also supports positional arguments. If a positional argument is required but not provided by the user,
+the command will fail—unless you define a default in your config.
+
+For the example, adding the following to `atmos.yaml` will introduce a new `greet` command that accepts one `name` argument,
+but uses a default of "John Doe" if none is provided.
+
+```yaml
+# subcommands
+commands:
+  - name: greet
+    description: This command says hello to the provided name
+    arguments:
+      - name: name
+        description: Name to greet
+        required: true
+        default: John Doe
+    steps:
+      - "echo Hello {{ .Arguments.name }}!"
+```
+
+We can run this example like this:
+
+```shell
+atmos greet Alice
+```
+or defaulting to "John Doe"
+
+```shell
+atmos greet
+```
+
+## Trailing Arguments
+
+Atmos supports **trailing arguments** after `--` (a standalone double-dash). The `--` itself is a delimiter that signals the end of Atmos-specific options. Anything after `--` is passed directly to the underlying command without being interpreted by Atmos. The value of these trailing arguments is accessible in `{{ .TrailingArgs }}`.
+
+For the example, adding the following to `atmos.yaml` will introduce a new `echo` command that accepts one `name` argument and also uses trailingArgs
+
+```yaml
+- name: ansible run
+  description: "Runs an Ansible playbook, allowing extra arguments after --."
+  arguments:
+    - name: playbook
+      description: "The Ansible playbook to run"
+      default: site.yml
+      required: true
+  steps:
+    - "ansible-playbook {{ .Arguments.playbook }} {{ .TrailingArgs }}"
+```
+Output:
+
+```bash
+$ atmos ansible run -- --limit web
+Running: ansible-playbook site.yml --limit web
+
+PLAY [web] *********************************************************************
+
+```
+
+
+## Passing Flags
+
+Passing flags works much like passing positional arguments, except for that they are passed using long or short flags.
+Flags can be optional (this is configured by setting the `required` attribute to `false`).
+
+```yaml
+# subcommands
+commands:
+  - name: hello
+    description: This command says hello to the provided name
+    flags:
+      - name: name
+        shorthand: n
+        description: Name to greet
+        required: true
+    steps:
+      - "echo Hello {{ .Flags.name }}!"
+```
+
+We can run this example like this, using the long flag:
+
+```shell
+atmos hello --name world
+```
+
+Or, using the shorthand, we can just write:
+
+```shell
+atmos hello -n world
+```
+
+## Advanced Examples
+
+### Define a New Terraform Command
+
+```yaml
+# Custom CLI commands
+commands:
   - name: terraform
     description: Execute 'terraform' commands
-
     # subcommands
     commands:
       - name: provision
@@ -59,13 +147,11 @@ commands:
         arguments:
           - name: component
             description: Name of the component
-
         flags:
           - name: stack
             shorthand: s
             description: Name of the stack
             required: true
-
         # ENV var values support Go templates
         env:
           - key: ATMOS_COMPONENT
@@ -75,10 +161,38 @@ commands:
         steps:
           - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
           - atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
+```
 
+### Override an Existing Terraform Command
+
+```yaml
+# Custom CLI commands
+commands:
+  - name: terraform
+    description: Execute 'terraform' commands
+    # subcommands
+    commands:
+      - name: apply
+        description: This command executes 'terraform apply -auto-approve' on terraform components
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+        steps:
+          - atmos terraform apply {{ .Arguments.component }} -s {{ .Flags.stack }} -auto-approve
+```
+
+### Show Component Info
+
+```yaml
+# Custom CLI commands
+commands:
   - name: show
     description: Execute 'show' commands
-
     # subcommands
     commands:
       - name: component
@@ -91,7 +205,6 @@ commands:
             shorthand: s
             description: Name of the stack
             required: true
-
         # ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
         env:
           - key: ATMOS_COMPONENT
@@ -104,9 +217,6 @@ commands:
             value: "{{ .ComponentConfig.vars.stage }}"
           - key: ATMOS_ENVIRONMENT
             value: "{{ .ComponentConfig.vars.environment }}"
-          - key: ATMOS_IS_PROD
-            value: "{{ .ComponentConfig.settings.config.is_prod }}"
-
         # If a custom command defines 'component_config' section with 'component' and 'stack', 'atmos' generates the config for the component in the stack
         # and makes it available in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables,
         # exposing all the component sections (which are also shown by 'atmos describe component' command)
@@ -126,49 +236,21 @@ commands:
           - 'echo Tenant: "{{ .ComponentConfig.vars.tenant }}"'
           - 'echo Environment: "{{ .ComponentConfig.vars.environment }}"'
           - 'echo Stage: "{{ .ComponentConfig.vars.stage }}"'
-          - 'echo settings.spacelift.workspace_enabled: "{{ .ComponentConfig.settings.spacelift.workspace_enabled }}"'
           - 'echo Dependencies: "{{ .ComponentConfig.deps }}"'
-          - 'echo settings.config.is_prod: "{{ .ComponentConfig.settings.config.is_prod }}"'
-          - 'echo ATMOS_IS_PROD: "$ATMOS_IS_PROD"'
+```
 
-  - name: list
-    description: Execute 'atmos list' commands
-    # subcommands
-    commands:
-      - name: stacks
-        description: |
-          List all Atmos stacks.
-        steps:
-          - >
-            atmos describe stacks --process-templates=false --sections none | grep -e "^\S" | sed s/://g
-      - name: components
-        description: |
-          List all Atmos components in all stacks or in a single stack.
+### Set EKS Cluster
 
-          Example usage:
-            atmos list components
-            atmos list components -s tenant1-ue1-dev
-            atmos list components --stack tenant2-uw2-prod
-        flags:
-          - name: stack
-            shorthand: s
-            description: Name of the stack
-            required: false
-        steps:
-          - >
-            {{ if .Flags.stack }}
-            atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
-            {{ else }}
-            atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
-            {{ end }}
-
+```yaml
+# Custom CLI commands
+commands:
   - name: set-eks-cluster
     description: |
       Download 'kubeconfig' and set EKS cluster.
 
       Example usage:
-        atmos set-eks-cluster eks/cluster -s tenant1-ue1-dev -r admin
-        atmos set-eks-cluster eks/cluster -s tenant2-uw2-prod --role reader
+        atmos set-eks-cluster eks/cluster -s plat-ue1-dev -r admin
+        atmos set-eks-cluster eks/cluster -s plat-uw2-prod --role reader
     verbose: false  # Set to `true` to see verbose outputs
     arguments:
       - name: component
@@ -204,8 +286,164 @@ commands:
       - chmod 600 ${KUBECONFIG}
       - echo ${KUBECONFIG}
 ```
-</File>
+
+### List Stacks and Components
+
+```yaml
+# Custom CLI commands
+commands:
+  - name: list
+    description: Execute 'atmos list' commands
+    # subcommands
+    commands:
+      - name: stacks
+        description: |
+          List all Atmos stacks.
+        steps:
+          - >
+            atmos describe stacks --process-templates=false --sections none | grep -e "^\S" | sed s/://g
+      - name: components
+        description: |
+          List all Atmos components in all stacks or in a single stack.
+
+          Example usage:
+            atmos list components
+            atmos list components -s tenant1-ue1-dev
+            atmos list components --stack tenant2-uw2-prod
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: false
+        steps:
+          - >
+            {{ if .Flags.stack }}
+            atmos describe stacks --stack {{ .Flags.stack }} --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+            {{ else }}
+            atmos describe stacks --format json --sections none | jq ".[].components.terraform" | jq -s add | jq -r "keys[]"
+            {{ end }}
+```
+
+## Using Authentication with Custom Commands
+
+Custom commands can specify an `identity` field to authenticate before execution. This is useful when commands need to interact with cloud resources that require specific credentials or elevated permissions.
+
+When an identity is specified, Atmos will:
+1. Authenticate using the specified identity (prompting for MFA if required)
+2. Write temporary credentials to a file
+3. Set environment variables pointing to the credential files (`AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`, etc.)
+4. Execute all command steps with these environment variables
+
+### Example: Custom Command with Authentication
+
+```yaml
+commands:
+  - name: deploy-infra
+    description: Deploy infrastructure with superadmin privileges
+    identity: superadmin  # Authenticate as superadmin before running
+    arguments:
+      - name: component
+        description: Component to deploy
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        description: Stack to deploy to
+        required: true
+    steps:
+      - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
+      - atmos terraform apply {{ .Arguments.component }} -s {{ .Flags.stack }} -auto-approve
+```
+
+To execute this command:
+
+```shell
+atmos deploy-infra vpc -s plat-ue2-prod
+```
+
+Atmos will:
+1. Authenticate as `superadmin` (prompting for MFA if configured)
+2. Set up environment variables pointing to temporary credential files
+3. Execute both `terraform plan` and `terraform apply` with those credentials
+
+### Example: Multi-Step Command with Authentication
+
+```yaml
+commands:
+  - name: audit-resources
+    description: Audit cloud resources with auditor credentials
+    identity: auditor
+    flags:
+      - name: region
+        shorthand: r
+        description: AWS region
+        required: true
+    steps:
+      - |
+        echo "Running audit in {{ .Flags.region }}..."
+        aws sts get-caller-identity
+      - |
+        aws ec2 describe-instances --region {{ .Flags.region }} \
+          --query 'Reservations[].Instances[].[InstanceId,State.Name,Tags[?Key==`Name`].Value|[0]]' \
+          --output table
+      - |
+        aws s3 ls --region {{ .Flags.region }}
+```
+
+All steps in this command will execute with the `auditor` identity credentials.
+
+### Authentication with Component Config
+
+You can combine identity authentication with component configuration:
+
+```yaml
+commands:
+  - name: provision-with-auth
+    description: Provision component with specific identity
+    identity: infrastructure-admin
+    arguments:
+      - name: component
+        description: Component to provision
+    flags:
+      - name: stack
+        shorthand: s
+        description: Stack name
+        required: true
+    component_config:
+      component: "{{ .Arguments.component }}"
+      stack: "{{ .Flags.stack }}"
+    env:
+      - key: COMPONENT_REGION
+        value: "{{ .ComponentConfig.vars.region }}"
+    steps:
+      - |
+        echo "Provisioning {{ .Arguments.component }} in {{ .ComponentConfig.vars.region }}"
+        echo "Using identity: infrastructure-admin"
+        aws sts get-caller-identity
+      - atmos terraform apply {{ .Arguments.component }} -s {{ .Flags.stack }}
+```
 
 :::tip
-  For more information, refer to [Atmos Custom Commands](/core-concepts/custom-commands)
+Configure identities in your [`atmos.yaml`](/cli/configuration) under the `auth` section. See the [Authentication documentation](/cli/commands/auth/usage) for configuration details.
+:::
+
+### Overriding Identity at Runtime
+
+You can override the identity specified in the command configuration using the `--identity` flag:
+
+```shell
+# Use the identity from command config
+atmos deploy-infra vpc -s plat-ue2-prod
+
+# Override with a different identity
+atmos deploy-infra vpc -s plat-ue2-prod --identity developer
+
+# Use no identity (skip authentication even if configured)
+atmos deploy-infra vpc -s plat-ue2-prod --identity ""
+```
+
+The `--identity` flag is automatically added to all custom commands and takes precedence over the `identity` field in the command configuration.
+
+:::note
+The `identity` field applies to all steps in the custom command. If you need different identities for different operations, consider using separate custom commands or [workflows](/workflows) with per-step identity configuration.
 :::

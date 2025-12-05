@@ -1,0 +1,68 @@
+---
+title: Vendoring
+description: Use Atmos vendoring to make copies of 3rd-party components, stacks, and other artifacts in your own repo.
+sidebar_position: 1
+sidebar_label: vendor
+sidebar_class_name: hidden
+id: vendor
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos natively supports "vendoring," a practice that involves replicating 3rd-party components, stacks, and artifacts within your own repository. This feature is particularly beneficial for managing dependencies in software like Terraform, which do not support pulling root modules remotely by configuration.
+</Intro>
+
+Vendoring standardizes dependency management, encourages enterprise component reuse, and ensures compliance standards adherence. Furthermore, it allows teams to customize and independently manage their vendored components according to their specific requirements.
+
+## Use-cases
+
+Atmos vendoring streamlines component sharing and version control across an enterprise, enhancing efficiency and collaboration while offering the flexibility to customize and manage multiple versions of dependencies, ensuring best practices in DevOps environments.
+
+- **Sharing Components Across an Enterprise**: Utilize Atmos vendoring to access a centralized component library, promoting code reuse and
+  efficiency across teams (or business units) while enabling customization and independent version control post-vendoring. This approach enhances collaboration without sacrificing the flexibility for teams to tailor components to their specific needs or update them at their preferred pace.
+- **Managing Multiple Versions of Dependencies:** Use Atmos vendoring to manage multiple versions of remote dependencies,
+  effectively implementing version pinning through locally controlled artifacts. By configuring a stacks component directory (e.g., `vpc/v1` or `vpc/v2`), vendoring provides maximum flexibility while still aligning with best practices in DevOps environments.
+- **Reinforce Immutable Infrastructure**: Employ Atmos vendoring to store immutable infrastructure artifacts, guaranteeing that once a committed,
+  it remains unaltered throughout its lifecycle, ensuring stability and reliability in deployments.
+
+## Types of Vendoring
+
+Atmos supports two different ways of vendoring components:
+
+- [**Vendor Configuration**](/vendor/vendor-config) Using `vendor.yaml` vendoring manifest file containing a list of all dependencies. **This is the recommended approach.**
+- [**Component Manifest**](/vendor/component-manifest) (Legacy) Using `component.yaml` manifest file inside of a component directory.
+
+The `vendor.yaml` vendoring manifest describes the vendoring config for all components, stacks and other artifacts for the entire infrastructure.
+The file is placed into the directory from which the `atmos vendor pull` command is executed. It's the recommended way to describe vendoring
+configurations.
+
+:::tip Recommended Approach
+Use the `vendor.yaml` [Vendor Configuration](/vendor/vendor-config) approach for centralized dependency management. The component manifest approach is considered legacy and should only be used for specific use cases.
+:::
+
+The `component.yaml` vendoring manifest is used to vendor components from remote repositories.
+A `component.yaml` file placed into a component's directory is used to describe the vendoring config for one component only.
+
+
+:::tip Pro Tip! Use GitOps
+Vendoring plays nicely with GitOps practices, especially when leveraging [GitHub Actions](/integrations/github-actions/).
+Use a workflow that automatically updates the vendor manifest and opens a pull request (PR) with all the changes.
+This allows you to inspect and precisely assess the impact of any upgrades before merging by reviewing the job summary of the PR.
+:::
+
+## Features
+
+With Atmos vendoring, you can copy components and other artifacts from the following sources:
+
+- Copy all files from an [OCI Registry](https://opencontainers.org) into a local folder
+- Copy all files from Git, Mercurial, Amazon S3, Google GCP into a local folder
+- Copy all files from an HTTP/HTTPS endpoint into a local folder
+- Copy a single file from an HTTP/HTTPS endpoint to a local file
+- Copy a local file into a local folder (keeping the same file name)
+- Copy a local file to a local file with a different file name
+- Copy a local folder (all files) into a local folder
+
+Our implementation is primarily inspired by the excellent tool by VMware Tanzu, called [`vendir`](https://github.com/vmware-tanzu/carvel-vendir).
+While Atmos does not call `vendir`, it functions and supports a subset of the configuration that is very similar.

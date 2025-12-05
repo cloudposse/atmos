@@ -1,0 +1,77 @@
+---
+title: Component Configuration
+sidebar_position: 1
+sidebar_label: components
+sidebar_class_name: command
+id: components
+description: Configure how Atmos locates and executes your Terraform, Helmfile, and Packer components.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `components` section in `atmos.yaml` defines how Atmos locates and executes your infrastructure components. Each component type (Terraform, Helmfile, Packer) has its own configuration for paths, commands, and behaviors.
+</Intro>
+
+:::important
+Do not confuse this CLI configuration with [configuring components in stacks](/stacks/components).
+This configuration is defined in `atmos.yaml` and specifies default behaviors like what command to run and where components are located.
+:::
+
+## Supported Component Types
+
+Atmos supports three built-in component types:
+
+<dl>
+  <dt>[Terraform](/cli/configuration/components/terraform)</dt>
+  <dd>Infrastructure as Code for cloud resources using Terraform or OpenTofu.</dd>
+
+  <dt>[Helmfile](/cli/configuration/components/helmfile)</dt>
+  <dd>Kubernetes package management for deploying Helm charts.</dd>
+
+  <dt>[Packer](/cli/configuration/components/packer)</dt>
+  <dd>Machine image building for AMIs, VM images, and container images.</dd>
+</dl>
+
+## Configuration Structure
+
+Each component type is configured under the `components` section:
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    base_path: components/terraform
+    command: terraform
+    # ... terraform-specific settings
+
+  helmfile:
+    base_path: components/helmfile
+    command: helmfile
+    # ... helmfile-specific settings
+
+  packer:
+    base_path: components/packer
+    command: packer
+    # ... packer-specific settings
+```
+</File>
+
+## Common Configuration Options
+
+All component types share these common configuration options:
+
+<dl>
+  <dt>`base_path`</dt>
+  <dd>Directory path where components of this type are located. Supports absolute and relative paths. Relative paths are resolved from `base_path` in the root configuration.</dd>
+
+  <dt>`command`</dt>
+  <dd>Executable to run for this component type. Can be a command name (resolved via PATH) or an absolute path to a binary.</dd>
+</dl>
+
+## Related
+
+- [Terraform Configuration](/cli/configuration/components/terraform)
+- [Helmfile Configuration](/cli/configuration/components/helmfile)
+- [Packer Configuration](/cli/configuration/components/packer)
+- [Stack Configuration](/cli/configuration/stacks)

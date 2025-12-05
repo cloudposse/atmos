@@ -1,13 +1,15 @@
 #
 # List of commands to be run in the `demo-stacks` example
 #
+atmos about
+atmos about --help
 atmos packer --help
-atmos packer version --help
-atmos packer validate --help
-atmos packer inspect --help
-atmos packer init --help
 atmos packer build --help
+atmos packer init --help
+atmos packer inspect --help
 atmos packer output --help
+atmos packer validate --help
+atmos packer version --help
 atmos helmfile --help
 atmos helmfile generate --help
 atmos helmfile generate varfile --help
@@ -54,6 +56,10 @@ atmos list vars --help
 atmos list workflows --help
 atmos pro lock --help
 atmos pro unlock --help
+atmos profile --help
+atmos profile list
+atmos profile list --help
+atmos profile show --help
 atmos terraform --help
 atmos terraform apply --help
 atmos terraform backend --help
@@ -96,6 +102,8 @@ atmos terraform untaint --help
 atmos terraform validate --help
 atmos terraform version --help
 atmos terraform workspace --help
+atmos support
+atmos support --help
 atmos theme --help
 atmos theme list --help
 atmos theme show --help

@@ -178,7 +178,7 @@ Configuring Terraform S3 backend with Atmos consists of the three steps:
 
   :::info
   The `_defaults.yaml` stack manifests are not imported into other Atmos manifests automatically.
-  You need to explicitly import them using [imports](/core-concepts/stacks/imports).
+  You need to explicitly import them using [imports](/stacks/imports).
   :::
 
   To configure the S3 backend for the entire Organization, add the following config in `stacks/orgs/acme/_defaults.yaml`:
@@ -264,8 +264,8 @@ Suppose that for security and audit reasons, you want to use different Terraform
 needs to have a separate S3 bucket and IAM role with different permissions (for example, the `development` Team should be able to
 access the Terraform backend only in the `dev` account, but not in `staging` and `prod`).
 
-Atmos supports this use-case by using deep-merging of stack manifests, [Imports](/core-concepts/stacks/imports)
-and [Inheritance](/core-concepts/stacks/inheritance), which makes the backend configuration reusable and DRY.
+Atmos supports this use-case by using deep-merging of stack manifests, [Imports](/stacks/imports)
+and [Inheritance](/howto/inheritance), which makes the backend configuration reusable and DRY.
 
 We'll split the backend config between the Organization and the accounts.
 
@@ -364,7 +364,7 @@ many Atmos components that provide configuration for the Terraform component.
 
 :::tip
 For more information on configuring and provision multiple instances of a Terraform component,
-refer to [Multiple Component Instances Atmos Design Patterns](/design-patterns/multiple-component-instances)
+refer to [Multiple Component Instances Atmos Design Patterns](/design-patterns/inheritance-patterns/multiple-component-instances)
 :::
 
 For example, the following config shows how to define two Atmos components, `vpc/1` and `vpc/2`, which both point to

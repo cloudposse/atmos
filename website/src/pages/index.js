@@ -31,7 +31,7 @@ function Home() {
             <p className="hero__description">Treat environments as configuration and eliminate code duplication, custom bash scripts, and complicated tooling with one tool to rule them all</p>
             <div className="hero__cta">
               <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
-              <Link to="/introduction" className="hero__link">Learn More</Link>
+              <Link to="/intro" className="hero__link">Learn More</Link>
             </div>
           </div>
         </header>
@@ -112,7 +112,7 @@ function Home() {
             <div className="section__description">
               <h2>Start Your Project</h2>
               <p>Create a solid foundation with a well-structured folder layout, embracing best practices and conventions for a consistently organized project.</p>
-              <Link to="/core-concepts/stacks/catalogs" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
+              <Link to="/howto/catalogs" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </section>
           <section className="alternate-section section--image-left">
@@ -121,7 +121,7 @@ function Home() {
               <h2>Write your Components</h2>
               <p>Use your existing Terraform root modules or create new ones. Component libraries make sharing easy.
                  Use vendoring to pull down remote dependencies.</p>
-              <Link to="/core-concepts/components" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
+              <Link to="/components" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </section>
           <section className="alternate-section section--image-right">
@@ -130,7 +130,7 @@ function Home() {
               <h2>Define your Stacks</h2>
               <p>Configure your environments—development, staging, production—each tailored to different stages of the lifecycle, ensuring smooth transitions and robust deployment strategies.
                  Inherit from a common baseline to keep it DRY.</p>
-              <Link to="/core-concepts/stacks" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
+              <Link to="/learn/stacks" className="button button--lg button--outline button--primary ml20"><p>Learn More</p></Link>
             </div>
           </section>
           <section className="alternate-section section--image-left">

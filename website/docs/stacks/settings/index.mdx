@@ -1,0 +1,263 @@
+---
+title: Configure Settings
+sidebar_position: 1
+sidebar_label: settings
+sidebar_class_name: command
+description: Use the settings section to configure integrations, custom metadata, and component behavior.
+id: index
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `settings` section provides a flexible configuration space for integrations, custom metadata, and component behavior. Settings can be defined at the global level, component-type level, or component level, and are deep-merged across the inheritance chain.
+</Intro>
+
+## Use Cases
+
+- **Integration Configuration:** Configure Spacelift, Atlantis, or other CI/CD integrations.
+- **Template Settings:** Define template engine configuration and data sources.
+- **Custom Metadata:** Store arbitrary metadata that can be referenced in templates or external tools.
+- **Validation Rules:** Configure JSON Schema or OPA policy validation.
+- **Dependencies:** Define component dependencies using `depends_on`.
+
+## Configuration Scopes
+
+The `settings` section can be defined at multiple levels. Atmos deep-merges settings from all levels, with more specific levels taking precedence.
+
+### Global Level
+
+Settings defined at the root level apply to all components in the stack:
+
+```yaml
+# stacks/orgs/acme/_defaults.yaml
+settings:
+  templates:
+    settings:
+      gomplate:
+        enabled: true
+  validation:
+    schema:
+      enabled: true
+```
+
+### Component-Type Level
+
+Settings defined under `terraform`, `helmfile`, or `packer` apply to all components of that type:
+
+```yaml
+# stacks/orgs/acme/plat/prod/_defaults.yaml
+terraform:
+  settings:
+    spacelift:
+      workspace_enabled: true
+      stack: org-acme-prod
+```
+
+### Component Level
+
+Settings defined within a component override all higher-level settings:
+
+```yaml
+# stacks/orgs/acme/plat/prod/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      settings:
+        spacelift:
+          autodeploy: true
+          labels:
+            - network
+            - critical
+        depends_on:
+          - component: account-settings
+```
+
+## Merge Behavior
+
+Settings are deep-merged from the most general to the most specific level:
+
+1. **Global `settings:`** (applies to all components)
+2. **Component-type `terraform.settings:` / `helmfile.settings:` / `packer.settings:`** (applies to all components of that type)
+3. **Component `components.terraform.<name>.settings`** (applies to a specific component)
+
+Maps are recursively merged, and lists are replaced (not appended).
+
+## Common Settings
+
+### Spacelift Integration
+
+Configure Spacelift workspace settings for components:
+
+```yaml
+settings:
+  spacelift:
+    workspace_enabled: true
+    autodeploy: false
+    branch: main
+    labels:
+      - managed-by-atmos
+    policies:
+      - plan-policy
+    stack: "{{ .namespace }}-{{ .environment }}-{{ .stage }}"
+```
+
+### Atlantis Integration
+
+Configure Atlantis for pull request automation:
+
+```yaml
+settings:
+  atlantis:
+    enabled: true
+    config_template_name: atmos-atlantis
+    project_template_name: atmos-project
+    workflow: terraform-workflow
+```
+
+### Template Configuration
+
+Configure the template engine:
+
+```yaml
+settings:
+  templates:
+    settings:
+      gomplate:
+        enabled: true
+        timeout: 5
+        datasources:
+          config:
+            url: "file:///config"
+```
+
+### Validation
+
+Configure schema and policy validation:
+
+```yaml
+settings:
+  validation:
+    schema:
+      enabled: true
+      schema_path: "schemas/vpc.json"
+    opa:
+      enabled: true
+      policy_path: "policies/vpc.rego"
+```
+
+### Component Dependencies
+
+Define dependencies between components using `depends_on`:
+
+```yaml
+settings:
+  depends_on:
+    - component: vpc
+    - component: security-groups
+      namespace: "{{ .namespace }}"
+```
+
+For detailed dependency configuration, see [depends_on](/stacks/settings/depends_on).
+
+## Example: Multi-Level Settings
+
+<File title="stacks/catalog/terraform/_defaults.yaml">
+```yaml
+# Base Terraform settings
+terraform:
+  settings:
+    spacelift:
+      workspace_enabled: true
+      autodeploy: false
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/prod/_defaults.yaml">
+```yaml
+# Production settings
+import:
+  - catalog/terraform/_defaults
+
+settings:
+  spacelift:
+    labels:
+      - production
+      - acme
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+import:
+  - orgs/acme/plat/prod/_defaults
+
+components:
+  terraform:
+    vpc:
+      settings:
+        spacelift:
+          autodeploy: true
+          labels:
+            - network
+        depends_on:
+          - component: account-settings
+```
+</File>
+
+The resulting `settings` for the `vpc` component would be:
+
+```yaml
+settings:
+  spacelift:
+    workspace_enabled: true  # From catalog defaults
+    autodeploy: true         # Overridden at component level
+    labels:                  # Replaced at component level
+      - network
+  depends_on:
+    - component: account-settings
+```
+
+## Freeform Nature
+
+The `settings` section is intentionally freeform to support:
+
+- **Custom integrations** that read component settings
+- **External tooling** that needs component metadata
+- **Future Atmos features** without schema changes
+
+You can add any nested structure under `settings`:
+
+```yaml
+settings:
+  my_custom_tool:
+    feature_enabled: true
+    config:
+      option_a: value
+      option_b: value
+  team_metadata:
+    owner: platform-team
+    slack_channel: "#platform-alerts"
+```
+
+## Best Practices
+
+1. **Use Catalog Defaults:** Define common settings in `stacks/catalog/` and import them to ensure consistency.
+
+2. **Namespace Custom Settings:** Use meaningful prefixes for custom settings to avoid conflicts with Atmos or integrations.
+
+3. **Document Custom Settings:** When adding custom settings, document their purpose and expected values for your team.
+
+4. **Leverage Dependencies:** Use `depends_on` to ensure components are applied in the correct order.
+
+5. **Validate Settings:** Use JSON Schema validation to enforce required settings and valid values.
+
+## Related
+
+- [Variables (vars)](/stacks/vars)
+- [Environment Variables (env)](/stacks/env)
+- [depends_on](/stacks/settings/depends_on)
+- [Imports](/stacks/imports)
+- [Inheritance](/howto/inheritance)
+- [Spacelift Integration](/cli/configuration/integrations/spacelift)
+- [Atlantis Integration](/cli/configuration/integrations/atlantis)

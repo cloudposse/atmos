@@ -1,0 +1,231 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Test fixture for !template YAML function
+# Purpose: Verify that !template correctly decodes JSON strings back into native YAML structures
+
+vars:
+  stage: nonprod
+
+components:
+  terraform:
+    # Component 1: Provides mock outputs for other components to reference
+    # This simulates a component that has already been deployed and has outputs
+    source-component:
+      command: tofu
+      metadata:
+        component: mock
+      settings:
+        # Mock outputs that other components will reference
+        outputs:
+          test_string: "hello-world"
+          test_number: 42
+          test_boolean: true
+          test_list:
+            - "item-1"
+            - "item-2"
+            - "item-3"
+          test_map:
+            key1: "value1"
+            key2: "value2"
+            key3: "value3"
+          nested_object:
+            name: "nested-test"
+            count: 5
+            active: true
+            tags:
+              - "tag1"
+              - "tag2"
+            metadata:
+              env: "test"
+              version: "1.0.0"
+      vars:
+        foo: "source-component-foo"
+
+    # Component 2: Tests basic !template functionality with hardcoded JSON strings
+    test-basic-template:
+      command: tofu
+      metadata:
+        component: mock
+      vars:
+        # Test case 1: Simple string (no JSON) - should return original string
+        simple_string: !template "hello-world"
+
+        # Test case 2: JSON-encoded string - should decode to string
+        json_string: !template '"hello-world"'
+
+        # Test case 3: JSON-encoded number - should decode to number
+        json_number: !template '42'
+
+        # Test case 4: JSON-encoded boolean - should decode to boolean
+        json_boolean: !template 'true'
+
+        # Test case 5: JSON-encoded null - should decode to null
+        json_null: !template 'null'
+
+        # Test case 6: JSON-encoded list - should decode to YAML list
+        json_list: !template '["item-1", "item-2", "item-3"]'
+
+        # Test case 7: JSON-encoded map - should decode to YAML map
+        json_map: !template '{"key1": "value1", "key2": "value2"}'
+
+        # Test case 8: Complex nested JSON - should decode to nested YAML structure
+        json_nested: !template '{"name": "test", "count": 5, "tags": ["tag1", "tag2"], "metadata": {"env": "prod"}}'
+
+        # Test case 9: Invalid JSON - should return original string (graceful degradation)
+        invalid_json: !template '{this is not valid json}'
+
+        # Test case 10: Empty JSON string - edge case
+        empty_json_string: !template '""'
+
+    # Component 3: Tests !template with Go template expressions
+    test-template-with-expressions:
+      command: tofu
+      metadata:
+        component: mock
+      vars:
+        # Test case 11: Template expression that resolves to a simple string
+        template_string: !template '{{ "hello-world" }}'
+
+        # Test case 12: Template expression with toJson for a list
+        template_list: !template '{{ toJson (list "a" "b" "c") }}'
+
+        # Test case 13: Template expression with toJson for a map
+        template_map: !template '{{ toJson (dict "x" 1 "y" 2 "z" 3) }}'
+
+        # Test case 14: Template expression accessing stack variable
+        stack_var: !template '{{ .stack }}'
+
+        # Test case 15: Template expression with nested toJson
+        nested_template: !template '{{ toJson (dict "list" (list 1 2 3) "map" (dict "a" "x" "b" "y")) }}'
+
+    # Component 4: Tests !template combined with atmos.Component() function
+    # This is the primary use case documented in the official docs
+    test-template-with-atmos-component:
+      command: tofu
+      metadata:
+        component: mock
+      vars:
+        # Test case 16: Get string output from another component (no !template needed)
+        component_string: '{{ (atmos.Component "source-component" .stack).settings.outputs.test_string }}'
+
+        # Test case 17: Get list output with toJson + !template
+        # WITHOUT !template, this would be a JSON string: "[\"item-1\", \"item-2\", \"item-3\"]"
+        # WITH !template, this becomes a native YAML list
+        component_list: !template '{{ toJson (atmos.Component "source-component" .stack).settings.outputs.test_list }}'
+
+        # Test case 18: Get map output with toJson + !template
+        # WITHOUT !template, this would be a JSON string: "{\"key1\": \"value1\", ...}"
+        # WITH !template, this becomes a native YAML map
+        component_map: !template '{{ toJson (atmos.Component "source-component" .stack).settings.outputs.test_map }}'
+
+        # Test case 19: Get nested object with toJson + !template
+        component_nested: !template '{{ toJson (atmos.Component "source-component" .stack).settings.outputs.nested_object }}'
+
+        # Test case 20: Extract nested path from component output
+        component_nested_path: !template '{{ toJson (atmos.Component "source-component" .stack).settings.outputs.nested_object.tags }}'
+
+        # Test case 21: Extract specific value from nested object
+        component_nested_value: !template '{{ toJson (atmos.Component "source-component" .stack).settings.outputs.nested_object.metadata.env }}'
+
+    # Component 5: Tests !template in lists (multiple !template calls in a list)
+    test-template-in-lists:
+      command: tofu
+      metadata:
+        component: mock
+      vars:
+        # Test case 22: List with multiple !template results
+        template_results_list:
+          - !template '["a", "b", "c"]'
+          - !template '["x", "y", "z"]'
+          - !template '{"key": "value"}'
+
+        # Test case 23: Mixed list with static values and !template
+        mixed_template_list:
+          - "static-value-start"
+          - !template '["dynamic-1", "dynamic-2"]'
+          - "static-value-middle"
+          - !template '{"dynamic": "map"}'
+          - "static-value-end"
+
+        # Test case 24: List with !template + atmos.Component()
+        component_list_results:
+          - !template '{{ toJson (atmos.Component "source-component" .stack).settings.outputs.test_list }}'
+          - !template '{{ toJson (atmos.Component "source-component" .stack).settings.outputs.test_map }}'
+
+    # Component 6: Tests !template in maps (multiple !template values in a map)
+    test-template-in-maps:
+      command: tofu
+      metadata:
+        component: mock
+      vars:
+        # Test case 25: Map with !template values
+        template_results_map:
+          list_result: !template '["a", "b", "c"]'
+          map_result: !template '{"x": 1, "y": 2}'
+          string_result: !template '"simple-string"'
+          number_result: !template '42'
+
+        # Test case 26: Nested structure with !template at various levels
+        nested_template_structure:
+          name: "test-structure"
+          data:
+            list: !template '["item-1", "item-2"]'
+            map: !template '{"key1": "val1", "key2": "val2"}'
+          outputs:
+            from_component: !template '{{ toJson (atmos.Component "source-component" .stack).settings.outputs.test_list }}'
+          static_value: "unchanged"
+
+    # Component 7: Tests edge cases and error handling
+    test-template-edge-cases:
+      command: tofu
+      metadata:
+        component: mock
+      vars:
+        # Test case 27: Whitespace handling
+        whitespace_before: !template '   ["a", "b"]'
+        whitespace_after: !template '["a", "b"]   '
+        whitespace_both: !template '   ["a", "b"]   '
+
+        # Test case 28: Escaped quotes in JSON
+        escaped_quotes: !template '{"message": "He said \"hello\""}'
+
+        # Test case 29: Unicode characters in JSON
+        unicode_chars: !template '{"emoji": "🚀", "text": "Hello 世界"}'
+
+        # Test case 30: Large nested structure
+        large_nested: !template '{"level1": {"level2": {"level3": {"level4": {"value": "deep"}}}}}'
+
+        # Test case 31: Array of objects
+        array_of_objects: !template '[{"id": 1, "name": "first"}, {"id": 2, "name": "second"}]'
+
+        # Test case 32: Empty JSON structures
+        empty_array: !template '[]'
+        empty_object: !template '{}'
+
+        # Test case 33: Numbers and booleans in arrays
+        mixed_types_array: !template '[1, "two", true, null, {"five": 5}]'
+
+    # Component 8: Real-world use case simulation
+    # Simulates the documented use case: getting outputs from deployed components
+    test-real-world-scenario:
+      command: tofu
+      metadata:
+        component: mock
+      vars:
+        # Scenario: You have a VPC component that outputs a list of subnet IDs
+        # and you want to use those subnet IDs in another component
+
+        # Get the list of subnet IDs as a native YAML list (not JSON string)
+        subnet_ids: !template '{{ toJson (atmos.Component "source-component" .stack).settings.outputs.test_list }}'
+
+        # Get security group rules as a native YAML map
+        security_group_rules: !template '{{ toJson (atmos.Component "source-component" .stack).settings.outputs.test_map }}'
+
+        # Get complex configuration from another component
+        vpc_config: !template '{{ toJson (atmos.Component "source-component" .stack).settings.outputs.nested_object }}'
+
+        # Combine static config with dynamic outputs
+        combined_config:
+          static_setting: "fixed-value"
+          dynamic_subnets: !template '{{ toJson (atmos.Component "source-component" .stack).settings.outputs.test_list }}'
+          dynamic_metadata: !template '{{ toJson (atmos.Component "source-component" .stack).settings.outputs.nested_object.metadata }}'

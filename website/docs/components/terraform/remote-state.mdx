@@ -1,0 +1,98 @@
+---
+title: Terraform Remote State
+sidebar_position: 4
+sidebar_label: Remote State
+description: Configure remote state access for reading other components' outputs.
+id: remote-state
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos supports configuring [Terraform/OpenTofu Backends](/components/terraform/backends)
+to define where [Terraform](https://developer.hashicorp.com/terraform/language/state) and [OpenTofu](https://opentofu.org/docs/language/state/) store its state,
+and [Remote State](/stacks/remote-state) to get the outputs of a [Terraform/OpenTofu component](/components),
+provisioned in the same or a different [Atmos stack](/learn/stacks), and use the outputs as inputs to another Atmos component.
+</Intro>
+
+:::tip Related Documentation
+- [Terraform Backends](/components/terraform/backends) - Configure where state is stored
+- [Backend Provisioning](/components/terraform/backend-provisioning) - Auto-create backends
+- [Remote State Data Sharing](/stacks/remote-state) - Using remote state in components
+:::
+
+## Remote State Backend Configuration
+
+Atmos supports the `remote_state_backend` section which can be used to configure how components access the remote state
+of other components. This is useful for:
+
+- Override [Terraform Backend](/components/terraform/backends) configuration to access the
+  remote state of a component (e.g. override the IAM role to assume, which in this case can be a read-only role)
+
+- Configure a remote state of type `static` which can be used to provide configurations for
+  [Brownfield development](https://en.wikipedia.org/wiki/Brownfield_(software_development))
+
+## Override Backend Configuration for Remote State Access
+
+To access the remote state of components, you can override
+any [Terraform Backend](/components/terraform/backends)
+configuration in the `backend` section using the `remote_state_backend` section. The `remote_state_backend` section
+is a first-class section, and it can be defined globally at any scope (organization, tenant, account, region), or per
+component, and then deep-merged using [Atmos Component Inheritance](/howto/inheritance).
+
+For example, let's suppose we have the following S3 backend configuration for the entire organization
+(refer to [AWS S3 Backend](/components/terraform/backends#aws-s3-backend) for more details):
+
+```yaml title="stacks/orgs/acme/_defaults.yaml"
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      acl: "bucket-owner-full-control"
+      encrypt: true
+      bucket: "your-s3-bucket-name"
+      key: "terraform.tfstate"
+      region: "your-aws-region"
+      role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-write"
+      use_lockfile: true
+```
+
+Let's say we also have a read-only IAM role, and we want to use it to access the remote state instead of the read-write
+role, because accessing remote state is a read-only operation, and we don't want to give the role more permissions than
+it requires - this is the [principle of least privilege](https://en.wikipedia.org/wiki/Principle_of_least_privilege).
+
+We can add the `remote_state_backend` and `remote_state_backend_type` to override the required attributes from the
+`backend` section:
+
+```yaml title="stacks/orgs/acme/_defaults.yaml"
+terraform:
+  backend_type: s3  # s3, remote, vault, azurerm, gcs, cloud
+  backend:
+    s3:
+      acl: "bucket-owner-full-control"
+      encrypt: true
+      bucket: "your-s3-bucket-name"
+      key: "terraform.tfstate"
+      region: "your-aws-region"
+      role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-write"
+      use_lockfile: true
+
+  remote_state_backend_type: s3 # s3, remote, vault, azurerm, gcs, cloud, static
+  remote_state_backend:
+    s3:
+      role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-only"
+      # Override the other attributes from the `backend.s3` section as needed
+```
+
+In the example above, we've overridden the `role_arn` attribute for the `s3` backend to use the read-only role when
+accessing the remote state of all components. All other attributes will be taken from the `backend` section (Atmos
+deep-merges the `remote_state_backend` section with the `backend` section).
+
+When working with Terraform backends and writing/updating the state, the `terraform-backend-read-write` role will be
+used. But when reading the remote state of components, the `terraform-backend-read-only` role will be used.
+
+## References
+
+- [Terraform Backends](/components/terraform/backends) - Configure backend storage
+- [Backend Provisioning](/components/terraform/backend-provisioning) - Auto-create backends
+- [Remote State Data Sharing](/stacks/remote-state) - Using remote state in components
+- [Terraform Remote State](https://developer.hashicorp.com/terraform/language/state/remote-state-data)
