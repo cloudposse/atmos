@@ -145,15 +145,16 @@ func formatDotenv(envVars map[string]string) string {
 }
 
 // formatGitHub formats environment variables for GitHub Actions $GITHUB_ENV file.
-// Uses KEY=value format without quoting. For multiline values, GitHub uses <<EOF syntax.
+// Uses KEY=value format without quoting. For multiline values, GitHub uses heredoc syntax.
 func formatGitHub(envVars map[string]string) string {
 	keys := sortedKeys(envVars)
 	var sb strings.Builder
 	for _, key := range keys {
 		value := envVars[key]
 		// Check if value contains newlines - use heredoc syntax.
+		// Use ATMOS_EOF_ prefix to avoid collision with values containing "EOF".
 		if strings.Contains(value, "\n") {
-			sb.WriteString(fmt.Sprintf("%s<<EOF\n%s\nEOF\n", key, value))
+			sb.WriteString(fmt.Sprintf("%s<<ATMOS_EOF_%s\n%s\nATMOS_EOF_%s\n", key, key, value, key))
 		} else {
 			sb.WriteString(fmt.Sprintf("%s=%s\n", key, value))
 		}

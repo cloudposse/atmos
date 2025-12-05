@@ -132,7 +132,7 @@ func TestFormatGitHub(t *testing.T) {
 			envVars: map[string]string{
 				"MULTILINE": "line1\nline2\nline3",
 			},
-			expected: "MULTILINE<<EOF\nline1\nline2\nline3\nEOF\n",
+			expected: "MULTILINE<<ATMOS_EOF_MULTILINE\nline1\nline2\nline3\nATMOS_EOF_MULTILINE\n",
 		},
 		{
 			name: "multiple variables sorted",
