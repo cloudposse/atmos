@@ -19,7 +19,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates"
-	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -38,8 +37,6 @@ func InfoExec(toolName, outputFormat string) error {
 	defer perf.Track(nil, "toolchain.InfoExec")()
 
 	ctx := context.Background()
-
-	// Create installer inside the function.
 	installer := NewInstaller()
 
 	// Parse tool name to get owner/repo.
@@ -48,49 +45,15 @@ func InfoExec(toolName, outputFormat string) error {
 		return fmt.Errorf("failed to resolve tool '%s': %w", toolName, err)
 	}
 
-	// Get installed and configured versions from tool-versions file.
-	installedVersions := []string{}
-	configuredVersions := []string{}
-	defaultVersion := ""
-	var version string
-	if toolVersions, err := LoadToolVersions(GetToolVersionsFilePath()); err == nil {
-		if versions, exists := toolVersions.Tools[toolName]; exists && len(versions) > 0 {
-			// Track all configured versions.
-			configuredVersions = versions
-
-			// Check which versions are actually installed (have binaries on disk).
-			for _, v := range versions {
-				if _, err := installer.FindBinaryPath(owner, repo, v); err == nil {
-					installedVersions = append(installedVersions, v)
-					// First installed version becomes default.
-					if defaultVersion == "" {
-						defaultVersion = v
-					}
-				}
-			}
-			// If no installed versions, but versions exist in config, use last configured as default.
-			if defaultVersion == "" && len(versions) > 0 {
-				defaultVersion = versions[len(versions)-1]
-			}
-		}
-
-		// Try to find a version using LookupToolVersionOrLatest.
-		result := LookupToolVersionOrLatest(toolName, toolVersions, installer.GetResolver())
-		version = result.Version
+	// Get version information.
+	versionInfo, err := resolveToolVersions(toolName, owner, repo, installer)
+	if err != nil {
+		// Error loading tool-versions file - continue with empty version info.
+		versionInfo = toolVersionInfo{}
 	}
 
-	// If no version found or if it's still "latest", resolve to concrete latest version.
-	if version == "" || version == "latest" {
-		// Get the actual latest version from the registry.
-		reg := NewAquaRegistry()
-		latestVersion, err := reg.GetLatestVersion(owner, repo)
-		if err == nil {
-			version = latestVersion
-		} else {
-			// If we can't get the latest version, fall back to "latest" literal.
-			version = "latest"
-		}
-	}
+	// Resolve latest version if needed.
+	version := resolveLatestVersion(versionInfo.ResolvedVersion, owner, repo)
 
 	// Find the tool configuration.
 	tool, err := installer.findTool(owner, repo, version)
@@ -98,52 +61,27 @@ func InfoExec(toolName, outputFormat string) error {
 		return fmt.Errorf("failed to find tool %s: %w", toolName, err)
 	}
 
-	// Get registry metadata to show which registry this came from.
-	var registryName string
-	reg := NewAquaRegistry()
-	if meta, err := reg.GetMetadata(ctx); err == nil {
-		registryName = meta.Name
-	}
+	// Get registry metadata and available versions.
+	registryName := getRegistryName(ctx)
+	availableVersions := getAvailableVersions(owner, repo, defaultVersionLimit)
 
-	// Try to get available versions with full metadata from GitHub (with spinner).
-	availableVersions, err := fetchGitHubVersionsWithSpinner(owner, repo)
-	if err != nil {
-		// Log error but don't fail - just show no available versions.
-		availableVersions = []versionItem{}
-	} else {
-		// Show latest 10 versions with full metadata.
-		limit := defaultVersionLimit
-		if len(availableVersions) < limit {
-			limit = len(availableVersions)
-		}
-		availableVersions = availableVersions[:limit]
+	// Build context for display.
+	toolCtx := &toolContext{
+		Name:               toolName,
+		Owner:              owner,
+		Repo:               repo,
+		Tool:               tool,
+		Version:            version,
+		Installer:          installer,
+		Registry:           registryName,
+		InstalledVersions:  versionInfo.InstalledVersions,
+		ConfiguredVersions: versionInfo.ConfiguredVersions,
+		AvailableVersions:  availableVersions,
+		DefaultVersion:     versionInfo.DefaultVersion,
 	}
 
 	// Display output based on format.
-	if outputFormat == "yaml" {
-		evaluatedYAML, err := getEvaluatedToolYAML(tool, version, installer)
-		if err != nil {
-			return fmt.Errorf("failed to get evaluated YAML: %w", err)
-		}
-		_ = data.Write(evaluatedYAML)
-	} else {
-		// Enhanced table format (default).
-		displayToolInfo(&toolContext{
-			Name:               toolName,
-			Owner:              owner,
-			Repo:               repo,
-			Tool:               tool,
-			Version:            version,
-			Installer:          installer,
-			Registry:           registryName,
-			InstalledVersions:  installedVersions,
-			ConfiguredVersions: configuredVersions,
-			AvailableVersions:  availableVersions,
-			DefaultVersion:     defaultVersion,
-		})
-	}
-
-	return nil
+	return displayFormattedOutput(outputFormat, tool, version, installer, toolCtx)
 }
 
 type toolContext struct {
