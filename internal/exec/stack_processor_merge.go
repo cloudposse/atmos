@@ -110,6 +110,46 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
+	// Terraform-specific: merge required_providers using deferred merge (DEV-3124).
+	var finalComponentRequiredProviders map[string]any
+	if opts.ComponentType == cfg.TerraformComponentType {
+		var requiredProvidersCtx *m.DeferredMergeContext
+		finalComponentRequiredProviders, requiredProvidersCtx, err = m.MergeWithDeferred(
+			atmosConfig,
+			[]map[string]any{
+				opts.TerraformRequiredProviders,
+				result.BaseComponentRequiredProviders,
+				result.ComponentRequiredProviders,
+				result.ComponentOverridesRequiredProviders,
+			})
+		if err != nil {
+			return nil, err
+		}
+
+		// Apply deferred merges for required_providers (without YAML processing - already done earlier).
+		if err := m.ApplyDeferredMerges(requiredProvidersCtx, finalComponentRequiredProviders, atmosConfig, nil); err != nil {
+			return nil, err
+		}
+	}
+
+	// Terraform-specific: resolve required_version (DEV-3124).
+	// Uses the same precedence as command: global -> base component -> component -> overrides.
+	var finalComponentRequiredVersion string
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if opts.TerraformRequiredVersion != "" {
+			finalComponentRequiredVersion = opts.TerraformRequiredVersion
+		}
+		if result.BaseComponentRequiredVersion != "" {
+			finalComponentRequiredVersion = result.BaseComponentRequiredVersion
+		}
+		if result.ComponentRequiredVersion != "" {
+			finalComponentRequiredVersion = result.ComponentRequiredVersion
+		}
+		if result.ComponentOverridesRequiredVersion != "" {
+			finalComponentRequiredVersion = result.ComponentOverridesRequiredVersion
+		}
+	}
+
 	// Terraform-specific: merge hooks using deferred merge.
 	var finalComponentHooks map[string]any
 	if opts.ComponentType == cfg.TerraformComponentType {
@@ -260,6 +300,8 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 
 		// Add Terraform-specific fields to component map.
 		comp[cfg.ProvidersSectionName] = finalComponentProviders
+		comp[cfg.RequiredProvidersSectionName] = finalComponentRequiredProviders
+		comp[cfg.RequiredVersionSectionName] = finalComponentRequiredVersion
 		comp[cfg.HooksSectionName] = finalComponentHooks
 		comp[cfg.BackendTypeSectionName] = finalComponentBackendType
 		comp[cfg.BackendSectionName] = finalComponentBackend

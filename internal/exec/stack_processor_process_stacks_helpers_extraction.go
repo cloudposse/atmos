@@ -64,6 +64,30 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Terraform-specific: extract required_providers section (DEV-3124).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.RequiredProvidersSectionName]; ok {
+			componentRequiredProviders, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.required_providers' in the file '%s'", errUtils.ErrInvalidComponentRequiredProviders, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentRequiredProviders = componentRequiredProviders
+		} else {
+			result.ComponentRequiredProviders = make(map[string]any, componentSmallMapCapacity)
+		}
+	}
+
+	// Terraform-specific: extract required_version section (DEV-3124).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.RequiredVersionSectionName]; ok {
+			componentRequiredVersion, ok := i.(string)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.required_version' in the file '%s'", errUtils.ErrInvalidComponentRequiredVersion, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentRequiredVersion = componentRequiredVersion
+		}
+	}
+
 	// Terraform-specific: extract hooks section.
 	if opts.ComponentType == cfg.TerraformComponentType {
 		if i, ok := opts.ComponentMap[cfg.HooksSectionName]; ok {

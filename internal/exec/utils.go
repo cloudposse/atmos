@@ -50,6 +50,8 @@ func ProcessComponentConfig(
 	var componentSettingsSection map[string]any
 	var componentOverridesSection map[string]any
 	var componentProvidersSection map[string]any
+	var componentRequiredProvidersSection map[string]map[string]any
+	var componentRequiredVersion string
 	var componentHooksSection map[string]any
 	var componentImportsSection []string
 	var componentEnvSection map[string]any
@@ -94,6 +96,26 @@ func ProcessComponentConfig(
 
 	if componentProvidersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
 		componentProvidersSection = map[string]any{}
+	}
+
+	// Extract required_providers section (DEV-3124: pin provider versions).
+	if componentRequiredProvidersSection, ok = componentSection[cfg.RequiredProvidersSectionName].(map[string]map[string]any); !ok {
+		// Try alternative extraction for map[string]any and convert.
+		if rawRequiredProviders, ok2 := componentSection[cfg.RequiredProvidersSectionName].(map[string]any); ok2 {
+			componentRequiredProvidersSection = make(map[string]map[string]any)
+			for k, v := range rawRequiredProviders {
+				if providerConfig, ok3 := v.(map[string]any); ok3 {
+					componentRequiredProvidersSection[k] = providerConfig
+				}
+			}
+		} else {
+			componentRequiredProvidersSection = nil
+		}
+	}
+
+	// Extract required_version section (DEV-3124: pin Terraform version).
+	if componentRequiredVersion, ok = componentSection[cfg.RequiredVersionSectionName].(string); !ok {
+		componentRequiredVersion = ""
 	}
 
 	if componentHooksSection, ok = componentSection[cfg.HooksSectionName].(map[string]any); !ok {
@@ -163,6 +185,8 @@ func ProcessComponentConfig(
 	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
 	configAndStacksInfo.ComponentOverridesSection = componentOverridesSection
 	configAndStacksInfo.ComponentProvidersSection = componentProvidersSection
+	configAndStacksInfo.RequiredProviders = componentRequiredProvidersSection
+	configAndStacksInfo.RequiredVersion = componentRequiredVersion
 	configAndStacksInfo.ComponentHooksSection = componentHooksSection
 	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
 	configAndStacksInfo.ComponentAuthSection = componentAuthSection
@@ -975,6 +999,21 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndStacksInfo) {
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
 		configAndStacksInfo.ComponentProvidersSection = i
+	}
+
+	// Restore required_providers section (DEV-3124).
+	if rawRequiredProviders, ok := configAndStacksInfo.ComponentSection[cfg.RequiredProvidersSectionName].(map[string]any); ok {
+		configAndStacksInfo.RequiredProviders = make(map[string]map[string]any)
+		for k, v := range rawRequiredProviders {
+			if providerConfig, ok2 := v.(map[string]any); ok2 {
+				configAndStacksInfo.RequiredProviders[k] = providerConfig
+			}
+		}
+	}
+
+	// Restore required_version section (DEV-3124).
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.RequiredVersionSectionName].(string); ok {
+		configAndStacksInfo.RequiredVersion = i
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.AuthSectionName].(map[string]any); ok {
