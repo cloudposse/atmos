@@ -670,7 +670,7 @@ func isVersionCommand() bool {
 // handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h".
 func handleHelpRequest(cmd *cobra.Command, args []string) {
 	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {
-		cmd.Help()
+		_ = cmd.Help()
 		errUtils.Exit(0)
 	}
 }
@@ -879,7 +879,7 @@ func AddStackCompletion(cmd *cobra.Command) {
 	if cmd.Flag("stack") == nil {
 		cmd.PersistentFlags().StringP("stack", "s", "", stackHint)
 	}
-	cmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
+	_ = cmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
 }
 
 // identityFlagCompletion provides shell completion for identity flags by fetching

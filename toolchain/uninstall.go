@@ -318,7 +318,7 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 		percent := float64(i+1) / float64(len(installedTools))
 		bar := progressBar.ViewAs(percent)
 		resetLine()
-		ui.Writeln(msg)
+		_ = ui.Writeln(msg)
 		// Show animated progress for a moment
 		for j := 0; j < maxSpinnerUpdates; j++ {
 			printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
@@ -327,7 +327,7 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 		}
 	}
 	resetLine()
-	ui.Writeln("")
+	_ = ui.Writeln("")
 
 	// Print summary message based on results
 	switch {

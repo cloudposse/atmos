@@ -55,7 +55,7 @@ var stacksCmd = &cobra.Command{
 		}
 
 		if len(output) == 0 {
-			ui.Info("No stacks found")
+			_ = ui.Info("No stacks found")
 			return nil
 		}
 

@@ -195,7 +195,7 @@ func displaySearchResults(tools []*toolchainregistry.Tool) {
 	toolVersions, err := toolchain.LoadToolVersions(toolVersionsFile)
 	if err != nil && !os.IsNotExist(err) {
 		// If there's an error other than file not found, log it but continue.
-		ui.Warningf("Could not load .tool-versions: %v", err)
+		_ = ui.Warningf("Could not load .tool-versions: %v", err)
 	}
 
 	// Build row data with installation status.
@@ -321,7 +321,7 @@ func displaySearchResults(tools []*toolchainregistry.Tool) {
 
 	// Render table and apply conditional styling.
 	styled := renderSearchTableWithConditionalStyling(t.View(), rows)
-	ui.Writeln(styled)
+	_ = ui.Writeln(styled)
 }
 
 // renderSearchTableWithConditionalStyling applies color to status indicators and dims non-installed rows.

@@ -47,7 +47,7 @@ func addStackCompletion(cobraCmd *cobra.Command) {
 	if cobraCmd.Flag("stack") == nil {
 		cobraCmd.PersistentFlags().StringP("stack", "s", "", "Filter by stack name or pattern")
 	}
-	cobraCmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
+	_ = cobraCmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
 }
 
 // stackFlagCompletion provides shell completion for the --stack flag.

@@ -55,7 +55,7 @@ var componentsCmd = &cobra.Command{
 		}
 
 		if len(output) == 0 {
-			ui.Info("No components found")
+			_ = ui.Info("No components found")
 			return nil
 		}
 
