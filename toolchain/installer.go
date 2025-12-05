@@ -448,12 +448,12 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 
 	// Check if already cached
 	if _, err := os.Stat(cachePath); err == nil {
-		log.Debug("Using cached asset", "filename", filename)
+		log.Debug("Using cached asset", filenameKey, filename)
 		return cachePath, nil
 	}
 
 	// Download the file using authenticated HTTP client
-	log.Debug("Downloading asset", "filename", filename)
+	log.Debug("Downloading asset", filenameKey, filename)
 	client := httpClient.NewDefaultClient(
 		httpClient.WithGitHubToken(httpClient.GetGitHubTokenFromEnv()),
 	)
@@ -615,14 +615,14 @@ func (i *Installer) simpleExtract(assetPath, binaryPath string, tool *registry.T
 		if strings.HasSuffix(assetPath, ".gz") {
 			return i.extractGzip(assetPath, binaryPath)
 		}
-		log.Debug("Unknown file type, copying as binary", "filename", filepath.Base(assetPath))
+		log.Debug("Unknown file type, copying as binary", filenameKey, filepath.Base(assetPath))
 		return i.copyFile(assetPath, binaryPath)
 	}
 }
 
 // extractZip extracts a ZIP file.
 func (i *Installer) extractZip(zipPath, binaryPath string, tool *registry.Tool) error {
-	log.Debug("Extracting ZIP archive", "filename", filepath.Base(zipPath))
+	log.Debug("Extracting ZIP archive", filenameKey, filepath.Base(zipPath))
 
 	tempDir, err := os.MkdirTemp("", "installer-extract-")
 	if err != nil {
@@ -855,7 +855,7 @@ func extractFile(tr *tar.Reader, path string, header *tar.Header) error {
 
 // extractTarGz extracts a tar.gz file.
 func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *registry.Tool) error {
-	log.Debug("Extracting tar.gz archive", "filename", filepath.Base(tarPath))
+	log.Debug("Extracting tar.gz archive", filenameKey, filepath.Base(tarPath))
 
 	tempDir, err := os.MkdirTemp("", "installer-extract-")
 	if err != nil {
@@ -953,7 +953,7 @@ func copyFile(src, dst string) error {
 
 // extractGzip decompresses a single gzip-compressed binary.
 func (i *Installer) extractGzip(gzPath, binaryPath string) error {
-	log.Debug("Decompressing gzip binary", "filename", filepath.Base(gzPath))
+	log.Debug("Decompressing gzip binary", filenameKey, filepath.Base(gzPath))
 
 	in, err := os.Open(gzPath)
 	if err != nil {
