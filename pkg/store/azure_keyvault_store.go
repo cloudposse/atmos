@@ -191,6 +191,7 @@ func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (in
 	var result interface{}
 	if jsonErr := json.Unmarshal([]byte(*resp.Value), &result); jsonErr != nil {
 		// If JSON unmarshaling fails, return as string.
+		//nolint:nilerr // Intentionally ignoring JSON error - fallback to string value.
 		return *resp.Value, nil
 	}
 	return result, nil
@@ -226,6 +227,7 @@ func (s *AzureKeyVaultStore) GetKey(key string) (interface{}, error) {
 	var result interface{}
 	if jsonErr := json.Unmarshal([]byte(*resp.Value), &result); jsonErr != nil {
 		// If JSON unmarshaling fails, return as string.
+		//nolint:nilerr // Intentionally ignoring JSON error - fallback to string value.
 		return *resp.Value, nil
 	}
 	return result, nil

@@ -161,7 +161,7 @@ func (p *ssoProvider) deleteCachedToken() error {
 	tokenPath, err := p.getTokenCachePath()
 	if err != nil {
 		// If we can't get cache path, nothing to delete.
-		return nil
+		return err
 	}
 
 	if err := p.cacheStorage.Remove(tokenPath); err != nil && !os.IsNotExist(err) {

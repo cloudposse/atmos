@@ -45,6 +45,7 @@ func calculateDirectorySize(dirPath string) (int64, error) {
 	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			// Skip files/directories we can't access.
+			//nolint:nilerr // Intentionally ignore inaccessible paths.
 			return nil
 		}
 		if !info.IsDir() {

@@ -1108,6 +1108,7 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 func removeCacheFile() error {
 	cacheFilePath, err := config.GetCacheFilePath()
 	if err != nil {
+		//nolint:nilerr // If we can't get cache path, nothing to remove.
 		return nil
 	}
 

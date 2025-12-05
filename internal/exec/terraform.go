@@ -399,9 +399,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Run `terraform init` before running other commands.
-	runTerraformInit := !(info.SubCommand == "init" ||
-		info.SubCommand == "clean" ||
-		(info.SubCommand == "deploy" && !atmosConfig.Components.Terraform.DeployRunInit))
+	runTerraformInit := info.SubCommand != "init" &&
+		info.SubCommand != "clean" &&
+		!(info.SubCommand == "deploy" && !atmosConfig.Components.Terraform.DeployRunInit)
 
 	if info.SkipInit {
 		log.Debug("Skipping over 'terraform init' due to '--skip-init' flag being passed")
