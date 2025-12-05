@@ -7,6 +7,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/cloudposse/atmos/pkg/config/casemap"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -89,6 +90,7 @@ type AtmosConfiguration struct {
 	Docs            Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Auth            AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
 	Env             map[string]string   `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+	CaseMaps        *casemap.CaseMaps   `yaml:"-" json:"-" mapstructure:"-"` // Stores original case for YAML map keys (Viper lowercases them)
 	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
 	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
 	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
@@ -215,6 +217,24 @@ func (a *AtmosConfiguration) processResourceSchema(key string) {
 		return
 	}
 	a.Schemas[key] = resource
+}
+
+// GetCaseSensitiveMap returns the specified map with original key casing restored.
+// This compensates for Viper lowercasing all YAML map keys.
+// Supported paths: "env".
+func (a *AtmosConfiguration) GetCaseSensitiveMap(path string) map[string]string {
+	var source map[string]string
+	switch path {
+	case "env":
+		source = a.Env
+	default:
+		return nil
+	}
+
+	if a.CaseMaps == nil {
+		return source
+	}
+	return a.CaseMaps.ApplyCase(path, source)
 }
 
 type Validate struct {

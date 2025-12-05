@@ -16,6 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/provisioning"
+	"github.com/cloudposse/atmos/pkg/config/casemap"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -292,10 +293,11 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		return atmosConfig, err
 	}
 
-	// Post-process to preserve case-sensitive identity names.
-	// Viper lowercases all map keys, but we need to preserve original case for identity names.
-	if err := preserveIdentityCase(v, &atmosConfig); err != nil {
-		log.Debug("Failed to preserve identity case", "error", err)
+	// Post-process to preserve case-sensitive map keys.
+	// Viper lowercases all YAML map keys, but we need to preserve original case
+	// for identity names and environment variables.
+	if err := preserveCaseSensitiveMaps(v, &atmosConfig); err != nil {
+		log.Debug("Failed to preserve case-sensitive maps", "error", err)
 		// Don't fail config loading if this step fails, just log it.
 	}
 
@@ -1098,58 +1100,46 @@ func loadEmbeddedConfig(v *viper.Viper) error {
 	return nil
 }
 
-// preserveIdentityCase extracts original case identity names from the raw YAML and creates a case mapping.
-// Viper lowercases all map keys, but we need to preserve original case for identity names.
-func preserveIdentityCase(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) error {
-	// Get the auth.identities section from Viper before case conversion
-	// Viper's AllSettings() returns the lowercased version, so we need to parse the raw YAML
+// caseSensitivePaths lists the YAML paths that need case preservation.
+// Viper lowercases all map keys, but these sections need original case.
+var caseSensitivePaths = []string{
+	"env",             // Environment variables (e.g., GITHUB_TOKEN)
+	"auth.identities", // Auth identity names (e.g., SuperAdmin)
+}
+
+// preserveCaseSensitiveMaps extracts original case for registered paths from the raw YAML.
+// This creates a mapping that can be used to restore original case when accessing these maps.
+func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) error {
 	configFile := v.ConfigFileUsed()
 	if configFile == "" {
-		// No config file loaded, nothing to preserve
+		// No config file loaded, nothing to preserve.
 		return nil
 	}
 
-	// Read the raw YAML file
 	rawYAML, err := os.ReadFile(configFile)
 	if err != nil {
 		return fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	// Parse YAML to extract original case identity names
-	var rawConfig map[string]interface{}
-	if err := yaml.Unmarshal(rawYAML, &rawConfig); err != nil {
-		return fmt.Errorf("failed to parse YAML: %w", err)
+	caseMaps, err := casemap.ExtractFromYAML(rawYAML, caseSensitivePaths)
+	if err != nil {
+		return fmt.Errorf("failed to extract case mappings: %w", err)
 	}
 
-	// Extract auth.identities with original case
-	authSection, ok := rawConfig["auth"].(map[string]interface{})
-	if !ok || authSection == nil {
-		// No auth section, nothing to preserve
-		return nil
+	atmosConfig.CaseMaps = caseMaps
+
+	// Also populate the legacy IdentityCaseMap for backward compatibility with auth.
+	identityCaseMap := caseMaps.Get("auth.identities")
+	if identityCaseMap != nil {
+		if atmosConfig.Auth.IdentityCaseMap == nil {
+			atmosConfig.Auth.IdentityCaseMap = make(map[string]string)
+		}
+		for k, v := range identityCaseMap {
+			atmosConfig.Auth.IdentityCaseMap[k] = v
+		}
 	}
 
-	identitiesSection, ok := authSection["identities"].(map[string]interface{})
-	if !ok || identitiesSection == nil {
-		// No identities section, nothing to preserve
-		return nil
-	}
-
-	// Create case mapping: lowercase -> original case
-	caseMap := make(map[string]string)
-	for originalName := range identitiesSection {
-		lowercaseName := strings.ToLower(originalName)
-		caseMap[lowercaseName] = originalName
-	}
-
-	// Store the case mapping in the config
-	if atmosConfig.Auth.IdentityCaseMap == nil {
-		atmosConfig.Auth.IdentityCaseMap = make(map[string]string)
-	}
-	for k, v := range caseMap {
-		atmosConfig.Auth.IdentityCaseMap[k] = v
-	}
-
-	log.Debug("Preserved identity case mapping", "identities", len(caseMap))
+	log.Debug("Preserved case-sensitive map keys", "paths", caseSensitivePaths)
 
 	return nil
 }
