@@ -155,17 +155,17 @@ func (i *Installer) Install(owner, repo, version string) (string, error) {
 func (i *Installer) installFromTool(tool *registry.Tool, version string) (string, error) {
 	assetURL, err := i.buildAssetURL(tool, version)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", ErrInvalidToolSpec, err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, err)
 	}
 	log.Debug("Downloading tool", "owner", tool.RepoOwner, "repo", tool.RepoName, "version", version, "url", assetURL)
 
 	assetPath, err := i.downloadAssetWithVersionFallback(tool, version, assetURL)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", ErrHTTPRequest, err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrHTTPRequest, err)
 	}
 	binaryPath, err := i.extractAndInstall(tool, assetPath, version)
 	if err != nil {
-		return "", fmt.Errorf("%w: %w", ErrFileOperation, err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrFileOperation, err)
 	}
 	if err := os.Chmod(binaryPath, defaultMkdirPermissions); err != nil {
 		return "", fmt.Errorf("%w: failed to make binary executable: %w", ErrFileOperation, err)
@@ -538,7 +538,7 @@ func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, versio
 	}
 	fallbackURL, buildErr := i.buildAssetURL(tool, fallbackVersion)
 	if buildErr != nil {
-		return "", fmt.Errorf("%w: %w", ErrInvalidToolSpec, buildErr)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, buildErr)
 	}
 	log.Debug("Asset 404, trying fallback version", "original", assetURL, "fallback", fallbackURL)
 	assetPath, err = i.downloadAsset(fallbackURL)
@@ -574,7 +574,7 @@ func (i *Installer) extractAndInstall(tool *registry.Tool, assetPath, version st
 
 	// For now, just copy the file (simplified extraction)
 	if err := i.simpleExtract(assetPath, binaryPath, tool); err != nil {
-		return "", fmt.Errorf("%w: %w", ErrFileOperation, err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrFileOperation, err)
 	}
 
 	return binaryPath, nil
