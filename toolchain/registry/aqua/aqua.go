@@ -18,6 +18,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/xdg"
@@ -968,5 +969,5 @@ func evaluateVersionConstraint(constraint, version string) (bool, error) {
 		return c.Check(v), nil
 	}
 
-	return false, fmt.Errorf("unsupported version constraint format: %q", constraint)
+	return false, fmt.Errorf("%w: %q", errUtils.ErrUnsupportedVersionConstraint, constraint)
 }

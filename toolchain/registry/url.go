@@ -10,6 +10,7 @@ import (
 	"github.com/Masterminds/semver/v3"
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -382,5 +383,5 @@ func evaluateVersionConstraint(constraint, version string) (bool, error) {
 		return c.Check(v), nil
 	}
 
-	return false, fmt.Errorf("unsupported version constraint format: %q", constraint)
+	return false, fmt.Errorf("%w: %q", errUtils.ErrUnsupportedVersionConstraint, constraint)
 }
