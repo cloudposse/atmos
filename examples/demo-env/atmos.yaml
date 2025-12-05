@@ -14,7 +14,7 @@ stacks:
     - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
 
 # Global environment variables
 # These are exported to all Terraform commands via `atmos env`
