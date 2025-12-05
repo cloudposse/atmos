@@ -12,7 +12,7 @@ import (
 
 // spinnerControl manages the lifecycle of a Bubble Tea spinner.
 type spinnerControl struct {
-	program       *tea.Program
+	program        *tea.Program
 	showingSpinner bool
 }
 
