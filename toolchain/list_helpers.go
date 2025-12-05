@@ -11,6 +11,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// toolIdentity holds the resolved owner, repo, and alias for a tool.
+type toolIdentity struct {
+	owner string
+	repo  string
+	alias string
+}
+
 // toolRowInfo holds basic information about a tool for building a row.
 type toolRowInfo struct {
 	owner     string
@@ -51,7 +58,7 @@ func buildToolRows(toolVersions *ToolVersions, installer *Installer) []toolRow {
 		}
 
 		// Resolve tool information.
-		owner, repo, alias, err := resolveToolInfo(toolName, toolVersions, installer)
+		id, err := resolveToolInfo(toolName, toolVersions, installer)
 		if err != nil {
 			_ = ui.Warningf("Could not resolve tool '%s': %v", toolName, err)
 			continue
@@ -59,9 +66,9 @@ func buildToolRows(toolVersions *ToolVersions, installer *Installer) []toolRow {
 
 		// Add row for default version (first in list).
 		if row, err := buildToolRow(installer, toolRowInfo{
-			owner:     owner,
-			repo:      repo,
-			alias:     alias,
+			owner:     id.owner,
+			repo:      id.repo,
+			alias:     id.alias,
 			version:   versions[0],
 			isDefault: true,
 		}); err == nil {
@@ -71,9 +78,9 @@ func buildToolRows(toolVersions *ToolVersions, installer *Installer) []toolRow {
 		// Add rows for additional versions.
 		for i := 1; i < len(versions); i++ {
 			if row, err := buildToolRow(installer, toolRowInfo{
-				owner:     owner,
-				repo:      repo,
-				alias:     alias,
+				owner:     id.owner,
+				repo:      id.repo,
+				alias:     id.alias,
 				version:   versions[i],
 				isDefault: false,
 			}); err == nil {
@@ -86,25 +93,30 @@ func buildToolRows(toolVersions *ToolVersions, installer *Installer) []toolRow {
 }
 
 // resolveToolInfo resolves owner, repo, and alias for a tool name.
-func resolveToolInfo(toolName string, toolVersions *ToolVersions, installer *Installer) (owner, repo, alias string, err error) {
+func resolveToolInfo(toolName string, toolVersions *ToolVersions, installer *Installer) (toolIdentity, error) {
 	// Use existing infrastructure to resolve tool.
 	resolvedKey, _, found := LookupToolVersion(toolName, toolVersions, installer.resolver)
 	if !found {
-		return "", "", "", fmt.Errorf("%w: %s", ErrToolNotFound, toolName)
+		return toolIdentity{}, fmt.Errorf("%w: %s", ErrToolNotFound, toolName)
 	}
 
 	// Get owner/repo from resolved key.
-	owner, repo, err = installer.resolver.Resolve(resolvedKey)
+	owner, repo, err := installer.resolver.Resolve(resolvedKey)
 	if err != nil {
-		return "", "", "", err
+		return toolIdentity{}, err
 	}
 
 	// Determine alias (if resolved key differs from tool name).
+	alias := ""
 	if resolvedKey != toolName {
 		alias = toolName
 	}
 
-	return owner, repo, alias, nil
+	return toolIdentity{
+		owner: owner,
+		repo:  repo,
+		alias: alias,
+	}, nil
 }
 
 // buildToolRow creates a single toolRow for a specific tool version.

@@ -9,14 +9,24 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// toolSpec holds resolved owner, repo, and key for a tool.
+type toolSpec struct {
+	owner string
+	repo  string
+	key   string
+}
+
 // resolveToolName resolves a tool name or alias to owner/repo format.
-func resolveToolName(toolName string, installer *Installer) (owner, repo, resolvedKey string, err error) {
-	owner, repo, err = installer.parseToolSpec(toolName)
+func resolveToolName(toolName string, installer *Installer) (toolSpec, error) {
+	owner, repo, err := installer.parseToolSpec(toolName)
 	if err != nil {
-		return "", "", "", fmt.Errorf("invalid tool name: %w", err)
+		return toolSpec{}, fmt.Errorf("invalid tool name: %w", err)
 	}
-	resolvedKey = owner + "/" + repo
-	return owner, repo, resolvedKey, nil
+	return toolSpec{
+		owner: owner,
+		repo:  repo,
+		key:   owner + "/" + repo,
+	}, nil
 }
 
 // validateToolForInteractiveSelection validates that a tool supports interactive version selection.

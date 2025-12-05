@@ -257,7 +257,7 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 
 	// Resolve the tool name to handle aliases.
 	installer := NewInstaller()
-	owner, repo, resolvedKey, err := resolveToolName(toolName, installer)
+	spec, err := resolveToolName(toolName, installer)
 	if err != nil {
 		return err
 	}
@@ -265,18 +265,18 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 	// If no version provided, fetch available versions and show interactive selection.
 	if version == "" {
 		// Validate tool supports interactive selection.
-		if err := validateToolForInteractiveSelection(installer, owner, repo); err != nil {
+		if err := validateToolForInteractiveSelection(installer, spec.owner, spec.repo); err != nil {
 			return err
 		}
 
 		// Fetch and validate available versions.
-		items, err := fetchAndValidateVersions(owner, repo)
+		items, err := fetchAndValidateVersions(spec.owner, spec.repo)
 		if err != nil {
 			return err
 		}
 
 		// Create and configure the interactive UI model.
-		m := createVersionListModel(owner, repo, items, scrollSpeed)
+		m := createVersionListModel(spec.owner, spec.repo, items, scrollSpeed)
 
 		// Run the interactive selection and get the chosen version.
 		version, err = runInteractiveSelection(m)
@@ -287,12 +287,12 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 
 	// Add the tool with the selected version.
 	filePath := GetToolVersionsFilePath()
-	err = AddToolToVersions(filePath, resolvedKey, version)
+	err = AddToolToVersions(filePath, spec.key, version)
 	if err != nil {
 		return fmt.Errorf("failed to set version: %w", err)
 	}
 
-	return ui.Successf("Set %s@%s in %s", resolvedKey, version, filePath)
+	return ui.Successf("Set %s@%s in %s", spec.key, version, filePath)
 }
 
 // fetchGitHubVersions fetches available versions and titles from GitHub releases.
