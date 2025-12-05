@@ -69,7 +69,11 @@ const config = {
                     // Backend documentation reorganization
                     {
                         from: '/core-concepts/components/terraform/state-backend',
-                        to: '/core-concepts/components/terraform/remote-state'
+                        to: '/components/terraform/remote-state'
+                    },
+                    {
+                        from: '/core-concepts/components/terraform/remote-state',
+                        to: '/components/terraform/remote-state'
                     },
                     // Component Catalog redirects for reorganization
                     {

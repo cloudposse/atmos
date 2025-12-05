@@ -36,16 +36,16 @@ Terraform components support all common sections plus Terraform-specific options
   <dt>[`hooks`](/stacks/hooks)</dt>
   <dd>Lifecycle event handlers.</dd>
 
-  <dt>[`backend`](/stacks/backend)</dt>
+  <dt>[`backend`](/stacks/components/terraform/backend)</dt>
   <dd>State storage configuration.</dd>
 
-  <dt>[`backend_type`](/stacks/backend)</dt>
+  <dt>[`backend_type`](/stacks/components/terraform/backend)</dt>
   <dd>Backend type (s3, azurerm, etc.).</dd>
 
-  <dt>[`remote_state_backend`](/stacks/backend)</dt>
+  <dt>[`remote_state_backend`](/stacks/components/terraform/backend)</dt>
   <dd>Remote state access configuration.</dd>
 
-  <dt>[`remote_state_backend_type`](/stacks/backend)</dt>
+  <dt>[`remote_state_backend_type`](/stacks/components/terraform/backend)</dt>
   <dd>Remote state backend type.</dd>
 
   <dt>[`providers`](/stacks/providers)</dt>
@@ -173,7 +173,7 @@ terraform:
     s3:
       bucket: "{{ .namespace }}-terraform-state"
       region: us-east-1
-      dynamodb_table: terraform-locks
+      use_lockfile: true
       encrypt: true
   providers:
     aws:
@@ -208,10 +208,10 @@ terraform:
   backend_type: s3
   backend:
     s3:
-      bucket: acme-prod-terraform-state
+      bucket: acme-ue1-prod-tfstate
       region: us-east-1
       key: "{{ .environment }}/{{ .stage }}/{{ .component }}/terraform.tfstate"
-      dynamodb_table: terraform-locks
+      use_lockfile: true
       encrypt: true
   providers:
     aws:
@@ -330,9 +330,11 @@ components/terraform/
 
 ## Related
 
-- [Configure Backend](/stacks/backend)
+- [Terraform Backend Configuration](/stacks/components/terraform/backend)
+- [Generate Terraform Backend](/stacks/backend)
 - [Configure Providers](/stacks/providers)
-- [Terraform Backends Reference](/components/terraform/backends)
+- [Terraform Backends Overview](/components/terraform/backends)
+- [Backend Provisioning](/components/terraform/backend-provisioning)
 - [Terraform Providers Reference](/components/terraform/providers)
 - [Terraform Workspaces](/components/terraform/workspaces)
 - [Remote State](/stacks/remote-state)
