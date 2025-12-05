@@ -6,6 +6,7 @@
   border-radius: 1.3em;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   margin-top: 4em;
+  margin-bottom: 3em;
 }
 
 .action-card h2 {
@@ -24,12 +25,13 @@
 }
 
 .action-card a.button.button--lg.button--primary {
-    margin-left: inherit;
-    margin-right: 100%;
+    margin-left: 0;
+    margin-right: 0;
 }
 
-.action-card p > div a.button.button--lg.button--primary, .action-card div > div a.button.button--lg.button--primary {
-    margin-right: inherit;
+.action-card a.button.button--lg.button--secondary {
+    margin-left: 0;
+    margin-right: 0;
 }
 
 .action-card a.button {
@@ -40,4 +42,18 @@
 .action-card div a.button {
   margin-top: 1em;
   margin-bottom: 0;
+}
+
+.action-card__cta-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 1.5em;
+}
+
+.action-card__cta-group a.button {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
 }

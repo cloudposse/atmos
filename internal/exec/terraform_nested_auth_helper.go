@@ -170,10 +170,12 @@ func createComponentAuthManager(
 
 	// Create and authenticate new AuthManager with merged config.
 	// Use inherited identity from parent, or empty string to auto-detect from component's defaults.
-	componentAuthManager, err := auth.CreateAndAuthenticateManager(
+	// Use WithAtmosConfig variant to enable stack-level default identity loading.
+	componentAuthManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
 		identityName,     // Inherited from parent, or empty to trigger auto-detection
 		mergedAuthConfig, // Merged component + global auth
 		cfg.IdentityFlagSelectValue,
+		atmosConfig, // Enable stack-level auth default loading
 	)
 	if err != nil {
 		log.Debug("Auth does not exist for the component, using parent AuthManager",

@@ -1,0 +1,253 @@
+---
+title: Authentication
+sidebar_position: 1
+sidebar_label: auth
+sidebar_class_name: command
+id: auth
+description: Configure cloud provider authentication in your `atmos.yaml` with providers, identities, and credential storage.
+---
+import DocCardList from '@theme/DocCardList'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+The `auth` section of the `atmos.yaml` configures how Atmos authenticates with cloud providers. It supports AWS SSO, SAML, OIDC, GitHub Actions, and static user credentials with a unified configuration model.
+</Intro>
+
+## Quick Start
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    my-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://mycompany.awsapps.com/start
+
+  identities:
+    admin:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: my-sso
+      principal:
+        name: AdminAccess
+        account:
+          name: production
+```
+</File>
+
+## Configuration Reference
+
+### Top-Level Structure
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  logs:
+    level: Info                    # Debug, Info, Warn, Error
+    file: /path/to/auth.log        # Optional log file
+
+  keyring:
+    type: system                   # system, file, or memory
+    spec: {}                       # Type-specific configuration
+
+  providers:
+    <provider-name>:               # Named provider configurations
+      kind: <provider-kind>
+      # Provider-specific fields...
+
+  identities:
+    <identity-name>:               # Named identity configurations
+      kind: <identity-kind>
+      # Identity-specific fields...
+```
+</File>
+
+## Subpages
+
+- **[Providers](/cli/configuration/auth/providers)** - Configure authentication providers (AWS SSO, SAML, GitHub OIDC)
+- **[Identities](/cli/configuration/auth/identities)** - Configure identities and identity chaining
+- **[Keyring](/cli/configuration/auth/keyring)** - Configure credential storage backends
+- **[Logs](/cli/configuration/auth/logs)** - Configure auth-specific logging
+
+## Disabling Authentication
+
+In CI/CD environments, you may want to disable Atmos-managed authentication and use native cloud provider credentials.
+
+```bash
+# Via CLI flag
+atmos terraform plan mycomponent --stack=dev --identity=false
+
+# Via environment variable
+export ATMOS_IDENTITY=false
+atmos terraform plan mycomponent --stack=dev
+```
+
+**Recognized disable values:** `false`, `0`, `no`, `off` (case-insensitive)
+
+When disabled:
+- Atmos skips all identity authentication
+- Falls back to standard cloud provider SDK credential resolution
+- Works even when `atmos.yaml` has identity configurations
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_IDENTITY`</dt>
+  <dd>Default identity name, or `false` to disable.</dd>
+
+  <dt>`ATMOS_KEYRING_TYPE`</dt>
+  <dd>Keyring backend (`system`, `file`, `memory`).</dd>
+
+  <dt>`ATMOS_KEYRING_PASSWORD`</dt>
+  <dd>Password for file keyring.</dd>
+
+  <dt>`ATMOS_XDG_CONFIG_HOME`</dt>
+  <dd>Override config directory for AWS files.</dd>
+
+  <dt>`ATMOS_XDG_DATA_HOME`</dt>
+  <dd>Override data directory for file keyring.</dd>
+</dl>
+
+## Complete Example
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  logs:
+    level: Info
+
+  keyring:
+    type: system
+
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start
+      session:
+        duration: 4h
+      console:
+        session_duration: 12h
+
+    github-oidc:
+      kind: github/oidc
+      region: us-east-1
+
+  identities:
+    # Development access via SSO
+    dev-admin:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: company-sso
+      principal:
+        name: AdminAccess
+        account:
+          name: development
+
+    # Production access via role chaining
+    prod-admin:
+      kind: aws/assume-role
+      via:
+        identity: dev-admin
+      principal:
+        assume_role: arn:aws:iam::999999999999:role/ProductionAdmin
+
+    # CI/CD access via GitHub OIDC
+    github-deploy:
+      kind: aws/assume-role
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
+
+    # Emergency break-glass access
+    emergency:
+      kind: aws/user
+      credentials:
+        region: us-east-1
+        mfa_arn: arn:aws:iam::123456789012:mfa/emergency
+```
+</File>
+
+## Using Profiles
+
+Use [Atmos profiles](/cli/configuration/profiles) to define different authentication configurations for various use cases:
+
+<File title="atmos.yaml">
+```yaml
+profiles:
+  # Profile for developers
+  dev:
+    auth:
+      identities:
+        dev-access:
+          kind: aws/permission-set
+          default: true
+          via:
+            provider: company-sso
+          principal:
+            name: DeveloperAccess
+            account:
+              name: development
+
+  # Profile for CI/CD
+  ci:
+    auth:
+      providers:
+        github-oidc:
+          kind: github/oidc
+          region: us-east-1
+      identities:
+        deploy:
+          kind: aws/assume-role
+          default: true
+          via:
+            provider: github-oidc
+          principal:
+            assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
+
+  # Profile for platform engineers
+  platform:
+    auth:
+      providers:
+        company-sso:
+          kind: aws/iam-identity-center
+          region: us-east-1
+          start_url: https://company.awsapps.com/start
+          session:
+            duration: 8h
+```
+</File>
+
+```bash
+# Activate a profile
+atmos --profile dev terraform plan myapp -s dev
+ATMOS_PROFILE=ci atmos terraform apply myapp -s prod
+```
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/auth/login', label: 'atmos auth login', description: 'Authenticate with a configured identity'},
+  {type: 'link', href: '/cli/commands/auth/whoami', label: 'atmos auth whoami', description: 'Show current authentication status'},
+  {type: 'link', href: '/cli/commands/auth/validate', label: 'atmos auth validate', description: 'Validate authentication configuration'},
+  {type: 'link', href: '/cli/commands/auth/shell', label: 'atmos auth shell', description: 'Start a shell with identity credentials'},
+  {type: 'link', href: '/cli/commands/auth/exec', label: 'atmos auth exec', description: 'Execute a command with identity credentials'},
+  {type: 'link', href: '/cli/commands/auth/env', label: 'atmos auth env', description: 'Export credentials as environment variables'},
+  {type: 'link', href: '/cli/commands/auth/console', label: 'atmos auth console', description: 'Open AWS console in browser'},
+  {type: 'link', href: '/cli/commands/auth/list', label: 'atmos auth list', description: 'List available identities and providers'},
+  {type: 'link', href: '/cli/commands/auth/logout', label: 'atmos auth logout', description: 'Clear cached credentials'},
+]} />
+
+## See Also
+
+- [Profiles](/cli/configuration/profiles) — Environment-specific configuration overrides
+- [Stack Auth Configuration](/stacks/auth) — Configure authentication at the stack level

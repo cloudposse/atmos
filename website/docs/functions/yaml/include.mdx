@@ -90,7 +90,7 @@ The `!include` function supports the following local file sources:
     vars: !include ../config/vars.yaml
     ```
 
-  - Paths relative to the [`base_path`](/cli/configuration/#base-path) defined in `atmos.yaml` CLI config file
+  - Paths relative to the [`base_path`](/cli/configuration#base-path) defined in `atmos.yaml` CLI config file
     ```yaml
     vars: !include stacks/catalog/vpc/vars.yaml
     ```
@@ -138,7 +138,7 @@ This has several important implications:
    files and reused across multiple stacks or components. You can use it in place of YAML anchors, which don't work across files.
 
 - **Preprocessing for Inheritance**
-  Includes are resolved *before* Atmos processes stacks and components, enabling powerful [inheritance](/core-concepts/stacks/inheritance/) and deep-merging
+  Includes are resolved *before* Atmos processes stacks and components, enabling powerful [inheritance](/howto/inheritance) and deep-merging
   behaviors using fully expanded configuration data.
 
 - **Adopting Existing Terraform/OpenTofu Root Modules as Atmos Components**
@@ -148,7 +148,7 @@ This has several important implications:
 
 ### Example: Referencing Different TFVAR Files Per Environment
 
-For example, instead of rewriting existing `.tfvars` varfiles into inline YAML, Atmos lets you bring them in as-is into your [Stacks](/core-concepts/stacks/).
+For example, instead of rewriting existing `.tfvars` varfiles into inline YAML, Atmos lets you bring them in as-is into your [Stacks](/learn/stacks/).
 You can continue managing your root modules as you always have, while gaining Atmos features like stack inheritance,
 environment promotion, and deep-merging.
 
@@ -189,7 +189,7 @@ components:
 
 This pattern allows you to plug Atmos into your existing Terraform/OpenTofu root modules with minimal changes — no need to
 duplicate or reformat your varfiles. You also unlock additional capabilities like [listing all your stacks](/cli/commands/list/stacks)
-and [components](/cli/commands/list/components), leveraging layered configurations, [stack inheritance with imports](/core-concepts/stacks/imports),
+and [components](/cli/commands/list/components), leveraging layered configurations, [stack inheritance with imports](/stacks/imports),
 and consistent promotion of settings across environments.
 
 ## Usage

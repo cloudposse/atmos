@@ -1,0 +1,132 @@
+.faq-item {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  transition: box-shadow 0.2s ease;
+}
+
+.faq-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+[data-theme='dark'] .faq-item {
+  border-color: #404040;
+}
+
+[data-theme='dark'] .faq-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.faq-question {
+  cursor: pointer;
+  width: 100%;
+  padding: 1.25rem 1.5rem;
+  font-weight: 600;
+  font-size: 1.1rem;
+  text-align: left;
+  border: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  background-color: #f8f9fa;
+  color: inherit;
+  font-family: inherit;
+  transition: background-color 0.2s ease;
+}
+
+[data-theme='dark'] .faq-question {
+  background-color: #1e1e1e;
+}
+
+.faq-question:hover {
+  background-color: #f0f0f0;
+}
+
+[data-theme='dark'] .faq-question:hover {
+  background-color: #2a2a2a;
+}
+
+.faq-question:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: -2px;
+}
+
+.faq-icon {
+  font-size: 1.5rem;
+  font-weight: 300;
+  color: #666;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+[data-theme='dark'] .faq-icon {
+  color: #999;
+}
+
+.faq-answer {
+  overflow: hidden;
+  background-color: #fff;
+}
+
+[data-theme='dark'] .faq-answer {
+  background-color: #161616;
+}
+
+.faq-answer-content {
+  padding: 1.25rem 1.5rem;
+  border-top: 1px solid #e0e0e0;
+  line-height: 1.7;
+}
+
+[data-theme='dark'] .faq-answer-content {
+  border-top-color: #404040;
+}
+
+.faq-answer-content p {
+  margin-bottom: 1rem;
+}
+
+.faq-answer-content p:last-child {
+  margin-bottom: 0;
+}
+
+.faq-answer-content h4 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 1rem;
+}
+
+.faq-answer-content h4:first-child {
+  margin-top: 0;
+}
+
+.faq-answer-content ul,
+.faq-answer-content ol {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+}
+
+.faq-answer-content li {
+  margin-bottom: 0.5rem;
+}
+
+.faq-answer-content code {
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.faq-answer-content .react-player {
+  margin: 1rem 0;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .faq-item,
+  .faq-question,
+  .faq-icon {
+    transition: none;
+  }
+}

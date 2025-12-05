@@ -1,0 +1,316 @@
+---
+title: Helmfile Components
+sidebar_position: 3
+sidebar_label: helmfile
+sidebar_class_name: command
+description: Configure Helmfile components in your Atmos stack manifests for Kubernetes deployments.
+id: helmfile
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Helmfile components manage Kubernetes deployments using Helmfile, a declarative spec for deploying Helm charts. They allow you to manage Helm releases with the same stack-based configuration approach used for Terraform.
+</Intro>
+
+## Available Configuration Sections
+
+Helmfile components support the common configuration sections:
+
+<dl>
+  <dt>[`vars`](/stacks/vars)</dt>
+  <dd>Variables passed to helmfile.</dd>
+
+  <dt>[`env`](/stacks/env)</dt>
+  <dd>Environment variables during execution.</dd>
+
+  <dt>[`settings`](/stacks/settings)</dt>
+  <dd>Integrations and metadata.</dd>
+
+  <dt>[`metadata`](/stacks/metadata)</dt>
+  <dd>Component behavior and inheritance.</dd>
+
+  <dt>[`command`](/stacks/command)</dt>
+  <dd>Override helmfile binary.</dd>
+
+  <dt>[`hooks`](/stacks/hooks)</dt>
+  <dd>Lifecycle event handlers.</dd>
+</dl>
+
+## Component Structure
+
+A typical Helmfile component configuration:
+
+```yaml
+components:
+  helmfile:
+    nginx-ingress:
+      metadata:
+        component: nginx-ingress
+      vars:
+        chart_version: "4.7.1"
+        replica_count: 3
+        service_type: LoadBalancer
+      env:
+        KUBECONFIG: "{{ env \"HOME\" }}/.kube/config"
+      settings:
+        depends_on:
+          - component: eks
+            type: terraform
+```
+
+## Helmfile Directory Structure
+
+Helmfile components are located in the path configured in `atmos.yaml`:
+
+```yaml
+# atmos.yaml
+components:
+  helmfile:
+    base_path: components/helmfile
+    kubeconfig_path: /dev/shm
+    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+```
+
+Example structure:
+
+```
+components/helmfile/
+├── nginx-ingress/
+│   └── helmfile.yaml
+├── cert-manager/
+│   └── helmfile.yaml
+└── prometheus/
+    └── helmfile.yaml
+```
+
+## Helmfile Template
+
+Each helmfile component contains a `helmfile.yaml` that uses variables passed from Atmos:
+
+<File title="components/helmfile/nginx-ingress/helmfile.yaml">
+```yaml
+repositories:
+  - name: ingress-nginx
+    url: https://kubernetes.github.io/ingress-nginx
+
+releases:
+  - name: nginx-ingress
+    namespace: ingress-nginx
+    createNamespace: true
+    chart: ingress-nginx/ingress-nginx
+    version: {{ .Values.chart_version | quote }}
+    wait: true
+    values:
+      - controller:
+          replicaCount: {{ .Values.replica_count }}
+          service:
+            type: {{ .Values.service_type }}
+          metrics:
+            enabled: {{ .Values.metrics_enabled | default false }}
+```
+</File>
+
+## Component-Type Defaults
+
+Define defaults for all Helmfile components:
+
+```yaml
+# Apply to all Helmfile components
+helmfile:
+  vars:
+    timeout: 600
+    atomic: true
+    wait: true
+  env:
+    HELM_CACHE_HOME: /tmp/helm-cache
+    HELM_CONFIG_HOME: /tmp/helm-config
+
+# Individual components
+components:
+  helmfile:
+    nginx-ingress:
+      vars:
+        chart_version: "4.7.1"
+```
+
+## Complete Example
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/helmfile/_defaults
+  - orgs/acme/plat/prod/_defaults
+
+vars:
+  region: us-east-1
+  stage: prod
+  eks_cluster_name: acme-prod-eks
+
+helmfile:
+  vars:
+    timeout: 900
+    atomic: true
+  env:
+    AWS_PROFILE: acme-prod
+    KUBECONFIG: "/tmp/kubeconfig-acme-prod"
+
+components:
+  helmfile:
+    cert-manager:
+      metadata:
+        component: cert-manager
+      vars:
+        chart_version: "v1.13.0"
+        install_crds: true
+
+    nginx-ingress:
+      metadata:
+        component: nginx-ingress
+      vars:
+        chart_version: "4.7.1"
+        replica_count: 3
+        service_type: LoadBalancer
+        metrics_enabled: true
+      settings:
+        depends_on:
+          - component: cert-manager
+
+    prometheus:
+      metadata:
+        component: prometheus
+        inherits:
+          - prometheus/defaults
+      vars:
+        chart_version: "45.0.0"
+        retention: "15d"
+        storage_size: "100Gi"
+      settings:
+        depends_on:
+          - component: nginx-ingress
+```
+</File>
+
+## Running Helmfile Commands
+
+Atmos provides commands that wrap Helmfile operations:
+
+```bash
+# Diff changes
+atmos helmfile diff nginx-ingress -s plat-ue1-prod
+
+# Apply changes
+atmos helmfile apply nginx-ingress -s plat-ue1-prod
+
+# Sync releases
+atmos helmfile sync nginx-ingress -s plat-ue1-prod
+
+# Destroy releases
+atmos helmfile destroy nginx-ingress -s plat-ue1-prod
+
+# Run any helmfile subcommand
+atmos helmfile <subcommand> <component> -s <stack>
+```
+
+## Environment Variables
+
+Common environment variables for Helmfile components:
+
+<dl>
+  <dt>`KUBECONFIG`</dt>
+  <dd>Path to kubeconfig file.</dd>
+
+  <dt>`HELM_CACHE_HOME`</dt>
+  <dd>Helm cache directory.</dd>
+
+  <dt>`HELM_CONFIG_HOME`</dt>
+  <dd>Helm configuration directory.</dd>
+
+  <dt>`HELM_DATA_HOME`</dt>
+  <dd>Helm data directory.</dd>
+
+  <dt>`AWS_PROFILE`</dt>
+  <dd>AWS profile for EKS authentication.</dd>
+
+  <dt>`HELM_EXPERIMENTAL_OCI`</dt>
+  <dd>Enable OCI registry support.</dd>
+</dl>
+
+## Integration with Terraform
+
+Helmfile components often depend on infrastructure created by Terraform:
+
+```yaml
+components:
+  terraform:
+    eks:
+      vars:
+        cluster_name: acme-prod-eks
+
+  helmfile:
+    nginx-ingress:
+      vars:
+        # Reference Terraform outputs
+        cluster_name: "{{ .terraform_outputs.eks.cluster_name }}"
+      env:
+        KUBECONFIG: "{{ .terraform_outputs.eks.kubeconfig_path }}"
+      settings:
+        depends_on:
+          - component: eks
+            type: terraform
+```
+
+## Values Handling
+
+Variables from the `vars` section are passed to Helmfile and available in templates:
+
+```yaml
+# In stack manifest
+components:
+  helmfile:
+    my-app:
+      vars:
+        image_tag: "v1.2.3"
+        replicas: 5
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+```
+
+```yaml
+# In helmfile.yaml
+releases:
+  - name: my-app
+    values:
+      - image:
+          tag: {{ .Values.image_tag | quote }}
+        replicaCount: {{ .Values.replicas }}
+        resources:
+          requests:
+            cpu: {{ .Values.resources.requests.cpu | quote }}
+            memory: {{ .Values.resources.requests.memory | quote }}
+```
+
+## Best Practices
+
+1. **Use Dependencies:** Define `depends_on` to ensure Helmfile components deploy after their infrastructure dependencies.
+
+2. **Centralize Chart Versions:** Define chart versions in catalog defaults and override only when necessary.
+
+3. **Use Atomic Deployments:** Set `atomic: true` to automatically roll back failed deployments.
+
+4. **Manage Kubeconfig:** Use environment variables or settings to manage kubeconfig paths consistently.
+
+5. **Version Pin Charts:** Always specify explicit chart versions for reproducible deployments.
+
+6. **Separate Concerns:** Create separate Helmfile components for distinct services rather than combining everything into one.
+
+## Related
+
+- [Component Types Overview](/stacks/components)
+- [Terraform Components](/stacks/components/terraform)
+- [Configure Variables](/stacks/vars)
+- [Configure Environment](/stacks/env)
+- [depends_on](/stacks/settings/depends_on)

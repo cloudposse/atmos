@@ -183,7 +183,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/smithy-go
     License: Apache-2.0
-    URL: https://github.com/aws/smithy-go/blob/v1.23.2/LICENSE
+    URL: https://github.com/aws/smithy-go/blob/v1.24.0/LICENSE
 
   - github.com/cloudposse/atmos
     License: Apache-2.0
@@ -568,7 +568,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/aws/smithy-go/internal/sync/singleflight
     License: BSD-3-Clause
-    URL: https://github.com/aws/smithy-go/blob/v1.23.2/internal/sync/singleflight/LICENSE
+    URL: https://github.com/aws/smithy-go/blob/v1.24.0/internal/sync/singleflight/LICENSE
 
   - github.com/bearsh/hid/hidapi
     License: BSD-3-Clause

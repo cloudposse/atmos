@@ -177,8 +177,8 @@ We're continuing to expand authentication capabilities:
 
 - [Authentication User Guide](/cli/commands/auth/usage)
 - [Command Reference](/cli/commands/auth/login)
-- [Migrating from Leapp](/cli/commands/auth/tutorials/migrating-from-leapp)
-- [Configuring Geodesic](/cli/commands/auth/tutorials/configuring-geodesic)
+- [Migrating from Leapp](/tutorials/migrating-from-leapp)
+- [Configuring Geodesic](/tutorials/configuring-geodesic)
 
 ## Get Involved
 
