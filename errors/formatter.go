@@ -448,9 +448,9 @@ func shouldUseColor() bool {
 		Color:      viper.GetBool("color"),
 		ForceColor: viper.GetBool("force-color"),
 
-		EnvNoColor:       os.Getenv("NO_COLOR") != "",
-		EnvCLIColor:      os.Getenv("CLICOLOR"),
-		EnvCLIColorForce: os.Getenv("CLICOLOR_FORCE") != "" || os.Getenv("FORCE_COLOR") != "",
+		EnvNoColor:       os.Getenv("NO_COLOR") //nolint:forbidigo // Standard env var != "",
+		EnvCLIColor:      os.Getenv("CLICOLOR") //nolint:forbidigo // Standard env var,
+		EnvCLIColorForce: os.Getenv("CLICOLOR_FORCE") //nolint:forbidigo // Standard env var != "" || os.Getenv("FORCE_COLOR") //nolint:forbidigo // Standard env var != "",
 	}
 
 	// Add atmos.yaml settings if available.
