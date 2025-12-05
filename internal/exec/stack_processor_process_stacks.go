@@ -22,6 +22,16 @@ const (
 	errFormatWithFile = "%w in file '%s'"
 )
 
+// trimStackExtensions removes any supported stack config extension from the stack path.
+func trimStackExtensions(stack string) string {
+	for _, ext := range u.StackConfigExtensions() {
+		if strings.HasSuffix(stack, ext) {
+			return strings.TrimSuffix(stack, ext)
+		}
+	}
+	return stack
+}
+
 // ProcessStackConfig processes a stack configuration.
 //
 //nolint:gocognit,nestif,revive,cyclop,funlen // Core stack processing logic with complex configuration handling.
@@ -42,12 +52,7 @@ func ProcessStackConfig(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStackConfig")()
 
-	stackName := strings.TrimSuffix(
-		strings.TrimSuffix(
-			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
-			u.DefaultStackConfigFileExtension),
-		".yml",
-	)
+	stackName := trimStackExtensions(u.TrimBasePathFromPath(stacksBasePath+"/", stack))
 
 	// Extract the stack-level 'name' field (logical name override) if present.
 	var stackManifestName string
