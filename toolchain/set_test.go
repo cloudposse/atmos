@@ -464,20 +464,21 @@ func fetchGitHubVersionsWithCustomURL(apiURL string) ([]versionItem, error) {
 
 	var items []versionItem
 	for _, release := range releases {
-		if !release.Prerelease {
-			version := strings.TrimPrefix(release.TagName, versionPrefix)
-			title := release.Name
-			if title == "" {
-				title = release.TagName
-			}
-			releaseNotes := formatReleaseNotes(release.Name, release.TagName, release.Body, release.PublishedAt)
-			items = append(items, versionItem{
-				version:      version,
-				title:        title,
-				desc:         fmt.Sprintf("Version %s", version),
-				releaseNotes: releaseNotes,
-			})
+		if release.Prerelease {
+			continue
 		}
+		version := strings.TrimPrefix(release.TagName, versionPrefix)
+		title := release.Name
+		if title == "" {
+			title = release.TagName
+		}
+		releaseNotes := formatReleaseNotes(release.Name, release.TagName, release.Body, release.PublishedAt)
+		items = append(items, versionItem{
+			version:      version,
+			title:        title,
+			desc:         fmt.Sprintf("Version %s", version),
+			releaseNotes: releaseNotes,
+		})
 	}
 
 	fmt.Printf("Found %d non-prerelease versions\n", len(items))
