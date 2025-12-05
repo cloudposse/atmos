@@ -56,7 +56,7 @@ func GetTerraformState(
 			)
 			result, err := tb.GetTerraformBackendVariable(atmosConfig, backend.(map[string]any), output)
 			if err != nil {
-				er := fmt.Errorf("%w %s for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
+				er := fmt.Errorf("%w %s for component `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
 				return nil, er
 			}
 			return result, nil
@@ -97,7 +97,7 @@ func GetTerraformState(
 		AuthManager:          resolvedAuthMgr, // Use resolved AuthManager (may be component-specific or inherited)
 	})
 	if err != nil {
-		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
+		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
@@ -111,7 +111,7 @@ func GetTerraformState(
 		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
 		result, exists, err := GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
 		if err != nil {
-			return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
+			return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		}
 		if !exists {
 			return nil, fmt.Errorf("%w: output `%s` does not exist for component `%s` in stack `%s`\nin YAML function: `%s`", errUtils.ErrReadTerraformState, output, component, stack, yamlFunc)
@@ -123,7 +123,7 @@ func GetTerraformState(
 	// Read Terraform backend.
 	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, authContext)
 	if err != nil {
-		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
+		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
@@ -138,7 +138,7 @@ func GetTerraformState(
 	// Get the output.
 	result, err := tb.GetTerraformBackendVariable(atmosConfig, backend, output)
 	if err != nil {
-		er := fmt.Errorf("%w %s for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
+		er := fmt.Errorf("%w %s for component `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
