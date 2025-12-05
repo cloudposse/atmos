@@ -867,14 +867,15 @@ func (ar *AquaRegistry) parseIndexYAML(data []byte) ([]*registry.Tool, error) {
 			parts := strings.Split(pkg.Path, "/")
 			if len(parts) >= 3 {
 				// Handle special cases like golang.org/x/...
-				if parts[0] == "golang.org" && len(parts) >= 2 {
+				switch {
+				case parts[0] == "golang.org" && len(parts) >= 2:
 					owner = "golang"
 					repo = parts[1] // e.g., "x" from "golang.org/x/..."
-				} else if parts[0] == "github.com" && len(parts) >= 3 {
+				case parts[0] == "github.com" && len(parts) >= 3:
 					owner = parts[1]
 					repo = parts[2]
-				} else {
-					// For other paths, use first part as owner, second as repo
+				default:
+					// For other paths, use first part as owner, second as repo.
 					owner = parts[0]
 					if len(parts) > 1 {
 						repo = parts[1]

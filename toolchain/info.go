@@ -232,11 +232,12 @@ func displayVersionsTable(versions []string, defaultVersion string, terminalWidt
 		}
 
 		// Set status indicator.
-		if row.isDefault {
+		switch {
+		case row.isDefault:
 			row.status = theme.Styles.Checkmark.String() // Checkmark for default.
-		} else if row.isInstalled {
+		case row.isInstalled:
 			row.status = theme.Styles.Checkmark.String() // Checkmark for installed.
-		} else {
+		default:
 			row.status = " " // No indicator for available-only.
 		}
 

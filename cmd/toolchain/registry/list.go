@@ -305,11 +305,12 @@ func buildToolsTable(tools []*toolchainregistry.Tool) string {
 		}
 
 		// Set status indicator.
-		if row.isInstalled {
+		switch {
+		case row.isInstalled:
 			row.status = statusIndicator // Green dot (will be colored later).
-		} else if row.isInConfig {
+		case row.isInConfig:
 			row.status = statusIndicator // Gray dot (will be colored later).
-		} else {
+		default:
 			row.status = " " // No indicator.
 		}
 
