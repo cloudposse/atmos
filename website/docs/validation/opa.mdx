@@ -1,0 +1,535 @@
+---
+title: Open Policy Agent (OPA) Validation
+sidebar_position: 2
+sidebar_label: Open Policy Agent (OPA)
+description: Use OPA policies to validate Stacks and Component configurations.
+id: opa
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import EmbedFile from '@site/src/components/EmbedFile'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The [Open Policy Agent](https://www.openpolicyagent.org/docs/latest/) (OPA) is the open-source industry standard for policy-as-code validation. It provides a general-purpose policy engine to unify policy enforcement across your stacks.
+</Intro>
+
+The OPA (pronounced “oh-pa”) language (Rego) is a high-level declarative language for specifying policy as code. Atmos has native support for the OPA decision-making engine to enforce policies across all the components in your stacks (e.g. for microservice configurations).
+
+This is powerful stuff: because you can define many policies, it's possible to apply different policies depending on where a component is defined in the stacks. For example, it could validate differently based on environments or teams.
+
+## Use Cases
+
+Use Open Policy Agent (OPA) policies to validate Atmos stacks and component configurations.
+
+* Validate component config (`vars`, `settings`, `backend`, `env`, `overrides` and other sections) using JSON Schema
+
+* Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using
+  OPA/Rego policies
+
+## Usage
+
+Atmos `validate component` command supports `--schema-path`, `--schema-type` and `--module-paths` command line arguments.
+If the arguments are not provided, Atmos will try to find and use the `settings.validation` section defined in the component's YAML config.
+
+:::tip
+
+Refer to [atmos validate component](/cli/commands/validate/component) CLI command for more information
+
+:::
+
+<Terminal>
+```shell
+
+# Validate 'vpc' component using OPA policy in the 'plat-ue2-prod' stack
+atmos validate component vpc -s plat-ue2-prod --schema-path vpc/validate-vpc-component.rego --schema-type opa
+
+# Validate 'vpc' component using OPA policy in the 'plat-ue2-dev' stack with additional module paths 'catalog/constants'
+atmos validate component vpc -s plat-ue2-dev --schema-path vpc/validate-vpc-component.rego --schema-type opa --module-paths catalog/constants
+
+# Validate 'vpc' component using OPA policy in the 'plat-ue2-dev' stack with additional module paths 'catalog'
+atmos validate component vpc -s plat-ue2-dev --schema-path vpc/validate-vpc-component.rego --schema-type opa --module-paths catalog
+
+# Validate 'vpc' component in the 'plat-ue2-prod' stack
+atmos validate component vpc -s plat-ue2-prod
+
+# Validate 'vpc' component in the 'plat-ue2-dev' stack
+atmos validate component vpc -s plat-ue2-dev
+
+# Validate 'vpc' component in the 'plat-ue2-dev' stack with a timeout of 15 seconds
+atmos validate component vpc -s plat-ue2-dev --timeout 15
+```
+</Terminal>
+
+### Configure Component Validation
+
+In [`atmos.yaml`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml), add the `schemas`
+section:
+
+<File title="atmos.yaml">
+```yaml
+# Validation schemas for OPA for validating atmos stacks and components
+schemas:
+  # https://www.openpolicyagent.org
+  opa:
+    # Can also be set using `ATMOS_SCHEMAS_OPA_BASE_PATH` ENV var, or `--schemas-opa-dir` command-line arguments
+    # Supports both absolute and relative paths
+    base_path: "stacks/schemas/opa"
+```
+</File>
+
+In the component [manifest](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml), add
+the `settings.validation` section:
+
+<EmbedFile filePath="examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml" />
+
+Add the following Rego package in the file [`stacks/schemas/opa/catalog/constants/constants.rego`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/schemas/opa/catalog/constants/constants.rego):
+
+<EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/opa/catalog/constants/constants.rego" />
+
+Add the following OPA policy in the file [`stacks/schemas/opa/vpc/validate-vpc-component.rego`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego):
+
+<EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego" />
+
+### Use One Policy File or Many
+
+Atmos supports OPA policies for components validation in a single Rego file and in multiple Rego files.
+
+As shown in the example above, you can define some Rego constants, modules and helper functions in a separate
+file `stacks/schemas/opa/catalog/constants/constants.rego`, and then import them into the main policy
+file `stacks/schemas/opa/vpc/validate-vpc-component.rego`.
+
+You also need to specify the `module_paths` attribute in the component's `settings.validation` section.
+The `module_paths` attribute is an array of filesystem paths (folders or individual files) to the additional modules for schema validation.
+Each path can be an absolute path or a path relative to `schemas.opa.base_path` defined in `atmos.yaml`.
+If a folder is specified in `module_paths`, Atmos will recursively process the folder and all its sub-folders and load all Rego files into the OPA
+engine.
+
+This allows you to separate the common OPA modules, constants and helper functions into a catalog of reusable Rego modules,
+and to structure your OPA policies to make them DRY.
+
+## Examples
+
+### Validate VPC Component in Stacks
+
+Run the following commands to validate the component in the stacks:
+
+<Terminal title="atmos validate component vpc -s plat-ue2-prod">
+```console
+Mapping public IPs on launch is not allowed in 'prod'. Set 'map_public_ip_on_launch' variable to 'false'
+
+exit status 1
+```
+</Terminal>
+
+<Terminal title="atmos validate component vpc -s plat-ue2-dev">
+```console
+In 'dev', only 2 Availability Zones are allowed
+VPC name must be a valid string from 2 to 20 alphanumeric chars
+
+exit status 1
+```
+</Terminal>
+
+
+### Validate Before Provisioning
+
+Try to run the following commands to provision the component in the stacks:
+
+<Terminal>
+```bash
+atmos terraform apply vpc -s plat-ue2-prod
+atmos terraform apply vpc -s plat-ue2-dev
+```
+</Terminal>
+
+Since the OPA validation policies don't pass, Atmos does not allow provisioning the component in the stacks:
+
+<Terminal title="atmos validate vpc --stack=plat-ue2-prod">
+![atmos-validate-vpc-in-plat-ue2-prod](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
+</Terminal>
+
+<Terminal title="atmos validate vpc --stack=plat-ue2-dev">
+![atmos-validate-vpc-in-plat-ue2-dev](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
+</Terminal>
+
+### Advanced Policy Examples
+
+<EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego" />
+
+:::note
+
+- If a regex pattern in the 're_match' function contains a backslash to escape special chars (e.g. '\.' or '\-'),
+  it must be escaped with another backslash when represented as a regular Go string ('\\.', '\\-').
+
+- The reason is that backslash is also used to escape special characters in Go strings like newline (\n).
+
+- If you want to match the backslash character itself, you'll need four slashes.
+
+:::
+
+## Policy Execution Context
+
+Atmos allows enforcing custom governance rules based on metadata about Atmos commands and provides a powerful
+policy evaluation mechanism by passing structured metadata to OPA policies at runtime.
+
+This metadata enables fine-grained control over when certain actions (like `terraform apply`) are allowed or denied,
+based on the context in which they're executed.
+
+### Policy Metadata
+
+When Atmos runs a command, it supplies an input object to OPA policies that contains detailed contextual information, such as:
+
+- `process_env`: a map of the environment variables in the current process
+- `cli_args`: a list of the command line arguments and flags (e.g., executing the `atmos terraform apply` command will generate the `["terraform", "apply"]` list)
+- `tf_cli_vars`: a map of variables with proper type conversion from the command-line `-var` arguments
+- `env_tf_cli_args`: a list of arguments from the [`TF_CLI_ARGS`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_cli_args-and-tf_cli_args_name) environment variable
+- `env_tf_cli_vars`: a map of variables with proper type conversion from the [`TF_CLI_ARGS`](https://developer.hashicorp.com/terraform/cli/config/environment-variables#tf_cli_args-and-tf_cli_args_name) environment variable
+- `vars`: a map of variables passed to the command, either via the stack config files or [CLI flags](/validation/terraform-variables)
+- other contextual attributes that are returned from the [`atmos describe component`](/cli/commands/describe/component) command for a component in a stack
+
+### Policy Execution Context Example
+
+Below is an OPA policy rule to enforce infrastructure governance during command execution.
+Specifically, this rule blocks the execution of `atmos terraform apply` if the variable `foo` is set to the string `"foo"`.
+
+<File title="validate-component.rego">
+```rego
+# 'package atmos' is required in all Atmos OPA policies
+package atmos
+
+# Atmos looks for the 'errors' (array of strings) output from all OPA policies
+# If the 'errors' output contains one or more error messages, Atmos considers the policy failed
+
+# Don't allow `terraform apply` if the `foo` variable is set to `foo`
+# The `input` map contains the `cli_args` attribute (a list of the command line arguments and flags)
+errors[message] {
+  count(input.cli_args) >= 2
+  input.cli_args[0] == "terraform"
+  input.cli_args[1] == "apply"
+  input.vars.foo == "foo"
+  message = "the component can't be applied if the 'foo' variable is set to 'foo'"
+}
+```
+</File>
+
+The rule checks if:
+ - The `cli_args` list has at least two items
+ - The command (first item in the `cli_args` list) is `terraform`
+ - The subcommand (second item in the `cli_args` list) is `apply`
+ - The variable `foo` is set to `"foo"`
+
+If all conditions are true, the rule generates an error message.
+
+The generated error message is added to the `errors` array.
+Atmos interprets the presence of any messages in `errors` as a policy violation and blocks the operation with the
+following error:
+
+<Terminal title="atmos terraform apply component-1 -s nonprod">
+```console
+the component can't be applied if the 'foo' variable is set to 'foo'
+
+exit status 1
+```
+</Terminal>
+
+### Environment and Process Context Examples
+
+The following examples demonstrate how to use the process environment and Terraform CLI context in OPA policies for advanced governance scenarios.
+
+#### Process Environment Variables (`process_env`)
+
+Access environment variables from the current process to enforce security and compliance policies.
+
+<File title="validate-environment.rego">
+```rego
+package atmos
+
+# Block operations if running in production without proper approval
+errors[message] {
+  input.process_env.ENVIRONMENT == "production"
+  not input.process_env.DEPLOYMENT_APPROVED
+  message = "Production deployments require DEPLOYMENT_APPROVED environment variable"
+}
+
+# Ensure required environment variables are set
+errors[message] {
+  required_vars := ["AWS_REGION", "AWS_PROFILE"]
+  missing_var := required_vars[_]
+  not input.process_env[missing_var]
+  message = sprintf("Required environment variable '%s' is not set", [missing_var])
+}
+
+# Validate AWS region restrictions
+errors[message] {
+  input.process_env.AWS_REGION
+  not input.process_env.AWS_REGION in ["us-east-1", "us-west-2", "eu-west-1"]
+  message = sprintf("AWS region '%s' is not allowed. Use: us-east-1, us-west-2, or eu-west-1", [input.process_env.AWS_REGION])
+}
+```
+</File>
+
+#### Terraform CLI Variables (`tf_cli_vars`)
+
+Validate variables passed via command-line `-var` arguments with proper type handling and JSON parsing.
+
+<File title="validate-cli-vars.rego">
+```rego
+package atmos
+
+# Validate instance types passed via CLI
+errors[message] {
+  input.tf_cli_vars.instance_type
+  not input.tf_cli_vars.instance_type in ["t3.micro", "t3.small", "t3.medium"]
+  message = sprintf("Instance type '%s' not allowed via CLI. Use t3.micro, t3.small, or t3.medium", [input.tf_cli_vars.instance_type])
+}
+
+# Validate JSON configuration passed via CLI
+errors[message] {
+  input.tf_cli_vars.config
+  is_object(input.tf_cli_vars.config)
+  input.tf_cli_vars.config.encryption_enabled != true
+  message = "Configuration passed via CLI must have encryption_enabled set to true"
+}
+
+# Ensure sensitive variables are not passed via CLI
+errors[message] {
+  sensitive_vars := ["password", "secret", "api_key", "token"]
+  cli_var := sensitive_vars[_]
+  input.tf_cli_vars[cli_var]
+  message = sprintf("Sensitive variable '%s' should not be passed via command line", [cli_var])
+}
+
+# Validate numeric ranges for CLI variables
+errors[message] {
+  input.tf_cli_vars.max_instances
+  is_number(input.tf_cli_vars.max_instances)
+  input.tf_cli_vars.max_instances > 10
+  message = sprintf("max_instances cannot exceed 10, got %d", [input.tf_cli_vars.max_instances])
+}
+```
+</File>
+
+#### TF_CLI_ARGS Environment (`env_tf_cli_args`)
+
+Parse and validate arguments from the `TF_CLI_ARGS` environment variable.
+
+<File title="validate-tf-cli-args.rego">
+```rego
+package atmos
+
+# Block dangerous flags in TF_CLI_ARGS
+errors[message] {
+  dangerous_flags := ["-auto-approve", "-force", "-lock=false"]
+  flag := dangerous_flags[_]
+  flag in input.env_tf_cli_args
+  input.process_env.ENVIRONMENT == "production"
+  message = sprintf("Flag '%s' is not allowed in production via TF_CLI_ARGS", [flag])
+}
+
+# Require planfile for apply (positional, not a flag)
+errors[message] {
+  some i
+  input.cli_args[i] == "apply"
+  # next token exists and is not a flag -> planfile path
+  i+1 < count(input.cli_args)
+  not startswith(input.cli_args[i+1], "-")
+  # Optionally, enforce a prefix/dir policy for plan files
+  not allowed_planfile(input.cli_args[i+1])
+  message = "Apply must use an approved plan file generated by 'terraform plan -out=...'"
+}
+
+allowed_planfile(p) {
+  startswith(p, "plans/")
+}
+
+# Validate parallelism settings
+errors[message] {
+  some i
+  # equals form: -parallelism=50
+  startswith(input.env_tf_cli_args[i], "-parallelism=")
+  parallelism := to_number(replace(input.env_tf_cli_args[i], "-parallelism=", ""))
+  parallelism > 20
+  message = sprintf("Parallelism cannot exceed 20, got %d", [parallelism])
+}
+
+errors[message] {
+  some i
+  # space form: -parallelism 50
+  input.env_tf_cli_args[i] == "-parallelism"
+  i + 1 < count(input.env_tf_cli_args)
+  parallelism := to_number(input.env_tf_cli_args[i+1])
+  parallelism > 20
+  message = sprintf("Parallelism cannot exceed 20, got %d", [parallelism])
+}
+```
+</File>
+
+#### TF_CLI_ARGS Variables (`env_tf_cli_vars`)
+
+Access and validate variables extracted from `TF_CLI_ARGS` with JSON type conversion.
+
+<File title="validate-env-cli-vars.rego">
+```rego
+package atmos
+
+# Validate environment-specific constraints
+errors[message] {
+  input.env_tf_cli_vars.environment == "production"
+  input.env_tf_cli_vars.instance_count
+  is_number(input.env_tf_cli_vars.instance_count)
+  input.env_tf_cli_vars.instance_count < 2
+  message = "Production environment requires at least 2 instances"
+}
+
+# Validate complex JSON configurations from TF_CLI_ARGS
+errors[message] {
+  input.env_tf_cli_vars.networking_config
+  is_object(input.env_tf_cli_vars.networking_config)
+  not input.env_tf_cli_vars.networking_config.vpc_id
+  message = "Networking configuration must include vpc_id"
+}
+
+# Cross-validate CLI args and environment variables
+errors[message] {
+  input.env_tf_cli_vars.region
+  input.process_env.AWS_REGION
+  input.env_tf_cli_vars.region != input.process_env.AWS_REGION
+  message = sprintf("Region mismatch: TF_CLI_ARGS region '%s' != AWS_REGION '%s'", [
+    input.env_tf_cli_vars.region,
+    input.process_env.AWS_REGION
+  ])
+}
+
+# Validate resource naming conventions from environment variables
+errors[message] {
+  input.env_tf_cli_vars.resource_name
+  not regex.match("^[a-z][a-z0-9-]*[a-z0-9]$", input.env_tf_cli_vars.resource_name)
+  message = sprintf("Resource name '%s' must be lowercase alphanumeric with hyphens", [input.env_tf_cli_vars.resource_name])
+}
+
+# Ensure cost controls are in place
+errors[message] {
+  input.env_tf_cli_vars.instance_type
+  expensive_types := ["m5.large", "m5.xlarge", "c5.large", "c5.xlarge"]
+  input.env_tf_cli_vars.instance_type in expensive_types
+  not input.env_tf_cli_vars.cost_center
+  message = sprintf("Expensive instance type '%s' requires cost_center to be specified", [input.env_tf_cli_vars.instance_type])
+}
+```
+</File>
+
+### Combined Context Validation
+
+Leverage multiple context sources for comprehensive governance policies.
+
+<File title="validate-comprehensive.rego">
+```rego
+package atmos
+
+# Comprehensive validation combining all context sources
+errors[message] {
+  # Check if this is a production apply operation
+  "apply" in input.cli_args
+  (input.process_env.ENVIRONMENT == "production" or
+   input.vars.environment == "production" or
+   input.tf_cli_vars.environment == "production" or
+   input.env_tf_cli_vars.environment == "production")
+
+  # Ensure proper approval workflow
+  not production_approved
+  message = "Production deployments require proper approval workflow"
+}
+
+# Helper rule for production approval
+production_approved {
+  input.process_env.DEPLOYMENT_APPROVED == "true"
+  input.process_env.APPROVED_BY
+  input.process_env.APPROVAL_TICKET
+}
+
+# Validate consistency across all variable sources
+errors[message] {
+  sources := [
+    object.get(input.vars, "environment", null),
+    object.get(input.tf_cli_vars, "environment", null),
+    object.get(input.env_tf_cli_vars, "environment", null),
+    object.get(input.process_env, "ATMOS_ENVIRONMENT", null)
+  ]
+
+  # Remove null/undefined values
+  defined_envs := [env | env := sources[_]; env != null; env != ""]
+
+  # Check if all defined environments match
+  count(defined_envs) > 1
+  not all_equal(defined_envs)
+  message = sprintf("Environment mismatch across sources: %v", [defined_envs])
+}
+
+# Helper function to check if all elements in array are equal
+all_equal(arr) {
+  count(arr) <= 1
+}
+
+all_equal(arr) {
+  count(arr) > 1
+  first := arr[0]
+  all_match := [x | x := arr[_]; x == first]
+  count(all_match) == count(arr)
+}
+
+# Validate resource limits based on environment context
+errors[message] {
+  environment := get_environment
+  environment == "development"
+  total_instances := get_total_instances
+  total_instances > 5
+  message = sprintf("Development environment limited to 5 instances, requested %d", [total_instances])
+}
+
+# Helper to get environment from any source
+get_environment := env {
+  env := input.vars.environment
+  env != null
+  env != ""
+}
+
+get_environment := env {
+  env := input.tf_cli_vars.environment
+  env != null
+  env != ""
+}
+
+get_environment := env {
+  env := input.env_tf_cli_vars.environment
+  env != null
+  env != ""
+}
+
+get_environment := env {
+  env := input.process_env.ATMOS_ENVIRONMENT
+  env != null
+  env != ""
+}
+
+# Helper to calculate total instances from all sources
+get_total_instances := total {
+  instance_counts := [
+    object.get(input.vars, "instance_count", null),
+    object.get(input.tf_cli_vars, "instance_count", null),
+    object.get(input.env_tf_cli_vars, "instance_count", null)
+  ]
+  valid_counts := [n | n := instance_counts[_]; is_number(n)]
+  total := sum(valid_counts)
+}
+```
+</File>
+
+### Best Practices for Context-Aware Policies
+
+1. **Environment Consistency**: Always validate that environment settings are consistent across all input sources
+2. **Security First**: Use `process_env` to enforce security requirements like required credentials and approval workflows
+3. **Type Safety**: Leverage Rego's type checking functions (`is_number`, `is_object`, etc.) when working with parsed JSON from CLI variables
+4. **Graceful Handling**: Check for null/undefined values before processing to avoid policy evaluation errors
+5. **Clear Messages**: Provide specific error messages that indicate which context source triggered the violation
+6. **Separation of Concerns**: Create focused policies for different aspects (security, compliance, cost control) rather than monolithic rules

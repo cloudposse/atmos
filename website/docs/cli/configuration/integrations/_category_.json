@@ -1,0 +1,11 @@
+{
+  "label": "integrations",
+  "position": 70,
+  "collapsed": true,
+  "link": {
+    "type": "generated-index",
+    "title": "Integrations",
+    "description": "Configure Atmos integrations with Atlantis, Spacelift, and other tools."
+  },
+  "className": "command"
+}

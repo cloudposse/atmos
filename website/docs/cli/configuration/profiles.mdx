@@ -1,0 +1,293 @@
+---
+title: Profiles
+sidebar_position: 10
+sidebar_label: profiles
+sidebar_class_name: command
+description: Configure named profiles for environment-specific Atmos settings
+---
+
+import Intro from '@site/src/components/Intro';
+import KeyPoints from '@site/src/components/KeyPoints';
+import Note from '@site/src/components/Note';
+import File from '@site/src/components/File';
+import DocCardList from '@theme/DocCardList';
+
+<Intro>
+Profiles allow you to define named sets of configuration overrides that can be activated at runtime. Use profiles to switch between development, CI/CD, and production settings without modifying your base configuration.
+</Intro>
+
+<KeyPoints>
+- Define environment-specific configuration overrides
+- Switch contexts with a single flag or environment variable
+- Support for inline profiles in `atmos.yaml` or directory-based profiles
+- Multiple profiles can be activated and merged together
+</KeyPoints>
+
+## Configuration
+
+Configure the profiles system in your `atmos.yaml`:
+
+```yaml
+profiles:
+  base_path: "custom/profiles"  # Optional: custom directory for profiles
+```
+
+<dl>
+  <dt>`profiles.base_path`</dt>
+  <dd>
+    Custom directory for profile storage. If relative, resolved from the `atmos.yaml` directory. If absolute, used as-is.
+
+    **Default:** Not set (uses standard profile locations)
+  </dd>
+</dl>
+
+## Profile Discovery
+
+Atmos discovers profiles from multiple locations in the following precedence order (highest to lowest):
+
+| Priority | Location | Description |
+|----------|----------|-------------|
+| 1 | `profiles.base_path` | Custom path configured in `atmos.yaml` |
+| 2 | `.atmos/profiles/` | Project-local hidden profiles |
+| 3 | `~/.config/atmos/profiles/` | XDG user profiles (or `$XDG_CONFIG_HOME/atmos/profiles/`) |
+| 4 | `profiles/` | Project-local profiles |
+
+When the same profile name exists in multiple locations, the higher-priority location takes precedence.
+
+## Creating Profiles
+
+### Directory-Based Profiles
+
+Create a directory for each profile containing configuration files:
+
+```
+profiles/
+├── developer/
+│   ├── atmos.yaml      # Profile configuration overrides
+│   └── auth.yaml       # Additional configuration files
+├── ci/
+│   └── atmos.yaml
+└── production/
+    ├── atmos.yaml
+    └── auth.yaml
+```
+
+Each profile directory can contain:
+- `atmos.yaml` - Main configuration overrides
+- Additional YAML files that will be merged
+
+### Profile Configuration
+
+A profile's `atmos.yaml` can override any Atmos configuration setting:
+
+<File title="profiles/developer/atmos.yaml">
+```yaml
+# Optional metadata
+metadata:
+  name: developer
+  description: Development environment with debug logging
+  version: "1.0.0"
+  tags:
+    - dev
+    - local
+    - debug
+
+# Configuration overrides
+logs:
+  level: Debug
+
+settings:
+  terminal:
+    max_width: 140
+    pager: true
+    syntax_highlighting:
+      enabled: true
+```
+</File>
+
+<File title="profiles/ci/atmos.yaml">
+```yaml
+metadata:
+  name: ci
+  description: CI/CD pipeline settings
+
+logs:
+  level: Warning
+  file: /var/log/atmos.log
+
+settings:
+  terminal:
+    color: false
+    pager: false
+    unicode: false
+```
+</File>
+
+### Profile Metadata
+
+The optional `metadata` section provides information about the profile:
+
+```yaml
+metadata:
+  name: "profile-name"           # Human-readable name
+  description: "Description"     # What this profile is for
+  version: "1.0.0"              # Semantic version
+  tags:                          # Searchable tags
+    - development
+    - debug
+  deprecated: false              # Mark profile as deprecated
+```
+
+## Using Profiles
+
+### Command-Line Flag
+
+Activate a profile using the `--profile` flag:
+
+```bash
+# Activate a single profile
+atmos --profile developer terraform plan vpc -s prod
+
+# Activate multiple profiles (applied left-to-right)
+atmos --profile ci,security terraform plan vpc -s prod
+```
+
+### Environment Variable
+
+Set the `ATMOS_PROFILE` environment variable:
+
+```bash
+# Single profile
+export ATMOS_PROFILE=developer
+atmos terraform plan vpc -s prod
+
+# Multiple profiles (comma-separated)
+export ATMOS_PROFILE="ci,security"
+atmos terraform apply --auto-approve
+```
+
+### Precedence
+
+When both the flag and environment variable are set, the flag takes precedence:
+
+```bash
+ATMOS_PROFILE=ci atmos --profile developer describe config
+# Uses: developer profile (flag wins)
+```
+
+## Profile Merging
+
+When multiple profiles are activated, they are merged left-to-right. Later profiles override earlier ones:
+
+```bash
+atmos --profile base,developer,debug terraform plan
+```
+
+Merge order:
+1. Base `atmos.yaml` configuration
+2. `base` profile applied
+3. `developer` profile applied (overrides `base`)
+4. `debug` profile applied (overrides `developer`)
+
+## Managing Profiles
+
+Use the `atmos profile` command to discover and inspect profiles:
+
+```bash
+# List all available profiles
+atmos profile list
+
+# Show details of a specific profile
+atmos profile show developer
+
+# List profiles in JSON format
+atmos profile list --format json
+```
+
+See [`atmos profile`](/cli/commands/profile/usage) for complete command documentation.
+
+## Use Cases
+
+### Development Workflow
+
+```yaml
+# profiles/developer/atmos.yaml
+logs:
+  level: Debug
+
+settings:
+  terminal:
+    max_width: 140
+    pager: true
+    syntax_highlighting:
+      enabled: true
+      theme: monokai
+```
+
+```bash
+# Enable during development
+atmos --profile developer describe stacks
+```
+
+### CI/CD Pipelines
+
+```yaml
+# profiles/ci/atmos.yaml
+logs:
+  level: Warning
+  file: /var/log/atmos.log
+
+settings:
+  terminal:
+    color: false
+    pager: false
+    unicode: false
+```
+
+```bash
+# In CI pipeline
+export ATMOS_PROFILE=ci
+atmos terraform apply --auto-approve
+```
+
+### Team Collaboration
+
+Share profiles via version control:
+
+```
+.atmos/profiles/           # Team-shared profiles (gitignored user overrides)
+├── team/
+│   └── atmos.yaml
+└── security-review/
+    └── atmos.yaml
+
+profiles/                  # Project-specific profiles
+├── staging/
+└── production/
+```
+
+### User-Specific Profiles
+
+Store personal profiles in your XDG config directory:
+
+```
+~/.config/atmos/profiles/
+├── personal/
+│   └── atmos.yaml
+└── experimental/
+    └── atmos.yaml
+```
+
+These won't be committed to version control but are available across all projects.
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/profile/usage', label: 'atmos profile', description: 'Manage configuration profiles'},
+  {type: 'link', href: '/cli/commands/profile/profile-list', label: 'atmos profile list', description: 'List available profiles'},
+  {type: 'link', href: '/cli/commands/profile/profile-show', label: 'atmos profile show', description: 'Show profile details'},
+]} />
+
+## See Also
+
+- [Global Flags](/cli/global-flags) - Using the `--profile` flag

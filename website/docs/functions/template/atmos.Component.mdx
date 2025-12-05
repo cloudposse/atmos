@@ -38,7 +38,7 @@ Atmos component in a stack, and use it in `Go` templates in Atmos component conf
   <dd>Using the `outputs` section in the `atmos.Component` command is an convenient way to read the outputs (remote state)
   of a component in a stack directly in Atmos stack manifests. It is an alternative to using the `remote-state`
   module and configuring Terraform/OpenTofu components to use the `remote-state` module as described in
-  <a href="/core-concepts/share-data/remote-state">Component Remote State</a></dd>
+  <a href="/stacks/remote-state">Component Remote State</a></dd>
 
   <dt>`attribute`</dt>
   <dd>
@@ -286,7 +286,7 @@ particular example. In a production environment where many components are used, 
 
 ## Using `atmos.Component` with `static` remote state backend
 
-Atmos supports [brownfield configuration by using the remote state of type `static`](/core-concepts/components/terraform/brownfield/#hacking-remote-state-with-static-backends).
+Atmos supports [brownfield configuration by using the remote state of type `static`](/components/terraform/brownfield/#hacking-remote-state-with-static-backends).
 
 For example:
 

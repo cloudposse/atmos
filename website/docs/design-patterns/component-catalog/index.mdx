@@ -1,9 +1,8 @@
 ---
-title: Component Catalog Patterns
+title: Configuration Catalog Patterns
 sidebar_position: 5
-sidebar_label: Component Catalog
-description: Component Catalog Patterns in Atmos - Strategies for Organizing Reusable Component Configurations
-id: component-catalog
+sidebar_label: Configuration Catalog
+description: Configuration Catalog Patterns in Atmos - Your library of configuration defaults for organizing reusable component configurations
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
@@ -12,10 +11,12 @@ import KeyPoints from '@site/src/components/KeyPoints'
 
 <PillBox>Atmos Design Pattern</PillBox>
 <Intro>
-The **Component Catalog Patterns** are a collection of strategies for organizing and managing reusable component configurations across multiple stacks. These patterns enable you to maintain DRY (Don't Repeat Yourself) configuration while providing flexibility for customization across different environments, regions, and organizational units.
+The **Configuration Catalog** is your library of configuration defaults. It provides strategies for organizing and managing reusable component configurations across multiple stacks, enabling you to maintain DRY (Don't Repeat Yourself) configuration while providing flexibility for customization across different environments, regions, and organizational units.
 </Intro>
 
-The Component Catalog is one of Atmos's most powerful features, allowing you to create a library of pre-configured components that can be easily imported and customized for different deployment contexts. Whether you're managing a simple multi-environment setup or a complex multi-organization architecture, these patterns help you maintain consistency while avoiding configuration duplication.
+The Configuration Catalog is one of Atmos's most powerful features, allowing you to create a library of pre-configured components that can be easily imported and customized for different deployment contexts. Whether you're managing a simple multi-environment setup or a complex multi-organization architecture, these patterns help you maintain consistency while avoiding configuration duplication.
+
+This pattern can also serve as a **service catalog** when you define predefined service configurations that teams can consume.
 
 <KeyPoints>
 - Creating a centralized library of reusable component configurations
@@ -27,22 +28,25 @@ The Component Catalog is one of Atmos's most powerful features, allowing you to 
 
 ## Available Patterns
 
-The Component Catalog patterns provide different approaches for organizing and managing component configurations:
+The Configuration Catalog patterns provide different approaches for organizing and managing component configurations:
 
-### Core Pattern: Basic Component Catalog
+### Core Pattern: Basic Configuration Catalog
 The foundation pattern that establishes a centralized library of component configurations. This pattern creates a mirror structure of your Terraform components in the `stacks/catalog` directory, making it easy to find and manage default configurations.
 
 ### Advanced Patterns
 
-#### 1. [Component Catalog with Mixins](/design-patterns/component-catalog/with-mixins)
-Combines the Component Catalog pattern with mixins to create powerful, multi-layered configuration inheritance. This pattern is ideal for complex organizational structures where you need to share configuration across multiple dimensions (regions, environments, teams).
+#### 1. [Mixins](/design-patterns/component-catalog/mixins)
+Reusable configuration fragments that encapsulate settings you want to apply consistently. Define region defaults, stage defaults, or tenant defaults once in a mixin and import where needed.
 
-#### 2. [Component Catalog Template](/design-patterns/component-catalog/template)
+#### 2. [Component Archetypes](/design-patterns/component-catalog/with-mixins)
+Pre-configured component variants for specific use cases. Instead of configuring each instance from scratch, define archetypes like `s3-bucket/public`, `s3-bucket/logging`, or `s3-bucket/artifacts` that encapsulate best practices for that use case.
+
+#### 3. [Configuration Catalog Template](/design-patterns/component-catalog/template)
 Uses Go templates within catalog configurations to dynamically generate component settings. This pattern enables sophisticated configuration logic and reduces repetition when dealing with patterns in your infrastructure.
 
 ## Use-cases
 
-Use the **Component Catalog** pattern when:
+Use the **Configuration Catalog** pattern when:
 
 - You have many components that are provisioned in multiple stacks (many OUs, accounts, regions) with different configurations for each stack
 
@@ -55,19 +59,19 @@ Use the **Component Catalog** pattern when:
 
 ## Benefits
 
-The **Component Catalog** pattern provides the following benefits:
+The **Configuration Catalog** pattern provides the following benefits:
 
 - The defaults for the components are defined in just one place (in the catalog) making the entire
   configuration [DRY](https://en.wikipedia.org/wiki/Don%27t_repeat_yourself)
 
-- The defaults for the components are reusable across many environments by using hierarchical [imports](/core-concepts/stacks/imports)
+- The defaults for the components are reusable across many environments by using hierarchical [imports](/stacks/imports)
 
 - It's easy to add a new manifest in the component's catalog to enable a new component's feature, then import the manifest into the corresponding
   stacks where the feature is required
 
 ## Design Pattern
 
-The **Component Catalog** pattern prescribes the following:
+The **Configuration Catalog** pattern prescribes the following:
 
 - For each Terraform component, create a folder with the same name in `stacks/catalog` to make it symmetrical and easy to find.
   For example, the `stacks/catalog/vpc` folder should mirror the `components/terraform/vpc` folder.
@@ -116,25 +120,25 @@ The following example shows the Atmos stack and component configurations to prov
 a multi-account, multi-region environment. The components' configurations for each account and region are defined in the components' catalog.
 
 ```console
-   │   # Centralized stacks configuration (stack manifests)
-   ├── stacks
-   │   └── catalog  # component-specific defaults
-   │       ├── vpc
-   │       │   ├── defaults.yaml
-   │       │   ├── disabled.yaml
-   │       │   ├── dev.yaml
-   │       │   ├── prod.yaml
-   │       │   ├── staging.yaml
-   │       │   ├── ue2.yaml
-   │       │   └── uw2.yaml
-   │       └── vpc-flow-logs-bucket
-   │           ├── defaults.yaml
-   │           └── disabled.yaml
-   │   # Centralized components configuration
-   └── components
-       └── terraform  # Terraform components (a.k.a Terraform "root" modules)
-           ├── vpc
-           └── vpc-flow-logs-bucket
+   │   # Centralized stacks configuration (stack manifests)
+   ├── stacks
+   │   └── catalog  # component-specific defaults
+   │       ├── vpc
+   │       │   ├── defaults.yaml
+   │       │   ├── disabled.yaml
+   │       │   ├── dev.yaml
+   │       │   ├── prod.yaml
+   │       │   ├── staging.yaml
+   │       │   ├── ue2.yaml
+   │       │   └── uw2.yaml
+   │       └── vpc-flow-logs-bucket
+   │           ├── defaults.yaml
+   │           └── disabled.yaml
+   │   # Centralized components configuration
+   └── components
+       └── terraform  # Terraform components (a.k.a Terraform "root" modules)
+           ├── vpc
+           └── vpc-flow-logs-bucket
 ```
 
 Add the following minimal configuration to `atmos.yaml` [CLI config file](/cli/configuration) :
@@ -146,21 +150,13 @@ components:
 
 stacks:
   base_path: "stacks"
-  name_pattern: "{tenant}-{environment}-{stage}"
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
   included_paths:
     # Tell Atmos to search for the top-level stack manifests in the `orgs` folder and its sub-folders
     - "orgs/**/*"
   excluded_paths:
     # Tell Atmos that the `defaults` folder and all sub-folders don't contain top-level stack manifests
     - "defaults/**/*"
-
-schemas:
-  jsonschema:
-    base_path: "stacks/schemas/jsonschema"
-  opa:
-    base_path: "stacks/schemas/opa"
-  atmos:
-    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
 Add the following configuration to the `stacks/catalog/vpc-flow-logs-bucket/defaults.yaml` manifest:
@@ -377,36 +373,33 @@ import:
 
 ## Limitations
 
-The **Component Catalog** pattern has the following limitations and drawbacks:
+The **Configuration Catalog** pattern has the following limitations and drawbacks:
 
 - Although it's always recommended to use, the catalog structure described by the pattern can be complex for basic infrastructures,
   e.g. for a very simple organizational structure (one organization and OU), and just a few components deployed into a few accounts and regions
 
 :::note
 
-To address the limitations of the **Component Catalog** Design Pattern when you are provisioning a very basic infrastructure, use the following
-patterns:
-
-- [Inline Component Configuration](/design-patterns/inline-component-configuration)
-- [Inline Component Customization](/design-patterns/inline-component-customization)
+To address the limitations of the **Configuration Catalog** Design Pattern when you are provisioning a very basic infrastructure, use the
+[Inline Configuration](/design-patterns/inline-component-configuration) pattern.
 
 :::
 
 ## Related Patterns
 
-### Component Catalog Variations
-- [Component Catalog with Mixins](/design-patterns/component-catalog/with-mixins) - Combine catalogs with mixins for multi-dimensional inheritance
-- [Component Catalog Template](/design-patterns/component-catalog/template) - Use templates for dynamic configuration generation
+### Configuration Catalog Variations
+- [Mixins](/design-patterns/component-catalog/mixins) - Reusable configuration fragments
+- [Component Archetypes](/design-patterns/component-catalog/with-mixins) - Pre-configured variants for specific use cases
+- [Configuration Catalog Template](/design-patterns/component-catalog/template) - Use templates for dynamic configuration generation
 
 ### Alternative Approaches
-- [Component Inheritance](/design-patterns/component-inheritance) - Direct component inheritance without catalogs
-- [Inline Component Configuration](/design-patterns/inline-component-configuration) - Configure components directly in stack files
-- [Inline Component Customization](/design-patterns/inline-component-customization) - Customize components inline for simple cases
+- [Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance) - Direct component inheritance without catalogs
+- [Inline Configuration](/design-patterns/inline-component-configuration) - Configure components directly in stack files
 
 ### Organizational Patterns
-- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration) - Structure catalogs for complex organizations
+- [Organizational Structure Configuration](/design-patterns/stack-organization) - Structure catalogs for complex organizations
 
 ## References
 
-- [Catalogs](/core-concepts/stacks/catalogs)
-- [Mixins](/core-concepts/stacks/inheritance/mixins)
+- [Catalogs](/howto/catalogs)
+- [Mixins](/howto/mixins)
