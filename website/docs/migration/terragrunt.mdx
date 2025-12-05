@@ -889,6 +889,54 @@ In Atmos terminology, root modules are called **components**. Each component is 
 - [ ] Train team on new commands
 </TaskList>
 
+## Stack Naming for Migrations
+
+When migrating from Terragrunt, your existing Terraform state is tied to specific workspace names. Atmos needs to know the correct stack names to find this state. You have two options:
+
+### Option 1: Use `name_template` (Recommended for Consistent Patterns)
+
+If your Terragrunt setup used a consistent directory structure that maps to context variables, configure `name_template` in `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+stacks:
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+```
+</File>
+
+This works well when:
+- Your Terragrunt directories followed a pattern like `prod/us-east-1/vpc/`
+- You can map that pattern to consistent `vars` in your stack manifests
+- All stacks use the same naming convention
+
+### Option 2: Use Explicit `name` Field (For Inconsistent or Legacy Naming)
+
+If your workspace names are ad-hoc or don't follow a consistent pattern, use the `name` field in each stack manifest:
+
+<File title="stacks/us-east-1/prod/vpc.yaml">
+```yaml
+name: "prod-us-east-1-vpc"  # Matches existing Terraform workspace exactly
+
+import:
+  - catalog/vpc
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+```
+</File>
+
+This is the right choice when:
+- Workspace names don't follow a pattern you can express as a template
+- You're migrating infrastructure from multiple sources with different naming conventions
+- You need exact control over workspace names to match existing state
+
+The `name` field takes precedence over `name_template`, so you can use both approaches—template for most stacks, explicit names for exceptions.
+
+For complete documentation on stack naming, see [Stack Names](/stacks/name).
+
 ## Why Migrate?
 
 ### Advantages of Atmos

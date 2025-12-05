@@ -52,8 +52,14 @@ various [design patterns](/design-patterns/).
 
 Every stack is uniquely identified by a name. The name is used to reference the stack in the Atmos CLI, or with stack dependencies.
 
-These are computed from either the `name_pattern` (old way) or the more configurable
-`name_template` (new way). These are configured in the `atmos.yaml` configuration file.
+Stack names are determined using this precedence order:
+
+1. **[`name`](/stacks/name)** field in the stack manifest (explicit override)
+2. **`name_template`** in `atmos.yaml` (Go template-based)
+3. **`name_pattern`** in `atmos.yaml` (token-based)
+4. **Default** - basename of the stack file
+
+Use `name_template` when you have consistent context variables across all stacks. Use the [`name` field](/stacks/name) when migrating from other tools or when your infrastructure doesn't follow a strict naming convention.
 
 For example, using the slug, we can reference a stack like this when applying the `vpc` stack in the `us2-dev` environment:
 
