@@ -69,6 +69,58 @@ func init() {
 	}
 }
 
+// validateSearchFormat validates the search format flag.
+func validateSearchFormat(format string) error {
+	switch format {
+	case "table", "json", "yaml":
+		return nil
+	default:
+		return fmt.Errorf("%w: format must be one of: table, json, yaml (got: %s)",
+			errUtils.ErrInvalidFlag, format)
+	}
+}
+
+// createSearchRegistry creates a registry based on the name.
+func createSearchRegistry(registryName string) (toolchainregistry.ToolRegistry, error) {
+	if registryName == "" {
+		// Use default aqua registry for MVP.
+		return toolchain.NewAquaRegistry(), nil
+	}
+
+	switch registryName {
+	case "aqua-public", "aqua":
+		return toolchain.NewAquaRegistry(), nil
+	default:
+		return nil, fmt.Errorf("%w: '%s' (supported registries: 'aqua-public', 'aqua')",
+			toolchainregistry.ErrUnknownRegistry, registryName)
+	}
+}
+
+// displaySearchTable displays search results in table format.
+func displaySearchTable(results []*toolchainregistry.Tool, query string, searchLimit int) {
+	totalMatches := len(results)
+	displayResults := results
+	if totalMatches > searchLimit {
+		displayResults = results[:searchLimit]
+	}
+
+	// Display results with info toast showing range vs total.
+	if totalMatches <= searchLimit {
+		// Showing all results.
+		_ = ui.Infof("Found **%d tools** matching `%s`:", totalMatches, query)
+	} else {
+		// Showing subset of results.
+		_ = ui.Infof("Showing **%d** of **%d tools** matching `%s`:", len(displayResults), totalMatches, query)
+	}
+	_ = ui.Writeln("") // Blank line after toast
+	displaySearchResults(displayResults)
+
+	// Show helpful hints after table.
+	_ = ui.Writeln("")
+	_ = ui.Hintf("Use `atmos toolchain info <tool>` for details")
+	_ = ui.Hintf("Use `atmos toolchain install <tool>@<version>` to install")
+}
+
 func executeSearchCommand(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "registry.executeSearchCommand")()
 
@@ -89,26 +141,14 @@ func executeSearchCommand(cmd *cobra.Command, args []string) error {
 	searchFormat := strings.ToLower(v.GetString("format"))
 
 	// Validate format flag.
-	switch searchFormat {
-	case "table", "json", "yaml":
-		// Valid formats.
-	default:
-		return fmt.Errorf("%w: format must be one of: table, json, yaml (got: %s)",
-			errUtils.ErrInvalidFlag, searchFormat)
+	if err := validateSearchFormat(searchFormat); err != nil {
+		return err
 	}
 
 	// Create registry based on flag or use default.
-	var reg toolchainregistry.ToolRegistry
-	if searchRegistry != "" {
-		switch searchRegistry {
-		case "aqua-public", "aqua":
-			reg = toolchain.NewAquaRegistry()
-		default:
-			return fmt.Errorf("%w: '%s' (supported registries: 'aqua-public', 'aqua')", toolchainregistry.ErrUnknownRegistry, searchRegistry)
-		}
-	} else {
-		// Use default aqua registry for MVP.
-		reg = toolchain.NewAquaRegistry()
+	reg, err := createSearchRegistry(searchRegistry)
+	if err != nil {
+		return err
 	}
 
 	// Search for all matching tools (no limit on search itself).
@@ -138,12 +178,9 @@ Try:
 		return nil
 	}
 
-	// Store total count before limiting display.
-	totalMatches := len(results)
-
-	// Apply display limit.
+	// Apply display limit for JSON/YAML.
 	displayResults := results
-	if totalMatches > searchLimit {
+	if len(results) > searchLimit {
 		displayResults = results[:searchLimit]
 	}
 
@@ -154,21 +191,7 @@ Try:
 	case "yaml":
 		return data.WriteYAML(displayResults)
 	case "table":
-		// Display results with info toast showing range vs total.
-		if totalMatches <= searchLimit {
-			// Showing all results.
-			_ = ui.Infof("Found **%d tools** matching `%s`:", totalMatches, query)
-		} else {
-			// Showing subset of results.
-			_ = ui.Infof("Showing **%d** of **%d tools** matching `%s`:", len(displayResults), totalMatches, query)
-		}
-		_ = ui.Writeln("") // Blank line after toast
-		displaySearchResults(displayResults)
-
-		// Show helpful hints after table.
-		_ = ui.Writeln("")
-		_ = ui.Hintf("Use `atmos toolchain info <tool>` for details")
-		_ = ui.Hintf("Use `atmos toolchain install <tool>@<version>` to install")
+		displaySearchTable(results, query, searchLimit)
 		return nil
 	default:
 		// Should never reach here due to validation above.

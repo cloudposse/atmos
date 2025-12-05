@@ -158,6 +158,47 @@ Use 'atmos toolchain registry list aqua' to see tools in the Aqua registry.
 	return nil
 }
 
+// displayToolsTable displays tools in table format with paging support.
+func displayToolsTable(ctx context.Context, reg toolchainregistry.ToolRegistry, tools []*toolchainregistry.Tool, registryName string, opts *ListOptions, pagerEnabled bool) error {
+	// Get metadata for total count.
+	meta, err := reg.GetMetadata(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get registry metadata: %w", err)
+	}
+
+	// Calculate range being displayed.
+	start := opts.Offset + 1
+	end := opts.Offset + len(tools)
+	total := meta.ToolCount
+
+	// Show info toast before pager content.
+	if end == total {
+		// Showing all tools.
+		_ = ui.Infof("Showing **%d tools** from registry `%s` (%s)", total, registryName, meta.Type)
+	} else {
+		// Showing a subset.
+		_ = ui.Infof("Showing **%d-%d** of **%d tools** from registry `%s` (%s)", start, end, total, registryName, meta.Type)
+	}
+	_ = ui.Writef("Source: %s\n\n", meta.Source)
+
+	// Get table content.
+	tableContent := buildToolsTable(tools)
+
+	// Use pager if enabled, otherwise print directly.
+	pageCreator := pager.NewWithAtmosConfig(pagerEnabled)
+	title := fmt.Sprintf("Registry '%s' Tools", registryName)
+	if err := pageCreator.Run(title, tableContent); err != nil {
+		return fmt.Errorf("failed to display output: %w", err)
+	}
+
+	// Show helpful hints after pager closes (so they're visible).
+	_ = ui.Writeln("")
+	_ = ui.Hintf("Use `atmos toolchain info <tool>` for details")
+	_ = ui.Hintf("Use `atmos toolchain install <tool>@<version>` to install")
+
+	return nil
+}
+
 func listRegistryTools(ctx context.Context, registryName string, opts *ListOptions) error {
 	defer perf.Track(nil, "registry.listRegistryTools")()
 
@@ -196,43 +237,7 @@ func listRegistryTools(ctx context.Context, registryName string, opts *ListOptio
 	case "yaml":
 		return data.WriteYAML(tools)
 	case "table":
-		// Get metadata for total count.
-		meta, err := reg.GetMetadata(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to get registry metadata: %w", err)
-		}
-
-		// Calculate range being displayed.
-		start := opts.Offset + 1
-		end := opts.Offset + len(tools)
-		total := meta.ToolCount
-
-		// Show info toast before pager content.
-		if end == total {
-			// Showing all tools.
-			_ = ui.Infof("Showing **%d tools** from registry `%s` (%s)", total, registryName, meta.Type)
-		} else {
-			// Showing a subset.
-			_ = ui.Infof("Showing **%d-%d** of **%d tools** from registry `%s` (%s)", start, end, total, registryName, meta.Type)
-		}
-		_ = ui.Writef("Source: %s\n\n", meta.Source)
-
-		// Get table content.
-		tableContent := buildToolsTable(tools)
-
-		// Use pager if enabled, otherwise print directly.
-		pageCreator := pager.NewWithAtmosConfig(pagerEnabled)
-		title := fmt.Sprintf("Registry '%s' Tools", registryName)
-		if err := pageCreator.Run(title, tableContent); err != nil {
-			return fmt.Errorf("failed to display output: %w", err)
-		}
-
-		// Show helpful hints after pager closes (so they're visible).
-		_ = ui.Writeln("")
-		_ = ui.Hintf("Use `atmos toolchain info <tool>` for details")
-		_ = ui.Hintf("Use `atmos toolchain install <tool>@<version>` to install")
-
-		return nil
+		return displayToolsTable(ctx, reg, tools, registryName, opts, pagerEnabled)
 	default:
 		// Should never reach here due to validation in parseListOptions.
 		return fmt.Errorf("%w: unsupported format: %s", errUtils.ErrInvalidFlag, opts.Format)
