@@ -14,9 +14,13 @@ variable. This example shows how to:
 
 ## Prerequisites
 
-- GitHub CLI (`gh`) installed and authenticated: `gh auth login`
-- Terraform >= 1.0
-- Atmos CLI
+1. **GitHub CLI** - Install from https://cli.github.com/
+2. **Authenticate with GitHub**:
+   ```bash
+   gh auth login
+   ```
+3. **Terraform** >= 1.0
+4. **Atmos CLI**
 
 ## Usage
 
