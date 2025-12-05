@@ -1,0 +1,51 @@
+---
+title: Nirvana 💫
+description: Teams who adopt Atmos have total clarity of their infrastructure.
+sidebar_label: Nirvana
+sidebar_position: 12
+id: nirvana
+---
+import Link from '@docusaurus/Link'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import SecondaryCTA from '@site/src/components/SecondaryCTA'
+
+<Intro>
+## The Atmos Difference
+
+Atmos lets you model the configuration of your cloud architecture in a way that makes logical sense.
+You can then develop components using any toolchain you want, including Terraform, to implement
+the components of your infrastructure.
+</Intro>
+
+Most teams don’t have a Terraform problem; they struggle with modeling their architecture in a reusable manner. Terraform provides everything needed to provision infrastructure, but an effective strategy to model cloud architecture is missing. Atmos fills this gap with a robust framework, offering design patterns, best practices, and advanced tooling to optimize your cloud architecture.
+
+**A well-designed framework does not limit you; it enables you. It doesn’t hold you back; it empowers you.**
+
+## The Benefits of Using Atmos
+
+Atmos provides a lightweight framework around Terraform, making it easier to manage and deploy your infrastructure
+across cloud platforms. It leverages vanilla Terraform for all its strengths, ensuring you can harness the full power
+of Terraform. Additionally, with Atmos, you no longer need to rely on code generation or templating HCL.
+
+You'll have a clear separation of concerns, consistent conventions, and organized project structures.
+
+Configuration is organized into stacks defined by YAML and separate from components (terraform root modules).
+This ensures root modules remain highly reusable across teams and promotes testing.
+
+It was designed to be used with CI/CD, so you can integrate with [GitHub Actions](https://atmos.tools/integrations/github-actions), [Spacelift](https://atmos.tools/cli/configuration/integrations/spacelift), or even [Atlantis](https://atmos.tools/cli/configuration/integrations/atlantis).
+
+And it was [inspired by giants](/reference/alternatives). We took the best of what we learned from all these other tools stuck into Atmos. So if you like the concepts of imports, inheritance, layering, and composition, you'll love Atmos.
+
+Oh yes, and it's entirely free and truly Open Source (licensed APACHE2) like [everything else Cloud Posse builds](https://github.com/cloudposse)! 🔥
+
+<ActionCard>
+    Now that we're all on the same page, start your first Atmos project in 30 minutes!
+
+    Try out our Simple Quick Start or delve deeper into the syntax and concepts used by Atmos.
+    <div>
+        <PrimaryCTA to="/quick-start/simple">Try our Simple Tutorial</PrimaryCTA>
+        <SecondaryCTA to="/learn/why-atmos">Learn Atmos Concepts</SecondaryCTA>
+    </div>
+</ActionCard>

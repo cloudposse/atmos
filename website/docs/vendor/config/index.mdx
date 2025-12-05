@@ -1,0 +1,146 @@
+---
+title: Vendor Configuration
+description: Configure vendoring with vendor.yaml manifest (recommended approach).
+sidebar_position: 1
+sidebar_label: Overview
+id: index
+slug: /vendor/vendor-config
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import CollapsibleText from '@site/src/components/CollapsibleText'
+
+<Intro>
+The vendoring configuration is defined in the `vendor.yaml` manifest (vendor config file). The vendoring manifest is used to make copies of 3rd-party components, stacks, and other artifacts in your own repository.
+</Intro>
+
+It functions a little bit like the `packages.json` file in Node.js or the `go.mod` file in Go, but for infrastructure code.
+
+## How it works
+
+Atmos searches for the vendoring manifest in the following locations and uses the first one found:
+
+- In the directory from which the [`atmos vendor pull`](/cli/commands/vendor/pull) command is executed, usually in the root of the infrastructure repo
+
+- In the directory pointed to by the [`base_path`](/cli/configuration#base-path) setting in the [`atmos.yaml`](/cli/configuration) CLI config file
+
+After defining the `vendor.yaml` manifest, all the remote artifacts can be downloaded by running the following command:
+
+```shell
+atmos vendor pull
+```
+
+To vendor a particular component or other artifact, execute the following command:
+
+```shell
+atmos vendor pull -c <component>
+```
+
+To vendor components and artifacts tagged with specific tags, execute the following command:
+
+```shell
+atmos vendor pull --tags <tag1>,<tag2>
+```
+
+:::tip
+Refer to [`atmos vendor pull`](/cli/commands/vendor/pull) CLI command for more details
+:::
+
+## Vendoring Manifest
+
+To vendor remote artifacts, create a `vendor.yaml` file similar to the example below:
+
+<CollapsibleText type="tall">
+  <File title="vendor.yaml">
+  ```yaml
+  apiVersion: atmos/v1
+  kind: AtmosVendorConfig
+  metadata:
+    name: example-vendor-config
+    description: Atmos vendoring manifest
+  spec:
+    # `imports` or `sources` (or both) must be defined in a vendoring manifest
+    imports:
+      - "vendor/vendor2"
+      - "vendor/vendor3.yaml"
+
+    sources:
+      # `source` supports the following protocols: local paths (absolute and relative), OCI (https://opencontainers.org),
+      # Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP,
+      # and all URL and archive formats as described in https://github.com/hashicorp/go-getter.
+      # See https://atmos.tools/vendor/url-syntax for complete URL syntax documentation.
+      # In 'source' and 'targets', Golang templates are supported  https://pkg.go.dev/text/template.
+      # Currently the fields '{{.Component}}' and '{{.Version}}' are supported.
+      # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html).
+      - component: "vpc"
+        source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+        version: "latest"
+        targets:
+          - "components/terraform/infra/vpc3"
+        # Only include the files that match the 'included_paths' patterns.
+        # If 'included_paths' is not specified, all files will be matched except those that match the patterns from 'excluded_paths'.
+        # 'included_paths' support POSIX-style Globs for file names/paths (double-star `**` is supported).
+        # https://en.wikipedia.org/wiki/Glob_(programming)
+        # https://github.com/bmatcuk/doublestar#patterns
+        included_paths:
+          - "**/*.tf"
+          - "**/*.tfvars"
+          - "**/*.md"
+        # Tags can be used to vendor component that have the specific tags
+        # `atmos vendor pull --tags test`
+        # Refer to https://atmos.tools/cli/commands/vendor/pull
+        tags:
+          - test
+          - networking
+      - component: "vpc-flow-logs-bucket"
+        source: "github.com/cloudposse-terraform-components/aws-vpc-flow-logs-bucket.git?ref={{.Version}}"
+        version: "1.323.0"
+        targets:
+          - "components/terraform/infra/{{.Component}}/{{.Version}}"
+        excluded_paths:
+          - "**/*.yaml"
+          - "**/*.yml"
+        tags:
+          - test
+          - storage
+  ```
+  </File>
+</CollapsibleText>
+
+With this configuration, it would be possible to run the following commands:
+<Terminal>
+```shell
+# atmos vendor pull
+# atmos vendor pull --everything
+# atmos vendor pull --component vpc-mixin-1
+# atmos vendor pull -c vpc-mixin-2
+# atmos vendor pull --tags test
+# atmos vendor pull --tags networking,storage
+```
+</Terminal>
+
+## Configuration Reference
+
+The `vendor.yaml` vendoring manifest supports Kubernetes-style YAML config. The file is placed into the directory from which the `atmos vendor pull` command is executed (usually the root of the repo).
+
+<dl>
+  <dt>`apiVersion`</dt>
+  <dd>Always set to `atmos/v1`.</dd>
+
+  <dt>`kind`</dt>
+  <dd>Always set to `AtmosVendorConfig`.</dd>
+
+  <dt>`metadata`</dt>
+  <dd>
+    Optional metadata about the vendor configuration.
+    - `name`: A name for this vendor configuration
+    - `description`: A description of what this configuration vendors
+  </dd>
+
+  <dt>[`spec.sources`](/vendor/config/sources)</dt>
+  <dd>List of sources to vendor. Each source defines a component, its source location, version, and target paths. See [Sources](/vendor/config/sources) for complete documentation.</dd>
+
+  <dt>[`spec.imports`](/vendor/config/imports)</dt>
+  <dd>List of additional vendor manifests to import. Supports hierarchical imports at many levels. See [Imports](/vendor/config/imports) for complete documentation.</dd>
+</dl>

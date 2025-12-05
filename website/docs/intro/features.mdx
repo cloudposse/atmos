@@ -1,0 +1,346 @@
+---
+slug: /features
+title: Atmos Features
+sidebar_label: Features
+sidebar_position: 2
+---
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import ActionCard from '@site/src/components/ActionCard'
+import FeatureCard from '@site/src/components/FeatureCard'
+import FeatureGrid from '@site/src/components/FeatureGrid'
+import {
+  RiTerminalBoxLine,
+  RiCodeSSlashLine,
+  RiStackLine,
+  RiBox3Line,
+  RiLockUnlockLine,
+  RiGitBranchLine,
+  RiGitMergeLine,
+  RiShieldCheckLine,
+  RiCheckDoubleLine,
+  RiFolderSharedLine,
+  RiFunctionLine,
+  RiDatabase2Line,
+  RiFlashlightLine,
+  RiDownloadCloudLine,
+  RiTerminalLine,
+  RiRefreshLine,
+  RiLoopLeftLine,
+  RiServerLine,
+  RiShipLine,
+  RiHardDriveLine
+} from 'react-icons/ri'
+
+<Intro>
+Atmos streamlines Terraform orchestration, environment, and configuration management, offering developers and DevOps a framework and a set of powerful tools to tackle deployment challenges.
+</Intro>
+
+Designed to be cloud agnostic, Atmos enables you to operate consistently across various cloud platforms. Click any feature below to learn more about how it can help your team.
+
+<KeyPoints title="Why Teams Choose Atmos">
+- **Reduce Configuration by 80%** — Eliminate copy-paste with inheritance and imports
+- **Deploy Any Environment with One Command** — Consistent workflows from dev to production
+- **Built-in Compliance Validation** — OPA policies and schema validation catch issues early
+- **Scale to Hundreds of Environments** — Same patterns work for 5 or 500 environments
+- **[Proven Design Patterns](/design-patterns)** — Battle-tested approaches for common infrastructure challenges
+</KeyPoints>
+
+## Core Infrastructure
+
+<FeatureGrid>
+  <FeatureCard
+    icon={<RiTerminalBoxLine />}
+    title="Terminal UI"
+    tagline="Navigate your infrastructure at a glance"
+    description="An intuitive terminal interface that lets you visually browse, search, and select stacks and components. Use arrow keys to navigate, see configuration previews, and execute deployments without memorizing complex commands."
+    benefits={[
+      "New team members become productive in hours, not weeks",
+      "No more typos in stack names or component paths",
+      "See your entire infrastructure organized logically"
+    ]}
+    docLink="/cli"
+  />
+
+  <FeatureCard
+    icon={<RiCodeSSlashLine />}
+    title="Native Terraform Support"
+    tagline="Your existing code, supercharged"
+    description="Atmos works with vanilla Terraform root modules without modification. It handles backend configuration, variable file generation, and workspace management while keeping your Terraform code portable and standard."
+    benefits={[
+      "Zero vendor lock-in — your code works with or without Atmos",
+      "No code generation — configuration stays in YAML, HCL stays clean",
+      "Full ecosystem compatibility with all providers and modules"
+    ]}
+    docLink="/cli/commands/terraform/usage"
+  />
+
+  <FeatureCard
+    icon={<RiStackLine />}
+    title="Stacks"
+    tagline="Your infrastructure blueprint in plain YAML"
+    description="Define environment configurations in simple YAML files that compose your components. Use inheritance and imports to keep configurations DRY, making dev/staging/prod just variations of a single source of truth."
+    benefits={[
+      "80% less configuration through inheritance",
+      "Single source of truth — changes propagate consistently",
+      "Human-readable — anyone can review and understand"
+    ]}
+    docLink="/learn/stacks"
+  />
+
+  <FeatureCard
+    icon={<RiBox3Line />}
+    title="Components"
+    tagline="Build once, deploy everywhere"
+    description="Components are opinionated, reusable infrastructure building blocks (Terraform root modules) that solve specific problems. Build a VPC component once, then deploy it across all your environments with different configurations."
+    benefits={[
+      "Reuse 80% of components across projects",
+      "Consistent, proven architecture everywhere",
+      "Smaller blast radius with loosely coupled components"
+    ]}
+    docLink="/components"
+  />
+
+  <FeatureCard
+    icon={<RiLockUnlockLine />}
+    title="Atmos Auth"
+    tagline="One login, every cloud"
+    description="Single authentication interface for AWS IAM Identity Center, Azure, GCP, and custom OIDC providers. Authenticate once and access all your cloud resources without browser plugins or credential sprawl."
+    benefits={[
+      "Eliminate credential management headaches",
+      "Works across shells, workflows, and deployments",
+      "Support for complex identity chains and role assumption"
+    ]}
+    docLink="/cli/commands/auth"
+  />
+
+  <FeatureCard
+    icon={<RiGitBranchLine />}
+    title="Native GitOps"
+    tagline="Deploy only what changed"
+    description="Pre-built GitHub Actions for plan, apply, and drift detection. Affected stacks detection analyzes Git changes to identify exactly which components need deployment, saving CI time and reducing risk."
+    benefits={[
+      "Professional-grade workflows out of the box",
+      "Smart change detection between any Git refs",
+      "Full PR integration with plan outputs"
+    ]}
+    docLink="/integrations/github-actions"
+  />
+</FeatureGrid>
+
+## Configuration Management
+
+<FeatureGrid>
+  <FeatureCard
+    icon={<RiGitMergeLine />}
+    title="Imports & Inheritance"
+    tagline="DRY configuration at scale"
+    description="Deep-merged imports let you layer configurations hierarchically. Define base settings once, then override only what's different in each environment. Changes to shared settings automatically propagate everywhere."
+    benefits={[
+      "Write once, inherit everywhere",
+      "Atomic changes — update a base file, affect all descendants",
+      "Clear hierarchy — easy to trace where settings come from"
+    ]}
+    docLink="/stacks/imports"
+  />
+
+  <FeatureCard
+    icon={<RiShieldCheckLine />}
+    title="Policy Validation"
+    tagline="Governance as code"
+    description="OPA (Open Policy Agent) integration lets you write policies as code. Automatically enforce rules like 'production databases must have encryption enabled' before deployments, not after audits."
+    benefits={[
+      "Policies enforced consistently, every time",
+      "Violations caught during development",
+      "Different policies for different environments"
+    ]}
+    docLink="/validation/opa"
+  />
+
+  <FeatureCard
+    icon={<RiCheckDoubleLine />}
+    title="Schema Validation"
+    tagline="Catch errors before they hurt"
+    description="JSON Schema validation catches configuration errors immediately in your IDE or CI pipeline. Know about typos, missing required fields, and type mismatches before any Terraform commands run."
+    benefits={[
+      "Shift-left validation — catch errors in seconds, not hours",
+      "Real-time IDE feedback as you edit",
+      "Automated CI guardrails in pull requests"
+    ]}
+    docLink="/validation"
+  />
+
+  <FeatureCard
+    icon={<RiFolderSharedLine />}
+    title="Service Catalogs"
+    tagline="Your infrastructure marketplace"
+    description="Service Catalogs provide curated collections of pre-configured, vetted components. Teams self-serve from approved options while platform teams maintain control over standards and best practices."
+    benefits={[
+      "Standardized infrastructure across all teams",
+      "Self-service at scale without waiting for approval",
+      "Governance built-in — only approved configurations available"
+    ]}
+    docLink="/howto/catalogs"
+  />
+
+  <FeatureCard
+    icon={<RiFunctionLine />}
+    title="Template Functions"
+    tagline="An escape hatch for every situation"
+    description="Go templates plus Gomplate with 100+ functions. Reference other components, fetch remote data, compute values dynamically. When YAML isn't enough, templates provide unlimited flexibility."
+    benefits={[
+      "Dynamic configuration without custom code",
+      "Access component outputs and external data",
+      "Full programming power when you need it"
+    ]}
+    docLink="/templates"
+  />
+
+  <FeatureCard
+    icon={<RiDatabase2Line />}
+    title="YAML Functions"
+    tagline="Live data in your configuration"
+    description="Special YAML tags like !terraform.output, !terraform.state, and !store read live data directly in stack manifests. No more hardcoded values or manual lookups—configurations stay in sync automatically."
+    benefits={[
+      "Reference Terraform outputs across stacks",
+      "Read secrets from SSM, Vault, and more",
+      "10-100x faster than terraform output commands"
+    ]}
+    docLink="/functions/yaml"
+  />
+</FeatureGrid>
+
+## Automation & DevOps
+
+<FeatureGrid>
+  <FeatureCard
+    icon={<RiFlashlightLine />}
+    title="Workflow Orchestration"
+    tagline="Complex deployments made simple"
+    description="Workflows let you define multi-step deployment sequences with retry logic, failure handling, and the ability to resume from any step. Bring up entire environments with a single command."
+    benefits={[
+      "Dependencies handled automatically",
+      "Built-in retry and recovery mechanisms",
+      "Pick up where failures occurred without re-running"
+    ]}
+    docLink="/workflows"
+  />
+
+  <FeatureCard
+    icon={<RiDownloadCloudLine />}
+    title="Vendoring"
+    tagline="Say goodbye to 'works on my machine'"
+    description="Automatically pull and pin dependencies from Git, S3, OCI registries, or HTTP endpoints. Every build uses identical artifacts, ensuring reproducible deployments every time."
+    benefits={[
+      "Reproducible builds across dev, CI, and production",
+      "Version-lock components and upgrade deliberately",
+      "Enterprise sharing via centralized component libraries"
+    ]}
+    docLink="/vendoring"
+  />
+
+  <FeatureCard
+    icon={<RiTerminalLine />}
+    title="Custom Commands"
+    tagline="One CLI to rule them all"
+    description="Extend atmos with any command, script, or workflow. Wire up your operational tools with consistent arguments, access stack configurations through templates, and provide a unified interface discoverable via atmos help."
+    benefits={[
+      "All operational commands in one place",
+      "Self-documenting via atmos help",
+      "Commands access component and stack configuration"
+    ]}
+    docLink="/custom-commands"
+  />
+
+  <FeatureCard
+    icon={<RiRefreshLine />}
+    title="Automatic Component Updates"
+    tagline="Stay current without the toil"
+    description="The Component Updater GitHub Action monitors your vendored components and automatically creates pull requests when updates are available. Review changes, run tests, and merge when ready."
+    benefits={[
+      "Zero manual tracking — updates come to you",
+      "Controlled upgrades — review and test before merging",
+      "Stay current with security patches and fixes"
+    ]}
+    docLink="/integrations/github-actions/component-updater"
+  />
+
+  <FeatureCard
+    icon={<RiLoopLeftLine />}
+    title="Lifecycle Hooks"
+    tagline="Automate after every apply"
+    description="Take action after terraform apply completes. Automatically store outputs to remote stores like AWS SSM Parameter Store, making values available to other components and systems."
+    benefits={[
+      "Store outputs to SSM after apply",
+      "Share values across components automatically",
+      "Configure at global, terraform, or component level"
+    ]}
+    docLink="/stacks/hooks"
+  />
+
+  <FeatureCard
+    icon={<RiServerLine />}
+    title="Backend Generation"
+    tagline="Terraform backends, fully automated"
+    description="Auto-generate backend configurations per component and stack. Define backend patterns once, and Atmos generates the correct backend.tf for every deployment—no more copy-paste errors."
+    benefits={[
+      "Consistent state management everywhere",
+      "Dynamic backends based on stack context",
+      "Supports S3, GCS, Azure, and more"
+    ]}
+    docLink="/cli/commands/terraform/generate-backend"
+  />
+</FeatureGrid>
+
+## Component Types
+
+<FeatureGrid>
+  <FeatureCard
+    icon={<RiCodeSSlashLine />}
+    title="Terraform Components"
+    tagline="Infrastructure as code, orchestrated"
+    description="Native Terraform root module support with automatic backend configuration, varfile generation, and workspace management. Your existing Terraform code works unchanged."
+    benefits={[
+      "Zero lock-in — vanilla Terraform modules",
+      "Automatic variable injection from stacks",
+      "Full terraform CLI passthrough"
+    ]}
+    docLink="/components/terraform"
+  />
+
+  <FeatureCard
+    icon={<RiShipLine />}
+    title="Helmfile Components"
+    tagline="Kubernetes in your stack"
+    description="Manage Kubernetes deployments alongside infrastructure using Helmfile. Same stack configurations, same inheritance patterns, same workflows for both Terraform and Helm."
+    benefits={[
+      "Unified infrastructure and app deployment",
+      "DRY Helm configurations via inheritance",
+      "One pipeline for complete environments"
+    ]}
+    docLink="/components/helmfile"
+  />
+
+  <FeatureCard
+    icon={<RiHardDriveLine />}
+    title="Packer Components"
+    tagline="Machine images, versioned"
+    description="Build immutable infrastructure with HashiCorp Packer. Patch images for security and compliance, create golden AMIs, and maintain a library of machine images—all managed consistently like any other Atmos component."
+    benefits={[
+      "Patch images for security and compliance",
+      "Build a reusable library of golden images",
+      "Manage image definitions like any other component"
+    ]}
+    docLink="/components/packer"
+  />
+</FeatureGrid>
+
+<ActionCard
+  title="Ready to get started?"
+  primaryCtaText="Try the Quick Start"
+  primaryCtaLink="/quick-start"
+  secondaryCtaText="Explore Use Cases"
+  secondaryCtaLink="/use-cases"
+>
+See how these features come together in a real project and discover which use cases Atmos excels at.
+</ActionCard>

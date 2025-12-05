@@ -1,0 +1,102 @@
+---
+title: Packer Configuration
+sidebar_position: 4
+sidebar_label: packer
+sidebar_class_name: command
+id: packer
+description: Configure Packer component behavior in atmos.yaml.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Configure how Atmos executes Packer commands for building machine images, including AMIs, VM images, and container images.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+components:
+  packer:
+    # Executable to run
+    command: packer
+
+    # Base path to Packer components
+    base_path: components/packer
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`command`</dt>
+  <dd>
+    Specifies the executable to run for Packer commands. Defaults to `packer`.
+
+    Examples:
+    - `packer` - Use Packer from PATH
+    - `/usr/local/bin/packer` - Use specific binary
+    - `/usr/local/bin/packer-1.9` - Use specific version
+  </dd>
+
+  <dt>`base_path`</dt>
+  <dd>
+    Directory containing Packer component directories. Supports absolute and relative paths.
+
+    Each subdirectory should contain Packer templates (`.pkr.hcl` files) for building images.
+  </dd>
+</dl>
+
+## Component Directory Structure
+
+Packer components follow the same directory structure as other component types:
+
+```
+components/
+└── packer/
+    ├── ami-builder/
+    │   ├── main.pkr.hcl
+    │   └── variables.pkr.hcl
+    └── docker-image/
+        ├── main.pkr.hcl
+        └── variables.pkr.hcl
+```
+
+## Example Configuration
+
+<File title="atmos.yaml">
+```yaml
+components:
+  packer:
+    command: packer
+    base_path: components/packer
+```
+</File>
+
+With this configuration, you can run Packer commands through Atmos:
+
+```bash
+# Build an AMI
+atmos packer build ami-builder -s prod
+
+# Validate a Packer template
+atmos packer validate docker-image -s dev
+```
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/packer/usage', label: 'atmos packer', description: 'Execute Packer commands'},
+  {type: 'link', href: '/cli/commands/packer/build', label: 'atmos packer build', description: 'Build machine images'},
+  {type: 'link', href: '/cli/commands/packer/validate', label: 'atmos packer validate', description: 'Validate Packer templates'},
+  {type: 'link', href: '/cli/commands/packer/init', label: 'atmos packer init', description: 'Initialize Packer plugins'},
+  {type: 'link', href: '/cli/commands/packer/inspect', label: 'atmos packer inspect', description: 'Inspect Packer templates'},
+]} />
+
+## Related
+
+- [Component Configuration Overview](/cli/configuration/components)
+- [Packer Components](/components/packer)
+- [Stack Configuration](/cli/configuration/stacks)

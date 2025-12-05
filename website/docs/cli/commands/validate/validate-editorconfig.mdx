@@ -7,14 +7,23 @@ description: Use this command to validate the workdir of the Atmos project again
 ---
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Use this command to validate files against the rules defined in .editorconfig file.
 </Intro>
 
-<Screengrab title="atmos validate editorconfig --help" slug="atmos-validate-editorconfig--help" />
+<ActionCard title="Configure EditorConfig Validation">
+    Learn how to configure EditorConfig validation settings, exclusions, and disabled checks in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/validate">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 ## Usage
+
+<Screengrab title="atmos validate editorconfig --help" slug="atmos-validate-editorconfig--help" />
 
 Execute the `validate editorconfig` command like this:
 
