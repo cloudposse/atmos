@@ -86,3 +86,25 @@ For CI/CD, use `--format=github` to write directly to `$GITHUB_ENV`:
 - name: Run Terraform
   run: atmos terraform apply github-repo -s demo --auto-approve
 ```
+
+## Security Considerations
+
+This example demonstrates dynamic credential retrieval using `!exec`. While convenient
+for development, consider these security practices:
+
+1. **Local development**: Using `gh auth token` is appropriate since the token is
+   already stored securely by the GitHub CLI and retrieved on-demand.
+
+2. **CI/CD environments**: In GitHub Actions, prefer using the built-in `GITHUB_TOKEN`
+   secret or repository secrets instead of `!exec`:
+   ```yaml
+   env:
+     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+   ```
+
+3. **Sensitive secrets**: For highly sensitive credentials (API keys, database passwords),
+   consider using dedicated secret managers (AWS Secrets Manager, HashiCorp Vault) via
+   the `!store` YAML function instead of `!exec`.
+
+4. **Output masking**: Atmos automatically masks detected secrets in terminal output
+   to prevent accidental exposure in logs.
