@@ -35,30 +35,82 @@ function convertYamlToFormats(yamlStr) {
 /**
  * Parse YAML with custom Atmos function tags.
  * Returns an AST-like structure that preserves function information.
+ *
+ * Uses regex-based extraction since js-yaml 4.x custom types are complex
+ * and we only need to identify function calls for documentation purposes.
  */
 function parseYamlWithFunctions(yamlStr) {
-  // Define custom YAML types for Atmos functions.
+  // First, extract function calls and replace with placeholders.
   const atmosFunctions = ['env', 'template', 'exec', 'repo-root', 'terraform.output', 'terraform.state', 'store'];
+  const functionMarkers = [];
+  let processedYaml = yamlStr;
 
-  const customTypes = atmosFunctions.map((funcName) => {
-    return new yaml.Type(`!${funcName}`, {
-      kind: 'scalar',
-      construct: (data) => ({
-        __atmosFunction: funcName,
-        __atmosArg: data,
-      }),
+  // Match YAML function syntax: !funcname args
+  // Handle both simple (!env VAR) and quoted (!env 'VAR "default"') forms.
+  atmosFunctions.forEach((funcName) => {
+    const regex = new RegExp(`!${funcName.replace('.', '\\.')}\\s+(.+?)(?=\\n|$)`, 'g');
+    processedYaml = processedYaml.replace(regex, (match, args) => {
+      const marker = `__ATMOS_FN_${functionMarkers.length}__`;
+      functionMarkers.push({
+        marker,
+        funcName,
+        args: args.trim(),
+      });
+      return `"${marker}"`;
     });
   });
 
-  const schema = yaml.DEFAULT_SCHEMA.extend(customTypes);
-
   try {
-    return yaml.load(yamlStr, { schema });
+    // Parse the processed YAML (functions replaced with string markers).
+    const parsed = yaml.load(processedYaml);
+
+    // Restore function markers to function objects.
+    return restoreFunctionMarkers(parsed, functionMarkers);
   } catch (err) {
-    // If parsing fails, try simpler approach.
+    // If parsing fails, try without function extraction.
     console.warn(`[converter] YAML parse warning: ${err.message}`);
-    return yaml.load(yamlStr);
+    try {
+      return yaml.load(yamlStr);
+    } catch {
+      // Return empty object if all parsing fails.
+      return {};
+    }
   }
+}
+
+/**
+ * Recursively restore function markers to function objects.
+ */
+function restoreFunctionMarkers(data, markers) {
+  if (data === null || data === undefined) {
+    return data;
+  }
+
+  if (typeof data === 'string') {
+    // Check if this is a function marker.
+    const marker = markers.find((m) => data === m.marker);
+    if (marker) {
+      return {
+        __atmosFunction: marker.funcName,
+        __atmosArg: marker.args,
+      };
+    }
+    return data;
+  }
+
+  if (Array.isArray(data)) {
+    return data.map((item) => restoreFunctionMarkers(item, markers));
+  }
+
+  if (typeof data === 'object') {
+    const result = {};
+    for (const [key, value] of Object.entries(data)) {
+      result[key] = restoreFunctionMarkers(value, markers);
+    }
+    return result;
+  }
+
+  return data;
 }
 
 /**
@@ -129,7 +181,7 @@ function valueToHcl(value, indent) {
 
   if (typeof value === 'string') {
     // Check if it's an HCL function call (already translated).
-    if (value.startsWith('atmos_')) {
+    if (value.startsWith('atmos.')) {
       return value;
     }
     // Escape special characters in strings.

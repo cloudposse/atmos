@@ -16,6 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/filetype"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -654,7 +655,8 @@ func processYAMLConfigFileWithContextInternal(
 		}
 	}
 
-	stackConfigMap, positions, err := u.UnmarshalYAMLFromFileWithPositions[schema.AtmosSectionMapType](atmosConfig, stackManifestTemplatesProcessed, filePath)
+	// Parse the stack config file based on its extension (YAML, JSON, or HCL).
+	stackConfigMap, positions, err := parseStackConfigByExtension(atmosConfig, stackManifestTemplatesProcessed, filePath)
 	if err != nil {
 		if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 			stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
@@ -850,16 +852,12 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
 		}
 
-		// If the import file is specified without extension, use `.yaml` as default
+		// If the import file is specified without extension, search for supported formats.
 		impWithExt := imp
 		ext := filepath.Ext(imp)
 		if ext == "" {
-			extensions := []string{
-				u.YamlFileExtension,
-				u.YmlFileExtension,
-				u.YamlTemplateExtension,
-				u.YmlTemplateExtension,
-			}
+			// Use the centralized list of supported stack config extensions.
+			extensions := u.StackConfigExtensions()
 
 			found := false
 			for _, extension := range extensions {
@@ -872,7 +870,7 @@ func processYAMLConfigFileWithContextInternal(
 			}
 
 			if !found {
-				// Default to .yaml if no file is found
+				// Default to .yaml if no file is found.
 				impWithExt = imp + u.DefaultStackConfigFileExtension
 			}
 		} else if ext == u.YamlFileExtension || ext == u.YmlFileExtension {
@@ -1441,6 +1439,46 @@ func GetFileContentWithoutCache(filePath string) (string, error) {
 	}
 
 	return string(content), nil
+}
+
+// parseStackConfigByExtension parses a stack config file based on its extension.
+// For YAML files (.yaml, .yml, .yaml.tmpl, .yml.tmpl), it uses the YAML parser with position tracking.
+// For JSON (.json) and HCL (.hcl) files, it uses the filetype package parser.
+// Returns the parsed config map and position map (only for YAML files).
+func parseStackConfigByExtension(
+	atmosConfig *schema.AtmosConfiguration,
+	content string,
+	filePath string,
+) (schema.AtmosSectionMapType, u.PositionMap, error) {
+	defer perf.Track(atmosConfig, "exec.parseStackConfigByExtension")()
+
+	ext := filepath.Ext(filePath)
+
+	// Handle YAML files (including templates) with position tracking.
+	if ext == u.YamlFileExtension || ext == u.YmlFileExtension ||
+		strings.HasSuffix(filePath, u.YamlTemplateExtension) ||
+		strings.HasSuffix(filePath, u.YmlTemplateExtension) {
+		return u.UnmarshalYAMLFromFileWithPositions[schema.AtmosSectionMapType](atmosConfig, content, filePath)
+	}
+
+	// Handle JSON and HCL files using the filetype package.
+	if ext == u.JSONFileExtension || ext == u.HCLFileExtension {
+		parsed, err := filetype.ParseByExtension([]byte(content), ext, filePath)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		// Convert the parsed result to AtmosSectionMapType.
+		result, ok := parsed.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf("%w: expected map[string]any from %s file, got %T", errUtils.ErrParseFile, ext, parsed)
+		}
+
+		return result, nil, nil
+	}
+
+	// Fallback to YAML parsing for unknown extensions.
+	return u.UnmarshalYAMLFromFileWithPositions[schema.AtmosSectionMapType](atmosConfig, content, filePath)
 }
 
 // ProcessBaseComponentConfig processes base component(s) config.

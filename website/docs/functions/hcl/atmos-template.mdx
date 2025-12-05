@@ -1,0 +1,65 @@
+---
+title: "atmos::template"
+sidebar_position: 4
+sidebar_label: "atmos::template"
+sidebar_class_name: command
+description: Evaluate Go templates in HCL stack configurations
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos::template` function evaluates Go template expressions and returns the result for use in HCL stack configurations.
+</Intro>
+
+## Usage
+
+```hcl
+// Evaluate a template expression
+result = atmos::template("{{ .stack }}")
+```
+
+## Arguments
+
+<dl>
+    <dt>`template-expression`</dt>
+    <dd>Go template expression to evaluate</dd>
+</dl>
+
+## Examples
+
+```hcl
+stack {
+  components {
+    terraform {
+      component "myapp" {
+        vars {
+          // Get current stack name
+          stack_name = atmos::template("{{ .stack }}")
+
+          // Get component outputs using atmos.Component
+          vpc_id = atmos::template("{{ (atmos.Component \"vpc\" .stack).outputs.vpc_id }}")
+
+          // Format strings with template functions
+          formatted = atmos::template("{{ printf \"%s-%s\" .namespace .environment }}")
+        }
+      }
+    }
+  }
+}
+```
+
+## Template Context
+
+The template expression has access to the standard Atmos template context, including:
+
+- `.stack` - Current stack name
+- `.namespace` - Namespace from stack configuration
+- `.environment` - Environment from stack configuration
+- `.stage` - Stage from stack configuration
+- `atmos.Component` - Function to access other component data
+
+## See Also
+
+- [!template (YAML)](/functions/yaml/template) - YAML equivalent
+- [Template Functions](/functions/template) - Available template functions
