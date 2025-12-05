@@ -254,7 +254,7 @@ func buildToolsTable(tools []*toolchainregistry.Tool) string {
 	toolVersions, err := toolchain.LoadToolVersions(toolVersionsFile)
 	if err != nil && !os.IsNotExist(err) {
 		// If there's an error other than file not found, log it but continue.
-		ui.Warningf("Could not load .tool-versions: %v", err)
+		_ = ui.Warningf("Could not load .tool-versions: %v", err)
 	}
 
 	// Build row data with installation status.

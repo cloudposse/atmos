@@ -117,7 +117,7 @@ func InfoExec(toolName, outputFormat string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get evaluated YAML: %w", err)
 		}
-		data.Write(evaluatedYAML)
+		_ = data.Write(evaluatedYAML)
 	} else {
 		// Enhanced table format (default).
 		displayToolInfo(&toolContext{

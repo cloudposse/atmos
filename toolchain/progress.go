@@ -15,7 +15,7 @@ func resetLine() {
 	defer perf.Track(nil, "toolchain.resetLine")()
 
 	if isTTY() {
-		ui.Write("\r\033[K")
+		_ = ui.Write("\r\033[K")
 	}
 }
 
@@ -23,7 +23,7 @@ func printStatusLine(line string) {
 	defer perf.Track(nil, "toolchain.printStatusLine")()
 
 	resetLine()
-	ui.Writeln(line)
+	_ = ui.Writeln(line)
 }
 
 func printProgressBar(line string) {
@@ -32,8 +32,8 @@ func printProgressBar(line string) {
 	// UI layer automatically handles TTY detection and ANSI codes.
 	// The isTTY check is kept for progress bar logic (show animation vs static output).
 	if isTTY() {
-		ui.Write("\r\033[K" + line)
+		_ = ui.Write("\r\033[K" + line)
 	} else {
-		ui.Writeln(line)
+		_ = ui.Writeln(line)
 	}
 }
