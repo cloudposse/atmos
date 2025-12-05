@@ -159,7 +159,8 @@ func executeCommandWithEnv(args []string, envVars map[string]string) error {
 	err = execCmd.Run()
 	if err != nil {
 		// If it's an exit error, propagate as a typed error so the root can exit with the same code.
-		if exitError, ok := err.(*exec.ExitError); ok {
+		exitError := &exec.ExitError{}
+		if errors.As(err, &exitError) {
 			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
 				// Return a typed error so the root can os.Exit(status.ExitStatus()).
 				return errUtils.ExitCodeError{Code: status.ExitStatus()}

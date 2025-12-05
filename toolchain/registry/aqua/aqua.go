@@ -573,7 +573,7 @@ func getArch() string {
 }
 
 // parseNextLink extracts the next page URL from GitHub API Link header.
-// Example Link header: <https://api.github.com/repos/foo/bar/releases?page=2>; rel="next", <https://api.github.com/repos/foo/bar/releases?page=5>; rel="last"
+// Example Link header: <https://api.github.com/repos/foo/bar/releases?page=2>; rel="next", <https://api.github.com/repos/foo/bar/releases?page=5>; rel="last".
 func parseNextLink(linkHeader string) string {
 	// Split by comma to get individual links.
 	links := strings.Split(linkHeader, ",")

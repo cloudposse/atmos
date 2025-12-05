@@ -237,7 +237,7 @@ func TestUnlockStack_SuccessFalseWithContext(t *testing.T) {
 	assert.False(t, response.Success)
 }
 
-// FailingReaderUnlock is a mock io.Reader that always returns an error for unlock tests
+// FailingReaderUnlock is a mock io.Reader that always returns an error for unlock tests.
 type FailingReaderUnlock struct{}
 
 func (f *FailingReaderUnlock) Read(p []byte) (n int, err error) {

@@ -9,7 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// StringKeysFromMap returns a slice of sorted string keys from the provided map
+// StringKeysFromMap returns a slice of sorted string keys from the provided map.
 func StringKeysFromMap(m map[string]any) []string {
 	defer perf.Track(nil, "utils.StringKeysFromMap")()
 
@@ -21,13 +21,13 @@ func StringKeysFromMap(m map[string]any) []string {
 	return keys
 }
 
-// MapKeyExists checks if a key already defined in a map
+// MapKeyExists checks if a key already defined in a map.
 func MapKeyExists(m map[string]any, key string) bool {
 	_, ok := m[key]
 	return ok
 }
 
-// SortMapByKeysAndValuesUniq sorts the provided map by the keys, sorts the map values (lists of strings), and makes the values unique
+// SortMapByKeysAndValuesUniq sorts the provided map by the keys, sorts the map values (lists of strings), and makes the values unique.
 func SortMapByKeysAndValuesUniq(m map[string][]string) map[string][]string {
 	defer perf.Track(nil, "utils.SortMapByKeysAndValuesUniq")()
 
@@ -41,7 +41,7 @@ func SortMapByKeysAndValuesUniq(m map[string][]string) map[string][]string {
 	return res
 }
 
-// MapOfInterfacesToMapOfStrings converts map[string]any to map[string]string
+// MapOfInterfacesToMapOfStrings converts map[string]any to map[string]string.
 func MapOfInterfacesToMapOfStrings(input map[string]any) map[string]string {
 	defer perf.Track(nil, "utils.MapOfInterfacesToMapOfStrings")()
 
@@ -50,7 +50,7 @@ func MapOfInterfacesToMapOfStrings(input map[string]any) map[string]string {
 	})
 }
 
-// MapOfInterfaceKeysToMapOfStringKeys converts map[any]any to map[string]any
+// MapOfInterfaceKeysToMapOfStringKeys converts map[any]any to map[string]any.
 func MapOfInterfaceKeysToMapOfStringKeys(input map[any]any) map[string]any {
 	defer perf.Track(nil, "utils.MapOfInterfaceKeysToMapOfStringKeys")()
 

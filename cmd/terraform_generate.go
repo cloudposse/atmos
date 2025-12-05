@@ -6,7 +6,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/terraform/generate/varfile"
 )
 
-// terraformGenerateCmd generates configurations for terraform components
+// terraformGenerateCmd generates configurations for terraform components.
 var terraformGenerateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generate Terraform configuration files for Atmos components and stacks.",

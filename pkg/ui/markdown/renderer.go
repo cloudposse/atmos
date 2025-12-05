@@ -296,7 +296,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 	}
 
 	if details != "" {
-		content += fmt.Sprintf("%s", details)
+		content += details
 	}
 
 	if suggestion != "" {

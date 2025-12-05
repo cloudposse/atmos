@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -374,10 +375,10 @@ func assertErrorCase(t *testing.T, tc *struct {
 	assert.Error(t, err)
 	assert.Nil(t, result)
 
-	switch tc.errorType {
-	case errUtils.ErrNilInput:
+	switch {
+	case errors.Is(tc.errorType, errUtils.ErrNilInput):
 		assert.Equal(t, errUtils.ErrNilInput, err)
-	case errUtils.ErrNonStringElement:
+	case errors.Is(tc.errorType, errUtils.ErrNonStringElement):
 		assertNonStringElementError(t, tc.input, err)
 	}
 }

@@ -286,7 +286,6 @@ func ExecuteAtlantisGenerateRepoConfig(
 			// Check if the 'components' filter is provided
 			if len(components) == 0 ||
 				u.SliceContainsString(components, componentName) {
-
 				// Component vars
 				if varsSection, ok = componentSection["vars"].(map[string]any); !ok {
 					continue
@@ -355,7 +354,7 @@ func ExecuteAtlantisGenerateRepoConfig(
 
 				// Context
 				context := cfg.GetContextFromVars(varsSection)
-				context.Component = strings.Replace(componentName, "/", "-", -1)
+				context.Component = strings.ReplaceAll(componentName, "/", "-")
 				context.ComponentPath = terraformComponentPath
 
 				// Base component is required to calculate terraform workspace for derived components

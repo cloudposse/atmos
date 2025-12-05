@@ -607,7 +607,7 @@ func newTestKit(t *testing.T) {
 
 // cleanToolchainCmdState resets all toolchainCmd flags and subcommand flags to prevent test pollution.
 // This follows the same pattern as cmd.NewTestKit but for the toolchain command hierarchy.
-// cleanRootCmdState cleans RootCmd and Viper state by accessing it via toolchainCmd.Parent().
+// CleanRootCmdState cleans RootCmd and Viper state by accessing it via toolchainCmd.Parent().
 func cleanRootCmdState(t *testing.T) {
 	t.Helper()
 

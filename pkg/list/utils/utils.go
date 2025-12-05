@@ -1,14 +1,17 @@
 package utils
 
 import (
+	"errors"
+
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/list/errors"
+	listErrors "github.com/cloudposse/atmos/pkg/list/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // IsNoValuesFoundError checks if an error is a NoValuesFoundError.
 func IsNoValuesFoundError(err error) bool {
-	_, ok := err.(*errors.NoValuesFoundError)
+	noValuesFoundError := &listErrors.NoValuesFoundError{}
+	ok := errors.As(err, &noValuesFoundError)
 	return ok
 }
 

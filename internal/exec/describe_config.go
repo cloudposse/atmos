@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -56,13 +57,17 @@ func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output stri
 
 	if d.atmosConfig.Settings.Terminal.IsPagerEnabled() {
 		err = d.viewConfig(format, res)
-		switch err.(type) {
-		case DescribeConfigFormatError:
-			return err
-		case nil:
-			return nil
-		default:
-			log.Debug("Failed to use pager")
+		{
+			var errCase0 DescribeConfigFormatError
+			var errCase1 error
+			switch {
+			case errors.As(err, &errCase0):
+				return err
+			case errors.As(err, &errCase1):
+				return nil
+			default:
+				log.Debug("Failed to use pager")
+			}
 		}
 	}
 	return d.printOrWriteToFile(d.atmosConfig, format, output, res)

@@ -20,13 +20,13 @@ import (
 )
 
 const (
-	// versionListUIReservedHeight is the number of lines reserved for title, borders, and status bar.
+	// VersionListUIReservedHeight is the number of lines reserved for title, borders, and status bar.
 	versionListUIReservedHeight = 6
 
-	// focusList indicates the list pane has focus in the version selector UI.
+	// FocusList indicates the list pane has focus in the version selector UI.
 	focusList = "list"
 
-	// focusViewport indicates the viewport pane has focus in the version selector UI.
+	// FocusViewport indicates the viewport pane has focus in the version selector UI.
 	focusViewport = "viewport"
 )
 

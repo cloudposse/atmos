@@ -154,7 +154,7 @@ func ReadTerraformBackendS3Internal(
 				time.Sleep(time.Second * 2) // backoff
 				continue
 			}
-			return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromS3, lastErr)
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrGetObjectFromS3, lastErr)
 		}
 
 		content, err := io.ReadAll(output.Body)
@@ -162,10 +162,10 @@ func ReadTerraformBackendS3Internal(
 			log.Trace("Failed to close S3 object body", "error", closeErr, "file", tfStateFilePath, "s3_bucket", bucket)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", errUtils.ErrReadS3ObjectBody, err)
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrReadS3ObjectBody, err)
 		}
 		return content, nil
 	}
 
-	return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromS3, lastErr)
+	return nil, fmt.Errorf("%w: %w", errUtils.ErrGetObjectFromS3, lastErr)
 }

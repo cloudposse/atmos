@@ -18,7 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// DefaultHighlightSettings returns the default syntax highlighting settings
+// DefaultHighlightSettings returns the default syntax highlighting settings.
 func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 	defer perf.Track(nil, "utils.DefaultHighlightSettings")()
 
@@ -31,7 +31,7 @@ func DefaultHighlightSettings() *schema.SyntaxHighlighting {
 	}
 }
 
-// GetHighlightSettings returns the syntax highlighting settings from the config or defaults
+// GetHighlightSettings returns the syntax highlighting settings from the config or defaults.
 func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighlighting {
 	defer perf.Track(config, "utils.GetHighlightSettings")()
 
@@ -59,7 +59,7 @@ func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighl
 	return settings
 }
 
-// HighlightCode highlights the given code using chroma with the specified lexer and theme
+// HighlightCode highlights the given code using chroma with the specified lexer and theme.
 func HighlightCode(code string, lexerName string, theme string) (string, error) {
 	defer perf.Track(nil, "utils.HighlightCode")()
 
@@ -164,14 +164,14 @@ func getFormatter(settings *schema.SyntaxHighlighting) chroma.Formatter {
 	return formatters.Get(settings.Formatter)
 }
 
-// HighlightWriter returns an io.Writer that highlights code written to it
+// HighlightWriter returns an io.Writer that highlights code written to it.
 type HighlightWriter struct {
 	config schema.AtmosConfiguration
 	writer io.Writer
 	format string
 }
 
-// NewHighlightWriter creates a new HighlightWriter
+// NewHighlightWriter creates a new HighlightWriter.
 func NewHighlightWriter(w io.Writer, config schema.AtmosConfiguration, format ...string) *HighlightWriter {
 	defer perf.Track(&config, "utils.NewHighlightWriter")()
 

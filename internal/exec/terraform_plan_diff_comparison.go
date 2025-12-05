@@ -364,14 +364,14 @@ func processResourceAdditionsAndRemovals(diff *strings.Builder, origResources, n
 	// Find added resources
 	for k := range newResources {
 		if _, exists := origResources[k]; !exists {
-			diff.WriteString(fmt.Sprintf("+ %s\n", k))
+			fmt.Fprintf(diff, "+ %s\n", k)
 		}
 	}
 
 	// Find removed resources
 	for k := range origResources {
 		if _, exists := newResources[k]; !exists {
-			diff.WriteString(fmt.Sprintf("- %s\n", k))
+			fmt.Fprintf(diff, "- %s\n", k)
 		}
 	}
 }
@@ -384,7 +384,7 @@ func processChangedResources(diff *strings.Builder, origResources, newResources 
 			continue
 		}
 
-		diff.WriteString(fmt.Sprintf("%s\n", k))
+		fmt.Fprintf(diff, "%s\n", k)
 
 		// Compare resource attributes
 		origAttrs := getResourceAttributes(origV)
@@ -431,9 +431,9 @@ func processPriorityAttributes(diff *strings.Builder, origAttrs, newAttrs map[st
 		case origExists && newExists && !reflect.DeepEqual(origAttrV, newAttrV):
 			printAttributeDiff(diff, attrK, origAttrV, newAttrV)
 		case origExists && !newExists:
-			diff.WriteString(fmt.Sprintf("  - %s: %v\n", attrK, formatValue(origAttrV)))
+			fmt.Fprintf(diff, "  - %s: %v\n", attrK, formatValue(origAttrV))
 		case !origExists && newExists:
-			diff.WriteString(fmt.Sprintf("  + %s: %v\n", attrK, formatValue(newAttrV)))
+			fmt.Fprintf(diff, "  + %s: %v\n", attrK, formatValue(newAttrV))
 		}
 	}
 }
@@ -449,7 +449,7 @@ func processRegularAttributeChanges(diff *strings.Builder, origAttrs, newAttrs m
 		if newAttrV, exists := newAttrs[attrK]; exists && !reflect.DeepEqual(origAttrV, newAttrV) {
 			printAttributeDiff(diff, attrK, origAttrV, newAttrV)
 		} else if !exists {
-			diff.WriteString(fmt.Sprintf("  - %s: %v\n", attrK, formatValue(origAttrV)))
+			fmt.Fprintf(diff, "  - %s: %v\n", attrK, formatValue(origAttrV))
 		}
 	}
 }
@@ -458,7 +458,7 @@ func processRegularAttributeChanges(diff *strings.Builder, origAttrs, newAttrs m
 func processAddedAttributes(diff *strings.Builder, origAttrs, newAttrs map[string]interface{}, priorityAttrs []string, skipAttrs map[string]bool) {
 	for attrK, newAttrV := range newAttrs {
 		if _, exists := origAttrs[attrK]; !exists && !contains(priorityAttrs, attrK) && !skipAttrs[attrK] {
-			diff.WriteString(fmt.Sprintf("  + %s: %v\n", attrK, formatValue(newAttrV)))
+			fmt.Fprintf(diff, "  + %s: %v\n", attrK, formatValue(newAttrV))
 		}
 	}
 }

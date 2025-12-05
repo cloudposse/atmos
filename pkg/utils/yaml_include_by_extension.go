@@ -250,7 +250,7 @@ func unmarshalYamlContent(y string, val string, file string) (*yaml.Node, error)
 	var includedNode yaml.Node
 	err := yaml.Unmarshal([]byte(y), &includedNode)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s, stack manifest: %s, error: %v",
+		return nil, fmt.Errorf("%w: %s, stack manifest: %s, error: %w",
 			ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
 	}
 

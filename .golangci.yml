@@ -66,6 +66,13 @@ linters:
             - "!**/pkg/auth/factory/**"
             - "!**/pkg/auth/types/aws_credentials.go"
             - "!**/pkg/auth/types/github_oidc_credentials.go"
+            - "!**/internal/aws_utils/**"
+            - "!**/internal/terraform_backend/**"
+            - "!**/pkg/store/**"
+            - "!**/pkg/github/**"
+            - "!**/pkg/utils/github_utils.go"
+            - "!**/cmd/version/**"
+            - "!**/tests/preconditions.go"
             - "$test"
           deny:
             # AWS: Identity and auth-related SDKs

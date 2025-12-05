@@ -42,7 +42,7 @@ func ValidateFormat(format string) error {
 	return fmt.Errorf("invalid format '%s'. Supported formats are: %s", format, strings.Join(validFormats, ", "))
 }
 
-// Extracts workflows from a workflow manifest
+// Extracts workflows from a workflow manifest.
 func getWorkflowsFromManifest(manifest schema.WorkflowManifest) ([][]string, error) {
 	var rows [][]string
 	if manifest.Workflows == nil {
@@ -58,7 +58,7 @@ func getWorkflowsFromManifest(manifest schema.WorkflowManifest) ([][]string, err
 	return rows, nil
 }
 
-// FilterAndListWorkflows filters and lists workflows based on the given file
+// FilterAndListWorkflows filters and lists workflows based on the given file.
 func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, format string, delimiter string) (string, error) {
 	if err := ValidateFormat(format); err != nil {
 		return "", err
@@ -126,7 +126,7 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 
 		files, err := utils.GetAllYamlFilesInDir(workflowsDir)
 		if err != nil {
-			return "", fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in 'atmos.yaml': %v",
+			return "", fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in 'atmos.yaml': %w",
 				atmosConfig.Workflows.BasePath, err)
 		}
 
@@ -145,7 +145,7 @@ func FilterAndListWorkflows(fileFlag string, listConfig schema.ListConfig, forma
 
 			var manifest schema.WorkflowManifest
 			if err := yaml.Unmarshal(fileContent, &manifest); err != nil {
-				return "", fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
+				return "", fmt.Errorf("error parsing the workflow manifest '%s': %w", f, err)
 			}
 
 			manifestRows, err := getWorkflowsFromManifest(manifest)

@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// proCmd executes 'atmos pro' CLI commands
+// proCmd executes 'atmos pro' CLI commands.
 var proCmd = &cobra.Command{
 	Use:                "pro",
 	Short:              "Access premium features integrated with atmos-pro.com",

@@ -169,7 +169,7 @@ func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndSt
 		stackInfo,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("%v: failed to create auth manager: %w", errUtils.ErrAuthManager, err)
+		return nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrAuthManager, err)
 	}
 	return authManager, nil
 }

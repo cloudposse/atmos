@@ -35,7 +35,7 @@ func ReadTerraformBackendLocal(
 
 	content, err := os.ReadFile(tfStateFilePath)
 	if err != nil {
-		return nil, fmt.Errorf("%w.\npath: `%s`\nerror: %v", errUtils.ErrReadFile, tfStateFilePath, err)
+		return nil, fmt.Errorf("%w.\npath: `%s`\nerror:w%v", errUtils.ErrReadFile, tfStateFilePath, err)
 	}
 
 	return content, nil

@@ -27,7 +27,7 @@ func EmitEnv(format string, relativeFlag bool) error {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("%w: no tools configured in tool-versions file", ErrToolNotFound)
 		}
-		return fmt.Errorf("%w: reading %s: %v", ErrFileOperation, GetToolVersionsFilePath(), err)
+		return fmt.Errorf("%w: reading %s: %w", ErrFileOperation, GetToolVersionsFilePath(), err)
 	}
 
 	if len(toolVersions.Tools) == 0 {

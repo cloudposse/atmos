@@ -82,7 +82,7 @@ func ConvertToHclAst(data any) (ast.Node, error) {
 	if objectList, ok := astree.Node.(*ast.ObjectList); ok {
 		for _, item := range objectList.Items {
 			for i, key := range item.Keys {
-				item.Keys[i].Token.Text = strings.Replace(key.Token.Text, "\"", "", -1)
+				item.Keys[i].Token.Text = strings.ReplaceAll(key.Token.Text, "\"", "")
 			}
 		}
 	}

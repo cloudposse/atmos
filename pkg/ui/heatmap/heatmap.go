@@ -496,7 +496,7 @@ func StartBubbleTeaUI(ctx context.Context, heatModel *HeatModel, mode string) er
 		tea.WithContext(ctx)) // Pass context for proper cancellation
 
 	if _, err := p.Run(); err != nil {
-		return fmt.Errorf("%w: failed to run performance heatmap TUI: %v", errUtils.ErrTUIRun, err)
+		return fmt.Errorf("%w: failed to run performance heatmap TUI: %w", errUtils.ErrTUIRun, err)
 	}
 	return nil
 }

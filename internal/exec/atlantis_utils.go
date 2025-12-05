@@ -38,7 +38,7 @@ func BuildAtlantisProjectNameFromComponentConfig(
 		// If Atlantis project template is defined and has a name, replace tokens in the name and add the Atlantis project to the output
 		if !reflect.ValueOf(atlantisProjectTemplate).IsZero() && atlantisProjectTemplate.Name != "" {
 			context := cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-			context.Component = strings.Replace(configAndStacksInfo.ComponentFromArg, "/", "-", -1)
+			context.Component = strings.ReplaceAll(configAndStacksInfo.ComponentFromArg, "/", "-")
 			atlantisProjectName = cfg.ReplaceContextTokens(context, atlantisProjectTemplate.Name)
 		}
 	}

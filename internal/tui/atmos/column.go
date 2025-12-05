@@ -44,12 +44,12 @@ func newColumn(columnPointer int) columnView {
 	}
 }
 
-// Init does initial setup
+// Init does initial setup.
 func (c *columnView) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles all the I/O
+// Update handles all the I/O.
 func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch message := msg.(type) {

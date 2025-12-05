@@ -122,7 +122,8 @@ func (app *App) initViews(workflows map[string]schema.WorkflowManifest) {
 }
 
 func (app *App) updateWorkflowFilesAndWorkflowsViews() {
-	if app.columnPointer == 0 {
+	switch app.columnPointer {
+	case 0:
 		selectedWorkflowFile := app.columnViews[0].list.SelectedItem()
 		if selectedWorkflowFile == nil {
 			return
@@ -162,7 +163,7 @@ func (app *App) updateWorkflowFilesAndWorkflowsViews() {
 			app.columnViews[2].list.ResetSelected()
 			app.columnViews[2].list.SetItems(stepItems)
 		}
-	} else if app.columnPointer == 1 {
+	case 1:
 		selectedWorkflowFile := app.columnViews[0].list.SelectedItem()
 		if selectedWorkflowFile == nil {
 			return

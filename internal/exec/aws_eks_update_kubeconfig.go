@@ -176,7 +176,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 		context := cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 
 		// Add Component to allow the `cluster_name_pattern` in `atmos.yaml` to use `{component} token
-		context.Component = strings.Replace(kubeconfigContext.Component, "/", "-", -1)
+		context.Component = strings.ReplaceAll(kubeconfigContext.Component, "/", "-")
 
 		// `kubeconfig` can be overridden on the command line
 		if kubeconfigPath == "" {

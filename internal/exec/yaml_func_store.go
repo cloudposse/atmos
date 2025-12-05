@@ -71,11 +71,12 @@ func processTagStore(atmosConfig *schema.AtmosConfiguration, input string, curre
 		query:        query,
 	}
 
-	if partsLength == 4 {
+	switch partsLength {
+	case 4:
 		retParams.stack = strings.TrimSpace(storeParts[1])
 		retParams.component = strings.TrimSpace(storeParts[2])
 		retParams.key = strings.TrimSpace(storeParts[3])
-	} else if partsLength == 3 {
+	case 3:
 		retParams.stack = currentStack
 		retParams.component = strings.TrimSpace(storeParts[1])
 		retParams.key = strings.TrimSpace(storeParts[2])

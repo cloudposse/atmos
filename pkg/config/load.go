@@ -410,11 +410,14 @@ func readSystemConfig(v *viper.Viper) error {
 
 	if len(configFilePath) > 0 {
 		err := mergeConfig(v, configFilePath, CliConfigFileName, false)
-		switch err.(type) {
-		case viper.ConfigFileNotFoundError:
-			return nil
-		default:
-			return err
+		{
+			var errCase0 viper.ConfigFileNotFoundError
+			switch {
+			case errors.As(err, &errCase0):
+				return nil
+			default:
+				return err
+			}
 		}
 	}
 	return nil
@@ -434,11 +437,14 @@ func readHomeConfigWithProvider(v *viper.Viper, homeProvider filesystem.HomeDirP
 	configFilePath := filepath.Join(home, ".atmos")
 	err = mergeConfig(v, configFilePath, CliConfigFileName, true)
 	if err != nil {
-		switch err.(type) {
-		case viper.ConfigFileNotFoundError:
-			return nil
-		default:
-			return err
+		{
+			var errCase0 viper.ConfigFileNotFoundError
+			switch {
+			case errors.As(err, &errCase0):
+				return nil
+			default:
+				return err
+			}
 		}
 	}
 
@@ -453,11 +459,14 @@ func readWorkDirConfig(v *viper.Viper) error {
 	}
 	err = mergeConfig(v, wd, CliConfigFileName, true)
 	if err != nil {
-		switch err.(type) {
-		case viper.ConfigFileNotFoundError:
-			return nil
-		default:
-			return err
+		{
+			var errCase0 viper.ConfigFileNotFoundError
+			switch {
+			case errors.As(err, &errCase0):
+				return nil
+			default:
+				return err
+			}
 		}
 	}
 	return nil
@@ -470,12 +479,15 @@ func readEnvAmosConfigPath(v *viper.Viper) error {
 	}
 	err := mergeConfig(v, atmosPath, CliConfigFileName, true)
 	if err != nil {
-		switch err.(type) {
-		case viper.ConfigFileNotFoundError:
-			log.Debug("config not found ENV var ATMOS_CLI_CONFIG_PATH", "file", atmosPath)
-			return nil
-		default:
-			return err
+		{
+			var errCase0 viper.ConfigFileNotFoundError
+			switch {
+			case errors.As(err, &errCase0):
+				log.Debug("config not found ENV var ATMOS_CLI_CONFIG_PATH", "file", atmosPath)
+				return nil
+			default:
+				return err
+			}
 		}
 	}
 	log.Debug("Found config ENV", "ATMOS_CLI_CONFIG_PATH", atmosPath)
@@ -488,11 +500,14 @@ func readAtmosConfigCli(v *viper.Viper, atmosCliConfigPath string) error {
 		return nil
 	}
 	err := mergeConfig(v, atmosCliConfigPath, CliConfigFileName, true)
-	switch err.(type) {
-	case viper.ConfigFileNotFoundError:
-		log.Debug("config not found", "file", atmosCliConfigPath)
-	default:
-		return err
+	{
+		var errCase0 viper.ConfigFileNotFoundError
+		switch {
+		case errors.As(err, &errCase0):
+			log.Debug("config not found", "file", atmosCliConfigPath)
+		default:
+			return err
+		}
 	}
 
 	return nil

@@ -121,7 +121,7 @@ func GetTerraformEnvCliVars() (map[string]any, error) {
 		if filetype.IsJSON(part2) {
 			v, err := u.ConvertFromJSON(part2)
 			if err != nil {
-				return nil, fmt.Errorf("%w: parsing TF_CLI_ARGS -var JSON for %q: %v", errUtils.ErrTerraformEnvCliVarJSON, varName, err)
+				return nil, fmt.Errorf("%w: parsing TF_CLI_ARGS -var JSON for %q: %w", errUtils.ErrTerraformEnvCliVarJSON, varName, err)
 			}
 			varValue = v
 		} else {

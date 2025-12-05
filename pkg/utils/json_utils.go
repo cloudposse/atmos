@@ -88,7 +88,7 @@ func GetAtmosConfigJSON(atmosConfig *schema.AtmosConfiguration) (string, error) 
 	return prettyJSON.String(), nil
 }
 
-// PrintAsJSONToFileDescriptor prints the provided value as JSON document to a file descriptor
+// PrintAsJSONToFileDescriptor prints the provided value as JSON document to a file descriptor.
 func PrintAsJSONToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any) error {
 	defer perf.Track(&atmosConfig, "utils.PrintAsJSONToFileDescriptor")()
 
@@ -100,7 +100,7 @@ func PrintAsJSONToFileDescriptor(atmosConfig schema.AtmosConfiguration, data any
 	return nil
 }
 
-// WriteToFileAsJSON converts the provided value to JSON and writes it to the specified file
+// WriteToFileAsJSON converts the provided value to JSON and writes it to the specified file.
 func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
 	defer perf.Track(nil, "utils.WriteToFileAsJSON")()
 
@@ -129,7 +129,7 @@ func WriteToFileAsJSON(filePath string, data any, fileMode os.FileMode) error {
 	return nil
 }
 
-// ConvertToJSON converts the provided value to a JSON-encoded string
+// ConvertToJSON converts the provided value to a JSON-encoded string.
 func ConvertToJSON(data any) (string, error) {
 	defer perf.Track(nil, "utils.ConvertToJSON")()
 
@@ -147,7 +147,7 @@ func ConvertToJSON(data any) (string, error) {
 	return string(j), nil
 }
 
-// ConvertToJSONFast converts the provided value to a JSON-encoded string using 'ConfigFastest' config and json.Marshal without indents
+// ConvertToJSONFast converts the provided value to a JSON-encoded string using 'ConfigFastest' config and json.Marshal without indents.
 func ConvertToJSONFast(data any) (string, error) {
 	defer perf.Track(nil, "utils.ConvertToJSONFast")()
 
@@ -166,7 +166,7 @@ func ConvertToJSONFast(data any) (string, error) {
 	return j, nil
 }
 
-// ConvertFromJSON converts the provided JSON-encoded string to Go data types
+// ConvertFromJSON converts the provided JSON-encoded string to Go data types.
 func ConvertFromJSON(jsonString string) (any, error) {
 	defer perf.Track(nil, "utils.ConvertFromJSON")()
 
@@ -186,7 +186,7 @@ func ConvertFromJSON(jsonString string) (any, error) {
 	return data, nil
 }
 
-// JSONToMapOfInterfaces takes a JSON string as input and returns a map[string]any
+// JSONToMapOfInterfaces takes a JSON string as input and returns a map[string]any.
 func JSONToMapOfInterfaces(input string) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(nil, "utils.JSONToMapOfInterfaces")()
 

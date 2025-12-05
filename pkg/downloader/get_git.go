@@ -56,6 +56,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -159,19 +160,19 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 	if sshKey != "" {
 		// Check that the git version is sufficiently new.
 		if err := checkGitVersion(ctx, "2.3"); err != nil {
-			return fmt.Errorf("%w: %v", errUtils.ErrSSHKeyUsage, err)
+			return fmt.Errorf("%w: %w", errUtils.ErrSSHKeyUsage, err)
 		}
 
 		// We have an SSH key - decode it.
 		raw, err := base64.StdEncoding.DecodeString(sshKey)
 		if err != nil {
-			return fmt.Errorf("%w: failed to decode SSH key: %v", errUtils.ErrSSHKeyUsage, err)
+			return fmt.Errorf("%w: failed to decode SSH key: %w", errUtils.ErrSSHKeyUsage, err)
 		}
 
 		// Create a temp file for the key and ensure it is removed.
 		fh, err := os.CreateTemp("", "go-getter")
 		if err != nil {
-			return fmt.Errorf("%w: failed to create temp file for SSH key: %v", errUtils.ErrSSHKeyUsage, err)
+			return fmt.Errorf("%w: failed to create temp file for SSH key: %w", errUtils.ErrSSHKeyUsage, err)
 		}
 		sshKeyFile = fh.Name()
 		defer func() {
@@ -182,7 +183,7 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 
 		// Set the permissions prior to writing the key material.
 		if err := os.Chmod(sshKeyFile, sshKeyFileMode); err != nil {
-			return fmt.Errorf("%w: failed to set SSH key file permissions: %v", errUtils.ErrSSHKeyUsage, err)
+			return fmt.Errorf("%w: failed to set SSH key file permissions: %w", errUtils.ErrSSHKeyUsage, err)
 		}
 
 		// Write the raw key into the temp file.
@@ -191,7 +192,7 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 			log.Trace("Failed to close temporary SSH key file", "error", closeErr, "file", sshKeyFile)
 		}
 		if err != nil {
-			return fmt.Errorf("%w: failed to write SSH key to temp file: %v", errUtils.ErrSSHKeyUsage, err)
+			return fmt.Errorf("%w: failed to write SSH key to temp file: %w", errUtils.ErrSSHKeyUsage, err)
 		}
 	}
 
@@ -277,7 +278,8 @@ func getRunCommand(cmd *exec.Cmd) error {
 	if err == nil {
 		return nil
 	}
-	if exiterr, ok := err.(*exec.ExitError); ok {
+	exiterr := &exec.ExitError{}
+	if errors.As(err, &exiterr) {
 		// The program has exited with an exit code != 0
 		if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
 			return fmt.Errorf(

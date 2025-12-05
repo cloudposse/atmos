@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	// userAgent is the User-Agent header value for HTTP requests.
+	// UserAgent is the User-Agent header value for HTTP requests.
 	userAgent = "atmos-toolchain/1.0"
 
 	// MaxErrorBodySize limits how much of an HTTP error response body to include in error messages.

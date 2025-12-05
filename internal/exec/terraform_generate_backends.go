@@ -121,7 +121,6 @@ func ExecuteTerraformGenerateBackends(
 			// Check if `components` filter is provided
 			if len(components) == 0 ||
 				u.SliceContainsString(components, componentName) {
-
 				// Component metadata
 				if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[string]any); ok {
 					if componentType, ok := metadataSection["type"].(string); ok {
@@ -216,7 +215,7 @@ func ExecuteTerraformGenerateBackends(
 
 				// Context
 				context := cfg.GetContextFromVars(varsSection)
-				context.Component = strings.Replace(componentName, "/", "-", -1)
+				context.Component = strings.ReplaceAll(componentName, "/", "-")
 				context.ComponentPath = terraformComponentPath
 
 				// Stack name
@@ -306,7 +305,6 @@ func ExecuteTerraformGenerateBackends(
 					// `stacks` filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
 					u.SliceContainsString(stacks, stackName) {
-
 					// If '--file-template' is not specified, don't check if we've already processed the terraform component,
 					// and write the backends to the terraform components folders
 					if !fileTemplateProvided {
@@ -349,7 +347,8 @@ func ExecuteTerraformGenerateBackends(
 					// Write the backend config to the file
 					log.Debug("Writing backend config for the component to file", "component", terraformComponent, "file", backendFilePath)
 
-					if format == "json" {
+					switch format {
+					case "json":
 						componentBackendConfig, err := generateComponentBackendConfig(backendTypeSection, backendSection, "", nil)
 						if err != nil {
 							return err
@@ -359,17 +358,17 @@ func ExecuteTerraformGenerateBackends(
 						if err != nil {
 							return err
 						}
-					} else if format == "hcl" {
+					case "hcl":
 						err = u.WriteTerraformBackendConfigToFileAsHcl(backendFileAbsolutePath, backendTypeSection, backendSection)
 						if err != nil {
 							return err
 						}
-					} else if format == "backend-config" {
+					case "backend-config":
 						err = u.WriteToFileAsHcl(backendFileAbsolutePath, backendSection, 0o644)
 						if err != nil {
 							return err
 						}
-					} else {
+					default:
 						return fmt.Errorf("invalid '--format' argument '%s'. Valid values are 'hcl' (default), 'json' and 'backend-config'", format)
 					}
 				}

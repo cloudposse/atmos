@@ -247,7 +247,7 @@ func preCustomCommand(
 			errUtils.Exit(1)
 		} else {
 			// truly invalid, nothing to do
-			er := errors.New(fmt.Sprintf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath()))
+			er := fmt.Errorf("The `%s` command has no steps or subcommands configured.", cmd.CommandPath())
 			errUtils.CheckErrorPrintAndExit(er, "Invalid Command", "https://atmos.tools/cli/configuration/commands")
 		}
 	}
@@ -431,11 +431,12 @@ func executeCustomCommand(
 		flags := cmd.Flags()
 		flagsData := map[string]any{}
 		for _, fl := range commandConfig.Flags {
-			if fl.Type == "" || fl.Type == "string" {
+			switch fl.Type {
+			case "", "string":
 				providedFlag, err := flags.GetString(fl.Name)
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 				flagsData[fl.Name] = providedFlag
-			} else if fl.Type == "bool" {
+			case "bool":
 				boolFlag, err := flags.GetBool(fl.Name)
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 				flagsData[fl.Name] = boolFlag
@@ -839,12 +840,12 @@ func listStacks(cmd *cobra.Command) ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return nil, fmt.Errorf("error initializing CLI config: %v", err)
+		return nil, fmt.Errorf("error initializing CLI config: %w", err)
 	}
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
-		return nil, fmt.Errorf("error describing stacks: %v", err)
+		return nil, fmt.Errorf("error describing stacks: %w", err)
 	}
 
 	output, err := l.FilterAndListStacks(stacksMap, "")
@@ -862,12 +863,12 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return nil, fmt.Errorf("error initializing CLI config: %v", err)
+		return nil, fmt.Errorf("error initializing CLI config: %w", err)
 	}
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
-		return nil, fmt.Errorf("error describing stacks: %v", err)
+		return nil, fmt.Errorf("error describing stacks: %w", err)
 	}
 
 	output, err := l.FilterAndListComponents(stackFlag, stacksMap)

@@ -5,7 +5,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// ExecuteDescribeComponent describes component config and returns the final map of component configuration in the stack
+// ExecuteDescribeComponent describes component config and returns the final map of component configuration in the stack.
 func ExecuteDescribeComponent(
 	component string,
 	stack string,

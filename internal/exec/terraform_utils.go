@@ -77,7 +77,6 @@ func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (bool, bool) {
 			shouldProcessStacks = false
 		}
 		shouldCheckStack = info.Stack != ""
-
 	}
 
 	return shouldProcessStacks, shouldCheckStack

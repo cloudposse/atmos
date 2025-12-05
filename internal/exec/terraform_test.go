@@ -866,7 +866,7 @@ components:
 // converted to ComponentEnvList. This is a unit test that proves the conversion logic
 // works correctly when auth hooks populate ComponentEnvSection.
 //
-//nolint:dupl // Test logic is intentionally similar across terraform/helmfile/packer for consistency
+
 func TestComponentEnvSectionConversion(t *testing.T) {
 	tests := []struct {
 		name            string

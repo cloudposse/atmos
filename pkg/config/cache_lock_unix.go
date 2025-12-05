@@ -83,7 +83,8 @@ func loadCacheWithReadLockUnix(cacheFile string) (CacheConfig, error) {
 	if err := v.ReadInConfig(); err != nil {
 		// If the config file doesn't exist, return empty config (no error)
 		// This matches the Windows fallback behavior and test expectations.
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if errors.As(err, &configFileNotFoundError) {
 			return cfg, nil
 		}
 		return cfg, errors.Join(errUtils.ErrCacheRead, err)

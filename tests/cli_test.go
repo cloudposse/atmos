@@ -485,7 +485,7 @@ func sanitizeTestName(name string) string {
 }
 
 // Drop any lines matched by the ignore patterns so they do not affect the comparison.
-// stripTrailingWhitespace removes trailing whitespace from each line.
+// StripTrailingWhitespace removes trailing whitespace from each line.
 func stripTrailingWhitespace(input string) string {
 	lines := strings.Split(input, "\n")
 	for i, line := range lines {

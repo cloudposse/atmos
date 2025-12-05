@@ -377,10 +377,10 @@ func ProcessStackConfig(
 	if atmosConfig.Auth.Providers != nil || atmosConfig.Auth.Identities != nil {
 		jsonBytes, err := json.Marshal(atmosConfig.Auth)
 		if err != nil {
-			return nil, fmt.Errorf("%w: failed to marshal global auth config: %v", errUtils.ErrInvalidAuthConfig, err)
+			return nil, fmt.Errorf("%w: failed to marshal global auth config: %w", errUtils.ErrInvalidAuthConfig, err)
 		}
 		if err := json.Unmarshal(jsonBytes, &atmosAuthConfig); err != nil {
-			return nil, fmt.Errorf("%w: failed to unmarshal global auth config: %v", errUtils.ErrInvalidAuthConfig, err)
+			return nil, fmt.Errorf("%w: failed to unmarshal global auth config: %w", errUtils.ErrInvalidAuthConfig, err)
 		}
 	} else {
 		atmosAuthConfig = map[string]any{}

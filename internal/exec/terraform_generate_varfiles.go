@@ -118,7 +118,6 @@ func ExecuteTerraformGenerateVarfiles(
 			// Check if `components` filter is provided
 			if len(components) == 0 ||
 				u.SliceContainsString(components, componentName) {
-
 				// Component vars
 				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[string]any); !ok {
 					continue
@@ -209,7 +208,7 @@ func ExecuteTerraformGenerateVarfiles(
 
 				// Context
 				context := cfg.GetContextFromVars(varsSection)
-				context.Component = strings.Replace(componentName, "/", "-", -1)
+				context.Component = strings.ReplaceAll(componentName, "/", "-")
 				context.ComponentPath = terraformComponentPath
 
 				// Stack name
@@ -305,7 +304,6 @@ func ExecuteTerraformGenerateVarfiles(
 					// `stacks` filter can also contain the logical stack names (derived from the context vars):
 					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
 					u.SliceContainsString(stacks, stackName) {
-
 					// Replace the tokens in the file template
 					// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
 					fileName := cfg.ReplaceContextTokens(context, fileTemplate)
@@ -321,22 +319,23 @@ func ExecuteTerraformGenerateVarfiles(
 					}
 
 					// Write the varfile
-					if format == "yaml" {
+					switch format {
+					case "yaml":
 						err = u.WriteToFileAsYAML(fileAbsolutePath, varsSection, 0o644)
 						if err != nil {
 							return err
 						}
-					} else if format == "json" {
+					case "json":
 						err = u.WriteToFileAsJSON(fileAbsolutePath, varsSection, 0o644)
 						if err != nil {
 							return err
 						}
-					} else if format == "hcl" {
+					case "hcl":
 						err = u.WriteToFileAsHcl(fileAbsolutePath, varsSection, 0o644)
 						if err != nil {
 							return err
 						}
-					} else {
+					default:
 						return fmt.Errorf("%w: invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl'", errUtils.ErrInvalidFlag, format)
 					}
 

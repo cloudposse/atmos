@@ -224,10 +224,10 @@ func generateDocument(
 	// 5) Resolve and write final document.
 	outputPath, err := resolvePath(docsGenerate.Output, baseDir, defaultReadmeOutput)
 	if err != nil {
-		return fmt.Errorf("%w: %s: %s", errUtils.ErrResolveOutputPath, docsGenerate.Output, err)
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrResolveOutputPath, docsGenerate.Output, err)
 	}
 	if err = os.WriteFile(outputPath, []byte(rendered), defaultFilePermissions); err != nil {
-		return fmt.Errorf("%w: %s: %s", errUtils.ErrWriteOutput, outputPath, err)
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrWriteOutput, outputPath, err)
 	}
 
 	u.PrintfMessageToTUI("\n%s Generated docs\n\n", theme.Styles.Checkmark)
@@ -317,23 +317,23 @@ func downloadSource(
 	if !isRemoteSource(pathOrURL) {
 		pathOrURL, err = resolvePath(pathOrURL, baseDir, "")
 		if err != nil {
-			return "", "", fmt.Errorf("%w: %s", errUtils.ErrPathResolution, err)
+			return "", "", fmt.Errorf("%w: %w", errUtils.ErrPathResolution, err)
 		}
 	}
 	log.Debug("Downloading source", "source", pathOrURL, "baseDir", baseDir)
 	tempDir, err := os.MkdirTemp("", "atmos-docs-*")
 	if err != nil {
-		return "", "", fmt.Errorf("%w: %v", errUtils.ErrCreateTempDir, err)
+		return "", "", fmt.Errorf("%w: %w", errUtils.ErrCreateTempDir, err)
 	}
 	// Ensure directory permissions are restricted.
 	if err := os.Chmod(tempDir, defaultDirPermissions); err != nil {
-		return "", "", fmt.Errorf("%w: %v", errUtils.ErrSetTempDirPermissions, err)
+		return "", "", fmt.Errorf("%w: %w", errUtils.ErrSetTempDirPermissions, err)
 	}
 
 	log.Debug("Downloading source", "source", pathOrURL, "tempDir", tempDir)
 
 	if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(pathOrURL, tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
-		return "", tempDir, fmt.Errorf("%w: %s: %v", errUtils.ErrDownloadPackage, pathOrURL, err)
+		return "", tempDir, fmt.Errorf("%w: %s: %w", errUtils.ErrDownloadPackage, pathOrURL, err)
 	}
 
 	fileName := filepath.Base(pathOrURL)
@@ -374,7 +374,7 @@ func resolvePath(path string, baseDir string, defaultPath string) (string, error
 	// Finally, resolve against cwd
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return "", fmt.Errorf("%w: %s", errUtils.ErrPathResolution, err)
+		return "", fmt.Errorf("%w: %w", errUtils.ErrPathResolution, err)
 	}
 
 	return absPath, nil

@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// helmfileGenerateCmd generates configurations for helmfile components
+// helmfileGenerateCmd generates configurations for helmfile components.
 var helmfileGenerateCmd = &cobra.Command{
 	Use:                "generate",
 	Short:              "Generate configurations for Helmfile components",

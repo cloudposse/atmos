@@ -41,12 +41,12 @@ func setupTestFixtures(baseDir string) error {
 
 	for dir, filenames := range files {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %v", dir, err)
+			return fmt.Errorf("failed to create directory %s: %w", dir, err)
 		}
 		for _, filename := range filenames {
 			filePath := filepath.Join(dir, filename)
 			if err := os.WriteFile(filePath, []byte("test content"), 0o644); err != nil {
-				return fmt.Errorf("failed to create file %s: %v", filePath, err)
+				return fmt.Errorf("failed to create file %s: %w", filePath, err)
 			}
 		}
 	}

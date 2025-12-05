@@ -200,7 +200,7 @@ func (i *Installer) findTool(owner, repo, version string) (*registry.Tool, error
 }
 
 // searchRegistry searches a specific registry for a tool.
-// version is required to apply version-specific overrides from the registry.
+// Version is required to apply version-specific overrides from the registry.
 func (i *Installer) searchRegistry(registry, owner, repo, version string) (*registry.Tool, error) {
 	// Try to fetch from Aqua registry for remote registries
 	if strings.HasPrefix(registry, "http") {
@@ -479,16 +479,17 @@ func (i *Installer) downloadAsset(url string) (string, error) {
 			WithContext("status_code", resp.StatusCode).
 			WithExitCode(1)
 
-		if resp.StatusCode == http.StatusNotFound {
+		switch resp.StatusCode {
+		case http.StatusNotFound:
 			builder.
 				WithHint("Asset not found - check tool name and version are correct").
 				WithHint("Try without `v` prefix: `@1.5.0` instead of `@v1.5.0`")
-		} else if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+		case http.StatusForbidden, http.StatusUnauthorized:
 			builder.
 				WithHint("GitHub API rate limit exceeded or authentication required").
 				WithHint("Set `GITHUB_TOKEN` environment variable to increase rate limits").
 				WithHint("Get token at: https://github.com/settings/tokens")
-		} else {
+		default:
 			builder.WithHint("Check GitHub status: https://www.githubstatus.com")
 		}
 

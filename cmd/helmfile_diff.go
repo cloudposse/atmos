@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Command: atmos helmfile diff
+// Command: atmos helmfile diff.
 var (
 	helmfileDiffShort = "Show differences between the desired and actual state of Helm releases."
 	helmfileDiffLong  = `This command calculates and displays the differences between the desired state of Helm releases
@@ -15,7 +15,7 @@ Example usage:
   atmos helmfile diff echo-server -s tenant1-ue2-dev --redirect-stderr /dev/null`
 )
 
-// helmfileDiffCmd represents the base command for all helmfile sub-commands
+// helmfileDiffCmd represents the base command for all helmfile sub-commands.
 var helmfileDiffCmd = &cobra.Command{
 	Use:                "diff",
 	Aliases:            []string{},

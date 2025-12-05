@@ -101,7 +101,7 @@ func (c *StoreCommand) getOutputValue(value string) (string, any, error) {
 	return outputKey, outputValue, nil
 }
 
-// storeOutput puts the value of the output in the store
+// storeOutput puts the value of the output in the store.
 func (c *StoreCommand) storeOutput(hook *Hook, key string, outputKey string, outputValue any) error {
 	log.Debug("checking if the store exists", "store", hook.Name)
 	store := c.atmosConfig.Stores[hook.Name]
@@ -115,7 +115,7 @@ func (c *StoreCommand) storeOutput(hook *Hook, key string, outputKey string, out
 	return store.Set(c.info.Stack, c.info.ComponentFromArg, key, outputValue)
 }
 
-// RunE is the entrypoint for the store command
+// RunE is the entrypoint for the store command.
 func (c *StoreCommand) RunE(hook *Hook, event HookEvent, cmd *cobra.Command, args []string) error {
 	return c.processStoreCommand(hook)
 }

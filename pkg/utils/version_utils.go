@@ -11,7 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
-// PrintMessageToUpgradeToAtmosLatestRelease prints info on how to upgrade Atmos to the latest version
+// PrintMessageToUpgradeToAtmosLatestRelease prints info on how to upgrade Atmos to the latest version.
 func PrintMessageToUpgradeToAtmosLatestRelease(latestVersion string) {
 	defer perf.Track(nil, "utils.PrintMessageToUpgradeToAtmosLatestRelease")()
 

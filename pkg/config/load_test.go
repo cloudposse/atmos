@@ -298,9 +298,7 @@ func TestMergeDefaultImports_ExclusionLogic(t *testing.T) {
 						joinedPaths = joinedPaths + string(os.PathListSeparator) + absoluteExcludePaths[i]
 					}
 					t.Setenv("TEST_EXCLUDE_ATMOS_D", joinedPaths)
-
 				}
-
 			}
 
 			// Adjust dirPath for the test

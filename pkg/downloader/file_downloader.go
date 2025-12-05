@@ -40,7 +40,7 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 
 	client, err := fd.clientFactory.NewClient(ctx, src, dest, mode)
 	if err != nil {
-		return fmt.Errorf("%w: %v", errUtils.ErrCreateDownloadClient, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrCreateDownloadClient, err)
 	}
 
 	return client.Get()
@@ -57,7 +57,7 @@ func (fd *fileDownloader) FetchAndAutoParse(src string) (any, error) {
 
 	v, err := filetype.DetectFormatAndParseFile(fd.fileReader, filePath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+		return nil, fmt.Errorf("%w: '%s': %w", errUtils.ErrParseFile, src, err)
 	}
 	return v, nil
 }
@@ -80,7 +80,7 @@ func (fd *fileDownloader) FetchAndParseByExtension(src string) (any, error) {
 	// Pass the original source URL for extension detection
 	v, err := filetype.ParseFileByExtension(readFunc, src)
 	if err != nil {
-		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+		return nil, fmt.Errorf("%w: '%s': %w", errUtils.ErrParseFile, src, err)
 	}
 	return v, nil
 }
@@ -96,7 +96,7 @@ func (fd *fileDownloader) FetchAndParseRaw(src string) (any, error) {
 
 	v, err := filetype.ParseFileRaw(fd.fileReader, filePath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+		return nil, fmt.Errorf("%w: '%s': %w", errUtils.ErrParseFile, src, err)
 	}
 	return v, nil
 }
@@ -126,7 +126,7 @@ func (fd *fileDownloader) FetchAtomic(src, dest string, mode ClientMode, timeout
 
 	client, err := fd.clientFactory.NewClient(ctx, src, tempPath, mode)
 	if err != nil {
-		return fmt.Errorf("%w: %v", errUtils.ErrCreateDownloadClient, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrCreateDownloadClient, err)
 	}
 
 	if err := client.Get(); err != nil {
@@ -136,12 +136,12 @@ func (fd *fileDownloader) FetchAtomic(src, dest string, mode ClientMode, timeout
 	// Read the downloaded content.
 	data, err := fd.fileReader(tempPath)
 	if err != nil {
-		return fmt.Errorf("%w: failed to read downloaded file: %v", errUtils.ErrDownloadFile, err)
+		return fmt.Errorf("%w: failed to read downloaded file: %w", errUtils.ErrDownloadFile, err)
 	}
 
 	// Write atomically to final destination using injected writer.
 	if err := fd.atomicWriter(dest, data, 0o644); err != nil {
-		return fmt.Errorf("%w: failed to write file atomically: %v", errUtils.ErrDownloadFile, err)
+		return fmt.Errorf("%w: failed to write file atomically: %w", errUtils.ErrDownloadFile, err)
 	}
 
 	return nil

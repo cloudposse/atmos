@@ -399,12 +399,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Run `terraform init` before running other commands.
-	runTerraformInit := true
-	if info.SubCommand == "init" ||
+	runTerraformInit := !(info.SubCommand == "init" ||
 		info.SubCommand == "clean" ||
-		(info.SubCommand == "deploy" && !atmosConfig.Components.Terraform.DeployRunInit) {
-		runTerraformInit = false
-	}
+		(info.SubCommand == "deploy" && !atmosConfig.Components.Terraform.DeployRunInit))
 
 	if info.SkipInit {
 		log.Debug("Skipping over 'terraform init' due to '--skip-init' flag being passed")
@@ -555,7 +552,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Run `terraform workspace` before executing other terraform commands
 	// only if the `TF_WORKSPACE` environment variable is not set by the caller.
-	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
+	if info.SubCommand != "init" && (info.SubCommand != "workspace" || info.SubCommand2 == "") {
 		// Don't use workspace commands in http backend.
 		if info.ComponentBackendType != "http" {
 			tfWorkspaceEnvVar := os.Getenv("TF_WORKSPACE")
@@ -637,7 +634,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Execute the provided command (except for `terraform workspace` which was executed above).
-	if !(info.SubCommand == "workspace" && info.SubCommand2 == "") {
+	if info.SubCommand != "workspace" || info.SubCommand2 != "" {
 		err = ExecuteShellCommand(
 			atmosConfig,
 			info.Command,

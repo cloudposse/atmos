@@ -24,10 +24,10 @@ const (
 	logKeyPattern     = "pattern"
 	shallowCopySuffix = "/*"
 
-	// finalTargetKey is used as a logging key for the final target.
+	// FinalTargetKey is used as a logging key for the final target.
 	finalTargetKey = "finalTarget"
 
-	// sourceKey is used as a logging key for the source.
+	// SourceKey is used as a logging key for the source.
 	sourceKey = "source"
 )
 

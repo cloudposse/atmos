@@ -80,12 +80,12 @@ func newColumn(columnPointer int, viewType string) columnView {
 	}
 }
 
-// Init does initial setup
+// Init does initial setup.
 func (c *columnView) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles all the I/O
+// Update handles all the I/O.
 func (c *columnView) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
@@ -150,7 +150,7 @@ func (c *columnView) getStyle() lipgloss.Style {
 	return s
 }
 
-// SetContent sets content
+// SetContent sets content.
 func (c *columnView) SetContent(content string, language string) {
 	c.codeView.SetContent(content, language)
 }

@@ -172,7 +172,7 @@ func processChdirFlag(cmd *cobra.Command) error {
 	homeDirProvider := filesystem.NewOSHomeDirProvider()
 	expandedPath, err := homeDirProvider.Expand(chdir)
 	if err != nil {
-		return fmt.Errorf("%w: %s", errUtils.ErrPathResolution, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrPathResolution, err)
 	}
 
 	// Clean and make absolute to handle both relative and absolute paths.
@@ -887,7 +887,7 @@ func setupProfiler(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration) e
 	// Create and start the profiler.
 	profilerServer = profiler.New(profilerConfig)
 	if err := profilerServer.Start(); err != nil {
-		return fmt.Errorf("%w: failed to start profiler: %v", errUtils.ErrProfilerStart, err)
+		return fmt.Errorf("%w: failed to start profiler: %w", errUtils.ErrProfilerStart, err)
 	}
 
 	return nil
@@ -957,7 +957,7 @@ func applyProfilerEnvironmentOverrides(config *profiler.Config, atmosConfig *sch
 	if atmosConfig.Profiler.ProfileType != "" {
 		parsedType, parseErr := profiler.ParseProfileType(string(atmosConfig.Profiler.ProfileType))
 		if parseErr != nil {
-			return fmt.Errorf("%w: invalid ATMOS_PROFILE_TYPE %q: %v", errUtils.ErrParseFlag, atmosConfig.Profiler.ProfileType, parseErr)
+			return fmt.Errorf("%w: invalid ATMOS_PROFILE_TYPE %q: %w", errUtils.ErrParseFlag, atmosConfig.Profiler.ProfileType, parseErr)
 		}
 		config.ProfileType = parsedType
 	}
@@ -1035,12 +1035,12 @@ func applyProfileTypeFlag(config *profiler.Config, cmd *cobra.Command) error {
 
 	profileType, err := cmd.Flags().GetString("profile-type")
 	if err != nil {
-		return fmt.Errorf("%w: failed to get profile-type flag: %v", errUtils.ErrInvalidFlag, err)
+		return fmt.Errorf("%w: failed to get profile-type flag: %w", errUtils.ErrInvalidFlag, err)
 	}
 
 	parsedType, parseErr := profiler.ParseProfileType(profileType)
 	if parseErr != nil {
-		return fmt.Errorf("%w: invalid profile type '%s': %v", errUtils.ErrParseFlag, profileType, parseErr)
+		return fmt.Errorf("%w: invalid profile type '%s': %w", errUtils.ErrParseFlag, profileType, parseErr)
 	}
 
 	config.ProfileType = parsedType
@@ -1332,7 +1332,7 @@ func initCobraConfig() {
 			command.Example = exampleContent.Content
 		}
 
-		if !(Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")) {
+		if !Contains(os.Args, "help") && !Contains(os.Args, "--help") && !Contains(os.Args, "-h") {
 			// Get actual arguments (handles DisableFlagParsing=true case).
 			arguments := flags.GetActualArgs(command, os.Args)
 			showUsageAndExit(command, arguments)

@@ -83,7 +83,7 @@ func CreateSpaceliftStacks(
 	}
 }
 
-// TransformStackConfigToSpaceliftStacks takes a map of stack manifests and transforms it to a map of Spacelift stacks
+// TransformStackConfigToSpaceliftStacks takes a map of stack manifests and transforms it to a map of Spacelift stacks.
 func TransformStackConfigToSpaceliftStacks(
 	atmosConfig *schema.AtmosConfiguration,
 	stacks map[string]any,
@@ -187,7 +187,7 @@ func TransformStackConfigToSpaceliftStacks(
 							return nil, err
 						}
 					} else {
-						contextPrefix = strings.Replace(stackName, "/", "-", -1)
+						contextPrefix = strings.ReplaceAll(stackName, "/", "-")
 					}
 
 					spaceliftConfig[cfg.ComponentSectionName] = component
@@ -275,7 +275,7 @@ func TransformStackConfigToSpaceliftStacks(
 					var terraformComponentNamesInCurrentStack []string
 
 					for v2 := range terraformComponentsMap {
-						terraformComponentNamesInCurrentStack = append(terraformComponentNamesInCurrentStack, strings.Replace(v2, "/", "-", -1))
+						terraformComponentNamesInCurrentStack = append(terraformComponentNamesInCurrentStack, strings.ReplaceAll(v2, "/", "-"))
 					}
 
 					// Legacy/deprecated `settings.spacelift.depends_on`
@@ -343,7 +343,7 @@ func TransformStackConfigToSpaceliftStacks(
 								return nil, err
 							}
 						} else {
-							contextPrefixDependsOn = strings.Replace(stackName, "/", "-", -1)
+							contextPrefixDependsOn = strings.ReplaceAll(stackName, "/", "-")
 						}
 
 						spaceliftStackNameDependsOn, err := e.BuildDependentStackNameFromDependsOn(
@@ -364,7 +364,7 @@ func TransformStackConfigToSpaceliftStacks(
 
 					// Add `component` and `folder` labels
 					labels = append(labels, fmt.Sprintf("folder:component/%s", component))
-					labels = append(labels, fmt.Sprintf("folder:%s", strings.Replace(contextPrefix, "-", "/", -1)))
+					labels = append(labels, fmt.Sprintf("folder:%s", strings.ReplaceAll(contextPrefix, "-", "/")))
 
 					spaceliftConfig["labels"] = u.UniqueStrings(labels)
 
@@ -375,7 +375,7 @@ func TransformStackConfigToSpaceliftStacks(
 					}
 
 					// Add Spacelift stack config to the final map
-					spaceliftStackNameKey := strings.Replace(spaceliftStackName, "/", "-", -1)
+					spaceliftStackNameKey := strings.ReplaceAll(spaceliftStackName, "/", "-")
 
 					if !u.MapKeyExists(res, spaceliftStackNameKey) {
 						res[spaceliftStackNameKey] = spaceliftConfig

@@ -367,7 +367,7 @@ func addStackTraceSection(md *strings.Builder, err error, useColor bool) {
 // the global renderer from pkg/ui to ensure:
 // 1. The FormatterConfig.MaxLineLength parameter is respected (global renderer may have different width)
 // 2. Error formatting works before the UI system is initialized (early startup errors)
-// 3. No circular dependencies (pkg/ui imports errors package)
+// 3. No circular dependencies (pkg/ui imports errors package).
 func renderMarkdown(md string, maxLineLength int) string {
 	// Use provided maxLineLength, or fall back to default if not set.
 	width := maxLineLength
@@ -440,7 +440,7 @@ func formatContextForMarkdown(err error) string {
 // This uses the terminal package's color logic which respects:
 // - --no-color, --color, --force-color flags
 // - NO_COLOR, CLICOLOR, CLICOLOR_FORCE environment variables
-// - settings.terminal.color and settings.terminal.no_color in atmos.yaml
+// - settings.terminal.color and settings.terminal.no_color in atmos.yaml.
 func shouldUseColor() bool {
 	// Build terminal config from all sources (flags, env vars, atmos.yaml).
 	termConfig := &terminal.Config{

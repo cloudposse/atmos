@@ -52,11 +52,12 @@ func (d *describeWorkflowsExec) Execute(atmosConfig *schema.AtmosConfiguration, 
 
 	var res any
 
-	if outputType == "list" {
+	switch outputType {
+	case "list":
 		res = describeWorkflowsList
-	} else if outputType == "map" {
+	case "map":
 		res = describeWorkflowsMap
-	} else {
+	default:
 		res = describeWorkflowsAll
 	}
 

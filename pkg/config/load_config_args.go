@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -86,11 +87,14 @@ func mergeConfigFromDirectories(v *viper.Viper, dirPaths []string) ([]string, er
 		err := mergeConfig(v, confDirPath, CliConfigFileName, true)
 		if err != nil {
 			log.Debug("Failed to find atmos config", "path", confDirPath, "error", err)
-			switch err.(type) {
-			case viper.ConfigFileNotFoundError:
-				log.Debug("Failed to found atmos config", "file", filepath.Join(confDirPath, CliConfigFileName))
-			default:
-				return nil, err
+			{
+				var errCase0 viper.ConfigFileNotFoundError
+				switch {
+				case errors.As(err, &errCase0):
+					log.Debug("Failed to found atmos config", "file", filepath.Join(confDirPath, CliConfigFileName))
+				default:
+					return nil, err
+				}
 			}
 		}
 		if err == nil {
@@ -143,7 +147,7 @@ func validatedIsFiles(files []string) error {
 				return fmt.Errorf("%w: --config file '%s' does not exist", errUtils.ErrFileNotFound, filePath)
 			}
 			// Other stat errors (permission denied, etc.)
-			return fmt.Errorf("%w: cannot access --config file '%s': %v", errUtils.ErrFileAccessDenied, filePath, err)
+			return fmt.Errorf("%w: cannot access --config file '%s': %w", errUtils.ErrFileAccessDenied, filePath, err)
 		}
 		if stat.IsDir() {
 			log.Debug("--config expected file found directory", "path", filePath)

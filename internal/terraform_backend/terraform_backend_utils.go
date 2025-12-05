@@ -144,7 +144,7 @@ func GetTerraformBackend(
 
 	data, err := ProcessTerraformStateFile(content)
 	if err != nil {
-		return nil, fmt.Errorf("%w\n%v", errUtils.ErrProcessTerraformStateFile, err)
+		return nil, fmt.Errorf("%w\nwv", errUtils.ErrProcessTerraformStateFile, err)
 	}
 
 	return data, nil

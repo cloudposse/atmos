@@ -358,13 +358,17 @@ type viewWithScrollProps struct {
 func viewWithScroll(v *viewWithScrollProps) error {
 	if v.atmosConfig.Settings.Terminal.IsPagerEnabled() && v.file == "" {
 		err := viewConfig(&viewConfigProps{v.pageCreator, v.isTTYSupportForStdout, v.atmosConfig, v.displayName, v.format, v.res})
-		switch err.(type) {
-		case DescribeConfigFormatError:
-			return err
-		case nil:
-			return nil
-		default:
-			log.Debug("Failed to use pager")
+		{
+			var errCase0 DescribeConfigFormatError
+			var errCase1 error
+			switch {
+			case errors.As(err, &errCase0):
+				return err
+			case errors.As(err, &errCase1):
+				return nil
+			default:
+				log.Debug("Failed to use pager")
+			}
 		}
 	}
 

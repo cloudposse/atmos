@@ -53,7 +53,7 @@ func (d listItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 		itemName = i.item
 	}
 
-	str := fmt.Sprintf("%s", itemName)
+	str := itemName
 	if _, err := fmt.Fprint(w, fn(str)); err != nil {
 		log.Trace("Failed to write to TUI output buffer", "error", err, "item", itemName)
 	}

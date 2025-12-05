@@ -91,12 +91,12 @@ func listAllStacks() ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return nil, fmt.Errorf("error initializing CLI config: %v", err)
+		return nil, fmt.Errorf("error initializing CLI config: %w", err)
 	}
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
-		return nil, fmt.Errorf("error describing stacks: %v", err)
+		return nil, fmt.Errorf("error describing stacks: %w", err)
 	}
 
 	output, err := l.FilterAndListStacks(stacksMap, "")

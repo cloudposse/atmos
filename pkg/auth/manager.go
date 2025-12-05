@@ -1273,7 +1273,7 @@ func (m *manager) PrepareShellEnvironment(ctx context.Context, identityName stri
 
 // environListToMap converts environment variable list to map.
 // Input: ["KEY=value", "FOO=bar"]
-// Output: {"KEY": "value", "FOO": "bar"}
+// Output: {"KEY": "value", "FOO": "bar"}.
 func environListToMap(envList []string) map[string]string {
 	envMap := make(map[string]string, len(envList))
 	for _, envVar := range envList {
@@ -1288,7 +1288,7 @@ func environListToMap(envList []string) map[string]string {
 
 // mapToEnvironList converts environment variable map to list.
 // Input: {"KEY": "value", "FOO": "bar"}
-// Output: ["KEY=value", "FOO=bar"]
+// Output: ["KEY=value", "FOO=bar"].
 func mapToEnvironList(envMap map[string]string) []string {
 	envList := make([]string, 0, len(envMap))
 	for key, value := range envMap {

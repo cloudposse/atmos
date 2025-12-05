@@ -195,7 +195,7 @@ func JoinPathAndValidate(basePath string, providedPath string) (string, error) {
 	return constructedPath, nil
 }
 
-// EnsureDir accepts a file path and creates all the intermediate subdirectories
+// EnsureDir accepts a file path and creates all the intermediate subdirectories.
 func EnsureDir(fileName string) error {
 	defer perf.Track(nil, "utils.EnsureDir")()
 

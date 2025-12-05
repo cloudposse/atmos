@@ -13,7 +13,7 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 		case "artifactory":
 			var opts ArtifactoryStoreOptions
 			if err := parseOptions(storeConfig.Options, &opts); err != nil {
-				return nil, fmt.Errorf("%w: %v", ErrParseArtifactoryOptions, err)
+				return nil, fmt.Errorf("%w: %w", ErrParseArtifactoryOptions, err)
 			}
 
 			store, err := NewArtifactoryStore(opts)
@@ -37,7 +37,7 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 		case "aws-ssm-parameter-store":
 			var opts SSMStoreOptions
 			if err := parseOptions(storeConfig.Options, &opts); err != nil {
-				return nil, fmt.Errorf("%w: %v", ErrParseSSMOptions, err)
+				return nil, fmt.Errorf("%w: %w", ErrParseSSMOptions, err)
 			}
 
 			store, err := NewSSMStore(opts)
@@ -61,7 +61,7 @@ func NewStoreRegistry(config *StoresConfig) (StoreRegistry, error) {
 		case "redis":
 			var opts RedisStoreOptions
 			if err := parseOptions(storeConfig.Options, &opts); err != nil {
-				return nil, fmt.Errorf("%w: %v", ErrParseRedisOptions, err)
+				return nil, fmt.Errorf("%w: %w", ErrParseRedisOptions, err)
 			}
 
 			store, err := NewRedisStore(opts)

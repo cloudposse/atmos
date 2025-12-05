@@ -223,7 +223,7 @@ func TestLockStack_SuccessFalseWithContext(t *testing.T) {
 	assert.False(t, response.Success)
 }
 
-// FailingReader is a mock io.Reader that always returns an error
+// FailingReader is a mock io.Reader that always returns an error.
 type FailingReader struct{}
 
 func (f *FailingReader) Read(p []byte) (n int, err error) {

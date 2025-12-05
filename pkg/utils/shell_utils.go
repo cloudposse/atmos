@@ -109,7 +109,7 @@ func GetNextShellLevel() (int, error) {
 	// Create a new viper instance for this operation
 	v := viper.New()
 	if err := v.BindEnv("atmos_shell_level", "ATMOS_SHLVL"); err != nil {
-		return 0, fmt.Errorf("%w: %v", ErrBindingShellLevelEnv, err)
+		return 0, fmt.Errorf("%w: %w", ErrBindingShellLevelEnv, err)
 	}
 
 	shellVal := 0
@@ -117,7 +117,7 @@ func GetNextShellLevel() (int, error) {
 	if atmosShellLvl != "" {
 		val, err := strconv.Atoi(atmosShellLvl)
 		if err != nil {
-			return 0, fmt.Errorf("%w: %s", ErrConvertingShellLevel, err)
+			return 0, fmt.Errorf("%w: %w", ErrConvertingShellLevel, err)
 		}
 		shellVal = val
 	}

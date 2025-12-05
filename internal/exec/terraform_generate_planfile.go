@@ -221,7 +221,7 @@ func resolvePlanfilePath(componentPath, format string, customFile string, info *
 func writePlanfile(planFilePath, format string, planJSON string) error {
 	d, err := u.ConvertFromJSON(planJSON)
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrConvertingJsonToGoType, err)
+		return fmt.Errorf("%w: %w", ErrConvertingJsonToGoType, err)
 	}
 
 	const fileMode = 0o644

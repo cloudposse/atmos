@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/pkg/errors"
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -145,13 +146,17 @@ func (d *DescribeComponentExec) ExecuteDescribeComponentCmd(describeComponentPar
 
 	if atmosConfig.Settings.Terminal.IsPagerEnabled() {
 		err = d.viewConfig(&atmosConfig, component, format, res)
-		switch err.(type) {
-		case DescribeConfigFormatError:
-			return err
-		case nil:
-			return nil
-		default:
-			log.Debug("Failed to use pager")
+		{
+			var errCase0 DescribeConfigFormatError
+			var errCase1 error
+			switch {
+			case errors.As(err, &errCase0):
+				return err
+			case errors.As(err, &errCase1):
+				return nil
+			default:
+				log.Debug("Failed to use pager")
+			}
 		}
 	}
 

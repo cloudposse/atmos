@@ -191,7 +191,7 @@ func handleAzureDownloadError(err error, tfStateFilePath, containerName string) 
 			return nil
 		case statusCodeForbiddenAzure:
 			return fmt.Errorf(
-				"%w: blob '%s' in container '%s': %v",
+				"%w: blob '%s' in container '%s': %w",
 				errUtils.ErrAzurePermissionDenied,
 				tfStateFilePath,
 				containerName,

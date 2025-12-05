@@ -104,7 +104,7 @@ func appendToAffected(
 
 	// Check the `component` section and add `ComponentPath` to the output.
 	affected.ComponentPath = BuildComponentPath(atmosConfig, componentSection, affected.ComponentType)
-	affected.StackSlug = fmt.Sprintf("%s-%s", stackName, strings.Replace(componentName, "/", "-", -1))
+	affected.StackSlug = fmt.Sprintf("%s-%s", stackName, strings.ReplaceAll(componentName, "/", "-"))
 
 	*affectedList = append(*affectedList, *affected)
 	return nil
@@ -448,7 +448,6 @@ func addAffectedSpaceliftAdminStack(
 				if terraformSection, ok := componentsSection[cfg.TerraformComponentType].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
 						if componentSection, ok := compSection.(map[string]any); ok {
-
 							if componentVarsSection, ok = componentSection["vars"].(map[string]any); !ok {
 								return affectedList, nil
 							}
@@ -483,17 +482,15 @@ func addAffectedSpaceliftAdminStack(
 								}
 
 								if spaceliftWorkspaceEnabled, ok := componentSettingsSpaceliftSection["workspace_enabled"].(bool); !ok || !spaceliftWorkspaceEnabled {
-									return nil, errors.New(fmt.Sprintf(
-										"component '%s' in the stack '%s' has the section 'settings.spacelift.admin_stack_selector' "+
-											"to point to the Spacelift admin component '%s' in the stack '%s', "+
-											"but that component has Spacelift workspace disabled "+
-											"in the 'settings.spacelift.workspace_enabled' section "+
-											"and can't be added to the affected stacks",
+									return nil, fmt.Errorf("component '%s' in the stack '%s' has the section 'settings.spacelift.admin_stack_selector' "+
+										"to point to the Spacelift admin component '%s' in the stack '%s', "+
+										"but that component has Spacelift workspace disabled "+
+										"in the 'settings.spacelift.workspace_enabled' section "+
+										"and can't be added to the affected stacks",
 										currentComponentName,
 										currentStackName,
 										componentName,
-										stackName,
-									))
+										stackName)
 								}
 
 								affectedSpaceliftAdminStack := schema.Affected{

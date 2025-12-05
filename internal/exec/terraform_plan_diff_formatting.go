@@ -31,11 +31,11 @@ func printAttributeDiff(diff *strings.Builder, attrK string, origAttrV, newAttrV
 
 	switch {
 	case origSensitive && newSensitive:
-		diff.WriteString(fmt.Sprintf("  ~ %s: (sensitive value) => (sensitive value)\n", attrK))
+		fmt.Fprintf(diff, "  ~ %s: (sensitive value) => (sensitive value)\n", attrK)
 	case origSensitive:
-		diff.WriteString(fmt.Sprintf("  ~ %s: (sensitive value) => %v\n", attrK, formatValue(newAttrV)))
+		fmt.Fprintf(diff, "  ~ %s: (sensitive value) => %v\n", attrK, formatValue(newAttrV))
 	case newSensitive:
-		diff.WriteString(fmt.Sprintf("  ~ %s: %v => (sensitive value)\n", attrK, formatValue(origAttrV)))
+		fmt.Fprintf(diff, "  ~ %s: %v => (sensitive value)\n", attrK, formatValue(origAttrV))
 	default:
 		// Check if both values are maps and use the specialized diff function
 		origMap, origIsMap := origAttrV.(map[string]interface{})
@@ -44,10 +44,10 @@ func printAttributeDiff(diff *strings.Builder, attrK string, origAttrV, newAttrV
 		if origIsMap && newIsMap {
 			mapDiff := formatMapDiff(origMap, newMap)
 			if mapDiff != noChangesText {
-				diff.WriteString(fmt.Sprintf("  ~ %s: %s\n", attrK, mapDiff))
+				fmt.Fprintf(diff, "  ~ %s: %s\n", attrK, mapDiff)
 			}
 		} else {
-			diff.WriteString(fmt.Sprintf("  ~ %s: %v => %v\n", attrK, formatValue(origAttrV), formatValue(newAttrV)))
+			fmt.Fprintf(diff, "  ~ %s: %v => %v\n", attrK, formatValue(origAttrV), formatValue(newAttrV))
 		}
 	}
 }
@@ -248,9 +248,9 @@ func formatKeyDiff(sb *strings.Builder, params keyDiffParams) {
 	// Format based on what changed
 	switch {
 	case !params.origExists:
-		sb.WriteString(fmt.Sprintf("    + %s: %s\n", params.key, formatValue(params.newVal)))
+		fmt.Fprintf(sb, "    + %s: %s\n", params.key, formatValue(params.newVal))
 	case !params.newExists:
-		sb.WriteString(fmt.Sprintf("    - %s: %s\n", params.key, formatValue(params.origVal)))
+		fmt.Fprintf(sb, "    - %s: %s\n", params.key, formatValue(params.origVal))
 	default:
 		// Value changed
 		if origMap, ok := params.origVal.(map[string]interface{}); ok {
@@ -260,14 +260,14 @@ func formatKeyDiff(sb *strings.Builder, params keyDiffParams) {
 				if nestedDiff != noChangesText {
 					// Add indentation to nested diff
 					nestedDiff = strings.ReplaceAll(nestedDiff, "\n", "\n    ")
-					sb.WriteString(fmt.Sprintf("    ~ %s: %s\n", params.key, nestedDiff))
+					fmt.Fprintf(sb, "    ~ %s: %s\n", params.key, nestedDiff)
 				}
 				return
 			}
 		}
 
 		// Simple value change
-		sb.WriteString(fmt.Sprintf("    ~ %s: %v => %v\n", params.key, formatValue(params.origVal), formatValue(params.newVal)))
+		fmt.Fprintf(sb, "    ~ %s: %v => %v\n", params.key, formatValue(params.origVal), formatValue(params.newVal))
 	}
 }
 

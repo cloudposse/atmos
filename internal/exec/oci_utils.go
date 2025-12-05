@@ -60,7 +60,7 @@ func processOciImageWithFS(atmosConfig *schema.AtmosConfiguration, imageName str
 	img, err := descriptor.Image()
 	if err != nil {
 		log.Error("Failed to get image descriptor", "image", imageName, "error", err)
-		return fmt.Errorf("%w '%s': %s", errUtils.ErrGetImageDescriptor, imageName, err)
+		return fmt.Errorf("%w '%s': %w", errUtils.ErrGetImageDescriptor, imageName, err)
 	}
 
 	checkArtifactType(descriptor, imageName)
@@ -78,7 +78,7 @@ func processOciImageWithFS(atmosConfig *schema.AtmosConfiguration, imageName str
 
 	for i, layer := range layers {
 		if err := processLayer(layer, i, destDir); err != nil {
-			return fmt.Errorf("%w %d: %s", errUtils.ErrProcessLayer, i, err)
+			return fmt.Errorf("%w %d: %w", errUtils.ErrProcessLayer, i, err)
 		}
 	}
 

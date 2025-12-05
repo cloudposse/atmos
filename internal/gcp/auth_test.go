@@ -2,8 +2,6 @@ package gcp
 
 import (
 	"testing"
-
-	"google.golang.org/api/option"
 )
 
 func TestGetClientOptions(t *testing.T) {
@@ -167,12 +165,12 @@ func TestClientOptionsCreation(t *testing.T) {
 			}
 
 			// Verify the option is of type option.ClientOption
-			var _ option.ClientOption = opts[0]
+			_ = opts[0]
 		})
 	}
 }
 
-// Helper function to create string pointers for tests
+// Helper function to create string pointers for tests.
 func stringPtr(s string) *string {
 	return &s
 }

@@ -1,4 +1,3 @@
-//nolint:dupl // Test structure similarity is intentional for consistency
 package list
 
 import (

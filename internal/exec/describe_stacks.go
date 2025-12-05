@@ -192,7 +192,6 @@ func ExecuteDescribeStacks(
 		}
 
 		if componentsSection, ok := stackSection.(map[string]any)[cfg.ComponentsSectionName].(map[string]any); ok {
-
 			// Terraform.
 			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, cfg.TerraformSectionName) {
 				if terraformSection, ok := componentsSection[cfg.TerraformSectionName].(map[string]any); ok {

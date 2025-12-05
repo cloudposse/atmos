@@ -28,7 +28,7 @@ const (
 	// Progress bar format string.
 	progressBarFormat = "%s %s"
 
-	// latestVersion is the special version identifier for the latest installed version.
+	// LatestVersion is the special version identifier for the latest installed version.
 	latestVersion = "latest"
 )
 
@@ -244,7 +244,7 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 	// Load tool versions
 	toolVersions, err := LoadToolVersions(toolVersionsPath)
 	if err != nil {
-		return fmt.Errorf("%w: failed to load %s: %v", ErrFileOperation, toolVersionsPath, err)
+		return fmt.Errorf("%w: failed to load %s: %w", ErrFileOperation, toolVersionsPath, err)
 	}
 
 	// Count total tools for progress tracking

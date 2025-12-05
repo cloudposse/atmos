@@ -6,7 +6,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
-// helmfileCmd represents the base command for all helmfile sub-commands
+// helmfileCmd represents the base command for all helmfile sub-commands.
 var helmfileCmd = &cobra.Command{
 	Use:                "helmfile",
 	Aliases:            []string{"hf"},

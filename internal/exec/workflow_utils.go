@@ -272,10 +272,11 @@ func ExecuteWorkflow(
 		}
 
 		var err error
-		if commandType == "shell" {
+		switch commandType {
+		case "shell":
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
 			err = ExecuteShell(command, commandName, ".", stepEnv, dryRun)
-		} else if commandType == "atmos" {
+		case "atmos":
 			args := strings.Fields(command)
 
 			workflowStack := strings.TrimSpace(workflowDefinition.Stack)
@@ -312,7 +313,7 @@ func ExecuteWorkflow(
 			err = retry.With7Params(context.Background(), step.Retry,
 				ExecuteShellCommand,
 				atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
-		} else {
+		default:
 			errUtils.CheckErrorAndPrint(
 				ErrInvalidWorkflowStepType,
 				WorkflowErrTitle,
@@ -407,7 +408,7 @@ func ExecuteDescribeWorkflows(
 
 	files, err := u.GetAllYamlFilesInDir(workflowsDir)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in 'atmos.yaml': %v",
+		return nil, nil, nil, fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in 'atmos.yaml': %w",
 			atmosConfig.Workflows.BasePath, err)
 	}
 
@@ -426,7 +427,7 @@ func ExecuteDescribeWorkflows(
 
 		workflowManifest, err := u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
+			return nil, nil, nil, fmt.Errorf("error parsing the workflow manifest '%s': %w", f, err)
 		}
 
 		if workflowManifest.Workflows == nil {

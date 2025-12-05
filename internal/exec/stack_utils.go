@@ -38,7 +38,7 @@ func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndSt
 			return "", err
 		}
 	} else {
-		contextPrefix = strings.Replace(configAndStacksInfo.Stack, "/", "-", -1)
+		contextPrefix = strings.ReplaceAll(configAndStacksInfo.Stack, "/", "-")
 	}
 
 	var workspace string
@@ -61,7 +61,7 @@ func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndSt
 		workspace = fmt.Sprintf("%s-%s", contextPrefix, configAndStacksInfo.Context.Component)
 	}
 
-	return strings.Replace(workspace, "/", "-", -1), nil
+	return strings.ReplaceAll(workspace, "/", "-"), nil
 }
 
 // ProcessComponentMetadata processes component metadata and returns a base component (if any) and whether
@@ -127,7 +127,7 @@ func BuildDependentStackNameFromDependsOnLegacy(
 
 	var dependentStackName string
 
-	dep := strings.Replace(dependsOn, "/", "-", -1)
+	dep := strings.ReplaceAll(dependsOn, "/", "-")
 
 	if u.SliceContainsString(allStackNames, dep) {
 		dependentStackName = dep
@@ -157,7 +157,7 @@ func BuildDependentStackNameFromDependsOn(
 ) (string, error) {
 	defer perf.Track(nil, "exec.BuildDependentStackNameFromDependsOn")()
 
-	dep := strings.Replace(fmt.Sprintf("%s-%s", dependsOnStackName, dependsOnComponentName), "/", "-", -1)
+	dep := strings.ReplaceAll(fmt.Sprintf("%s-%s", dependsOnStackName, dependsOnComponentName), "/", "-")
 
 	if u.SliceContainsString(allStackNames, dep) {
 		return dep, nil
@@ -227,7 +227,7 @@ func IsComponentEnabled(varsSection map[string]any) bool {
 	defer perf.Track(nil, "exec.IsComponentEnabled")()
 
 	if enabled, ok := varsSection["enabled"].(bool); ok {
-		if enabled == false {
+		if !enabled {
 			return false
 		}
 	}

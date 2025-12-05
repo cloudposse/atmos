@@ -58,13 +58,14 @@ func ExecuteShellCommand(
 		redirectStdError = "NUL"
 	}
 
-	if redirectStdError == "/dev/stderr" {
+	switch redirectStdError {
+	case "/dev/stderr":
 		cmd.Stderr = os.Stderr
-	} else if redirectStdError == "/dev/stdout" {
+	case "/dev/stdout":
 		cmd.Stderr = os.Stdout
-	} else if redirectStdError == "" {
+	case "":
 		cmd.Stderr = os.Stderr
-	} else {
+	default:
 		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
 			log.Warn(err.Error())
@@ -91,7 +92,8 @@ func ExecuteShellCommand(
 		// Extract exit code from error to preserve it.
 		// This is critical for commands like `terraform plan -detailed-exitcode`
 		// which use exit code 2 to indicate changes detected.
-		if exitError, ok := err.(*exec.ExitError); ok {
+		exitError := &exec.ExitError{}
+		if errors.As(err, &exitError) {
 			exitCode := exitError.ExitCode()
 			log.Debug("Command exited with non-zero code", "code", exitCode)
 
@@ -157,7 +159,7 @@ func parseEnvVarValue(envVar string) string {
 	return ""
 }
 
-// execTerraformShellCommand executes `terraform shell` command by starting a new interactive shell
+// execTerraformShellCommand executes `terraform shell` command by starting a new interactive shell.
 func execTerraformShellCommand(
 	atmosConfig *schema.AtmosConfiguration,
 	component string,
@@ -267,7 +269,7 @@ func execTerraformShellCommand(
 				// Try fallback to sh if bash is not available
 				shPath, shErr := exec.LookPath("sh")
 				if shErr != nil {
-					return fmt.Errorf("no suitable shell found: %v", shErr)
+					return fmt.Errorf("no suitable shell found: %w", shErr)
 				}
 				shellCommand = shPath
 			} else {

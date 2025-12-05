@@ -17,12 +17,12 @@ const (
 // OsExit is a variable for testing, so we can mock os.Exit.
 var OsExit = os.Exit
 
-// PrintMessage prints the message to the console
+// PrintMessage prints the message to the console.
 func PrintMessage(message string) {
 	fmt.Println(message)
 }
 
-// PrintMessageInColor prints the message to the console using the provided color
+// PrintMessageInColor prints the message to the console using the provided color.
 func PrintMessageInColor(message string, messageColor *color.Color) {
 	if _, err := messageColor.Fprint(os.Stdout, message); err != nil {
 		log.Trace("Failed to print colored message to stdout", "error", err)

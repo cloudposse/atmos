@@ -151,11 +151,11 @@ func parseConfig(raw any) (Config, error) {
 		TagName: "mapstructure",
 	})
 	if err != nil {
-		return DefaultConfig(), fmt.Errorf("%w: failed to create config decoder: %v", errUtils.ErrComponentConfigInvalid, err)
+		return DefaultConfig(), fmt.Errorf("%w: failed to create config decoder: %w", errUtils.ErrComponentConfigInvalid, err)
 	}
 
 	if err := decoder.Decode(raw); err != nil {
-		return DefaultConfig(), fmt.Errorf("%w: failed to decode mock config: %v", errUtils.ErrComponentConfigInvalid, err)
+		return DefaultConfig(), fmt.Errorf("%w: failed to decode mock config: %w", errUtils.ErrComponentConfigInvalid, err)
 	}
 
 	return config, nil

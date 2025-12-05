@@ -38,7 +38,7 @@ func WriteYAML(v interface{}) error {
 	return data.WriteYAML(v)
 }
 
-// HighlightCode returns a syntax highlighted code for the specified language
+// HighlightCode returns a syntax highlighted code for the specified language.
 func HighlightCode(code string, language string, syntaxTheme string) (string, error) {
 	buf := new(bytes.Buffer)
 	if err := quick.Highlight(buf, code, language, "terminal256", syntaxTheme); err != nil {
@@ -121,7 +121,7 @@ func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 	return nil
 }
 
-// RenderMarkdown renders markdown text with terminal styling
+// RenderMarkdown renders markdown text with terminal styling.
 func RenderMarkdown(markdownText string, style string) (string, error) {
 	if markdownText == "" {
 		return "", fmt.Errorf("empty markdown input")

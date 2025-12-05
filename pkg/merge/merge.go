@@ -436,7 +436,7 @@ func MergeWithContext(
 
 	// Check for nil config to prevent panic.
 	if atmosConfig == nil {
-		err := fmt.Errorf("%w: %s", errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
+		err := fmt.Errorf("%w: %w", errUtils.ErrMerge, errUtils.ErrAtmosConfigIsNil)
 		if context != nil {
 			return nil, context.FormatError(err)
 		}
@@ -452,7 +452,7 @@ func MergeWithContext(
 	if strategy != ListMergeStrategyReplace &&
 		strategy != ListMergeStrategyAppend &&
 		strategy != ListMergeStrategyMerge {
-		err := fmt.Errorf("%w: %s: '%s'. Supported list merge strategies are: %s",
+		err := fmt.Errorf("%w: %w: '%s'. Supported list merge strategies are: %s",
 			errUtils.ErrMerge,
 			errUtils.ErrInvalidListMergeStrategy,
 			strategy,

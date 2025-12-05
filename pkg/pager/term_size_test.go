@@ -35,7 +35,7 @@ func TestGetTerminalSize(t *testing.T) {
 		if err == nil {
 			t.Error("Expected error, got nil")
 		}
-		if err != expectedErr {
+		if !errors.Is(err, expectedErr) {
 			t.Errorf("Expected error %v, got %v", expectedErr, err)
 		}
 	})

@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Command: atmos helmfile apply
+// Command: atmos helmfile apply.
 var (
 	helmfileApplyShort = "Apply changes to align the actual state of Helm releases with the desired state."
 	helmfileApplyLong  = `This command reconciles the actual state of Helm releases in the cluster with the desired state
@@ -16,7 +16,7 @@ Example usage:
 `
 )
 
-// helmfileApplyCmd represents the base command for all helmfile sub-commands
+// helmfileApplyCmd represents the base command for all helmfile sub-commands.
 var helmfileApplyCmd = &cobra.Command{
 	Use:                "apply",
 	Aliases:            []string{},

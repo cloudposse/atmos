@@ -23,7 +23,7 @@ type Templater struct {
 	UsageTemplate string
 }
 
-// commandStyle defines the styles for command formatting
+// commandStyle defines the styles for command formatting.
 var (
 	commandNameStyle = theme.Styles.CommandName
 	commandDescStyle = theme.Styles.Description
@@ -35,7 +35,7 @@ var (
 					Foreground(lipgloss.Color(theme.ColorGray))
 )
 
-// formatCommand returns a styled string for a command and its description
+// formatCommand returns a styled string for a command and its description.
 func formatCommand(name string, desc string, padding int, IsNotSupported bool) string {
 	paddedName := fmt.Sprintf("%-*s", padding, name)
 	if IsNotSupported {
@@ -52,7 +52,7 @@ var customHelpShortMessage = map[string]string{
 	"help": "Display help information for Atmos commands",
 }
 
-// filterCommands returns only commands or aliases based on returnOnlyAliases boolean
+// filterCommands returns only commands or aliases based on returnOnlyAliases boolean.
 func filterCommands(commands []*cobra.Command, returnOnlyAliases bool) []*cobra.Command {
 	if !returnOnlyAliases {
 		return commands
@@ -132,7 +132,7 @@ func renderMarkdown(example string) string {
 	return ""
 }
 
-// formatCommands formats a slice of cobra commands with proper styling
+// formatCommands formats a slice of cobra commands with proper styling.
 func formatCommands(cmds []*cobra.Command, listType string) string {
 	var maxLen int
 	availableCmds := make([]*cobra.Command, 0)
@@ -241,7 +241,7 @@ func SetCustomUsageFunc(cmd *cobra.Command) error {
 	return nil
 }
 
-// GetTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined
+// GetTerminalWidth returns the width of the terminal, defaulting to 80 if it cannot be determined.
 func GetTerminalWidth() int {
 	defaultWidth := 80
 	screenWidth := defaultWidth
@@ -257,7 +257,7 @@ func GetTerminalWidth() int {
 	return screenWidth
 }
 
-// WrappedFlagUsages formats the flag usage string to fit within the terminal width
+// WrappedFlagUsages formats the flag usage string to fit within the terminal width.
 func WrappedFlagUsages(f *pflag.FlagSet) string {
 	var builder strings.Builder
 	width := GetTerminalWidth()

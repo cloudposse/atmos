@@ -153,13 +153,13 @@ func (p *Server) startProfileByType() error {
 		if err := pprof.StartCPUProfile(p.profFile); err != nil {
 			p.profFile.Close()
 			p.profFile = nil
-			return fmt.Errorf("%w: %v", ErrStartCPUProfile, err)
+			return fmt.Errorf("%w: %w", ErrStartCPUProfile, err)
 		}
 	case ProfileTypeTrace:
 		if err := trace.Start(p.profFile); err != nil {
 			p.profFile.Close()
 			p.profFile = nil
-			return fmt.Errorf("%w: %v", ErrStartTraceProfile, err)
+			return fmt.Errorf("%w: %w", ErrStartTraceProfile, err)
 		}
 	case ProfileTypeHeap, ProfileTypeAllocs, ProfileTypeGoroutine,
 		ProfileTypeBlock, ProfileTypeMutex, ProfileTypeThreadCreate:

@@ -195,7 +195,7 @@ func (o *erroringGCSObjectHandle) NewReader(ctx context.Context) (io.ReadCloser,
 	return o.client.body, nil
 }
 
-// Simulate failure in io.ReadAll
+// Simulate failure in io.ReadAll.
 type badGCSReader struct{}
 
 func (badGCSReader) Read([]byte) (int, error) { return 0, errors.New("gcs read failure") }

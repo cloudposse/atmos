@@ -60,7 +60,7 @@ func findFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 	// First, read the directories at the root level (level 1)
 	level1Dirs, err := os.ReadDir(root)
 	if err != nil {
-		return nil, fmt.Errorf("%w path %s: error %v", ErrReadDir, root, err)
+		return nil, fmt.Errorf("%w path %s: error %w", ErrReadDir, root, err)
 	}
 
 	for _, dir := range level1Dirs {
@@ -104,13 +104,13 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 	addFileInfo := func(filePath string) (*ObjectInfo, error) {
 		relativePath, err := filepath.Rel(basePath, filePath)
 		if err != nil {
-			return nil, fmt.Errorf("%w  %s: %v", ErrRelPath, filePath, err)
+			return nil, fmt.Errorf("%w  %s: %w", ErrRelPath, filePath, err)
 		}
 		info, err := os.Stat(filePath)
 		if os.IsNotExist(err) {
 			return nil, nil // Skip if the file doesn't exist
 		} else if err != nil {
-			return nil, fmt.Errorf("%w,path %s error %v", ErrFileStat, filePath, err)
+			return nil, fmt.Errorf("%w,path %s error %w", ErrFileStat, filePath, err)
 		}
 
 		return &ObjectInfo{
@@ -125,7 +125,7 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 	createFolder := func(folderPath string, folderName string) (*Directory, error) {
 		relativePath, err := filepath.Rel(basePath, folderPath)
 		if err != nil {
-			return nil, fmt.Errorf("%w %s: %v", ErrRelPath, folderPath, err)
+			return nil, fmt.Errorf("%w %s: %w", ErrRelPath, folderPath, err)
 		}
 
 		return &Directory{
@@ -141,7 +141,7 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 		for _, pat := range patterns {
 			matchedFiles, err := filepath.Glob(filepath.Join(folderPath, pat))
 			if err != nil {
-				return fmt.Errorf("%w %s in folder %s: %v", ErrMatchPattern, pat, folderPath, err)
+				return fmt.Errorf("%w %s in folder %s: %w", ErrMatchPattern, pat, folderPath, err)
 			}
 
 			// Add matched files to folder
@@ -174,7 +174,7 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 	// Now, search for folders and their files from immediate subdirectories
 	entries, err := os.ReadDir(basePath)
 	if err != nil {
-		return nil, fmt.Errorf("error reading the base path %s: %v", basePath, err)
+		return nil, fmt.Errorf("error reading the base path %s: %w", basePath, err)
 	}
 
 	for _, entry := range entries {
@@ -204,12 +204,12 @@ func CollectDirectoryObjects(basePath string, patterns []string) ([]Directory, e
 	return folders, nil
 }
 
-// get stack terraform state files
+// get stack terraform state files.
 func getStackTerraformStateFolder(componentPath string, stack string) ([]Directory, error) {
 	tfStateFolderPath := filepath.Join(componentPath, "terraform.tfstate.d")
 	tfStateFolderNames, err := findFoldersNamesWithPrefix(tfStateFolderPath, stack)
 	if err != nil {
-		return nil, fmt.Errorf("%w : %v", ErrFailedFoundStack, err)
+		return nil, fmt.Errorf("%w : %w", ErrFailedFoundStack, err)
 	}
 	var stackTfStateFolders []Directory
 	for _, folderName := range tfStateFolderNames {
@@ -220,7 +220,7 @@ func getStackTerraformStateFolder(componentPath string, stack string) ([]Directo
 		}
 		directories, err := CollectDirectoryObjects(tfStateFolderPath, []string{"*.tfstate", "*.tfstate.backup"})
 		if err != nil {
-			return nil, fmt.Errorf("%w in %s: %v", ErrCollectFiles, tfStateFolderPath, err)
+			return nil, fmt.Errorf("%w in %s: %w", ErrCollectFiles, tfStateFolderPath, err)
 		}
 		for i := range directories {
 			if directories[i].Files != nil {
@@ -263,7 +263,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 		Negative("No.").
 		Value(&confirm).WithTheme(t)
 	if err := confirmPrompt.Run(); err != nil {
-		if err == huh.ErrUserAborted {
+		if errors.Is(err, huh.ErrUserAborted) {
 			return confirm, fmt.Errorf("%w", ErrUserAborted)
 		}
 		return confirm, err
@@ -394,7 +394,7 @@ func IsValidDataDir(tfDataDir string) error {
 	}
 	absTFDataDir, err := filepath.Abs(tfDataDir)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrResolveEnvDir, err)
+		return fmt.Errorf("%w: %w", ErrResolveEnvDir, err)
 	}
 
 	// Check for root path on both Unix and Windows systems
@@ -450,7 +450,7 @@ func handleCleanSubCommand(info schema.ConfigAndStacksInfo, componentPath string
 		FilterComponents,
 		nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrDescribeStack, err)
+		return fmt.Errorf("%w: %w", ErrDescribeStack, err)
 	}
 	allComponentsRelativePaths := getAllStacksComponentsPaths(stacksMap)
 	folders, err := CollectComponentsDirectoryObjects(atmosConfig.TerraformDirAbsolutePath, allComponentsRelativePaths, filesToClear)

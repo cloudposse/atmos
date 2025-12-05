@@ -7,7 +7,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
-// validateComponentCmd validates atmos components
+// validateComponentCmd validates atmos components.
 var validateComponentCmd = &cobra.Command{
 	Use:                "component",
 	Short:              "Validate an Atmos component in a stack using JSON Schema or OPA policies",

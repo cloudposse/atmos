@@ -6,7 +6,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
-// proUnlockCmd executes 'pro unlock' CLI command
+// proUnlockCmd executes 'pro unlock' CLI command.
 var proUnlockCmd = &cobra.Command{
 	Use:                "unlock",
 	Short:              "Unlock a stack",

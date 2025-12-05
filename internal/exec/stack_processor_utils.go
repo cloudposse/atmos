@@ -646,11 +646,11 @@ func processYAMLConfigFileWithContextInternal(
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 			}
-			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, tmplErr)
+			wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrInvalidStackManifest, tmplErr)
 			if mergeContext != nil {
 				return nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			}
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: stack manifest '%s'\nwv%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
 		}
 	}
 
@@ -662,12 +662,12 @@ func processYAMLConfigFileWithContextInternal(
 		// Check if we have merge context to provide enhanced error formatting
 		if mergeContext != nil {
 			// Wrap the error with the sentinel first to preserve it
-			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
+			wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrInvalidStackManifest, err)
 			// Then format it with context information
 			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			return nil, nil, nil, nil, nil, nil, nil, e
 		} else {
-			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
+			e := fmt.Errorf("%w: stack manifest '%s'\nwv%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 			return nil, nil, nil, nil, nil, nil, nil, e
 		}
 	}
@@ -726,15 +726,18 @@ func processYAMLConfigFileWithContextInternal(
 
 		// Validate using the compiled schema (whether cached or newly compiled).
 		if err = compiledSchema.Validate(dataFromJson); err != nil {
-			switch e := err.(type) {
-			case *jsonschema.ValidationError:
-				b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
-				if err2 != nil {
-					return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err2)
+			{
+				var e *jsonschema.ValidationError
+				switch {
+				case errors.As(err, &e):
+					b, err2 := json.MarshalIndent(e.BasicOutput(), "", "  ")
+					if err2 != nil {
+						return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err2)
+					}
+					return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, string(b))
+				default:
+					return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 				}
-				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, string(b))
-			default:
-				return nil, nil, nil, nil, nil, nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
 		}
 	}
@@ -1394,7 +1397,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 	return result, nil
 }
 
-// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty
+// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty.
 func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck []string) bool {
 	for _, s := range sectionsToCheck {
 		if len(s) > 0 {

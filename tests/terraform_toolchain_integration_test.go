@@ -134,7 +134,7 @@ func TestTerraformToolchain_WithDependencies(t *testing.T) {
 //
 // Expected behavior:
 // - If system terraform is available: uses system terraform
-// - If system terraform is NOT available: command fails with "terraform not found"
+// - If system terraform is NOT available: command fails with "terraform not found".
 func TestTerraformToolchain_WithoutDependencies(t *testing.T) {
 	workDir := "fixtures/scenarios/toolchain-terraform-integration"
 	t.Chdir(workDir)

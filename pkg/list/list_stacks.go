@@ -6,7 +6,7 @@ import (
 	"github.com/samber/lo"
 )
 
-// FilterAndListStacks filters stacks by the given component
+// FilterAndListStacks filters stacks by the given component.
 func FilterAndListStacks(stacksMap map[string]any, component string) ([]string, error) {
 	if component != "" {
 		// Filter stacks by component

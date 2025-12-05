@@ -7,7 +7,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
-// terraformGenerateBackendCmd generates backend config for a terraform component
+// terraformGenerateBackendCmd generates backend config for a terraform component.
 var terraformGenerateBackendCmd = &cobra.Command{
 	Use:                "backend",
 	Short:              "Generate backend configuration for a Terraform component",

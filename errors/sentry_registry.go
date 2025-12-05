@@ -321,9 +321,9 @@ func MergeErrorConfigs(global *schema.ErrorsConfig, component *schema.ErrorsConf
 		// but assume "false" values are zero values (to preserve backward compatibility).
 		// This allows non-YAML callers to enable booleans alongside other config.
 		// To explicitly set "false", use SetComponentBooleanOverrides().
-		explicitBooleans.enabled = component.Sentry.Enabled == true
-		explicitBooleans.debug = component.Sentry.Debug == true
-		explicitBooleans.captureStackContext = component.Sentry.CaptureStackContext == true
+		explicitBooleans.enabled = component.Sentry.Enabled
+		explicitBooleans.debug = component.Sentry.Debug
+		explicitBooleans.captureStackContext = component.Sentry.CaptureStackContext
 	}
 
 	hasBooleanOverride := explicitBooleans.enabled || explicitBooleans.debug || explicitBooleans.captureStackContext
@@ -357,8 +357,8 @@ type booleanOverrides struct {
 }
 
 // mergeSentryConfigs merges component Sentry config with global Sentry config.
-// hasExplicitConfig indicates whether the component has explicit non-boolean Sentry config.
-// explicitBooleans indicates which boolean fields were explicitly set in the component YAML.
+// HasExplicitConfig indicates whether the component has explicit non-boolean Sentry config.
+// ExplicitBooleans indicates which boolean fields were explicitly set in the component YAML.
 func mergeSentryConfigs(global *schema.SentryConfig, component *schema.SentryConfig, hasExplicitConfig bool, explicitBooleans booleanOverrides) schema.SentryConfig {
 	var merged schema.SentryConfig
 	if global != nil {

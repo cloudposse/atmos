@@ -160,7 +160,7 @@ var listCmd = &cobra.Command{
 		if listSince != "" {
 			parsed, err := time.Parse("2006-01-02", listSince)
 			if err != nil {
-				return fmt.Errorf("%w: %q (expected YYYY-MM-DD): %v", errUtils.ErrInvalidSinceDate, listSince, err)
+				return fmt.Errorf("%w: %q (expected YYYY-MM-DD): %w", errUtils.ErrInvalidSinceDate, listSince, err)
 			}
 			sinceTime = &parsed
 		}

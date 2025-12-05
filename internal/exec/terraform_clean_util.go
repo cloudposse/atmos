@@ -121,7 +121,7 @@ func validateInputPath(path string) error {
 func createFolder(rootPath, folderPath, folderName string) (*Directory, error) {
 	relativePath, err := filepath.Rel(rootPath, folderPath)
 	if err != nil {
-		return nil, fmt.Errorf("%w %s: %v", ErrRelPath, folderPath, err)
+		return nil, fmt.Errorf("%w %s: %w", ErrRelPath, folderPath, err)
 	}
 
 	return &Directory{
@@ -136,7 +136,7 @@ func collectFilesInFolder(folder *Directory, folderPath string, patterns []strin
 	for _, pat := range patterns {
 		matchedFiles, err := filepath.Glob(filepath.Join(folderPath, pat))
 		if err != nil {
-			return fmt.Errorf("%w %s in folder %s: %v", ErrMatchPattern, pat, folderPath, err)
+			return fmt.Errorf("%w %s in folder %s: %w", ErrMatchPattern, pat, folderPath, err)
 		}
 
 		for _, matchedFile := range matchedFiles {
@@ -155,7 +155,7 @@ func collectFilesInFolder(folder *Directory, folderPath string, patterns []strin
 func createFileInfo(rootPath, filePath string) (*ObjectInfo, error) {
 	relativePath, err := filepath.Rel(rootPath, filePath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s error %v", ErrRelPath, filePath, err)
+		return nil, fmt.Errorf("%w: %s error %w", ErrRelPath, filePath, err)
 	}
 
 	info, err := os.Stat(filePath)
@@ -163,7 +163,7 @@ func createFileInfo(rootPath, filePath string) (*ObjectInfo, error) {
 		return nil, nil // Skip if the file doesn't exist
 	}
 	if err != nil {
-		return nil, fmt.Errorf("%w %s: %v", ErrFileStat, filePath, err)
+		return nil, fmt.Errorf("%w %s: %w", ErrFileStat, filePath, err)
 	}
 
 	return &ObjectInfo{

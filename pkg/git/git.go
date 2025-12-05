@@ -128,11 +128,11 @@ func NewDefaultGitRepo() GitRepoInterface {
 func (d *DefaultGitRepo) GetLocalRepoInfo() (*RepoInfo, error) {
 	repo, err := GetLocalRepo()
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get local repository: %s", errUtils.ErrFailedToGetLocalRepo, err)
+		return nil, fmt.Errorf("%w: failed to get local repository: %w", errUtils.ErrFailedToGetLocalRepo, err)
 	}
 	info, err := GetRepoInfo(repo)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get repository info: %s", errUtils.ErrFailedToGetRepoInfo, err)
+		return nil, fmt.Errorf("%w: failed to get repository info: %w", errUtils.ErrFailedToGetRepoInfo, err)
 	}
 	return &info, nil
 }
@@ -158,12 +158,12 @@ func (d *DefaultGitRepo) GetRepoInfo(repo *git.Repository) (RepoInfo, error) {
 func (d *DefaultGitRepo) GetCurrentCommitSHA() (string, error) {
 	repo, err := GetLocalRepo()
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to get local repository: %s", errUtils.ErrLocalRepoFetch, err)
+		return "", fmt.Errorf("%w: failed to get local repository: %w", errUtils.ErrLocalRepoFetch, err)
 	}
 
 	ref, err := repo.Head()
 	if err != nil {
-		return "", fmt.Errorf("%w: failed to get HEAD reference: %s", errUtils.ErrHeadLookup, err)
+		return "", fmt.Errorf("%w: failed to get HEAD reference: %w", errUtils.ErrHeadLookup, err)
 	}
 
 	return ref.Hash().String(), nil

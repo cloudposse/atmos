@@ -320,7 +320,7 @@ func ExecuteDescribeDependents(
 						ComponentPath: BuildComponentPath(atmosConfig, &stackComponentMap, stackComponentType),
 						ComponentType: stackComponentType,
 						Stack:         stackName,
-						StackSlug:     fmt.Sprintf("%s-%s", stackName, strings.Replace(stackComponentName, "/", "-", -1)),
+						StackSlug:     fmt.Sprintf("%s-%s", stackName, strings.ReplaceAll(stackComponentName, "/", "-")),
 						Namespace:     stackComponentVars.Namespace,
 						Tenant:        stackComponentVars.Tenant,
 						Environment:   stackComponentVars.Environment,

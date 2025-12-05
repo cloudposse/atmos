@@ -678,7 +678,8 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 	stackNamePatternParts := strings.Split(stackNamePattern, "-")
 
 	for _, part := range stackNamePatternParts {
-		if part == "{namespace}" {
+		switch part {
+		case "{namespace}":
 			if len(context.Namespace) == 0 {
 				return "",
 					fmt.Errorf("the stack name pattern '%s' specifies 'namespace', but the stack '%s' does not have a namespace defined in the stack file '%s'",
@@ -692,7 +693,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 			} else {
 				contextPrefix = contextPrefix + "-" + context.Namespace
 			}
-		} else if part == "{tenant}" {
+		case "{tenant}":
 			if len(context.Tenant) == 0 {
 				return "",
 					fmt.Errorf("the stack name pattern '%s' specifies 'tenant', but the stack '%s' does not have a tenant defined in the stack file '%s'",
@@ -706,7 +707,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 			} else {
 				contextPrefix = contextPrefix + "-" + context.Tenant
 			}
-		} else if part == "{environment}" {
+		case "{environment}":
 			if len(context.Environment) == 0 {
 				return "",
 					fmt.Errorf("the stack name pattern '%s' specifies 'environment', but the stack '%s' does not have an environment defined in the stack file '%s'",
@@ -720,7 +721,7 @@ func GetContextPrefix(stack string, context schema.Context, stackNamePattern str
 			} else {
 				contextPrefix = contextPrefix + "-" + context.Environment
 			}
-		} else if part == "{stage}" {
+		case "{stage}":
 			if len(context.Stage) == 0 {
 				return "",
 					fmt.Errorf("the stack name pattern '%s' specifies 'stage', but the stack '%s' does not have a stage defined in the stack file '%s'",
@@ -775,7 +776,8 @@ func GetStackNameFromContextAndStackNamePattern(
 	stackNamePatternParts := strings.Split(stackNamePattern, "-")
 
 	for _, part := range stackNamePatternParts {
-		if part == "{namespace}" {
+		switch part {
+		case "{namespace}":
 			if len(namespace) == 0 {
 				return "", fmt.Errorf("stack name pattern '%s' includes '{namespace}', but namespace is not provided", stackNamePattern)
 			}
@@ -784,7 +786,7 @@ func GetStackNameFromContextAndStackNamePattern(
 			} else {
 				stack = fmt.Sprintf("%s-%s", stack, namespace)
 			}
-		} else if part == "{tenant}" {
+		case "{tenant}":
 			if len(tenant) == 0 {
 				return "", fmt.Errorf("stack name pattern '%s' includes '{tenant}', but tenant is not provided", stackNamePattern)
 			}
@@ -793,7 +795,7 @@ func GetStackNameFromContextAndStackNamePattern(
 			} else {
 				stack = fmt.Sprintf("%s-%s", stack, tenant)
 			}
-		} else if part == "{environment}" {
+		case "{environment}":
 			if len(environment) == 0 {
 				return "", fmt.Errorf("stack name pattern '%s' includes '{environment}', but environment is not provided", stackNamePattern)
 			}
@@ -802,7 +804,7 @@ func GetStackNameFromContextAndStackNamePattern(
 			} else {
 				stack = fmt.Sprintf("%s-%s", stack, environment)
 			}
-		} else if part == "{stage}" {
+		case "{stage}":
 			if len(stage) == 0 {
 				return "", fmt.Errorf("stack name pattern '%s' includes '{stage}', but stage is not provided", stackNamePattern)
 			}
@@ -883,7 +885,7 @@ func SearchConfigFile(configPath string, atmosConfig schema.AtmosConfiguration) 
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return "", fmt.Errorf("error reading directory %s: %v", dir, err)
+		return "", fmt.Errorf("error reading directory %s: %w", dir, err)
 	}
 
 	// Create a map of existing files for quick lookup

@@ -298,7 +298,6 @@ func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfigurat
 	return config, repoPath, componentPath
 }
 
-//nolint:dupl // Test scenarios have similar structures but test different conditions.
 func TestDescribeAffectedWithTemplatesAndFunctions(t *testing.T) {
 	atmosConfig, repoPath, componentPath := setupDescribeAffectedTest(t)
 
@@ -320,7 +319,6 @@ func TestDescribeAffectedWithTemplatesAndFunctions(t *testing.T) {
 	assert.ElementsMatch(t, expected, affected)
 }
 
-//nolint:dupl // Test scenarios have similar structures but test different conditions.
 func TestDescribeAffectedWithoutTemplatesAndFunctions(t *testing.T) {
 	atmosConfig, repoPath, componentPath := setupDescribeAffectedTest(t)
 

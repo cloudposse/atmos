@@ -17,7 +17,7 @@ const MaskedSecret = "REDACTED"
 func maskBasicAuth(rawURL string) (string, error) {
 	parsedURL, err := url.Parse(rawURL)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", errUtils.ErrParseURL, err)
+		return "", fmt.Errorf("%w: %w", errUtils.ErrParseURL, err)
 	}
 
 	if parsedURL.User != nil {

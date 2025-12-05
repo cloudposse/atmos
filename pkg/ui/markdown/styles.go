@@ -63,10 +63,10 @@ func GetDefaultStyle(atmosConfig schema.AtmosConfiguration) ([]byte, error) {
 	}
 
 	if atmosConfig.Settings.Markdown.CodeBlock.Color != "" {
-		if style.CodeBlock.StyleBlock.StylePrimitive.Color != nil {
-			*style.CodeBlock.StyleBlock.StylePrimitive.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
+		if style.CodeBlock.Color != nil {
+			*style.CodeBlock.Color = atmosConfig.Settings.Markdown.CodeBlock.Color
 		} else {
-			style.CodeBlock.StyleBlock.StylePrimitive.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
+			style.CodeBlock.Color = &atmosConfig.Settings.Markdown.CodeBlock.Color
 		}
 		style.CodeBlock.Margin = uintPtr(uint(atmosConfig.Settings.Markdown.CodeBlock.Margin))
 	}
