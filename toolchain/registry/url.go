@@ -234,7 +234,8 @@ func (ur *URLRegistry) loadIndex() error {
 	}
 
 	// Cache all packages from the index.
-	for _, pkg := range indexFile.Packages {
+	for i := range indexFile.Packages {
+		pkg := &indexFile.Packages[i]
 		tool := &Tool{
 			Name:             pkg.RepoName,
 			Type:             pkg.Type,
@@ -303,7 +304,8 @@ func (ur *URLRegistry) GetMetadata(ctx context.Context) (*RegistryMetadata, erro
 func applyVersionOverride(tool *Tool, version string) error {
 	defer perf.Track(nil, "registry.applyVersionOverride")()
 
-	for _, override := range tool.VersionOverrides {
+	for i := range tool.VersionOverrides {
+		override := &tool.VersionOverrides[i]
 		matches, err := evaluateVersionConstraint(override.VersionConstraint, version)
 		if err != nil {
 			log.Debug("Failed to evaluate version constraint", "constraint", override.VersionConstraint, "version", version, "error", err)
