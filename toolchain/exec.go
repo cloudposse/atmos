@@ -11,6 +11,7 @@ import (
 
 // execFunc is a function variable for executing external commands.
 // This allows for testing by replacing with a mock implementation.
+// Returns exec.ExitError which preserves the exit code for the caller to handle.
 var execFunc = func(binaryPath string, args []string, env []string) error {
 	// #nosec G204 -- binaryPath is validated through tool resolution and binary lookup
 	cmd := exec.Command(binaryPath, args[1:]...) // args[0] is the binary itself
@@ -19,13 +20,9 @@ var execFunc = func(binaryPath string, args []string, env []string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-
-	// Exit with the same code as the child process.
-	os.Exit(cmd.ProcessState.ExitCode())
-	return nil
+	// Run returns exec.ExitError on non-zero exit, which preserves the exit code.
+	// The caller is responsible for extracting the exit code using errors.GetExitCode().
+	return cmd.Run()
 }
 
 // ToolRunner defines the interface for running and resolving tools (for real and mock installers).
