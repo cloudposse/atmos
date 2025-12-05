@@ -30,7 +30,22 @@ const (
 	versionPrefix               = "v"
 	defaultFileWritePermissions = 0o644
 	defaultMkdirPermissions     = 0o755
-	githubPerPage               = 100 // Maximum results per page
+	githubPerPage               = 100 // Maximum results per page.
+
+	// Search constants.
+	defaultSearchLimit       = 20
+	defaultListLimit         = 50
+	defaultVersionLimit      = 10
+	defaultRegistryPriority  = 10
+	registryLogKey           = "registry"
+	durationMetricKey        = "duration"
+
+	// Search scoring weights.
+	scoreExactRepoMatch    = 100
+	scoreRepoPrefixMatch   = 70
+	scoreRepoContainsMatch = 50
+	scoreOwnerPrefixMatch  = 40
+	scoreOwnerContainsMatch = 20
 )
 
 // init registers the Aqua registry as the default registry.
@@ -78,7 +93,7 @@ func NewAquaRegistry(opts ...RegistryOption) *AquaRegistry {
 
 	// Use XDG-compliant cache directory.
 	// Falls back to ~/.cache/atmos/toolchain on most systems.
-	cacheBaseDir, err := xdg.GetXDGCacheDir("toolchain", 0o755)
+	cacheBaseDir, err := xdg.GetXDGCacheDir("toolchain", defaultMkdirPermissions)
 	if err != nil {
 		// Fallback to temp dir if XDG fails.
 		log.Debug("Failed to get XDG cache dir, using temp", "error", err)
@@ -144,13 +159,13 @@ func (ar *AquaRegistry) GetTool(owner, repo string) (*registry.Tool, error) {
 	}
 
 	for _, registry := range registries {
-		log.Debug("Trying registry", "registry", registry)
+		log.Debug("Trying registry", registryLogKey, registry)
 		tool, err := ar.fetchFromRegistry(registry, owner, repo)
 		if err == nil {
-			log.Debug("Found tool in registry", "registry", registry)
+			log.Debug("Found tool in registry", registryLogKey, registry)
 			return tool, nil
 		}
-		log.Debug("Not found in registry", "registry", registry, "error", err)
+		log.Debug("Not found in registry", registryLogKey, registry, "error", err)
 	}
 
 	return nil, fmt.Errorf("%w: %s/%s not found in any registry", registry.ErrToolNotFound, owner, repo)
@@ -599,7 +614,7 @@ func (ar *AquaRegistry) Search(ctx context.Context, query string, opts ...regist
 
 	// Apply search options.
 	config := &registry.SearchConfig{
-		Limit: 20, // default
+		Limit: defaultSearchLimit,
 	}
 	for _, opt := range opts {
 		opt(config)
@@ -611,7 +626,7 @@ func (ar *AquaRegistry) Search(ctx context.Context, query string, opts ...regist
 	if err != nil {
 		return nil, err
 	}
-	log.Debug("ListAll took", "duration", time.Since(listStart), "tools", len(allTools))
+	log.Debug("ListAll took", durationMetricKey, time.Since(listStart), "tools", len(allTools))
 
 	// Filter and score results.
 	var results []scoredTool
@@ -624,12 +639,12 @@ func (ar *AquaRegistry) Search(ctx context.Context, query string, opts ...regist
 			results = append(results, scoredTool{tool: tool, score: score})
 		}
 	}
-	log.Debug("Scoring took", "duration", time.Since(scoreStart), "matches", len(results))
+	log.Debug("Scoring took", durationMetricKey, time.Since(scoreStart), "matches", len(results))
 
 	// Sort by score (highest first), then alphabetically.
 	sortStart := time.Now()
 	sortResults(results)
-	log.Debug("Sort took", "duration", time.Since(sortStart))
+	log.Debug("Sort took", durationMetricKey, time.Since(sortStart))
 
 	// Store total count in metadata for pagination display.
 	ar.lastSearchTotal = len(results)
@@ -666,25 +681,25 @@ func (ar *AquaRegistry) calculateRelevanceScore(tool *registry.Tool, queryLower 
 
 	// Exact repo match.
 	if repoLower == queryLower {
-		return 100
+		return scoreExactRepoMatch
 	}
 
 	score := 0
 
 	// Prefix match on repo.
 	if strings.HasPrefix(repoLower, queryLower) {
-		score += 70
+		score += scoreRepoPrefixMatch
 	} else if strings.Contains(repoLower, queryLower) {
 		// Contains match on repo.
-		score += 50
+		score += scoreRepoContainsMatch
 	}
 
 	// Prefix match on owner.
 	if strings.HasPrefix(ownerLower, queryLower) {
-		score += 40
+		score += scoreOwnerPrefixMatch
 	} else if strings.Contains(ownerLower, queryLower) {
 		// Contains match on owner.
-		score += 20
+		score += scoreOwnerContainsMatch
 	}
 
 	return score
@@ -716,7 +731,7 @@ func (ar *AquaRegistry) ListAll(ctx context.Context, opts ...registry.ListOption
 
 	// Apply list options.
 	config := &registry.ListConfig{
-		Limit: 50,     // default
+		Limit: defaultListLimit,
 		Sort:  "name", // default
 	}
 	for _, opt := range opts {
@@ -760,11 +775,11 @@ func (ar *AquaRegistry) fetchRegistryIndex(ctx context.Context) ([]*registry.Too
 	// Try to get from cache first.
 	start := time.Now()
 	if cachedData, err := ar.cacheStore.Get(ctx, cacheKey); err == nil {
-		log.Debug("Cache read took", "duration", time.Since(start))
+		log.Debug("Cache read took", durationMetricKey, time.Since(start))
 		// Cache hit - parse and return.
 		parseStart := time.Now()
 		tools, err := ar.parseIndexYAML(cachedData)
-		log.Debug("Parse took", "duration", time.Since(parseStart), "tools", len(tools))
+		log.Debug("Parse took", durationMetricKey, time.Since(parseStart), "tools", len(tools))
 		if err == nil {
 			log.Debug("Using cached registry index", "tool_count", len(tools))
 			return tools, nil
@@ -916,7 +931,7 @@ func (ar *AquaRegistry) GetMetadata(ctx context.Context) (*registry.RegistryMeta
 		Name:        "aqua-public",
 		Type:        "aqua",
 		Source:      "https://github.com/aquaproj/aqua-registry",
-		Priority:    10, // Default priority
+		Priority:    defaultRegistryPriority,
 		ToolCount:   len(tools),
 		LastUpdated: time.Now(), // TODO: Fetch actual last updated from GitHub API
 	}, nil
