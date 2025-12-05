@@ -1,0 +1,285 @@
+---
+title: Configure Component Metadata
+sidebar_position: 13
+sidebar_label: metadata
+sidebar_class_name: command
+description: Use the metadata section to control component behavior, inheritance, and deployment settings.
+id: metadata
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `metadata` section configures how Atmos interprets and manages a component. Unlike other sections, `metadata` is only valid within component definitions (`components.terraform.<name>.metadata`), not at the global or component-type level.
+</Intro>
+
+## Use Cases
+
+- **Component Mapping:** Specify which Terraform root module a component uses.
+- **Inheritance:** Define which components a component inherits from.
+- **Abstract Components:** Mark components as templates that cannot be deployed directly.
+- **Component Control:** Enable, disable, or lock components.
+
+## Configuration Scope
+
+The `metadata` section is **only valid inside component definitions**:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc/network
+        inherits:
+          - vpc/defaults
+```
+
+It cannot be used at the global level or under `terraform:` / `helmfile:` / `packer:` defaults.
+
+## Metadata Fields
+
+### `component`
+
+Specifies the path to the Terraform root module, relative to your components directory:
+
+```yaml
+components:
+  terraform:
+    vpc-prod:
+      metadata:
+        component: vpc  # Uses components/terraform/vpc
+      vars:
+        environment: prod
+```
+
+This allows multiple stack components to share the same Terraform root module with different configurations.
+
+### `inherits`
+
+Defines a list of components from which this component inherits configuration:
+
+```yaml
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+      vars:
+        enable_dns_hostnames: true
+        enable_dns_support: true
+
+    vpc-prod:
+      metadata:
+        inherits:
+          - vpc/defaults
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+```
+
+Inheritance is processed in order, with later items and the component's own values taking precedence. For detailed inheritance behavior, see [Inheritance](/howto/inheritance).
+
+### `type`
+
+Marks a component as `abstract` or `real` (default):
+
+```yaml
+components:
+  terraform:
+    vpc/base:
+      metadata:
+        type: abstract  # Cannot be deployed directly
+      vars:
+        enable_dns_hostnames: true
+```
+
+**Abstract components:**
+- Serve as templates for other components to inherit from
+- Cannot be deployed with `atmos terraform apply`
+- Do not appear in `atmos describe stacks` output by default
+- Are useful for DRY configuration patterns
+
+### `enabled`
+
+Controls whether a component is active:
+
+```yaml
+components:
+  terraform:
+    monitoring:
+      metadata:
+        enabled: false  # Component is disabled
+      vars:
+        # ...
+```
+
+When `enabled: false`:
+- The component is skipped during `atmos terraform apply`
+- The component does not appear in active stack listings
+- Useful for conditionally disabling components per environment
+
+### `locked`
+
+Prevents modifications to a component:
+
+```yaml
+components:
+  terraform:
+    core-network:
+      metadata:
+        locked: true  # Prevent changes
+      vars:
+        # ...
+```
+
+When `locked: true`:
+- Atmos will warn or prevent changes to the component
+- Useful for protecting critical infrastructure components
+
+## Examples
+
+### Multiple Instances from One Module
+
+Deploy the same VPC module in different configurations:
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc-main:
+      metadata:
+        component: vpc
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+        name: main
+
+    vpc-isolated:
+      metadata:
+        component: vpc
+      vars:
+        vpc_cidr: "10.1.0.0/16"
+        name: isolated
+        enable_internet_gateway: false
+```
+</File>
+
+Both `vpc-main` and `vpc-isolated` use the same `components/terraform/vpc` root module but with different configurations.
+
+### Abstract Base with Concrete Implementations
+
+<File title="stacks/catalog/vpc/_defaults.yaml">
+```yaml
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+        component: vpc
+      vars:
+        enable_dns_hostnames: true
+        enable_dns_support: true
+        enable_nat_gateway: true
+        single_nat_gateway: false
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc/_defaults
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits:
+          - vpc/defaults
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
+```
+</File>
+
+### Environment-Specific Component Control
+
+<File title="stacks/orgs/acme/plat/dev/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    expensive-feature:
+      metadata:
+        enabled: false  # Disabled in dev to save costs
+      vars:
+        # ...
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    expensive-feature:
+      metadata:
+        enabled: true   # Enabled in production
+      vars:
+        # ...
+```
+</File>
+
+### Multi-Level Inheritance
+
+<File title="stacks/catalog/components.yaml">
+```yaml
+components:
+  terraform:
+    # Level 1: Base defaults
+    base/defaults:
+      metadata:
+        type: abstract
+      vars:
+        tags:
+          ManagedBy: Atmos
+
+    # Level 2: VPC defaults inheriting from base
+    vpc/defaults:
+      metadata:
+        type: abstract
+        component: vpc
+        inherits:
+          - base/defaults
+      vars:
+        enable_dns_hostnames: true
+
+    # Level 3: Production VPC inheriting from vpc/defaults
+    vpc/prod:
+      metadata:
+        type: abstract
+        inherits:
+          - vpc/defaults
+      vars:
+        enable_nat_gateway: true
+        multi_az: true
+```
+</File>
+
+## Best Practices
+
+1. **Use Abstract Components:** Create abstract base components for shared configuration to keep your stacks DRY.
+
+2. **Meaningful Component Names:** Use descriptive names that indicate the component's purpose and any specialization (e.g., `vpc/prod`, `vpc/isolated`).
+
+3. **Document Inheritance:** Keep inheritance chains shallow (2-3 levels) and well-documented for maintainability.
+
+4. **Protect Critical Components:** Use `locked: true` for infrastructure components that should not change without careful review.
+
+5. **Use `enabled` for Environment Differences:** Rather than duplicating component definitions, use `enabled` to control which components are active per environment.
+
+## Related
+
+- [Inheritance](/howto/inheritance)
+- [Catalogs](/howto/catalogs)
+- [Overrides](/stacks/overrides)
+- [Variables (vars)](/stacks/vars)
+- [Terraform Components](/stacks/components/terraform)
