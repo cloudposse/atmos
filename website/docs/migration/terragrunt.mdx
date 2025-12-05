@@ -891,11 +891,15 @@ In Atmos terminology, root modules are called **components**. Each component is 
 
 ## Stack Naming for Migrations
 
-When migrating from Terragrunt, your existing Terraform state is tied to specific workspace names. Atmos needs to know the correct stack names to find this state. You have two options:
+Every Atmos command requires a stack name—whether you're running `atmos terraform plan -s <stack>`, listing stacks with `atmos list stacks`, or referencing dependencies. You need to define how Atmos determines these names.
+
+Additionally, if you want Atmos to automatically determine Terraform workspaces, those workspace names should follow a consistent convention that Atmos can compute.
+
+You have two options:
 
 ### Option 1: Use `name_template` (Recommended for Consistent Patterns)
 
-If your Terragrunt setup used a consistent directory structure that maps to context variables, configure `name_template` in `atmos.yaml`:
+If you have consistent context variables across all your stacks, configure `name_template` in `atmos.yaml` to programmatically compute stack names:
 
 <File title="atmos.yaml">
 ```yaml
@@ -905,17 +909,17 @@ stacks:
 </File>
 
 This works well when:
-- Your Terragrunt directories followed a pattern like `prod/us-east-1/vpc/`
-- You can map that pattern to consistent `vars` in your stack manifests
-- All stacks use the same naming convention
+- You have consistent `vars` (like `environment`, `stage`, `tenant`) across all stacks
+- You want programmatic, convention-based naming
+- Your Terraform workspaces should follow the same naming pattern
 
 ### Option 2: Use Explicit `name` Field (For Inconsistent or Legacy Naming)
 
-If your workspace names are ad-hoc or don't follow a consistent pattern, use the `name` field in each stack manifest:
+If your infrastructure doesn't follow a strict naming convention, use the `name` field in each stack manifest to explicitly specify the stack name:
 
 <File title="stacks/us-east-1/prod/vpc.yaml">
 ```yaml
-name: "prod-us-east-1-vpc"  # Matches existing Terraform workspace exactly
+name: "prod-us-east-1-vpc"
 
 import:
   - catalog/vpc
@@ -929,9 +933,9 @@ components:
 </File>
 
 This is the right choice when:
-- Workspace names don't follow a pattern you can express as a template
+- Your stacks don't have consistent context variables
 - You're migrating infrastructure from multiple sources with different naming conventions
-- You need exact control over workspace names to match existing state
+- Workspace names are ad-hoc or don't follow a pattern you can express as a template
 
 The `name` field takes precedence over `name_template`, so you can use both approaches—template for most stacks, explicit names for exceptions.
 
