@@ -1,0 +1,97 @@
+---
+title: Terraform/OpenTofu
+sidebar_position: 1
+sidebar_label: Terraform/OpenTofu
+description: Configure Terraform and OpenTofu components in Atmos stacks.
+id: terraform
+slug: /components/terraform
+---
+import DocCardList from '@theme/DocCardList'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos manages Terraform root modules as components, handling workspace selection, backend configuration, provider overrides, and variable generation.
+</Intro>
+
+## Overview
+
+In Atmos, a **Terraform component** is a [Terraform root module](https://developer.hashicorp.com/terraform/language/modules#the-root-module) stored in your `components/terraform/` directory. Atmos orchestrates these components by:
+
+- **Generating variables** from stack configurations into `.tfvars` files
+- **Managing workspaces** automatically based on stack context
+- **Configuring backends** for state storage
+- **Generating providers** with dynamic configurations
+- **Orchestrating execution** across multiple components and stacks
+
+:::info Disambiguation
+
+- **Terraform Component** is a [Terraform Root Module](https://developer.hashicorp.com/terraform/language/modules#the-root-module) stored typically in `components/terraform/$name` that consists of the resources defined in the `.tf` files in a working directory
+  (e.g. [components/terraform/infra/vpc](https://github.com/cloudposse/atmos/tree/main/examples/quick-start-advanced/components/terraform/vpc))
+
+- **Stack** provides configuration (variables and other settings) for a Terraform Component and is defined in one or more Atmos stack manifests
+  (a.k.a. stack config files)
+
+:::
+
+## Provisioning Components
+
+To provision a Terraform component using the `atmos` CLI:
+
+```console
+atmos terraform plan eks --stack=ue2-dev
+atmos terraform apply eks --stack=ue2-dev
+```
+
+where:
+
+- `eks` is the Terraform component to provision (from the `components/terraform` folder)
+- `--stack=ue2-dev` is the stack to provision the component into
+
+Short versions of all command-line arguments can be used:
+
+```console
+atmos terraform plan eks -s ue2-dev
+atmos terraform apply eks -s ue2-dev
+```
+
+The `atmos terraform deploy` command executes `terraform apply -auto-approve` to provision components in stacks without
+user interaction:
+
+```console
+atmos terraform deploy eks -s ue2-dev
+```
+
+## Stack Configuration
+
+Configure Terraform components in your stack manifests:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        type: real
+        component: vpc
+        inherits:
+          - vpc-defaults
+      vars:
+        enabled: true
+        name: primary
+        cidr_block: "10.0.0.0/16"
+      env:
+        TF_LOG: INFO
+      settings:
+        spacelift:
+          workspace_enabled: true
+```
+
+See [Stack Configuration](/components/terraform/stack-config) for the complete schema reference.
+
+## Using Submodules (Child Modules)
+
+If your components rely on local submodules, our convention is to use a `modules/` subfolder of the component to store them.
+
+## Related Topics
+
+<DocCardList/>

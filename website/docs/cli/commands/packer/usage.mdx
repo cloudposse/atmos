@@ -9,6 +9,7 @@ import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
 
 <img width="80" align="right" src={useBaseUrl('/img/hashicorp-packer.svg')} alt="Packer"/>
 
@@ -79,6 +80,10 @@ atmos packer output aws/bastion -s prod --query '.builds[0].artifact_id'
 atmos packer output aws/bastion -s prod -q '.builds[0].artifact_id | split(":")[1]'
 ```
 </Terminal>
+
+<ActionCard title="Configure Packer" ctaText="Learn More" ctaLink="/cli/configuration/components/packer">
+  Learn how to configure Packer components in your `atmos.yaml`, including templates and component settings.
+</ActionCard>
 
 ## Subcommands
 

@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	term "github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -276,9 +277,10 @@ func uploadInstances(instances []schema.Instance) error {
 func processInstancesWithDeps(
 	atmosConfig *schema.AtmosConfiguration,
 	stacksProcessor e.StacksProcessor,
+	authManager auth.AuthManager,
 ) ([]schema.Instance, error) {
 	// Get all stacks with template processing enabled to render template variables.
-	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil)
+	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, authManager)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 		return nil, errors.Join(errUtils.ErrExecuteDescribeStacks, err)
@@ -295,12 +297,12 @@ func processInstancesWithDeps(
 
 // processInstances collects, filters, and sorts instances.
 // This is a convenience wrapper around processInstancesWithDeps() for production use.
-func processInstances(atmosConfig *schema.AtmosConfiguration) ([]schema.Instance, error) {
-	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{})
+func processInstances(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) ([]schema.Instance, error) {
+	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{}, authManager)
 }
 
 // ExecuteListInstancesCmd executes the list instances command.
-func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
+func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string, authManager auth.AuthManager) error {
 	// Inline initializeConfig.
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
@@ -316,7 +318,7 @@ func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Comman
 	}
 
 	// Process instances.
-	instances, err := processInstances(&atmosConfig)
+	instances, err := processInstances(&atmosConfig, authManager)
 	if err != nil {
 		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
 		return errors.Join(errUtils.ErrProcessInstances, err)

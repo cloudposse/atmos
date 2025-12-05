@@ -5,16 +5,25 @@ sidebar_class_name: command
 description: Use this command to open the Atmos docs
 ---
 import Screengrab from '@site/src/components/Screengrab'
-import DocCardList from '@theme/DocCardList';
+import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Use this command to open the [Atmos docs](https://atmos.tools/)
+Use this command to open the [Atmos docs](https://atmos.tools/) or generate documentation artifacts like READMEs and release notes.
 </Intro>
 
-<Screengrab title="atmos docs --help" slug="atmos-docs--help" />
+<ActionCard title="Configure Documentation Generation">
+    Learn how to configure documentation generators for READMEs, release notes, and other artifacts.
+    <div>
+      <PrimaryCTA to="/cli/configuration/docs">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 ## Usage
+
+<Screengrab title="atmos docs --help" slug="atmos-docs--help" />
 
 When run on its own, the `atmos docs` command opens [Atmos docs](https://atmos.tools/), but it can also display documentation for specified components. For example:
 
