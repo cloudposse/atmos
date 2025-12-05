@@ -1,0 +1,143 @@
+---
+title: Inheritance Behavior
+sidebar_position: 1
+sidebar_label: inherit
+sidebar_class_name: command
+description: Configure what sections are inherited when components use metadata.inherits.
+id: inherit
+slug: /cli/configuration/stacks/inherit
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+The `stacks.inherit` section controls what sections are inherited when components use `metadata.inherits`. By default, metadata inheritance is enabled, allowing governance policies and component configurations to be defined once and inherited by all instances.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+stacks:
+  inherit:
+    metadata: true  # Enable metadata inheritance (default)
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`metadata`</dt>
+  <dd>
+    When `true` (default), the `metadata` section is inherited from base components along with `vars`, `settings`, `env`, `backend`, and `providers`.
+
+    **Environment variable:** `ATMOS_STACKS_INHERIT_METADATA`
+
+    **Default:** `true`
+
+    **Exceptions:** The following metadata fields are NOT inherited:
+    - `metadata.inherits` - Defines the inheritance relationship itself
+    - `metadata.type: abstract` - Abstract designation is not inherited by derived components
+
+    **Example - Enable metadata inheritance** (default):
+    ```yaml
+    stacks:
+      inherit:
+        metadata: true
+    ```
+
+    **Example - Disable metadata inheritance** (backwards compatibility):
+    ```yaml
+    stacks:
+      inherit:
+        metadata: false
+    ```
+
+    When disabled, only `vars`, `settings`, `env`, `backend`, and `providers` are inherited. The `metadata` section must be defined explicitly in each component.
+  </dd>
+</dl>
+
+## Use Cases
+
+### Version Management
+
+When using [versioned component folders](/design-patterns/version-management/folder-based-versioning), metadata inheritance allows you to define the component version once in a base component:
+
+<File title="stacks/catalog/vpc/_defaults.yaml">
+```yaml
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+        name: vpc              # Stable logical identity
+        component: vpc/v2      # Pin to version
+        locked: true
+        terraform_workspace_pattern: "{tenant}-{environment}-{stage}"
+        description: "Virtual Private Cloud network configuration"
+        owner: "platform-team"
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc/primary:
+      metadata:
+        inherits: [vpc/defaults]
+        # All metadata fields inherited - including component version
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+
+    vpc/secondary:
+      metadata:
+        inherits: [vpc/defaults]
+        # All metadata fields inherited - including component version
+      vars:
+        vpc_cidr: "10.1.0.0/16"
+```
+</File>
+
+**The benefit:** When upgrading to `vpc/v3`, change `metadata.component` once in `vpc/defaults`, and all instances (`vpc/primary`, `vpc/secondary`) inherit the new version automatically. No need to update each instance individually.
+
+### Governance Policies
+
+Inherit governance settings (locking, workspace patterns, ownership) from base components:
+
+<File title="stacks/catalog/critical-infrastructure.yaml">
+```yaml
+components:
+  terraform:
+    critical/defaults:
+      metadata:
+        type: abstract
+        locked: true
+        terraform_workspace_pattern: "{tenant}-{environment}-{stage}"
+        description: "Critical infrastructure - requires approval for changes"
+        owner: "platform-team"
+```
+</File>
+
+All components inheriting from `critical/defaults` automatically get the governance settings.
+
+## Backwards Compatibility
+
+If metadata inheritance causes issues with existing configurations, disable it:
+
+<File title="atmos.yaml">
+```yaml
+stacks:
+  inherit:
+    metadata: false  # Disable metadata inheritance
+```
+</File>
+
+When disabled, components behave as they did before this feature - only `vars`, `settings`, `env`, `backend`, and `providers` are inherited.
+
+## Related
+
+- [Inheritance](/howto/inheritance)
+- [Metadata](/stacks/metadata)
+- [Versioned Components](/design-patterns/version-management/folder-based-versioning)
+- [Stack Configuration](/cli/configuration/stacks)
