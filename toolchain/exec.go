@@ -12,6 +12,7 @@ import (
 // execFunc is a function variable for executing external commands.
 // This allows for testing by replacing with a mock implementation.
 var execFunc = func(binaryPath string, args []string, env []string) error {
+	// #nosec G204 -- binaryPath is validated through tool resolution and binary lookup
 	cmd := exec.Command(binaryPath, args[1:]...) // args[0] is the binary itself
 	cmd.Env = env
 	cmd.Stdin = os.Stdin
