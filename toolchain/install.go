@@ -3,7 +3,6 @@ package toolchain
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -170,53 +169,23 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 	installer := NewInstaller()
 
 	// Start spinner immediately before any potentially slow operations.
-	var p *tea.Program
-	if showProgressBar {
-		message := fmt.Sprintf("Installing %s/%s@%s", owner, repo, version)
-		p = runBubbleTeaSpinner(message)
-		go func() {
-			// Run spinner in background, ignore error since program is managed by quit channel.
-			_, _ = p.Run()
-		}()
-	}
+	spinner := &spinnerControl{showingSpinner: showProgressBar}
+	message := fmt.Sprintf("Installing %s/%s@%s", owner, repo, version)
+	spinner.start(message)
 
 	// Resolve "latest" version if needed (network call - can be slow).
-	if isLatest && version == "latest" {
-		registry := NewAquaRegistry()
-		latestVersion, err := registry.GetLatestVersion(owner, repo)
-		if err != nil {
-			// Stop spinner before showing error.
-			if showProgressBar && p != nil {
-				p.Send(installDoneMsg{})
-				time.Sleep(100 * time.Millisecond)
-			}
-			return fmt.Errorf("failed to get latest version for %s/%s: %w", owner, repo, err)
-		}
-		// Update version to the resolved latest version.
-		version = latestVersion
-		// Update spinner message to show actual version.
-		if showProgressBar && p != nil {
-			p.Send(installDoneMsg{})
-			time.Sleep(50 * time.Millisecond)
-			_ = ui.Toastf("📦", "Using latest version `%s`", latestVersion)
-			// Restart spinner with updated message.
-			message := fmt.Sprintf("Installing %s/%s@%s", owner, repo, version)
-			p = runBubbleTeaSpinner(message)
-			go func() {
-				_, _ = p.Run()
-			}()
-		}
+	resolvedVersion, err := resolveLatestVersionWithSpinner(owner, repo, version, isLatest, spinner)
+	if err != nil {
+		spinner.stop()
+		return err
 	}
+	version = resolvedVersion
 
 	// Perform installation.
 	binaryPath, err := installer.Install(owner, repo, version)
 
 	// Stop spinner before printing any output.
-	if showProgressBar && p != nil {
-		p.Send(installDoneMsg{})
-		// Small delay to ensure spinner is cleared before printing output.
-		time.Sleep(100 * time.Millisecond)
-	}
+	spinner.stop()
 
 	if err != nil {
 		if showProgressBar {
@@ -224,27 +193,9 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 		}
 		return err
 	}
-	if isLatest {
-		if err := installer.CreateLatestFile(owner, repo, version); err != nil {
-			if showProgressBar {
-				_ = ui.Errorf("Failed to create latest file for %s/%s: %v", owner, repo, err)
-			}
-		}
-	}
-	if showProgressBar {
-		// Calculate directory size for the installed version.
-		versionDir := filepath.Dir(binaryPath)
-		sizeStr := ""
-		if dirSize, err := calculateDirectorySize(versionDir); err == nil {
-			sizeStr = fmt.Sprintf(" (%s)", formatBytes(dirSize))
-		}
-		_ = ui.Successf("Installed `%s/%s@%s` to `%s`%s", owner, repo, version, binaryPath, sizeStr)
-	}
-	if err := AddToolToVersions(DefaultToolVersionsFilePath, repo, version); err == nil && showProgressBar {
-		_ = ui.Successf("Registered `%s %s` in `.tool-versions`", repo, version)
-		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
-	}
-	return nil
+
+	// Handle post-installation tasks.
+	return handleInstallSuccess(owner, repo, version, binaryPath, isLatest, showProgressBar, installer)
 }
 
 func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error {
