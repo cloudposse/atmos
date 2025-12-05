@@ -1,0 +1,261 @@
+---
+title: "Standard Library"
+sidebar_position: 10
+sidebar_label: "Standard Library"
+description: Standard Terraform/OpenTofu functions available in HCL stack configurations
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    HCL stack configurations support 70+ standard functions from the Terraform/OpenTofu function library. These functions work exactly as they do in Terraform/OpenTofu configurations.
+</Intro>
+
+## String Functions
+
+<dl>
+    <dt>`chomp(str)`</dt>
+    <dd>Remove trailing newlines. `chomp("hello\n")` → `"hello"`</dd>
+
+    <dt>`lower(str)`</dt>
+    <dd>Convert to lowercase. `lower("HELLO")` → `"hello"`</dd>
+
+    <dt>`upper(str)`</dt>
+    <dd>Convert to uppercase. `upper("hello")` → `"HELLO"`</dd>
+
+    <dt>`title(str)`</dt>
+    <dd>Convert to title case. `title("hello world")` → `"Hello World"`</dd>
+
+    <dt>`trim(str, chars)`</dt>
+    <dd>Remove specified characters from both ends. `trim("?!hello?!", "?!")` → `"hello"`</dd>
+
+    <dt>`trimprefix(str, prefix)`</dt>
+    <dd>Remove prefix from string. `trimprefix("helloworld", "hello")` → `"world"`</dd>
+
+    <dt>`trimsuffix(str, suffix)`</dt>
+    <dd>Remove suffix from string. `trimsuffix("helloworld", "world")` → `"hello"`</dd>
+
+    <dt>`trimspace(str)`</dt>
+    <dd>Remove whitespace from both ends. `trimspace(" hi ")` → `"hi"`</dd>
+
+    <dt>`strlen(str)`</dt>
+    <dd>Get string length. `strlen("hello")` → `5`</dd>
+
+    <dt>`substr(str, offset, length)`</dt>
+    <dd>Extract substring. `substr("hello", 0, 2)` → `"he"`</dd>
+
+    <dt>`replace(str, search, replace)`</dt>
+    <dd>Replace all occurrences of a substring. `replace("hello", "l", "L")` → `"heLLo"`</dd>
+
+    <dt>`split(sep, str)`</dt>
+    <dd>Split string into list. `split(",", "a,b,c")` → `["a", "b", "c"]`</dd>
+
+    <dt>`join(sep, list)`</dt>
+    <dd>Join list into string. `join("-", ["a", "b"])` → `"a-b"`</dd>
+
+    <dt>`format(fmt, args...)`</dt>
+    <dd>Printf-style formatting. `format("Hello, %s!", "World")` → `"Hello, World!"`</dd>
+
+    <dt>`formatlist(fmt, list)`</dt>
+    <dd>Format each list element. `formatlist("Hello, %s!", ["A", "B"])` → `["Hello, A!", "Hello, B!"]`</dd>
+
+    <dt>`reverse(str)`</dt>
+    <dd>Reverse a string. `reverse("hello")` → `"olleh"`</dd>
+</dl>
+
+## Collection Functions
+
+<dl>
+    <dt>`length(col)`</dt>
+    <dd>Get length of collection. `length([1, 2, 3])` → `3`</dd>
+
+    <dt>`concat(list1, list2, ...)`</dt>
+    <dd>Concatenate lists. `concat([1], [2, 3])` → `[1, 2, 3]`</dd>
+
+    <dt>`contains(list, value)`</dt>
+    <dd>Check if list contains value. `contains(["a", "b"], "a")` → `true`</dd>
+
+    <dt>`distinct(list)`</dt>
+    <dd>Remove duplicates from list. `distinct([1, 1, 2, 2])` → `[1, 2]`</dd>
+
+    <dt>`element(list, index)`</dt>
+    <dd>Get element by index. `element(["a", "b", "c"], 1)` → `"b"`</dd>
+
+    <dt>`flatten(list)`</dt>
+    <dd>Flatten nested lists. `flatten([[1, 2], [3]])` → `[1, 2, 3]`</dd>
+
+    <dt>`keys(map)`</dt>
+    <dd>Get map keys. `keys({a: 1, b: 2})` → `["a", "b"]`</dd>
+
+    <dt>`values(map)`</dt>
+    <dd>Get map values. `values({a: 1, b: 2})` → `[1, 2]`</dd>
+
+    <dt>`lookup(map, key, default)`</dt>
+    <dd>Look up map value with default. `lookup({a: 1}, "b", 0)` → `0`</dd>
+
+    <dt>`merge(map1, map2, ...)`</dt>
+    <dd>Merge maps. `merge({a: 1}, {b: 2})` → `{a: 1, b: 2}`</dd>
+
+    <dt>`range(start, end)`</dt>
+    <dd>Generate number sequence. `range(0, 3)` → `[0, 1, 2]`</dd>
+
+    <dt>`slice(list, start, end)`</dt>
+    <dd>Extract slice from list. `slice([1, 2, 3, 4], 1, 3)` → `[2, 3]`</dd>
+
+    <dt>`sort(list)`</dt>
+    <dd>Sort list alphabetically. `sort([3, 1, 2])` → `[1, 2, 3]`</dd>
+
+    <dt>`compact(list)`</dt>
+    <dd>Remove empty strings from list. `compact(["a", "", "b"])` → `["a", "b"]`</dd>
+
+    <dt>`chunklist(list, size)`</dt>
+    <dd>Split list into chunks. `chunklist([1, 2, 3, 4], 2)` → `[[1, 2], [3, 4]]`</dd>
+
+    <dt>`zipmap(keys, values)`</dt>
+    <dd>Create map from key/value lists. `zipmap(["a", "b"], [1, 2])` → `{a: 1, b: 2}`</dd>
+</dl>
+
+## Numeric Functions
+
+<dl>
+    <dt>`abs(num)`</dt>
+    <dd>Absolute value. `abs(-5)` → `5`</dd>
+
+    <dt>`ceil(num)`</dt>
+    <dd>Round up to nearest integer. `ceil(4.3)` → `5`</dd>
+
+    <dt>`floor(num)`</dt>
+    <dd>Round down to nearest integer. `floor(4.7)` → `4`</dd>
+
+    <dt>`log(num, base)`</dt>
+    <dd>Calculate logarithm. `log(100, 10)` → `2`</dd>
+
+    <dt>`max(nums...)`</dt>
+    <dd>Return maximum value. `max(1, 5, 3)` → `5`</dd>
+
+    <dt>`min(nums...)`</dt>
+    <dd>Return minimum value. `min(1, 5, 3)` → `1`</dd>
+
+    <dt>`pow(base, exp)`</dt>
+    <dd>Calculate power. `pow(2, 3)` → `8`</dd>
+
+    <dt>`signum(num)`</dt>
+    <dd>Return sign of number (-1, 0, or 1). `signum(-5)` → `-1`</dd>
+</dl>
+
+## Encoding Functions
+
+<dl>
+    <dt>`jsonencode(value)`</dt>
+    <dd>Encode value as JSON string. `jsonencode({a: 1})` → `"{\"a\":1}"`</dd>
+
+    <dt>`jsondecode(str)`</dt>
+    <dd>Decode JSON string to value. `jsondecode("{\"a\":1}")` → `{a: 1}`</dd>
+
+    <dt>`csvdecode(str)`</dt>
+    <dd>Decode CSV string to list of maps. `csvdecode("a,b\n1,2")` → `[{a: "1", b: "2"}]`</dd>
+</dl>
+
+## Date and Time Functions
+
+<dl>
+    <dt>`formatdate(format, time)`</dt>
+    <dd>Format timestamp. `formatdate("YYYY-MM-DD", timestamp())`</dd>
+
+    <dt>`timeadd(time, duration)`</dt>
+    <dd>Add duration to time. `timeadd(timestamp(), "24h")`</dd>
+</dl>
+
+## Regex Functions
+
+<dl>
+    <dt>`regex(pattern, str)`</dt>
+    <dd>Extract first regex match. `regex("[a-z]+", "hello123")` → `"hello"`</dd>
+
+    <dt>`regexall(pattern, str)`</dt>
+    <dd>Extract all regex matches. `regexall("[a-z]+", "hi bye")` → `["hi", "bye"]`</dd>
+
+    <dt>`regexreplace(str, pattern, replace)`</dt>
+    <dd>Replace regex matches. `regexreplace("hello", "l", "L")` → `"heLLo"`</dd>
+</dl>
+
+## Type Conversion Functions
+
+<dl>
+    <dt>`coalesce(vals...)`</dt>
+    <dd>Return first non-null value. `coalesce(null, "a", "b")` → `"a"`</dd>
+
+    <dt>`coalescelist(lists...)`</dt>
+    <dd>Return first non-empty list. `coalescelist([], [1, 2])` → `[1, 2]`</dd>
+</dl>
+
+## Set Functions
+
+<dl>
+    <dt>`setintersection(sets...)`</dt>
+    <dd>Compute set intersection. `setintersection([1, 2], [2, 3])` → `[2]`</dd>
+
+    <dt>`setsubtract(a, b)`</dt>
+    <dd>Compute set difference. `setsubtract([1, 2, 3], [2])` → `[1, 3]`</dd>
+
+    <dt>`setunion(sets...)`</dt>
+    <dd>Compute set union. `setunion([1, 2], [2, 3])` → `[1, 2, 3]`</dd>
+</dl>
+
+## Example Usage
+
+```hcl
+stack {
+  vars {
+    tenant      = "acme"
+    environment = "prod"
+  }
+
+  components {
+    terraform {
+      component "vpc" {
+        vars {
+          // String manipulation
+          name_upper = upper("my-vpc")
+          name_lower = lower("MY-VPC")
+          trimmed = trimspace("  hello  ")
+
+          // Collection operations
+          all_subnets = concat(local.public_subnets, local.private_subnets)
+          unique_tags = distinct(["web", "api", "web", "db"])
+          first_az = element(local.availability_zones, 0)
+
+          // Map operations
+          merged_tags = merge(
+            local.common_tags,
+            {
+              Environment = "prod"
+              Component = "vpc"
+            }
+          )
+
+          // Numeric operations
+          max_instances = max(local.min_instances, 3)
+
+          // Encoding
+          config_json = jsonencode({
+            enabled = true
+            timeout = 30
+          })
+
+          // Formatting
+          resource_name = format("%s-%s-%s", local.namespace, local.environment, "vpc")
+        }
+      }
+    }
+  }
+}
+```
+
+## Notes
+
+These functions are provided by the [go-cty standard library](https://pkg.go.dev/github.com/zclconf/go-cty/cty/function/stdlib) and are compatible with Terraform/OpenTofu function behavior.
+
+:::info
+Some Terraform functions that require provider-specific functionality (like `file()`, `templatefile()`, or cloud provider functions) are not available in Atmos HCL stack configurations.
+:::

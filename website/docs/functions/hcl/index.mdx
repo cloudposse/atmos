@@ -1,0 +1,137 @@
+---
+title: Atmos HCL Functions
+sidebar_position: 2
+sidebar_label: HCL Functions
+sidebar_class_name: hidden
+id: index
+---
+
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+
+<PillBox>Experimental</PillBox>
+
+<Intro>
+    **HCL Functions enable dynamic behavior in HCL-format stack configurations.** When using `.hcl` files for stack manifests, you can access Atmos functions using the `atmos::` namespace syntax, plus all standard Terraform/OpenTofu functions.
+</Intro>
+
+## Syntax
+
+HCL uses native function call syntax with the `atmos::` namespace:
+
+```hcl
+stack {
+  components {
+    terraform {
+      component "vpc" {
+        vars {
+          region   = atmos::env("AWS_REGION us-east-1")
+          root_dir = atmos::repo_root("")
+        }
+      }
+    }
+  }
+}
+```
+
+## Atmos Functions
+
+All YAML functions are available in HCL with the `atmos::` prefix:
+
+| YAML Syntax | HCL Syntax |
+|------------|-----------|
+| `!env VAR` | `atmos::env("VAR")` |
+| `!env VAR default` | `atmos::env("VAR default")` |
+| `!exec command` | `atmos::exec("command")` |
+| `!repo-root` | `atmos::repo_root("")` |
+| `!template expr` | `atmos::template("expr")` |
+
+## Standard Library Functions
+
+HCL stack files also support 70+ standard Terraform/OpenTofu functions:
+
+### String Functions
+- `upper("hello")` → `"HELLO"`
+- `lower("HELLO")` → `"hello"`
+- `trim("  hello  ")` → `"hello"`
+- `replace("hello", "l", "L")` → `"heLLo"`
+- `split(",", "a,b,c")` → `["a", "b", "c"]`
+- `join("-", ["a", "b"])` → `"a-b"`
+
+### Collection Functions
+- `length([1, 2, 3])` → `3`
+- `merge({a: 1}, {b: 2})` → `{a: 1, b: 2}`
+- `concat([1], [2, 3])` → `[1, 2, 3]`
+- `flatten([[1, 2], [3]])` → `[1, 2, 3]`
+- `keys({a: 1, b: 2})` → `["a", "b"]`
+- `values({a: 1, b: 2})` → `[1, 2]`
+
+### Numeric Functions
+- `max(1, 5, 3)` → `5`
+- `min(1, 5, 3)` → `1`
+- `abs(-5)` → `5`
+- `ceil(4.3)` → `5`
+- `floor(4.7)` → `4`
+
+### Encoding Functions
+- `jsonencode({key: "value"})` → `"{\"key\":\"value\"}"`
+- `jsondecode("{\"key\": \"value\"}")` → `{key: "value"}`
+
+See the [Standard Library Functions](/functions/hcl/stdlib) page for the complete list.
+
+## Example
+
+<File title="stacks/deploy/prod.hcl">
+```hcl
+stack {
+  vars {
+    tenant      = "acme"
+    environment = "prod"
+    region      = "us-west-2"
+  }
+
+  components {
+    terraform {
+      component "vpc" {
+        vars {
+          // Atmos functions with atmos:: namespace
+          environment = atmos::env("ENVIRONMENT production")
+          region      = atmos::env("AWS_REGION")
+
+          // Standard library functions
+          name_upper  = upper("my-vpc")
+          name_lower  = lower("MY-VPC")
+
+          // Combine both
+          formatted   = format("%s-%s", upper(atmos::env("PROJECT")), "vpc")
+
+          // Merge maps
+          tags = merge(
+            {
+              Environment = "prod"
+              ManagedBy   = "atmos"
+            },
+            {
+              Project = atmos::env("PROJECT_NAME default-project")
+            }
+          )
+        }
+      }
+
+      component "eks" {
+        vars {
+          instance_type    = "m6i.large"
+          desired_capacity = 3
+        }
+      }
+    }
+  }
+}
+```
+</File>
+
+## Atmos HCL Functions
+
+<DocCardList/>
