@@ -69,7 +69,7 @@ func resolveToolInfo(toolName string, toolVersions *ToolVersions, installer *Ins
 	// Use existing infrastructure to resolve tool.
 	resolvedKey, _, found := LookupToolVersion(toolName, toolVersions, installer.resolver)
 	if !found {
-		return "", "", "", fmt.Errorf("tool not found")
+		return "", "", "", fmt.Errorf("%w: %s", ErrToolNotFound, toolName)
 	}
 
 	// Get owner/repo from resolved key.
