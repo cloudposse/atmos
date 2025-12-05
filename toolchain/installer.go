@@ -200,7 +200,7 @@ func (i *Installer) findTool(owner, repo, version string) (*registry.Tool, error
 }
 
 // searchRegistry searches a specific registry for a tool.
-// version is required to apply version-specific overrides from the registry.
+// Version is required to apply version-specific overrides from the registry.
 func (i *Installer) searchRegistry(registry, owner, repo, version string) (*registry.Tool, error) {
 	// Try to fetch from Aqua registry for remote registries
 	if strings.HasPrefix(registry, "http") {

@@ -28,7 +28,7 @@ const (
 	// Progress bar format string.
 	progressBarFormat = "%s %s"
 
-	// latestVersion is the special version identifier for the latest installed version.
+	// LatestVersion is the special version identifier for the latest installed version.
 	latestVersion = "latest"
 )
 

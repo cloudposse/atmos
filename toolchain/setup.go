@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	// defaultDirPermissions is the default permission mask for created directories.
+	// DefaultDirPermissions is the default permission mask for created directories.
 	defaultDirPermissions = 0o755
 )
 
