@@ -63,4 +63,7 @@ When you run `atmos list stacks`, the output table will have columns titled "Sta
 <dl>
   <dt>`--component` / `-c` <em>(optional)</em></dt>
   <dd>Atmos component.</dd>
+
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before listing stacks.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list stacks --identity my-aws-identity`<br/><br/>Can also be set via `ATMOS_IDENTITY` environment variable.</dd>
 </dl>

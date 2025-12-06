@@ -1,0 +1,352 @@
+---
+title: Environment Variables
+sidebar_position: 4
+sidebar_label: Environment Variables
+description: Complete reference for all Atmos environment variables.
+id: environment-variables
+slug: /cli/environment-variables
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Most YAML settings in `atmos.yaml` can also be defined by environment variables. This is helpful for local development, CI/CD pipelines, and environment-specific overrides.
+</Intro>
+
+## Configuration Variables
+
+These environment variables configure Atmos behavior and can override settings in `atmos.yaml`.
+
+<dl>
+  <dt>`ATMOS_CLI_CONFIG_PATH`</dt>
+  <dd>
+    Where to find `atmos.yaml`. Path to a folder where `atmos.yaml` CLI config file is located (e.g. `/config`).
+  </dd>
+
+  <dt>`ATMOS_PROFILE`</dt>
+  <dd>
+    Activate configuration profiles (comma-separated). Equivalent to the `--profile` flag.
+  </dd>
+
+  <dt>`ATMOS_BASE_PATH`</dt>
+  <dd>
+    Base path to `components` and `stacks` folders.
+
+    - **YAML Path:** `base_path`
+  </dd>
+
+  <dt>`ATMOS_VENDOR_BASE_PATH`</dt>
+  <dd>
+    Path to vendor configuration file or directory containing vendor files.
+
+    - **YAML Path:** `vendor.base_path`
+  </dd>
+</dl>
+
+## Component Variables
+
+<dl>
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_COMMAND`</dt>
+  <dd>
+    The executable to be called by `atmos` when running Terraform commands.
+
+    - **YAML Path:** `components.terraform.command`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_BASE_PATH`</dt>
+  <dd>
+    Base path to Terraform components.
+
+    - **YAML Path:** `components.terraform.base_path`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_APPLY_AUTO_APPROVE`</dt>
+  <dd>
+    If set to `true`, auto-approve Terraform apply.
+
+    - **YAML Path:** `components.terraform.apply_auto_approve`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT`</dt>
+  <dd>
+    Run `terraform init` when executing `atmos terraform deploy` command.
+
+    - **YAML Path:** `components.terraform.deploy_run_init`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE`</dt>
+  <dd>
+    Run `terraform init -reconfigure` when executing `atmos terraform` commands.
+
+    - **YAML Path:** `components.terraform.init_run_reconfigure`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS`</dt>
+  <dd>
+    Pass the generated varfile to `terraform init` using the `--var-file` flag.
+
+    - **YAML Path:** `components.terraform.init.pass_vars`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE`</dt>
+  <dd>
+    Skip writing the plan to a file by not passing the `-out` flag.
+
+    - **YAML Path:** `components.terraform.plan.skip_planfile`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE`</dt>
+  <dd>
+    If set to `true`, auto-generate Terraform backend config files.
+
+    - **YAML Path:** `components.terraform.auto_generate_backend_file`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_HELMFILE_COMMAND`</dt>
+  <dd>
+    The executable to be called by `atmos` when running Helmfile commands.
+
+    - **YAML Path:** `components.helmfile.command`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_HELMFILE_BASE_PATH`</dt>
+  <dd>
+    Path to helmfile components.
+
+    - **YAML Path:** `components.helmfile.base_path`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_HELMFILE_USE_EKS`</dt>
+  <dd>
+    If set to `true`, download `kubeconfig` from EKS before executing `atmos helmfile` commands.
+
+    - **YAML Path:** `components.helmfile.use_eks`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH`</dt>
+  <dd>
+    Path to write the `kubeconfig` file.
+
+    - **YAML Path:** `components.helmfile.kubeconfig_path`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN`</dt>
+  <dd>
+    Pattern for AWS profile to use when executing `atmos helmfile` commands.
+
+    - **YAML Path:** `components.helmfile.helm_aws_profile_pattern`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN`</dt>
+  <dd>
+    Pattern for EKS cluster name to use when executing `atmos helmfile` commands.
+
+    - **YAML Path:** `components.helmfile.cluster_name_pattern`
+  </dd>
+</dl>
+
+## Stack Variables
+
+<dl>
+  <dt>`ATMOS_STACKS_BASE_PATH`</dt>
+  <dd>
+    Base path to Atmos stack manifests.
+
+    - **YAML Path:** `stacks.base_path`
+  </dd>
+
+  <dt>`ATMOS_STACKS_INCLUDED_PATHS`</dt>
+  <dd>
+    List of paths to use as top-level stack manifests.
+
+    - **YAML Path:** `stacks.included_paths`
+  </dd>
+
+  <dt>`ATMOS_STACKS_EXCLUDED_PATHS`</dt>
+  <dd>
+    List of paths to not consider as top-level stacks.
+
+    - **YAML Path:** `stacks.excluded_paths`
+  </dd>
+
+  <dt>`ATMOS_STACKS_NAME_PATTERN`</dt>
+  <dd>
+    Stack name pattern to use as Atmos stack names.
+
+    - **YAML Path:** `stacks.name_pattern`
+  </dd>
+
+  <dt>`ATMOS_STACKS_NAME_TEMPLATE`</dt>
+  <dd>
+    Stack name Golang template to use as Atmos stack names.
+
+    - **YAML Path:** `stacks.name_template`
+  </dd>
+</dl>
+
+## Workflow and Schema Variables
+
+<dl>
+  <dt>`ATMOS_WORKFLOWS_BASE_PATH`</dt>
+  <dd>
+    Base path to Atmos workflows.
+
+    - **YAML Path:** `workflows.base_path`
+  </dd>
+
+  <dt>`ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH`</dt>
+  <dd>
+    Base path to JSON schemas for component validation.
+
+    - **YAML Path:** `schemas.jsonschema.base_path`
+  </dd>
+
+  <dt>`ATMOS_SCHEMAS_OPA_BASE_PATH`</dt>
+  <dd>
+    Base path to OPA policies for component validation.
+
+    - **YAML Path:** `schemas.opa.base_path`
+  </dd>
+
+  <dt>`ATMOS_SCHEMAS_ATMOS_MANIFEST`</dt>
+  <dd>
+    Path to JSON Schema to validate Atmos stack manifests.
+
+    - **YAML Path:** `schemas.atmos.manifest`
+  </dd>
+</dl>
+
+## Logging and Profiling Variables
+
+<dl>
+  <dt>`ATMOS_LOGS_FILE`</dt>
+  <dd>
+    The file to write Atmos logs to (`/dev/stdout`, `/dev/stderr`, `/dev/null`, or a file path).
+
+    - **YAML Path:** `logs.file`
+  </dd>
+
+  <dt>`ATMOS_LOGS_LEVEL`</dt>
+  <dd>
+    Logs level: `Trace`, `Debug`, `Info`, `Warning`, `Off`.
+
+    - **YAML Path:** `logs.level`
+  </dd>
+
+  <dt>`ATMOS_PROFILER_ENABLED`</dt>
+  <dd>
+    Enable or disable the pprof HTTP profiling server.
+
+    - **YAML Path:** `profiler.enabled`
+  </dd>
+
+  <dt>`ATMOS_PROFILER_HOST`</dt>
+  <dd>
+    Host address for the profiling server.
+
+    - **YAML Path:** `profiler.host`
+  </dd>
+
+  <dt>`ATMOS_PROFILER_PORT`</dt>
+  <dd>
+    Port for the profiling server.
+
+    - **YAML Path:** `profiler.port`
+  </dd>
+
+  <dt>`ATMOS_PROFILE_FILE`</dt>
+  <dd>
+    Write profiling data to the specified file.
+
+    - **YAML Path:** `profiler.file`
+  </dd>
+
+  <dt>`ATMOS_PROFILE_TYPE`</dt>
+  <dd>
+    Type of profile to collect: `cpu`, `heap`, `allocs`, `goroutine`, `block`, `mutex`, `threadcreate`, `trace`.
+
+    - **YAML Path:** `profiler.profile_type`
+  </dd>
+</dl>
+
+## Settings Variables
+
+<dl>
+  <dt>`ATMOS_SETTINGS_LIST_MERGE_STRATEGY`</dt>
+  <dd>
+    Specifies how lists are merged: `replace`, `append`, `merge`.
+
+    - **YAML Path:** `settings.list_merge_strategy`
+  </dd>
+
+  <dt>`ATMOS_VERSION_CHECK_ENABLED`</dt>
+  <dd>
+    Enable/disable Atmos version checks for updates.
+
+    - **YAML Path:** `version.check.enabled`
+  </dd>
+</dl>
+
+## Authentication Variables
+
+<dl>
+  <dt>`ATMOS_GITHUB_TOKEN`</dt>
+  <dd>
+    Bearer token for GitHub API requests, enabling authentication for private repositories.
+  </dd>
+
+  <dt>`ATMOS_GITHUB_USERNAME`</dt>
+  <dd>
+    GitHub username for OCI registry authentication to ghcr.io.
+
+    - **YAML Path:** `settings.github_username`
+  </dd>
+
+  <dt>`ATMOS_BITBUCKET_TOKEN`</dt>
+  <dd>
+    App password for Bitbucket API requests.
+  </dd>
+
+  <dt>`ATMOS_BITBUCKET_USERNAME`</dt>
+  <dd>
+    Username for Bitbucket authentication.
+  </dd>
+
+  <dt>`ATMOS_GITLAB_TOKEN`</dt>
+  <dd>
+    Personal Access Token (PAT) for GitLab authentication.
+  </dd>
+</dl>
+
+## Context Variables
+
+Some commands spawn interactive shells with environment variables set to provide context. These are set by Atmos, not by users:
+
+<dl>
+  <dt>`ATMOS_COMPONENT`</dt>
+  <dd>The name of the active component.</dd>
+
+  <dt>`ATMOS_SHELL_WORKING_DIR`</dt>
+  <dd>The directory from which native commands should be run.</dd>
+
+  <dt>`ATMOS_SHLVL`</dt>
+  <dd>The depth of Atmos shell nesting. When present, indicates shell was spawned by Atmos.</dd>
+
+  <dt>`ATMOS_STACK`</dt>
+  <dd>The name of the active stack.</dd>
+
+  <dt>`ATMOS_TERRAFORM_WORKSPACE`</dt>
+  <dd>The name of the Terraform workspace in which Terraform commands should be run.</dd>
+
+  <dt>`PS1`</dt>
+  <dd>When a custom shell prompt has been configured, the prompt is set via `PS1`.</dd>
+
+  <dt>`TF_CLI_ARGS_*`</dt>
+  <dd>Terraform CLI arguments to be passed to Terraform commands.</dd>
+</dl>
+
+## See Also
+
+- [CLI Configuration](/cli/configuration) — Overview of CLI configuration
+- [Base Path](/cli/configuration#base-path) — Configure base paths
+- [Logs](/cli/configuration/logs) — Configure logging
+- [Profiler](/cli/configuration/profiler) — Configure performance profiling

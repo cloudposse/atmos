@@ -110,6 +110,14 @@ func (i *Identity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// Paths returns credential files/directories used by this identity.
+func (i *Identity) Paths() ([]types.Path, error) {
+	defer perf.Track(nil, "mock.Identity.Paths")()
+
+	// Mock identity doesn't use filesystem credentials.
+	return []types.Path{}, nil
+}
+
 // PrepareEnvironment prepares environment variables for external processes.
 // For mock identities, we set ATMOS_IDENTITY to verify that authentication
 // is working correctly in integration tests.

@@ -1,0 +1,138 @@
+---
+title: Vendor Configuration
+sidebar_position: 20
+sidebar_label: vendor
+sidebar_class_name: command
+id: vendor
+description: Configure vendoring behavior in atmos.yaml.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+The `vendor` section in `atmos.yaml` configures how Atmos discovers and processes vendor manifest files for dependency management.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+vendor:
+  # Path to vendor manifest file or directory
+  base_path: vendor.yaml
+
+  # Configure output format for vendor list command
+  list:
+    format: table
+    columns:
+      - name: Component
+        value: "{{ .component }}"
+      - name: Version
+        value: "{{ .version }}"
+      - name: Source
+        value: "{{ .source }}"
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`base_path`</dt>
+  <dd>
+    Path to the vendor manifest file or directory containing vendor files. Can be a single `vendor.yaml` file or a directory containing multiple `.yaml` files.
+
+    When a directory is specified, all `.yaml` files in the directory are processed in lexicographical order.
+
+    **Default:** `vendor.yaml`
+
+    Examples:
+    - `vendor.yaml` - Single manifest file
+    - `./vendor.yaml` - Explicit relative path
+    - `vendor/` - Directory containing multiple manifests
+  </dd>
+
+  <dt>`list.format`</dt>
+  <dd>
+    Output format for the `atmos vendor list` command.
+
+    **Valid values:** `table`, `json`, `csv`
+    **Default:** `table`
+  </dd>
+
+  <dt>`list.columns`</dt>
+  <dd>
+    Custom column definitions for table output. Each column has a `name` (header) and `value` (Go template expression).
+
+    Available template variables:
+    - `{{ .component }}` - Component name
+    - `{{ .source }}` - Source URL
+    - `{{ .version }}` - Version tag
+    - `{{ .targets }}` - Target paths
+    - `{{ .tags }}` - Associated tags
+  </dd>
+</dl>
+
+## Vendor Manifest Structure
+
+The vendor manifest file defines external dependencies to pull into your project:
+
+<File title="vendor.yaml">
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: my-project-vendor
+  description: Vendor dependencies for my project
+spec:
+  imports:
+    - vendor/common.yaml
+  sources:
+    - component: vpc
+      source: github.com/cloudposse/terraform-aws-vpc.git//src?ref={{.Version}}
+      version: 1.0.0
+      targets:
+        - components/terraform/vpc
+
+    - component: eks
+      source: github.com/cloudposse/terraform-aws-eks-cluster.git?ref={{.Version}}
+      version: 2.0.0
+      targets:
+        - components/terraform/eks
+      included_paths:
+        - "**/*.tf"
+      excluded_paths:
+        - "examples/**"
+```
+</File>
+
+## Multiple Manifest Files
+
+You can organize vendor configurations across multiple files:
+
+```
+vendor/
+├── aws.yaml        # AWS-related components
+├── kubernetes.yaml # Kubernetes components
+└── common.yaml     # Shared dependencies
+```
+
+<File title="atmos.yaml">
+```yaml
+vendor:
+  base_path: vendor/
+```
+</File>
+
+Atmos processes files in alphabetical order: `aws.yaml`, then `common.yaml`, then `kubernetes.yaml`.
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/vendor/usage', label: 'atmos vendor', description: 'Vendor Atmos components and stacks'},
+  {type: 'link', href: '/cli/commands/vendor/pull', label: 'atmos vendor pull', description: 'Pull dependencies from vendor manifest'},
+]} />
+
+## Related
+
+- [Vendor Configuration Reference](/vendor/vendor-config)

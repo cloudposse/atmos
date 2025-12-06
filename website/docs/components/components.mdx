@@ -1,0 +1,48 @@
+---
+title: Atmos Components
+sidebar_position: 2
+sidebar_label: Write Components
+description: Components are opinionated building blocks of infrastructure as code that solve one specific problem or use-case.
+slug: /components
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Components are the building blocks of your infrastructure. Each component is a Terraform root module or Helmfile that does one thing well.
+</Intro>
+
+The most common use case for Atmos is implementing components using [Terraform "root modules"](https://developer.hashicorp.com/terraform/language/modules#the-root-module). Since Atmos is tool-agnostic, [custom commands](/cli/configuration/commands) can implement components for any tooling.
+
+Components can be as small as you'd like (but we don't recommend too small), or as large as a [Terralith](/terms/terralith) (but we don't recommend that either). See our [best practices for components](/best-practices/components) to get a sense of what we recommend.
+
+:::tip
+
+Typical components of an architecture are things like VPCs, clusters, databases, buckets, load balancers, and applications. Implement components using [Terraform "root" modules](https://developer.hashicorp.com/terraform/language/modules#the-root-module).
+
+:::
+
+## Use-cases
+
+Components offer a multitude of applications across various business scenarios. Cloud Posse publishes its AWS components for free, so you can see some [technical use-cases for Terraform components](https://docs.cloudposse.com/components/category/aws/).
+
+- **Accelerate Development Cycles:** By reusing components, development teams can significantly shorten the time from concept to deployment, facilitating faster product iterations and quicker responses to market changes.
+
+- **Security policies and compliance controls** DevOps and SecOps teams implement components to uniformly apply security policies and compliance controls across all cloud environments, ensuring regulatory adherence.
+
+- **Enhance Collaboration Across Teams:** Components foster a shared understanding and approach to infrastructure, promoting collaboration between development, operations, and security teams, leading to more cohesive and secure product development.
+
+## Flavors of Components
+
+Atmos natively supports two kinds of components, but using [custom commands](/cli/configuration/commands), the [CLI](/cli) can be extended to support anything (e.g. `docker`, `packer`, `ansible`, etc.)
+
+1. [Terraform](/components/terraform): These are stand-alone "root modules" that implement some piece of your infrastructure. For example, typical components might be an
+   EKS cluster, RDS cluster, EFS filesystem, S3 bucket, DynamoDB table, etc. You can find
+   the [full library of SweetOps Terraform components on GitHub](https://github.com/cloudposse/terraform-aws-components). By convention, we store
+   components in the `components/terraform/` directory within the infrastructure repository.
+
+2. [Helmfiles](/components/helmfile): These are stand-alone applications deployed using [`helmfile`](https://github.com/helmfile) to Kubernetes. For example, typical
+   helmfiles might deploy the DataDog agent, `cert-manager` controller, `nginx-ingress` controller, etc. By convention, we store these types of components in the `components/helmfile/` directory within the infrastructure repository.
+
+## Terraform Components
+
+One important distinction about components that is worth noting about Terraform components is they should be opinionated Terraform "root" modules that typically call other child modules. Components are the building blocks of your infrastructure. This is where you define all the business logic for provisioning some common piece of infrastructure like ECR repos (with the [ecr](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/ecr) component) or EKS clusters (with the [eks/cluster](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/eks/cluster) component). Our convention is to stick Terraform components in the `components/terraform/` directory.

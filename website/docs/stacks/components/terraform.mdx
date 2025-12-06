@@ -1,0 +1,338 @@
+---
+title: Terraform Components
+sidebar_position: 2
+sidebar_label: terraform
+sidebar_class_name: command
+description: Configure Terraform components in your Atmos stack manifests.
+id: terraform
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Terraform components are the most commonly used component type in Atmos. They represent Terraform root modules that manage cloud infrastructure. Terraform components support additional configuration sections for state management, providers, and workspaces.
+</Intro>
+
+## Available Configuration Sections
+
+Terraform components support all common sections plus Terraform-specific options:
+
+<dl>
+  <dt>[`vars`](/stacks/vars)</dt>
+  <dd>Input variables for the Terraform module.</dd>
+
+  <dt>[`env`](/stacks/env)</dt>
+  <dd>Environment variables during execution.</dd>
+
+  <dt>[`settings`](/stacks/settings)</dt>
+  <dd>Integrations and metadata.</dd>
+
+  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
+  <dd>Component behavior and inheritance.</dd>
+
+  <dt>[`command`](/stacks/command)</dt>
+  <dd>Override terraform/tofu binary.</dd>
+
+  <dt>[`hooks`](/stacks/hooks)</dt>
+  <dd>Lifecycle event handlers.</dd>
+
+  <dt>[`backend`](/stacks/backend)</dt>
+  <dd>State storage configuration.</dd>
+
+  <dt>[`backend_type`](/stacks/backend)</dt>
+  <dd>Backend type (s3, azurerm, etc.).</dd>
+
+  <dt>[`remote_state_backend`](/stacks/backend)</dt>
+  <dd>Remote state access configuration.</dd>
+
+  <dt>[`remote_state_backend_type`](/stacks/backend)</dt>
+  <dd>Remote state backend type.</dd>
+
+  <dt>[`providers`](/stacks/providers)</dt>
+  <dd>Provider configuration.</dd>
+
+  <dt>`terraform_workspace`</dt>
+  <dd>Explicit workspace name. See below.</dd>
+
+  <dt>`terraform_workspace_pattern`</dt>
+  <dd>Workspace name template. See below.</dd>
+</dl>
+
+## Component Structure
+
+A typical Terraform component configuration:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc           # Path to root module
+        inherits:
+          - vpc/defaults         # Inherit from base component
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+        enable_dns_hostnames: true
+      env:
+        TF_LOG: INFO
+      settings:
+        spacelift:
+          workspace_enabled: true
+      providers:
+        aws:
+          region: us-east-1
+      backend_type: s3
+      backend:
+        s3:
+          bucket: my-terraform-state
+          key: "vpc/terraform.tfstate"
+```
+
+## Auto-Generated Files
+
+When you run `atmos terraform` commands, Atmos automatically generates configuration files in the component directory:
+
+### Backend Configuration
+
+```hcl
+# backend.tf.json
+{
+  "terraform": {
+    "backend": {
+      "s3": {
+        "bucket": "my-terraform-state",
+        "key": "vpc/terraform.tfstate",
+        "region": "us-east-1"
+      }
+    }
+  }
+}
+```
+
+### Provider Overrides
+
+```hcl
+# providers_override.tf.json
+{
+  "provider": {
+    "aws": {
+      "region": "us-east-1"
+    }
+  }
+}
+```
+
+### Variables
+
+```hcl
+# atmos-terraform.tfvars.json
+{
+  "vpc_cidr": "10.0.0.0/16",
+  "enable_dns_hostnames": true
+}
+```
+
+## Workspace Configuration
+
+### Explicit Workspace
+
+Set a specific workspace name:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      terraform_workspace: production
+```
+
+### Workspace Pattern
+
+Use a template for dynamic workspace names:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      terraform_workspace_pattern: "{{ .namespace }}-{{ .environment }}-{{ .stage }}"
+```
+
+Available template variables include all context variables (`namespace`, `tenant`, `environment`, `stage`, `component`).
+
+For detailed workspace configuration, see [Terraform Workspaces](/components/terraform/workspaces).
+
+## Component-Type Defaults
+
+Define defaults for all Terraform components:
+
+```yaml
+# Apply to all Terraform components
+terraform:
+  command: tofu
+  backend_type: s3
+  backend:
+    s3:
+      bucket: "{{ .namespace }}-terraform-state"
+      region: us-east-1
+      dynamodb_table: terraform-locks
+      encrypt: true
+  providers:
+    aws:
+      region: "{{ .vars.region }}"
+  vars:
+    tags:
+      ManagedBy: Atmos
+  env:
+    TF_IN_AUTOMATION: "true"
+
+# Individual components
+components:
+  terraform:
+    vpc:
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+```
+
+## Complete Example
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc/_defaults
+  - orgs/acme/plat/prod/_defaults
+
+vars:
+  region: us-east-1
+  stage: prod
+
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: acme-prod-terraform-state
+      region: us-east-1
+      key: "{{ .environment }}/{{ .stage }}/{{ .component }}/terraform.tfstate"
+      dynamodb_table: terraform-locks
+      encrypt: true
+  providers:
+    aws:
+      region: "{{ .vars.region }}"
+      assume_role:
+        role_arn: "arn:aws:iam::123456789012:role/TerraformRole"
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
+        enable_nat_gateway: true
+        single_nat_gateway: false
+
+    eks:
+      metadata:
+        component: eks
+        inherits:
+          - eks/defaults
+      vars:
+        cluster_name: acme-prod
+        cluster_version: "1.28"
+      settings:
+        depends_on:
+          - component: vpc
+      providers:
+        aws:
+          region: us-east-1
+        kubernetes:
+          host: "{{ .outputs.eks.cluster_endpoint }}"
+
+    rds:
+      metadata:
+        component: rds-aurora
+      vars:
+        engine: aurora-postgresql
+        engine_version: "15.4"
+      backend:
+        s3:
+          key: "sensitive/rds/terraform.tfstate"
+          kms_key_id: alias/terraform-state-key
+```
+</File>
+
+## Running Terraform Commands
+
+Atmos provides commands that wrap Terraform operations:
+
+```bash
+# Plan changes
+atmos terraform plan vpc -s plat-ue1-prod
+
+# Apply changes
+atmos terraform apply vpc -s plat-ue1-prod
+
+# Show outputs
+atmos terraform output vpc -s plat-ue1-prod
+
+# Destroy resources
+atmos terraform destroy vpc -s plat-ue1-prod
+
+# Run any terraform subcommand
+atmos terraform <subcommand> <component> -s <stack>
+```
+
+## Directory Structure
+
+Terraform root modules are located in the path configured in `atmos.yaml`:
+
+```yaml
+# atmos.yaml
+components:
+  terraform:
+    base_path: components/terraform
+```
+
+Example structure:
+
+```
+components/terraform/
+├── vpc/
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── outputs.tf
+│   └── versions.tf
+├── eks/
+│   ├── main.tf
+│   ├── variables.tf
+│   └── outputs.tf
+└── rds-aurora/
+    ├── main.tf
+    ├── variables.tf
+    └── outputs.tf
+```
+
+## Best Practices
+
+1. **Use Abstract Components:** Create abstract base components in catalogs with common settings, then inherit from them in stack-specific components.
+
+2. **Centralize Backend Configuration:** Define backend settings at the `terraform:` level to ensure consistent state management.
+
+3. **Use Provider Defaults:** Configure providers at the component-type level and override only when necessary.
+
+4. **Leverage Remote State:** Use `remote_state_backend` to enable cross-component references via `terraform_remote_state`.
+
+5. **Organize by Domain:** Group related components together (networking, compute, databases) in your directory structure.
+
+6. **Use Workspaces Carefully:** Prefer stack-based isolation over Terraform workspaces for environment separation.
+
+## Related
+
+- [Configure Backend](/stacks/backend)
+- [Configure Providers](/stacks/providers)
+- [Terraform Backends Reference](/components/terraform/backends)
+- [Terraform Providers Reference](/components/terraform/providers)
+- [Terraform Workspaces](/components/terraform/workspaces)
+- [Remote State](/stacks/remote-state)

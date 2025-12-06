@@ -1,0 +1,398 @@
+---
+title: Packer Components
+sidebar_position: 4
+sidebar_label: packer
+sidebar_class_name: command
+description: Configure Packer components in your Atmos stack manifests for machine image building.
+id: packer
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Packer components build machine images (AMIs, VM images, container images) using HashiCorp Packer. They allow you to manage image builds with the same stack-based configuration approach used for Terraform and Helmfile.
+</Intro>
+
+## Available Configuration Sections
+
+Packer components support the common configuration sections:
+
+<dl>
+  <dt>[`vars`](/stacks/vars)</dt>
+  <dd>Variables passed to packer.</dd>
+
+  <dt>[`env`](/stacks/env)</dt>
+  <dd>Environment variables during execution.</dd>
+
+  <dt>[`settings`](/stacks/settings)</dt>
+  <dd>Integrations and metadata.</dd>
+
+  <dt>[`metadata`](/stacks/components/component-metadata)</dt>
+  <dd>Component behavior and inheritance.</dd>
+
+  <dt>[`command`](/stacks/command)</dt>
+  <dd>Override packer binary.</dd>
+
+  <dt>[`hooks`](/stacks/hooks)</dt>
+  <dd>Lifecycle event handlers.</dd>
+</dl>
+
+## Component Structure
+
+A typical Packer component configuration:
+
+```yaml
+components:
+  packer:
+    ami-ubuntu:
+      metadata:
+        component: ami-ubuntu
+      vars:
+        region: us-east-1
+        instance_type: t3.medium
+        source_ami_filter:
+          name: "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
+          owner: "099720109477"  # Canonical
+        ami_name_prefix: "acme-ubuntu"
+      env:
+        AWS_PROFILE: acme-prod
+```
+
+## Packer Directory Structure
+
+Packer components are located in the path configured in `atmos.yaml`:
+
+```yaml
+# atmos.yaml
+components:
+  packer:
+    base_path: components/packer
+```
+
+Example structure:
+
+```
+components/packer/
+├── ami-ubuntu/
+│   ├── template.pkr.hcl
+│   ├── variables.pkr.hcl
+│   └── scripts/
+│       ├── setup.sh
+│       └── cleanup.sh
+├── ami-eks-node/
+│   ├── template.pkr.hcl
+│   └── variables.pkr.hcl
+└── docker-base/
+    └── template.pkr.hcl
+```
+
+## Packer Template
+
+Each Packer component contains HCL templates that use variables passed from Atmos:
+
+<File title="components/packer/ami-ubuntu/variables.pkr.hcl">
+```hcl
+variable "region" {
+  type        = string
+  description = "AWS region to build the AMI"
+}
+
+variable "instance_type" {
+  type        = string
+  default     = "t3.medium"
+  description = "EC2 instance type for the builder"
+}
+
+variable "source_ami_filter" {
+  type = object({
+    name  = string
+    owner = string
+  })
+  description = "Filter for source AMI"
+}
+
+variable "ami_name_prefix" {
+  type        = string
+  description = "Prefix for the AMI name"
+}
+
+variable "tags" {
+  type        = map(string)
+  default     = {}
+  description = "Tags to apply to the AMI"
+}
+```
+</File>
+
+<File title="components/packer/ami-ubuntu/template.pkr.hcl">
+```hcl
+packer {
+  required_plugins {
+    amazon = {
+      version = ">= 1.2.0"
+      source  = "github.com/hashicorp/amazon"
+    }
+  }
+}
+
+source "amazon-ebs" "ubuntu" {
+  region        = var.region
+  instance_type = var.instance_type
+
+  source_ami_filter {
+    filters = {
+      name                = var.source_ami_filter.name
+      root-device-type    = "ebs"
+      virtualization-type = "hvm"
+    }
+    most_recent = true
+    owners      = [var.source_ami_filter.owner]
+  }
+
+  ami_name = "${var.ami_name_prefix}-ubuntu-{{timestamp}}"
+
+  tags = merge(var.tags, {
+    Name      = "${var.ami_name_prefix}-ubuntu"
+    BuildTime = timestamp()
+  })
+
+  ssh_username = "ubuntu"
+}
+
+build {
+  sources = ["source.amazon-ebs.ubuntu"]
+
+  provisioner "shell" {
+    scripts = [
+      "${path.root}/scripts/setup.sh",
+      "${path.root}/scripts/cleanup.sh"
+    ]
+  }
+}
+```
+</File>
+
+## Component-Type Defaults
+
+Define defaults for all Packer components:
+
+```yaml
+# Apply to all Packer components
+packer:
+  vars:
+    region: us-east-1
+    tags:
+      ManagedBy: Atmos
+      Builder: Packer
+  env:
+    PACKER_LOG: "1"
+    AWS_PROFILE: acme-build
+
+# Individual components
+components:
+  packer:
+    ami-ubuntu:
+      vars:
+        instance_type: t3.medium
+```
+
+## Complete Example
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/packer/_defaults
+  - orgs/acme/plat/prod/_defaults
+
+vars:
+  region: us-east-1
+  stage: prod
+
+packer:
+  vars:
+    tags:
+      Environment: prod
+      ManagedBy: Atmos
+  env:
+    AWS_PROFILE: acme-prod
+
+components:
+  packer:
+    ami-ubuntu-base:
+      metadata:
+        component: ami-ubuntu
+      vars:
+        instance_type: t3.medium
+        ami_name_prefix: "acme-prod"
+        source_ami_filter:
+          name: "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"
+          owner: "099720109477"
+
+    ami-eks-node:
+      metadata:
+        component: ami-eks-node
+      vars:
+        instance_type: t3.large
+        ami_name_prefix: "acme-prod-eks"
+        kubernetes_version: "1.28"
+        source_ami_filter:
+          name: "amazon-eks-node-1.28-*"
+          owner: "602401143452"  # Amazon EKS
+      settings:
+        depends_on:
+          - component: ami-ubuntu-base
+            type: packer
+
+    docker-base:
+      metadata:
+        component: docker-base
+      vars:
+        repository: "acme/base"
+        tag: "{{ .stage }}-{{ timestamp }}"
+        base_image: "ubuntu:22.04"
+```
+</File>
+
+## Running Packer Commands
+
+Atmos provides commands that wrap Packer operations:
+
+```bash
+# Initialize Packer plugins
+atmos packer init ami-ubuntu -s plat-ue1-prod
+
+# Validate templates
+atmos packer validate ami-ubuntu -s plat-ue1-prod
+
+# Build images
+atmos packer build ami-ubuntu -s plat-ue1-prod
+
+# Run any packer subcommand
+atmos packer <subcommand> <component> -s <stack>
+```
+
+## Environment Variables
+
+Common environment variables for Packer components:
+
+<dl>
+  <dt>`PACKER_LOG`</dt>
+  <dd>Enable logging (set to `1`).</dd>
+
+  <dt>`PACKER_LOG_PATH`</dt>
+  <dd>Path to log file.</dd>
+
+  <dt>`AWS_PROFILE`</dt>
+  <dd>AWS profile for authentication.</dd>
+
+  <dt>`AWS_REGION`</dt>
+  <dd>Default AWS region.</dd>
+
+  <dt>`PACKER_CACHE_DIR`</dt>
+  <dd>Directory for Packer cache.</dd>
+</dl>
+
+## Variables File Generation
+
+Atmos generates a variables file that Packer uses during builds:
+
+```json
+// atmos-packer.pkrvars.json (auto-generated)
+{
+  "region": "us-east-1",
+  "instance_type": "t3.medium",
+  "ami_name_prefix": "acme-prod",
+  "source_ami_filter": {
+    "name": "ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*",
+    "owner": "099720109477"
+  },
+  "tags": {
+    "Environment": "prod",
+    "ManagedBy": "Atmos"
+  }
+}
+```
+
+## Multi-Cloud Support
+
+Packer components can build images for multiple cloud providers:
+
+### AWS AMI
+
+```yaml
+components:
+  packer:
+    ami-builder:
+      vars:
+        region: us-east-1
+        source_ami_filter:
+          name: "ubuntu/images/*"
+          owner: "099720109477"
+```
+
+### Azure VM Image
+
+```yaml
+components:
+  packer:
+    azure-image:
+      vars:
+        azure_subscription_id: "{{ env \"ARM_SUBSCRIPTION_ID\" }}"
+        azure_resource_group: "packer-images-rg"
+        azure_location: "eastus"
+      env:
+        ARM_CLIENT_ID: "{{ env \"ARM_CLIENT_ID\" }}"
+        ARM_CLIENT_SECRET: "{{ env \"ARM_CLIENT_SECRET\" }}"
+```
+
+### GCP Machine Image
+
+```yaml
+components:
+  packer:
+    gcp-image:
+      vars:
+        project_id: "my-gcp-project"
+        zone: "us-central1-a"
+        source_image_family: "ubuntu-2204-lts"
+      env:
+        GOOGLE_APPLICATION_CREDENTIALS: "/path/to/credentials.json"
+```
+
+### Docker Image
+
+```yaml
+components:
+  packer:
+    docker-image:
+      vars:
+        repository: "myregistry/myimage"
+        tag: "latest"
+        base_image: "ubuntu:22.04"
+      env:
+        DOCKER_HOST: "unix:///var/run/docker.sock"
+```
+
+## Best Practices
+
+1. **Version Pin Plugins:** Always specify explicit plugin versions in your Packer templates.
+
+2. **Use Source AMI Filters:** Use filters with `most_recent = true` to automatically get the latest base images.
+
+3. **Tag Everything:** Apply consistent tags to all built images for tracking and cost allocation.
+
+4. **Use Provisioner Scripts:** Keep provisioning logic in external scripts for easier testing and maintenance.
+
+5. **Clean Up:** Include cleanup scripts to reduce image size and remove sensitive data.
+
+6. **Use Dependencies:** Define `depends_on` when images need to be built in a specific order.
+
+7. **Centralize Defaults:** Define common settings in catalog defaults and override only when necessary.
+
+## Related
+
+- [Component Types Overview](/stacks/components)
+- [Terraform Components](/stacks/components/terraform)
+- [Configure Variables](/stacks/vars)
+- [Configure Environment](/stacks/env)
+- [depends_on](/stacks/settings/depends_on)

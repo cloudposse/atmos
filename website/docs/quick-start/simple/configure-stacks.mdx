@@ -12,7 +12,7 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import Note from '@site/src/components/Note'
 
 <Intro>
-[Atmos Stacks](/core-concepts/stacks) are the configuration for your components. It's how you can combine multiple reusable, stateful
+[Atmos Stacks](/learn/stacks) are the configuration for your components. It's how you can combine multiple reusable, stateful
 components into your "Stack" that you depend on.
 </Intro>
 
@@ -28,20 +28,20 @@ to pass to them. If you make your components highly reusable, it usually means t
 - How Atmos identifies components using context variables and naming patterns
 </KeyPoints>
 
-Stack configurations are merely all the settings for your components. They can be organized in any way you like, but we recommend a hierarchical layout. We share some [different ways to organize your stacks in the Catalog](/core-concepts/stacks/catalogs), but for this example, we will use a simple layout.
+Stack configurations are merely all the settings for your components. They can be organized in any way you like, but we recommend a hierarchical layout. We share some [different ways to organize your stacks in the Catalog](/howto/catalogs), but for this example, we will use a simple layout.
 
 ## Create Catalog for Reusable Configurations
 
-Atmos supports the concept of a [Service Catalog](/core-concepts/stacks/catalogs), which is where you can define all
+Atmos supports the concept of a [Service Catalog](/howto/catalogs), which is where you can define all
 of your default configurations.
 
 All the common default settings for each Atmos component should be in a separate file in the `stacks/catalog` directory.
 The file then gets imported into the parent Atmos stacks. This makes the stack configurations DRY by reusing the component's config that is common for all environments.
 
-Refer to [Stack Imports](/core-concepts/stacks/imports) for more details on Atmos imports.
+Refer to [Stack Imports](/stacks/imports) for more details on Atmos imports.
 
 These Atmos component manifests will be imported into the top-level Atmos stacks. The default variables (in the `vars` sections)
-can be overridden in the derived Atmos components by using [Atmos Component Inheritance](/core-concepts/stacks/inheritance).
+can be overridden in the derived Atmos components by using [Atmos Component Inheritance](/howto/inheritance).
 
 ## Atmos Top-level Stacks
 
@@ -161,6 +161,6 @@ And finally, we have the production (`prod`) stack. Much like the `staging` and 
 Now, we're finally ready to deploy our components. We'll show you how to do this in the next step.
 
 <ActionCard title="Want to go deeper on this topic?">
-    You can do so much more with stacks! We're just scratching the surface. If you want [learn about imports, inheritance, templating, etc](/core-concepts/stacks), check out the Core Concepts.
-    <PrimaryCTA to="/core-concepts/stacks">Learn More</PrimaryCTA>
+    You can do so much more with stacks! We're just scratching the surface. If you want [learn about imports, inheritance, templating, etc](/learn/stacks), check out the Core Concepts.
+    <PrimaryCTA to="/learn/stacks">Learn More</PrimaryCTA>
 </ActionCard>
