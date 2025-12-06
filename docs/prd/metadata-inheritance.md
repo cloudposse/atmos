@@ -106,7 +106,7 @@ When `stacks.inherit.metadata: true` (the default):
 
 | Field | Inherited? | Notes |
 |-------|-----------|-------|
-| `metadata.type` | **Partial** | Inherited UNLESS value is `abstract` (base component designation) |
+| `metadata.type` | **No** | Component type is per-component, not inherited |
 | `metadata.enabled` | Yes | Can override in derived component |
 | `metadata.component` | Yes | Can override in derived component |
 | `metadata.name` | Yes | NEW field - logical component identity |
@@ -118,7 +118,7 @@ When `stacks.inherit.metadata: true` (the default):
 
 **Special exclusions from inheritance:**
 - `metadata.inherits` - This is the meta-property that defines inheritance relationships. Inheriting it would create confusing circular dependencies.
-- `metadata.type: abstract` - The `abstract` type is a base component designation that indicates the component is not deployable. This should not be inherited by child components, which are concrete implementations. Other `type` values (e.g., `real`, custom types) ARE inherited normally.
+- `metadata.type` - Component type (`abstract`, `real`, or custom) is per-component and not inherited. Each component explicitly defines its own type.
 
 ### New Field: `metadata.name`
 

@@ -57,13 +57,13 @@ When a component inherits from a base component, the following sections are deep
 | `env` | Yes | Environment variables |
 | `backend` | Yes | Backend configuration |
 | `providers` | Yes | Provider overrides |
-| `metadata` | Yes | All fields except `metadata.inherits` and `metadata.type: abstract` |
+| `metadata` | Yes | All fields except `metadata.inherits` and `metadata.type` |
 
 :::info Metadata Inheritance
 The `metadata` section is inherited from base components, with two exceptions:
 
 1. **`metadata.inherits`** - Not inherited because it defines the inheritance relationship itself
-2. **`metadata.type: abstract`** - Not inherited because `abstract` is a base component designation indicating the component is not deployable. Child components that inherit from abstract components are concrete implementations and should not inherit the abstract type. Other `type` values (e.g., `real`, custom types) ARE inherited normally.
+2. **`metadata.type`** - Not inherited because component type (`abstract`, `real`, or custom) is per-component and should be explicitly defined by each component.
 
 This enables patterns like defining `metadata.name` once in a base component for stable [workspace key prefixes](/components/terraform/backends).
 
