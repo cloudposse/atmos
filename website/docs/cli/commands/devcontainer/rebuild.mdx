@@ -1,0 +1,77 @@
+---
+title: atmos devcontainer rebuild
+sidebar_label: rebuild
+sidebar_class_name: command
+id: rebuild
+description: Rebuild a devcontainer from scratch
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to rebuild a devcontainer from scratch. This stops and removes the existing container, pulls the latest image, and creates a new container.
+</Intro>
+
+<Screengrab title="atmos devcontainer rebuild --help" slug="atmos-devcontainer-rebuild--help" />
+
+## Usage
+
+```shell
+atmos devcontainer rebuild <name> [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Name of the devcontainer to rebuild</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--instance string`</dt>
+  <dd>Instance name for this devcontainer (default: `default`)</dd>
+
+  <dt>`--attach`</dt>
+  <dd>Attach to the container after rebuilding</dd>
+
+  <dt>`--no-pull`</dt>
+  <dd>Don't pull the latest image before rebuilding</dd>
+</dl>
+
+## Examples
+
+```shell
+# Rebuild a devcontainer
+atmos devcontainer rebuild geodesic
+
+# Rebuild and attach
+atmos devcontainer rebuild geodesic --attach
+
+# Rebuild without pulling latest image
+atmos devcontainer rebuild geodesic --no-pull
+
+# Rebuild a specific instance
+atmos devcontainer rebuild terraform --instance project-a
+```
+
+## Behavior
+
+1. Stops the container if it's running
+2. Removes the existing container
+3. Pulls the latest image (unless `--no-pull` is specified)
+4. Creates a new container with the current configuration
+5. Starts the new container
+6. Optionally attaches to the container (if `--attach` is specified)
+
+## Use Cases
+
+- Configuration changes: After updating your `devcontainer.json` or `atmos.yaml`
+- Image updates: To get the latest version of the base image
+- Clean slate: When you want to start fresh without any accumulated state
+
+## See Also
+
+- [`atmos devcontainer start`](/cli/commands/devcontainer/start)
+- [`atmos devcontainer remove`](/cli/commands/devcontainer/remove)

@@ -358,3 +358,15 @@ output = json
 		})
 	}
 }
+
+func TestPermissionSetIdentity_Paths(t *testing.T) {
+	id, err := NewPermissionSetIdentity("dev", &schema.Identity{
+		Kind: "aws/permission-set",
+	})
+	require.NoError(t, err)
+
+	// Permission set identities don't add additional credential files beyond the provider.
+	paths, err := id.Paths()
+	assert.NoError(t, err)
+	assert.Empty(t, paths, "permission set identities should not return additional paths")
+}

@@ -1,0 +1,585 @@
+---
+title: Development Containers
+sidebar_position: 30
+sidebar_label: devcontainer
+sidebar_class_name: command
+id: devcontainer
+description: Configure development container environments for consistent tooling across your team.
+slug: /cli/configuration/devcontainer
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Configure development container environments in your `atmos.yaml` to provide consistent, reproducible tooling across your team. Based on the [Development Container Specification](https://containers.dev/), Atmos manages named container configurations with support for Docker and Podman runtimes.
+</Intro>
+
+## Quick Start
+
+The simplest devcontainer configuration uses a pre-built image:
+
+<File title="atmos.yaml">
+```yaml
+devcontainer:
+  terraform:
+    spec:
+      image: "hashicorp/terraform:1.10"
+      workspaceFolder: "/workspace"
+```
+</File>
+
+Launch it with:
+
+```bash
+atmos devcontainer shell terraform
+```
+
+## Configuration Structure
+
+Development containers are configured under the top-level `devcontainer` key. Each entry is a **named configuration** that can be launched independently:
+
+<File title="atmos.yaml">
+```yaml
+devcontainer:
+  <name>:           # Named configuration (e.g., "geodesic", "terraform", "python")
+    settings:       # Atmos-specific settings (optional)
+      runtime: ""   # "docker", "podman", or omit for auto-detection
+    spec:           # Development Container specification (required)
+      # ... Dev Container spec fields ...
+```
+</File>
+
+## Settings
+
+Atmos-specific configuration options that control how containers are managed.
+
+<dl>
+  <dt>`settings.runtime`</dt>
+  <dd>
+    Specify the container runtime to use: `"docker"`, `"podman"`, or omit for automatic detection.
+
+    **Default:** Auto-detect (checks Docker first, then Podman)
+
+    When omitted, Atmos will automatically detect which runtime is available on your system. This is useful for teams where some members use Docker and others use Podman.
+
+    **Example:**
+    ```yaml
+    devcontainer:
+      geodesic:
+        settings:
+          runtime: "podman"
+        spec:
+          image: "cloudposse/geodesic:latest"
+    ```
+  </dd>
+</dl>
+
+## Spec (Development Container Specification)
+
+The `spec` section follows the [Development Container Specification](https://containers.dev/implementors/json_reference/). You can provide either a single map or a list of maps (for merging configurations).
+
+### Basic Configuration
+
+<dl>
+  <dt>`spec.name`</dt>
+  <dd>
+    Display name for the container.
+
+    **Type:** string
+
+    **Example:**
+    ```yaml
+    spec:
+      name: "Terraform Development Environment"
+    ```
+  </dd>
+
+  <dt>`spec.image`</dt>
+  <dd>
+    Pre-built container image to use. Use this **or** `build`, not both.
+
+    **Type:** string
+
+    **Example:**
+    ```yaml
+    spec:
+      image: "hashicorp/terraform:1.10"
+    ```
+  </dd>
+
+  <dt>`spec.build`</dt>
+  <dd>
+    Build configuration for creating a custom container. Use this **or** `image`, not both.
+
+    **Type:** object with fields:
+    - `dockerfile` (string) - Path to Dockerfile
+    - `context` (string) - Build context directory
+    - `args` (map) - Build arguments
+
+    **Example:**
+    ```yaml
+    spec:
+      build:
+        dockerfile: ".devcontainer/Dockerfile"
+        context: "."
+        args:
+          NODE_VERSION: "20"
+          PYTHON_VERSION: "3.12"
+    ```
+  </dd>
+</dl>
+
+### Workspace Configuration
+
+<dl>
+  <dt>`spec.workspaceFolder`</dt>
+  <dd>
+    Working directory inside the container where commands will execute.
+
+    **Type:** string
+    **Default:** `/workspace`
+
+    **Example:**
+    ```yaml
+    spec:
+      workspaceFolder: "/workspace"
+    ```
+  </dd>
+
+  <dt>`spec.workspaceMount`</dt>
+  <dd>
+    Primary workspace volume mount specification. Uses Docker mount syntax.
+
+    **Type:** string
+
+    Supports variable expansion:
+    - `${localWorkspaceFolder}` - Path to the workspace on your machine
+    - `${localEnv:VAR}` - Local environment variable
+
+    **Example:**
+    ```yaml
+    spec:
+      workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
+    ```
+  </dd>
+
+  <dt>`spec.mounts`</dt>
+  <dd>
+    Additional volume mounts beyond the workspace. Common uses include mounting credential directories or SSH keys.
+
+    **Type:** array of strings (Docker mount syntax)
+
+    **Example:**
+    ```yaml
+    spec:
+      mounts:
+        - "type=bind,source=${localEnv:HOME}/.aws,target=/root/.aws,readonly"
+        - "type=bind,source=${localEnv:HOME}/.ssh,target=/root/.ssh,readonly"
+        - "type=volume,source=terraform-cache,target=/root/.terraform.d/plugin-cache"
+    ```
+  </dd>
+</dl>
+
+### Port Configuration
+
+<dl>
+  <dt>`spec.forwardPorts`</dt>
+  <dd>
+    Ports to forward from the container to your host machine. Supports both static ports and the `!random` YAML function for dynamic port assignment.
+
+    **Type:** array of numbers or strings
+
+    **Example:**
+    ```yaml
+    spec:
+      forwardPorts:
+        - 3000                    # Static port
+        - !random 8080 8099       # Random port in range (avoids conflicts)
+        - "8080:8081"             # Host 8080 to container 8081
+    ```
+
+    Using `!random` is recommended when running multiple instances to avoid port conflicts.
+  </dd>
+
+  <dt>`spec.portsAttributes`</dt>
+  <dd>
+    Metadata for forwarded ports, such as labels and protocols.
+
+    **Type:** object mapping port numbers/strings to attribute objects
+
+    Each port can have:
+    - `label` (string) - Descriptive label
+    - `protocol` (string) - Protocol (http, https, etc.)
+
+    **Example:**
+    ```yaml
+    spec:
+      portsAttributes:
+        "3000":
+          label: "Web Server"
+          protocol: "http"
+        "5432":
+          label: "PostgreSQL"
+          protocol: "tcp"
+    ```
+  </dd>
+</dl>
+
+### Environment Configuration
+
+<dl>
+  <dt>`spec.containerEnv`</dt>
+  <dd>
+    Environment variables to set inside the container.
+
+    **Type:** object (key-value pairs)
+
+    Supports variable expansion:
+    - `${localEnv:VAR}` - Expand from your local environment
+    - `${localWorkspaceFolder}` - Path to workspace
+
+    **Example:**
+    ```yaml
+    spec:
+      containerEnv:
+        AWS_PROFILE: "${localEnv:AWS_PROFILE}"
+        TF_PLUGIN_CACHE_DIR: "/root/.terraform.d/plugin-cache"
+        TERM: "${localEnv:TERM}"
+    ```
+  </dd>
+
+  <dt>`spec.remoteUser`</dt>
+  <dd>
+    User to run as inside the container.
+
+    **Type:** string
+    **Default:** Depends on the image
+
+    **Example:**
+    ```yaml
+    spec:
+      remoteUser: "root"
+    ```
+  </dd>
+</dl>
+
+### Runtime Configuration
+
+<dl>
+  <dt>`spec.runArgs`</dt>
+  <dd>
+    Additional arguments to pass to `docker run` or `podman run`.
+
+    **Type:** array of strings
+
+    **Example:**
+    ```yaml
+    spec:
+      runArgs:
+        - "--network=host"
+        - "--dns=8.8.8.8"
+    ```
+  </dd>
+
+  <dt>`spec.overrideCommand`</dt>
+  <dd>
+    Whether to override the image's ENTRYPOINT/CMD.
+
+    **Type:** boolean
+    **Default:** `false`
+
+    **Example:**
+    ```yaml
+    spec:
+      overrideCommand: true
+    ```
+  </dd>
+
+  <dt>`spec.init`</dt>
+  <dd>
+    Run an init process inside the container to handle signal forwarding and reaping.
+
+    **Type:** boolean
+    **Default:** `false`
+
+    **Example:**
+    ```yaml
+    spec:
+      init: true
+    ```
+  </dd>
+
+  <dt>`spec.privileged`</dt>
+  <dd>
+    Run the container in privileged mode.
+
+    **Type:** boolean
+    **Default:** `false`
+
+    **Warning:** Only use when necessary for your workflow.
+
+    **Example:**
+    ```yaml
+    spec:
+      privileged: true
+    ```
+  </dd>
+
+  <dt>`spec.capAdd`</dt>
+  <dd>
+    Linux capabilities to add to the container.
+
+    **Type:** array of strings
+
+    **Example:**
+    ```yaml
+    spec:
+      capAdd:
+        - "SYS_PTRACE"
+        - "NET_ADMIN"
+    ```
+  </dd>
+
+  <dt>`spec.securityOpt`</dt>
+  <dd>
+    Security options for the container.
+
+    **Type:** array of strings
+
+    **Example:**
+    ```yaml
+    spec:
+      securityOpt:
+        - "seccomp=unconfined"
+    ```
+  </dd>
+
+  <dt>`spec.userEnvProbe`</dt>
+  <dd>
+    How to probe the user environment inside the container.
+
+    **Type:** string
+    **Options:** `"none"`, `"loginShell"`, `"loginInteractiveShell"`, `"interactiveShell"`
+
+    **Example:**
+    ```yaml
+    spec:
+      userEnvProbe: "loginInteractiveShell"
+    ```
+  </dd>
+</dl>
+
+## Advanced Features
+
+### Merging Configurations with `!include`
+
+Reuse existing `.devcontainer/devcontainer.json` files by merging them with Atmos-specific overrides:
+
+<File title="atmos.yaml">
+```yaml
+devcontainer:
+  geodesic:
+    spec:
+      - !include .devcontainer/devcontainer.json  # Base configuration
+      - forwardPorts:                              # Override/extend
+          - !random 8080 8099
+        containerEnv:
+          AWS_PROFILE: "dev"
+```
+</File>
+
+When using a list, configurations are merged in order. Later entries override earlier ones.
+
+### Dynamic Port Assignment
+
+Use the `!random` YAML function to avoid port conflicts when running multiple container instances:
+
+<File title="atmos.yaml">
+```yaml
+devcontainer:
+  app:
+    spec:
+      forwardPorts:
+        - !random 8080 8099  # Assigns random port in range
+        - 3000               # Static port
+```
+</File>
+
+This is especially useful when launching multiple instances with the `--instance` flag.
+
+### Multiple Instances
+
+Run multiple containers from the same configuration using the `--instance` flag:
+
+```bash
+# Default instance
+atmos devcontainer shell geodesic
+
+# Named instances
+atmos devcontainer shell geodesic --instance dev
+atmos devcontainer shell geodesic --instance prod
+atmos devcontainer shell geodesic --instance testing
+```
+
+Each instance gets a unique container name: `atmos-<config>-<instance>`.
+
+## Common Patterns
+
+### Pattern: Simple Image-Based Container
+
+Use a pre-built image for quick development environments:
+
+<File title="atmos.yaml">
+```yaml
+devcontainer:
+  python:
+    spec:
+      image: "python:3.12"
+      workspaceFolder: "/workspace"
+      containerEnv:
+        PYTHONPATH: "/workspace"
+```
+</File>
+
+### Pattern: Custom Dockerfile Build
+
+Build a custom container with specific tools:
+
+<File title="atmos.yaml">
+```yaml
+devcontainer:
+  custom:
+    spec:
+      build:
+        dockerfile: ".devcontainer/Dockerfile"
+        context: "."
+        args:
+          NODE_VERSION: "20"
+          TERRAFORM_VERSION: "1.10"
+      workspaceFolder: "/workspace"
+```
+</File>
+
+### Pattern: Geodesic Shell (Multi-Tool Environment)
+
+Use [Geodesic](https://github.com/cloudposse/geodesic) as a comprehensive toolbox:
+
+<File title="atmos.yaml">
+```yaml
+devcontainer:
+  geodesic:
+    settings:
+      runtime: "docker"
+    spec:
+      - !include .devcontainer/devcontainer.json
+      - forwardPorts:
+          - !random 8080 8099
+          - !random 3000 3099
+        containerEnv:
+          AWS_PROFILE: "dev"
+          TF_PLUGIN_CACHE_DIR: "/root/.terraform.d/plugin-cache"
+```
+</File>
+
+### Pattern: Mounting Authentication Credentials
+
+Mount cloud provider credentials into your container:
+
+<File title="atmos.yaml">
+```yaml
+devcontainer:
+  terraform:
+    spec:
+      image: "hashicorp/terraform:1.10"
+      workspaceFolder: "/workspace"
+      mounts:
+        - "type=bind,source=${localEnv:HOME}/.aws,target=/root/.aws,readonly"
+        - "type=bind,source=${localEnv:HOME}/.azure,target=/root/.azure,readonly"
+      containerEnv:
+        AWS_PROFILE: "${localEnv:AWS_PROFILE}"
+        AZURE_SUBSCRIPTION_ID: "${localEnv:AZURE_SUBSCRIPTION_ID}"
+```
+</File>
+
+Alternatively, use Atmos [identity injection](/cli/configuration/auth/identities) with the `--identity` flag for enhanced security.
+
+## Complete Example
+
+A comprehensive configuration showing all major features:
+
+<File title="atmos.yaml">
+```yaml
+devcontainer:
+  # Simple image-based container
+  terraform:
+    spec:
+      name: "Terraform Development"
+      image: "hashicorp/terraform:1.10"
+      workspaceFolder: "/workspace"
+      forwardPorts:
+        - !random 8080 8099
+      mounts:
+        - "type=bind,source=${localEnv:HOME}/.aws,target=/root/.aws,readonly"
+      containerEnv:
+        TF_PLUGIN_CACHE_DIR: "/root/.terraform.d/plugin-cache"
+        AWS_PROFILE: "${localEnv:AWS_PROFILE}"
+
+  # Custom build with Podman
+  custom:
+    settings:
+      runtime: "podman"
+    spec:
+      name: "Custom Development Environment"
+      build:
+        dockerfile: ".devcontainer/Dockerfile"
+        context: "."
+        args:
+          WORKSPACE: "/workspace"
+      workspaceFolder: "/workspace"
+      remoteUser: "developer"
+      init: true
+
+  # Geodesic with merged configuration
+  geodesic:
+    spec:
+      - !include .devcontainer/devcontainer.json
+      - name: "Geodesic Cloud Shell"
+        forwardPorts:
+          - !random 8080 8099
+          - !random 3000 3099
+        portsAttributes:
+          "8080":
+            label: "Application"
+            protocol: "http"
+        containerEnv:
+          AWS_PROFILE: "dev"
+          TERM: "${localEnv:TERM}"
+```
+</File>
+
+## Environment Variables
+
+The `devcontainer` configuration is read exclusively from `atmos.yaml` and does not support environment variable overrides. However, individual container settings support environment variable expansion using `${localEnv:VAR}` syntax within the `spec` section.
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/devcontainer', label: 'atmos devcontainer', description: 'Development container management'},
+  {type: 'link', href: '/cli/commands/devcontainer/shell', label: 'atmos devcontainer shell', description: 'Launch interactive shell in container'},
+  {type: 'link', href: '/cli/commands/devcontainer/start', label: 'atmos devcontainer start', description: 'Start a devcontainer'},
+  {type: 'link', href: '/cli/commands/devcontainer/attach', label: 'atmos devcontainer attach', description: 'Attach to running container'},
+  {type: 'link', href: '/cli/commands/devcontainer/exec', label: 'atmos devcontainer exec', description: 'Execute command in container'},
+  {type: 'link', href: '/cli/commands/devcontainer/stop', label: 'atmos devcontainer stop', description: 'Stop a devcontainer'},
+  {type: 'link', href: '/cli/commands/devcontainer/logs', label: 'atmos devcontainer logs', description: 'View container logs'},
+  {type: 'link', href: '/cli/commands/devcontainer/remove', label: 'atmos devcontainer remove', description: 'Remove a devcontainer'},
+  {type: 'link', href: '/cli/commands/devcontainer/rebuild', label: 'atmos devcontainer rebuild', description: 'Rebuild a devcontainer'},
+  {type: 'link', href: '/cli/commands/devcontainer/list', label: 'atmos devcontainer list', description: 'List devcontainers'},
+]} />
+
+## See Also
+
+- [CLI Configuration](/cli/configuration) — Overview of Atmos CLI configuration
+- [Development Container Specification](https://containers.dev/implementors/json_reference/) — Complete specification reference
+- [YAML Functions](/functions/yaml) — Including `!include` and `!random`
+- [Auth Configuration](/cli/configuration/auth) — Configure identity injection with `--identity` flag
