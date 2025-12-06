@@ -111,14 +111,19 @@ var (
 	ErrAzurePermissionDenied  = errors.New("permission denied accessing Azure blob")
 
 	// Azure authentication errors.
-	ErrAzureOIDClaimNotFound      = errors.New("oid claim not found in token")
-	ErrAzureUsernameClaimNotFound = errors.New("no username claim found in token (tried upn, unique_name, email)")
-	ErrAzureInvalidJWTFormat      = errors.New("invalid JWT format")
-	ErrAzureExpirationTimeEmpty   = errors.New("expiration time is empty")
-	ErrAzureTimeParseFailure      = errors.New("unable to parse time: tried RFC3339, local time formats, and Unix timestamp")
-	ErrAzureNoAccountsInCache     = errors.New("no accounts found in cache")
-	ErrAzureNoAccountForTenant    = errors.New("no account found for tenant")
-	ErrBackendConfigRequired      = errors.New("backend configuration is required")
+	ErrAzureOIDClaimNotFound       = errors.New("oid claim not found in token")
+	ErrAzureUsernameClaimNotFound  = errors.New("no username claim found in token (tried upn, unique_name, email)")
+	ErrAzureInvalidJWTFormat       = errors.New("invalid JWT format")
+	ErrAzureExpirationTimeEmpty    = errors.New("expiration time is empty")
+	ErrAzureTimeParseFailure       = errors.New("unable to parse time: tried RFC3339, local time formats, and Unix timestamp")
+	ErrAzureNoAccountsInCache      = errors.New("no accounts found in cache")
+	ErrAzureNoAccountForTenant     = errors.New("no account found for tenant")
+	ErrBackendConfigRequired       = errors.New("backend configuration is required")
+	ErrBackendTypeRequired         = errors.New("backend_type is required")
+	ErrBackendSectionMissing       = errors.New("no 'backend' section configured")
+	ErrBackendTypeMissing          = errors.New("no 'backend_type' configured")
+	ErrBackendTypeEmptyAfterRender = errors.New("'backend_type' is empty after template processing")
+	ErrBackendConfigEmpty          = errors.New("'backend' section is empty but 'backend_type' requires configuration")
 
 	// Git-related errors.
 	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")
