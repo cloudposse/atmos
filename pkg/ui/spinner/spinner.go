@@ -102,7 +102,9 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m spinnerModel) View() string {
 	if m.done {
 		if m.err != nil {
-			return ""
+			// Show error indicator with reset line to clear spinner.
+			xmark := theme.GetCurrentStyles().XMark.String()
+			return fmt.Sprintf("%s%s %s\n", terminal.EscResetLine, xmark, m.progressMsg)
 		}
 		// Show completed message with checkmark.
 		checkmark := theme.GetCurrentStyles().Checkmark.String()

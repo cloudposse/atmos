@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -69,7 +70,8 @@ func (m *mockRuntimeProvider) Logs(ctx context.Context, atmosConfig *schema.Atmo
 	if m.logsError != nil {
 		return nil, m.logsError
 	}
-	return io.NopCloser(nil), nil
+	// Return a valid empty reader, not nil.
+	return io.NopCloser(strings.NewReader("")), nil
 }
 
 func (m *mockRuntimeProvider) Remove(ctx context.Context, atmosConfig *schema.AtmosConfiguration, name string, opts RemoveOptions) error {
@@ -559,6 +561,52 @@ func TestService_Rebuild(t *testing.T) {
 			service := NewTestableService(nil, tt.runtime, nil)
 
 			err := service.Rebuild(context.Background(), tt.devName, tt.opts)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestService_Logs(t *testing.T) {
+	tests := []struct {
+		name          string
+		devName       string
+		opts          LogsOptions
+		runtime       *mockRuntimeProvider
+		expectedError bool
+	}{
+		{
+			name:    "logs success with nil reader",
+			devName: "geodesic",
+			opts:    LogsOptions{Follow: false, Tail: "100"},
+			runtime: &mockRuntimeProvider{},
+		},
+		{
+			name:    "logs with follow",
+			devName: "geodesic",
+			opts:    LogsOptions{Follow: true, Tail: "all"},
+			runtime: &mockRuntimeProvider{},
+		},
+		{
+			name:    "logs fails",
+			devName: "geodesic",
+			opts:    LogsOptions{},
+			runtime: &mockRuntimeProvider{
+				logsError: errors.New("container not found"),
+			},
+			expectedError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := NewTestableService(nil, tt.runtime, nil)
+
+			err := service.Logs(context.Background(), tt.devName, tt.opts)
 
 			if tt.expectedError {
 				assert.Error(t, err)

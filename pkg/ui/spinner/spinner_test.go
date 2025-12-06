@@ -113,16 +113,17 @@ func TestSpinnerModel_View(t *testing.T) {
 		assert.NotContains(t, view, "Loading")
 	})
 
-	t.Run("shows nothing when done with error", func(t *testing.T) {
+	t.Run("shows error indicator when done with error", func(t *testing.T) {
 		model := newSpinnerModel("Loading", "Loaded")
 		model.done = true
 		model.err = errors.New("test error")
 
 		view := model.View()
 
-		// When there's an error, we don't show the completed message.
-		// The error will be returned by ExecWithSpinner.
-		assert.Equal(t, "", view)
+		// When there's an error, we show the progress message with error indicator.
+		// The actual error details will be returned by ExecWithSpinner.
+		assert.Contains(t, view, "Loading")
+		assert.NotContains(t, view, "Loaded")
 	})
 }
 
