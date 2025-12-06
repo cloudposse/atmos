@@ -387,3 +387,188 @@ func TestCustomCommandCanExtendRegistryCommand(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "custom-plan", customCmd.Use)
 }
+
+// resetCompatFlagsRegistry clears the compat flags registry for testing.
+// This ensures tests start with a clean state.
+func resetCompatFlagsRegistry() {
+	commandCompatFlagsRegistry.mu.Lock()
+	defer commandCompatFlagsRegistry.mu.Unlock()
+	commandCompatFlagsRegistry.flags = make(map[string]map[string]map[string]compat.CompatibilityFlag)
+}
+
+func TestRegisterCommandCompatFlags(t *testing.T) {
+	resetCompatFlagsRegistry()
+
+	// Register terraform global flags.
+	RegisterCommandCompatFlags("terraform", "terraform", map[string]compat.CompatibilityFlag{
+		"-chdir":   {Behavior: compat.AppendToSeparated, Description: "Switch to a different working directory"},
+		"-help":    {Behavior: compat.AppendToSeparated, Description: "Show terraform help output"},
+		"-version": {Behavior: compat.AppendToSeparated, Description: "Show terraform version"},
+	})
+
+	// Verify registration.
+	flags := GetSubcommandCompatFlags("terraform", "terraform")
+	require.NotNil(t, flags)
+	assert.Len(t, flags, 3)
+	assert.Contains(t, flags, "-chdir")
+	assert.Contains(t, flags, "-help")
+	assert.Contains(t, flags, "-version")
+}
+
+func TestRegisterCommandCompatFlags_MultipleSubcommands(t *testing.T) {
+	resetCompatFlagsRegistry()
+
+	// Register terraform global flags.
+	RegisterCommandCompatFlags("terraform", "terraform", map[string]compat.CompatibilityFlag{
+		"-chdir":   {Behavior: compat.AppendToSeparated, Description: "Switch to a different working directory"},
+		"-help":    {Behavior: compat.AppendToSeparated, Description: "Show terraform help output"},
+		"-version": {Behavior: compat.AppendToSeparated, Description: "Show terraform version"},
+	})
+
+	// Register plan-specific flags.
+	RegisterCommandCompatFlags("terraform", "plan", map[string]compat.CompatibilityFlag{
+		"-var":               {Behavior: compat.AppendToSeparated, Description: "Set a value for one of the input variables"},
+		"-var-file":          {Behavior: compat.AppendToSeparated, Description: "Load variable values from the given file"},
+		"-out":               {Behavior: compat.AppendToSeparated, Description: "Write the plan to the given path"},
+		"-destroy":           {Behavior: compat.AppendToSeparated, Description: "Create a plan to destroy all objects"},
+		"-detailed-exitcode": {Behavior: compat.AppendToSeparated, Description: "Return detailed exit codes"},
+	})
+
+	// Register apply-specific flags.
+	RegisterCommandCompatFlags("terraform", "apply", map[string]compat.CompatibilityFlag{
+		"-var":          {Behavior: compat.AppendToSeparated, Description: "Set a value for one of the input variables"},
+		"-var-file":     {Behavior: compat.AppendToSeparated, Description: "Load variable values from the given file"},
+		"-auto-approve": {Behavior: compat.AppendToSeparated, Description: "Skip interactive approval"},
+		"-backup":       {Behavior: compat.AppendToSeparated, Description: "Path to backup the existing state file"},
+	})
+
+	// Verify terraform global flags.
+	globalFlags := GetSubcommandCompatFlags("terraform", "terraform")
+	require.NotNil(t, globalFlags)
+	assert.Len(t, globalFlags, 3)
+	assert.Contains(t, globalFlags, "-chdir")
+	assert.Contains(t, globalFlags, "-help")
+	assert.Contains(t, globalFlags, "-version")
+	assert.NotContains(t, globalFlags, "-var") // Should not have subcommand flags.
+
+	// Verify plan flags.
+	planFlags := GetSubcommandCompatFlags("terraform", "plan")
+	require.NotNil(t, planFlags)
+	assert.Len(t, planFlags, 5)
+	assert.Contains(t, planFlags, "-var")
+	assert.Contains(t, planFlags, "-var-file")
+	assert.Contains(t, planFlags, "-out")
+	assert.Contains(t, planFlags, "-destroy")
+	assert.Contains(t, planFlags, "-detailed-exitcode")
+	assert.NotContains(t, planFlags, "-chdir")        // Should not have global flags.
+	assert.NotContains(t, planFlags, "-auto-approve") // Should not have apply flags.
+
+	// Verify apply flags.
+	applyFlags := GetSubcommandCompatFlags("terraform", "apply")
+	require.NotNil(t, applyFlags)
+	assert.Len(t, applyFlags, 4)
+	assert.Contains(t, applyFlags, "-var")
+	assert.Contains(t, applyFlags, "-var-file")
+	assert.Contains(t, applyFlags, "-auto-approve")
+	assert.Contains(t, applyFlags, "-backup")
+	assert.NotContains(t, applyFlags, "-chdir") // Should not have global flags.
+	assert.NotContains(t, applyFlags, "-out")   // Should not have plan flags.
+}
+
+func TestGetSubcommandCompatFlags_NotFound(t *testing.T) {
+	resetCompatFlagsRegistry()
+
+	// Query non-existent provider.
+	flags := GetSubcommandCompatFlags("nonexistent", "plan")
+	assert.Nil(t, flags)
+
+	// Query non-existent subcommand.
+	RegisterCommandCompatFlags("terraform", "plan", map[string]compat.CompatibilityFlag{
+		"-var": {Behavior: compat.AppendToSeparated, Description: "Set a variable"},
+	})
+
+	flags = GetSubcommandCompatFlags("terraform", "nonexistent")
+	assert.Nil(t, flags)
+}
+
+func TestRegisterCommandCompatFlags_OverwriteExisting(t *testing.T) {
+	resetCompatFlagsRegistry()
+
+	// Register initial flags.
+	RegisterCommandCompatFlags("terraform", "plan", map[string]compat.CompatibilityFlag{
+		"-var": {Behavior: compat.AppendToSeparated, Description: "Original description"},
+	})
+
+	// Overwrite with new flags.
+	RegisterCommandCompatFlags("terraform", "plan", map[string]compat.CompatibilityFlag{
+		"-var":      {Behavior: compat.AppendToSeparated, Description: "Updated description"},
+		"-var-file": {Behavior: compat.AppendToSeparated, Description: "New flag"},
+	})
+
+	// Verify flags were overwritten.
+	flags := GetSubcommandCompatFlags("terraform", "plan")
+	require.NotNil(t, flags)
+	assert.Len(t, flags, 2)
+	assert.Equal(t, "Updated description", flags["-var"].Description)
+	assert.Contains(t, flags, "-var-file")
+}
+
+func TestRegisterCommandCompatFlags_MultipleProviders(t *testing.T) {
+	resetCompatFlagsRegistry()
+
+	// Register terraform flags.
+	RegisterCommandCompatFlags("terraform", "plan", map[string]compat.CompatibilityFlag{
+		"-var": {Behavior: compat.AppendToSeparated, Description: "Terraform variable"},
+	})
+
+	// Register helmfile flags.
+	RegisterCommandCompatFlags("helmfile", "sync", map[string]compat.CompatibilityFlag{
+		"-f": {Behavior: compat.AppendToSeparated, Description: "Path to helmfile.yaml"},
+	})
+
+	// Verify terraform flags.
+	tfFlags := GetSubcommandCompatFlags("terraform", "plan")
+	require.NotNil(t, tfFlags)
+	assert.Contains(t, tfFlags, "-var")
+	assert.NotContains(t, tfFlags, "-f")
+
+	// Verify helmfile flags.
+	hfFlags := GetSubcommandCompatFlags("helmfile", "sync")
+	require.NotNil(t, hfFlags)
+	assert.Contains(t, hfFlags, "-f")
+	assert.NotContains(t, hfFlags, "-var")
+
+	// Verify providers are isolated.
+	assert.Nil(t, GetSubcommandCompatFlags("terraform", "sync"))
+	assert.Nil(t, GetSubcommandCompatFlags("helmfile", "plan"))
+}
+
+func TestRegisterCommandCompatFlags_Concurrent(t *testing.T) {
+	resetCompatFlagsRegistry()
+
+	done := make(chan bool)
+
+	// Concurrently register flags for different subcommands.
+	for i := 0; i < 10; i++ {
+		go func(idx int) {
+			subcommand := fmt.Sprintf("cmd%d", idx)
+			RegisterCommandCompatFlags("terraform", subcommand, map[string]compat.CompatibilityFlag{
+				"-var": {Behavior: compat.AppendToSeparated, Description: fmt.Sprintf("Flag for %s", subcommand)},
+			})
+			done <- true
+		}(i)
+	}
+
+	// Wait for all goroutines.
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	// Verify all registrations succeeded.
+	for i := 0; i < 10; i++ {
+		subcommand := fmt.Sprintf("cmd%d", i)
+		flags := GetSubcommandCompatFlags("terraform", subcommand)
+		require.NotNil(t, flags, "flags for %s should exist", subcommand)
+		assert.Contains(t, flags, "-var")
+	}
+}

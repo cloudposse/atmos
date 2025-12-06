@@ -430,8 +430,35 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	debugTimestampRegex := regexp.MustCompile(`expiration="[^"]+\s+[+-]\d{4}\s+[A-Z]{3,4}\s+m=[+-][\d.]+`)
 	result = debugTimestampRegex.ReplaceAllString(result, `expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000`)
 
-	// 11. Apply custom replacements if provided.
+	// 11. Normalize external absolute paths to avoid environment-specific paths in snapshots.
+	// Replace common absolute path prefixes with generic placeholders.
+	// This handles paths outside the repo (e.g., /Users/username/other-projects/).
+	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:\Users\, etc.).
+	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^/\s":]+|/home/[^/]+/[^/]+/[^/]+/[^/\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
+	result = externalPathRegex.ReplaceAllString(result, "/absolute/path/to/external")
+
+	// 12. Normalize "Last Updated" timestamps in auth whoami output.
+	// These appear as "Last Updated  2025-10-28 13:10:27 CDT" in table output.
+	// Replace with a fixed timestamp to avoid snapshot mismatches.
+	lastUpdatedRegex := regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
+	result = lastUpdatedRegex.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
+
+	// 13. Normalize credential expiration durations in auth list output.
+	// These appear as "● mock-identity (mock) [DEFAULT] 650202h14m" in tree output.
+	// The duration changes every minute, so normalize to "1h 0m" like other duration normalizations.
+	// Matches patterns like "650202h14m", "650194h", "1h30m", "45m", etc. at the end of identity lines.
+	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h(?:\d+m)?\b`)
+	result = expirationDurationRegex.ReplaceAllString(result, "$1 1h 0m")
+
+	// 14. Normalize credential_store values in error messages.
+	// The keyring backend varies by platform: "system-keyring" (Mac/Windows) vs "noop" (Linux CI).
+	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
+	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
+	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
+
+	// 15. Apply custom replacements if provided.
 	// These are test-specific patterns that don't need to be part of the global sanitization.
+	// IMPORTANT: This must run LAST so it can override any built-in sanitization results.
 	for pattern, replacement := range config.customReplacements {
 		customRegex, err := regexp.Compile(pattern)
 		if err != nil {
@@ -439,32 +466,6 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 		}
 		result = customRegex.ReplaceAllString(result, replacement)
 	}
-
-	// 12. Normalize external absolute paths to avoid environment-specific paths in snapshots.
-	// Replace common absolute path prefixes with generic placeholders.
-	// This handles paths outside the repo (e.g., /Users/username/other-projects/).
-	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:\Users\, etc.).
-	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^/\s":]+|/home/[^/]+/[^/]+/[^/]+/[^/\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
-	result = externalPathRegex.ReplaceAllString(result, "/absolute/path/to/external")
-
-	// 13. Normalize "Last Updated" timestamps in auth whoami output.
-	// These appear as "Last Updated  2025-10-28 13:10:27 CDT" in table output.
-	// Replace with a fixed timestamp to avoid snapshot mismatches.
-	lastUpdatedRegex := regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
-	result = lastUpdatedRegex.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
-
-	// 14. Normalize credential expiration durations in auth list output.
-	// These appear as "● mock-identity (mock) [DEFAULT] 650202h14m" in tree output.
-	// The duration changes every minute, so normalize to "1h 0m" like other duration normalizations.
-	// Matches patterns like "650202h14m", "650194h", "1h30m", "45m", etc. at the end of identity lines.
-	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h(?:\d+m)?\b`)
-	result = expirationDurationRegex.ReplaceAllString(result, "$1 1h 0m")
-
-	// 15. Normalize credential_store values in error messages.
-	// The keyring backend varies by platform: "system-keyring" (Mac/Windows) vs "noop" (Linux CI).
-	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
-	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
-	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
 
 	return result, nil
 }
