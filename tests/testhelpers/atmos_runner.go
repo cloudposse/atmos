@@ -225,7 +225,7 @@ func FindRepoRoot() (string, error) {
 		parent := filepath.Dir(dir)
 		if parent == dir {
 			// Reached the root of the filesystem.
-			return "", errUtils.ErrNoGitRepo
+			return "", errUtils.ErrNotInGitRepository
 		}
 		dir = parent
 	}

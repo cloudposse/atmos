@@ -67,6 +67,7 @@ type AtmosConfiguration struct {
 	StoresConfig                  store.StoresConfig `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
 	Vendor                        Vendor             `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool               `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
+	BasePathAbsolute              string             `yaml:"basePathAbsolute,omitempty" json:"basePathAbsolute,omitempty" mapstructure:"basePathAbsolute"`
 	StacksBaseAbsolutePath        string             `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
 	IncludeStackAbsolutePaths     []string           `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
 	ExcludeStackAbsolutePaths     []string           `yaml:"excludeStackAbsolutePaths,omitempty" json:"excludeStackAbsolutePaths,omitempty" mapstructure:"excludeStackAbsolutePaths"`
@@ -573,6 +574,7 @@ type ArgsAndFlagsInfo struct {
 	Affected                  bool
 	All                       bool
 	Identity                  string
+	NeedsPathResolution       bool // True if ComponentFromArg is a path that needs resolution.
 }
 
 // AuthContext holds active authentication credentials for multiple providers.
@@ -731,6 +733,7 @@ type ConfigAndStacksInfo struct {
 	All                       bool
 	Components                []string
 	Identity                  string
+	NeedsPathResolution       bool // True if ComponentFromArg is a path that needs resolution.
 }
 
 // GetComponentEnvSection returns the component's env section map.
