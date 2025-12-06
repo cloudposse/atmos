@@ -641,6 +641,7 @@ type ConfigAndStacksInfo struct {
 	StackFromArg                  string
 	Stack                         string
 	StackFile                     string
+	StackManifestName             string // Stack-level 'name' override from manifest (highest precedence).
 	ComponentType                 string
 	ComponentFromArg              string
 	Component                     string
