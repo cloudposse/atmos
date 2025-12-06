@@ -438,11 +438,29 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 }
 
 type Stacks struct {
-	BasePath      string   `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	IncludedPaths []string `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
-	ExcludedPaths []string `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
-	NamePattern   string   `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
-	NameTemplate  string   `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
+	BasePath      string        `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	IncludedPaths []string      `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
+	ExcludedPaths []string      `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
+	NamePattern   string        `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
+	NameTemplate  string        `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
+	Inherit       StacksInherit `yaml:"inherit,omitempty" json:"inherit,omitempty" mapstructure:"inherit"`
+}
+
+// StacksInherit controls inheritance behavior for stack processing.
+type StacksInherit struct {
+	// Metadata controls whether metadata fields are inherited from base components.
+	// When true (default), all metadata fields except 'inherits' are inherited.
+	// When false, metadata is per-component only (legacy behavior).
+	Metadata *bool `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+}
+
+// IsMetadataInheritanceEnabled returns whether metadata inheritance is enabled.
+// Defaults to true if not explicitly set.
+func (s *StacksInherit) IsMetadataInheritanceEnabled() bool {
+	if s.Metadata == nil {
+		return true // Default to true.
+	}
+	return *s.Metadata
 }
 
 type Workflows struct {
@@ -822,6 +840,7 @@ type BaseComponentConfig struct {
 	BaseComponentSettings                  AtmosSectionMapType
 	BaseComponentEnv                       AtmosSectionMapType
 	BaseComponentAuth                      AtmosSectionMapType
+	BaseComponentMetadata                  AtmosSectionMapType
 	BaseComponentProviders                 AtmosSectionMapType
 	BaseComponentHooks                     AtmosSectionMapType
 	FinalBaseComponentName                 string

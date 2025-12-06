@@ -503,6 +503,10 @@
                 "real"
               ]
             },
+            "name": {
+              "type": "string",
+              "description": "Logical component identity used for workspace key prefix auto-generation. Inheritable from base components."
+            },
             "enabled": {
               "type": "boolean",
               "description": "Flag to enable or disable the component"
@@ -543,7 +547,7 @@
                 },
                 {
                   "type": "object",
-                  "description": "Custom configuration per component, not inherited by derived components",
+                  "description": "Custom configuration per component. Inherited when stacks.inherit.metadata is enabled (default).",
                   "additionalProperties": true,
                   "title": "custom"
                 }
