@@ -335,6 +335,7 @@ func TestService_Stop(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			service := NewTestableService(nil, tt.runtime, nil)
+			service.InitializeWithConfig(&schema.AtmosConfiguration{})
 
 			err := service.Stop(context.Background(), tt.devName, StopOptions{Timeout: tt.timeout})
 
@@ -375,6 +376,7 @@ func TestService_Attach(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			service := NewTestableService(nil, tt.runtime, nil)
+			service.InitializeWithConfig(&schema.AtmosConfiguration{})
 
 			err := service.Attach(context.Background(), tt.devName, tt.opts)
 
@@ -467,6 +469,7 @@ func TestService_Exec(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			service := NewTestableService(nil, tt.runtime, nil)
+			service.InitializeWithConfig(&schema.AtmosConfiguration{})
 
 			err := service.Exec(context.Background(), tt.devName, tt.cmd, tt.opts)
 
@@ -513,6 +516,7 @@ func TestService_Remove(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			service := NewTestableService(nil, tt.runtime, nil)
+			service.InitializeWithConfig(&schema.AtmosConfiguration{})
 
 			err := service.Remove(context.Background(), tt.devName, tt.opts)
 
@@ -559,6 +563,7 @@ func TestService_Rebuild(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			service := NewTestableService(nil, tt.runtime, nil)
+			service.InitializeWithConfig(&schema.AtmosConfiguration{})
 
 			err := service.Rebuild(context.Background(), tt.devName, tt.opts)
 
@@ -605,6 +610,8 @@ func TestService_Logs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			service := NewTestableService(nil, tt.runtime, nil)
+			// Initialize the service with a mock config.
+			service.InitializeWithConfig(&schema.AtmosConfiguration{})
 
 			err := service.Logs(context.Background(), tt.devName, tt.opts)
 
@@ -615,4 +622,100 @@ func TestService_Logs(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestService_NotInitialized(t *testing.T) {
+	// Test that service methods fail gracefully when not initialized.
+	t.Run("Attach fails when not initialized", func(t *testing.T) {
+		service := NewTestableService(nil, &mockRuntimeProvider{}, nil)
+		// Don't call Initialize or InitializeWithConfig.
+
+		err := service.Attach(context.Background(), "test", AttachOptions{})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAtmosConfigIsNil)
+	})
+
+	t.Run("Start fails when not initialized", func(t *testing.T) {
+		service := NewTestableService(&mockConfigProvider{}, &mockRuntimeProvider{}, nil)
+
+		err := service.Start(context.Background(), "test", StartOptions{})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAtmosConfigIsNil)
+	})
+
+	t.Run("Stop fails when not initialized", func(t *testing.T) {
+		service := NewTestableService(nil, &mockRuntimeProvider{}, nil)
+
+		err := service.Stop(context.Background(), "test", StopOptions{})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAtmosConfigIsNil)
+	})
+
+	t.Run("Exec fails when not initialized", func(t *testing.T) {
+		service := NewTestableService(nil, &mockRuntimeProvider{}, nil)
+
+		err := service.Exec(context.Background(), "test", []string{"echo"}, ExecOptions{})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAtmosConfigIsNil)
+	})
+
+	t.Run("Logs fails when not initialized", func(t *testing.T) {
+		service := NewTestableService(nil, &mockRuntimeProvider{}, nil)
+
+		err := service.Logs(context.Background(), "test", LogsOptions{})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAtmosConfigIsNil)
+	})
+
+	t.Run("Remove fails when not initialized", func(t *testing.T) {
+		service := NewTestableService(nil, &mockRuntimeProvider{}, nil)
+
+		err := service.Remove(context.Background(), "test", RemoveOptions{})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAtmosConfigIsNil)
+	})
+
+	t.Run("Rebuild fails when not initialized", func(t *testing.T) {
+		service := NewTestableService(nil, &mockRuntimeProvider{}, nil)
+
+		err := service.Rebuild(context.Background(), "test", RebuildOptions{})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAtmosConfigIsNil)
+	})
+
+	t.Run("List works without initialization", func(t *testing.T) {
+		// List doesn't require atmosConfig as it queries runtime directly.
+		service := NewTestableService(nil, &mockRuntimeProvider{listResult: []ContainerInfo{}}, nil)
+
+		containers, err := service.List(context.Background())
+
+		require.NoError(t, err)
+		assert.Empty(t, containers)
+	})
+}
+
+func TestService_LogsWithCustomOutput(t *testing.T) {
+	// Test that logs can be streamed to a custom writer.
+	t.Run("logs stream to custom writer", func(t *testing.T) {
+		runtime := &mockRuntimeProvider{}
+
+		// Create a buffer to capture output.
+		var buf strings.Builder
+		service := NewTestableServiceWithLogOutput(nil, runtime, nil, &buf)
+		service.InitializeWithConfig(&schema.AtmosConfiguration{})
+
+		// The mock returns an empty reader, so we just verify
+		// the method completes without error.
+		err := service.Logs(context.Background(), "geodesic", LogsOptions{})
+
+		require.NoError(t, err)
+		// The empty reader produces no output, but the method should complete.
+	})
 }

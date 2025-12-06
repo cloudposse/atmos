@@ -37,6 +37,14 @@ need to start fresh.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.rebuild.RunE")()
 
+		// Guard against nil atmosConfigPtr to prevent panics in tests or programmatic usage.
+		if atmosConfigPtr == nil {
+			return errUtils.Build(errUtils.ErrAtmosConfigIsNil).
+				WithExplanation("Atmos configuration was not initialized for the devcontainer command").
+				WithHint("Ensure cmd.Execute() has been called before invoking devcontainer subcommands").
+				Err()
+		}
+
 		// Parse flags using new options pattern.
 		v := viper.GetViper()
 		if err := rebuildParser.BindFlagsToViper(cmd, v); err != nil {

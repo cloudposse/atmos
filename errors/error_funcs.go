@@ -182,7 +182,7 @@ func printFormattedError(err error, title string, suggestion string) {
 	}
 }
 
-// rendered output are logged.
+// printMarkdownError renders an error using the Markdown renderer with fallback to plain text.
 func printMarkdownError(err error, title string, suggestion string) {
 	// If markdown renderer is not initialized, fall back to plain error output.
 	if render == nil {

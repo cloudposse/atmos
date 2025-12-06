@@ -455,16 +455,16 @@ func TestErrorBuilder_WithCause(t *testing.T) {
 		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
 	})
 
-	t.Run("works with stdlib errors.Is in tests", func(t *testing.T) {
-		// This test verifies WithCause works with stdlib errors package.
-		// This is critical because our test files use stdlib errors, not cockroachdb.
+	t.Run("works with errors.Is checks", func(t *testing.T) {
+		// This test verifies WithCause works correctly with errors.Is checks.
+		// Both sentinel and cause should be discoverable in the error chain.
 		causeErr := errors.New("connection refused")
 
 		err := Build(ErrContainerRuntimeOperation).
 			WithCause(causeErr).
 			Err()
 
-		// Using stdlib errors.Is, not cockroachdb.
+		// Verify both sentinel and cause are in the chain.
 		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
 		assert.True(t, errors.Is(err, causeErr))
 	})

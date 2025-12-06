@@ -64,8 +64,10 @@ from the command to execute.`,
 // parseExecOptions parses command flags into ExecOptions.
 //
 // ParseExecOptions constructs an ExecOptions populated from viper configuration values.
-// It reads the "instance", "interactive", and "pty" keys from v and returns the populated ExecOptions; the args parameter is unused but accepted for consistency with other parse functions.
-func parseExecOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*ExecOptions, error) {
+// It reads the "instance", "interactive", and "pty" keys from v and returns the populated
+// ExecOptions. The cmd and args parameters are unused but accepted for consistency with
+// other parse functions.
+func parseExecOptions(_ *cobra.Command, v *viper.Viper, _ []string) (*ExecOptions, error) {
 	return &ExecOptions{
 		Instance:    v.GetString("instance"),
 		Interactive: v.GetBool("interactive"),

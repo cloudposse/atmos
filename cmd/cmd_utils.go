@@ -146,8 +146,27 @@ func processCustomCommands(
 	return nil
 }
 
-// FilterChdirArgs removes --chdir and -C flags from args.
-// FilterChdirArgs returns a copy of args with any chdir flags and their values removed.
+// filterChdirEnv removes ATMOS_CHDIR from environ and optionally adds an empty
+// ATMOS_CHDIR= entry to override any parent value when spawning child processes.
+// This prevents child processes from re-applying the parent's chdir directive.
+func filterChdirEnv(environ []string) []string {
+	filtered := make([]string, 0, len(environ))
+	foundAtmosChdir := false
+	for _, env := range environ {
+		if strings.HasPrefix(env, "ATMOS_CHDIR=") {
+			foundAtmosChdir = true
+			continue
+		}
+		filtered = append(filtered, env)
+	}
+	// Add empty ATMOS_CHDIR to override parent's value in merged environment.
+	if foundAtmosChdir {
+		filtered = append(filtered, "ATMOS_CHDIR=")
+	}
+	return filtered
+}
+
+// filterChdirArgs returns a copy of args with any chdir flags and their values removed.
 // It removes `--chdir`, `--chdir=<value>`, `-C`, `-C=<value>`, and concatenated `-C<value>` forms, preserving the order of all other arguments.
 func filterChdirArgs(args []string) []string {
 	filtered := make([]string, 0, len(args))
@@ -225,21 +244,8 @@ func processCommandAliases(
 					filteredArgs := filterChdirArgs(args)
 
 					// Filter out ATMOS_CHDIR from environment variables to prevent the child process
-					// from re-applying the parent's chdir directive. Since ExecuteShell merges with
-					// os.Environ(), we must explicitly set ATMOS_CHDIR to empty string to override it.
-					filteredEnv := make([]string, 0, len(os.Environ()))
-					foundAtmosChdir := false
-					for _, env := range os.Environ() {
-						if strings.HasPrefix(env, "ATMOS_CHDIR=") {
-							foundAtmosChdir = true
-							continue
-						}
-						filteredEnv = append(filteredEnv, env)
-					}
-					// Add empty ATMOS_CHDIR to override parent's value in merged environment.
-					if foundAtmosChdir {
-						filteredEnv = append(filteredEnv, "ATMOS_CHDIR=")
-					}
+					// from re-applying the parent's chdir directive.
+					filteredEnv := filterChdirEnv(os.Environ())
 
 					commandToRun := fmt.Sprintf("%s %s %s", execPath, aliasCmd, strings.Join(filteredArgs, " "))
 					err = e.ExecuteShell(commandToRun, commandToRun, currentDirPath, filteredEnv, false)

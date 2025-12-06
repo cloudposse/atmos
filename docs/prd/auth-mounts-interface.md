@@ -402,7 +402,7 @@ func CleanupCredentials(whoami *types.WhoamiInfo) error {
 2. Implement `Paths()` for AWS SSO provider
 3. Implement `Paths()` for AWS User provider
 4. Update `AuthManager.Authenticate()` to collect paths with deduplication
-5. Write tests for AWS path discovery
+5. Write tests for AWS path discovery.
 
 ### Phase 3: Other Providers
 1. Implement `Paths()` for Azure provider (when available)

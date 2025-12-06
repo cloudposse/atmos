@@ -79,25 +79,6 @@ func TestDevcontainerAliases(t *testing.T) {
 func TestAliasChdirProcessing(t *testing.T) {
 	_ = NewTestKit(t)
 
-	// Test that --chdir works with aliases by loading config from the target directory.
-	t.Run("chdir loads config from target directory before processing aliases", func(t *testing.T) {
-		_ = NewTestKit(t)
-
-		// This test verifies that when using --chdir, atmos loads the config from the
-		// target directory (not the current directory) before processing aliases.
-		//
-		// The fix ensures processEarlyChdirFlag() runs before cfg.InitCliConfig() in Execute(),
-		// so that atmos.yaml is loaded from the correct directory and aliases are registered
-		// from the correct config.
-		//
-		// We can't easily test the full flow because Execute() changes global state,
-		// but we can verify that the filterChdirArgs function works correctly (tested below)
-		// and manually verify with: atmos shell --chdir examples/devcontainer --help
-		//
-		// The manual verification should show the devcontainer shell help, not an error
-		// about unknown command.
-	})
-
 	t.Run("filterChdirArgs removes chdir flags", func(t *testing.T) {
 		tests := []struct {
 			name     string
@@ -154,16 +135,17 @@ func TestAliasChdirProcessing(t *testing.T) {
 		}
 	})
 
-	t.Run("filters ATMOS_CHDIR from environment", func(t *testing.T) {
-		// This test verifies that when spawning aliased commands, we properly filter
-		// out ATMOS_CHDIR from the environment to prevent the child process from
-		// re-applying the parent's chdir directive.
+	t.Run("filterChdirEnv removes ATMOS_CHDIR from environment", func(t *testing.T) {
+		// This test verifies that the production filterChdirEnv function properly
+		// filters out ATMOS_CHDIR from the environment to prevent child processes
+		// from re-applying the parent's chdir directive.
 
 		tests := []struct {
 			name               string
 			environ            []string
 			expectedContains   string
 			expectedNotContain string
+			expectEmptyChdir   bool // true if we expect ATMOS_CHDIR= to be added
 		}{
 			{
 				name: "adds empty ATMOS_CHDIR when present",
@@ -174,6 +156,7 @@ func TestAliasChdirProcessing(t *testing.T) {
 				},
 				expectedContains:   "ATMOS_CHDIR=",
 				expectedNotContain: "ATMOS_CHDIR=/some/path",
+				expectEmptyChdir:   true,
 			},
 			{
 				name: "no ATMOS_CHDIR when not present",
@@ -183,6 +166,7 @@ func TestAliasChdirProcessing(t *testing.T) {
 				},
 				expectedContains:   "PATH=/usr/bin",
 				expectedNotContain: "ATMOS_CHDIR=",
+				expectEmptyChdir:   false,
 			},
 			{
 				name: "preserves other environment variables",
@@ -194,25 +178,14 @@ func TestAliasChdirProcessing(t *testing.T) {
 				},
 				expectedContains:   "ATMOS_OTHER_VAR=value",
 				expectedNotContain: "ATMOS_CHDIR=/some/path",
+				expectEmptyChdir:   true,
 			},
 		}
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				// Simulate the filtering logic from cmd_utils.go.
-				filteredEnv := make([]string, 0, len(tt.environ))
-				foundAtmosChdir := false
-				for _, env := range tt.environ {
-					if strings.HasPrefix(env, "ATMOS_CHDIR=") {
-						foundAtmosChdir = true
-						continue
-					}
-					filteredEnv = append(filteredEnv, env)
-				}
-				// Add empty ATMOS_CHDIR to override parent's value in merged environment.
-				if foundAtmosChdir {
-					filteredEnv = append(filteredEnv, "ATMOS_CHDIR=")
-				}
+				// Call the production function.
+				filteredEnv := filterChdirEnv(tt.environ)
 
 				// Verify expectations.
 				envStr := strings.Join(filteredEnv, "\n")
@@ -226,8 +199,8 @@ func TestAliasChdirProcessing(t *testing.T) {
 				}
 
 				// Additional verification for ATMOS_CHDIR handling.
-				if foundAtmosChdir {
-					// Should have exactly one ATMOS_CHDIR= entry.
+				if tt.expectEmptyChdir {
+					// Should have exactly one ATMOS_CHDIR= entry with empty value.
 					count := 0
 					for _, env := range filteredEnv {
 						if strings.HasPrefix(env, "ATMOS_CHDIR=") {

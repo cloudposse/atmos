@@ -54,9 +54,9 @@ Experimental: Use --pty for PTY mode with masking support (not available on Wind
 //
 // ParseAttachOptions parses Viper-backed flags into an AttachOptions value.
 // The returned AttachOptions has Instance sourced from the "instance" key and
-// UsePTY sourced from the "pty" key. The args slice is unused and retained
-// for API consistency with other parsers.
-func parseAttachOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*AttachOptions, error) {
+// UsePTY sourced from the "pty" key. The cmd and args parameters are unused
+// and retained for API consistency with other parsers.
+func parseAttachOptions(_ *cobra.Command, v *viper.Viper, _ []string) (*AttachOptions, error) {
 	return &AttachOptions{
 		Instance: v.GetString("instance"),
 		UsePTY:   v.GetBool("pty"),

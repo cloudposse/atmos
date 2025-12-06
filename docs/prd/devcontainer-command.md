@@ -340,10 +340,10 @@ When importing `devcontainer.json` files, **unsupported fields are silently igno
 ```
 
 **Debug log output:**
-```
-DEBUG Ignoring unsupported devcontainer field field=features component=vpc stack=ue2-dev
-DEBUG Ignoring unsupported devcontainer field field=postCreateCommand component=vpc stack=ue2-dev
-DEBUG Ignoring unsupported devcontainer field field=customizations component=vpc stack=ue2-dev
+```text
+DEBUG Ignoring unsupported devcontainer field field=features devcontainer=geodesic
+DEBUG Ignoring unsupported devcontainer field field=postCreateCommand devcontainer=geodesic
+DEBUG Ignoring unsupported devcontainer field field=customizations devcontainer=geodesic
 ```
 
 This allows **seamless compatibility with existing VS Code devcontainer.json files** while only using the subset of features that Atmos supports.
@@ -384,33 +384,51 @@ func LoadDevcontainerConfig(
     atmosConfig *schema.AtmosConfiguration,
     name string,
 ) (*DevcontainerConfig, *DevcontainerSettings, error) {
-    // 1. Get devcontainer section from atmos.yaml
-    // This is already processed by YAML parser with !include directives
-    if atmosConfig.Components.Devcontainer == nil {
-        return nil, nil, fmt.Errorf("%w: no devcontainers configured in atmos.yaml", errUtils.ErrDevcontainerNotFound)
+    // 1. Get devcontainer section from atmos.yaml (top-level, not under components)
+    // This is already processed by YAML parser with !include directives.
+    // The schema defines: Devcontainer map[string]any at the top level.
+    if atmosConfig.Devcontainer == nil {
+        return nil, nil, errUtils.Build(errUtils.ErrDevcontainerNotFound).
+            WithExplanation("No devcontainers configured in atmos.yaml").
+            WithHint("Add devcontainer configuration under the top-level 'devcontainer:' section").
+            Err()
     }
 
-    // 2. Get specific devcontainer by name
-    devcontainerData, ok := atmosConfig.Components.Devcontainer[name].(map[string]interface{})
+    // 2. Get specific devcontainer by name.
+    devcontainerData, ok := atmosConfig.Devcontainer[name].(map[string]interface{})
     if !ok {
-        return nil, nil, fmt.Errorf("%w: devcontainer '%s' not found", errUtils.ErrDevcontainerNotFound, name)
+        return nil, nil, errUtils.Build(errUtils.ErrDevcontainerNotFound).
+            WithExplanation(fmt.Sprintf("Devcontainer '%s' not found", name)).
+            WithHint("Check that the devcontainer name exists in atmos.yaml under 'devcontainer:'").
+            Err()
     }
 
-    // 3. Filter unsupported fields and convert to typed config
+    // 3. Extract settings (runtime configuration) from the "settings" key.
+    settings := &DevcontainerSettings{}
+    if settingsData, ok := devcontainerData["settings"].(map[string]interface{}); ok {
+        if runtime, ok := settingsData["runtime"].(string); ok {
+            settings.Runtime = runtime
+        }
+    }
+
+    // 4. Extract spec (devcontainer specification) from the "spec" key.
+    specData, ok := devcontainerData["spec"].(map[string]interface{})
+    if !ok {
+        return nil, nil, errUtils.Build(errUtils.ErrDevcontainerInvalidConfig).
+            WithExplanation(fmt.Sprintf("Devcontainer '%s' is missing 'spec' section", name)).
+            WithHint("Add a 'spec:' section with devcontainer specification fields").
+            Err()
+    }
+
+    // 5. Filter unsupported fields and convert to typed config.
     config := &DevcontainerConfig{}
-    if err := filterAndUnmarshal(devcontainerData, config, name); err != nil {
+    if err := filterAndUnmarshal(specData, config, name); err != nil {
         return nil, nil, err
     }
 
-    // 4. Validate required fields
+    // 6. Validate required fields.
     if err := validateConfig(config); err != nil {
         return nil, nil, err
-    }
-
-    // 5. Extract settings (runtime configuration)
-    settings := &DevcontainerSettings{}
-    if runtime, ok := devcontainerData["runtime"].(string); ok {
-        settings.Runtime = runtime
     }
 
     return config, settings, nil
@@ -446,26 +464,33 @@ func filterAndUnmarshal(
 
 ### Container Naming Convention
 
-Containers are named using the pattern: `atmos-devcontainer-{name}-{instance}`
+Containers are named using the dot-separated pattern: `atmos-devcontainer.{name}.{instance}`
 
 - `name`: Devcontainer name from configuration (e.g., `default`, `terraform`, `python`)
 - `instance`: Optional instance identifier (defaults to `default` if not specified)
 
+> **Note:** The dot separator was chosen to avoid parsing ambiguity when names or instances contain hyphens.
+> See [Devcontainer Naming Convention PRD](devcontainer-naming-convention.md) for the full rationale and migration strategy.
+
 **Examples:**
 ```bash
 # Default instance
-atmos devcontainer create default
-# Creates: atmos-devcontainer-default-default
+atmos devcontainer shell geodesic
+# Creates: atmos-devcontainer.geodesic.default
 
 # Named instance
-atmos devcontainer create default --instance prod
-# Creates: atmos-devcontainer-default-prod
+atmos devcontainer shell geodesic --instance prod
+# Creates: atmos-devcontainer.geodesic.prod
 
 # Same devcontainer, different instances
-atmos devcontainer create terraform --instance alice
-atmos devcontainer create terraform --instance bob
-# Creates: atmos-devcontainer-terraform-alice
-#          atmos-devcontainer-terraform-bob
+atmos devcontainer shell terraform-dev --instance alice
+atmos devcontainer shell terraform-dev --instance bob
+# Creates: atmos-devcontainer.terraform-dev.alice
+#          atmos-devcontainer.terraform-dev.bob
+
+# Hyphenated names and instances work correctly
+atmos devcontainer shell backend-api --instance test-1
+# Creates: atmos-devcontainer.backend-api.test-1
 ```
 
 **Why instances?** Multiple developers can run the same devcontainer configuration with different instance names, or a single developer can run multiple instances for different purposes (e.g., `dev`, `test`, `debug`).
@@ -474,7 +499,7 @@ atmos devcontainer create terraform --instance bob
 
 All containers will be labeled for easy identification:
 
-```
+```text
 com.atmos.type=devcontainer
 com.atmos.devcontainer.name=default
 com.atmos.devcontainer.instance=default
@@ -733,7 +758,7 @@ All devcontainer operations will use **Charmbracelet Bubble Tea** for interactiv
 Each devcontainer operation displays progress with checkmarks:
 
 #### Container Creation Flow
-```
+```text
 ⠋ Building image vpc-dev                           [=====>    ] 2/4
 ✓ Pulled base image hashicorp/terraform:1.6
 ✓ Built image vpc-dev (sha256:abc123...)
@@ -741,7 +766,7 @@ Each devcontainer operation displays progress with checkmarks:
 ```
 
 #### Container Start Flow
-```
+```text
 ⠋ Starting container atmos-devcontainer-vpc-ue2-dev-a1b2c3d4
 ✓ Container started
 ✓ Port 8080 bound to localhost:8080
@@ -750,7 +775,7 @@ Each devcontainer operation displays progress with checkmarks:
 ```
 
 #### Volume Mount Flow
-```
+```text
 ⠋ Mounting volumes                                 [===>      ] 1/3
 ✓ Mounted /Users/erik/workspace/vpc → /workspace
 ✓ Mounted /Users/erik/.aws → /root/.aws (readonly)
@@ -761,7 +786,7 @@ Each devcontainer operation displays progress with checkmarks:
 
 The `atmos devcontainer list` command follows the look and feel of other Atmos list commands:
 
-```
+```text
 NAME           INSTANCE    STATUS     PORTS                    CREATED        IMAGE
 default        default     Running    8080                     2 hours ago    cloudposse/geodesic:latest
 default        prod        Running    8080                     1 day ago      cloudposse/geodesic:latest
@@ -774,12 +799,12 @@ python         default     Running    8000                     1 hour ago     py
 
 When no TTY is detected, operations use structured logging instead:
 
-```
-INFO  Building image component=vpc-dev
+```text
+INFO  Building image devcontainer=geodesic
 INFO  ✓ image=hashicorp/terraform:1.6 status=pulled
-INFO  ✓ image=vpc-dev status=built sha=abc123...
-INFO  Creating container name=atmos-devcontainer-vpc-ue2-dev-a1b2c3d4
-INFO  ✓ container=atmos-devcontainer-vpc-ue2-dev-a1b2c3d4 status=created
+INFO  ✓ image=geodesic status=built sha=abc123...
+INFO  Creating container name=atmos-devcontainer-geodesic-default
+INFO  ✓ container=atmos-devcontainer-geodesic-default status=created
 ```
 
 ### TUI Model Architecture
@@ -1043,7 +1068,7 @@ func TestDevcontainerCreate(t *testing.T) {
 
 ## File Structure
 
-```
+```text
 pkg/devcontainer/
 ├── registry.go               # Component registry interface
 ├── registry_impl.go          # Registry implementation
@@ -1052,7 +1077,7 @@ pkg/devcontainer/
 ├── podman_runtime.go         # Podman implementation
 ├── runtime_detector.go       # Auto-detection logic
 ├── config.go                 # Configuration types
-├── config_loader.go          # Load config from component
+├── config_loader.go          # Load config from atmos.yaml
 ├── naming.go                 # Container naming conventions
 ├── mounts.go                 # Volume mount handling
 ├── ports.go                  # Port forwarding handling
@@ -1120,16 +1145,21 @@ website/docs/cli/commands/devcontainer/
 
 ## Complete Example: Importing VS Code devcontainer.json
 
-This example shows how to use an existing VS Code `devcontainer.json` file with Atmos:
+This example shows how to use an existing VS Code `devcontainer.json` file with Atmos using the **top-level `devcontainer:` configuration** in `atmos.yaml`:
 
 **Project structure:**
-```
-components/terraform/vpc/
+```text
+.
 ├── .devcontainer/
 │   └── devcontainer.json          # VS Code devcontainer config
-├── component.yaml                 # Atmos component metadata
-├── main.tf
-└── variables.tf
+├── atmos.yaml                     # Atmos configuration (top-level devcontainer section)
+├── components/
+│   └── terraform/
+│       └── vpc/
+│           ├── main.tf
+│           └── variables.tf
+└── stacks/
+    └── ...
 ```
 
 **Existing devcontainer.json (VS Code):**
@@ -1159,25 +1189,31 @@ components/terraform/vpc/
 }
 ```
 
-**Atmos component.yaml (imports devcontainer.json):**
+**atmos.yaml (imports devcontainer.json at top-level):**
 ```yaml
-# components/terraform/vpc/component.yaml
-metadata:
-  component: vpc
-  type: terraform
+# atmos.yaml
+base_path: "."
 
-  # Import VS Code devcontainer.json with !include
-  devcontainer: !include .devcontainer/devcontainer.json
+components:
+  terraform:
+    base_path: "components/terraform"
 
-vars:
-  enabled: true
-  name: vpc
+stacks:
+  base_path: "stacks"
+
+# Top-level devcontainer configuration (NOT under components)
+devcontainer:
+  terraform-dev:
+    settings:
+      runtime: docker
+    # Import VS Code devcontainer.json with !include
+    spec: !include .devcontainer/devcontainer.json
 ```
 
-**What happens when you run `atmos devcontainer create vpc -s ue2-dev`:**
+**What happens when you run `atmos devcontainer shell terraform-dev`:**
 
-1. ✅ Atmos loads `component.yaml`
-2. ✅ `!include` directive loads `.devcontainer/devcontainer.json`
+1. ✅ Atmos loads `atmos.yaml` and finds `devcontainer.terraform-dev`
+2. ✅ `!include` directive loads `.devcontainer/devcontainer.json` into the `spec` section
 3. ✅ Supported fields are used:
    - `name: "Terraform VPC Dev"`
    - `image: "hashicorp/terraform:1.6"`

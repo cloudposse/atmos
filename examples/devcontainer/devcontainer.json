@@ -11,7 +11,7 @@
     "type=bind,source=${localEnv:HOME}/.terraform.d,target=/root/.terraform.d"
   ],
 
-  "forwardPorts": [],
+  "forwardPorts": [8080, 3000],
 
   "portsAttributes": {
     "8080": {

@@ -52,8 +52,8 @@ or --tail to limit the number of lines shown.`,
 // parseLogsOptions parses command flags into LogsOptions.
 //
 // ParseLogsOptions creates a LogsOptions populated from the command's Viper-backed flags.
-// The args slice is ignored and retained for API consistency.
-func parseLogsOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*LogsOptions, error) {
+// The cmd and args parameters are unused but retained for API consistency with other parsers.
+func parseLogsOptions(_ *cobra.Command, v *viper.Viper, _ []string) (*LogsOptions, error) {
 	return &LogsOptions{
 		Instance: v.GetString("instance"),
 		Follow:   v.GetBool("follow"),
