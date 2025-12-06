@@ -1,0 +1,63 @@
+---
+title: "atmos::repo_root"
+sidebar_position: 3
+sidebar_label: "atmos::repo_root"
+sidebar_class_name: command
+description: Get the repository root path in HCL stack configurations
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos::repo_root` function returns the absolute path to the root of the Git repository containing the Atmos project.
+</Intro>
+
+## Usage
+
+```hcl
+// Get repository root path
+root_path = atmos::repo_root("")
+```
+
+## Arguments
+
+<dl>
+    <dt>`subpath`</dt>
+    <dd>(Optional) Subpath to append to the repository root. Pass empty string `""` for the root path itself.</dd>
+</dl>
+
+## Examples
+
+```hcl
+stack {
+  components {
+    terraform {
+      component "myapp" {
+        vars {
+          // Get repository root
+          repo_root = atmos::repo_root("")
+
+          // Get path to scripts directory
+          scripts_dir = atmos::repo_root("scripts")
+
+          // Get path to config file
+          config_path = atmos::repo_root("config/settings.yaml")
+        }
+      }
+    }
+  }
+}
+```
+
+## Use Cases
+
+This function is useful when you need to reference files or directories relative to the repository root, regardless of where Atmos is executed from.
+
+Common use cases include:
+- Referencing shared configuration files
+- Pointing to scripts or templates in the repository
+- Building absolute paths for Terraform modules
+
+## See Also
+
+- [!repo-root (YAML)](/functions/yaml/repo-root) - YAML equivalent

@@ -6,13 +6,26 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/hashicorp/hcl"
+	hclv1 "github.com/hashicorp/hcl"
+	"github.com/hashicorp/hcl/v2"
 	"github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/hashicorp/hcl/v2/hclsyntax"
 	"github.com/zclconf/go-cty/cty"
 	"go.yaml.in/yaml/v3"
+
+	"github.com/cloudposse/atmos/pkg/function"
 )
 
 var ErrFailedToProcessHclFile = errors.New("failed to process HCL file")
+
+const errFmtProcessHCLFile = "%w, file: %s, error: %s"
+
+// hclEvalContext returns an HCL evaluation context with Atmos functions available.
+// Functions like env(), exec(), template(), and repo_root() can be used in HCL expressions.
+func hclEvalContext() *hcl.EvalContext {
+	registry := function.DefaultRegistry(nil)
+	return function.HCLEvalContextWithFunctions(registry, nil)
+}
 
 // IsYAML checks if data is in YAML format.
 func IsYAML(data string) bool {
@@ -40,7 +53,7 @@ func IsHCL(data string) bool {
 	}
 
 	var hclData any
-	return hcl.Unmarshal([]byte(data), &hclData) == nil
+	return hclv1.Unmarshal([]byte(data), &hclData) == nil
 }
 
 // IsJSON checks if data is in JSON format.
@@ -121,22 +134,116 @@ func parseHCL(data []byte, filename string) (any, error) {
 	parser := hclparse.NewParser()
 	file, diags := parser.ParseHCL(data, filename)
 	if diags != nil && diags.HasErrors() {
-		return nil, fmt.Errorf("%w, file: %s, error: %s", ErrFailedToProcessHclFile, filename, diags.Error())
+		return nil, fmt.Errorf(errFmtProcessHCLFile, ErrFailedToProcessHclFile, filename, diags.Error())
 	}
 	if file == nil {
 		return nil, fmt.Errorf("%w, file: %s, file parsing returned nil", ErrFailedToProcessHclFile, filename)
 	}
 
-	attributes, diags := file.Body.JustAttributes()
-	if diags != nil && diags.HasErrors() {
-		return nil, fmt.Errorf("%w, file: %s, error: %s", ErrFailedToProcessHclFile, filename, diags.Error())
+	// Parse both attributes and blocks from the HCL body.
+	return parseHCLBody(file.Body, filename)
+}
+
+// parseHCLBody parses an HCL body, handling both attributes and blocks.
+// This supports both attribute syntax (key = value) and block syntax (block { ... }).
+func parseHCLBody(body hcl.Body, filename string) (map[string]any, error) {
+	result := make(map[string]any)
+
+	// First, try to get just attributes (for simple HCL files or attribute-only sections).
+	attrs, attrDiags := body.JustAttributes()
+
+	// If JustAttributes fails (due to blocks present), use PartialContent approach.
+	if attrDiags != nil && attrDiags.HasErrors() {
+		// There are blocks present - we need to handle them differently.
+		// Use a dynamic approach to discover block types.
+		return parseHCLBodyWithBlocks(body, filename)
 	}
 
+	// Process attributes only (no blocks in this body).
+	evalCtx := hclEvalContext()
+	for name, attr := range attrs {
+		ctyValue, valDiags := attr.Expr.Value(evalCtx)
+		if valDiags != nil && valDiags.HasErrors() {
+			return nil, fmt.Errorf(errFmtProcessHCLFile, ErrFailedToProcessHclFile, filename, valDiags.Error())
+		}
+		result[name] = ctyToGo(ctyValue)
+	}
+	return result, nil
+}
+
+// parseHCLBodyWithBlocks handles HCL bodies that contain blocks using hclsyntax direct access.
+//
+//nolint:cyclop,funlen,gocognit,nestif,nolintlint,revive
+func parseHCLBodyWithBlocks(body hcl.Body, filename string) (map[string]any, error) {
 	result := make(map[string]any)
-	for name, attr := range attributes {
-		ctyValue, diags := attr.Expr.Value(nil)
-		if diags != nil && diags.HasErrors() {
-			return nil, fmt.Errorf("%w, file: %s, error: %s", ErrFailedToProcessHclFile, filename, diags.Error())
+	evalCtx := hclEvalContext()
+
+	// Type assert to get the underlying hclsyntax.Body which gives us direct access.
+	// This is needed because the hcl.Body interface doesn't provide a way to iterate
+	// over unknown block types.
+	if syntaxBody, ok := body.(*hclsyntax.Body); ok {
+		// Process attributes.
+		for name, attr := range syntaxBody.Attributes {
+			ctyValue, valDiags := attr.Expr.Value(evalCtx)
+			if valDiags != nil && valDiags.HasErrors() {
+				return nil, fmt.Errorf("%w, file: %s, attribute %s error: %s", ErrFailedToProcessHclFile, filename, name, valDiags.Error())
+			}
+			result[name] = ctyToGo(ctyValue)
+		}
+
+		// Process blocks recursively.
+		for _, block := range syntaxBody.Blocks {
+			blockContent, err := parseHCLBodyWithBlocks(block.Body, filename)
+			if err != nil {
+				return nil, err
+			}
+
+			// For blocks without labels, just use the block type as the key.
+			if len(block.Labels) == 0 {
+				// No labels - merge directly or create nested map.
+				if existing, ok := result[block.Type]; ok {
+					// If the key already exists, merge the content.
+					if existingMap, ok := existing.(map[string]any); ok {
+						for k, v := range blockContent {
+							existingMap[k] = v
+						}
+					}
+				} else {
+					result[block.Type] = blockContent
+				}
+			} else {
+				// Has labels - this is less common in Atmos stack config but handle it.
+				// e.g., `resource "aws_instance" "example" { ... }`
+				current := result
+				if _, ok := current[block.Type]; !ok {
+					current[block.Type] = make(map[string]any)
+				}
+				typeMap := current[block.Type].(map[string]any)
+				for i, label := range block.Labels {
+					if i == len(block.Labels)-1 {
+						typeMap[label] = blockContent
+					} else {
+						if _, ok := typeMap[label]; !ok {
+							typeMap[label] = make(map[string]any)
+						}
+						typeMap = typeMap[label].(map[string]any)
+					}
+				}
+			}
+		}
+
+		return result, nil
+	}
+
+	// Fallback: try JustAttributes if type assertion fails.
+	attrs, diags := body.JustAttributes()
+	if diags != nil && diags.HasErrors() {
+		return nil, fmt.Errorf(errFmtProcessHCLFile, ErrFailedToProcessHclFile, filename, diags.Error())
+	}
+	for name, attr := range attrs {
+		ctyValue, valDiags := attr.Expr.Value(evalCtx)
+		if valDiags != nil && valDiags.HasErrors() {
+			return nil, fmt.Errorf(errFmtProcessHCLFile, ErrFailedToProcessHclFile, filename, valDiags.Error())
 		}
 		result[name] = ctyToGo(ctyValue)
 	}
