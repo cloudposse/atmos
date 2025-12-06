@@ -88,23 +88,6 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		return nil, err
 	}
 
-	// Merge dependencies using deferred merge to handle YAML functions.
-	finalComponentDependencies, depsCtx, err := m.MergeWithDeferred(
-		atmosConfig,
-		[]map[string]any{
-			result.BaseComponentDependencies,
-			result.ComponentDependencies,
-			result.ComponentOverridesDeps,
-		})
-	if err != nil {
-		return nil, err
-	}
-
-	// Apply deferred merges for dependencies (without YAML processing - already done earlier).
-	if err := m.ApplyDeferredMerges(depsCtx, finalComponentDependencies, atmosConfig, nil); err != nil {
-		return nil, err
-	}
-
 	// Terraform-specific: merge providers using deferred merge.
 	var finalComponentProviders map[string]any
 	if opts.ComponentType == cfg.TerraformComponentType {
@@ -182,17 +165,34 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		return nil, err
 	}
 
+	// Merge metadata when inheritance is enabled.
+	// Base component metadata is merged with component metadata.
+	// Excluded from inheritance: 'inherits' and 'type' (already excluded during collection).
+	finalComponentMetadata := result.ComponentMetadata
+	if atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() && len(result.BaseComponentMetadata) > 0 {
+		// Create a copy of base metadata excluding 'inherits' and 'type' (already excluded during collection).
+		// Then merge with component metadata (component metadata wins on conflicts).
+		finalComponentMetadata, err = m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				result.BaseComponentMetadata,
+				result.ComponentMetadata,
+			})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Build final component map.
 	comp := map[string]any{
-		cfg.VarsSectionName:         finalComponentVars,
-		cfg.SettingsSectionName:     finalSettings,
-		cfg.EnvSectionName:          finalComponentEnv,
-		cfg.AuthSectionName:         finalComponentAuth,
-		cfg.DependenciesSectionName: finalComponentDependencies,
-		cfg.CommandSectionName:      finalComponentCommand,
-		cfg.InheritanceSectionName:  result.ComponentInheritanceChain,
-		cfg.MetadataSectionName:     result.ComponentMetadata,
-		cfg.OverridesSectionName:    result.ComponentOverrides,
+		cfg.VarsSectionName:        finalComponentVars,
+		cfg.SettingsSectionName:    finalSettings,
+		cfg.EnvSectionName:         finalComponentEnv,
+		cfg.AuthSectionName:        finalComponentAuth,
+		cfg.CommandSectionName:     finalComponentCommand,
+		cfg.InheritanceSectionName: result.ComponentInheritanceChain,
+		cfg.MetadataSectionName:    finalComponentMetadata,
+		cfg.OverridesSectionName:   result.ComponentOverrides,
 	}
 
 	// Terraform-specific: process backends and add Terraform-specific fields.
@@ -203,6 +203,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				atmosConfig:                 atmosConfig,
 				component:                   opts.Component,
 				baseComponentName:           result.BaseComponentName,
+				componentMetadata:           finalComponentMetadata,
 				globalBackendType:           opts.GlobalBackendType,
 				globalBackendSection:        opts.GlobalBackendSection,
 				baseComponentBackendType:    result.BaseComponentBackendType,
