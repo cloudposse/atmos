@@ -1,14 +1,18 @@
 package exec
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
 
+	charm "github.com/charmbracelet/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -777,5 +781,365 @@ func TestGenerateComponentBackendConfigFunction(t *testing.T) {
 		require.True(t, ok)
 
 		assert.Equal(t, "terraform.tfstate", local["path"])
+	})
+
+	t.Run("returns error for empty backend type", func(t *testing.T) {
+		backendConfig := map[string]any{
+			"bucket": "test-bucket",
+		}
+
+		result, err := generateComponentBackendConfig("", backendConfig, "", nil)
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.ErrorIs(t, err, errUtils.ErrBackendTypeRequired)
+	})
+}
+
+// TestExtractBackendConfig tests the extractBackendConfig pure function.
+func TestExtractBackendConfig(t *testing.T) {
+	t.Run("returns valid result when backend and backend_type are configured", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend": map[string]any{
+				"bucket": "my-bucket",
+				"key":    "terraform.tfstate",
+			},
+			"backend_type": "s3",
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.NoError(t, result.Err)
+		assert.Equal(t, "s3", result.BackendType)
+		assert.Equal(t, "my-bucket", result.BackendSection["bucket"])
+	})
+
+	t.Run("returns error when backend section is missing", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend_type": "s3",
+			"vars": map[string]any{
+				"name": "test",
+			},
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendSectionMissing)
+		assert.Nil(t, result.BackendSection)
+		assert.Empty(t, result.BackendType)
+	})
+
+	t.Run("returns error when backend_type is missing", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend": map[string]any{
+				"bucket": "my-bucket",
+			},
+			"vars": map[string]any{
+				"name": "test",
+			},
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendTypeMissing)
+		assert.Nil(t, result.BackendSection)
+		assert.Empty(t, result.BackendType)
+	})
+
+	t.Run("returns error when backend is not a map", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend":      "invalid-string-backend",
+			"backend_type": "s3",
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendSectionMissing)
+	})
+
+	t.Run("returns error when backend_type is not a string", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend": map[string]any{
+				"bucket": "my-bucket",
+			},
+			"backend_type": map[string]any{"invalid": "type"},
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendTypeMissing)
+	})
+
+	t.Run("returns error when both backend and backend_type are missing", func(t *testing.T) {
+		componentSection := map[string]any{
+			"vars": map[string]any{
+				"name": "test",
+			},
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		// Should fail on backend first.
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendSectionMissing)
+	})
+
+	t.Run("handles empty component section", func(t *testing.T) {
+		componentSection := map[string]any{}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendSectionMissing)
+	})
+
+	t.Run("handles nil values in component section", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend":      nil,
+			"backend_type": nil,
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendSectionMissing)
+	})
+
+	t.Run("returns error when backend section is empty for s3 backend", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend":      map[string]any{},
+			"backend_type": "s3",
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendConfigEmpty)
+		assert.Nil(t, result.BackendSection)
+		assert.Empty(t, result.BackendType)
+	})
+
+	t.Run("returns error when backend section is empty for gcs backend", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend":      map[string]any{},
+			"backend_type": "gcs",
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendConfigEmpty)
+	})
+
+	t.Run("returns error when backend section is empty for azurerm backend", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend":      map[string]any{},
+			"backend_type": "azurerm",
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendConfigEmpty)
+	})
+
+	t.Run("returns error when backend section is empty for cloud backend", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend":      map[string]any{},
+			"backend_type": "cloud",
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.ErrorIs(t, result.Err, errUtils.ErrBackendConfigEmpty)
+	})
+
+	t.Run("allows empty backend section for local backend", func(t *testing.T) {
+		componentSection := map[string]any{
+			"backend":      map[string]any{},
+			"backend_type": "local",
+		}
+
+		result := extractBackendConfig(componentSection)
+
+		assert.NoError(t, result.Err)
+		assert.Equal(t, "local", result.BackendType)
+		assert.Empty(t, result.BackendSection)
+	})
+}
+
+// TestCheckBackendTypeAfterProcessing tests the checkBackendTypeAfterProcessing pure function.
+func TestCheckBackendTypeAfterProcessing(t *testing.T) {
+	t.Run("returns nil for valid backend type", func(t *testing.T) {
+		err := checkBackendTypeAfterProcessing("s3")
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns nil for any non-empty backend type", func(t *testing.T) {
+		testCases := []string{"s3", "gcs", "azurerm", "local", "cloud", "remote", "http"}
+		for _, backendType := range testCases {
+			err := checkBackendTypeAfterProcessing(backendType)
+			assert.NoError(t, err, "backend type %q should be valid", backendType)
+		}
+	})
+
+	t.Run("returns error for empty backend type", func(t *testing.T) {
+		err := checkBackendTypeAfterProcessing("")
+		assert.ErrorIs(t, err, errUtils.ErrBackendTypeEmptyAfterRender)
+	})
+}
+
+// TestBackendGenerationSkipsComponentsWithoutBackend tests that components without backend config are skipped with warnings.
+func TestBackendGenerationSkipsComponentsWithoutBackend(t *testing.T) {
+	t.Run("skips component without backend section and logs warning", func(t *testing.T) {
+		// Set up a temp directory with stack files
+		tempDir := t.TempDir()
+
+		// Create stacks directory and a stack file with a component missing backend
+		stacksDir := filepath.Join(tempDir, "stacks")
+		err := os.MkdirAll(stacksDir, 0o755)
+		require.NoError(t, err)
+
+		// Create component directory
+		componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+		err = os.MkdirAll(componentDir, 0o755)
+		require.NoError(t, err)
+
+		// Create a minimal main.tf so the component exists
+		mainTF := filepath.Join(componentDir, "main.tf")
+		err = os.WriteFile(mainTF, []byte("# vpc component\n"), 0o644)
+		require.NoError(t, err)
+
+		// Create stack file with component that has NO backend section
+		stackContent := `
+vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      vars:
+        name: test-vpc
+`
+		stackFile := filepath.Join(stacksDir, "dev.yaml")
+		err = os.WriteFile(stackFile, []byte(stackContent), 0o644)
+		require.NoError(t, err)
+
+		// Capture log output
+		var logBuf bytes.Buffer
+		originalLogger := log.Default()
+		testLogger := log.NewAtmosLogger(charm.New(&logBuf))
+		testLogger.SetLevel(log.WarnLevel)
+		log.SetDefault(testLogger)
+		defer log.SetDefault(originalLogger)
+
+		// Create atmosConfig with absolute paths properly set for FindStacksMap
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+			},
+			Stacks: schema.Stacks{
+				BasePath:    "stacks",
+				NamePattern: "{stage}",
+			},
+			StacksBaseAbsolutePath:        stacksDir,
+			TerraformDirAbsolutePath:      filepath.Join(tempDir, "components", "terraform"),
+			IncludeStackAbsolutePaths:     []string{stacksDir},
+			StackConfigFilesAbsolutePaths: []string{stackFile},
+		}
+
+		// Execute backend generation (test both HCL and JSON formats)
+		err = ExecuteTerraformGenerateBackends(atmosConfig, "", "hcl", []string{}, []string{})
+		assert.NoError(t, err)
+
+		// Check that warning was logged
+		logOutput := logBuf.String()
+		assert.Contains(t, logOutput, "Skipping backend generation")
+		assert.Contains(t, logOutput, "auto_generate_backend_file")
+
+		// Verify no backend.tf or backend.tf.json was generated
+		backendTF := filepath.Join(componentDir, "backend.tf")
+		backendTFJSON := filepath.Join(componentDir, "backend.tf.json")
+		_, errTF := os.Stat(backendTF)
+		_, errJSON := os.Stat(backendTFJSON)
+		assert.True(t, os.IsNotExist(errTF), "backend.tf should not be created when backend section is missing")
+		assert.True(t, os.IsNotExist(errJSON), "backend.tf.json should not be created when backend section is missing")
+	})
+
+	t.Run("skips component without backend_type and logs warning", func(t *testing.T) {
+		// Set up a temp directory with stack files
+		tempDir := t.TempDir()
+
+		// Create stacks directory
+		stacksDir := filepath.Join(tempDir, "stacks")
+		err := os.MkdirAll(stacksDir, 0o755)
+		require.NoError(t, err)
+
+		// Create component directory
+		componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+		err = os.MkdirAll(componentDir, 0o755)
+		require.NoError(t, err)
+
+		// Create a minimal main.tf
+		mainTF := filepath.Join(componentDir, "main.tf")
+		err = os.WriteFile(mainTF, []byte("# vpc component\n"), 0o644)
+		require.NoError(t, err)
+
+		// Create stack file with component that has backend but NO backend_type
+		stackContent := `
+vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      backend:
+        bucket: test-bucket
+        key: terraform.tfstate
+      vars:
+        name: test-vpc
+`
+		stackFile := filepath.Join(stacksDir, "dev.yaml")
+		err = os.WriteFile(stackFile, []byte(stackContent), 0o644)
+		require.NoError(t, err)
+
+		// Capture log output
+		var logBuf bytes.Buffer
+		originalLogger := log.Default()
+		testLogger := log.NewAtmosLogger(charm.New(&logBuf))
+		testLogger.SetLevel(log.WarnLevel)
+		log.SetDefault(testLogger)
+		defer log.SetDefault(originalLogger)
+
+		// Create atmosConfig with absolute paths properly set for FindStacksMap
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+			},
+			Stacks: schema.Stacks{
+				BasePath:    "stacks",
+				NamePattern: "{stage}",
+			},
+			StacksBaseAbsolutePath:        stacksDir,
+			TerraformDirAbsolutePath:      filepath.Join(tempDir, "components", "terraform"),
+			IncludeStackAbsolutePaths:     []string{stacksDir},
+			StackConfigFilesAbsolutePaths: []string{stackFile},
+		}
+
+		// Execute backend generation
+		err = ExecuteTerraformGenerateBackends(atmosConfig, "", "hcl", []string{}, []string{})
+		assert.NoError(t, err)
+
+		// Check that warning was logged - note: the YAML processor sets backend_type to empty string
+		// so we hit the "empty after template processing" path, not the "not configured" path
+		logOutput := logBuf.String()
+		assert.Contains(t, logOutput, "Skipping backend generation")
+		assert.Contains(t, logOutput, "backend_type")
+		assert.Contains(t, logOutput, "auto_generate_backend_file")
+
+		// Verify no backend.tf or backend.tf.json was generated
+		backendTF := filepath.Join(componentDir, "backend.tf")
+		backendTFJSON := filepath.Join(componentDir, "backend.tf.json")
+		_, errTF := os.Stat(backendTF)
+		_, errJSON := os.Stat(backendTFJSON)
+		assert.True(t, os.IsNotExist(errTF), "backend.tf should not be created when backend_type is missing")
+		assert.True(t, os.IsNotExist(errJSON), "backend.tf.json should not be created when backend_type is missing")
 	})
 }

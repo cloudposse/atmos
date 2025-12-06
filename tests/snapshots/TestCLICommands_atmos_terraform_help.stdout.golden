@@ -226,7 +226,7 @@ FLAGS
                                   current branch: atmos terraform  --affected --repo-path
                                   <path_to_already_cloned_repo>
 
-      --sha string                Git commit SHA with which to compare the current branch: atmos terraform  --affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
+      --sha string                Git commit SHA with which to compare the current branch: atmos terraform  --affected --sha ***MASKED***
 
       --skip strings              Skip executing specific YAML functions in the Atmos stack manifests when executing
                                   terraform commands

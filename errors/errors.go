@@ -112,14 +112,19 @@ var (
 	ErrAzurePermissionDenied  = errors.New("permission denied accessing Azure blob")
 
 	// Azure authentication errors.
-	ErrAzureOIDClaimNotFound      = errors.New("oid claim not found in token")
-	ErrAzureUsernameClaimNotFound = errors.New("no username claim found in token (tried upn, unique_name, email)")
-	ErrAzureInvalidJWTFormat      = errors.New("invalid JWT format")
-	ErrAzureExpirationTimeEmpty   = errors.New("expiration time is empty")
-	ErrAzureTimeParseFailure      = errors.New("unable to parse time: tried RFC3339, local time formats, and Unix timestamp")
-	ErrAzureNoAccountsInCache     = errors.New("no accounts found in cache")
-	ErrAzureNoAccountForTenant    = errors.New("no account found for tenant")
-	ErrBackendConfigRequired      = errors.New("backend configuration is required")
+	ErrAzureOIDClaimNotFound       = errors.New("oid claim not found in token")
+	ErrAzureUsernameClaimNotFound  = errors.New("no username claim found in token (tried upn, unique_name, email)")
+	ErrAzureInvalidJWTFormat       = errors.New("invalid JWT format")
+	ErrAzureExpirationTimeEmpty    = errors.New("expiration time is empty")
+	ErrAzureTimeParseFailure       = errors.New("unable to parse time: tried RFC3339, local time formats, and Unix timestamp")
+	ErrAzureNoAccountsInCache      = errors.New("no accounts found in cache")
+	ErrAzureNoAccountForTenant     = errors.New("no account found for tenant")
+	ErrBackendConfigRequired       = errors.New("backend configuration is required")
+	ErrBackendTypeRequired         = errors.New("backend_type is required")
+	ErrBackendSectionMissing       = errors.New("no 'backend' section configured")
+	ErrBackendTypeMissing          = errors.New("no 'backend_type' configured")
+	ErrBackendTypeEmptyAfterRender = errors.New("'backend_type' is empty after template processing")
+	ErrBackendConfigEmpty          = errors.New("'backend' section is empty but 'backend_type' requires configuration")
 
 	// Git-related errors.
 	ErrGitNotAvailable      = errors.New("git must be available and on the PATH")
@@ -301,6 +306,10 @@ var (
 	ErrVersionFormatInvalid   = errors.New("invalid version output format")
 	ErrVersionCacheLoadFailed = errors.New("failed to load version check cache")
 	ErrVersionGitHubAPIFailed = errors.New("failed to query GitHub API for releases")
+
+	// Version constraint errors.
+	ErrVersionConstraint        = errors.New("version constraint not satisfied")
+	ErrInvalidVersionConstraint = errors.New("invalid version constraint")
 
 	// Atlantis errors.
 	ErrAtlantisInvalidFlags          = errors.New("incompatible atlantis flags")
@@ -556,6 +565,20 @@ var (
 	ErrNilTerraformOutput = errors.New("terraform output returned nil")
 	ErrNilStoreValue      = errors.New("cannot store nil value")
 
+	// Devcontainer errors.
+	ErrDevcontainerNotFound      = errors.New("devcontainer not found")
+	ErrContainerRuntimeOperation = errors.New("container runtime operation failed")
+	ErrContainerNotFound         = errors.New("container not found")
+	ErrContainerAlreadyExists    = errors.New("container already exists")
+	ErrContainerNotRunning       = errors.New("container is not running")
+	ErrContainerRunning          = errors.New("container is running")
+	ErrInvalidDevcontainerConfig = errors.New("invalid devcontainer configuration")
+	ErrRuntimeNotAvailable       = errors.New("container runtime not available")
+	ErrDevcontainerNameEmpty     = errors.New("devcontainer name cannot be empty")
+	ErrDevcontainerNameInvalid   = errors.New("devcontainer name contains invalid characters")
+	ErrDevcontainerNameTooLong   = errors.New("devcontainer name is too long")
+	ErrPTYNotSupported           = errors.New("PTY not supported on this platform")
+
 	// Logout errors.
 	ErrLogoutFailed                         = errors.New("logout failed")
 	ErrPartialLogout                        = errors.New("partial logout")
@@ -573,7 +596,6 @@ var (
 	ErrBucketRequired       = errors.New("backend.bucket is required")
 	ErrRegionRequired       = errors.New("backend.region is required")
 	ErrBackendNotFound      = errors.New("backend configuration not found")
-	ErrBackendTypeRequired  = errors.New("backend_type not specified")
 	ErrCreateNotImplemented = errors.New("create not implemented for backend type")
 	ErrDeleteNotImplemented = errors.New("delete not implemented for backend type")
 	ErrProvisionerFailed    = errors.New("provisioner failed")
@@ -595,6 +617,8 @@ var (
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.
+// When Code is 0, it indicates successful completion that should exit cleanly without printing errors.
+// This avoids deep exits (os.Exit) which are untestable.
 type ExitCodeError struct {
 	Code int
 }

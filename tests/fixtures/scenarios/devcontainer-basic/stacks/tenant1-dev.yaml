@@ -1,0 +1,9 @@
+import:
+  - tenant1/_defaults
+
+terraform:
+  vars:
+    namespace: test
+    tenant: tenant1
+    environment: dev
+    stage: dev

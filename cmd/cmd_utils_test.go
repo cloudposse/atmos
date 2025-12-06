@@ -617,3 +617,100 @@ func TestListStacksForComponentEmptyComponent(t *testing.T) {
 	assert.NoError(t, err, "Should not error with empty component")
 	assert.NotEmpty(t, stacks, "Empty component filter returns all stacks")
 }
+
+// TestFilterChdirArgs tests the filterChdirArgs function.
+func TestFilterChdirArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected []string
+	}{
+		{
+			name:     "no chdir flags",
+			input:    []string{"terraform", "plan", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "long form --chdir=value",
+			input:    []string{"terraform", "plan", "--chdir=/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "long form --chdir value",
+			input:    []string{"terraform", "plan", "--chdir", "/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "short form -C=value",
+			input:    []string{"terraform", "plan", "-C=/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "short form -C value",
+			input:    []string{"terraform", "plan", "-C", "/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "short form concatenated -Cvalue",
+			input:    []string{"terraform", "plan", "-C/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "multiple chdir flags",
+			input:    []string{"terraform", "--chdir=/first", "plan", "-C", "/second", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "chdir at beginning",
+			input:    []string{"--chdir=/path", "terraform", "plan"},
+			expected: []string{"terraform", "plan"},
+		},
+		{
+			name:     "chdir at end",
+			input:    []string{"terraform", "plan", "--chdir=/path"},
+			expected: []string{"terraform", "plan"},
+		},
+		{
+			name:     "mixed formats",
+			input:    []string{"terraform", "--chdir=/first", "plan", "-C/second", "deploy", "-C", "/third"},
+			expected: []string{"terraform", "plan", "deploy"},
+		},
+		{
+			name:     "preserve non-chdir flags",
+			input:    []string{"terraform", "plan", "--var-file=test.tfvars", "--chdir=/path", "--auto-approve"},
+			expected: []string{"terraform", "plan", "--var-file=test.tfvars", "--auto-approve"},
+		},
+		{
+			name:     "chdir with tilde",
+			input:    []string{"terraform", "--chdir=~/project", "plan"},
+			expected: []string{"terraform", "plan"},
+		},
+		{
+			name:     "empty input",
+			input:    []string{},
+			expected: []string{},
+		},
+		{
+			name:     "only chdir flags",
+			input:    []string{"--chdir=/path", "-C", "/another"},
+			expected: []string{},
+		},
+		{
+			name:     "chdir-like but not flag (value contains chdir)",
+			input:    []string{"terraform", "plan", "my-chdir-component"},
+			expected: []string{"terraform", "plan", "my-chdir-component"},
+		},
+		{
+			name:     "short C alone should be filtered",
+			input:    []string{"terraform", "-C", "/path", "plan"},
+			expected: []string{"terraform", "plan"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterChdirArgs(tt.input)
+			assert.Equal(t, tt.expected, result, "filterChdirArgs should correctly filter chdir arguments")
+		})
+	}
+}

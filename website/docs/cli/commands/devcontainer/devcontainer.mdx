@@ -1,0 +1,236 @@
+---
+title: atmos devcontainer
+sidebar_label: devcontainer
+sidebar_class_name: command
+id: devcontainer
+description: Manage development containers for Atmos workflows
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Use this command to manage development containers (devcontainers) for your Atmos workflows.
+
+Devcontainers provide isolated, reproducible development environments with all required tools and dependencies pre-configured.
+</Intro>
+
+<Screengrab title="atmos devcontainer --help" slug="atmos-devcontainer--help" />
+
+## Prerequisites
+
+### Container Runtime Required
+
+Atmos devcontainers require either **Docker** or **Podman** to be installed and running on your system.
+
+<Tabs queryString="runtime">
+  <TabItem value="docker" label="Docker" default>
+    #### Installation
+
+    <Tabs groupId="operating-systems">
+      <TabItem value="macos" label="macOS" default>
+        Install [Docker Desktop for Mac](https://docs.docker.com/desktop/install/mac-install/)
+
+        ```bash
+        # Or via Homebrew
+        brew install --cask docker
+        ```
+
+        **Start Docker Desktop** from Applications or Launchpad.
+      </TabItem>
+
+      <TabItem value="windows" label="Windows">
+        Install [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/)
+
+        **Start Docker Desktop** from the Start menu.
+      </TabItem>
+
+      <TabItem value="linux" label="Linux">
+        Install [Docker Engine](https://docs.docker.com/engine/install/) for your distribution.
+
+        ```bash
+        # Ubuntu/Debian
+        sudo apt-get update
+        sudo apt-get install docker-ce docker-ce-cli containerd.io
+
+        # Fedora/RHEL
+        sudo dnf install docker-ce docker-ce-cli containerd.io
+
+        # Start and enable Docker
+        sudo systemctl start docker
+        sudo systemctl enable docker
+        ```
+      </TabItem>
+    </Tabs>
+
+    #### Verification
+
+    ```bash
+    docker --version
+    docker ps
+    ```
+  </TabItem>
+
+  <TabItem value="podman" label="Podman">
+    #### Installation
+
+    <Tabs groupId="operating-systems">
+      <TabItem value="macos" label="macOS" default>
+        ```bash
+        brew install podman
+        ```
+
+        Or install [Podman Desktop](https://podman-desktop.io/) for GUI management.
+
+        **Initialize and start Podman machine:**
+        ```bash
+        podman machine init
+        podman machine start
+        ```
+      </TabItem>
+
+      <TabItem value="windows" label="Windows">
+        Install [Podman Desktop for Windows](https://podman.io/docs/installation#windows)
+
+        **Initialize and start Podman machine:**
+        ```bash
+        podman machine init
+        podman machine start
+        ```
+      </TabItem>
+
+      <TabItem value="linux" label="Linux">
+        ```bash
+        # Ubuntu/Debian
+        sudo apt-get install podman
+
+        # Fedora/RHEL
+        sudo dnf install podman
+
+        # Arch
+        sudo pacman -S podman
+        ```
+
+        **Note:** Podman runs rootless on Linux - no daemon required.
+      </TabItem>
+    </Tabs>
+
+    #### Verification
+
+    ```bash
+    podman --version
+    podman ps
+    ```
+  </TabItem>
+</Tabs>
+
+### Runtime Selection
+
+Atmos automatically detects the available container runtime:
+1. Checks for Docker first
+2. Falls back to Podman if Docker is unavailable
+3. You can override with `ATMOS_CONTAINER_RUNTIME=docker` or `ATMOS_CONTAINER_RUNTIME=podman`
+
+## Usage
+
+```shell
+atmos devcontainer <subcommand> [options]
+```
+
+## Subcommands
+
+<DocCardList />
+
+## Container Runtimes
+
+Atmos supports both Docker and Podman as container runtimes:
+
+- **Auto-detection**: Atmos automatically detects the available runtime (Docker first, then Podman)
+- **Explicit selection**: Set `ATMOS_CONTAINER_RUNTIME=docker` or `ATMOS_CONTAINER_RUNTIME=podman`
+- **Per-devcontainer**: Configure runtime in `atmos.yaml` under `devcontainer.<name>.settings.runtime`
+
+## Configuration
+
+Devcontainers are configured in `atmos.yaml` under the `devcontainer` section:
+
+```yaml
+components:
+  devcontainer:
+    <name>:  # Choose any name for your devcontainer (e.g., geodesic, terraform, python)
+      settings:
+        runtime: podman  # Optional: docker, podman, or omit for auto-detect
+      spec: !include devcontainer.json
+```
+
+**Example with `geodesic`:**
+```yaml
+components:
+  devcontainer:
+    geodesic:
+      spec: !include devcontainer.json
+```
+
+The `<name>` is a user-defined identifier you choose for your devcontainer. Use it with commands like `atmos devcontainer start <name>`.
+
+The `spec` field follows the [VS Code Dev Container specification](https://containers.dev/implementors/json_reference/).
+
+## Output Masking
+
+Devcontainer commands support Atmos's automatic secret masking system with some limitations:
+
+**Masking Support:**
+- ✅ **`logs`** - Masking enabled by default
+- ✅ **`exec`** - Masking enabled by default for non-interactive commands
+- ⚠️ **`attach`/`shell`** - Masking **requires experimental `--pty` flag** (macOS/Linux only)
+
+**Interactive Sessions:**
+
+Interactive TTY sessions (`attach`, `shell`) cannot mask output in standard mode due to TTY limitations. To enable masking in interactive sessions:
+
+```bash
+# Enable masking in interactive sessions (experimental, macOS/Linux only)
+atmos devcontainer attach geodesic --pty
+atmos devcontainer shell geodesic --pty
+```
+
+:::warning
+The `--pty` flag is experimental and not available on Windows. Standard attach/shell mode works on all platforms but cannot mask output in interactive TTY sessions.
+:::
+
+For complete masking configuration (patterns, options, use cases), see the [Secret Masking Configuration](/cli/configuration/settings/mask) documentation.
+
+## Examples
+
+```shell
+# List all devcontainers
+atmos devcontainer list
+
+# Start a devcontainer
+atmos devcontainer start geodesic
+
+# Start and attach in one command
+atmos devcontainer start geodesic --attach
+
+# Attach to a running devcontainer
+atmos devcontainer attach geodesic
+
+# Show logs
+atmos devcontainer logs geodesic
+
+# Rebuild a devcontainer
+atmos devcontainer rebuild geodesic
+
+# Stop a devcontainer
+atmos devcontainer stop geodesic
+
+# Remove a devcontainer
+atmos devcontainer remove geodesic
+```
+
+## See Also
+
+- [Devcontainer Configuration](/cli/configuration/devcontainer) — Configure devcontainers in `atmos.yaml`
+- [Dev Container Specification](https://containers.dev/) — Official Dev Container spec
+- [Atmos Components](/components) — Learn about Atmos components
