@@ -1,11 +1,19 @@
 ---
 slug: pager-default-correction
 title: Pager Default Behavior Corrected
-authors: [atmos]
-tags: [atmos, bugfix, breaking-change, dx]
+sidebar_label: Pager Default Behavior
+authors:
+  - osterman
+tags:
+  - bugfix
+  - breaking-change
+date: 2025-10-15T00:00:00.000Z
+release: v1.195.0
 ---
 
 We've identified and corrected a regression in Atmos where the pager was incorrectly enabled by default, contrary to the intended behavior documented in a previous release.
+
+<!--truncate-->
 
 ## What Changed
 
@@ -81,6 +89,6 @@ Most users won't need to change anything. If you were relying on the pager being
 
 - [PR #1642: Pager Default Correction](https://github.com/cloudposse/atmos/pull/1642)
 - [Original PR #1430: Pager Improvements](https://github.com/cloudposse/atmos/pull/1430)
-- [Terminal Configuration Documentation](/cli/configuration/terminal)
+- [Terminal Configuration Documentation](/cli/configuration/settings/terminal)
 
 We apologize for any confusion this regression may have caused and thank the community for bringing it to our attention.

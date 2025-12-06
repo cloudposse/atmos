@@ -5,11 +5,12 @@ import (
 	"os"
 	"testing"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
+	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -33,7 +34,7 @@ func TestDescribeStacksExec(t *testing.T) {
 					printOrWriteToFile: func(_ *schema.AtmosConfiguration, _, _ string, _ any) error {
 						return nil
 					},
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
 						return map[string]any{"hello": "test"}, nil
 					},
 				}
@@ -52,7 +53,7 @@ func TestDescribeStacksExec(t *testing.T) {
 						assert.Equal(t, "test", data)
 						return nil
 					},
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
 						return map[string]any{"hello": "test"}, nil
 					},
 				}
@@ -70,7 +71,7 @@ func TestDescribeStacksExec(t *testing.T) {
 					printOrWriteToFile: func(_ *schema.AtmosConfiguration, _, _ string, _ any) error {
 						return nil
 					},
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, filterByStack string, _, _, _ []string, _, _, _, _ bool, _ []string) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, filterByStack string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
 						assert.Equal(t, "test-stack", filterByStack)
 						return map[string]any{"filtered": true}, nil
 					},
@@ -91,7 +92,7 @@ func TestDescribeStacksExec(t *testing.T) {
 						assert.Equal(t, "output.json", file)
 						return nil
 					},
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
 						return map[string]any{"output": "to file"}, nil
 					},
 				}
@@ -104,7 +105,7 @@ func TestDescribeStacksExec(t *testing.T) {
 				return &describeStacksExec{
 					pageCreator:           pager.NewMockPageCreator(ctrl),
 					isTTYSupportForStdout: func() bool { return false },
-					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string) (map[string]any, error) {
+					executeDescribeStacks: func(_ *schema.AtmosConfiguration, _ string, _, _, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
 						return nil, errors.New("execution error")
 					},
 				}
@@ -162,6 +163,7 @@ func TestExecuteDescribeStacks_Packer(t *testing.T) {
 		true,
 		false,
 		nil,
+		nil, // authManager
 	)
 	assert.Nil(t, err)
 

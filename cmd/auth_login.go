@@ -10,13 +10,16 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // authLoginCmd logs in using a configured identity.
@@ -33,32 +36,72 @@ var authLoginCmd = &cobra.Command{
 func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
-	// Load atmos config
+	// Load atmos config.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return fmt.Errorf("failed to load atmos config: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
 	}
+	defer perf.Track(&atmosConfig, "cmd.executeAuthLoginCommand")()
 
-	// Create auth manager
+	// Create auth manager.
 	authManager, err := createAuthManager(&atmosConfig.Auth)
 	if err != nil {
-		return fmt.Errorf("failed to create auth manager: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
-	// Get identity from flag or use default
-	identityName, _ := cmd.Flags().GetString("identity")
+	// Check if --provider flag was provided.
+	providerName, _ := cmd.Flags().GetString("provider")
 
-	// Perform authentication
+	// Perform authentication based on whether provider or identity was specified.
 	ctx := context.Background()
-	whoami, err := authManager.Authenticate(ctx, identityName)
-	if err != nil {
-		return fmt.Errorf("authentication failed: %w", err)
+	var whoami *authTypes.WhoamiInfo
+
+	if providerName != "" {
+		// Provider-level authentication (e.g., for SSO auto-provisioning).
+		whoami, err = authManager.AuthenticateProvider(ctx, providerName)
+		if err != nil {
+			return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
+		}
+	} else {
+		// Identity-level authentication (existing behavior).
+		whoami, err = authenticateIdentity(ctx, cmd, authManager)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Display success message using Atmos theme.
 	displayAuthSuccess(whoami)
 
 	return nil
+}
+
+// authenticateIdentity handles identity-level authentication with default and interactive selection.
+func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager auth.AuthManager) (*authTypes.WhoamiInfo, error) {
+	// Get identity from flag or use default.
+	// Use centralized function that handles Cobra's NoOptDefVal quirk correctly.
+	identityName := GetIdentityFromFlags(cmd, os.Args)
+
+	// Check if user wants to interactively select identity.
+	forceSelect := identityName == IdentityFlagSelectValue
+
+	// If no identity specified, get the default identity (which prompts if needed).
+	// If --identity flag was used without value, forceSelect will be true.
+	if identityName == "" || forceSelect {
+		var err error
+		identityName, err = authManager.GetDefaultIdentity(forceSelect)
+		if err != nil {
+			return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrDefaultIdentity, err)
+		}
+	}
+
+	// Perform identity authentication.
+	whoami, err := authManager.Authenticate(ctx, identityName)
+	if err != nil {
+		return nil, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrAuthenticationFailed, identityName, err)
+	}
+
+	return whoami, nil
 }
 
 // createAuthManager creates a new auth manager with all required dependencies.
@@ -96,8 +139,7 @@ func formatDuration(d time.Duration) string {
 // displayAuthSuccess displays a styled success message with authentication details.
 func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 	// Display checkmark with success message.
-	checkMark := theme.Styles.Checkmark
-	fmt.Fprintf(os.Stderr, "\n%s Authentication successful!\n\n", checkMark)
+	u.PrintfMessageToTUI("\n%s Authentication successful!\n\n", theme.Styles.Checkmark)
 
 	// Build table rows.
 	var rows [][]string
@@ -122,6 +164,9 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 	}
 
 	// Create minimal charmbracelet table.
+	// Note: Padding variation across platforms was causing snapshot test failures.
+	// The table auto-sizes columns but the final width varied (Linux: 40 chars, macOS: 45 chars).
+	// Removed `.Width()` constraint as it was causing word-wrapping issues.
 	t := table.New().
 		Rows(rows...).
 		BorderTop(false).
@@ -145,5 +190,6 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 }
 
 func init() {
+	authLoginCmd.Flags().StringP("provider", "p", "", "Provider name to authenticate with (for SSO auto-provisioning)")
 	authCmd.AddCommand(authLoginCmd)
 }

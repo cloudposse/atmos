@@ -1,0 +1,252 @@
+---
+title: Workspaces
+sidebar_position: 4
+sidebar_label: Workspaces
+description: Configure Terraform workspaces.
+id: workspaces
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+In Terraform, a [workspace](https://developer.hashicorp.com/terraform/language/state/workspaces) is a feature that allows
+you to manage multiple "state" environments within a Terraform configuration. Each workspace maintains its own state,
+allowing you to deploy and manage infrastructure configurations independently.
+</Intro>
+
+Workspaces are useful in several scenarios:
+
+- **Environment Isolation**: Workspaces enable you to have separate environments within a Terraform configuration.
+Each workspace can have its own set of resources and configurations.
+
+- **Parallel Development**: Workspaces facilitate parallel development by allowing different team members to work on
+different workspaces concurrently without interfering with each other's changes.
+
+- **Testing and Experimentation**: Workspaces are helpful for testing and experimentation.
+You can create temporary workspaces to test changes or new configurations without affecting the main production environment.
+
+- **State Management**: Workspaces manage separate states for each environment.
+This helps in maintaining clarity and avoiding conflicts when multiple environments are being managed.
+
+- **Deployment Strategies**: Workspaces can be used to implement different deployment strategies.
+For example, you might use separate workspaces for blue-green deployments or canary releases.
+
+To work with workspaces in Terraform, you can use commands like `terraform workspace new`, `terraform workspace select`,
+and `terraform workspace delete` to create, switch between, and delete workspaces respectively.
+Atmos automatically manages Terraform workspaces for you when you provision components in a stack.
+
+## Terraform Workspaces in Atmos
+
+Atmos automatically calculates Terraform workspace names and uses workspaces to manage top-level stacks. By default, Atmos uses the stack
+name as the Terraform workspace when provisioning components in the stack. For example, consider the following manifest
+for the component `vpc` in the stack `ue2-dev`:
+
+<File title="stacks/ue2-dev.yaml">
+```yaml
+vars:
+  # Context variables that define the Atmos stack `ue2-dev`
+  environment: ue2
+  stage: dev
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        # Point to the Terraform component in `components/terraform/vpc`
+        component: vpc
+      # Define the variables specific to this component
+      vars:
+        name: my-vpc
+        ipv4_primary_cidr_block: 10.9.0.0/18
+```
+</File>
+
+When you provision the `vpc` component in the stack `ue2-dev` by executing the following command:
+
+<Terminal>
+    ```shell
+    atmos terraform apply vpc -s ue2-dev
+    ```
+</Terminal>
+
+Atmos computes the workspace name to be `ue2-dev`. Any Atmos Terraform command other than `init`, using this stack,
+will cause Atmos to select this workspace, creating it if needed. (This leaves the workspace selected as a side effect
+for subsequent Terraform commands run outside of Atmos. Atmos version 1.55 took away this side effect, but it was
+restored in version 1.69.)
+
+The exception to the default rule (using the stack name as Terraform workspace) is when we provision more than one
+instance of the same Terraform component (with the same or different settings) into the same stack by defining multiple
+Atmos components. In this case, Atmos calculates the Terraform workspace for each component by joining the stack name
+with the component name.
+
+For example, the following manifest shows how to define two Atmos components, `vpc/1` and `vpc/2`,
+which both point to the same Terraform component `vpc`, in the stack `ue2-dev`:
+
+<File title="stacks/ue2-dev.yaml">
+```yaml
+vars:
+  # Context variables that define the Atmos stack `ue2-dev`
+  environment: ue2
+  stage: dev
+
+components:
+  terraform:
+    # Atmos component `vpc/1`
+    vpc/1:
+      metadata:
+        # Point to the Terraform component in `components/terraform/vpc`
+        component: vpc
+        # Inherit the defaults for all VPC components
+        inherits:
+          - vpc/defaults
+      # Define/override variables specific to this `vpc/1` component
+      vars:
+        name: vpc-1
+        ipv4_primary_cidr_block: 10.9.0.0/18
+
+    # Atmos component `vpc/2`
+    vpc/2:
+      metadata:
+        # Point to the Terraform component in `components/terraform/vpc`
+        component: vpc
+        # Inherit the defaults for all VPC components
+        inherits:
+          - vpc/defaults
+      # Define/override variables specific to this `vpc/2` component
+      vars:
+        name: vpc-2
+        ipv4_primary_cidr_block: 10.10.0.0/18
+```
+</File>
+
+When you provision the components by executing the commands:
+
+<Terminal>
+    ```shell
+    atmos terraform apply vpc/1 -s ue2-dev
+    atmos terraform apply vpc/2 -s ue2-dev
+    ```
+</Terminal>
+
+Atmos computes the workspace names as `ue2-dev-vpc-1` and `ue2-dev-vpc-2` respectively,
+and selects the appropriate workspace for each component (again, creating it if needed).
+This is done because the same Terraform component `vpc` is used as the workspace prefix
+(in case of [AWS S3 backend](https://developer.hashicorp.com/terraform/language/settings/backends/s3),
+folder in the S3 state bucket), and it's necessary to have different subfolders (`ue2-dev-vpc-1`
+and `ue2-dev-vpc-2` instead of just `ue2-dev`) to store the Terraform state files.
+
+## Terraform Workspace Override in Atmos
+
+You can override Terraform workspaces for Atmos components by using `metadata.terraform_workspace` and
+`metadata.terraform_workspace_pattern` attributes. For example:
+
+<File title="stacks/ue2-dev.yaml">
+```yaml
+vars:
+  environment: ue2
+  stage: dev
+
+components:
+  terraform:
+    vpc/1:
+      metadata:
+        component: vpc
+        # Override Terraform workspace
+        terraform_workspace: "vpc-1-workspace-override"
+
+    vpc/2:
+      metadata:
+        component: vpc
+        # Override Terraform workspace
+        terraform_workspace_pattern: "{environment}-{stage}-{component}-workspace-override"
+```
+</File>
+
+When you provision the components by executing the commands:
+
+<Terminal>
+    ```shell
+    atmos terraform apply vpc/1 -s ue2-dev
+    atmos terraform apply vpc/2 -s ue2-dev
+    ```
+</Terminal>
+
+Atmos sets the Terraform workspace `vpc-1-workspace-override` for the `vpc/1` component, and
+`ue2-dev-vpc-2-workspace-override` for the `vpc/2` component.
+
+The following context tokens are supported by the `metadata.terraform_workspace_pattern` attribute:
+
+- `{namespace}`
+- `{tenant}`
+- `{environment}`
+- `{region}`
+- `{stage}`
+- `{attributes}`
+- `{component}`
+- `{base-component}`
+
+:::tip
+For more information on Atmos base and derived components, and to understand the `{base-component}` token,
+refer to [Atmos Component Inheritance](/howto/inheritance)
+:::
+
+## References
+
+- [Component Metadata](/stacks/components/component-metadata) - Configure `terraform_workspace` and `terraform_workspace_pattern`
+- [Terraform Workspaces](https://developer.hashicorp.com/terraform/language/state/workspaces)
+- [Managing Terraform Workspaces](https://developer.hashicorp.com/terraform/cli/workspaces)
+- [Terraform Environment Variables](https://developer.hashicorp.com/terraform/cli/config/environment-variables)
+
+## Disabling Terraform Workspaces
+
+In some cases, you may want to disable Terraform workspaces entirely, particularly when using backends that don't support workspaces. By default, Atmos automatically manages workspaces for supported backend types, but you can control this behavior using the `components.terraform.workspaces_enabled` configuration in your `atmos.yaml` file.
+
+### HTTP Backend and Workspace Support
+
+The [Terraform HTTP backend](https://developer.hashicorp.com/terraform/language/settings/backends/http) does not support workspaces. When Atmos detects that you're using an HTTP backend, it automatically disables workspaces for the affected components, regardless of other configuration settings. This ensures compatibility with HTTP backends while still allowing you to use the same configuration for other backend types.
+
+For example, when you execute a Terraform command with an HTTP backend:
+
+<Terminal>
+    ```shell
+    atmos terraform apply vpc -s ue2-dev
+    ```
+</Terminal>
+
+Atmos will execute Terraform without attempting to create or select a workspace, using the default workspace instead.
+
+### Explicitly Disabling Workspaces
+
+If you need to disable workspaces for all components, regardless of backend type, you can set the `workspaces_enabled` configuration option in your `atmos.yaml` file:
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    # Disable workspaces for all Terraform components
+    workspaces_enabled: false
+    # Other Terraform configuration...
+```
+</File>
+
+When workspaces are disabled:
+
+- Atmos will not attempt to create or select workspaces before running Terraform commands
+- All Terraform operations will use the default workspace
+- Workspace-related variables will be empty in component configurations
+
+:::note
+Setting `workspaces_enabled: true` for an HTTP backend will be ignored with a warning message since HTTP backends don't support workspaces.
+:::
+
+### When to Disable Workspaces
+
+Consider disabling workspaces in the following scenarios:
+
+- When using backends that don't support workspaces (e.g., HTTP backend)
+- When you need consistent behavior with other tools that don't manage workspaces
+- When you prefer to manage state files without workspace isolation
+- When your workflow already handles environment separation through other means
+
+By properly configuring workspace support, you can ensure that Atmos works seamlessly with all backend types while maintaining the flexibility to adapt to different deployment strategies.

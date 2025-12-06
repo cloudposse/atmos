@@ -17,11 +17,11 @@ import (
 	mock_telemetry "github.com/cloudposse/atmos/pkg/telemetry/mock"
 	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
-	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/posthog/posthog-go"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 )
 
 // TestGetTelemetryFromConfig tests the getTelemetryFromConfig function to ensure it properly
@@ -655,7 +655,8 @@ func TestPrintTelemetryDisclosure(t *testing.T) {
 	defer os.RemoveAll(cacheDir)
 
 	// Initialize markdown renderer for testing
-	utils.InitializeMarkdown(schema.AtmosConfiguration{})
+	atmosConfig := schema.AtmosConfiguration{}
+	utils.InitializeMarkdown(&atmosConfig)
 
 	// Call PrintTelemetryDisclosure
 	PrintTelemetryDisclosure()
@@ -691,7 +692,8 @@ func TestPrintTelemetryDisclosureOnlyOnce(t *testing.T) {
 	defer os.RemoveAll(cacheDir)
 
 	// Initialize markdown renderer for testing
-	utils.InitializeMarkdown(schema.AtmosConfiguration{})
+	atmosConfig := schema.AtmosConfiguration{}
+	utils.InitializeMarkdown(&atmosConfig)
 
 	// First call should show the message
 	oldStderr := os.Stderr
@@ -741,7 +743,8 @@ func TestPrintTelemetryDisclosureDisabledInCI(t *testing.T) {
 	defer os.RemoveAll(cacheDir)
 
 	// Initialize markdown renderer for testing
-	utils.InitializeMarkdown(schema.AtmosConfiguration{})
+	atmosConfig := schema.AtmosConfiguration{}
+	utils.InitializeMarkdown(&atmosConfig)
 
 	// Capture stderr
 	oldStderr := os.Stderr
@@ -777,7 +780,8 @@ func TestPrintTelemetryDisclosureDisabledByConfig(t *testing.T) {
 	defer os.RemoveAll(cacheDir)
 
 	// Initialize markdown renderer for testing
-	utils.InitializeMarkdown(schema.AtmosConfiguration{})
+	atmosConfig := schema.AtmosConfiguration{}
+	utils.InitializeMarkdown(&atmosConfig)
 
 	// Capture stderr
 	oldStderr := os.Stderr

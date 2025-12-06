@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -9,10 +10,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-var ErrInvalidAtmosYAMLFunction = fmt.Errorf("invalid Atmos YAML function")
+var ErrInvalidAtmosYAMLFunction = errors.New("invalid Atmos YAML function")
+
+// EnvVarContext provides context for environment variable lookup.
+// It allows !env to check stack manifest env sections before falling back to OS environment.
+type EnvVarContext interface {
+	// GetComponentEnvSection returns the component's env section map, or nil if not available.
+	GetComponentEnvSection() map[string]any
+}
 
 func ProcessTagEnv(
 	input string,
+	envContext EnvVarContext,
 ) (string, error) {
 	defer perf.Track(nil, "utils.ProcessTagEnv")()
 
@@ -46,6 +55,17 @@ func ProcessTagEnv(
 		return "", err
 	}
 
+	// First, check the component's env section from stack manifests.
+	if envContext != nil {
+		if envSection := envContext.GetComponentEnvSection(); envSection != nil {
+			if val, exists := envSection[envVarName]; exists {
+				// Convert the value to string.
+				return fmt.Sprintf("%v", val), nil
+			}
+		}
+	}
+
+	// Fall back to OS environment variables.
 	res, envVarExists := os.LookupEnv(envVarName)
 
 	if envVarExists {

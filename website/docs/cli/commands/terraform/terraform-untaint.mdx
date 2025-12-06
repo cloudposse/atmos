@@ -1,0 +1,95 @@
+---
+title: atmos terraform untaint
+sidebar_label: untaint
+sidebar_class_name: command
+id: untaint
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to remove the tainted state from a Terraform resource in an Atmos component. Note: This command is deprecated in Terraform v1.0+.
+</Intro>
+
+<Screengrab title="atmos terraform untaint --help" slug="atmos-terraform-untaint--help" />
+
+## Usage
+
+Execute the `terraform untaint` command like this:
+
+```shell
+atmos terraform untaint <component> -s <stack> <resource_address> [-- <terraform_flags>]
+```
+
+This command removes the tainted state from a resource, preventing it from being destroyed and recreated on the next apply. Note: This command is deprecated in Terraform v1.0+ since `taint` is also deprecated.
+
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init`, workspace selection, and variable file generation. Additionally, Atmos blocks this operation if the component is locked (`metadata.locked: true`). The untaint operation itself is handled by native Terraform.
+:::
+## Examples
+
+### Untaint a Resource
+
+```shell
+# Remove tainted state from a resource
+atmos terraform untaint vpc -s dev aws_instance.web
+```
+
+### Untaint with Module Path
+
+```shell
+# Untaint a resource in a module
+atmos terraform untaint app -s dev module.vpc.aws_subnet.private[0]
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+
+    <dt>`resource_address` <em>(required)</em></dt>
+    <dd>
+        Terraform resource address to untaint. This is the full resource address including any module prefix and resource index (e.g., `aws_instance.example` or `module.vpc.aws_subnet.private[0]`).
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform untaint vpc -s dev aws_instance.web --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform untaint vpc -s dev aws_instance.web --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+This command supports native `terraform untaint` flags such as `-lock=false` to disable state locking, `-lock-timeout` to override lock timeout.
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

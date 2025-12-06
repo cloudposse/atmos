@@ -1,10 +1,12 @@
 package cmd
 
 import (
-	log "github.com/cloudposse/atmos/pkg/logger"
+	"os"
+
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/internal/exec"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -69,6 +71,15 @@ func getRunnableDescribeAffectedCmd(
 				props.CLIConfig.Logs.Level = u.LogLevelDebug
 			}
 		}
+
+		// Get identity from flag and create AuthManager if provided.
+		// Use the WithAtmosConfig variant to enable stack-level default identity loading.
+		identityName := GetIdentityFromFlags(cmd, os.Args)
+		authManager, err := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &props.CLIConfig.Auth, props.CLIConfig)
+		if err != nil {
+			return err
+		}
+		props.AuthManager = authManager
 
 		// Global --pager flag is now handled in cfg.InitCliConfig
 

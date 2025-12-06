@@ -132,6 +132,80 @@ These flags are available for every Atmos command:
         - Atmos looks for `atmos.yaml`, `.atmos.yaml`, `atmos.yml`, or `.atmos.yml` in these directories
     </dd>
 
+    <dt>`--profile`</dt>
+    <dd>
+        Activate configuration profiles for environment-specific settings.
+
+        **Use Cases:**
+        - **Development workflow**: Use debug logging and wider terminal output during development
+        - **CI/CD**: Disable interactive features and use plain text output in CI environments
+        - **Team collaboration**: Share consistent settings across team members via profiles
+        - **Multi-environment**: Different settings for staging vs production deployments
+
+        **Basic Usage:**
+        ```bash
+        # Activate a single profile
+        atmos --profile developer terraform plan vpc -s prod
+
+        # Use environment variable
+        ATMOS_PROFILE=developer atmos terraform plan vpc -s prod
+
+        # Activate multiple profiles (comma-separated, applied left-to-right)
+        atmos --profile ci,security terraform plan vpc -s prod
+        ATMOS_PROFILE="developer,debug" atmos describe stacks
+
+        # Flag takes precedence over environment variable
+        ATMOS_PROFILE=ci atmos --profile developer describe config
+        # Uses: developer profile (flag wins)
+        ```
+
+        **Profile Configuration:**
+
+        Profiles are defined in your `atmos.yaml` or in separate profile directories. Each profile can override any Atmos configuration setting:
+
+        ```yaml
+        # atmos.yaml
+        profiles:
+          developer:
+            logs:
+              level: Debug
+            settings:
+              terminal:
+                max_width: 120
+
+          ci:
+            logs:
+              level: Info
+            settings:
+              terminal:
+                color: false
+                pager: false
+        ```
+
+        Or use separate profile directories for better organization:
+
+        ```
+        profiles/
+        ├── developer/
+        │   ├── atmos.yaml      # Developer-specific config
+        │   └── auth.yaml       # Developer auth settings
+        ├── ci/
+        │   ├── atmos.yaml      # CI-specific config
+        │   └── auth.yaml       # CI auth settings
+        └── production/
+            ├── atmos.yaml      # Production config
+            └── auth.yaml       # Production auth settings
+        ```
+
+        **Available via:**
+        - `--profile` flag
+        - `ATMOS_PROFILE` environment variable
+
+        <Note>
+            Profiles are loaded early in Atmos initialization (before stack processing) and can override any configuration setting including logging, terminal settings, and authentication.
+        </Note>
+    </dd>
+
     <dt>`--logs-level`</dt>
     <dd>
         Set the logging level for Atmos operations.
@@ -154,6 +228,28 @@ These flags are available for every Atmos command:
         - Useful for CI/CD environments or when piping output
         - Can also use `ATMOS_NO_COLOR` or `NO_COLOR` environment variables
         - The `NO_COLOR` env var follows the standard from https://no-color.org/
+        - **Takes highest precedence**: Overrides `--force-color`, `--color`, and all other color settings
+    </dd>
+
+    <dt>`--force-tty`</dt>
+    <dd>
+        Force TTY mode with sane defaults when terminal detection fails.
+        - Useful for screenshot generation and documentation
+        - Uses default terminal dimensions (width=120, height=40)
+        - Forces `IsTTY()` to return `true` even when not a TTY
+        - Can also use `ATMOS_FORCE_TTY` environment variable
+        - Example: `atmos terraform plan --force-tty --force-color | screenshot.sh`
+    </dd>
+
+    <dt>`--force-color`</dt>
+    <dd>
+        Force TrueColor output even when not a TTY.
+        - Useful for screenshot generation and documentation
+        - Forces 24-bit TrueColor profile regardless of terminal detection
+        - Overrides automatic color degradation
+        - Can also use `ATMOS_FORCE_COLOR` environment variable
+        - **Note**: The `NO_COLOR` environment variable or `--no-color` flag takes precedence and will disable color even when `--force-color` is set
+        - Example: `ATMOS_FORCE_COLOR=true atmos describe stacks | vhs record.tape`
     </dd>
 
     <dt>`--pager`</dt>
@@ -349,6 +445,15 @@ All global flags can be set using environment variables. The precedence order is
     <dt>`ATMOS_BASE_PATH`</dt>
     <dd>Sets the base path for the Atmos project</dd>
 
+    <dt>`ATMOS_PROFILE`</dt>
+    <dd>
+        Activate configuration profiles (comma-separated).
+        - Equivalent to the `--profile` flag
+        - CLI flag takes precedence over this environment variable
+        - Supports multiple profiles: `ATMOS_PROFILE="developer,debug"`
+        - Example: `ATMOS_PROFILE=ci atmos terraform plan vpc -s prod`
+    </dd>
+
     <dt>`ATMOS_LOGS_LEVEL`</dt>
     <dd>Sets the logging level</dd>
 
@@ -368,8 +473,29 @@ All global flags can be set using environment variables. The precedence order is
         Disable colored output (any non-empty value disables color).
         - `NO_COLOR` is a standard environment variable supported by many CLI tools (https://no-color.org/)
         - Maintained for portability across different systems and CI/CD environments
-        - Takes precedence over `ATMOS_COLOR`/`COLOR` settings
+        - **Highest precedence**: Takes precedence over `ATMOS_FORCE_COLOR`, `CLICOLOR_FORCE`, `ATMOS_COLOR`, and `COLOR` settings
+        - Overrides `--force-color` flag
         - Both `ATMOS_NO_COLOR` and `NO_COLOR` are fully supported
+    </dd>
+
+    <dt>`ATMOS_FORCE_TTY`</dt>
+    <dd>
+        Force TTY mode with sane defaults when terminal detection fails.
+        - Useful for screenshot generation and documentation
+        - Uses default terminal dimensions (width=120, height=40)
+        - Example: `ATMOS_FORCE_TTY=true atmos describe stacks`
+    </dd>
+
+    <dt>`ATMOS_FORCE_COLOR` / `CLICOLOR_FORCE`</dt>
+    <dd>
+        Force TrueColor output even when not a TTY.
+        - Both `ATMOS_FORCE_COLOR` and `CLICOLOR_FORCE` are equivalent and fully supported
+        - `CLICOLOR_FORCE` is a standard environment variable (https://bixense.com/clicolors/)
+        - Useful for screenshot generation and piping to color-aware tools
+        - Forces 24-bit TrueColor profile regardless of terminal detection
+        - **Note**: `NO_COLOR` environment variable takes precedence and will disable color even when this is set
+        - Example: `ATMOS_FORCE_COLOR=true atmos describe config | bat`
+        - Example: `CLICOLOR_FORCE=1 atmos terraform plan`
     </dd>
 
     <dt>`ATMOS_PAGER` / `PAGER`</dt>
@@ -393,6 +519,34 @@ All global flags can be set using environment variables. The precedence order is
 
     <dt>`ATMOS_PROFILE_TYPE`</dt>
     <dd>Set the profile type for file-based profiling (cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace)</dd>
+</dl>
+
+### XDG Base Directory Environment Variables
+
+<dl>
+    <dt>`ATMOS_XDG_CACHE_HOME` / `XDG_CACHE_HOME`</dt>
+    <dd>
+        Override the default XDG cache directory for Atmos.
+        - Default: `~/.cache` on Linux/Unix/macOS, `%LOCALAPPDATA%\cache` on Windows
+        - Used for: Cache files (`cache.yaml`), auth provisioning cache
+        - Example: `ATMOS_XDG_CACHE_HOME=/custom/cache atmos describe stacks`
+    </dd>
+
+    <dt>`ATMOS_XDG_DATA_HOME` / `XDG_DATA_HOME`</dt>
+    <dd>
+        Override the default XDG data directory for Atmos.
+        - Default: `~/.local/share` on Linux/Unix/macOS, `%LOCALAPPDATA%` on Windows
+        - Used for: File-based keyring storage
+        - Example: `ATMOS_XDG_DATA_HOME=/custom/data atmos auth login`
+    </dd>
+
+    <dt>`ATMOS_XDG_CONFIG_HOME` / `XDG_CONFIG_HOME`</dt>
+    <dd>
+        Override the default XDG config directory for Atmos.
+        - Default: `~/.config` on Linux/Unix/macOS, `%APPDATA%` on Windows
+        - Reserved for future use
+        - Example: `ATMOS_XDG_CONFIG_HOME=/custom/config`
+    </dd>
 </dl>
 
 ## Portability Notes
@@ -562,5 +716,5 @@ kubectl get pods
 ## See Also
 
 - [CLI Configuration](/cli/configuration) - Detailed configuration file reference
-- [Terminal Settings](/cli/configuration/terminal) - Terminal-specific configuration options
-- [Environment Variables](/cli/configuration#environment-variables) - Complete environment variable reference
+- [Terminal Settings](/cli/configuration/settings/terminal) - Terminal-specific configuration options
+- [Environment Variables](/cli/environment-variables) - Complete environment variable reference

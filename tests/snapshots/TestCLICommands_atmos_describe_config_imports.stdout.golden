@@ -258,7 +258,7 @@ settings:
   list_merge_strategy: replace
   terminal:
     max_width: 120
-    pager: "0"
+    pager: "false"
     unicode: true
     syntax_highlighting:
       enabled: true
@@ -288,6 +288,8 @@ settings:
       color: ${colors.primary}
       underline: true
   inject_github_token: true
+  inject_bitbucket_token: true
+  inject_gitlab_token: true
   pro:
     base_url: https://atmos-pro.com
     endpoint: api/v1

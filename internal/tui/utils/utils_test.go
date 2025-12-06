@@ -222,6 +222,9 @@ func TestPrintStyledTextToSpecifiedOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Enable color output for tests by setting ATMOS_FORCE_COLOR.
+			t.Setenv("ATMOS_FORCE_COLOR", "1")
+
 			var buf bytes.Buffer
 			err := PrintStyledTextToSpecifiedOutput(&buf, tt.text)
 

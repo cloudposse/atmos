@@ -165,7 +165,8 @@ func TestCheckErrorAndPrint(t *testing.T) {
 
 	// Redirect stderr
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, pipeErr := os.Pipe()
+	assert.NoError(t, pipeErr, "failed to create pipe")
 	os.Stderr = w
 
 	CheckErrorAndPrint(err, title, suggestion)
@@ -193,19 +194,37 @@ func TestCheckErrorAndPrint(t *testing.T) {
 			render = originalRender
 		}()
 
-		logBuf.Reset()
+		r, w, pipeErr := os.Pipe()
+		assert.NoError(t, pipeErr, "failed to create pipe")
+		originalStderr := os.Stderr
+		os.Stderr = w
+		defer func() {
+			os.Stderr = originalStderr
+		}()
+
 		testErr := errors.New("error with nil render")
 		CheckErrorAndPrint(testErr, "Test", "Suggestion")
 
-		// Should log error directly
-		assert.Contains(t, logBuf.String(), "error with nil render")
+		err := w.Close()
+		assert.NoError(t, err, "failed to close pipe writer")
+
+		var buf bytes.Buffer
+		_, err = buf.ReadFrom(r)
+		assert.NoError(t, err, "failed to read from pipe")
+		output := buf.String()
+
+		// Should output plain text error to stderr
+		assert.Contains(t, output, "error with nil render")
+		assert.Contains(t, output, "Test")
+		assert.Contains(t, output, "Suggestion")
 	})
 
 	// Test with empty title (defaults to "Error")
 	t.Run("empty title", func(t *testing.T) {
 		render, _ = markdown.NewTerminalMarkdownRenderer(schema.AtmosConfiguration{})
 
-		r, w, _ := os.Pipe()
+		r, w, pipeErr := os.Pipe()
+		assert.NoError(t, pipeErr, "failed to create pipe")
 		os.Stderr = w
 
 		testErr := errors.New("test error with empty title")
@@ -238,7 +257,7 @@ func TestInitializeMarkdown(t *testing.T) {
 	t.Run("valid configuration", func(t *testing.T) {
 		logBuf.Reset()
 		atmosConfig := schema.AtmosConfiguration{}
-		InitializeMarkdown(atmosConfig)
+		InitializeMarkdown(&atmosConfig)
 
 		// Should initialize without error
 		assert.NotContains(t, logBuf.String(), "failed to initialize Markdown renderer")

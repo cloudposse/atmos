@@ -1,0 +1,102 @@
+---
+title: atmos terraform refresh
+sidebar_label: refresh
+sidebar_class_name: command
+id: refresh
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to refresh the Terraform state for an Atmos component in a stack, updating it to match the current remote infrastructure.
+</Intro>
+
+<Screengrab title="atmos terraform refresh --help" slug="atmos-terraform-refresh--help" />
+
+## Usage
+
+Execute the `terraform refresh` command like this:
+
+```shell
+atmos terraform refresh <component> -s <stack> [options]
+```
+
+This command reads the current settings from all managed remote objects and updates the Terraform state to match. This won't modify your infrastructure but will update the state file.
+
+:::info Atmos Enhancements
+Atmos enhances the refresh command with:
+- Automatic `terraform init` before refreshing
+- Workspace selection and management
+- **Automatic variable file generation and passing**
+- Backend configuration
+- Component validation
+:::
+## Examples
+
+### Basic Refresh
+
+```shell
+# Refresh the state for a component
+atmos terraform refresh vpc -s dev
+```
+
+### Targeted Refresh
+
+```shell
+# Refresh specific resources only
+atmos terraform refresh vpc -s dev -target=aws_instance.web
+```
+
+### Refresh with Variable Override
+
+```shell
+# Refresh with different variable values
+atmos terraform refresh vpc -s dev -var="instance_type=t3.large"
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform refresh vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform refresh vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+This command supports native `terraform refresh` flags such as `-target=RESOURCE` to refresh specific resources, `-var` to override variables, `-var-file` to specify variable files.
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

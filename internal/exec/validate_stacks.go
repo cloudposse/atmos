@@ -19,6 +19,7 @@ import (
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -61,7 +62,15 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	err = ValidateStacks(&atmosConfig)
-	return err
+	if err != nil {
+		_ = ui.ClearLine()
+		_ = ui.Error("Stack validation failed")
+		return err
+	}
+	_ = ui.ClearLine()
+	_ = ui.Success("All stacks validated successfully")
+	log.Debug("Stack validation completed")
+	return nil
 }
 
 // ValidateStacks validates Atmos stack configuration.
@@ -393,7 +402,14 @@ func checkComponentStackMap(componentStackMap map[string]map[string][]string) ([
 				// If the configs are different, add it to the errors
 				var componentConfigs []map[string]any
 				for _, stackManifestName := range stackManifests {
-					componentConfig, err := ExecuteDescribeComponent(componentName, stackManifestName, false, false, nil)
+					componentConfig, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+						Component:            componentName,
+						Stack:                stackManifestName,
+						ProcessTemplates:     false,
+						ProcessYamlFunctions: false,
+						Skip:                 nil,
+						AuthManager:          nil,
+					})
 					if err != nil {
 						return nil, err
 					}

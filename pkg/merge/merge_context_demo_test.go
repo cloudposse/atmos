@@ -2,7 +2,6 @@ package merge
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 )
 
@@ -21,11 +20,13 @@ func TestMergeContextErrorDemo(t *testing.T) {
 	// Format the error with context
 	enhancedError := ctx.FormatError(mergoError)
 
-	// Print the enhanced error to show what users will see
-	fmt.Printf("\n=== Enhanced Error Message ===\n%s\n=== End of Error Message ===\n", enhancedError)
-
 	// The test passes if we successfully format the error
 	if enhancedError != nil {
+		t.Cleanup(func() {
+			if t.Failed() {
+				t.Logf("\n=== Enhanced Error Message ===\n%s\n=== End of Error Message ===\n", enhancedError)
+			}
+		})
 		t.Log("Successfully demonstrated enhanced error formatting")
 	}
 }
@@ -49,8 +50,10 @@ func TestMergeContextRealWorldScenario(t *testing.T) {
 		"This error occurred while processing VPC configuration",
 		"The 'subnets' field appears to have conflicting types")
 
-	// Print to show the result
-	fmt.Printf("\n=== Complex Scenario Error ===\n%s\n=== End of Error ===\n", enhancedError)
-
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("\n=== Complex Scenario Error ===\n%s\n=== End of Error ===\n", enhancedError)
+		}
+	})
 	t.Log("Demonstrated complex import chain error formatting")
 }

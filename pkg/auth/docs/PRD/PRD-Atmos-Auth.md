@@ -1047,7 +1047,7 @@ identities:
 
 #### AWS User (Break-glass)
 
-AWS User identities are standalone and do not require a `via` provider configuration. They authenticate directly using AWS access keys.
+AWS User identities are standalone and do not require a `via` provider configuration. They authenticate directly using AWS access keys with optional multi-factor authentication (MFA) support.
 
 ```yaml
 identities:
@@ -1063,6 +1063,7 @@ identities:
     kind: aws/user
     credentials:
       # If not defined, the credentials will try to be pulled from the keyring.
+      mfa_arn: arn:aws:iam::123456789012:mfa/username  # Optional: Direct MFA ARN
       region: us-east-1
 ```
 
@@ -1074,7 +1075,145 @@ identities:
 - MFA ARN support integrated directly into `AWSCredentials` schema
 - Primarily used for break-glass scenarios and emergency access
 - Direct AWS API authentication using access key pairs
-- AWS files written to `~/.aws/atmos/aws-user/credentials` and `~/.aws/atmos/aws-user/config`
+- AWS files written to XDG config directory (e.g., `~/.config/atmos/aws/aws-user/credentials` and `~/.config/atmos/aws/aws-user/config` on Linux)
+
+**Multi-Factor Authentication (MFA) - AWS Implementation:**
+
+AWS User identities support MFA devices for enhanced security. When an MFA device ARN is configured, Atmos prompts for a time-based one-time password (TOTP) during authentication.
+
+> **Note:** This describes the MFA implementation for AWS IAM users. Future implementations will support MFA for Azure (multi-factor authentication via Entra ID), GCP (2-Step Verification), and other cloud providers, each with their provider-specific MFA mechanisms.
+
+**Configuration Options:**
+
+```yaml
+# Option 1: Complete credentials in YAML (direct values or environment variables)
+identities:
+  prod-admin:
+    kind: aws/user
+    session:
+      duration: "12h"  # Session token duration (default: 12h, max: 36h with MFA)
+    credentials:
+      access_key_id: !env AWS_ACCESS_KEY_ID
+      secret_access_key: !env AWS_SECRET_ACCESS_KEY
+      mfa_arn: arn:aws:iam::123456789012:mfa/username
+      region: us-east-1
+
+# Option 2: Credentials in keyring, MFA ARN in YAML (RECOMMENDED)
+# Store access keys via 'atmos auth user configure', override MFA ARN in YAML
+identities:
+  prod-admin:
+    kind: aws/user
+    session:
+      duration: "24h"  # Extended session with MFA
+    credentials:
+      mfa_arn: arn:aws:iam::123456789012:mfa/username  # YAML overrides keyring
+      region: us-east-1
+
+# Option 3: All credentials in keyring (via atmos auth user configure)
+# No credentials in YAML - everything retrieved from keyring
+identities:
+  prod-admin:
+    kind: aws/user
+    session:
+      duration: "8h"   # Can also be configured in keyring via 'atmos auth user configure'
+    credentials:
+      region: us-east-1
+```
+
+**Credential Precedence (Deep Merge):**
+
+Atmos uses per-field precedence with deep merge:
+
+1. **If YAML has complete credentials** (both `access_key_id` and `secret_access_key`):
+   - Use YAML entirely (including `mfa_arn` from YAML)
+   - Keyring is ignored
+
+2. **If YAML has no credentials** (both keys empty or omitted):
+   - Use keyring credentials (access keys + MFA ARN)
+   - **Override MFA ARN from YAML if present** (allows version-controlled MFA config)
+
+3. **If YAML has partial credentials** (only one key):
+   - Error: Both keys must be provided or both must be empty
+
+This allows flexible configuration:
+- **Store sensitive credentials in keyring** (local, secure)
+- **Configure MFA ARN in YAML** (version controlled, shared across team)
+- **Override any field** from YAML without losing keyring credentials
+
+**Authentication Flow with MFA:**
+
+1. **Credential Resolution:**
+   - Atmos retrieves long-lived credentials (access key + secret) from YAML config or keychain
+   - MFA ARN is retrieved from YAML config, environment variable, or keychain
+
+2. **Interactive TOTP Prompt:**
+   - If MFA ARN is configured, Atmos displays an interactive form
+   - User enters 6-digit TOTP code from authenticator app (Google Authenticator, Authy, etc.)
+   - TOTP is validated (must be exactly 6 digits, cannot be empty)
+
+3. **Session Token Generation:**
+   - Atmos calls AWS STS `GetSessionToken` with:
+     - Long-lived credentials (access key + secret)
+     - MFA device ARN (`SerialNumber` parameter)
+     - TOTP code (`TokenCode` parameter)
+     - Session duration (configurable, default: 12 hours)
+   - AWS validates MFA and returns temporary session credentials
+
+4. **Credential Storage:**
+   - Temporary session credentials (access key + secret + session token) are written to AWS files
+   - Long-lived credentials remain unchanged in keychain
+   - Session credentials are valid for configured duration
+
+5. **Subsequent Operations:**
+   - All AWS API calls use temporary session credentials
+   - Session credentials expire after configured duration
+   - Re-authentication required after expiration (prompts for new TOTP)
+
+**Session Duration Configuration:**
+
+Session duration controls how long temporary credentials remain valid:
+
+```yaml
+providers:
+  company-sso:
+    kind: aws/iam-identity-center
+    session:
+      duration: "8h"
+
+identities:
+  prod-admin:
+    kind: aws/user
+    session:
+      duration: "24h"  # Formats: integers (seconds), Go durations ("1h"), or days ("1d")
+```
+
+**AWS IAM user limits**: 15m-12h (no MFA) or 15m-36h (with MFA). Default: 12h
+
+**Security Model:**
+
+- **MFA Device ARN:** Not a secret - safe to store in version-controlled YAML configuration
+- **TOTP Codes:** Never stored - ephemeral input only, required for each authentication session
+- **Long-lived Credentials:** Stored securely in OS keychain, never in plain text
+- **Session Credentials:** Written to AWS files, automatically expire after the configured duration (default: 12h; up to 36h with MFA)
+- **Defense-in-Depth:** Even if long-lived credentials are compromised, attacker needs physical access to MFA device
+
+**Implementation Details:**
+
+- **File:** `pkg/auth/identities/aws/user.go`
+- **TOTP Prompt Function:** `promptMfaTokenFunc` (line 282) - uses Charm Bracelet `huh` library for interactive form
+- **MFA Form:** `newMfaForm` (line 381) - validates 6-digit TOTP, displays MFA device ARN
+- **Session Token Generation:** `generateSessionToken` (line 209) - calls AWS STS with MFA parameters
+- **Input Construction:** `buildGetSessionTokenInput` (line 360) - conditionally adds MFA parameters
+- **Credential Resolution:** `resolveLongLivedCredentials` (line 86) - prioritizes YAML config over keychain
+- **MFA ARN Storage:** `AWSCredentials.MfaArn` field (line 22 in `pkg/auth/types/aws_credentials.go`)
+
+**Use Cases:**
+
+- **Compliance Requirements:** Organizations mandating MFA for privileged access
+- **Break-glass Access:** Emergency accounts requiring enhanced security
+- **Production Environments:** Critical infrastructure requiring defense-in-depth
+- **Regulatory Compliance:** HIPAA, SOC 2, PCI-DSS environments
+- **Zero Trust Architecture:** Multi-layered authentication for least-privilege access
 
 #### Azure Role (Not Implemented)
 

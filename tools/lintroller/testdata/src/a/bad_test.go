@@ -57,3 +57,23 @@ func BenchmarkGoodMkdirTemp(b *testing.B) {
 func BenchmarkGoodOsSetenv(b *testing.B) {
 	os.Setenv("PATH", "/bench/path") // OK: os.Setenv is allowed in benchmarks.
 }
+
+// Test os.Args in test file (os-args-in-test rule).
+func TestBadOsArgs(t *testing.T) {
+	oldArgs := os.Args // want "os.Args should not be used in test files; use cmd.SetArgs\\(\\) instead to set command arguments \\(os.Args is allowed in benchmark functions\\)"
+	defer func() {
+		os.Args = oldArgs // want "os.Args should not be used in test files; use cmd.SetArgs\\(\\) instead to set command arguments \\(os.Args is allowed in benchmark functions\\)"
+	}()
+
+	os.Args = []string{"test", "arg"} // want "os.Args should not be used in test files; use cmd.SetArgs\\(\\) instead to set command arguments \\(os.Args is allowed in benchmark functions\\)"
+}
+
+// Test os.Args allowed in benchmark.
+func BenchmarkGoodOsArgs(b *testing.B) {
+	oldArgs := os.Args // OK: os.Args is allowed in benchmarks.
+	defer func() {
+		os.Args = oldArgs // OK: os.Args is allowed in benchmarks.
+	}()
+
+	os.Args = []string{"bench", "arg"} // OK: os.Args is allowed in benchmarks.
+}

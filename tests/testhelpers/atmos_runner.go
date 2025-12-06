@@ -66,7 +66,7 @@ func (r *AtmosRunner) buildWithoutCoverage() error {
 		tempBinary += ".exe"
 	}
 	// Build from the repository root.
-	repoRoot, err := findRepoRoot()
+	repoRoot, err := FindRepoRoot()
 	if err != nil {
 		return fmt.Errorf("failed to find repository root: %w", err)
 	}
@@ -111,7 +111,7 @@ func (r *AtmosRunner) buildWithCoverage() error {
 		tempBinary += ".exe"
 	}
 	// Build from the repository root.
-	repoRoot, err := findRepoRoot()
+	repoRoot, err := FindRepoRoot()
 	if err != nil {
 		return fmt.Errorf("failed to find repository root: %w", err)
 	}
@@ -208,8 +208,8 @@ func (r *AtmosRunner) Cleanup() {
 	}
 }
 
-// findRepoRoot finds the root of the git repository.
-func findRepoRoot() (string, error) {
+// FindRepoRoot finds the root of the git repository.
+func FindRepoRoot() (string, error) {
 	// Start from current directory and walk up to find .git directory.
 	dir, err := os.Getwd()
 	if err != nil {

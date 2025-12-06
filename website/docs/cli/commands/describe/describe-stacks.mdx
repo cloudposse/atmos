@@ -24,6 +24,10 @@ atmos describe stacks [options]
 
 This command shows configuration for stacks and components in the stacks.
 
+:::info YAML Functions and Authentication
+By default, `atmos describe stacks` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during stack processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
+:::
+
 :::tip
 Run `atmos describe stacks --help` to see all the available options
 :::
@@ -50,6 +54,12 @@ atmos describe stacks --skip=terraform.output
 atmos describe stacks --skip=terraform.output --skip=include
 atmos describe stacks --skip=include,eval
 atmos describe stacks --query <yq-expression>
+# Authenticate before describing (when YAML functions require credentials)
+atmos describe stacks --identity my-aws-identity
+atmos describe stacks --identity # Interactive selection
+# Disable authentication (use AWS SDK defaults)
+atmos describe stacks --identity=false
+atmos describe stacks -i my-aws-identity -s tenant1-ue2-dev
 ```
 
 :::tip
@@ -88,6 +98,9 @@ Use the `--query` flag (shorthand `-q`) to filter the output.
 
   <dt>`--query` / `-q` <em>(optional)</em></dt>
   <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe stacks --query <yq-expression>`.<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
+
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before describing stacks.<br/>This is required when YAML template functions (e.g., `!terraform.state`, `!terraform.output`)<br/>need to access remote resources requiring authentication.<br/>Use without a value for interactive identity selection:<br/>`atmos describe stacks --identity` (interactive)<br/>`atmos describe stacks --identity my-aws-identity` (specific identity)<br/><br/>For more details, refer to [Authentication](/cli/commands/auth/usage).</dd>
 </dl>
 
 :::note Provenance Tracking

@@ -1,0 +1,6 @@
+# Mock test stack.
+components:
+  terraform:
+    test:
+      vars:
+        enabled: true

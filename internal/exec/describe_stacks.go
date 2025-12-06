@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -29,9 +30,10 @@ type DescribeStacksArgs struct {
 	Skip                 []string
 	Format               string
 	File                 string
+	AuthManager          auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DescribeStacksExec interface {
 	Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeStacksArgs) error
 }
@@ -51,10 +53,13 @@ type describeStacksExec struct {
 		processYamlFunctions bool,
 		includeEmptyStacks bool,
 		skip []string,
+		authManager auth.AuthManager,
 	) (map[string]any, error)
 }
 
 func NewDescribeStacksExec() DescribeStacksExec {
+	defer perf.Track(nil, "exec.NewDescribeStacksExec")()
+
 	return &describeStacksExec{
 		pageCreator:           pager.New(),
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
@@ -78,6 +83,7 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 		args.ProcessYamlFunctions,
 		args.IncludeEmptyStacks,
 		args.Skip,
+		args.AuthManager,
 	)
 	if err != nil {
 		return err
@@ -118,7 +124,10 @@ func ExecuteDescribeStacks(
 	processYamlFunctions bool,
 	includeEmptyStacks bool,
 	skip []string,
+	authManager auth.AuthManager,
 ) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.ExecuteDescribeStacks")()
+
 	stacksMap, _, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
 	if err != nil {
 		return nil, err
@@ -141,10 +150,10 @@ func ExecuteDescribeStacks(
 	for stackFileName, stackSection := range stacksMap {
 		var context schema.Context
 
-		// Delete the stack-wide imports
+		// Delete the stack-wide imports.
 		delete(stackSection.(map[string]any), "imports")
 
-		// Check if the `components` section exists and has explicit components
+		// Check if the `components` section exists and has explicit components.
 		hasExplicitComponents := false
 		if componentsSection, ok := stackSection.(map[string]any)[cfg.ComponentsSectionName]; ok {
 			if componentsSection != nil {
@@ -160,13 +169,13 @@ func ExecuteDescribeStacks(
 			}
 		}
 
-		// Also check for imports
+		// Also check for imports.
 		hasImports := false
 		if importsSection, ok := stackSection.(map[string]any)["import"].([]any); ok {
 			hasImports = len(importsSection) > 0
 		}
 
-		// Skip stacks without components or imports when includeEmptyStacks is false
+		// Skip stacks without components or imports when includeEmptyStacks is false.
 		if !includeEmptyStacks && !hasExplicitComponents && !hasImports {
 			continue
 		}
@@ -184,7 +193,7 @@ func ExecuteDescribeStacks(
 
 		if componentsSection, ok := stackSection.(map[string]any)[cfg.ComponentsSectionName].(map[string]any); ok {
 
-			// Terraform
+			// Terraform.
 			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, cfg.TerraformSectionName) {
 				if terraformSection, ok := componentsSection[cfg.TerraformSectionName].(map[string]any); ok {
 					for componentName, compSection := range terraformSection {
@@ -197,7 +206,7 @@ func ExecuteDescribeStacks(
 							componentSection[cfg.ComponentSectionName] = componentName
 						}
 
-						// Find all derived components of the provided components and include them in the output
+						// Find all derived components of the provided components and include them in the output.
 						derivedComponents, err := FindComponentsDerivedFromBaseComponents(stackFileName, terraformSection, components)
 						if err != nil {
 							return nil, err
@@ -270,11 +279,19 @@ func ExecuteDescribeStacks(
 							},
 						}
 
+						// Populate AuthContext from AuthManager if provided (from --identity flag).
+						if authManager != nil {
+							managerStackInfo := authManager.GetStackInfo()
+							if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+								configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+							}
+						}
+
 						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
 							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 						}
 
-						// Stack name
+						// Stack name.
 						if atmosConfig.Stacks.NameTemplate != "" {
 							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
@@ -297,7 +314,7 @@ func ExecuteDescribeStacks(
 							stackName = stackFileName
 						}
 
-						// Only create the stack entry if it doesn't exist
+						// Only create the stack entry if it doesn't exist.
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
@@ -319,7 +336,7 @@ func ExecuteDescribeStacks(
 								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)[componentName] = make(map[string]any)
 							}
 
-							// Atmos component, stack, and stack manifest file
+							// Atmos component, stack, and stack manifest file.
 							configAndStacksInfo.Stack = stackName
 							componentSection["atmos_component"] = componentName
 							componentSection["atmos_stack"] = stackName
@@ -327,7 +344,7 @@ func ExecuteDescribeStacks(
 							componentSection["atmos_stack_file"] = stackFileName
 							componentSection["atmos_manifest"] = stackFileName
 
-							// Terraform workspace
+							// Terraform workspace.
 							workspace, err := BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
 							if err != nil {
 								return nil, err
@@ -335,7 +352,7 @@ func ExecuteDescribeStacks(
 							componentSection["workspace"] = workspace
 							configAndStacksInfo.ComponentSection["workspace"] = workspace
 
-							// Process `Go` templates
+							// Process `Go` templates.
 							if processTemplates {
 								componentSectionStr, err := u.ConvertToYAML(componentSection)
 								if err != nil {
@@ -376,13 +393,14 @@ func ExecuteDescribeStacks(
 								componentSection = componentSectionConverted
 							}
 
-							// Process YAML functions
+							// Process YAML functions.
 							if processYamlFunctions {
 								componentSectionConverted, err := ProcessCustomYamlTags(
 									atmosConfig,
 									componentSection,
 									configAndStacksInfo.Stack,
 									skip,
+									&configAndStacksInfo,
 								)
 								if err != nil {
 									return nil, err
@@ -391,16 +409,15 @@ func ExecuteDescribeStacks(
 								componentSection = componentSectionConverted
 							}
 
-							// Check if we should include empty sections
-							includeEmpty := true // Default to true if setting is not provided // pending Erik accept
+							// Check if we should include empty sections.
+							includeEmpty := true // Default to true if `setting` is not provided.
 							if atmosConfig.Describe.Settings.IncludeEmpty != nil {
 								includeEmpty = *atmosConfig.Describe.Settings.IncludeEmpty
 							}
 
-							// Add sections
+							// Add sections.
 							for sectionName, section := range componentSection {
-								// Skip empty sections if includeEmpty is false
-								// pending Erik to check if this should also remove empty strings e.g (vars: format: "")
+								// Skip empty sections if includeEmpty is false.
 								if !includeEmpty {
 									if sectionMap, ok := section.(map[string]any); ok {
 										if len(sectionMap) == 0 {
@@ -418,7 +435,7 @@ func ExecuteDescribeStacks(
 				}
 			}
 
-			// Helmfile
+			// Helmfile.
 			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, cfg.HelmfileSectionName) {
 				if helmfileSection, ok := componentsSection[cfg.HelmfileSectionName].(map[string]any); ok {
 					for componentName, compSection := range helmfileSection {
@@ -431,7 +448,7 @@ func ExecuteDescribeStacks(
 							componentSection[cfg.ComponentSectionName] = componentName
 						}
 
-						// Find all derived components of the provided components and include them in the output
+						// Find all derived components of the provided components and include them in the output.
 						derivedComponents, err := FindComponentsDerivedFromBaseComponents(stackFileName, helmfileSection, components)
 						if err != nil {
 							return nil, err
@@ -504,11 +521,19 @@ func ExecuteDescribeStacks(
 							},
 						}
 
+						// Populate AuthContext from AuthManager if provided (from --identity flag).
+						if authManager != nil {
+							managerStackInfo := authManager.GetStackInfo()
+							if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+								configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+							}
+						}
+
 						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
 							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 						}
 
-						// Stack name
+						// Stack name.
 						if atmosConfig.Stacks.NameTemplate != "" {
 							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
@@ -531,7 +556,7 @@ func ExecuteDescribeStacks(
 							stackName = stackFileName
 						}
 
-						// Only create the stack entry if it doesn't exist
+						// Only create the stack entry if it doesn't exist.
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
@@ -554,14 +579,14 @@ func ExecuteDescribeStacks(
 								finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName] = make(map[string]any)
 							}
 
-							// Atmos component, stack, and stack manifest file
+							// Atmos component, stack, and stack manifest file.
 							componentSection["atmos_component"] = componentName
 							componentSection["atmos_stack"] = stackName
 							componentSection["stack"] = stackName
 							componentSection["atmos_stack_file"] = stackFileName
 							componentSection["atmos_manifest"] = stackFileName
 
-							// Process `Go` templates
+							// Process `Go` templates.
 							if processTemplates {
 								componentSectionStr, err := u.ConvertToYAML(componentSection)
 								if err != nil {
@@ -602,13 +627,14 @@ func ExecuteDescribeStacks(
 								componentSection = componentSectionConverted
 							}
 
-							// Process YAML functions
+							// Process YAML functions.
 							if processYamlFunctions {
 								componentSectionConverted, err := ProcessCustomYamlTags(
 									atmosConfig,
 									componentSection,
 									configAndStacksInfo.Stack,
 									skip,
+									&configAndStacksInfo,
 								)
 								if err != nil {
 									return nil, err
@@ -617,7 +643,7 @@ func ExecuteDescribeStacks(
 								componentSection = componentSectionConverted
 							}
 
-							// Add sections
+							// Add sections.
 							for sectionName, section := range componentSection {
 								if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
 									finalStacksMap[stackName].(map[string]any)["components"].(map[string]any)["helmfile"].(map[string]any)[componentName].(map[string]any)[sectionName] = section
@@ -628,7 +654,7 @@ func ExecuteDescribeStacks(
 				}
 			}
 
-			// Packer
+			// Packer.
 			if len(componentTypes) == 0 || u.SliceContainsString(componentTypes, cfg.PackerSectionName) {
 				if packerSection, ok := componentsSection[cfg.PackerSectionName].(map[string]any); ok {
 					for componentName, compSection := range packerSection {
@@ -641,7 +667,7 @@ func ExecuteDescribeStacks(
 							componentSection[cfg.ComponentSectionName] = componentName
 						}
 
-						// Find all derived components of the provided components and include them in the output
+						// Find all derived components of the provided components and include them in the output.
 						derivedComponents, err := FindComponentsDerivedFromBaseComponents(stackFileName, packerSection, components)
 						if err != nil {
 							return nil, err
@@ -714,11 +740,19 @@ func ExecuteDescribeStacks(
 							},
 						}
 
+						// Populate AuthContext from AuthManager if provided (from --identity flag).
+						if authManager != nil {
+							managerStackInfo := authManager.GetStackInfo()
+							if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+								configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+							}
+						}
+
 						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
 							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
 						}
 
-						// Stack name
+						// Stack name.
 						if atmosConfig.Stacks.NameTemplate != "" {
 							stackName, err = ProcessTmpl(atmosConfig, "describe-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 							if err != nil {
@@ -741,7 +775,7 @@ func ExecuteDescribeStacks(
 							stackName = stackFileName
 						}
 
-						// Only create the stack entry if it doesn't exist
+						// Only create the stack entry if it doesn't exist.
 						if !u.MapKeyExists(finalStacksMap, stackName) {
 							finalStacksMap[stackName] = make(map[string]any)
 						}
@@ -764,14 +798,14 @@ func ExecuteDescribeStacks(
 								finalStacksMap[stackName].(map[string]any)[cfg.ComponentsSectionName].(map[string]any)[cfg.PackerSectionName].(map[string]any)[componentName] = make(map[string]any)
 							}
 
-							// Atmos component, stack, and stack manifest file
+							// Atmos component, stack, and stack manifest file.
 							componentSection["atmos_component"] = componentName
 							componentSection["atmos_stack"] = stackName
 							componentSection["stack"] = stackName
 							componentSection["atmos_stack_file"] = stackFileName
 							componentSection["atmos_manifest"] = stackFileName
 
-							// Process `Go` templates
+							// Process `Go` templates.
 							if processTemplates {
 								componentSectionStr, err := u.ConvertToYAML(componentSection)
 								if err != nil {
@@ -812,13 +846,14 @@ func ExecuteDescribeStacks(
 								componentSection = componentSectionConverted
 							}
 
-							// Process YAML functions
+							// Process YAML functions.
 							if processYamlFunctions {
 								componentSectionConverted, err := ProcessCustomYamlTags(
 									atmosConfig,
 									componentSection,
 									configAndStacksInfo.Stack,
 									skip,
+									&configAndStacksInfo,
 								)
 								if err != nil {
 									return nil, err
@@ -827,7 +862,7 @@ func ExecuteDescribeStacks(
 								componentSection = componentSectionConverted
 							}
 
-							// Add sections
+							// Add sections.
 							for sectionName, section := range componentSection {
 								if len(sections) == 0 || u.SliceContainsString(sections, sectionName) {
 									finalStacksMap[stackName].(map[string]any)[cfg.ComponentsSectionName].(map[string]any)[cfg.PackerSectionName].(map[string]any)[componentName].(map[string]any)[sectionName] = section
@@ -840,7 +875,7 @@ func ExecuteDescribeStacks(
 		}
 	}
 
-	// Filter out empty stacks after processing all stack files
+	// Filter out empty stacks after processing all stack files.
 	if !includeEmptyStacks {
 		for stackName := range finalStacksMap {
 			if stackName == "" {
@@ -859,13 +894,13 @@ func ExecuteDescribeStacks(
 				continue
 			}
 
-			// Check if any component type (terraform/helmfile/packer) has components
+			// Check if any component type (terraform/helmfile/packer) has components.
 			hasNonEmptyComponents := false
 			for _, components := range componentsSection {
 				if compTypeMap, ok := components.(map[string]any); ok {
 					for _, comp := range compTypeMap {
 						if compContent, ok := comp.(map[string]any); ok {
-							// Check for any meaningful content
+							// Check for any meaningful content.
 							relevantSections := []string{"vars", "metadata", "settings", "env", "workspace"}
 							for _, section := range relevantSections {
 								if _, hasSection := compContent[section]; hasSection {
@@ -887,7 +922,7 @@ func ExecuteDescribeStacks(
 			}
 		}
 	} else {
-		// Process stacks normally without special handling for any prefixes
+		// Process stacks normally without special handling for any prefixes.
 		for stackName, stackConfig := range finalStacksMap {
 			finalStacksMap[stackName] = stackConfig
 		}

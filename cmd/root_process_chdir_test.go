@@ -115,6 +115,42 @@ func TestProcessChdirFlag(t *testing.T) {
 			expectError: true,
 			errorMsg:    "failed to change directory",
 		},
+		{
+			name:      "tilde expansion for home directory",
+			flagValue: "~",
+			setup: func(t *testing.T) string {
+				homeDir, err := os.UserHomeDir()
+				require.NoError(t, err)
+				return homeDir
+			},
+			expectError: false,
+		},
+		{
+			name:      "tilde expansion with path",
+			flagValue: "~/",
+			setup: func(t *testing.T) string {
+				homeDir, err := os.UserHomeDir()
+				require.NoError(t, err)
+				return homeDir
+			},
+			expectError: false,
+		},
+		{
+			name: "tilde expansion with subdirectory",
+			setup: func(t *testing.T) string {
+				homeDir, err := os.UserHomeDir()
+				require.NoError(t, err)
+				// Create a temporary subdirectory in home for testing.
+				testDir := filepath.Join(homeDir, ".atmos-test-chdir-"+t.Name())
+				require.NoError(t, os.MkdirAll(testDir, 0o755))
+				t.Cleanup(func() {
+					_ = os.RemoveAll(testDir)
+				})
+				return testDir
+			},
+			// Will be set dynamically in test loop to use relative path from home.
+			expectError: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -146,6 +182,14 @@ func TestProcessChdirFlag(t *testing.T) {
 				tt.name != "no chdir flag or env var" &&
 				tt.name != "valid absolute path via env var" {
 				flagValue = expectedDir
+			}
+
+			// Special handling for tilde expansion test with subdirectory.
+			if tt.name == "tilde expansion with subdirectory" {
+				homeDir, _ := os.UserHomeDir()
+				// Convert absolute path to tilde path.
+				relPath, _ := filepath.Rel(homeDir, expectedDir)
+				flagValue = "~/" + relPath
 			}
 
 			if flagValue != "" {

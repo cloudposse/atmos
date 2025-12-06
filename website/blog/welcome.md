@@ -1,8 +1,12 @@
 ---
 slug: welcome
 title: Welcome to the Atmos Changelog
-authors: [atmos]
-tags: [atmos, announcements]
+authors:
+  - aknysh
+tags:
+  - documentation
+date: 2025-10-12T00:00:00.000Z
+release: v1.195.0
 ---
 
 We're excited to launch the Atmos Changelog—your go-to source for feature announcements, technical deep dives, and best practices for managing cloud infrastructure at scale.

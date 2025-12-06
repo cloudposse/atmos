@@ -82,7 +82,7 @@ Examples of anti-patterns include:
 - Using a `for_each` loop to create multiple DNS records from a variable input
   (you may hit rate limits when you zones get large enough; it's happened to us)
 
-Instead, leverage [Stack configurations to serve as factories](/core-concepts/stacks) for provisioning multiple component instances.
+Instead, leverage [Stack configurations to serve as factories](/learn/stacks) for provisioning multiple component instances.
 This approach keeps the state isolated and scales efficiently with the increasing number of component instances.
 
 Please note, it's perfectly fine to use `for_each` loops sometimes to provision groups of resources, just use them with moderation
@@ -110,7 +110,7 @@ This approach decouples your architecture from the configuration, resulting in s
 
 ## Use Component Libraries & Vendoring
 
-Utilize a centralized [component library](/core-concepts/components/library) to distribute and share components across the
+Utilize a centralized [component library](/components) to distribute and share components across the
 organization efficiently. This approach enhances discoverability by centralizing where components are stored, preventing
 sprawl, and ensuring components are easily accessible to everyone. Employ vendoring to retrieve remote dependencies, like
 components, ensuring the practice of immutable infrastructure.

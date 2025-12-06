@@ -34,6 +34,10 @@ var (
 	sprigFuncMapCacheOnce sync.Once
 )
 
+const (
+	logKeyTemplate = "template"
+)
+
 // getSprigFuncMap returns a cached copy of the sprig function map.
 // Sprig function maps are expensive to create (173MB+ allocations) and immutable,
 // so we cache and reuse them across template operations.
@@ -105,11 +109,11 @@ func ProcessTmplWithDatasources(
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasources")()
 
 	if !atmosConfig.Templates.Settings.Enabled {
-		log.Debug("ProcessTmplWithDatasources: not processing templates since templating is disabled in 'atmos.yaml'", "template", tmplName)
+		log.Debug("ProcessTmplWithDatasources: not processing templates since templating is disabled in 'atmos.yaml'", logKeyTemplate, tmplName)
 		return tmplValue, nil
 	}
 
-	log.Debug("ProcessTmplWithDatasources", "template", tmplName)
+	log.Trace("ProcessTmplWithDatasources", logKeyTemplate, tmplName)
 
 	// Merge the template settings from `atmos.yaml` CLI config and from the stack manifests
 	var cliConfigTemplateSettingsMap map[string]any
@@ -144,7 +148,7 @@ func ProcessTmplWithDatasources(
 	result := tmplValue
 
 	for i := 0; i < evaluations; i++ {
-		log.Debug("ProcessTmplWithDatasources", "template", tmplName, "evaluation", i+1)
+		log.Trace("ProcessTmplWithDatasources", logKeyTemplate, tmplName, "evaluation", i+1)
 
 		d := data.Data{}
 
@@ -264,7 +268,7 @@ func ProcessTmplWithDatasources(
 		}
 	}
 
-	log.Debug("ProcessTmplWithDatasources: processed", "template", tmplName)
+	log.Trace("ProcessTmplWithDatasources: processed", logKeyTemplate, tmplName)
 
 	return result, nil
 }

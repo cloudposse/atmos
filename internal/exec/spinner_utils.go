@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -45,14 +46,15 @@ func (m modelSpinner) View() string {
 // NewSpinner initializes a spinner and returns a pointer to a tea.Program.
 func NewSpinner(message string) *tea.Program {
 	s := spinner.New()
-	s.Style = theme.Styles.Link
+	styles := theme.GetCurrentStyles()
+	s.Style = styles.Link
 
 	var opts []tea.ProgramOption
 	if !term.IsTTYSupportForStdout() {
 		// Workaround for non-TTY environments.
 		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 		log.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
-		fmt.Println(message)
+		fmt.Fprintln(os.Stderr, message)
 	}
 
 	p := tea.NewProgram(modelSpinner{

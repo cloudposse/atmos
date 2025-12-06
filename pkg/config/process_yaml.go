@@ -129,14 +129,16 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 // handleEnv processes a YAML node with an !env tag and sets the value in Viper, returns an error if the processing fails, warns if the value is empty.
 func handleEnv(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
-	envValue, err := u.ProcessTagEnv(strFunc)
+	// In atmos.yaml processing, we don't have stack context, so pass nil.
+	// This will make !env fall back to OS environment variables only.
+	envValue, err := u.ProcessTagEnv(strFunc, nil)
 	if err != nil {
 		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
 		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncEnv, node.Value, err)
 	}
 	envValue = strings.TrimSpace(envValue)
 	if envValue == "" {
-		log.Warn(emptyValueWarning, functionKey, strFunc)
+		log.Debug(emptyValueWarning, functionKey, strFunc)
 	}
 	// Set the value in Viper .
 	v.Set(currentPath, envValue)
@@ -156,7 +158,7 @@ func handleExec(node *yaml.Node, v *viper.Viper, currentPath string) error {
 		// Set the value in Viper .
 		v.Set(currentPath, execValue)
 	} else {
-		log.Warn(emptyValueWarning, functionKey, strFunc)
+		log.Debug(emptyValueWarning, functionKey, strFunc)
 	}
 	node.Tag = "" // Avoid re-processing
 	return nil
@@ -182,7 +184,7 @@ func handleInclude(node *yaml.Node, v *viper.Viper, currentPath string) error {
 			)
 		}
 	} else {
-		log.Warn(emptyValueWarning, functionKey, strFunc)
+		log.Debug(emptyValueWarning, functionKey, strFunc)
 	}
 	node.Tag = "" // Avoid re-processing
 	return nil
@@ -198,7 +200,7 @@ func handleGitRoot(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	}
 	gitRootValue = strings.TrimSpace(gitRootValue)
 	if gitRootValue == "" {
-		log.Warn(emptyValueWarning, functionKey, strFunc)
+		log.Debug(emptyValueWarning, functionKey, strFunc)
 	}
 	// Set the value in Viper .
 	v.Set(currentPath, gitRootValue)

@@ -1,0 +1,353 @@
+package auth
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+func TestCopyGlobalAuthConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		globalAuth *schema.AuthConfig
+		verify     func(*testing.T, *schema.AuthConfig)
+	}{
+		{
+			name:       "nil config returns empty",
+			globalAuth: nil,
+			verify: func(t *testing.T, result *schema.AuthConfig) {
+				assert.NotNil(t, result)
+				assert.Nil(t, result.Providers)
+				assert.Nil(t, result.Identities)
+			},
+		},
+		{
+			name: "copies all fields",
+			globalAuth: &schema.AuthConfig{
+				Providers: map[string]schema.Provider{
+					"test-provider": {
+						Kind:   "aws/iam-identity-center",
+						Region: "us-east-1",
+					},
+				},
+				Identities: map[string]schema.Identity{
+					"test-identity": {
+						Kind:    "aws/user",
+						Default: true,
+					},
+				},
+				Logs: schema.Logs{
+					Level: "Info",
+				},
+				Keyring: schema.KeyringConfig{
+					Type: "system",
+				},
+				IdentityCaseMap: map[string]string{
+					"test": "Test",
+				},
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig) {
+				assert.Len(t, result.Providers, 1)
+				assert.Contains(t, result.Providers, "test-provider")
+				assert.Len(t, result.Identities, 1)
+				assert.Contains(t, result.Identities, "test-identity")
+				assert.Equal(t, "Info", result.Logs.Level)
+				assert.Equal(t, "system", result.Keyring.Type)
+				assert.Len(t, result.IdentityCaseMap, 1)
+			},
+		},
+		{
+			name: "deep copies Keyring.Spec map",
+			globalAuth: &schema.AuthConfig{
+				Keyring: schema.KeyringConfig{
+					Type: "file",
+					Spec: map[string]interface{}{
+						"path":     "/tmp/keyring",
+						"password": "secret",
+					},
+				},
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig) {
+				// Verify Spec was copied.
+				assert.NotNil(t, result.Keyring.Spec)
+				assert.Len(t, result.Keyring.Spec, 2)
+				assert.Equal(t, "/tmp/keyring", result.Keyring.Spec["path"])
+				assert.Equal(t, "secret", result.Keyring.Spec["password"])
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := CopyGlobalAuthConfig(tt.globalAuth)
+			tt.verify(t, result)
+		})
+	}
+}
+
+func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
+	// Test that modifying the copy doesn't mutate the original.
+	original := &schema.AuthConfig{
+		Keyring: schema.KeyringConfig{
+			Type: "file",
+			Spec: map[string]interface{}{
+				"path": "/original/path",
+			},
+		},
+		IdentityCaseMap: map[string]string{
+			"original": "Original",
+		},
+	}
+
+	// Create a copy.
+	copy := CopyGlobalAuthConfig(original)
+
+	// Modify the copy.
+	copy.Keyring.Spec["path"] = "/modified/path"
+	copy.Keyring.Spec["new_key"] = "new_value"
+	copy.IdentityCaseMap["original"] = "Modified"
+	copy.IdentityCaseMap["new"] = "New"
+
+	// Verify original is unchanged.
+	assert.Equal(t, "/original/path", original.Keyring.Spec["path"])
+	assert.Len(t, original.Keyring.Spec, 1)
+	assert.NotContains(t, original.Keyring.Spec, "new_key")
+	assert.Equal(t, "Original", original.IdentityCaseMap["original"])
+	assert.Len(t, original.IdentityCaseMap, 1)
+	assert.NotContains(t, original.IdentityCaseMap, "new")
+
+	// Verify copy has the modifications.
+	assert.Equal(t, "/modified/path", copy.Keyring.Spec["path"])
+	assert.Equal(t, "new_value", copy.Keyring.Spec["new_key"])
+	assert.Len(t, copy.Keyring.Spec, 2)
+	assert.Equal(t, "Modified", copy.IdentityCaseMap["original"])
+	assert.Equal(t, "New", copy.IdentityCaseMap["new"])
+	assert.Len(t, copy.IdentityCaseMap, 2)
+}
+
+func TestMergeComponentAuthFromConfig(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"global-provider": {
+				Kind:   "aws/iam-identity-center",
+				Region: "us-west-2",
+			},
+		},
+		Identities: map[string]schema.Identity{
+			"global-identity": {
+				Kind:    "aws/user",
+				Default: true,
+			},
+		},
+		IdentityCaseMap: map[string]string{
+			"global-identity": "global-identity",
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "replace",
+		},
+	}
+
+	tests := []struct {
+		name            string
+		componentConfig map[string]any
+		verify          func(*testing.T, *schema.AuthConfig, error)
+	}{
+		{
+			name:            "nil component config returns global",
+			componentConfig: nil,
+			verify: func(t *testing.T, result *schema.AuthConfig, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, result.Identities, 1)
+				assert.Contains(t, result.Identities, "global-identity")
+			},
+		},
+		{
+			name: "no auth section returns global",
+			componentConfig: map[string]any{
+				"vars": map[string]any{
+					"test": "value",
+				},
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, result.Identities, 1)
+				assert.Contains(t, result.Identities, "global-identity")
+			},
+		},
+		{
+			name: "merges component auth section",
+			componentConfig: map[string]any{
+				cfg.AuthSectionName: map[string]any{
+					"identities": map[string]any{
+						"component-identity": map[string]any{
+							"kind": "aws/assume-role",
+						},
+					},
+				},
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig, err error) {
+				assert.NoError(t, err)
+				assert.Len(t, result.Identities, 2)
+				assert.Contains(t, result.Identities, "global-identity")
+				assert.Contains(t, result.Identities, "component-identity")
+			},
+		},
+		{
+			name: "component identity added to IdentityCaseMap",
+			componentConfig: map[string]any{
+				cfg.AuthSectionName: map[string]any{
+					"identities": map[string]any{
+						"ComponentIdentity": map[string]any{
+							"kind": "aws/assume-role",
+						},
+					},
+				},
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, result.IdentityCaseMap)
+				assert.Contains(t, result.IdentityCaseMap, "componentidentity")
+				assert.Equal(t, "ComponentIdentity", result.IdentityCaseMap["componentidentity"])
+				// Global identity should still be present.
+				assert.Contains(t, result.IdentityCaseMap, "global-identity")
+			},
+		},
+		{
+			name: "mixed-case component identity lookups work",
+			componentConfig: map[string]any{
+				cfg.AuthSectionName: map[string]any{
+					"identities": map[string]any{
+						"MyComponentIdentity": map[string]any{
+							"kind": "aws/assume-role",
+						},
+					},
+				},
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, result.IdentityCaseMap)
+				// Case-insensitive lookup should work.
+				assert.Contains(t, result.IdentityCaseMap, "mycomponentidentity")
+				assert.Equal(t, "MyComponentIdentity", result.IdentityCaseMap["mycomponentidentity"])
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := MergeComponentAuthFromConfig(globalAuth, tt.componentConfig, atmosConfig, cfg.AuthSectionName)
+			tt.verify(t, result, err)
+		})
+	}
+}
+
+func TestMergeComponentAuthFromConfig_NilGlobalAuth(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "replace",
+		},
+	}
+
+	tests := []struct {
+		name            string
+		globalAuth      *schema.AuthConfig
+		componentConfig map[string]any
+		verify          func(*testing.T, *schema.AuthConfig, error)
+	}{
+		{
+			name:       "nil global auth with component identities",
+			globalAuth: nil,
+			componentConfig: map[string]any{
+				cfg.AuthSectionName: map[string]any{
+					"identities": map[string]any{
+						"ComponentIdentity": map[string]any{
+							"kind": "aws/assume-role",
+						},
+					},
+				},
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Len(t, result.Identities, 1)
+				assert.Contains(t, result.Identities, "ComponentIdentity")
+				// IdentityCaseMap should be built for component identities.
+				assert.NotNil(t, result.IdentityCaseMap)
+				assert.Contains(t, result.IdentityCaseMap, "componentidentity")
+				assert.Equal(t, "ComponentIdentity", result.IdentityCaseMap["componentidentity"])
+			},
+		},
+		{
+			name: "empty global auth with component identities",
+			globalAuth: &schema.AuthConfig{
+				Identities:      map[string]schema.Identity{},
+				IdentityCaseMap: nil,
+			},
+			componentConfig: map[string]any{
+				cfg.AuthSectionName: map[string]any{
+					"identities": map[string]any{
+						"ComponentIdentity": map[string]any{
+							"kind": "aws/assume-role",
+						},
+					},
+				},
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig, err error) {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.Len(t, result.Identities, 1)
+				// IdentityCaseMap should be built even when global config has nil map.
+				assert.NotNil(t, result.IdentityCaseMap)
+				assert.Contains(t, result.IdentityCaseMap, "componentidentity")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := MergeComponentAuthFromConfig(tt.globalAuth, tt.componentConfig, atmosConfig, cfg.AuthSectionName)
+			tt.verify(t, result, err)
+		})
+	}
+}
+
+func TestAuthConfigToMap(t *testing.T) {
+	tests := []struct {
+		name       string
+		authConfig *schema.AuthConfig
+		wantErr    bool
+	}{
+		{
+			name:       "nil config returns empty map",
+			authConfig: nil,
+			wantErr:    false,
+		},
+		{
+			name: "converts auth config to map",
+			authConfig: &schema.AuthConfig{
+				Providers: map[string]schema.Provider{
+					"test": {Kind: "aws/user"},
+				},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := AuthConfigToMap(tt.authConfig)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+			}
+		})
+	}
+}

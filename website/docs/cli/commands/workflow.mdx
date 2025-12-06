@@ -2,15 +2,27 @@
 title: atmos workflow
 sidebar_label: workflow
 sidebar_class_name: command
+sidebar_position: 20
 description: Use this command to perform sequential execution of `atmos` and `shell` commands defined as workflow steps.
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Use this command to perform sequential execution of `atmos` and `shell` commands defined as workflow steps.
 </Intro>
+
+<ActionCard title="Configure Workflows">
+    Learn how to configure workflow paths and define workflow manifests in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/workflows">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Usage
 
 <Screengrab title="atmos workflow --help" slug="atmos-workflow--help" />
 
@@ -18,12 +30,12 @@ An Atmos workflow is a series of steps that are run in order to achieve some out
 easily executed from the
 command line by calling `atmos workflow`. Use workflows to orchestrate any number of commands. Workflows can call
 any `atmos` subcommand (including
-[Atmos Custom Commands](/core-concepts/custom-commands)), shell commands, and have access to the stack configurations.
+[Atmos Custom Commands](/cli/configuration/commands)), shell commands, and have access to the stack configurations.
 
 :::note
-You can use [Atmos Custom Commands](/core-concepts/custom-commands) in [Atmos Workflows](/core-concepts/workflows),
-and [Atmos Workflows](/core-concepts/workflows)
-in [Atmos Custom Commands](/core-concepts/custom-commands)
+You can use [Atmos Custom Commands](/cli/configuration/commands) in [Atmos Workflows](/workflows),
+and [Atmos Workflows](/workflows)
+in [Atmos Custom Commands](/cli/configuration/commands)
 :::
 
 ## Usage

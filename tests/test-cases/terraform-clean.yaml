@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=schema.json
+# UI output tests for terraform clean command
+tests:
+  - name: "atmos terraform clean with UI output"
+    enabled: true
+    snapshot: true
+    description: "Verify terraform clean shows checkmark (whether deleting files or already clean)"
+    workdir: "fixtures/scenarios/complete"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "clean"
+      - "test/test-component"
+      - "-s"
+      - "tenant1-ue2-dev"
+    expect:
+      exit_code: 0
+      # Verify checkmark appears whether files are deleted or directory is already clean

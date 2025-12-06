@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
@@ -266,4 +266,100 @@ func TestParseOCIManifest(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestProcessLayer_DigestError tests that processLayer returns nil when digest fails.
+func TestProcessLayer_DigestError(t *testing.T) {
+	mockLayer := &MockLayerWithDigestError{
+		digestErr: fmt.Errorf("digest calculation failed"),
+	}
+
+	// processLayer should return nil (not an error) when digest fails.
+	err := processLayer(mockLayer, 0, "/tmp/dest")
+	assert.NoError(t, err, "processLayer should return nil when digest fails")
+}
+
+// TestCheckArtifactType_MatchingType tests checkArtifactType with matching artifact type.
+func TestCheckArtifactType_MatchingType(t *testing.T) {
+	manifestJSON := `{
+		"schemaVersion": 2,
+		"artifactType": "application/vnd.atmos.component.terraform.v1+tar+gzip",
+		"config": {
+			"digest": "sha256:test",
+			"size": 100
+		},
+		"layers": []
+	}`
+
+	descriptor := &remote.Descriptor{
+		Manifest: []byte(manifestJSON),
+	}
+
+	// Should not panic and should not log warning for matching type.
+	assert.NotPanics(t, func() {
+		checkArtifactType(descriptor, "test:latest")
+	})
+}
+
+// TestCheckArtifactType_NonMatchingType tests checkArtifactType with non-matching artifact type.
+func TestCheckArtifactType_NonMatchingType(t *testing.T) {
+	manifestJSON := `{
+		"schemaVersion": 2,
+		"artifactType": "application/vnd.docker.container.image.v1+json",
+		"config": {
+			"digest": "sha256:test",
+			"size": 100
+		},
+		"layers": []
+	}`
+
+	descriptor := &remote.Descriptor{
+		Manifest: []byte(manifestJSON),
+	}
+
+	// Should not panic but will log warning for non-matching type.
+	assert.NotPanics(t, func() {
+		checkArtifactType(descriptor, "docker:latest")
+	})
+}
+
+// TestCheckArtifactType_InvalidManifest tests checkArtifactType with invalid manifest JSON.
+func TestCheckArtifactType_InvalidManifest(t *testing.T) {
+	descriptor := &remote.Descriptor{
+		Manifest: []byte(`{invalid json`),
+	}
+
+	// Should not panic even with invalid manifest, just logs error.
+	assert.NotPanics(t, func() {
+		checkArtifactType(descriptor, "invalid:latest")
+	})
+}
+
+// MockLayerWithDigestError implements v1.Layer for testing digest errors.
+type MockLayerWithDigestError struct {
+	digestErr error
+}
+
+func (m *MockLayerWithDigestError) Digest() (v1.Hash, error) {
+	return v1.Hash{}, m.digestErr
+}
+
+func (m *MockLayerWithDigestError) DiffID() (v1.Hash, error) {
+	return v1.Hash{}, nil
+}
+
+func (m *MockLayerWithDigestError) Compressed() (io.ReadCloser, error) {
+	return nil, nil
+}
+
+func (m *MockLayerWithDigestError) Uncompressed() (io.ReadCloser, error) {
+	return nil, nil
+}
+
+func (m *MockLayerWithDigestError) Size() (int64, error) {
+	return 0, nil
+}
+
+func (m *MockLayerWithDigestError) MediaType() (types.MediaType, error) {
+	return types.DockerLayer, nil
 }

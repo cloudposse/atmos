@@ -2,6 +2,7 @@ package describe
 
 import (
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -15,6 +16,8 @@ func ExecuteDescribeStacks(
 	ignoreMissingFiles bool,
 	includeEmptyStacks bool,
 ) (map[string]any, error) {
+	defer perf.Track(&atmosConfig, "describe.ExecuteDescribeStacks")()
+
 	return e.ExecuteDescribeStacks(
 		&atmosConfig,
 		filterByStack,
@@ -25,6 +28,7 @@ func ExecuteDescribeStacks(
 		true,
 		true,
 		includeEmptyStacks,
-		nil,
+		nil, // skip
+		nil, // authManager
 	)
 }

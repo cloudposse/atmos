@@ -90,16 +90,20 @@ func TestMultilineScalarInContext(t *testing.T) {
 
 	pathMap := buildYAMLPathMap(lines)
 
-	// Debug: print all paths
-	t.Log("\n=== MULTILINE CONTEXT PATH MAP ===")
-	for i := 0; i < len(lines); i++ {
-		if info, ok := pathMap[i]; ok {
-			t.Logf("Line %d: %q -> Path: %q, IsKey: %v, IsCont: %v",
-				i, lines[i], info.Path, info.IsKeyLine, info.IsContinuation)
-		} else {
-			t.Logf("Line %d: %q -> NOT IN MAP", i, lines[i])
+	// Debug: print all paths on failure
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Log("\n=== MULTILINE CONTEXT PATH MAP ===")
+			for i := 0; i < len(lines); i++ {
+				if info, ok := pathMap[i]; ok {
+					t.Logf("Line %d: %q -> Path: %q, IsKey: %v, IsCont: %v",
+						i, lines[i], info.Path, info.IsKeyLine, info.IsContinuation)
+				} else {
+					t.Logf("Line %d: %q -> NOT IN MAP", i, lines[i])
+				}
+			}
 		}
-	}
+	})
 
 	// Verify multiline keys are detected
 	assert.True(t, pathMap[0].IsKeyLine, "description key should be detected")

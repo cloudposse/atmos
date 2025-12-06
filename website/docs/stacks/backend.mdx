@@ -1,0 +1,526 @@
+---
+title: Generate Terraform Backend
+sidebar_position: 15
+sidebar_label: backend
+sidebar_class_name: command
+description: Use the backend section to generate Terraform backend configuration files for state storage.
+id: backend
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+The `backend` section generates Terraform backend configuration files (`backend.tf.json`) for your components. This allows you to manage state storage declaratively in your stack configuration, with Atmos automatically generating the backend files when you run Terraform commands. This section is **Terraform-specific**.
+</Intro>
+
+## How It Works
+
+When you run any `atmos terraform` command, Atmos:
+1. Reads your `backend` and `backend_type` configuration from the stack
+2. Generates a `backend.tf.json` file in the component directory
+3. Terraform uses this file to configure state storage without modifying your source code
+
+This approach lets you define backend configuration once in your stacks and have Atmos generate the appropriate files for each environment, with dynamic values like state keys computed from context variables.
+
+:::tip Generated Files
+Add `backend.tf.json` to your `.gitignore` since these files are generated automatically by Atmos and should not be committed to version control:
+
+```gitignore
+# Atmos generated files
+backend.tf.json
+```
+:::
+
+## Use Cases
+
+- **State Management:** Configure S3, Azure Blob, GCS, or other backends for remote state storage.
+- **Environment Isolation:** Use different state storage per environment or account.
+- **State Locking:** Configure DynamoDB, Azure Blob leases, or other locking mechanisms.
+- **Remote State Access:** Configure `remote_state_backend` for cross-component state references.
+
+## Configuration Scopes
+
+The backend configuration can be defined at two levels:
+
+### Component-Type Level
+
+Backend settings defined under `terraform` apply to all Terraform components:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml title="stacks/orgs/acme/_defaults.yaml"
+    terraform:
+      backend_type: s3
+      backend:
+        s3:
+          bucket: acme-terraform-state
+          region: us-east-1
+          dynamodb_table: terraform-locks
+          encrypt: true
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/vpc/backend.tf.json"
+    {
+      "terraform": {
+        "backend": {
+          "s3": {
+            "bucket": "acme-terraform-state",
+            "region": "us-east-1",
+            "dynamodb_table": "terraform-locks",
+            "encrypt": true,
+            "key": "ue1/prod/vpc/terraform.tfstate"
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Component Level
+
+Backend settings within a component override the defaults:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml title="stacks/orgs/acme/plat/prod/us-east-1.yaml"
+    components:
+      terraform:
+        special-component:
+          backend_type: s3
+          backend:
+            s3:
+              bucket: acme-special-state
+              key: "special/terraform.tfstate"
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/special-component/backend.tf.json"
+    {
+      "terraform": {
+        "backend": {
+          "s3": {
+            "bucket": "acme-special-state",
+            "key": "special/terraform.tfstate"
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+## Backend Types
+
+Atmos supports all Terraform backend types. Configure using `backend_type` and the corresponding configuration under `backend`.
+
+### S3 Backend
+
+The most common backend for AWS environments. We recommend using `use_lockfile: true` for native S3 state locking (Terraform 1.10+) instead of DynamoDB:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml
+    terraform:
+      backend_type: s3
+      backend:
+        s3:
+          bucket: "{{ .namespace }}-terraform-state"
+          region: us-east-1
+          key: "{{ .environment }}/{{ .stage }}/{{ .component }}/terraform.tfstate"
+          encrypt: true
+          use_lockfile: true  # Native S3 locking (Terraform 1.10+)
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/vpc/backend.tf.json"
+    {
+      "terraform": {
+        "backend": {
+          "s3": {
+            "bucket": "acme-terraform-state",
+            "region": "us-east-1",
+            "key": "ue1/prod/vpc/terraform.tfstate",
+            "encrypt": true,
+            "use_lockfile": true
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+#### S3 Backend with Assume Role
+
+For cross-account access, configure the backend to assume a role:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml
+    terraform:
+      backend_type: s3
+      backend:
+        s3:
+          bucket: "{{ .namespace }}-terraform-state"
+          region: us-east-1
+          key: "{{ .environment }}/{{ .stage }}/{{ .component }}/terraform.tfstate"
+          encrypt: true
+          use_lockfile: true
+          assume_role:
+            role_arn: "arn:aws:iam::{{ .vars.state_account_id }}:role/TerraformStateAccess"
+            session_name: "atmos-{{ .component }}"
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/vpc/backend.tf.json"
+    {
+      "terraform": {
+        "backend": {
+          "s3": {
+            "bucket": "acme-terraform-state",
+            "region": "us-east-1",
+            "key": "ue1/prod/vpc/terraform.tfstate",
+            "encrypt": true,
+            "use_lockfile": true,
+            "assume_role": {
+              "role_arn": "arn:aws:iam::123456789012:role/TerraformStateAccess",
+              "session_name": "atmos-vpc"
+            }
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+#### S3 Backend with DynamoDB Locking (Legacy)
+
+For Terraform versions before 1.10, use DynamoDB for state locking:
+
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: "{{ .namespace }}-terraform-state"
+      region: us-east-1
+      key: "{{ .environment }}/{{ .stage }}/{{ .component }}/terraform.tfstate"
+      dynamodb_table: terraform-locks
+      encrypt: true
+```
+
+### Azure Blob Backend
+
+For Azure environments:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml
+    terraform:
+      backend_type: azurerm
+      backend:
+        azurerm:
+          resource_group_name: terraform-state-rg
+          storage_account_name: tfstateaccount
+          container_name: tfstate
+          key: "{{ .environment }}/{{ .stage }}/{{ .component }}/terraform.tfstate"
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/vpc/backend.tf.json"
+    {
+      "terraform": {
+        "backend": {
+          "azurerm": {
+            "resource_group_name": "terraform-state-rg",
+            "storage_account_name": "tfstateaccount",
+            "container_name": "tfstate",
+            "key": "ue1/prod/vpc/terraform.tfstate"
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### GCS Backend
+
+For Google Cloud environments:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml
+    terraform:
+      backend_type: gcs
+      backend:
+        gcs:
+          bucket: "{{ .namespace }}-terraform-state"
+          prefix: "{{ .environment }}/{{ .stage }}/{{ .component }}"
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/vpc/backend.tf.json"
+    {
+      "terraform": {
+        "backend": {
+          "gcs": {
+            "bucket": "acme-terraform-state",
+            "prefix": "ue1/prod/vpc"
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Terraform Cloud / Enterprise
+
+For Terraform Cloud or Enterprise:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml
+    terraform:
+      backend_type: remote
+      backend:
+        remote:
+          hostname: app.terraform.io
+          organization: acme
+          workspaces:
+            name: "{{ .namespace }}-{{ .environment }}-{{ .stage }}-{{ .component }}"
+    ```
+
+    Or using the newer `cloud` backend:
+
+    ```yaml
+    terraform:
+      backend_type: cloud
+      backend:
+        cloud:
+          organization: acme
+          workspaces:
+            name: "{{ .namespace }}-{{ .environment }}-{{ .stage }}-{{ .component }}"
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/vpc/backend.tf.json"
+    {
+      "terraform": {
+        "backend": {
+          "remote": {
+            "hostname": "app.terraform.io",
+            "organization": "acme",
+            "workspaces": {
+              "name": "acme-ue1-prod-vpc"
+            }
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Local Backend
+
+For development or single-user scenarios:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml
+    terraform:
+      backend_type: local
+      backend:
+        local:
+          path: "{{ .component }}/terraform.tfstate"
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/vpc/backend.tf.json"
+    {
+      "terraform": {
+        "backend": {
+          "local": {
+            "path": "vpc/terraform.tfstate"
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+## Remote State Backend
+
+The `remote_state_backend` configuration is separate from `backend` and controls how other components can read this component's state:
+
+```yaml
+terraform:
+  # Where this component stores its state
+  backend_type: s3
+  backend:
+    s3:
+      bucket: acme-terraform-state
+      region: us-east-1
+
+  # How other components read this component's state
+  remote_state_backend_type: s3
+  remote_state_backend:
+    s3:
+      bucket: acme-terraform-state
+      region: us-east-1
+```
+
+This separation allows for scenarios like:
+- Using Terraform Cloud for operations but S3 for remote state access
+- Different credentials for writing vs. reading state
+- Custom remote state configurations
+
+## Examples
+
+### Environment-Specific State Buckets
+
+<File title="stacks/orgs/acme/plat/dev/_defaults.yaml">
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: acme-dev-terraform-state
+      region: us-east-1
+      dynamodb_table: terraform-locks-dev
+      encrypt: true
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/prod/_defaults.yaml">
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: acme-prod-terraform-state
+      region: us-east-1
+      dynamodb_table: terraform-locks-prod
+      encrypt: true
+```
+</File>
+
+### Dynamic State Keys with Templates
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: "{{ .namespace }}-terraform-state"
+      region: "{{ .vars.region }}"
+      key: "{{ .environment }}/{{ .stage }}/{{ .component }}/terraform.tfstate"
+      dynamodb_table: terraform-locks
+      encrypt: true
+```
+</File>
+
+### Component-Specific Backend Override
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+import:
+  - orgs/acme/_defaults
+
+components:
+  terraform:
+    # Uses default backend
+    vpc:
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+
+    # Uses custom backend for sensitive data
+    secrets-manager:
+      backend_type: s3
+      backend:
+        s3:
+          bucket: acme-sensitive-state
+          region: us-east-1
+          key: "secrets/terraform.tfstate"
+          encrypt: true
+          kms_key_id: alias/terraform-state-key
+      vars:
+        # ...
+```
+</File>
+
+### Multi-Cloud Configuration
+
+<File title="stacks/orgs/acme/aws/_defaults.yaml">
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: acme-aws-terraform-state
+      region: us-east-1
+```
+</File>
+
+<File title="stacks/orgs/acme/azure/_defaults.yaml">
+```yaml
+terraform:
+  backend_type: azurerm
+  backend:
+    azurerm:
+      resource_group_name: terraform-state-rg
+      storage_account_name: acmetfstate
+      container_name: tfstate
+```
+</File>
+
+## Workspace Configuration
+
+For backends that support workspaces, you can configure workspace patterns:
+
+```yaml
+terraform:
+  backend_type: remote
+  backend:
+    remote:
+      organization: acme
+      workspaces:
+        prefix: "acme-"
+
+components:
+  terraform:
+    vpc:
+      terraform_workspace: "{{ .environment }}-{{ .stage }}-vpc"
+```
+
+See [Terraform Workspaces](/components/terraform/workspaces) for detailed workspace configuration.
+
+## Best Practices
+
+1. **Use Remote State:** Always use a remote backend for team environments to enable collaboration and state locking.
+
+2. **Enable Encryption:** Always enable encryption for backends that support it (S3, Azure Blob, GCS).
+
+3. **Configure State Locking:** Use DynamoDB for S3, blob leases for Azure, or built-in locking for other backends.
+
+4. **Organize State Keys:** Use a consistent key structure that includes environment, stage, and component information.
+
+5. **Separate Sensitive State:** Consider using separate state buckets or additional encryption for components managing secrets.
+
+6. **Use Templates:** Leverage Go templates for dynamic backend configuration based on context variables.
+
+## Related
+
+- [Terraform Backends](/components/terraform/backends) - Detailed backend configuration reference
+- [Remote State](/stacks/remote-state) - Accessing state from other components
+- [Terraform Providers](/stacks/providers)
+- [Terraform Workspaces](/components/terraform/workspaces)

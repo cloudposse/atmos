@@ -32,3 +32,21 @@ tests:
       stdout:
         - "dev"
       exit_code: 0
+  - name: completion for stacks should be filtered by component
+    enabled: true
+    snapshot: true
+    description: "Test that stack completion is filtered when component is specified"
+    workdir: "fixtures/scenarios/completions"
+    command: "atmos"
+    args:
+      - "__completeNoDesc"
+      - "terraform"
+      - "plan"
+      - "vpc"
+      - "--stack"
+    expect:
+      diff: []
+      stdout:
+        - "dev"
+        - "prod"
+      exit_code: 0

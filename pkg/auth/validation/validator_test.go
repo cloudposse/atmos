@@ -164,46 +164,46 @@ func TestValidateIdentity_ErrorCases(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		identity *schema.Identity
-		wantErr  bool
-		errMsg   string
+		name        string
+		identity    *schema.Identity
+		wantErr     bool
+		expectedErr error
 	}{
 		{
-			name:     "unknown identity kind",
-			identity: &schema.Identity{Kind: "unknown/kind"},
-			wantErr:  true,
-			errMsg:   "invalid identity kind",
+			name:        "unknown identity kind",
+			identity:    &schema.Identity{Kind: "unknown/kind"},
+			wantErr:     true,
+			expectedErr: errUtils.ErrInvalidIdentityKind,
 		},
 		{
-			name:     "assume role missing principal",
-			identity: &schema.Identity{Kind: "aws/assume-role", Via: &schema.IdentityVia{Provider: "aws-sso"}},
-			wantErr:  true,
-			errMsg:   "principal is required",
+			name:        "assume role missing principal",
+			identity:    &schema.Identity{Kind: "aws/assume-role", Via: &schema.IdentityVia{Provider: "aws-sso"}},
+			wantErr:     true,
+			expectedErr: errUtils.ErrMissingPrincipal,
 		},
 		{
-			name:     "assume role missing assume_role in principal",
-			identity: &schema.Identity{Kind: "aws/assume-role", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{}},
-			wantErr:  true,
-			errMsg:   "assume_role is required",
+			name:        "assume role missing assume_role in principal",
+			identity:    &schema.Identity{Kind: "aws/assume-role", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{}},
+			wantErr:     true,
+			expectedErr: errUtils.ErrMissingAssumeRole,
 		},
 		{
-			name:     "permission set missing principal",
-			identity: &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}},
-			wantErr:  true,
-			errMsg:   "principal is required",
+			name:        "permission set missing principal",
+			identity:    &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}},
+			wantErr:     true,
+			expectedErr: errUtils.ErrMissingPrincipal,
 		},
 		{
-			name:     "permission set missing name in principal",
-			identity: &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{}},
-			wantErr:  true,
-			errMsg:   "name is required",
+			name:        "permission set missing name in principal",
+			identity:    &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{}},
+			wantErr:     true,
+			expectedErr: errUtils.ErrMissingPermissionSet,
 		},
 		{
-			name:     "permission set missing account in principal",
-			identity: &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{"name": "DevAccess"}},
-			wantErr:  true,
-			errMsg:   "account specification is required",
+			name:        "permission set missing account in principal",
+			identity:    &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{"name": "DevAccess"}},
+			wantErr:     true,
+			expectedErr: errUtils.ErrMissingAccountSpec,
 		},
 	}
 
@@ -212,7 +212,8 @@ func TestValidateIdentity_ErrorCases(t *testing.T) {
 			err := v.ValidateIdentity("test-identity", tt.identity, providers)
 			if tt.wantErr {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errMsg)
+				// Use sentinel error checking instead of string comparison.
+				assert.ErrorIs(t, err, tt.expectedErr)
 			} else {
 				assert.NoError(t, err)
 			}
@@ -257,6 +258,74 @@ func TestValidateChains_ErrorCases(t *testing.T) {
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateAuthConfig_ErrorWrapping(t *testing.T) {
+	v := NewValidator()
+
+	tests := []struct {
+		name    string
+		config  *schema.AuthConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "invalid logs config is wrapped",
+			config: &schema.AuthConfig{
+				Logs: schema.Logs{Level: "InvalidLevel"},
+			},
+			wantErr: true,
+			errMsg:  "logs configuration validation failed",
+		},
+		{
+			name: "invalid provider is wrapped",
+			config: &schema.AuthConfig{
+				Providers: map[string]schema.Provider{
+					"bad-provider": {Kind: "unknown/kind"},
+				},
+			},
+			wantErr: true,
+			errMsg:  "provider \"bad-provider\" validation failed",
+		},
+		{
+			name: "invalid identity is wrapped",
+			config: &schema.AuthConfig{
+				Identities: map[string]schema.Identity{
+					"bad-identity": {Kind: "unknown/kind"},
+				},
+			},
+			wantErr: true,
+			errMsg:  "identity \"bad-identity\" validation failed",
+		},
+		{
+			name: "invalid chain is wrapped",
+			config: &schema.AuthConfig{
+				Providers: map[string]schema.Provider{
+					"sso": {Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://example.awsapps.com/start"},
+				},
+				Identities: map[string]schema.Identity{
+					"a": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Identity: "b"}, Principal: map[string]any{"name": "Admin", "account": map[string]any{"name": "prod"}}},
+					"b": {Kind: "aws/permission-set", Via: &schema.IdentityVia{Identity: "a"}, Principal: map[string]any{"name": "Dev", "account": map[string]any{"name": "dev"}}},
+				},
+			},
+			wantErr: true,
+			errMsg:  "identity chain validation failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := v.ValidateAuthConfig(tt.config)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+				// Verify error is properly wrapped with ErrInvalidAuthConfig.
+				assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
 			} else {
 				assert.NoError(t, err)
 			}

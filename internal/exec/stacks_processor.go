@@ -1,10 +1,13 @@
 package exec
 
-import "github.com/cloudposse/atmos/pkg/schema"
+import (
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
 
 // StacksProcessor defines operations for processing stack manifests.
 //
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type StacksProcessor interface {
 	// ExecuteDescribeStacks processes stack manifests and returns the final map of stacks and components.
 	ExecuteDescribeStacks(
@@ -18,6 +21,7 @@ type StacksProcessor interface {
 		processYamlFunctions bool,
 		includeEmptyStacks bool,
 		skip []string,
+		authManager auth.AuthManager,
 	) (map[string]any, error)
 }
 
@@ -38,6 +42,7 @@ func (d *DefaultStacksProcessor) ExecuteDescribeStacks(
 	processYamlFunctions bool,
 	includeEmptyStacks bool,
 	skip []string,
+	authManager auth.AuthManager,
 ) (map[string]any, error) {
 	return ExecuteDescribeStacks(
 		atmosConfig,
@@ -50,5 +55,6 @@ func (d *DefaultStacksProcessor) ExecuteDescribeStacks(
 		processYamlFunctions,
 		includeEmptyStacks,
 		skip,
+		authManager,
 	)
 }

@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -114,6 +115,153 @@ func TestRenderErrorf(t *testing.T) {
 			str, err := r.RenderErrorf(tt.input)
 			assert.Contains(t, str, tt.expected)
 			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestTrimTrailingSpaces(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "removes trailing spaces from single line",
+			input:    "Hello world    \n",
+			expected: "Hello world\n",
+		},
+		{
+			name:     "removes trailing tabs",
+			input:    "Hello world\t\t\n",
+			expected: "Hello world\n",
+		},
+		{
+			name:     "preserves blank lines",
+			input:    "Line 1  \n\nLine 3  \n",
+			expected: "Line 1\n\nLine 3\n",
+		},
+		{
+			name:     "preserves multiple consecutive blank lines",
+			input:    "Line 1  \n\n\n\nLine 5  \n",
+			expected: "Line 1\n\n\n\nLine 5\n",
+		},
+		{
+			name:     "handles blank lines with only spaces",
+			input:    "Line 1  \n    \nLine 3  \n",
+			expected: "Line 1\n\nLine 3\n",
+		},
+		{
+			name:     "no trailing spaces unchanged",
+			input:    "Hello\nWorld\n",
+			expected: "Hello\nWorld\n",
+		},
+		{
+			name:     "empty string unchanged",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := trimTrailingSpaces(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestRenderer_NonTTY_ASCII(t *testing.T) {
+	r, _ := NewRenderer(schema.AtmosConfiguration{})
+	r.isTTYSupportForStdout = func() bool { return false }
+	defer func() {
+		r.isTTYSupportForStdout = term.IsTTYSupportForStdout
+	}()
+
+	result, err := r.Render("## Hello **world**")
+	assert.NoError(t, err)
+	assert.NotContains(t, result, "\x1b[", "Non-TTY should not contain ANSI codes")
+	assert.Contains(t, result, "Hello")
+
+	// Verify no trailing whitespace.
+	lines := strings.Split(result, "\n")
+	for i, line := range lines {
+		assert.Equal(t, strings.TrimRight(line, " \t"), line,
+			"Line %d should not have trailing whitespace", i)
+	}
+}
+
+func TestRenderer_AllMethodsTrimTrailingSpaces(t *testing.T) {
+	r, _ := NewRenderer(schema.AtmosConfiguration{})
+	r.isTTYSupportForStdout = func() bool { return true }
+	defer func() {
+		r.isTTYSupportForStdout = term.IsTTYSupportForStdout
+	}()
+
+	testContent := "## Test\n\nContent"
+
+	tests := []struct {
+		name       string
+		renderFunc func(string) (string, error)
+	}{
+		{"Render", r.Render},
+		{"RenderAscii", r.RenderAscii},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := tt.renderFunc(testContent)
+			assert.NoError(t, err)
+
+			// Check no trailing spaces on any line.
+			lines := strings.Split(result, "\n")
+			for i, line := range lines {
+				assert.Equal(t, strings.TrimRight(line, " \t"), line,
+					"%s: Line %d should not have trailing whitespace", tt.name, i)
+			}
+		})
+	}
+}
+
+func TestNewHelpRenderer(t *testing.T) {
+	tests := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		expectError bool
+	}{
+		{
+			name: "creates help renderer successfully",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{
+						NoColor: false,
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "creates help renderer with no color",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{
+						NoColor: true,
+					},
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			renderer, err := NewHelpRenderer(tt.atmosConfig)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, renderer)
+			}
 		})
 	}
 }

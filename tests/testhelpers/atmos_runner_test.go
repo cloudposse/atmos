@@ -261,7 +261,7 @@ func TestAtmosRunner_Cleanup(t *testing.T) {
 
 func Test_findRepoRoot(t *testing.T) {
 	// Test from current directory.
-	root, err := findRepoRoot()
+	root, err := FindRepoRoot()
 
 	// Check if we found a repo.
 	if err == nil {
@@ -280,7 +280,7 @@ func Test_findRepoRoot(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
 
-	_, err = findRepoRoot()
+	_, err = FindRepoRoot()
 	assert.Error(t, err)
 	assert.ErrorContains(t, err, "not in a git repository")
 }

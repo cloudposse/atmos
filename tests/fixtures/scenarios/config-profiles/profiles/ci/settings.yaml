@@ -1,0 +1,8 @@
+# CI profile settings
+logs:
+  level: Info
+
+settings:
+  terminal:
+    color: false
+    max_width: 80

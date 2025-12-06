@@ -48,6 +48,11 @@ jobs:
           # Add Go bin to PATH
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
+      - name: Download Go module dependencies
+        run: |
+          # Pre-download dependencies to prevent go mod tidy from trying to fetch internal packages
+          go mod download
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

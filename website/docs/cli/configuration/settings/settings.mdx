@@ -1,0 +1,186 @@
+---
+title: Settings
+sidebar_position: 25
+sidebar_label: settings
+sidebar_class_name: command
+description: Configure Atmos global settings including list merge strategies, terminal display, and token injection.
+id: settings
+slug: /cli/configuration/settings
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+The `settings` section configures Atmos global settings that affect how stacks are processed, how lists are merged, how output is displayed, and how authentication tokens are injected for private repositories.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  # Specifies how lists are merged in Atmos stack manifests
+  list_merge_strategy: replace
+
+  # Terminal settings
+  terminal:
+    max_width: 120
+    pager: false
+    color: true
+
+  # Token injection settings
+  inject_github_token: true
+  inject_gitlab_token: false
+  inject_bitbucket_token: false
+  github_username: ""
+```
+</File>
+
+## Settings Sections
+
+| Section | Description |
+|---------|-------------|
+| [Terminal](/cli/configuration/settings/terminal) | Terminal display, color, width, pager, and syntax highlighting |
+| [Secret Masking](/cli/configuration/settings/mask) | Automatic secret detection and masking in output |
+| [Markdown Styling](/cli/configuration/settings/markdown-styling) | Customize markdown rendering in terminal |
+| [Atmos Pro](/cli/configuration/settings/pro) | Atmos Pro integration for stack locking and workspace management |
+
+## List Merge Strategy
+
+<dl>
+  <dt>`settings.list_merge_strategy`</dt>
+  <dd>
+    Specifies how lists are merged in Atmos stack manifests. Can also be set using `ATMOS_SETTINGS_LIST_MERGE_STRATEGY` environment variable or `--settings-list-merge-strategy` command-line argument.
+
+    The following strategies are supported:
+
+    <dl>
+      <dt>`replace`</dt>
+      <dd>Most recent list imported wins (the default behavior).</dd>
+
+      <dt>`append`</dt>
+      <dd>The sequence of lists is appended in the same order as imports.</dd>
+
+      <dt>`merge`</dt>
+      <dd>The items in the destination list are deep-merged with the items in the source list. The items in the source list take precedence. The items are processed starting from the first up to the length of the source list (the remaining items are not processed). If the source and destination lists have the same length, all items in the destination lists are deep-merged with all items in the source list.</dd>
+    </dl>
+  </dd>
+</dl>
+
+## Token Injection
+
+Atmos can automatically inject authentication tokens when vendoring from private repositories. This eliminates the need to embed credentials in vendor URLs.
+
+<dl>
+  <dt>`settings.inject_github_token`</dt>
+  <dd>
+    Enables automatic GitHub token injection when vendoring from private GitHub repositories. Defaults to `true`.
+
+    When enabled, Atmos automatically injects authentication credentials from `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variables.
+
+    Set to `false` to disable automatic GitHub token injection.
+  </dd>
+
+  <dt>`settings.inject_gitlab_token`</dt>
+  <dd>
+    Enables automatic GitLab token injection when vendoring from private GitLab repositories. Defaults to `false`.
+
+    When enabled, Atmos automatically injects authentication credentials from `ATMOS_GITLAB_TOKEN` or `GITLAB_TOKEN` environment variables.
+
+    ```yaml
+    settings:
+      inject_gitlab_token: true
+    ```
+  </dd>
+
+  <dt>`settings.inject_bitbucket_token`</dt>
+  <dd>
+    Enables automatic Bitbucket token injection when vendoring from private Bitbucket repositories. Defaults to `false`.
+
+    When enabled, Atmos automatically injects authentication credentials from `ATMOS_BITBUCKET_TOKEN` or `BITBUCKET_TOKEN` environment variables.
+
+    ```yaml
+    settings:
+      inject_bitbucket_token: true
+    ```
+
+    For Bitbucket, you can also configure a custom username via `bitbucket_username` setting. If not specified, defaults to `x-token-auth`.
+  </dd>
+
+  <dt>`settings.github_username`</dt>
+  <dd>
+    Specifies the GitHub username for OCI registry authentication to GitHub Container Registry (ghcr.io).
+
+    When pulling artifacts from ghcr.io using `oci://ghcr.io/...` sources, Atmos requires a GitHub username along with the token. The username can be configured via:
+
+    - `github_username` setting in `atmos.yaml`
+    - `ATMOS_GITHUB_USERNAME` environment variable (highest precedence)
+    - `GITHUB_ACTOR` environment variable (automatically set in GitHub Actions)
+    - `GITHUB_USERNAME` environment variable
+
+    **Configuration example:**
+    ```yaml
+    settings:
+      github_username: "myusername"
+    ```
+
+    **GitHub Actions usage:**
+    ```yaml
+    # In GitHub Actions, GITHUB_ACTOR is automatically available
+    # No additional configuration needed
+    - name: Pull from GHCR
+      run: atmos vendor pull -c my-component
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # GITHUB_ACTOR is automatically set by GitHub Actions
+    ```
+
+    **Note:** Unlike Git repository authentication (which uses `x-access-token` as username), GitHub Container Registry requires your actual GitHub username. Without a username, authentication will fail even if `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` is set.
+  </dd>
+</dl>
+
+## Deprecated Settings
+
+<dl>
+  <dt>`settings.docs` (Deprecated)</dt>
+  <dd>
+    :::warning Deprecated
+    The `settings.docs` section is deprecated and will be removed in a future version. Please use `settings.terminal` instead.
+    :::
+
+    <dl>
+      <dt>`max-width` (Deprecated)</dt>
+      <dd>Use `settings.terminal.max_width` instead.</dd>
+
+      <dt>`pagination` (Deprecated)</dt>
+      <dd>Use `settings.terminal.pager` instead.</dd>
+    </dl>
+  </dd>
+</dl>
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_SETTINGS_LIST_MERGE_STRATEGY`</dt>
+  <dd>List merge strategy: `replace`, `append`, `merge`.</dd>
+
+  <dt>`ATMOS_GITHUB_TOKEN`</dt>
+  <dd>GitHub token for private repository access.</dd>
+
+  <dt>`ATMOS_GITHUB_USERNAME`</dt>
+  <dd>GitHub username for GHCR authentication.</dd>
+
+  <dt>`ATMOS_GITLAB_TOKEN`</dt>
+  <dd>GitLab token for private repository access.</dd>
+
+  <dt>`ATMOS_BITBUCKET_TOKEN`</dt>
+  <dd>Bitbucket token for private repository access.</dd>
+
+  <dt>`ATMOS_BITBUCKET_USERNAME`</dt>
+  <dd>Bitbucket username for authentication.</dd>
+</dl>
+
+## See Also
+
+- [CLI Configuration](/cli/configuration) — Overview of CLI configuration
+- [Environment Variables](/cli/environment-variables) — All configuration environment variables

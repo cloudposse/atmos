@@ -1,0 +1,290 @@
+name: Check Markdown File Size
+description: Validates that modified markdown files in PR do not exceed size limits
+inputs:
+  file-patterns:
+    description: 'Space-separated glob patterns for files to check (e.g., "CLAUDE.md .claude/agents/*.md")'
+    required: false
+    default: 'CLAUDE.md'
+  max-size:
+    description: 'Maximum file size in bytes'
+    required: false
+    default: '40000'
+  github-token:
+    description: 'GitHub token for posting comments'
+    required: true
+outputs:
+  size:
+    description: 'Current file size in bytes (for single file mode)'
+    value: ${{ steps.check.outputs.size }}
+  exceeds-limit:
+    description: 'Whether any file exceeds the size limit (true/false)'
+    value: ${{ steps.check.outputs.exceeds_limit }}
+  usage-percent:
+    description: 'Percentage of limit used (for single file mode)'
+    value: ${{ steps.check.outputs.usage_percent }}
+  all-files-ok:
+    description: 'Whether all files pass size check (true/false)'
+    value: ${{ steps.check.outputs.all_files_ok }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check file size
+      id: check
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        FILE_PATTERNS="${{ inputs.file-patterns }}"
+        MAX_SIZE="${{ inputs.max-size }}"
+
+        echo "File patterns: $FILE_PATTERNS"
+
+        # Get list of changed files in PR using GitHub CLI
+        if [ -n "${{ github.event.pull_request.number }}" ]; then
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          echo "Fetching changed files for PR #${PR_NUMBER}..."
+          CHANGED_FILES=$(gh pr view "$PR_NUMBER" --json files --jq '.files[].path')
+        else
+          echo "⚠️ Not a pull request context - cannot determine changed files"
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "all_files_ok=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        if [ -z "$CHANGED_FILES" ]; then
+          echo "✅ No files modified in this PR"
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "all_files_ok=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Filter changed files by patterns
+        MATCHED_FILES=""
+        for PATTERN in $FILE_PATTERNS; do
+          for CHANGED_FILE in $CHANGED_FILES; do
+            # Use bash pattern matching
+            if [[ "$CHANGED_FILE" == $PATTERN ]]; then
+              if [ -f "$CHANGED_FILE" ]; then
+                MATCHED_FILES="${MATCHED_FILES}${CHANGED_FILE}"$'\n'
+              fi
+            fi
+          done
+        done
+
+        # Remove trailing newline and duplicates
+        MATCHED_FILES=$(echo "$MATCHED_FILES" | sort -u | grep -v '^$' || true)
+
+        if [ -z "$MATCHED_FILES" ]; then
+          echo "✅ No files matching patterns modified in this PR"
+          echo "exists=false" >> $GITHUB_OUTPUT
+          echo "all_files_ok=true" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        echo "exists=true" >> $GITHUB_OUTPUT
+        echo "max_size=$MAX_SIZE" >> $GITHUB_OUTPUT
+
+        # Check file sizes
+        ALL_OK=true
+        OVERSIZED_FILES=""
+        TOTAL_FILES=0
+
+        while IFS= read -r FILE; do
+          [ -z "$FILE" ] && continue
+
+          SIZE=$(wc -c < "$FILE" | tr -d ' ')
+          USAGE_PERCENT=$((SIZE * 100 / MAX_SIZE))
+          FILENAME=$(basename "$FILE")
+          TOTAL_FILES=$((TOTAL_FILES + 1))
+
+          if [ "$SIZE" -gt "$MAX_SIZE" ]; then
+            EXCESS=$((SIZE - MAX_SIZE))
+            EXCESS_PERCENT=$((EXCESS * 100 / MAX_SIZE))
+            echo "❌ $FILENAME: $SIZE bytes (over by $EXCESS bytes, ${EXCESS_PERCENT}%)"
+            OVERSIZED_FILES="${OVERSIZED_FILES}${FILE}:${SIZE},"
+            ALL_OK=false
+          else
+            echo "✅ $FILENAME: $SIZE bytes (${USAGE_PERCENT}% of limit)"
+          fi
+        done <<< "$MATCHED_FILES"
+
+        echo "all_files_ok=$ALL_OK" >> $GITHUB_OUTPUT
+        echo "total_files=$TOTAL_FILES" >> $GITHUB_OUTPUT
+        echo "oversized_files=$OVERSIZED_FILES" >> $GITHUB_OUTPUT
+
+        if [ "$ALL_OK" = "false" ]; then
+          echo "exceeds_limit=true" >> $GITHUB_OUTPUT
+        else
+          echo "exceeds_limit=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Post PR comment if file too large
+      if: steps.check.outputs.exists == 'true' && steps.check.outputs.exceeds_limit == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        if [ -z "${{ github.event.pull_request.number }}" ]; then
+          echo "ℹ️ Not a pull request - skipping comment"
+          exit 0
+        fi
+
+        PR_NUMBER="${{ github.event.pull_request.number }}"
+        SIZE="${{ steps.check.outputs.size }}"
+        MAX_SIZE="${{ steps.check.outputs.max_size }}"
+        EXCESS=$((SIZE - MAX_SIZE))
+        EXCESS_PERCENT=$((EXCESS * 100 / MAX_SIZE))
+
+        EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- claude-md-size-check -->")) | .id' | head -1)
+
+        if [ -n "$EXISTING_COMMENT" ]; then
+          echo "Found existing comment with ID: $EXISTING_COMMENT"
+        else
+          echo "No existing comment found"
+        fi
+
+        OVERSIZED="${{ steps.check.outputs.oversized_files }}"
+        TOTAL_FILES="${{ steps.check.outputs.total_files }}"
+
+        # Build list of oversized files
+        FILE_LIST=""
+        IFS=',' read -ra FILES_ARRAY <<< "$OVERSIZED"
+        for FILE_ENTRY in "${FILES_ARRAY[@]}"; do
+          [ -z "$FILE_ENTRY" ] && continue
+          FILE_NAME=$(echo "$FILE_ENTRY" | cut -d: -f1 | xargs basename)
+          FILE_SIZE=$(echo "$FILE_ENTRY" | cut -d: -f2)
+          FILE_EXCESS=$((FILE_SIZE - MAX_SIZE))
+          FILE_EXCESS_PERCENT=$((FILE_EXCESS * 100 / MAX_SIZE))
+          FILE_LIST="${FILE_LIST}> - \`${FILE_NAME}\`: **${FILE_SIZE} bytes** (over by ${FILE_EXCESS} bytes, ~${FILE_EXCESS_PERCENT}%)"$'\n'
+        done
+
+        # Detect if we're checking CLAUDE.md or agent files
+        if echo "${{ inputs.file-patterns }}" | grep -q "CLAUDE.md"; then
+          FILE_TYPE="CLAUDE.md"
+          FILE_TYPE_PLURAL="CLAUDE.md files"
+          ACTION_VERB="refactor the oversized CLAUDE.md file"
+        else
+          FILE_TYPE="Claude agent file"
+          FILE_TYPE_PLURAL="Claude agent files"
+          ACTION_VERB="refactor the oversized agent files"
+        fi
+
+        if [ "$TOTAL_FILES" -eq 1 ]; then
+          TITLE="${FILE_TYPE} Too Large"
+          DESCRIPTION="The modified ${FILE_TYPE} exceeds the **${MAX_SIZE} byte** size limit:"
+        else
+          TITLE="${FILE_TYPE_PLURAL} Too Large"
+          DESCRIPTION="The following modified ${FILE_TYPE_PLURAL} exceed the **${MAX_SIZE} byte** size limit:"
+        fi
+
+        COMMENT_BODY="<!-- claude-md-size-check -->
+        > [!WARNING]
+        > #### ${TITLE}
+        >
+        > ${DESCRIPTION}
+        >
+        ${FILE_LIST}
+        **Action needed:** Please ${ACTION_VERB}. Consider:
+
+        - Removing verbose explanations
+        - Consolidating redundant examples
+        - Keeping only essential requirements
+        - Moving detailed guides to separate docs in \`docs/\` or \`docs/prd/\`
+
+        All MANDATORY requirements must be preserved."
+
+        if [ -n "$EXISTING_COMMENT" ]; then
+          echo "Updating existing comment ID: $EXISTING_COMMENT..."
+          gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
+            -f body="$COMMENT_BODY" || {
+            echo "⚠️ Failed to update comment (it may have been deleted), creating new comment..."
+            gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
+          }
+        else
+          echo "Creating new comment..."
+          gh pr comment $PR_NUMBER --body "$COMMENT_BODY"
+        fi
+
+    - name: Update comment with success if size is OK
+      if: steps.check.outputs.exists == 'true' && steps.check.outputs.exceeds_limit == 'false'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: |
+        if [ -z "${{ github.event.pull_request.number }}" ]; then
+          echo "ℹ️ Not a pull request - skipping comment"
+          exit 0
+        fi
+
+        PR_NUMBER="${{ github.event.pull_request.number }}"
+        SIZE="${{ steps.check.outputs.size }}"
+        MAX_SIZE="${{ steps.check.outputs.max_size }}"
+        USAGE_PERCENT="${{ steps.check.outputs.usage_percent }}"
+
+        EXISTING_COMMENT=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- claude-md-size-check -->")) | .id' | head -1)
+
+        if [ -z "$EXISTING_COMMENT" ]; then
+          echo "ℹ️ No existing comment to update"
+          exit 0
+        fi
+
+        EXISTING_COMMENT_BODY=$(gh pr view $PR_NUMBER --json comments --jq '.comments[] | select(.body | contains("<!-- claude-md-size-check -->")) | .body' | head -1)
+
+        TOTAL_FILES="${{ steps.check.outputs.total_files }}"
+
+        SUCCESS_COMMENT_BODY="<!-- claude-md-size-check -->
+        > [!NOTE]
+        > #### Modified Files Size OK ✅
+        >
+        > **Files checked:** ${TOTAL_FILES}
+        > **Limit:** ${MAX_SIZE} bytes per file
+        >
+        > All modified files are within size limits. Thank you!"
+
+        if echo "$EXISTING_COMMENT_BODY" | grep -q "Size OK ✅"; then
+          echo "ℹ️ Comment already shows success - no update needed"
+        else
+          echo "Updating existing comment with success message..."
+          gh api -X PATCH "/repos/${{ github.repository }}/issues/comments/$EXISTING_COMMENT" \
+            -f body="$SUCCESS_COMMENT_BODY" || {
+            echo "⚠️ Failed to update comment (it may have been deleted)"
+          }
+          echo "✅ Comment updated from warning to success"
+        fi
+
+    - name: Fail if file too large
+      if: steps.check.outputs.exists == 'true' && steps.check.outputs.exceeds_limit == 'true'
+      shell: bash
+      run: |
+        SIZE="${{ steps.check.outputs.size }}"
+        MAX_SIZE="${{ steps.check.outputs.max_size }}"
+        EXCESS=$((SIZE - MAX_SIZE))
+        EXCESS_PERCENT=$((EXCESS * 100 / MAX_SIZE))
+
+        OVERSIZED="${{ steps.check.outputs.oversized_files }}"
+
+        echo "❌ ERROR: One or more modified files exceed the size limit"
+        echo ""
+        echo "Maximum size: $MAX_SIZE bytes"
+        echo ""
+        echo "Oversized files:"
+
+        IFS=',' read -ra FILES_ARRAY <<< "$OVERSIZED"
+        for FILE_ENTRY in "${FILES_ARRAY[@]}"; do
+          [ -z "$FILE_ENTRY" ] && continue
+          FILE_NAME=$(echo "$FILE_ENTRY" | cut -d: -f1 | xargs basename)
+          FILE_SIZE=$(echo "$FILE_ENTRY" | cut -d: -f2)
+          FILE_EXCESS=$((FILE_SIZE - MAX_SIZE))
+          echo "  - $FILE_NAME: $FILE_SIZE bytes (over by $FILE_EXCESS bytes)"
+        done
+
+        echo ""
+        echo "Please compress the files by:"
+        echo "  - Removing verbose explanations"
+        echo "  - Consolidating redundant examples"
+        echo "  - Keeping only essential requirements"
+        echo "  - Moving detailed guides to docs/ or docs/prd/"
+        echo ""
+        echo "All MANDATORY requirements must be preserved."
+        exit 1
