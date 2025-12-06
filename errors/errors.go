@@ -564,6 +564,20 @@ var (
 	ErrNilTerraformOutput = errors.New("terraform output returned nil")
 	ErrNilStoreValue      = errors.New("cannot store nil value")
 
+	// Devcontainer errors.
+	ErrDevcontainerNotFound      = errors.New("devcontainer not found")
+	ErrContainerRuntimeOperation = errors.New("container runtime operation failed")
+	ErrContainerNotFound         = errors.New("container not found")
+	ErrContainerAlreadyExists    = errors.New("container already exists")
+	ErrContainerNotRunning       = errors.New("container is not running")
+	ErrContainerRunning          = errors.New("container is running")
+	ErrInvalidDevcontainerConfig = errors.New("invalid devcontainer configuration")
+	ErrRuntimeNotAvailable       = errors.New("container runtime not available")
+	ErrDevcontainerNameEmpty     = errors.New("devcontainer name cannot be empty")
+	ErrDevcontainerNameInvalid   = errors.New("devcontainer name contains invalid characters")
+	ErrDevcontainerNameTooLong   = errors.New("devcontainer name is too long")
+	ErrPTYNotSupported           = errors.New("PTY not supported on this platform")
+
 	// Logout errors.
 	ErrLogoutFailed                         = errors.New("logout failed")
 	ErrPartialLogout                        = errors.New("partial logout")
@@ -580,6 +594,8 @@ var (
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.
+// When Code is 0, it indicates successful completion that should exit cleanly without printing errors.
+// This avoids deep exits (os.Exit) which are untestable.
 type ExitCodeError struct {
 	Code int
 }
