@@ -64,6 +64,7 @@ func TestExecWithPTY_BasicExecution(t *testing.T) {
 
 	cmd := exec.Command("echo", "hello world")
 	opts := &Options{
+		Stdin:         strings.NewReader(""), // Provide empty stdin for CI environments.
 		Stdout:        &stdout,
 		EnableMasking: false,
 	}
@@ -100,6 +101,7 @@ func TestExecWithPTY_WithMasking(t *testing.T) {
 	cmd := exec.Command("echo", secretKey)
 
 	opts := &Options{
+		Stdin:         strings.NewReader(""), // Provide empty stdin for CI environments.
 		Stdout:        &stdout,
 		Masker:        ioCtx.Masker(),
 		EnableMasking: true,
@@ -143,6 +145,7 @@ func TestExecWithPTY_MaskingDisabled(t *testing.T) {
 	cmd := exec.Command("echo", secretKey)
 
 	opts := &Options{
+		Stdin:         strings.NewReader(""), // Provide empty stdin for CI environments.
 		Stdout:        &stdout,
 		Masker:        ioCtx.Masker(),
 		EnableMasking: false, // Explicitly disabled.
@@ -173,6 +176,7 @@ func TestExecWithPTY_ContextCancellation(t *testing.T) {
 	// Sleep command that would run for 10 seconds.
 	cmd := exec.Command("sleep", "10")
 	opts := &Options{
+		Stdin:  strings.NewReader(""), // Provide empty stdin for CI environments.
 		Stdout: &stdout,
 	}
 
@@ -203,6 +207,7 @@ func TestExecWithPTY_CommandFailure(t *testing.T) {
 	// Command that will fail (exit code 1).
 	cmd := exec.Command("sh", "-c", "exit 1")
 	opts := &Options{
+		Stdin:  strings.NewReader(""), // Provide empty stdin for CI environments.
 		Stdout: &stdout,
 	}
 

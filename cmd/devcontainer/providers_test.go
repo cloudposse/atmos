@@ -336,10 +336,11 @@ func TestDefaultUIProvider_OutputWritable(t *testing.T) {
 
 	// Capture stderr to verify writing works.
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
 	os.Stderr = w
 
-	_, err := provider.Output().Write([]byte("test output\n"))
+	_, err = provider.Output().Write([]byte("test output\n"))
 	require.NoError(t, err)
 
 	// Restore stderr.
@@ -359,10 +360,11 @@ func TestDefaultUIProvider_ErrorWritable(t *testing.T) {
 
 	// Capture stderr to verify writing works.
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
 	os.Stderr = w
 
-	_, err := provider.Error().Write([]byte("test error\n"))
+	_, err = provider.Error().Write([]byte("test error\n"))
 	require.NoError(t, err)
 
 	// Restore stderr.

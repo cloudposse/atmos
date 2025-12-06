@@ -207,14 +207,12 @@ func printMarkdownError(err error, title string, suggestion string) {
 	}
 }
 
-// CheckErrorPrintAndExit prints an error message and exits with exit code 1.
-// CheckErrorPrintAndExit handles a non-nil error by printing it using the package's error
-// formatter and terminating the process with an appropriate exit code.
-// If the error is an ExitCodeError and its Code is 0, the function exits successfully without
-// printing; if the Code is non-zero it prints the error and exits with that code. For all
-// other errors it prints the error, closes Sentry if enabled in configuration, and exits
-// with the code returned by GetExitCode. The provided title and suggestion are used when
-// printing the error.
+// CheckErrorPrintAndExit prints a non-nil error using the package's error formatter
+// and terminates the process with an appropriate exit code.
+// If the error is an ExitCodeError and its Code is 0, the function exits successfully without printing.
+// If the Code is non-zero it prints the error, closes Sentry if enabled, and exits with that code.
+// For all other errors it prints the error, closes Sentry if enabled, and exits with the code
+// returned by GetExitCode. The provided title and suggestion are used when printing the error.
 func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 	if err == nil {
 		return
