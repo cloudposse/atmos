@@ -40,6 +40,10 @@ type ColorScheme struct {
 	// Help/Documentation specific
 	BackgroundHighlight string // Background for highlighted sections (usage/example blocks)
 
+	// Interactive prompts (Huh library)
+	ButtonForeground string // Button text color (light/cream)
+	ButtonBackground string // Button background color (primary/purple)
+
 	// Syntax highlighting
 	ChromaTheme string // Chroma theme name for syntax highlighting
 
@@ -98,6 +102,10 @@ func GenerateColorScheme(t *Theme) ColorScheme {
 
 		// Help/Documentation specific
 		BackgroundHighlight: t.Black, // Dark background for code blocks
+
+		// Interactive prompts (Huh library)
+		ButtonForeground: t.BrightWhite, // Light cream text
+		ButtonBackground: t.BrightBlue,  // Primary action color (purple/blue)
 
 		// Syntax highlighting - map themes to appropriate Chroma themes
 		ChromaTheme: getChromaThemeForAtmosTheme(t),

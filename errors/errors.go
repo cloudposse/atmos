@@ -590,6 +590,8 @@ var (
 	ErrIdentityNotInConfig                  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig                  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
+	ErrInteractiveModeNotAvailable          = errors.New("interactive mode not available")
+	ErrNoOptionsAvailable                   = errors.New("no options available")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
