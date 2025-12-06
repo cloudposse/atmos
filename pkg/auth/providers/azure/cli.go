@@ -211,6 +211,12 @@ func (p *cliProvider) Logout(ctx context.Context) error {
 	return nil
 }
 
+// Paths returns credential files/directories used by this provider.
+// Returns empty slice as CLI provider doesn't manage files (uses az CLI).
+func (p *cliProvider) Paths() ([]authTypes.Path, error) {
+	return []authTypes.Path{}, nil
+}
+
 // GetFilesDisplayPath returns empty string (no files managed by this provider).
 func (p *cliProvider) GetFilesDisplayPath() string {
 	return "" // CLI provider doesn't manage files.

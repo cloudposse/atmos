@@ -66,6 +66,7 @@ var excludedReceivers = []string{
 	"Mock",                      // General mocks.
 	"modelSpinner",              // TUI spinner models.
 	"modelVendor",               // TUI vendor models.
+	"devcontainerSpinnerModel",  // Devcontainer spinner model (bubbletea high-frequency render loop).
 	"defaultTemplateRenderer",   // Simple template renderer.
 	"realTerraformDocsRunner",   // Simple terraform docs runner.
 	"ErrInvalidPattern",         // Error types.

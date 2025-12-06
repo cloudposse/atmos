@@ -74,6 +74,7 @@ func (s stubUser) Authenticate(_ context.Context, _ types.ICredentials) (types.I
 }
 func (s stubUser) Validate() error                         { return nil }
 func (s stubUser) Environment() (map[string]string, error) { return map[string]string{}, nil }
+func (s stubUser) Paths() ([]types.Path, error)            { return []types.Path{}, nil }
 func (s stubUser) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
@@ -1059,4 +1060,16 @@ func TestUserIdentity_BuildGetSessionTokenInput_UsesConfiguredDuration(t *testin
 			}
 		})
 	}
+}
+
+func TestUserIdentity_Paths(t *testing.T) {
+	id, err := NewUserIdentity("dev", &schema.Identity{
+		Kind: "aws/user",
+	})
+	require.NoError(t, err)
+
+	// AWS user identities don't add additional credential files beyond the provider.
+	paths, err := id.Paths()
+	assert.NoError(t, err)
+	assert.Empty(t, paths, "AWS user identities should not return additional paths")
 }

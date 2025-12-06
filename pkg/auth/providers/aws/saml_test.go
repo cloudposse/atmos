@@ -19,6 +19,7 @@ import (
 	"github.com/versent/saml2aws/v2/pkg/creds"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -669,6 +670,10 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 				t.Setenv("HOME", homeDir)
 				t.Setenv("USERPROFILE", homeDir)
 
+				// Clear homedir cache to ensure environment variables take effect.
+				t.Cleanup(homedir.Reset)
+				homedir.Reset()
+
 				// Create a mock playwright driver directory with a file inside to pass validation.
 				playwrightPath := filepath.Join(homeDir, ".cache", "ms-playwright", "chromium-1084")
 				err := os.MkdirAll(playwrightPath, 0o755)
@@ -683,6 +688,10 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 				tmpDir := t.TempDir()
 				t.Setenv("HOME", tmpDir)
 				t.Setenv("USERPROFILE", tmpDir)
+
+				// Clear homedir cache to ensure environment variables take effect.
+				t.Cleanup(homedir.Reset)
+				homedir.Reset()
 			}
 
 			result := sp.shouldDownloadBrowser()
@@ -908,4 +917,43 @@ func TestSAMLProvider_Environment_AutoDownload(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSAMLProvider_Paths(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+
+	// Disable homedir cache to ensure our test environment is used.
+	homedir.DisableCache = true
+	t.Cleanup(func() { homedir.DisableCache = false })
+
+	provider, err := NewSAMLProvider("test-saml", &schema.Provider{
+		Kind:   "aws/saml",
+		URL:    "https://idp.example.com/saml",
+		Region: "us-west-2",
+	})
+	require.NoError(t, err)
+
+	paths, err := provider.Paths()
+	assert.NoError(t, err)
+	assert.Len(t, paths, 3, "should return credentials, config, and cache paths")
+
+	// Verify credentials file.
+	assert.Equal(t, types.PathTypeFile, paths[0].Type)
+	assert.True(t, paths[0].Required)
+	assert.Contains(t, paths[0].Location, "credentials")
+	assert.Equal(t, "true", paths[0].Metadata["read_only"])
+
+	// Verify config file.
+	assert.Equal(t, types.PathTypeFile, paths[1].Type)
+	assert.False(t, paths[1].Required, "config file is optional")
+	assert.Contains(t, paths[1].Location, "config")
+	assert.Equal(t, "true", paths[1].Metadata["read_only"])
+
+	// Verify cache directory.
+	assert.Equal(t, types.PathTypeDirectory, paths[2].Type)
+	assert.False(t, paths[2].Required, "cache is optional")
+	assert.Contains(t, paths[2].Purpose, "cache")
+	assert.Equal(t, "false", paths[2].Metadata["read_only"], "cache must be writable")
 }

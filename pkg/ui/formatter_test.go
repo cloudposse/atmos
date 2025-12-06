@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/terminal"
@@ -534,7 +535,9 @@ func TestFormatter_AutomaticIcons(t *testing.T) {
 			if !strings.Contains(got, tt.expectedIcon) {
 				t.Errorf("%s output = %q, should contain icon %q", tt.name, got, tt.expectedIcon)
 			}
-			if !strings.Contains(got, tt.text) {
+			// Strip ANSI codes before checking text containment (Glamour wraps each char in styling)
+			plainText := ansi.Strip(got)
+			if !strings.Contains(plainText, tt.text) {
 				t.Errorf("%s output = %q, should contain text %q", tt.name, got, tt.text)
 			}
 
@@ -598,7 +601,9 @@ func TestFormatter_FormattedMethods(t *testing.T) {
 			if !strings.Contains(got, tt.expectedIcon) {
 				t.Errorf("%s output = %q, should contain icon %q", tt.name, got, tt.expectedIcon)
 			}
-			if !strings.Contains(got, tt.expectedText) {
+			// Strip ANSI codes before checking text containment (Glamour wraps each char in styling)
+			plainText := ansi.Strip(got)
+			if !strings.Contains(plainText, tt.expectedText) {
 				t.Errorf("%s output = %q, should contain text %q", tt.name, got, tt.expectedText)
 			}
 
@@ -873,31 +878,31 @@ func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
 			name:     "empty message",
 			icon:     "✓",
 			message:  "",
-			expected: "✓ \n",
+			expected: "✓ \n  \n", // Glamour renders empty as paragraph with indent
 		},
 		{
 			name:     "message with only newline",
 			icon:     "✓",
 			message:  "\n",
-			expected: "✓ \n  \n",
+			expected: "✓ \n  \n", // Glamour collapses single newline to empty paragraph
 		},
 		{
 			name:     "message starting with newline",
 			icon:     "✓",
 			message:  "\nStarting text",
-			expected: "✓ \n  Starting text\n",
+			expected: "✓ Starting text\n", // Glamour doesn't preserve leading newline in markdown
 		},
 		{
 			name:     "message ending with newline",
 			icon:     "✓",
 			message:  "Ending text\n",
-			expected: "✓ Ending text\n  \n",
+			expected: "✓ Ending text\n  \n", // Glamour treats trailing newline as paragraph separation
 		},
 		{
 			name:     "multiple consecutive newlines",
 			icon:     "ℹ",
 			message:  "Line 1\n\n\nLine 2",
-			expected: "ℹ Line 1\n  \n  \n  Line 2\n",
+			expected: "ℹ Line 1\n  \n  Line 2\n", // Glamour collapses multiple newlines to single empty line
 		},
 		{
 			name:     "long multiline message",
@@ -909,7 +914,7 @@ func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
 			name:     "special characters in message",
 			icon:     "⚠",
 			message:  "Warning: special chars\n\t- Tab character\n  - Spaces",
-			expected: "⚠ Warning: special chars\n  \t- Tab character\n    - Spaces\n",
+			expected: "⚠ Warning: special chars\n  - Tab character\n  \n  • Spaces\n", // Glamour normalizes whitespace, adds paragraph break, and converts "  - " to bullet
 		},
 		{
 			name:     "unicode in message",
@@ -1172,8 +1177,9 @@ func TestFormatter_ConvenienceFunctions_Multiline(t *testing.T) {
 				t.Errorf("First line should contain icon %q, got %q", tt.icon, lines[0])
 			}
 
-			// Second line should be indented
-			if !strings.HasPrefix(lines[1], " ") {
+			// Second line should be indented (strip ANSI codes first)
+			plainLine := ansi.Strip(lines[1])
+			if !strings.HasPrefix(plainLine, " ") {
 				t.Errorf("Second line should be indented, got %q", lines[1])
 			}
 
@@ -1330,5 +1336,272 @@ func TestFormatter_Infof_Multiline(t *testing.T) {
 
 	if !strings.Contains(lines[1], "Completed: 50%") {
 		t.Errorf("Second line should contain formatted text, got: %q", lines[1])
+	}
+}
+
+func TestTrimTrailingWhitespace(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{
+			name:     "single line with trailing spaces",
+			input:    "hello world     ",
+			expected: []string{"hello world"},
+		},
+		{
+			name:     "single line without trailing spaces",
+			input:    "hello world",
+			expected: []string{"hello world"},
+		},
+		{
+			name:     "multiple lines with trailing spaces",
+			input:    "line one     \nline two     \nline three     ",
+			expected: []string{"line one", "line two", "line three"},
+		},
+		{
+			name:     "empty line with only spaces (preserves 2-space indent)",
+			input:    "line one\n     \nline three",
+			expected: []string{"line one", "  ", "line three"},
+		},
+		{
+			name:     "empty line with 2 spaces (preserves indent)",
+			input:    "line one\n  \nline three",
+			expected: []string{"line one", "  ", "line three"},
+		},
+		{
+			name:     "empty line with 1 space (preserves single space)",
+			input:    "line one\n \nline three",
+			expected: []string{"line one", " ", "line three"},
+		},
+		{
+			name:     "truly empty line (no spaces)",
+			input:    "line one\n\nline three",
+			expected: []string{"line one", "", "line three"},
+		},
+		{
+			name:     "mixed: text with trailing spaces and empty lines",
+			input:    "text     \n     \nmore text     ",
+			expected: []string{"text", "  ", "more text"},
+		},
+		{
+			name:     "leading spaces preserved, trailing spaces removed",
+			input:    "  indented text     ",
+			expected: []string{"  indented text"},
+		},
+		{
+			name:     "multiple empty lines with spaces",
+			input:    "start\n     \n     \nend",
+			expected: []string{"start", "  ", "  ", "end"},
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: []string{""},
+		},
+		{
+			name:     "only spaces (becomes 2-space indent)",
+			input:    "          ",
+			expected: []string{"  "},
+		},
+		{
+			name:     "tabs and spaces mixed (trims only trailing spaces, not tabs)",
+			input:    "text\t\t   ",
+			expected: []string{"text\t\t"},
+		},
+		{
+			name:     "real Glamour output with 80-char padding",
+			input:    "Success message" + strings.Repeat(" ", 65) + "\n  " + strings.Repeat(" ", 78),
+			expected: []string{"Success message", "  "},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := trimTrailingWhitespace(tt.input)
+
+			if len(result) != len(tt.expected) {
+				t.Errorf("Expected %d lines, got %d lines", len(tt.expected), len(result))
+				t.Errorf("Expected: %#v", tt.expected)
+				t.Errorf("Got: %#v", result)
+				return
+			}
+
+			for i := range result {
+				if result[i] != tt.expected[i] {
+					t.Errorf("Line %d mismatch:\n  Expected: %q (len=%d)\n  Got:      %q (len=%d)",
+						i, tt.expected[i], len(tt.expected[i]), result[i], len(result[i]))
+				}
+			}
+		})
+	}
+}
+
+func TestTrimRight(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+		desc     string
+	}{
+		{
+			name:     "plain text no trailing spaces",
+			input:    "hello world",
+			expected: "hello world",
+			desc:     "Baseline: plain text without trailing spaces should be unchanged",
+		},
+		{
+			name:     "plain text with trailing spaces",
+			input:    "hello world   ",
+			expected: "hello world",
+			desc:     "Plain text with trailing spaces should be trimmed",
+		},
+		{
+			name:     "plain text with trailing tabs",
+			input:    "hello world\t\t",
+			expected: "hello world",
+			desc:     "Plain text with trailing tabs should be trimmed",
+		},
+		{
+			name:     "plain text with mixed trailing whitespace",
+			input:    "hello world \t \t ",
+			expected: "hello world",
+			desc:     "Plain text with mixed trailing whitespace should be trimmed",
+		},
+		{
+			name:     "ANSI colored text no trailing spaces",
+			input:    "\x1b[38;2;247;250;252mhello world\x1b[0m",
+			expected: "\x1b[38;2;247;250;252mhello world\x1b[0m",
+			desc:     "ANSI colored text without trailing spaces should preserve all codes",
+		},
+		{
+			name:     "ANSI colored text with plain trailing spaces",
+			input:    "\x1b[38;2;247;250;252mhello world\x1b[0m   ",
+			expected: "\x1b[38;2;247;250;252mhello world\x1b[0m",
+			desc:     "ANSI colored text with plain trailing spaces should trim spaces",
+		},
+		{
+			name:     "ANSI wrapped trailing spaces (Glamour pattern)",
+			input:    "\x1b[38;2;247;250;252mhello world\x1b[0m\x1b[38;2;247;250;252m   \x1b[0m",
+			expected: "\x1b[38;2;247;250;252mhello world\x1b[0m",
+			desc:     "ANSI-wrapped trailing spaces (Glamour padding) should be trimmed",
+		},
+		{
+			name:     "ANSI wrapped trailing spaces complex",
+			input:    "\x1b[38;2;247;250;252mhello\x1b[0m\x1b[38;2;100;100;100m world\x1b[0m\x1b[38;2;247;250;252m     \x1b[0m",
+			expected: "\x1b[38;2;247;250;252mhello\x1b[0m\x1b[38;2;100;100;100m world\x1b[0m",
+			desc:     "Complex ANSI colored text with wrapped trailing spaces should trim only trailing portion",
+		},
+		{
+			name:     "Unicode characters no trailing spaces",
+			input:    "ℹ hello → world",
+			expected: "ℹ hello → world",
+			desc:     "Unicode characters should be handled correctly without trailing spaces",
+		},
+		{
+			name:     "Unicode with ANSI and trailing spaces",
+			input:    "\x1b[38;2;247;250;252mℹ hello → world\x1b[0m\x1b[38;2;247;250;252m   \x1b[0m",
+			expected: "\x1b[38;2;247;250;252mℹ hello → world\x1b[0m",
+			desc:     "Unicode with ANSI codes and wrapped trailing spaces should trim correctly",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+			desc:     "Empty string should remain empty",
+		},
+		{
+			name:     "only spaces",
+			input:    "     ",
+			expected: "",
+			desc:     "String with only spaces should become empty",
+		},
+		{
+			name:     "only ANSI wrapped spaces",
+			input:    "\x1b[38;2;247;250;252m     \x1b[0m",
+			expected: "",
+			desc:     "String with only ANSI-wrapped spaces should become empty",
+		},
+		{
+			name:     "preserves leading spaces",
+			input:    "  hello world   ",
+			expected: "  hello world",
+			desc:     "Leading spaces should be preserved, only trailing removed",
+		},
+		{
+			name:     "preserves ANSI on leading spaces",
+			input:    "\x1b[38;2;247;250;252m  hello world\x1b[0m\x1b[38;2;247;250;252m   \x1b[0m",
+			expected: "\x1b[38;2;247;250;252m  hello world\x1b[0m",
+			desc:     "ANSI codes on leading spaces should be preserved",
+		},
+		{
+			name:     "bold and colored text",
+			input:    "\x1b[1m\x1b[38;2;247;250;252mBold text\x1b[0m\x1b[38;2;247;250;252m  \x1b[0m",
+			expected: "\x1b[1m\x1b[38;2;247;250;252mBold text\x1b[0m",
+			desc:     "Multiple ANSI codes (bold + color) should be preserved on content",
+		},
+		{
+			name:     "real Glamour output pattern",
+			input:    "\x1b[0m\x1b[38;2;247;250;252m\x1b[48;2;30;34;38m \x1b[0m\x1b[0m\x1b[1m\x1b[38;2;247;141;167mImage:\x1b[0m\x1b[0m\x1b[38;2;247;250;252m\x1b[48;2;30;34;38m cloudposse/geodesic:latest\x1b[0m\x1b[38;2;247;250;252m                                                \x1b[0m",
+			expected: "\x1b[0m\x1b[38;2;247;250;252m\x1b[48;2;30;34;38m \x1b[0m\x1b[0m\x1b[1m\x1b[38;2;247;141;167mImage:\x1b[0m\x1b[0m\x1b[38;2;247;250;252m\x1b[48;2;30;34;38m cloudposse/geodesic:latest\x1b[0m",
+			desc:     "Real Glamour output with 47+ trailing spaces should be trimmed correctly",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := TrimRight(tt.input)
+
+			// Compare results
+			if result != tt.expected {
+				t.Errorf("\nTest: %s\nDescription: %s\n\nInput:\n  Raw: %q\n  Hex: % X\n  Visual: %s\n\nExpected:\n  Raw: %q\n  Hex: % X\n  Visual: %s\n\nGot:\n  Raw: %q\n  Hex: % X\n  Visual: %s",
+					tt.name,
+					tt.desc,
+					tt.input,
+					[]byte(tt.input),
+					tt.input,
+					tt.expected,
+					[]byte(tt.expected),
+					tt.expected,
+					result,
+					[]byte(result),
+					result,
+				)
+			}
+
+			// Additional verification: check visual width
+			strippedInput := ansi.Strip(tt.input)
+			strippedExpected := ansi.Strip(tt.expected)
+			strippedResult := ansi.Strip(result)
+
+			expectedWidth := ansi.StringWidth(strings.TrimRight(strippedInput, " \t"))
+			resultWidth := ansi.StringWidth(strippedResult)
+
+			if resultWidth != expectedWidth {
+				t.Errorf("\nVisual width mismatch:\n  Expected trimmed width: %d (from %q)\n  Got width: %d (from %q)",
+					expectedWidth,
+					strings.TrimRight(strippedInput, " \t"),
+					resultWidth,
+					strippedResult,
+				)
+			}
+
+			// Verify no trailing whitespace in result
+			if strippedResult != strings.TrimRight(strippedResult, " \t") {
+				t.Errorf("\nResult still has trailing whitespace:\n  Stripped result: %q\n  After TrimRight: %q",
+					strippedResult,
+					strings.TrimRight(strippedResult, " \t"),
+				)
+			}
+
+			// Verify expected also matches this property
+			if strippedExpected != strings.TrimRight(strippedExpected, " \t") {
+				t.Errorf("\nTest case error - expected value has trailing whitespace:\n  Stripped expected: %q\n  After TrimRight: %q",
+					strippedExpected,
+					strings.TrimRight(strippedExpected, " \t"),
+				)
+			}
+		})
 	}
 }

@@ -487,6 +487,29 @@ func (p *deviceCodeProvider) Logout(ctx context.Context) error {
 	return p.deleteCachedToken()
 }
 
+// Paths returns credential files/directories used by this provider.
+func (p *deviceCodeProvider) Paths() ([]authTypes.Path, error) {
+	// Create file manager to get provider-namespaced paths.
+	fileManager, err := azureCloud.NewAzureFileManager("")
+	if err != nil {
+		return nil, err
+	}
+
+	paths := []authTypes.Path{
+		{
+			Location: fileManager.GetCredentialsPath(p.name),
+			Type:     authTypes.PathTypeFile,
+			Required: true,
+			Purpose:  fmt.Sprintf("Azure credentials file for provider %s", p.name),
+			Metadata: map[string]string{
+				"read_only": "true",
+			},
+		},
+	}
+
+	return paths, nil
+}
+
 // GetFilesDisplayPath returns the user-facing display path for credential files
 // stored by this provider (e.g., "~/.azure/atmos/provider-name").
 func (p *deviceCodeProvider) GetFilesDisplayPath() string {
