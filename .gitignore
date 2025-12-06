@@ -105,6 +105,7 @@ toolchain/.tool-versions
 # Merge conflict artifacts and backup files
 *.orig
 *.rej
+.scratch
 *.bak
 *.bak[0-9]
 *.bak[0-9][0-9]
@@ -115,6 +116,8 @@ toolchain/.tool-versions
 .scratch/
 TEST_FAILURE_ANALYSIS.md
 scratch/
+COVERAGE_SUMMARY.md
+TESTABILITY_CHANGES_SUMMARY.md
 
 # Conductor scratch/temporary files
 *.log

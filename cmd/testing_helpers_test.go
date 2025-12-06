@@ -23,13 +23,11 @@ type flagSnapshot struct {
 
 // cmdStateSnapshot stores the complete state of RootCmd and I/O for restoration.
 type cmdStateSnapshot struct {
-	args         []string
-	osArgs       []string
-	osStdout     *os.File
-	osStderr     *os.File
-	osStdin      *os.File
-	flags        map[string]flagSnapshot
-	colorProfile termenv.Profile // Lipgloss color profile
+	args           []string
+	osArgs         []string
+	flags          map[string]flagSnapshot
+	chdirProcessed bool
+	colorProfile   termenv.Profile // Lipgloss color profile
 }
 
 // snapshotRootCmdState captures the current state of RootCmd including all flag values and I/O streams.
@@ -37,13 +35,11 @@ type cmdStateSnapshot struct {
 // preventing test pollution without needing to maintain a hardcoded list of flags.
 func snapshotRootCmdState() *cmdStateSnapshot {
 	snapshot := &cmdStateSnapshot{
-		args:         make([]string, len(RootCmd.Flags().Args())),
-		osArgs:       make([]string, len(os.Args)),
-		osStdout:     os.Stdout,
-		osStderr:     os.Stderr,
-		osStdin:      os.Stdin,
-		flags:        make(map[string]flagSnapshot),
-		colorProfile: lipgloss.ColorProfile(),
+		args:           make([]string, len(RootCmd.Flags().Args())),
+		osArgs:         make([]string, len(os.Args)),
+		flags:          make(map[string]flagSnapshot),
+		chdirProcessed: chdirProcessed,
+		colorProfile:   lipgloss.ColorProfile(),
 	}
 
 	// Copy args.
@@ -112,10 +108,8 @@ func restoreRootCmdState(snapshot *cmdStateSnapshot) {
 	os.Args = make([]string, len(snapshot.osArgs))
 	copy(os.Args, snapshot.osArgs)
 
-	// Restore os std streams.
-	os.Stdout = snapshot.osStdout
-	os.Stderr = snapshot.osStderr
-	os.Stdin = snapshot.osStdin
+	// Restore chdirProcessed flag.
+	chdirProcessed = snapshot.chdirProcessed
 
 	// Restore all flags to their snapshotted values.
 	restoreFlags := func(flagSet *pflag.FlagSet) {

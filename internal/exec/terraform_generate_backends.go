@@ -17,6 +17,46 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// backendConfig holds extracted backend configuration from a component section.
+type backendConfig struct {
+	BackendSection map[string]any
+	BackendType    string
+	Err            error
+}
+
+// extractBackendConfig extracts and validates backend configuration from a component section.
+func extractBackendConfig(componentSection map[string]any) backendConfig {
+	backendSection, ok := componentSection[cfg.BackendSectionName].(map[string]any)
+	if !ok {
+		return backendConfig{Err: errUtils.ErrBackendSectionMissing}
+	}
+
+	backendType, ok := componentSection[cfg.BackendTypeSectionName].(string)
+	if !ok {
+		return backendConfig{Err: errUtils.ErrBackendTypeMissing}
+	}
+
+	// Check if backend section is empty for backends that require configuration.
+	// The "local" backend can work without any configuration, but remote backends
+	// like s3, gcs, azurerm, and cloud require at least some configuration.
+	if len(backendSection) == 0 && backendType != cfg.BackendTypeLocal {
+		return backendConfig{Err: errUtils.ErrBackendConfigEmpty}
+	}
+
+	return backendConfig{
+		BackendSection: backendSection,
+		BackendType:    backendType,
+	}
+}
+
+// checkBackendTypeAfterProcessing validates that backend_type is not empty after template processing.
+func checkBackendTypeAfterProcessing(backendType string) error {
+	if backendType == "" {
+		return errUtils.ErrBackendTypeEmptyAfterRender
+	}
+	return nil
+}
+
 // ExecuteTerraformGenerateBackendsCmd executes `terraform generate backends` command.
 func ExecuteTerraformGenerateBackendsCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendsCmd")()
@@ -132,15 +172,16 @@ func ExecuteTerraformGenerateBackends(
 					}
 				}
 
-				// Component backend
-				if backendSection, ok = componentSection[cfg.BackendSectionName].(map[string]any); !ok {
+				// Extract backend configuration.
+				backend := extractBackendConfig(componentSection)
+				if backend.Err != nil {
+					log.Warn("Skipping backend generation: "+backend.Err.Error()+". "+
+						"Set 'components.terraform.auto_generate_backend_file: false' in atmos.yaml to disable.",
+						"component", componentName, "stack", stackFileName)
 					continue
 				}
-
-				// Backend type
-				if backendTypeSection, ok = componentSection[cfg.BackendTypeSectionName].(string); !ok {
-					continue
-				}
+				backendSection = backend.BackendSection
+				backendTypeSection = backend.BackendType
 
 				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[string]any); !ok {
 					varsSection = map[string]any{}
@@ -293,6 +334,14 @@ func ExecuteTerraformGenerateBackends(
 
 				if i, ok := componentSection[cfg.BackendTypeSectionName].(string); ok {
 					backendTypeSection = i
+				}
+
+				// Skip if backend_type is empty after template processing.
+				if err := checkBackendTypeAfterProcessing(backendTypeSection); err != nil {
+					log.Warn("Skipping backend generation: "+err.Error()+". "+
+						"Set 'components.terraform.auto_generate_backend_file: false' in atmos.yaml to disable.",
+						"component", componentName, "stack", stackName)
+					continue
 				}
 
 				var backendFilePath string

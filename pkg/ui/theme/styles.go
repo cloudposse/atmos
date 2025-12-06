@@ -30,6 +30,7 @@ type StyleSet struct {
 	Command     lipgloss.Style
 	Description lipgloss.Style
 	Label       lipgloss.Style // Section labels/headers (non-status)
+	Spinner     lipgloss.Style // Loading/progress indicators
 
 	// Table styles
 	TableHeader    lipgloss.Style
@@ -45,7 +46,6 @@ type StyleSet struct {
 	XMark     lipgloss.Style
 	Footer    lipgloss.Style
 	Border    lipgloss.Style
-	Spinner   lipgloss.Style
 
 	// Version styles
 	VersionNumber lipgloss.Style
@@ -119,6 +119,7 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		Command:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Primary)),
 		Description: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextPrimary)),
 		Label:       lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Primary)).Bold(true),
+		Spinner:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Spinner)),
 
 		// Table styles
 		TableHeader:    getTableHeaderStyle(scheme),
@@ -134,7 +135,6 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		XMark:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)).SetString(IconXMark),
 		Footer:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)).Italic(true),
 		Border:    getBorderStyle(scheme),
-		Spinner:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
 
 		// Version styles
 		VersionNumber: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),

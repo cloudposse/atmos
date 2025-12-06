@@ -13,6 +13,8 @@ import (
 
 // TestProcessChdirFlag tests the processChdirFlag function directly.
 func TestProcessChdirFlag(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Save original working directory.
 	originalWd, err := os.Getwd()
 	require.NoError(t, err)
@@ -155,6 +157,8 @@ func TestProcessChdirFlag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t) // Reset chdirProcessed flag and other state.
+
 			// Restore original directory before each test.
 			require.NoError(t, os.Chdir(originalWd))
 
@@ -232,6 +236,8 @@ func TestProcessChdirFlag(t *testing.T) {
 
 // TestProcessChdirFlagWithEnvVar tests environment variable handling.
 func TestProcessChdirFlagWithEnvVar(t *testing.T) {
+	_ = NewTestKit(t)
+
 	originalWd, err := os.Getwd()
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -262,6 +268,8 @@ func TestProcessChdirFlagWithEnvVar(t *testing.T) {
 
 // TestProcessChdirFlagPrecedence tests that flag takes precedence over env var.
 func TestProcessChdirFlagPrecedence(t *testing.T) {
+	_ = NewTestKit(t)
+
 	originalWd, err := os.Getwd()
 	require.NoError(t, err)
 	t.Cleanup(func() {
