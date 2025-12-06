@@ -306,6 +306,10 @@ var (
 	ErrVersionCacheLoadFailed = errors.New("failed to load version check cache")
 	ErrVersionGitHubAPIFailed = errors.New("failed to query GitHub API for releases")
 
+	// Version constraint errors.
+	ErrVersionConstraint        = errors.New("version constraint not satisfied")
+	ErrInvalidVersionConstraint = errors.New("invalid version constraint")
+
 	// Atlantis errors.
 	ErrAtlantisInvalidFlags          = errors.New("incompatible atlantis flags")
 	ErrAtlantisProjectTemplateNotDef = errors.New("atlantis project template is not defined")
