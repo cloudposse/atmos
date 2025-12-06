@@ -52,6 +52,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/profile"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
+	_ "github.com/cloudposse/atmos/cmd/vendor"
 	"github.com/cloudposse/atmos/cmd/version"
 )
 
