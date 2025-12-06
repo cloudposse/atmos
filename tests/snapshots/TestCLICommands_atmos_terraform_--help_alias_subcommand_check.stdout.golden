@@ -131,12 +131,7 @@ USAGE
 
 ALIASES
 
-  terraform, tf, tr
-
-SUBCOMMAND ALIASES
-
-      ta               Alias of terraform apply command
-      tp               Alias of terraform plan command
+  terraform, tf
 
 EXAMPLES
 

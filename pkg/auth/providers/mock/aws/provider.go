@@ -124,3 +124,11 @@ func (p *Provider) GetFilesDisplayPath() string {
 
 	return "~/.mock/credentials"
 }
+
+// Paths returns mock credential file paths for mounting into containers.
+func (p *Provider) Paths() ([]types.Path, error) {
+	defer perf.Track(nil, "mock.Provider.Paths")()
+
+	// Mock providers return an empty list since they don't use real credential files.
+	return []types.Path{}, nil
+}

@@ -621,6 +621,103 @@ func TestListStacksForComponentEmptyComponent(t *testing.T) {
 	assert.NotEmpty(t, stacks, "Empty component filter returns all stacks")
 }
 
+// TestFilterChdirArgs tests the filterChdirArgs function.
+func TestFilterChdirArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected []string
+	}{
+		{
+			name:     "no chdir flags",
+			input:    []string{"terraform", "plan", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "long form --chdir=value",
+			input:    []string{"terraform", "plan", "--chdir=/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "long form --chdir value",
+			input:    []string{"terraform", "plan", "--chdir", "/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "short form -C=value",
+			input:    []string{"terraform", "plan", "-C=/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "short form -C value",
+			input:    []string{"terraform", "plan", "-C", "/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "short form concatenated -Cvalue",
+			input:    []string{"terraform", "plan", "-C/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "multiple chdir flags",
+			input:    []string{"terraform", "--chdir=/first", "plan", "-C", "/second", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "chdir at beginning",
+			input:    []string{"--chdir=/path", "terraform", "plan"},
+			expected: []string{"terraform", "plan"},
+		},
+		{
+			name:     "chdir at end",
+			input:    []string{"terraform", "plan", "--chdir=/path"},
+			expected: []string{"terraform", "plan"},
+		},
+		{
+			name:     "mixed formats",
+			input:    []string{"terraform", "--chdir=/first", "plan", "-C/second", "deploy", "-C", "/third"},
+			expected: []string{"terraform", "plan", "deploy"},
+		},
+		{
+			name:     "preserve non-chdir flags",
+			input:    []string{"terraform", "plan", "--var-file=test.tfvars", "--chdir=/path", "--auto-approve"},
+			expected: []string{"terraform", "plan", "--var-file=test.tfvars", "--auto-approve"},
+		},
+		{
+			name:     "chdir with tilde",
+			input:    []string{"terraform", "--chdir=~/project", "plan"},
+			expected: []string{"terraform", "plan"},
+		},
+		{
+			name:     "empty input",
+			input:    []string{},
+			expected: []string{},
+		},
+		{
+			name:     "only chdir flags",
+			input:    []string{"--chdir=/path", "-C", "/another"},
+			expected: []string{},
+		},
+		{
+			name:     "chdir-like but not flag (value contains chdir)",
+			input:    []string{"terraform", "plan", "my-chdir-component"},
+			expected: []string{"terraform", "plan", "my-chdir-component"},
+		},
+		{
+			name:     "short C alone should be filtered",
+			input:    []string{"terraform", "-C", "/path", "plan"},
+			expected: []string{"terraform", "plan"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterChdirArgs(tt.input)
+			assert.Equal(t, tt.expected, result, "filterChdirArgs should correctly filter chdir arguments")
+		})
+	}
+}
+
 // TestValidateAtmosConfig tests the error-returning version of config validation.
 // This test was not possible before refactoring because checkAtmosConfig() called os.Exit().
 func TestValidateAtmosConfig(t *testing.T) {
@@ -645,8 +742,8 @@ func TestValidateAtmosConfig(t *testing.T) {
 			if tt.wantErr {
 				assert.Error(t, err, tt.description)
 			} else {
-				// With stack validation disabled, we should get nil or config load error
-				// The important thing is it doesn't call os.Exit()
+				// With stack validation disabled, we should get nil or config load error.
+				// The important thing is it doesn't call os.Exit().
 				t.Logf("validateAtmosConfig returned: %v", err)
 			}
 		})
@@ -678,23 +775,23 @@ func TestGetConfigAndStacksInfo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a minimal cobra command for testing
+			// Create a minimal cobra command for testing.
 			cmd := &cobra.Command{
 				Use: tt.commandName,
 			}
 
-			// The key test: this call should return an error instead of calling os.Exit()
+			// The key test: this call should return an error instead of calling os.Exit().
 			info, err := getConfigAndStacksInfo(tt.commandName, cmd, tt.args)
 
 			// We expect an error here because we're not in a valid atmos directory,
 			// but the important thing is that it doesn't call os.Exit()
-			// and we can actually test the error behavior
+			// and we can actually test the error behavior.
 			if err != nil {
-				// This is expected - we're testing that errors are returned properly
+				// This is expected - we're testing that errors are returned properly.
 				t.Logf("Got expected error (no valid config): %v", err)
 				assert.Error(t, err, tt.description)
 			} else {
-				// If somehow we got a valid config, verify the info structure
+				// If somehow we got a valid config, verify the info structure.
 				assert.IsType(t, schema.ConfigAndStacksInfo{}, info, "Should return ConfigAndStacksInfo struct")
 			}
 		})
@@ -708,13 +805,13 @@ func TestGetConfigAndStacksInfoDoubleDashHandling(t *testing.T) {
 		Use: "terraform",
 	}
 
-	// Test with args containing "--"
+	// Test with args containing "--".
 	args := []string{"plan", "component", "--stack", "dev", "--", "-target=resource"}
 
 	_, err := getConfigAndStacksInfo("terraform", cmd, args)
 
 	// We expect this to fail due to missing atmos config, but importantly
-	// it should NOT panic or call os.Exit()
+	// it should NOT panic or call os.Exit().
 	assert.Error(t, err, "Should return error for missing config instead of calling os.Exit()")
 	assert.Contains(t, err.Error(), "directory for Atmos stacks does not exist", "Error should relate to config validation")
 }
@@ -726,21 +823,21 @@ func TestGetConfigAndStacksInfoReturnsErrorInsteadOfExiting(t *testing.T) {
 		Use: "terraform",
 	}
 
-	// Call the function with invalid input that would previously cause os.Exit(1)
+	// Call the function with invalid input that would previously cause os.Exit(1).
 	_, err := getConfigAndStacksInfo("terraform", cmd, []string{})
 
-	// The key assertion: we got an error back instead of the process terminating
+	// The key assertion: we got an error back instead of the process terminating.
 	assert.Error(t, err, "Function should return error instead of calling os.Exit()")
 
-	// Verify it contains useful information
+	// Verify it contains useful information.
 	assert.NotEmpty(t, err.Error(), "Error should have a descriptive message")
 }
 
 // TestValidateAtmosConfigWithOptions tests that options pattern works correctly.
 func TestValidateAtmosConfigWithOptions(t *testing.T) {
-	// Test that WithStackValidation option is respected
+	// Test that WithStackValidation option is respected.
 	err := validateAtmosConfig(WithStackValidation(false))
-	// With stack validation disabled, we should only fail on config loading
+	// With stack validation disabled, we should only fail on config loading.
 	// (which will fail in test env, but that's OK - we're testing it returns an error)
 	if err != nil {
 		t.Logf("Got expected error with stack validation disabled: %v", err)
@@ -873,7 +970,7 @@ func TestCloneCommand(t *testing.T) {
 			wantErr: false,
 			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
 				assert.Equal(t, len(orig.Steps), len(clone.Steps))
-				// Verify it's a deep copy - modifying clone doesn't affect original
+				// Verify it's a deep copy - modifying clone doesn't affect original.
 				clone.Steps[0] = "modified"
 				assert.NotEqual(t, orig.Steps[0], clone.Steps[0])
 			},
@@ -979,7 +1076,7 @@ func TestCloneCommand(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, clone)
 
-			// Verify it's a different object
+			// Verify it's a different object.
 			if tt.input != nil {
 				assert.NotSame(t, tt.input, clone)
 			}
@@ -1025,9 +1122,9 @@ func TestHandleHelpRequest(t *testing.T) {
 			}
 
 			if tt.shouldNotExit {
-				// This should not panic or call os.Exit
+				// This should not panic or call os.Exit.
 				handleHelpRequest(cmd, tt.args)
-				// If we got here, the function returned normally
+				// If we got here, the function returned normally.
 				assert.True(t, true, "handleHelpRequest returned without exiting")
 			}
 		})
@@ -1091,7 +1188,7 @@ func TestComponentsArgCompletion(t *testing.T) {
 		setupDir   string
 		args       []string
 		toComplete string
-		expectDir  bool // Whether we expect directory completion directive
+		expectDir  bool // Whether we expect directory completion directive.
 	}{
 		{
 			name:       "first arg with dot - directory completion",
