@@ -78,6 +78,18 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!random`__](/functions/yaml/random) YAML function generates a cryptographically secure random integer
    within a specified range, useful for generating random port numbers or IDs
 
+ - The [__`!aws.account_id`__](/functions/yaml/aws.account-id) YAML function retrieves the AWS account ID
+   of the current caller identity using STS GetCallerIdentity
+
+ - The [__`!aws.caller_identity_arn`__](/functions/yaml/aws.caller-identity-arn) YAML function retrieves the full ARN
+   of the current AWS caller identity using STS GetCallerIdentity
+
+ - The [__`!aws.caller_identity_user_id`__](/functions/yaml/aws.caller-identity-user-id) YAML function retrieves the unique user ID
+   of the current AWS caller identity using STS GetCallerIdentity
+
+ - The [__`!aws.region`__](/functions/yaml/aws.region) YAML function retrieves the AWS region
+   from the current SDK configuration
+
 :::tip
 You can combine [Atmos Stack Manifest Templating](/templates) with Atmos YAML functions within the same stack configuration.
 Atmos processes templates first, followed by YAML functions, enabling you to dynamically provide parameters to the YAML functions.
@@ -154,6 +166,18 @@ components:
 
         # Generate a random port number between 1024 and 65535
         app_port: !random 1024 65535
+
+        # Get the current AWS account ID
+        aws_account_id: !aws.account_id
+
+        # Get the ARN of the current AWS caller identity
+        aws_caller_arn: !aws.caller_identity_arn
+
+        # Get the unique user ID of the current AWS caller identity
+        aws_user_id: !aws.caller_identity_user_id
+
+        # Get the current AWS region
+        aws_region: !aws.region
 ```
 </File>
 
