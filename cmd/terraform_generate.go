@@ -3,10 +3,11 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/terraform/generate/required_providers"
 	"github.com/cloudposse/atmos/cmd/terraform/generate/varfile"
 )
 
-// terraformGenerateCmd generates configurations for terraform components
+// terraformGenerateCmd generates configurations for terraform components.
 var terraformGenerateCmd = &cobra.Command{
 	Use:   "generate",
 	Short: "Generate Terraform configuration files for Atmos components and stacks.",
@@ -17,7 +18,8 @@ This command supports the following subcommands:
 - 'backend' to generate a backend configuration file for an Atmos component in a stack.
 - 'backends' to generate backend configuration files for all Atmos components in all stacks.
 - 'varfile' to generate a variable file (varfile) for an Atmos component in a stack.
-- 'varfiles' to generate varfiles for all Atmos components in all stacks.`,
+- 'varfiles' to generate varfiles for all Atmos components in all stacks.
+- 'required-providers' to generate a terraform_override.tf.json file with required_version and required_providers.`,
 	Args:               cobra.NoArgs,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
@@ -25,6 +27,9 @@ This command supports the following subcommands:
 func init() {
 	// Add modern varfile command.
 	terraformGenerateCmd.AddCommand(varfile.NewVarfileCommand())
+
+	// Add required-providers command (DEV-3124).
+	terraformGenerateCmd.AddCommand(required_providers.NewRequiredProvidersCommand())
 
 	terraformCmd.AddCommand(terraformGenerateCmd)
 }

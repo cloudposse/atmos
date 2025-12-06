@@ -148,6 +148,10 @@ func getCachedBaseComponentConfig(cacheKey string) (*schema.BaseComponentConfig,
 	if copyConfig.BaseComponentProviders, err = m.DeepCopyMap(cached.BaseComponentProviders); err != nil {
 		return nil, nil, false
 	}
+	if copyConfig.BaseComponentRequiredProviders, err = m.DeepCopyMap(cached.BaseComponentRequiredProviders); err != nil {
+		return nil, nil, false
+	}
+	copyConfig.BaseComponentRequiredVersion = cached.BaseComponentRequiredVersion
 	if copyConfig.BaseComponentHooks, err = m.DeepCopyMap(cached.BaseComponentHooks); err != nil {
 		return nil, nil, false
 	}
@@ -201,6 +205,10 @@ func cacheBaseComponentConfig(cacheKey string, config *schema.BaseComponentConfi
 	if copyConfig.BaseComponentProviders, err = m.DeepCopyMap(config.BaseComponentProviders); err != nil {
 		return
 	}
+	if copyConfig.BaseComponentRequiredProviders, err = m.DeepCopyMap(config.BaseComponentRequiredProviders); err != nil {
+		return
+	}
+	copyConfig.BaseComponentRequiredVersion = config.BaseComponentRequiredVersion
 	if copyConfig.BaseComponentHooks, err = m.DeepCopyMap(config.BaseComponentHooks); err != nil {
 		return
 	}
@@ -1644,6 +1652,24 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		// Base component required_providers (DEV-3124).
+		var baseComponentRequiredProviders map[string]any
+		if baseComponentRequiredProvidersSection, baseComponentRequiredProvidersSectionExist := baseComponentMap[cfg.RequiredProvidersSectionName]; baseComponentRequiredProvidersSectionExist {
+			baseComponentRequiredProviders, ok = baseComponentRequiredProvidersSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.required_providers' in the stack '%s'", errUtils.ErrInvalidComponentRequiredProviders, baseComponent, stack)
+			}
+		}
+
+		// Base component required_version (DEV-3124).
+		var baseComponentRequiredVersion string
+		if baseComponentRequiredVersionSection, baseComponentRequiredVersionSectionExist := baseComponentMap[cfg.RequiredVersionSectionName]; baseComponentRequiredVersionSectionExist {
+			baseComponentRequiredVersion, ok = baseComponentRequiredVersionSection.(string)
+			if !ok {
+				return fmt.Errorf("%w '%s.required_version' in the stack '%s'", errUtils.ErrInvalidComponentRequiredVersion, baseComponent, stack)
+			}
+		}
+
 		if baseComponentHooksSection, baseComponentHooksSectionExist := baseComponentMap[cfg.HooksSectionName]; baseComponentHooksSectionExist {
 			baseComponentHooks, ok = baseComponentHooksSection.(map[string]any)
 			if !ok {
@@ -1751,6 +1777,19 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentProviders = merged
+
+		// Base component `required_providers` (DEV-3124).
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentRequiredProviders, baseComponentRequiredProviders})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentRequiredProviders = merged
+
+		// Base component `required_version` (DEV-3124).
+		// String values are not merged - the most specific value wins.
+		if baseComponentRequiredVersion != "" {
+			baseComponentConfig.BaseComponentRequiredVersion = baseComponentRequiredVersion
+		}
 
 		// Base component `hooks`
 		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentHooks, baseComponentHooks})
