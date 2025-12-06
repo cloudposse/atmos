@@ -509,7 +509,7 @@
             },
             "component": {
               "type": "string",
-              "description": "Terraform/OpenTofu/Helmfile component"
+              "description": "Terraform/OpenTofu/Helmfile/Packer component"
             },
             "inherits": {
               "oneOf": [
