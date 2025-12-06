@@ -1,0 +1,83 @@
+---
+slug: yaml-function-clean-syntax
+title: "Clean Syntax for YAML Functions: No More Quote Escaping"
+authors:
+  - osterman
+tags:
+  - enhancement
+  - dx
+---
+
+Say goodbye to painful double-quote escaping in `!terraform.state` and `!terraform.output` functions. Complex expressions are now clean and readable.
+
+<!--truncate-->
+
+## What Changed
+
+Previously, using JSON fallback values or YQ expressions with quotes required awkward CSV-style escaping:
+
+```yaml
+# Old syntax - double quotes had to be escaped with ""
+config_map: !terraform.state 'component-2 ".invalid-output3 // {""key1"": ""fallback1""}"'
+```
+
+Now you can write clean, natural YAML:
+
+```yaml
+# New syntax - just use normal quotes
+config_map: !terraform.state 'component .config_map // {"key1": "fallback1", "key2": "fallback2"}'
+```
+
+## Why This Matters
+
+The old CSV-based parser was the wrong tool for the job. YAML function arguments have a simple grammar:
+
+```
+component [stack] expression
+```
+
+Component and stack names never contain spaces, and expressions always start with specific characters (`.`, `|`, `[`, `{`, `"`, `'`). The new parser exploits this structure to parse arguments without requiring any escaping.
+
+## Examples
+
+**String fallback:**
+```yaml
+username: !terraform.output 'config .username // "default-user"'
+```
+
+**Map fallback:**
+```yaml
+config: !terraform.state 'config .config_map // {"api": "localhost:3000", "timeout": 30}'
+```
+
+**YQ pipe expression:**
+```yaml
+postgres_url: !terraform.output 'aurora-postgres .hostname | "jdbc:postgresql://" + . + ":5432/db"'
+```
+
+## Block Scalars for Complex Expressions
+
+For very long expressions, use YAML folded block scalars (`>-`) for better readability:
+
+```yaml
+config_map: !terraform.state >-
+  config
+  .config_map // {"api_endpoint": "localhost:3000", "user": "test", "timeout": 30}
+```
+
+The folded block scalar joins lines with spaces, producing the same result as the single-line version.
+
+## Backward Compatibility
+
+Simple syntax remains fully compatible:
+
+```yaml
+# These work exactly as before
+vpc_id: !terraform.state vpc vpc_id
+vpc_id: !terraform.state vpc prod vpc_id
+```
+
+## Get Involved
+
+- [GitHub Pull Request](https://github.com/cloudposse/atmos/pull/1834)
+- Share your feedback in the [Atmos Community Slack](https://cloudposse.com/slack)
