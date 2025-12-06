@@ -68,6 +68,16 @@ func InitFormatter(ioCtx io.Context) {
 	Format = globalFormatter // Also expose for advanced use
 }
 
+// Reset clears the global formatter and I/O context.
+// This is primarily used in tests to ensure clean state between test executions.
+func Reset() {
+	formatterMu.Lock()
+	defer formatterMu.Unlock()
+	globalIO = nil
+	globalFormatter = nil
+	Format = nil
+}
+
 // configureColorProfile sets the global lipgloss color profile based on terminal capabilities.
 // This ensures all lipgloss styles respect NO_COLOR and other terminal color settings.
 func configureColorProfile(term terminal.Terminal) {
@@ -296,6 +306,28 @@ func Toastf(icon, format string, a ...interface{}) error {
 	}
 	formatted := f.Toastf(icon, format, a...) // formatter.Toastf() already includes trailing newline
 	return f.terminal.Write(formatted)
+}
+
+// Hint writes a hint/tip message with lightbulb icon to stderr (UI channel).
+// This is a convenience wrapper with themed hint icon and muted color.
+// Flow: ui.Hint() → ui.Format.Hint() → ui.Write() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Hint(text string) error {
+	if Format == nil {
+		return errUtils.ErrUIFormatterNotInitialized
+	}
+	formatted := Format.Hint(text) + newline
+	return Write(formatted)
+}
+
+// Hintf writes a formatted hint/tip message with lightbulb icon to stderr (UI channel).
+// This is a convenience wrapper with themed hint icon and muted color.
+// Flow: ui.Hintf() → ui.Format.Hintf() → ui.Write() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Hintf(format string, a ...interface{}) error {
+	if Format == nil {
+		return errUtils.ErrUIFormatterNotInitialized
+	}
+	formatted := Format.Hintf(format, a...) + newline
+	return Write(formatted)
 }
 
 // Write writes plain text to stderr (UI channel) without icons or automatic styling.
@@ -726,6 +758,14 @@ func (f *formatter) Infof(format string, a ...interface{}) string {
 	return f.Info(fmt.Sprintf(format, a...))
 }
 
+func (f *formatter) Hint(text string) string {
+	return f.StatusMessage("💡", &f.styles.Muted, text)
+}
+
+func (f *formatter) Hintf(format string, a ...interface{}) string {
+	return f.Hint(fmt.Sprintf(format, a...))
+}
+
 func (f *formatter) Muted(text string) string {
 	if !f.SupportsColor() {
 		return text
@@ -812,5 +852,80 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 		return content, err
 	}
 
-	return rendered, nil
+	// Remove trailing whitespace that glamour adds for padding.
+	lines := strings.Split(rendered, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+
+	return strings.Join(lines, "\n"), nil
+}
+
+// renderInlineMarkdownWithBase renders inline markdown while preserving a base style.
+// The base style is reapplied after each inline fragment to maintain consistent coloring.
+// This solves the issue where lipgloss reset codes cancel outer styling.
+func (f *formatter) renderInlineMarkdownWithBase(text string, baseStyle *lipgloss.Style) string {
+	// If no color support, strip markdown and return plain text.
+	if !f.SupportsColor() {
+		// Strip **bold**.
+		text = strings.ReplaceAll(text, "**", "")
+		// Strip `code`.
+		text = strings.ReplaceAll(text, "`", "")
+		return text
+	}
+
+	// Process **bold** markers.
+	boldStyle := lipgloss.NewStyle().Bold(true)
+	if baseStyle != nil {
+		// Inherit base style and add bold.
+		boldStyle = baseStyle.Bold(true)
+	}
+	result := text
+
+	// Replace **text** with bold styling.
+	for {
+		start := strings.Index(result, "**")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(result[start+2:], "**")
+		if end == -1 {
+			break
+		}
+		end += start + 2
+
+		// Extract the text between markers.
+		boldText := result[start+2 : end]
+		styledText := boldStyle.Render(boldText)
+
+		// Replace in result.
+		result = result[:start] + styledText + result[end+2:]
+	}
+
+	// Process `code` markers.
+	codeStyle := f.styles.Help.Code
+	if baseStyle != nil {
+		// Inherit base style properties and overlay code style.
+		codeStyle = baseStyle.Inherit(f.styles.Help.Code)
+	}
+	for {
+		start := strings.Index(result, "`")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(result[start+1:], "`")
+		if end == -1 {
+			break
+		}
+		end += start + 1
+
+		// Extract the text between markers.
+		codeText := result[start+1 : end]
+		styledText := codeStyle.Render(codeText)
+
+		// Replace in result.
+		result = result[:start] + styledText + result[end+1:]
+	}
+
+	return result
 }

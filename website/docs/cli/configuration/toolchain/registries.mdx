@@ -1,0 +1,370 @@
+---
+title: Toolchain Registries
+sidebar_position: 2
+sidebar_label: Registries
+description: Configure tool registries for toolchain management
+---
+
+import Intro from '@site/src/components/Intro';
+import KeyPoints from '@site/src/components/KeyPoints';
+import File from '@site/src/components/File';
+import Note from '@site/src/components/Note';
+
+<Intro>
+Toolchain registries define where Atmos finds tool metadata and binaries. Atmos supports multiple registry types with priority-based precedence, allowing you to use official registries, corporate mirrors, and custom tool definitions.
+</Intro>
+
+<KeyPoints>
+- Multiple registry support with priority ordering
+- Aqua registry integration (1,000+ pre-configured tools)
+- Inline registry for quick prototyping
+- Custom registries for private or corporate tools
+- File-based and URL-based registry sources
+</KeyPoints>
+
+## Registry Types
+
+Atmos supports three registry types:
+
+### 1. Aqua Registry
+
+The [Aqua registry](https://github.com/aquaproj/aqua-registry) is a community-maintained collection of 1,000+ CLI tool definitions with battle-tested metadata.
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  registries:
+    - name: aqua
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+```
+</File>
+
+**Features:**
+- Pre-configured tools: terraform, kubectl, helm, aws-cli, and more
+- Regular updates from active contributors
+- Rich metadata: download URLs, checksums, version mapping
+- Proven YAML format used by thousands of teams
+
+### 2. Atmos Inline Registry
+
+Define tools directly in your `atmos.yaml` for quick prototyping or custom tools:
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  registries:
+    - name: my-tools
+      type: atmos
+      priority: 150
+      tools:
+        stedolan/jq:
+          type: github_release
+          url: "jq-{{.OS}}-{{.Arch}}"
+        mikefarah/yq:
+          type: github_release
+          url: "yq_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+```
+</File>
+
+**Features:**
+- No external files needed
+- Perfect for quick prototyping or small tool sets
+- Supports all template variables: `{{.OS}}`, `{{.Arch}}`, `{{.Version}}`, `{{trimV .Version}}`
+- Tools defined using `owner/repo` format
+
+### 3. Custom File-Based Registry
+
+Use custom registry files for corporate or private tools:
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  registries:
+    - name: corporate
+      type: aqua
+      source: file://./custom-registry/registry.yaml
+      priority: 100
+```
+</File>
+
+## Registry Source Patterns
+
+Atmos supports two registry file organization patterns:
+
+### Single Index File (Recommended)
+
+All tool definitions in one file:
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  registries:
+    - name: custom
+      type: aqua
+      source: file://./registry.yaml  # Ends with .yaml or .yml
+      priority: 100
+```
+</File>
+
+<File title="registry.yaml">
+```yaml
+packages:
+  - type: github_release
+    repo_owner: hashicorp
+    repo_name: terraform
+    asset: "terraform_{{.Version}}_{{.OS}}_{{.Arch}}.zip"
+
+  - type: github_release
+    repo_owner: opentofu
+    repo_name: opentofu
+    asset: "tofu_{{.Version}}_{{.OS}}_{{.Arch}}.zip"
+```
+</File>
+
+**Benefits:**
+- Simplest to maintain
+- All tools in one place
+- Matches official Aqua registry structure
+
+### Per-Package Directory
+
+Separate file per package for larger registries:
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  registries:
+    - name: custom
+      type: aqua
+      source: file://./pkgs/  # Directory, not .yaml file
+      priority: 100
+```
+</File>
+
+**Directory structure:**
+```
+pkgs/
+├── hashicorp/
+│   └── terraform/
+│       └── registry.yaml
+└── opentofu/
+    └── opentofu/
+        └── registry.yaml
+```
+
+Each `registry.yaml` contains ONE package definition.
+
+**Benefits:**
+- Better organization for large registries
+- Per-tool versioning
+- Easier to maintain individual tools
+
+## Priority System
+
+Registries are checked in priority order (highest to lowest):
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  registries:
+    # Checked first (highest priority)
+    - name: corporate
+      type: atmos
+      priority: 150
+      tools:
+        internal/custom-tool:
+          type: http
+          url: "https://artifacts.corp.com/custom-tool/{{.Version}}/binary"
+
+    # Checked second
+    - name: corporate-mirror
+      type: aqua
+      source: file://./corporate-registry/registry.yaml
+      priority: 100
+
+    # Checked third
+    - name: internal-mirror
+      type: aqua
+      source: https://github-mirror.corp.com/aqua-registry/pkgs
+      priority: 50
+
+    # Checked last (lowest priority)
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+```
+</File>
+
+**Resolution order:**
+1. Corporate inline tools (priority: 150)
+2. Corporate registry file (priority: 100)
+3. Internal mirror (priority: 50)
+4. Public Aqua registry (priority: 10)
+5. Error if tool not found in any registry
+
+## Registry Configuration Options
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Unique identifier for the registry</dd>
+
+  <dt>`type`</dt>
+  <dd>
+    Registry type:
+    - `aqua` - Aqua registry format (file or URL)
+    - `atmos` - Inline tool definitions
+  </dd>
+
+  <dt>`source`</dt>
+  <dd>
+    Registry location (required for `aqua` type):
+    - File: `file://./path/to/registry.yaml`
+    - Directory: `file://./path/to/pkgs/`
+    - URL: `https://github.com/aquaproj/aqua-registry/tree/main/pkgs`
+  </dd>
+
+  <dt>`priority`</dt>
+  <dd>
+    Search priority (higher numbers checked first):
+    - Inline registries: 100-200
+    - Corporate registries: 50-100
+    - Public registries: 1-50
+    - Default: 10
+  </dd>
+
+  <dt>`tools`</dt>
+  <dd>
+    Inline tool definitions (required for `atmos` type):
+    - Key format: `owner/repo`
+    - Value: Tool configuration object
+  </dd>
+</dl>
+
+## Tool Definition Format
+
+Tools in Aqua registries use this format:
+
+<File title="registry.yaml">
+```yaml
+packages:
+  - type: github_release
+    repo_owner: hashicorp
+    repo_name: terraform
+    asset: "terraform_{{.Version}}_{{.OS}}_{{.Arch}}.zip"
+    format: zip
+    version_constraint: "semver"
+    version_overrides:
+      - version_constraint: ">= 1.0.0"
+        asset: "terraform_{{.Version}}_{{.OS}}_{{.Arch}}.zip"
+```
+</File>
+
+### Template Variables
+
+Use template variables in asset URLs:
+
+<dl>
+  <dt>`{{.Version}}`</dt>
+  <dd>Full version string (e.g., `1.9.8`)</dd>
+
+  <dt>`{{trimV .Version}}`</dt>
+  <dd>Version without 'v' prefix (e.g., `1.9.8` from `v1.9.8`)</dd>
+
+  <dt>`{{.OS}}`</dt>
+  <dd>Operating system (`linux`, `darwin`, `windows`)</dd>
+
+  <dt>`{{.Arch}}`</dt>
+  <dd>Architecture (`amd64`, `arm64`)</dd>
+
+  <dt>`{{trimPrefix .Version "v"}}`</dt>
+  <dd>Remove prefix from string</dd>
+
+  <dt>`{{trimSuffix .Version "-beta"}}`</dt>
+  <dd>Remove suffix from string</dd>
+
+  <dt>`{{replace .Version "." "_"}}`</dt>
+  <dd>String replacement</dd>
+</dl>
+
+## Package Types
+
+### GitHub Release
+
+Download from GitHub release assets:
+
+<File title="registry.yaml">
+```yaml
+packages:
+  - type: github_release
+    repo_owner: hashicorp
+    repo_name: terraform
+    asset: "terraform_{{.Version}}_{{.OS}}_{{.Arch}}.zip"
+```
+</File>
+
+### HTTP Download
+
+Download from direct URLs:
+
+<File title="registry.yaml">
+```yaml
+packages:
+  - type: http
+    url: "https://releases.hashicorp.com/terraform/{{trimV .Version}}/terraform_{{trimV .Version}}_{{.OS}}_{{.Arch}}.zip"
+```
+</File>
+
+## Supported Archive Formats
+
+Atmos automatically detects and extracts:
+
+- `.tar.gz` - Gzip-compressed tarballs
+- `.zip` - ZIP archives
+- `.gz` - Single gzip-compressed binaries
+- Raw binaries (no extension)
+
+## Complete Example
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  install_path: ".tools"
+  file_path: ".tool-versions"
+
+  registries:
+    # Corporate inline tools (highest priority)
+    - name: corporate
+      type: atmos
+      priority: 150
+      tools:
+        corp/internal-cli:
+          type: http
+          url: "https://artifacts.corp.com/cli/{{.Version}}/cli-{{.OS}}-{{.Arch}}"
+
+    # Corporate Aqua registry mirror
+    - name: corporate-aqua
+      type: aqua
+      source: file://./corporate-registry/registry.yaml
+      priority: 100
+
+    # Public Aqua registry (fallback)
+    - name: aqua
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+```
+</File>
+
+<Note>
+Registry definitions are cached locally for performance. Use `atmos toolchain clean` to clear the cache and force a refresh.
+</Note>
+
+## Related Documentation
+
+- [Toolchain Overview](/cli/configuration/toolchain/) - Basic toolchain configuration
+- [Tool Aliases](/cli/configuration/toolchain/aliases) - Define convenient tool name aliases
+- [Toolchain Commands](/cli/commands/toolchain/usage) - Full command reference
+- [Aqua Registry](https://github.com/aquaproj/aqua-registry) - Browse available tools

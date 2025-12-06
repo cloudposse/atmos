@@ -100,6 +100,20 @@ func (mr *MockFileDownloaderMockRecorder) FetchAndParseRaw(src any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchAndParseRaw", reflect.TypeOf((*MockFileDownloader)(nil).FetchAndParseRaw), src)
 }
 
+// FetchAtomic mocks base method.
+func (m *MockFileDownloader) FetchAtomic(src, dest string, mode ClientMode, timeout time.Duration) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchAtomic", src, dest, mode, timeout)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// FetchAtomic indicates an expected call of FetchAtomic.
+func (mr *MockFileDownloaderMockRecorder) FetchAtomic(src, dest, mode, timeout any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchAtomic", reflect.TypeOf((*MockFileDownloader)(nil).FetchAtomic), src, dest, mode, timeout)
+}
+
 // FetchData mocks base method.
 func (m *MockFileDownloader) FetchData(src string) ([]byte, error) {
 	m.ctrl.T.Helper()

@@ -1,0 +1,84 @@
+# Atmos Toolchain Configuration Example - Multi-Registry Setup
+#
+# This example demonstrates a WORKING multi-registry configuration with:
+# 1. Custom local registry (for demonstration/testing)
+# 2. Official Aqua registry (for standard tools)
+#
+# All registries in this example are functional and can be tested immediately.
+# The custom-registry/registry.yaml file is included with example tools (jq, yq).
+
+toolchain:
+  # Install path for toolchain binaries (default: .tools)
+  install_path: .tools
+
+  # Versions file tracking installed tools (default: .tool-versions)
+  # Uses ASDF format: one line per tool with space-separated versions
+  # Use short tool names (aliases), not org/repo format
+  versions_file: .tool-versions
+
+  # Multiple registries demonstrating priority-based tool resolution
+  registries:
+    # Inline registry (highest priority)
+    # Tools defined directly in atmos.yaml without external files
+    # Perfect for quick custom tools or overrides
+    - name: my-inline-tools
+      type: atmos
+      priority: 150
+      tools:
+        # Example 1: Simple GitHub release tool
+        stedolan/jq:
+          type: github_release
+          url: "jq-{{.OS}}-{{.Arch}}"
+          binary_name: jq
+
+        # Example 2: Tool with archive format
+        mikefarah/yq:
+          type: github_release
+          url: "yq_{{.OS}}_{{.Arch}}"
+          format: tar.gz
+          binary_name: yq
+
+        # Example 3: HTTP download with version in URL
+        example/custom-tool:
+          type: http
+          url: "https://releases.example.com/{{trimV .Version}}/tool-{{.OS}}-{{.Arch}}.zip"
+
+    # Local custom registry (medium priority)
+    # Single-file registry at ./custom-registry/registry.yaml (included in examples)
+    # Contains example tools (jq, yq) to demonstrate custom registry format
+    # In production, this could be a corporate registry or internal mirror
+    - name: custom-local
+      type: aqua
+      source: file://./custom-registry/registry.yaml
+      priority: 100
+
+    # Official Aqua public registry (standard fallback)
+    # Contains 1000+ popular development tools
+    # Used when tools are not found in higher-priority registries
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
+# Tool Resolution Workflow:
+# 1. Check my-inline-tools registry first (priority 150)
+#    - stedolan/jq, mikefarah/yq, example/custom-tool defined inline
+# 2. Check custom-local registry (priority 100)
+#    - jq, yq defined in separate file for demonstration
+# 3. Check aqua-public registry (priority 10)
+#    - terraform, kubectl, helm, and other standard tools
+# 4. Error if tool not found in any configured registry
+#
+# Testing This Configuration:
+#   atmos toolchain install stedolan/jq  # Resolves from inline registry
+#   atmos toolchain install terraform    # Resolves from aqua-public
+#   atmos toolchain list                 # Shows all installed tools
+#   atmos toolchain which jq             # Shows jq path from inline registry
+#
+# Registry Format Notes:
+# - type: atmos   - Inline tools defined directly in atmos.yaml
+# - type: aqua    - Aqua registry format (YAML manifests per tool)
+# - source:       - URL (https://, file://) or GitHub path (for aqua type)
+# - tools:        - Map of tool definitions (for atmos type)
+# - priority:     - Higher numbers checked first
+# - GitHub URLs:  - Automatically converted (tree → raw, blob → raw)

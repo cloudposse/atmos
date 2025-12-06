@@ -1,0 +1,31 @@
+---
+title: atmos toolchain uninstall
+sidebar_label: uninstall
+sidebar_class_name: command
+id: uninstall
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Uninstall specific tool versions or all tools from your local toolchain cache. This frees up disk space while keeping your toolchain configuration intact for future installations.
+</Intro>
+
+<Screengrab title="atmos toolchain uninstall --help" slug="atmos-toolchain-uninstall--help" />
+
+## Usage
+
+Execute the `toolchain uninstall` command like this:
+
+```shell
+atmos toolchain uninstall <tool> <version>
+```
+
+## Examples
+
+```shell
+atmos toolchain uninstall terraform@1.9.8
+atmos toolchain uninstall hashicorp/terraform@1.11.4
+atmos toolchain uninstall                    # Uninstall all tools from .tool-versions
+```
