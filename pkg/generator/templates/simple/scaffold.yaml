@@ -1,0 +1,10 @@
+name: "simple"
+description: "Simple Atmos project template"
+author: "Cloud Posse"
+version: "1.0.0"
+
+prompts:
+  - name: "project_name"
+    description: "Project name"
+    type: "input"
+    default: "my-project"

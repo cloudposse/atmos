@@ -1,0 +1,104 @@
+# Atmos CLI configuration
+# https://atmos.tools/cli/configuration
+
+version: 1
+
+# CLI configuration
+cli:
+  colors: true
+
+# Base path for components, stacks and workflows
+base_path: "."
+
+components:
+  terraform:
+    # Path to Terraform components (relative to `base_path`)
+    base_path: "components/terraform"
+    # Apply auto-generated Terraform backend config
+    apply_auto_generated_backend_file: true
+    # Auto-generated backend config file name
+    backend_config_file: "backend.tf"
+    # Auto-generated backend config file template
+    backend_config_template: |
+      terraform {
+        required_version = "{{.Config.terraform_version}}"
+
+        backend "s3" {
+          region         = "{{.Config.aws_region}}"
+          bucket         = "{{.Config.project_name}}-terraform-state"
+          key            = "{{`{{ .atmos_component }}`}}/{{`{{ .atmos_stack }}`}}/terraform.tfstate"
+          dynamodb_table = "{{.Config.project_name}}-terraform-state-lock"
+          encrypt        = true
+        }
+
+        required_providers {
+          aws = {
+            source  = "hashicorp/aws"
+            version = ">= 5.0"
+          }
+        }
+      }
+
+  helmfile:
+    # Path to Helmfile components (relative to `base_path`)
+    base_path: "components/helmfile"
+    # Kubeconfig path
+    kubeconfig_path: "/dev/shm"
+
+# Stack configuration
+stacks:
+  # Path to stack files (relative to `base_path`)
+  base_path: "stacks"
+  # Stack file name pattern
+  name_pattern: "{environment}-{stage}.yaml"
+  # Default stack name template
+  name_template: "{{.environment}}-{{.stage}}"
+
+# JSON Schema configuration for validation
+schemas:
+  # JSON Schema to validate stack configurations
+  jsonschema:
+    # Path to directory with JSON schemas (relative to `base_path`)
+    base_path: "schemas/jsonschema"
+  # OPA configuration
+  opa:
+    # Path to directory with OPA policies (relative to `base_path`)
+    base_path: "schemas/opa"
+
+# Template configuration
+templates:
+  settings:
+    # Enable support for Go templates in stack configuration files
+    enabled: true
+    # Enable support for Sprig functions in Go templates
+    sprig:
+      enabled: true
+    # Enable support for Gomplate functions in Go templates
+    gomplate:
+      enabled: true
+
+# Workflow configuration
+workflows:
+  # Path to workflow files (relative to `base_path`)
+  base_path: "workflows"
+
+# Logging configuration
+logs:
+  # Logging level
+  level: info
+  # Log file location
+  file: "/dev/stderr"
+
+# Vendoring configuration
+vendor:
+  # Path to vendor config file (relative to `base_path`)
+  config_path: "vendor.yaml"
+  # Path to vendor directory (relative to `base_path`)
+  base_path: "vendor"
+
+# Import configuration
+import:
+  # File extensions to search for when importing files
+  file_extensions:
+    - ".yaml"
+    - ".yml"
