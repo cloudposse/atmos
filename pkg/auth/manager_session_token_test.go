@@ -152,6 +152,10 @@ func (m *mockIdentityReturningSessionTokens) Environment() (map[string]string, e
 	return map[string]string{}, nil
 }
 
+func (m *mockIdentityReturningSessionTokens) Paths() ([]types.Path, error) {
+	return []types.Path{}, nil
+}
+
 func (m *mockIdentityReturningSessionTokens) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
 }

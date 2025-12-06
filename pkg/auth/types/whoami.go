@@ -12,6 +12,10 @@ type WhoamiInfo struct {
 	Expiration  *time.Time        `json:"expiration,omitempty"`
 	Environment map[string]string `json:"environment,omitempty"`
 
+	// Paths contains combined paths from provider and identity chains.
+	// Later paths override earlier ones if Location matches.
+	Paths []Path `json:"paths,omitempty"`
+
 	// Credentials holds raw credential material and must never be serialized.
 	// Ensure secrets/tokens are not exposed via JSON or YAML outputs.
 	Credentials ICredentials `json:"-" yaml:"-"`

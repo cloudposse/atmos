@@ -644,3 +644,191 @@ func TestAWSFileManager_BasePathInvalidPath(t *testing.T) {
 	assert.Error(t, err, "Should fail with invalid home directory expansion")
 	assert.Contains(t, err.Error(), "invalid base_path")
 }
+
+func TestAWSFileManager_GetCachePath(t *testing.T) {
+	tests := []struct {
+		name              string
+		setupEnv          func(*testing.T) string // returns temp home dir
+		expectedPathParts []string                // path parts that should be in result
+		shouldBeEmpty     bool
+	}{
+		{
+			name: "uses XDG_CACHE_HOME when set",
+			setupEnv: func(t *testing.T) string {
+				tempHome := t.TempDir()
+				xdgCache := filepath.Join(tempHome, "custom-cache")
+				t.Setenv("XDG_CACHE_HOME", xdgCache)
+				t.Setenv("HOME", tempHome)
+				if runtime.GOOS == "windows" {
+					t.Setenv("USERPROFILE", tempHome)
+				}
+				return tempHome
+			},
+			expectedPathParts: []string{"custom-cache", "aws", "sso", "cache"},
+		},
+		{
+			name: "expands tilde in XDG_CACHE_HOME",
+			setupEnv: func(t *testing.T) string {
+				tempHome := t.TempDir()
+				t.Setenv("XDG_CACHE_HOME", "~/.cache")
+				t.Setenv("HOME", tempHome)
+				if runtime.GOOS == "windows" {
+					t.Setenv("USERPROFILE", tempHome)
+				}
+				return tempHome
+			},
+			expectedPathParts: []string{".cache", "aws", "sso", "cache"},
+		},
+		{
+			name: "falls back to default when XDG_CACHE_HOME empty",
+			setupEnv: func(t *testing.T) string {
+				tempHome := t.TempDir()
+				t.Setenv("XDG_CACHE_HOME", "")
+				t.Setenv("HOME", tempHome)
+				if runtime.GOOS == "windows" {
+					t.Setenv("USERPROFILE", tempHome)
+				}
+				return tempHome
+			},
+			expectedPathParts: []string{".aws", "sso", "cache"},
+		},
+		{
+			name: "falls back to default when XDG_CACHE_HOME not set",
+			setupEnv: func(t *testing.T) string {
+				tempHome := t.TempDir()
+				// Don't set XDG_CACHE_HOME at all
+				t.Setenv("HOME", tempHome)
+				if runtime.GOOS == "windows" {
+					t.Setenv("USERPROFILE", tempHome)
+				}
+				return tempHome
+			},
+			expectedPathParts: []string{".aws", "sso", "cache"},
+		},
+		{
+			name: "handles XDG_CACHE_HOME with trailing slash",
+			setupEnv: func(t *testing.T) string {
+				tempHome := t.TempDir()
+				xdgCache := filepath.Join(tempHome, "cache") + string(filepath.Separator)
+				t.Setenv("XDG_CACHE_HOME", xdgCache)
+				t.Setenv("HOME", tempHome)
+				if runtime.GOOS == "windows" {
+					t.Setenv("USERPROFILE", tempHome)
+				}
+				return tempHome
+			},
+			expectedPathParts: []string{"cache", "aws"},
+		},
+		{
+			name: "handles XDG_CACHE_HOME with whitespace",
+			setupEnv: func(t *testing.T) string {
+				tempHome := t.TempDir()
+				xdgCache := filepath.Join(tempHome, "cache")
+				t.Setenv("XDG_CACHE_HOME", "  "+xdgCache+"  ")
+				t.Setenv("HOME", tempHome)
+				if runtime.GOOS == "windows" {
+					t.Setenv("USERPROFILE", tempHome)
+				}
+				return tempHome
+			},
+			expectedPathParts: []string{"cache", "aws", "sso", "cache"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempHome := tt.setupEnv(t)
+
+			m := &AWSFileManager{baseDir: tempHome}
+			result := m.GetCachePath()
+
+			if tt.shouldBeEmpty {
+				assert.Empty(t, result, "should return empty string when home dir unavailable")
+			} else {
+				assert.NotEmpty(t, result, "should return non-empty cache path")
+				// Normalize to forward slashes for cross-platform comparison
+				normalizedResult := filepath.ToSlash(result)
+				for _, part := range tt.expectedPathParts {
+					assert.Contains(t, normalizedResult, part,
+						"cache path should contain %s", part)
+				}
+			}
+
+			t.Logf("Cache path: %s", result)
+		})
+	}
+}
+
+func TestAWSFileManager_GetCachePath_AbsolutePaths(t *testing.T) {
+	// Test that cache paths are absolute, not relative
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", tempHome)
+	}
+
+	tests := []struct {
+		name     string
+		xdgCache string
+	}{
+		{
+			name:     "with absolute XDG path",
+			xdgCache: filepath.Join(tempHome, ".cache"),
+		},
+		{
+			name:     "with tilde XDG path",
+			xdgCache: "~/.cache",
+		},
+		{
+			name:     "without XDG (default)",
+			xdgCache: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.xdgCache != "" {
+				t.Setenv("XDG_CACHE_HOME", tt.xdgCache)
+			}
+
+			m := &AWSFileManager{baseDir: tempHome}
+			result := m.GetCachePath()
+
+			assert.NotEmpty(t, result)
+			assert.True(t, filepath.IsAbs(result),
+				"cache path should be absolute, got: %s", result)
+
+			t.Logf("Cache path: %s (absolute: %v)", result, filepath.IsAbs(result))
+		})
+	}
+}
+
+func TestAWSFileManager_GetCachePath_CrossPlatform(t *testing.T) {
+	// Verify cache paths work correctly across different platforms
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", tempHome)
+	}
+
+	m := &AWSFileManager{baseDir: tempHome}
+	cachePath := m.GetCachePath()
+
+	assert.NotEmpty(t, cachePath)
+
+	// Verify path separators are correct for the platform
+	expectedSeparator := string(filepath.Separator)
+	assert.Contains(t, cachePath, expectedSeparator,
+		"cache path should use platform-specific separators")
+
+	// Verify we can actually create the directory
+	err := os.MkdirAll(cachePath, 0o755)
+	assert.NoError(t, err, "should be able to create cache directory")
+
+	// Clean up
+	defer os.RemoveAll(cachePath)
+
+	t.Logf("Platform: %s", runtime.GOOS)
+	t.Logf("Cache path: %s", cachePath)
+	t.Logf("Path separator: %s", expectedSeparator)
+}

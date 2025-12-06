@@ -179,11 +179,8 @@
   "packerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
-    "Check": {
-      "Enabled": false,
-      "Timeout": 0,
-      "Frequency": ""
-    }
+    "check": {},
+    "constraint": {}
   },
   "validate": {
     "editorconfig": {}

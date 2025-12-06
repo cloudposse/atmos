@@ -1164,6 +1164,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/common-nighthawk/go-figure/blob/734e95fb86be/LICENSE
 
+  - github.com/creack/pty
+    License: MIT
+    URL: https://github.com/creack/pty/blob/v1.1.24/LICENSE
+
   - github.com/deckarep/golang-set/v2
     License: MIT
     URL: https://github.com/deckarep/golang-set/blob/v2.6.0/LICENSE

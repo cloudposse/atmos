@@ -89,6 +89,7 @@ type AtmosConfiguration struct {
 	Auth            AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
 	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
 	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
+	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
 	Profiles        ProfilesConfig      `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
 	Metadata        ConfigMetadata      `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
 }

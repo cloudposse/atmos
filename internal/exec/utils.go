@@ -752,6 +752,12 @@ func ProcessStacks(
 
 // generateComponentBackendConfig generates backend config for components.
 func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string, _ *schema.AuthContext) (map[string]any, error) {
+	// Validate that backendType is not empty to avoid generating invalid backend config.
+	// An empty backendType would result in invalid JSON like: {"terraform": {"backend": {"": {}}}}.
+	if backendType == "" {
+		return nil, errUtils.ErrBackendTypeRequired
+	}
+
 	// Generate backend config file for Terraform Cloud.
 	// https://developer.hashicorp.com/terraform/cli/cloud/settings
 	if backendType == "cloud" {

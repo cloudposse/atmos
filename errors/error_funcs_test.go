@@ -146,6 +146,38 @@ func TestCheckErrorPrintAndExit_ExecExitError(t *testing.T) {
 	}
 }
 
+func TestCheckErrorPrintAndExit_ExitCodeZero(t *testing.T) {
+	if os.Getenv("TEST_EXIT_CODE_ZERO") == "1" {
+		// Test that ExitCodeError{Code: 0} exits with code 0 without printing error
+		err := ExitCodeError{Code: 0}
+		CheckErrorPrintAndExit(err, "This should not print", "")
+		return
+	}
+
+	// Use os.Args[0] to get path to test binary for subprocess execution.
+	// This is the correct Go testing pattern for testing os.Exit behavior.
+	execPath, err := exec.LookPath(os.Args[0])
+	assert.Nil(t, err)
+	cmd := exec.Command(execPath, "-test.run=TestCheckErrorPrintAndExit_ExitCodeZero")
+	cmd.Env = append(os.Environ(), "TEST_EXIT_CODE_ZERO=1")
+
+	// Capture stderr to verify no error is printed
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+	// ExitCodeError{Code: 0} should exit with code 0 (success)
+	if err != nil {
+		t.Errorf("Expected successful exit (code 0), got error: %v", err)
+	}
+
+	// Verify no error message was printed to stderr
+	stderrOutput := stderr.String()
+	if stderrOutput != "" {
+		t.Errorf("Expected no error output, got: %s", stderrOutput)
+	}
+}
+
 func TestCheckErrorAndPrint(t *testing.T) {
 	// Save original logger
 	originalLogger := log.Default()
