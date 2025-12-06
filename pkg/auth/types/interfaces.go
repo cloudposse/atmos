@@ -17,6 +17,41 @@ const (
 	CredentialStoreTypeFile          = "file"
 )
 
+// PathType indicates what kind of filesystem entity the path represents.
+type PathType string
+
+const (
+	// PathTypeFile indicates a single file (e.g., ~/.aws/credentials).
+	PathTypeFile PathType = "file"
+	// PathTypeDirectory indicates a directory (e.g., ~/.azure/).
+	PathTypeDirectory PathType = "directory"
+)
+
+// Path represents a credential file or directory used by the provider/identity.
+type Path struct {
+	// Location is the filesystem path (may contain ~ for home directory).
+	Location string `json:"location"`
+
+	// Type indicates if this is a file or directory.
+	Type PathType `json:"type"`
+
+	// Required indicates if path must exist for provider to function.
+	// If false, missing paths are optional (provider works without them).
+	Required bool `json:"required"`
+
+	// Purpose describes what this path is used for (helps with debugging/logging).
+	// Examples: "AWS credentials file", "Azure config directory", "GCP service account key"
+	Purpose string `json:"purpose"`
+
+	// Metadata holds optional provider-specific information.
+	// Consumers can use this for advanced features without breaking interface.
+	// Examples:
+	//   - "selinux_label": "system_u:object_r:container_file_t:s0" (future SELinux support)
+	//   - "read_only": "true" (hint that path should be read-only)
+	//   - "mount_target": "/workspace/.aws" (suggested container path)
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
 // Provider defines the interface that all authentication providers must implement.
 type Provider interface {
 	// Kind returns the provider kind (e.g., "aws/iam-identity-center").
@@ -37,6 +72,11 @@ type Provider interface {
 
 	// Environment returns environment variables that should be set for this provider.
 	Environment() (map[string]string, error)
+
+	// Paths returns credential files/directories used by this provider.
+	// Returns empty slice if provider doesn't use filesystem credentials (e.g., GitHub tokens).
+	// Consumers decide how to use these paths (mount, copy, delete, etc.).
+	Paths() ([]Path, error)
 
 	// PrepareEnvironment prepares environment variables for external processes (Terraform, workflows, etc.).
 	// Takes current environment and returns modified environment suitable for the provider's SDK/CLI.
@@ -94,6 +134,11 @@ type Identity interface {
 
 	// Environment returns environment variables that should be set for this identity.
 	Environment() (map[string]string, error)
+
+	// Paths returns credential files/directories used by this identity.
+	// Returns empty slice if identity doesn't use filesystem credentials.
+	// Paths are in addition to provider paths (identities can add more files).
+	Paths() ([]Path, error)
 
 	// PrepareEnvironment prepares environment variables for external processes (Terraform, workflows, etc.).
 	// Takes current environment (already modified by provider's PrepareEnvironment) and returns
