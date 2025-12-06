@@ -92,7 +92,7 @@ FLAGS
       --repo-path string          Filesystem path to the already cloned target repository with which to compare the
                                   current branch
 
-      --sha string                Git commit SHA with which to compare the current branch
+      --sha string                Git commit SHA with which to compare the current branch: atmos terraform  --affected --sha ***MASKED***
 
       --skip strings              Skip executing specific YAML functions in the Atmos stack manifests
 

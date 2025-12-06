@@ -545,3 +545,7 @@ func MergeWithOptionsAndContext(
 
 	return result, nil
 }
+
+// isAtmosYAMLFunction checks if a string is an Atmos YAML function that is processed after merging.
+// YAML functions processed after merging (need special handling during merge).
+// Functions like !include and !include.raw are processed during YAML loading, so they don't need special handling.

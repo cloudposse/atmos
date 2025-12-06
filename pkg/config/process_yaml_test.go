@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/spf13/viper"
+	"go.yaml.in/yaml/v3"
 )
 
 func TestPreprocessAtmosYamlFunc(t *testing.T) {
@@ -223,6 +224,357 @@ parent:
 					t.Errorf("Key %s: expected %v (%T), got %v (%T)",
 						key, expectedValue, expectedValue, actualValue, actualValue)
 				}
+			}
+		})
+	}
+}
+
+func TestHasCustomTag(t *testing.T) {
+	tests := []struct {
+		name     string
+		tag      string
+		expected bool
+	}{
+		{
+			name:     "env tag",
+			tag:      "!env",
+			expected: true,
+		},
+		{
+			name:     "env tag with value",
+			tag:      "!env VAR_NAME",
+			expected: true,
+		},
+		{
+			name:     "exec tag",
+			tag:      "!exec",
+			expected: true,
+		},
+		{
+			name:     "include tag",
+			tag:      "!include",
+			expected: true,
+		},
+		{
+			name:     "repo-root tag",
+			tag:      "!repo-root",
+			expected: true,
+		},
+		{
+			name:     "random tag",
+			tag:      "!random",
+			expected: true,
+		},
+		{
+			name:     "random tag with params",
+			tag:      "!random.string",
+			expected: true,
+		},
+		{
+			name:     "non-custom tag",
+			tag:      "!!str",
+			expected: false,
+		},
+		{
+			name:     "empty tag",
+			tag:      "",
+			expected: false,
+		},
+		{
+			name:     "regular yaml tag",
+			tag:      "tag:yaml.org,2002:str",
+			expected: false,
+		},
+		{
+			name:     "unknown custom tag",
+			tag:      "!unknown",
+			expected: false,
+		},
+		{
+			name:     "store tag (not in hasCustomTag list)",
+			tag:      "!store",
+			expected: false,
+		},
+		{
+			name:     "template tag (not in hasCustomTag list)",
+			tag:      "!template",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasCustomTag(tt.tag)
+			if result != tt.expected {
+				t.Errorf("hasCustomTag(%q) = %v, expected %v", tt.tag, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestContainsCustomTags(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *yaml.Node
+		expected bool
+	}{
+		{
+			name: "nil node",
+			setup: func() *yaml.Node {
+				return nil
+			},
+			expected: false,
+		},
+		{
+			name: "scalar node with env tag",
+			setup: func() *yaml.Node {
+				return &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Tag:   "!env",
+					Value: "VAR_NAME",
+				}
+			},
+			expected: true,
+		},
+		{
+			name: "scalar node with exec tag",
+			setup: func() *yaml.Node {
+				return &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Tag:   "!exec",
+					Value: "echo hello",
+				}
+			},
+			expected: true,
+		},
+		{
+			name: "scalar node without custom tag",
+			setup: func() *yaml.Node {
+				return &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Tag:   "!!str",
+					Value: "plain text",
+				}
+			},
+			expected: false,
+		},
+		{
+			name: "mapping node with child containing env tag",
+			setup: func() *yaml.Node {
+				return &yaml.Node{
+					Kind: yaml.MappingNode,
+					Content: []*yaml.Node{
+						{Kind: yaml.ScalarNode, Value: "key"},
+						{Kind: yaml.ScalarNode, Tag: "!env", Value: "VAR"},
+					},
+				}
+			},
+			expected: true,
+		},
+		{
+			name: "sequence node with element containing include tag",
+			setup: func() *yaml.Node {
+				return &yaml.Node{
+					Kind: yaml.SequenceNode,
+					Content: []*yaml.Node{
+						{Kind: yaml.ScalarNode, Value: "item1"},
+						{Kind: yaml.ScalarNode, Tag: "!include", Value: "file.yaml"},
+					},
+				}
+			},
+			expected: true,
+		},
+		{
+			name: "nested structure with custom tag deep inside",
+			setup: func() *yaml.Node {
+				return &yaml.Node{
+					Kind: yaml.MappingNode,
+					Content: []*yaml.Node{
+						{Kind: yaml.ScalarNode, Value: "parent"},
+						{
+							Kind: yaml.MappingNode,
+							Content: []*yaml.Node{
+								{Kind: yaml.ScalarNode, Value: "child"},
+								{Kind: yaml.ScalarNode, Tag: "!random", Value: "string"},
+							},
+						},
+					},
+				}
+			},
+			expected: true,
+		},
+		{
+			name: "nested structure without custom tags",
+			setup: func() *yaml.Node {
+				return &yaml.Node{
+					Kind: yaml.MappingNode,
+					Content: []*yaml.Node{
+						{Kind: yaml.ScalarNode, Value: "key1"},
+						{Kind: yaml.ScalarNode, Value: "value1"},
+						{Kind: yaml.ScalarNode, Value: "key2"},
+						{
+							Kind: yaml.SequenceNode,
+							Content: []*yaml.Node{
+								{Kind: yaml.ScalarNode, Value: "item1"},
+								{Kind: yaml.ScalarNode, Value: "item2"},
+							},
+						},
+					},
+				}
+			},
+			expected: false,
+		},
+		{
+			name: "empty mapping node",
+			setup: func() *yaml.Node {
+				return &yaml.Node{
+					Kind:    yaml.MappingNode,
+					Content: []*yaml.Node{},
+				}
+			},
+			expected: false,
+		},
+		{
+			name: "empty sequence node",
+			setup: func() *yaml.Node {
+				return &yaml.Node{
+					Kind:    yaml.SequenceNode,
+					Content: []*yaml.Node{},
+				}
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			node := tt.setup()
+			result := containsCustomTags(node)
+			if result != tt.expected {
+				t.Errorf("containsCustomTags() = %v, expected %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestProcessScalarNodeValue(t *testing.T) {
+	tests := []struct {
+		name      string
+		setup     func(t *testing.T) *yaml.Node
+		wantErr   bool
+		checkFunc func(t *testing.T, result any)
+	}{
+		{
+			name: "env tag with existing variable",
+			setup: func(t *testing.T) *yaml.Node {
+				t.Setenv("TEST_PROCESS_SCALAR_VAR", "test_value")
+				return &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Tag:   "!env",
+					Value: "TEST_PROCESS_SCALAR_VAR",
+				}
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, result any) {
+				if str, ok := result.(string); !ok || str != "test_value" {
+					t.Errorf("Expected 'test_value', got %v (%T)", result, result)
+				}
+			},
+		},
+		{
+			name: "env tag with missing variable returns empty string",
+			setup: func(t *testing.T) *yaml.Node {
+				return &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Tag:   "!env",
+					Value: "NONEXISTENT_VAR_12345",
+				}
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, result any) {
+				if str, ok := result.(string); !ok || str != "" {
+					t.Errorf("Expected empty string for missing env var, got %v (%T)", result, result)
+				}
+			},
+		},
+		{
+			name: "exec tag with simple command",
+			setup: func(t *testing.T) *yaml.Node {
+				return &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Tag:   "!exec",
+					Value: "echo hello",
+				}
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, result any) {
+				if str, ok := result.(string); !ok || str == "" {
+					t.Errorf("Expected non-empty string from exec, got %v (%T)", result, result)
+				}
+			},
+		},
+		{
+			name: "random tag with min max values",
+			setup: func(t *testing.T) *yaml.Node {
+				return &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Tag:   "!random",
+					Value: "1000 9999",
+				}
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, result any) {
+				if num, ok := result.(int); !ok || num < 1000 || num > 9999 {
+					t.Errorf("Expected random int between 1000-9999, got %v (%T)", result, result)
+				}
+			},
+		},
+		{
+			name: "unknown tag returns decoded value",
+			setup: func(t *testing.T) *yaml.Node {
+				return &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Tag:   "!!str",
+					Value: "plain value",
+				}
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, result any) {
+				if str, ok := result.(string); !ok || str != "plain value" {
+					t.Errorf("Expected 'plain value', got %v (%T)", result, result)
+				}
+			},
+		},
+		{
+			name: "numeric node with standard tag",
+			setup: func(t *testing.T) *yaml.Node {
+				return &yaml.Node{
+					Kind:  yaml.ScalarNode,
+					Tag:   "!!int",
+					Value: "42",
+				}
+			},
+			wantErr: false,
+			checkFunc: func(t *testing.T, result any) {
+				if num, ok := result.(int); !ok || num != 42 {
+					t.Errorf("Expected 42 (int), got %v (%T)", result, result)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			node := tt.setup(t)
+			result, err := processScalarNodeValue(node)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("processScalarNodeValue() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr && tt.checkFunc != nil {
+				tt.checkFunc(t, result)
 			}
 		})
 	}

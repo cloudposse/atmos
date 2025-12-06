@@ -1,0 +1,161 @@
+---
+title: atmos profile list
+sidebar_label: list
+sidebar_class_name: command
+description: "List available configuration profiles"
+---
+
+import Screengrab from '@site/src/components/Screengrab';
+import Intro from '@site/src/components/Intro';
+
+<Intro>
+Use this command to list all configured profiles across all discovery locations with their details.
+</Intro>
+
+<Screengrab title="atmos profile list" slug="atmos-profile-list" />
+
+## Usage
+
+```bash
+atmos profile list [flags]
+```
+
+## Description
+
+List all configured profiles across all locations with their details.
+
+Profiles are discovered from multiple locations in precedence order:
+
+1. **Configurable path**: `profiles.base_path` in `atmos.yaml`
+2. **Project-hidden**: `.atmos/profiles/`
+3. **XDG user directory**: `~/.config/atmos/profiles/` (or `$XDG_CONFIG_HOME/atmos/profiles/`)
+4. **Project directory**: `profiles/`
+
+The output includes:
+- Profile name
+- Profile type (inline or directory)
+- Source location
+- Description (if available)
+
+## Flags
+
+<dl>
+  <dt>`-f, --format`</dt>
+  <dd>
+    Output format. Options: `table`, `json`, `yaml`
+
+    **Default:** `table`
+  </dd>
+</dl>
+
+## Examples
+
+### List All Profiles
+
+```bash
+# List all available profiles in table format (default)
+atmos profile list
+```
+
+**Example output:**
+
+```
+┌────────────┬───────────┬────────────────────────────┬─────────────────────────────────┐
+│ NAME       │ TYPE      │ SOURCE                     │ DESCRIPTION                     │
+├────────────┼───────────┼────────────────────────────┼─────────────────────────────────┤
+│ developer  │ directory │ profiles/developer         │ Development environment         │
+│ ci         │ directory │ profiles/ci                │ CI/CD pipeline settings         │
+│ production │ inline    │ atmos.yaml                 │ Production configuration        │
+│ debug      │ directory │ ~/.config/atmos/profiles   │ Debug logging enabled           │
+└────────────┴───────────┴────────────────────────────┴─────────────────────────────────┘
+```
+
+### Output as JSON
+
+```bash
+# List profiles in JSON format for scripting
+atmos profile list --format json
+```
+
+**Example output:**
+
+```json
+[
+  {
+    "name": "developer",
+    "type": "directory",
+    "source": "profiles/developer",
+    "description": "Development environment"
+  },
+  {
+    "name": "ci",
+    "type": "directory",
+    "source": "profiles/ci",
+    "description": "CI/CD pipeline settings"
+  }
+]
+```
+
+### Output as YAML
+
+```bash
+# List profiles in YAML format
+atmos profile list --format yaml
+```
+
+**Example output:**
+
+```yaml
+- name: developer
+  type: directory
+  source: profiles/developer
+  description: Development environment
+- name: ci
+  type: directory
+  source: profiles/ci
+  description: CI/CD pipeline settings
+```
+
+### Using the Alias
+
+You can also use the `atmos list profiles` alias:
+
+```bash
+# List profiles using the alias
+atmos list profiles
+
+# With format flag
+atmos list profiles --format json
+```
+
+## Scripting Examples
+
+### Check if a Profile Exists
+
+```bash
+# Check if 'developer' profile exists
+if atmos profile list --format json | jq -e '.[] | select(.name == "developer")' > /dev/null; then
+    echo "Developer profile found"
+    atmos --profile developer terraform plan vpc -s dev
+fi
+```
+
+### List Profile Names Only
+
+```bash
+# Get just the profile names
+atmos profile list --format json | jq -r '.[].name'
+```
+
+### Count Available Profiles
+
+```bash
+# Count total profiles
+atmos profile list --format json | jq 'length'
+```
+
+## See Also
+
+- [`atmos profile`](/cli/commands/profile/usage) - Profile management overview
+- [`atmos profile show`](/cli/commands/profile/profile-show) - Show profile details
+- [Global Flags](/cli/global-flags) - Using the `--profile` flag

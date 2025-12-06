@@ -1,8 +1,8 @@
 ---
-title: Component Catalog Template
+title: Configuration Catalog Template
 sidebar_position: 7
-sidebar_label: Component Catalog Template
-description: Component Catalog Template Atmos Design Pattern
+sidebar_label: With Templates
+description: Configuration Catalog Template Atmos Design Pattern
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
@@ -11,15 +11,15 @@ import PillBox from '@site/src/components/PillBox'
 <PillBox>Atmos Design Pattern</PillBox>
 
 <Intro>
-The **Component Catalog Template** Design Pattern is used when you have an unbounded number of a component's instances provisioned in one environment (the same organization, OU/tenant, account and region). New instances with different settings can be configured and provisioned anytime. The old instances must be kept unchanged and never destroyed.
+The **Configuration Catalog Template** Design Pattern is used when you have an unbounded number of a component's instances provisioned in one environment (the same organization, OU/tenant, account and region). New instances with different settings can be configured and provisioned anytime. The old instances must be kept unchanged and never destroyed.
 </Intro>
 
-This is achieved by using [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) and
-[Hierarchical Imports with Context](/core-concepts/stacks/imports#hierarchical-imports-with-context).
+This is achieved by using [`Go` Templates in Imports](/stacks/imports#go-templates-in-imports) and
+[Hierarchical Imports with Context](/stacks/imports#hierarchical-imports-with-context).
 
 ## Use-cases
 
-Use the **Component Catalog Template** pattern when:
+Use the **Configuration Catalog Template** pattern when:
 
 - You have an unbounded number of a component's instances provisioned in one environment (the same organization, OU/tenant, account and region)
 
@@ -46,10 +46,10 @@ The **Component Catalog Template** pattern provides the following benefits:
 The **Component Catalog Template** pattern recommends the following:
 
 - In the component's catalog folder, create a [`Go` template](https://pkg.go.dev/text/template) manifest with all the configurations for the
-  component (refer to [`Go` Templates in Imports](/core-concepts/stacks/imports#go-templates-in-imports) for more details)
+  component (refer to [`Go` Templates in Imports](/stacks/imports#go-templates-in-imports) for more details)
 
 - Import the `Go` template manifest into a top-level stack many times to configure the component's instances
-  using [Hierarchical Imports with Context](/core-concepts/stacks/imports#hierarchical-imports-with-context) and providing different template values
+  using [Hierarchical Imports with Context](/stacks/imports#hierarchical-imports-with-context) and providing different template values
   for each import
 
 ## Example
@@ -85,21 +85,13 @@ components:
 
 stacks:
   base_path: "stacks"
-  name_pattern: "{tenant}-{environment}-{stage}"
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
   included_paths:
     # Tell Atmos to search for the top-level stack manifests in the `orgs` folder and its sub-folders
     - "orgs/**/*"
   excluded_paths:
     # Tell Atmos that the `defaults` folder and all sub-folders don't contain top-level stack manifests
     - "defaults/**/*"
-
-schemas:
-  jsonschema:
-    base_path: "stacks/schemas/jsonschema"
-  opa:
-    base_path: "stacks/schemas/opa"
-  atmos:
-    manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 ```
 
 Add the following configuration to the `stacks/catalog/eks/iam-role/defaults.tmpl` `Go` template manifest:
@@ -185,19 +177,18 @@ The **Component Catalog Template** pattern has the following limitations and dra
 To address the limitations of the **Component Catalog Template** Design Pattern, consider using the following patterns:
 
 - [Component Catalog](/design-patterns/component-catalog)
-- [Component Catalog with Mixins](/design-patterns/component-catalog/with-mixins)
+- [Component Archetypes](/design-patterns/component-catalog/with-mixins)
 
 :::
 
 ## Related Patterns
 
 - [Component Catalog](/design-patterns/component-catalog)
-- [Component Catalog with Mixins](/design-patterns/component-catalog/with-mixins)
-- [Component Inheritance](/design-patterns/component-inheritance)
+- [Component Archetypes](/design-patterns/component-catalog/with-mixins)
+- [Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance)
 - [Inline Component Configuration](/design-patterns/inline-component-configuration)
-- [Inline Component Customization](/design-patterns/inline-component-customization)
-- [Organizational Structure Configuration](/design-patterns/organizational-structure-configuration)
+- [Organizational Structure Configuration](/design-patterns/stack-organization)
 
 ## References
 
-- [Catalogs](/core-concepts/stacks/catalogs)
+- [Catalogs](/howto/catalogs)

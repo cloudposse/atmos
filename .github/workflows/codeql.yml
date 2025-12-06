@@ -205,35 +205,3 @@ jobs:
             > {{ provided }}
             > ```
             > You'll need to add one before this PR can be merged.
-
-  pr-size-labeler:
-    name: PR Size Labeler
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-      issues: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: PR Size Labeler
-        uses: ./.github/actions/pr-sizer
-        with:
-          xs_label: "size/xs"
-          xs_max_size: "10"
-          s_label: "size/s"
-          s_max_size: "100"
-          m_label: "size/m"
-          m_max_size: "500"
-          l_label: "size/l"
-          l_max_size: "1000"
-          xl_label: "size/xl"
-          fail_if_xl: "false"
-          files_to_ignore: |
-            package-lock.json
-            yarn.lock
-            go.sum
-          ignore_line_deletions: "false"
-          ignore_file_deletions: "false"

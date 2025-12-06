@@ -1,0 +1,14 @@
+# Stack-level defaults with auth identity default
+# This is where users might set their default identity (e.g., in stacks/orgs/acme/_defaults)
+
+vars:
+  tenant: test
+  environment: ue2
+  stage: dev
+
+# Auth settings at the stack level
+# This sets the default identity that should be auto-detected
+auth:
+  identities:
+    test-identity:
+      default: true  # DEFAULT SET HERE, not in atmos.yaml

@@ -387,6 +387,12 @@ func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// Paths returns credential files/directories used by this identity.
+func (i *assumeRoleIdentity) Paths() ([]types.Path, error) {
+	// Assume role identities don't add additional credential files beyond the provider.
+	return []types.Path{}, nil
+}
+
 // PrepareEnvironment prepares environment variables for external processes.
 // For AWS assume role identities, we use the shared AWS PrepareEnvironment helper
 // which configures credential files, profile, region, and disables IMDS fallback.

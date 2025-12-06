@@ -326,6 +326,7 @@ func (p *testProvider) Authenticate(_ context.Context) (types.ICredentials, erro
 }
 func (p *testProvider) Validate() error                         { return nil }
 func (p *testProvider) Environment() (map[string]string, error) { return map[string]string{}, nil }
+func (p *testProvider) Paths() ([]types.Path, error)            { return []types.Path{}, nil }
 func (p *testProvider) Logout(_ context.Context) error          { return nil }
 func (p *testProvider) GetFilesDisplayPath() string             { return "~/.aws/atmos" }
 func (p *testProvider) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
@@ -666,6 +667,10 @@ func (m *mockIdentityForFallback) PrepareEnvironment(_ context.Context, environ 
 	return environ, nil
 }
 
+func (m *mockIdentityForFallback) Paths() ([]types.Path, error) {
+	return []types.Path{}, nil
+}
+
 func TestManager_initializeProvidersAndIdentities(t *testing.T) {
 	// Providers: invalid kind.
 	m := &manager{config: &schema.AuthConfig{Providers: map[string]schema.Provider{"bad": {Kind: "unknown"}}}}
@@ -726,6 +731,7 @@ func (s stubUserID) Authenticate(_ context.Context, _ types.ICredentials) (types
 }
 func (s stubUserID) Validate() error                         { return nil }
 func (s stubUserID) Environment() (map[string]string, error) { return map[string]string{}, nil }
+func (s stubUserID) Paths() ([]types.Path, error)            { return []types.Path{}, nil }
 func (s stubUserID) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
@@ -800,6 +806,7 @@ func (s stubPSIdentity) Authenticate(_ context.Context, base types.ICredentials)
 }
 func (s stubPSIdentity) Validate() error                         { return nil }
 func (s stubPSIdentity) Environment() (map[string]string, error) { return s.env, nil }
+func (s stubPSIdentity) Paths() ([]types.Path, error)            { return []types.Path{}, nil }
 func (s stubPSIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	if s.postCalled != nil {
 		*s.postCalled = true
@@ -983,6 +990,7 @@ func (s stubIdentity) Authenticate(_ context.Context, _ types.ICredentials) (typ
 }
 func (s stubIdentity) Validate() error                         { return nil }
 func (s stubIdentity) Environment() (map[string]string, error) { return nil, nil }
+func (s stubIdentity) Paths() ([]types.Path, error)            { return []types.Path{}, nil }
 func (s stubIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
 	return nil
 }
@@ -1255,6 +1263,10 @@ func (s *stubEnvIdentity) Authenticate(_ context.Context, base types.ICredential
 func (s *stubEnvIdentity) Validate() error { return nil }
 func (s *stubEnvIdentity) Environment() (map[string]string, error) {
 	return s.env, s.envErr
+}
+
+func (s *stubEnvIdentity) Paths() ([]types.Path, error) {
+	return []types.Path{}, nil
 }
 
 func (s *stubEnvIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {

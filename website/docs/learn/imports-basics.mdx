@@ -1,0 +1,301 @@
+---
+title: Import Basics
+sidebar_position: 5
+sidebar_label: Imports
+description: Reuse configuration across stacks with imports
+id: imports-basics
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import KeyTakeaways from '@site/src/components/KeyTakeaways'
+
+<Intro>
+Imports are how you keep your stack configurations DRY (Don't Repeat Yourself). Instead of copying the same settings into every stack file, you define them once and import them where needed.
+</Intro>
+
+Think of imports like `#include` in C or `import` in Python—you're bringing configuration from other files into the current one.
+
+## Your First Import
+
+Let's say you have common tags that should apply to all resources in all environments:
+
+<File title="stacks/globals.yaml">
+```yaml
+vars:
+  tags:
+    ManagedBy: Atmos
+    Team: Platform
+    CostCenter: Engineering
+```
+</File>
+
+Now any stack can import these tags:
+
+<File title="stacks/dev.yaml">
+```yaml
+import:
+  - globals
+
+vars:
+  environment: development
+  region: us-east-1
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+The `vpc` component in the `dev` stack now has access to all the tags from `globals.yaml`, plus its own variables.
+
+:::tip
+The `.yaml` extension is optional in imports. `- globals` and `- globals.yaml` both work.
+:::
+
+## How Imports Work
+
+When Atmos processes a stack file, it:
+
+1. **Reads the imports list** (top to bottom)
+2. **Loads each imported file** (recursively processing their imports too)
+3. **Deep merges** all configurations into one unified structure
+4. **Applies the current file's configuration** on top
+
+The result is a single, merged configuration that behaves like one big YAML file.
+
+## Import Order Matters
+
+Files are processed **sequentially**. Later imports override earlier ones.
+
+<File title="stacks/aws-defaults.yaml">
+```yaml
+vars:
+  provider: aws
+  region: us-east-1
+```
+</File>
+
+<File title="stacks/gcp-defaults.yaml">
+```yaml
+vars:
+  provider: gcp
+  region: us-central1
+```
+</File>
+
+<File title="stacks/my-stack.yaml">
+```yaml
+import:
+  - aws-defaults
+  - gcp-defaults  # This overrides AWS settings
+
+# Result: provider=gcp, region=us-central1
+```
+</File>
+
+**Order changed:**
+
+<File title="stacks/my-stack.yaml">
+```yaml
+import:
+  - gcp-defaults
+  - aws-defaults  # This overrides GCP settings
+
+# Result: provider=aws, region=us-east-1
+```
+</File>
+
+## Multiple Imports
+
+You can import as many files as you need:
+
+<File title="stacks/prod.yaml">
+```yaml
+import:
+  - globals           # Common tags
+  - aws-prod         # AWS production settings
+  - networking       # Network configuration
+  - security-policies # Security baselines
+
+vars:
+  environment: production
+```
+</File>
+
+All four files merge together, with later imports overriding earlier ones, and the current file overriding all imports.
+
+## Organizing Imports
+
+A common pattern is to create a `_defaults` directory for shared configuration:
+
+```
+stacks/
+├── _defaults/
+│   ├── globals.yaml
+│   ├── aws.yaml
+│   └── tags.yaml
+├── dev.yaml
+├── staging.yaml
+└── prod.yaml
+```
+
+<File title="stacks/_defaults/globals.yaml">
+```yaml
+vars:
+  tags:
+    ManagedBy: Atmos
+```
+</File>
+
+<File title="stacks/dev.yaml">
+```yaml
+import:
+  - _defaults/globals
+  - _defaults/aws
+
+vars:
+  environment: dev
+```
+</File>
+
+:::info
+The `_defaults/` directory is just a convention. You can organize imports however makes sense for your project.
+:::
+
+## What Gets Merged?
+
+Imports merge **everything** in the YAML structure:
+
+- Top-level `vars`
+- Component configurations
+- Backend settings
+- Metadata
+- Any custom keys you add
+
+<File title="stacks/base.yaml">
+```yaml
+vars:
+  namespace: myapp
+
+components:
+  terraform:
+    vpc:
+      vars:
+        enable_dns: true
+```
+</File>
+
+<File title="stacks/dev.yaml">
+```yaml
+import:
+  - base
+
+vars:
+  environment: dev
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+        # enable_dns: true is inherited
+```
+</File>
+
+**After merge:**
+
+```yaml
+vars:
+  namespace: myapp      # From base
+  environment: dev      # From dev
+
+components:
+  terraform:
+    vpc:
+      vars:
+        enable_dns: true           # From base
+        cidr_block: "10.0.0.0/16"  # From dev
+```
+
+## Common Import Patterns
+
+### 1. Global + Regional + Environment
+
+<File title="stacks/prod-us-east-1.yaml">
+```yaml
+import:
+  - _defaults/globals     # Company-wide settings
+  - _defaults/aws-us-east-1  # Region-specific
+  - _defaults/prod        # Environment-specific
+```
+</File>
+
+### 2. Shared Component Defaults
+
+<File title="stacks/_defaults/vpc-defaults.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        enable_dns_hostnames: true
+        enable_dns_support: true
+```
+</File>
+
+<File title="stacks/dev.yaml">
+```yaml
+import:
+  - _defaults/vpc-defaults
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"  # Adds to defaults
+```
+</File>
+
+### 3. Layered Configuration
+
+```yaml
+import:
+  - _defaults/globals        # Layer 1: Global
+  - _defaults/aws            # Layer 2: Provider
+  - _defaults/networking     # Layer 3: Domain
+  - _defaults/prod           # Layer 4: Environment
+```
+
+Each layer adds or overrides settings from the previous layers.
+
+## Imports vs Inheritance
+
+Confused about the difference?
+
+<dl>
+  <dt>**Imports**</dt>
+  <dd>Bring entire files into the current stack. All settings merge together. Use for sharing common configuration across stacks.</dd>
+
+  <dt>**Inheritance**</dt>
+  <dd>Make one component extend another component's configuration. Use for component variations (e.g., "vpc" extends "vpc-base").</dd>
+</dl>
+
+We'll cover inheritance in the next section. For now, focus on imports for file-level reuse.
+
+<KeyTakeaways>
+- **Imports bring configuration from other files** into the current stack
+- **Order matters** - later imports override earlier ones
+- **Deep merge** combines all settings into one unified structure
+- **Use for DRY configuration** - define once, import everywhere
+- **Organize in `_defaults/`** for clarity (optional convention)
+</KeyTakeaways>
+
+## What's Next
+
+Imports get you far, but sometimes you need component-level reuse. That's where inheritance comes in:
+
+- **[Learn about Inheritance](/learn/inheritance-basics)** - Create component variations
+- **[Organize your Stacks](/learn/organizing-stacks)** - Patterns for large projects
+- **[Advanced Imports](/stacks/imports)** - Templates, filters, and more

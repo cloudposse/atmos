@@ -1,0 +1,71 @@
+---
+slug: empty-backend-config-validation
+title: 'Fixed: Invalid Backend Files from Empty Configuration'
+authors:
+  - osterman
+tags:
+  - bugfix
+date: 2025-12-03T00:00:00.000Z
+---
+
+Atmos now validates that remote backend configurations are not empty before generating backend files. This prevents invalid Terraform configurations that would fail during `terraform init`.
+
+<!--truncate-->
+
+## The Problem
+
+When `backend_type` was set to a remote backend like `s3`, but the `backend` section was empty or missing required fields, Atmos would generate an invalid backend configuration:
+
+```yaml
+# Stack configuration with empty backend
+components:
+  terraform:
+    my-component:
+      backend_type: s3
+      backend: {}  # Empty!
+```
+
+This produced invalid `backend.tf.json`:
+
+```json
+{
+  "terraform": {
+    "backend": {
+      "s3": {}
+    }
+  }
+}
+```
+
+Running `terraform init` with this configuration would fail because S3 backends require at minimum `bucket` and `key` fields.
+
+## The Fix
+
+Atmos now validates that the `backend` section is not empty when using remote backends (`s3`, `gcs`, `azurerm`, `cloud`). If the configuration is empty, Atmos skips backend generation with a helpful warning:
+
+```
+Skipping backend generation: 'backend' section is empty but 'backend_type' requires configuration.
+Set 'components.terraform.auto_generate_backend_file: false' in atmos.yaml to disable.
+```
+
+The `local` backend is still allowed to have an empty configuration since Terraform supports it without any required fields.
+
+## Example
+
+Correct configuration with required backend fields:
+
+```yaml
+components:
+  terraform:
+    my-component:
+      backend_type: s3
+      backend:
+        bucket: "my-terraform-states"
+        key: "terraform.tfstate"
+        region: "us-east-1"
+        dynamodb_table: "terraform-locks"
+```
+
+## Upgrade
+
+Upgrade Atmos to get this validation. If you see the warning, add the required backend configuration fields for your backend type.

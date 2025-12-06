@@ -1,0 +1,10 @@
+{
+  "label": "version",
+  "position": 90,
+  "collapsed": false,
+  "link": {
+    "type": "doc",
+    "id": "version"
+  },
+  "className": "command"
+}

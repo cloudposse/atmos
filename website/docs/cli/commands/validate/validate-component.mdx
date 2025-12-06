@@ -7,14 +7,23 @@ description: Use this command to validate an Atmos component in a stack using JS
 ---
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Use this command to validate an Atmos component in a stack using JSON Schema and OPA policies.
 </Intro>
 
-<Screengrab title="atmos validate component --help" slug="atmos-validate-component--help" />
+<ActionCard title="Configure Schema Validation">
+    Learn how to configure JSON Schema and OPA policy paths for validating components.
+    <div>
+      <PrimaryCTA to="/cli/configuration/schemas">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 ## Usage
+
+<Screengrab title="atmos validate component --help" slug="atmos-validate-component--help" />
 
 Execute the `validate component` command like this:
 
