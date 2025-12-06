@@ -424,9 +424,8 @@ func TestRedisStore_GetKey(t *testing.T) {
 			redisStore.redisClient = mockClient
 
 			// Set up mock expectations
-			// GetKey prepends the prefix with a colon when prefix is set
-			expectedKey := "myapp:" + tt.key
-			mockClient.On("Get", context.Background(), expectedKey).Return(tt.mockReturn, tt.mockError)
+			// GetKey uses the key exactly as provided without adding prefix
+			mockClient.On("Get", context.Background(), tt.key).Return(tt.mockReturn, tt.mockError)
 
 			// Act
 			result, err := redisStore.GetKey(tt.key)

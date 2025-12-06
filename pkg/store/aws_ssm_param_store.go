@@ -262,13 +262,9 @@ func (s *SSMStore) GetKey(key string) (any, error) {
 
 	ctx := context.TODO()
 
-	// Use the key directly as the parameter name
+	// Use the key directly as the parameter name without any prefix transformation.
+	// This allows !store.get to access arbitrary keys as-is, per documentation.
 	paramName := key
-
-	// If the prefix is set, prepend it to the key
-	if s.prefix != "" {
-		paramName = s.prefix + "/" + key
-	}
 
 	// Ensure the parameter name starts with "/" for SSM
 	if !strings.HasPrefix(paramName, "/") {

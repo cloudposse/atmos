@@ -346,6 +346,97 @@ func TestArtifactoryStore_GetWithMockErrors(t *testing.T) {
 	}
 }
 
+func TestArtifactoryStore_GetKey(t *testing.T) {
+	tests := []struct {
+		name          string
+		key           string
+		prefix        string
+		mockSetup     func(*MockArtifactoryClient)
+		expectedPath  string
+		expectError   bool
+		errorContains string
+	}{
+		{
+			name:   "successful retrieval without prefix",
+			key:    "config/app-settings",
+			prefix: "",
+			mockSetup: func(m *MockArtifactoryClient) {
+				m.On("DownloadFiles", mock.MatchedBy(func(params services.DownloadParams) bool {
+					return params.Pattern == "test-repo/config/app-settings.json"
+				})).Return(1, 0, nil)
+			},
+			expectedPath: "test-repo/config/app-settings.json",
+			expectError:  false,
+		},
+		{
+			name:   "prefix is not added to key",
+			key:    "my-secret",
+			prefix: "myapp",
+			mockSetup: func(m *MockArtifactoryClient) {
+				// The key should be used exactly as provided, WITHOUT the prefix prepended
+				m.On("DownloadFiles", mock.MatchedBy(func(params services.DownloadParams) bool {
+					return params.Pattern == "test-repo/my-secret.json"
+				})).Return(1, 0, nil)
+			},
+			expectedPath: "test-repo/my-secret.json",
+			expectError:  false,
+		},
+		{
+			name:   "key with json extension",
+			key:    "config.json",
+			prefix: "",
+			mockSetup: func(m *MockArtifactoryClient) {
+				m.On("DownloadFiles", mock.MatchedBy(func(params services.DownloadParams) bool {
+					return params.Pattern == "test-repo/config.json"
+				})).Return(1, 0, nil)
+			},
+			expectedPath: "test-repo/config.json",
+			expectError:  false,
+		},
+		{
+			name:   "download error",
+			key:    "nonexistent",
+			prefix: "",
+			mockSetup: func(m *MockArtifactoryClient) {
+				m.On("DownloadFiles", mock.Anything).Return(0, 1, fmt.Errorf("file not found"))
+			},
+			expectError:   true,
+			errorContains: "file not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			mockClient := new(MockArtifactoryClient)
+			delimiter := "/"
+			store := &ArtifactoryStore{
+				prefix:         tt.prefix,
+				repoName:       "test-repo",
+				rtManager:      mockClient,
+				stackDelimiter: &delimiter,
+			}
+
+			tt.mockSetup(mockClient)
+
+			// Act
+			result, err := store.GetKey(tt.key)
+
+			// Assert
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+			}
+			mockClient.AssertExpectations(t)
+		})
+	}
+}
+
 func TestArtifactoryStore_LoggingConfiguration(t *testing.T) {
 	// Save the original function and restore it after the test
 	origCreateNoopLogger := createNoopLogger
