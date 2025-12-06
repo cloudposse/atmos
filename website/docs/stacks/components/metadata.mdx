@@ -215,7 +215,7 @@ Use `custom` for:
 - Custom categorization that doesn't affect Atmos behavior
 
 :::note
-Unlike `vars` and `settings`, the `custom` section is **not inherited** by derived components. Each component must define its own `custom` values.
+The `custom` section is inherited from base components when `stacks.inherit.metadata` is enabled (the default). Like other metadata fields, values from derived components override inherited values, and nested maps are deep-merged.
 :::
 
 ## Examples

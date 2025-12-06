@@ -23,8 +23,9 @@ vpc/defaults:
     component: vpc/v2                                             # Pin to version
     locked: true
     terraform_workspace_pattern: "{tenant}-{environment}-{stage}"
-    description: "Virtual Private Cloud network configuration"
-    owner: "platform-team"
+    custom:
+      description: "Virtual Private Cloud network configuration"
+      owner: "platform-team"
 
 # ...but had to repeat EVERYTHING for each instance
 vpc/primary:
@@ -33,8 +34,9 @@ vpc/primary:
     component: vpc/v2                                             # Repeated
     locked: true                                                  # Repeated
     terraform_workspace_pattern: "{tenant}-{environment}-{stage}" # Repeated
-    description: "Virtual Private Cloud network configuration"    # Repeated
-    owner: "platform-team"                                        # Repeated
+    custom:                                                       # Repeated
+      description: "Virtual Private Cloud network configuration"  # Repeated
+      owner: "platform-team"                                      # Repeated
 
 vpc/secondary:
   metadata:
@@ -42,8 +44,9 @@ vpc/secondary:
     component: vpc/v2                                             # Repeated again
     locked: true                                                  # Repeated again
     terraform_workspace_pattern: "{tenant}-{environment}-{stage}" # Repeated again
-    description: "Virtual Private Cloud network configuration"    # Repeated again
-    owner: "platform-team"                                        # Repeated again
+    custom:                                                       # Repeated again
+      description: "Virtual Private Cloud network configuration"  # Repeated again
+      owner: "platform-team"                                      # Repeated again
 ```
 
 The biggest pain? When upgrading to `vpc/v3`, you had to update the component version in every single instance. Miss one, and you'd have components running different versions with no indication why.
@@ -59,13 +62,14 @@ vpc/defaults:
     component: vpc/v2                                             # Define version once
     locked: true
     terraform_workspace_pattern: "{tenant}-{environment}-{stage}"
-    description: "Virtual Private Cloud network configuration"
-    owner: "platform-team"
+    custom:
+      description: "Virtual Private Cloud network configuration"
+      owner: "platform-team"
 
 vpc/primary:
   metadata:
     inherits: [vpc/defaults]
-    # component, locked, terraform_workspace_pattern, description, and owner are all inherited
+    # component, locked, terraform_workspace_pattern, and custom are all inherited
 
 vpc/secondary:
   metadata:
@@ -75,7 +79,9 @@ vpc/secondary:
 
 Want to upgrade to `vpc/v3`? Change it once in `vpc/defaults`, and all instances inherit the new version automatically.
 
-The only field that doesn't inherit is `metadata.inherits` itself.
+Two fields are excluded from inheritance:
+- `metadata.inherits` - defines the inheritance relationship itself
+- `metadata.type` - component type is per-component (e.g., `abstract` shouldn't propagate to derived components)
 
 ## Configuration
 
