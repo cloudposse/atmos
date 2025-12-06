@@ -762,6 +762,7 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncRandom,
 	}
 
 	for _, tag := range expectedTags {
@@ -789,6 +790,7 @@ func TestAtmosYamlTagsMap_O1Lookup(t *testing.T) {
 		{AtmosYamlFuncTerraformOutput, true},
 		{AtmosYamlFuncTerraformState, true},
 		{AtmosYamlFuncEnv, true},
+		{AtmosYamlFuncRandom, true},
 		{"!unknown", false},
 		{"!invalid", false},
 		{"", false},

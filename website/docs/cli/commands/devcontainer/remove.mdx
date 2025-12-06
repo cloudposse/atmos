@@ -1,0 +1,63 @@
+---
+title: atmos devcontainer remove
+sidebar_label: remove
+sidebar_class_name: command
+id: remove
+description: Remove a devcontainer
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to permanently remove a devcontainer. This stops the container if it's running and deletes it.
+</Intro>
+
+<Screengrab title="atmos devcontainer remove --help" slug="atmos-devcontainer-remove--help" />
+
+## Usage
+
+```shell
+atmos devcontainer remove <name> [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Name of the devcontainer to remove</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--instance string`</dt>
+  <dd>Instance name for this devcontainer (default: `default`)</dd>
+
+  <dt>`--force` / `-f`</dt>
+  <dd>Force removal even if the container is running</dd>
+</dl>
+
+## Examples
+
+```shell
+# Remove a devcontainer
+atmos devcontainer remove geodesic
+
+# Force remove a running devcontainer
+atmos devcontainer remove geodesic --force
+
+# Remove a specific instance
+atmos devcontainer remove terraform --instance project-a
+```
+
+## Behavior
+
+- Stops the container if it's running (or immediately if `--force` is used)
+- Removes the container and its associated data
+- Does not remove the container image (use `docker rmi` or `podman rmi` separately if needed)
+- Does not remove named volumes (use `docker volume rm` or `podman volume rm` separately if needed)
+
+## See Also
+
+- [`atmos devcontainer stop`](/cli/commands/devcontainer/stop)
+- [`atmos devcontainer rebuild`](/cli/commands/devcontainer/rebuild)

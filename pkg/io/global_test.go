@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 func TestInitialize(t *testing.T) {
@@ -455,4 +457,8 @@ func resetGlobals() {
 	globalContext = nil
 	initOnce = sync.Once{}
 	initErr = nil
+
+	// Reset viper configuration to avoid test pollution.
+	// This ensures each test starts with clean viper state.
+	viper.Reset()
 }

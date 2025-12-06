@@ -193,6 +193,36 @@ Agents must be context-efficient to avoid token bloat:
 - ❌ Don't embed entire CLAUDE.md
 - ❌ Don't duplicate content across agents
 
+**File Size Limits (MANDATORY):**
+
+After creating or updating agents or CLAUDE.md files, ALWAYS verify file sizes:
+
+```bash
+# Check agent file size (must be < 25 KB)
+wc -c .claude/agents/your-agent.md
+
+# Check CLAUDE.md size (must be < 40 KB)
+wc -c CLAUDE.md
+wc -c .conductor/*/CLAUDE.md  # Check all workspace CLAUDE files
+```
+
+**Size limits:**
+- ✅ Individual agent files: **< 25 KB** (25,600 bytes)
+- ✅ CLAUDE.md files: **< 40 KB** (40,960 bytes)
+- ❌ If over limit: Split into multiple agents or move content to docs/prd/
+
+**If agent exceeds 25 KB:**
+1. Extract domain knowledge to `docs/prd/<topic>.md`
+2. Reference the PRD in agent instead of duplicating
+3. Split into multiple focused agents if needed
+4. Remove redundant examples or verbose explanations
+
+**If CLAUDE.md exceeds 40 KB:**
+1. Move detailed guides to `docs/prd/`
+2. Keep only essential patterns and rules
+3. Reference external docs instead of inline content
+4. Consider creating specialized agents for complex domains
+
 **Use references, not duplication:**
 
 ```markdown

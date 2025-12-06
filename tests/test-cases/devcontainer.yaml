@@ -1,0 +1,142 @@
+tests:
+  # List devcontainers
+  # Note: Devcontainer tests require Docker/Podman and are disabled on macOS
+  # as GitHub macOS runners don't have container runtimes available
+  - name: "atmos devcontainer list"
+    description: "List all configured devcontainers"
+    enabled: false  # Disabled: requires container runtime (not available on macOS runners)
+    workdir: "fixtures/scenarios/devcontainer-basic"
+    command: "atmos"
+    args:
+      - "devcontainer"
+      - "list"
+    short: false  # Not a short test - requires container runtime
+    preconditions:
+      - "container-runtime"
+    expect:
+      exit_code: 0
+      stdout:
+        - "test-alpine"
+        - "alpine:latest"
+
+  # Show devcontainer config
+  - name: "atmos devcontainer config test-alpine"
+    description: "Show devcontainer configuration"
+    enabled: false  # Disabled: requires container runtime (not available on macOS runners)
+    workdir: "fixtures/scenarios/devcontainer-basic"
+    command: "atmos"
+    args:
+      - "devcontainer"
+      - "config"
+      - "test-alpine"
+    short: false
+    preconditions:
+      - "container-runtime"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Name: test-alpine"
+        - "Image: alpine:latest"
+        - "Remote User: root"
+        - "test_var: test-value"
+
+  # Start devcontainer (will create and start)
+  - name: "atmos devcontainer start test-alpine"
+    description: "Start a devcontainer (creates if needed)"
+    enabled: false  # Disabled: requires container runtime (not available on macOS runners)
+    workdir: "fixtures/scenarios/devcontainer-basic"
+    command: "atmos"
+    args:
+      - "devcontainer"
+      - "start"
+      - "test-alpine"
+      - "--instance"
+      - "test-instance"
+    short: false
+    preconditions:
+      - "container-runtime"
+    expect:
+      exit_code: 0
+      timeout: "2m"  # Container operations can take time
+      stderr:
+        - "atmos-devcontainer-test-alpine-test-instance"
+
+  # Stop devcontainer
+  - name: "atmos devcontainer stop test-alpine"
+    description: "Stop a running devcontainer"
+    enabled: false  # Disabled: requires container runtime (not available on macOS runners)
+    workdir: "fixtures/scenarios/devcontainer-basic"
+    command: "atmos"
+    args:
+      - "devcontainer"
+      - "stop"
+      - "test-alpine"
+      - "--instance"
+      - "test-instance"
+    short: false
+    preconditions:
+      - "container-runtime"
+    expect:
+      exit_code: 0
+      timeout: "1m"
+      stderr:
+        - "atmos-devcontainer-test-alpine-test-instance"
+
+  # Show devcontainer logs
+  # Note: This test is disabled because the container may not have logs
+  # or may be in a state where logs command fails. Re-enable after
+  # ensuring container generates logs.
+  - name: "atmos devcontainer logs test-alpine"
+    description: "Show devcontainer logs"
+    enabled: false
+    workdir: "fixtures/scenarios/devcontainer-basic"
+    command: "atmos"
+    args:
+      - "devcontainer"
+      - "logs"
+      - "test-alpine"
+      - "--instance"
+      - "test-instance"
+      - "--tail"
+      - "10"
+    short: false
+    preconditions:
+      - "container-runtime"
+    expect:
+      exit_code: 0
+      timeout: "30s"
+
+  # Error case: non-existent devcontainer
+  - name: "atmos devcontainer start nonexistent"
+    description: "Error when starting non-existent devcontainer"
+    enabled: false  # Disabled: requires container runtime (not available on macOS runners)
+    workdir: "fixtures/scenarios/devcontainer-basic"
+    command: "atmos"
+    args:
+      - "devcontainer"
+      - "start"
+      - "nonexistent"
+    short: false
+    preconditions:
+      - "container-runtime"
+    expect:
+      exit_code: 1
+      stderr:
+        - "devcontainer.*not found|does not exist"
+
+  # List with no devcontainers configured
+  - name: "atmos devcontainer list (no devcontainers)"
+    description: "List when no devcontainers are configured"
+    enabled: false  # Disabled: requires container runtime (not available on macOS runners)
+    workdir: "fixtures/scenarios/complete"  # Has no devcontainers
+    command: "atmos"
+    args:
+      - "devcontainer"
+      - "list"
+    short: false
+    preconditions:
+      - "container-runtime"
+    expect:
+      exit_code: 0
+      stdout:
+        - "No devcontainers configured"
