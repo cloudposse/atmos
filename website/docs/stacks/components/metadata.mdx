@@ -1,10 +1,10 @@
 ---
 title: Configure Component Metadata
-sidebar_position: 13
-sidebar_label: metadata
+sidebar_position: 5
+sidebar_label: "*.metadata"
 sidebar_class_name: command
 description: Use the metadata section to control component behavior, inheritance, and deployment settings.
-id: metadata
+id: component-metadata
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
@@ -134,6 +134,70 @@ components:
 When `locked: true`:
 - Atmos will warn or prevent changes to the component
 - Useful for protecting critical infrastructure components
+
+### `terraform_workspace`
+
+Overrides the Terraform workspace name with a literal string value:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        terraform_workspace: "custom-workspace-name"
+```
+
+By default, Atmos calculates workspace names automatically based on the stack name. Use this field when you need explicit control over the workspace name.
+
+For detailed information about how Atmos manages Terraform workspaces, see [Workspaces](/components/terraform/workspaces).
+
+### `terraform_workspace_pattern`
+
+Overrides the Terraform workspace name using a pattern with context tokens:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        terraform_workspace_pattern: "{tenant}-{environment}-{stage}"
+```
+
+Supported tokens:
+- `{namespace}` - The namespace from context variables
+- `{tenant}` - The tenant from context variables
+- `{environment}` - The environment from context variables
+- `{region}` - The region from context variables
+- `{stage}` - The stage from context variables
+- `{attributes}` - The attributes from context variables
+- `{component}` - The Atmos component name
+- `{base-component}` - The base component name (from `metadata.component`)
+
+For detailed information about workspace patterns and examples, see [Workspaces](/components/terraform/workspaces).
+
+### `custom`
+
+A user extension point for storing arbitrary metadata that Atmos preserves but does not interpret:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        custom:
+          owner: platform-team
+          cost_center: "12345"
+          tier: critical
+```
+
+Use `custom` for:
+- Storing metadata for external tooling to consume (CI/CD pipelines, dashboards)
+- Adding labels or annotations readable via `atmos describe stacks`
+- Custom categorization that doesn't affect Atmos behavior
+
+:::note
+Unlike `vars` and `settings`, the `custom` section is **not inherited** by derived components. Each component must define its own `custom` values.
+:::
 
 ## Examples
 

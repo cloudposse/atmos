@@ -133,6 +133,12 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	return nil
 }
 
+// newModelVendor constructs a modelVendor prepared to run vendor installations
+// from the provided slice of pkgComponentVendor or pkgAtmosVendor.
+// It initializes the progress bar and spinner, converts the input slice into a
+// unified []pkgVendor, and sets dryRun, atmosConfig, and TTY detection on the
+// returned model. If pkgs is empty the returned model has done set to true.
+// The function never performs network or filesystem operations.
 func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
 	pkgs []T,
 	dryRun bool,
@@ -144,7 +150,7 @@ func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
 		progress.WithoutPercentage(),
 	)
 	s := spinner.New()
-	s.Style = theme.Styles.Link
+	s.Style = theme.GetCurrentStyles().Spinner
 
 	if len(pkgs) == 0 {
 		return modelVendor{done: true}, nil
