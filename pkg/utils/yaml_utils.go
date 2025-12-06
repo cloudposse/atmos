@@ -19,16 +19,16 @@ import (
 
 const (
 	// Atmos YAML functions.
-	AtmosYamlFuncExec            = "!exec"
-	AtmosYamlFuncStore           = "!store"
-	AtmosYamlFuncStoreGet        = "!store.get"
-	AtmosYamlFuncTemplate        = "!template"
-	AtmosYamlFuncTerraformOutput = "!terraform.output"
-	AtmosYamlFuncTerraformState  = "!terraform.state"
-	AtmosYamlFuncEnv             = "!env"
-	AtmosYamlFuncInclude         = "!include"
-	AtmosYamlFuncIncludeRaw      = "!include.raw"
-	AtmosYamlFuncGitRoot         = "!repo-root"
+	AtmosYamlFuncExec                    = "!exec"
+	AtmosYamlFuncStore                   = "!store"
+	AtmosYamlFuncStoreGet                = "!store.get"
+	AtmosYamlFuncTemplate                = "!template"
+	AtmosYamlFuncTerraformOutput         = "!terraform.output"
+	AtmosYamlFuncTerraformState          = "!terraform.state"
+	AtmosYamlFuncEnv                     = "!env"
+	AtmosYamlFuncInclude                 = "!include"
+	AtmosYamlFuncIncludeRaw              = "!include.raw"
+	AtmosYamlFuncGitRoot                 = "!repo-root"
 	AtmosYamlFuncRandom                  = "!random"
 	AtmosYamlFuncAwsAccountID            = "!aws.account_id"
 	AtmosYamlFuncAwsCallerIdentityArn    = "!aws.caller_identity_arn"
@@ -62,13 +62,13 @@ var (
 	// This optimization replaces the O(n) SliceContainsString calls that were previously
 	// called 75M+ times, causing significant performance overhead.
 	atmosYamlTagsMap = map[string]bool{
-		AtmosYamlFuncExec:            true,
-		AtmosYamlFuncStore:           true,
-		AtmosYamlFuncStoreGet:        true,
-		AtmosYamlFuncTemplate:        true,
-		AtmosYamlFuncTerraformOutput: true,
-		AtmosYamlFuncTerraformState:  true,
-		AtmosYamlFuncEnv:             true,
+		AtmosYamlFuncExec:                    true,
+		AtmosYamlFuncStore:                   true,
+		AtmosYamlFuncStoreGet:                true,
+		AtmosYamlFuncTemplate:                true,
+		AtmosYamlFuncTerraformOutput:         true,
+		AtmosYamlFuncTerraformState:          true,
+		AtmosYamlFuncEnv:                     true,
 		AtmosYamlFuncRandom:                  true,
 		AtmosYamlFuncAwsAccountID:            true,
 		AtmosYamlFuncAwsCallerIdentityArn:    true,
