@@ -301,6 +301,7 @@ settings:
 vendor:
   base_path: ./vendor.yaml
 initialized: true
+basePathAbsolute: /absolute/path/to/repo
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/stacks
 includeStackAbsolutePaths:
   - /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/stacks/deploy/**/*

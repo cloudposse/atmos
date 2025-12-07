@@ -83,7 +83,10 @@ func JoinPaths(basePath string, paths []string) ([]string, error) {
 	res := []string{}
 
 	for _, p := range paths {
-		res = append(res, JoinPath(basePath, p))
+		joined := JoinPath(basePath, p)
+		// Clean up any path duplication that might occur from incorrect path joining.
+		cleaned := CleanDuplicatedPath(joined)
+		res = append(res, cleaned)
 	}
 
 	return res, nil
