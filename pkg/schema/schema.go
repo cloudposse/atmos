@@ -67,6 +67,7 @@ type AtmosConfiguration struct {
 	StoresConfig                  store.StoresConfig `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
 	Vendor                        Vendor             `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool               `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
+	BasePathAbsolute              string             `yaml:"basePathAbsolute,omitempty" json:"basePathAbsolute,omitempty" mapstructure:"basePathAbsolute"`
 	StacksBaseAbsolutePath        string             `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
 	IncludeStackAbsolutePaths     []string           `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
 	ExcludeStackAbsolutePaths     []string           `yaml:"excludeStackAbsolutePaths,omitempty" json:"excludeStackAbsolutePaths,omitempty" mapstructure:"excludeStackAbsolutePaths"`
@@ -438,11 +439,29 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 }
 
 type Stacks struct {
-	BasePath      string   `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	IncludedPaths []string `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
-	ExcludedPaths []string `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
-	NamePattern   string   `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
-	NameTemplate  string   `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
+	BasePath      string        `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	IncludedPaths []string      `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
+	ExcludedPaths []string      `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
+	NamePattern   string        `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
+	NameTemplate  string        `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
+	Inherit       StacksInherit `yaml:"inherit,omitempty" json:"inherit,omitempty" mapstructure:"inherit"`
+}
+
+// StacksInherit controls inheritance behavior for stack processing.
+type StacksInherit struct {
+	// Metadata controls whether metadata fields are inherited from base components.
+	// When true (default), all metadata fields except 'inherits' are inherited.
+	// When false, metadata is per-component only (legacy behavior).
+	Metadata *bool `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+}
+
+// IsMetadataInheritanceEnabled returns whether metadata inheritance is enabled.
+// Defaults to true if not explicitly set.
+func (s *StacksInherit) IsMetadataInheritanceEnabled() bool {
+	if s.Metadata == nil {
+		return true // Default to true.
+	}
+	return *s.Metadata
 }
 
 type Workflows struct {
@@ -555,6 +574,7 @@ type ArgsAndFlagsInfo struct {
 	Affected                  bool
 	All                       bool
 	Identity                  string
+	NeedsPathResolution       bool // True if ComponentFromArg is a path that needs resolution.
 }
 
 // AuthContext holds active authentication credentials for multiple providers.
@@ -713,6 +733,7 @@ type ConfigAndStacksInfo struct {
 	All                       bool
 	Components                []string
 	Identity                  string
+	NeedsPathResolution       bool // True if ComponentFromArg is a path that needs resolution.
 }
 
 // GetComponentEnvSection returns the component's env section map.
@@ -822,6 +843,7 @@ type BaseComponentConfig struct {
 	BaseComponentSettings                  AtmosSectionMapType
 	BaseComponentEnv                       AtmosSectionMapType
 	BaseComponentAuth                      AtmosSectionMapType
+	BaseComponentMetadata                  AtmosSectionMapType
 	BaseComponentProviders                 AtmosSectionMapType
 	BaseComponentHooks                     AtmosSectionMapType
 	FinalBaseComponentName                 string

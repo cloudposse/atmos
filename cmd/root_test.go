@@ -836,19 +836,12 @@ func TestParseChdirFromArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore os.Args.
-			originalArgs := os.Args
-			defer func() { os.Args = originalArgs }()
-
-			// Set os.Args to the test args.
-			os.Args = tt.args
-
-			// Call the function.
-			result := parseChdirFromArgs()
+			// Call the function with test args.
+			result := parseChdirFromArgList(tt.args)
 
 			// Verify.
 			assert.Equal(t, tt.expected, result,
-				"parseChdirFromArgs() with args %v should return %q, got %q",
+				"parseChdirFromArgList() with args %v should return %q, got %q",
 				tt.args, tt.expected, result)
 		})
 	}

@@ -1,6 +1,9 @@
 package utils
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -372,6 +375,69 @@ func TestGetGlobMatches_InvalidPattern(t *testing.T) {
 	matches, err := GetGlobMatches(pattern)
 	assert.Error(t, err, "Invalid pattern should return error")
 	assert.Nil(t, matches)
+}
+
+// TestGetGlobMatches_WindowsAbsolutePath tests that Windows absolute paths with glob patterns
+// don't cause path duplication. This validates the fix for the filepath.FromSlash() conversion.
+// Before the fix, paths like "D:/a/atmos/atmos/..." would be duplicated to "D:/D:/a/atmos/atmos/..."
+// because filepath.Join() on Windows treats forward-slash paths as relative.
+func TestGetGlobMatches_WindowsAbsolutePath(t *testing.T) {
+	// Test requires creating temporary directory structure to simulate Windows CI environment.
+	// We'll use t.TempDir() which works cross-platform.
+	tempDir := t.TempDir()
+
+	// Create a test file structure
+	// tempDir/stacks/deploy/test.yaml
+	stacksDir := filepath.Join(tempDir, "stacks", "deploy")
+	err := os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(stacksDir, "test.yaml")
+	err = os.WriteFile(testFile, []byte("test: data"), 0o644)
+	require.NoError(t, err)
+
+	// Test with both forward-slash and native path separators.
+	// The critical test is with forward slashes on Windows, but we test both for completeness.
+	patterns := []string{
+		filepath.Join(tempDir, "stacks", "deploy", "**", "*.yaml"),                   // Native separators
+		filepath.ToSlash(filepath.Join(tempDir, "stacks", "deploy", "**", "*.yaml")), // Forward slashes (Windows issue case)
+	}
+
+	for _, pattern := range patterns {
+		t.Run(pattern, func(t *testing.T) {
+			matches, err := GetGlobMatches(pattern)
+			require.NoError(t, err, "GetGlobMatches should not fail for pattern: %s", pattern)
+			require.NotNil(t, matches, "Matches should not be nil")
+			require.NotEmpty(t, matches, "Should find at least one match")
+
+			// Verify no path duplication - the matched path should not contain the base path twice.
+			for _, match := range matches {
+				// Check that the path doesn't contain duplicated volume/drive letters (e.g., "D:/D:/" or "C:\C:\")
+				// This is the symptom of the bug we're fixing.
+				normalizedMatch := filepath.ToSlash(match)
+
+				// Count occurrences of the temp directory in the match path
+				// It should appear exactly once, not multiple times
+				tempDirNormalized := filepath.ToSlash(tempDir)
+				count := strings.Count(normalizedMatch, tempDirNormalized)
+				assert.Equal(t, 1, count, "Path should contain base directory exactly once, not duplicated. Path: %s", match)
+
+				// Additional check: On Windows, ensure we don't have drive letter duplication like "D:/D:/"
+				if len(normalizedMatch) >= 5 {
+					// Check for patterns like "X:/X:/" where X is any drive letter
+					for _, driveLetter := range "ABCDEFGHIJKLMNOPQRSTUVWXYZ" {
+						duplicatedPrefix := string(driveLetter) + ":/" + string(driveLetter) + ":/"
+						assert.NotContains(t, normalizedMatch, duplicatedPrefix,
+							"Path should not contain duplicated drive letter: %s", match)
+					}
+				}
+
+				// Verify the file actually exists at the returned path
+				_, err := os.Stat(match)
+				assert.NoError(t, err, "Matched file should exist at path: %s", match)
+			}
+		})
+	}
 }
 
 // TestPathMatch_PipeCharacterNoCollision tests that patterns and names containing "|"
