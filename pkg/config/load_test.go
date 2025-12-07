@@ -1028,6 +1028,7 @@ base_path: /test/parent-should-not-find
 
 			if tt.expectConfig {
 				assert.NotEmpty(t, v.ConfigFileUsed())
+				assert.Contains(t, v.ConfigFileUsed(), "atmos.yaml")
 			}
 
 			tt.validateConfig(t, v)

@@ -27,7 +27,6 @@ func TestHandleComponentMatches_NoMatches(t *testing.T) {
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrComponentNotInStack)
 	assert.Empty(t, result)
-	assert.Contains(t, err.Error(), "not found in stack")
 }
 
 // TestHandleComponentMatches_SingleMatch tests the case when exactly one component match is found.
@@ -73,9 +72,6 @@ func TestHandleComponentMatches_MultipleMatches_NonTTY(t *testing.T) {
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAmbiguousComponentPath)
 	assert.Empty(t, result)
-	// The base sentinel error is "ambiguous component path"
-	// The detailed information is in the error's formatted output
-	assert.Contains(t, err.Error(), "ambiguous component path")
 }
 
 // TestFindComponentMatches_DirectKeyMatch tests finding component by direct key match.
@@ -253,8 +249,8 @@ func TestExtractComponentsSection_EmptyStack(t *testing.T) {
 	result, err := extractComponentsSection(stackConfig, "terraform", "dev")
 
 	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrComponentNotInStack)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "has no components section")
 }
 
 // TestExtractComponentsSection_ComponentsNotMap tests invalid components type.
@@ -266,8 +262,8 @@ func TestExtractComponentsSection_ComponentsNotMap(t *testing.T) {
 	result, err := extractComponentsSection(stackConfig, "terraform", "dev")
 
 	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrComponentNotInStack)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "invalid components section")
 }
 
 // TestExtractComponentsSection_MissingComponentType tests missing component type section.
@@ -281,8 +277,8 @@ func TestExtractComponentsSection_MissingComponentType(t *testing.T) {
 	result, err := extractComponentsSection(stackConfig, "terraform", "dev")
 
 	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrComponentNotInStack)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "has no terraform components")
 }
 
 // TestExtractComponentsSection_ComponentTypeNotMap tests invalid component type section.
@@ -296,8 +292,8 @@ func TestExtractComponentsSection_ComponentTypeNotMap(t *testing.T) {
 	result, err := extractComponentsSection(stackConfig, "terraform", "dev")
 
 	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrComponentNotInStack)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "invalid terraform components section")
 }
 
 // TestHandleNoMatches_DifferentComponentTypes tests error messages for different component types.
@@ -335,7 +331,6 @@ func TestHandleNoMatches_DifferentComponentTypes(t *testing.T) {
 			assert.Error(t, err)
 			assert.ErrorIs(t, err, errUtils.ErrComponentNotInStack)
 			assert.Empty(t, result)
-			assert.Contains(t, err.Error(), "not found in stack")
 		})
 	}
 }
@@ -378,7 +373,6 @@ func TestBuildAmbiguousComponentError_VariousMatchCounts(t *testing.T) {
 
 			assert.Error(t, err)
 			assert.ErrorIs(t, err, errUtils.ErrAmbiguousComponentPath)
-			assert.Contains(t, err.Error(), "ambiguous component path")
 			// The formatted error message contains the hints which include the match information.
 			// Use the full formatted error to verify the matches are included.
 			formattedErr := errUtils.Format(err, errUtils.DefaultFormatterConfig())

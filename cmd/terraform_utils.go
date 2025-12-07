@@ -59,19 +59,29 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	flags := cmd.Flags()
 
 	processTemplates, err := flags.GetBool("process-templates")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	processYamlFunctions, err := flags.GetBool("process-functions")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	skip, err := flags.GetStringSlice("skip")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	components, err := flags.GetStringSlice("components")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	dryRun, err := flags.GetBool("dry-run")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	info.ProcessTemplates = processTemplates
 	info.ProcessFunctions = processYamlFunctions
@@ -90,9 +100,11 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	}
 	// Otherwise, info.Identity already has the correct value from ProcessCommandLineArgs
 	// (either from --identity <value>, ATMOS_IDENTITY env var, or empty string).
-	// Check Terraform Single-Component and Multi-Component flags
+	// Check Terraform Single-Component and Multi-Component flags.
 	err = checkTerraformFlags(&info)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	// Execute `atmos terraform <sub-command> --affected` or `atmos terraform <sub-command> --affected --stack <stack>`
 	if info.Affected {

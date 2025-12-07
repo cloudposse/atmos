@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // mockComponentResolver is a test implementation of ComponentResolver.
@@ -210,6 +212,9 @@ func TestResolvePathBasedComponent_MissingStack(t *testing.T) {
 
 	assert.Error(tk, err)
 	assert.Empty(tk, result)
+	// Use sentinel error check for robust error type verification.
+	assert.ErrorIs(tk, err, errUtils.ErrMissingStack)
+	// Secondary check for user-facing message text.
 	assert.Contains(tk, err.Error(), "--stack")
 }
 

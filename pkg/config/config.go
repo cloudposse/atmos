@@ -219,7 +219,7 @@ func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
 		basePath := filepath.Join(cliConfigPath, path)
 		absPath, err := filepath.Abs(basePath)
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("resolving path %q relative to config %q: %w", path, cliConfigPath, err)
 		}
 		return absPath, nil
 	}
@@ -227,7 +227,7 @@ func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
 	// Fallback: resolve relative to CWD (for backwards compatibility when cliConfigPath is empty).
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("resolving path %q: %w", path, err)
 	}
 	return absPath, nil
 }

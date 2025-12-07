@@ -1221,7 +1221,12 @@ func Execute() error {
 		if err := handleConfigInitError(initErr, &atmosConfig); err != nil {
 			return err
 		}
-		log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
+		// Only log "not found" message when the error is specifically NotFound.
+		// Other cases (e.g., version command with invalid config) log differently
+		// inside handleConfigInitError.
+		if errors.Is(initErr, cfg.NotFound) {
+			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
+		}
 	}
 
 	// Initialize markdown renderers only if config loaded successfully

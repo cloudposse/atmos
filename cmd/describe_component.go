@@ -80,9 +80,9 @@ var describeComponentCmd = &cobra.Command{
 		// Otherwise, treat it as a component name (even if it contains slashes).
 		needsPathResolution := comp.IsExplicitComponentPath(component)
 
-		// Load atmos configuration.
-		// Use processStacks=true when path resolution is needed because the resolver
-		// needs StackConfigFilesAbsolutePaths to find stacks and detect ambiguity.
+		// Load atmos configuration. Use processStacks=true when path resolution is needed
+		// because the resolver needs StackConfigFilesAbsolutePaths to find stacks and
+		// detect ambiguity.
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
 			ComponentFromArg: component,
 			Stack:            stack,
@@ -99,7 +99,7 @@ var describeComponentCmd = &cobra.Command{
 					WithHint("Verify `atmos.yaml` exists in your repository root or `.atmos/` directory\nRun `atmos describe config` to validate your configuration").
 					WithContext("component_arg", component).
 					WithContext("stack", stack).
-					WithContext("config_error", err.Error()).
+					WithCause(err).
 					WithExitCode(2).
 					Err()
 				return pathErr
@@ -111,10 +111,9 @@ var describeComponentCmd = &cobra.Command{
 		if needsPathResolution {
 			// We don't know the component type yet - describe component detects it.
 			// Use the full resolver with stack validation to:
-			// 1. Extract the component name from the path
-			// 2. Look up which Atmos components reference this terraform folder in the stack
-			// 3. If multiple components reference the same folder, prompt user to select (TTY)
-			//    or return an error (non-TTY/CI)
+			// 1. Extract the component name from the path.
+			// 2. Look up which Atmos components reference this terraform folder in the stack.
+			// 3. If multiple components reference the same folder, return an ambiguous path error.
 			resolvedComponent, err := e.ResolveComponentFromPathWithoutTypeCheck(&atmosConfig, component, stack)
 			if err != nil {
 				// Return the error directly to preserve detailed hints and exit codes.

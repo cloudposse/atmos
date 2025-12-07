@@ -813,7 +813,7 @@ func TestGetConfigAndStacksInfoDoubleDashHandling(t *testing.T) {
 	// We expect this to fail due to missing atmos config, but importantly
 	// it should NOT panic or call os.Exit().
 	assert.Error(t, err, "Should return error for missing config instead of calling os.Exit()")
-	assert.Contains(t, err.Error(), "directory for Atmos stacks does not exist", "Error should relate to config validation")
+	assert.ErrorIs(t, err, errUtils.ErrStacksDirectoryDoesNotExist)
 }
 
 // TestGetConfigAndStacksInfoReturnsErrorInsteadOfExiting demonstrates the key improvement.
@@ -1276,6 +1276,8 @@ func TestVerifyInsideGitRepoE_NonGitDir(t *testing.T) {
 
 // TestGetTopLevelCommands tests the getTopLevelCommands function.
 func TestGetTopLevelCommands(t *testing.T) {
+	_ = NewTestKit(t)
+
 	result := getTopLevelCommands()
 
 	// Should return a map.

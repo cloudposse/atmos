@@ -116,9 +116,9 @@ func TestHelmfilePathResolutionWithCurrentDir(t *testing.T) {
 		isPathError := errors.Is(err, errUtils.ErrPathNotInComponentDir) ||
 			errors.Is(err, errUtils.ErrPathResolutionFailed) ||
 			errors.Is(err, errUtils.ErrComponentTypeMismatch)
-		// Either we get a path resolution error (expected) or some other valid error.
-		// The key is that it doesn't panic.
-		assert.True(t, isPathError || err != nil,
-			"Current directory resolution should produce path resolution error or valid error, got: %v", err)
+		// Assert that we specifically get a path resolution error.
+		// This validates the path resolution code path was executed.
+		assert.True(t, isPathError,
+			"Current directory resolution should produce a path resolution error, got: %v", err)
 	}
 }

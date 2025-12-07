@@ -131,7 +131,11 @@ func resolveBasePath(basePath string) string {
 	if basePath == "" || filepath.IsAbs(basePath) {
 		return basePath
 	}
-	absPath, _ := filepath.Abs(basePath)
+	absPath, err := filepath.Abs(basePath)
+	if err != nil {
+		// Fallback to original path if resolution fails.
+		return basePath
+	}
 	return absPath
 }
 

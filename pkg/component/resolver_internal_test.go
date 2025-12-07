@@ -1,10 +1,13 @@
 package component
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // Test extractComponentsSection function.
@@ -15,8 +18,9 @@ func TestExtractComponentsSection(t *testing.T) {
 		componentType string
 		stack         string
 		wantErr       bool
-		errContains   string
-		expectedLen   int // Number of components expected if successful
+		expectedErr   error  // Sentinel error to check with errors.Is
+		errContains   string // Additional message check (for user-facing text)
+		expectedLen   int    // Number of components expected if successful
 	}{
 		{
 			name: "valid terraform components",
@@ -53,6 +57,7 @@ func TestExtractComponentsSection(t *testing.T) {
 			componentType: "terraform",
 			stack:         "test-stack",
 			wantErr:       true,
+			expectedErr:   errUtils.ErrComponentNotInStack,
 			errContains:   "has no components section",
 		},
 		{
@@ -63,6 +68,7 @@ func TestExtractComponentsSection(t *testing.T) {
 			componentType: "terraform",
 			stack:         "test-stack",
 			wantErr:       true,
+			expectedErr:   errUtils.ErrComponentNotInStack,
 			errContains:   "invalid components section",
 		},
 		{
@@ -75,6 +81,7 @@ func TestExtractComponentsSection(t *testing.T) {
 			componentType: "helmfile",
 			stack:         "test-stack",
 			wantErr:       true,
+			expectedErr:   errUtils.ErrComponentNotInStack,
 			errContains:   "has no helmfile components",
 		},
 		{
@@ -87,6 +94,7 @@ func TestExtractComponentsSection(t *testing.T) {
 			componentType: "terraform",
 			stack:         "test-stack",
 			wantErr:       true,
+			expectedErr:   errUtils.ErrComponentNotInStack,
 			errContains:   "invalid terraform components section",
 		},
 	}
@@ -97,6 +105,10 @@ func TestExtractComponentsSection(t *testing.T) {
 
 			if tt.wantErr {
 				require.Error(t, err)
+				// Use sentinel error check for robust error type verification.
+				assert.True(t, errors.Is(err, tt.expectedErr),
+					"expected error to wrap %v, got: %v", tt.expectedErr, err)
+				// Secondary check for user-facing message text.
 				assert.Contains(t, err.Error(), tt.errContains)
 				assert.Nil(t, result)
 			} else {
@@ -228,7 +240,8 @@ func TestHandleComponentMatches(t *testing.T) {
 		stack         string
 		componentType string
 		wantErr       bool
-		errContains   string
+		expectedErr   error  // Sentinel error to check with errors.Is
+		errContains   string // Additional message check (for user-facing text)
 		expectedKey   string
 	}{
 		{
@@ -238,6 +251,7 @@ func TestHandleComponentMatches(t *testing.T) {
 			stack:         "prod-stack",
 			componentType: "terraform",
 			wantErr:       true,
+			expectedErr:   errUtils.ErrComponentNotInStack,
 			errContains:   "not found in stack",
 		},
 		{
@@ -265,6 +279,7 @@ func TestHandleComponentMatches(t *testing.T) {
 			stack:         "prod-stack",
 			componentType: "terraform",
 			wantErr:       true,
+			expectedErr:   errUtils.ErrAmbiguousComponentPath,
 			errContains:   "ambiguous",
 		},
 	}
@@ -275,6 +290,10 @@ func TestHandleComponentMatches(t *testing.T) {
 
 			if tt.wantErr {
 				require.Error(t, err)
+				// Use sentinel error check for robust error type verification.
+				assert.True(t, errors.Is(err, tt.expectedErr),
+					"expected error to wrap %v, got: %v", tt.expectedErr, err)
+				// Secondary check for user-facing message text.
 				assert.Contains(t, err.Error(), tt.errContains)
 				assert.Empty(t, result)
 			} else {

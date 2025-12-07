@@ -17,6 +17,16 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// getBasePathToUse returns the appropriate base path for file resolution.
+// It prefers BasePathAbsolute for correct resolution when base_path is relative
+// (e.g., when using ATMOS_CLI_CONFIG_PATH), falling back to BasePath for backward compatibility.
+func getBasePathToUse(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig.BasePathAbsolute != "" {
+		return atmosConfig.BasePathAbsolute
+	}
+	return atmosConfig.BasePath
+}
+
 // ExecuteValidateComponentCmd executes `validate component` command.
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, string, error) {
 	defer perf.Track(nil, "exec.ExecuteValidateComponentCmd")()
@@ -215,17 +225,11 @@ func validateComponentInternal(
 
 	// Check if the file pointed to by 'schemaPath' exists.
 	// If not, join it with the schemas `base_path` from the CLI config.
-	// Use BasePathAbsolute instead of BasePath to ensure correct resolution
-	// when base_path is relative (e.g., when using ATMOS_CLI_CONFIG_PATH).
 	var filePath string
 	if u.FileExists(schemaPath) {
 		filePath = schemaPath
 	} else {
-		basePathToUse := atmosConfig.BasePathAbsolute
-		if basePathToUse == "" {
-			// Fallback to BasePath if BasePathAbsolute is not set (for backward compatibility).
-			basePathToUse = atmosConfig.BasePath
-		}
+		basePathToUse := getBasePathToUse(atmosConfig)
 		switch schemaType {
 		case "jsonschema":
 			{
@@ -263,13 +267,7 @@ func validateComponentInternal(
 		}
 	case "opa":
 		{
-			// Use BasePathAbsolute for module path resolution to ensure correct paths
-			// when base_path is relative (e.g., when using ATMOS_CLI_CONFIG_PATH).
-			basePathToUse := atmosConfig.BasePathAbsolute
-			if basePathToUse == "" {
-				// Fallback to BasePath if BasePathAbsolute is not set (for backward compatibility).
-				basePathToUse = atmosConfig.BasePath
-			}
+			basePathToUse := getBasePathToUse(atmosConfig)
 			modulePathsAbsolute, err := u.JoinPaths(filepath.Join(basePathToUse, atmosConfig.GetResourcePath("opa").BasePath), modulePaths)
 			if err != nil {
 				return false, err

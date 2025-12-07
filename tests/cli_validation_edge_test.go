@@ -249,26 +249,24 @@ func TestValidationWithEmptyAndWhitespace(t *testing.T) {
 	}
 }
 
-// TestPreviewTruncation tests that error previews are properly truncated.
-func TestPreviewTruncation(t *testing.T) {
-	// Test YAML preview truncation
-	t.Run("YAML preview truncation", func(t *testing.T) {
-		// Create input with exactly 10 lines (with different keys to avoid duplicates)
+// TestYAMLVariousLineCounts tests YAML validation with various line counts and lengths.
+func TestYAMLVariousLineCounts(t *testing.T) {
+	t.Run("YAML with 10 lines", func(t *testing.T) {
+		// Create input with exactly 10 lines (with different keys to avoid duplicates).
 		lines := make([]string, 10)
 		for i := 0; i < 10; i++ {
 			lines[i] = "key" + string(rune('0'+i)) + ": value" + string(rune('0'+i))
 		}
 		input := strings.Join(lines, "\n")
 
-		// This should use all 10 lines in preview
 		result := validateYAMLFormatSilent(input)
 		if !result {
 			t.Error("Valid YAML should pass")
 		}
 	})
 
-	// Test with fewer than 10 lines
-	t.Run("YAML preview with few lines", func(t *testing.T) {
+	// Test with fewer than 10 lines.
+	t.Run("YAML with few lines", func(t *testing.T) {
 		input := "line1\nline2\nline3"
 		result := validateYAMLFormatSilent(input)
 		if !result {
@@ -276,9 +274,9 @@ func TestPreviewTruncation(t *testing.T) {
 		}
 	})
 
-	// Test preview length truncation at 500 chars
-	t.Run("YAML preview length truncation", func(t *testing.T) {
-		// Create a very long single line that will be truncated
+	// Test long single-line YAML.
+	t.Run("YAML with long line", func(t *testing.T) {
+		// Create a very long single line.
 		longLine := strings.Repeat("a", 600)
 		result := validateYAMLFormatSilent(longLine)
 		if !result {
@@ -287,43 +285,36 @@ func TestPreviewTruncation(t *testing.T) {
 	})
 }
 
-// TestJSONSyntaxErrorContext tests JSON syntax error context extraction.
-func TestJSONSyntaxErrorContext(t *testing.T) {
+// TestJSONSyntaxErrors tests JSON validation detects syntax errors at various positions.
+func TestJSONSyntaxErrors(t *testing.T) {
 	tests := []struct {
-		name          string
-		input         string
-		expectContext bool
+		name  string
+		input string
 	}{
 		{
-			name:          "Error at beginning",
-			input:         `{invalid`,
-			expectContext: true,
+			name:  "Error at beginning",
+			input: `{invalid`,
 		},
 		{
-			name:          "Error in middle",
-			input:         `{"valid": "part", invalid}`,
-			expectContext: true,
+			name:  "Error in middle",
+			input: `{"valid": "part", invalid}`,
 		},
 		{
-			name:          "Error at end",
-			input:         `{"valid": "json"`,
-			expectContext: true,
+			name:  "Error at end",
+			input: `{"valid": "json"`,
 		},
 		{
-			name:          "Error with very long input",
-			input:         `{"key": "` + strings.Repeat("a", 100) + `", invalid}`,
-			expectContext: true,
+			name:  "Error with very long input",
+			input: `{"key": "` + strings.Repeat("a", 100) + `", invalid}`,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// We expect these to fail and report context
 			result := validateJSONFormatSilent(tt.input)
 			if result {
 				t.Error("Invalid JSON should fail validation")
 			}
-			// The context reporting is done via t.Errorf in the function
 		})
 	}
 }

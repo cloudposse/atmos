@@ -315,11 +315,8 @@ func TestCheckTerraformFlags_AllEdgeCases(t *testing.T) {
 			tk := NewTestKit(t)
 
 			err := checkTerraformFlags(tt.info)
-			if tt.expectedError != nil {
-				assert.ErrorIs(tk, err, tt.expectedError)
-			} else {
-				assert.NoError(tk, err)
-			}
+			// All test cases in this table expect errors - asserting the specific error type.
+			assert.ErrorIs(tk, err, tt.expectedError)
 		})
 	}
 }

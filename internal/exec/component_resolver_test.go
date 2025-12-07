@@ -13,36 +13,41 @@ import (
 )
 
 func TestResolveComponentFromPath(t *testing.T) {
-	// Skip if running in a minimal test environment
+	// Skip if running in a minimal test environment.
 	if os.Getenv("ATMOS_TEST_SKIP_STACK_LOADING") != "" {
 		t.Skip("Skipping test that requires stack loading")
 	}
 
 	tests := []struct {
-		name                string
-		path                string
-		stack               string
-		componentType       string
-		want                string
-		wantErr             bool
-		errorIs             error
-		setupStacks         bool
-		skipStackValidation bool
+		name          string
+		path          string
+		stack         string
+		componentType string
+		want          string
+		wantErr       bool
+		errorIs       error
 	}{
 		{
-			name:                "resolve without stack validation",
-			path:                ".",
-			stack:               "", // No stack = skip validation
-			componentType:       "terraform",
-			skipStackValidation: true,
-			// Can't test actual resolution without a real component directory
-			wantErr: true, // Will fail because "." is not in component directory
+			name:          "current directory not in component path",
+			path:          ".",
+			stack:         "", // No stack = skip validation
+			componentType: "terraform",
+			wantErr:       true, // Will fail because "." is not in component directory
+			errorIs:       errUtils.ErrPathNotInComponentDir,
+		},
+		{
+			name:          "non-existent path",
+			path:          "/nonexistent/path/to/component",
+			stack:         "",
+			componentType: "terraform",
+			wantErr:       true,
+			errorIs:       errUtils.ErrPathNotInComponentDir,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create minimal config for testing
+			// Create minimal config for testing.
 			atmosConfig := &schema.AtmosConfiguration{
 				BasePath: t.TempDir(),
 				Components: schema.Components{

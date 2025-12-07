@@ -237,11 +237,11 @@ func (r *Resolver) loadStackConfig(
 	stacksMap, _, err := r.stackLoader.FindStacksMap(atmosConfig, false)
 	if err != nil {
 		loadErr := errUtils.Build(errUtils.ErrStackNotFound).
+			WithCause(err).
 			WithHintf("Failed to load stack configurations: %s\n\nPath-based component resolution requires valid stack configuration", err.Error()).
 			WithHint("Run `atmos describe config` to see stack configuration paths\nVerify your stack manifests are in the configured stacks directory").
 			WithContext("stack", stack).
 			WithContext("component", componentName).
-			WithContext("underlying_error", err.Error()).
 			WithExitCode(2).
 			Err()
 		return nil, loadErr

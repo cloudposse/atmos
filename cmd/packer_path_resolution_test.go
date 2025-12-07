@@ -12,6 +12,9 @@ import (
 
 // TestPackerPathResolution tests that path-based component resolution works for packer commands.
 // This verifies that the shared getConfigAndStacksInfo() path resolution logic works for packer.
+// Note: This is a smoke test that validates the code path executes without panicking.
+// Stronger assertions (e.g., checking specific paths in error messages) would make tests brittle
+// and are better covered by the dedicated unit tests in internal/exec/component_path_resolution_test.go.
 func TestPackerPathResolution(t *testing.T) {
 	_ = NewTestKit(t)
 	skipIfPackerNotInstalled(t)

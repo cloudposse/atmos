@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -41,27 +42,17 @@ func TestExecStackLoader_FindStacksMap(t *testing.T) {
 	}
 }
 
+// Compile-time interface conformance check.
+// If ExecStackLoader doesn't implement component.StackLoader, this line will fail to compile.
+var _ component.StackLoader = (*ExecStackLoader)(nil)
+
 func TestExecStackLoader_ImplementsInterface(t *testing.T) {
-	// Verify that ExecStackLoader implements the component.StackLoader interface.
-	// This is a compile-time check - if the interface changes, this test will fail to compile.
+	// Runtime verification that ExecStackLoader implements the component.StackLoader interface.
+	// The compile-time check above ensures interface conformance; this test verifies
+	// the method can be called without panicking.
 	loader := NewStackLoader()
 
-	// Check that FindStacksMap exists and has the correct signature.
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: t.TempDir(),
-		Stacks: schema.Stacks{
-			BasePath: "stacks",
-		},
-	}
-
-	// This call verifies the method signature matches the interface.
-	rawConfig, finalConfig, err := loader.FindStacksMap(atmosConfig, true)
-
-	// We don't care about the result, just that the method signature is correct.
-	_ = rawConfig
-	_ = finalConfig
-	_ = err
-
-	// If we get here without a compile error, the interface is implemented correctly.
-	assert.NotNil(t, loader, "Loader should be non-nil")
+	// Verify the loader is not nil and can be assigned to the interface type.
+	var stackLoader component.StackLoader = loader
+	assert.NotNil(t, stackLoader, "Loader should be non-nil and implement StackLoader interface")
 }

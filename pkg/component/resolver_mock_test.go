@@ -5,6 +5,8 @@ import (
 )
 
 // MockStackLoader is a mock implementation of StackLoader for testing.
+// TODO: Consider switching to go.uber.org/mock/mockgen if StackLoader grows
+// or tests need more nuanced behavior (e.g., per-call expectations).
 type MockStackLoader struct {
 	StacksMap       map[string]any
 	RawStackConfigs map[string]map[string]any

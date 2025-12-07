@@ -11,7 +11,6 @@ func TestVerifyYAMLFormatUnit(t *testing.T) {
 		name       string
 		input      string
 		shouldPass bool
-		errorCheck string // substring that should appear in error
 	}{
 		{
 			name:       "Valid YAML - simple key-value",
@@ -39,22 +38,19 @@ func TestVerifyYAMLFormatUnit(t *testing.T) {
 			shouldPass: true,
 		},
 		{
-			name:       "Invalid YAML - bad indentation",
+			name:       "Valid YAML - indented continuation",
 			input:      "key: value\n  bad indentation without parent",
-			shouldPass: true, // Actually valid - interpreted as string value
-			errorCheck: "YAML validation failed",
+			shouldPass: true, // Actually valid - interpreted as string value.
 		},
 		{
 			name:       "Invalid YAML - unclosed quote",
 			input:      "key: \"unclosed string",
 			shouldPass: false,
-			errorCheck: "YAML validation failed",
 		},
 		{
-			name:       "Invalid YAML - tab character",
+			name:       "Valid YAML - tab in value",
 			input:      "key:\tvalue with tab",
-			shouldPass: true, // Actually valid - tab is part of the value
-			errorCheck: "YAML validation failed",
+			shouldPass: true, // Actually valid - tab is part of the value.
 		},
 		{
 			name: "Valid YAML - complex Atmos config",
@@ -89,7 +85,6 @@ func TestVerifyJSONFormatUnit(t *testing.T) {
 		name       string
 		input      string
 		shouldPass bool
-		errorCheck string
 	}{
 		{
 			name:       "Valid JSON - simple object",
@@ -120,31 +115,26 @@ func TestVerifyJSONFormatUnit(t *testing.T) {
 			name:       "Invalid JSON - missing quotes on key",
 			input:      `{key: "value"}`,
 			shouldPass: false,
-			errorCheck: "JSON validation failed",
 		},
 		{
 			name:       "Invalid JSON - trailing comma",
 			input:      `{"key": "value",}`,
 			shouldPass: false,
-			errorCheck: "JSON validation failed",
 		},
 		{
 			name:       "Invalid JSON - single quotes",
 			input:      `{'key': 'value'}`,
 			shouldPass: false,
-			errorCheck: "JSON validation failed",
 		},
 		{
 			name:       "Invalid JSON - unclosed string",
 			input:      `{"key": "unclosed`,
 			shouldPass: false,
-			errorCheck: "JSON validation failed",
 		},
 		{
 			name:       "Invalid JSON - plain text",
 			input:      `This is not JSON`,
 			shouldPass: false,
-			errorCheck: "JSON validation failed",
 		},
 		{
 			name:       "Valid JSON - string value",
@@ -275,28 +265,26 @@ func TestMinMaxHelpers(t *testing.T) {
 	}
 }
 
-// TestValidationErrorContext tests that validation provides helpful error context.
-func TestValidationErrorContext(t *testing.T) {
-	// Test YAML error preview
-	t.Run("YAML error shows preview", func(t *testing.T) {
+// TestValidationDetectsInvalidInput tests that validation correctly identifies invalid input.
+func TestValidationDetectsInvalidInput(t *testing.T) {
+	// Test YAML validation detects bad indentation in long input.
+	t.Run("YAML detects bad indentation", func(t *testing.T) {
 		longYAML := strings.Repeat("key: value\n", 20) + "  bad: indentation"
 		result := validateYAMLFormatSilent(longYAML)
 
 		if result {
 			t.Error("Expected YAML validation to fail for bad indentation")
 		}
-		// The error should be logged via t.Errorf in the actual function
 	})
 
-	// Test JSON error shows offset
-	t.Run("JSON error shows offset context", func(t *testing.T) {
+	// Test JSON validation detects unterminated values.
+	t.Run("JSON detects unterminated value", func(t *testing.T) {
 		jsonWithError := `{"valid": "start", "bad": unterminated}`
 		result := validateJSONFormatSilent(jsonWithError)
 
 		if result {
 			t.Error("Expected JSON validation to fail for unterminated value")
 		}
-		// The error context should be logged via t.Errorf in the actual function
 	})
 }
 
@@ -330,15 +318,14 @@ func TestLargeInputValidation(t *testing.T) {
 		}
 	})
 
-	// Test preview truncation for large invalid input
-	t.Run("Large invalid input preview truncation", func(t *testing.T) {
-		// Create a large string that's invalid JSON
+	// Test that large invalid input is correctly rejected.
+	t.Run("Large invalid input rejected", func(t *testing.T) {
+		// Create a large string that's invalid JSON.
 		largeInvalid := strings.Repeat("not json ", 1000)
 		result := validateJSONFormatSilent(largeInvalid)
 
 		if result {
 			t.Error("Expected validation to fail for large invalid input")
 		}
-		// The preview should be truncated to 500 chars
 	})
 }

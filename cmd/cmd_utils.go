@@ -873,8 +873,9 @@ func handlePathResolutionError(err error) error {
 		return err
 	}
 	// Generic path resolution error - add hint.
-	wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
-	return errUtils.Build(wrappedErr).
+	// Use WithCause to preserve the underlying error for errors.Is introspection.
+	return errUtils.Build(errUtils.ErrPathResolutionFailed).
+		WithCause(err).
 		WithHint("Make sure the path is within your component directories").
 		Err()
 }
