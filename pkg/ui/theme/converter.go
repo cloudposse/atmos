@@ -55,6 +55,7 @@ func createGlamourStyleFromTheme(t *Theme) *ansi.StyleConfig {
 				BlockSuffix: "",
 				Color:       &docColor,
 			},
+			Margin: uintPtr(0),
 		},
 		List: ansi.StyleList{
 			LevelIndent: 4,

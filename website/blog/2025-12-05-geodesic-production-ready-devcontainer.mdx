@@ -1,0 +1,331 @@
+---
+slug: geodesic-production-ready-devcontainer
+title: "Geodesic: A Production-Ready DevOps Toolbox for Development Containers"
+authors: [osterman]
+tags: [feature, geodesic, devcontainers, docker, developer-experience, devops]
+date: 2025-11-14
+---
+
+While Atmos supports any devcontainer configuration, **Geodesic is a proven DevOps toolbox** that's been battle-tested for almost 10 years. If you're looking for a production-ready development container with all the tools you need for infrastructure work, Geodesic is your answer.
+
+<!--truncate-->
+
+## What is Geodesic?
+
+[Geodesic](https://github.com/cloudposse/geodesic) is Cloud Posse's implementation of the DevOps toolbox pattern—a comprehensive development container that includes everything you need for modern infrastructure work.
+
+**Geodesic is a devcontainer implementation.** It predates the Development Containers specification, but it's the exact same concept: a containerized environment with all your tools pre-installed and pre-configured.
+
+## The DevOps Toolbox Pattern
+
+The concept of containerized development environments—what we call "DevOps toolboxes"—originated in the DevOps world long before the Development Containers spec existed. Companies like CoreOS pioneered the toolbox pattern, recognizing that DevOps teams needed consistent, reproducible environments without installing dozens of tools locally.
+
+The idea is simple but powerful: **package all your tools into a container, and developers just need Docker and a shell**.
+
+Geodesic has been implementing this pattern since 2016, providing infrastructure teams with a battle-tested solution for the "works on my machine" problem.
+
+## What's Included?
+
+Geodesic comes pre-loaded with everything you need for infrastructure work:
+
+### Core Infrastructure Tools
+- **Atmos** (of course!)
+- **Terraform** with all major providers
+- **kubectl** and Kubernetes tools (helm, helmfile, k9s, etc.)
+- **Cloud CLIs**: AWS CLI, Azure CLI, Google Cloud SDK
+- **Data processing**: jq, yq, gomplate
+- **Development essentials**: git, make, vim, and more
+- **Custom scripts and tooling**
+
+### Production-Tested Foundation
+
+Geodesic images are:
+- **Multi-platform**: linux/amd64 and linux/arm64
+- **Debian-based**: Familiar package management
+- **Customizable**: Use as a base image for your own toolbox
+- **Production-tested**: Nearly a decade of real-world usage
+- **Open source**: Over 1,000 stars on GitHub
+
+## Using Geodesic with Atmos
+
+With [Atmos's native devcontainer support](/changelog/native-devcontainer-support), using Geodesic is incredibly simple:
+
+```yaml
+# atmos.yaml
+components:
+  devcontainer:
+    geodesic:
+      spec:
+        name: "Geodesic DevOps Toolbox"
+        image: "cloudposse/geodesic:latest"
+        workspaceFolder: "/workspace"
+        workspaceMount: "type=bind,source=${PWD},target=/workspace"
+        containerEnv:
+          ATMOS_BASE_PATH: "/workspace"
+        remoteUser: "root"
+```
+
+Then launch it:
+
+```bash
+atmos devcontainer shell geodesic
+# You're in a fully-equipped DevOps environment
+```
+
+## Getting Started in 2 Minutes
+
+Here's how fast you can go from zero to productive:
+
+```bash
+# 1. Install Atmos (one binary)
+brew install atmos
+
+# 2. Navigate to your infrastructure repo
+cd my-infrastructure
+
+# 3. Launch Geodesic
+atmos devcontainer shell geodesic
+
+# You're in. Start working.
+$ atmos terraform plan vpc -s prod
+$ kubectl get pods
+$ helm list
+```
+
+**That's the ingenious part**: All you need to install is Atmos. Everything else—Terraform, cloud CLIs, Kubernetes tools—gets pulled from the container image automatically.
+
+Your host machine stays clean. Your environment stays consistent. Your team uses identical tool versions.
+
+## Quick Start with Examples
+
+Check out the live examples in the Atmos repository:
+
+```bash
+# Clone Atmos repo (or just browse examples on GitHub)
+git clone https://github.com/cloudposse/atmos.git
+cd atmos/examples/devcontainer
+
+# The example includes a complete configuration
+cat atmos.yaml
+# Shows geodesic devcontainer configuration
+
+# Launch it
+atmos devcontainer shell geodesic
+```
+
+The `examples/devcontainer` folder contains:
+- Complete `atmos.yaml` with Geodesic configuration
+- Example `devcontainer.json` file
+- Shell aliases for convenience
+- Ready-to-use setup
+
+**Use this as a starting point** for your own configuration. Copy it, customize it, make it yours.
+
+## Shell Aliases for One-Word Access
+
+Make it even easier with shell aliases in your `atmos.yaml`:
+
+```yaml
+# atmos.yaml
+cli:
+  aliases:
+    shell: "devcontainer shell geodesic"
+```
+
+Now you can just type:
+
+```bash
+atmos shell
+# Immediately launches Geodesic
+```
+
+This mirrors the classic Geodesic pattern where you'd type `./geodesic.sh` to launch your environment. Now it's even simpler: `atmos shell`.
+
+## Customizing Geodesic
+
+### Use as a Base Image
+
+Create your own custom toolbox based on Geodesic:
+
+```dockerfile
+FROM cloudposse/geodesic:latest
+
+# Add your organization's tools
+RUN apt-get update && apt-get install -y \
+    your-custom-tool \
+    another-tool
+
+# Add custom scripts
+COPY scripts/ /usr/local/bin/
+
+# Configure environment
+ENV CUSTOM_VAR=value
+```
+
+### Version Pinning for Consistency
+
+Pin specific Geodesic versions per project:
+
+```yaml
+# project-a/atmos.yaml
+components:
+  devcontainer:
+    toolbox:
+      spec:
+        image: "cloudposse/geodesic:4.3.0"  # Pinned version
+
+# project-b/atmos.yaml
+components:
+  devcontainer:
+    toolbox:
+      spec:
+        image: "cloudposse/geodesic:4.4.0"  # Different version
+```
+
+Each project gets the right tool versions automatically.
+
+## Real-World Workflows
+
+### Onboarding a New Team Member
+
+**Old way:**
+1. Install Homebrew
+2. Install Docker
+3. Install Terraform (with tfenv or version manager)
+4. Install kubectl
+5. Install AWS CLI
+6. Configure AWS credentials
+7. Install Helm
+8. Install Helmfile
+9. Install jq, yq, and other tools
+10. Debug version conflicts
+11. Maybe productive by end of day?
+
+**New way with Geodesic:**
+```bash
+brew install atmos
+cd team-infrastructure
+atmos devcontainer shell geodesic
+# Productive in 2 minutes
+```
+
+### Working on Multiple Projects
+
+**Old way:**
+- Project A uses one set of tool versions
+- Project B uses different tool versions
+- Use version managers (tfenv, etc.) to switch constantly
+- Hope you remember to switch before running commands
+
+**New way with Geodesic:**
+Each project defines its Geodesic version in `atmos.yaml`, and you automatically get the right tools when you launch the devcontainer for that project.
+
+## Integration with Atmos Auth
+
+Geodesic works seamlessly with Atmos's identity injection feature:
+
+```bash
+# Launch Geodesic with AWS identity
+atmos devcontainer shell geodesic --identity aws-prod
+
+# Launch with GitHub identity
+atmos devcontainer shell geodesic --identity github-main
+
+# Works with ANY provider - Azure, GCP, custom providers
+atmos devcontainer shell geodesic --identity azure-prod
+```
+
+Inside the container, cloud provider SDKs automatically use the authenticated identity. No manual credential configuration needed.
+
+## Multiple Instances
+
+Need multiple environments? Launch Geodesic with different instance names:
+
+```bash
+# Development instance
+atmos devcontainer shell geodesic --instance dev
+
+# Production instance
+atmos devcontainer shell geodesic --instance prod
+
+# Each team member can have their own
+atmos devcontainer shell geodesic --instance alice
+atmos devcontainer shell geodesic --instance bob
+```
+
+Each instance is an independent container with its own state, perfect for running multiple environments or isolating work.
+
+## Why Choose Geodesic?
+
+### Battle-Tested
+Nearly 10 years in production use across hundreds of infrastructure projects. The patterns and tools have been refined through real-world usage.
+
+### Comprehensive
+Everything you need for infrastructure work is already installed. No hunting for the right tool versions or dealing with installation issues.
+
+### Consistent
+Your entire team uses the same tool versions. CI uses the same tool versions. No more "works on my machine."
+
+### Clean
+Your host machine stays clean. No dozens of CLIs and tools cluttering your system. Just Docker and Atmos.
+
+### Extensible
+Use Geodesic as-is, or use it as a base image to build your own custom toolbox with organization-specific tools.
+
+### Open Source
+Over 1,000 stars on GitHub. Active maintenance. Community-driven improvements.
+
+## Get Started Now
+
+Use this quick start to get going:
+
+### 1. Install Atmos
+
+```bash
+brew install atmos
+# or download from GitHub releases
+```
+
+### 2. Add Geodesic to Your Project
+
+```yaml
+# atmos.yaml
+components:
+  devcontainer:
+    geodesic:
+      spec:
+        image: "cloudposse/geodesic:latest"
+        workspaceFolder: "/workspace"
+        workspaceMount: "type=bind,source=${PWD},target=/workspace"
+
+cli:
+  aliases:
+    shell: "devcontainer shell geodesic"
+```
+
+### 3. Launch Your Environment
+
+```bash
+atmos shell
+# Or: atmos devcontainer shell geodesic
+```
+
+## Conclusion
+
+Geodesic brings nearly a decade of DevOps toolbox experience into the modern development container era. Combined with Atmos's native devcontainer support, you get a production-ready solution that solves the "works on my machine" problem once and for all.
+
+**Install Atmos, run one command, and everything just works.**
+
+Check out the [native devcontainer support announcement](/changelog/native-devcontainer-support) to learn more about Atmos's devcontainer capabilities, or dive into the [examples](https://github.com/cloudposse/atmos/tree/main/examples/devcontainer) to get started immediately.
+
+## Resources
+
+- [Geodesic GitHub Repository](https://github.com/cloudposse/geodesic)
+- [Atmos Native Devcontainer Support](/changelog/native-devcontainer-support)
+- [Devcontainer Command Documentation](/cli/commands/devcontainer)
+- [Atmos Examples - Devcontainer](https://github.com/cloudposse/atmos/tree/main/examples/devcontainer)
+- [Development Containers Specification](https://containers.dev/)
+
+---
+
+*Have feedback or questions? Join our [Slack community](https://slack.cloudposse.com/) or [open an issue on GitHub](https://github.com/cloudposse/geodesic/issues).*

@@ -89,6 +89,6 @@ Most users won't need to change anything. If you were relying on the pager being
 
 - [PR #1642: Pager Default Correction](https://github.com/cloudposse/atmos/pull/1642)
 - [Original PR #1430: Pager Improvements](https://github.com/cloudposse/atmos/pull/1430)
-- [Terminal Configuration Documentation](/cli/configuration/terminal)
+- [Terminal Configuration Documentation](/cli/configuration/settings/terminal)
 
 We apologize for any confusion this regression may have caused and thank the community for bringing it to our attention.

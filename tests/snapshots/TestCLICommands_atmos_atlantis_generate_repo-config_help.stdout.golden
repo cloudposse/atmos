@@ -59,7 +59,7 @@ EXAMPLES
     - Git commit SHA with which to compare the current branch                                                             
                                                                                                                           
                                                                                                                           
-     $ atmos atlantis generate repo-config --affected-only --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073                 
+     $ atmos atlantis generate repo-config --affected-only --sha ***MASKED***                 
                                                                                                                           
                                                                                                                           
     - Print more detailed output when cloning and checking out the Git repository                                         

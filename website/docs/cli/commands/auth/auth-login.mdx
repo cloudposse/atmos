@@ -105,86 +105,15 @@ Atmos supports multiple authentication methods for different cloud providers:
 - OIDC (GitHub Actions, GitLab CI)
 - Static credentials
 
-See [Migrating from Leapp](/cli/commands/auth/tutorials/migrating-from-leapp) for AWS examples.
+See [Migrating from Leapp](/tutorials/migrating-from-leapp) for AWS examples.
 
 ### Azure
 - Device Code Flow (browser-based)
 - OIDC (workload identity for CI/CD)
 - Service Principals (client credentials)
 
-See [Azure Authentication](/cli/commands/auth/tutorials/azure-authentication) for detailed Azure configuration.
+See [Azure Authentication](/tutorials/azure-authentication) for detailed Azure configuration.
 
-## AWS SSO (IAM Identity Center)
+## See Also
 
-### IAM Permissions for Identity Provisioning
-
-When using automatic identity provisioning (`auto_provision_identities: true`), Atmos queries AWS Identity Center APIs during login to discover available permission sets across assigned accounts. This requires specific IAM permissions.
-
-<details>
-<summary>Required IAM Permissions</summary>
-
-#### Basic Provisioning (Required)
-
-These permissions are required for automatic identity provisioning to work:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "sso:ListAccounts",
-        "sso:ListAccountRoles"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-**APIs Used:**
-- `sso:ListAccounts` - Enumerates all AWS accounts the user can access
-- `sso:ListAccountRoles` - Lists available permission sets (roles) for each account
-
-#### Tag/Label Support (Optional)
-
-If you enable tag discovery (`include_tags: true` in provider configuration), additional permissions are required:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "sso:ListAccounts",
-        "sso:ListAccountRoles"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "sso:ListInstances",
-        "sso:DescribePermissionSet",
-        "sso:ListPermissionSets",
-        "sso:ListTagsForResource"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-**Additional APIs Used:**
-- `sso:ListInstances` - Finds the SSO instance ARN
-- `sso:DescribePermissionSet` - Gets permission set details
-- `sso:ListPermissionSets` - Finds permission set ARNs
-- `sso:ListTagsForResource` - Retrieves AWS tags from permission sets
-
-#### How to Apply Permissions
-
-These permissions should be attached to the IAM Identity Center permission set that users authenticate with, or to the IAM user/role if using static credentials. Without these permissions, identity provisioning will fail gracefully and fall back to manually configured identities.
-
-</details>
+- [Auth Providers Configuration](/cli/configuration/auth/providers) — Configure AWS SSO, SAML, and OIDC providers (including IAM permissions for identity provisioning)
