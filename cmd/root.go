@@ -85,7 +85,11 @@ var chdirProcessed bool
 // It recognizes `--chdir=value`, `--chdir value`, `-C=value`, `-Cvalue`, and `-C value` forms.
 // If no chdir flag is found, it returns an empty string.
 func parseChdirFromArgs() string {
-	args := os.Args
+	return parseChdirFromArgList(os.Args)
+}
+
+// parseChdirFromArgList manually parses --chdir or -C flag from the given argument list.
+func parseChdirFromArgList(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
@@ -1218,6 +1222,12 @@ func Execute() error {
 		// Handle config initialization errors based on command context.
 		if err := handleConfigInitError(initErr, &atmosConfig); err != nil {
 			return err
+		}
+		// Only log "not found" message when the error is specifically NotFound.
+		// Other cases (e.g., version command with invalid config) log differently
+		// inside handleConfigInitError.
+		if errors.Is(initErr, cfg.NotFound) {
+			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		}
 	}
 
