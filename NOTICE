@@ -411,7 +411,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/spf13/cobra
     License: Apache-2.0
-    URL: https://github.com/spf13/cobra/blob/v1.10.1/LICENSE.txt
+    URL: https://github.com/spf13/cobra/blob/v1.10.2/LICENSE.txt
 
   - github.com/spiffe/go-spiffe/v2
     License: Apache-2.0
