@@ -1122,7 +1122,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/charmbracelet/x/ansi
     License: MIT
-    URL: https://github.com/charmbracelet/x/blob/ansi/v0.10.3/ansi/LICENSE
+    URL: https://github.com/charmbracelet/x/blob/ansi/v0.11.1/ansi/LICENSE
 
   - github.com/charmbracelet/x/cellbuf
     License: MIT
@@ -1142,7 +1142,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/clipperhouse/displaywidth
     License: MIT
-    URL: https://github.com/clipperhouse/displaywidth/blob/v0.4.1/LICENSE
+    URL: https://github.com/clipperhouse/displaywidth/blob/v0.5.0/LICENSE
 
   - github.com/clipperhouse/stringish
     License: MIT
