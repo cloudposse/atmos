@@ -12,7 +12,6 @@ import (
 	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // describeComponentCmd describes configuration for components
@@ -81,11 +80,13 @@ var describeComponentCmd = &cobra.Command{
 		// Otherwise, treat it as a component name (even if it contains slashes).
 		needsPathResolution := comp.IsExplicitComponentPath(component)
 
-		// Load atmos configuration to get auth config.
+		// Load atmos configuration.
+		// Use processStacks=true when path resolution is needed because the resolver
+		// needs StackConfigFilesAbsolutePaths to find stacks and detect ambiguity.
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
 			ComponentFromArg: component,
 			Stack:            stack,
-		}, false)
+		}, needsPathResolution)
 		if err != nil {
 			// If config loading failed and we're trying to resolve a path,
 			// try to give a more specific error about the path.
@@ -109,15 +110,17 @@ var describeComponentCmd = &cobra.Command{
 		// Resolve path-based component arguments to component names.
 		if needsPathResolution {
 			// We don't know the component type yet - describe component detects it.
-			// Extract component info from path without type checking or stack validation.
-			// Stack validation will happen later in ExecuteDescribeComponent.
-			componentInfo, err := u.ExtractComponentInfoFromPath(&atmosConfig, component)
+			// Use the full resolver with stack validation to:
+			// 1. Extract the component name from the path
+			// 2. Look up which Atmos components reference this terraform folder in the stack
+			// 3. If multiple components reference the same folder, prompt user to select (TTY)
+			//    or return an error (non-TTY/CI)
+			resolvedComponent, err := e.ResolveComponentFromPathWithoutTypeCheck(&atmosConfig, component, stack)
 			if err != nil {
 				// Return the error directly to preserve detailed hints and exit codes.
-				// ExtractComponentInfoFromPath already provides detailed error messages with hints.
 				return err
 			}
-			component = componentInfo.FullComponent
+			component = resolvedComponent
 		}
 
 		// Get identity flag value.

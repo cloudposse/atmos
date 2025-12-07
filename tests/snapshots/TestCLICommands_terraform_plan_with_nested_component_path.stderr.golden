@@ -3,11 +3,14 @@
 
 # Error
 
-**Error:** OPA policy violations detected
+**Error:** ambiguous component path
 
-## Explanation
+## Hints
 
-In 'dev', only 2 Availability Zones are allowed VPC name must be a valid string
-from 2 to 20 alphanumeric chars
+💡 Path resolves to infra/vpc which is referenced by multiple components in
+stack tenant1-ue2-dev Matching components: infra/vpc, vpc, vpc/new
+
+💡 Use the exact component name instead of a path Example: atmos terraform
+<command> infra/vpc --stack tenant1-ue2-dev
 
 

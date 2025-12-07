@@ -448,13 +448,49 @@ func readHomeConfigWithProvider(v *viper.Viper, homeProvider filesystem.HomeDirP
 	return nil
 }
 
-// readWorkDirConfig load config from current working directory.
+// readWorkDirConfig loads config from current working directory or any parent directory.
+// It searches upward through the directory tree until it finds an atmos.yaml file
+// or reaches the filesystem root. This enables running atmos commands from any
+// subdirectory (e.g., component directories) without specifying --config-path.
+// Parent directory search can be disabled by setting ATMOS_CLI_CONFIG_PATH to "." or
+// any explicit path.
 func readWorkDirConfig(v *viper.Viper) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
+
+	// First try the current directory.
 	err = mergeConfig(v, wd, CliConfigFileName, true)
+	if err == nil {
+		return nil
+	}
+
+	// If not a ConfigFileNotFoundError, return the error.
+	var configFileNotFoundError viper.ConfigFileNotFoundError
+	if !errors.As(err, &configFileNotFoundError) {
+		return err
+	}
+
+	// If ATMOS_CLI_CONFIG_PATH is set, don't search parent directories.
+	// This allows tests and users to explicitly control config discovery.
+	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself,
+	// it must be checked before viper loads config files. Using os.Getenv is necessary
+	// because this check happens during the config loading phase, before any viper
+	// bindings are established.
+	if os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
+		return nil
+	}
+
+	// Search parent directories for atmos.yaml.
+	configDir := findAtmosConfigInParentDirs(wd)
+	if configDir == "" {
+		// No config found in any parent directory.
+		return nil
+	}
+
+	// Found config in a parent directory, merge it.
+	err = mergeConfig(v, configDir, CliConfigFileName, true)
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
@@ -463,7 +499,37 @@ func readWorkDirConfig(v *viper.Viper) error {
 			return err
 		}
 	}
+
+	log.Debug("Found atmos.yaml in parent directory", "path", configDir)
 	return nil
+}
+
+// findAtmosConfigInParentDirs searches for atmos.yaml in parent directories.
+// It walks up the directory tree from the given starting directory until
+// it finds an atmos.yaml file or reaches the filesystem root.
+// Returns the directory containing atmos.yaml, or empty string if not found.
+func findAtmosConfigInParentDirs(startDir string) string {
+	dir := startDir
+
+	for {
+		// Move to parent directory.
+		parent := filepath.Dir(dir)
+
+		// Check if we've reached the root.
+		if parent == dir {
+			return ""
+		}
+
+		dir = parent
+
+		// Check for atmos.yaml or .atmos.yaml in this directory.
+		for _, configName := range []string{AtmosConfigFileName, DotAtmosConfigFileName} {
+			configPath := filepath.Join(dir, configName)
+			if _, err := os.Stat(configPath); err == nil {
+				return dir
+			}
+		}
+	}
 }
 
 func readEnvAmosConfigPath(v *viper.Viper) error {

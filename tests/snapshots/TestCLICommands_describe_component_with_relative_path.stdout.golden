@@ -463,34 +463,7 @@ deps_all:
   - orgs/cp/tenant1/dev/us-east-2
 env: {}
 hooks: {}
-imports:
-  - catalog/helmfile/echo-server
-  - catalog/helmfile/infra-server
-  - catalog/helmfile/infra-server-override
-  - catalog/packer/aws/bastion/defaults
-  - catalog/terraform/mixins/test-1
-  - catalog/terraform/mixins/test-2
-  - catalog/terraform/services/service-1
-  - catalog/terraform/services/service-1-override
-  - catalog/terraform/services/service-1-override-2
-  - catalog/terraform/services/service-2
-  - catalog/terraform/services/service-2-override
-  - catalog/terraform/services/service-2-override-2
-  - catalog/terraform/services/top-level-service-1
-  - catalog/terraform/services/top-level-service-2
-  - catalog/terraform/spacelift-and-backend-override-1
-  - catalog/terraform/tenant1-ue2-dev
-  - catalog/terraform/test-component
-  - catalog/terraform/test-component-override
-  - catalog/terraform/test-component-override-2
-  - catalog/terraform/test-component-override-3
-  - catalog/terraform/top-level-component1
-  - catalog/terraform/vpc
-  - mixins/region/us-east-2
-  - mixins/stage/dev
-  - orgs/cp/_defaults
-  - orgs/cp/tenant1/_defaults
-  - orgs/cp/tenant1/dev/_defaults
+imports: []
 inheritance: []
 metadata: {}
 overrides:

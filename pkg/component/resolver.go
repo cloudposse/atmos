@@ -3,6 +3,7 @@ package component
 import (
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
@@ -311,37 +312,48 @@ func extractComponentsSection(
 
 // findComponentMatches searches for a component by name, checking both direct keys and aliases.
 // Returns all matching stack keys to handle ambiguous cases.
+// This function finds ALL components that reference the given Terraform component path,
+// including both direct key matches and components that reference it via metadata.component.
 func findComponentMatches(
 	typeComponentsMap map[string]any,
 	componentName string,
 ) []string {
-	// First check for direct key match.
-	if _, exists := typeComponentsMap[componentName]; exists {
-		return []string{componentName}
-	}
-
-	// If no direct match, check for aliases via component or metadata.component fields.
-	// Collect ALL matches to detect ambiguous cases.
 	var matches []string
+
+	// Iterate through all components to find matches.
+	// We need to check all components, not just direct key matches, because:
+	// 1. A direct key match (e.g., "vpc") means the Atmos component name equals the Terraform folder
+	// 2. An alias match means a different Atmos component references the same Terraform folder
+	// Both cases should be collected to detect ambiguous paths.
 	for stackKey, componentConfig := range typeComponentsMap {
+		// Check for direct key match first.
+		if stackKey == componentName {
+			matches = append(matches, stackKey)
+			continue
+		}
+
 		componentConfigMap, ok := componentConfig.(map[string]any)
 		if !ok {
 			continue
 		}
 
-		// Check 'component' field.
+		// Check 'component' field for alias.
 		if comp, ok := componentConfigMap[ComponentKey].(string); ok && comp == componentName {
 			matches = append(matches, stackKey)
 			continue
 		}
 
-		// Check 'metadata.component' field.
+		// Check 'metadata.component' field for alias.
 		if metadata, ok := componentConfigMap["metadata"].(map[string]any); ok {
 			if metaComp, ok := metadata[ComponentKey].(string); ok && metaComp == componentName {
 				matches = append(matches, stackKey)
 			}
 		}
 	}
+
+	// Sort matches for deterministic ordering.
+	// This ensures consistent error messages and selector order.
+	sort.Strings(matches)
 
 	return matches
 }

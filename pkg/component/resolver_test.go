@@ -195,8 +195,8 @@ func TestFindComponentMatches_IgnoresInvalidConfig(t *testing.T) {
 	assert.Equal(t, "vpc-prod", matches[0])
 }
 
-// TestFindComponentMatches_DirectMatchHasPriority tests that direct match returns only the direct match.
-func TestFindComponentMatches_DirectMatchHasPriority(t *testing.T) {
+// TestFindComponentMatches_AllMatchesCollected tests that all matches are collected for ambiguity detection.
+func TestFindComponentMatches_AllMatchesCollected(t *testing.T) {
 	typeComponentsMap := map[string]any{
 		"vpc": map[string]any{
 			"vars": map[string]any{},
@@ -208,9 +208,11 @@ func TestFindComponentMatches_DirectMatchHasPriority(t *testing.T) {
 
 	matches := findComponentMatches(typeComponentsMap, "vpc")
 
-	// Direct match should only return the direct match, not aliases.
-	assert.Len(t, matches, 1)
-	assert.Equal(t, "vpc", matches[0])
+	// All matches should be collected to detect ambiguous component paths.
+	// This enables proper error messages when multiple Atmos components reference the same terraform folder.
+	assert.Len(t, matches, 2)
+	assert.Contains(t, matches, "vpc")
+	assert.Contains(t, matches, "vpc-alias")
 }
 
 // TestFindComponentMatches_NilComponentField tests that nil component field is handled.

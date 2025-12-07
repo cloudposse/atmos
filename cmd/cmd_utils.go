@@ -797,7 +797,7 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 // getConfigAndStacksInfo processes the CLI config and stacks.
 // Returns error instead of calling os.Exit for better testability.
 func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
-	// Check Atmos configuration
+	// Check Atmos configuration.
 	if err := validateAtmosConfig(); err != nil {
 		return schema.ConfigAndStacksInfo{}, err
 	}
@@ -816,42 +816,67 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 		return schema.ConfigAndStacksInfo{}, err
 	}
 
-	// Resolve path-based component arguments to component names
+	// Resolve path-based component arguments to component names.
 	if info.NeedsPathResolution && info.ComponentFromArg != "" {
-		atmosConfig, err := cfg.InitCliConfig(info, false)
-		if err != nil {
-			return schema.ConfigAndStacksInfo{}, fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
+		if err := resolveComponentPath(&info, commandName); err != nil {
+			return schema.ConfigAndStacksInfo{}, err
 		}
-
-		// Extract component name from path without stack validation.
-		// Stack validation happens later in ProcessStacks().
-		//
-		// Note: This extracts the directory-based component name (e.g., "vpc" from "components/terraform/vpc").
-		// If multiple components reference the same directory via metadata.component, the user must
-		// use the exact component name instead of the path (e.g., "vpc/1" or "vpc/2", not ".").
-		resolvedComponent, err := e.ResolveComponentFromPathWithoutValidation(
-			&atmosConfig,
-			info.ComponentFromArg,
-			commandName, // Component type is the command name (terraform, helmfile, packer)
-		)
-		if err != nil {
-			wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
-			return schema.ConfigAndStacksInfo{}, errUtils.Build(wrappedErr).
-				WithHint("Make sure the path is within your component directories").
-				Err()
-		}
-
-		log.Debug("Resolved component from path",
-			"original_path", info.ComponentFromArg,
-			"resolved_component", resolvedComponent,
-			"stack", info.Stack,
-		)
-
-		info.ComponentFromArg = resolvedComponent
-		info.NeedsPathResolution = false // Mark as resolved
 	}
 
 	return info, nil
+}
+
+// resolveComponentPath resolves a path-based component argument to a component name.
+// It validates the component exists in the specified stack and handles ambiguous paths.
+func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) error {
+	// Initialize config with processStacks=true to enable stack-based validation.
+	// This is needed to detect ambiguous paths (multiple components referencing the same folder).
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
+	}
+
+	// Resolve component from path WITH stack validation.
+	// This will:
+	// 1. Extract the component name from the path (e.g., "vpc" from "components/terraform/vpc")
+	// 2. Look up which Atmos components reference this terraform folder in the stack
+	// 3. If multiple components reference the same folder, return an ambiguous path error.
+	resolvedComponent, err := e.ResolveComponentFromPath(
+		&atmosConfig,
+		info.ComponentFromArg,
+		info.Stack,
+		commandName, // Component type is the command name (terraform, helmfile, packer).
+	)
+	if err != nil {
+		return handlePathResolutionError(err)
+	}
+
+	log.Debug("Resolved component from path",
+		"original_path", info.ComponentFromArg,
+		"resolved_component", resolvedComponent,
+		"stack", info.Stack,
+	)
+
+	info.ComponentFromArg = resolvedComponent
+	info.NeedsPathResolution = false // Mark as resolved.
+	return nil
+}
+
+// handlePathResolutionError wraps path resolution errors with appropriate hints.
+func handlePathResolutionError(err error) error {
+	// These errors already have detailed hints from the resolver, return directly.
+	// Using fmt.Errorf to wrap would lose the cockroachdb/errors hints.
+	if errors.Is(err, errUtils.ErrAmbiguousComponentPath) ||
+		errors.Is(err, errUtils.ErrComponentNotInStack) ||
+		errors.Is(err, errUtils.ErrStackNotFound) ||
+		errors.Is(err, errUtils.ErrUserAborted) {
+		return err
+	}
+	// Generic path resolution error - add hint.
+	wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
+	return errUtils.Build(wrappedErr).
+		WithHint("Make sure the path is within your component directories").
+		Err()
 }
 
 // enableHeatmapIfRequested checks os.Args for --heatmap and --heatmap-mode flags.

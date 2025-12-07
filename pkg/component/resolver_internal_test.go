@@ -165,7 +165,7 @@ func TestFindComponentMatches(t *testing.T) {
 				},
 			},
 			componentName:   "vpc",
-			expectedMatches: []string{"vpc"}, // Direct match returns immediately
+			expectedMatches: []string{"vpc", "vpc-prod"}, // All matches collected to detect ambiguity
 		},
 		{
 			name: "no matches",

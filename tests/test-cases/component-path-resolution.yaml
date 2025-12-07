@@ -45,7 +45,7 @@ tests:
   - name: terraform plan with nested component path
     enabled: true
     snapshot: true
-    description: "Test terraform plan with component in subfolder (expects OPA policy violations)"
+    description: "Test terraform plan with component in subfolder - detects ambiguous path when multiple components reference same folder"
     workdir: "fixtures/scenarios/complete/components/terraform/infra/vpc"
     command: "atmos"
     env:
@@ -59,7 +59,10 @@ tests:
       - "--dry-run"
     expect:
       diff: []
-      exit_code: 1
+      stderr:
+        - "ambiguous component path"
+        - "Matching components"
+      exit_code: 2
 
   # Error handling tests
   - name: terraform plan with path not in component directory
@@ -83,7 +86,7 @@ tests:
   - name: terraform plan with path but component not in stack
     enabled: true
     snapshot: true
-    description: "Test error when component doesn't exist in specified stack"
+    description: "Test error when stack doesn't exist (fails early during path resolution)"
     workdir: "fixtures/scenarios/complete/components/terraform/top-level-component1"
     command: "atmos"
     env:
@@ -97,8 +100,8 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Could not find the component"
-      exit_code: 1
+        - "stack not found"
+      exit_code: 2
 
   - name: terraform plan with path at component base directory
     enabled: true
@@ -223,7 +226,7 @@ tests:
   - name: describe component with nested component path
     enabled: true
     snapshot: true
-    description: "Test describe component with component in subfolder"
+    description: "Test describe component with component in subfolder - detects ambiguous path when multiple components reference same folder"
     workdir: "fixtures/scenarios/complete/components/terraform/infra/vpc"
     command: "atmos"
     env:
@@ -236,7 +239,10 @@ tests:
       - "tenant1-ue2-dev"
     expect:
       diff: []
-      exit_code: 0
+      stderr:
+        - "ambiguous component path"
+        - "Matching components"
+      exit_code: 2
 
   - name: describe component with path not in component directory
     enabled: true
@@ -372,3 +378,56 @@ tests:
         - "ambiguous component path"
         - "multiple components"
       exit_code: 2
+
+  # Parent directory atmos.yaml discovery tests
+  - name: describe component from nested dir discovers atmos.yaml in parent
+    enabled: true
+    snapshot: true
+    description: "Test that atmos finds atmos.yaml in parent directory when running from component dir"
+    workdir: "fixtures/scenarios/opentofu-module-source-interpolation/components/terraform/test-component"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "."
+      - "--stack"
+      - "test"
+    expect:
+      diff: []
+      sanitize:
+        "provisioned_by_user: [^\\s]+": "provisioned_by_user: user"
+        "basePathAbsolute: .+": "basePathAbsolute: /absolute/path"
+      exit_code: 0
+
+  - name: terraform plan from nested dir discovers atmos.yaml in parent
+    enabled: true
+    snapshot: true
+    description: "Test that terraform plan works when atmos.yaml is in parent directory"
+    workdir: "fixtures/scenarios/opentofu-module-source-interpolation/components/terraform/test-component"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "."
+      - "--stack"
+      - "test"
+      - "--dry-run"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: validate component from nested dir discovers atmos.yaml in parent
+    enabled: true
+    snapshot: true
+    description: "Test that validate component works when atmos.yaml is in parent directory"
+    workdir: "fixtures/scenarios/opentofu-module-source-interpolation/components/terraform/test-component"
+    command: "atmos"
+    args:
+      - "validate"
+      - "component"
+      - "."
+      - "--stack"
+      - "test"
+    expect:
+      diff: []
+      exit_code: 0
