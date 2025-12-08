@@ -1,0 +1,264 @@
+---
+title: atmos auth env
+sidebar_label: env
+sidebar_class_name: command
+sidebar_position: 1
+id: env
+description: Export temporary cloud credentials as environment variables for the selected identity.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Quickly generate temporary cloud credentials as environment variables so you can run tools like Terraform, AWS CLI, or SDKs without manually copying and pasting access keys. This makes it seamless to switch between identities, integrate with scripts, and keep your sessions secure and short-lived.
+</Intro>
+
+<Screengrab title="atmos auth env --help" slug="atmos-auth-env--help" />
+
+## Usage
+
+```shell
+atmos auth env [--identity <name>] [--format bash|json|dotenv] [--login]
+```
+
+## How It Works
+
+`atmos auth env` outputs environment variable exports for a specific cloud identity (e.g., `AWS_PROFILE`, `AWS_CONFIG_FILE`, `AWS_SHARED_CREDENTIALS_FILE`). You use this output to configure your shell environment by evaluating it with `eval $(atmos auth env)`.
+
+**Important:** This command **outputs environment variables** and does **not perform authentication by default**. It generates export statements pointing to credential files that are populated during login events. Use the `--login` flag to trigger authentication if credentials are missing or expired. Since commands cannot modify their parent shell's environment, you must use `eval` to apply these variables to your current shell.
+
+**Typical Workflow:**
+
+```bash
+# 1. Set environment variables for an identity
+eval $(atmos auth env --identity prod-admin)
+
+# 2. Authenticate (when needed) - opens browser for SSO
+atmos auth login --identity prod-admin
+
+# 3. Use AWS CLI, Terraform, or other tools
+aws s3 ls
+terraform plan vpc -s prod
+```
+
+**The commands fail gracefully:** If you run AWS CLI or Terraform commands before logging in, they will fail with standard credential errors, prompting you to run `atmos auth login`.
+
+This separation allows you to add `eval $(atmos auth env)` to your shell profile without triggering login prompts every time you open a terminal.
+
+## When to Use This Command
+
+**Use `atmos auth env` when:**
+- Adding authentication to your shell profile (`.zshrc`, `.bashrc`) for automatic configuration
+- Integrating with CI/CD pipelines that need environment variables
+- Writing scripts that source credentials
+- You need credentials in a specific format (bash, json, dotenv)
+- Working primarily in a single identity and want persistent configuration
+
+**Use `atmos auth shell` instead when:**
+- You need session isolation for security (credentials scoped to subshell)
+- Working with production or sensitive environments requiring strict boundaries
+- Running multiple concurrent sessions with different identities in separate terminals
+- You want credentials to automatically clean up when you exit the shell
+- You need clear separation between different cloud contexts
+
+See the [`atmos auth shell`](/cli/commands/auth/shell) documentation for more details on session isolation.
+
+## Examples
+
+```shell
+# Configure shell for the default identity (bash format)
+atmos auth env
+
+# Interactively select identity
+atmos auth env --identity
+
+# JSON format for a specific identity
+atmos auth env --identity prod-admin --format json
+
+# Dotenv format
+atmos auth env --format dotenv
+
+# Automatically login if credentials don't exist or are expired
+atmos auth env --login
+
+# Use with identity selection and auto-login
+atmos auth env --identity prod-admin --login
+```
+
+## Shell Integration
+
+### Adding to Your Shell Profile
+
+A key advantage of `atmos auth env` is that it outputs environment variables for an identity **without requiring immediate authentication**. This makes it safe to add to your shell profile (e.g., `.zshrc`, `.bashrc`) without triggering a login prompt on every new shell session:
+
+```bash
+# Add to ~/.zshrc or ~/.bashrc
+eval $(atmos auth env)
+```
+
+<details>
+<summary>Helper Function for Identity Switching</summary>
+
+For users who prefer a combined authentication and configuration flow, you can create a helper function:
+
+```bash
+# Helper function for Atmos auth integration
+# Usage: use-identity [identity-name] [other atmos auth env flags]
+# This uses Atmos auth to authenticate and set credentials in the environment
+# If called with no arguments, it brings up the identity selector
+function use-identity() {
+    if ! command -v atmos >/dev/null 2>&1; then
+        echo "Error: atmos command not found. Please install atmos first." >&2
+        return 1
+    fi
+
+    # Run atmos auth env and evaluate the output to set credentials
+    local auth_output
+    if [ $# -eq 0 ]; then
+        # No arguments: bring up the selector by passing --identity with no value
+        if ! auth_output=$(atmos auth env --identity --login 2>&1); then
+            echo "Error running atmos auth: $auth_output" >&2
+            return 1
+        fi
+    else
+        # Arguments provided: pass --identity=<value> with the first argument, then any additional flags
+        if ! auth_output=$(atmos auth env --identity="$1" --login "${@:2}" 2>&1); then
+            echo "Error running atmos auth: $auth_output" >&2
+            return 1
+        fi
+    fi
+
+    # Evaluate the output to set environment variables
+    eval "$auth_output"
+}
+```
+
+**Usage examples:**
+
+```bash
+# Interactively select identity and login
+use-identity
+
+# Use specific identity with automatic login
+use-identity prod-admin
+
+# Use specific identity with custom format
+use-identity staging-dev --format bash
+```
+
+This helper function:
+- Combines configuration and authentication in one step using the `--login` flag
+- Checks if atmos is installed before running
+- Provides both interactive and non-interactive modes
+- Evaluates the output to set credentials in your current shell
+- Works with any cloud provider supported by Atmos
+
+</details>
+
+This approach:
+- Sets environment variables for the default identity
+- Uses cached credentials if they exist and are valid
+- **Does not trigger login prompts** - you can run `atmos auth login` separately when needed
+- Tools that require credentials will fail gracefully, prompting you to login when necessary
+
+The separation between setting environment variables (`atmos auth env`) and authentication (`atmos auth login`) means you can:
+1. Set environment variables once with `eval $(atmos auth env)` in your profile
+2. Authenticate when needed with `atmos auth login`
+3. Re-authenticate when credentials expire without re-evaluating `atmos auth env`
+
+:::info Using with Warp Terminal
+[Warp](https://warp.dev) is a modern terminal that works well with `atmos auth env`. When working with Warp or other feature-rich terminals, use `atmos auth env` instead of `atmos auth shell` to maintain the terminal's UI features (command palette, AI assistant, blocks, etc.).
+
+The `atmos auth shell` command launches a subshell that loses the terminal emulator's feature-rich UIs. Instead, use a helper function like `use-identity()` (shown above) that calls `atmos auth env` to get credentials for AWS CLI or other operations while maintaining your terminal's interface.
+
+Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) ensures that new terminal windows and panes automatically have the appropriate environment variables set for your default identity.
+:::
+
+## Flags
+
+<dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    Specify the identity to use. This flag has three modes:
+
+    - **With value** (`--identity admin`): Use the specified identity
+    - **Without value** (`--identity`): Show interactive selector to choose identity
+    - **Omitted**: Use the default identity configured in `atmos.yaml`
+  </dd>
+
+  <dt>`--format` <em>(alias `-f`)</em></dt>
+  <dd>
+    Output format for the environment variables. Default: `bash`.
+
+    - **`bash`** (default): Prints `export KEY='value'` lines suitable for shell evaluation
+    - **`json`**: Prints a JSON object of environment variables
+    - **`dotenv`**: Prints `KEY='value'` lines in dotenv format
+  </dd>
+
+  <dt>`--login`</dt>
+  <dd>
+    Trigger authentication flow if credentials are missing or expired. When enabled, this flag will automatically invoke the login flow if the specified identity hasn't been authenticated yet.
+
+    - **Without flag** (default): Outputs environment variables for the identity using cached credentials (if available)
+    - **With flag** (`--login`): Automatically triggers browser-based authentication when credentials are missing or expired
+
+    This is particularly useful when you want to ensure fresh credentials or when switching to an identity you haven't logged into yet.
+  </dd>
+</dl>
+
+## Environment variables
+
+### Input Variables (Configuration)
+
+<dl>
+  <dt>`ATMOS_IDENTITY`</dt>
+  <dd>Default identity when `--identity` is not provided.</dd>
+
+  <dt>`ATMOS_AUTH_ENV_FORMAT`</dt>
+  <dd>Sets the default output style for exported credentials. Supported values: `bash`, `json`, `dotenv`.</dd>
+</dl>
+
+### Output Variables (Exported by this command)
+
+When you run `eval $(atmos auth env)`, Atmos exports provider-specific environment variables to your shell based on the identity's cloud provider.
+
+<dl>
+  <dt>`ATMOS_IDENTITY`</dt>
+  <dd>The name of the active identity (all providers)</dd>
+</dl>
+
+**Provider-specific variables:**
+
+The exact variables exported depend on your cloud provider. For example:
+
+**AWS identities:**
+```bash
+AWS_SHARED_CREDENTIALS_FILE  # Path to Atmos-managed credentials file
+AWS_CONFIG_FILE              # Path to Atmos-managed config file
+AWS_PROFILE                  # Profile name for the identity
+AWS_REGION                   # Default region (if configured)
+```
+
+**GitHub OIDC identities:**
+```bash
+GITHUB_TOKEN                 # GitHub authentication token
+GITHUB_APP_ID                # GitHub App ID (if applicable)
+GITHUB_INSTALLATION_ID       # GitHub App installation ID (if applicable)
+```
+
+These environment variables configure cloud provider SDKs and tools (Terraform, AWS CLI, GitHub CLI, kubectl) to use the correct credentials without exposing them directly in the environment.
+
+## Notes
+
+- `atmos auth env` outputs environment variable export statements. You must use `eval` to apply them to your current shell session, where they persist until you close the shell or override them.
+- The command does not trigger authentication unless you use the `--login` flag.
+- Safe to add to shell profiles (`.zshrc`, `.bashrc`) - won't prompt for login on every shell startup.
+- Tools expecting credentials will fail gracefully if you haven't run `atmos auth login` yet, prompting you to authenticate.
+- For workflows requiring multiple identities simultaneously, consider using `atmos auth shell` which provides session isolation.
+
+## See Also
+
+- [`atmos auth shell`](/cli/commands/auth/shell) - Launch an isolated shell session with automatic credential cleanup
+- [`atmos auth login`](/cli/commands/auth/login) - Authenticate to a cloud identity
+- [`atmos auth whoami`](/cli/commands/auth/whoami) - Display information about the current authenticated identity
+- [Warp Terminal](https://warp.dev) - Modern terminal that works well with persistent environment variables

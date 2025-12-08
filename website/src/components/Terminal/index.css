@@ -1,14 +1,20 @@
 /* Terminal Styling */
 .terminal {
     min-width: 100%;
-    color: #ccc;
-    /*background: #171717; */
-    background: #070e12;
+    color: #2d3748;
+    background: #1a1d23;
     margin-top: 10px;
     margin-bottom: 1em;
     line-height: 0.8em;
     border-radius: 10px;
     padding: 0.5em;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 0 20px 3px rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="dark"] .terminal {
+    color: #ccc;
+    background: #070e12;
     border: 1px solid #cccccc36;
     box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
 }
@@ -35,7 +41,7 @@
     min-width: 100%;
     position: relative;
     left: -60px;
-    color: #fff;
+    color: #1a1d23;
     font-weight: bold;
     padding-right: 80px;
     padding-left: 80px;
@@ -44,6 +50,10 @@
     overflow: hidden;
     max-width: 60%;
     text-overflow: ellipsis;
+}
+
+html[data-theme="dark"] .terminal h1 {
+    color: #fff;
 }
 
 /* The container for the dots, representing a window control bar */

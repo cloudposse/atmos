@@ -10,9 +10,11 @@ import (
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/googleapis/gax-go/v2"
-	"google.golang.org/api/option"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/cloudposse/atmos/internal/gcp"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 const (
@@ -57,16 +59,18 @@ func NewGSMStore(options GSMStoreOptions) (Store, error) {
 
 	ctx := context.Background()
 
-	var clientOpts []option.ClientOption
-	if options.Credentials != nil && *options.Credentials != "" {
-		clientOpts = append(clientOpts, option.WithCredentialsJSON([]byte(*options.Credentials)))
-	}
+	// Use unified GCP authentication
+	clientOpts := gcp.GetClientOptions(gcp.AuthOptions{
+		Credentials: gcp.GetCredentialsFromStore(options.Credentials),
+	})
 
 	client, err := secretmanager.NewClient(ctx, clientOpts...)
 	if err != nil {
 		// Close the client to prevent resource leaks
 		if client != nil {
-			_ = client.Close()
+			if closeErr := client.Close(); closeErr != nil {
+				log.Trace("Failed to close Google Secret Manager client after creation error", "error", closeErr)
+			}
 		}
 		return nil, fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
@@ -200,6 +204,9 @@ func (s *GSMStore) Set(stack string, component string, key string, value any) er
 	}
 	if key == "" {
 		return ErrEmptyKey
+	}
+	if value == nil {
+		return fmt.Errorf("%w for key %s in stack %s component %s", ErrNilValue, key, stack, component)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)

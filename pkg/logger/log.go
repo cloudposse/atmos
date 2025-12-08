@@ -110,6 +110,38 @@ func GetLevelString() string {
 	return Default().GetLevelString()
 }
 
+// LevelToString converts a charm.Level to its string representation.
+// It handles Atmos' custom TraceLevel and falls back to the standard string representation for other levels.
+//
+// Parameters:
+//   - level: The charm.Level to convert
+//
+// Returns:
+//   - string: The lowercase string representation of the level (e.g., "trace", "debug", "info", "warn", "error", "fatal")
+//
+// Examples:
+//   - LevelToString(TraceLevel) returns "trace"
+//   - LevelToString(charm.InfoLevel) returns "info"
+//   - LevelToString(charm.ErrorLevel) returns "error"
+func LevelToString(level charm.Level) string {
+	switch level {
+	case TraceLevel:
+		return "trace"
+	case charm.DebugLevel:
+		return "debug"
+	case charm.InfoLevel:
+		return "info"
+	case charm.WarnLevel:
+		return "warn"
+	case charm.ErrorLevel:
+		return "error"
+	case charm.FatalLevel:
+		return "fatal"
+	default:
+		return level.String()
+	}
+}
+
 // SetReportCaller sets whether to report the caller location on the default logger.
 func SetReportCaller(report bool) {
 	Default().SetReportCaller(report)

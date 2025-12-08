@@ -7,11 +7,10 @@ import (
 	"regexp"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-var ErrInvalidURL = fmt.Errorf("invalid URL")
 
 const schemeSeparator = "://"
 
@@ -22,6 +21,7 @@ type CustomGitDetector struct {
 	source      string
 }
 
+// NewCustomGitDetector creates a new CustomGitDetector with the provided configuration and source URL.
 func NewCustomGitDetector(atmosConfig *schema.AtmosConfiguration, source string) *CustomGitDetector {
 	return &CustomGitDetector{
 		atmosConfig: atmosConfig,
@@ -45,7 +45,7 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	if err != nil {
 		maskedSrc, _ := maskBasicAuth(src)
 		log.Debug("Failed to parse URL", keyURL, maskedSrc, "error", err)
-		return "", false, fmt.Errorf("failed to parse URL %q: %w", maskedSrc, err)
+		return "", false, fmt.Errorf("%w: %q: %w", errUtils.ErrParseURL, maskedSrc, err)
 	}
 
 	// If no host is detected, this is likely a local file path.
@@ -59,15 +59,21 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 	d.normalizePath(parsedURL)
 
 	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
-	host := strings.ToLower(parsedURL.Host)
-	if host != hostGitHub && host != hostBitbucket && host != hostGitLab {
-		log.Debug("Skipping token injection for an unsupported host", "host", parsedURL.Host)
+	// Use Hostname() to extract just the hostname without port (e.g., "github.com:22" → "github.com").
+	rawHost := parsedURL.Host
+	host := strings.ToLower(parsedURL.Hostname())
+	if !isSupportedHost(host) {
+		log.Debug("Skipping token injection for an unsupported host", keyHost, rawHost)
 		return "", false, nil
 	}
 
-	log.Debug("Reading config param", "InjectGithubToken", d.atmosConfig.Settings.InjectGithubToken)
-	// Inject token if available.
-	d.injectToken(parsedURL, host)
+	// Check if token injection is enabled for this host and inject if appropriate.
+	if shouldInjectTokenForHost(host, &d.atmosConfig.Settings) {
+		log.Debug("Token injection enabled for host", keyHost, rawHost)
+		d.injectToken(parsedURL, host)
+	} else {
+		log.Debug("Token injection disabled for host", keyHost, rawHost)
+	}
 
 	// Note: URI normalization (including adding //.) is now handled by normalizeVendorURI
 	// in the vendor processing pipeline, so we don't need to adjust subdirectory here
@@ -98,7 +104,8 @@ const (
 	matchIndexSuffix = 5
 	matchIndexExtra  = 6
 
-	keyURL = "url"
+	keyURL  = "url"
+	keyHost = "host"
 
 	hostGitHub    = "github.com"
 	hostGitLab    = "gitlab.com"
@@ -106,6 +113,34 @@ const (
 )
 
 const GitPrefix = "git::"
+
+// isSupportedHost checks if the host is a supported Git hosting provider.
+// This is a pure function that can be easily tested.
+func isSupportedHost(host string) bool {
+	return host == hostGitHub || host == hostBitbucket || host == hostGitLab
+}
+
+// shouldInjectTokenForHost checks if token injection is enabled for the given host.
+// This is a pure function that encapsulates the logic of checking inject settings per host.
+func shouldInjectTokenForHost(host string, settings *schema.AtmosSettings) bool {
+	switch host {
+	case hostGitHub:
+		return settings.InjectGithubToken
+	case hostBitbucket:
+		return settings.InjectBitbucketToken
+	case hostGitLab:
+		return settings.InjectGitlabToken
+	default:
+		return false
+	}
+}
+
+// needsTokenInjection checks if a URL needs token injection.
+// A URL needs token injection if it doesn't already have user credentials.
+// This is a pure function that can be easily tested.
+func needsTokenInjection(parsedURL *url.URL) bool {
+	return parsedURL.User == nil
+}
 
 // ensureScheme checks for an explicit scheme and rewrites SCP-style URLs if needed.
 // Also removes any existing "git::" prefix (required for the dry-run mode to operate correctly).
@@ -163,7 +198,15 @@ func (d *CustomGitDetector) normalizePath(parsedURL *url.URL) {
 }
 
 // injectToken injects a token into the URL if available.
+// User-specified credentials in the URL always take precedence over automatic injection.
 func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
+	// If URL already has user credentials, respect them and skip injection.
+	if !needsTokenInjection(parsedURL) {
+		maskedURL, _ := maskBasicAuth(parsedURL.String())
+		log.Debug("Skipping token injection: URL already has user credentials", keyURL, maskedURL)
+		return
+	}
+
 	token, tokenSource := d.resolveToken(host)
 	if token != "" {
 		defaultUsername := d.getDefaultUsername(host)
@@ -171,25 +214,29 @@ func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
 		maskedURL, _ := maskBasicAuth(parsedURL.String())
 		log.Debug("Injected token", "env", tokenSource, keyURL, maskedURL)
 	} else {
-		log.Debug("No token found for injection")
+		log.Debug("No token found for injection", keyHost, host)
 	}
 }
 
 // resolveToken returns the token and its source based on the host.
+// It prefers ATMOS_* prefixed tokens but falls back to standard tokens if not set.
 func (d *CustomGitDetector) resolveToken(host string) (string, string) {
 	switch host {
 	case hostGitHub:
-		if d.atmosConfig.Settings.InjectGithubToken {
+		// Try ATMOS_GITHUB_TOKEN first, fall back to GITHUB_TOKEN
+		if d.atmosConfig.Settings.AtmosGithubToken != "" {
 			return d.atmosConfig.Settings.AtmosGithubToken, "ATMOS_GITHUB_TOKEN"
 		}
 		return d.atmosConfig.Settings.GithubToken, "GITHUB_TOKEN"
 	case hostBitbucket:
-		if d.atmosConfig.Settings.InjectBitbucketToken {
+		// Try ATMOS_BITBUCKET_TOKEN first, fall back to BITBUCKET_TOKEN
+		if d.atmosConfig.Settings.AtmosBitbucketToken != "" {
 			return d.atmosConfig.Settings.AtmosBitbucketToken, "ATMOS_BITBUCKET_TOKEN"
 		}
 		return d.atmosConfig.Settings.BitbucketToken, "BITBUCKET_TOKEN"
 	case hostGitLab:
-		if d.atmosConfig.Settings.InjectGitlabToken {
+		// Try ATMOS_GITLAB_TOKEN first, fall back to GITLAB_TOKEN
+		if d.atmosConfig.Settings.AtmosGitlabToken != "" {
 			return d.atmosConfig.Settings.AtmosGitlabToken, "ATMOS_GITLAB_TOKEN"
 		}
 		return d.atmosConfig.Settings.GitlabToken, "GITLAB_TOKEN"

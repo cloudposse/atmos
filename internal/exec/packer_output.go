@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,7 +28,7 @@ func ExecutePackerOutput(
 		return nil, err
 	}
 
-	*info, err = ProcessStacks(&atmosConfig, *info, true, true, true, nil)
+	*info, err = ProcessStacks(&atmosConfig, *info, true, true, true, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +80,7 @@ func ExecutePackerOutput(
 
 	manifestContent, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrappingFormat, errUtils.ErrReadFile, err)
+		return nil, errors.Join(errUtils.ErrReadFile, err)
 	}
 
 	data, err := u.ConvertFromJSON(string(manifestContent))

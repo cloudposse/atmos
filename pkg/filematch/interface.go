@@ -13,7 +13,9 @@ type compiledGlob interface {
 	Match(string) bool
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
+// FileMatcher matches file paths against configured patterns and returns the subset of paths that match.
 type FileMatcher interface {
 	MatchFiles([]string) ([]string, error)
 }

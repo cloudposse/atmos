@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -70,6 +71,15 @@ func getRunnableDescribeStacksCmd(
 			return err
 		}
 
+		// Get identity from flag and create AuthManager if provided.
+		// Use the WithAtmosConfig variant to enable stack-level default identity loading.
+		identityName := GetIdentityFromFlags(cmd, os.Args)
+		authManager, err := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &atmosConfig.Auth, &atmosConfig)
+		if err != nil {
+			return err
+		}
+		describe.AuthManager = authManager
+
 		// Global --pager flag is now handled in cfg.InitCliConfig
 
 		err = g.newDescribeStacksExec.Execute(&atmosConfig, describe)
@@ -91,6 +101,10 @@ func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.Describe
 		"query":                &describe.Query,
 		"skip":                 &describe.Skip,
 	}
+
+	// `true` by default.
+	describe.ProcessTemplates = true
+	describe.ProcessYamlFunctions = true
 
 	var err error
 	for k := range flagsKeyValue {
@@ -137,7 +151,7 @@ func init() {
 			"The filter supports names of the top-level stack manifests (including subfolder paths), and `atmos` stack names (derived from the context vars)",
 	)
 	AddStackCompletion(describeStacksCmd)
-	describeStacksCmd.PersistentFlags().String("components", "", "Filter by specific `atmos` components")
+	describeStacksCmd.PersistentFlags().StringSlice("components", nil, "Filter by specific `atmos` components")
 
 	describeStacksCmd.PersistentFlags().StringSlice("component-types", nil, "Filter by specific component types. Supported component types: terraform, helmfile")
 

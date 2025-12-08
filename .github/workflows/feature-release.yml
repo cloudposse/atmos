@@ -23,5 +23,6 @@ jobs:
       prerelease: true
       format: binary
       environment: 'feature-releases'
+      runs-on: '["runs-on=${{github.run_id}}", "runner=large", "tag=atmos","extras=s3-cache", "private=false"]'
       draft: ${{ github.event.pull_request.draft }}
     secrets: inherit

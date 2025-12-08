@@ -1,0 +1,69 @@
+---
+title: atmos auth exec
+sidebar_label: exec
+sidebar_class_name: command
+sidebar_position: 2
+id: exec
+description: Execute a command with authentication environment variables set for the selected identity.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Run any tool (Terraform, AWS CLI, kubectl, etc.) with the right cloud identity injected automatically into the environment. Use `exec` when you want a one-off command to inherit secure, temporary credentials without polluting your shell session.
+</Intro>
+
+<Screengrab title="atmos auth exec --help" slug="atmos-auth-exec--help" />
+
+:::tip Exec vs Shell
+Use `exec` for single commands or automation. Use [`shell`](/cli/commands/auth/shell) for interactive sessions where you'll run multiple commands.
+:::
+
+## Usage
+
+```shell
+atmos auth exec [--identity <name>] -- <command> [args...]
+```
+
+## Arguments
+
+<dl>
+  <dt>command</dt>
+  <dd>The program to execute with authentication environment variables set.</dd>
+
+  <dt>args...</dt>
+  <dd>Arguments to pass through to the command.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Run terraform with authenticated env (uses default identity)
+atmos auth exec -- terraform plan -var-file=env.tfvars
+
+# Interactively select identity
+atmos auth exec --identity -- aws sts get-caller-identity
+
+# Use a specific identity
+atmos auth exec --identity prod-admin -- aws sts get-caller-identity
+
+# Inspect env
+atmos auth exec -- env | grep AWS
+```
+
+## Flags
+
+<dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    Specify the identity to use. This flag has three modes:
+
+    - **With value** (`--identity admin`): Use the specified identity
+    - **Without value** (`--identity`): Show interactive selector to choose identity
+    - **Omitted**: Use the default identity configured in `atmos.yaml`
+  </dd>
+</dl>
+
+## Notes
+
+- `--` is required to stop Atmos flag parsing; everything after is passed to the subcommand.

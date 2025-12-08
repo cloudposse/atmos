@@ -315,3 +315,182 @@ timestamp: {{ now | date "2006-01-02" }}`
 		_, _ = ProcessTmpl(nil, "bench.yaml.tmpl", template, context, false)
 	}
 }
+
+// TestGetSprigFuncMap_CachingBehavior tests that Sprig function map caching works correctly.
+// This validates P7.7.2 optimization: cached Sprig function maps produce consistent results.
+func TestGetSprigFuncMap_CachingBehavior(t *testing.T) {
+	// Call getSprigFuncMap multiple times
+	funcMap1 := getSprigFuncMap()
+	require.NotNil(t, funcMap1)
+	require.NotEmpty(t, funcMap1)
+
+	funcMap2 := getSprigFuncMap()
+	require.NotNil(t, funcMap2)
+	require.NotEmpty(t, funcMap2)
+
+	funcMap3 := getSprigFuncMap()
+	require.NotNil(t, funcMap3)
+	require.NotEmpty(t, funcMap3)
+
+	// All should contain common Sprig functions
+	commonFunctions := []string{"add", "upper", "lower", "now", "b64enc", "sha256sum"}
+	for _, fn := range commonFunctions {
+		assert.Contains(t, funcMap1, fn, "Function %s should exist in Sprig map", fn)
+		assert.Contains(t, funcMap2, fn, "Function %s should exist in cached Sprig map", fn)
+		assert.Contains(t, funcMap3, fn, "Function %s should exist in cached Sprig map", fn)
+	}
+
+	// Test that cached function maps work identically
+	template := "result: {{ add 10 20 }}"
+
+	result1, err := ProcessTmpl(nil, "test1", template, nil, false)
+	require.NoError(t, err)
+
+	result2, err := ProcessTmpl(nil, "test2", template, nil, false)
+	require.NoError(t, err)
+
+	result3, err := ProcessTmpl(nil, "test3", template, nil, false)
+	require.NoError(t, err)
+
+	// All results should be identical
+	assert.Equal(t, result1, result2)
+	assert.Equal(t, result2, result3)
+	assert.Contains(t, result1, "result: 30")
+}
+
+// TestGetSprigFuncMap_Concurrent tests thread safety of cached Sprig function map.
+// This validates P7.7.2 optimization: sync.Once guarantees safe concurrent access.
+func TestGetSprigFuncMap_Concurrent(t *testing.T) {
+	const numGoroutines = 100
+
+	// Channel to collect results
+	results := make(chan bool, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	// Use a channel to synchronize goroutine start times
+	start := make(chan struct{})
+
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			// Wait for start signal
+			<-start
+
+			// Get cached function map
+			funcMap := getSprigFuncMap()
+			if funcMap == nil {
+				errors <- assert.AnError
+				return
+			}
+
+			// Verify it has expected functions
+			if _, ok := funcMap["add"]; !ok {
+				errors <- assert.AnError
+				return
+			}
+
+			results <- true
+		}()
+	}
+
+	// Release all goroutines at once
+	close(start)
+
+	// Collect all results
+	successCount := 0
+	errorCount := 0
+
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case <-results:
+			successCount++
+		case <-errors:
+			errorCount++
+		}
+	}
+
+	// All goroutines should succeed
+	assert.Equal(t, numGoroutines, successCount, "All goroutines should get cached function map")
+	assert.Equal(t, 0, errorCount, "No goroutines should encounter errors")
+}
+
+// TestGetSprigFuncMap_ConcurrentTemplateProcessing tests concurrent template processing
+// with cached Sprig function maps. This is a stress test for P7.7.2.
+func TestGetSprigFuncMap_ConcurrentTemplateProcessing(t *testing.T) {
+	const numGoroutines = 50
+
+	templates := []string{
+		"result: {{ add 1 2 }}",
+		"upper: {{ \"hello\" | upper }}",
+		"encoded: {{ \"test\" | b64enc }}",
+		"hash: {{ \"data\" | sha256sum }}",
+	}
+
+	results := make(chan string, numGoroutines)
+	errors := make(chan error, numGoroutines)
+	start := make(chan struct{})
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(templateIdx int) {
+			<-start
+
+			template := templates[templateIdx%len(templates)]
+			result, err := ProcessTmpl(nil, "concurrent-test", template, nil, false)
+			if err != nil {
+				errors <- err
+				return
+			}
+
+			results <- result
+		}(i)
+	}
+
+	// Release all goroutines
+	close(start)
+
+	// Collect results
+	successCount := 0
+	errorCount := 0
+
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case result := <-results:
+			assert.NotEmpty(t, result)
+			successCount++
+		case err := <-errors:
+			t.Errorf("Template processing failed: %v", err)
+			errorCount++
+		}
+	}
+
+	assert.Equal(t, numGoroutines, successCount, "All concurrent template operations should succeed")
+	assert.Equal(t, 0, errorCount, "No concurrent template operations should fail")
+}
+
+// BenchmarkGetSprigFuncMap benchmarks the performance of getting cached Sprig function map.
+// This demonstrates P7.7.2 optimization: after first call, subsequent calls have zero overhead.
+func BenchmarkGetSprigFuncMap(b *testing.B) {
+	// First call to initialize cache
+	_ = getSprigFuncMap()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = getSprigFuncMap()
+	}
+}
+
+// BenchmarkTemplateProcessingSprigCache benchmarks template processing with Sprig caching.
+// This measures the cumulative benefit of P7.7.2: cache initialization happens once,
+// all subsequent template operations benefit from zero Sprig allocation overhead.
+func BenchmarkTemplateProcessingSprigCache(b *testing.B) {
+	template := `
+config:
+  hash: {{ "test" | sha256sum }}
+  encoded: {{ "data" | b64enc }}
+  upper: {{ "hello" | upper }}
+  calculated: {{ add 10 20 }}`
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ProcessTmpl(nil, "bench-sprig-cache", template, nil, false)
+	}
+}

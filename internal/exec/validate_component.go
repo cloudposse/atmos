@@ -5,16 +5,27 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mitchellh/mapstructure"
-	"github.com/pkg/errors"
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// getBasePathToUse returns the appropriate base path for file resolution.
+// It prefers BasePathAbsolute for correct resolution when base_path is relative
+// (e.g., when using ATMOS_CLI_CONFIG_PATH), falling back to BasePath for backward compatibility.
+func getBasePathToUse(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig.BasePathAbsolute != "" {
+		return atmosConfig.BasePathAbsolute
+	}
+	return atmosConfig.BasePath
+}
 
 // ExecuteValidateComponentCmd executes `validate component` command.
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, string, error) {
@@ -31,7 +42,7 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 	}
 
 	if len(args) != 1 {
-		return "", "", errors.New("invalid arguments. The command requires one argument 'componentName'")
+		return "", "", errUtils.ErrInvalidComponentArgument
 	}
 
 	componentName := args[0]
@@ -74,8 +85,11 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 
 	_, err = ExecuteValidateComponent(&atmosConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
 	if err != nil {
+		u.PrintfMessageToTUI("\r%s Component validation failed\n", theme.Styles.XMark)
 		return "", "", err
 	}
+	u.PrintfMessageToTUI("\r%s Component validated successfully\n", theme.Styles.Checkmark)
+	log.Debug("Component validation completed", "component", componentName, "stack", stack)
 
 	return componentName, stack, nil
 }
@@ -97,13 +111,13 @@ func ExecuteValidateComponent(
 	configAndStacksInfo.Stack = stack
 
 	configAndStacksInfo.ComponentType = cfg.TerraformComponentType
-	configAndStacksInfo, err := ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
+	configAndStacksInfo, err := ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 	if err != nil {
 		configAndStacksInfo.ComponentType = cfg.HelmfileComponentType
-		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
+		configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 		if err != nil {
 			configAndStacksInfo.ComponentType = cfg.PackerComponentType
-			configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil)
+			configAndStacksInfo, err = ProcessStacks(atmosConfig, configAndStacksInfo, true, true, true, nil, nil)
 			if err != nil {
 				return false, err
 			}
@@ -210,19 +224,20 @@ func validateComponentInternal(
 	}
 
 	// Check if the file pointed to by 'schemaPath' exists.
-	// If not, join it with the schemas `base_path` from the CLI config
+	// If not, join it with the schemas `base_path` from the CLI config.
 	var filePath string
 	if u.FileExists(schemaPath) {
 		filePath = schemaPath
 	} else {
+		basePathToUse := getBasePathToUse(atmosConfig)
 		switch schemaType {
 		case "jsonschema":
 			{
-				filePath = filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("jsonschema").BasePath, schemaPath)
+				filePath = filepath.Join(basePathToUse, atmosConfig.GetResourcePath("jsonschema").BasePath, schemaPath)
 			}
 		case "opa":
 			{
-				filePath = filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("opa").BasePath, schemaPath)
+				filePath = filepath.Join(basePathToUse, atmosConfig.GetResourcePath("opa").BasePath, schemaPath)
 			}
 		}
 
@@ -252,7 +267,8 @@ func validateComponentInternal(
 		}
 	case "opa":
 		{
-			modulePathsAbsolute, err := u.JoinPaths(filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("opa").BasePath), modulePaths)
+			basePathToUse := getBasePathToUse(atmosConfig)
+			modulePathsAbsolute, err := u.JoinPaths(filepath.Join(basePathToUse, atmosConfig.GetResourcePath("opa").BasePath), modulePaths)
 			if err != nil {
 				return false, err
 			}

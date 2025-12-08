@@ -327,11 +327,7 @@ func TestGetSupportedProfileTypes(t *testing.T) {
 }
 
 func TestFileBasedProfilingCPU(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "profiler_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	profileFile := filepath.Join(tempDir, "cpu.prof")
 	config := Config{
@@ -343,7 +339,7 @@ func TestFileBasedProfilingCPU(t *testing.T) {
 	profiler := New(config)
 
 	// Start profiling
-	err = profiler.Start()
+	err := profiler.Start()
 	if err != nil {
 		t.Fatalf("Failed to start CPU profiling: %v", err)
 	}
@@ -372,11 +368,7 @@ func TestFileBasedProfilingCPU(t *testing.T) {
 }
 
 func TestFileBasedProfilingHeap(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "profiler_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	profileFile := filepath.Join(tempDir, "heap.prof")
 	config := Config{
@@ -388,7 +380,7 @@ func TestFileBasedProfilingHeap(t *testing.T) {
 	profiler := New(config)
 
 	// Start profiling
-	err = profiler.Start()
+	err := profiler.Start()
 	if err != nil {
 		t.Fatalf("Failed to start heap profiling: %v", err)
 	}
@@ -409,11 +401,7 @@ func TestFileBasedProfilingHeap(t *testing.T) {
 }
 
 func TestFileBasedProfilingTrace(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "profiler_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	profileFile := filepath.Join(tempDir, "trace.out")
 	config := Config{
@@ -425,7 +413,7 @@ func TestFileBasedProfilingTrace(t *testing.T) {
 	profiler := New(config)
 
 	// Start profiling
-	err = profiler.Start()
+	err := profiler.Start()
 	if err != nil {
 		t.Fatalf("Failed to start trace profiling: %v", err)
 	}
@@ -446,11 +434,7 @@ func TestFileBasedProfilingTrace(t *testing.T) {
 }
 
 func TestFileBasedProfilingInvalidType(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "profiler_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	profileFile := filepath.Join(tempDir, "invalid.prof")
 	config := Config{
@@ -462,7 +446,7 @@ func TestFileBasedProfilingInvalidType(t *testing.T) {
 	profiler := New(config)
 
 	// Start profiling should fail
-	err = profiler.Start()
+	err := profiler.Start()
 	if err == nil {
 		t.Fatal("Expected error for invalid profile type, but got none")
 	}
@@ -473,11 +457,7 @@ func TestFileBasedProfilingInvalidType(t *testing.T) {
 }
 
 func TestDefaultProfileType(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "profiler_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	profileFile := filepath.Join(tempDir, "default.prof")
 	config := Config{
@@ -489,7 +469,7 @@ func TestDefaultProfileType(t *testing.T) {
 	profiler := New(config)
 
 	// Start profiling (should default to CPU)
-	err = profiler.Start()
+	err := profiler.Start()
 	if err != nil {
 		t.Fatalf("Failed to start profiling with default type: %v", err)
 	}
@@ -643,11 +623,7 @@ func TestConfigWithProfileTypeString(t *testing.T) {
 }
 
 func TestAllProfileTypesFileCreation(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "profiler_all_types_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	profileTypes := GetSupportedProfileTypes()
 
@@ -670,7 +646,7 @@ func TestAllProfileTypesFileCreation(t *testing.T) {
 			profiler := New(config)
 
 			// Start profiling
-			err = profiler.Start()
+			err := profiler.Start()
 			if err != nil {
 				t.Fatalf("Failed to start %s profiling: %v", profileType, err)
 			}
@@ -701,11 +677,7 @@ func TestAllProfileTypesFileCreation(t *testing.T) {
 }
 
 func TestProfileTypeDefaultHandling(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "profiler_default_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Test with empty ProfileType (should default to CPU)
 	profileFile := filepath.Join(tempDir, "default.prof")
@@ -718,7 +690,7 @@ func TestProfileTypeDefaultHandling(t *testing.T) {
 	profiler := New(config)
 
 	// The profiler should internally default to CPU when ProfileType is empty
-	err = profiler.Start()
+	err := profiler.Start()
 	if err != nil {
 		t.Fatalf("Failed to start profiling with empty ProfileType: %v", err)
 	}
@@ -764,11 +736,7 @@ func TestConfiguredProfilerDisabled(t *testing.T) {
 }
 
 func TestProfilerStateResetOnErrors(t *testing.T) {
-	tempDir, err := os.MkdirTemp("", "profiler_state_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create a read-only directory to force file creation failure
 	readOnlyDir := filepath.Join(tempDir, "readonly")
@@ -795,7 +763,7 @@ func TestProfilerStateResetOnErrors(t *testing.T) {
 	profiler := New(config)
 
 	// This should fail due to permission error or invalid path
-	err = profiler.Start()
+	err := profiler.Start()
 	if err == nil {
 		t.Error("Start() should fail when unable to create profile file")
 	}

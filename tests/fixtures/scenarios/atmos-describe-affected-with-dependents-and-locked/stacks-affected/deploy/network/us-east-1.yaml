@@ -15,10 +15,15 @@ components:
       vars:
         # AFFECTED
         name: new-name
+        # Add !env function to detect if this stack is being processed
+        env_test_vpc_ue1: '!env ATMOS_TEST_VPC_UE1'
 
     tgw/hub:
       metadata:
         component: mock
+      vars:
+        # Add !env function to detect if this stack is being processed
+        env_test_tgw_hub_ue1: '!env ATMOS_TEST_TGW_HUB_UE1'
       settings:
         # AFFECTED
         team: network
@@ -31,6 +36,9 @@ components:
     tgw/attachment:
       metadata:
         component: mock
+      vars:
+        # Add !env function to detect if this stack is being processed
+        env_test_tgw_attachment_ue1: '!env ATMOS_TEST_TGW_ATTACHMENT_UE1'
       settings:
         # `tgw/attachment` depends on the `vpc` and `tgw/hub` components in the same stack (same account, same region)
         depends_on:

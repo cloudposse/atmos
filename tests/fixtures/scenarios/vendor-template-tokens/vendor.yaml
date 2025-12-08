@@ -1,0 +1,86 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: template-token-injection-tests
+  description: Tests for all documented manual template-based token injection formats
+spec:
+  imports: []
+
+  sources:
+    # Format 1: Single-quoted YAML with {{env "TOKEN"}} - RECOMMENDED FORMAT
+    # This is the recommended format from documentation
+    - component: "test-single-quotes-env"
+      source: 'git::https://x-access-token:{{env "GITHUB_TOKEN"}}@github.com/cloudposse/terraform-null-label.git?ref={{.Version}}'
+      version: "0.25.0"
+      targets:
+        - "components/terraform/{{ .Component }}"
+      tags:
+        - template-test
+        - single-quotes
+
+    # Format 2: Folded scalar (>-) with {{env "TOKEN"}} - ALTERNATIVE FORMAT
+    # This is the alternative format from documentation
+    - component: "test-folded-scalar-env"
+      source: >-
+        git::https://x-access-token:{{env "GITHUB_TOKEN"}}@github.com/cloudposse/terraform-null-label.git?ref={{.Version}}
+      version: "0.25.0"
+      targets:
+        - "components/terraform/{{ .Component }}"
+      tags:
+        - template-test
+        - folded-scalar
+
+    # Format 3: Custom host with custom token variable
+    # Tests that templates work for non-GitHub hosts
+    - component: "test-custom-token-var"
+      source: 'git::https://{{env "CUSTOM_GIT_TOKEN"}}@github.com/cloudposse/terraform-null-label.git?ref={{.Version}}'
+      version: "0.25.0"
+      targets:
+        - "components/terraform/{{ .Component }}"
+      tags:
+        - template-test
+        - custom-var
+
+    # Format 4: Username and password both from environment
+    # Tests username:password format with templates
+    - component: "test-user-pass-template"
+      source: 'git::https://{{env "GIT_USERNAME"}}:{{env "GIT_PASSWORD"}}@github.com/cloudposse/terraform-null-label.git?ref={{.Version}}'
+      version: "0.25.0"
+      targets:
+        - "components/terraform/{{ .Component }}"
+      tags:
+        - template-test
+        - user-pass
+
+    # Format 5: Mixed - version template with hardcoded token placeholder
+    # Tests that .Version template works alongside env templates
+    - component: "test-version-template"
+      source: 'git::https://x-access-token:{{env "GITHUB_TOKEN"}}@github.com/cloudposse/terraform-null-label.git?ref=v{{.Version}}'
+      version: "0.25.0"
+      targets:
+        - "components/terraform/{{ .Component }}"
+      tags:
+        - template-test
+        - version-ref
+
+    # Format 6: Native injection (no template) for comparison
+    # This should work with automatic token injection
+    - component: "test-native-injection"
+      source: "github.com/cloudposse/terraform-null-label.git?ref={{.Version}}"
+      version: "0.25.0"
+      targets:
+        - "components/terraform/{{ .Component }}"
+      tags:
+        - template-test
+        - native
+
+    # Format 7: SSH with template (edge case)
+    # Tests that templates work with SSH URLs
+    - component: "test-ssh-template"
+      source: 'git::ssh://git@github.com/cloudposse/terraform-null-label.git?ref={{.Version}}'
+      version: "0.25.0"
+      targets:
+        - "components/terraform/{{ .Component }}"
+      tags:
+        - template-test
+        - ssh

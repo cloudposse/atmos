@@ -518,24 +518,8 @@ func TestCheckGitVersion_CommandError(t *testing.T) {
 	}
 }
 
-func TestCheckGitVersion_WindowsSuffix_Stripped(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skipf("Skipping test: Windows-specific git behavior differs from Unix systems")
-	}
-	// On Windows, version string may contain ".windows." and should be stripped
-	writeFakeGit(t, "git version 2.20.1.windows.1", 0)
-
-	// With suffix removed, this compares as 2.20.1
-	err := checkGitVersion(context.Background(), "2.18.0")
-	if err != nil {
-		t.Fatalf("expected no error after stripping .windows. suffix, got %v", err)
-	}
-
-	err = checkGitVersion(context.Background(), "2.30.0")
-	if err == nil {
-		t.Fatalf("expected error: 2.20.1 < 2.30.0")
-	}
-}
+// Windows-specific test moved to get_git_windows_test.go:
+// - TestCheckGitVersion_WindowsSuffix_Stripped
 
 func mustURL(t *testing.T, s string) *url.URL {
 	t.Helper()
@@ -547,11 +531,11 @@ func mustURL(t *testing.T, s string) *url.URL {
 // withTempPath injects a temporary PATH for the duration of the test.
 func withTempPath(t *testing.T, dirs ...string) func() {
 	t.Helper()
-	orig := os.Getenv("PATH")
 	sep := string(os.PathListSeparator)
 	newPath := strings.Join(dirs, sep)
-	require.NoError(t, os.Setenv("PATH", newPath))
-	return func() { _ = os.Setenv("PATH", orig) }
+	t.Setenv("PATH", newPath)
+	// t.Setenv automatically restores the original value, so return a no-op
+	return func() {}
 }
 
 // newGetter returns a CustomGitGetter with a context and zero timeout.
@@ -566,8 +550,7 @@ func newGetter() *CustomGitGetter {
 }
 
 func TestGetCustom_ErrorWhenGitMissing(t *testing.T) {
-	t.Parallel()
-
+	// Note: Cannot use t.Parallel() with t.Setenv (used in withTempPath)
 	restore := withTempPath(t /* empty PATH to force failure */)
 	defer restore()
 
@@ -581,8 +564,9 @@ func TestGetCustom_ErrorWhenGitMissing(t *testing.T) {
 	require.Contains(t, err.Error(), "git must be available")
 }
 
-func TestGetCustom_Succeeds_ClonePath_NoRefNoSSHKey(t *testing.T) {
-	// Provide a fake git that always succeeds; this lets clone/checkout/submodules pass.
+func TestGetCustom_ErrorClonePath_NoRefNoSSHKey(t *testing.T) {
+	// Provide a fake git that succeeds but doesn't create a real repository.
+	// This tests that GetCustom handles the clone path but fails when repository validation occurs.
 	writeFakeGit(t, "", 0)
 
 	g := newGetter()
@@ -945,9 +929,14 @@ func TestGetCustom_WithTimeout(t *testing.T) {
 	dst := t.TempDir()
 	u := mustURL(t, "https://example.com/repo.git")
 
-	// This might timeout or succeed very quickly.
-	// We're mainly testing that the timeout path doesn't panic.
-	_ = g.GetCustom(dst, u)
+	// This might timeout or succeed very quickly depending on system load.
+	// We verify the function executes without panic and returns (error or nil).
+	err := g.GetCustom(dst, u)
+
+	// The function should either succeed very quickly or timeout.
+	// Either outcome is acceptable - we're testing that timeout doesn't cause panic.
+	// Most likely it will error due to fake git setup.
+	_ = err // Error is expected in this test environment
 }
 
 // Test GetCustom full integration - clone path.

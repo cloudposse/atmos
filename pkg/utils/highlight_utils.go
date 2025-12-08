@@ -4,17 +4,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"os"
 	"strings"
 
-	"github.com/alecthomas/chroma"
-	"github.com/alecthomas/chroma/formatters"
-	"github.com/alecthomas/chroma/lexers"
-	"github.com/alecthomas/chroma/quick"
-	"github.com/alecthomas/chroma/styles"
-	"golang.org/x/term"
+	"github.com/alecthomas/chroma/v2"
+	"github.com/alecthomas/chroma/v2/formatters"
+	"github.com/alecthomas/chroma/v2/lexers"
+	"github.com/alecthomas/chroma/v2/quick"
+	"github.com/alecthomas/chroma/v2/styles"
 
 	"github.com/cloudposse/atmos/internal/tui/templates"
+	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -64,7 +63,7 @@ func GetHighlightSettings(config *schema.AtmosConfiguration) *schema.SyntaxHighl
 func HighlightCode(code string, lexerName string, theme string) (string, error) {
 	defer perf.Track(nil, "utils.HighlightCode")()
 
-	if !term.IsTerminal(int(os.Stdout.Fd())) {
+	if !termUtils.IsTTYSupportForStdout() {
 		return code, nil
 	}
 	var buf bytes.Buffer
@@ -75,14 +74,26 @@ func HighlightCode(code string, lexerName string, theme string) (string, error) 
 	return buf.String(), nil
 }
 
-var isTermPresent = term.IsTerminal(int(os.Stdout.Fd()))
+var isTermPresent = termUtils.IsTTYSupportForStdout()
 
 // HighlightCodeWithConfig highlights the given code using the provided configuration.
 func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, format ...string) (string, error) {
 	defer perf.Track(config, "utils.HighlightCodeWithConfig")()
 
-	// Skip highlighting if not in a terminal or disabled
-	if !isTermPresent || !GetHighlightSettings(config).Enabled {
+	// Return plain code if config is nil
+	if config == nil {
+		return code, nil
+	}
+
+	// Check if either stdout or stderr is a terminal (provenance goes to stderr)
+	isTerm := isTermPresent || termUtils.IsTTYSupportForStderr()
+
+	// Check if color is explicitly disabled via NoColor flag or Color setting.
+	// NoColor takes precedence (when true, always disable colors).
+	colorDisabled := config.Settings.Terminal.NoColor || !config.Settings.Terminal.Color
+
+	// Skip highlighting if not in a terminal, disabled, or colors are disabled
+	if !isTerm || !GetHighlightSettings(config).Enabled || colorDisabled {
 		return code, nil
 	}
 

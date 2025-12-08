@@ -70,6 +70,7 @@ import (
 	"github.com/hashicorp/go-version"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 // Constants for git operations.
@@ -164,27 +165,33 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 		// We have an SSH key - decode it.
 		raw, err := base64.StdEncoding.DecodeString(sshKey)
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: failed to decode SSH key: %v", errUtils.ErrSSHKeyUsage, err)
 		}
 
 		// Create a temp file for the key and ensure it is removed.
 		fh, err := os.CreateTemp("", "go-getter")
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: failed to create temp file for SSH key: %v", errUtils.ErrSSHKeyUsage, err)
 		}
 		sshKeyFile = fh.Name()
-		defer func() { _ = os.Remove(sshKeyFile) }()
+		defer func() {
+			if err := os.Remove(sshKeyFile); err != nil && !os.IsNotExist(err) {
+				log.Trace("Failed to remove temporary SSH key file", "error", err, "file", sshKeyFile)
+			}
+		}()
 
 		// Set the permissions prior to writing the key material.
 		if err := os.Chmod(sshKeyFile, sshKeyFileMode); err != nil {
-			return err
+			return fmt.Errorf("%w: failed to set SSH key file permissions: %v", errUtils.ErrSSHKeyUsage, err)
 		}
 
 		// Write the raw key into the temp file.
 		_, err = fh.Write(raw)
-		_ = fh.Close()
+		if closeErr := fh.Close(); closeErr != nil {
+			log.Trace("Failed to close temporary SSH key file", "error", closeErr, "file", sshKeyFile)
+		}
 		if err != nil {
-			return err
+			return fmt.Errorf("%w: failed to write SSH key to temp file: %v", errUtils.ErrSSHKeyUsage, err)
 		}
 	}
 
@@ -408,7 +415,9 @@ func (g *CustomGitGetter) clone(params *gitOperationParams) error {
 		err := g.checkout(ctx, dst, originalRef)
 		if err != nil {
 			// Clean up git repository on disk
-			_ = os.RemoveAll(dst)
+			if removeErr := os.RemoveAll(dst); removeErr != nil {
+				log.Trace("Failed to remove git repository during cleanup", "error", removeErr, "dir", dst)
+			}
 			return err
 		}
 	}

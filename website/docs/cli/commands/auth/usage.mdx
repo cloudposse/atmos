@@ -1,0 +1,304 @@
+---
+title: atmos auth
+sidebar_label: auth
+sidebar_class_name: command
+description: Atmos Authentication Commands
+---
+
+import DocCardList from '@theme/DocCardList';
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Atmos Auth gives you a single, consistent way to authenticate with multiple cloud providers. It supports SAML, SSO, OIDC, GitHub Actions, and static user identities. By consolidating these flows into one system, you no longer need to juggle separate tools or browser plugins, just to try to login. And because it's built into Atmos, it works seamlessly with stacks, components, workflows, shells, and even custom commands.
+</Intro>
+
+<ActionCard title="Configure Authentication">
+    Learn how to configure providers, identities, keyring, and credential storage in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/auth">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Usage
+
+<Screengrab title="atmos auth --help" slug="atmos-auth--help" />
+
+## Examples
+
+```shell
+# Validate configuration
+atmos auth validate
+
+# Authenticate with the default identity
+atmos auth login
+
+# Authenticate with a specific identity
+atmos auth login --identity admin
+
+# Print environment variables in JSON
+atmos auth env --format json
+
+# Execute a command with authentication context
+atmos auth exec -- terraform plan
+
+# Show current authentication status
+atmos auth whoami
+
+# Open AWS console in browser
+atmos auth console
+
+# Start a shell with authentication
+atmos auth shell
+```
+
+## Flags
+
+<dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    Specify the identity to use for authentication. Can be:
+    <ul>
+      <li>An identity name (e.g., <code>--identity admin</code>)</li>
+      <li>Empty for interactive selection (e.g., <code>--identity</code>)</li>
+      <li><code>false</code> to disable authentication (e.g., <code>--identity=false</code>)</li>
+    </ul>
+    When set to <code>false</code>, Atmos skips identity authentication and uses standard AWS credential resolution.
+  </dd>
+</dl>
+
+## Subcommands
+
+<DocCardList/>
+
+## Authentication Concepts
+
+### Providers
+
+**Providers** are the upstream systems that Atmos Auth uses to obtain initial credentials:
+
+- **AWS SSO**: `aws/iam-identity-center`
+- **AWS SAML**: `aws/saml`
+- **GitHub OIDC**: `github/oidc`
+
+### Identities
+
+**Identities** represent the user accounts or roles available from provider credentials:
+
+- **AWS Permission Set**: `aws/permission-set`
+- **AWS Assume Role**: `aws/assume-role`
+- **AWS User**: `aws/user`
+
+### Identity Chaining
+
+Identity chaining (often called *role chaining*) is when one identity is used to obtain another, forming a sequence of temporary credentials.
+
+For example, you might:
+1. Start with an SSO login to obtain base credentials.
+2. Use those credentials to assume a cross-account role.
+3. Optionally, chain again into another role with more limited or specialized permissions.
+
+This allows you to:
+- Access multiple accounts or environments without long-lived keys.
+- Follow least-privilege practices by escalating only as needed.
+- Automate complex authentication flows while still relying on short-lived credentials.
+
+## Default Identity Handling
+
+A **default identity** is the one Atmos Auth will use automatically when no specific identity is requested.
+
+- If you configure a single identity and mark it as `default: true`, Atmos will always use it without requiring you to pass `--identity`.
+- If multiple identities are defined, you can still mark one as default, but you'll need to explicitly choose another when you don't want the default.
+- If no default is set and multiple identities exist, Atmos will require you to specify which identity to use.
+
+### Interactive Selection
+
+When multiple defaults exist or no default is configured, Atmos prompts you to choose:
+
+```bash
+$ atmos auth whoami
+? Multiple default identities found. Please choose one:
+  ▸ dev-admin
+    prod-admin
+    staging-admin
+```
+
+## Disabling Authentication
+
+In CI/CD environments, you may want to disable Atmos-managed authentication and use native cloud provider credentials instead.
+
+```bash
+# Disable via CLI flag
+atmos terraform plan mycomponent --stack=dev --identity=false
+
+# Disable via environment variable
+export ATMOS_IDENTITY=false
+atmos terraform plan mycomponent --stack=dev
+```
+
+**Recognized disable values:** `false`, `0`, `no`, `off` (case-insensitive)
+
+When disabled, Atmos skips all identity authentication and falls back to standard cloud provider SDK credential resolution.
+
+## Environment Variable Formats
+
+The `atmos auth env` command outputs credentials in multiple formats:
+
+### Bash Format
+
+```bash
+atmos auth env --format bash
+# Output:
+export AWS_ACCESS_KEY_ID="AKIA..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_SESSION_TOKEN="..."
+```
+
+### JSON Format
+
+```bash
+atmos auth env --format json
+# Output:
+{
+  "AWS_ACCESS_KEY_ID": "AKIA...",
+  "AWS_SECRET_ACCESS_KEY": "...",
+  "AWS_SESSION_TOKEN": "..."
+}
+```
+
+### Dotenv Format
+
+```bash
+atmos auth env --format dotenv
+# Output:
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
+AWS_SESSION_TOKEN=...
+```
+
+## CI/CD Integration
+
+### GitHub Actions
+
+```yaml
+name: Deploy Infrastructure
+on: [push]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::123456789012:role/GitHubActionsRole
+          aws-region: us-east-1
+
+      - name: Deploy with Atmos (using GitHub OIDC credentials)
+        env:
+          ATMOS_IDENTITY: false  # Disable Atmos auth, use GitHub-provided credentials
+        run: |
+          atmos terraform apply mycomponent --stack=prod
+```
+
+### GitLab CI
+
+```yaml
+deploy:
+  script:
+    - atmos auth validate
+    - atmos terraform apply myapp -s prod
+```
+
+## Workflows Integration
+
+Use Atmos Auth in workflows:
+
+```yaml
+# atmos.yaml workflows section
+workflows:
+  deploy:
+    description: Deploy with authentication
+    steps:
+      - name: validate-auth
+        command: atmos auth validate
+      - name: deploy-dev
+        command: atmos terraform apply myapp -s dev
+        identity: dev-admin
+      - name: deploy-prod
+        command: atmos terraform apply myapp -s prod
+        identity: prod-admin
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**Configuration Validation Errors**
+
+```bash
+atmos auth validate --verbose
+```
+
+**Authentication Failures**
+
+```bash
+# Check current status
+atmos auth whoami
+
+# Re-authenticate
+atmos auth login --identity <name>
+
+# Check with verbose output
+atmos auth login --identity <name> --verbose
+```
+
+**Permission Errors**
+
+```bash
+# Verify identity configuration
+atmos auth validate
+
+# Check assumed role/permissions
+atmos auth exec --identity <name> -- aws sts get-caller-identity
+```
+
+**Environment Variable Issues**
+
+```bash
+# Check what variables are set
+atmos auth env --identity <name>
+
+# Test environment
+atmos auth exec --identity <name> -- env | grep AWS
+```
+
+### Debug Mode
+
+Enable debug logging for detailed troubleshooting:
+
+```bash
+# Verbose CLI output
+atmos auth validate --verbose
+atmos auth login --identity <name> --verbose
+
+# Set log level explicitly
+ATMOS_LOG_LEVEL=Debug atmos auth whoami
+```
+
+## Security Best Practices
+
+- Never commit credentials to version control
+- Use environment variables for sensitive data: `!env VAR_NAME`
+- Regularly rotate credentials
+- Use least-privilege access
+- Validate configurations regularly: `atmos auth validate`
+- Use shorter session durations for high-security environments

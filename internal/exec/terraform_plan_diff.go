@@ -9,13 +9,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // Static errors.
@@ -161,7 +159,7 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 		errUtils.CheckErrorAndPrint(errUtils.ErrPlanHasDiff, "", "")
 
 		// Exit with code 2 to indicate that the plans are different
-		u.OsExit(2)
+		errUtils.OsExit(2)
 		return nil // This line will never be reached
 	}
 

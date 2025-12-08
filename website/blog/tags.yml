@@ -1,0 +1,45 @@
+# Blog Post Tags Configuration
+# This file defines the official tags for Atmos changelog posts.
+# Each post should have 1-2 tags from this list.
+
+# USER-FACING TAGS
+# Use these for posts that directly affect Atmos users:
+
+feature:
+  label: Feature
+  description: New capabilities and functionality
+
+enhancement:
+  label: Enhancement
+  description: Improvements to existing features
+
+bugfix:
+  label: Bug Fix
+  description: Bug fixes
+
+dx:
+  label: DX
+  description: Developer experience improvements
+
+breaking-change:
+  label: Breaking Change
+  description: Breaking changes requiring user action
+
+security:
+  label: Security
+  description: Security-related changes
+
+documentation:
+  label: Documentation
+  description: Documentation improvements
+
+deprecation:
+  label: Deprecation
+  description: Deprecated features scheduled for removal
+
+# CONTRIBUTOR TAG
+# Use for internal changes with zero user impact:
+
+core:
+  label: Core
+  description: Internal changes for Atmos contributors and core developers

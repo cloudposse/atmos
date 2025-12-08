@@ -18,15 +18,36 @@ repos:
   # Run golangci-lint using system binary to avoid Go 1.25 compatibility issues
   - repo: local
     hooks:
+      - id: golangci-lint-config-verify
+        name: golangci-lint config verify
+        description: Validate golangci-lint configuration file schema
+        entry: golangci-lint config verify
+        language: system
+        files: ^\.golangci\.yml$
+        pass_filenames: false
+
+      # IMPORTANT: Do NOT build custom-gcl automatically in this hook!
+      # Building during pre-commit can cause git corruption in worktrees.
+      # Users should run `make custom-gcl` once before committing.
+      # The run script will provide helpful error if binary is missing.
       - id: golangci-lint
         name: golangci-lint
-        description: Run golangci-lint on modified Go files
-        entry: golangci-lint run --new-from-rev=origin/main --config=.golangci.yml
+        description: Run golangci-lint on modified Go files (requires pre-built custom-gcl binary)
+        entry: scripts/run-custom-golangci-lint.sh
         language: system
         types: [go]
         pass_filenames: false
         require_serial: true
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)
+
+      - id: gomodcheck
+        name: Check go.mod install compatibility
+        description: Ensure go.mod doesn't have replace/exclude directives that break go install
+        entry: make gomodcheck
+        language: system
+        files: ^go\.mod$
+        pass_filenames: false
+
 
   # General file hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -37,7 +58,7 @@ repos:
       - id: end-of-file-fixer
         exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg|website/src/components/Screengrabs/)
       - id: check-yaml
-        exclude: ^(vendor/)
+        exclude: ^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|tests/fixtures/)
         args: [--allow-multiple-documents, --unsafe]
       - id: check-added-large-files
         args: [--maxkb=500]

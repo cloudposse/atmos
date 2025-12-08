@@ -1,0 +1,368 @@
+---
+title: Organizing Stacks
+sidebar_position: 7
+sidebar_label: Organizing Stacks
+description: Structure your stacks for maintainability and scale
+id: organizing-stacks
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+As your infrastructure grows, so does your stack configuration. A handful of YAML files quickly becomes dozens or hundreds. Good organization keeps everything manageable and makes it easy for your team to find what they need.
+</Intro>
+
+Let's look at proven patterns for organizing Atmos stacks at scale.
+
+## Start Simple
+
+If you're just getting started, keep it simple:
+
+```
+stacks/
+├── dev.yaml
+├── staging.yaml
+└── prod.yaml
+```
+
+Each file is a complete environment. This works great for small projects with a few environments.
+
+## Add Shared Configuration
+
+As duplication creeps in, extract common settings:
+
+```
+stacks/
+├── _defaults/
+│   └── globals.yaml
+├── dev.yaml
+├── staging.yaml
+└── prod.yaml
+```
+
+<File title="stacks/_defaults/globals.yaml">
+```yaml
+vars:
+  namespace: myapp
+  tags:
+    ManagedBy: Atmos
+    Team: Platform
+```
+</File>
+
+<File title="stacks/dev.yaml">
+```yaml
+import:
+  - _defaults/globals
+
+vars:
+  environment: dev
+```
+</File>
+
+The `_defaults/` directory is a convention (you can name it anything), but it's widely used and makes intent clear.
+
+## Organize by Hierarchy
+
+For larger projects with multiple regions and accounts, organize hierarchically:
+
+```
+stacks/
+├── _defaults/
+│   ├── globals.yaml
+│   └── aws.yaml
+├── orgs/
+│   └── acme/
+│       ├── _defaults.yaml
+│       └── accounts/
+│           ├── dev/
+│           │   ├── _defaults.yaml
+│           │   ├── us-east-1.yaml
+│           │   └── us-west-2.yaml
+│           └── prod/
+│               ├── _defaults.yaml
+│               ├── us-east-1.yaml
+│               └── eu-west-1.yaml
+```
+
+This mirrors your cloud structure: Organization → Account → Region.
+
+Each level can have `_defaults.yaml` files that apply to everything below them:
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+vars:
+  organization: acme
+  domain: acme.com
+```
+</File>
+
+<File title="stacks/orgs/acme/accounts/prod/_defaults.yaml">
+```yaml
+import:
+  - orgs/acme/_defaults
+
+vars:
+  environment: production
+  account_id: "123456789012"
+```
+</File>
+
+<File title="stacks/orgs/acme/accounts/prod/us-east-1.yaml">
+```yaml
+import:
+  - orgs/acme/accounts/prod/_defaults
+
+vars:
+  region: us-east-1
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+## Catalogs: Reusable Component Blueprints
+
+Catalogs are collections of pre-configured component blueprints. Think of them as a component library for your organization.
+
+```
+stacks/
+├── catalog/
+│   ├── vpc/
+│   │   ├── vpc-base.yaml
+│   │   ├── vpc-dmz.yaml
+│   │   └── vpc-private.yaml
+│   ├── eks/
+│   │   ├── eks-base.yaml
+│   │   └── eks-production.yaml
+│   └── rds/
+│       ├── rds-postgres.yaml
+│       └── rds-mysql.yaml
+└── orgs/
+    └── acme/
+        └── accounts/
+            └── prod/
+                └── us-east-1.yaml
+```
+
+<File title="stacks/catalog/vpc/vpc-base.yaml">
+```yaml
+components:
+  terraform:
+    vpc/base:
+      metadata:
+        component: vpc
+        type: abstract
+      vars:
+        enable_dns_hostnames: true
+        enable_dns_support: true
+```
+</File>
+
+<File title="stacks/orgs/acme/accounts/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc/vpc-base
+
+components:
+  terraform:
+    vpc-prod:
+      metadata:
+        inherits:
+          - vpc/base
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+Catalogs make it easy to browse available components and understand their default configurations.
+
+## Naming Conventions
+
+Good names make configuration self-documenting. Here are some proven patterns:
+
+### Stack Names
+
+Stack names are how you reference environments:
+
+```bash
+atmos terraform apply vpc -s prod-us-east-1
+atmos terraform apply vpc -s dev-us-west-2
+```
+
+Common patterns:
+
+- `{environment}-{region}`: `prod-us-east-1`, `dev-eu-west-1`
+- `{account}-{region}`: `production-us-east-1`, `sandbox-us-west-2`
+- `{org}-{account}-{region}`: `acme-prod-us-east-1`
+
+Configure your naming pattern in `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+stacks:
+  name_pattern: "{environment}-{region}"
+```
+</File>
+
+### File Names
+
+Match your file names to stack names for clarity:
+
+```
+stacks/
+└── orgs/
+    └── acme/
+        └── accounts/
+            ├── prod-us-east-1.yaml    # Stack: prod-us-east-1
+            ├── prod-us-west-2.yaml    # Stack: prod-us-west-2
+            └── dev-us-east-1.yaml     # Stack: dev-us-east-1
+```
+
+### Component Instance Names
+
+Use descriptive names that indicate purpose:
+
+```yaml
+components:
+  terraform:
+    vpc-production:       # Good: indicates environment
+      vars: {}
+
+    vpc-dmz:              # Good: indicates purpose
+      vars: {}
+
+    vpc-eks-cluster:      # Good: indicates what uses it
+      vars: {}
+
+    vpc:                  # Less clear
+      vars: {}
+```
+
+## Mixins: Cross-Cutting Configuration
+
+Mixins are small, focused configuration snippets that add specific functionality. Use them for cross-cutting concerns that don't fit a hierarchy.
+
+```
+stacks/
+├── mixins/
+│   ├── monitoring.yaml
+│   ├── backup.yaml
+│   └── compliance.yaml
+```
+
+<File title="stacks/mixins/monitoring.yaml">
+```yaml
+components:
+  terraform:
+    monitoring-mixin:
+      metadata:
+        type: abstract
+      vars:
+        enable_cloudwatch: true
+        enable_xray: true
+        log_retention_days: 30
+```
+</File>
+
+<File title="stacks/prod-us-east-1.yaml">
+```yaml
+import:
+  - mixins/monitoring
+  - mixins/backup
+  - mixins/compliance
+
+components:
+  terraform:
+    app:
+      metadata:
+        inherits:
+          - monitoring-mixin
+      vars:
+        # Monitoring settings inherited
+```
+</File>
+
+## Full Example Structure
+
+Here's a complete structure for a multi-account, multi-region setup:
+
+```
+stacks/
+├── _defaults/
+│   ├── globals.yaml          # Company-wide settings
+│   └── aws.yaml              # AWS provider defaults
+├── catalog/
+│   ├── vpc/
+│   │   ├── vpc-base.yaml
+│   │   └── vpc-dmz.yaml
+│   ├── eks/
+│   │   └── eks-base.yaml
+│   └── rds/
+│       └── rds-postgres.yaml
+├── mixins/
+│   ├── monitoring.yaml
+│   ├── backup.yaml
+│   └── compliance.yaml
+└── orgs/
+    └── acme/
+        ├── _defaults.yaml
+        └── accounts/
+            ├── dev/
+            │   ├── _defaults.yaml
+            │   ├── us-east-1.yaml
+            │   └── us-west-2.yaml
+            ├── staging/
+            │   ├── _defaults.yaml
+            │   └── us-east-1.yaml
+            └── prod/
+                ├── _defaults.yaml
+                ├── us-east-1.yaml
+                ├── us-west-2.yaml
+                └── eu-west-1.yaml
+```
+
+Each file is small and focused. Settings cascade down the hierarchy. Components reuse catalog blueprints.
+
+## Finding the Right Level
+
+Where should a setting go?
+
+<dl>
+  <dt>**Globals (`_defaults/globals.yaml`)**</dt>
+  <dd>Company-wide settings that apply everywhere: organization name, root domain, common tags</dd>
+
+  <dt>**Org Defaults (`orgs/acme/_defaults.yaml`)**</dt>
+  <dd>Organization-specific settings: billing alerts, compliance requirements, naming conventions</dd>
+
+  <dt>**Account Defaults (`accounts/prod/_defaults.yaml`)**</dt>
+  <dd>Account-level settings: account ID, environment, cost allocation tags</dd>
+
+  <dt>**Region Files (`us-east-1.yaml`)**</dt>
+  <dd>Region-specific components: VPCs, subnets, regional services</dd>
+
+  <dt>**Component Config**</dt>
+  <dd>Component-specific variables: CIDR blocks, instance sizes, feature flags</dd>
+</dl>
+
+**Rule of thumb:** Put settings at the highest level where they apply, override lower as needed.
+
+## Key Takeaways
+
+✅ **Start simple** - Add structure as you need it
+✅ **Use `_defaults/` for shared configuration** - Widely recognized convention
+✅ **Organize hierarchically** - Mirror your cloud structure (org/account/region)
+✅ **Create catalogs** - Reusable component blueprints
+✅ **Use descriptive names** - Make intent clear
+✅ **Mixins for cross-cutting concerns** - Monitoring, backup, compliance
+
+## What's Next
+
+Your stacks are organized, but components need to talk to each other. Let's learn how to connect them:
+
+- **[Connect Components](/learn/connecting-components)** - Share data between components
+- **[What's Next](/learn/next-steps)** - Advanced topics and where to go from here
+- **[Stack Configuration Reference](/stacks/)** - Deep dive into advanced features

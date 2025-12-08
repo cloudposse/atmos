@@ -10,7 +10,7 @@ demo_name=$(basename $(pwd))
 
 shopt -s expand_aliases
 
-alias tree='tree -CF --gitignore -I ".git" -I "terraform.tfstate*" -I "*.tfvars.json" -I "cache*.txt"'
+alias tree='tree -CF --gitignore --charset=UTF-8 -I ".git" -I "terraform.tfstate*" -I "*.tfvars.json" -I "cache*.txt"'
 alias bat='bat --force-colorization --style header,numbers --theme="GitHub" --paging=never'
 alias cat='bat'
 

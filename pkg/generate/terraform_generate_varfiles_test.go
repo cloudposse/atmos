@@ -1,11 +1,8 @@
 package generate
 
 import (
-	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -18,13 +15,7 @@ func TestTerraformGenerateVarfiles(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	assert.Nil(t, err)
 
-	tempDir, err := os.MkdirTemp("", strconv.FormatInt(time.Now().Unix(), 10))
-	assert.Nil(t, err)
-
-	defer func(path string) {
-		err := os.RemoveAll(path)
-		assert.Nil(t, err)
-	}(tempDir)
+	tempDir := t.TempDir()
 
 	var stacks []string
 	var components []string

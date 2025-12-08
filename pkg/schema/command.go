@@ -12,6 +12,7 @@ type Command struct {
 	Steps           []string               `yaml:"steps" json:"steps" mapstructure:"steps"`
 	Commands        []Command              `yaml:"commands" json:"commands" mapstructure:"commands"`
 	Verbose         bool                   `yaml:"verbose" json:"verbose" mapstructure:"verbose"`
+	Identity        string                 `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }
 
 type CommandArgument struct {
@@ -28,6 +29,7 @@ type CommandFlag struct {
 	Description string `yaml:"description" json:"description" mapstructure:"description"`
 	Usage       string `yaml:"usage" json:"usage" mapstructure:"usage"`
 	Required    bool   `yaml:"required" json:"required" mapstructure:"required"`
+	Default     any    `yaml:"default" json:"default" mapstructure:"default"`
 }
 
 type CommandEnv struct {

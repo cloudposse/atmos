@@ -14,7 +14,6 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 
-	"github.com/Masterminds/sprig/v3"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/jfrog/jfrog-client-go/utils/log"
@@ -32,7 +31,6 @@ const ociScheme = "oci://"
 var (
 	ErrMissingMixinURI             = errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
 	ErrMissingMixinFilename        = errors.New("'filename' must be specified for each 'mixin' in the 'component.yaml' file")
-	ErrUnsupportedComponentType    = errors.New("'%s' is not supported type. Valid types are 'terraform' and 'helmfile'")
 	ErrMixinEmpty                  = errors.New("mixin URI cannot be empty")
 	ErrMixinNotImplemented         = errors.New("local mixin installation not implemented")
 	ErrStackPullNotSupported       = errors.New("command 'atmos vendor pull --stack <stack>' is not supported yet")
@@ -69,13 +67,16 @@ func ReadAndProcessComponentVendorConfigFile(
 	var componentConfig schema.VendorComponentConfig
 
 	switch componentType {
-	case "terraform":
+	case cfg.TerraformComponentType:
 		componentBasePath = atmosConfig.Components.Terraform.BasePath
-	case "helmfile":
+	case cfg.HelmfileComponentType:
 		componentBasePath = atmosConfig.Components.Helmfile.BasePath
+	case cfg.PackerComponentType:
+		componentBasePath = atmosConfig.Components.Packer.BasePath
 	default:
-		return componentConfig, "", fmt.Errorf("%s,%w", componentType, ErrUnsupportedComponentType)
+		return componentConfig, "", fmt.Errorf("%s,%w", componentType, errUtils.ErrUnsupportedComponentType)
 	}
+
 	componentPath := filepath.Join(atmosConfig.BasePath, componentBasePath, component)
 
 	dirExists, err := u.IsDirectory(componentPath)
@@ -241,7 +242,7 @@ func ExecuteComponentVendorInternal(
 	uri := vendorComponentSpec.Source.Uri
 	// Parse 'uri' template
 	if vendorComponentSpec.Source.Version != "" {
-		t, err := template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(sprig.FuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(vendorComponentSpec.Source.Uri)
+		t, err := template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(getSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(vendorComponentSpec.Source.Uri)
 		if err != nil {
 			return err
 		}
@@ -379,7 +380,7 @@ func parseMixinURI(mixin *schema.VendorComponentMixins) (string, error) {
 		return mixin.Uri, nil
 	}
 
-	tmpl, err := template.New("mixin-uri").Funcs(sprig.FuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(mixin.Uri)
+	tmpl, err := template.New("mixin-uri").Funcs(getSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(mixin.Uri)
 	if err != nil {
 		return "", err
 	}

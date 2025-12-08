@@ -1,0 +1,264 @@
+---
+title: Configure Variables
+sidebar_position: 10
+sidebar_label: vars
+sidebar_class_name: command
+description: Use the vars section to pass variables to your Terraform, Helmfile, or Packer components.
+id: vars
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `vars` section defines variables that are passed to your components. Variables can be set at the global level, component-type level, or component level, and are deep-merged across the inheritance chain.
+</Intro>
+
+## Use Cases
+
+- **Component Configuration:** Pass input variables to Terraform root modules, Helmfile releases, or Packer templates.
+- **Environment-Specific Values:** Define different values for dev, staging, and production environments.
+- **Shared Defaults:** Set common variables at higher levels and override them at lower levels as needed.
+
+## Configuration Scopes
+
+The `vars` section can be defined at multiple levels. Atmos deep-merges variables from all levels, with more specific levels taking precedence.
+
+### Global Level
+
+Variables defined at the root level apply to all components in the stack:
+
+```yaml
+# stacks/orgs/acme/plat/prod/us-east-1.yaml
+vars:
+  environment: prod
+  region: us-east-1
+  tags:
+    Environment: Production
+    ManagedBy: Atmos
+```
+
+### Component-Type Level
+
+Variables defined under `terraform`, `helmfile`, or `packer` apply to all components of that type:
+
+```yaml
+# stacks/orgs/acme/plat/prod/_defaults.yaml
+terraform:
+  vars:
+    terraform_version: "1.5"
+
+helmfile:
+  vars:
+    helm_timeout: 300
+```
+
+### Component Level
+
+Variables defined within a component override all higher-level settings:
+
+```yaml
+# stacks/orgs/acme/plat/prod/us-east-1.yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+        enable_dns_hostnames: true
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
+```
+
+## Merge Behavior
+
+Variables are deep-merged from the most general to the most specific level:
+
+1. **Global `vars:`** (applies to all components)
+2. **Component-type `terraform.vars:` / `helmfile.vars:` / `packer.vars:`** (applies to all components of that type)
+3. **Component `components.terraform.<name>.vars`** (applies to a specific component)
+
+Maps are recursively merged, and lists are replaced (not appended). More specific values override less specific ones.
+
+### Example
+
+<File title="stacks/catalog/vpc/_defaults.yaml">
+```yaml
+# Global defaults for VPC components
+vars:
+  tags:
+    Team: Platform
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/prod/_defaults.yaml">
+```yaml
+# Production defaults
+vars:
+  tags:
+    Environment: Production
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc/_defaults
+  - orgs/acme/plat/prod/_defaults
+
+components:
+  terraform:
+    vpc:
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+        tags:
+          Name: prod-vpc
+```
+</File>
+
+The resulting `vars` for the `vpc` component would be:
+
+```yaml
+vars:
+  vpc_cidr: "10.0.0.0/16"
+  tags:
+    Team: Platform        # From catalog/_defaults
+    Environment: Production # From prod/_defaults
+    Name: prod-vpc        # From component
+```
+
+## Context Variables
+
+Atmos automatically provides context variables based on your stack naming convention. These are available in templates and can be used in your Terraform code:
+
+<dl>
+  <dt>`namespace`</dt>
+  <dd>Organization or company identifier.</dd>
+
+  <dt>`tenant`</dt>
+  <dd>Tenant identifier (for multi-tenant setups).</dd>
+
+  <dt>`environment`</dt>
+  <dd>Environment identifier (e.g., `ue1` for us-east-1).</dd>
+
+  <dt>`stage`</dt>
+  <dd>Stage identifier (e.g., `dev`, `staging`, `prod`).</dd>
+</dl>
+
+These context variables are typically configured in your `atmos.yaml` using the `name_pattern` setting.
+
+## Using Templates in Variables
+
+Variables support Go templates for dynamic values:
+
+```yaml
+vars:
+  cluster_name: "{{ .namespace }}-{{ .environment }}-{{ .stage }}-eks"
+  bucket_name: "{{ .namespace }}-{{ .tenant }}-{{ .stage }}-assets"
+```
+
+You can also reference other component outputs using YAML functions:
+
+```yaml
+vars:
+  vpc_id: !terraform.output vpc/vpc_id
+  subnet_ids: !terraform.output vpc/private_subnet_ids
+```
+
+## YAML Functions for Variables
+
+Atmos provides YAML functions that can dynamically set variable values. These functions are evaluated at runtime when processing stack configurations.
+
+### `!include` - Load External Files
+
+The `!include` function loads content from external files, making it ideal for reusing existing `.tfvars` files or large variable definitions:
+
+```yaml
+vars:
+  # Include an entire tfvars file
+  !include path/to/variables.tfvars
+
+  # Or include specific variable files
+  network_config: !include config/network.yaml
+  tags: !include config/common-tags.yaml
+```
+
+This is particularly useful when:
+- Migrating from native Terraform with existing `.tfvars` files
+- Sharing variable definitions across multiple components
+- Keeping large configuration blocks in separate files
+
+### `!terraform.output` - Reference Component Outputs
+
+Read outputs from other Terraform components:
+
+```yaml
+vars:
+  vpc_id: !terraform.output vpc/vpc_id
+  subnet_ids: !terraform.output vpc/private_subnet_ids
+```
+
+### `!terraform.state` - Access Remote State
+
+Access values from Terraform state with more control:
+
+```yaml
+vars:
+  # From same stack
+  vpc_id: !terraform.state vpc vpc_id
+
+  # From different stack
+  shared_vpc_id: !terraform.state shared-services/network vpc vpc_id
+```
+
+### `!store` - Read from External Stores
+
+Read values from external key-value stores:
+
+```yaml
+vars:
+  api_key: !store ssm/prod app api_key
+  db_password: !store vault/secrets database password
+```
+
+### `!env` - Read Environment Variables
+
+Pass through environment variables:
+
+```yaml
+vars:
+  aws_region: !env AWS_REGION
+  deploy_env: !env DEPLOY_ENV, development  # With default
+```
+
+### `!exec` - Execute Commands
+
+Execute shell commands and use their output:
+
+```yaml
+vars:
+  git_commit: !exec git rev-parse HEAD
+  current_user: !exec whoami
+```
+
+For the complete list of YAML functions, see [YAML Functions](/functions/yaml).
+
+## Best Practices
+
+1. **Use Catalog Defaults:** Define common variable patterns in `stacks/catalog/` and import them.
+
+2. **Keep Variables DRY:** Set shared values at higher levels and only override what's different at lower levels.
+
+3. **Use Meaningful Names:** Variable names should match your Terraform variable names for clarity.
+
+4. **Document Required Variables:** Use abstract components to enforce required variables through inheritance.
+
+5. **Avoid Duplication:** If you find yourself repeating the same variables, consider using [imports](/stacks/imports) or [inheritance](/howto/inheritance).
+
+## Related
+
+- [Environment Variables (env)](/stacks/env)
+- [Settings](/stacks/settings)
+- [Imports](/stacks/imports)
+- [Inheritance](/howto/inheritance)
+- [Overrides](/stacks/overrides)

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -351,7 +352,7 @@ func TestGetCacheFilePathWithDirectoryCreationError(t *testing.T) {
 	_, err = GetCacheFilePath()
 	assert.Error(t, err)
 	if err != nil {
-		assert.Contains(t, err.Error(), "error creating cache directory")
+		assert.ErrorIs(t, err, errUtils.ErrCacheDir)
 	}
 }
 

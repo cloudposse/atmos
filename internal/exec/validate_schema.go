@@ -10,6 +10,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filematch"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
+	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/validator"
 )
 
@@ -133,7 +135,8 @@ func (av *atmosValidatorExecutor) printValidation(schema string, files []string)
 			return count, err
 		}
 		if len(validationErrors) == 0 {
-			log.Info("No Validation Errors", "file", file, "schema", schema)
+			u.PrintfMessageToTUI("%s Validated %s\n", theme.Styles.Checkmark, file)
+			log.Debug("Schema validation passed", "file", file, "schema", schema)
 			continue
 		}
 		log.Error("Invalid YAML", "file", file)

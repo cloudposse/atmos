@@ -1,0 +1,9 @@
+components:
+  terraform:
+    component-c:
+      metadata:
+        component: test-component
+      vars:
+        name: component-c
+        # C depends on A - creates cycle A → B → C → A
+        dependency: !terraform.state component-a indirect-a value

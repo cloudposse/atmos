@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -46,9 +47,10 @@ type DescribeAffectedCmdArgs struct {
 	ProcessYamlFunctions        bool
 	Skip                        []string
 	ExcludeLocked               bool
+	AuthManager                 auth.AuthManager // Optional: Auth manager for credential management (from --identity flag).
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
 type DescribeAffectedExec interface {
 	Execute(*DescribeAffectedCmdArgs) error
 }
@@ -99,6 +101,7 @@ type describeAffectedExec struct {
 		processTemplates bool,
 		processYamlFunctions bool,
 		skip []string,
+		onlyInStack string,
 	) error
 	printOrWriteToFile func(
 		atmosConfig *schema.AtmosConfiguration,
@@ -273,9 +276,9 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 		return err
 	}
 
-	// Add dependent components and stacks for each affected component
+	// Add dependent components and stacks for each affected component.
 	if len(affected) > 0 && a.IncludeDependents {
-		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip)
+		err = d.addDependentsToAffected(a.CLIConfig, &affected, a.IncludeSettings, a.ProcessTemplates, a.ProcessYamlFunctions, a.Skip, a.Stack)
 		if err != nil {
 			return err
 		}

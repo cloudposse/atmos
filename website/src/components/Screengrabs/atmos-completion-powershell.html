@@ -1,4 +1,3 @@
-# powershell completion for atmos                                -*- shell-script -*-
 
 function __atmos_debug {
     if ($env:BASH_COMP_DEBUG_FILE) {
@@ -266,6 +265,4 @@ filter __atmos_escapeStringWithSpecialChars {
 
     }
 }
-
-Register-ArgumentCompleter -CommandName 'atmos' -ScriptBlock ${__atmosCompleterBlock}
 

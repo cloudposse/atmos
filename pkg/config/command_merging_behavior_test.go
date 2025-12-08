@@ -150,11 +150,15 @@ commands:
 				assert.NotNil(t, cmdMap["local-only"], "local-only command should exist")
 				assert.NotNil(t, cmdMap["remote-only"], "remote-only command should exist")
 
-				// Print actual command details for debugging.
-				fmt.Printf("\nActual commands:\n")
-				for _, cmd := range commands {
-					fmt.Printf("  - %s: %s\n", cmd.Name, cmd.Description)
-				}
+				// Capture command details for debugging on failure.
+				t.Cleanup(func() {
+					if t.Failed() {
+						t.Log("\nActual commands:")
+						for _, cmd := range commands {
+							t.Logf("  - %s: %s", cmd.Name, cmd.Description)
+						}
+					}
+				})
 			},
 		},
 		{
@@ -219,10 +223,14 @@ commands:
 				assert.True(t, cmdMap["level3-cmd"], "Level 3 command should be present")
 				assert.True(t, cmdMap["level4-cmd"], "Level 4 command should be present")
 
-				fmt.Printf("\nCommands from 4-level deep import:\n")
-				for _, cmd := range commands {
-					fmt.Printf("  - %s: %s\n", cmd.Name, cmd.Description)
-				}
+				t.Cleanup(func() {
+					if t.Failed() {
+						t.Log("\nCommands from 4-level deep import:")
+						for _, cmd := range commands {
+							t.Logf("  - %s: %s", cmd.Name, cmd.Description)
+						}
+					}
+				})
 			},
 		},
 		{
@@ -264,22 +272,26 @@ commands:
 				assert.Len(t, commands, 2, "Should have both commands")
 
 				// Verify complex nested structures are preserved.
-				for _, cmd := range commands {
-					fmt.Printf("\nCommand '%s' structure:\n", cmd.Name)
-					fmt.Printf("  Description: %s\n", cmd.Description)
-					if len(cmd.Steps) > 0 {
-						fmt.Printf("  Steps: %d\n", len(cmd.Steps))
+				t.Cleanup(func() {
+					if t.Failed() {
+						for _, cmd := range commands {
+							t.Logf("\nCommand '%s' structure:", cmd.Name)
+							t.Logf("  Description: %s", cmd.Description)
+							if len(cmd.Steps) > 0 {
+								t.Logf("  Steps: %d", len(cmd.Steps))
+							}
+							if len(cmd.Env) > 0 {
+								t.Logf("  Env vars: %d", len(cmd.Env))
+							}
+							if len(cmd.Arguments) > 0 {
+								t.Logf("  Arguments: %d", len(cmd.Arguments))
+							}
+							if len(cmd.Flags) > 0 {
+								t.Logf("  Flags: %d", len(cmd.Flags))
+							}
+						}
 					}
-					if len(cmd.Env) > 0 {
-						fmt.Printf("  Env vars: %d\n", len(cmd.Env))
-					}
-					if len(cmd.Arguments) > 0 {
-						fmt.Printf("  Arguments: %d\n", len(cmd.Arguments))
-					}
-					if len(cmd.Flags) > 0 {
-						fmt.Printf("  Flags: %d\n", len(cmd.Flags))
-					}
-				}
+				})
 			},
 		},
 	}
@@ -287,9 +299,7 @@ commands:
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create temp directory.
-			tempDir, err := os.MkdirTemp("", "atmos-merge-behavior-*")
-			require.NoError(t, err)
-			defer os.RemoveAll(tempDir)
+			tempDir := t.TempDir()
 
 			// Create test files.
 			for path, content := range tt.setupFiles {
@@ -299,11 +309,7 @@ commands:
 			}
 
 			// Change to test directory.
-			oldDir, err := os.Getwd()
-			require.NoError(t, err)
-			err = os.Chdir(tempDir)
-			require.NoError(t, err)
-			defer os.Chdir(oldDir)
+			t.Chdir(tempDir)
 
 			// Load configuration.
 			configInfo := schema.ConfigAndStacksInfo{
@@ -327,9 +333,7 @@ commands:
 // TestCommandStructurePreservation verifies that complex command structures are preserved through merging.
 func TestCommandStructurePreservation(t *testing.T) {
 	// Create temp directory.
-	tempDir, err := os.MkdirTemp("", "atmos-structure-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	// Create a file with a complex command structure.
 	complexYAML := `
@@ -361,15 +365,11 @@ commands:
     verbose: true
 `
 
-	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(complexYAML), 0o644)
+	err := os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(complexYAML), 0o644)
 	require.NoError(t, err)
 
 	// Load and verify.
-	oldDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	defer os.Chdir(oldDir)
+	t.Chdir(tempDir)
 
 	configInfo := schema.ConfigAndStacksInfo{
 		AtmosBasePath:      tempDir,

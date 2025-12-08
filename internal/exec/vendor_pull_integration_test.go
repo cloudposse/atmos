@@ -16,6 +16,9 @@ import (
 // TestVendorPullBasicExecution tests basic vendor pull command execution.
 // It verifies the command runs without errors using the vendor2 fixture.
 func TestVendorPullBasicExecution(t *testing.T) {
+	// Skip long tests in short mode (this test takes ~4 seconds due to network I/O and Git operations)
+	tests.SkipIfShort(t)
+
 	// Check for GitHub access with rate limit check.
 	rateLimits := tests.RequireGitHubAccess(t)
 	if rateLimits != nil && rateLimits.Remaining < 10 {
@@ -28,15 +31,15 @@ func TestVendorPullBasicExecution(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	cmd := &cobra.Command{
-		Use:                "pull",
-		Short:              "Pull the latest vendor configurations or dependencies",
-		Long:               "Pull and update vendor-specific configurations or dependencies to ensure the project has the latest required resources.",
-		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-		Args:               cobra.NoArgs,
-		RunE:               ExecuteVendorPullCmd,
-	}
+	// Create command with global flags (including profile flag).
+	cmd := newTestCommandWithGlobalFlags("pull")
+	cmd.Short = "Pull the latest vendor configurations or dependencies"
+	cmd.Long = "Pull and update vendor-specific configurations or dependencies to ensure the project has the latest required resources."
+	cmd.FParseErrWhitelist = struct{ UnknownFlags bool }{UnknownFlags: false}
+	cmd.Args = cobra.NoArgs
+	cmd.RunE = ExecuteVendorPullCmd
 
+	// Add vendor-specific flags.
 	cmd.DisableFlagParsing = false
 	cmd.PersistentFlags().StringP("component", "c", "", "Only vendor the specified component")
 	cmd.PersistentFlags().StringP("stack", "s", "", "Only vendor the specified stack")
@@ -44,9 +47,6 @@ func TestVendorPullBasicExecution(t *testing.T) {
 	cmd.PersistentFlags().Bool("dry-run", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes.")
 	cmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags")
 	cmd.PersistentFlags().Bool("everything", false, "Vendor all components")
-	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
-	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
 
 	// Execute the command.
 	err := cmd.RunE(cmd, []string{})
@@ -69,6 +69,9 @@ func TestVendorPullConfigFileProcessing(t *testing.T) {
 // TestVendorPullFullWorkflow tests the complete vendor pull workflow including file verification.
 // It verifies that vendor components are correctly pulled from various sources (git, file, OCI).
 func TestVendorPullFullWorkflow(t *testing.T) {
+	// Skip long tests in short mode (this test requires network I/O and OCI pulls)
+	tests.SkipIfShort(t)
+
 	// Check for GitHub access with rate limit check.
 	rateLimits := tests.RequireGitHubAccess(t)
 	if rateLimits != nil && rateLimits.Remaining < 20 {
@@ -78,23 +81,12 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 	// Check for OCI authentication (GitHub token) for pulling images from ghcr.io.
 	tests.RequireOCIAuthentication(t)
 
-	// Save and restore current directory.
-	startingDir, err := os.Getwd()
-	require.NoError(t, err, "Failed to get the current working directory")
-	t.Cleanup(func() {
-		require.NoError(t, os.Chdir(startingDir), "Failed to change back to the starting directory")
-	})
-
 	// Change to test fixture directory.
 	workDir := "../../tests/fixtures/scenarios/vendor"
-	err = os.Chdir(workDir)
-	require.NoError(t, err, "Failed to change directory to %q", workDir)
+	t.Chdir(workDir)
 
-	// Set up vendor pull command.
-	cmd := &cobra.Command{}
-	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
-	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
+	// Set up vendor pull command with global flags.
+	cmd := newTestCommandWithGlobalFlags("pull")
 
 	flags := cmd.Flags()
 	flags.String("component", "", "")
@@ -104,7 +96,7 @@ func TestVendorPullFullWorkflow(t *testing.T) {
 	flags.Bool("everything", false, "")
 
 	// Test 1: Execute vendor pull and verify files are created.
-	err = ExecuteVendorPullCommand(cmd, []string{})
+	err := ExecuteVendorPullCommand(cmd, []string{})
 	require.NoError(t, err, "Failed to execute vendor pull command")
 
 	expectedFiles := []string{
@@ -169,26 +161,15 @@ func TestVendorPullTripleSlashNormalization(t *testing.T) {
 		t.Skipf("Insufficient GitHub API requests remaining (%d). Test may require ~10 requests.", rateLimits.Remaining)
 	}
 
-	// Save and restore current directory.
-	startingDir, err := os.Getwd()
-	require.NoError(t, err, "Failed to get the current working directory")
-	t.Cleanup(func() {
-		require.NoError(t, os.Chdir(startingDir), "Failed to change back to the starting directory")
-	})
-
 	// Use t.Setenv for automatic cleanup.
 	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
 	// Change to test directory.
 	testDir := "../../tests/fixtures/scenarios/vendor-triple-slash"
-	err = os.Chdir(testDir)
-	require.NoError(t, err, "Failed to change to test directory")
+	t.Chdir(testDir)
 
-	// Set up command.
-	cmd := &cobra.Command{}
-	cmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-	cmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration file")
-	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Path to configuration directory")
+	// Set up command with global flags.
+	cmd := newTestCommandWithGlobalFlags("pull")
 
 	flags := cmd.Flags()
 	flags.String("component", "s3-bucket", "")
@@ -198,7 +179,7 @@ func TestVendorPullTripleSlashNormalization(t *testing.T) {
 	flags.Bool("everything", false, "")
 
 	// Execute vendor pull command.
-	err = ExecuteVendorPullCommand(cmd, []string{})
+	err := ExecuteVendorPullCommand(cmd, []string{})
 	require.NoError(t, err, "Vendor pull command with triple-slash URI should execute without error")
 
 	// Verify target directory was created.

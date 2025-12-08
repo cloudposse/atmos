@@ -5,11 +5,12 @@ sidebar_class_name: command
 id: components
 description: Use this command to list Atmos components
 ---
+import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 
-:::note purpose
+<Intro>
 Use this command to list all Atmos components or Atmos components in a specified stack.
-:::
+</Intro>
 
 <Screengrab title="atmos list components --help" slug="atmos-list-components--help" />
 
@@ -61,4 +62,7 @@ Running `atmos list components` will produce a table with these custom columns.
 <dl>
   <dt>`--stack` / `-s` <em>(optional)</em></dt>
   <dd>Atmos stack.</dd>
+
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before listing components.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list components --identity my-aws-identity`<br/><br/>Can also be set via `ATMOS_IDENTITY` environment variable.</dd>
 </dl>

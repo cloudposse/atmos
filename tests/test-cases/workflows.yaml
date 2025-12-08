@@ -52,7 +52,10 @@ tests:
         - "nonexistentcommand"
         - "To resume the workflow from this step, run:"
         - "atmos workflow shell-command-not-found -f test --from-step step1"
-      exit_code: 1
+      # Exit code 127 is the standard Unix/POSIX exit code for "command not found".
+      # This differs from exit code 1 (generic error) and provides more specific information.
+      # The workflow correctly preserves the shell's actual exit code rather than converting it to 1.
+      exit_code: 127
 
   - name: atmos workflow failure
     enabled: true
@@ -140,9 +143,12 @@ tests:
         - "invalid workflow step type"
         - "## Explanation"
         - "Step type invalid is not supported. Each step must specify a valid type."
-        - "### Available types:"
+        - "## Hints"
+        - "Available types:"
         - "atmos"
         - "shell"
+        - "To resume the workflow from this step, run:"
+        - "atmos workflow invalid-step-type -f test --from-step step1"
       exit_code: 1
 
   - name: atmos workflow invalid from step
@@ -164,8 +170,10 @@ tests:
         - "Workflow Error"
         - "invalid from-step flag"
         - "## Explanation"
-        - "The --from-step flag was set to dne, but this step does not exist in workflow pass."
-        - "### Available steps:"
+        - "The --from-step flag was set to dne, but this step does not exist in workflow"
+        - "pass"
+        - "## Hints"
+        - "Available steps:"
         - "step1"
       exit_code: 1
 
@@ -214,7 +222,8 @@ tests:
         - "Workflow Error"
         - "invalid workflow manifest"
         - "## Explanation"
-        - "The workflow manifest stacks/workflows/test-invalid.yaml must be a map with the top-level workflows: key."
+        - "The workflow manifest stacks/workflows/test-invalid.yaml must be a map with the"
+        - "top-level workflows: key"
       exit_code: 1
 
   - name: atmos workflow file not found
@@ -284,3 +293,72 @@ tests:
         - "To resume the workflow from this step, run:"
         - "atmos workflow fail -f subdir/test --from-step step1"
       exit_code: 1
+
+  - name: atmos workflow shell command with PATH
+    enabled: true
+    snapshot: false
+    description: "Ensure atmos workflow shell commands can find executables in PATH"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "shell-with-path"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stdout:
+        - "PATH="
+      exit_code: 0
+
+  # Test cases for multi-component operations with quoted arguments
+  # These test the fix for the issue where strings.Fields() incorrectly splits quoted arguments
+
+  - name: atmos workflow shell echo with quoted arguments
+    enabled: true
+    snapshot: false
+    description: "Ensure shell commands with quoted arguments are parsed correctly"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "shell-echo-args"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stdout:
+        - "argument with spaces single quoted double quoted"
+      exit_code: 0
+
+  - name: atmos workflow multi-component with components flag
+    enabled: true
+    snapshot: false
+    description: "Ensure multi-component workflow with --components flag works"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "multi-component-list"
+      - "--file"
+      - "test"
+      - "--dry-run"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: atmos workflow multi-component with all flag
+    enabled: true
+    snapshot: false
+    description: "Ensure multi-component workflow with --all flag works"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "multi-component-all"
+      - "--file"
+      - "test"
+      - "--dry-run"
+    expect:
+      diff: []
+      exit_code: 0

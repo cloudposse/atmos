@@ -14,15 +14,7 @@ import (
 )
 
 func TestGetComponentPath(t *testing.T) {
-	// Save original env vars to restore later.
-	originalTerraformPath := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
-	originalHelmfilePath := os.Getenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
-	originalPackerPath := os.Getenv("ATMOS_COMPONENTS_PACKER_BASE_PATH")
-	defer func() {
-		os.Setenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH", originalTerraformPath)
-		os.Setenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH", originalHelmfilePath)
-		os.Setenv("ATMOS_COMPONENTS_PACKER_BASE_PATH", originalPackerPath)
-	}()
+	// Note: We don't need to save/restore env vars as t.Setenv in subtests handles cleanup
 
 	tests := []struct {
 		name               string
@@ -262,14 +254,9 @@ func TestGetComponentPath(t *testing.T) {
 				t.Skipf("Skipping test on Windows")
 			}
 
-			// Clear env vars.
-			os.Unsetenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH")
-			os.Unsetenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH")
-			os.Unsetenv("ATMOS_COMPONENTS_PACKER_BASE_PATH")
-
-			// Set test env vars.
+			// Set test env vars (t.Setenv handles cleanup automatically).
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 
 			cfg := tt.setupConfig()
@@ -413,32 +400,11 @@ func TestGetBasePathForComponentType(t *testing.T) {
 		},
 	}
 
-	// Save original env vars.
-	originalVars := map[string]string{
-		"ATMOS_COMPONENTS_TERRAFORM_BASE_PATH": os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH"),
-		"ATMOS_COMPONENTS_HELMFILE_BASE_PATH":  os.Getenv("ATMOS_COMPONENTS_HELMFILE_BASE_PATH"),
-		"ATMOS_COMPONENTS_PACKER_BASE_PATH":    os.Getenv("ATMOS_COMPONENTS_PACKER_BASE_PATH"),
-	}
-	defer func() {
-		for k, v := range originalVars {
-			if v == "" {
-				os.Unsetenv(k)
-			} else {
-				os.Setenv(k, v)
-			}
-		}
-	}()
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear env vars.
-			for k := range originalVars {
-				os.Unsetenv(k)
-			}
-
-			// Set test env vars.
+			// Set test env vars (t.Setenv handles cleanup automatically).
 			for k, v := range tt.setupEnv {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 
 			cfg := tt.setupConfig()
@@ -461,6 +427,158 @@ func TestGetBasePathForComponentType(t *testing.T) {
 			} else {
 				// For UNC paths or exact matches, compare directly.
 				assert.Equal(t, tt.expectedPath, basePath)
+			}
+		})
+	}
+}
+
+func TestCleanDuplicatedPath(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "simple path without duplication",
+			input:    "/workspace/components/terraform",
+			expected: "/workspace/components/terraform",
+		},
+		{
+			name:     "2-part duplication - basic",
+			input:    "/a/b/a/b/c",
+			expected: "/a/b/c",
+		},
+		{
+			name:     "2-part duplication - tests/fixtures",
+			input:    "/workspace/tests/fixtures/tests/fixtures/components",
+			expected: "/workspace/tests/fixtures/components",
+		},
+		{
+			name:     "2-part duplication - at start",
+			input:    "/foo/bar/foo/bar",
+			expected: "/foo/bar",
+		},
+		{
+			name:     "2-part duplication - in middle",
+			input:    "/prefix/a/b/a/b/suffix",
+			expected: "/prefix/a/b/suffix",
+		},
+		{
+			name:     "3-part duplication",
+			input:    "/x/y/z/x/y/z/end",
+			expected: "/x/y/z/end",
+		},
+		{
+			name:     "recursive duplication - multiple consecutive",
+			input:    "/a/b/a/b/a/b/c",
+			expected: "/a/b/c",
+		},
+		{
+			name:     "recursive duplication - chain",
+			input:    "/x/y/x/y/x/y/z",
+			expected: "/x/y/z",
+		},
+		{
+			name:     "4-part duplication",
+			input:    "/one/two/three/four/one/two/three/four/end",
+			expected: "/one/two/three/four/end",
+		},
+		{
+			name:     "legitimate repeated 2-part sequences - different context",
+			input:    "/a/b/c/a/b",
+			expected: "/a/b/c/a/b",
+		},
+		{
+			name:     "legitimate repeated parts - not consecutive",
+			input:    "/components/terraform/other/components/helmfile",
+			expected: "/components/terraform/other/components/helmfile",
+		},
+		{
+			name:     "single part path",
+			input:    "/workspace",
+			expected: "/workspace",
+		},
+		{
+			name:     "two part path - no duplication possible",
+			input:    "/a/b",
+			expected: "/a/b",
+		},
+		{
+			name:     "three part path - no duplication",
+			input:    "/a/b/c",
+			expected: "/a/b/c",
+		},
+		{
+			name:     "relative path with 2-part duplication",
+			input:    "tests/fixtures/tests/fixtures/file.txt",
+			expected: "tests/fixtures/file.txt",
+		},
+		{
+			name:     "path with dots cleaned first",
+			input:    "/a/b/./a/b/c",
+			expected: "/a/b/c",
+		},
+		{
+			name:     "symlink scenario - real use case",
+			input:    "/Users/erik/atmos/tests/fixtures/tests/fixtures/components/terraform/vpc",
+			expected: "/Users/erik/atmos/tests/fixtures/components/terraform/vpc",
+		},
+		{
+			name: "Windows-style path with 2-part duplication",
+			// Use forward slashes - filepath.FromSlash will convert to OS-specific separators
+			// On Windows: C:/... becomes C:\...
+			// On Unix: C:/... stays as C:/... (a relative path for testing)
+			input:    "C:/workspace/tests/fixtures/tests/fixtures/components",
+			expected: "C:/workspace/tests/fixtures/components",
+		},
+		{
+			name:     "no false positive - similar but not duplicate",
+			input:    "/test/fixture/tests/fixtures/component",
+			expected: "/test/fixture/tests/fixtures/component",
+		},
+		{
+			name:     "exact 2-part repeat at end",
+			input:    "/prefix/suffix/suffix",
+			expected: "/prefix/suffix/suffix",
+		},
+		{
+			name:     "2-part duplication with single separator",
+			input:    "/workspace/components/workspace/components/terraform",
+			expected: "/workspace/components/terraform",
+		},
+		{
+			name:     "Windows volume duplication - forward slash",
+			input:    "D:/D:/a/atmos/tests/fixtures/components",
+			expected: "D:/a/atmos/tests/fixtures/components",
+		},
+		{
+			name:     "Windows volume duplication - backslash",
+			input:    filepath.FromSlash("D:/D:/a/atmos/tests/fixtures/components"),
+			expected: filepath.FromSlash("D:/a/atmos/tests/fixtures/components"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Normalize input to use OS-specific separators for testing cross-platform paths
+			input := filepath.FromSlash(tt.input)
+			result := cleanDuplicatedPath(input)
+
+			// Normalize expected path to use OS-specific separators for comparison
+			// cleanDuplicatedPath returns OS-specific paths, so we need to convert
+			// the hardcoded forward-slash expected values to match
+			expected := filepath.FromSlash(tt.expected)
+
+			assert.Equal(t, expected, result, "cleanDuplicatedPath(%q) = %q, want %q", input, result, expected)
+
+			// Additional verification: result should be clean
+			if result != "" {
+				assert.Equal(t, filepath.Clean(result), result, "Result should be a clean path")
 			}
 		})
 	}

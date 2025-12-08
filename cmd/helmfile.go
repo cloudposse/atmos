@@ -26,10 +26,16 @@ func init() {
 
 func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
 	handleHelpRequest(cmd, args)
+	// Enable heatmap tracking if --heatmap flag is present in os.Args
+	// (needed because flag parsing is disabled for helmfile commands).
+	enableHeatmapIfRequested()
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
-	info := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
+	info, err := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
+	if err != nil {
+		return err
+	}
 	info.CliArgs = []string{"helmfile", commandName}
-	err := e.ExecuteHelmfile(info)
+	err = e.ExecuteHelmfile(info)
 	return err
 }

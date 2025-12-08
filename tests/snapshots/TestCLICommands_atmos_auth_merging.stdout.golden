@@ -1,0 +1,57 @@
+identities:
+  identity-oidc:
+    via:
+      provider: provider-oidc
+  oidc:
+    kind: aws/assume-role
+    principal:
+      assume_role: arn:aws:iam::000000000000:role/Dummy
+    via:
+      provider: provider-oidc
+  test-admin:
+    default: true
+    kind: aws/permission-set
+    principal:
+      account:
+        id: "123456789012"
+      name: AdminAccess
+    via:
+      provider: test-sso
+  test-readonly:
+    kind: aws/permission-set
+    principal:
+      account:
+        name: plat-sandbox
+      name: ReadOnlyAccess
+    via:
+      provider: test-sso
+  test-role:
+    kind: aws/assume-role
+    principal:
+      assume_role: arn:aws:iam::123456789012:role/TestRole
+      session_name: test-session
+    via:
+      provider: test-sso
+  test-user:
+    credentials:
+      access_key_id: EXAMPLEACCESSKEYID
+      region: us-east-1
+      secret_access_key: EXAMPLESECRETACCESSKEY
+    kind: aws/user
+  test-user-no-creds:
+    kind: aws/user
+keyring: {}
+logs:
+  file: ""
+  level: ""
+providers:
+  provider-oidc:
+    kind: github/oidc
+    region: us-east-1
+    spec:
+      audience: sts.us-east-1.amazonaws.com
+  test-sso:
+    kind: aws/iam-identity-center
+    region: us-east-1
+    start_url: https://test.awsapps.com/start
+

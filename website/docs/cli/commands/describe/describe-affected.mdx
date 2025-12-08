@@ -84,6 +84,10 @@ Our [affected stacks](/integrations/github-actions/affected-stacks) GitHub Actio
 atmos describe affected [options]
 ```
 
+:::info YAML Functions and Authentication
+By default, `atmos describe affected` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during stack processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
+:::
+
 :::tip
 Run `atmos describe affected --help` to see all the available options
 :::
@@ -115,6 +119,12 @@ atmos describe affected --skip=terraform.output
 atmos describe affected --skip=terraform.output --skip=include
 atmos describe affected --skip=include,eval
 atmos describe affected --exclude-locked
+# Authenticate before describing (when YAML functions require credentials)
+atmos describe affected --identity my-aws-identity
+atmos describe affected --identity # Interactive selection
+# Disable authentication (use AWS SDK defaults)
+atmos describe affected --identity=false
+atmos describe affected -i my-aws-identity --ref refs/heads/main
 ```
 
 # Example Output
@@ -318,7 +328,7 @@ Affected components and stacks:
     <dd>
         Exclude the locked components (`metadata.locked: true`) from the output.
 
-        Refer to [Locking Components with `metadata.locked`](/core-concepts/stacks/define-components/#locking-components-with-metadatalocked)
+        Refer to [Locking Components with `metadata.locked`](/stacks/components#locking-components-metadatalocked)
 
         `atmos describe affected --exclude-locked`
     </dd>
@@ -332,6 +342,20 @@ Affected components and stacks:
         Atmos will perform an HTTP POST request to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,
         where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,
         and the URL path is defined by the `ATMOS_PRO_ENDPOINT`environment variable
+    </dd>
+
+    <dt>`--identity` / `-i` <em>(optional)</em></dt>
+    <dd>
+        Authenticate with a specific identity before describing affected components.
+        This is required when YAML template functions (e.g., `!terraform.state`, `!terraform.output`)
+        need to access remote resources requiring authentication.
+        Use without a value for interactive identity selection:
+
+        `atmos describe affected --identity` (interactive)
+
+        `atmos describe affected --identity my-aws-identity` (specific identity)
+
+        For more details, refer to [Authentication](/cli/commands/auth/usage).
     </dd>
 </dl>
 
@@ -398,7 +422,7 @@ where:
     <dt>`atlantis_project`</dt>
     <dd>
         The affected Atlantis project name. It will be included only if the Atlantis integration is configured in
-        the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/integrations/atlantis) for more details.
+        the `settings.atlantis` section in the stack config. Refer to [Atlantis Integration](/cli/configuration/integrations/atlantis) for more details.
     </dd>
 
     <dt>`file`</dt>
@@ -427,7 +451,7 @@ where:
     <dd>
         The `settings` section of the component in the stack. It will be included only if the
         command-line flag `--include-settings=true` is passed. The `settings` sections is a free-form map used to pass
-        configuration information to [integrations](/integrations).
+        configuration information to [integrations](/integrations/github-actions).
     </dd>
 
     <dt>`included_in_dependents`</dt>
@@ -779,10 +803,10 @@ where:
 
 :::note
 
-[Abstract Atmos components](/design-patterns/abstract-component) (`metadata.type` is set to `abstract`)
+[Abstract Atmos components](/design-patterns/inheritance-patterns/abstract-component) (`metadata.type` is set to `abstract`)
 are not included in the output since they serve as blueprints for other Atmos components and are not meant to be provisioned.
 
-[Disabled Atmos components](/core-concepts/stacks/define-components/#disabling-components-with-metadataenabled) (`metadata.enabled` is set to `false`)
+[Disabled Atmos components](/stacks/components#disabling-components-metadataenabled) (`metadata.enabled` is set to `false`)
 are also not included in the output since they are explicitly disabled.
 
 :::

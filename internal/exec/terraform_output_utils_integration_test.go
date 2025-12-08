@@ -13,14 +13,12 @@ import (
 
 func TestRetryOnWindows_FileOperations(t *testing.T) {
 	// Create a temporary directory for testing.
-	tmpDir, err := os.MkdirTemp("", "terraform_output_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	testFile := filepath.Join(tmpDir, "test.txt")
 
 	// Create a test file.
-	err = os.WriteFile(testFile, []byte("test content"), 0o644)
+	err := os.WriteFile(testFile, []byte("test content"), 0o644)
 	require.NoError(t, err)
 
 	// Test file deletion with retry logic.
@@ -39,14 +37,12 @@ func TestRetryOnWindows_SimulatedLockingScenario(t *testing.T) {
 		t.Skipf("This test simulates Windows-specific file locking behavior")
 	}
 
-	tmpDir, err := os.MkdirTemp("", "terraform_lock_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	testFile := filepath.Join(tmpDir, "state.tfstate")
 
 	// Create a test file.
-	err = os.WriteFile(testFile, []byte("terraform state"), 0o644)
+	err := os.WriteFile(testFile, []byte("terraform state"), 0o644)
 	require.NoError(t, err)
 
 	// Open the file to simulate it being locked.

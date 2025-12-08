@@ -1,0 +1,21 @@
+workflows:
+  test-exit-0:
+    description: "Workflow that exits with code 0"
+    steps:
+      - name: exit-0-step
+        type: shell
+        command: "exit 0"
+
+  test-exit-2:
+    description: "Workflow that exits with code 2"
+    steps:
+      - name: exit-2-step
+        type: shell
+        command: "exit 2"
+
+  test-exit-42:
+    description: "Workflow that exits with code 42"
+    steps:
+      - name: exit-42-step
+        type: shell
+        command: "exit 42"
