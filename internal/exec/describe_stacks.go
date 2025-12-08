@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -227,6 +228,71 @@ func ExecuteDescribeStacks(
 
 						if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[string]any); !ok {
 							metadataSection = map[string]any{}
+						}
+
+						// Process metadata inheritance to resolve metadata.terraform_workspace and other inherited metadata fields.
+						// This ensures that BuildTerraformWorkspace sees the correctly inherited metadata.
+						if atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() {
+							if inheritList, hasInherits := metadataSection[cfg.InheritsSectionName].([]any); hasInherits && len(inheritList) > 0 {
+								// Initialize base component config accumulator.
+								baseComponentConfig := &schema.BaseComponentConfig{
+									BaseComponentVars:      make(map[string]any),
+									BaseComponentSettings:  make(map[string]any),
+									BaseComponentEnv:       make(map[string]any),
+									BaseComponentAuth:      make(map[string]any),
+									BaseComponentMetadata:  make(map[string]any),
+									BaseComponentProviders: make(map[string]any),
+									BaseComponentHooks:     make(map[string]any),
+								}
+
+								baseComponents := []string{}
+
+								// Process each inherited component in order (left-to-right merge).
+								for _, inheritValue := range inheritList {
+									inheritFrom, ok := inheritValue.(string)
+									if !ok {
+										continue // Skip invalid entries.
+									}
+
+									err := ProcessBaseComponentConfig(
+										atmosConfig,
+										baseComponentConfig,
+										terraformSection, // allComponentsMap (contains all components in this stack).
+										componentName,    // component name.
+										stackFileName,    // stack name.
+										inheritFrom,      // base component to inherit from.
+										"",               // componentBasePath (empty for describe stacks).
+										false,            // checkBaseComponentExists (false to be lenient).
+										&baseComponents,  // accumulates inheritance chain.
+									)
+									if err != nil {
+										return nil, err
+									}
+								}
+
+								// Merge base metadata with component's own metadata.
+								// Component metadata wins on conflicts (component overrides base).
+								if len(baseComponentConfig.BaseComponentMetadata) > 0 {
+									merged, err := m.Merge(
+										atmosConfig,
+										[]map[string]any{
+											baseComponentConfig.BaseComponentMetadata, // Base (lower priority).
+											metadataSection, // Component (higher priority).
+										})
+									if err != nil {
+										return nil, err
+									}
+									metadataSection = merged
+								}
+							}
+
+							// If component has explicit terraform_workspace, remove pattern/template.
+							// This ensures the explicit workspace takes precedence over inherited/imported patterns.
+							// The pattern may come from imports or base components, but explicit workspace should win.
+							if _, hasExplicitWorkspace := metadataSection["terraform_workspace"].(string); hasExplicitWorkspace {
+								delete(metadataSection, "terraform_workspace_pattern")
+								delete(metadataSection, "terraform_workspace_template")
+							}
 						}
 
 						if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[string]any); !ok {

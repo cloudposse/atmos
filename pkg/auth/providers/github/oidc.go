@@ -202,6 +202,13 @@ func (p *oidcProvider) Environment() (map[string]string, error) {
 	return map[string]string{}, nil
 }
 
+// Paths returns credential files/directories used by this provider.
+func (p *oidcProvider) Paths() ([]types.Path, error) {
+	// GitHub OIDC provider doesn't use filesystem credentials.
+	// The OIDC token comes from GitHub Actions environment.
+	return []types.Path{}, nil
+}
+
 // PrepareEnvironment prepares environment variables for external processes.
 // For GitHub OIDC providers, we don't modify the environment since OIDC tokens
 // are used for authentication chains but not directly consumed by external processes.

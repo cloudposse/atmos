@@ -243,6 +243,33 @@ func (i *subscriptionIdentity) CredentialsExist() (bool, error) {
 	return fileManager.CredentialsExist(providerName), nil
 }
 
+// Paths returns credential files/directories used by this identity.
+func (i *subscriptionIdentity) Paths() ([]authTypes.Path, error) {
+	// Get provider name.
+	providerName, err := i.GetProviderName()
+	if err != nil {
+		return nil, err
+	}
+
+	// Create file manager to get provider-namespaced paths.
+	fileManager, err := azureCloud.NewAzureFileManager("")
+	if err != nil {
+		return nil, err
+	}
+
+	return []authTypes.Path{
+		{
+			Location: fileManager.GetCredentialsPath(providerName),
+			Type:     authTypes.PathTypeFile,
+			Required: true,
+			Purpose:  fmt.Sprintf("Azure credentials file for identity %s", i.name),
+			Metadata: map[string]string{
+				"read_only": "true",
+			},
+		},
+	}, nil
+}
+
 // LoadCredentials loads credentials from identity-managed storage.
 func (i *subscriptionIdentity) LoadCredentials(ctx context.Context) (authTypes.ICredentials, error) {
 	// Load from Azure credentials file.

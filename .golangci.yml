@@ -105,6 +105,8 @@ linters:
       forbid:
         - pattern: os\.Getenv
           msg: Use `viper.BindEnv` for new environment variables instead of `os.Getenv`
+        - pattern: os\.UserHomeDir
+          msg: Use `homedir.Dir()` from `github.com/cloudposse/atmos/pkg/config/homedir` instead of `os.UserHomeDir()` for better cross-platform support, caching, and OS-specific methods
         - pattern: '\.(Skip|SkipNow)\('
           msg: Use `t.Skipf("<reason>")` with a descriptive reason; do not use `t.Skip`/`t.SkipNow`
         - pattern: ^path\.Join$
@@ -121,6 +123,10 @@ linters:
           msg: "Do not use deprecated github.com/pkg/errors; use static sentinel errors from errors/errors.go instead"
         - pattern: '\bpkgerrors\.'
           msg: "Do not use deprecated pkg/errors; use static sentinel errors from errors/errors.go instead"
+        - pattern: 'assert\.Contains\(.*,\s*err\.Error\('
+          msg: "NEVER use string matching on errors; use assert.ErrorIs(err, sentinel) to check sentinel errors from errors/errors.go"
+        - pattern: 'strings\.Contains\(err\.Error\('
+          msg: "NEVER use string matching on errors; use errors.Is(err, sentinel) to check sentinel errors from errors/errors.go"
         - pattern: github\.com/golang/mock
           msg: Use `go.uber.org/mock` instead of archived `github.com/golang/mock`
         - pattern: github\.com/mitchellh/go-homedir
@@ -325,6 +331,21 @@ severity:
     - linters:
         - nestif
         - nolintlint
+        - gocognit
+      severity: warning
+    - linters:
+        - gocritic
+      text: "hugeParam.*Init|hugeParam.*Update|hugeParam.*View"
+      severity: warning
+    - linters:
+        - gosec
+      text: "G204"
+      path: "pkg/container/.*\\.go$"
+      severity: warning
+    - linters:
+        - gosec
+      text: "G204"
+      path: "pkg/devcontainer/.*\\.go$"
       severity: warning
 formatters:
   enable:

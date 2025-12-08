@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -85,7 +84,6 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 		name             string
 		setupViper       func()
 		setupEnv         func(*testing.T)
-		osArgs           []string
 		expectedProfiles []string
 		expectedSource   string
 	}{
@@ -98,7 +96,6 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			setupEnv: func(t *testing.T) {
 				t.Setenv("ATMOS_PROFILE", "env-profile")
 			},
-			osArgs:           []string{"atmos", "describe", "config"},
 			expectedProfiles: []string{"env-profile"},
 			expectedSource:   "env",
 		},
@@ -112,7 +109,6 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			setupEnv: func(t *testing.T) {
 				t.Setenv("ATMOS_PROFILE", "env-profile1,env-profile2")
 			},
-			osArgs:           []string{"atmos", "describe", "config"},
 			expectedProfiles: []string{"env-profile1", "env-profile2"},
 			expectedSource:   "env",
 		},
@@ -126,7 +122,6 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			setupEnv: func(t *testing.T) {
 				t.Setenv("ATMOS_PROFILE", "dev,,prod")
 			},
-			osArgs:           []string{"atmos", "describe", "config"},
 			expectedProfiles: []string{"dev", "prod"},
 			expectedSource:   "env",
 		},
@@ -139,7 +134,6 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			setupEnv: func(t *testing.T) {
 				t.Setenv("ATMOS_PROFILE", "   ")
 			},
-			osArgs:           []string{"atmos", "describe", "config"},
 			expectedProfiles: nil,
 			expectedSource:   "",
 		},
@@ -152,7 +146,6 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			setupEnv: func(t *testing.T) {
 				t.Setenv("ATMOS_PROFILE", ",dev,staging,")
 			},
-			osArgs:           []string{"atmos", "describe", "config"},
 			expectedProfiles: []string{"dev", "staging"},
 			expectedSource:   "env",
 		},
@@ -163,7 +156,6 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 				v.Set("profile", []string{"cli-profile"})
 			},
 			setupEnv:         nil, // Don't set ATMOS_PROFILE
-			osArgs:           []string{"atmos", "describe", "config", AtmosProfileFlag, "cli-profile"},
 			expectedProfiles: []string{"cli-profile"},
 			expectedSource:   "flag",
 		},
@@ -174,7 +166,6 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 				v.Set("profile", []string{"cli-profile"})
 			},
 			setupEnv:         nil, // Don't set ATMOS_PROFILE
-			osArgs:           []string{"atmos", "describe", "config", AtmosProfileFlag + "=cli-profile"},
 			expectedProfiles: []string{"cli-profile"},
 			expectedSource:   "flag",
 		},
@@ -185,7 +176,6 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 				v.Set("profile", nil)
 			},
 			setupEnv:         nil, // Don't set ATMOS_PROFILE
-			osArgs:           []string{"atmos", "describe", "config"},
 			expectedProfiles: nil,
 			expectedSource:   "",
 		},
@@ -196,7 +186,6 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 				v.Set("profile", []string{})
 			},
 			setupEnv:         nil, // Don't set ATMOS_PROFILE
-			osArgs:           []string{"atmos", "describe", "config"},
 			expectedProfiles: nil,
 			expectedSource:   "",
 		},
@@ -210,7 +199,6 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			setupEnv: func(t *testing.T) {
 				t.Setenv("ATMOS_PROFILE", "env-profile")
 			},
-			osArgs:           []string{"atmos", "describe", "config", AtmosProfileFlag, "flag-profile"},
 			expectedProfiles: []string{"flag-profile"},
 			// Note: Source detection has known limitation - may report "env" when both are set
 			// since we check os.LookupEnv("ATMOS_PROFILE"). This is acceptable because:
@@ -228,13 +216,6 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 
 			// Setup Viper (for tests that still need it)
 			tt.setupViper()
-
-			// Save original os.Args and restore after test
-			originalArgs := os.Args
-			t.Cleanup(func() {
-				os.Args = originalArgs
-			})
-			os.Args = tt.osArgs
 
 			// Setup environment variables using t.Setenv for automatic cleanup
 			if tt.setupEnv != nil {

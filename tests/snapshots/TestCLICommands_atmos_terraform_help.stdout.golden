@@ -164,6 +164,7 @@ AVAILABLE COMMANDS
       plan                Show changes required by the current configuration
       plan-diff           Compare two Terraform plans and show the differences
       providers           Show the providers required for this configuration
+      provision           This command provisions terraform components
       refresh             Update the state to match remote systems
       shell               Configure an environment for an Atmos component and start a new shell.
       show                Show the current state or a saved plan
@@ -225,7 +226,7 @@ FLAGS
                                   current branch: atmos terraform  --affected --repo-path
                                   <path_to_already_cloned_repo>
 
-      --sha string                Git commit SHA with which to compare the current branch: atmos terraform  --affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
+      --sha string                Git commit SHA with which to compare the current branch: atmos terraform  --affected --sha ***MASKED***
 
       --skip strings              Skip executing specific YAML functions in the Atmos stack manifests when executing
                                   terraform commands

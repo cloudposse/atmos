@@ -30,6 +30,7 @@ type ColorScheme struct {
 	Selected  string // Selected items (typically brightGreen)
 	Highlight string // Highlighted text (typically magenta)
 	Gold      string // Special indicators (typically yellow or brightYellow)
+	Spinner   string // Loading/progress indicators (typically cyan)
 
 	// Table specific
 	HeaderText string // Table header text (typically brightCyan or green)
@@ -88,6 +89,7 @@ func GenerateColorScheme(t *Theme) ColorScheme {
 		Selected:  t.BrightGreen,   // Bright green for selected
 		Highlight: t.BrightMagenta, // Bright magenta for highlights
 		Gold:      t.BrightYellow,  // Bright yellow for special indicators
+		Spinner:   t.Cyan,          // Cyan for loading/progress (calming, indicates activity)
 
 		// Table specific
 		HeaderText: t.Green,       // Green for headers

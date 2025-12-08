@@ -11,10 +11,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// findComponentInStacks searches for a specific component in the stacks map.
+// findTestComponentInStacks searches for a specific component in the stacks map.
 //
 //nolint:nestif // Nested if statements are necessary for safe type assertion chains.
-func findComponentInStacks(stacks map[string]any, componentKey string) (map[string]any, string, bool) {
+func findTestComponentInStacks(stacks map[string]any, componentKey string) (map[string]any, string, bool) {
 	for stackName, stackConfig := range stacks {
 		if stackMap, ok := stackConfig.(map[string]any); ok {
 			if components, ok := stackMap["components"].(map[string]any); ok {
@@ -47,7 +47,7 @@ func TestEnvInheritance_GlobalToComponent(t *testing.T) {
 	require.NotNil(t, stacks, "Stacks should not be nil")
 
 	// Find the test-component-dev component.
-	componentConfig, stackName, found := findComponentInStacks(stacks, "test-component-dev")
+	componentConfig, stackName, found := findTestComponentInStacks(stacks, "test-component-dev")
 	require.True(t, found, "Component test-component-dev not found in any stack")
 	require.NotNil(t, componentConfig, "Component config should not be nil")
 	t.Logf("Found component test-component-dev in stack %s", stackName)
@@ -131,7 +131,7 @@ func TestEnvInheritance_MergePriority(t *testing.T) {
 	require.NotNil(t, stacks, "Stacks should not be nil")
 
 	// Find the test-component-dev component to verify merge priority.
-	comp, stackName, found := findComponentInStacks(stacks, "test-component-dev")
+	comp, stackName, found := findTestComponentInStacks(stacks, "test-component-dev")
 	require.True(t, found, "Component test-component-dev not found in any stack")
 
 	envSection, ok := comp["env"].(map[string]any)
@@ -172,7 +172,7 @@ func TestEnvInheritance_ComponentType(t *testing.T) {
 
 	// Verify Terraform component gets terraform-specific env variables.
 	// Find test-component-dev and verify it has terraform.env variables.
-	comp, stackName, found := findComponentInStacks(stacks, "test-component-dev")
+	comp, stackName, found := findTestComponentInStacks(stacks, "test-component-dev")
 	require.True(t, found, "Component test-component-dev not found in any stack")
 
 	envSection, ok := comp["env"].(map[string]any)
@@ -205,7 +205,7 @@ func TestEnvInheritance_EnvYAMLFunction(t *testing.T) {
 	require.NotNil(t, stacks, "Stacks should not be nil")
 
 	// Find the test-component-env-function component.
-	comp, stackName, found := findComponentInStacks(stacks, "test-component-env-function")
+	comp, stackName, found := findTestComponentInStacks(stacks, "test-component-env-function")
 	require.True(t, found, "Component test-component-env-function not found in any stack")
 	t.Logf("Found test-component-env-function in stack %s", stackName)
 

@@ -42,7 +42,8 @@
       "**/_defaults.yaml"
     ],
     "name_pattern": "{stage}",
-    "name_template": ""
+    "name_template": "",
+    "inherit": {}
   },
   "workflows": {
     "base_path": "",
@@ -166,6 +167,7 @@
     }
   },
   "initialized": true,
+  "basePathAbsolute": "/absolute/path/to/repo/examples/demo-stacks",
   "stacksBaseAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/stacks",
   "includeStackAbsolutePaths": [
     "/absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*"

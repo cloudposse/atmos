@@ -13,7 +13,6 @@ const (
 )
 
 var (
-	ErrNoGitRepo                             = errors.New("not in a git repository")
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrDownloadFile                          = errors.New("failed to download file")
 	ErrParseFile                             = errors.New("failed to parse file")
@@ -53,6 +52,8 @@ var (
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
+	ErrMissingAtmosConfig                    = errors.New("atmos configuration not found or invalid")
+	ErrNotInGitRepository                    = errors.New("not inside a git repository")
 	ErrCommandNil                            = errors.New("command cannot be nil")
 	ErrGitHubRateLimitExceeded               = errors.New("GitHub API rate limit exceeded")
 	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
@@ -75,9 +76,11 @@ var (
 	ErrInvalidAuthManagerType = errors.New("invalid authManager type")
 
 	// Component and positional argument errors.
-	ErrComponentRequired     = errors.New("component is required")
-	ErrInvalidPositionalArgs = errors.New("invalid positional arguments")
-	ErrWorkflowNameRequired  = errors.New("workflow name is required")
+	ErrComponentRequired          = errors.New("component is required")
+	ErrInvalidPositionalArgs      = errors.New("invalid positional arguments")
+	ErrWorkflowNameRequired       = errors.New("workflow name is required")
+	ErrInvalidStackConfiguration  = errors.New("invalid stack configuration")
+	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -415,6 +418,14 @@ var (
 	ErrTerraformEnvCliVarJSON        = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
 	ErrWorkflowBasePathNotConfigured = errors.New("'workflows.base_path' must be configured in 'atmos.yaml'")
 	ErrWorkflowDirectoryDoesNotExist = errors.New("workflow directory does not exist")
+	ErrWorkflowNoSteps               = errors.New("workflow has no steps defined")
+	ErrInvalidWorkflowStepType       = errors.New("invalid workflow step type")
+	ErrInvalidFromStep               = errors.New("invalid from-step flag")
+	ErrWorkflowStepFailed            = errors.New("workflow step execution failed")
+	ErrWorkflowNoWorkflow            = errors.New("no workflow found")
+	ErrWorkflowFileNotFound          = errors.New("workflow file not found")
+	ErrInvalidWorkflowManifest       = errors.New("invalid workflow manifest")
+	ErrAuthProviderNotAvailable      = errors.New("auth provider is not available")
 	ErrInvalidComponentArgument      = errors.New("invalid arguments. The command requires one argument 'componentName'")
 	ErrValidation                    = errors.New("validation failed")
 	ErrCUEValidationUnsupported      = errors.New("validation using CUE is not supported yet")
@@ -564,6 +575,20 @@ var (
 	ErrNilTerraformOutput = errors.New("terraform output returned nil")
 	ErrNilStoreValue      = errors.New("cannot store nil value")
 
+	// Devcontainer errors.
+	ErrDevcontainerNotFound      = errors.New("devcontainer not found")
+	ErrContainerRuntimeOperation = errors.New("container runtime operation failed")
+	ErrContainerNotFound         = errors.New("container not found")
+	ErrContainerAlreadyExists    = errors.New("container already exists")
+	ErrContainerNotRunning       = errors.New("container is not running")
+	ErrContainerRunning          = errors.New("container is running")
+	ErrInvalidDevcontainerConfig = errors.New("invalid devcontainer configuration")
+	ErrRuntimeNotAvailable       = errors.New("container runtime not available")
+	ErrDevcontainerNameEmpty     = errors.New("devcontainer name cannot be empty")
+	ErrDevcontainerNameInvalid   = errors.New("devcontainer name contains invalid characters")
+	ErrDevcontainerNameTooLong   = errors.New("devcontainer name is too long")
+	ErrPTYNotSupported           = errors.New("PTY not supported on this platform")
+
 	// Logout errors.
 	ErrLogoutFailed                         = errors.New("logout failed")
 	ErrPartialLogout                        = errors.New("partial logout")
@@ -576,10 +601,20 @@ var (
 	ErrIdentityNotInConfig                  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig                  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
+
+	// Component path resolution errors.
+	ErrPathNotInComponentDir  = errors.New("path is not within Atmos component directories")
+	ErrComponentTypeMismatch  = errors.New("path component type does not match command")
+	ErrComponentNotInStack    = errors.New("component not found in stack configuration")
+	ErrPathResolutionFailed   = errors.New("failed to resolve component from path")
+	ErrPathIsComponentBase    = errors.New("must specify a component directory, not the base directory")
+	ErrAmbiguousComponentPath = errors.New("ambiguous component path")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.
+// When Code is 0, it indicates successful completion that should exit cleanly without printing errors.
+// This avoids deep exits (os.Exit) which are untestable.
 type ExitCodeError struct {
 	Code int
 }

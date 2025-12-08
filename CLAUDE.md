@@ -37,13 +37,56 @@ See `.claude/agents/README.md` for full list and `docs/prd/claude-agent-architec
 
 ## Architecture
 
-- **`cmd/`** - CLI commands (one per file)
-- **`internal/exec/`** - Business logic
-- **`pkg/`** - config, stack, component, utils, validate, workflow, hooks, telemetry
+- **`cmd/`** - CLI commands (one per file, lightweight - flags and command registration only)
+- **`pkg/`** - Reusable business logic packages (config, stack, component, devcontainer, container, store, git, auth, etc.)
+- **`internal/exec/`** - Legacy business logic (being phased out - prefer pkg/)
 
 **Stack Pipeline**: Load atmos.yaml → process imports/inheritance → apply overrides → render templates → generate config.
 
 **Templates and YAML functions**: Go templates + Gomplate with `atmos.Component()`, `!terraform.state`, `!terraform.output`, store integration.
+
+### Package Organization Philosophy (MANDATORY)
+
+**Prefer `pkg/` over `internal/exec/` or new `internal/` packages:**
+- **Create focused packages in `pkg/`** - Each new feature/domain gets its own package (e.g., `pkg/devcontainer`, `pkg/store`, `pkg/git`)
+- **Commands are thin wrappers** - `cmd/` files only handle CLI concerns (flags, arguments, command registration)
+- **Business logic lives in `pkg/`** - All domain logic, orchestration, and operations belong in reusable packages
+- **Plugin-ready architecture** - Packages in `pkg/` can be imported and reused, supporting future plugin systems
+
+**Anti-pattern:**
+```go
+// WRONG: Adding business logic to internal/exec
+internal/exec/new_feature.go  // ❌ Avoid this
+
+// WRONG: Adding business logic to cmd/
+cmd/mycommand/mycommand.go    // ❌ Should only have CLI setup
+func (cmd *MyCmd) Run() {
+    // hundreds of lines of business logic  // ❌ Wrong place
+}
+```
+
+**Correct pattern:**
+```go
+// CORRECT: Business logic in focused pkg/
+pkg/myfeature/
+  ├── myfeature.go           // ✅ Core business logic
+  ├── myfeature_test.go      // ✅ Unit tests
+  ├── operations.go          // ✅ Helper operations
+  └── types.go               // ✅ Domain types
+
+// CORRECT: Thin CLI wrapper in cmd/
+cmd/mycommand/mycommand.go   // ✅ Just CLI setup
+func (cmd *MyCmd) Run() {
+    return myfeature.Execute(atmosConfig, opts)  // ✅ Delegates to pkg/
+}
+```
+
+**Examples of well-structured packages:**
+- `pkg/devcontainer/` - Devcontainer lifecycle management (List, Start, Stop, Attach, Exec, etc.)
+- `pkg/store/` - Multi-provider secret store with registry pattern
+- `pkg/git/` - Git operations and repository management
+- `pkg/auth/` - Authentication and identity management
+- `pkg/container/` - Container runtime abstraction (Docker/Podman)
 
 ## Architectural Patterns (MANDATORY)
 
@@ -69,9 +112,63 @@ type ComponentLoader interface {
 //go:generate go run go.uber.org/mock/mockgen@latest -source=loader.go -destination=mock_loader_test.go
 ```
 
-### Options Pattern (MANDATORY)
-Avoid functions with many parameters. Use functional options pattern:
+### Service-Oriented Architecture (MANDATORY)
 
+For complex domains with multiple operations and concerns (like devcontainer, store, auth), use Service-Oriented Architecture with provider interfaces:
+
+**Pattern:**
+1. **One Service struct** per domain (not one-off structs per operation)
+2. **Provider interfaces** for classes of problems (ConfigProvider, RuntimeProvider, UIProvider)
+3. **Default implementations** wrapping existing code
+4. **Mock implementations** for testing
+5. **Dependency injection** for testability
+
+**Example (devcontainer domain):**
+```go
+// Service coordinates all devcontainer operations
+type Service struct {
+    config   ConfigProvider    // ALL config operations
+    runtime  RuntimeProvider   // ALL runtime operations
+    ui       UIProvider        // ALL UI operations
+}
+
+// Provider interfaces for classes of problems
+type ConfigProvider interface {
+    LoadAtmosConfig() (*schema.AtmosConfiguration, error)
+    ListDevcontainers(config *schema.AtmosConfiguration) ([]string, error)
+}
+
+type RuntimeProvider interface {
+    Start(ctx context.Context, name string, opts StartOptions) error
+    Stop(ctx context.Context, name string, timeout int) error
+    Attach(ctx context.Context, name string, opts AttachOptions) error
+}
+
+type UIProvider interface {
+    IsInteractive() bool
+    Prompt(message string, options []string) (string, error)
+}
+
+// Commands use service, not individual helpers
+service := NewService()
+service.Start(ctx, name, opts)
+```
+
+**Benefits:**
+- Reusable across all commands in domain
+- Clear separation of concerns (config/runtime/UI)
+- Easy to test with mock providers
+- Extensible (new provider = new implementation)
+- Avoids one-off struct proliferation
+
+**See:** `docs/prd/devcontainer-service-architecture.md` for complete implementation guide.
+
+**Existing examples:** `pkg/store/` (multi-provider store), `pkg/auth/` (authentication providers), `pkg/container/` (Docker/Podman abstraction)
+
+### Options Pattern (MANDATORY)
+Use functional options pattern for configuration instead of many parameters. Provides defaults and extensibility without breaking changes.
+
+**Example:**
 ```go
 type Option func(*Config)
 func WithTimeout(d time.Duration) Option { return func(c *Config) { c.Timeout = d } }
@@ -82,8 +179,6 @@ func NewClient(opts ...Option) *Client {
 }
 // Usage: client := NewClient(WithTimeout(30*time.Second), WithRetries(3))
 ```
-
-**Benefits:** Avoids parameter drilling, provides defaults, extensible without breaking changes.
 
 ### Context Usage (MANDATORY)
 Use `context.Context` for:
@@ -106,17 +201,28 @@ The terminal is a text-based UI (TextUI). User interaction (menus, prompts, anim
 
 **Output functions:**
 ```go
-// Data channel (stdout) - pipeable output
-data.Write("result") / data.Writef() / data.Writeln()
-data.WriteJSON(structData) / data.WriteYAML(structData)
+// Data channel (stdout) - for pipeable output
+data.Write("result")                // Plain text to stdout
+data.Writef("value: %s", val)       // Formatted text to stdout
+data.Writeln("result")              // Plain text with newline to stdout
+data.WriteJSON(structData)          // JSON to stdout
+data.WriteYAML(structData)          // YAML to stdout
 
-// UI channel (stderr) - human messages
-ui.Write() / ui.Writef() / ui.Writeln()              // Plain text, no icon/color
-ui.Success() / ui.Error() / ui.Warning() / ui.Info() // With icons and colors
-ui.Markdown() / ui.MarkdownMessage()                 // Rendered markdown
+// UI channel (stderr) - for human messages
+ui.Write("Loading configuration...")            // Plain text (no icon, no color, stderr)
+ui.Writef("Processing %d items...", count)      // Formatted text (no icon, no color, stderr)
+ui.Writeln("Done")                              // Plain text with newline (no icon, no color, stderr)
+ui.Success("Deployment complete!")              // ✓ Deployment complete! (green, stderr)
+ui.Error("Configuration failed")                // ✗ Configuration failed (red, stderr)
+ui.Warning("Deprecated feature")                // ⚠ Deprecated feature (yellow, stderr)
+ui.Info("Processing components...")             // ℹ Processing components... (cyan, stderr)
+
+// Markdown rendering
+ui.Markdown("# Help\n\nUsage...")               // Rendered to stdout (data)
+ui.MarkdownMessage("**Error:** Invalid config") // Rendered to stderr (UI)
 ```
 
-**Decision tree:** Pipeable data → `data.*`, Plain UI → `ui.Write*()`, Status messages → `ui.Success/Error/etc()`, Formatted docs → `ui.Markdown*()`
+**Decision tree:** Pipeable data → `data.*`, Plain UI → `ui.Write*()`, Status messages → `ui.Success/Error/Warning/Info()`, Formatted docs → `ui.Markdown*()`
 
 **Anti-patterns:** Never use `fmt.Fprintf(os.Stdout/Stderr, ...)`, `fmt.Println()`, or direct stream access. Use `data.*` or `ui.*` instead.
 
@@ -149,10 +255,34 @@ settings:
 Disable: `atmos terraform plan --mask=false`
 
 ### Package Organization (MANDATORY)
-- **Avoid utils package bloat** - Don't add to `pkg/utils/`
-- **Create purpose-built packages** - New functionality → `pkg/newfeature/`
-- **Well-tested, focused packages** - Clear responsibility
-- Examples: `pkg/store/`, `pkg/git/`, `pkg/pro/`, `pkg/filesystem/`
+See "Package Organization Philosophy" section above for the overall strategy. Key principles:
+
+- **Avoid utils package bloat** - Don't add new functions to `pkg/utils/`
+- **Avoid internal/exec** - Don't add new business logic to `internal/exec/` (legacy, being phased out)
+- **Create purpose-built packages** - New functionality gets its own package in `pkg/`
+- **Well-tested, focused packages** - Each package has clear responsibility
+- **Examples**: `pkg/devcontainer/`, `pkg/store/`, `pkg/git/`, `pkg/pro/`, `pkg/container/`, `pkg/auth/`
+
+**Anti-pattern:**
+```go
+// WRONG: Adding to utils
+pkg/utils/new_feature.go
+
+// WRONG: Adding to internal/exec
+internal/exec/new_feature.go
+```
+
+**Correct pattern:**
+```go
+// CORRECT: New focused package in pkg/
+pkg/newfeature/
+  ├── newfeature.go           // Main business logic
+  ├── newfeature_test.go      // Unit tests
+  ├── operations.go           // Helper operations (if needed)
+  ├── types.go                // Domain types (if needed)
+  ├── interface.go            // Interface definitions (if needed)
+  └── mock_interface_test.go  // Generated mocks (if needed)
+```
 
 ## Code Patterns & Conventions
 
@@ -252,40 +382,52 @@ RunE: func(cmd *cobra.Command, args []string) error {
 - ✅ See `cmd/version/version.go` for reference implementation.
 
 ### Error Handling (MANDATORY)
-- **All errors MUST be wrapped using static errors defined in `errors/errors.go`**
-- **Use `errors.Join` for combining multiple errors** - preserves all error chains
-- **Use `fmt.Errorf` with `%w` for adding string context** - when you need formatted strings
-- **Use error builder for complex errors** - adds hints, context, exit codes
-- **Use `errors.Is()` for error checking** - robust against wrapping
-- **NEVER use dynamic errors directly** - triggers linting warnings
-- **See `docs/errors.md`** for complete guide
 
-**Key distinctions:**
+#### PRIMARY PATTERN: ErrorBuilder with Sentinel Errors
+
+ALL user-facing errors MUST use ErrorBuilder with sentinel errors from `errors/errors.go`:
+
+```go
+// PREFERRED: Sentinel with underlying cause (preserves actual error message)
+err := runtime.Start(ctx, containerID) // returns "container already running"
+return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+    WithCause(err).  // Preserves Docker/Podman error message
+    WithExplanation("Failed to start container").
+    WithHint("Check Docker is running").
+    WithContext("container", containerName).
+    Err()
+
+// ALSO VALID: Sentinel as base (when no underlying error to preserve)
+err := errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+    WithExplanation("Container runtime not configured").
+    WithHint("Check atmos.yaml configuration").
+    Err()
+```
+
+**Testing (MANDATORY):**
+```go
+// ✅ CORRECT: Always use errors.Is()
+assert.ErrorIs(t, err, errUtils.ErrContainerRuntimeOperation)
+
+// ❌ WRONG: Never string matching
+assert.Contains(t, err.Error(), "...")  // FORBIDDEN
+```
+
+**Rules:**
+- ✅ ALWAYS use `errors.Is()` for checking, NEVER string comparison.
+- ✅ ALWAYS use `assert.ErrorIs()` in tests, NEVER `assert.Contains(err.Error(), ...)`.
+- ✅ ALWAYS use sentinel errors from `errors/errors.go`.
+- ❌ NEVER create dynamic errors: `errors.New("msg")`.
+- ❌ NEVER string matching: `err.Error() == "..."` or `strings.Contains(err.Error(), ...)`.
+
+**Legacy patterns (internal/non-user-facing only):**
+- `errors.Join` for multiple errors, `fmt.Errorf("%w", err)` for chains.
 - `fmt.Errorf` with single `%w`: Error chain (sequential call stack)
 - `errors.Join`: Flat list (independent errors, parallel operations)
 - `fmt.Errorf` with multiple `%w`: Like `errors.Join` but with format string (Go 1.20+)
 
-**Examples:**
+**Additional utilities:**
 ```go
-// Combining errors
-return errors.Join(errUtils.ErrFailedToProcess, underlyingErr)
-
-// Adding context
-return fmt.Errorf("%w: component=%s stack=%s", errUtils.ErrInvalidComponent, component, stack)
-
-// Error builder
-err := errUtils.Build(errUtils.ErrLoadAwsConfig).
-    WithHint("Check database credentials in atmos.yaml").
-    WithContext("component", "vpc").
-    WithExitCode(2).
-    Err()
-
-// Checking errors
-if errors.Is(err, context.DeadlineExceeded) { ... }
-
-// Static definitions (errors/errors.go)
-var ErrInvalidComponent = errors.New("invalid component")
-
 // Exit codes
 err := errUtils.WithExitCode(err, 2)
 exitCode := errUtils.GetExitCode(err) // 0 (nil), custom, exec.ExitError, or 1 (default)
@@ -298,6 +440,8 @@ errUtils.InitializeSentry(&atmosConfig.Errors.Sentry)
 defer errUtils.CloseSentry()
 errUtils.CaptureErrorWithContext(err, map[string]string{"component": "vpc"})
 ```
+
+See "docs/errors.md" for complete ErrorBuilder API guide.
 
 ### Testing Strategy (MANDATORY)
 - **Prefer unit tests with mocks** over integration tests
@@ -354,6 +498,7 @@ Small focused files (<600 lines). One cmd/impl per file. Co-locate tests. Never 
 
 **Regeneration:**
 ```bash
+go test ./pkg/config -run TestName  # Specific test
 go test ./tests -run 'TestCLICommands/test_name' -regenerate-snapshots
 go test ./tests -run 'TestCLICommands/test_name' -v  # Verify
 git diff tests/snapshots/  # Review
@@ -510,3 +655,15 @@ ALWAYS compile after changes: `go build . && go test ./...`. Fix errors immediat
 
 ### Pre-commit (MANDATORY)
 NEVER use `--no-verify`. Run `make lint` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
+
+### Lint Exclusions (MANDATORY)
+- **ALWAYS ask for user approval before adding nolint comments** - do not add them automatically
+- **Prefer refactoring over nolint** - only use nolint as last resort with explicit user permission
+- **Exception for bubbletea models**: `//nolint:gocritic // bubbletea models must be passed by value` is acceptable (library convention)
+- **Exception for intentional subprocess calls**: `//nolint:gosec // intentional subprocess call` is acceptable for container runtimes
+- **NEVER add nolint for**:
+  - gocognit (cognitive complexity) - refactor the function instead
+  - cyclomatic complexity - refactor the function instead
+  - magic numbers - extract constants instead
+  - nestif - refactor nested logic instead
+- **If you think nolint is needed, stop and ask the user first** - explain why refactoring isn't possible

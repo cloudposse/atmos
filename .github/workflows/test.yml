@@ -217,7 +217,7 @@ jobs:
         run: make testacc-cover
 
       - name: Upload coverage report to Codecov
-        if: matrix.flavor.target == 'linux'
+        if: matrix.flavor.target == 'linux' && (success() || failure())
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
