@@ -249,6 +249,77 @@ func TestCalculateMaxFlagLength(t *testing.T) {
 	}
 }
 
+func TestPrintHelpFlag_EmptyLinesAfterFirstLineRemoval(t *testing.T) {
+	// This test specifically validates the fix for handling empty lines
+	// after removing the first line from markdown-rendered content.
+	// The code at lines 125-141 in help_printer.go checks if len(lines) > 0
+	// before accessing lines[0] to prevent index out of range panic.
+	tests := []struct {
+		name       string
+		flag       *pflag.Flag
+		wrapLimit  uint
+		maxFlagLen int
+	}{
+		{
+			name: "empty usage results in single empty line after split",
+			flag: &pflag.Flag{
+				Name:      "test",
+				Shorthand: "t",
+				Usage:     "",
+				Value:     &boolValue{value: false},
+				DefValue:  "",
+			},
+			wrapLimit:  80,
+			maxFlagLen: 20,
+		},
+		{
+			name: "whitespace only usage",
+			flag: &pflag.Flag{
+				Name:      "whitespace",
+				Shorthand: "w",
+				Usage:     "   ",
+				Value:     &boolValue{value: false},
+				DefValue:  "",
+			},
+			wrapLimit:  80,
+			maxFlagLen: 20,
+		},
+		{
+			name: "newline only usage",
+			flag: &pflag.Flag{
+				Name:      "newline",
+				Shorthand: "n",
+				Usage:     "\n",
+				Value:     &boolValue{value: false},
+				DefValue:  "",
+			},
+			wrapLimit:  80,
+			maxFlagLen: 20,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			printer := &HelpFlagPrinter{
+				out:        &buf,
+				wrapLimit:  tt.wrapLimit,
+				maxFlagLen: tt.maxFlagLen,
+			}
+
+			// This should not panic due to the empty lines check.
+			assert.NotPanics(t, func() {
+				printer.PrintHelpFlag(tt.flag)
+			}, "PrintHelpFlag should not panic with empty or minimal content")
+
+			// Verify trailing newline is always written.
+			output := buf.String()
+			assert.True(t, len(output) > 0, "output should not be empty")
+			assert.True(t, output[len(output)-1] == '\n', "output should end with newline")
+		})
+	}
+}
+
 func TestPrintHelpFlag_EdgeCases(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -293,6 +364,32 @@ func TestPrintHelpFlag_EdgeCases(t *testing.T) {
 			wrapLimit:   60,
 			maxFlagLen:  50,
 			description: "should handle narrow width gracefully",
+		},
+		{
+			name: "empty description after markdown rendering",
+			flag: &pflag.Flag{
+				Name:      "empty",
+				Shorthand: "e",
+				Usage:     "",
+				Value:     &boolValue{value: false},
+				DefValue:  "",
+			},
+			wrapLimit:   80,
+			maxFlagLen:  20,
+			description: "should handle empty lines after first line removal without panic",
+		},
+		{
+			name: "single character description",
+			flag: &pflag.Flag{
+				Name:      "single",
+				Shorthand: "s",
+				Usage:     "x",
+				Value:     &boolValue{value: false},
+				DefValue:  "",
+			},
+			wrapLimit:   80,
+			maxFlagLen:  20,
+			description: "should handle single character description",
 		},
 	}
 
