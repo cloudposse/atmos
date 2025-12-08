@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/samber/lo"
+	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	w "github.com/cloudposse/atmos/internal/tui/workflow"
@@ -245,7 +246,17 @@ func ExecuteWorkflow(
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
 			err = ExecuteShell(command, commandName, ".", stepEnv, dryRun)
 		} else if commandType == "atmos" {
-			args := strings.Fields(command)
+			// Use shell.Fields() instead of strings.Fields() to properly handle
+			// quoted arguments. This fixes issues with flags like --query that
+			// contain quoted expressions with spaces (e.g., --query '.field == "value"').
+			// See: https://pkg.go.dev/mvdan.cc/sh/v3/shell#Fields
+			args, parseErr := shell.Fields(command, nil)
+			if parseErr != nil {
+				// If shell parsing fails, fall back to simple splitting.
+				// This maintains backwards compatibility for simple commands.
+				log.Debug("Shell parsing failed, falling back to strings.Fields", "error", parseErr, "command", command)
+				args = strings.Fields(command)
+			}
 
 			workflowStack := strings.TrimSpace(workflowDefinition.Stack)
 			stepStack := strings.TrimSpace(step.Stack)

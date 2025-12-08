@@ -59,3 +59,47 @@ workflows:
     steps:
       - command: env | grep PATH
         type: shell
+
+  # Test cases for multi-component operations with quoted arguments
+  # These test the issue where strings.Fields() incorrectly splits quoted arguments
+
+  # This workflow tests the --query flag with a quoted expression
+  # The query contains spaces and special characters that should be preserved
+  multi-component-query:
+    description: |
+      Test multi-component operation with --query flag containing quoted expression.
+      This reproduces the issue where strings.Fields() splits the quoted query.
+    steps:
+      # This command should be parsed as: terraform plan --query '.settings.enabled == true' -s nonprod
+      # But strings.Fields() incorrectly splits it into: terraform plan --query '.settings.enabled == true' -s nonprod
+      # which causes the CLI to interpret '.settings.enabled' as a component argument
+      - command: terraform plan --query '.settings.enabled == true' -s nonprod
+
+  # This workflow tests the --components flag with comma-separated values
+  multi-component-list:
+    description: |
+      Test multi-component operation with --components flag.
+    steps:
+      - command: terraform plan --components mock -s nonprod
+
+  # This workflow tests the --all flag
+  multi-component-all:
+    description: |
+      Test multi-component operation with --all flag.
+    steps:
+      - command: terraform plan --all -s nonprod
+
+  # Shell command that echoes back arguments to verify parsing
+  shell-echo-args:
+    description: |
+      Echo back arguments to verify shell parsing of quoted strings.
+    steps:
+      - command: echo "argument with spaces" 'single quoted' "double quoted"
+        type: shell
+
+  # Test double-quoted query expression
+  multi-component-query-double-quotes:
+    description: |
+      Test multi-component with double-quoted query expression.
+    steps:
+      - command: terraform plan --query ".metadata.component == \"mock\"" -s nonprod

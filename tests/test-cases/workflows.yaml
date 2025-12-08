@@ -306,3 +306,55 @@ tests:
       stdout:
         - "PATH="
       exit_code: 0
+
+  # Test cases for multi-component operations with quoted arguments
+  # These test the fix for the issue where strings.Fields() incorrectly splits quoted arguments
+
+  - name: atmos workflow shell echo with quoted arguments
+    enabled: true
+    snapshot: false
+    description: "Ensure shell commands with quoted arguments are parsed correctly"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "shell-echo-args"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stdout:
+        - "argument with spaces single quoted double quoted"
+      exit_code: 0
+
+  - name: atmos workflow multi-component with components flag
+    enabled: true
+    snapshot: false
+    description: "Ensure multi-component workflow with --components flag works"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "multi-component-list"
+      - "--file"
+      - "test"
+      - "--dry-run"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: atmos workflow multi-component with all flag
+    enabled: true
+    snapshot: false
+    description: "Ensure multi-component workflow with --all flag works"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "multi-component-all"
+      - "--file"
+      - "test"
+      - "--dry-run"
+    expect:
+      diff: []
+      exit_code: 0
