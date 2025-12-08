@@ -190,7 +190,7 @@ func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOption
 		log.Trace("Caches cleared, re-processing with provenance")
 
 		// Re-process stacks with provenance tracking enabled.
-		stacksMap, err = e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+		stacksMap, err = e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
 		if err != nil {
 			return fmt.Errorf("error re-processing stacks with provenance: %w", err)
 		}
