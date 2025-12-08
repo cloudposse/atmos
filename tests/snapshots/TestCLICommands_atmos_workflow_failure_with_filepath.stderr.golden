@@ -16,7 +16,7 @@ component and stack names correct? Did you forget an import?
 
 # Workflow Error
 
-**Error:** workflow step execution failed
+**Error:** workflow step execution failed: subcommand exited with code 1
 
 ## Explanation
 
@@ -24,7 +24,9 @@ The following command failed to execute:
 
  atmos terraform plan mock -s idontexist
 
-To resume the workflow from this step, run:
+## Hints
+
+💡 To resume the workflow from this step, run:
 
  atmos workflow fail -f subdir/test --from-step step1
 
