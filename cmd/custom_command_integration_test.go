@@ -342,6 +342,141 @@ func TestCustomCommandIntegration_BooleanFlagDefaults(t *testing.T) {
 	assert.Equal(t, "false", dryRunFlag.DefValue, "dry-run should default to false when no default specified")
 }
 
+// TestCustomCommandIntegration_BooleanFlagTemplatePatterns tests that boolean flags
+// work correctly with various Go template patterns in step execution.
+func TestCustomCommandIntegration_BooleanFlagTemplatePatterns(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a temporary file to capture output from all patterns.
+	tmpDir := t.TempDir()
+	outputFile := filepath.Join(tmpDir, "template-patterns-output.txt")
+
+	// Create a custom command that tests various template patterns with boolean flags.
+	testCommand := schema.Command{
+		Name:        "test-template-patterns",
+		Description: "Test boolean flag template patterns",
+		Flags: []schema.CommandFlag{
+			{
+				Name:      "verbose",
+				Shorthand: "v",
+				Type:      "bool",
+				Usage:     "Enable verbose output",
+				Default:   false,
+			},
+			{
+				Name:    "clean",
+				Type:    "bool",
+				Usage:   "Clean before building",
+				Default: true,
+			},
+		},
+		Steps: []string{
+			// Test multiple patterns in a single step that writes to file.
+			`echo "PATTERN1={{ if .Flags.verbose }}VERBOSE_ON{{ end }}" >> ` + outputFile,
+			`echo "PATTERN2=Building{{ if .Flags.verbose }} with verbose{{ end }}" >> ` + outputFile,
+			`echo "PATTERN3={{ if .Flags.clean }}CLEAN_ON{{ else }}CLEAN_OFF{{ end }}" >> ` + outputFile,
+			`echo "PATTERN4={{ if not .Flags.verbose }}QUIET_MODE{{ end }}" >> ` + outputFile,
+			`echo "PATTERN5=verbose={{ .Flags.verbose }}" >> ` + outputFile,
+			`echo "PATTERN6=clean={{ printf "%t" .Flags.clean }}" >> ` + outputFile,
+		},
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	// Process custom commands to register them with RootCmd.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err)
+
+	// Verify the command is registered.
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-template-patterns" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	// Test 1: Execute with default values (verbose=false, clean=true).
+	// IMPORTANT: Must use RootCmd.SetArgs() + Execute() to properly initialize Cobra's flag merging.
+	// Calling cmd.Run() directly bypasses flag initialization and causes "flag not defined" errors.
+	RootCmd.SetArgs([]string{"test-template-patterns"})
+	err = RootCmd.Execute()
+	require.NoError(t, err, "Custom command execution should succeed")
+
+	// Read and verify output.
+	output, err := os.ReadFile(outputFile)
+	require.NoError(t, err, "Should be able to read output file")
+	outputStr := string(output)
+	t.Logf("Output with defaults (verbose=false, clean=true):\n%s", outputStr)
+
+	// Pattern 1: {{ if .Flags.verbose }} - should be empty since verbose=false.
+	assert.Contains(t, outputStr, "PATTERN1=\n", "Pattern 1: if should produce empty when verbose=false")
+
+	// Pattern 2: Inline conditional - should not have "with verbose".
+	assert.Contains(t, outputStr, "PATTERN2=Building\n", "Pattern 2: inline if should not append when verbose=false")
+
+	// Pattern 3: if/else - clean=true so should be CLEAN_ON.
+	assert.Contains(t, outputStr, "PATTERN3=CLEAN_ON", "Pattern 3: if/else should produce CLEAN_ON when clean=true")
+
+	// Pattern 4: if not - verbose=false so "not .Flags.verbose" is true.
+	assert.Contains(t, outputStr, "PATTERN4=QUIET_MODE", "Pattern 4: if not should produce QUIET_MODE when verbose=false")
+
+	// Pattern 5: Direct boolean value - should be "false".
+	assert.Contains(t, outputStr, "PATTERN5=verbose=false", "Pattern 5: direct value should render as 'false'")
+
+	// Pattern 6: printf %t - should be "true".
+	assert.Contains(t, outputStr, "PATTERN6=clean=true", "Pattern 6: printf should render as 'true'")
+
+	// Clear output file for next test.
+	err = os.WriteFile(outputFile, []byte{}, 0o644)
+	require.NoError(t, err)
+
+	// Test 2: Execute with verbose=true and clean=false (via flags).
+	RootCmd.SetArgs([]string{"test-template-patterns", "--verbose", "--clean=false"})
+	err = RootCmd.Execute()
+	require.NoError(t, err, "Custom command execution with flags should succeed")
+
+	// Read and verify output with verbose=true, clean=false.
+	output, err = os.ReadFile(outputFile)
+	require.NoError(t, err)
+	outputStr = string(output)
+	t.Logf("Output with flags (verbose=true, clean=false):\n%s", outputStr)
+
+	// Pattern 1: {{ if .Flags.verbose }} - should have VERBOSE_ON.
+	assert.Contains(t, outputStr, "PATTERN1=VERBOSE_ON", "Pattern 1: if should produce VERBOSE_ON when verbose=true")
+
+	// Pattern 2: Inline conditional - should have "with verbose".
+	assert.Contains(t, outputStr, "PATTERN2=Building with verbose", "Pattern 2: inline if should append when verbose=true")
+
+	// Pattern 3: if/else - clean=false so should be CLEAN_OFF.
+	assert.Contains(t, outputStr, "PATTERN3=CLEAN_OFF", "Pattern 3: if/else should produce CLEAN_OFF when clean=false")
+
+	// Pattern 4: if not - verbose=true so "not .Flags.verbose" is false.
+	assert.Contains(t, outputStr, "PATTERN4=\n", "Pattern 4: if not should produce empty when verbose=true")
+
+	// Pattern 5: Direct boolean value - should be "true".
+	assert.Contains(t, outputStr, "PATTERN5=verbose=true", "Pattern 5: direct value should render as 'true'")
+
+	// Pattern 6: printf %t - should be "false".
+	assert.Contains(t, outputStr, "PATTERN6=clean=false", "Pattern 6: printf should render as 'false'")
+}
+
 // TestCustomCommandIntegration_StringFlagDefaults tests that string flags with default values
 // are correctly registered and accessible in custom commands.
 func TestCustomCommandIntegration_StringFlagDefaults(t *testing.T) {
