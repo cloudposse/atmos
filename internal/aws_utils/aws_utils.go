@@ -96,7 +96,7 @@ func LoadAWSConfigWithAuth(
 	baseCfg, err := config.LoadDefaultConfig(ctx, cfgOpts...)
 	if err != nil {
 		log.Debug("Failed to load AWS config", "error", err)
-		return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAwsConfig, err)
+		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAWSConfig, err)
 	}
 	log.Debug("Successfully loaded AWS SDK config", "region", baseCfg.Region)
 
