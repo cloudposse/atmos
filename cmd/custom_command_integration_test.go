@@ -257,6 +257,168 @@ func extractEnvVar(envOutput, varName string) string {
 	return ""
 }
 
+// TestCustomCommandIntegration_BooleanFlagDefaults tests that boolean flags with default values
+// are correctly registered and accessible in custom commands.
+func TestCustomCommandIntegration_BooleanFlagDefaults(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a temporary file to capture output.
+	tmpDir := t.TempDir()
+	outputFile := filepath.Join(tmpDir, "bool-flag-output.txt")
+
+	// Create a custom command with boolean flags that have various default values.
+	testCommand := schema.Command{
+		Name:        "test-bool-defaults",
+		Description: "Test boolean flag defaults",
+		Flags: []schema.CommandFlag{
+			{
+				Name:      "verbose",
+				Shorthand: "v",
+				Type:      "bool",
+				Usage:     "Enable verbose output",
+				Default:   false, // Explicit false default.
+			},
+			{
+				Name:      "force",
+				Shorthand: "f",
+				Type:      "bool",
+				Usage:     "Force the operation",
+				Default:   true, // Default to true.
+			},
+			{
+				Name:  "dry-run",
+				Type:  "bool",
+				Usage: "Perform dry run",
+				// No default - should default to false.
+			},
+		},
+		Steps: []string{
+			"echo verbose={{ .Flags.verbose }} force={{ .Flags.force }} dry-run={{ index .Flags \"dry-run\" }} > " + outputFile,
+		},
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	// Process custom commands to register them with RootCmd.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err)
+
+	// Find the custom command.
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-bool-defaults" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	// Verify flags are registered with correct defaults.
+	verboseFlag := customCmd.PersistentFlags().Lookup("verbose")
+	require.NotNil(t, verboseFlag, "verbose flag should be registered")
+	assert.Equal(t, "false", verboseFlag.DefValue, "verbose should default to false")
+
+	forceFlag := customCmd.PersistentFlags().Lookup("force")
+	require.NotNil(t, forceFlag, "force flag should be registered")
+	assert.Equal(t, "true", forceFlag.DefValue, "force should default to true")
+
+	dryRunFlag := customCmd.PersistentFlags().Lookup("dry-run")
+	require.NotNil(t, dryRunFlag, "dry-run flag should be registered")
+	assert.Equal(t, "false", dryRunFlag.DefValue, "dry-run should default to false when no default specified")
+}
+
+// TestCustomCommandIntegration_StringFlagDefaults tests that string flags with default values
+// are correctly registered and accessible in custom commands.
+func TestCustomCommandIntegration_StringFlagDefaults(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a custom command with string flags that have default values.
+	testCommand := schema.Command{
+		Name:        "test-string-defaults",
+		Description: "Test string flag defaults",
+		Flags: []schema.CommandFlag{
+			{
+				Name:      "environment",
+				Shorthand: "e",
+				Usage:     "Target environment",
+				Default:   "development",
+			},
+			{
+				Name:  "region",
+				Usage: "AWS region",
+				// No default - should be empty string.
+			},
+			{
+				Name:    "format",
+				Usage:   "Output format",
+				Default: "json",
+			},
+		},
+		Steps: []string{
+			"echo environment={{ .Flags.environment }} region={{ .Flags.region }} format={{ .Flags.format }}",
+		},
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	// Process custom commands to register them with RootCmd.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err)
+
+	// Find the custom command.
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-string-defaults" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	// Verify flags are registered with correct defaults.
+	envFlag := customCmd.PersistentFlags().Lookup("environment")
+	require.NotNil(t, envFlag, "environment flag should be registered")
+	assert.Equal(t, "development", envFlag.DefValue, "environment should default to 'development'")
+
+	regionFlag := customCmd.PersistentFlags().Lookup("region")
+	require.NotNil(t, regionFlag, "region flag should be registered")
+	assert.Equal(t, "", regionFlag.DefValue, "region should default to empty string when no default specified")
+
+	formatFlag := customCmd.PersistentFlags().Lookup("format")
+	require.NotNil(t, formatFlag, "format flag should be registered")
+	assert.Equal(t, "json", formatFlag.DefValue, "format should default to 'json'")
+}
+
 // TestCustomCommandIntegration_NoIdentity tests that custom commands without identity
 // work correctly and don't set authentication environment variables.
 func TestCustomCommandIntegration_NoIdentity(t *testing.T) {
