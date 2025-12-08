@@ -48,6 +48,7 @@ import (
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
+	"github.com/cloudposse/atmos/cmd/devcontainer"
 	"github.com/cloudposse/atmos/cmd/internal"
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/profile"
@@ -75,9 +76,14 @@ var profilerServer *profiler.Server
 // logFileHandle holds the opened log file for the lifetime of the program.
 var logFileHandle *os.File
 
+// chdirProcessed tracks whether chdir has already been processed to avoid double-processing.
+var chdirProcessed bool
+
 // parseChdirFromArgs manually parses --chdir or -C flag from os.Args.
 // This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
-// where Cobra doesn't parse flags before PersistentPreRun is called.
+// parseChdirFromArgs scans the process arguments for a chdir flag and returns the specified path if present.
+// It recognizes `--chdir=value`, `--chdir value`, `-C=value`, `-Cvalue`, and `-C value` forms.
+// If no chdir flag is found, it returns an empty string.
 func parseChdirFromArgs() string {
 	return parseChdirFromArgsInternal(os.Args)
 }
@@ -113,6 +119,70 @@ func parseChdirFromArgsInternal(args []string) string {
 	return ""
 }
 
+// processEarlyChdirFlag processes --chdir flag before RootCmd is fully initialized.
+// This is called in Execute() before loading atmos.yaml to ensure the config is loaded
+// processEarlyChdirFlag changes the current working directory based on the first
+// occurrence of the `--chdir`/`-C` flag (parsed from os.Args) or the ATMOS_CHDIR
+// environment variable, expanding `~`, resolving to an absolute path, and
+// validating that the target exists and is a directory.
+// It returns nil on success or an error describing why the directory could not
+// be resolved or changed.
+func processEarlyChdirFlag() error {
+	// If chdir already processed, skip (avoid double-processing).
+	if chdirProcessed {
+		return nil
+	}
+
+	// Parse --chdir from os.Args since we can't use Cobra flags yet.
+	chdir := parseChdirFromArgs()
+
+	// If flag is not set, check environment variable.
+	if chdir == "" {
+		//nolint:forbidigo // Must use os.Getenv: chdir is processed before Viper configuration loads.
+		chdir = os.Getenv("ATMOS_CHDIR")
+	}
+
+	if chdir == "" {
+		return nil // No chdir specified.
+	}
+
+	// Expand tilde to home directory using filesystem package.
+	homeDirProvider := filesystem.NewOSHomeDirProvider()
+	expandedPath, err := homeDirProvider.Expand(chdir)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrPathResolution, err)
+	}
+
+	// Clean and make absolute to handle both relative and absolute paths.
+	absPath, err := filepath.Abs(expandedPath)
+	if err != nil {
+		return fmt.Errorf("%w: invalid chdir path: %s", errUtils.ErrPathResolution, chdir)
+	}
+
+	// Verify the directory exists before attempting to change to it.
+	stat, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("%w: directory does not exist: %s", errUtils.ErrWorkdirNotExist, absPath)
+		}
+		return fmt.Errorf("%w: failed to access directory: %s", errUtils.ErrStatFile, absPath)
+	}
+
+	if !stat.IsDir() {
+		return fmt.Errorf("%w: not a directory: %s", errUtils.ErrWorkdirNotExist, absPath)
+	}
+
+	// Change to the specified directory.
+	if err := os.Chdir(absPath); err != nil {
+		return fmt.Errorf("%w: failed to change directory to %s", errUtils.ErrPathResolution, absPath)
+	}
+
+	// Mark as processed to avoid double-processing in PersistentPreRun.
+	chdirProcessed = true
+
+	return nil
+}
+
 // syncGlobalFlagsToViper synchronizes global flags from Cobra's FlagSet to Viper.
 // This is necessary because Viper's BindPFlag doesn't immediately sync values when flags are parsed.
 // Call this after Cobra parses flags but before accessing flag values via Viper.
@@ -145,7 +215,22 @@ func syncGlobalFlagsToViper(cmd *cobra.Command) {
 // processChdirFlag processes the --chdir flag and ATMOS_CHDIR environment variable,
 // changing the working directory before any other operations.
 // Precedence: --chdir flag > ATMOS_CHDIR environment variable.
+// Note: This is also called from PersistentPreRun, but will be a no-op if
+// processChdirFlag changes the current working directory when a chdir target is provided
+// via the --chdir flag (or by parsing os.Args when flag parsing is disabled) or the
+// ATMOS_CHDIR environment variable, and marks the change as processed to avoid
+// double-processing.
+//
+// It expands a leading tilde, resolves the path to an absolute location, verifies the
+// path exists and is a directory, then calls os.Chdir. If the chdir has already been
+// handled, the function returns immediately. It returns an error when the path cannot
+// be resolved, does not exist, is not a directory, or when changing directories fails.
 func processChdirFlag(cmd *cobra.Command) error {
+	// If chdir already processed in Execute(), skip to avoid double-processing.
+	if chdirProcessed {
+		return nil
+	}
+
 	// Try to get chdir from parsed flags first (works when DisableFlagParsing=false).
 	chdir, _ := cmd.Flags().GetString("chdir")
 
@@ -170,7 +255,7 @@ func processChdirFlag(cmd *cobra.Command) error {
 	homeDirProvider := filesystem.NewOSHomeDirProvider()
 	expandedPath, err := homeDirProvider.Expand(chdir)
 	if err != nil {
-		return fmt.Errorf("%w: %s", errUtils.ErrPathResolution, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrPathResolution, err)
 	}
 
 	// Clean and make absolute to handle both relative and absolute paths.
@@ -196,6 +281,9 @@ func processChdirFlag(cmd *cobra.Command) error {
 	if err := os.Chdir(absPath); err != nil {
 		return fmt.Errorf("%w: failed to change directory to %s", errUtils.ErrPathResolution, absPath)
 	}
+
+	// Mark as processed to avoid double-processing.
+	chdirProcessed = true
 
 	return nil
 }
@@ -311,10 +399,11 @@ var RootCmd = &cobra.Command{
 
 		// Initialize I/O context and global formatter after flag parsing.
 		// This ensures flags like --no-color, --redirect-stderr, --mask are respected.
-		ioCtx, ioErr := iolib.NewContext()
-		if ioErr != nil {
+		// Initialize() sets the global iolib.Data and iolib.UI writers with masking enabled.
+		if ioErr := iolib.Initialize(); ioErr != nil {
 			errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to initialize I/O context: %w", ioErr), "", "")
 		}
+		ioCtx := iolib.GetContext()
 		ui.InitFormatter(ioCtx)
 		data.InitWriter(ioCtx)
 		data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
@@ -1103,8 +1192,25 @@ func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the RootCmd.
+// Execute runs the root CLI command and performs one-time global startup tasks.
+// It processes a leading --chdir before loading configuration, loads and wires the CLI
+// configuration to subsystems, initializes markdown rendering and logging, registers
+// custom commands and aliases (unless running the version command), executes the root
+// command, captures telemetry, and handles unknown-command errors by showing usage.
+// This function is invoked once from main.main.
 func Execute() error {
+	// CRITICAL: Process --chdir flag BEFORE loading config.
+	// This ensures atmos.yaml is loaded from the correct directory when using --chdir.
+	// We must process chdir early because aliases depend on the config, and the config
+	// depends on the working directory.
+	//
+	// Note: We create a temporary command to parse flags because RootCmd hasn't been
+	// fully initialized yet (custom commands/aliases not added). This is safe because
+	// --chdir is a global persistent flag defined in init().
+	if err := processEarlyChdirFlag(); err != nil {
+		return err
+	}
+
 	// InitCliConfig finds and merges CLI configurations in the following order:
 	// system dir, home dir, current dir, ENV vars, command-line arguments
 	// Here we need the custom commands from the config.
@@ -1114,12 +1220,19 @@ func Execute() error {
 
 	// Set atmosConfig for commands that need access to config.
 	version.SetAtmosConfig(&atmosConfig)
+	devcontainer.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
 
 	if initErr != nil {
 		// Handle config initialization errors based on command context.
 		if err := handleConfigInitError(initErr, &atmosConfig); err != nil {
 			return err
+		}
+		// Only log "not found" message when the error is specifically NotFound.
+		// Other cases (e.g., version command with invalid config) log differently
+		// inside handleConfigInitError.
+		if errors.Is(initErr, cfg.NotFound) {
+			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		}
 	}
 
@@ -1138,7 +1251,9 @@ func Execute() error {
 
 	var err error
 	// If CLI configuration was found, process its custom commands and command aliases.
-	if initErr == nil {
+	// Skip processing for version command to ensure it always works, even if aliases
+	// reference commands that don't exist in this version of Atmos.
+	if initErr == nil && !isVersionCommand() {
 		err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 		if err != nil {
 			return err
@@ -1237,6 +1352,8 @@ func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	return heatmap.StartBubbleTeaUI(sigCtx, heatModel, mode)
 }
 
+// init initializes CLI wiring for the package: it registers built-in commands, adds template helpers, registers and binds global persistent flags and related environment variables, adjusts the version flag default, sets the custom usage template, and configures Cobra behavior for the root command.
+// This prepares global flag precedence, environment bindings (color, mask, verbose, GitHub token), and other root-level CLI integrations before command execution.
 func init() {
 	// Register all global flags as persistent flags using builder pattern.
 	// IMPORTANT: This MUST happen BEFORE registering commands, so commands inherit the persistent flags.
@@ -1272,6 +1389,18 @@ func init() {
 	viper.SetEnvPrefix("ATMOS")
 	viper.AutomaticEnv()
 
+	// Bind both ATMOS_FORCE_COLOR and CLICOLOR_FORCE to the same viper key (they are equivalent).
+	if err := viper.BindEnv("force-color", "ATMOS_FORCE_COLOR", "CLICOLOR_FORCE"); err != nil {
+		log.Error("Failed to bind ATMOS_FORCE_COLOR/CLICOLOR_FORCE environment variables", "error", err)
+	}
+	// Bind mask flag to Viper so viper.GetBool("mask") reads the flag value.
+	if err := viper.BindPFlag("mask", RootCmd.PersistentFlags().Lookup("mask")); err != nil {
+		log.Error("Failed to bind mask flag to Viper", "error", err)
+	}
+	// Bind mask flag to environment variable.
+	if err := viper.BindEnv("mask", "ATMOS_MASK"); err != nil {
+		log.Error("Failed to bind ATMOS_MASK environment variable", "error", err)
+	}
 	// Bind verbose flag to environment variable.
 	if err := viper.BindEnv(verboseFlagName, "ATMOS_VERBOSE"); err != nil {
 		log.Error("Failed to bind ATMOS_VERBOSE environment variable", "error", err)

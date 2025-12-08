@@ -14,9 +14,14 @@ No workflow exists with the name no-workflow-exists
 • fail
 • fail-with-stack
 • invalid-step-type
+• multi-component-all
+• multi-component-list
+• multi-component-query
+• multi-component-query-double-quotes
 • no-steps
 • pass
 • shell-command-not-found
+• shell-echo-args
 • shell-failure
 • shell-pass
 • shell-with-path

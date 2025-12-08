@@ -1,0 +1,195 @@
+---
+title: Atlantis Integration
+sidebar_position: 2
+sidebar_label: atlantis
+sidebar_class_name: command
+description: Configure Atmos integration with Atlantis.
+id: atlantis
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos natively supports [Atlantis](https://runatlantis.io) for Terraform Pull Request Automation.
+</Intro>
+
+## How it Works
+
+With Atmos, all your configurations are neatly defined in YAML. This makes transformations of that data very easy.
+
+Atmos supports three commands that, when combined, make it easy to use Atlantis:
+
+1. Generate the [`atlantis.yaml`](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html) repo-level
+   configuration: [`atmos atlantis generate repo-config`](/cli/commands/atlantis/generate-repo-config)
+
+2. Generate the backend configuration for all
+   components: [`atmos terraform generate backends --format=backend-config|hcl`](/cli/commands/terraform/generate-backends)
+
+3. Generate the full deep-merged configurations of all stacks for each
+   component: [`atmos terraform generate varfiles`](/cli/commands/terraform/generate-varfiles)
+
+## Configuration
+
+Atlantis Integration can be configured in two different ways (or a combination of them):
+
+- In the `integrations.atlantis` section in `atmos.yaml`
+- In the `settings.atlantis` sections in the stack config files
+
+### Configure Atlantis Integration in `integrations.atlantis` section in `atmos.yaml`
+
+To configure Atmos to generate the Atlantis repo configurations, update the `integrations.atlantis` section in `atmos.yaml`.
+
+Here's an example to get you started. As with *everything* in Atmos, it supports deep-merging at all levels. Anything under
+the `integrations.atlantis` section in `atmos.yaml` can be overridden in the stack config sections `settings.atlantis` at any level of the inheritance
+chain.
+
+```yaml title=atmos.yaml
+# atmos.yaml CLI config
+
+# Integrations
+integrations:
+
+  # Atlantis integration
+  # https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html
+  atlantis:
+    # Path and name of the Atlantis config file `atlantis.yaml`
+    # Supports absolute and relative paths
+    # All the intermediate folders will be created automatically (e.g. `path: /config/atlantis/atlantis.yaml`)
+    # Can be overridden on the command line by using `--output-path` command-line argument in `atmos atlantis generate repo-config` command
+    # If not specified (set to an empty string/omitted here, and set to an empty string on the command line), the content of the file will be dumped to `stdout`
+    # On Linux/macOS, you can also use `--output-path=/dev/stdout` to dump the content to `stdout` without setting it to an empty string in `atlantis.path`
+    path: "atlantis.yaml"
+
+    # Config templates
+    # Select a template by using the `--config-template <config_template>` command-line argument in `atmos atlantis generate repo-config` command
+    config_templates:
+      config-1:
+        version: 3
+        automerge: true
+        delete_source_branch_on_merge: true
+        parallel_plan: true
+        parallel_apply: true
+        allowed_regexp_prefixes:
+          - dev/
+          - staging/
+          - prod/
+
+    # Project templates
+    # Select a template by using the `--project-template <project_template>` command-line argument in `atmos atlantis generate repo-config` command
+    project_templates:
+      project-1:
+        # generate a project entry for each component in every stack
+        name: "{tenant}-{environment}-{stage}-{component}"
+        workspace: "{workspace}"
+        dir: "{component-path}"
+        terraform_version: v1.8
+        delete_source_branch_on_merge: true
+        autoplan:
+          enabled: true
+          when_modified:
+            - "**/*.tf"
+            - "varfiles/$PROJECT_NAME.tfvars"
+          apply_requirements:
+            - "approved"
+
+    # Workflow templates
+    # https://www.runatlantis.io/docs/custom-workflows.html#custom-init-plan-apply-commands
+    # https://www.runatlantis.io/docs/custom-workflows.html#custom-run-command
+    workflow_templates:
+      workflow-1:
+        plan:
+          steps:
+            - run: terraform init -input=false
+            # When using workspaces, you need to select the workspace using the $WORKSPACE environment variable
+            - run: terraform workspace select $WORKSPACE
+            # You must output the plan using `-out $PLANFILE` because Atlantis expects plans to be in a specific location
+            - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars
+        apply:
+          steps:
+            - run: terraform apply $PLANFILE
+```
+
+Using the config and project templates, Atmos generates a separate atlantis project for each Atmos component in every stack.
+
+For example, by running this command:
+
+```shell
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1
+```
+
+the following Atlantis repo-config would be generated:
+
+```yaml title=atlantis.yaml
+version: 3
+automerge: true
+delete_source_branch_on_merge: true
+parallel_plan: true
+parallel_apply: true
+allowed_regexp_prefixes:
+  - dev/
+  - staging/
+  - prod/
+projects:
+  - name: tenant1-ue2-staging-test-test-component-override-3
+    workspace: test-component-override-3-workspace
+    workflow: workflow-1
+    dir: tests/fixtures/scenarios/complete/components/terraform/test/test-component
+    terraform_version: v1.8
+    delete_source_branch_on_merge: true
+    autoplan:
+      enabled: true
+      when_modified:
+        - '**/*.tf'
+        - varfiles/$PROJECT_NAME.tfvars
+      apply_requirements:
+        - approved
+  - name: tenant1-ue2-staging-infra-vpc
+    workspace: tenant1-ue2-staging
+    workflow: workflow-1
+    dir: tests/fixtures/scenarios/complete/components/terraform/infra/vpc
+    terraform_version: v1.8
+    delete_source_branch_on_merge: true
+    autoplan:
+      enabled: true
+      when_modified:
+        - '**/*.tf'
+        - varfiles/$PROJECT_NAME.tfvars
+      apply_requirements:
+        - approved
+workflows:
+  workflow-1:
+    apply:
+      steps:
+        - run: terraform apply $PLANFILE
+    plan:
+      steps:
+        - run: terraform init -input=false
+        - run: terraform workspace select $WORKSPACE
+        - run: terraform plan -input=false -refresh -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars
+```
+
+__NOTE:__ If Atlantis Integration is configured only in the `integrations.atlantis` section in `atmos.yaml`, the command-line
+flags `--config-template` and `--project-template` are required to specify a config template and a project template from the collection of
+templates defined in the `integrations.atlantis.config_templates` and `integrations.atlantis.project_templates` sections in `atmos.yaml`. You can
+change this behavior by using the `settings.atlantis` sections in stack config files.
+
+### Configure Atlantis Integration in `settings.atlantis` sections in stack configs
+
+The `integrations.atlantis.config_templates`, `integrations.atlantis.project_templates` and `integrations.atlantis.workflow_templates` sections
+in `atmos.yaml` can be overridden in the `settings.atlantis` sections in stack config files. In fact, you don't have to define the sections
+in `atmos.yaml` at all and instead use only the `settings.atlantis` sections in stack configs to configure work with the Atlantis Integration.
+
+For more details on configuring Atlantis in stack configs and using workflows, see the complete [Atlantis documentation](/cli/commands/atlantis/generate-repo-config).
+
+## References
+
+For more information, refer to:
+
+- [Configuring Atlantis](https://www.runatlantis.io/docs/configuring-atlantis.html)
+- [Server Side Config](https://www.runatlantis.io/docs/server-side-repo-config.html)
+- [Repo Level atlantis.yaml Config](https://www.runatlantis.io/docs/repo-level-atlantis-yaml.html)
+- [Server Configuration](https://www.runatlantis.io/docs/server-configuration.html)
+- [Atlantis Custom Workflows](https://www.runatlantis.io/docs/custom-workflows.html)
+- [Pre Workflow Hooks](https://www.runatlantis.io/docs/pre-workflow-hooks.html)
+- [Post Workflow Hooks](https://www.runatlantis.io/docs/post-workflow-hooks.html)
+- [Dynamic Repo Config Generation](https://www.runatlantis.io/docs/pre-workflow-hooks.html#dynamic-repo-config-generation)

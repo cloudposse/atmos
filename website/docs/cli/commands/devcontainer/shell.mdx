@@ -1,0 +1,155 @@
+---
+title: atmos devcontainer shell
+sidebar_label: shell
+sidebar_class_name: command
+id: shell
+description: Launch a shell in a devcontainer
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to quickly launch an interactive shell in a devcontainer. This is a convenience command equivalent to `start --attach` that provides the fastest way to get into a development environment.
+</Intro>
+
+<Screengrab title="atmos devcontainer shell --help" slug="atmos-devcontainer-shell--help" />
+
+## Usage
+
+```shell
+atmos devcontainer shell <name> [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Name of the devcontainer to launch (from `atmos.yaml` configuration)</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--instance string`</dt>
+  <dd>Instance name for this devcontainer (default: `default`). Use this to run multiple instances of the same devcontainer configuration.</dd>
+
+  <dt>`--identity string` or `-i`</dt>
+  <dd>Authenticate with specified identity. Inside the container, cloud provider SDKs automatically use the authenticated identity.</dd>
+
+  <dt>`--new`</dt>
+  <dd>Always create a new instance with auto-generated numbered name based on the `--instance` value (e.g., `default-1`, `default-2`, or `alice-1` with `--instance alice`). Use this when you want a fresh container that doesn't reuse existing instances.</dd>
+
+  <dt>`--replace`</dt>
+  <dd>Destroy and recreate the instance specified by `--instance` flag. This rebuilds the container from scratch, pulling the latest image and recreating with current configuration.</dd>
+
+  <dt>`--rm`</dt>
+  <dd>Automatically remove the container when you exit the shell. Similar to Docker's `docker run --rm` behavior. Useful for temporary or one-off containers.</dd>
+
+  <dt>`--pty`</dt>
+  <dd>Experimental: Use PTY mode with masking support (not available on Windows). Enables masking of sensitive values in terminal output. See [Secret Masking Configuration](/cli/configuration/settings/mask) for pattern configuration.</dd>
+</dl>
+
+## Examples
+
+### Basic Usage
+
+```shell
+# Launch shell in the geodesic devcontainer
+atmos devcontainer shell geodesic
+
+# Launch shell in a named instance
+atmos devcontainer shell terraform --instance alice
+
+# Launch shell with custom runtime (via environment variable)
+export ATMOS_CONTAINER_RUNTIME=podman
+atmos devcontainer shell geodesic
+```
+
+### Instance Management
+
+```shell
+# Create a new auto-numbered instance (default-1, default-2, etc.)
+atmos devcontainer shell geodesic --new
+
+# Create a new auto-numbered instance with custom base name
+atmos devcontainer shell geodesic --instance alice --new
+# Creates: alice-1, alice-2, etc.
+
+# Rebuild existing instance from scratch
+atmos devcontainer shell terraform --replace
+
+# Rebuild a specific named instance
+atmos devcontainer shell terraform --instance prod --replace
+```
+
+### Temporary Containers
+
+```shell
+# Launch shell and auto-remove container on exit (like 'docker run --rm')
+atmos devcontainer shell geodesic --rm
+
+# Combine --new with --rm for completely ephemeral containers
+atmos devcontainer shell geodesic --new --rm
+```
+
+### Authenticated Containers
+
+```shell
+# Launch shell with Atmos-managed identity
+atmos devcontainer shell geodesic --identity prod-admin
+
+# Launch new instance with identity that auto-removes on exit
+atmos devcontainer shell terraform --identity dev-user --new --rm
+```
+
+## Behavior
+
+This command performs the following operations automatically:
+
+1. **Container doesn't exist**: Creates a new container with the configured image, mounts, ports, and environment variables
+2. **Container exists but stopped**: Starts the existing container
+3. **Container running**: Connects to the running container
+4. **Always**: Attaches to the container with an interactive shell
+
+The `shell` command is designed to be the quickest way to get into a devcontainer environment. It's equivalent to running `atmos devcontainer start <name> --attach` and follows the same pattern as other Atmos shell commands:
+
+- `atmos terraform shell` - Interactive Terraform shell
+- `atmos auth shell` - Interactive shell with authenticated identity
+
+## Comparison with Other Commands
+
+| Command | Creates Container | Starts Container | Attaches Shell |
+|---------|------------------|------------------|----------------|
+| `atmos devcontainer start` | ✅ | ✅ | ❌ |
+| `atmos devcontainer start --attach` | ✅ | ✅ | ✅ |
+| `atmos devcontainer shell` | ✅ | ✅ | ✅ |
+| `atmos devcontainer attach` | ❌ | ❌ | ✅ |
+
+**Use `shell` when**: You want to quickly get into an interactive development environment
+**Use `start` when**: You want to start a container without attaching (e.g., to run background services)
+**Use `attach` when**: The container is already running and you just want to connect to it
+
+## Use with Aliases
+
+The `shell` command works particularly well with command aliases in `atmos.yaml`:
+
+```yaml
+aliases:
+  shell: "devcontainer shell geodesic"
+```
+
+This allows you to simply run:
+
+```shell
+atmos shell
+```
+
+This pattern provides a consistent experience with traditional shell wrappers like Geodesic.
+
+## See Also
+
+- [Devcontainer Configuration](/cli/configuration/devcontainer) — Configure devcontainers in `atmos.yaml`
+- [`atmos devcontainer start`](/cli/commands/devcontainer/start)
+- [`atmos devcontainer attach`](/cli/commands/devcontainer/attach)
+- [`atmos devcontainer list`](/cli/commands/devcontainer/list)
+- [Command Aliases](/cli/configuration/commands#aliases)

@@ -95,6 +95,9 @@ atmos list components --format yaml
 
   <dt>`--sort`</dt>
   <dd>Sort by column:order (e.g., `component:asc,stack:desc`)</dd>
+
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before listing components.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list components --identity my-aws-identity`<br/><br/>Can also be set via `ATMOS_IDENTITY` environment variable.</dd>
 </dl>
 
 ## Configuration

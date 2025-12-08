@@ -98,7 +98,7 @@ var valuesCmd = &cobra.Command{
 			ProcessFunctions: v.GetBool("process-functions"),
 		}
 
-		output, err := listValuesWithOptions(opts, args)
+		output, err := listValuesWithOptions(cmd, opts, args)
 		if err != nil {
 			return err
 		}
@@ -145,7 +145,7 @@ var varsCmd = &cobra.Command{
 			ProcessFunctions: v.GetBool("process-functions"),
 		}
 
-		output, err := listValuesWithOptions(opts, args)
+		output, err := listValuesWithOptions(cmd, opts, args)
 		if err != nil {
 			var componentVarsNotFoundErr *listerrors.ComponentVarsNotFoundError
 			if errors.As(err, &componentVarsNotFoundErr) {
@@ -310,7 +310,7 @@ func prepareListValuesOptions(opts *ValuesOptions, componentName string) *l.Filt
 	return filterOptions
 }
 
-func listValuesWithOptions(opts *ValuesOptions, args []string) (string, error) {
+func listValuesWithOptions(cmd *cobra.Command, opts *ValuesOptions, args []string) (string, error) {
 	// Ensure we have a component name
 	if len(args) == 0 {
 		return "", ErrComponentNameRequired
@@ -324,13 +324,19 @@ func listValuesWithOptions(opts *ValuesOptions, args []string) (string, error) {
 		return "", fmt.Errorf(ErrFmtWrapErr, ErrInitializingCLIConfig, err)
 	}
 
+	// Create AuthManager for authentication support.
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	if err != nil {
+		return "", err
+	}
+
 	// Check if the component exists
 	if !listutils.CheckComponentExists(&atmosConfig, componentName) {
 		return "", &listerrors.ComponentDefinitionNotFoundError{Component: componentName}
 	}
 
 	// Get all stacks
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, opts.ProcessTemplates, opts.ProcessFunctions, false, nil, nil)
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager)
 	if err != nil {
 		return "", fmt.Errorf(ErrFmtWrapErr, ErrDescribingStacks, err)
 	}

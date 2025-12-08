@@ -1,0 +1,583 @@
+---
+title: Migrating from Terraform Workspaces
+sidebar_position: 2
+sidebar_label: From Terraform Workspaces
+description: How to migrate from Terraform Workspaces to Atmos
+id: terraform-workspaces
+---
+import FAQItem from '@site/src/components/FAQItem'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import KeyTakeaways from '@site/src/components/KeyTakeaways'
+import TaskList from '@site/src/components/TaskList'
+
+<Intro>
+Terraform workspaces solve a simple problem: deploy the same code to multiple environments using one state backend. But as your infrastructure grows, workspaces create more problems than they solve. Atmos provides a better path forward.
+</Intro>
+
+## Why Workspaces Fall Short
+
+Workspaces seem great at first—one command (`terraform workspace select prod`) and you're deploying to production. But they have fundamental limitations:
+
+### 1. **Shared State Backend = Single Point of Failure**
+
+All workspaces share the same backend configuration. One misconfigured workspace can corrupt state for all environments.
+
+```hcl
+# ALL workspaces use this backend
+terraform {
+  backend "s3" {
+    bucket = "my-terraform-state"  # Same bucket for dev, staging, prod
+    key    = "terraform.tfstate"   # Workspace adds prefix, but it's fragile
+    region = "us-east-1"
+  }
+}
+```
+
+A typo in `dev` can overwrite `prod` state. This has happened to many teams.
+
+### 2. **No Configuration Differentiation**
+
+Workspaces use the same variables file. You end up with massive case statements:
+
+<File title="variables.tf">
+```hcl
+variable "instance_type" {
+  default = "t3.micro"
+}
+
+locals {
+  # Ugly workspace-specific logic
+  instance_type = terraform.workspace == "prod" ? "m5.large" :
+                  terraform.workspace == "staging" ? "t3.medium" :
+                  "t3.micro"
+
+  enable_monitoring = terraform.workspace == "prod" ? true : false
+
+  # This gets unmaintainable quickly
+}
+```
+</File>
+
+### 3. **Hidden State**
+
+Which workspaces exist? What resources do they contain? You have to inspect the state backend or track it manually.
+
+```bash
+$ terraform workspace list
+  default
+  dev
+  staging
+  prod
+  old-test-workspace  # Is this safe to delete?
+  johns-experiment    # What is this?
+```
+
+### 4. **No Code Reuse**
+
+Every workspace runs the exact same code. Want to test a new module version in dev before prod? Tough luck. You need to branch your entire repository.
+
+### 5. **Blast Radius**
+
+All environments in one state backend means one mistake can affect all environments. Separate state backends provide isolation.
+
+## How Atmos Solves These Problems
+
+Atmos separates **code** (Terraform components) from **configuration** ([stack YAML files](/stacks/)). This gives you:
+
+<KeyTakeaways title="Atmos Advantages">
+- **Isolated state** - Each stack has its own [backend configuration](/stacks/remote-state)
+- **Environment-specific config** - No giant case statements
+- **Visible configuration** - Stacks are files you can search, version, review
+- **Component reuse** - Share code, customize config via [inheritance](/howto/inheritance)
+- **Reduced blast radius** - Isolated state backends per environment
+</KeyTakeaways>
+
+## Migration Strategy
+
+### Before: Workspace-Based Setup
+
+<File title="main.tf">
+```hcl
+terraform {
+  backend "s3" {
+    bucket = "terraform-state"
+    key    = "vpc/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+
+variable "environment" {
+  default = "dev"
+}
+
+variable "cidr_block" {
+  default = "10.0.0.0/16"
+}
+
+locals {
+  # Workspace-specific logic
+  cidr_block = terraform.workspace == "prod" ? "10.100.0.0/16" :
+               terraform.workspace == "staging" ? "10.50.0.0/16" :
+               "10.0.0.0/16"
+}
+
+resource "aws_vpc" "main" {
+  cidr_block = local.cidr_block
+
+  tags = {
+    Environment = terraform.workspace
+  }
+}
+```
+</File>
+
+**Deploy:**
+```bash
+terraform workspace select prod
+terraform apply  # Which VPC am I deploying? Not obvious!
+```
+
+### After: Atmos Stacks
+
+**Step 1: Create reusable component (generic code)**
+
+<File title="components/terraform/vpc/main.tf">
+```hcl
+# No workspace logic!
+variable "cidr_block" {
+  description = "VPC CIDR block"
+  type        = string
+}
+
+variable "environment" {
+  description = "Environment name"
+  type        = string
+}
+
+resource "aws_vpc" "main" {
+  cidr_block = var.cidr_block
+
+  tags = {
+    Environment = var.environment
+  }
+}
+```
+</File>
+
+**Step 2: Create environment-specific stacks (config)**
+
+<File title="stacks/prod.yaml">
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: terraform-state-prod  # Isolated backend
+      key: terraform.tfstate
+      region: us-east-1
+
+components:
+  terraform:
+    vpc:
+      backend:
+        s3:
+          workspace_key_prefix: vpc
+      vars:
+        cidr_block: "10.100.0.0/16"
+        environment: prod
+```
+</File>
+
+<File title="stacks/dev.yaml">
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: terraform-state-dev  # Separate backend!
+      key: terraform.tfstate
+      region: us-east-1
+
+components:
+  terraform:
+    vpc:
+      backend:
+        s3:
+          workspace_key_prefix: vpc
+      vars:
+        cidr_block: "10.0.0.0/16"
+        environment: dev
+```
+</File>
+
+**Deploy:**
+```bash
+atmos terraform apply vpc -s prod  # Crystal clear: VPC in prod
+atmos terraform apply vpc -s dev   # VPC in dev
+```
+
+No workspace selection. No hidden state. Just explicit, declarative configuration.
+
+Learn more: [`atmos terraform apply`](/cli/commands/terraform/apply) | [`atmos terraform plan`](/cli/commands/terraform/plan)
+
+## Step-by-Step Migration
+
+### 1. Extract Workspace Logic
+
+Identify all workspace-specific logic in your Terraform code:
+
+**Before:**
+```hcl
+locals {
+  instance_type     = terraform.workspace == "prod" ? "m5.large" : "t3.small"
+  enable_monitoring = terraform.workspace == "prod" ? true : false
+  backup_retention  = terraform.workspace == "prod" ? 30 : 7
+}
+```
+
+**After (convert to variables):**
+<File title="components/terraform/app/variables.tf">
+```hcl
+variable "instance_type" {
+  description = "EC2 instance type"
+  type        = string
+}
+
+variable "enable_monitoring" {
+  description = "Enable CloudWatch monitoring"
+  type        = bool
+}
+
+variable "backup_retention" {
+  description = "Backup retention in days"
+  type        = number
+}
+```
+</File>
+
+### 2. Create Stack Configurations
+
+For each workspace, create a stack file:
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        instance_type: m5.large
+        enable_monitoring: true
+        backup_retention: 30
+```
+</File>
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        instance_type: t3.small
+        enable_monitoring: false
+        backup_retention: 7
+```
+</File>
+
+### 3. Migrate State Backends
+
+**Critical:** This step requires careful planning to avoid state loss.
+
+**Option A: Keep Workspace State (Easiest)**
+
+You can keep using workspace-based state with Atmos:
+
+<File title="stacks/prod.yaml">
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: terraform-state  # Same bucket
+      key: vpc/terraform.tfstate
+      region: us-east-1
+      workspace_key_prefix: env  # Uses workspace structure
+
+components:
+  terraform:
+    vpc:
+      settings:
+        terraform:
+          workspace: prod  # Selects workspace "prod"
+```
+</File>
+
+This lets you migrate incrementally without touching state.
+
+**Option B: Migrate to Separate Backends (Recommended)**
+
+For better isolation, migrate each workspace to its own backend:
+
+1. **Export state from workspace:**
+   ```bash
+   terraform workspace select prod
+   terraform state pull > prod.tfstate
+   ```
+
+2. **Configure new backend:**
+   <File title="stacks/prod.yaml">
+   ```yaml
+   terraform:
+     backend_type: s3
+     backend:
+       s3:
+         bucket: terraform-state-prod  # New bucket
+         key: vpc.tfstate
+         region: us-east-1
+   ```
+   </File>
+
+3. **Initialize and push state:**
+   ```bash
+   atmos terraform init vpc -s prod
+   terraform state push prod.tfstate
+   ```
+
+4. **Verify:**
+   ```bash
+   atmos terraform plan vpc -s prod  # Should show no changes
+   ```
+
+### 4. Remove Workspace Logic
+
+Clean up your Terraform code:
+
+**Remove:**
+```hcl
+# DELETE workspace references
+locals {
+  env = terraform.workspace  # Remove
+}
+
+# DELETE workspace conditionals
+count = terraform.workspace == "prod" ? 1 : 0  # Remove
+```
+
+**Replace with variables:**
+```hcl
+variable "environment" {
+  description = "Environment name"
+  type        = string
+}
+
+variable "create_feature" {
+  description = "Whether to create optional feature"
+  type        = bool
+  default     = false
+}
+```
+
+### 5. Update CI/CD
+
+**Before:**
+```bash
+# Old CI/CD
+terraform workspace select $ENV
+terraform plan
+terraform apply -auto-approve
+```
+
+**After:**
+```bash
+# New CI/CD
+atmos terraform plan $COMPONENT -s $STACK
+atmos terraform apply $COMPONENT -s $STACK -auto-approve
+```
+
+**GitHub Actions example:**
+```yaml
+- name: Deploy VPC
+  run: |
+    atmos terraform apply vpc -s ${{ matrix.stack }}
+  strategy:
+    matrix:
+      stack: [dev, staging, prod]
+```
+
+## Handling Common Patterns
+
+### Pattern 1: Workspace-Specific Resources
+
+**Before:**
+```hcl
+resource "aws_instance" "monitoring" {
+  count = terraform.workspace == "prod" ? 1 : 0
+  # ...
+}
+```
+
+**After:**
+<File title="components/terraform/monitoring/main.tf">
+```hcl
+variable "enabled" {
+  type    = bool
+  default = false
+}
+
+resource "aws_instance" "this" {
+  count = var.enabled ? 1 : 0
+  # ...
+}
+```
+</File>
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    monitoring:
+      vars:
+        enabled: true
+```
+</File>
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    monitoring:
+      vars:
+        enabled: false
+```
+</File>
+
+### Pattern 2: Workspace in Tags
+
+**Before:**
+```hcl
+tags = {
+  Environment = terraform.workspace
+}
+```
+
+**After:**
+<File title="components/terraform/vpc/main.tf">
+```hcl
+variable "environment" {
+  type = string
+}
+
+tags = {
+  Environment = var.environment
+}
+```
+</File>
+
+<File title="stacks/prod.yaml">
+```yaml
+vars:
+  environment: production
+
+components:
+  terraform:
+    vpc:
+      vars:
+        environment: '{{ .vars.environment }}'
+```
+</File>
+
+### Pattern 3: Workspace-Specific Data Sources
+
+**Before:**
+```hcl
+data "aws_ami" "app" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = [terraform.workspace == "prod" ? "prod-ami-*" : "dev-ami-*"]
+  }
+}
+```
+
+**After:**
+<File title="components/terraform/app/main.tf">
+```hcl
+variable "ami_prefix" {
+  type = string
+}
+
+data "aws_ami" "app" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["${var.ami_prefix}-*"]
+  }
+}
+```
+</File>
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        ami_prefix: prod-ami
+```
+</File>
+
+## Migration Checklist
+
+<TaskList>
+- [ ] Audit all `terraform.workspace` references in code
+- [ ] Convert workspace conditionals to variables
+- [ ] Create Atmos `atmos.yaml` configuration
+- [ ] Create stack files for each workspace
+- [ ] Test state migration in dev first
+- [ ] Migrate state (keep workspace structure OR move to separate backends)
+- [ ] Verify `atmos terraform plan` shows no changes
+- [ ] Update CI/CD pipelines
+- [ ] Update team documentation
+- [ ] Deprecate workspace commands
+</TaskList>
+
+<KeyTakeaways title="Benefits After Migration">
+- **Explicit configuration** - No hidden workspace state
+- **Isolated backends** - Prod can't accidentally affect dev
+- **Environment-specific settings** - No complex conditionals
+- **Better code review** - Stack changes visible in YAML diffs
+- **Reusable components** - Same code, different configs
+- **Easier testing** - Deploy different component versions per stack
+</KeyTakeaways>
+
+## Common Questions
+
+<FAQItem question="Can I keep using workspaces with Atmos?">
+Yes! Atmos supports workspace-based backends via `workspace` settings. But we recommend migrating away from workspaces for better isolation.
+</FAQItem>
+
+<FAQItem question="Do I need to migrate everything at once?">
+No. Migrate incrementally—one component at a time. Use workspaces for unmigrated components and Atmos stacks for migrated ones.
+</FAQItem>
+
+<FAQItem question="What about Terraform Cloud workspaces?">
+Terraform Cloud workspaces are different from OSS workspaces—they're more similar to Atmos stacks (isolated state, separate config). Migration is similar but simpler.
+</FAQItem>
+
+## Get Help
+
+Migrating from workspaces? We're here to help:
+
+- **[Slack Community](/community/slack)** - Ask migration questions
+- **[Office Hours](/community/office-hours)** - Live support for complex migrations
+- **[GitHub Discussions](https://github.com/cloudposse/atmos/discussions)** - Share your migration story
+
+## Next Steps
+
+Ready to get started?
+
+- **[Quick Start](/quick-start/simple)** - Build your first Atmos stack
+- **[Core Concepts](/learn/why-atmos)** - Understand Atmos fundamentals
+- **[Stack Configuration](/stacks/)** - Advanced YAML features

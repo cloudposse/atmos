@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -174,6 +175,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
 	configAndStacksInfo.Identity = argsAndFlagsInfo.Identity
+	configAndStacksInfo.NeedsPathResolution = argsAndFlagsInfo.NeedsPathResolution
 
 	// Fallback to ATMOS_IDENTITY environment variable if identity not set via flag.
 	// Use os.Getenv directly to avoid polluting viper config with temporary binding.
@@ -710,6 +712,15 @@ func processArgsAndFlags(
 					info.AdditionalArgsAndFlags = []string{secondArg}
 				} else {
 					info.ComponentFromArg = secondArg
+					// Check if argument is an explicit path that needs resolution.
+					// Only resolve as a filesystem path if the argument explicitly indicates a path:
+					// - "." (current directory).
+					// - Starts with "./" or "../" (relative path).
+					// - Starts with "/" (absolute path).
+					// Otherwise, treat it as a component name (even if it contains slashes).
+					if comp.IsExplicitComponentPath(secondArg) {
+						info.NeedsPathResolution = true
+					}
 				}
 			}
 			if len(additionalArgsAndFlags) > 2 {

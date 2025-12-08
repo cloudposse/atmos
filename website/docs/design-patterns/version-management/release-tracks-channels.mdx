@@ -109,24 +109,45 @@ components/
 ```
 </File>
 
+<File title="stacks/catalog/vpc.yaml and rds.yaml">
+```yaml
+# Define base components with stable identity
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+        name: vpc  # Convention: top-level folder
+
+    rds/defaults:
+      metadata:
+        type: abstract
+        name: rds  # Convention: top-level folder
+```
+</File>
+
 <File title="stacks/prod/us-east-1.yaml">
 ```yaml
+import:
+  - catalog/vpc
+  - catalog/rds
+
 components:
   terraform:
     vpc:
       metadata:
+        inherits: [vpc/defaults]
         component: vpc/prod  # Subscribe to VPC production track
-      settings:
-        workspace_key_prefix: "vpc"
+        # Inherits name: vpc → workspace_key_prefix: "vpc"
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.0.0.0/16"
 
     rds:
       metadata:
+        inherits: [rds/defaults]
         component: rds/prod  # Subscribe to RDS production track
-      settings:
-        workspace_key_prefix: "rds"
+        # Inherits name: rds → workspace_key_prefix: "rds"
       vars:
         instance_class: "db.t3.large"
 ```
@@ -194,24 +215,45 @@ components/
 ```
 </File>
 
+<File title="stacks/catalog/vpc.yaml and rds.yaml">
+```yaml
+# Define base components with stable identity
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+        name: vpc  # Convention: top-level folder
+
+    rds/defaults:
+      metadata:
+        type: abstract
+        name: rds  # Convention: top-level folder
+```
+</File>
+
 <File title="stacks/prod/us-east-1.yaml">
 ```yaml
+import:
+  - catalog/vpc
+  - catalog/rds
+
 components:
   terraform:
     vpc:
       metadata:
+        inherits: [vpc/defaults]
         component: prod/vpc  # VPC from production track
-      settings:
-        workspace_key_prefix: "vpc"
+        # Inherits name: vpc → workspace_key_prefix: "vpc"
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.0.0.0/16"
 
     rds:
       metadata:
+        inherits: [rds/defaults]
         component: prod/rds  # RDS from production track
-      settings:
-        workspace_key_prefix: "rds"
+        # Inherits name: rds → workspace_key_prefix: "rds"
       vars:
         instance_class: "db.t3.large"
 ```

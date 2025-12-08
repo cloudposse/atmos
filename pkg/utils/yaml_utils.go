@@ -29,6 +29,7 @@ const (
 	AtmosYamlFuncInclude         = "!include"
 	AtmosYamlFuncIncludeRaw      = "!include.raw"
 	AtmosYamlFuncGitRoot         = "!repo-root"
+	AtmosYamlFuncRandom          = "!random"
 
 	DefaultYAMLIndent = 2
 
@@ -46,6 +47,7 @@ var (
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncRandom,
 	}
 
 	// AtmosYamlTagsMap provides O(1) lookup for custom tag checking.
@@ -59,6 +61,7 @@ var (
 		AtmosYamlFuncTerraformOutput: true,
 		AtmosYamlFuncTerraformState:  true,
 		AtmosYamlFuncEnv:             true,
+		AtmosYamlFuncRandom:          true,
 	}
 
 	// ParsedYAMLCache stores parsed yaml.Node objects and their position information

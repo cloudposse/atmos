@@ -54,6 +54,12 @@ This command is useful for:
 
   <dt>`--sort`</dt>
   <dd>Sort by column:order (e.g., `stack:asc,component:desc`)</dd>
+
+  <dt>`--delimiter`</dt>
+  <dd>Delimiter for csv/tsv output (default: `,` for csv, `\t` for tsv)</dd>
+
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before listing metadata.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list metadata --identity my-aws-identity`<br/><br/>Can also be set via `ATMOS_IDENTITY` environment variable.</dd>
 </dl>
 
 ## Examples

@@ -297,6 +297,9 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 }
 
 func setEnv(v *viper.Viper) {
+	// Base path configuration.
+	bindEnv(v, "base_path", "ATMOS_BASE_PATH")
+
 	bindEnv(v, "settings.github_token", "GITHUB_TOKEN")
 	bindEnv(v, "settings.inject_github_token", "ATMOS_INJECT_GITHUB_TOKEN")
 	bindEnv(v, "settings.atmos_github_token", "ATMOS_GITHUB_TOKEN")
@@ -445,13 +448,49 @@ func readHomeConfigWithProvider(v *viper.Viper, homeProvider filesystem.HomeDirP
 	return nil
 }
 
-// readWorkDirConfig load config from current working directory.
+// readWorkDirConfig loads config from current working directory or any parent directory.
+// It searches upward through the directory tree until it finds an atmos.yaml file
+// or reaches the filesystem root. This enables running atmos commands from any
+// subdirectory (e.g., component directories) without specifying --config-path.
+// Parent directory search can be disabled by setting ATMOS_CLI_CONFIG_PATH to "." or
+// any explicit path.
 func readWorkDirConfig(v *viper.Viper) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
+
+	// First try the current directory.
 	err = mergeConfig(v, wd, CliConfigFileName, true)
+	if err == nil {
+		return nil
+	}
+
+	// If not a ConfigFileNotFoundError, return the error.
+	var configFileNotFoundError viper.ConfigFileNotFoundError
+	if !errors.As(err, &configFileNotFoundError) {
+		return err
+	}
+
+	// If ATMOS_CLI_CONFIG_PATH is set, don't search parent directories.
+	// This allows tests and users to explicitly control config discovery.
+	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself,
+	// it must be checked before viper loads config files. Using os.Getenv is necessary
+	// because this check happens during the config loading phase, before any viper
+	// bindings are established.
+	if os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
+		return nil
+	}
+
+	// Search parent directories for atmos.yaml.
+	configDir := findAtmosConfigInParentDirs(wd)
+	if configDir == "" {
+		// No config found in any parent directory.
+		return nil
+	}
+
+	// Found config in a parent directory, merge it.
+	err = mergeConfig(v, configDir, CliConfigFileName, true)
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
@@ -460,7 +499,37 @@ func readWorkDirConfig(v *viper.Viper) error {
 			return err
 		}
 	}
+
+	log.Debug("Found atmos.yaml in parent directory", "path", configDir)
 	return nil
+}
+
+// findAtmosConfigInParentDirs searches for atmos.yaml in parent directories.
+// It walks up the directory tree from the given starting directory until
+// it finds an atmos.yaml file or reaches the filesystem root.
+// Returns the directory containing atmos.yaml, or empty string if not found.
+func findAtmosConfigInParentDirs(startDir string) string {
+	dir := startDir
+
+	for {
+		// Move to parent directory.
+		parent := filepath.Dir(dir)
+
+		// Check if we've reached the root.
+		if parent == dir {
+			return ""
+		}
+
+		dir = parent
+
+		// Check for atmos.yaml or .atmos.yaml in this directory.
+		for _, configName := range []string{AtmosConfigFileName, DotAtmosConfigFileName} {
+			configPath := filepath.Join(dir, configName)
+			if _, err := os.Stat(configPath); err == nil {
+				return dir
+			}
+		}
+	}
 }
 
 func readEnvAmosConfigPath(v *viper.Viper) error {
@@ -511,8 +580,9 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 		if errors.As(err, &configFileNotFoundError) {
 			return nil, err
 		}
-		// Wrap any other error with context
-		return nil, errors.Join(errUtils.ErrReadConfig, fmt.Errorf("%s/%s: %w", path, fileName, err))
+		// Wrap error with context using proper chaining.
+		// This preserves the full error chain for debugging while adding our sentinel error.
+		return nil, fmt.Errorf("%w: %s/%s: %w", errUtils.ErrReadConfig, path, fileName, err)
 	}
 
 	return tempViper, nil
@@ -522,7 +592,7 @@ func loadConfigFile(path string, fileName string) (*viper.Viper, error) {
 func readConfigFileContent(configFilePath string) ([]byte, error) {
 	content, err := os.ReadFile(configFilePath)
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrReadConfig, fmt.Errorf("%s: %w", configFilePath, err))
+		return nil, fmt.Errorf("%w: %s: %w", errUtils.ErrReadConfig, configFilePath, err)
 	}
 	return content, nil
 }
@@ -533,7 +603,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	mainViper := viper.New()
 	mainViper.SetConfigType(yamlType)
 	if err := mainViper.ReadConfig(bytes.NewReader(content)); err != nil {
-		return errors.Join(errUtils.ErrMergeConfiguration, fmt.Errorf("parse main config: %w", err))
+		return fmt.Errorf("%w: parse main config: %w", errUtils.ErrMergeConfiguration, err)
 	}
 	mainCommands := mainViper.Get(commandsKey)
 
@@ -547,7 +617,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	// Now load the main config temporarily to process explicit imports.
 	// We need this because the import paths are defined in the main config.
 	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
-		return errors.Join(errUtils.ErrMergeConfiguration, fmt.Errorf("merge main config: %w", err))
+		return fmt.Errorf("%w: merge main config: %w", errUtils.ErrMergeConfiguration, err)
 	}
 
 	// Clear commands before processing imports to collect only imported commands.
@@ -566,7 +636,7 @@ func processConfigImportsAndReapply(path string, tempViper *viper.Viper, content
 	// This ensures proper precedence: each config file's own settings override
 	// the settings from any files it imports (directly or transitively).
 	if err := tempViper.MergeConfig(bytes.NewReader(content)); err != nil {
-		return errors.Join(errUtils.ErrMergeConfiguration, fmt.Errorf("re-applying main config after processing imports: %w", err))
+		return fmt.Errorf("%w: re-applying main config after processing imports: %w", errUtils.ErrMergeConfiguration, err)
 	}
 
 	// Now merge commands in the correct order with proper override behavior:

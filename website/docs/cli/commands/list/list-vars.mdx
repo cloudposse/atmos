@@ -55,6 +55,8 @@ This command is an alias for `atmos list values --query .vars` and is useful for
   <dd>Delimiter for csv/tsv output (default: `,` for csv, `\t` for tsv)</dd>
   <dt>`--stack string`</dt>
   <dd>Filter by stack pattern (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)</dd>
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before listing vars.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list vars vpc --identity my-aws-identity`<br/><br/>Can also be set via `ATMOS_IDENTITY` environment variable.</dd>
 </dl>
 
 ## Examples
