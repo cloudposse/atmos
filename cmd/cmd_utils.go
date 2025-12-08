@@ -106,10 +106,15 @@ func processCustomCommands(
 			customCommand.PersistentFlags().String("identity", "", "Identity to use for authentication (overrides identity in command config)")
 			AddIdentityCompletion(customCommand)
 
-			// Process and add flags to the command
+			// Process and add flags to the command.
 			for _, flag := range commandConfig.Flags {
 				if flag.Type == "bool" {
 					defaultVal := false
+					if flag.Default != nil {
+						if boolVal, ok := flag.Default.(bool); ok {
+							defaultVal = boolVal
+						}
+					}
 					if flag.Shorthand != "" {
 						customCommand.PersistentFlags().BoolP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
 					} else {
@@ -117,6 +122,11 @@ func processCustomCommands(
 					}
 				} else {
 					defaultVal := ""
+					if flag.Default != nil {
+						if strVal, ok := flag.Default.(string); ok {
+							defaultVal = strVal
+						}
+					}
 					if flag.Shorthand != "" {
 						customCommand.PersistentFlags().StringP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
 					} else {
