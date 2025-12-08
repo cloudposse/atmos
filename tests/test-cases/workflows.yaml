@@ -147,6 +147,8 @@ tests:
         - "Available types:"
         - "atmos"
         - "shell"
+        - "To resume the workflow from this step, run:"
+        - "atmos workflow invalid-step-type -f test --from-step step1"
       exit_code: 1
 
   - name: atmos workflow invalid from step

@@ -238,16 +238,23 @@ func (e *Executor) runCommand(params *WorkflowParams, cmdParams *runCommandParam
 func (e *Executor) handleStepError(params *WorkflowParams, stepName string, cmdParams *runCommandParams, err error) stepResultInternal {
 	log.Debug("Workflow step failed", "step", stepName, "error", err)
 
-	// For workflow-specific errors (like invalid step type), print them directly
-	// without wrapping - they already have all the context needed.
+	// Build resume command for all error types.
+	resumeCmd := e.buildResumeCommand(params.Workflow, params.WorkflowPath, stepName, cmdParams.finalStack, params.AtmosConfig)
+
+	// For workflow-specific errors (like invalid step type), add resume hint and print directly
+	// without wrapping in ErrWorkflowStepFailed - they already have their own context.
 	if errors.Is(err, errUtils.ErrInvalidWorkflowStepType) {
-		e.printError(err)
+		// Add resume command hint to the existing error.
+		enrichedErr := errUtils.Build(err).
+			WithHintf("To resume the workflow from this step, run:\n```\n%s\n```", resumeCmd).
+			Err()
+		e.printError(enrichedErr)
 		return stepResultInternal{
 			StepResult: StepResult{
 				StepName: stepName,
 				Command:  cmdParams.command,
 				Success:  false,
-				Error:    err,
+				Error:    enrichedErr,
 			},
 			finalStack: cmdParams.finalStack,
 		}
@@ -261,9 +268,6 @@ func (e *Executor) handleStepError(params *WorkflowParams, stepName string, cmdP
 			failedCmd = fmt.Sprintf("%s -s %s", failedCmd, cmdParams.finalStack)
 		}
 	}
-
-	// Build resume command.
-	resumeCmd := e.buildResumeCommand(params.Workflow, params.WorkflowPath, stepName, cmdParams.finalStack, params.AtmosConfig)
 
 	stepErr := errUtils.Build(errUtils.ErrWorkflowStepFailed).
 		WithCause(err).

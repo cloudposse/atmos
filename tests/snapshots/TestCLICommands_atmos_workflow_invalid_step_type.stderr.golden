@@ -16,4 +16,8 @@ Step type invalid is not supported. Each step must specify a valid type.
 • atmos
 • shell
 
+💡 To resume the workflow from this step, run:
+
+ atmos workflow invalid-step-type -f test --from-step step1
+
 
