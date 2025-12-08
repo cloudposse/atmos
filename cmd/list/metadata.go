@@ -120,13 +120,26 @@ func executeListMetadataCmd(cmd *cobra.Command, args []string, opts *MetadataOpt
 	configAndStacksInfo.Command = "list"
 	configAndStacksInfo.SubCommand = "metadata"
 
+	// Initialize config to create auth manager.
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return err
+	}
+
+	// Create AuthManager for authentication support.
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	if err != nil {
+		return err
+	}
+
 	// Convert cmd-level options to pkg-level options.
 	pkgOpts := &list.MetadataOptions{
-		Format:  opts.Format,
-		Columns: opts.Columns,
-		Sort:    opts.Sort,
-		Filter:  opts.Filter,
-		Stack:   opts.Stack,
+		Format:      opts.Format,
+		Columns:     opts.Columns,
+		Sort:        opts.Sort,
+		Filter:      opts.Filter,
+		Stack:       opts.Stack,
+		AuthManager: authManager,
 	}
 
 	return list.ExecuteListMetadataCmd(&configAndStacksInfo, cmd, args, pkgOpts)

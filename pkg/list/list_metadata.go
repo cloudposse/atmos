@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/extract"
@@ -97,12 +98,13 @@ func parseMetadataColumnsFlag(columnsFlag []string) ([]column.Config, error) {
 
 // MetadataOptions contains options for list metadata command.
 type MetadataOptions struct {
-	Format    string
-	Columns   []string
-	Sort      string
-	Filter    string
-	Stack     string
-	Delimiter string
+	Format      string
+	Columns     []string
+	Sort        string
+	Filter      string
+	Stack       string
+	Delimiter   string
+	AuthManager auth.AuthManager
 }
 
 // ExecuteListMetadataCmd executes the list metadata command using the renderer pipeline.
@@ -114,7 +116,7 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	}
 
 	// Process instances (same as list instances, but we'll extract metadata).
-	instances, err := processInstances(&atmosConfig)
+	instances, err := processInstances(&atmosConfig, opts.AuthManager)
 	if err != nil {
 		return errors.Join(errUtils.ErrProcessInstances, err)
 	}

@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -44,6 +45,7 @@ type InstancesCommandOptions struct {
 	SortSpec    string
 	Delimiter   string
 	Query       string
+	AuthManager auth.AuthManager
 }
 
 // parseColumnsFlag parses column specifications from CLI flag.
@@ -323,9 +325,10 @@ func uploadInstances(instances []schema.Instance) error {
 func processInstancesWithDeps(
 	atmosConfig *schema.AtmosConfiguration,
 	stacksProcessor e.StacksProcessor,
+	authManager auth.AuthManager,
 ) ([]schema.Instance, error) {
 	// Get all stacks with template processing enabled to render template variables.
-	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, nil)
+	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, authManager)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 		return nil, errors.Join(errUtils.ErrExecuteDescribeStacks, err)
@@ -342,8 +345,8 @@ func processInstancesWithDeps(
 
 // processInstances collects, filters, and sorts instances.
 // This is a convenience wrapper around processInstancesWithDeps() for production use.
-func processInstances(atmosConfig *schema.AtmosConfiguration) ([]schema.Instance, error) {
-	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{})
+func processInstances(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) ([]schema.Instance, error) {
+	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{}, authManager)
 }
 
 // ExecuteListInstancesCmd executes the list instances command.
@@ -387,7 +390,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		e.ClearFindStacksMapCache()
 
 		// Get all stacks for provenance-based import resolution (single call).
-		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, opts.AuthManager)
 		if err != nil {
 			log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 			return errors.Join(errUtils.ErrExecuteDescribeStacks, err)
@@ -407,7 +410,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	}
 
 	// For non-tree formats, process instances normally.
-	instances, err := processInstances(&atmosConfig)
+	instances, err := processInstances(&atmosConfig, opts.AuthManager)
 	if err != nil {
 		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
 		return errors.Join(errUtils.ErrProcessInstances, err)

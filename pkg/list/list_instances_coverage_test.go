@@ -48,7 +48,7 @@ func TestProcessInstances(t *testing.T) {
 	}
 
 	// Call the wrapper - it may return empty list or error depending on config.
-	instances, err := processInstances(atmosConfig)
+	instances, err := processInstances(atmosConfig, nil)
 
 	// Either result is acceptable - key is the function executes without panic.
 	// The function behavior is fully tested via processInstancesWithDeps tests.

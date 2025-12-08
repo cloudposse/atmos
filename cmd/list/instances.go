@@ -139,6 +139,18 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 	configAndStacksInfo.Command = "list"
 	configAndStacksInfo.SubCommand = "instances"
 
+	// Initialize config to create auth manager.
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return err
+	}
+
+	// Create AuthManager for authentication support.
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	if err != nil {
+		return err
+	}
+
 	return list.ExecuteListInstancesCmd(&list.InstancesCommandOptions{
 		Info:        &configAndStacksInfo,
 		Cmd:         cmd,
@@ -149,5 +161,6 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 		SortSpec:    opts.Sort,
 		Delimiter:   opts.Delimiter,
 		Query:       opts.Query,
+		AuthManager: authManager,
 	})
 }
