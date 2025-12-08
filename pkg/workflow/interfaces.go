@@ -70,10 +70,10 @@ type WorkflowLoader interface {
 	//   - workflowPath: Path to the workflow file
 	//   - workflowName: Name of the workflow to load
 	// Returns the workflow definition and any error.
-	LoadWorkflow(atmosConfig schema.AtmosConfiguration, workflowPath, workflowName string) (*schema.WorkflowDefinition, error)
+	LoadWorkflow(atmosConfig *schema.AtmosConfiguration, workflowPath, workflowName string) (*schema.WorkflowDefinition, error)
 
 	// ListWorkflows returns all available workflows.
-	ListWorkflows(atmosConfig schema.AtmosConfiguration) ([]schema.DescribeWorkflowsItem, error)
+	ListWorkflows(atmosConfig *schema.AtmosConfiguration) ([]schema.DescribeWorkflowsItem, error)
 }
 
 // UIProvider abstracts user interface operations for workflows.

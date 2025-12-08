@@ -70,9 +70,11 @@ workflows:
       Test multi-component operation with --query flag containing quoted expression.
       This reproduces the issue where strings.Fields() splits the quoted query.
     steps:
-      # This command should be parsed as: terraform plan --query '.settings.enabled == true' -s nonprod
-      # But strings.Fields() incorrectly splits it into: terraform plan --query '.settings.enabled == true' -s nonprod
-      # which causes the CLI to interpret '.settings.enabled' as a component argument
+      # This command should be parsed as a single query argument:
+      #   ["terraform", "plan", "--query", ".settings.enabled == true", "-s", "nonprod"]
+      # But strings.Fields() incorrectly splits the quoted query into multiple tokens:
+      #   ["terraform", "plan", "--query", "'.settings.enabled", "==", "true'", "-s", "nonprod"]
+      # which causes the CLI to interpret "'.settings.enabled" as a component argument.
       - command: terraform plan --query '.settings.enabled == true' -s nonprod
 
   # This workflow tests the --components flag with comma-separated values

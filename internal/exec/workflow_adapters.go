@@ -23,7 +23,8 @@ var (
 type WorkflowCommandRunner struct{}
 
 // NewWorkflowCommandRunner creates a new WorkflowCommandRunner.
-func NewWorkflowCommandRunner(retryConfig *schema.RetryConfig) *WorkflowCommandRunner {
+// Note: Retry logic should be handled at a higher level if needed.
+func NewWorkflowCommandRunner(_ *schema.RetryConfig) *WorkflowCommandRunner {
 	defer perf.Track(nil, "exec.NewWorkflowCommandRunner")()
 
 	return &WorkflowCommandRunner{}
@@ -39,7 +40,11 @@ func (r *WorkflowCommandRunner) RunShell(command, name, dir string, env []string
 // RunAtmos executes an atmos command using ExecuteShellCommand.
 // Note: Retry logic should be handled at a higher level if needed.
 func (r *WorkflowCommandRunner) RunAtmos(params *workflow.AtmosExecParams) error {
-	defer perf.Track(params.AtmosConfig, "exec.WorkflowCommandRunner.RunAtmos")()
+	defer perf.Track(nil, "exec.WorkflowCommandRunner.RunAtmos")()
+
+	if params == nil || params.AtmosConfig == nil {
+		return errUtils.ErrNilParam
+	}
 
 	return ExecuteShellCommand(*params.AtmosConfig, "atmos", params.Args, params.Dir, params.Env, params.DryRun, "")
 }

@@ -21,15 +21,6 @@ import (
 // workflowErrorTitle is the standard title for workflow errors.
 const workflowErrorTitle = "Workflow Error"
 
-// Sentinel errors for workflow execution.
-var (
-	ErrWorkflowNoSteps          = errors.New("workflow has no steps defined")
-	ErrInvalidWorkflowStepType  = errors.New("invalid workflow step type")
-	ErrInvalidFromStep          = errors.New("invalid from-step flag")
-	ErrWorkflowStepFailed       = errors.New("workflow step execution failed")
-	ErrAuthProviderNotAvailable = errors.New("auth provider is not available")
-)
-
 // Executor handles workflow execution with dependency injection for testing.
 type Executor struct {
 	runner       CommandRunner
@@ -38,7 +29,9 @@ type Executor struct {
 }
 
 // NewExecutor creates a new Executor with the given dependencies.
-// If any dependency is nil, a default implementation will be used.
+// Nil dependencies are handled gracefully: runner is required for command execution,
+// authProvider can be nil if no authentication is needed, and ui can be nil to
+// disable user-facing output (messages and errors will be silently skipped).
 func NewExecutor(runner CommandRunner, authProvider AuthProvider, ui UIProvider) *Executor {
 	return &Executor{
 		runner:       runner,
@@ -50,6 +43,9 @@ func NewExecutor(runner CommandRunner, authProvider AuthProvider, ui UIProvider)
 // Execute runs a workflow with the given options.
 // This is the main entry point for workflow execution.
 func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
+	if params == nil || params.AtmosConfig == nil {
+		return nil, errUtils.ErrNilParam
+	}
 	defer perf.Track(params.AtmosConfig, "workflow.Executor.Execute")()
 
 	result := &ExecutionResult{
@@ -62,9 +58,10 @@ func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
 
 	// Validate workflow has steps.
 	if len(steps) == 0 {
-		err := ErrWorkflowNoSteps
-		e.printError(err,
-			fmt.Sprintf("\n## Explanation\nWorkflow `%s` is empty and requires at least one step to execute.", params.Workflow))
+		err := errUtils.Build(errUtils.ErrWorkflowNoSteps).
+			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", params.Workflow).
+			Err()
+		e.printError(err)
 		result.Success = false
 		result.Error = err
 		return result, err
@@ -115,10 +112,11 @@ func (e *Executor) handleFromStep(
 
 	if len(steps) == 0 {
 		stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
-		err := ErrInvalidFromStep
-		e.printError(err,
-			fmt.Sprintf("\n## Explanation\nThe `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`. \n### Available steps:\n%s",
-				fromStep, workflow, formatList(stepNames)))
+		err := errUtils.Build(errUtils.ErrInvalidFromStep).
+			WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.", fromStep, workflow).
+			WithHintf("Available steps:\n%s", FormatList(stepNames)).
+			Err()
+		e.printError(err)
 		result.Success = false
 		result.Error = err
 		return nil, err
@@ -228,16 +226,32 @@ func (e *Executor) runCommand(params *WorkflowParams, cmdParams *runCommandParam
 	case "atmos":
 		return e.executeAtmosCommand(params, cmdParams.command, cmdParams.finalStack, cmdParams.stepEnv)
 	default:
-		e.printError(ErrInvalidWorkflowStepType,
-			fmt.Sprintf("\n## Explanation\nStep type `%s` is not supported. Each step must specify a valid type. \n### Available types:\n%s",
-				cmdParams.commandType, formatList([]string{"atmos", "shell"})))
-		return ErrInvalidWorkflowStepType
+		// Return error without printing - handleStepError will print it with resume context.
+		return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
+			WithExplanationf("Step type `%s` is not supported. Each step must specify a valid type.", cmdParams.commandType).
+			WithHintf("Available types:\n%s", FormatList([]string{"atmos", "shell"})).
+			Err()
 	}
 }
 
 // handleStepError handles a step execution error and returns the appropriate result.
 func (e *Executor) handleStepError(params *WorkflowParams, stepName string, cmdParams *runCommandParams, err error) stepResultInternal {
 	log.Debug("Workflow step failed", "step", stepName, "error", err)
+
+	// For workflow-specific errors (like invalid step type), print them directly
+	// without wrapping - they already have all the context needed.
+	if errors.Is(err, errUtils.ErrInvalidWorkflowStepType) {
+		e.printError(err)
+		return stepResultInternal{
+			StepResult: StepResult{
+				StepName: stepName,
+				Command:  cmdParams.command,
+				Success:  false,
+				Error:    err,
+			},
+			finalStack: cmdParams.finalStack,
+		}
+	}
 
 	// Build failed command string for error message.
 	failedCmd := cmdParams.command
@@ -251,16 +265,19 @@ func (e *Executor) handleStepError(params *WorkflowParams, stepName string, cmdP
 	// Build resume command.
 	resumeCmd := e.buildResumeCommand(params.Workflow, params.WorkflowPath, stepName, cmdParams.finalStack, params.AtmosConfig)
 
-	e.printError(ErrWorkflowStepFailed,
-		fmt.Sprintf("\n## Explanation\nThe following command failed to execute:\n```\n%s\n```\nTo resume the workflow from this step, run:\n```\n%s\n```",
-			failedCmd, resumeCmd))
+	stepErr := errUtils.Build(errUtils.ErrWorkflowStepFailed).
+		WithCause(err).
+		WithExplanationf("The following command failed to execute:\n```\n%s\n```", failedCmd).
+		WithHintf("To resume the workflow from this step, run:\n```\n%s\n```", resumeCmd).
+		Err()
+	e.printError(stepErr)
 
 	return stepResultInternal{
 		StepResult: StepResult{
 			StepName: stepName,
 			Command:  cmdParams.command,
 			Success:  false,
-			Error:    errors.Join(ErrWorkflowStepFailed, err),
+			Error:    stepErr,
 		},
 		finalStack: cmdParams.finalStack,
 	}
@@ -269,7 +286,7 @@ func (e *Executor) handleStepError(params *WorkflowParams, stepName string, cmdP
 // prepareAuthenticatedEnvironment prepares environment variables with authentication.
 func (e *Executor) prepareAuthenticatedEnvironment(ctx context.Context, identity, stepName string) ([]string, error) {
 	if e.authProvider == nil {
-		return nil, fmt.Errorf("%w: identity %q specified for step %q", ErrAuthProviderNotAvailable, identity, stepName)
+		return nil, fmt.Errorf("%w: identity %q specified for step %q", errUtils.ErrAuthProviderNotAvailable, identity, stepName)
 	}
 
 	// Try cached credentials first.
@@ -367,9 +384,11 @@ func (e *Executor) printMessage(format string, args ...any) {
 }
 
 // printError prints an error using the UI provider with the standard workflow error title.
-func (e *Executor) printError(err error, explanation string) {
+// The error should be built using ErrorBuilder with explanation and hints included.
+func (e *Executor) printError(err error) {
 	if e.ui != nil {
-		e.ui.PrintError(err, workflowErrorTitle, explanation)
+		// Pass empty explanation since it's now embedded in the error via ErrorBuilder.
+		e.ui.PrintError(err, workflowErrorTitle, "")
 	}
 }
 
@@ -387,8 +406,8 @@ func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefini
 	}
 }
 
-// formatList formats a list of strings into a markdown bullet list.
-func formatList(items []string) string {
+// FormatList formats a list of strings into a markdown bullet list.
+func FormatList(items []string) string {
 	var result strings.Builder
 	for _, item := range items {
 		result.WriteString(fmt.Sprintf("- `%s`\n", item))

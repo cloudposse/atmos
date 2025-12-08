@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -106,16 +107,16 @@ func TestDefaultCommandRunner_RunShell(t *testing.T) {
 	}
 }
 
-// TestDefaultCommandRunner_RunShell_NilExecutor tests panic on nil shell executor.
+// TestDefaultCommandRunner_RunShell_NilExecutor tests error on nil shell executor.
 func TestDefaultCommandRunner_RunShell_NilExecutor(t *testing.T) {
 	runner := &DefaultCommandRunner{
 		shellExecutor: nil,
 		atmosExecutor: nil,
 	}
 
-	assert.Panics(t, func() {
-		_ = runner.RunShell("echo hello", "test", ".", nil, false)
-	})
+	err := runner.RunShell("echo hello", "test", ".", nil, false)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNilParam)
 }
 
 // TestDefaultCommandRunner_RunAtmos tests the RunAtmos method.
@@ -192,7 +193,7 @@ func TestDefaultCommandRunner_RunAtmos(t *testing.T) {
 	}
 }
 
-// TestDefaultCommandRunner_RunAtmos_NilExecutor tests panic on nil atmos executor.
+// TestDefaultCommandRunner_RunAtmos_NilExecutor tests error on nil atmos executor.
 func TestDefaultCommandRunner_RunAtmos_NilExecutor(t *testing.T) {
 	runner := &DefaultCommandRunner{
 		shellExecutor: nil,
@@ -206,9 +207,40 @@ func TestDefaultCommandRunner_RunAtmos_NilExecutor(t *testing.T) {
 		Dir:         ".",
 	}
 
-	assert.Panics(t, func() {
-		_ = runner.RunAtmos(params)
-	})
+	err := runner.RunAtmos(params)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNilParam)
+}
+
+// TestDefaultCommandRunner_RunAtmos_NilParams tests error on nil params.
+func TestDefaultCommandRunner_RunAtmos_NilParams(t *testing.T) {
+	runner := &DefaultCommandRunner{
+		shellExecutor: nil,
+		atmosExecutor: func(params *AtmosExecParams) error { return nil },
+	}
+
+	err := runner.RunAtmos(nil)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNilParam)
+}
+
+// TestDefaultCommandRunner_RunAtmos_NilAtmosConfig tests error on nil AtmosConfig.
+func TestDefaultCommandRunner_RunAtmos_NilAtmosConfig(t *testing.T) {
+	runner := &DefaultCommandRunner{
+		shellExecutor: nil,
+		atmosExecutor: func(params *AtmosExecParams) error { return nil },
+	}
+
+	params := &AtmosExecParams{
+		Ctx:         context.Background(),
+		AtmosConfig: nil,
+		Args:        []string{"version"},
+		Dir:         ".",
+	}
+
+	err := runner.RunAtmos(params)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNilParam)
 }
 
 // TestDefaultCommandRunner_InterfaceCompliance verifies that DefaultCommandRunner

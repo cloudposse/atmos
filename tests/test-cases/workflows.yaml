@@ -143,7 +143,8 @@ tests:
         - "invalid workflow step type"
         - "## Explanation"
         - "Step type invalid is not supported. Each step must specify a valid type."
-        - "### Available types:"
+        - "## Hints"
+        - "Available types:"
         - "atmos"
         - "shell"
       exit_code: 1
@@ -169,7 +170,8 @@ tests:
         - "## Explanation"
         - "The --from-step flag was set to dne, but this step does not exist in workflow"
         - "pass"
-        - "### Available steps:"
+        - "## Hints"
+        - "Available steps:"
         - "step1"
       exit_code: 1
 

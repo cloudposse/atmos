@@ -24,25 +24,25 @@ import (
 	"github.com/cloudposse/atmos/pkg/workflow"
 )
 
-// Static error definitions.
+// Workflow error aliases from errors package for backward compatibility.
 var (
 	WorkflowErrTitle           = "Workflow Error"
-	ErrWorkflowNoSteps         = errors.New("workflow has no steps defined")
-	ErrInvalidWorkflowStepType = errors.New("invalid workflow step type")
-	ErrInvalidFromStep         = errors.New("invalid from-step flag")
-	ErrWorkflowStepFailed      = errors.New("workflow step execution failed")
-	ErrWorkflowNoWorkflow      = errors.New("no workflow found")
-	ErrWorkflowFileNotFound    = errors.New("workflow file not found")
-	ErrInvalidWorkflowManifest = errors.New("invalid workflow manifest")
+	ErrWorkflowNoSteps         = errUtils.ErrWorkflowNoSteps
+	ErrInvalidWorkflowStepType = errUtils.ErrInvalidWorkflowStepType
+	ErrInvalidFromStep         = errUtils.ErrInvalidFromStep
+	ErrWorkflowStepFailed      = errUtils.ErrWorkflowStepFailed
+	ErrWorkflowNoWorkflow      = errUtils.ErrWorkflowNoWorkflow
+	ErrWorkflowFileNotFound    = errUtils.ErrWorkflowFileNotFound
+	ErrInvalidWorkflowManifest = errUtils.ErrInvalidWorkflowManifest
 
 	KnownWorkflowErrors = []error{
-		ErrWorkflowNoSteps,
-		ErrInvalidWorkflowStepType,
-		ErrInvalidFromStep,
-		ErrWorkflowStepFailed,
-		ErrWorkflowNoWorkflow,
-		ErrWorkflowFileNotFound,
-		ErrInvalidWorkflowManifest,
+		errUtils.ErrWorkflowNoSteps,
+		errUtils.ErrInvalidWorkflowStepType,
+		errUtils.ErrInvalidFromStep,
+		errUtils.ErrWorkflowStepFailed,
+		errUtils.ErrWorkflowNoWorkflow,
+		errUtils.ErrWorkflowFileNotFound,
+		errUtils.ErrInvalidWorkflowManifest,
 	}
 )
 
@@ -189,12 +189,9 @@ func ExecuteWorkflow(
 }
 
 // FormatList formats a list of strings into a markdown bullet list.
+// This is an alias to workflow.FormatList for backward compatibility.
 func FormatList(items []string) string {
-	var result strings.Builder
-	for _, item := range items {
-		result.WriteString(fmt.Sprintf("- `%s`\n", item))
-	}
-	return result.String()
+	return workflow.FormatList(items)
 }
 
 // ExecuteDescribeWorkflows executes `atmos describe workflows` command.

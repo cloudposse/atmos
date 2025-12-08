@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -35,17 +36,21 @@ func (r *DefaultCommandRunner) RunShell(command, name, dir string, env []string,
 	defer perf.Track(nil, "workflow.DefaultCommandRunner.RunShell")()
 
 	if r.shellExecutor == nil {
-		panic("shellExecutor is nil - DefaultCommandRunner was not properly initialized")
+		return errUtils.ErrNilParam
 	}
 	return r.shellExecutor(command, name, dir, env, dryRun)
 }
 
 // RunAtmos executes an atmos command using the configured atmos executor.
 func (r *DefaultCommandRunner) RunAtmos(params *AtmosExecParams) error {
-	defer perf.Track(params.AtmosConfig, "workflow.DefaultCommandRunner.RunAtmos")()
+	defer perf.Track(nil, "workflow.DefaultCommandRunner.RunAtmos")()
+
+	if params == nil || params.AtmosConfig == nil {
+		return errUtils.ErrNilParam
+	}
 
 	if r.atmosExecutor == nil {
-		panic("atmosExecutor is nil - DefaultCommandRunner was not properly initialized")
+		return errUtils.ErrNilParam
 	}
 	return r.atmosExecutor(params)
 }

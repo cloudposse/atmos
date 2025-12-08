@@ -9,31 +9,11 @@
 
 Step type invalid is not supported. Each step must specify a valid type.
 
-### Available types:
+## Hints
+
+💡 Available types:
 
 • atmos
 • shell
-
-
-
-# Workflow Error
-
-**Error:** workflow step execution failed
-
-## Explanation
-
-The following command failed to execute:
-
- echo "This should fail"
-
-To resume the workflow from this step, run:
-
- atmos workflow invalid-step-type -f test --from-step step1
-
-
-
-# Error
-
-**Error:** workflow step execution failed invalid workflow step type
 
 

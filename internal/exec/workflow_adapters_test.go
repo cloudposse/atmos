@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/workflow"
@@ -398,11 +399,8 @@ func TestWorkflowCommandRunner_RunShell_InvalidCommand(t *testing.T) {
 
 	// This should fail because the command doesn't exist.
 	err := runner.RunShell("nonexistent_command_12345", "test-command", ".", []string{}, false)
-	// The error behavior depends on ExecuteShell implementation.
-	// We just verify it handles the error gracefully.
-	if err != nil {
-		assert.Error(t, err)
-	}
+	// Invalid commands should return an error.
+	assert.Error(t, err)
 }
 
 // TestWorkflowCommandRunner_RunShell_WithEnv tests RunShell with environment variables.
@@ -433,6 +431,33 @@ func TestWorkflowCommandRunner_RunAtmos_DryRun(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestWorkflowCommandRunner_RunAtmos_NilParams tests RunAtmos with nil params.
+func TestWorkflowCommandRunner_RunAtmos_NilParams(t *testing.T) {
+	runner := NewWorkflowCommandRunner(nil)
+
+	err := runner.RunAtmos(nil)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNilParam)
+}
+
+// TestWorkflowCommandRunner_RunAtmos_NilAtmosConfig tests RunAtmos with nil AtmosConfig.
+func TestWorkflowCommandRunner_RunAtmos_NilAtmosConfig(t *testing.T) {
+	runner := NewWorkflowCommandRunner(nil)
+
+	params := &workflow.AtmosExecParams{
+		Ctx:         context.Background(),
+		AtmosConfig: nil,
+		Args:        []string{"version"},
+		Dir:         ".",
+		Env:         []string{},
+		DryRun:      true,
+	}
+
+	err := runner.RunAtmos(params)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNilParam)
+}
+
 // TestWorkflowAuthProvider_NeedsAuth_EmptyIdentityString tests edge case with whitespace identity.
 func TestWorkflowAuthProvider_NeedsAuth_EmptyIdentityString(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -449,8 +474,8 @@ func TestWorkflowAuthProvider_NeedsAuth_EmptyIdentityString(t *testing.T) {
 	assert.False(t, result)
 }
 
-// TestWorkflowAuthProvider_NeedsAuth_WhitespaceIdentity tests that whitespace-only identity
-// is treated as having an identity (the provider doesn't trim).
+// TestWorkflowAuthProvider_NeedsAuth_WhitespaceIdentity tests that whitespace-only identity is
+// treated as having an identity (the provider doesn't trim).
 func TestWorkflowAuthProvider_NeedsAuth_WhitespaceIdentity(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

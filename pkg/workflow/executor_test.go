@@ -146,7 +146,7 @@ func TestExecutor_Execute_EmptyWorkflow(t *testing.T) {
 	mockUI := NewMockUIProvider(ctrl)
 
 	// Expect error to be printed.
-	mockUI.EXPECT().PrintError(ErrWorkflowNoSteps, workflowErrorTitle, gomock.Any())
+	mockUI.EXPECT().PrintError(gomock.Any(), workflowErrorTitle, gomock.Any())
 
 	executor := NewExecutor(mockRunner, nil, mockUI)
 
@@ -165,7 +165,7 @@ func TestExecutor_Execute_EmptyWorkflow(t *testing.T) {
 	result, err := executor.Execute(params)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrWorkflowNoSteps)
+	assert.ErrorIs(t, err, errUtils.ErrWorkflowNoSteps)
 	assert.False(t, result.Success)
 }
 
@@ -177,8 +177,8 @@ func TestExecutor_Execute_InvalidStepType(t *testing.T) {
 	mockRunner := NewMockCommandRunner(ctrl)
 	mockUI := NewMockUIProvider(ctrl)
 
-	// Expect error to be printed twice (once for invalid type, once for step failure).
-	mockUI.EXPECT().PrintError(gomock.Any(), workflowErrorTitle, gomock.Any()).Times(2)
+	// Expect error to be printed once by handleStepError (which includes resume context).
+	mockUI.EXPECT().PrintError(gomock.Any(), workflowErrorTitle, gomock.Any()).Times(1)
 
 	executor := NewExecutor(mockRunner, nil, mockUI)
 
@@ -191,7 +191,8 @@ func TestExecutor_Execute_InvalidStepType(t *testing.T) {
 	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrWorkflowStepFailed)
+	// ErrInvalidWorkflowStepType is returned directly without wrapping in ErrWorkflowStepFailed.
+	assert.ErrorIs(t, err, errUtils.ErrInvalidWorkflowStepType)
 	assert.False(t, result.Success)
 }
 
@@ -212,7 +213,7 @@ func TestExecutor_Execute_StepFailure(t *testing.T) {
 	)
 
 	// Expect error to be printed for failed step.
-	mockUI.EXPECT().PrintError(ErrWorkflowStepFailed, workflowErrorTitle, gomock.Any())
+	mockUI.EXPECT().PrintError(gomock.Any(), workflowErrorTitle, gomock.Any())
 
 	executor := NewExecutor(mockRunner, nil, mockUI)
 
@@ -227,7 +228,7 @@ func TestExecutor_Execute_StepFailure(t *testing.T) {
 	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrWorkflowStepFailed)
+	assert.ErrorIs(t, err, errUtils.ErrWorkflowStepFailed)
 	assert.False(t, result.Success)
 	assert.Len(t, result.Steps, 2) // Only 2 steps executed.
 	assert.True(t, result.Steps[0].Success)
@@ -284,7 +285,7 @@ func TestExecutor_Execute_InvalidFromStep(t *testing.T) {
 	mockUI := NewMockUIProvider(ctrl)
 
 	// Expect error to be printed.
-	mockUI.EXPECT().PrintError(ErrInvalidFromStep, workflowErrorTitle, gomock.Any())
+	mockUI.EXPECT().PrintError(gomock.Any(), workflowErrorTitle, gomock.Any())
 
 	executor := NewExecutor(mockRunner, nil, mockUI)
 
@@ -297,7 +298,7 @@ func TestExecutor_Execute_InvalidFromStep(t *testing.T) {
 	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{FromStep: "nonexistent"}))
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrInvalidFromStep)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFromStep)
 	assert.False(t, result.Success)
 }
 
@@ -719,7 +720,7 @@ func TestFormatList(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := formatList(tt.input)
+			result := FormatList(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -769,7 +770,7 @@ func TestExecutor_Execute_NilUIProvider_Error(t *testing.T) {
 	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrWorkflowNoSteps)
+	assert.ErrorIs(t, err, errUtils.ErrWorkflowNoSteps)
 	assert.False(t, result.Success)
 }
 
@@ -877,7 +878,7 @@ func TestExecutor_Execute_AtmosCommandFailureWithStack(t *testing.T) {
 
 	mockUI.EXPECT().PrintMessage(gomock.Any(), gomock.Any()).AnyTimes()
 	mockRunner.EXPECT().RunAtmos(gomock.Any()).Return(stepError)
-	mockUI.EXPECT().PrintError(ErrWorkflowStepFailed, workflowErrorTitle, gomock.Any())
+	mockUI.EXPECT().PrintError(gomock.Any(), workflowErrorTitle, gomock.Any())
 
 	executor := NewExecutor(mockRunner, nil, mockUI)
 
@@ -890,7 +891,7 @@ func TestExecutor_Execute_AtmosCommandFailureWithStack(t *testing.T) {
 	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{CommandLineStack: "dev-stack"}))
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrWorkflowStepFailed)
+	assert.ErrorIs(t, err, errUtils.ErrWorkflowStepFailed)
 	assert.False(t, result.Success)
 	// Resume command should include the stack.
 	assert.Contains(t, result.ResumeCommand, "-s dev-stack")
@@ -923,4 +924,43 @@ func TestExecutor_Execute_IdentityWithNoAuthProvider(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, result.Success)
+}
+
+func TestExecutor_Execute_NilParams(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	executor := NewExecutor(mockRunner, nil, nil)
+
+	result, err := executor.Execute(nil)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrNilParam)
+}
+
+func TestExecutor_Execute_NilAtmosConfig(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	executor := NewExecutor(mockRunner, nil, nil)
+
+	// Create params with nil AtmosConfig.
+	params := &WorkflowParams{
+		Ctx:          context.Background(),
+		AtmosConfig:  nil,
+		Workflow:     "test-workflow",
+		WorkflowPath: "test.yaml",
+		WorkflowDefinition: &schema.WorkflowDefinition{
+			Steps: []schema.WorkflowStep{
+				{Name: "step1", Command: "echo hello", Type: "shell"},
+			},
+		},
+	}
+
+	result, err := executor.Execute(params)
+
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrNilParam)
 }

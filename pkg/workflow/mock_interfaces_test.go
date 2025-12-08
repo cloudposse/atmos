@@ -176,7 +176,7 @@ func (m *MockWorkflowLoader) EXPECT() *MockWorkflowLoaderMockRecorder {
 }
 
 // ListWorkflows mocks base method.
-func (m *MockWorkflowLoader) ListWorkflows(atmosConfig schema.AtmosConfiguration) ([]schema.DescribeWorkflowsItem, error) {
+func (m *MockWorkflowLoader) ListWorkflows(atmosConfig *schema.AtmosConfiguration) ([]schema.DescribeWorkflowsItem, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListWorkflows", atmosConfig)
 	ret0, _ := ret[0].([]schema.DescribeWorkflowsItem)
@@ -191,7 +191,7 @@ func (mr *MockWorkflowLoaderMockRecorder) ListWorkflows(atmosConfig any) *gomock
 }
 
 // LoadWorkflow mocks base method.
-func (m *MockWorkflowLoader) LoadWorkflow(atmosConfig schema.AtmosConfiguration, workflowPath, workflowName string) (*schema.WorkflowDefinition, error) {
+func (m *MockWorkflowLoader) LoadWorkflow(atmosConfig *schema.AtmosConfiguration, workflowPath, workflowName string) (*schema.WorkflowDefinition, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LoadWorkflow", atmosConfig, workflowPath, workflowName)
 	ret0, _ := ret[0].(*schema.WorkflowDefinition)
