@@ -240,7 +240,7 @@ func TestWorkflowAuthProvider_GetCachedCredentials(t *testing.T) {
 				assert.Nil(t, creds)
 			} else {
 				assert.NoError(t, err)
-				assert.NotNil(t, creds)
+				assert.Equal(t, tt.expectedCreds, creds)
 			}
 		})
 	}

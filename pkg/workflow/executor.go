@@ -68,7 +68,7 @@ func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
 	}
 
 	// Generate step names if not provided.
-	checkAndGenerateWorkflowStepNames(params.WorkflowDefinition)
+	CheckAndGenerateWorkflowStepNames(params.WorkflowDefinition)
 
 	log.Debug("Executing workflow", "workflow", params.Workflow, "path", params.WorkflowPath)
 
@@ -396,8 +396,9 @@ func (e *Executor) printError(err error) {
 	}
 }
 
-// checkAndGenerateWorkflowStepNames generates step names for steps that don't have them.
-func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefinition) {
+// CheckAndGenerateWorkflowStepNames generates step names for steps that don't have them.
+// If a step doesn't have a name, it generates one in the format "step1", "step2", etc.
+func CheckAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefinition) {
 	steps := workflowDefinition.Steps
 	if steps == nil {
 		return

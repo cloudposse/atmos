@@ -680,7 +680,7 @@ func TestCheckAndGenerateWorkflowStepNames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			checkAndGenerateWorkflowStepNames(tt.input)
+			CheckAndGenerateWorkflowStepNames(tt.input)
 
 			if tt.expected == nil {
 				assert.Nil(t, tt.input.Steps)

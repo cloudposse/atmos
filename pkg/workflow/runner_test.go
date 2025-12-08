@@ -243,8 +243,7 @@ func TestDefaultCommandRunner_RunAtmos_NilAtmosConfig(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrNilParam)
 }
 
-// TestDefaultCommandRunner_InterfaceCompliance verifies that DefaultCommandRunner
-// implements the CommandRunner interface.
+// TestDefaultCommandRunner_InterfaceCompliance verifies that DefaultCommandRunner implements the CommandRunner interface.
 func TestDefaultCommandRunner_InterfaceCompliance(t *testing.T) {
 	var _ CommandRunner = (*DefaultCommandRunner)(nil)
 }

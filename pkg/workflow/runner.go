@@ -23,7 +23,7 @@ type DefaultCommandRunner struct {
 }
 
 // NewDefaultCommandRunner creates a new DefaultCommandRunner with the given executors.
-// Both executors must be provided - nil executors will cause panics at runtime.
+// Both executors should be provided - nil executors will result in ErrNilParam being returned.
 func NewDefaultCommandRunner(shellExec ShellExecutor, atmosExec AtmosExecutor) *DefaultCommandRunner {
 	return &DefaultCommandRunner{
 		shellExecutor: shellExec,
