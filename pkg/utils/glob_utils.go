@@ -56,7 +56,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 
 	var fullMatches []string
 	for _, match := range matches {
-		fullMatches = append(fullMatches, filepath.Join(base, match))
+		fullMatches = append(fullMatches, filepath.Join(filepath.FromSlash(base), match))
 	}
 
 	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))

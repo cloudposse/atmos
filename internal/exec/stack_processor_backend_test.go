@@ -14,6 +14,7 @@ func TestProcessTerraformBackend(t *testing.T) {
 		name                        string
 		component                   string
 		baseComponentName           string
+		componentMetadata           map[string]any
 		globalBackendType           string
 		globalBackendSection        map[string]any
 		baseComponentBackendType    string
@@ -231,17 +232,137 @@ func TestProcessTerraformBackend(t *testing.T) {
 			expectedBackendType: "azurerm",
 			expectedKey:         "component-specific.tfstate",
 		},
+		// Tests for metadata.name priority in workspace_key_prefix calculation.
+		{
+			name:              "s3 backend with metadata.name takes priority over base component",
+			component:         "vpc-prod",
+			baseComponentName: "vpc/v2",
+			componentMetadata: map[string]any{
+				"name": "vpc",
+			},
+			globalBackendType: "s3",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{
+					"bucket": "test-bucket",
+				},
+			},
+			expectedBackendType:        "s3",
+			expectedWorkspaceKeyPrefix: "vpc",
+		},
+		{
+			name:              "s3 backend with metadata.name containing slashes converts to dashes",
+			component:         "vpc-prod",
+			baseComponentName: "vpc/v2",
+			componentMetadata: map[string]any{
+				"name": "network/vpc",
+			},
+			globalBackendType: "s3",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{
+					"bucket": "test-bucket",
+				},
+			},
+			expectedBackendType:        "s3",
+			expectedWorkspaceKeyPrefix: "network-vpc",
+		},
+		{
+			name:              "s3 backend explicit workspace_key_prefix takes priority over metadata.name",
+			component:         "vpc-prod",
+			baseComponentName: "vpc/v2",
+			componentMetadata: map[string]any{
+				"name": "vpc",
+			},
+			globalBackendType: "s3",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{
+					"bucket":               "test-bucket",
+					"workspace_key_prefix": "explicit-prefix",
+				},
+			},
+			expectedBackendType:        "s3",
+			expectedWorkspaceKeyPrefix: "explicit-prefix",
+		},
+		{
+			name:              "gcs backend with metadata.name takes priority",
+			component:         "vpc-prod",
+			baseComponentName: "vpc/v2",
+			componentMetadata: map[string]any{
+				"name": "vpc",
+			},
+			globalBackendType: "gcs",
+			globalBackendSection: map[string]any{
+				"gcs": map[string]any{
+					"bucket": "test-bucket",
+				},
+			},
+			expectedBackendType: "gcs",
+			expectedPrefix:      "vpc",
+		},
+		{
+			name:              "azurerm backend with metadata.name takes priority",
+			component:         "vpc-prod",
+			baseComponentName: "vpc/v2",
+			componentMetadata: map[string]any{
+				"name": "vpc",
+			},
+			globalBackendType: "azurerm",
+			globalBackendSection: map[string]any{
+				"azurerm": map[string]any{
+					"storage_account_name": "test-account",
+					"container_name":       "tfstate",
+				},
+			},
+			expectedBackendType: "azurerm",
+			expectedKey:         "vpc.terraform.tfstate",
+		},
+		{
+			name:              "s3 backend falls back to base component when metadata.name is empty",
+			component:         "vpc-prod",
+			baseComponentName: "vpc/v2",
+			componentMetadata: map[string]any{
+				"name": "",
+			},
+			globalBackendType: "s3",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{
+					"bucket": "test-bucket",
+				},
+			},
+			expectedBackendType:        "s3",
+			expectedWorkspaceKeyPrefix: "vpc-v2",
+		},
+		{
+			name:              "s3 backend falls back to component name when no metadata.name or base component",
+			component:         "vpc-standalone",
+			baseComponentName: "",
+			componentMetadata: map[string]any{},
+			globalBackendType: "s3",
+			globalBackendSection: map[string]any{
+				"s3": map[string]any{
+					"bucket": "test-bucket",
+				},
+			},
+			expectedBackendType:        "s3",
+			expectedWorkspaceKeyPrefix: "vpc-standalone",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			atmosConfig := &schema.AtmosConfiguration{}
 
+			// Initialize metadata to empty map if nil.
+			metadata := tt.componentMetadata
+			if metadata == nil {
+				metadata = map[string]any{}
+			}
+
 			backendType, backendConfig, err := processTerraformBackend(
 				&terraformBackendConfig{
 					atmosConfig:                 atmosConfig,
 					component:                   tt.component,
 					baseComponentName:           tt.baseComponentName,
+					componentMetadata:           metadata,
 					globalBackendType:           tt.globalBackendType,
 					globalBackendSection:        tt.globalBackendSection,
 					baseComponentBackendType:    tt.baseComponentBackendType,

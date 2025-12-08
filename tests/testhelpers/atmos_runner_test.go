@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -273,7 +274,8 @@ func Test_findRepoRoot(t *testing.T) {
 		assert.NoError(t, statErr, ".git should exist")
 	} else {
 		// If no repo found, should have specific error.
-		assert.ErrorContains(t, err, "not in a git repository")
+		assert.ErrorIs(t, err, errUtils.ErrNotInGitRepository)
+		assert.ErrorContains(t, err, "not inside a git repository")
 	}
 
 	// Test from a temp directory (should fail).
@@ -282,7 +284,8 @@ func Test_findRepoRoot(t *testing.T) {
 
 	_, err = FindRepoRoot()
 	assert.Error(t, err)
-	assert.ErrorContains(t, err, "not in a git repository")
+	assert.ErrorIs(t, err, errUtils.ErrNotInGitRepository)
+	assert.ErrorContains(t, err, "not inside a git repository")
 }
 
 func TestAtmosRunner_buildWithoutCoverage(t *testing.T) {
