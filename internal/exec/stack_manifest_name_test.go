@@ -146,3 +146,207 @@ func TestStackManifestNameWorkspace(t *testing.T) {
 	// The workspace should be based on the custom stack name.
 	assert.Equal(t, "my-legacy-prod-stack", workspace, "Workspace should be based on the custom stack name")
 }
+
+// TestBuildTerraformWorkspace_StackManifestName tests that BuildTerraformWorkspace
+// uses StackManifestName when set (highest precedence).
+func TestBuildTerraformWorkspace_StackManifestName(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+		Stacks: schema.Stacks{
+			NameTemplate: "{{ .vars.environment }}-{{ .vars.stage }}", // Should be ignored.
+			NamePattern:  "{environment}-{stage}",                     // Should be ignored.
+		},
+	}
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		StackManifestName:        "my-explicit-stack-name",
+		Stack:                    "some-stack-file",
+		ComponentMetadataSection: map[string]any{},
+		Context: schema.Context{
+			Environment: "prod",
+			Stage:       "us-east-1",
+		},
+	}
+
+	workspace, err := BuildTerraformWorkspace(&atmosConfig, configAndStacksInfo)
+	require.NoError(t, err)
+	assert.Equal(t, "my-explicit-stack-name", workspace, "Workspace should use StackManifestName")
+}
+
+// TestBuildTerraformWorkspace_NameTemplate tests that BuildTerraformWorkspace
+// uses name_template when StackManifestName is not set.
+func TestBuildTerraformWorkspace_NameTemplate(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+		Stacks: schema.Stacks{
+			NameTemplate: "{{ .vars.environment }}-{{ .vars.stage }}",
+			NamePattern:  "{environment}-{stage}", // Should be ignored.
+		},
+	}
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		StackManifestName:        "", // Not set.
+		Stack:                    "some-stack-file",
+		ComponentMetadataSection: map[string]any{},
+		ComponentSection: map[string]any{
+			"vars": map[string]any{
+				"environment": "prod",
+				"stage":       "ue1",
+			},
+		},
+		Context: schema.Context{
+			Environment: "prod",
+			Stage:       "ue1",
+		},
+	}
+
+	workspace, err := BuildTerraformWorkspace(&atmosConfig, configAndStacksInfo)
+	require.NoError(t, err)
+	assert.Equal(t, "prod-ue1", workspace, "Workspace should use name_template")
+}
+
+// TestBuildTerraformWorkspace_NamePattern tests that BuildTerraformWorkspace
+// uses name_pattern when neither StackManifestName nor name_template is set.
+func TestBuildTerraformWorkspace_NamePattern(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+		Stacks: schema.Stacks{
+			NameTemplate: "", // Not set.
+			NamePattern:  "{environment}-{stage}",
+		},
+	}
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		StackManifestName:        "", // Not set.
+		Stack:                    "some-stack-file",
+		ComponentMetadataSection: map[string]any{},
+		Context: schema.Context{
+			Environment: "prod",
+			Stage:       "ue1",
+		},
+	}
+
+	workspace, err := BuildTerraformWorkspace(&atmosConfig, configAndStacksInfo)
+	require.NoError(t, err)
+	assert.Equal(t, "prod-ue1", workspace, "Workspace should use name_pattern")
+}
+
+// TestBuildTerraformWorkspace_DefaultFilename tests that BuildTerraformWorkspace
+// falls back to the stack filename when no naming config is set.
+func TestBuildTerraformWorkspace_DefaultFilename(t *testing.T) {
+	atmosConfig := schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+		Stacks: schema.Stacks{
+			NameTemplate: "", // Not set.
+			NamePattern:  "", // Not set.
+		},
+	}
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		StackManifestName:        "", // Not set.
+		Stack:                    "prod/us-east-1",
+		ComponentMetadataSection: map[string]any{},
+		Context:                  schema.Context{},
+	}
+
+	workspace, err := BuildTerraformWorkspace(&atmosConfig, configAndStacksInfo)
+	require.NoError(t, err)
+	assert.Equal(t, "prod-us-east-1", workspace, "Workspace should use stack filename with / replaced by -")
+}
+
+// TestBuildTerraformWorkspace_Precedence verifies the full precedence order:
+// name (manifest) > name_template > name_pattern > filename.
+func TestBuildTerraformWorkspace_Precedence(t *testing.T) {
+	tests := []struct {
+		name              string
+		stackManifestName string
+		nameTemplate      string
+		namePattern       string
+		stackFilename     string
+		expectedWorkspace string
+	}{
+		{
+			name:              "manifest name takes precedence over all",
+			stackManifestName: "explicit-name",
+			nameTemplate:      "{{ .vars.env }}",
+			namePattern:       "{environment}",
+			stackFilename:     "fallback-file",
+			expectedWorkspace: "explicit-name",
+		},
+		{
+			name:              "name_template takes precedence over pattern and filename",
+			stackManifestName: "",
+			nameTemplate:      "template-result",
+			namePattern:       "{environment}",
+			stackFilename:     "fallback-file",
+			expectedWorkspace: "template-result",
+		},
+		{
+			name:              "name_pattern takes precedence over filename",
+			stackManifestName: "",
+			nameTemplate:      "",
+			namePattern:       "{environment}-{stage}",
+			stackFilename:     "fallback-file",
+			expectedWorkspace: "prod-dev",
+		},
+		{
+			name:              "filename used when nothing else configured",
+			stackManifestName: "",
+			nameTemplate:      "",
+			namePattern:       "",
+			stackFilename:     "my-stack-file",
+			expectedWorkspace: "my-stack-file",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: "components/terraform",
+					},
+				},
+				Stacks: schema.Stacks{
+					NameTemplate: tt.nameTemplate,
+					NamePattern:  tt.namePattern,
+				},
+			}
+
+			configAndStacksInfo := schema.ConfigAndStacksInfo{
+				StackManifestName:        tt.stackManifestName,
+				Stack:                    tt.stackFilename,
+				ComponentMetadataSection: map[string]any{},
+				ComponentSection: map[string]any{
+					"vars": map[string]any{
+						"env": "template-result",
+					},
+				},
+				Context: schema.Context{
+					Environment: "prod",
+					Stage:       "dev",
+				},
+			}
+
+			workspace, err := BuildTerraformWorkspace(&atmosConfig, configAndStacksInfo)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedWorkspace, workspace)
+		})
+	}
+}
