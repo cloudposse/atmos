@@ -27,20 +27,21 @@ func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndSt
 	var tmpl string
 
 	// Stack name precedence: name (from manifest) > name_template > name_pattern > filename.
-	if configAndStacksInfo.StackManifestName != "" {
+	switch {
+	case configAndStacksInfo.StackManifestName != "":
 		contextPrefix = configAndStacksInfo.StackManifestName
-	} else if atmosConfig.Stacks.NameTemplate != "" {
+	case atmosConfig.Stacks.NameTemplate != "":
 		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {
 			return "", err
 		}
 		contextPrefix = tmpl
-	} else if atmosConfig.Stacks.NamePattern != "" {
+	case atmosConfig.Stacks.NamePattern != "":
 		contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, atmosConfig.Stacks.NamePattern, configAndStacksInfo.Stack)
 		if err != nil {
 			return "", err
 		}
-	} else {
+	default:
 		contextPrefix = strings.Replace(configAndStacksInfo.Stack, "/", "-", -1)
 	}
 

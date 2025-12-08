@@ -54,6 +54,48 @@ func getMapKeys(m map[string]any) []string {
 	return keys
 }
 
+// describeStacksHelper is a helper function that calls ExecuteDescribeStacks with default parameters.
+func describeStacksHelper(t *testing.T, atmosConfig *schema.AtmosConfiguration) map[string]any {
+	t.Helper()
+	result, err := ExecuteDescribeStacks(
+		atmosConfig,
+		"",         // filterByStack
+		[]string{}, // components
+		[]string{}, // componentTypes
+		[]string{}, // sections
+		false,      // ignoreMissingFiles
+		false,      // processTemplates
+		false,      // processYamlFunctions
+		false,      // includeEmptyStacks
+		[]string{}, // skip
+		nil,        // authManager
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	return result
+}
+
+// getVpcWorkspaceFromStack extracts the workspace of the vpc component from a stack in the result map.
+func getVpcWorkspaceFromStack(t *testing.T, result map[string]any, stackName string) string {
+	t.Helper()
+	stack, ok := result[stackName].(map[string]any)
+	require.True(t, ok, "Stack '%s' should exist", stackName)
+
+	components, ok := stack["components"].(map[string]any)
+	require.True(t, ok, "Stack should have components")
+
+	terraform, ok := components["terraform"].(map[string]any)
+	require.True(t, ok, "Stack should have terraform components")
+
+	vpc, ok := terraform["vpc"].(map[string]any)
+	require.True(t, ok, "Stack should have vpc component")
+
+	workspace, ok := vpc["workspace"].(string)
+	require.True(t, ok, "VPC component should have workspace")
+
+	return workspace
+}
+
 // TestStackManifestName verifies that the 'name' field in stack manifests
 // takes precedence over name_template and name_pattern from atmos.yaml.
 func TestStackManifestName(t *testing.T) {
@@ -66,23 +108,7 @@ func TestStackManifestName(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	require.NoError(t, err)
 
-	// Call ExecuteDescribeStacks.
-	result, err := ExecuteDescribeStacks(
-		&atmosConfig,
-		"",         // filterByStack
-		[]string{}, // components
-		[]string{}, // componentTypes
-		[]string{}, // sections
-		false,      // ignoreMissingFiles
-		false,      // processTemplates
-		false,      // processYamlFunctions
-		false,      // includeEmptyStacks
-		[]string{}, // skip
-		nil,        // authManager
-	)
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
+	result := describeStacksHelper(t, &atmosConfig)
 
 	// Verify that the stack with 'name' field uses the custom name.
 	_, hasCustomName := result["my-legacy-prod-stack"]
@@ -109,39 +135,8 @@ func TestStackManifestNameWorkspace(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	require.NoError(t, err)
 
-	// Call ExecuteDescribeStacks.
-	result, err := ExecuteDescribeStacks(
-		&atmosConfig,
-		"",         // filterByStack
-		[]string{}, // components
-		[]string{}, // componentTypes
-		[]string{}, // sections
-		false,      // ignoreMissingFiles
-		false,      // processTemplates
-		false,      // processYamlFunctions
-		false,      // includeEmptyStacks
-		[]string{}, // skip
-		nil,        // authManager
-	)
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-
-	// Get the stack with custom name and check its workspace.
-	customStack, ok := result["my-legacy-prod-stack"].(map[string]any)
-	require.True(t, ok, "Stack 'my-legacy-prod-stack' should exist")
-
-	components, ok := customStack["components"].(map[string]any)
-	require.True(t, ok, "Stack should have components")
-
-	terraform, ok := components["terraform"].(map[string]any)
-	require.True(t, ok, "Stack should have terraform components")
-
-	vpc, ok := terraform["vpc"].(map[string]any)
-	require.True(t, ok, "Stack should have vpc component")
-
-	workspace, ok := vpc["workspace"].(string)
-	require.True(t, ok, "VPC component should have workspace")
+	result := describeStacksHelper(t, &atmosConfig)
+	workspace := getVpcWorkspaceFromStack(t, result, "my-legacy-prod-stack")
 
 	// The workspace should be based on the custom stack name.
 	assert.Equal(t, "my-legacy-prod-stack", workspace, "Workspace should be based on the custom stack name")
@@ -268,6 +263,115 @@ func TestBuildTerraformWorkspace_DefaultFilename(t *testing.T) {
 	workspace, err := BuildTerraformWorkspace(&atmosConfig, configAndStacksInfo)
 	require.NoError(t, err)
 	assert.Equal(t, "prod-us-east-1", workspace, "Workspace should use stack filename with / replaced by -")
+}
+
+// TestDescribeStacks_NameTemplate verifies that ExecuteDescribeStacks
+// uses name_template when no explicit 'name' is set in the stack manifest.
+func TestDescribeStacks_NameTemplate(t *testing.T) {
+	// Change to the test fixture directory with name_template configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-template"
+	t.Chdir(testDir)
+
+	// Initialize the CLI config.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify that name_template is configured.
+	require.NotEmpty(t, atmosConfig.Stacks.NameTemplate, "name_template should be configured in atmos.yaml")
+
+	result := describeStacksHelper(t, &atmosConfig)
+
+	// Verify that the stack with explicit 'name' field uses the custom name (highest precedence).
+	_, hasExplicitName := result["my-explicit-stack"]
+	assert.True(t, hasExplicitName, "Stack with 'name: my-explicit-stack' should use the explicit name as its key")
+
+	// Verify that the stack without 'name' field uses name_template (prod-ue2).
+	_, hasTemplatedName := result["prod-ue2"]
+	assert.True(t, hasTemplatedName, "Stack without 'name' field should use name_template 'prod-ue2' as its key")
+
+	// Verify that the original filenames are NOT used.
+	_, hasOriginalExplicit := result["with-explicit-name"]
+	assert.False(t, hasOriginalExplicit, "Stack with 'name' field should NOT use the original filename 'with-explicit-name'")
+
+	_, hasOriginalWithout := result["without-explicit-name"]
+	assert.False(t, hasOriginalWithout, "Stack without 'name' should NOT use the original filename 'without-explicit-name'")
+}
+
+// TestDescribeStacks_NameTemplateWorkspace verifies that the terraform workspace
+// uses name_template when no explicit 'name' is set.
+func TestDescribeStacks_NameTemplateWorkspace(t *testing.T) {
+	// Change to the test fixture directory with name_template configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-template"
+	t.Chdir(testDir)
+
+	// Initialize the CLI config.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	result := describeStacksHelper(t, &atmosConfig)
+
+	// The workspace should be based on the templated stack name.
+	workspace := getVpcWorkspaceFromStack(t, result, "prod-ue2")
+	assert.Equal(t, "prod-ue2", workspace, "Workspace should be based on the templated stack name")
+
+	// The explicit name stack should use the explicit stack name, not name_template.
+	explicitWorkspace := getVpcWorkspaceFromStack(t, result, "my-explicit-stack")
+	assert.Equal(t, "my-explicit-stack", explicitWorkspace, "Workspace should use explicit stack name over name_template")
+}
+
+// TestDescribeStacks_NamePattern verifies that ExecuteDescribeStacks
+// uses name_pattern when no explicit 'name' or 'name_template' is set.
+func TestDescribeStacks_NamePattern(t *testing.T) {
+	// Change to the test fixture directory with name_pattern configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-pattern"
+	t.Chdir(testDir)
+
+	// Initialize the CLI config.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify that name_pattern is configured but name_template is not.
+	require.Empty(t, atmosConfig.Stacks.NameTemplate, "name_template should NOT be configured in atmos.yaml")
+	require.NotEmpty(t, GetStackNamePattern(&atmosConfig), "name_pattern should be configured in atmos.yaml")
+
+	result := describeStacksHelper(t, &atmosConfig)
+
+	// Verify that the stack with explicit 'name' field uses the custom name (highest precedence).
+	_, hasExplicitName := result["my-explicit-stack"]
+	assert.True(t, hasExplicitName, "Stack with 'name: my-explicit-stack' should use the explicit name as its key")
+
+	// Verify that the stack without 'name' field uses name_pattern (dev-uw2).
+	_, hasPatternName := result["dev-uw2"]
+	assert.True(t, hasPatternName, "Stack without 'name' field should use name_pattern 'dev-uw2' as its key")
+
+	// Verify that the original filenames are NOT used.
+	_, hasOriginalExplicit := result["with-explicit-name"]
+	assert.False(t, hasOriginalExplicit, "Stack with 'name' field should NOT use the original filename 'with-explicit-name'")
+
+	_, hasOriginalWithout := result["without-explicit-name"]
+	assert.False(t, hasOriginalWithout, "Stack without 'name' should NOT use the original filename 'without-explicit-name'")
+}
+
+// TestDescribeStacks_NamePatternWorkspace verifies that the terraform workspace
+// uses name_pattern when no explicit 'name' or 'name_template' is set.
+func TestDescribeStacks_NamePatternWorkspace(t *testing.T) {
+	// Change to the test fixture directory with name_pattern configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-pattern"
+	t.Chdir(testDir)
+
+	// Initialize the CLI config.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	result := describeStacksHelper(t, &atmosConfig)
+
+	// The workspace should be based on the pattern-derived stack name.
+	workspace := getVpcWorkspaceFromStack(t, result, "dev-uw2")
+	assert.Equal(t, "dev-uw2", workspace, "Workspace should be based on the pattern-derived stack name")
 }
 
 // TestBuildTerraformWorkspace_Precedence verifies the full precedence order:
