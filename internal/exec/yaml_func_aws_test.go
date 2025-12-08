@@ -518,7 +518,7 @@ func TestErrorWrapping(t *testing.T) {
 	require.Error(t, err)
 
 	// The error should be wrapped with the underlying error accessible.
-	assert.Contains(t, err.Error(), "network timeout")
+	assert.ErrorIs(t, err, underlyingErr)
 }
 
 // TestDefaultAWSGetterExists verifies the default getter exists.
