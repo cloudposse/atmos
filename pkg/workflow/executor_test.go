@@ -724,3 +724,203 @@ func TestFormatList(t *testing.T) {
 		})
 	}
 }
+
+// TestExecutor_Execute_NilUIProvider tests that executor works without UI provider.
+func TestExecutor_Execute_NilUIProvider(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+
+	// Expect shell command to be called.
+	mockRunner.EXPECT().
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{}, false).
+		Return(nil)
+
+	// Create executor with nil UI provider.
+	executor := NewExecutor(mockRunner, nil, nil)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "echo 'hello'", Type: "shell"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+}
+
+// TestExecutor_Execute_NilUIProvider_Error tests that error handling works without UI provider.
+func TestExecutor_Execute_NilUIProvider_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+
+	// Create executor with nil UI provider.
+	executor := NewExecutor(mockRunner, nil, nil)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWorkflowNoSteps)
+	assert.False(t, result.Success)
+}
+
+// TestExecutor_Execute_StackBeforeDoubleDash tests stack insertion before -- separator.
+func TestExecutor_Execute_StackBeforeDoubleDash(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+
+	mockUI.EXPECT().PrintMessage(gomock.Any(), gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().
+		RunAtmos(gomock.Any()).
+		DoAndReturn(func(params *AtmosExecParams) error {
+			// Verify stack flag is inserted before --.
+			// Expected: ["terraform", "plan", "vpc", "-s", "dev-stack", "--", "extra-arg"]
+			assert.Equal(t, []string{"terraform", "plan", "vpc", "-s", "dev-stack", "--", "extra-arg"}, params.Args)
+			return nil
+		})
+
+	executor := NewExecutor(mockRunner, nil, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "terraform plan vpc -- extra-arg", Type: "atmos"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{CommandLineStack: "dev-stack"}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+}
+
+// TestExecutor_Execute_CachedCredentialsSuccess tests using cached credentials.
+func TestExecutor_Execute_CachedCredentialsSuccess(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockAuth := NewMockAuthProvider(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+
+	// Cached credentials are valid - no need to authenticate.
+	mockAuth.EXPECT().GetCachedCredentials(gomock.Any(), "cached-identity").Return("cached-creds", nil)
+	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "cached-identity", nil).Return([]string{"CACHED=true"}, nil)
+
+	mockRunner.EXPECT().
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{"CACHED=true"}, false).
+		Return(nil)
+
+	executor := NewExecutor(mockRunner, mockAuth, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "echo 'hello'", Type: "shell", Identity: "cached-identity"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+}
+
+// TestExecutor_Execute_PrepareEnvironmentFailure tests PrepareEnvironment failure.
+func TestExecutor_Execute_PrepareEnvironmentFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockAuth := NewMockAuthProvider(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+
+	// Auth succeeds but PrepareEnvironment fails.
+	mockAuth.EXPECT().GetCachedCredentials(gomock.Any(), "test-identity").Return(nil, errors.New("no cache"))
+	mockAuth.EXPECT().Authenticate(gomock.Any(), "test-identity").Return(nil)
+	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "test-identity", nil).Return(nil, errors.New("prepare failed"))
+
+	executor := NewExecutor(mockRunner, mockAuth, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "echo 'hello'", Type: "shell", Identity: "test-identity"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	assert.False(t, result.Success)
+}
+
+// TestExecutor_Execute_AtmosCommandFailureWithStack tests atmos command type failure with stack.
+func TestExecutor_Execute_AtmosCommandFailureWithStack(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+
+	stepError := errors.New("command failed")
+
+	mockUI.EXPECT().PrintMessage(gomock.Any(), gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().RunAtmos(gomock.Any()).Return(stepError)
+	mockUI.EXPECT().PrintError(ErrWorkflowStepFailed, workflowErrorTitle, gomock.Any())
+
+	executor := NewExecutor(mockRunner, nil, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "terraform plan vpc", Type: "atmos"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{CommandLineStack: "dev-stack"}))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWorkflowStepFailed)
+	assert.False(t, result.Success)
+	// Resume command should include the stack.
+	assert.Contains(t, result.ResumeCommand, "-s dev-stack")
+}
+
+// TestExecutor_Execute_IdentityWithNoAuthProvider tests identity specified but no auth provider.
+func TestExecutor_Execute_IdentityWithNoAuthProvider(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockUI := NewMockUIProvider(ctrl)
+
+	// No auth provider, but step has identity - should still execute without auth.
+	// Since authProvider is nil, prepareStepEnvironment returns empty env.
+	mockRunner.EXPECT().
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{}, false).
+		Return(nil)
+
+	executor := NewExecutor(mockRunner, nil, mockUI)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			// Identity is specified but since authProvider is nil, it's ignored.
+			{Name: "step1", Command: "echo 'hello'", Type: "shell", Identity: "some-identity"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+}
