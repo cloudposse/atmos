@@ -7,6 +7,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 )
 
@@ -119,6 +120,21 @@ func (w *WorkflowCommandProvider) GetName() string {
 // GetGroup returns the command group.
 func (w *WorkflowCommandProvider) GetGroup() string {
 	return "Core Stack Commands"
+}
+
+// GetFlagsBuilder returns the flags builder for this command.
+func (w *WorkflowCommandProvider) GetFlagsBuilder() flags.Builder {
+	return nil
+}
+
+// GetPositionalArgsBuilder returns the positional args builder for this command.
+func (w *WorkflowCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+// GetCompatibilityFlags returns compatibility flags for this command.
+func (w *WorkflowCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
 }
 
 // GetAliases returns command aliases (none for workflow).

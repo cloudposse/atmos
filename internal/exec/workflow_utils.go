@@ -73,6 +73,42 @@ func IsKnownWorkflowError(err error) bool {
 	return false
 }
 
+// checkAndMergeDefaultIdentity checks if there's a default identity configured in atmos.yaml or stack configs.
+// If a default identity is found in stack configs, it merges it into atmosConfig.Auth.
+// Stack defaults take precedence over atmos.yaml defaults (following Atmos inheritance model).
+// Returns true if a default identity exists after merging.
+func checkAndMergeDefaultIdentity(atmosConfig *schema.AtmosConfiguration) bool {
+	if len(atmosConfig.Auth.Identities) == 0 {
+		return false
+	}
+
+	// Always load stack configs - stack defaults take precedence over atmos.yaml.
+	stackDefaults, err := config.LoadStackAuthDefaults(atmosConfig)
+	if err != nil {
+		// On error, fall back to checking atmos.yaml defaults.
+		for _, identity := range atmosConfig.Auth.Identities {
+			if identity.Default {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Merge stack defaults into auth config (stack takes precedence).
+	if len(stackDefaults) > 0 {
+		config.MergeStackAuthDefaults(&atmosConfig.Auth, stackDefaults)
+	}
+
+	// Check if we have a default after merging.
+	for _, identity := range atmosConfig.Auth.Identities {
+		if identity.Default {
+			return true
+		}
+	}
+
+	return false
+}
+
 // ExecuteWorkflow executes an Atmos workflow.
 func ExecuteWorkflow(
 	atmosConfig schema.AtmosConfiguration,
@@ -119,8 +155,7 @@ func ExecuteWorkflow(
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
 			return errUtils.Build(ErrInvalidFromStep).
 				WithTitle(WorkflowErrTitle).
-				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.", fromStep, workflow).
-				WithHintf("Available steps:\n%s", FormatList(stepNames)).
+				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.\n\n### Available steps:\n\n%s", fromStep, workflow, FormatList(stepNames)).
 				WithContext("from_step", fromStep).
 				WithContext("workflow", workflow).
 				WithExitCode(1).
