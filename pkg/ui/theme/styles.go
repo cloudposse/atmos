@@ -70,7 +70,7 @@ type StyleSet struct {
 		BorderUnfocused   lipgloss.Style
 	}
 
-	// Interactive prompt styles (Huh library)
+	// Interactive prompt styles for the Huh library's buttons and UI elements.
 	Interactive struct {
 		ButtonForeground lipgloss.Style // Button text style
 		ButtonBackground lipgloss.Style // Button background style
@@ -153,7 +153,7 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		// TUI component styles
 		TUI: getTUIStyles(scheme),
 
-		// Interactive prompt styles
+		// Interactive prompt styles.
 		Interactive: getInteractiveStyles(scheme),
 
 		// Diff/Output styles
