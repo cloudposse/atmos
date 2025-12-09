@@ -1,4 +1,3 @@
-//nolint:dupl // Test structure similarity is intentional for consistency
 package list
 
 import (
@@ -7,8 +6,23 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// initTestIO initializes the I/O and UI contexts for testing.
+// This must be called before tests that use renderComponents or similar functions.
+func initTestIO(t *testing.T) {
+	t.Helper()
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		t.Fatalf("failed to initialize I/O context: %v", err)
+	}
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+}
 
 // TestListComponentsFlags tests that the list components command has the correct flags.
 func TestListComponentsFlags(t *testing.T) {
@@ -471,3 +485,327 @@ func TestColumnsCompletionForComponents(t *testing.T) {
 	_ = suggestions // May be nil or empty
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
+
+// TestRenderComponents tests the renderComponents function with mock data.
+func TestRenderComponents(t *testing.T) {
+	initTestIO(t)
+
+	testCases := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		opts        *ComponentsOptions
+		components  []map[string]any
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "Empty components list",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					List: schema.ListConfig{},
+				},
+			},
+			opts:        &ComponentsOptions{Format: "table"},
+			components:  []map[string]any{},
+			expectError: false,
+		},
+		{
+			name: "Single component with table format",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					List: schema.ListConfig{},
+				},
+			},
+			opts: &ComponentsOptions{Format: "table"},
+			components: []map[string]any{
+				{"component": "vpc", "stack": "prod-us-east-1", "type": "terraform"},
+			},
+			expectError: false,
+		},
+		{
+			name: "Multiple components with json format",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					List: schema.ListConfig{},
+				},
+			},
+			opts: &ComponentsOptions{Format: "json"},
+			components: []map[string]any{
+				{"component": "vpc", "stack": "prod-us-east-1", "type": "terraform"},
+				{"component": "rds", "stack": "prod-us-east-1", "type": "terraform"},
+				{"component": "eks", "stack": "dev-us-west-2", "type": "terraform"},
+			},
+			expectError: false,
+		},
+		{
+			name: "Components with yaml format",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					List: schema.ListConfig{},
+				},
+			},
+			opts: &ComponentsOptions{Format: "yaml"},
+			components: []map[string]any{
+				{"component": "vpc", "stack": "prod", "type": "terraform"},
+			},
+			expectError: false,
+		},
+		{
+			name: "Components with invalid sort spec",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					List: schema.ListConfig{},
+				},
+			},
+			opts: &ComponentsOptions{
+				Format: "table",
+				Sort:   "invalid::sort::spec",
+			},
+			components: []map[string]any{
+				{"component": "vpc", "stack": "prod", "type": "terraform"},
+			},
+			expectError: true,
+			errorMsg:    "error parsing sort specification",
+		},
+		{
+			name: "Components with stack filter",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					List: schema.ListConfig{},
+				},
+			},
+			opts: &ComponentsOptions{
+				Format: "table",
+				Stack:  "prod-*",
+			},
+			components: []map[string]any{
+				{"component": "vpc", "stack": "prod-us-east-1", "type": "terraform"},
+				{"component": "rds", "stack": "dev-us-west-2", "type": "terraform"},
+			},
+			expectError: false,
+		},
+		{
+			name: "Components with custom columns from config",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					List: schema.ListConfig{
+						Columns: []schema.ListColumnConfig{
+							{Name: "Name", Value: "{{ .component }}"},
+							{Name: "Environment", Value: "{{ .stack }}"},
+						},
+					},
+				},
+			},
+			opts: &ComponentsOptions{
+				Format: "table",
+				Sort:   "Name:asc", // Use custom column name for sorting.
+			},
+			components: []map[string]any{
+				{"component": "vpc", "stack": "prod", "type": "terraform"},
+			},
+			expectError: false,
+		},
+		{
+			name: "Components with sort ascending",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					List: schema.ListConfig{},
+				},
+			},
+			opts: &ComponentsOptions{
+				Format: "table",
+				Sort:   "component:asc",
+			},
+			components: []map[string]any{
+				{"component": "rds", "stack": "prod", "type": "terraform"},
+				{"component": "eks", "stack": "prod", "type": "terraform"},
+				{"component": "vpc", "stack": "prod", "type": "terraform"},
+			},
+			expectError: false,
+		},
+		{
+			name: "Components with sort descending",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					List: schema.ListConfig{},
+				},
+			},
+			opts: &ComponentsOptions{
+				Format: "table",
+				Sort:   "component:desc",
+			},
+			components: []map[string]any{
+				{"component": "rds", "stack": "prod", "type": "terraform"},
+				{"component": "eks", "stack": "prod", "type": "terraform"},
+				{"component": "vpc", "stack": "prod", "type": "terraform"},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := renderComponents(tc.atmosConfig, tc.opts, tc.components)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.errorMsg != "" {
+					assert.Contains(t, err.Error(), tc.errorMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestRenderComponents_TriStateBoolFilters tests renderComponents with tri-state boolean filters.
+func TestRenderComponents_TriStateBoolFilters(t *testing.T) {
+	initTestIO(t)
+
+	enabledTrue := true
+	enabledFalse := false
+	lockedTrue := true
+	lockedFalse := false
+
+	testCases := []struct {
+		name       string
+		opts       *ComponentsOptions
+		components []map[string]any
+	}{
+		{
+			name: "Filter enabled=true",
+			opts: &ComponentsOptions{
+				Format:  "json",
+				Enabled: &enabledTrue,
+			},
+			components: []map[string]any{
+				{"component": "vpc", "stack": "prod", "enabled": true},
+				{"component": "rds", "stack": "prod", "enabled": false},
+			},
+		},
+		{
+			name: "Filter enabled=false",
+			opts: &ComponentsOptions{
+				Format:  "json",
+				Enabled: &enabledFalse,
+			},
+			components: []map[string]any{
+				{"component": "vpc", "stack": "prod", "enabled": true},
+				{"component": "rds", "stack": "prod", "enabled": false},
+			},
+		},
+		{
+			name: "Filter locked=true",
+			opts: &ComponentsOptions{
+				Format: "json",
+				Locked: &lockedTrue,
+			},
+			components: []map[string]any{
+				{"component": "vpc", "stack": "prod", "locked": true},
+				{"component": "rds", "stack": "prod", "locked": false},
+			},
+		},
+		{
+			name: "Filter locked=false",
+			opts: &ComponentsOptions{
+				Format: "json",
+				Locked: &lockedFalse,
+			},
+			components: []map[string]any{
+				{"component": "vpc", "stack": "prod", "locked": true},
+				{"component": "rds", "stack": "prod", "locked": false},
+			},
+		},
+		{
+			name: "Combine enabled and locked filters",
+			opts: &ComponentsOptions{
+				Format:  "json",
+				Enabled: &enabledTrue,
+				Locked:  &lockedFalse,
+			},
+			components: []map[string]any{
+				{"component": "vpc", "stack": "prod", "enabled": true, "locked": false},
+				{"component": "rds", "stack": "prod", "enabled": false, "locked": true},
+			},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			List: schema.ListConfig{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := renderComponents(atmosConfig, tc.opts, tc.components)
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestRenderComponents_TypeFilter tests renderComponents with type filtering.
+func TestRenderComponents_TypeFilter(t *testing.T) {
+	initTestIO(t)
+
+	testCases := []struct {
+		name       string
+		typeFilter string
+		abstract   bool
+	}{
+		{
+			name:       "Type filter terraform",
+			typeFilter: "terraform",
+			abstract:   false,
+		},
+		{
+			name:       "Type filter helmfile",
+			typeFilter: "helmfile",
+			abstract:   false,
+		},
+		{
+			name:       "Type filter all",
+			typeFilter: "all",
+			abstract:   false,
+		},
+		{
+			name:       "Abstract flag true",
+			typeFilter: "",
+			abstract:   true,
+		},
+		{
+			name:       "Type filter with abstract",
+			typeFilter: "terraform",
+			abstract:   true,
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			List: schema.ListConfig{},
+		},
+	}
+
+	components := []map[string]any{
+		{"component": "vpc", "stack": "prod", "type": "terraform", "component_type": "real"},
+		{"component": "base-vpc", "stack": "prod", "type": "terraform", "component_type": "abstract"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := &ComponentsOptions{
+				Format:   "json",
+				Type:     tc.typeFilter,
+				Abstract: tc.abstract,
+			}
+			err := renderComponents(atmosConfig, opts, components)
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestInitAndExtractComponents is documented in integration tests.
+// Unit testing with nil command is not meaningful as ProcessCommandLineArgs
+// requires a valid command context. See tests/cli_list_commands_test.go for
+// integration tests that exercise the full command flow.

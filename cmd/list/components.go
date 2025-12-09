@@ -80,7 +80,7 @@ var componentsCmd = &cobra.Command{
 			Abstract: v.GetBool("abstract"),
 		}
 
-		return listComponentsWithOptions(cmd, opts)
+		return listComponentsWithOptions(cmd, args, opts)
 	},
 }
 
@@ -140,13 +140,37 @@ func init() {
 	}
 }
 
-func listComponentsWithOptions(cmd *cobra.Command, opts *ComponentsOptions) error {
+func listComponentsWithOptions(cmd *cobra.Command, args []string, opts *ComponentsOptions) error {
 	defer perf.Track(nil, "list.components.listComponentsWithOptions")()
 
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	// Initialize configuration and extract components.
+	atmosConfig, components, err := initAndExtractComponents(cmd, args, opts)
+	if err != nil {
+		return err
+	}
+
+	if len(components) == 0 {
+		_ = ui.Info("No components found")
+		return nil
+	}
+
+	// Build and execute render pipeline.
+	return renderComponents(atmosConfig, opts, components)
+}
+
+// initAndExtractComponents initializes config and extracts components from stacks.
+func initAndExtractComponents(cmd *cobra.Command, args []string, opts *ComponentsOptions) (*schema.AtmosConfiguration, []map[string]any, error) {
+	defer perf.Track(nil, "list.components.initAndExtractComponents")()
+
+	// Process command line args to get ConfigAndStacksInfo with CLI flags.
+	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrInitializingCLIConfig, err)
+		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrInitializingCLIConfig, err)
 	}
 
 	// If format is empty, check command-specific config.
@@ -157,30 +181,32 @@ func listComponentsWithOptions(cmd *cobra.Command, opts *ComponentsOptions) erro
 	// Create AuthManager for authentication support.
 	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
+		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
 
 	// Extract components into structured data.
 	components, err := extract.Components(stacksMap)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
-	if len(components) == 0 {
-		_ = ui.Info("No components found")
-		return nil
-	}
+	return &atmosConfig, components, nil
+}
+
+// renderComponents builds the render pipeline and renders components.
+func renderComponents(atmosConfig *schema.AtmosConfiguration, opts *ComponentsOptions, components []map[string]any) error {
+	defer perf.Track(nil, "list.components.renderComponents")()
 
 	// Build filters.
 	filters := buildComponentFilters(opts)
 
 	// Get column configuration.
-	columns := getComponentColumns(&atmosConfig, opts.Columns)
+	columns := getComponentColumns(atmosConfig, opts.Columns)
 
 	// Build column selector.
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
