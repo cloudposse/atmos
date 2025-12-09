@@ -69,9 +69,8 @@ func (p *DependencyParser) ParseComponentDependencies(
 		return p.parseDependencyMapAnyAny(fromID, stackName, deps)
 	default:
 		log.Warn("Unknown depends_on format", logFieldType, fmt.Sprintf("%T", deps), logFieldFrom, fromID)
+		return fmt.Errorf("%w: %s -> unsupported depends_on format %T", errUtils.ErrUnsupportedDependencyType, fromID, deps)
 	}
-
-	return nil
 }
 
 // parseDependencyArray parses dependencies in array format.

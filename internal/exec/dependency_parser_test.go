@@ -238,7 +238,7 @@ func TestDependencyParser_ParseComponentDependencies(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			builder := dependency.NewBuilder()
 
-			// Add nodes to builder
+			// Add nodes to builder.
 			for nodeID := range tt.nodeMap {
 				_ = builder.AddNode(&dependency.Node{
 					ID: nodeID,
@@ -255,7 +255,7 @@ func TestDependencyParser_ParseComponentDependencies(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			// Build graph and check dependencies
+			// Build graph and check dependencies.
 			graph, _ := builder.Build()
 			fromID := tt.componentName + "-" + tt.stackName
 			if node, exists := graph.GetNode(fromID); exists {
@@ -419,12 +419,12 @@ func TestDependencyParser_ParseDependencyMapEntry(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			builder := dependency.NewBuilder()
 
-			// Add source node
+			// Add source node.
 			_ = builder.AddNode(&dependency.Node{
 				ID: "app-dev",
 			})
 
-			// Add nodes from nodeMap
+			// Add nodes from nodeMap.
 			for nodeID := range tt.nodeMap {
 				if nodeID != "app-dev" {
 					_ = builder.AddNode(&dependency.Node{
@@ -491,7 +491,7 @@ func TestDependencyParser_AddDependencyIfExists(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			builder := dependency.NewBuilder()
 
-			// Add nodes to builder
+			// Add nodes to builder.
 			for nodeID := range tt.nodeMap {
 				_ = builder.AddNode(&dependency.Node{
 					ID: nodeID,
@@ -507,7 +507,7 @@ func TestDependencyParser_AddDependencyIfExists(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 
-				// Verify dependency was added
+				// Verify dependency was added.
 				graph, _ := builder.Build()
 				if node, exists := graph.GetNode(tt.fromID); exists && tt.fromID != tt.toID {
 					assert.Contains(t, node.Dependencies, tt.toID)

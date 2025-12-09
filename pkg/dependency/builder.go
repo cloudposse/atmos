@@ -1,8 +1,6 @@
 package dependency
 
-import (
-	"fmt"
-)
+import "fmt"
 
 // GraphBuilder implements the Builder interface for constructing dependency graphs.
 type GraphBuilder struct {
@@ -25,7 +23,10 @@ func (b *GraphBuilder) AddNode(node *Node) error {
 		return ErrGraphAlreadyBuilt
 	}
 
-	return b.graph.AddNode(node)
+	if err := b.graph.AddNode(node); err != nil {
+		return fmt.Errorf("%w: id=%s: %v", ErrAddNodeFailed, node.ID, err)
+	}
+	return nil
 }
 
 // AddDependency creates a dependency relationship between two nodes.
@@ -35,7 +36,10 @@ func (b *GraphBuilder) AddDependency(fromID, toID string) error {
 		return ErrGraphAlreadyBuilt
 	}
 
-	return b.graph.AddDependency(fromID, toID)
+	if err := b.graph.AddDependency(fromID, toID); err != nil {
+		return fmt.Errorf("%w: from=%s to=%s: %v", ErrAddDependencyFailed, fromID, toID, err)
+	}
+	return nil
 }
 
 // Build finalizes the graph construction and returns the built graph.

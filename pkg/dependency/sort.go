@@ -172,7 +172,10 @@ func (g *Graph) FindPath(fromID, toID string) ([]string, bool) {
 			return true
 		}
 
-		node := g.Nodes[currentID]
+		node, ok := g.Nodes[currentID]
+		if !ok {
+			return false
+		}
 		for _, depID := range node.Dependencies {
 			if dfs(depID) {
 				return true
