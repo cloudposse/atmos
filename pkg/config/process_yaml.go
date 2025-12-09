@@ -22,6 +22,92 @@ const (
 
 var ErrExecuteYamlFunctions = errors.New("failed to execute yaml function")
 
+// deleteViperKey removes a key from Viper's configuration by walking the dotted path
+// and deleting the final segment from its parent map. This is necessary because
+// v.Set(path, nil) leaves the key present (reported as null), which doesn't truly
+// remove it from the configuration.
+//
+// Note: Viper's internal config from ReadConfig cannot be modified by Set(key, nil).
+// We must re-read the modified configuration as YAML to truly remove keys.
+func deleteViperKey(v *viper.Viper, path string) {
+	if path == "" {
+		return
+	}
+
+	// Get all settings as a map (this returns a deep copy).
+	allSettings := v.AllSettings()
+	if len(allSettings) == 0 {
+		return
+	}
+
+	// Split the path into segments.
+	segments := strings.Split(path, ".")
+	if len(segments) == 0 {
+		return
+	}
+
+	// Delete the key from the nested map structure.
+	if !deleteNestedKey(allSettings, segments) {
+		return // Key didn't exist or couldn't be deleted.
+	}
+
+	// Re-read the modified settings as YAML.
+	// This is necessary because Viper's Set(key, nil) doesn't truly remove keys
+	// when the config was loaded via ReadConfig - it maintains the original values.
+	yamlBytes, err := yaml.Marshal(allSettings)
+	if err != nil {
+		log.Debug("Failed to marshal settings to YAML for key deletion", "error", err)
+		return
+	}
+
+	// Read the modified config back into Viper.
+	v.SetConfigType("yaml")
+	if err := v.ReadConfig(strings.NewReader(string(yamlBytes))); err != nil {
+		log.Debug("Failed to re-read config after key deletion", "error", err)
+	}
+}
+
+// deleteNestedKey deletes a key from a nested map structure given a path of segments.
+// Returns true if the key was found and deleted, false otherwise.
+func deleteNestedKey(m map[string]any, segments []string) bool {
+	if len(segments) == 0 {
+		return false
+	}
+
+	// If it's a top-level key, delete it directly.
+	if len(segments) == 1 {
+		key := strings.ToLower(segments[0])
+		if _, exists := m[key]; exists {
+			delete(m, key)
+			return true
+		}
+		return false
+	}
+
+	// Walk to the parent map.
+	current := m
+	for i := 0; i < len(segments)-1; i++ {
+		key := strings.ToLower(segments[i])
+		next, ok := current[key]
+		if !ok {
+			return false // Path doesn't exist.
+		}
+		nextMap, ok := next.(map[string]any)
+		if !ok {
+			return false // Not a map, can't traverse further.
+		}
+		current = nextMap
+	}
+
+	// Delete the final key from the parent map.
+	finalKey := strings.ToLower(segments[len(segments)-1])
+	if _, exists := current[finalKey]; exists {
+		delete(current, finalKey)
+		return true
+	}
+	return false
+}
+
 // PreprocessYAML processes the given YAML content, replacing specific directives
 // (such as !env,!include,!exec,!repo-root) with their corresponding values.
 // It parses the YAML content into a tree structure, processes each node recursively,
@@ -106,11 +192,11 @@ func processMappingNode(node *yaml.Node, v *viper.Viper, currentPath string) err
 
 		// Check if the value node has the !unset tag.
 		if valueNode.Tag == u.AtmosYamlFuncUnset {
-			// Remove the key from the configuration by setting it to nil.
-			// Note: Viper doesn't have a direct Delete method, so setting to nil
-			// is the conventional approach. When queried, Viper treats nil values
-			// as non-existent keys, returning nil from Get() calls.
-			v.Set(newPath, nil)
+			// Remove this key from Viper. The key may have been loaded by Viper's
+			// ReadConfig before preprocessing, so we need to explicitly delete it.
+			// Using deleteViperKey ensures the key is truly removed (not just set to nil),
+			// so IsSet returns false and AllSettings doesn't include it.
+			deleteViperKey(v, newPath)
 			log.Debug("Unsetting configuration key", "path", newPath)
 			continue
 		}
@@ -328,9 +414,10 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 
 	switch {
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncUnset):
-		// Remove the key from the configuration by setting it to nil.
-		// Viper treats nil values as non-existent keys.
-		v.Set(currentPath, nil)
+		// The !unset tag is handled in processMappingNode by skipping the key.
+		// If we reach here, it means !unset was used in a context where it can't
+		// prevent the key from being added (e.g., scalar value context).
+		// In this case, we simply don't set any value and clear the tag.
 		log.Debug("Unsetting configuration key", "path", currentPath)
 		node.Tag = "" // Avoid re-processing.
 		return nil
