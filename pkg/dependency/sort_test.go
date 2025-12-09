@@ -56,8 +56,7 @@ func TestGraph_TopologicalSort(t *testing.T) {
 		assert.Equal(t, 4, len(order))
 		assert.Equal(t, "A", order[0].ID)
 		// B and C can be in any order, but both must come before D.
-		assert.Contains(t, []string{"B", "C"}, order[1].ID)
-		assert.Contains(t, []string{"B", "C"}, order[2].ID)
+		assert.ElementsMatch(t, []string{"B", "C"}, []string{order[1].ID, order[2].ID})
 		assert.Equal(t, "D", order[3].ID)
 	})
 

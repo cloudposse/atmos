@@ -30,4 +30,10 @@ var (
 
 	// ErrNoRootNodes is returned when no root nodes are found in the graph.
 	ErrNoRootNodes = errors.New("no root nodes found - possible circular dependency involving all nodes")
+
+	// ErrAddNodeFailed is returned when the builder fails to add a node.
+	ErrAddNodeFailed = errors.New("builder failed to add node")
+
+	// ErrAddDependencyFailed is returned when the builder fails to add a dependency.
+	ErrAddDependencyFailed = errors.New("builder failed to add dependency")
 )

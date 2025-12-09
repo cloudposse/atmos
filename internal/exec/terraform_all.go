@@ -24,12 +24,12 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		return fmt.Errorf("error initializing CLI config: %w", err)
+		return fmt.Errorf("%w: %v", errUtils.ErrInitializeCLIConfig, err)
 	}
 
 	log.Debug("Executing terraform command for all components in dependency order", "command", info.SubCommand)
 
-	// Get all stacks with terraform components
+	// Get all stacks with terraform components.
 	stacks, err := ExecuteDescribeStacks(
 		&atmosConfig,
 		"",  // all stacks
@@ -41,39 +41,40 @@ func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
 		info.ProcessFunctions,
 		false,
 		info.Skip,
+		nil, // authManager
 	)
 	if err != nil {
-		return fmt.Errorf("error describing stacks: %w", err)
+		return fmt.Errorf("%w: %v", errUtils.ErrExecuteDescribeStacks, err)
 	}
 
-	// Build dependency graph
+	// Build dependency graph.
 	graph, err := buildTerraformDependencyGraph(
 		&atmosConfig,
 		stacks,
 		info,
 	)
 	if err != nil {
-		return fmt.Errorf("error building dependency graph: %w", err)
+		return fmt.Errorf("%w: %v", errUtils.ErrBuildDepGraph, err)
 	}
 
-	// Apply filters if specified
+	// Apply filters if specified.
 	if info.Query != "" || len(info.Components) > 0 || info.Stack != "" {
 		graph = applyFiltersToGraph(graph, stacks, info)
 	}
 
-	// Execute components in dependency order
+	// Execute components in dependency order.
 	return executeInDependencyOrder(graph, info)
 }
 
 // executeInDependencyOrder executes terraform commands in dependency order.
 func executeInDependencyOrder(graph *dependency.Graph, info *schema.ConfigAndStacksInfo) error {
-	// Get execution order
+	// Get execution order.
 	executionOrder, err := graph.TopologicalSort()
 	if err != nil {
-		return fmt.Errorf("error determining execution order: %w", err)
+		return fmt.Errorf("%w: %v", errUtils.ErrTopologicalOrder, err)
 	}
 
-	// For destroy command, reverse the execution order to destroy dependents before dependencies
+	// For destroy command, reverse the execution order to destroy dependents before dependencies.
 	if info.SubCommand == "destroy" {
 		for i, j := 0, len(executionOrder)-1; i < j; i, j = i+1, j-1 {
 			executionOrder[i], executionOrder[j] = executionOrder[j], executionOrder[i]
@@ -83,13 +84,13 @@ func executeInDependencyOrder(graph *dependency.Graph, info *schema.ConfigAndSta
 		log.Info("Processing components in dependency order", "count", len(executionOrder))
 	}
 
-	// Execute components in order
+	// Execute components in order.
 	for i := range executionOrder {
 		node := &executionOrder[i]
 		log.Info("Processing component", "index", i+1, "total", len(executionOrder), "component", node.Component, "stack", node.Stack)
 
 		if err := executeTerraformForNode(node, info); err != nil {
-			return fmt.Errorf("error executing terraform for component %s in stack %s: %w", node.Component, node.Stack, err)
+			return fmt.Errorf("%w: component=%s stack=%s: %v", errUtils.ErrTerraformExecFailed, node.Component, node.Stack, err)
 		}
 	}
 
@@ -108,18 +109,18 @@ func buildTerraformDependencyGraph(
 
 	// First pass: add all nodes.
 	if err := addNodesToGraph(stacks, builder, nodeMap); err != nil {
-		return nil, fmt.Errorf("error adding nodes to dependency graph: %w", err)
+		return nil, fmt.Errorf("%w: adding nodes: %v", errUtils.ErrBuildDepGraph, err)
 	}
 
 	// Second pass: build dependencies using settings.depends_on.
 	if err := buildGraphDependencies(stacks, builder, nodeMap); err != nil {
-		return nil, fmt.Errorf("error building dependencies: %w", err)
+		return nil, fmt.Errorf("%w: building dependencies: %v", errUtils.ErrBuildDepGraph, err)
 	}
 
 	// Build the final graph.
 	graph, err := builder.Build()
 	if err != nil {
-		return nil, fmt.Errorf("error finalizing dependency graph: %w", err)
+		return nil, fmt.Errorf("%w: finalizing graph: %v", errUtils.ErrBuildDepGraph, err)
 	}
 
 	log.Debug("Dependency graph built", "nodes", graph.Size(), "roots", len(graph.Roots))

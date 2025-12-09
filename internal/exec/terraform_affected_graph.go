@@ -137,6 +137,7 @@ func buildFilteredDependencyGraph(
 		args.ProcessYamlFunctions,
 		false,
 		args.Skip,
+		nil, // authManager
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error describing stacks: %w", err)

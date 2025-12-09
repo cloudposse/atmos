@@ -5,6 +5,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -86,12 +87,12 @@ func shouldSkipByQuery(node *dependency.Node, info *schema.ConfigAndStacksInfo) 
 func evaluateNodeQueryFilter(node *dependency.Node, info *schema.ConfigAndStacksInfo) (bool, error) {
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
-		return false, fmt.Errorf("error initializing CLI config: %w", err)
+		return false, fmt.Errorf("%w: %v", errUtils.ErrInitializeCLIConfig, err)
 	}
 
 	queryResult, err := u.EvaluateYqExpression(&atmosConfig, node.Metadata, info.Query)
 	if err != nil {
-		return false, fmt.Errorf("error evaluating query expression: %w", err)
+		return false, fmt.Errorf("%w: %v", errUtils.ErrQueryEvaluation, err)
 	}
 
 	queryPassed, ok := queryResult.(bool)
@@ -119,7 +120,7 @@ func executeNodeCommand(node *dependency.Node, info *schema.ConfigAndStacksInfo)
 
 	// Execute the terraform command.
 	if err := ExecuteTerraform(*info); err != nil {
-		return fmt.Errorf("terraform execution failed: %w", err)
+		return fmt.Errorf("%w: %v", errUtils.ErrTerraformExecFailed, err)
 	}
 
 	return nil
