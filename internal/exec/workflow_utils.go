@@ -55,6 +55,120 @@ var (
 	}
 )
 
+// workflowStepErrorContext contains context needed to build workflow step errors.
+type workflowStepErrorContext struct {
+	WorkflowPath     string
+	WorkflowBasePath string
+	Workflow         string
+	StepName         string
+	Command          string
+	CommandType      string
+	FinalStack       string
+}
+
+// buildWorkflowStepError builds an error with resume hints when a workflow step fails.
+func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
+	log.Debug("Workflow failed", "error", err)
+
+	// Remove the workflow base path, stacks/workflows.
+	workflowFileName := strings.TrimPrefix(filepath.ToSlash(ctx.WorkflowPath), filepath.ToSlash(ctx.WorkflowBasePath))
+	// Remove the leading slash.
+	workflowFileName = strings.TrimPrefix(workflowFileName, "/")
+	// Remove the file extension.
+	workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
+
+	resumeCommand := fmt.Sprintf(
+		"%s workflow %s -f %s --from-step '%s'",
+		config.AtmosCommand,
+		ctx.Workflow,
+		workflowFileName,
+		ctx.StepName,
+	)
+
+	// Add stack parameter to resume command if a stack was used.
+	if ctx.FinalStack != "" {
+		resumeCommand = fmt.Sprintf("%s -s '%s'", resumeCommand, ctx.FinalStack)
+	}
+
+	failedCmd := ctx.Command
+	if ctx.CommandType == config.AtmosCommand {
+		failedCmd = config.AtmosCommand + " " + ctx.Command
+		// Add stack parameter to failed command if a stack was used.
+		if ctx.FinalStack != "" {
+			failedCmd = fmt.Sprintf("%s -s '%s'", failedCmd, ctx.FinalStack)
+		}
+	}
+
+	// Build error with context about the failed command.
+	// Use fmt.Errorf with %w to wrap the underlying error while adding ErrWorkflowStepFailed to the chain.
+	// This preserves both the error sentinel for errors.Is() checks and the underlying error's exit code.
+	wrappedErr := fmt.Errorf("%w: %w", ErrWorkflowStepFailed, err)
+
+	// Now build the error with hints using the wrapped error.
+	// This preserves the error chain while adding formatted hints.
+	// Commands are wrapped in code fences for proper formatting and copy-paste.
+	// Single quotes are used for shell safety (step names and stacks can contain spaces).
+	builder := errUtils.Build(wrappedErr).
+		WithTitle("Workflow Error").
+		WithHintf("The following command failed to execute:\n\n```shell\n%s\n```", failedCmd).
+		WithHintf("To resume the workflow from this step, run:\n\n```shell\n%s\n```", resumeCommand)
+
+	// Extract exit code from the underlying error if available.
+	if exitCode := errUtils.GetExitCode(err); exitCode != 0 {
+		builder = builder.WithExitCode(exitCode)
+	}
+
+	return builder.Err()
+}
+
+// prepareStepEnvironment prepares environment variables for a workflow step.
+// If identity is specified, it authenticates and prepares credentials.
+// Returns the environment variables to use for the step.
+func prepareStepEnvironment(
+	stepIdentity string,
+	stepName string,
+	authManager auth.AuthManager,
+) ([]string, error) {
+	// No identity specified, use empty environment (subprocess inherits from parent).
+	if stepIdentity == "" {
+		return []string{}, nil
+	}
+
+	if authManager == nil {
+		return nil, errUtils.Build(errUtils.ErrAuthManager).
+			WithExplanation("auth manager is not initialized").
+			WithContext("identity", stepIdentity).
+			WithContext("step", stepName).
+			Err()
+	}
+
+	ctx := context.Background()
+
+	// Try to use cached credentials first (passive check, no prompts).
+	// Only authenticate if cached credentials are not available or expired.
+	if _, err := authManager.GetCachedCredentials(ctx, stepIdentity); err != nil {
+		log.Debug("No valid cached credentials found, authenticating", "identity", stepIdentity, "error", err)
+		// No valid cached credentials - perform full authentication.
+		if _, err = authManager.Authenticate(ctx, stepIdentity); err != nil {
+			// Check for user cancellation - return clean error without wrapping.
+			if errors.Is(err, errUtils.ErrUserAborted) {
+				return nil, errUtils.ErrUserAborted
+			}
+			return nil, fmt.Errorf("%w for identity %q in step %q: %w", errUtils.ErrAuthenticationFailed, stepIdentity, stepName, err)
+		}
+	}
+
+	// Prepare shell environment with authentication credentials.
+	// Start with current OS environment and let PrepareShellEnvironment configure auth.
+	stepEnv, err := authManager.PrepareShellEnvironment(ctx, stepIdentity, os.Environ())
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare shell environment for identity %q in step %q: %w", stepIdentity, stepName, err)
+	}
+
+	log.Debug("Prepared environment with identity", "identity", stepIdentity, "step", stepName)
+	return stepEnv, nil
+}
+
 // IsKnownWorkflowError returns true if the error matches any known workflow error.
 // This includes ExitCodeError which indicates a subcommand failure that's already been reported.
 func IsKnownWorkflowError(err error) bool {
@@ -205,48 +319,15 @@ func ExecuteWorkflow(
 		}
 
 		// Prepare environment variables if identity is specified for this step.
-		var stepEnv []string
-		if stepIdentity != "" {
-			if authManager == nil {
-				return fmt.Errorf("identity %q specified for step %q but auth manager is not initialized", stepIdentity, step.Name)
-			}
-
-			ctx := context.Background()
-
-			// Try to use cached credentials first (passive check, no prompts).
-			// Only authenticate if cached credentials are not available or expired.
-			_, err := authManager.GetCachedCredentials(ctx, stepIdentity)
-			if err != nil {
-				log.Debug("No valid cached credentials found, authenticating", "identity", stepIdentity, "error", err)
-				// No valid cached credentials - perform full authentication.
-				_, err = authManager.Authenticate(ctx, stepIdentity)
-				if err != nil {
-					// Check for user cancellation - return clean error without wrapping.
-					if errors.Is(err, errUtils.ErrUserAborted) {
-						return errUtils.ErrUserAborted
-					}
-					return fmt.Errorf("%w for identity %q in step %q: %w", errUtils.ErrAuthenticationFailed, stepIdentity, step.Name, err)
-				}
-			}
-
-			// Prepare shell environment with authentication credentials.
-			// Start with current OS environment and let PrepareShellEnvironment configure auth.
-			stepEnv, err = authManager.PrepareShellEnvironment(ctx, stepIdentity, os.Environ())
-			if err != nil {
-				return fmt.Errorf("failed to prepare shell environment for identity %q in step %q: %w", stepIdentity, step.Name, err)
-			}
-
-			log.Debug("Prepared environment with identity", "identity", stepIdentity, "step", step.Name)
-		} else {
-			// No identity specified, use empty environment (subprocess inherits from parent).
-			stepEnv = []string{}
+		stepEnv, err := prepareStepEnvironment(stepIdentity, step.Name, authManager)
+		if err != nil {
+			return err
 		}
-
-		var err error
-		if commandType == "shell" {
+		switch commandType {
+		case "shell":
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
 			err = ExecuteShell(command, commandName, ".", stepEnv, dryRun)
-		} else if commandType == "atmos" {
+		case "atmos":
 			args := strings.Fields(command)
 
 			workflowStack := strings.TrimSpace(workflowDefinition.Stack)
@@ -283,7 +364,7 @@ func ExecuteWorkflow(
 			err = retry.With7Params(context.Background(), step.Retry,
 				ExecuteShellCommand,
 				atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
-		} else {
+		default:
 			return errUtils.Build(ErrInvalidWorkflowStepType).
 				WithHintf("Step type '%s' is not supported", commandType).
 				WithHint("Each step must specify a valid type: 'atmos' or 'shell'").
@@ -292,57 +373,15 @@ func ExecuteWorkflow(
 		}
 
 		if err != nil {
-			log.Debug("Workflow failed", "error", err)
-
-			// Remove the workflow base path, stacks/workflows
-			workflowFileName := strings.TrimPrefix(filepath.ToSlash(workflowPath), filepath.ToSlash(atmosConfig.Workflows.BasePath))
-			// Remove the leading slash
-			workflowFileName = strings.TrimPrefix(workflowFileName, "/")
-			// Remove the file extension
-			workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
-
-			resumeCommand := fmt.Sprintf(
-				"%s workflow %s -f %s --from-step '%s'",
-				config.AtmosCommand,
-				workflow,
-				workflowFileName,
-				step.Name,
-			)
-
-			// Add stack parameter to resume command if a stack was used
-			if finalStack != "" {
-				resumeCommand = fmt.Sprintf("%s -s '%s'", resumeCommand, finalStack)
-			}
-
-			failedCmd := command
-			if commandType == config.AtmosCommand {
-				failedCmd = config.AtmosCommand + " " + command
-				// Add stack parameter to failed command if a stack was used
-				if finalStack != "" {
-					failedCmd = fmt.Sprintf("%s -s '%s'", failedCmd, finalStack)
-				}
-			}
-
-			// Build error with context about the failed command.
-			// Use fmt.Errorf with %w to wrap the underlying error while adding ErrWorkflowStepFailed to the chain.
-			// This preserves both the error sentinel for errors.Is() checks and the underlying error's exit code.
-			wrappedErr := fmt.Errorf("%w: %w", ErrWorkflowStepFailed, err)
-
-			// Now build the error with hints using the wrapped error.
-			// This preserves the error chain while adding formatted hints.
-			// Commands are wrapped in code fences for proper formatting and copy-paste.
-			// Single quotes are used for shell safety (step names and stacks can contain spaces).
-			builder := errUtils.Build(wrappedErr).
-				WithTitle("Workflow Error").
-				WithHintf("The following command failed to execute:\n\n```shell\n%s\n```", failedCmd).
-				WithHintf("To resume the workflow from this step, run:\n\n```shell\n%s\n```", resumeCommand)
-
-			// Extract exit code from the underlying error if available
-			if exitCode := errUtils.GetExitCode(err); exitCode != 0 {
-				builder = builder.WithExitCode(exitCode)
-			}
-
-			return builder.Err()
+			return buildWorkflowStepError(err, &workflowStepErrorContext{
+				WorkflowPath:     workflowPath,
+				WorkflowBasePath: atmosConfig.Workflows.BasePath,
+				Workflow:         workflow,
+				StepName:         step.Name,
+				Command:          command,
+				CommandType:      commandType,
+				FinalStack:       finalStack,
+			})
 		}
 	}
 
@@ -487,6 +526,8 @@ func findWorkflowAcrossFiles(workflowName string, atmosConfig *schema.AtmosConfi
 // promptForWorkflowFile shows an interactive selector for choosing a workflow file.
 // Uses the Huh library with Atmos theme (same pattern as identity selector).
 func promptForWorkflowFile(matches []WorkflowMatch) (string, error) {
+	defer perf.Track(nil, "exec.promptForWorkflowFile")()
+
 	if len(matches) == 0 {
 		return "", ErrNoWorkflowFilesToSelect
 	}
