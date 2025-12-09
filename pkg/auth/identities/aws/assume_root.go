@@ -315,6 +315,12 @@ func (i *assumeRootIdentity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// Paths returns credential files/directories used by this identity.
+func (i *assumeRootIdentity) Paths() ([]types.Path, error) {
+	// Assume root identities don't add additional credential files beyond the provider.
+	return []types.Path{}, nil
+}
+
 // PrepareEnvironment prepares environment variables for external processes.
 func (i *assumeRootIdentity) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	defer perf.Track(nil, "aws.assumeRootIdentity.PrepareEnvironment")()
