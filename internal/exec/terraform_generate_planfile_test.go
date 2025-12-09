@@ -73,14 +73,14 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 	}
 
 	t.Run("both file and dir flags return an error", func(t *testing.T) {
-		conflictingCmd := &cobra.Command{
-			Use:                "terraform generate planfile",
-			Short:              "Generate a planfile for a Terraform component",
-			Long:               "This command generates a `planfile` for a specified Atmos Terraform component.",
-			FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-			RunE:               ExecuteTerraformGeneratePlanfileCmd,
-		}
+		// Create test command with global flags registered (including 'profile').
+		conflictingCmd := newTestCommandWithGlobalFlags("terraform generate planfile")
+		conflictingCmd.Short = "Generate a planfile for a Terraform component"
+		conflictingCmd.Long = "This command generates a `planfile` for a specified Atmos Terraform component."
+		conflictingCmd.FParseErrWhitelist = struct{ UnknownFlags bool }{UnknownFlags: false}
+		conflictingCmd.RunE = ExecuteTerraformGeneratePlanfileCmd
 
+		// Add command-specific flags.
 		conflictingCmd.PersistentFlags().StringP("stack", "s", "", "Atmos stack")
 		conflictingCmd.PersistentFlags().StringP("file", "f", "", "Planfile name")
 		conflictingCmd.PersistentFlags().StringP("dir", "d", "", "Directory where the planfile will be generated using the default naming convention ({stack}-{component}.planfile.{format})")
@@ -88,11 +88,6 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 		conflictingCmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command")
 		conflictingCmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command")
 		conflictingCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function when processing Atmos stack manifests")
-		conflictingCmd.PersistentFlags().String("logs-level", "Info", "Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log level is set to Off, Atmos will not log any messages")
-		conflictingCmd.PersistentFlags().String("logs-file", "/dev/stderr", "The file to write Atmos logs to. Logs can be written to any file or any standard file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null'")
-		conflictingCmd.PersistentFlags().String("base-path", "", "Base path for Atmos project")
-		conflictingCmd.PersistentFlags().StringSlice("config", []string{}, "Paths to configuration files (comma-separated or repeated flag)")
-		conflictingCmd.PersistentFlags().StringSlice("config-path", []string{}, "Paths to configuration directories (comma-separated or repeated flag)")
 
 		conflictingCmd.SetArgs([]string{
 			component,
