@@ -91,3 +91,20 @@ func TestListCmd_Shorthand(t *testing.T) {
 		assert.Equal(t, "f", flag.Shorthand, "format flag should have 'f' shorthand")
 	})
 }
+
+func TestListCmd_Init(t *testing.T) {
+	// Verify init() ran successfully by checking parser and flags are set up.
+	assert.NotNil(t, listParser, "listParser should be initialized")
+	assert.NotNil(t, listCmd, "listCmd should be initialized")
+	assert.False(t, listCmd.DisableFlagParsing, "DisableFlagParsing should be false")
+
+	// Verify flags are registered.
+	stackFlag := listCmd.Flags().Lookup("stack")
+	assert.NotNil(t, stackFlag, "stack flag should be registered")
+
+	identityFlag := listCmd.Flags().Lookup("identity")
+	assert.NotNil(t, identityFlag, "identity flag should be registered")
+
+	formatFlag := listCmd.Flags().Lookup("format")
+	assert.NotNil(t, formatFlag, "format flag should be registered")
+}

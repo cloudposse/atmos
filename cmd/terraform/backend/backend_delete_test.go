@@ -57,3 +57,20 @@ func TestDeleteCmd_FlagDefaults(t *testing.T) {
 		})
 	}
 }
+
+func TestDeleteCmd_Init(t *testing.T) {
+	// Verify init() ran successfully by checking parser and flags are set up.
+	assert.NotNil(t, deleteParser, "deleteParser should be initialized")
+	assert.NotNil(t, deleteCmd, "deleteCmd should be initialized")
+	assert.False(t, deleteCmd.DisableFlagParsing, "DisableFlagParsing should be false")
+
+	// Verify flags are registered.
+	stackFlag := deleteCmd.Flags().Lookup("stack")
+	assert.NotNil(t, stackFlag, "stack flag should be registered")
+
+	identityFlag := deleteCmd.Flags().Lookup("identity")
+	assert.NotNil(t, identityFlag, "identity flag should be registered")
+
+	forceFlag := deleteCmd.Flags().Lookup("force")
+	assert.NotNil(t, forceFlag, "force flag should be registered")
+}
