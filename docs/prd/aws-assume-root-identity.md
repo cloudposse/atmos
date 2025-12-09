@@ -557,14 +557,14 @@ func TestAssumeRoot_ShellEnvironment(t *testing.T)
 **Risk**: Users may not have centralized root access enabled
 **Impact**: Medium
 **Probability**: Medium
-**Mitigation**: Clear error messages and documentation about prerequisites
+**Mitigation**: Clear error messages and documentation about prerequisites.
 
 ### Risk 3: Task Policy Limitations
 
 **Risk**: AWS may add new task policies
 **Impact**: Low
 **Probability**: Medium
-**Mitigation**: Allow any ARN matching `arn:aws:iam::aws:policy/root-task/*` pattern
+**Mitigation**: Allow any ARN matching `arn:aws:iam::aws:policy/root-task/*` pattern.
 
 ## Success Metrics
 
