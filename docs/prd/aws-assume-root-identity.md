@@ -156,12 +156,12 @@ auth:
 - `task_policy_arn`: ARN of the AWS-managed task policy
 
 **Optional Fields**:
-- `duration`: Session duration (default: 900 seconds / 15 minutes, max: 900 seconds per AWS limit)
+- `duration`: Session duration as a Go-style duration string (e.g., `"300s"`, `"5m"`, `"15m"`). Default: 900 seconds (15 minutes). Max: 900 seconds per AWS limit. Values exceeding 900 seconds are automatically capped.
 
 **Validation**:
 - `target_principal` must be a valid 12-digit AWS account ID
 - `task_policy_arn` must match pattern `arn:aws:iam::aws:policy/root-task/*`
-- `duration` must be between 1 and 900 seconds
+- `duration` must parse as a valid Go duration string with effective range 1s–900s after parsing
 
 ### FR-3: AWS-Managed Task Policies
 
