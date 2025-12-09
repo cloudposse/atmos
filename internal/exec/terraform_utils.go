@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -281,29 +280,6 @@ func processTerraformComponent(
 	return nil
 }
 
-<<<<<<< HEAD
-// parseUploadStatusFlag parses the upload status flag from the arguments.
-// It supports --flag, --flag=true, and --flag=false forms.
-// Returns true if the flag is present and not explicitly set to false.
-func parseUploadStatusFlag(args []string, flagName string) bool {
-	flagPrefix := "--" + flagName + "="
-
-	// Check for --flag (without value, defaults to true).
-	if u.SliceContainsString(args, "--"+flagName) {
-		return true
-	}
-
-	// Check for --flag=value forms
-	for _, arg := range args {
-		if strings.HasPrefix(arg, flagPrefix) {
-			value := strings.TrimPrefix(arg, flagPrefix)
-			// Parse boolean value, default to true if not a valid boolean.
-			return value != "false"
-		}
-	}
-
-	return false
-=======
 // executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
 func executeTerraformAffectedComponentInDepOrder(
 	info *schema.ConfigAndStacksInfo,
@@ -364,5 +340,4 @@ func executeTerraformAffectedComponentInDepOrder(
 	}
 
 	return nil
->>>>>>> 6ac56d4bf (Changes auto-committed by Conductor)
 }
