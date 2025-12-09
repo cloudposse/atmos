@@ -1879,6 +1879,8 @@ func processImportProvenanceTracking(
 	result *importFileResult,
 	mergeContext *m.MergeContext,
 ) {
+	defer perf.Track(atmosConfig, "exec.processImportProvenanceTracking")()
+
 	if atmosConfig == nil || !atmosConfig.TrackProvenance {
 		return
 	}
@@ -1902,6 +1904,12 @@ func processImportProvenanceTracking(
 
 // updateParentImportChain adds imported files from the child's import chain to the parent's chain.
 func updateParentImportChain(childContext, parentContext *m.MergeContext) {
+	defer perf.Track(nil, "exec.updateParentImportChain")()
+
+	if parentContext == nil {
+		return
+	}
+
 	for i, importedFile := range childContext.ImportChain {
 		if u.SliceContainsString(parentContext.ImportChain, importedFile) {
 			continue

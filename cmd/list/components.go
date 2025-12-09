@@ -89,8 +89,12 @@ var componentsCmd = &cobra.Command{
 func columnsCompletionForComponents(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	defer perf.Track(nil, "list.components.columnsCompletionForComponents")()
 
-	// Load atmos configuration.
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	// Load atmos configuration with CLI flags.
+	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -279,14 +283,14 @@ func buildComponentSorters(sortSpec string) ([]*listSort.Sorter, error) {
 }
 
 // parseColumnsFlag parses column names from CLI flag.
-//
-//nolint:unparam // columnsFlag will be used when column parsing is implemented
 func parseColumnsFlag(columnsFlag []string) []column.Config {
 	defer perf.Track(nil, "list.components.parseColumnsFlag")()
 
 	// TODO: Implement parsing of column specifications from CLI.
-	// For now, return default columns as placeholder.
-	// The flag is registered but parsing is not yet implemented.
+	// For now, warn user and return default columns.
+	if len(columnsFlag) > 0 {
+		_ = ui.Warning("Custom --columns parsing not yet implemented, using defaults")
+	}
 	return []column.Config{
 		{Name: "Component", Value: "{{ .component }}"},
 		{Name: "Stack", Value: "{{ .stack }}"},

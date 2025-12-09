@@ -22,6 +22,7 @@ import (
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/list/tree"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	perf "github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -72,6 +73,8 @@ var stacksCmd = &cobra.Command{
 // columnsCompletionForStacks provides dynamic tab completion for --columns flag.
 // Returns column names from atmos.yaml stacks.list.columns configuration.
 func columnsCompletionForStacks(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	defer perf.Track(nil, "list.stacks.columnsCompletionForStacks")()
+
 	// Load atmos configuration with CLI flags.
 	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
 	if err != nil {
@@ -121,6 +124,8 @@ func init() {
 }
 
 func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOptions) error {
+	defer perf.Track(nil, "list.stacks.listStacksWithOptions")()
+
 	// Early validation: --provenance only works with --format=tree.
 	if err := validateProvenanceFlag(opts); err != nil {
 		return err
@@ -166,6 +171,8 @@ func initStacksConfig(
 	args []string,
 	opts *StacksOptions,
 ) (schema.AtmosConfiguration, auth.AuthManager, error) {
+	defer perf.Track(nil, "list.stacks.initStacksConfig")()
+
 	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
 	if err != nil {
 		return schema.AtmosConfiguration{}, nil, err
@@ -200,6 +207,8 @@ func executeAndExtractStacks(
 	opts *StacksOptions,
 	authManager auth.AuthManager,
 ) ([]map[string]any, map[string]any, error) {
+	defer perf.Track(nil, "list.stacks.executeAndExtractStacks")()
+
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
@@ -220,6 +229,8 @@ func executeAndExtractStacks(
 
 // renderStacksTable renders stacks in table format with filters, columns, and sorters.
 func renderStacksTable(atmosConfig *schema.AtmosConfiguration, stacks []map[string]any, opts *StacksOptions) error {
+	defer perf.Track(nil, "list.stacks.renderStacksTable")()
+
 	filters := buildStackFilters(opts)
 	columns := getStackColumns(atmosConfig, opts.Columns, opts.Component != "")
 
@@ -250,6 +261,8 @@ func buildStackFilters(opts *StacksOptions) []filter.Filter {
 
 // getStackColumns returns column configuration.
 func getStackColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string, hasComponent bool) []column.Config {
+	defer perf.Track(nil, "list.stacks.getStackColumns")()
+
 	// If --columns flag is provided, parse it and return.
 	if len(columnsFlag) > 0 {
 		return parseColumnsFlag(columnsFlag)
@@ -291,6 +304,8 @@ func renderStacksTreeFormat(
 	showProvenance bool,
 	authManager auth.AuthManager,
 ) error {
+	defer perf.Track(nil, "list.stacks.renderStacksTreeFormat")()
+
 	log.Trace("Tree format detected, enabling provenance tracking")
 	atmosConfig.TrackProvenance = true
 
@@ -323,6 +338,8 @@ func resolveAndFilterImportTrees(
 	atmosConfig *schema.AtmosConfiguration,
 	stacks []map[string]any,
 ) (map[string][]*tree.ImportNode, error) {
+	defer perf.Track(nil, "list.stacks.resolveAndFilterImportTrees")()
+
 	importTreesWithComponents, err := importresolver.ResolveImportTreeFromProvenance(stacksMap, atmosConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error resolving import tree from provenance: %w", err)
@@ -350,6 +367,8 @@ func resolveAndFilterImportTrees(
 
 // buildAllowedStacksSet creates a set of stack names from a slice of stack maps.
 func buildAllowedStacksSet(stacks []map[string]any) map[string]bool {
+	defer perf.Track(nil, "list.stacks.buildAllowedStacksSet")()
+
 	allowedStacks := make(map[string]bool)
 	for _, stack := range stacks {
 		if stackName, ok := stack["stack"].(string); ok {
@@ -361,6 +380,8 @@ func buildAllowedStacksSet(stacks []map[string]any) map[string]bool {
 
 // buildStackSorters creates sorters from sort specification.
 func buildStackSorters(sortSpec string) ([]*listSort.Sorter, error) {
+	defer perf.Track(nil, "list.stacks.buildStackSorters")()
+
 	if sortSpec == "" {
 		// Default sort: by stack ascending.
 		return []*listSort.Sorter{
