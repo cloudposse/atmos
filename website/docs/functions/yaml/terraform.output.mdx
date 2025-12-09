@@ -169,16 +169,21 @@ This quoting pattern works for every Atmos YAML function that accepts YQ express
 
 ## Using YQ Expressions to provide a default value
 
-If the component for which you are reading the output has not been provisioned yet, the `!terraform.output` function
-will return `null` unless you specify a [default value](https://mikefarah.gitbook.io/yq/operators/alternative-default-value)
-in the YQ expression, in which case the function will return the default value.
+If the component for which you are reading the output has not been provisioned yet, or if the specific output doesn't exist,
+you can specify a [default value](https://mikefarah.gitbook.io/yq/operators/alternative-default-value)
+in the YQ expression using the `//` operator. Atmos will evaluate the default when the data is unavailable.
 
-This will allow you to mock outputs when executing `atmos terraform plan` where there are dependencies between components,
+This allows you to mock outputs when executing `atmos terraform plan` where there are dependencies between components,
 and the dependent components are not provisioned yet.
 
-:::tip
-When an output doesn't exist, the function returns `null` to maintain backward compatibility with existing workflows.
-To explicitly handle missing outputs, use the YQ `//` operator to provide a default value.
+:::tip Default Value Behavior
+Atmos distinguishes between **recoverable errors** (component not provisioned, output missing) and **non-recoverable errors** (API failures, network timeouts):
+
+- **Recoverable errors with defaults**: When a component isn't provisioned or an output doesn't exist, AND you specify a YQ default (`//`), Atmos uses the default value
+- **Recoverable errors without defaults**: Returns `null` for missing outputs (backward compatible) or an error for unprovisioned components
+- **Non-recoverable errors**: API failures (S3 timeouts, authentication errors, network issues) always propagate as errors, even if a default is specified
+
+This ensures that infrastructure failures are never silently masked by default values.
 :::
 
 :::note
@@ -485,5 +490,4 @@ vars:
 
  - Be mindful of disaster recovery (DR) implications when using it across regions.
 
- - Consider cold-start scenarios: if the dependent component has not yet been provisioned, the function will return `null`.
-   Use the YQ `//` operator to provide default values for components that may not be provisioned yet.
+ - Consider cold-start scenarios: if the dependent component has not yet been provisioned, the function will return an error unless you provide a YQ default value using the `//` operator. See [Using YQ Expressions to provide a default value](#using-yq-expressions-to-provide-a-default-value) for details on error handling behavior.
