@@ -13,13 +13,13 @@ import (
 	"time"
 
 	"cloud.google.com/go/storage"
-	log "github.com/charmbracelet/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/gcp"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -236,16 +236,26 @@ func ReadTerraformBackendGCSInternal(
 			// Check if the error is because the object doesn't exist.
 			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
 			if errors.Is(err, storage.ErrObjectNotExist) || status.Code(err) == codes.NotFound {
-				log.Debug("Terraform state file doesn't exist in the GCS bucket; returning 'null'", "file", tfStateFilePath, "bucket", bucket)
+				log.Debug("Terraform state file doesn't exist in the GCS bucket; returning 'null'", "file", tfStateFilePath, log.FieldBucket, bucket)
 				return nil, nil
 			}
 
 			lastErr = err
 			if attempt < maxGCSRetryCount {
-				log.Debug("Failed to read Terraform state file from GCS bucket", "attempt", attempt+1, "file", tfStateFilePath, "bucket", bucket, "error", err)
-				time.Sleep(time.Second * 2) // backoff
+				// Exponential backoff: 1s, 2s, 4s for attempts 0, 1, 2.
+				backoff := time.Second * time.Duration(1<<attempt)
+				log.Debug("Failed to read Terraform state file from GCS bucket",
+					"attempt", attempt+1,
+					"file", tfStateFilePath,
+					log.FieldBucket, bucket,
+					"error", err,
+					"backoff", backoff,
+				)
+				time.Sleep(backoff)
 				continue
 			}
+			// Retries exhausted - log warning with error details to help diagnose the issue.
+			logGCSRetryExhausted(err, tfStateFilePath, bucket, maxGCSRetryCount)
 			return nil, fmt.Errorf(errWrapFormat, errUtils.ErrGetObjectFromGCS, lastErr)
 		}
 
@@ -259,4 +269,30 @@ func ReadTerraformBackendGCSInternal(
 	}
 
 	return nil, fmt.Errorf(errWrapFormat, errUtils.ErrGetObjectFromGCS, lastErr)
+}
+
+// logGCSRetryExhausted logs a warning when all retries are exhausted for GCS operations.
+// This helps users report issues by providing the gRPC status code and details.
+func logGCSRetryExhausted(err error, tfStateFilePath, bucket string, maxRetries int) {
+	defer perf.Track(nil, "terraform_backend.logGCSRetryExhausted")()
+
+	// Extract gRPC status code if available.
+	errorCode := "unknown"
+	if grpcStatus, ok := status.FromError(err); ok {
+		errorCode = grpcStatus.Code().String()
+	}
+
+	// Check for context timeout.
+	if errors.Is(err, context.DeadlineExceeded) {
+		errorCode = "DEADLINE_EXCEEDED"
+	}
+
+	log.Warn(
+		"Failed to read Terraform state after all retries exhausted",
+		"file", tfStateFilePath,
+		log.FieldBucket, bucket,
+		"attempts", maxRetries+1,
+		"error_code", errorCode,
+		"error", err,
+	)
 }

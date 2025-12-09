@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	charm "github.com/charmbracelet/log"
 	"github.com/go-viper/mapstructure/v2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -174,9 +173,9 @@ func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndSt
 	return authManager, nil
 }
 
-func getConfigLogLevels(atmosConfig *schema.AtmosConfiguration) (charm.Level, charm.Level) {
+func getConfigLogLevels(atmosConfig *schema.AtmosConfiguration) (log.Level, log.Level) {
 	if atmosConfig == nil {
-		return charm.InfoLevel, charm.InfoLevel
+		return log.InfoLevel, log.InfoLevel
 	}
 	// Get the current atmos log level that was already set by setupLogger in root.go.
 	// This respects ATMOS_LOGS_LEVEL env var and --logs-level flag with case-insensitive parsing.
@@ -188,7 +187,7 @@ func getConfigLogLevels(atmosConfig *schema.AtmosConfiguration) (charm.Level, ch
 		// Parse the auth log level using Atmos' ParseLogLevel for case-insensitive parsing.
 		// This ensures "Warning", "warning", "WARN", "warn" all work correctly.
 		if atmosLogLevel, err := log.ParseLogLevel(atmosConfig.Auth.Logs.Level); err == nil {
-			// Convert Atmos LogLevel string to charm.Level.
+			// Convert Atmos LogLevel string to log.Level.
 			switch atmosLogLevel {
 			case log.LogLevelTrace:
 				authLevel = log.TraceLevel

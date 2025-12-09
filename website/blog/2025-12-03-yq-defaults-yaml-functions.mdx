@@ -1,0 +1,101 @@
+---
+slug: yq-defaults-yaml-functions
+title: YQ Default Values Now Work Reliably in YAML Functions
+sidebar_label: YQ Defaults Fix
+authors:
+  - osterman
+tags:
+  - bugfix
+  - terraform
+date: 2025-12-03T00:00:00.000Z
+---
+
+We've fixed an issue where YQ default values (using the `//` fallback operator) in `!terraform.state` and `!terraform.output` YAML functions were not being evaluated when components weren't provisioned or outputs didn't exist.
+
+<!--truncate-->
+
+## What Changed
+
+YQ expressions with default values now work correctly in all scenarios:
+
+```yaml
+# This now works reliably when vpc component isn't provisioned
+vars:
+  vpc_id: !terraform.output vpc {{ .stack }} ".vpc_id // ""default-vpc"""
+  subnets: !terraform.state vpc {{ .stack }} ".subnets // [""subnet-1"", ""subnet-2""]"
+```
+
+## The Problem
+
+Previously, when a terraform component wasn't provisioned or an output didn't exist, the YAML function wrappers would return `nil` or exit before the YQ pipeline could evaluate default expressions. This caused sporadic failures where users expected the YQ `//` operator to provide fallback values.
+
+The issue manifested as:
+- Stack configurations failing when referencing unprovisioned components
+- Inconsistent behavior depending on component state
+- No way to gracefully handle missing outputs with defaults
+
+## The Solution
+
+We refactored the YAML function processing to:
+
+1. **Properly classify errors**: Distinguish between recoverable errors (component not provisioned, output missing) and non-recoverable API errors (S3 timeouts, network failures)
+
+2. **Evaluate YQ defaults for recoverable errors**: When a component isn't provisioned but the expression includes a default (`//`), evaluate the YQ expression against an empty map to extract the default value
+
+3. **Propagate API errors**: Infrastructure failures like S3 timeouts correctly propagate as errors rather than silently using defaults
+
+## Examples
+
+### String Defaults
+
+```yaml
+vars:
+  bucket_name: !terraform.output s3 {{ .stack }} ".bucket_name // ""default-bucket"""
+```
+
+If the `s3` component isn't provisioned, `bucket_name` will be `"default-bucket"`.
+
+### List Defaults
+
+```yaml
+vars:
+  subnets: !terraform.state vpc {{ .stack }} ".private_subnets // [""subnet-a"", ""subnet-b""]"
+```
+
+If the `vpc` component isn't provisioned, `subnets` will be `["subnet-a", "subnet-b"]`.
+
+### Map Defaults
+
+```yaml
+vars:
+  tags: !terraform.output common {{ .stack }} ".tags // {\"env\": \"dev\", \"team\": \"platform\"}"
+```
+
+### No Default (Error on Missing)
+
+```yaml
+vars:
+  # This will error if vpc component isn't provisioned (expected behavior)
+  vpc_id: !terraform.output vpc {{ .stack }} .vpc_id
+```
+
+## Error Handling Behavior
+
+| Scenario | Has Default (`//`) | Result |
+|----------|-------------------|--------|
+| Component not provisioned | Yes | Uses default value |
+| Component not provisioned | No | Returns error |
+| Output missing | Yes | Uses default value |
+| Output missing | No | Returns `nil` |
+| API error (S3 timeout) | Yes/No | Returns error |
+
+## Migration
+
+No migration is required. Existing configurations that use YQ defaults will now work as expected. Configurations without defaults maintain their existing behavior.
+
+## Related Links
+
+- [PR #1836: Fix YQ defaults for terraform.state/output YAML functions](https://github.com/cloudposse/atmos/pull/1836)
+- [YAML Functions Documentation](/functions/yaml)
+- [Terraform Output Function](/functions/yaml/terraform.output)
+- [Terraform State Function](/functions/yaml/terraform.state)
