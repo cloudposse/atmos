@@ -1,12 +1,13 @@
 package exec
 
 import (
-	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // TestProcessCustomTags_Coverage tests the coverage of processCustomTags function
@@ -14,9 +15,8 @@ import (
 func TestProcessCustomTags_Coverage(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	// Set up test environment variable
-	os.Setenv("TEST_ENV_VAR", "test_value")
-	defer os.Unsetenv("TEST_ENV_VAR")
+	// Set up test environment variable.
+	t.Setenv("TEST_ENV_VAR", "test_value")
 
 	tests := []struct {
 		name     string
@@ -115,7 +115,7 @@ func TestProcessCustomTags_Coverage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Skip tests that would require external setup
 			if len(tt.skip) == 0 && (hasPrefix(tt.input, "!store") || hasPrefix(tt.input, "!terraform") || tt.input == "!exec echo test") {
-				t.Skip("Skipping test that requires external setup")
+				t.Skipf("Skipping test '%s': requires external setup", tt.name)
 			}
 
 			result := processCustomTags(atmosConfig, tt.input, tt.stack, tt.skip)
@@ -141,30 +141,29 @@ func TestProcessCustomTags_UnsupportedTagPath(t *testing.T) {
 		"!terraform", // without .output or .state
 	}
 
-	supportedPrefixes := []string{
-		"!template",
-		"!exec",
-		"!store.get",
-		"!store",
-		"!terraform.output",
-		"!terraform.state",
-		"!env",
-	}
-
 	for _, tag := range unsupportedTags {
 		t.Run(tag, func(t *testing.T) {
 			// Check that the tag would not match any supported prefix
-			isSupported := false
+			// Use matchesSupportedTagCoverage which checks for exact tag followed by whitespace
 			testInput := tag + " test"
-			for _, prefix := range supportedPrefixes {
-				if hasPrefix(testInput, prefix) {
-					isSupported = true
-					break
-				}
-			}
+			isSupported := matchesSupportedTagCoverage(testInput, u.AllSupportedYamlTags)
 			assert.False(t, isSupported, "Tag %s should not be recognized as supported", tag)
 		})
 	}
+}
+
+// matchesSupportedTagCoverage checks if input matches one of the supported tags.
+// A tag matches if the input starts with the tag and is followed by a space, tab, newline, or end of string.
+func matchesSupportedTagCoverage(input string, supportedTags []string) bool {
+	for _, tag := range supportedTags {
+		if strings.HasPrefix(input, tag) {
+			rest := strings.TrimPrefix(input, tag)
+			if rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // TestProcessNodes_Coverage tests processNodes with various data structures.

@@ -35,9 +35,9 @@ func TestProcessTagStore_Coverage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Skip actual execution as it requires store setup
-			// We're testing that the function handles the input format
-			t.Skip("Skipping store tag test that requires external store setup")
+			// Skip actual execution as it requires store setup.
+			// We're testing that the function handles the input format.
+			t.Skipf("Skipping test '%s': requires external store registry setup", tt.name)
 		})
 	}
 }
@@ -62,8 +62,8 @@ func TestProcessTagStoreGet_Coverage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Skip actual execution as it requires store setup
-			t.Skip("Skipping store.get tag test that requires external store setup")
+			// Skip actual execution as it requires store setup.
+			t.Skipf("Skipping test '%s': requires external store registry setup", tt.name)
 		})
 	}
 }
@@ -93,8 +93,8 @@ func TestProcessTagTerraformOutput_Coverage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Skip actual execution as it requires terraform setup
-			t.Skip("Skipping terraform.output tag test that requires terraform setup")
+			// Skip actual execution as it requires terraform setup.
+			t.Skipf("Skipping test '%s': requires terraform state backend", tt.name)
 		})
 	}
 }
@@ -124,8 +124,8 @@ func TestProcessTagTerraformState_Coverage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Skip actual execution as it requires terraform setup
-			t.Skip("Skipping terraform.state tag test that requires terraform setup")
+			// Skip actual execution as it requires terraform setup.
+			t.Skipf("Skipping test '%s': requires terraform state backend", tt.name)
 		})
 	}
 }
@@ -238,12 +238,12 @@ func TestProcessCustomTags_AllTagBranches(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// For exec tag, skip as it would actually execute
 			if strings.Contains(tt.input, "!exec") && len(tt.skip) == 0 {
-				t.Skip("Skipping exec tag test to avoid actual command execution")
+				t.Skipf("Skipping test '%s': exec tag would execute system command", tt.name)
 			}
 
 			// For store/terraform tags without skip, they would fail without setup
 			if (strings.Contains(tt.input, "!store") || strings.Contains(tt.input, "!terraform")) && len(tt.skip) == 0 {
-				t.Skip("Skipping tag test that requires external setup")
+				t.Skipf("Skipping test '%s': %s requires external setup", tt.name, tt.input)
 			}
 
 			result := processCustomTags(atmosConfig, tt.input, tt.stack, tt.skip)

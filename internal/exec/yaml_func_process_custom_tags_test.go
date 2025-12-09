@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -105,14 +106,14 @@ func TestProcessCustomTags_AllSupportedTags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Skip tests that would cause runtime errors
+			// Skip tests that would cause runtime errors.
 			if tt.name == "string starting with exclamation but not a tag" {
-				t.Skip("Skipping test that would cause program exit due to unsupported tag")
+				t.Skipf("Skipping test: unsupported tag '!not-a-tag' would cause program exit")
 			}
 
-			// Skip store/terraform tests without skip flags as they require setup
+			// Skip store/terraform tests without skip flags as they require setup.
 			if len(tt.skip) == 0 && (strings.Contains(tt.input, "!store") || strings.Contains(tt.input, "!terraform")) {
-				t.Skip("Skipping test that requires external setup")
+				t.Skipf("Skipping test '%s': requires external store/terraform setup", tt.name)
 			}
 
 			result := processCustomTags(atmosConfig, tt.input, "test-stack", tt.skip)
@@ -159,9 +160,9 @@ func TestProcessCustomTags_TagPrefixes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Skip tests that would cause program exit due to unsupported tags
+			// Skip tests that would cause program exit due to unsupported tags.
 			if tt.name != "exact tag match" {
-				t.Skip("Skipping test that would cause program exit due to unsupported tag")
+				t.Skipf("Skipping test '%s': would trigger unsupported tag error and exit", tt.name)
 			}
 
 			result := processCustomTags(atmosConfig, tt.input, "test-stack", []string{})
@@ -379,9 +380,9 @@ func TestProcessCustomTags_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Skip tests that would trigger unsupported tag errors
+			// Skip tests that would trigger unsupported tag errors.
 			if tt.name == "tag at end of string" || tt.name == "multiple exclamation marks" {
-				t.Skip("Skipping test that would cause unsupported tag error")
+				t.Skipf("Skipping test '%s': would trigger unsupported tag error", tt.name)
 			}
 
 			result := processCustomTags(atmosConfig, tt.input, "test-stack", []string{})
@@ -393,13 +394,13 @@ func TestProcessCustomTags_EdgeCases(t *testing.T) {
 func TestProcessNodes_LargeDataStructure(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	// Create a large nested structure
+	// Create a large nested structure.
 	largeMap := make(map[string]any)
 	for i := 0; i < 100; i++ {
-		key := "key" + string(rune(i))
+		key := fmt.Sprintf("key%d", i)
 		switch {
 		case i%10 == 0:
-			largeMap[key] = "!template value" + string(rune(i))
+			largeMap[key] = fmt.Sprintf("!template value%d", i)
 		case i%5 == 0:
 			largeMap[key] = []any{"!template item1", "regular", "!template item2"}
 		default:
@@ -409,15 +410,15 @@ func TestProcessNodes_LargeDataStructure(t *testing.T) {
 
 	result := processNodes(atmosConfig, largeMap, "test-stack", []string{})
 
-	// Verify structure is preserved
+	// Verify structure is preserved.
 	assert.Len(t, result, 100)
 
-	// Spot check some transformations
+	// Spot check some transformations.
 	for i := 0; i < 100; i++ {
-		key := "key" + string(rune(i))
+		key := fmt.Sprintf("key%d", i)
 		switch {
 		case i%10 == 0:
-			expected := "value" + string(rune(i))
+			expected := fmt.Sprintf("value%d", i)
 			assert.Equal(t, expected, result[key])
 		case i%5 == 0:
 			arr := result[key].([]any)
@@ -433,8 +434,9 @@ func TestProcessNodes_LargeDataStructure(t *testing.T) {
 func TestProcessCustomTags_AllTagsCoverage(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	// Test that all supported tags are handled
-	supportedTags := []string{
+	// Test that all supported tags are handled using the central list.
+	// Filter to tags that take arguments (exclude AWS functions that take no args).
+	supportedTagsWithArgs := []string{
 		u.AtmosYamlFuncTemplate,
 		u.AtmosYamlFuncExec,
 		u.AtmosYamlFuncStore,
@@ -444,7 +446,7 @@ func TestProcessCustomTags_AllTagsCoverage(t *testing.T) {
 		u.AtmosYamlFuncEnv,
 	}
 
-	for _, tag := range supportedTags {
+	for _, tag := range supportedTagsWithArgs {
 		t.Run("tag_"+tag, func(t *testing.T) {
 			// Test with skip to avoid actual execution
 			input := tag + " test_value"
