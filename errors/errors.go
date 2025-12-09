@@ -105,7 +105,6 @@ var (
 	ErrTerraformBackendAPIError  = errors.New("terraform backend API error")
 	ErrUnsupportedBackendType    = errors.New("unsupported backend type")
 	ErrProcessTerraformStateFile = errors.New("error processing terraform state file")
-	ErrLoadAwsConfig             = errors.New("failed to load AWS config")
 	ErrGetObjectFromS3           = errors.New("failed to get object from S3")
 	ErrReadS3ObjectBody          = errors.New("failed to read S3 object body")
 	ErrS3BucketAccessDenied      = errors.New("access denied to S3 bucket")
