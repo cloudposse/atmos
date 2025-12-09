@@ -14,6 +14,8 @@ import (
 )
 
 func TestTerraformGenerateBackendCmd(t *testing.T) {
+	_ = NewTestKit(t)
+
 	tests.RequireTerraform(t)
 
 	if runtime.GOOS == "windows" {

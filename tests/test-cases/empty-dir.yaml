@@ -25,8 +25,7 @@ tests:
     expect:
       stdout:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
-      stderr:
-        - "^$"
+      # stderr may be empty or contain GitHub API rate limit warnings
       exit_code: 0
 
   - name: atmos support
@@ -46,6 +45,9 @@ tests:
     description: "Check that atmos command outputs helpful information to get started"
     workdir: "fixtures/scenarios/empty-dir"
     command: "atmos"
+    env:
+      # Set explicit config path to prevent parent directory search
+      ATMOS_CLI_CONFIG_PATH: "."
     args: []
     expect:
       diff: []

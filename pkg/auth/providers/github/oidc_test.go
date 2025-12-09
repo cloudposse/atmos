@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -204,7 +205,7 @@ func TestOIDCProvider_isGitHubActions(t *testing.T) {
 		{
 			name: "GitHub Actions environment",
 			setupEnv: func() {
-				os.Setenv("GITHUB_ACTIONS", "true")
+				t.Setenv("GITHUB_ACTIONS", "true")
 			},
 			cleanup: func() {
 				os.Unsetenv("GITHUB_ACTIONS")
@@ -222,7 +223,7 @@ func TestOIDCProvider_isGitHubActions(t *testing.T) {
 		{
 			name: "GitHub Actions set to false",
 			setupEnv: func() {
-				os.Setenv("GITHUB_ACTIONS", "false")
+				t.Setenv("GITHUB_ACTIONS", "false")
 			},
 			cleanup: func() {
 				os.Unsetenv("GITHUB_ACTIONS")
@@ -263,4 +264,24 @@ func TestOIDCProvider_NameAndPreAuthenticate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "github-oidc", p.Name())
 	require.NoError(t, p.PreAuthenticate(nil))
+}
+
+func TestOIDCProvider_Logout(t *testing.T) {
+	p, err := NewOIDCProvider("github-oidc", &schema.Provider{Kind: "github/oidc", Region: "us-east-1"})
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	err = p.Logout(ctx)
+
+	// GitHub OIDC provider's Logout returns ErrLogoutNotSupported (exit 0).
+	assert.ErrorIs(t, err, errUtils.ErrLogoutNotSupported)
+}
+
+func TestOIDCProvider_GetFilesDisplayPath(t *testing.T) {
+	p, err := NewOIDCProvider("github-oidc", validOidcSpec())
+	require.NoError(t, err)
+
+	path := p.GetFilesDisplayPath()
+	// GitHub OIDC provider doesn't use file-based credentials.
+	assert.Equal(t, "", path)
 }

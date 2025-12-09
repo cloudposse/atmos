@@ -1,0 +1,126 @@
+atmos_cli_config:
+  base_path: ./
+  components:
+    terraform:
+      base_path: components/terraform
+      apply_auto_approve: false
+      append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
+      deploy_run_init: true
+      init_run_reconfigure: true
+      auto_generate_backend_file: false
+      command: tofu
+      shell:
+        prompt: ""
+      init:
+        pass_vars: true
+      plan:
+        skip_planfile: false
+    helmfile:
+      base_path: ""
+      use_eks: true
+      kubeconfig_path: ""
+      helm_aws_profile_pattern: ""
+      cluster_name_pattern: ""
+      command: ""
+    packer:
+      base_path: ""
+      command: ""
+  stacks:
+    base_path: stacks
+    included_paths:
+      - '**/*'
+    excluded_paths: []
+    name_pattern: '{stage}'
+    name_template: ""
+  workflows:
+    base_path: ""
+    list:
+      format: ""
+      columns: []
+atmos_component: test-component
+atmos_manifest: test-stack
+atmos_stack: test
+atmos_stack_file: test-stack
+auth: {}
+backend: {}
+backend_type: ""
+cli_args:
+  - describe
+  - component
+command: tofu
+component: test-component
+component_info:
+  component_path: /absolute/path/to/repo/tests/fixtures/scenarios/opentofu-module-source-interpolation/components/terraform/test-component
+  component_type: terraform
+  terraform_config: null
+  validation_skipped_opentofu: true
+component_type: terraform
+deps:
+  - test-stack
+deps_all:
+  - test-stack
+env: {}
+hooks: {}
+imports: []
+inheritance: []
+metadata: {}
+overrides: {}
+providers: {}
+remote_state_backend: {}
+remote_state_backend_type: ""
+settings: {}
+sources:
+  backend: {}
+  env: {}
+  settings: {}
+  vars:
+    another_var:
+      final_value: another_value
+      name: another_var
+      stack_dependencies:
+        - dependency_type: inline
+          stack_file: test-stack
+          stack_file_section: components.terraform.vars
+          variable_value: another_value
+    context:
+      final_value:
+        build:
+          module_path: ./modules/example
+          module_version: v1.0.0
+      name: context
+      stack_dependencies:
+        - dependency_type: inline
+          stack_file: test-stack
+          stack_file_section: components.terraform.vars
+          variable_value:
+            build:
+              module_path: ./modules/example
+              module_version: v1.0.0
+    simple_var:
+      final_value: simple_value
+      name: simple_var
+      stack_dependencies:
+        - dependency_type: inline
+          stack_file: test-stack
+          stack_file_section: components.terraform.vars
+          variable_value: simple_value
+    stage:
+      final_value: test
+      name: stage
+      stack_dependencies:
+        - dependency_type: inline
+          stack_file: test-stack
+          stack_file_section: vars
+          variable_value: test
+stack: test
+tf_cli_vars: {}
+vars:
+  another_var: another_value
+  context:
+    build:
+      module_path: ./modules/example
+      module_version: v1.0.0
+  simple_var: simple_value
+  stage: test
+workspace: test
+

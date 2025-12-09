@@ -103,7 +103,7 @@ func TestReadTerraformBackendS3_InvalidConfig(t *testing.T) {
 
 			atmosConfig := &schema.AtmosConfiguration{}
 
-			result, err := tb.ReadTerraformBackendS3(atmosConfig, &tt.componentData)
+			result, err := tb.ReadTerraformBackendS3(atmosConfig, &tt.componentData, nil)
 
 			if tt.wantErr {
 				assert.Error(t, err)

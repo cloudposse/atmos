@@ -8,7 +8,6 @@ import (
 	"github.com/hashicorp/hcl/hcl/printer"
 	jsonParser "github.com/hashicorp/hcl/json/parser"
 	"github.com/hashicorp/hcl/v2/hclwrite"
-	"github.com/zclconf/go-cty/cty"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -112,20 +111,8 @@ func WriteTerraformBackendConfigToFileAsHcl(
 
 	for _, name := range backendConfigSortedKeys {
 		v := backendConfig[name]
-
-		if v == nil {
-			backendBlockBody.SetAttributeValue(name, cty.NilVal)
-		} else if i, ok := v.(string); ok {
-			backendBlockBody.SetAttributeValue(name, cty.StringVal(i))
-		} else if i, ok := v.(bool); ok {
-			backendBlockBody.SetAttributeValue(name, cty.BoolVal(i))
-		} else if i, ok := v.(int64); ok {
-			backendBlockBody.SetAttributeValue(name, cty.NumberIntVal(i))
-		} else if i, ok := v.(uint64); ok {
-			backendBlockBody.SetAttributeValue(name, cty.NumberUIntVal(i))
-		} else if i, ok := v.(float64); ok {
-			backendBlockBody.SetAttributeValue(name, cty.NumberFloatVal(i))
-		}
+		ctyVal := GoToCty(v)
+		backendBlockBody.SetAttributeValue(name, ctyVal)
 	}
 
 	f, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0o644)

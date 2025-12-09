@@ -1090,6 +1090,9 @@ func TestProcessInheritedComponent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Clear cache before each test case to ensure isolation.
+			ClearBaseComponentConfigCache()
+
 			baseComponentConfig := &schema.BaseComponentConfig{}
 			componentInheritanceChain := []string{}
 

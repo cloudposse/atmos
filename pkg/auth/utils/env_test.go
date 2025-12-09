@@ -9,8 +9,18 @@ import (
 )
 
 func TestSetEnvironmentVariable_NilSafe(t *testing.T) {
-	// Should not panic.
+	// Should not panic when called with nil stack.
+	// Use defer/recover to verify no panic occurs.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("SetEnvironmentVariable panicked with nil stack: %v", r)
+		}
+	}()
+
 	SetEnvironmentVariable(nil, "KEY", "VAL")
+
+	// Test passes if no panic occurs.
+	assert.True(t, true, "Function executed without panic on nil stack")
 }
 
 func TestSetEnvironmentVariable_SetsValues(t *testing.T) {

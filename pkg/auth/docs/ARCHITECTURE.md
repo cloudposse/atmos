@@ -166,7 +166,9 @@ identities:
     principal:
       name: AdminAccess
       account:
-        name: "123456789012"
+        name: "sandbox"
+        # OR use account ID directly:
+        # id: "123456789012"
 ```
 
 ### Identity Chaining

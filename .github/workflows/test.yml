@@ -20,26 +20,30 @@ on:
 env:
   TERRAFORM_VERSION: "1.9.7"
   OPEN_TOFU_VERSION: "1.9.1"
+  HELM_VERSION: "v3.19.2"
   HELMFILE_VERSION: "v1.1.0"
   PACKER_VERSION: "1.14.2"
 
 jobs:
   # ensure the code builds...
   build:
-    name: Build
+    name: Build (${{ matrix.target }})
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false"
             target: linux
-          - os: windows-latest
+          - os: "windows-latest"
             target: windows
-          - os: macos-latest
+          - os: "macos-latest"
             target: macos
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: runs-on/action@v1
+        if: matrix.target == 'linux'
+
       - name: Build
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         run: echo "Building on ${{ matrix.os }}"
@@ -84,18 +88,21 @@ jobs:
 
   # run acceptance tests
   test:
-    name: Acceptance Tests
-    needs: build
+    name: Acceptance Tests (${{ matrix.flavor.target }})
+    needs: [build]
     strategy:
       fail-fast: false
       matrix:
         flavor:
-          - { os: ubuntu-latest, target: linux }
-          - { os: windows-latest, target: windows }
-          - { os: macos-latest, target: macos }
+          - { os: "runs-on=${{github.run_id}}/runner=terraform/tag=atmos/extras=s3-cache/private=false", target: linux }
+          - { os: "windows-latest", target: windows }
+          - { os: "macos-latest", target: macos }
     timeout-minutes: 30
     runs-on: ${{ matrix.flavor.os }}
     steps:
+      - uses: runs-on/action@v1
+        if: matrix.flavor.target == 'linux'
+
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@v4
@@ -153,9 +160,15 @@ jobs:
         uses: helmfile/helmfile-action@v2.0.5
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
+          helm-version: ${{ env.HELM_VERSION }}
           helmfile-version: ${{ env.HELMFILE_VERSION }}
           helmfile-args: version
           helmfile-auto-init: "false"
+          helm-plugins: ""
+
+      - name: Install helm-diff plugin
+        if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
+        run: helm plugin install https://github.com/databus23/helm-diff
 
       - name: Check atmos.exe integrity
         if: matrix.flavor.target == 'windows' && ! github.event.pull_request.draft
@@ -204,7 +217,7 @@ jobs:
         run: make testacc-cover
 
       - name: Upload coverage report to Codecov
-        if: matrix.flavor.target == 'linux'
+        if: matrix.flavor.target == 'linux' && (success() || failure())
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -234,7 +247,7 @@ jobs:
           ignore: DL3008
 
       - name: Upload SARIF file
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
         with:
           # Path to SARIF file relative to the root of the repository
@@ -353,8 +366,13 @@ jobs:
       - name: Install the Cloud Posse package repository
         run: curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | sudo bash
 
-      - name: Install kubectl, helmfile, and helm
-        run: sudo apt-get -y install kubectl helmfile helm
+      - name: Install kubectl and helmfile
+        run: sudo apt-get -y install kubectl helmfile
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
 
       - name: Install helm-diff plugin
         run: helm plugin install https://github.com/databus23/helm-diff
@@ -400,6 +418,7 @@ jobs:
           # - examples/demo-stack-templating
           # - examples/demo-multi-cloud
           - examples/demo-vendoring
+          - examples/config-profiles
           - tests/fixtures/scenarios/complete
 
     timeout-minutes: 20
@@ -583,4 +602,5 @@ jobs:
     with:
       publish: false
       format: binary
+      runs-on: '["runs-on=${{github.run_id}}", "runner=large", "tag=atmos","extras=s3-cache", "private=false"]'
     secrets: inherit

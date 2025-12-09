@@ -4,12 +4,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 const (
-	ProfileFlagName  = "profile"
 	IdentityFlagName = "identity"
+	// IdentityFlagSelectValue is imported from cfg.IdentityFlagSelectValue.
+	IdentityFlagSelectValue = cfg.IdentityFlagSelectValue
 )
 
 // authCmd groups authentication-related subcommands.
@@ -24,21 +26,25 @@ var authCmd = &cobra.Command{
 func init() {
 	// Avoid adding "stack" at the group level unless subcommands require it.
 	// AddStackCompletion(authCmd)
-	authCmd.PersistentFlags().String(ProfileFlagName, "", "Specify the profile to use for authentication.")
-	authCmd.PersistentFlags().StringP(IdentityFlagName, "i", "", "Specify the target identity to assume.")
-	// Bind to Viper and env (flags > env > config > defaults).
-	if err := viper.BindEnv(ProfileFlagName, "ATMOS_PROFILE", "PROFILE"); err != nil {
-		log.Trace("Failed to bind profile environment variables", "error", err)
+	authCmd.PersistentFlags().StringP(IdentityFlagName, "i", "", "Specify the target identity to assume. Use without value to interactively select.")
+
+	// Set NoOptDefVal to enable optional flag value.
+	// When --identity is used without a value, it will receive IdentityFlagSelectValue.
+	identityFlag := authCmd.PersistentFlags().Lookup(IdentityFlagName)
+	if identityFlag != nil {
+		identityFlag.NoOptDefVal = IdentityFlagSelectValue
 	}
+
+	// Bind environment variables but NOT the flag itself.
+	// BindPFlag creates a two-way binding that can cause Viper's value to override
+	// command-line flags during parsing. Instead, commands should read the flag value
+	// first, then fall back to Viper if the flag wasn't provided.
 	if err := viper.BindEnv(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"); err != nil {
 		log.Trace("Failed to bind identity environment variables", "error", err)
 	}
-	if err := viper.BindPFlag(ProfileFlagName, authCmd.PersistentFlags().Lookup(ProfileFlagName)); err != nil {
-		log.Trace("Failed to bind profile flag", "error", err)
-	}
-	if err := viper.BindPFlag(IdentityFlagName, authCmd.PersistentFlags().Lookup(IdentityFlagName)); err != nil {
-		log.Trace("Failed to bind identity flag", "error", err)
-	}
+
+	// Add completion for identity flag.
+	AddIdentityCompletion(authCmd)
 
 	RootCmd.AddCommand(authCmd)
 }

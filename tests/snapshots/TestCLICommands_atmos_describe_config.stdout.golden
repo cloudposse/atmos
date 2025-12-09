@@ -30,7 +30,8 @@
     "packer": {
       "base_path": "",
       "command": ""
-    }
+    },
+    "Plugins": null
   },
   "stacks": {
     "base_path": "stacks",
@@ -41,7 +42,8 @@
       "**/_defaults.yaml"
     ],
     "name_pattern": "{stage}",
-    "name_template": ""
+    "name_template": "",
+    "inherit": {}
   },
   "workflows": {
     "base_path": "",
@@ -53,6 +55,13 @@
   "logs": {
     "file": "/dev/stderr",
     "level": "Info"
+  },
+  "errors": {
+    "format": {},
+    "sentry": {
+      "enabled": false,
+      "dsn": ""
+    }
   },
   "integrations": {
     "atlantis": {}
@@ -74,7 +83,7 @@
     "list_merge_strategy": "",
     "terminal": {
       "max_width": 0,
-      "pager": "0",
+      "pager": "false",
       "unicode": false,
       "syntax_highlighting": {
         "enabled": false,
@@ -85,7 +94,10 @@
         "wrap": false
       },
       "color": true,
-      "no_color": false
+      "no_color": false,
+      "mask": {
+        "enabled": false
+      }
     },
     "docs": {
       "max_width": 0,
@@ -124,11 +136,12 @@
     "InjectGithubToken": true,
     "GithubToken": "",
     "AtmosGithubToken": "",
-    "InjectBitbucketToken": false,
+    "GithubUsername": "",
+    "InjectBitbucketToken": true,
     "BitbucketToken": "",
     "AtmosBitbucketToken": "",
     "BitbucketUsername": "",
-    "InjectGitlabToken": false,
+    "InjectGitlabToken": true,
     "AtmosGitlabToken": "",
     "GitlabToken": "",
     "pro": {
@@ -154,6 +167,7 @@
     }
   },
   "initialized": true,
+  "basePathAbsolute": "/absolute/path/to/repo/examples/demo-stacks",
   "stacksBaseAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/stacks",
   "includeStackAbsolutePaths": [
     "/absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*"
@@ -166,11 +180,8 @@
   "packerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
-    "Check": {
-      "Enabled": false,
-      "Timeout": 0,
-      "Frequency": ""
-    }
+    "check": {},
+    "constraint": {}
   },
   "validate": {
     "editorconfig": {}
@@ -192,6 +203,7 @@
       "file": "",
       "level": ""
     },
+    "keyring": {},
     "providers": null,
     "identities": null
   },
@@ -201,5 +213,7 @@
     "host": "",
     "file": "",
     "profile_type": ""
-  }
+  },
+  "profiles": {},
+  "metadata": {}
 }

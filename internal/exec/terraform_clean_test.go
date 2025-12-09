@@ -44,24 +44,9 @@ func TestCLITerraformClean(t *testing.T) {
 		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
 	}
 
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
 	// Define the work directory and change to it
 	workDir := "../../tests/fixtures/scenarios/terraform-sub-components"
-	if err := os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	var infoApply schema.ConfigAndStacksInfo
 	infoApply.SubCommand = "apply"
@@ -232,19 +217,6 @@ func TestIsValidDataDir(t *testing.T) {
 }
 
 func TestCollectComponentsDirectoryObjects(t *testing.T) {
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
 	// Define the test cases
 	tests := []struct {
 		name                 string

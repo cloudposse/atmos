@@ -1,26 +1,10 @@
 package homedir
 
 import (
-	"os"
 	"os/user"
 	"path/filepath"
 	"testing"
 )
-
-func patchEnv(key, value string) func() {
-	bck := os.Getenv(key)
-	deferFunc := func() {
-		os.Setenv(key, bck)
-	}
-
-	if value != "" {
-		os.Setenv(key, value)
-	} else {
-		os.Unsetenv(key)
-	}
-
-	return deferFunc
-}
 
 func BenchmarkDir(b *testing.B) {
 	// We do this for any "warmups"
@@ -35,6 +19,9 @@ func BenchmarkDir(b *testing.B) {
 }
 
 func TestDir(t *testing.T) {
+	Reset() // Clear cache from any previous tests
+	defer Reset()
+
 	u, err := user.Current()
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -51,7 +38,7 @@ func TestDir(t *testing.T) {
 
 	DisableCache = true
 	defer func() { DisableCache = false }()
-	defer patchEnv("HOME", "")()
+	t.Setenv("HOME", "")
 	dir, err = Dir()
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -62,7 +49,59 @@ func TestDir(t *testing.T) {
 	}
 }
 
+func TestReset_ClearsCache(t *testing.T) {
+	// First call to populate cache.
+	dir1, err := Dir()
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	// Set a different HOME and reset cache.
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	Reset()
+
+	// Dir() should now return the new HOME from env var.
+	dir2, err := Dir()
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+
+	if dir1 == dir2 {
+		t.Fatalf("Reset() did not clear cache: both calls returned %q", dir1)
+	}
+
+	if dir2 != tmpDir {
+		t.Fatalf("After Reset(), expected Dir() to return %q, got %q", tmpDir, dir2)
+	}
+}
+
+func TestReset_WorksAcrossMultipleTests(t *testing.T) {
+	// This test reproduces the issue where Reset() doesn't work properly
+	// when tests are run multiple times (go test -count=2).
+
+	for i := 0; i < 3; i++ {
+		t.Run("iteration", func(t *testing.T) {
+			tmpDir := t.TempDir()
+			t.Setenv("HOME", tmpDir)
+			Reset()
+
+			dir, err := Dir()
+			if err != nil {
+				t.Fatalf("iteration %d: err: %s", i, err)
+			}
+
+			if dir != tmpDir {
+				t.Fatalf("iteration %d: expected Dir() to return %q, got %q", i, tmpDir, dir)
+			}
+		})
+	}
+}
+
 func TestExpand(t *testing.T) {
+	Reset() // Clear cache from any previous tests
+	defer Reset()
+
 	u, err := user.Current()
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -117,8 +156,8 @@ func TestExpand(t *testing.T) {
 
 	DisableCache = true
 	defer func() { DisableCache = false }()
-	defer patchEnv("HOME", "/custom/path/")()
-	expected := filepath.Join(string(filepath.Separator), "custom", "path", "foo", string(filepath.Separator), "bar")
+	t.Setenv("HOME", "/custom/path/")
+	expected := filepath.Join(string(filepath.Separator), "custom", "path", "foo", "bar")
 	actual, err := Expand("~/foo/bar")
 
 	if err != nil {

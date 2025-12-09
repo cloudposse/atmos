@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,22 +13,21 @@ import (
 func TestAbstractComponentBackendGeneration(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/abstract-component-backend"
 
-	// Save current directory and restore after test.
-	startingDir, err := os.Getwd()
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(startingDir)
-	})
-
 	// Change to the test directory.
-	err = os.Chdir(workDir)
-	require.NoError(t, err)
+	t.Chdir(workDir)
 
 	component := "eks/service/app1"
 	stack := "tenant1-ue2-dev"
 
 	// Describe the component to get its configuration.
-	componentSection, err := ExecuteDescribeComponent(component, stack, false, false, []string{})
+	componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false,
+		Skip:                 []string{},
+		AuthManager:          nil,
+	})
 	require.NoError(t, err, "ExecuteDescribeComponent should work for component inheriting from abstract component")
 
 	// Verify that the component section is not nil.

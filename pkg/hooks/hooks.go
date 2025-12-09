@@ -30,7 +30,14 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 		}, nil
 	}
 
-	sections, err := e.ExecuteDescribeComponent(info.ComponentFromArg, info.Stack, true, true, []string{})
+	sections, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            info.ComponentFromArg,
+		Stack:                info.Stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{},
+		AuthManager:          nil,
+	})
 	if err != nil {
 		return &Hooks{}, fmt.Errorf("failed to execute describe component: %w", err)
 	}

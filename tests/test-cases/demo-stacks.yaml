@@ -11,7 +11,7 @@ tests:
     expect:
       diff: []
       stdout:
-        - "Available Commands:"
+        - "AVAILABLE COMMANDS"
         - "\\bauth\\b"
         - "\\batlantis\\b"
         - "\\baws\\b"
@@ -29,8 +29,10 @@ tests:
         - "\\bvendor\\b"
         - "\\bversion\\b"
         - "\\bworkflow\\b"
-        - "Flags:"
+        - "FLAGS"
         - "for more information about a command"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   - name: atmos version
@@ -49,9 +51,9 @@ tests:
       exit_code: 0
 
   - name: atmos version --check
-    enabled: true
+    enabled: false
     snapshot: false
-    description: "Verify atmos version --check command functions correctly."
+    description: "Verify atmos version --check command functions correctly (disabled - requires network, fails with GitHub API rate limits)"
     workdir: "../examples/demo-stacks"
     env:
       ATMOS_LOGS_LEVEL: "Warning"

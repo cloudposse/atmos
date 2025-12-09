@@ -13,6 +13,7 @@ import (
 	_ "github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsUtils "github.com/cloudposse/atmos/internal/aws_utils"
@@ -54,25 +55,34 @@ type S3API interface {
 // It's a map[string]S3API.
 var s3ClientCache sync.Map
 
-func getCachedS3Client(backend *map[string]any) (S3API, error) {
+func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext) (S3API, error) {
 	region := GetBackendAttribute(backend, "region")
 	roleArn := GetS3BackendAssumeRoleArn(backend)
 
-	// Build a deterministic cache key
+	// Build a deterministic cache key including auth profile if present.
 	cacheKey := fmt.Sprintf("region=%s;role_arn=%s", region, roleArn)
+	if authContext != nil && authContext.AWS != nil {
+		cacheKey += fmt.Sprintf(";profile=%s", authContext.AWS.Profile)
+	}
 
-	// Check the cache
+	// Check the cache.
 	if cached, ok := s3ClientCache.Load(cacheKey); ok {
 		return cached.(S3API), nil
 	}
 
-	// Build the S3 client if not cached
+	// Build the S3 client if not cached.
 	// 30 sec timeout to configure an AWS client (and assume a role if provided).
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// The minimum `assume role` duration allowed by AWS is 15 minutes
-	cfg, err := awsUtils.LoadAWSConfig(ctx, region, roleArn, 15*time.Minute)
+	// Extract AWS auth context.
+	var awsAuthContext *schema.AWSAuthContext
+	if authContext != nil {
+		awsAuthContext = authContext.AWS
+	}
+
+	// The minimum `assume role` duration allowed by AWS is 15 minutes.
+	cfg, err := awsUtils.LoadAWSConfigWithAuth(ctx, region, roleArn, 15*time.Minute, awsAuthContext)
 	if err != nil {
 		return nil, err
 	}
@@ -87,12 +97,13 @@ func getCachedS3Client(backend *map[string]any) (S3API, error) {
 func ReadTerraformBackendS3(
 	_ *schema.AtmosConfiguration,
 	componentSections *map[string]any,
+	authContext *schema.AuthContext,
 ) ([]byte, error) {
 	defer perf.Track(nil, "terraform_backend.ReadTerraformBackendS3")()
 
 	backend := GetComponentBackend(componentSections)
 
-	s3Client, err := getCachedS3Client(&backend)
+	s3Client, err := getCachedS3Client(&backend, authContext)
 	if err != nil {
 		return nil, err
 	}
@@ -134,16 +145,26 @@ func ReadTerraformBackendS3Internal(
 			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
 			var nsk *types.NoSuchKey
 			if errors.As(err, &nsk) {
-				log.Debug("Terraform state file doesn't exist in the S3 bucket; returning 'null'", "file", tfStateFilePath, "bucket", bucket)
+				log.Debug("Terraform state file doesn't exist in the S3 bucket; returning 'null'", "file", tfStateFilePath, log.FieldBucket, bucket)
 				return nil, nil
 			}
 
 			lastErr = err
 			if attempt < maxRetryCount {
-				log.Debug("Failed to read Terraform state file from the S3 bucket", "attempt", attempt+1, "file", tfStateFilePath, "bucket", bucket, "error", err)
-				time.Sleep(time.Second * 2) // backoff
+				// Exponential backoff: 1s, 2s, 4s for attempts 0, 1, 2.
+				backoff := time.Second * time.Duration(1<<attempt)
+				log.Debug("Failed to read Terraform state file from the S3 bucket",
+					"attempt", attempt+1,
+					"file", tfStateFilePath,
+					log.FieldBucket, bucket,
+					"error", err,
+					"backoff", backoff,
+				)
+				time.Sleep(backoff)
 				continue
 			}
+			// Retries exhausted - log warning with error details to help diagnose the issue.
+			logS3RetryExhausted(err, tfStateFilePath, bucket, maxRetryCount)
 			return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromS3, lastErr)
 		}
 
@@ -158,4 +179,31 @@ func ReadTerraformBackendS3Internal(
 	}
 
 	return nil, fmt.Errorf("%w: %v", errUtils.ErrGetObjectFromS3, lastErr)
+}
+
+// logS3RetryExhausted logs a warning when all retries are exhausted for S3 operations.
+// This helps users report issues by providing the error code and details.
+func logS3RetryExhausted(err error, tfStateFilePath, bucket string, maxRetries int) {
+	defer perf.Track(nil, "terraform_backend.logS3RetryExhausted")()
+
+	// Extract AWS API error code if available.
+	var apiErr smithy.APIError
+	errorCode := "unknown"
+	if errors.As(err, &apiErr) {
+		errorCode = apiErr.ErrorCode()
+	}
+
+	// Check for context timeout.
+	if errors.Is(err, context.DeadlineExceeded) {
+		errorCode = "timeout"
+	}
+
+	log.Warn(
+		"Failed to read Terraform state after all retries exhausted",
+		"file", tfStateFilePath,
+		log.FieldBucket, bucket,
+		"attempts", maxRetries+1,
+		"error_code", errorCode,
+		"error", err,
+	)
 }

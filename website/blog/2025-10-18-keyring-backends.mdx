@@ -1,0 +1,275 @@
+---
+slug: flexible-keyring-backends
+title: 'Flexible Keyring Backends: System, File, and Memory Storage for Credentials'
+authors:
+  - aknysh
+tags:
+  - feature
+  - security
+date: 2025-10-18T00:00:00.000Z
+release: v1.196.0
+---
+
+Atmos Auth supports flexible keyring backends, giving you control over how authentication credentials are stored. Use your **system keyring** for native OS integration, **file-based keyrings** to share credentials across OS boundaries (like between your Mac and a Docker container), or **memory keyrings** for testing.
+
+<!--truncate-->
+
+## Why Different Keyring Types Matter
+
+Different environments have different credential storage needs:
+
+**System keyrings are great for personal workstations**, where OS-native security (macOS Keychain, Windows Credential Manager, Linux Secret Service) provides tight integration with your operating system.
+
+**File-based keyrings solve cross-boundary problems**. When you're working across OS boundaries—like developing on macOS but running commands in a Docker container, or using a Dev Container in VS Code—your system keyring isn't accessible inside the container. A file-based keyring can be mounted into the container, giving you seamless credential access across both environments.
+
+**Memory keyrings are perfect for testing and CI/CD**, where you need fast, isolated credential storage without external dependencies or security concerns.
+
+## Flexible Keyring Backends
+
+Atmos now supports three keyring backends, selectable via configuration or environment variable:
+
+### 1. **System Keyring** (Default)
+
+OS-native secure credential storage using your operating system's built-in keyring. This is the default and requires no configuration.
+
+```yaml
+# atmos.yaml (optional - this is the default)
+auth:
+  keyring:
+    type: system
+```
+
+**Best for**: Personal workstations where OS-level security is preferred.
+
+**Features**:
+- ✅ OS-native secure storage
+- ✅ Integration with system password managers
+- ❌ Cannot list all stored credentials (API limitation)
+- ❌ May not be available in CI/headless environments
+
+### 2. **File Keyring**
+
+Encrypted file-based storage using [99designs/keyring](https://github.com/99designs/keyring) with interactive password prompting via Charm Bracelet's `huh` library.
+
+```yaml
+# atmos.yaml
+auth:
+  keyring:
+    type: file
+    spec:
+      path: ~/.atmos/keyring  # Optional: custom path
+      password_env: ATMOS_KEYRING_PASSWORD  # Optional: env var for password
+```
+
+**Best for**: Shared environments, servers, or when you need portability across different machines.
+
+**Features**:
+- ✅ AES-256 encryption
+- ✅ Cross-platform (works anywhere)
+- ✅ Supports listing all stored credentials
+- ✅ Interactive password prompting (with `huh`)
+- ✅ Automation-friendly (password via environment variable)
+- ⚠️ Requires password management
+
+**Password Resolution**:
+1. Check `ATMOS_KEYRING_PASSWORD` environment variable (or custom env var from `password_env`)
+2. Prompt interactively if TTY is available (using Charm Bracelet's secure input)
+3. Error if neither is available
+
+**Example Usage**:
+```shell
+# Interactive mode - you'll be prompted for password
+atmos auth login --identity prod-admin
+
+# Automation mode - password from environment
+export ATMOS_KEYRING_PASSWORD="my-secure-password"
+atmos auth login --identity prod-admin
+```
+
+### 3. **Memory Keyring** (Testing Only)
+
+In-memory credential storage with no persistence. Credentials are lost when the process exits.
+
+```yaml
+# atmos.yaml (or set ATMOS_KEYRING_TYPE=memory)
+auth:
+  keyring:
+    type: memory
+```
+
+**Best for**: Unit tests, integration tests, and CI/CD pipelines where you need fast, isolated credential storage without external dependencies.
+
+**Features**:
+- ✅ No external dependencies
+- ✅ Thread-safe concurrent access
+- ✅ Supports listing all stored credentials
+- ✅ Perfect for testing
+- ⚠️ Not persistent (ephemeral)
+- ⚠️ Not encrypted (testing only!)
+
+**CI/CD Example**:
+```yaml
+# .github/workflows/test.yml
+env:
+  ATMOS_KEYRING_TYPE: memory
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Auth Tests
+        run: go test ./pkg/auth/...
+```
+
+## Configuration Priority
+
+Keyring backend selection follows this priority order:
+
+1. **`ATMOS_KEYRING_TYPE` environment variable** (highest priority - great for testing)
+2. **`auth.keyring.type` in atmos.yaml** (explicit configuration)
+3. **Default to `system`** (backward compatibility)
+
+This means you can override the configured backend for testing:
+
+```shell
+# Override to memory keyring for this session
+export ATMOS_KEYRING_TYPE=memory
+atmos auth login --identity test-identity
+```
+
+## Real-World Use Cases
+
+### Personal Development
+
+Use the default system keyring for secure, OS-integrated credential storage:
+
+```yaml
+# atmos.yaml (no keyring config needed)
+auth:
+  providers:
+    my-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://mycompany.awsapps.com/start
+```
+
+Your credentials are stored in macOS Keychain, Windows Credential Manager, or Linux Secret Service.
+
+### Docker / Dev Container Development
+
+Use file keyring to share credentials between your host machine and containers:
+
+```yaml
+# atmos.yaml
+auth:
+  keyring:
+    type: file
+    spec:
+      path: ~/.atmos/keyring
+      password_env: ATMOS_KEYRING_PASSWORD
+```
+
+Mount the keyring into your container:
+
+```yaml
+# docker-compose.yml or devcontainer.json
+volumes:
+  - ~/.atmos/keyring:/root/.atmos/keyring:ro
+```
+
+Now credentials authenticated on your Mac are available inside your Docker container. Your system keyring isn't accessible across the OS boundary, but the file-based keyring is.
+
+### CI/CD Pipeline
+
+Use memory keyring for fast, isolated testing without external dependencies:
+
+```yaml
+# .github/workflows/integration.yml
+env:
+  ATMOS_KEYRING_TYPE: memory
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Integration Tests
+        run: |
+          # Tests use memory keyring - fast, isolated, no dependencies
+          go test ./pkg/auth/...
+```
+
+### Local Testing
+
+Override the configured backend for local testing:
+
+```shell
+# Test with memory keyring (no persistence)
+ATMOS_KEYRING_TYPE=memory atmos auth login --identity test
+
+# Test with file keyring
+ATMOS_KEYRING_TYPE=file ATMOS_KEYRING_PASSWORD=test atmos auth login --identity test
+```
+
+## Security Considerations
+
+### System Keyring
+- Credentials protected by OS-level security
+- Access controlled by OS permissions
+- Password prompts managed by OS
+
+### File Keyring
+- AES-256 encryption
+- File permissions: 0600 (user read/write only)
+- Password never logged or stored
+- Password required for each process (or from environment variable)
+
+### Memory Keyring
+- ⚠️ **NOT for production use**
+- No encryption (plain text in memory)
+- No persistence (ephemeral)
+- Perfect for testing where security is not a concern
+
+## What This Gives You
+
+- **Cross-boundary credential access**: Use file-based keyrings to share credentials between your host and Docker/Dev containers
+- **Flexible storage**: Choose the backend that fits your environment—system keyring for personal use, file keyring for portability, memory keyring for testing
+- **CI/CD friendly**: Run auth tests reliably without system keyring dependencies
+
+## Try It Out
+
+The keyring backend system is available now. To use memory keyring for testing:
+
+```shell
+export ATMOS_KEYRING_TYPE=memory
+atmos auth login --identity your-identity
+```
+
+To use file keyring:
+
+```yaml
+# atmos.yaml
+auth:
+  keyring:
+    type: file
+    spec:
+      password_env: ATMOS_KEYRING_PASSWORD
+```
+
+Then set the password and authenticate:
+
+```shell
+export ATMOS_KEYRING_PASSWORD="your-secure-password"
+atmos auth login --identity your-identity
+```
+
+## Get Involved
+
+We'd love to hear your feedback! If you have questions or suggestions:
+
+- [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
+- [GitHub Issues](https://github.com/cloudposse/atmos/issues)
+- [Cloud Posse Slack](https://cloudposse.com/slack/)
+
+This feature improves testing reliability, enables new deployment patterns, and gives teams more control over credential storage without sacrificing security.

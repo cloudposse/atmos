@@ -1,0 +1,359 @@
+---
+title: atmos auth console
+sidebar_label: console
+sidebar_class_name: command
+id: console
+description: Open cloud provider web console in your default browser using authenticated credentials.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to quickly access your cloud provider's web console (AWS, Azure, GCP) using your authenticated Atmos identity credentials, eliminating the need to manually copy credentials or log in separately.
+</Intro>
+
+<Screengrab title="atmos auth console --help" slug="atmos-auth-console--help" />
+
+## Usage
+
+```shell
+atmos auth console [flags]
+```
+
+This command generates a temporary, secure sign-in URL using your authenticated identity's credentials and automatically opens it in your default browser. The URL is valid for a limited time and provides seamless access to the cloud provider's web console.
+
+## Examples
+
+### Basic Usage
+
+```shell
+# Open console with default identity
+atmos auth console
+
+# Interactively select identity
+atmos auth console --identity
+
+# Open console with specific identity
+atmos auth console --identity prod-admin
+
+# Use short form of identity flag
+atmos auth console -i prod-admin
+
+# Interactive selection with short form
+atmos auth console -i
+```
+
+### AWS-Specific Examples
+
+#### Using Service Aliases (Shorthand)
+
+Atmos supports convenient aliases for common AWS services - just use the service name:
+
+```shell
+# Open AWS S3 console (shorthand)
+atmos auth console --destination s3
+```
+
+```shell
+# Open AWS EC2 console
+atmos auth console --destination ec2
+```
+
+```shell
+# Open AWS Lambda console
+atmos auth console --destination lambda
+```
+
+```shell
+# Open AWS CloudFormation console
+atmos auth console --destination cloudformation
+```
+
+```shell
+# Open AWS RDS console
+atmos auth console --destination rds
+```
+
+```shell
+# Open AWS DynamoDB console
+atmos auth console --destination dynamodb
+```
+
+**Available Aliases:** Atmos supports 100+ AWS service aliases including: `s3`, `ec2`, `lambda`, `dynamodb`, `rds`, `vpc`, `iam`, `cloudformation`, `cloudwatch`, `eks`, `ecs`, `sagemaker`, `bedrock`, and many more. Aliases are case-insensitive.
+
+#### Using Full URLs
+
+You can also use complete AWS console URLs for specific pages:
+
+```shell
+# Open AWS S3 console (full URL)
+atmos auth console --destination https://console.aws.amazon.com/s3
+```
+
+```shell
+# Open AWS EC2 console with longer session
+atmos auth console --destination https://console.aws.amazon.com/ec2 --duration 4h
+```
+
+#### Other Options
+
+```shell
+# Custom issuer name (appears in AWS console URL)
+atmos auth console --issuer my-organization
+```
+
+### Scripting and Automation
+
+```shell
+# Print URL to stdout without opening browser
+atmos auth console --print-only
+```
+
+```shell
+# Copy URL to clipboard (macOS)
+atmos auth console --print-only | pbcopy
+```
+
+```shell
+# Copy URL to clipboard (Linux)
+atmos auth console --print-only | xclip
+```
+
+```shell
+# Generate URL but don't auto-open browser
+atmos auth console --no-open
+```
+
+### Advanced Examples
+
+```shell
+# Combine options for specific use case (using alias)
+atmos auth console \
+  --identity prod-admin \
+  --destination cloudformation \
+  --duration 2h \
+  --issuer devops-team
+```
+
+```shell
+# Access machine learning services
+atmos auth console --destination sagemaker
+atmos auth console --destination bedrock
+```
+
+```shell
+# Security and compliance services
+atmos auth console --destination guardduty
+atmos auth console --destination securityhub
+atmos auth console --destination iam
+```
+
+## Flags
+
+<dl>
+  <dt>`--identity` / `-i`</dt>
+  <dd>
+    Specify the Atmos identity to use for console access. This flag has three modes:
+
+    - **With value** (`--identity admin`): Use the specified identity
+    - **Without value** (`--identity`): Show interactive selector to choose identity
+    - **Omitted**: Use the default identity configured in `atmos.yaml`, or prompt if no default is set
+
+    **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
+  </dd>
+
+  <dt>`--destination`</dt>
+  <dd>
+    The specific console page or service to navigate to after authentication. Provider-specific URL format.
+
+    **AWS Examples:**
+    - `https://console.aws.amazon.com/s3` - S3 console
+    - `https://console.aws.amazon.com/ec2` - EC2 console
+    - `https://console.aws.amazon.com/cloudformation` - CloudFormation console
+
+    **Default:** Provider's main console page
+  </dd>
+
+  <dt>`--duration`</dt>
+  <dd>
+    The requested duration for the console session. Providers may enforce maximum limits.
+
+    **AWS:** Maximum 12 hours
+
+    **Default:** 1 hour, or the provider's `console.session_duration` configuration
+
+    **Format:** Go duration (e.g., `1h`, `2h30m`, `12h`)
+
+    **Example:** `--duration 4h`
+
+    **Note:** This flag overrides the provider's `console.session_duration` setting when specified.
+  </dd>
+
+  <dt>`--issuer`</dt>
+  <dd>
+    An identifier that appears in the console URL (AWS only). Useful for tracking or organizational purposes.
+
+    **Default:** `atmos`
+    **Example:** `--issuer my-team`
+  </dd>
+
+  <dt>`--print-only`</dt>
+  <dd>
+    Print the console URL to stdout instead of opening a browser. Useful for scripting or when you want to manually control when/how the URL is opened.
+
+    **Example:** `atmos auth console --print-only | pbcopy`
+  </dd>
+
+  <dt>`--no-open`</dt>
+  <dd>
+    Generate the console URL and display it, but don't automatically open the browser. The URL is still shown in the terminal output.
+
+    **Example:** `atmos auth console --no-open`
+  </dd>
+</dl>
+
+## How It Works
+
+### AWS Console Access
+
+For AWS identities, Atmos uses the [AWS Federation Endpoint](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_enable-console-custom-url.html) to generate temporary console sign-in URLs:
+
+1. **Authentication**: Atmos authenticates using your configured identity (AWS SSO, SAML, etc.) to obtain temporary credentials with a session token.
+
+2. **Federation Token**: The temporary credentials are sent to the AWS federation endpoint (`https://signin.aws.amazon.com/federation`) to request a signin token.
+
+3. **Console URL**: Atmos constructs a special URL containing the signin token that automatically logs you into the AWS console.
+
+4. **Browser Launch**: The URL is opened in your default browser, providing instant access to the AWS console.
+
+:::tip Security Note
+Console signin tokens are valid for 15 minutes and should be treated as sensitive. Never share console URLs or paste them in logs or chat applications.
+:::
+
+### Azure and GCP (Coming Soon)
+
+Support for Azure Portal and Google Cloud Console is planned for future releases. The command structure will remain the same across all providers.
+
+## Provider Support
+
+| Provider | Status | Notes |
+|----------|--------|-------|
+| AWS (IAM Identity Center) | ✅ Supported | Full support with federation endpoint |
+| AWS (SAML) | ✅ Supported | Full support with federation endpoint |
+| Azure | 🚧 Planned | Coming in future release |
+| GCP | 🚧 Planned | Coming in future release |
+
+## Common Use Cases
+
+### Quick Access During Incidents
+
+```shell
+# Rapidly access production AWS console during an incident
+atmos auth console --identity prod-oncall --duration 2h
+```
+
+### Multi-Account Workflows
+
+```shell
+# Switch between different account consoles
+atmos auth console --identity dev-account
+atmos auth console --identity staging-account
+atmos auth console --identity prod-account
+```
+
+### CI/CD Integration
+
+```shell
+# Generate console URL in CI/CD for manual verification
+CONSOLE_URL=$(atmos auth console --print-only)
+echo "Deployment complete. Verify at: $CONSOLE_URL"
+```
+
+### Team Collaboration
+
+```shell
+# Use custom issuer to track which team opened the console
+atmos auth console --issuer platform-team --duration 4h
+```
+
+## Troubleshooting
+
+### "session token required for console access"
+
+**Problem**: You're using permanent IAM user credentials instead of temporary credentials.
+
+**Solution**: AWS console access requires temporary credentials with a session token. Ensure your identity is configured to use AWS SSO, SAML, or assumed roles.
+
+### "Failed to open browser automatically"
+
+**Problem**: The system couldn't automatically launch your default browser.
+
+**Solution**: Use `--print-only` to get the URL and manually paste it into your browser, or copy it to your clipboard:
+
+```shell
+atmos auth console --print-only | pbcopy  # macOS
+atmos auth console --print-only | xclip   # Linux
+```
+
+### "provider does not support web console access"
+
+**Problem**: The authenticated identity's provider doesn't support console access yet.
+
+**Solution**: Check the Provider Support table above. Azure and GCP support is coming soon.
+
+## Configuration
+
+You can configure default console session duration for providers in your `atmos.yaml`:
+
+```yaml
+auth:
+  providers:
+    aws-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://mycompany.awsapps.com/start
+
+      # Session duration for programmatic credentials (auth shell, auth env)
+      session:
+        duration: 1h
+
+      # Console session duration for web browser access (auth console)
+      console:
+        session_duration: 12h  # Maximum for AWS
+```
+
+### Configuration Options
+
+<dl>
+  <dt>`console.session_duration`</dt>
+  <dd>
+    Default session duration for web console access when using this provider.
+
+    **Format:** Go duration string (e.g., `1h`, `4h`, `12h`)
+
+    **AWS Maximum:** 12 hours
+
+    **Default:** 1 hour if not specified
+
+    **Override:** Use the `--duration` flag to override this setting per command
+  </dd>
+</dl>
+
+### Session Duration vs Signin Token Expiration
+
+It's important to understand the difference between two types of timeouts:
+
+1. **Signin Token Expiration (15 minutes, AWS-enforced)**: After generating a console URL, you have 15 minutes to click the link before it expires. This cannot be configured.
+
+2. **Console Session Duration (configurable up to 12 hours)**: Once you're logged into the console, this controls how long you stay authenticated before being logged out. This is configured via `console.session_duration` or the `--duration` flag.
+
+## Related Commands
+
+- [`atmos auth login`](/cli/commands/auth/login) - Authenticate with a configured identity
+- [`atmos auth whoami`](/cli/commands/auth/whoami) - Display current authentication info
+- [`atmos auth env`](/cli/commands/auth/env) - Export credentials as environment variables
+
+## See Also
+
+- [AWS Console Federation](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_enable-console-custom-url.html)

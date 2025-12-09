@@ -1,0 +1,858 @@
+---
+title: Continuous Version Deployment
+sidebar_position: 2
+sidebar_label: Continuous Version Deployment
+description: Continuous Version Deployment - The recommended trunk-based deployment strategy with automated progressive rollout
+id: continuous-version-deployment
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+**Continuous Version Deployment** is the recommended trunk-based deployment strategy where environments progressively converge to whatever component path they reference in stack configurations. All environments work from the main branch trunk, with automated testing and deployment pipelines controlling progressive rollout. This strategy decouples release from deployment using automation rather than version control strategies, promoting automated convergence while maintaining safety through comprehensive testing.
+</Intro>
+
+This strategy represents the sweet spot for most organizations—simple enough to understand and operate, yet powerful enough to handle complex deployment scenarios. By deploying all environments from the same trunk and using automation to control the rollout, teams can move fast with confidence while maintaining visibility into change impacts across their entire infrastructure.
+
+Within this strategy, you can organize your components using different folder structures depending on your needs: simple [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning), [Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels), or [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning).
+
+:::tip Folder Organization Approaches
+This deployment strategy supports multiple folder organization approaches. Most components use simple folder-based versioning, while specific components requiring planned divergence can use release tracks or strict version pinning. See the [Planned Divergence](#planned-divergence) section for detailed examples of combining approaches.
+:::
+
+<KeyPoints>
+- All environments deploy commits from the main branch trunk (trunk-based development)
+- Environments converge to the same commit through automated progressive rollout
+- Controlled, time-bound divergence during deployment pipeline execution
+- Changes are immediately visible across all environments during planning
+- Automation drives convergence, reducing operational overhead and drift
+</KeyPoints>
+
+## Strategy Overview
+
+Continuous Version Deployment is the overarching trunk-based deployment strategy where environments progressively converge to whatever component path they reference in their stack configurations. The key principle: whatever component folder your stack references, your environment will converge to that version through automated progressive rollout.
+
+Instead of managing different versions per environment through Git branching, you use:
+
+1. **Automated testing pipelines** to validate changes before they reach production
+2. **Progressive deployment strategies** to roll out commits incrementally across environments
+3. **Environment-specific configuration** to control behavior per environment
+4. **CI/CD automation** to orchestrate the convergence process
+
+This approach aligns with modern DevOps practices and trunk-based development, where the main branch is always deployable and releases are controlled through automation. Environments naturally diverge during the rollout window (while the pipeline executes), then automatically converge once the deployment completes.
+
+## Folder Organization Approaches
+
+Within this deployment strategy, you can organize your component folders in different ways depending on your needs:
+
+**[Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)** - The foundational approach with simple folders (`vpc/`, `eks/`, `rds/`). All environments typically reference the same component folder and converge to it. This is the recommended starting point and what most teams use for most components.
+
+**[Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)** - Organizes components into named channels (`alpha/vpc`, `beta/vpc`, `prod/vpc`). Environments subscribe to tracks and converge to whatever version is in their track.
+
+**[Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)** - Uses explicit SemVer versions (`vpc/1.2.3`, `vpc/2.0.0`). Works well when vendoring from external sources or managing shared component libraries.
+
+All these approaches share the same deployment philosophy: environments converge to the component path they reference through progressive automated rollout.
+
+:::tip Component Sourcing
+These folder organization approaches work seamlessly with [Vendoring Component Versions](/design-patterns/version-management/vendoring-components). Atmos makes explicit what other tools do implicitly—instead of just-in-time cloning to temp folders, we vendor components locally for visibility, searchability, and operational control. See the [Component Sourcing Philosophy](/design-patterns/version-management#component-sourcing-philosophy) for why this approach emerged from countless projects.
+:::
+
+## How It Works
+
+### Basic Structure
+
+All your stack configurations reference the same components without version qualifiers:
+
+<Tabs>
+<TabItem value="dev" label="Development">
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc  # Same component for all environments
+      vars:
+        environment: dev
+        cidr_block: "10.0.0.0/16"
+        enable_nat_gateway: false  # Dev-specific configuration
+```
+</File>
+</TabItem>
+
+<TabItem value="staging" label="Staging">
+<File title="stacks/staging/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc  # Same component version as dev
+      vars:
+        environment: staging
+        cidr_block: "10.1.0.0/16"
+        enable_nat_gateway: true  # Staging-specific configuration
+```
+</File>
+</TabItem>
+
+<TabItem value="prod" label="Production">
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc  # Same component version everywhere
+      vars:
+        environment: prod
+        cidr_block: "10.2.0.0/16"
+        enable_nat_gateway: true
+        enable_flow_logs: true  # Prod-specific configuration
+```
+</File>
+</TabItem>
+</Tabs>
+
+### Deployment Pipeline
+
+The key to this pattern is a robust deployment pipeline that validates changes progressively. Your CI/CD system orchestrates the convergence process:
+
+**Validation Stage** (on pull request):
+1. Run `terraform validate` and security scans (tfsec, checkov, etc.)
+2. Execute policy checks (OPA, Sentinel)
+3. Generate and display terraform plans for all environments
+4. Provide visibility into what will change across dev, staging, and production
+
+**Progressive Deployment** (after merge to main):
+1. **Dev deployment**: Automatically deploy to development environment
+2. **Dev validation**: Run smoke tests and basic functionality checks
+3. **Staging deployment**: Deploy to staging after dev validation passes
+4. **Staging validation**: Execute comprehensive integration and performance tests
+5. **Production approval**: Require manual approval or wait for time-based gate
+6. **Production deployment**: Deploy to production with monitoring
+7. **Production validation**: Post-deployment health checks and alerting
+
+**Monitoring & Rollback**:
+1. Track deployment metrics and error rates
+2. Configure automated alerts for anomalies
+3. Maintain rollback procedures (revert commit + re-run pipeline)
+
+## Decoupling Release from Deployment
+
+A core principle of this pattern is separating deployment (putting code in an environment) from release (making changes available to users). The industry has established that this decoupling increases speed and stability.
+
+> Decoupling deploy from release increases speed and stability when delivering software.
+>
+> — [LaunchDarkly](https://launchdarkly.com/blog/why-decouple-deployments-from-releases/)
+
+> More-frequent deployments reduce the risk associated with change, while business stakeholders retain control over when features are released to end users.
+>
+> — [Thoughtworks Technology Radar](https://www.thoughtworks.com/radar/techniques/decoupling-deployment-from-release)
+
+While application teams often achieve this through runtime feature flags (LaunchDarkly, [Thoughtworks Feature Toggles](https://www.thoughtworks.com/radar/techniques/decoupling-deployment-from-release)), infrastructure-as-code benefits from a different approach:
+
+**Atmos decouples through progressive deployment automation** - where CI/CD gates control when environments receive changes, and comprehensive plan previews enable informed release decisions.
+
+### How Atmos Achieves Decoupling
+
+**Deployment**: Merge to main declares intent to deploy everywhere<br/>
+**Release**: CI/CD gates control WHEN each environment actually gets the changes<br/>
+**Preview**: See the impact on ALL environments before releasing to ANY
+
+**Atmos's Key Advantage**: Unlike approaches requiring version pinning updates, you see the plan for every environment immediately after merge—dev, staging, AND production—without touching any configuration. This visibility enables informed decisions about release timing.
+
+> Knowing that deploying new code will not automatically trigger a release provides that safety net.
+>
+> — [LaunchDarkly](https://launchdarkly.com/blog/why-decouple-deployments-from-releases/)
+
+This decoupling is achieved through two separation mechanisms:
+
+1. **Environmental Configuration Separation**: Stack configurations (stacks/dev/, stacks/staging/, stacks/prod/) provide environment-specific variables and settings, allowing the same component to behave differently per environment.
+
+2. **Component Version Separation**: The `metadata.component` path determines which component implementation to use, enabling environments to reference different versions through folder organization.
+
+The **primary mechanism** controlling when deployments are released to each environment is **CI/CD approval gates** (GitHub Actions, GitLab CI, etc.). These gates control the progression of deployments across environments through automated testing, manual approvals, and time-based holds—more natural for infrastructure than runtime flags while achieving the same goal.
+
+| Approach | Mechanism | Decoupling Method | Best For |
+|----------|-----------|-------------------|----------|
+| **Feature Flags** (LaunchDarkly) | Runtime switches | Control feature visibility in deployed code | Application features with gradual rollout needs |
+| **Atmos** | CI/CD gates + automation | Control deployment timing across environments | Infrastructure changes with progressive validation |
+
+**Environment-specific configuration** (Terraform variables, Helm values) provides the most natural way to control infrastructure behavior per environment. While runtime feature flags can supplement this, they add complexity in infrastructure-as-code compared to application development, so they're best reserved for specific use cases rather than general practice.
+
+### Progressive Rollout Across Environments
+
+When you merge code to main, you're declaring you want this code live in all environments (dev, staging, prod). However, **progressive rollout** means deploying to environments sequentially with approval gates:
+
+1. **Deploy to dev** - Automatically after merge
+2. **Let it sit** - Validate in dev environment
+3. **Approve deployment to staging** - Manual or automated gate
+4. **Validate in staging** - Pre-production testing
+5. **Approve deployment to production** - Manual approval gate
+6. **All environments converged** - Same code running everywhere
+
+This progressive environment rollout provides safety through validation at each stage while driving convergence across all environments.
+
+## Experimentation
+
+Experimentation in Atmos is achieved through folder-based component isolation. When you need to test a new approach or validate an experimental change, create a dedicated component folder for your experiment and pin specific environments to it. This clearly signals that the environment has deliberately diverged, making the experiment visible in both the file system and stack configuration.
+
+### Creating an Experiment
+
+<File title="Directory Structure">
+```text
+components/terraform/
+  vpc/                    # Current stable version
+    main.tf
+    variables.tf
+  vpc-experiment/         # Experimental version
+    main.tf
+    variables.tf
+```
+</File>
+
+### Pinning Environment to Experiment
+
+<Tabs>
+<TabItem value="dev" label="Development" default>
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc-experiment  # Pin dev to experiment
+      settings:
+        workspace_key_prefix: "vpc"  # Keep stable across experiments
+      vars:
+        name: "dev-vpc-experiment"
+```
+</File>
+</TabItem>
+
+<TabItem value="prod" label="Production">
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc  # Production stays on stable
+      vars:
+        name: "prod-vpc"
+```
+</File>
+</TabItem>
+</Tabs>
+
+### Experiment Lifecycle
+
+1. **Create experiment folder** - Copy stable component to new folder (e.g., `vpc-experiment`)
+2. **Make changes** - Modify experimental component without affecting stable
+3. **Pin test environment** - Update dev/staging to reference experiment folder
+4. **Validate** - Test experimental changes in isolated environment
+5. **Promote or discard**:
+   - **Success**: Merge changes back to stable component, remove experiment folder
+   - **Failure**: Delete experiment folder, revert environment pins
+
+This approach provides complete isolation for experiments while maintaining the benefits of trunk-based development. Each experiment is visible in the repository structure and can be managed through standard Git workflows.
+
+## Understanding Divergence
+
+All deployment systems experience periods where environments are in different states—this is unavoidable. The question isn't whether divergence exists, but rather: **Is it controlled, visible, and temporary?**
+
+### Operational Divergence
+
+During progressive rollout, environments naturally diverge as commits flow through your pipeline:
+
+```text
+Time 0: Commit abc123 merged to main
+├─ Dev:     abc123 (deployed automatically)
+├─ Staging: xyz789 (previous commit, divergence begins)
+└─ Prod:    xyz789 (previous commit)
+
+Time +30min: Dev validation passes
+├─ Dev:     abc123 ✓
+├─ Staging: abc123 (deployed after dev validation)
+└─ Prod:    xyz789 (still on previous commit)
+
+Time +2hrs: Staging validation passes, manual approval
+├─ Dev:     abc123 ✓
+├─ Staging: abc123 ✓
+└─ Prod:    abc123 (convergence achieved)
+```
+
+This operational divergence is:
+- **Expected and controlled**: Caused by deliberate CI/CD gates (testing, approvals)
+- **Time-bound**: Lasts only during pipeline execution (minutes to hours)
+- **Visible**: Planning shows what will change across all environments
+- **Automatically converging**: Pipeline completion guarantees all environments reach the same commit
+
+### Comparison to Other Systems
+
+Every system has divergence—even those considered "always in sync":
+- **Argo CD**: Minutes of divergence during reconciliation loops
+- **This pattern**: Hours of divergence during progressive rollout
+- **Strict pinning**: Weeks/months of divergence without manual intervention
+
+The key difference: **This pattern has automatic convergence** through your pipeline, while manual versioning strategies require human intervention to achieve convergence.
+
+### Unintentional Drift (What We're Avoiding)
+
+Contrast operational divergence with unintentional drift:
+- **No convergence guarantee**: Environments remain on different versions indefinitely without manual promotion
+- **Invisible**: Hard to see what versions are where without tooling
+- **Accumulates over time**: Gap between environments grows larger
+- **Manual resolution**: Requires human intervention to converge
+
+This pattern eliminates unintentional drift by making convergence automatic and divergence intentional and bounded.
+
+## Benefits
+
+### 1. Strong Convergence
+
+All environments converge to the same version quickly, reducing drift and making it easier to reason about your infrastructure:
+
+- **No version skew**: Dev accurately reflects what will happen in production
+- **Immediate feedback**: Changes are visible across all environments during planning
+- **Reduced surprises**: What works in dev will work in production (configuration permitting)
+
+### 2. Simplified Operations
+
+Without complex version management, operations become straightforward:
+
+- **Single source of truth**: The main branch represents the desired state
+- **No version tracking**: No need to manage version pins, tracks, or promotions
+- **Clear rollback**: Revert the commit and re-run the pipeline
+- **Minimal cognitive load**: Team members don't need to understand versioning strategies
+
+### 3. Fast Feedback Loops
+
+Changes are immediately visible across all environments:
+
+```bash
+# On a feature branch, see impact everywhere
+$ atmos terraform plan vpc -s dev/us-east-1
+$ atmos terraform plan vpc -s staging/us-east-1
+$ atmos terraform plan vpc -s prod/us-east-1
+
+# All plans show the same changes (modulo configuration)
+```
+
+### 4. Trunk-Based Development
+
+Aligns perfectly with trunk-based development practices:
+
+- Short-lived feature branches
+- Frequent integration to main
+- Main branch always deployable
+- Progressive deployment through environments
+
+## Implementation Guide
+
+### Step 1: Set Up Component Structure
+
+Organize components without version directories:
+
+```text
+components/
+├── terraform/
+│   ├── vpc/             # Single version of VPC component
+│   ├── eks/             # Single version of EKS component
+│   └── rds/             # Single version of RDS component
+```
+
+### Step 2: Configure Automation
+
+Set up comprehensive CI/CD pipelines with:
+
+1. **Validation on PR**:
+   - Terraform validation
+   - Security scanning
+   - Policy checks (OPA, Sentinel)
+   - Plan output for all environments
+
+2. **Progressive Deployment**:
+   - Automatic deployment to dev
+   - Automated testing gates
+   - Manual approval for production
+   - Rollback procedures
+
+3. **Monitoring and Alerting**:
+   - Deployment metrics
+   - Error tracking
+   - Performance monitoring
+   - Automated rollback triggers
+
+### Step 3: Implement Safety Controls
+
+Use environment-specific configuration for safety:
+
+<File title="components/terraform/app/main.tf">
+```hcl
+variable "enable_enhanced_monitoring" {
+  description = "Enable enhanced CloudWatch monitoring"
+  type        = bool
+  default     = false
+}
+
+resource "aws_lambda_function" "app" {
+  # Core configuration
+
+  environment {
+    variables = {
+      ENABLE_ENHANCED_MONITORING = var.enable_enhanced_monitoring
+    }
+  }
+}
+```
+</File>
+
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        enable_enhanced_monitoring: true  # Test in dev first
+```
+</File>
+
+### Step 4: Handle Breaking Changes
+
+For breaking changes, use temporary compatibility layers:
+
+<File title="components/terraform/vpc/main.tf">
+```hcl
+# Support both old and new variable names during transition
+variable "enable_nat" {
+  description = "DEPRECATED: Use enable_nat_gateway instead"
+  type        = bool
+  default     = null
+}
+
+variable "enable_nat_gateway" {
+  description = "Enable NAT Gateway"
+  type        = bool
+  default     = false
+}
+
+locals {
+  # Use new variable if set, fall back to old variable
+  nat_gateway_enabled = coalesce(
+    var.enable_nat_gateway,
+    var.enable_nat,
+    false
+  )
+}
+```
+</File>
+
+## Planned Divergence
+
+While this pattern promotes automatic convergence for most components, there are scenarios where environments need to intentionally diverge for extended periods. This is **planned divergence**—strategic, controlled separation that serves specific business or technical needs.
+
+### Operational vs. Planned Divergence
+
+It's important to distinguish between two types of divergence:
+
+**Operational Divergence** (covered earlier):
+- **Duration**: Minutes to hours during progressive rollout
+- **Purpose**: Safe deployment through testing gates and approvals
+- **Outcome**: Automatic convergence when pipeline completes
+- **Example**: Dev on commit abc123, prod still on xyz789 while staging validates
+
+**Planned Divergence** (this section):
+- **Duration**: Weeks to months for strategic reasons
+- **Purpose**: Extended parallel operation during migrations, experiments, or high-risk changes
+- **Outcome**: Intentional separation with manual convergence when ready
+- **Example**: Prod on PostgreSQL 13, dev/staging testing PostgreSQL 15 upgrade for 6 weeks
+
+### Use Cases for Planned Divergence
+
+Planned divergence is appropriate when changes are too risky or complex for progressive rollout, requiring extended parallel testing before committing all environments.
+
+**Breaking Changes with Extended Testing**:
+Major architectural changes that require weeks or months of validation before production deployment.
+
+**Database Engine Upgrades**:
+Major version upgrades within the same database engine (e.g., PostgreSQL 13 → 15, MySQL 5.7 → 8.0) that need extended parallel operation and testing. Note that migrations between different engines would be separate components (e.g., a `postgres` component and an `aurora` component), not versions of the same component.
+
+**Major Terraform Provider Updates**:
+Upgrading to new major versions of Terraform providers that include breaking changes requiring extensive validation.
+
+**Architectural Changes to Components**:
+Significant restructuring of component implementations that changes resource dependencies or state structure.
+
+**Regulatory Compliance Staging**:
+When regulations require frozen production versions during audit periods while development continues.
+
+**Major Kubernetes Version Upgrades**:
+Testing k8s 1.27 → 1.30 upgrades in isolated environments before production rollout.
+
+**Experimental Features & Skunk Works**:
+Trying new Terraform providers, modules, or architectural patterns without risking production stability. Isolated experimentation before committing to production rollout.
+
+### Combining Strategies
+
+The power of Atmos is that you can mix strategies per component based on its needs:
+
+**Most Components**: Use continuous deployment from trunk (this pattern)
+**Strategic Components**: Use versioned folders or release tracks for planned divergence
+
+<File title="components/terraform/">
+```text
+terraform/
+├── vpc/                    # Trunk-based - all envs converge
+├── eks/                    # Trunk-based - all envs converge
+├── monitoring/             # Trunk-based - all envs converge
+└── database/
+    ├── v1/                # PostgreSQL 13 (prod pinned here)
+    └── v2/                # PostgreSQL 15 (dev/staging testing)
+```
+</File>
+
+### Strategy Combinations
+
+**With [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)**:
+
+Create explicit version boundaries through folder structure. Define base components in catalog with `metadata.name` for stable workspace keys, then environments reference specific version folders during the divergence period.
+
+<File title="stacks/catalog/vpc.yaml and database.yaml">
+```yaml
+components:
+  terraform:
+    # Most components use trunk-based convergence
+    vpc/defaults:
+      metadata:
+        type: abstract
+        name: vpc  # Convention: top-level folder
+
+    # Database uses versioned folders for planned divergence
+    database/defaults:
+      metadata:
+        type: abstract
+        name: database  # Convention: top-level folder (stable across versions)
+```
+</File>
+
+<Tabs>
+<TabItem value="dev" label="Development" default>
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc
+  - catalog/database
+
+components:
+  terraform:
+    # Most components converge continuously
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+        component: vpc  # Uses trunk
+
+    # Database has planned divergence
+    database:
+      metadata:
+        inherits: [database/defaults]
+        component: database/v2  # Testing new version
+        # Inherits name: database → workspace_key_prefix: "database"
+      vars:
+        engine: "postgres"
+        engine_version: "15.4"
+```
+</File>
+</TabItem>
+
+<TabItem value="prod" label="Production">
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc
+  - catalog/database
+
+components:
+  terraform:
+    # Most components converge continuously
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+        component: vpc  # Uses trunk
+
+    # Database pinned during migration
+    database:
+      metadata:
+        inherits: [database/defaults]
+        component: database/v1  # Stable on old version
+        # Inherits name: database → workspace_key_prefix: "database"
+      vars:
+        engine: "postgres"
+        engine_version: "13.11"
+```
+</File>
+</TabItem>
+</Tabs>
+
+**With [Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)**:
+
+Use tracks to coordinate planned divergence across multiple components. Useful when several components need synchronized version progression.
+
+<File title="stacks/catalog/database.yaml">
+```yaml
+components:
+  terraform:
+    database:
+      settings:
+        # Use tracks for coordinated multi-component migrations
+        release_track: stable  # or: beta, canary
+```
+</File>
+
+**With [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)**:
+
+Temporarily pin critical environments during high-risk periods, then return to continuous deployment after validation.
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    critical-service:
+      metadata:
+        # Pin to specific commit by pointing to a vendored version-specific path
+        # The component must be vendored to this path with the specific commit/tag
+        component: critical-service-v1.2.3
+      # Or use a vendored path that includes the commit SHA:
+      # component: critical-service-abc123d
+```
+</File>
+
+<File title="vendor.yaml (for pinned version)">
+```yaml
+spec:
+  sources:
+    # Vendor the specific commit to a version-specific path
+    - component: critical-service-v1.2.3
+      source: "git::https://github.com/acme/components.git//components/terraform/critical-service?ref=v1.2.3"
+      targets:
+        - "components/terraform/critical-service-v1.2.3"
+```
+</File>
+
+### When to Use Planned Divergence
+
+Choose planned divergence when:
+
+✅ **Migration requires weeks/months** of parallel operation and testing
+
+✅ **Risk is too high** for progressive rollout without extended validation
+
+✅ **Rollback would be complex** or impossible (data migrations, schema changes)
+
+✅ **Need production-scale testing** before committing all environments
+
+✅ **Regulatory approval process** requires frozen versions during review
+
+✅ **Breaking API changes** affect multiple downstream consumers
+
+### Managing the Convergence Path
+
+Even with planned divergence, you should have a clear path back to convergence:
+
+**Set a Convergence Timeline**:
+Define when environments will reconverge (e.g., "8 weeks after v2 deployment to staging").
+
+**Document the Divergence**:
+Maintain clear documentation on why divergence exists, what's being tested, and convergence criteria.
+
+**Monitor Both Versions**:
+Track metrics for both versions to make data-driven convergence decisions.
+
+**Plan the Cutover**:
+Define success criteria and cutover procedures before starting the divergence period.
+
+**Automate When Possible**:
+Even planned divergence can use automation—just with longer gates and explicit approval requirements.
+
+## Advanced Patterns
+
+### Emergency Overrides
+
+Support emergency overrides when needed:
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    critical-fix:
+      metadata:
+        # Temporarily use a different component version
+        component: vpc-hotfix
+      settings:
+        workspace_key_prefix: "vpc"  # Keep stable during hotfix
+      vars:
+        # Emergency configuration
+```
+</File>
+
+## Comparison with Other Patterns
+
+<Tabs>
+<TabItem value="strict-pinning" label="vs. Strict Version Pinning" default>
+
+| Aspect | Strict Pinning | Continuous Version Deployment |
+|--------|----------------|-------------------------------|
+| **Operational Overhead** | High - manage individual pins per environment | Low - single trunk for all environments |
+| **Feedback Loops** | Weak - issues surface late | Strong - immediate visibility across environments |
+| **Convergence** | Promotes divergence | Automatic convergence via pipeline |
+| **Reproducibility** | Strong - explicit pins | Good - via Git history |
+
+**When to prefer Strict Pinning:** Compliance requirements demand cryptographic proof of exact versions deployed.
+
+</TabItem>
+<TabItem value="release-tracks" label="vs. Release Tracks">
+
+| Aspect | Release Tracks | Continuous Version Deployment |
+|--------|----------------|-------------------------------|
+| **Track Management** | Must manage track definitions | No track management needed |
+| **Abstraction** | Additional layer of indirection | Direct and simple |
+| **Gradual Rollout** | Built into track progression | Achieved via CI/CD pipeline |
+| **Flexibility** | Grouped environment control | Individual pipeline control |
+
+**When to prefer Release Tracks:** Many environments need coordinated version progression with clear promotion stages.
+
+</TabItem>
+<TabItem value="git-flow" label="vs. Git Flow">
+
+| Aspect | Git Flow | Continuous Version Deployment |
+|--------|----------|-------------------------------|
+| **Branch Management** | Complex - maintain multiple long-lived branches | Simple - trunk-based development |
+| **Merge Conflicts** | Frequent conflicts between branches | No branch conflicts |
+| **Integration Speed** | Slower - changes isolated in branches | Fast - frequent integration to main |
+| **Deployment Model** | Branches represent environments | Automation controls deployment |
+
+**When to prefer Git Flow:** Legacy systems where branch-per-environment is deeply embedded in processes.
+
+</TabItem>
+</Tabs>
+
+## When to Use This Pattern
+
+This pattern is ideal when:
+
+✅ **You want simplicity**: Minimal concepts to understand and operate
+
+✅ **You have good automation**: Strong CI/CD pipelines and testing
+
+✅ **You value convergence**: Want environments to stay in sync
+
+✅ **You practice trunk-based development**: Frequent integration to main
+
+✅ **You can roll forward**: Culture supports fixing forward vs. rollback
+
+✅ **You're starting fresh**: New projects without legacy constraints
+
+## When Not to Use This Pattern
+
+Consider alternatives when:
+
+❌ **Strict compliance requirements**: Need cryptographic proof of deployments
+
+❌ **No automation infrastructure**: Can't build robust pipelines
+
+❌ **Very slow release cycles**: Months between production deployments
+
+❌ **Multiple teams with conflicts**: Need isolation between team changes
+
+❌ **Legacy migration**: Existing complex versioning must be maintained
+
+## Best Practices
+
+- **Comprehensive Testing:** Invest in thorough testing at each stage including unit tests (component-level), integration tests (cross-component), smoke tests (basic functionality), performance tests (load and scale), security scans (vulnerability assessment), and chaos testing (resilience validation).
+
+- **Rollback Considerations:** Rollbacks without a tracking mechanism to store the last commit for each environment are impractical. Modern DevOps practice favors **roll-forward** over rollback—fixing issues by deploying new code rather than reverting. When rollback is necessary: revert the problematic commit on main and re-run the pipeline to apply the previous state consistently across all environments. Environment-specific configuration allows you to disable features per environment and redeploy if needed, though redeployment is still required.
+
+- **Environment Parity:** Keep environments as similar as possible by using inheritance for shared configuration and minimizing environment-specific overrides.
+
+  <File title="stacks/catalog/vpc-base.yaml">
+  ```yaml
+  # Reusable base configuration in catalog
+  components:
+    terraform:
+      vpc-base:
+        metadata:
+          type: abstract
+        vars:
+          enable_dns_hostnames: true
+          enable_dns_support: true
+          # Shared configuration
+  ```
+  </File>
+
+  <File title="stacks/prod/us-east-1.yaml">
+  ```yaml
+  # Import catalog configuration
+  import:
+    - catalog/vpc-base
+
+  # Then customize minimally per environment
+  components:
+    terraform:
+      vpc:
+        metadata:
+          inherits:
+            - vpc-base
+        vars:
+          # Only environment-specific overrides
+          cidr_block: "10.2.0.0/16"
+  ```
+  </File>
+
+## Troubleshooting
+
+### Common Issues
+
+**Problem**: Afraid to deploy to production<br/>
+**Solution**: Increase test coverage and implement better monitoring
+
+**Problem**: Changes break multiple environments<br/>
+**Solution**: Add environment-specific validation and configuration to control behavior per environment
+
+**Problem**: Rollback is difficult<br/>
+**Solution**: Automate rollback procedures and practice them regularly
+
+**Problem**: Compliance requires deployment records<br/>
+**Solution**: Generate deployment artifacts from your CI/CD system
+
+## Summary
+
+Continuous Version Deployment represents the ideal balance for most teams—simple to understand, easy to operate, yet powerful enough for complex scenarios. By embracing trunk-based development and leveraging automation for safety, teams can move fast with confidence while maintaining visibility and control over their infrastructure.
+
+The pattern's strength lies not in complex version management, but in robust automation, progressive rollout, and automatic convergence. This approach aligns with modern DevOps practices and scales well from small teams to large organizations. Environments naturally diverge during deployment windows, then automatically converge through your CI/CD pipeline.
+
+:::tip Key Takeaway
+Don't solve deployment challenges with version control gymnastics. Use automation, testing, and progressive rollout strategies to maintain safety while keeping operations simple. Deploy from trunk, converge automatically.
+:::
+
+## See Also
+
+- **[Versioning Schemes](/design-patterns/version-management/versioning-schemes)** - Choose naming conventions that work with your folder organization approach
+- **[Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)** - Combine with this pattern for components requiring planned divergence during breaking changes or extended migrations.
+- **[Release Tracks/Channels](/design-patterns/version-management/release-tracks-channels)** - Use alongside trunk-based deployment when coordinating multi-component migrations across many environments.
+- **[Strict Version Pinning](/design-patterns/version-management/strict-version-pinning)** - Temporarily apply to specific components during high-risk periods while others use continuous deployment.

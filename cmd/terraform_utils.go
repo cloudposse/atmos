@@ -4,18 +4,21 @@ import (
 	"errors"
 	"fmt"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	h "github.com/cloudposse/atmos/pkg/hooks"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
-	info := getConfigAndStacksInfo("terraform", cmd, append([]string{cmd.Name()}, args...))
+	info, err := getConfigAndStacksInfo("terraform", cmd, append([]string{cmd.Name()}, args...))
+	if err != nil {
+		return err
+	}
 
 	// Initialize the CLI config
 	atmosConfig, err := cfg.InitCliConfig(info, true)
@@ -32,7 +35,7 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 		log.Info("Running hooks", "event", event)
 		err := hooks.RunAll(event, &atmosConfig, &info, cmd, args)
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			return err
 		}
 	}
 
@@ -40,30 +43,45 @@ func runHooks(event h.HookEvent, cmd *cobra.Command, args []string) error {
 }
 
 func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
-	info := getConfigAndStacksInfo(cfg.TerraformComponentType, cmd, args)
+	info, err := getConfigAndStacksInfo(cfg.TerraformComponentType, cmd, args)
+	if err != nil {
+		return err
+	}
 
 	if info.NeedHelp {
 		err := actualCmd.Usage()
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return err
+		}
 		return nil
 	}
 
 	flags := cmd.Flags()
 
 	processTemplates, err := flags.GetBool("process-templates")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	processYamlFunctions, err := flags.GetBool("process-functions")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	skip, err := flags.GetStringSlice("skip")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	components, err := flags.GetStringSlice("components")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	dryRun, err := flags.GetBool("dry-run")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	info.ProcessTemplates = processTemplates
 	info.ProcessFunctions = processYamlFunctions
@@ -71,13 +89,22 @@ func terraformRun(cmd *cobra.Command, actualCmd *cobra.Command, args []string) e
 	info.Components = components
 	info.DryRun = dryRun
 
-	identityFlag, err := flags.GetString("identity")
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-
-	info.Identity = identityFlag
-	// Check Terraform Single-Component and Multi-Component flags
+	// Handle --identity flag for interactive selection.
+	// ProcessCommandLineArgs already parsed the identity value correctly via processArgsAndFlags.
+	// We only need to handle the special case where --identity was used without a value (interactive selection).
+	// Note: We cannot use flags.GetString("identity") here because Cobra's NoOptDefVal behavior
+	// with positional args causes it to return "__SELECT__" even when a value was provided
+	// (e.g., "atmos terraform plan vpc --identity asd" treats "asd" as positional, not flag value).
+	if info.Identity == cfg.IdentityFlagSelectValue {
+		handleInteractiveIdentitySelection(&info)
+	}
+	// Otherwise, info.Identity already has the correct value from ProcessCommandLineArgs
+	// (either from --identity <value>, ATMOS_IDENTITY env var, or empty string).
+	// Check Terraform Single-Component and Multi-Component flags.
 	err = checkTerraformFlags(&info)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	// Execute `atmos terraform <sub-command> --affected` or `atmos terraform <sub-command> --affected --stack <stack>`
 	if info.Affected {
@@ -151,4 +178,44 @@ func checkTerraformFlags(info *schema.ConfigAndStacksInfo) error {
 	}
 
 	return nil
+}
+
+// handleInteractiveIdentitySelection handles the case where --identity was used without a value.
+func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
+	// Initialize CLI config to get auth configuration.
+	// Use false to skip stack processing - only auth config is needed.
+	atmosConfig, err := cfg.InitCliConfig(*info, false)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrInitializeCLIConfig, err), "", "")
+	}
+
+	// Check if auth is configured. If not, we can't select an identity.
+	if len(atmosConfig.Auth.Providers) == 0 && len(atmosConfig.Auth.Identities) == 0 {
+		// User explicitly requested identity selection (--identity or --identity=)
+		// but no authentication is configured. This is an error.
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: no authentication configured", errUtils.ErrNoIdentitiesAvailable), "", "")
+	}
+
+	// Create auth manager to enable identity selection.
+	authManager, err := createAuthManager(&atmosConfig.Auth)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
+	}
+
+	// Get default identity with forced interactive selection.
+	// GetDefaultIdentity() handles TTY and CI detection via isInteractive().
+	selectedIdentity, err := authManager.GetDefaultIdentity(true)
+	if err != nil {
+		// Check if user explicitly aborted (Ctrl+C, ESC, etc.).
+		// In this case, we want to exit immediately without showing an error.
+		if errors.Is(err, errUtils.ErrUserAborted) {
+			log.Debug("User aborted identity selection, exiting with SIGINT code")
+			// Exit immediately with POSIX SIGINT exit code.
+			// Note: We bypass error formatting as user abort is not an error condition.
+			errUtils.Exit(errUtils.ExitCodeSIGINT)
+		}
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrDefaultIdentity, err), "", "")
+	}
+
+	info.Identity = selectedIdentity
 }

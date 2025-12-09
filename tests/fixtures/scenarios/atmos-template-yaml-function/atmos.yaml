@@ -1,0 +1,38 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "../../components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# `Go` templates in Atmos manifests
+# https://atmos.tools/core-concepts/stacks/templates
+# https://pkg.go.dev/text/template
+templates:
+  settings:
+    enabled: true
+    evaluations: 1
+    # https://masterminds.github.io/sprig
+    sprig:
+      enabled: true
+    # https://docs.gomplate.ca
+    gomplate:
+      enabled: true
+      timeout: 10
+      # https://docs.gomplate.ca/datasources
+      datasources: {}

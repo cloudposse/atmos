@@ -1,0 +1,883 @@
+---
+title: Migrating from Native Terraform
+sidebar_position: 3
+sidebar_label: From Native Terraform
+description: How to migrate from vanilla Terraform to Atmos
+id: native-terraform
+---
+import FAQItem from '@site/src/components/FAQItem'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import TaskList from '@site/src/components/TaskList'
+import Terminal from '@site/src/components/Terminal'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+You're already 90% there. Your Terraform code doesn't need to change. Atmos gives you a documented, conventional way to manage your infrastructure—whether you're using Makefiles, shell scripts, or just raw Terraform commands.
+</Intro>
+
+## Why This Guide?
+
+Most teams don't use Terraform in isolation. You're probably already using:
+- **Makefiles** to wrap common commands
+- **Shell scripts** to set variables or loop through environments
+- **GitHub Actions/Jenkins** with custom bash scripting
+- **Directory structures** to separate dev/staging/prod
+- **`.tfvars` files** scattered everywhere
+
+Tool fatigue is real. Instead of duct-taping 25 different tools together, Atmos gives you one documented approach.
+
+## Crawl, Walk, Run
+
+- **Crawl**: Get running in 20 minutes (this guide)
+- **Walk**: Explore DRY configs and remote state
+- **Run**: Advanced features when you need them (workflows, validation, component libraries)
+
+You don't need to learn everything on day one. Get value in 20 minutes, not 20 hours.
+
+---
+
+## Crawl: Get Running in 20 Minutes
+
+### What You're Going To Do
+
+1. Install Atmos
+2. Create a minimal `atmos.yaml`
+3. Create one stack YAML file
+4. Run `atmos terraform plan`
+
+That's it. You'll be using Atmos.
+
+### Step 1: Install Atmos
+
+There are many ways to install Atmos. See the full [Installation Guide](/install) for all options.
+
+<Terminal>
+```bash
+# macOS/Linux (Homebrew)
+brew install atmos
+
+# Go
+go install github.com/cloudposse/atmos@latest
+
+# Or download from GitHub releases
+```
+</Terminal>
+
+### Step 2: Create Minimal atmos.yaml
+
+Point Atmos to where your Terraform **root modules** live. Atmos only cares about root modules—where you put child modules (reusable modules called via `source`) is entirely up to you and has no bearing on Atmos configuration.
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    base_path: "components/terraform"  # Where your Terraform root modules live
+
+stacks:
+  base_path: "stacks"                  # Where your stack configs will go
+  name_template: "{{ .vars.stage }}"   # Simple naming: dev, staging, prod
+```
+</File>
+
+:::tip[Customize Your Structure]
+The `base_path` setting is flexible. If your root modules are already in a `terraform/` directory, set `base_path: "terraform"`. If you only use Terraform (no Helmfile or other toolchains), you could use `base_path: "components"` or even just `base_path: "."`. The `components/terraform` convention exists because Atmos supports multiple toolchains (Terraform, Helmfile, etc.), but organize however makes sense for your project.
+:::
+
+### Step 3: Move Your Terraform Code
+
+If your Terraform is in scattered directories, consolidate it:
+
+<Tabs>
+  <TabItem value="before" label="Before" default>
+    ```plaintext
+    terraform/
+    ├── vpc/
+    │   ├── main.tf
+    │   ├── variables.tf
+    │   ├── outputs.tf
+    │   └── envs/
+    │       ├── dev.tfvars
+    │       ├── staging.tfvars
+    │       └── prod.tfvars
+    └── database/
+        ├── main.tf
+        ├── variables.tf
+        ├── outputs.tf
+        └── envs/
+            ├── dev.tfvars
+            ├── staging.tfvars
+            └── prod.tfvars
+    ```
+  </TabItem>
+  <TabItem value="after" label="After">
+    ```plaintext
+    components/terraform/
+    ├── vpc/
+    │   ├── main.tf
+    │   ├── variables.tf
+    │   ├── outputs.tf
+    │   └── envs/                   # Optional: Keep your existing tfvars!
+    │       ├── dev.tfvars
+    │       ├── staging.tfvars
+    │       └── prod.tfvars
+    └── database/
+        ├── main.tf
+        ├── variables.tf
+        ├── outputs.tf
+        └── envs/
+            ├── dev.tfvars
+            ├── staging.tfvars
+            └── prod.tfvars
+    ```
+  </TabItem>
+</Tabs>
+
+Your Terraform code stays **exactly the same**. You can keep using your `.tfvars` files with `!include` and gradually migrate to stack YAML as you grow.
+
+### Step 4: Create Your First Stack
+
+Create a stack YAML file for one environment. Start by referencing your existing `.tfvars` files:
+
+<Tabs>
+  <TabItem value="include" label="Keep Using tfvars" default>
+    Keep your existing `.tfvars` files and include them directly:
+
+    <File title="stacks/dev.yaml">
+    ```yaml
+    vars:
+      stage: dev
+
+    components:
+      terraform:
+        vpc:
+          vars: !include components/terraform/vpc/envs/dev.tfvars
+        database:
+          vars: !include components/terraform/database/envs/dev.tfvars
+    ```
+    </File>
+
+    The `!include` function resolves paths relative to the Atmos base path and automatically parses `.tfvars` files (HCL format). This is the fastest migration path—your existing variable files keep working. You still get stack inheritance, imports, and all other Atmos features.
+  </TabItem>
+  <TabItem value="convert" label="Convert to YAML">
+    As you grow, convert your `.tfvars` to native YAML for deep merge benefits:
+
+    <File title="stacks/dev.yaml">
+    ```yaml
+    vars:
+      stage: dev
+
+    components:
+      terraform:
+        vpc:
+          vars:
+            cidr_block: "10.0.0.0/16"
+            environment: dev
+            enable_dns_hostnames: true
+        database:
+          vars:
+            instance_class: db.t3.micro
+            allocated_storage: 20
+    ```
+    </File>
+
+    Native YAML lets you define variables directly in stacks, enabling deep merging across inherited files—no duplication between environments.
+  </TabItem>
+</Tabs>
+
+### Step 5: Run Atmos
+
+<Tabs>
+  <TabItem value="before" label="Before (Native Terraform)" default>
+    ```bash
+    cd terraform/dev
+    terraform plan -var-file=vpc.tfvars
+    terraform apply -var-file=vpc.tfvars
+    ```
+  </TabItem>
+  <TabItem value="after" label="After (Atmos)">
+    ```bash
+    atmos terraform plan vpc -s dev
+    atmos terraform apply vpc -s dev
+    ```
+
+    Or just run `atmos` to use the interactive UI.
+  </TabItem>
+</Tabs>
+
+**Congratulations!** You're now using Atmos.
+
+---
+
+## What Just Happened?
+
+### Directory Structure: Before and After
+
+Here's a comprehensive view of how your project structure transforms:
+
+<Tabs>
+  <TabItem value="before" label="Before (Native Terraform)" default>
+    ```plaintext
+    my-infrastructure/
+    ├── terraform/
+    │   ├── vpc/
+    │   │   ├── main.tf
+    │   │   ├── variables.tf
+    │   │   ├── outputs.tf
+    │   │   └── envs/
+    │   │       ├── dev.tfvars
+    │   │       ├── staging.tfvars
+    │   │       └── prod.tfvars
+    │   └── database/
+    │       ├── main.tf
+    │       ├── variables.tf
+    │       ├── outputs.tf
+    │       └── envs/
+    │           ├── dev.tfvars
+    │           ├── staging.tfvars
+    │           └── prod.tfvars
+    ├── scripts/
+    │   ├── deploy.sh
+    │   └── plan-all.sh
+    └── Makefile
+    ```
+
+    **Challenges:**
+    - `.tfvars` files duplicated across components
+    - Backend config managed manually or in scripts
+    - Custom scripts for orchestration
+    - No standard way to query infrastructure
+  </TabItem>
+  <TabItem value="after" label="After (Atmos)">
+    ```plaintext
+    my-infrastructure/
+    ├── atmos.yaml                    # Single config file
+    ├── components/
+    │   └── terraform/
+    │       ├── vpc/
+    │       │   ├── main.tf
+    │       │   ├── variables.tf
+    │       │   ├── outputs.tf
+    │       │   └── envs/             # Optional: Keep your existing tfvars!
+    │       │       ├── dev.tfvars
+    │       │       ├── staging.tfvars
+    │       │       └── prod.tfvars
+    │       └── database/
+    │           ├── main.tf
+    │           ├── variables.tf
+    │           ├── outputs.tf
+    │           └── envs/
+    │               ├── dev.tfvars
+    │               ├── staging.tfvars
+    │               └── prod.tfvars
+    └── stacks/
+        ├── _defaults/
+        │   └── globals.yaml          # Shared config (backend, etc.)
+        ├── dev.yaml                  # References tfvars with !include
+        ├── staging.yaml
+        └── prod.yaml
+    ```
+
+    **Benefits:**
+    - Keep using your existing `.tfvars` files
+    - Centralized backend configuration in `_defaults/`
+    - No custom scripts needed
+    - Query with `atmos list stacks`, `atmos describe component`
+  </TabItem>
+</Tabs>
+
+### Key Differences at a Glance
+
+| Aspect | Native Terraform | Atmos |
+|--------|------------------|-------|
+| **Terraform Code** | `main.tf`, `variables.tf` | Same - no changes needed |
+| **Configuration** | `.tfvars` files, TF_VAR_ env vars | YAML `vars:` (but .tfvars still work via `!include`!) |
+| **Environments** | Directories or workspaces | Stack YAML files |
+| **Backend Config** | In Terraform code | Centralized in stack config |
+| **Commands** | `terraform plan -var-file=...` | `atmos terraform plan <component> -s <stack>` |
+| **Querying** | Bash scripts, grep | `atmos list stacks`, `atmos describe component` |
+
+### What Stays The Same
+
+- Your Terraform code works as-is
+- Your `.tfvars` files still work (use `!include` to import them)
+- Your `TF_VAR_` environment variables still work
+- Your backend configuration migrates cleanly
+
+### What You Added
+
+- `atmos.yaml` - tells Atmos where your code lives
+- Stack YAML files - one per environment
+
+That's it. This is the "entry fee" for all the benefits below.
+
+---
+
+## Walk: Immediate Value
+
+Now that you're running Atmos, here's what you get **immediately**:
+
+### 1. List Your Infrastructure
+
+No more bash scripts or mental mapping:
+
+<Terminal>
+```bash
+# See all your stacks
+atmos list stacks
+
+# See all components
+atmos list components
+
+# Describe a component in a stack
+atmos describe component vpc -s dev
+```
+</Terminal>
+
+Learn more: [`atmos list`](/cli/commands/list/stacks) | [`atmos describe component`](/cli/commands/describe/component)
+
+### 2. DRY Configuration
+
+Instead of copying `.tfvars` files, use YAML [imports](/stacks/imports) and [inheritance](/howto/inheritance):
+
+<File title="stacks/_defaults.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        enable_dns_hostnames: true
+        enable_dns_support: true
+```
+</File>
+
+<File title="stacks/dev.yaml">
+```yaml
+import:
+  - _defaults
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+        environment: dev
+```
+</File>
+
+<File title="stacks/prod.yaml">
+```yaml
+import:
+  - _defaults
+
+vars:
+  stage: prod
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.1.0.0/16"
+        environment: prod
+```
+</File>
+
+Shared settings live in `_defaults.yaml`. Each environment only specifies what's different.
+
+### 3. Query Remote State
+
+Pull outputs from other components using the [`!terraform.output`](/functions/yaml/terraform.output) function—no custom bash needed:
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    eks:
+      vars:
+        vpc_id: !terraform.output vpc.vpc_id
+        subnet_ids: !terraform.output vpc.private_subnet_ids
+```
+</File>
+
+Or use the Terraform module:
+
+<File title="components/terraform/eks/remote_state.tf">
+```hcl
+module "vpc" {
+  source  = "cloudposse/stack-config/yaml//modules/remote-state"
+  version = "1.5.0"
+
+  component = "vpc"
+  context   = module.this.context
+}
+
+# Use: module.vpc.outputs.vpc_id
+```
+</File>
+
+### 4. Centralized Backend
+
+Stop managing backend config in every directory:
+
+<File title="stacks/dev.yaml">
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: my-terraform-state
+      key: "terraform.tfstate"
+      region: us-east-1
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+Atmos auto-generates `backend.tf.json` for you.
+
+---
+
+## Run: When You're Ready
+
+These advanced features are there when you need them. You don't need them now.
+
+### [Workflows](/workflows) (Replace Your Makefiles)
+
+<File title="stacks/workflows/deploy.yaml">
+```yaml
+name: deploy-dev
+steps:
+  - command: terraform plan vpc -s dev
+  - command: terraform apply vpc -s dev
+  - command: terraform plan eks -s dev
+  - command: terraform apply eks -s dev
+```
+</File>
+
+<Terminal>
+```bash
+atmos workflow deploy-dev -f stacks/workflows/deploy.yaml
+```
+</Terminal>
+
+### [Validation](/validation/validating) with OPA and JSON Schema
+
+Validate your configurations before running Terraform:
+
+<Terminal>
+```bash
+atmos validate stacks
+atmos validate component vpc -s dev
+```
+</Terminal>
+
+### [Component Inheritance](/howto/inheritance)
+
+Reuse component configurations:
+
+<File title="stacks/catalog/vpc-defaults.yaml">
+```yaml
+components:
+  terraform:
+    vpc-defaults:
+      metadata:
+        type: abstract  # Can't be deployed directly
+      vars:
+        enable_dns_hostnames: true
+        enable_dns_support: true
+```
+</File>
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc-defaults
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+---
+
+## Real Example: Hello World Migration
+
+Let's migrate a simple "Hello World" Terraform configuration that creates an S3 bucket.
+
+### Before (Native Terraform)
+
+<Tabs>
+  <TabItem value="structure" label="Structure" default>
+    ```plaintext
+    hello-world/
+      dev/
+        main.tf
+        variables.tf
+        outputs.tf
+        terraform.tfvars
+        backend.tf
+      prod/
+        main.tf
+        variables.tf
+        outputs.tf
+        terraform.tfvars
+        backend.tf
+    ```
+  </TabItem>
+  <TabItem value="main" label="main.tf">
+    ```hcl
+    resource "aws_s3_bucket" "hello" {
+      bucket = var.bucket_name
+
+      tags = {
+        Environment = var.environment
+        Project     = "hello-world"
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem value="variables" label="variables.tf">
+    ```hcl
+    variable "bucket_name" {
+      type        = string
+      description = "Name of the S3 bucket"
+    }
+
+    variable "environment" {
+      type        = string
+      description = "Environment name"
+    }
+    ```
+  </TabItem>
+  <TabItem value="tfvars" label="terraform.tfvars">
+    ```hcl
+    bucket_name = "hello-world-dev-bucket"
+    environment = "dev"
+    ```
+  </TabItem>
+  <TabItem value="backend" label="backend.tf">
+    ```hcl
+    terraform {
+      backend "s3" {
+        bucket         = "my-terraform-state"
+        key            = "dev/hello-world/terraform.tfstate"
+        region         = "us-east-1"
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+**Commands:**
+```bash
+cd hello-world/dev
+terraform init
+terraform plan -var-file=terraform.tfvars
+terraform apply -var-file=terraform.tfvars
+```
+
+### After (Atmos)
+
+<Tabs>
+  <TabItem value="structure" label="Structure" default>
+    ```plaintext
+    atmos.yaml
+    components/terraform/hello-world/
+      main.tf          # Same code, no changes
+      variables.tf     # Same code, no changes
+      outputs.tf       # Same code, no changes
+    stacks/
+      dev.yaml
+      prod.yaml
+    ```
+  </TabItem>
+  <TabItem value="atmos" label="atmos.yaml">
+    ```yaml
+    components:
+      terraform:
+        base_path: "components/terraform"
+
+    stacks:
+      base_path: "stacks"
+      name_template: "{{ .vars.stage }}"
+    ```
+  </TabItem>
+  <TabItem value="dev" label="stacks/dev.yaml">
+    ```yaml
+    terraform:
+      backend_type: s3
+      backend:
+        s3:
+          bucket: my-terraform-state
+          key: "dev/hello-world/terraform.tfstate"
+          region: us-east-1
+
+    vars:
+      stage: dev
+
+    components:
+      terraform:
+        hello-world:
+          vars:
+            bucket_name: "hello-world-dev-bucket"
+            environment: dev
+    ```
+  </TabItem>
+  <TabItem value="prod" label="stacks/prod.yaml">
+    ```yaml
+    terraform:
+      backend_type: s3
+      backend:
+        s3:
+          bucket: my-terraform-state
+          key: "prod/hello-world/terraform.tfstate"
+          region: us-east-1
+
+    vars:
+      stage: prod
+
+    components:
+      terraform:
+        hello-world:
+          vars:
+            bucket_name: "hello-world-prod-bucket"
+            environment: prod
+    ```
+  </TabItem>
+  <TabItem value="include" label="Using !include">
+    Want to keep using your existing `.tfvars` files? Use `!include`:
+
+    ```yaml
+    # stacks/dev.yaml
+    terraform:
+      backend_type: s3
+      backend:
+        s3:
+          bucket: my-terraform-state
+          key: "dev/hello-world/terraform.tfstate"
+          region: us-east-1
+
+    vars:
+      stage: dev
+
+    components:
+      terraform:
+        hello-world:
+          vars: !include ../legacy/dev/terraform.tfvars
+    ```
+  </TabItem>
+</Tabs>
+
+**Commands:**
+```bash
+atmos terraform plan hello-world -s dev
+atmos terraform apply hello-world -s dev
+```
+
+---
+
+## Why It's Worth It
+
+### Stop Duct-Taping Tools Together
+
+Instead of:
+- Makefiles + shell scripts + GitHub Actions + custom bash + .tfvars + workspaces
+
+You get:
+- **One documented approach** with Atmos
+
+### Real Benefits You'll Feel Immediately
+
+- **Documented convention** - Not tribal knowledge
+- **Reduced cognitive load** - Follow patterns, don't reinvent
+- **Easier onboarding** - New team members productive in 20 minutes
+- **Query infrastructure** - `atmos list stacks` instead of bash/grep
+- **DRY configs** - Inheritance without copy-paste
+- **Workflows** - Replace your Makefiles
+- **Separation of concerns** - Terraform is code, YAML is configuration
+
+### What It Transforms
+
+- **Before**: "Let me grep through directories to find where we deploy the VPC in staging"
+- **After**: `atmos describe component vpc -s staging`
+
+- **Before**: "New developer? Here's 45 minutes of tribal knowledge about our Makefile"
+- **After**: "Read the stack YAML, run `atmos terraform plan`, you're good"
+
+- **Before**: Custom bash scripts to pull remote state
+- **After**: `vpc_id: !terraform.output vpc.vpc_id`
+
+---
+
+## What Atmos Won't Do
+
+Here's what to expect:
+
+- **Won't magically refactor your existing Terraform** - Atmos doesn't provide automated refactoring tools
+- **Won't fix monolithic modules** - That's still on you
+- **Won't require you to learn everything** - Start with basics, grow as needed
+
+**But:**
+
+- Everything new you build will follow glorious conventions
+- You can gradually refactor existing stuff as you see fit
+- It's going to transform your day-to-day
+
+---
+
+## Working with .tfvars Files
+
+### Option 1: Use !include (Recommended for Migration)
+
+Keep your existing `.tfvars` files and import them directly:
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars: !include dev.tfvars
+```
+</File>
+
+The `!include` function:
+- Automatically parses `.tfvars` (HCL format)
+- Converts to proper YAML types (maps, lists, booleans)
+- Works with local and remote files
+- Supports YQ expressions for filtering
+
+See the [`!include` function documentation](/functions/yaml/include) for more details.
+
+### Option 2: Convert to YAML (Recommended Long-term)
+
+Convert your `.tfvars` to YAML for full Atmos features:
+
+<Tabs>
+  <TabItem value="before" label="Before (vpc.tfvars)" default>
+    ```hcl
+    cidr_block           = "10.0.0.0/16"
+    enable_dns_hostnames = true
+    tags = {
+      Environment = "dev"
+      Team        = "platform"
+    }
+    ```
+  </TabItem>
+  <TabItem value="after" label="After (stacks/dev.yaml)">
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          vars:
+            cidr_block: "10.0.0.0/16"
+            enable_dns_hostnames: true
+            tags:
+              Environment: dev
+              Team: platform
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## Working with TF_VAR_ Environment Variables
+
+Atmos supports Terraform's native environment variable pattern:
+
+<File title="stacks/dev.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      env:
+        TF_VAR_region: us-east-1
+        TF_VAR_environment: dev
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+When you run `atmos terraform plan vpc -s dev`, these environment variables are set automatically.
+
+---
+
+## Migration Checklist
+
+<TaskList>
+- [ ] Install Atmos CLI ([Installation Guide](/install))
+- [ ] Create `atmos.yaml` pointing to your Terraform code
+- [ ] Reorganize Terraform code into `components/terraform/<component>/`
+- [ ] Create your first stack YAML (start with dev)
+- [ ] Test with `atmos terraform plan <component> -s dev`
+- [ ] Create remaining stack files (staging, prod)
+- [ ] (Optional) Use `!include` to import existing `.tfvars` files
+- [ ] (Optional) Migrate `.tfvars` to YAML for full features
+- [ ] (Optional) Set up workflows to replace Makefiles
+- [ ] (Optional) Explore DRY configs with imports
+</TaskList>
+
+---
+
+## Next Steps
+
+**You just did Crawl** - you're running Atmos!
+
+**Walk**: Explore these next:
+- [DRY Configuration with Imports](/learn/inheritance-basics)
+- [Remote State Integration](/stacks/remote-state)
+- [Component Catalogs](/howto/catalogs)
+
+**Run**: When you're ready for advanced features:
+- [Workflows](/workflows)
+- [Validation with OPA](/validation/validating)
+- [Vendoring Components](/vendor/)
+
+---
+
+## Common Questions
+
+<FAQItem question="Do I need to change my Terraform code?">
+**No.** Your Terraform root modules work as-is. Atmos wraps them with orchestration.
+</FAQItem>
+
+<FAQItem question="Can I keep using .tfvars files?">
+**Yes.** Use the `!include` function to import them directly into your stack YAML:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      vars: !include dev.tfvars
+```
+</FAQItem>
+
+<FAQItem question="Can I keep using TF_VAR_ environment variables?">
+**Yes.** Define them in the `env:` section of your stack YAML, and Atmos will set them when running Terraform.
+</FAQItem>
+
+<FAQItem question="Do I need to learn everything at once?">
+**No.** Start with the basics (this guide). Advanced features are there when you need them.
+</FAQItem>
+
+<FAQItem question="What if I'm using Terraform workspaces?">
+See the [Migrating from Terraform Workspaces](/migration/terraform-workspaces) guide.
+</FAQItem>
+
+<FAQItem question="What if I'm using Terragrunt?">
+See the [Migrating from Terragrunt](/migration/terragrunt) guide.
+</FAQItem>

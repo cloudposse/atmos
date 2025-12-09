@@ -1,0 +1,7 @@
+# Developer profile settings
+logs:
+  level: Debug
+
+settings:
+  terminal:
+    max_width: 120

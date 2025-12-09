@@ -8,38 +8,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Test uploadInstances function.
-func TestUploadInstances(t *testing.T) {
-	t.Run("successful upload", func(t *testing.T) {
-		t.Skip("placeholder: requires git/config/API mocking - uploadInstances function calls external git operations, config loading, and API clients that would need extensive mocking to test properly in CI")
-	})
-
-	t.Run("empty instances", func(t *testing.T) {
-		t.Skip("placeholder: requires git/config/API mocking - uploadInstances function calls external git operations, config loading, and API clients that would need extensive mocking to test properly in CI")
-	})
-}
-
-// Test processInstances function.
-func TestProcessInstances(t *testing.T) {
-	t.Run("successful processing", func(t *testing.T) {
-		t.Skip("placeholder: requires ExecuteDescribeStacks mocking - processInstances function calls ExecuteDescribeStacks which would need interface injection and mocking to test properly in CI")
-	})
-
-	t.Run("empty config", func(t *testing.T) {
-		t.Skip("placeholder: requires ExecuteDescribeStacks mocking - processInstances function calls ExecuteDescribeStacks which would need interface injection and mocking to test properly in CI")
-	})
-}
-
-// Test ExecuteListInstancesCmd function.
-func TestExecuteListInstancesCmd(t *testing.T) {
-	t.Run("basic command execution", func(t *testing.T) {
-		t.Skip("end-to-end command test requires stdio capture and viper flag setup — skipping until helper implemented")
-	})
-
-	t.Run("command with upload flag", func(t *testing.T) {
-		t.Skip("end-to-end command test requires stdio capture and viper flag setup — skipping until helper implemented")
-	})
-}
+// Note: uploadInstances(), processInstances(), and ExecuteListInstancesCmd() are not unit tested here
+// because they have hard dependencies on external systems (git operations, config loading, API clients,
+// ExecuteDescribeStacks, viper flags). To properly test these functions, they would need refactoring to:
+// 1. Accept interface dependencies (GitRepo, ConfigLoader, APIClient) that can be mocked
+// 2. Use dependency injection rather than calling global functions directly
+// 3. Separate business logic from I/O operations
+//
+// The current implementation tests below focus on the pure business logic functions that don't
+// have external dependencies: processComponentConfig, processComponentType, processStackComponents,
+// createInstance, sortInstances, filterProEnabledInstances, and collectInstances.
+//
+// For integration testing of the full command, see cmd/list_test.go which tests via the CLI.
 
 // Additional edge case tests for existing functions.
 func TestProcessComponentConfigEdgeCases(t *testing.T) {

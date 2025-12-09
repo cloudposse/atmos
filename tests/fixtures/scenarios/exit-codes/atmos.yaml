@@ -1,0 +1,33 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  name_pattern: "{tenant}-{environment}-{stage}"
+  included_paths:
+    - "**/*"
+
+workflows:
+  base_path: "stacks/workflows"
+
+commands:
+  # Custom commands that test exit codes
+  - name: test-exit-0
+    description: "Test command that exits with code 0"
+    steps:
+      - "exit 0"
+
+  - name: test-exit-2
+    description: "Test command that exits with code 2"
+    steps:
+      - "exit 2"
+
+  - name: test-exit-42
+    description: "Test command that exits with code 42"
+    steps:
+      - "exit 42"
+
+# Command aliases not needed - custom commands handle the tests

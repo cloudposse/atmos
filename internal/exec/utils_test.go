@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -163,7 +164,7 @@ func TestGenerateComponentProviderOverrides(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := generateComponentProviderOverrides(tt.providerOverrides)
+			result := generateComponentProviderOverrides(tt.providerOverrides, nil)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -256,14 +257,23 @@ func TestGenerateComponentBackendConfig(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:               "empty-backend-type-returns-error",
+			backendType:        "",
+			backendConfig:      map[string]any{},
+			terraformWorkspace: "",
+			expected:           nil,
+			expectError:        true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := generateComponentBackendConfig(tt.backendType, tt.backendConfig, tt.terraformWorkspace)
+			result, err := generateComponentBackendConfig(tt.backendType, tt.backendConfig, tt.terraformWorkspace, nil)
 
 			if tt.expectError {
 				assert.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrBackendTypeRequired)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected, result)
@@ -349,4 +359,51 @@ func TestFindComponentDependencies(t *testing.T) {
 			assert.Equal(t, tt.expectedAll, depsAll)
 		})
 	}
+}
+
+// TestGetFindStacksMapCacheKey tests cache key generation for FindStacksMap.
+// This validates P3.4 optimization: cache key includes atmosConfig and parameters.
+func TestGetFindStacksMapCacheKey(t *testing.T) {
+	// Create a test atmosConfig with key fields that are actually used in cache key generation.
+	// The cache key uses: StacksBaseAbsolutePath, TerraformDirAbsolutePath, ignoreMissingFiles, len(StackConfigFilesAbsolutePaths)
+	atmosConfig1 := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:        "/path/to/stacks",
+		TerraformDirAbsolutePath:      "/path/to/components/terraform",
+		StackConfigFilesAbsolutePaths: []string{"/path/to/stacks/file1.yaml", "/path/to/stacks/file2.yaml"},
+	}
+
+	atmosConfig2 := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:        "/different/path/to/stacks",
+		TerraformDirAbsolutePath:      "/path/to/components/terraform",
+		StackConfigFilesAbsolutePaths: []string{"/path/to/stacks/file1.yaml", "/path/to/stacks/file2.yaml"},
+	}
+
+	atmosConfig3 := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:        "/path/to/stacks",
+		TerraformDirAbsolutePath:      "/path/to/components/terraform",
+		StackConfigFilesAbsolutePaths: []string{"/path/to/stacks/file1.yaml"},
+	}
+
+	// Test: same config, same parameters → same cache key.
+	key1 := getFindStacksMapCacheKey(atmosConfig1, false)
+	key2 := getFindStacksMapCacheKey(atmosConfig1, false)
+	assert.Equal(t, key1, key2, "Same config and parameters should produce same cache key")
+
+	// Test: same config, different parameters → different cache key.
+	key3 := getFindStacksMapCacheKey(atmosConfig1, true)
+	assert.NotEqual(t, key1, key3, "Different ignoreMissingFiles should produce different cache key")
+
+	// Test: different StacksBaseAbsolutePath → different cache key.
+	key4 := getFindStacksMapCacheKey(atmosConfig2, false)
+	assert.NotEqual(t, key1, key4, "Different StacksBaseAbsolutePath should produce different cache key")
+
+	// Test: different StackConfigFilesAbsolutePaths length → different cache key.
+	key5 := getFindStacksMapCacheKey(atmosConfig3, false)
+	assert.NotEqual(t, key1, key5, "Different StackConfigFilesAbsolutePaths length should produce different cache key")
+
+	// Test: cache keys are not empty.
+	assert.NotEmpty(t, key1)
+	assert.NotEmpty(t, key3)
+	assert.NotEmpty(t, key4)
+	assert.NotEmpty(t, key5)
 }

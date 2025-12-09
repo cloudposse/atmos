@@ -102,24 +102,9 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
 	// Define the work directory and change to it
 	workDir := "../../tests/fixtures/scenarios/terraform-apply-affected"
-	if err = os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	oldStd := os.Stderr
 	_, w, _ := os.Pipe()
@@ -165,24 +150,9 @@ func TestExecuteTerraformQuery(t *testing.T) {
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
-	// Capture the starting working directory
-	startingDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get the current working directory: %v", err)
-	}
-
-	defer func() {
-		// Change back to the original working directory after the test
-		if err := os.Chdir(startingDir); err != nil {
-			t.Fatalf("Failed to change back to the starting directory: %v", err)
-		}
-	}()
-
 	// Define the work directory and change to it
 	workDir := "../../tests/fixtures/scenarios/terraform-apply-affected"
-	if err = os.Chdir(workDir); err != nil {
-		t.Fatalf("Failed to change directory to %q: %v", workDir, err)
-	}
+	t.Chdir(workDir)
 
 	oldStd := os.Stderr
 	_, w, _ := os.Pipe()
@@ -198,7 +168,7 @@ func TestExecuteTerraformQuery(t *testing.T) {
 		Query:         ".vars.tags.team == \"eks\"",
 	}
 
-	err = ExecuteTerraformQuery(&info)
+	err := ExecuteTerraformQuery(&info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraformQuery': %v", err)
 	}
@@ -364,9 +334,7 @@ func TestCheckTerraformConfig(t *testing.T) {
 
 func TestCleanTerraformWorkspace(t *testing.T) {
 	// Create a temporary directory for testing.
-	tempDir, err := os.MkdirTemp("", "terraform_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	tests := []struct {
 		name               string
@@ -402,14 +370,17 @@ func TestCleanTerraformWorkspace(t *testing.T) {
 			require.NoError(t, err)
 
 			// Setup TF_DATA_DIR if specified.
-			originalTfDataDir := os.Getenv("TF_DATA_DIR")
 			if tt.setupTfDataDir != "" {
-				os.Setenv("TF_DATA_DIR", tt.setupTfDataDir)
+				t.Setenv("TF_DATA_DIR", tt.setupTfDataDir)
 			} else {
+				orig := os.Getenv("TF_DATA_DIR")
 				os.Unsetenv("TF_DATA_DIR")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("TF_DATA_DIR", orig)
+					}
+				})
 			}
-			defer os.Setenv("TF_DATA_DIR", originalTfDataDir)
-
 			// Determine the terraform data directory.
 			tfDataDir := tt.setupTfDataDir
 			if tfDataDir == "" {
@@ -524,9 +495,7 @@ func TestShouldProcessStacks(t *testing.T) {
 
 func TestGenerateBackendConfig(t *testing.T) {
 	// Create a temporary directory for testing.
-	tempDir, err := os.MkdirTemp("", "backend_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	tests := []struct {
 		name               string
@@ -617,9 +586,7 @@ func TestGenerateBackendConfig(t *testing.T) {
 
 func TestGenerateProviderOverrides(t *testing.T) {
 	// Create a temporary directory for testing.
-	tempDir, err := os.MkdirTemp("", "provider_test")
-	require.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	tests := []struct {
 		name               string
@@ -1424,21 +1391,17 @@ func TestTFCliArgsAndVarsComponentSections(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Store original value to restore later
-			originalValue := os.Getenv("TF_CLI_ARGS")
-			defer func() {
-				if originalValue != "" {
-					os.Setenv("TF_CLI_ARGS", originalValue)
-				} else {
-					os.Unsetenv("TF_CLI_ARGS")
-				}
-			}()
-
 			// Set test environment variable
 			if tt.tfCliArgsEnv != "" {
-				os.Setenv("TF_CLI_ARGS", tt.tfCliArgsEnv)
+				t.Setenv("TF_CLI_ARGS", tt.tfCliArgsEnv)
 			} else {
+				orig := os.Getenv("TF_CLI_ARGS")
 				os.Unsetenv("TF_CLI_ARGS")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("TF_CLI_ARGS", orig)
+					}
+				})
 			}
 
 			// Create a component section to simulate what ProcessStacks does

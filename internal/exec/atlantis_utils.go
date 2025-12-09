@@ -6,7 +6,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"

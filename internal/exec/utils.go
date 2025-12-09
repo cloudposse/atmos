@@ -1,15 +1,22 @@
 package exec
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
-	"github.com/mitchellh/mapstructure"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	auth "github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -17,13 +24,20 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const (
+	// TerraformConfigKey is the key used in componentInfo maps to store terraform configuration.
+	terraformConfigKey = "terraform_config"
+)
+
 // ProcessComponentConfig processes component config sections.
 func ProcessComponentConfig(
+	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stack string,
 	stacksMap map[string]any,
 	componentType string,
 	component string,
+	authManager auth.AuthManager,
 ) error {
 	defer perf.Track(nil, "exec.ProcessComponentConfig")()
 
@@ -109,6 +123,12 @@ func ProcessComponentConfig(
 		componentAuthSection = map[string]any{}
 	}
 
+	// Merge global auth config from atmosConfig if component doesn't have auth section.
+	// This ensures profiles with auth config work even when auth.yaml is not explicitly imported.
+	if len(componentAuthSection) == 0 && atmosConfig != nil {
+		componentAuthSection = mergeGlobalAuthConfig(atmosConfig, componentSection)
+	}
+
 	if componentSettingsSection, ok = componentSection[cfg.SettingsSectionName].(map[string]any); !ok {
 		componentSettingsSection = map[string]any{}
 	}
@@ -157,10 +177,89 @@ func ProcessComponentConfig(
 		configAndStacksInfo.Command = command
 	}
 
+	// Populate AuthContext from AuthManager if provided (from --identity flag).
+	if authManager != nil {
+		managerStackInfo := authManager.GetStackInfo()
+		if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+			configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+		}
+	}
+
 	return nil
 }
 
+var (
+	// FindStacksMapCache stores the results of FindStacksMap to avoid re-processing.
+	// all YAML files multiple times within the same command execution.
+	// Cache key: JSON-serialized atmosConfig key fields + ignoreMissingFiles flag.
+	findStacksMapCache   map[string]*findStacksMapCacheEntry
+	findStacksMapCacheMu sync.RWMutex
+)
+
+func init() {
+	findStacksMapCache = make(map[string]*findStacksMapCacheEntry)
+}
+
+// findStacksMapCacheEntry stores the cached result of FindStacksMap.
+type findStacksMapCacheEntry struct {
+	stacksMap       map[string]any
+	rawStackConfigs map[string]map[string]any
+}
+
+// getFindStacksMapCacheKey generates a content-aware cache key from atmosConfig and parameters.
+// The cache key includes all paths, file lists, and modification times that affect stack processing,
+// ensuring proper cache invalidation when configuration or file content changes.
+func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) string {
+	const cacheKeyDelimiter = "|"
+
+	// Build a string containing all cache-relevant configuration.
+	// Include all component directories that affect stack processing.
+	var keyBuilder strings.Builder
+	keyBuilder.WriteString(atmosConfig.StacksBaseAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.TerraformDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.HelmfileDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.PackerDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(fmt.Sprintf("%v", ignoreMissingFiles))
+	keyBuilder.WriteString(cacheKeyDelimiter)
+
+	// Include the actual file paths and their modification times.
+	// Sort the paths for consistent hashing.
+	sortedPaths := make([]string, len(atmosConfig.StackConfigFilesAbsolutePaths))
+	copy(sortedPaths, atmosConfig.StackConfigFilesAbsolutePaths)
+	sort.Strings(sortedPaths)
+
+	// Add all file paths and mtimes to the key.
+	// This ensures cache invalidation when files are modified.
+	for _, path := range sortedPaths {
+		keyBuilder.WriteString(path)
+		keyBuilder.WriteString(cacheKeyDelimiter)
+
+		// Include file modification time and size for cache invalidation.
+		// Use nanosecond precision to detect changes within the same second.
+		// Include file size to detect content changes that preserve mtime.
+		// If stat fails (file doesn't exist, permission denied, etc.),
+		// use "missing:-1" sentinel to ensure consistent behavior.
+		if info, err := os.Stat(path); err == nil {
+			keyBuilder.WriteString(fmt.Sprintf("%d:%d", info.ModTime().UnixNano(), info.Size()))
+		} else {
+			keyBuilder.WriteString("missing:-1")
+		}
+		keyBuilder.WriteString(cacheKeyDelimiter)
+	}
+
+	// Use SHA-256 hash to create a fixed-length cache key.
+	// This prevents cache key explosion with large numbers of files.
+	hash := sha256.Sum256([]byte(keyBuilder.String()))
+	return hex.EncodeToString(hash[:])
+}
+
 // FindStacksMap processes stack config and returns a map of all stacks.
+// Results are cached to avoid re-processing the same YAML files multiple times
+// within the same command execution (e.g., when ValidateStacks is called before ExecuteDescribeStacks).
 func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
@@ -168,7 +267,22 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 ) {
 	defer perf.Track(atmosConfig, "exec.FindStacksMap")()
 
-	// Process stack config file(s).
+	// Skip cache when provenance tracking is enabled, as we need to capture merge context and positions during processing.
+	if !atmosConfig.TrackProvenance {
+		// Generate cache key.
+		cacheKey := getFindStacksMapCacheKey(atmosConfig, ignoreMissingFiles)
+
+		// Check cache first.
+		findStacksMapCacheMu.RLock()
+		cached, found := findStacksMapCache[cacheKey]
+		findStacksMapCacheMu.RUnlock()
+
+		if found {
+			return cached.stacksMap, cached.rawStackConfigs, nil
+		}
+	}
+
+	// Cache miss - process stack config file(s).
 	_, stacksMap, rawStackConfigs, err := ProcessYAMLConfigFiles(
 		atmosConfig,
 		atmosConfig.StacksBaseAbsolutePath,
@@ -184,7 +298,103 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 		return nil, nil, err
 	}
 
+	// Cache the result only when provenance tracking is disabled.
+	if !atmosConfig.TrackProvenance {
+		cacheKey := getFindStacksMapCacheKey(atmosConfig, ignoreMissingFiles)
+		findStacksMapCacheMu.Lock()
+		findStacksMapCache[cacheKey] = &findStacksMapCacheEntry{
+			stacksMap:       stacksMap,
+			rawStackConfigs: rawStackConfigs,
+		}
+		findStacksMapCacheMu.Unlock()
+	}
+
 	return stacksMap, rawStackConfigs, nil
+}
+
+// processStackContextPrefix processes the context prefix for a stack based on name template or pattern.
+func processStackContextPrefix(
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	stackName string,
+) error {
+	switch {
+	case atmosConfig.Stacks.NameTemplate != "":
+		tmpl, err := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
+		if err != nil {
+			return err
+		}
+		configAndStacksInfo.ContextPrefix = tmpl
+	case atmosConfig.Stacks.NamePattern != "":
+		// Process context.
+		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+
+		var err error
+		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
+			configAndStacksInfo.Context,
+			GetStackNamePattern(atmosConfig),
+			stackName,
+		)
+		if err != nil {
+			return err
+		}
+	default:
+		return errUtils.ErrMissingStackNameTemplateAndPattern
+	}
+
+	configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
+	configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+	return nil
+}
+
+// findComponentInStacks searches for a component across all stacks and returns matching stacks.
+// Returns the count of found stacks, list of stack names, and the config info for the found component.
+func findComponentInStacks(
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	stacksMap map[string]any,
+	authManager auth.AuthManager,
+) (int, []string, schema.ConfigAndStacksInfo) {
+	foundStackCount := 0
+	var foundStacks []string
+	var foundConfigAndStacksInfo schema.ConfigAndStacksInfo
+
+	for stackName := range stacksMap {
+		// Check if we've found the component in the stack.
+		err := ProcessComponentConfig(
+			atmosConfig,
+			configAndStacksInfo,
+			stackName,
+			stacksMap,
+			configAndStacksInfo.ComponentType,
+			configAndStacksInfo.ComponentFromArg,
+			authManager,
+		)
+		if err != nil {
+			continue
+		}
+
+		if err := processStackContextPrefix(atmosConfig, configAndStacksInfo, stackName); err != nil {
+			continue
+		}
+
+		// Check if we've found the stack.
+		if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
+			configAndStacksInfo.StackFile = stackName
+			foundConfigAndStacksInfo = *configAndStacksInfo
+			foundStackCount++
+			foundStacks = append(foundStacks, stackName)
+
+			log.Debug(
+				fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
+					configAndStacksInfo.ComponentFromArg,
+					configAndStacksInfo.Stack,
+					stackName,
+				))
+		}
+	}
+
+	return foundStackCount, foundStacks, foundConfigAndStacksInfo
 }
 
 // ProcessStacks processes stack config.
@@ -195,6 +405,7 @@ func ProcessStacks(
 	processTemplates bool,
 	processYamlFunctions bool,
 	skip []string,
+	authManager auth.AuthManager,
 ) (schema.ConfigAndStacksInfo, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStacks")()
 
@@ -234,11 +445,13 @@ func ProcessStacks(
 	// Check and process stacks.
 	if atmosConfig.StackType == "Directory" {
 		err = ProcessComponentConfig(
+			atmosConfig,
 			&configAndStacksInfo,
 			configAndStacksInfo.Stack,
 			stacksMap,
 			configAndStacksInfo.ComponentType,
 			configAndStacksInfo.ComponentFromArg,
+			authManager,
 		)
 		if err != nil {
 			return configAndStacksInfo, err
@@ -260,69 +473,81 @@ func ProcessStacks(
 			return configAndStacksInfo, err
 		}
 	} else {
-		foundStackCount := 0
-		var foundStacks []string
-		var foundConfigAndStacksInfo schema.ConfigAndStacksInfo
-
-		for stackName := range stacksMap {
-			// Check if we've found the component in the stack.
-			err = ProcessComponentConfig(
-				&configAndStacksInfo,
-				stackName,
-				stacksMap,
-				configAndStacksInfo.ComponentType,
-				configAndStacksInfo.ComponentFromArg,
-			)
-			if err != nil {
-				continue
-			}
-
-			if atmosConfig.Stacks.NameTemplate != "" {
-				tmpl, err2 := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
-				if err2 != nil {
-					continue
-				}
-				configAndStacksInfo.ContextPrefix = tmpl
-			} else if atmosConfig.Stacks.NamePattern != "" {
-				// Process context.
-				configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-
-				configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack,
-					configAndStacksInfo.Context,
-					GetStackNamePattern(atmosConfig),
-					stackName,
-				)
-				if err != nil {
-					continue
-				}
-			} else {
-				return configAndStacksInfo, errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml' CLI config")
-			}
-
-			configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-			configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-
-			// Check if we've found the stack.
-			if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
-				configAndStacksInfo.StackFile = stackName
-				foundConfigAndStacksInfo = configAndStacksInfo
-				foundStackCount++
-				foundStacks = append(foundStacks, stackName)
-
-				log.Debug(
-					fmt.Sprintf("Found component '%s' in the stack '%s' in the stack manifest '%s'",
-						configAndStacksInfo.ComponentFromArg,
-						configAndStacksInfo.Stack,
-						stackName,
-					))
-			}
-		}
+		foundStackCount, foundStacks, foundConfigAndStacksInfo := findComponentInStacks(
+			atmosConfig,
+			&configAndStacksInfo,
+			stacksMap,
+			authManager,
+		)
 
 		if foundStackCount == 0 && !checkStack {
 			// Allow proceeding without error if checkStack is false (e.g., for operations that don't require a stack).
 			return configAndStacksInfo, nil
 		}
 
+		// Only attempt path resolution fallback if the component argument looks like a file path.
+		// This prevents treating plain component names (like "vpc") as relative paths from CWD.
+		//
+		// Note: Component names in stack configs can contain forward slashes (like "infra/vpc"),
+		// but these are namespace prefixes, not file paths. The key distinction is:
+		// - "infra/vpc" as a component name → already found in first loop, no fallback needed
+		// - "components/terraform/vpc" as a path → not found in first loop, fallback needed
+		//
+		// Path indicators (trigger fallback):
+		// - Forward slash: "components/terraform/vpc"
+		// - Backslash (Windows): "components\terraform\vpc"
+		// - Dot paths: ".", "..", "./vpc"
+		//
+		// Examples that should NOT trigger fallback: "vpc", "top-level-component1", "infra/vpc" (if defined in stack)
+		pathArg := configAndStacksInfo.ComponentFromArg
+		hasForwardSlash := strings.Contains(pathArg, "/")
+		hasPlatformSep := filepath.Separator != '/' && strings.ContainsRune(pathArg, filepath.Separator)
+		// Check for dot paths with both forward slash and platform separator.
+		isDotPath := pathArg == "." || pathArg == ".." ||
+			strings.HasPrefix(pathArg, "./") || strings.HasPrefix(pathArg, "../") ||
+			strings.HasPrefix(pathArg, "."+string(filepath.Separator)) ||
+			strings.HasPrefix(pathArg, ".."+string(filepath.Separator))
+		shouldAttemptPathResolution := foundStackCount == 0 && (hasForwardSlash || hasPlatformSep || isDotPath)
+
+		if shouldAttemptPathResolution {
+			// Component not found - try fallback to path resolution.
+			// If the component argument looks like it could be a path (e.g., "components/terraform/vpc"),
+			// try resolving it as a filesystem path and retry with the resolved component name.
+			log.Debug("Component not found by name, attempting path resolution fallback",
+				"component", configAndStacksInfo.ComponentFromArg,
+				"stack", configAndStacksInfo.Stack,
+			)
+
+			resolvedComponent, pathErr := ResolveComponentFromPathWithoutValidation(
+				atmosConfig,
+				configAndStacksInfo.ComponentFromArg,
+				configAndStacksInfo.ComponentType,
+			)
+
+			if pathErr == nil {
+				// Path resolution succeeded - retry with resolved component name.
+				log.Debug("Path resolution succeeded, retrying with resolved component",
+					"original", configAndStacksInfo.ComponentFromArg,
+					"resolved", resolvedComponent,
+				)
+
+				// Update ComponentFromArg with resolved name and retry the loop.
+				configAndStacksInfo.ComponentFromArg = resolvedComponent
+
+				foundStackCount, foundStacks, foundConfigAndStacksInfo = findComponentInStacks(
+					atmosConfig,
+					&configAndStacksInfo,
+					stacksMap,
+					authManager,
+				)
+			} else if errors.Is(pathErr, errUtils.ErrPathNotInComponentDir) {
+				// Path resolution failed because path is not in component directories.
+				// Return the detailed path error instead of generic "component not found".
+				return configAndStacksInfo, pathErr
+			}
+		}
+
+		// If still not found after path resolution attempt (or if path resolution was skipped), return error.
 		if foundStackCount == 0 {
 			cliConfigYaml := ""
 
@@ -443,7 +668,7 @@ func ProcessStacks(
 
 	// Process YAML functions in Atmos manifest sections.
 	if processYamlFunctions {
-		componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, skip)
+		componentSectionConverted, err := ProcessCustomYamlTags(atmosConfig, configAndStacksInfo.ComponentSection, configAndStacksInfo.Stack, skip, &configAndStacksInfo)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -525,8 +750,50 @@ func ProcessStacks(
 	case cfg.TerraformComponentType:
 		componentPath := constructTerraformComponentWorkingDir(atmosConfig, &configAndStacksInfo)
 		componentInfo[cfg.ComponentPathSectionName] = componentPath
-		terraformConfiguration, _ := tfconfig.LoadModule(componentPath)
-		componentInfo["terraform_config"] = terraformConfiguration
+		terraformConfiguration, diags := tfconfig.LoadModule(componentPath)
+		if !diags.HasErrors() {
+			componentInfo[terraformConfigKey] = terraformConfiguration
+		} else {
+			diagErr := diags.Err()
+
+			// Handle edge case where Err() returns nil despite HasErrors() being true.
+			if diagErr == nil {
+				componentInfo[terraformConfigKey] = nil
+			} else {
+				// Try structured error detection first (most robust).
+				isNotExist := errors.Is(diagErr, os.ErrNotExist) || errors.Is(diagErr, fs.ErrNotExist)
+
+				// Fallback to error message inspection for cases where tfconfig doesn't wrap errors properly.
+				// This handles missing subdirectory modules (e.g., ./modules/security-group referenced in main.tf
+				// but the directory doesn't exist). Such missing paths are valid in stack processing—components
+				// or their modules may be deleted or not yet created when tracking changes over time.
+				errMsg := diagErr.Error()
+				isNotExistString := strings.Contains(errMsg, "does not exist") || strings.Contains(errMsg, "Failed to read directory")
+
+				if !isNotExist && !isNotExistString {
+					// Check if this is an OpenTofu-specific feature that terraform-config-inspect doesn't support.
+					// Respect component-level command overrides for OpenTofu detection.
+					// Clone the config and apply the component override if present.
+					effectiveConfig := *atmosConfig
+					if configAndStacksInfo.Command != "" {
+						effectiveConfig.Components.Terraform.Command = configAndStacksInfo.Command
+					}
+
+					// For known OpenTofu features, skip validation. Otherwise, return the error.
+					if !IsOpenTofu(&effectiveConfig) || !isKnownOpenTofuFeature(diagErr) {
+						// For other errors (syntax errors, permission issues, etc.), return error.
+						return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+					}
+
+					// Skip validation for known OpenTofu-specific features.
+					log.Debug("Skipping terraform-config-inspect validation for OpenTofu-specific feature: " + errMsg)
+					componentInfo[terraformConfigKey] = nil
+					componentInfo["validation_skipped_opentofu"] = true
+				} else {
+					componentInfo[terraformConfigKey] = nil
+				}
+			}
+		}
 	case cfg.HelmfileComponentType:
 		componentInfo[cfg.ComponentPathSectionName] = constructHelmfileComponentWorkingDir(atmosConfig, &configAndStacksInfo)
 	case cfg.PackerComponentType:
@@ -580,7 +847,13 @@ func ProcessStacks(
 }
 
 // generateComponentBackendConfig generates backend config for components.
-func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string) (map[string]any, error) {
+func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string, _ *schema.AuthContext) (map[string]any, error) {
+	// Validate that backendType is not empty to avoid generating invalid backend config.
+	// An empty backendType would result in invalid JSON like: {"terraform": {"backend": {"": {}}}}.
+	if backendType == "" {
+		return nil, errUtils.ErrBackendTypeRequired
+	}
+
 	// Generate backend config file for Terraform Cloud.
 	// https://developer.hashicorp.com/terraform/cli/cloud/settings
 	if backendType == "cloud" {
@@ -623,7 +896,7 @@ func generateComponentBackendConfig(backendType string, backendConfig map[string
 }
 
 // generateComponentProviderOverrides generates provider overrides for components.
-func generateComponentProviderOverrides(providerOverrides map[string]any) map[string]any {
+func generateComponentProviderOverrides(providerOverrides map[string]any, _ *schema.AuthContext) map[string]any {
 	return map[string]any{
 		"provider": providerOverrides,
 	}

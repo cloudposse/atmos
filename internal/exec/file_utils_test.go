@@ -34,9 +34,7 @@ func TestPrintOrWriteToFile(t *testing.T) {
 	err = printOrWriteToFile(atmosConfig, "json", "", testData)
 	assert.NoError(t, err)
 
-	tempDir, err := os.MkdirTemp("", "atmos-test-*")
-	assert.NoError(t, err)
-	defer os.RemoveAll(tempDir)
+	tempDir := t.TempDir()
 
 	yamlFile := filepath.Join(tempDir, "test.yaml")
 	err = printOrWriteToFile(atmosConfig, "yaml", yamlFile, testData)
@@ -319,9 +317,7 @@ func TestRemoveTempDir(t *testing.T) {
 		{
 			name: "remove existing directory",
 			setup: func() string {
-				dir, err := os.MkdirTemp("", "atmos-test-*")
-				assert.NoError(t, err)
-				return dir
+				return t.TempDir()
 			},
 			wantLog: false,
 		},
@@ -335,11 +331,10 @@ func TestRemoveTempDir(t *testing.T) {
 		{
 			name: "remove directory with files",
 			setup: func() string {
-				dir, err := os.MkdirTemp("", "atmos-test-*")
-				assert.NoError(t, err)
+				dir := t.TempDir()
 				// Create a file inside
 				file := filepath.Join(dir, "test.txt")
-				err = os.WriteFile(file, []byte("test"), 0o644)
+				err := os.WriteFile(file, []byte("test"), 0o644)
 				assert.NoError(t, err)
 				return dir
 			},

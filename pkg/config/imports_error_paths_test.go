@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
@@ -256,10 +256,11 @@ import:
 	err = os.WriteFile(nestedPath, []byte(nestedContent), 0o644)
 	assert.NoError(t, err)
 
-	// Process with depth that will hit max
+	// Process with depth that will hit max.
+	// The first-level import succeeds, but nested import processing should fail at max depth.
 	_, err = processLocalImport(tempDir, "config.yaml", tempDir, MaximumImportLvL, MaximumImportLvL)
-	// Should complete but nested import will fail at max depth
-	_ = err
+	// The first-level import should succeed.
+	assert.NoError(t, err)
 }
 
 // TestSearchAtmosConfig_FindMatchingFilesError tests error path at imports.go:268-271.

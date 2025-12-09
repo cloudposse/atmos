@@ -47,22 +47,24 @@ var editorConfigCmd *cobra.Command = &cobra.Command{
 	},
 }
 
+// parseConfigPaths extracts config file paths from command flags.
+// Returns the paths specified via --config flag, or default paths if not specified.
+func parseConfigPaths(cmd *cobra.Command) []string {
+	if cmd.Flags().Changed("config") {
+		configFlag := cmd.Flags().Lookup("config")
+		if configFlag != nil {
+			return strings.Split(configFlag.Value.String(), ",")
+		}
+	}
+	return defaultConfigFileNames
+}
+
 // initializeConfig breaks the initialization cycle by separating the config setup.
 func initializeConfig(cmd *cobra.Command) {
 	replaceAtmosConfigInConfig(cmd, atmosConfig)
 
-	configPaths := []string{}
-	if cmd.Flags().Changed("config") {
-		config := cmd.Flags().Lookup("config")
-		if config != nil {
-			configFilePaths = strings.Split(config.Value.String(), ",")
-		}
-	}
-	if len(configFilePaths) == 0 {
-		configPaths = append(configPaths, defaultConfigFileNames...)
-	} else {
-		configPaths = append(configPaths, configFilePaths...)
-	}
+	configFilePaths = parseConfigPaths(cmd)
+	configPaths := configFilePaths
 
 	currentConfig = config.NewConfig(configPaths)
 

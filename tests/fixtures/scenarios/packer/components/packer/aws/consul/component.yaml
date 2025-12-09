@@ -1,0 +1,10 @@
+kind: ComponentVendorConfig
+apiVersion: atmos/v1
+metadata:
+  name: consul
+  description: Packer template for building Consul AMI (vendored from HashiCorp)
+spec:
+  source:
+    # Example Packer template from HashiCorp's official guides
+    uri: github.com/hashicorp/guides-configuration.git//vault/consul-ami/amazon-linux?ref=master
+    version: master

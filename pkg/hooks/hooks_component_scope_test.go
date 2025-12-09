@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -25,29 +24,45 @@ func TestHooksAreComponentScoped(t *testing.T) {
 	require.NoError(t, err)
 
 	// Change to test directory so atmos finds the config
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(originalDir)
-
-	err = os.Chdir(absTestDir)
-	require.NoError(t, err)
+	t.Chdir(absTestDir)
 
 	// Test VPC component
-	vpcComponent, err := e.ExecuteDescribeComponent("vpc", "acme-dev-test", true, true, []string{})
+	vpcComponent, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            "vpc",
+		Stack:                "acme-dev-test",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{},
+		AuthManager:          nil,
+	})
 	require.NoError(t, err)
 
 	vpcHooks, ok := vpcComponent["hooks"].(map[string]any)
 	require.True(t, ok, "vpc should have hooks section")
 
 	// Test RDS component
-	rdsComponent, err := e.ExecuteDescribeComponent("rds", "acme-dev-test", true, true, []string{})
+	rdsComponent, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            "rds",
+		Stack:                "acme-dev-test",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{},
+		AuthManager:          nil,
+	})
 	require.NoError(t, err)
 
 	rdsHooks, ok := rdsComponent["hooks"].(map[string]any)
 	require.True(t, ok, "rds should have hooks section")
 
 	// Test Lambda component
-	lambdaComponent, err := e.ExecuteDescribeComponent("lambda", "acme-dev-test", true, true, []string{})
+	lambdaComponent, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            "lambda",
+		Stack:                "acme-dev-test",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{},
+		AuthManager:          nil,
+	})
 	require.NoError(t, err)
 
 	lambdaHooks, ok := lambdaComponent["hooks"].(map[string]any)
@@ -93,29 +108,45 @@ func TestHooksWithDRYPattern(t *testing.T) {
 	require.NoError(t, err)
 
 	// Change to test directory so atmos finds the config
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(originalDir)
-
-	err = os.Chdir(absTestDir)
-	require.NoError(t, err)
+	t.Chdir(absTestDir)
 
 	// Test VPC component using DRY pattern
-	vpcComponent, err := e.ExecuteDescribeComponent("vpc-dry", "acme-dev-dry", true, true, []string{})
+	vpcComponent, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            "vpc-dry",
+		Stack:                "acme-dev-dry",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{},
+		AuthManager:          nil,
+	})
 	require.NoError(t, err)
 
 	vpcHooks, ok := vpcComponent["hooks"].(map[string]any)
 	require.True(t, ok, "vpc-dry should have hooks section")
 
 	// Test RDS component using DRY pattern
-	rdsComponent, err := e.ExecuteDescribeComponent("rds-dry", "acme-dev-dry", true, true, []string{})
+	rdsComponent, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            "rds-dry",
+		Stack:                "acme-dev-dry",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{},
+		AuthManager:          nil,
+	})
 	require.NoError(t, err)
 
 	rdsHooks, ok := rdsComponent["hooks"].(map[string]any)
 	require.True(t, ok, "rds-dry should have hooks section")
 
 	// Test Lambda component using DRY pattern
-	lambdaComponent, err := e.ExecuteDescribeComponent("lambda-dry", "acme-dev-dry", true, true, []string{})
+	lambdaComponent, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            "lambda-dry",
+		Stack:                "acme-dev-dry",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{},
+		AuthManager:          nil,
+	})
 	require.NoError(t, err)
 
 	lambdaHooks, ok := lambdaComponent["hooks"].(map[string]any)

@@ -167,8 +167,8 @@ terraform:
 			configFileName: "atmos.yaml",
 			configContent:  `base_path: !env TEST_ATMOS_BASE_PATH`,
 			envSetup: func(t *testing.T) func() {
-				os.Setenv("TEST_ATMOS_BASE_PATH", "env/test/path")
-				return func() { os.Unsetenv("TEST_ATMOS_BASE_PATH") }
+				t.Setenv("TEST_ATMOS_BASE_PATH", "env/test/path")
+				return func() {} // t.Setenv automatically restores the value
 			},
 			setup: func(t *testing.T, dir string, tc testCase) {
 				createConfigFile(t, dir, tc.configFileName, tc.configContent)
@@ -369,10 +369,8 @@ func TestParseFlags(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			oldArgs := os.Args
-			defer func() { os.Args = oldArgs }()
-			os.Args = test.args
-			result := parseFlags()
+			// Use parseFlagsFromArgs to avoid os.Args manipulation.
+			result := parseFlagsFromArgs(test.args)
 			assert.Equal(t, test.expected, result)
 		})
 	}
@@ -417,6 +415,8 @@ func TestSetLogConfig(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			// setLogConfig() calls parseFlags() which reads os.Args.
+			// We manipulate os.Args here to test the integration.
 			oldArgs := os.Args
 			defer func() { os.Args = oldArgs }()
 			os.Args = test.args
@@ -476,16 +476,7 @@ func createConfigFile(t *testing.T, dir string, fileName string, content string)
 }
 
 func changeWorkingDir(t *testing.T, dir string) {
-	cwd, err := os.Getwd()
-	require.NoError(t, err, "Failed to get current directory")
-
-	t.Cleanup(func() {
-		err := os.Chdir(cwd)
-		require.NoError(t, err, "Failed to restore working directory")
-	})
-
-	err = os.Chdir(dir)
-	require.NoError(t, err, "Failed to change working directory")
+	t.Chdir(dir)
 }
 
 func TestParseFlagsForPager(t *testing.T) {
@@ -541,15 +532,8 @@ func TestParseFlagsForPager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original args
-			originalArgs := os.Args
-			defer func() { os.Args = originalArgs }()
-
-			// Set test args
-			os.Args = tt.args
-
-			// Parse flags
-			flags := parseFlags()
+			// Use parseFlagsFromArgs to avoid os.Args manipulation.
+			flags := parseFlagsFromArgs(tt.args)
 
 			// Check pager flag
 			if tt.expectedPager != "" {
@@ -594,7 +578,8 @@ func TestSetLogConfigWithPager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original state
+			// setLogConfig() calls parseFlags() which reads os.Args.
+			// We manipulate os.Args here to test the integration.
 			originalArgs := os.Args
 			defer func() { os.Args = originalArgs }()
 
@@ -793,7 +778,8 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original state
+			// setLogConfig() calls parseFlags() which reads os.Args.
+			// We manipulate os.Args here to test the integration.
 			originalArgs := os.Args
 			originalEnvVars := make(map[string]string)
 
@@ -820,7 +806,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 
 			// Set test environment variables
 			for envVar, val := range tt.envVars {
-				os.Setenv(envVar, val)
+				t.Setenv(envVar, val)
 			}
 
 			// Set test args

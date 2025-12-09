@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -260,13 +261,8 @@ func TestAtmosRunner_Cleanup(t *testing.T) {
 }
 
 func Test_findRepoRoot(t *testing.T) {
-	// Save current directory and restore after test.
-	oldWd, err := os.Getwd()
-	require.NoError(t, err)
-	defer os.Chdir(oldWd)
-
 	// Test from current directory.
-	root, err := findRepoRoot()
+	root, err := FindRepoRoot()
 
 	// Check if we found a repo.
 	if err == nil {
@@ -278,16 +274,18 @@ func Test_findRepoRoot(t *testing.T) {
 		assert.NoError(t, statErr, ".git should exist")
 	} else {
 		// If no repo found, should have specific error.
-		assert.ErrorContains(t, err, "not in a git repository")
+		assert.ErrorIs(t, err, errUtils.ErrNotInGitRepository)
+		assert.ErrorContains(t, err, "not inside a git repository")
 	}
 
 	// Test from a temp directory (should fail).
 	tempDir := t.TempDir()
-	os.Chdir(tempDir)
+	t.Chdir(tempDir)
 
-	_, err = findRepoRoot()
+	_, err = FindRepoRoot()
 	assert.Error(t, err)
-	assert.ErrorContains(t, err, "not in a git repository")
+	assert.ErrorIs(t, err, errUtils.ErrNotInGitRepository)
+	assert.ErrorContains(t, err, "not inside a git repository")
 }
 
 func TestAtmosRunner_buildWithoutCoverage(t *testing.T) {
@@ -324,9 +322,7 @@ func TestAtmosRunner_buildWithoutCoverage(t *testing.T) {
 	t.Run("handles missing repo root", func(t *testing.T) {
 		// Change to directory without git repo.
 		tempDir := t.TempDir()
-		oldWd, _ := os.Getwd()
-		defer os.Chdir(oldWd)
-		os.Chdir(tempDir)
+		t.Chdir(tempDir)
 
 		runner := &AtmosRunner{}
 
@@ -372,9 +368,7 @@ func TestAtmosRunner_buildWithCoverage(t *testing.T) {
 	t.Run("handles missing repo root", func(t *testing.T) {
 		// Change to directory without git repo.
 		tempDir := t.TempDir()
-		oldWd, _ := os.Getwd()
-		defer os.Chdir(oldWd)
-		os.Chdir(tempDir)
+		t.Chdir(tempDir)
 
 		runner := &AtmosRunner{
 			coverDir: t.TempDir(),
@@ -427,9 +421,7 @@ func TestAtmosRunner_ErrorPaths(t *testing.T) {
 		}
 
 		// Change to a directory without go.mod.
-		oldWd, _ := os.Getwd()
-		os.Chdir(t.TempDir())
-		defer os.Chdir(oldWd)
+		t.Chdir(t.TempDir())
 
 		// Should fail to build.
 		err := runner.buildWithCoverage()

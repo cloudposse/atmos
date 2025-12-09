@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -16,6 +19,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
+)
+
+const (
+	logKeyIdentity = "identity"
 )
 
 // authWhoamiCmd shows current authentication status.
@@ -44,17 +52,72 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Query whoami.
-	whoami, err := authManager.Whoami(context.Background(), identityName)
+	ctx := context.Background()
+	whoami, err := authManager.Whoami(ctx, identityName)
 	if err != nil {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
+
+	// Validate credentials if available.
+	isValid := validateCredentials(ctx, whoami)
 
 	// Output.
 	if viper.GetString("auth.whoami.output") == "json" {
 		return printWhoamiJSON(whoami)
 	}
-	printWhoamiHuman(whoami)
+	printWhoamiHuman(whoami, isValid)
 	return nil
+}
+
+// validateCredentials attempts to validate the credentials and returns true if valid.
+// If validation succeeds, it populates whoami with additional info (principal, expiration, etc.).
+func validateCredentials(ctx context.Context, whoami *authTypes.WhoamiInfo) bool {
+	if whoami.Credentials == nil {
+		log.Debug("Validation failed: no credentials in WhoamiInfo", "identity", whoami.Identity)
+		return false
+	}
+
+	// Try to validate using the Validate method if available.
+	type validator interface {
+		Validate(context.Context) (*authTypes.ValidationInfo, error)
+	}
+
+	v, ok := whoami.Credentials.(validator)
+	if !ok {
+		// If no validator, check expiration as fallback.
+		expired := whoami.Credentials.IsExpired()
+		log.Debug("Credential validation using expiration check", logKeyIdentity, whoami.Identity, "expired", expired)
+		return !expired
+	}
+
+	validationInfo, err := v.Validate(ctx)
+	if err != nil {
+		log.Debug("Credential validation failed", logKeyIdentity, whoami.Identity, "error", err)
+		return false
+	}
+
+	log.Debug("Credential validation succeeded", logKeyIdentity, whoami.Identity)
+
+	// Populate whoami with validation info.
+	populateWhoamiFromValidation(whoami, validationInfo)
+
+	return true
+}
+
+// populateWhoamiFromValidation populates whoami info from validation results.
+func populateWhoamiFromValidation(whoami *authTypes.WhoamiInfo, validationInfo *authTypes.ValidationInfo) {
+	if validationInfo == nil {
+		return
+	}
+	if validationInfo.Principal != "" {
+		whoami.Principal = validationInfo.Principal
+	}
+	if validationInfo.Account != "" {
+		whoami.Account = validationInfo.Account
+	}
+	if validationInfo.Expiration != nil {
+		whoami.Expiration = validationInfo.Expiration
+	}
 }
 
 func loadAuthManager() (authTypes.AuthManager, error) {
@@ -70,11 +133,18 @@ func loadAuthManager() (authTypes.AuthManager, error) {
 }
 
 func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthManager) (string, error) {
-	identityName, _ := cmd.Flags().GetString("identity")
-	if identityName != "" {
+	// Get identity from flag or use default.
+	// Use GetIdentityFromFlags which handles Cobra's NoOptDefVal quirk correctly.
+	identityName := GetIdentityFromFlags(cmd, os.Args)
+
+	// Check if user wants to interactively select identity.
+	forceSelect := identityName == IdentityFlagSelectValue
+
+	if identityName != "" && !forceSelect {
 		return identityName, nil
 	}
-	defaultIdentity, err := authManager.GetDefaultIdentity()
+
+	defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 	if err != nil {
 		return "", fmt.Errorf("%w: no default identity configured and no identity specified: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
@@ -99,23 +169,86 @@ func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
 	return nil
 }
 
-func printWhoamiHuman(whoami *authTypes.WhoamiInfo) {
-	fmt.Fprintf(os.Stderr, "Current Authentication Status\n\n")
-	fmt.Fprintf(os.Stderr, "Provider: %s\n", whoami.Provider)
-	fmt.Fprintf(os.Stderr, "Identity: %s\n", whoami.Identity)
+func printWhoamiHuman(whoami *authTypes.WhoamiInfo, isValid bool) {
+	// Display status indicator with colored checkmark or X.
+	statusIndicator := theme.Styles.XMark.String()
+	if isValid {
+		statusIndicator = theme.Styles.Checkmark.String()
+	}
+
+	fmt.Fprintf(os.Stderr, "%s Current Authentication Status\n\n", statusIndicator)
+
+	// Build and print table.
+	rows := buildWhoamiTableRows(whoami)
+	t := createWhoamiTable(rows)
+
+	fmt.Fprintf(os.Stderr, "%s\n", t)
+}
+
+// buildWhoamiTableRows builds table rows for whoami output.
+func buildWhoamiTableRows(whoami *authTypes.WhoamiInfo) [][]string {
+	const expiringThresholdMinutes = 15
+
+	var rows [][]string
+	rows = append(rows, []string{"Provider", whoami.Provider})
+	rows = append(rows, []string{"Identity", whoami.Identity})
+
 	if whoami.Principal != "" {
-		fmt.Fprintf(os.Stderr, "Principal: %s\n", whoami.Principal)
+		rows = append(rows, []string{"Principal", whoami.Principal})
 	}
+
 	if whoami.Account != "" {
-		fmt.Fprintf(os.Stderr, "Account: %s\n", whoami.Account)
+		rows = append(rows, []string{"Account", whoami.Account})
 	}
+
 	if whoami.Region != "" {
-		fmt.Fprintf(os.Stderr, "Region: %s\n", whoami.Region)
+		rows = append(rows, []string{"Region", whoami.Region})
 	}
+
 	if whoami.Expiration != nil {
-		fmt.Fprintf(os.Stderr, "Expires: %s\n", whoami.Expiration.Format("2006-01-02 15:04:05 MST"))
+		expiresStr := formatExpiration(whoami.Expiration, expiringThresholdMinutes)
+		rows = append(rows, []string{"Expires", expiresStr})
 	}
-	fmt.Fprintf(os.Stderr, "Last Updated: %s\n", whoami.LastUpdated.Format("2006-01-02 15:04:05 MST"))
+
+	rows = append(rows, []string{"Last Updated", whoami.LastUpdated.Format("2006-01-02 15:04:05 MST")})
+
+	return rows
+}
+
+// formatExpiration formats expiration time with duration and styling.
+func formatExpiration(expiration *time.Time, thresholdMinutes int) string {
+	expiresStr := expiration.Format("2006-01-02 15:04:05 MST")
+	duration := formatDuration(time.Until(*expiration))
+
+	timeUntilExpiration := time.Until(*expiration)
+	var durationStyle lipgloss.Style
+	if timeUntilExpiration > 0 && timeUntilExpiration < time.Duration(thresholdMinutes)*time.Minute {
+		durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
+	} else {
+		durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#808080"))
+	}
+
+	return fmt.Sprintf("%s %s", expiresStr, durationStyle.Render(fmt.Sprintf("(%s)", duration)))
+}
+
+// createWhoamiTable creates a formatted table for whoami output.
+func createWhoamiTable(rows [][]string) *table.Table {
+	return table.New().
+		Rows(rows...).
+		BorderTop(false).
+		BorderBottom(false).
+		BorderLeft(false).
+		BorderRight(false).
+		BorderRow(false).
+		BorderColumn(false).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if col == 0 {
+				return lipgloss.NewStyle().
+					Foreground(lipgloss.Color(theme.ColorCyan)).
+					Padding(0, 1, 0, 2)
+			}
+			return lipgloss.NewStyle().Padding(0, 1)
+		})
 }
 
 // redactHomeDir replaces occurrences of the homeDir at the start of v with "~" to avoid leaking user paths.
@@ -158,6 +291,11 @@ func init() {
 	}
 	if err := viper.BindEnv("auth.whoami.output", "ATMOS_AUTH_WHOAMI_OUTPUT"); err != nil {
 		log.Trace("Failed to bind auth.whoami.output environment variable", "error", err)
+	}
+	if err := authWhoamiCmd.RegisterFlagCompletionFunc("output", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"json"}, cobra.ShellCompDirectiveNoFileComp
+	}); err != nil {
+		log.Trace("Failed to register output flag completion", "error", err)
 	}
 	authCmd.AddCommand(authWhoamiCmd)
 }

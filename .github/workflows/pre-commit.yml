@@ -10,12 +10,18 @@ env:
   # Skip hooks that are already running in other CI jobs to avoid redundant work
   # go-build-mod: Already runs in test.yml build job
   # golangci-lint: Already runs in codeql.yml lint-golangci job
-  SKIP: go-build-mod,golangci-lint
+  # lintroller: Already runs in codeql.yml lint-golangci job (via custom-gcl binary)
+  SKIP: go-build-mod,golangci-lint,lintroller
 
 jobs:
   pre-commit:
     name: Run pre-commit hooks
-    runs-on: ubuntu-latest
+    runs-on:
+      - runs-on=${{github.run_id}}
+      - runner=terraform
+      - tag=atmos
+      - extras=s3-cache
+      - private=false
     timeout-minutes: 15
 
     steps:
@@ -41,6 +47,11 @@ jobs:
 
           # Add Go bin to PATH
           echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Download Go module dependencies
+        run: |
+          # Pre-download dependencies to prevent go mod tidy from trying to fetch internal packages
+          go mod download
 
       - name: Set up Python
         uses: actions/setup-python@v5

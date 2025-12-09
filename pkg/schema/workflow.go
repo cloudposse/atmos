@@ -5,11 +5,12 @@ type DescribeWorkflowsItem struct {
 	Workflow string `yaml:"workflow" json:"workflow" mapstructure:"workflow"`
 }
 type WorkflowStep struct {
-	Name    string       `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
-	Command string       `yaml:"command" json:"command" mapstructure:"command"`
-	Stack   string       `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
-	Type    string       `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
-	Retry   *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
+	Name     string       `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+	Command  string       `yaml:"command" json:"command" mapstructure:"command"`
+	Stack    string       `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
+	Type     string       `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
+	Retry    *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
+	Identity string       `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }
 
 type WorkflowDefinition struct {

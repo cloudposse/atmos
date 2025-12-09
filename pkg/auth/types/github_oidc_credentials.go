@@ -1,6 +1,7 @@
 package types
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -48,7 +49,8 @@ func (c *OIDCCredentials) GetExpiration() (*time.Time, error) {
 	if claims.Exp == 0 {
 		return nil, nil
 	}
-	t := time.Unix(claims.Exp, 0).UTC()
+	// Convert to local timezone for display to user.
+	t := time.Unix(claims.Exp, 0).Local()
 	return &t, nil
 }
 
@@ -61,4 +63,10 @@ func (c *OIDCCredentials) BuildWhoamiInfo(info *WhoamiInfo) {
 	if exp, _ := c.GetExpiration(); exp != nil {
 		info.Expiration = exp
 	}
+}
+
+// Validate is not implemented for OIDC credentials.
+// OIDC tokens cannot be validated without provider-specific logic.
+func (c *OIDCCredentials) Validate(ctx context.Context) (*ValidationInfo, error) {
+	return nil, errUtils.ErrNotImplemented
 }
