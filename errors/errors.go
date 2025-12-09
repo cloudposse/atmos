@@ -166,7 +166,7 @@ var (
 	ErrOutputFormat   = errors.New("output format error")
 
 	// File operation errors.
-	ErrRefusingToDeleteSymlink = errors.New("refusing to delete symbolic link")
+	ErrRefusingToDeleteSymlink = ErrRefuseDeleteSymbolicLink
 
 	// Slice utility errors.
 	ErrNilInput         = errors.New("input must not be nil")

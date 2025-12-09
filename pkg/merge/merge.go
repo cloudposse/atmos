@@ -18,6 +18,10 @@ const (
 	ListMergeStrategyReplace = "replace"
 	ListMergeStrategyAppend  = "append"
 	ListMergeStrategyMerge   = "merge"
+
+	// MaxSliceCapacity is the maximum safe capacity for slice allocation to prevent overflow.
+	// This is 2^30 (about 1 billion elements), providing a safe margin below the int max.
+	maxSliceCapacity = 1 << 30
 )
 
 // DeepCopyMap performs a deep copy of a map optimized for map[string]any structures.
@@ -352,8 +356,10 @@ func MergeWithOptions(
 	for index := range nonEmptyInputs {
 		current := nonEmptyInputs[index]
 
-		// Process !append tagged lists before merging
-		current = processAppendTags(current, merged)
+		// Process !append tagged lists before merging.
+		// When appendSlice is true (global append strategy), pass appendNewOnly=true
+		// so !append returns only new items and mergo.WithAppendSlice performs the append without duplication.
+		current = processAppendTags(current, merged, appendSlice)
 
 		// Due to a bug in `mergo.Merge`
 		// (Note: in the `for` loop, it DOES modify the source of the previous loop iteration if it's a complex map and `mergo` gets a pointer to it,
@@ -391,34 +397,42 @@ func MergeWithOptions(
 
 // processAppendTags handles special !append tagged lists during merging.
 // It processes any values wrapped with __atmos_append__ metadata and appends them to existing lists.
-func processAppendTags(current map[string]any, merged map[string]any) map[string]any {
+// When appendNewOnly is true (global append strategy), it returns only the new items so that
+// mergo.WithAppendSlice performs the append without duplication.
+func processAppendTags(current map[string]any, merged map[string]any, appendNewOnly bool) map[string]any {
 	result := make(map[string]any)
 
 	for key, value := range current {
-		result[key] = processValue(key, value, merged)
+		result[key] = processValue(key, value, merged, appendNewOnly)
 	}
 
 	return result
 }
 
 // processValue processes a single value for append tags.
-func processValue(key string, value any, merged map[string]any) any {
-	// Check if this is an append-tagged list
+func processValue(key string, value any, merged map[string]any, appendNewOnly bool) any {
+	// Check if this is an append-tagged list.
 	if list, isAppend := u.ExtractAppendListValue(value); isAppend {
-		return processAppendList(key, list, merged)
+		return processAppendList(key, list, merged, appendNewOnly)
 	}
 
-	// Check if this is a nested map
+	// Check if this is a nested map.
 	if nestedMap, ok := value.(map[string]any); ok {
-		return processNestedMap(key, nestedMap, merged)
+		return processNestedMap(key, nestedMap, merged, appendNewOnly)
 	}
 
-	// Regular value, pass through
+	// Regular value, pass through.
 	return value
 }
 
 // processAppendList handles appending a list to existing values.
-func processAppendList(key string, list []any, merged map[string]any) []any {
+// If appendNewOnly is true, return only the new items so mergo.WithAppendSlice can append
+// them to the existing list without duplication.
+func processAppendList(key string, list []any, merged map[string]any, appendNewOnly bool) []any {
+	if appendNewOnly {
+		return list
+	}
+
 	var existingList []any
 	if existingValue, exists := merged[key]; exists {
 		if el, ok := existingValue.([]any); ok {
@@ -426,15 +440,22 @@ func processAppendList(key string, list []any, merged map[string]any) []any {
 		}
 	}
 
-	// Create a new slice to avoid modifying the original
-	result := make([]any, len(existingList), len(existingList)+len(list))
+	// Create a new slice to avoid modifying the original.
+	// Check for potential overflow before allocation.
+	existingLen := len(existingList)
+	newLen := len(list)
+	if existingLen > 0 && newLen > 0 && existingLen > maxSliceCapacity-newLen {
+		// Overflow would occur; return just the new list to avoid panic.
+		return list
+	}
+	result := make([]any, existingLen, existingLen+newLen)
 	copy(result, existingList)
 	result = append(result, list...)
 	return result
 }
 
 // processNestedMap recursively processes nested maps for append tags.
-func processNestedMap(key string, nestedMap map[string]any, merged map[string]any) map[string]any {
+func processNestedMap(key string, nestedMap map[string]any, merged map[string]any, appendNewOnly bool) map[string]any {
 	var mergedNested map[string]any
 	if existingNested, exists := merged[key]; exists {
 		if mn, ok := existingNested.(map[string]any); ok {
@@ -444,7 +465,7 @@ func processNestedMap(key string, nestedMap map[string]any, merged map[string]an
 	if mergedNested == nil {
 		mergedNested = make(map[string]any)
 	}
-	return processAppendTags(nestedMap, mergedNested)
+	return processAppendTags(nestedMap, mergedNested, appendNewOnly)
 }
 
 // Merge takes a list of maps as input, deep-merges the items in the order they are defined in the list, and returns a single map with the merged contents.
