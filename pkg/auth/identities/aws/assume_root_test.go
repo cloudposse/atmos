@@ -846,6 +846,10 @@ func TestAssumeRootIdentity_Logout(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	// Set root provider name (required for logout to resolve the provider).
+	assumeRoot := identity.(*assumeRootIdentity)
+	assumeRoot.SetManagerAndProvider(nil, "test-provider")
+
 	ctx := context.Background()
 	err = identity.Logout(ctx)
 
