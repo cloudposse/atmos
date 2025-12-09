@@ -11,6 +11,94 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// setupMockStateGetter configures the global stateGetter to return mock values
+// for terraform state lookups. This allows tests to run without actual terraform
+// state files. Returns a cleanup function that must be deferred to restore the
+// original state getter.
+func setupMockStateGetter(t *testing.T, ctrl *gomock.Controller) func() {
+	t.Helper()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+
+	// Configure mock to return values for all components in the fixture.
+
+	// Level 3 components have no dependencies.
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "level3-component", "subnet_id", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("subnet-level3-12345", nil).
+		AnyTimes()
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "level3-component", "cidr_block", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("10.0.3.0/24", nil).
+		AnyTimes()
+
+	// Level 2 components depend on level 3.
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "level2-component", "vpc_id", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("vpc-level2-67890", nil).
+		AnyTimes()
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "level2-component", "level3_subnet_id", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("subnet-level3-12345", nil).
+		AnyTimes()
+
+	// Auth override scenario components test middle-level auth override.
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "auth-override-level3", "database_host", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("db.example.com", nil).
+		AnyTimes()
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "auth-override-level2", "service_name", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("api-service", nil).
+		AnyTimes()
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "auth-override-level2", "database_config", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("db.example.com", nil).
+		AnyTimes()
+
+	// Multi-auth scenario components test multiple auth overrides in chain.
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "multi-auth-level3", "shared_resource_id", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("shared-12345", nil).
+		AnyTimes()
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "multi-auth-level2", "vpc_id", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("vpc-account-b", nil).
+		AnyTimes()
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "multi-auth-level2", "shared_resource", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("shared-12345", nil).
+		AnyTimes()
+
+	// Mixed inheritance scenario components test selective auth override.
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "mixed-inherit-component", "config_value", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("inherited-auth-config", nil).
+		AnyTimes()
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "mixed-override-component", "override_value", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("override-specific-value", nil).
+		AnyTimes()
+
+	// Deep nesting scenario components test 4-level deep auth override.
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "deep-level4", "data_source", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("primary-db", nil).
+		AnyTimes()
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "deep-level3", "data_ref", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("primary-db", nil).
+		AnyTimes()
+	mockStateGetter.EXPECT().
+		GetState(gomock.Any(), gomock.Any(), "test", "deep-level2", "nested_data", gomock.Any(), gomock.Any(), gomock.Any()).
+		Return("primary-db", nil).
+		AnyTimes()
+
+	stateGetter = mockStateGetter
+	return func() { stateGetter = originalGetter }
+}
+
 // TestNestedAuthManagerPropagation verifies that AuthManager propagates correctly
 // through multiple levels of nested !terraform.state YAML functions.
 //
@@ -33,6 +121,10 @@ import (
 func TestNestedAuthManagerPropagation(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
+
+	// Setup mock state getter to return expected values without actual terraform state.
+	cleanup := setupMockStateGetter(t, ctrl)
+	defer cleanup()
 
 	// Setup: Create AuthContext with AWS credentials.
 	expectedAuthContext := &schema.AuthContext{
@@ -93,6 +185,10 @@ func TestNestedAuthManagerPropagation(t *testing.T) {
 func TestNestedAuthManagerPropagationLevel2(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
+
+	// Setup mock state getter to return expected values without actual terraform state.
+	cleanup := setupMockStateGetter(t, ctrl)
+	defer cleanup()
 
 	expectedAuthContext := &schema.AuthContext{
 		AWS: &schema.AWSAuthContext{
@@ -293,11 +389,14 @@ func TestNestedAuthManagerWithNilAuthContext(t *testing.T) {
 }
 
 // setupNestedAuthTest creates a mock AuthManager and sets up the test directory.
-// Returns the mock controller and AuthManager for use in nested auth tests.
-func setupNestedAuthTest(t *testing.T, profile, region string) (*gomock.Controller, types.AuthManager) {
+// Returns the mock controller, AuthManager, and cleanup function for use in nested auth tests.
+func setupNestedAuthTest(t *testing.T, profile, region string) (*gomock.Controller, types.AuthManager, func()) {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
+
+	// Setup mock state getter to return expected values without actual terraform state.
+	stateCleanup := setupMockStateGetter(t, ctrl)
 
 	parentAuthContext := &schema.AuthContext{
 		AWS: &schema.AWSAuthContext{
@@ -320,7 +419,7 @@ func setupNestedAuthTest(t *testing.T, profile, region string) (*gomock.Controll
 	workDir := "../../tests/fixtures/scenarios/authmanager-nested-propagation"
 	t.Chdir(workDir)
 
-	return ctrl, mockAuthManager
+	return ctrl, mockAuthManager, stateCleanup
 }
 
 // TestNestedAuthManagerScenario2_AuthOverrideAtMiddleLevel verifies that
@@ -340,8 +439,9 @@ func setupNestedAuthTest(t *testing.T, profile, region string) (*gomock.Controll
 //   - Level 3 inherits Level 2's AuthManager
 //   - No IMDS timeout errors at any level.
 func TestNestedAuthManagerScenario2_AuthOverrideAtMiddleLevel(t *testing.T) {
-	ctrl, mockAuthManager := setupNestedAuthTest(t, "parent-profile", "us-east-1")
+	ctrl, mockAuthManager, stateCleanup := setupNestedAuthTest(t, "parent-profile", "us-east-1")
 	defer ctrl.Finish()
+	defer stateCleanup()
 
 	componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 		Component:            "auth-override-level1",
@@ -378,8 +478,9 @@ func TestNestedAuthManagerScenario2_AuthOverrideAtMiddleLevel(t *testing.T) {
 //   - Level 3 uses account 333333333333 (inherited from Level 2)
 //   - Each level with auth config creates its own AuthManager.
 func TestNestedAuthManagerScenario3_MultipleAuthOverrides(t *testing.T) {
-	ctrl, mockAuthManager := setupNestedAuthTest(t, "global-profile", "us-east-1")
+	ctrl, mockAuthManager, stateCleanup := setupNestedAuthTest(t, "global-profile", "us-east-1")
 	defer ctrl.Finish()
+	defer stateCleanup()
 
 	componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 		Component:            "multi-auth-level1",
@@ -415,8 +516,9 @@ func TestNestedAuthManagerScenario3_MultipleAuthOverrides(t *testing.T) {
 //   - mixed-override-component uses account 555555555555 (its own auth)
 //   - When mixed-override calls mixed-inherit, it inherits account 555555555555.
 func TestNestedAuthManagerScenario4_MixedInheritance(t *testing.T) {
-	ctrl, mockAuthManager := setupNestedAuthTest(t, "parent-profile", "us-west-2")
+	ctrl, mockAuthManager, stateCleanup := setupNestedAuthTest(t, "parent-profile", "us-west-2")
 	defer ctrl.Finish()
+	defer stateCleanup()
 
 	componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 		Component:            "mixed-top-level",
@@ -455,8 +557,9 @@ func TestNestedAuthManagerScenario4_MixedInheritance(t *testing.T) {
 //   - Level 3 switches to account 666666666666 (Level3Access) - its own override
 //   - Level 4 inherits account 666666666666 from Level 3.
 func TestNestedAuthManagerScenario5_DeepNesting(t *testing.T) {
-	ctrl, mockAuthManager := setupNestedAuthTest(t, "global-profile", "us-east-1")
+	ctrl, mockAuthManager, stateCleanup := setupNestedAuthTest(t, "global-profile", "us-east-1")
 	defer ctrl.Finish()
+	defer stateCleanup()
 
 	componentSection, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 		Component:            "deep-level1",
