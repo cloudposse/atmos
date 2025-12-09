@@ -313,3 +313,222 @@ func TestTerraformOutput_APIErrorWithoutDefaultReturnsError(t *testing.T) {
 	assert.Nil(t, result)
 	assert.Contains(t, err.Error(), "S3 connection timeout")
 }
+
+// TestTerraformOutput_OutputNotFoundWithDefaultUsesDefault verifies that when
+// GetOutput returns ErrTerraformOutputNotFound (output key doesn't exist in state)
+// AND the expression has a YQ default, the default is used.
+func TestTerraformOutput_OutputNotFoundWithDefaultUsesDefault(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOutputGetter := NewMockTerraformOutputGetter(ctrl)
+	originalGetter := outputGetter
+	outputGetter = mockOutputGetter
+	defer func() { outputGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	expectedYqExpr := `.missing_output // "fallback-value"`
+
+	// Mock returns ErrTerraformOutputNotFound - the output key doesn't exist.
+	mockOutputGetter.EXPECT().
+		GetOutput(
+			atmosConfig,
+			"test-stack",
+			"vpc",
+			expectedYqExpr,
+			false,
+			gomock.Any(),
+			gomock.Any(),
+		).
+		Return(nil, false, fmt.Errorf("output key not found: %w", errUtils.ErrTerraformOutputNotFound)).
+		Times(1)
+
+	input := schema.AtmosSectionMapType{
+		"value": `!terraform.output vpc test-stack ".missing_output // ""fallback-value"""`,
+	}
+
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+
+	// With a YQ default and ErrTerraformOutputNotFound, the default should be used.
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "fallback-value", result["value"])
+}
+
+// TestTerraformOutput_YqDefaultWithMapFallback verifies that YQ default
+// values work with map/object fallback expressions.
+func TestTerraformOutput_YqDefaultWithMapFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOutputGetter := NewMockTerraformOutputGetter(ctrl)
+	originalGetter := outputGetter
+	outputGetter = mockOutputGetter
+	defer func() { outputGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	expectedYqExpr := `.tags // {"env": "dev", "team": "platform"}`
+
+	// Mock returns exists=false - output doesn't exist.
+	mockOutputGetter.EXPECT().
+		GetOutput(
+			atmosConfig,
+			"test-stack",
+			"config",
+			expectedYqExpr,
+			false,
+			gomock.Any(),
+			gomock.Any(),
+		).
+		Return(nil, false, nil).
+		Times(1)
+
+	input := schema.AtmosSectionMapType{
+		"tags": `!terraform.output config test-stack ".tags // {""env"": ""dev"", ""team"": ""platform""}"`,
+	}
+
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	// Verify the map structure is returned correctly.
+	expectedMap := map[string]any{"env": "dev", "team": "platform"}
+	assert.Equal(t, expectedMap, result["tags"])
+}
+
+// TestTerraformOutput_YqDefaultWithEmptyStringFallback verifies behavior
+// when using an empty string as a YQ default value.
+// Note: YQ evaluates empty strings to nil in the current implementation.
+func TestTerraformOutput_YqDefaultWithEmptyStringFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOutputGetter := NewMockTerraformOutputGetter(ctrl)
+	originalGetter := outputGetter
+	outputGetter = mockOutputGetter
+	defer func() { outputGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	expectedYqExpr := `.optional_value // ""`
+
+	// Mock returns exists=false - output doesn't exist.
+	mockOutputGetter.EXPECT().
+		GetOutput(
+			atmosConfig,
+			"test-stack",
+			"config",
+			expectedYqExpr,
+			false,
+			gomock.Any(),
+			gomock.Any(),
+		).
+		Return(nil, false, nil).
+		Times(1)
+
+	input := schema.AtmosSectionMapType{
+		"optional": `!terraform.output config test-stack ".optional_value // """""`,
+	}
+
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	// Note: YQ evaluates empty string default to nil in current implementation.
+	// This documents the actual behavior.
+	assert.Nil(t, result["optional"])
+}
+
+// TestTerraformOutput_YqDefaultWithNumericFallback verifies that
+// numeric defaults work correctly.
+func TestTerraformOutput_YqDefaultWithNumericFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOutputGetter := NewMockTerraformOutputGetter(ctrl)
+	originalGetter := outputGetter
+	outputGetter = mockOutputGetter
+	defer func() { outputGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	expectedYqExpr := `.port // 8080`
+
+	// Mock returns exists=false - output doesn't exist.
+	mockOutputGetter.EXPECT().
+		GetOutput(
+			atmosConfig,
+			"test-stack",
+			"config",
+			expectedYqExpr,
+			false,
+			gomock.Any(),
+			gomock.Any(),
+		).
+		Return(nil, false, nil).
+		Times(1)
+
+	input := schema.AtmosSectionMapType{
+		"port": `!terraform.output config test-stack ".port // 8080"`,
+	}
+
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	// Numeric default should work.
+	assert.Equal(t, 8080, result["port"])
+}
+
+// TestTerraformOutput_YqDefaultWithBooleanFallback verifies that
+// boolean defaults work correctly.
+func TestTerraformOutput_YqDefaultWithBooleanFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockOutputGetter := NewMockTerraformOutputGetter(ctrl)
+	originalGetter := outputGetter
+	outputGetter = mockOutputGetter
+	defer func() { outputGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	expectedYqExpr := `.enabled // true`
+
+	// Mock returns exists=false - output doesn't exist.
+	mockOutputGetter.EXPECT().
+		GetOutput(
+			atmosConfig,
+			"test-stack",
+			"config",
+			expectedYqExpr,
+			false,
+			gomock.Any(),
+			gomock.Any(),
+		).
+		Return(nil, false, nil).
+		Times(1)
+
+	input := schema.AtmosSectionMapType{
+		"enabled": `!terraform.output config test-stack ".enabled // true"`,
+	}
+
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	// Boolean default should work.
+	assert.Equal(t, true, result["enabled"])
+}

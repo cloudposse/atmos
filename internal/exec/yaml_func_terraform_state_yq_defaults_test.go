@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -10,6 +11,150 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// TestIsRecoverableTerraformError tests the error classification helper function.
+func TestIsRecoverableTerraformError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			name:     "ErrTerraformStateNotProvisioned is recoverable",
+			err:      errUtils.ErrTerraformStateNotProvisioned,
+			expected: true,
+		},
+		{
+			name:     "Wrapped ErrTerraformStateNotProvisioned is recoverable",
+			err:      fmt.Errorf("component not found: %w", errUtils.ErrTerraformStateNotProvisioned),
+			expected: true,
+		},
+		{
+			name:     "ErrTerraformOutputNotFound is recoverable",
+			err:      errUtils.ErrTerraformOutputNotFound,
+			expected: true,
+		},
+		{
+			name:     "Wrapped ErrTerraformOutputNotFound is recoverable",
+			err:      fmt.Errorf("output missing: %w", errUtils.ErrTerraformOutputNotFound),
+			expected: true,
+		},
+		{
+			name:     "ErrGetObjectFromS3 is not recoverable",
+			err:      errUtils.ErrGetObjectFromS3,
+			expected: false,
+		},
+		{
+			name:     "ErrTerraformBackendAPIError is not recoverable",
+			err:      errUtils.ErrTerraformBackendAPIError,
+			expected: false,
+		},
+		{
+			name:     "Generic error is not recoverable",
+			err:      errors.New("some random error"),
+			expected: false,
+		},
+		{
+			name:     "Nil error is not recoverable",
+			err:      nil,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isRecoverableTerraformError(tt.err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+//nolint:dupl // Test structure is similar to TestHasSchemeSeparator but tests completely different function (YQ expressions vs URI schemes).
+func TestHasYqDefault(t *testing.T) {
+	tests := []struct {
+		name     string
+		yqExpr   string
+		expected bool
+	}{
+		{
+			name:     "Expression with string default",
+			yqExpr:   `.bucket_name // "default"`,
+			expected: true,
+		},
+		{
+			name:     "Expression with list default",
+			yqExpr:   `.subnets // ["a", "b"]`,
+			expected: true,
+		},
+		{
+			name:     "Expression with map default",
+			yqExpr:   `.tags // {"env": "dev"}`,
+			expected: true,
+		},
+		{
+			name:     "Expression with numeric default",
+			yqExpr:   `.port // 8080`,
+			expected: true,
+		},
+		{
+			name:     "Expression with boolean default",
+			yqExpr:   `.enabled // true`,
+			expected: true,
+		},
+		{
+			name:     "Expression with empty string default",
+			yqExpr:   `.value // ""`,
+			expected: true,
+		},
+		{
+			name:     "Expression with null default",
+			yqExpr:   `.value // null`,
+			expected: true,
+		},
+		{
+			name:     "Simple field access without default",
+			yqExpr:   `.bucket_name`,
+			expected: false,
+		},
+		{
+			name:     "Array access without default",
+			yqExpr:   `.subnets[0]`,
+			expected: false,
+		},
+		{
+			name:     "Nested field access without default",
+			yqExpr:   `.config.database.host`,
+			expected: false,
+		},
+		{
+			name:     "Field name without dot",
+			yqExpr:   `bucket_name`,
+			expected: false,
+		},
+		{
+			name:     "Empty string",
+			yqExpr:   ``,
+			expected: false,
+		},
+		{
+			name:     "Expression with pipe but no default",
+			yqExpr:   `.items | length`,
+			expected: false,
+		},
+		{
+			name:     "Expression with multiple defaults (chained)",
+			yqExpr:   `.value // .fallback // "default"`,
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasYqDefault(tt.yqExpr)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
 
 // TestTerraformState_YqDefaultWhenBackendReturnsNil verifies that YQ default
 // values work when the backend returns nil (component not provisioned).
@@ -194,4 +339,182 @@ func TestTerraformState_NoDefaultExpressionReturnsError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, errUtils.ErrTerraformStateNotProvisioned)
+}
+
+// TestTerraformState_OutputNotFoundWithDefaultUsesDefault verifies that when
+// GetState returns ErrTerraformOutputNotFound (output key doesn't exist in state)
+// AND the expression has a YQ default, the default is used.
+func TestTerraformState_OutputNotFoundWithDefaultUsesDefault(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	expectedYqExpr := `.missing_output // "fallback-value"`
+
+	// Mock returns ErrTerraformOutputNotFound - the output key doesn't exist.
+	mockStateGetter.EXPECT().
+		GetState(
+			atmosConfig,
+			gomock.Any(),
+			"test-stack",
+			"vpc",
+			expectedYqExpr,
+			false,
+			gomock.Any(),
+			gomock.Any(),
+		).
+		Return(nil, fmt.Errorf("output key not found: %w", errUtils.ErrTerraformOutputNotFound)).
+		Times(1)
+
+	input := schema.AtmosSectionMapType{
+		"value": `!terraform.state vpc test-stack ".missing_output // ""fallback-value"""`,
+	}
+
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+
+	// With a YQ default and ErrTerraformOutputNotFound, the default should be used.
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "fallback-value", result["value"])
+}
+
+// TestTerraformState_YqDefaultWithMapFallback verifies that YQ default
+// values work with map/object fallback expressions.
+func TestTerraformState_YqDefaultWithMapFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	expectedYqExpr := `.tags // {"env": "dev", "team": "platform"}`
+
+	// Mock returns ErrTerraformStateNotProvisioned - component not provisioned.
+	mockStateGetter.EXPECT().
+		GetState(
+			atmosConfig,
+			gomock.Any(),
+			"test-stack",
+			"config",
+			expectedYqExpr,
+			false,
+			gomock.Any(),
+			gomock.Any(),
+		).
+		Return(nil, fmt.Errorf("%w for component `config` in stack `test-stack`", errUtils.ErrTerraformStateNotProvisioned)).
+		Times(1)
+
+	input := schema.AtmosSectionMapType{
+		"tags": `!terraform.state config test-stack ".tags // {""env"": ""dev"", ""team"": ""platform""}"`,
+	}
+
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	// Verify the map structure is returned correctly.
+	expectedMap := map[string]any{"env": "dev", "team": "platform"}
+	assert.Equal(t, expectedMap, result["tags"])
+}
+
+// TestTerraformState_YqDefaultWithNumericFallback verifies that
+// numeric defaults work correctly.
+func TestTerraformState_YqDefaultWithNumericFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	expectedYqExpr := `.replicas // 3`
+
+	// Mock returns ErrTerraformStateNotProvisioned.
+	mockStateGetter.EXPECT().
+		GetState(
+			atmosConfig,
+			gomock.Any(),
+			"test-stack",
+			"app",
+			expectedYqExpr,
+			false,
+			gomock.Any(),
+			gomock.Any(),
+		).
+		Return(nil, fmt.Errorf("%w for component `app` in stack `test-stack`", errUtils.ErrTerraformStateNotProvisioned)).
+		Times(1)
+
+	input := schema.AtmosSectionMapType{
+		"replicas": `!terraform.state app test-stack ".replicas // 3"`,
+	}
+
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	// Numeric default should work.
+	assert.Equal(t, 3, result["replicas"])
+}
+
+// TestTerraformState_YqDefaultWithEmptyListFallback verifies that
+// empty list defaults work correctly.
+func TestTerraformState_YqDefaultWithEmptyListFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStateGetter := NewMockTerraformStateGetter(ctrl)
+	originalGetter := stateGetter
+	stateGetter = mockStateGetter
+	defer func() { stateGetter = originalGetter }()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	expectedYqExpr := `.security_groups // []`
+
+	// Mock returns ErrTerraformStateNotProvisioned.
+	mockStateGetter.EXPECT().
+		GetState(
+			atmosConfig,
+			gomock.Any(),
+			"test-stack",
+			"vpc",
+			expectedYqExpr,
+			false,
+			gomock.Any(),
+			gomock.Any(),
+		).
+		Return(nil, fmt.Errorf("%w for component `vpc` in stack `test-stack`", errUtils.ErrTerraformStateNotProvisioned)).
+		Times(1)
+
+	input := schema.AtmosSectionMapType{
+		"security_groups": `!terraform.state vpc test-stack ".security_groups // []"`,
+	}
+
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	// Empty list default should work.
+	assert.Equal(t, []any{}, result["security_groups"])
 }
