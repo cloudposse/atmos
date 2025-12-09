@@ -352,7 +352,8 @@ func TestGetComponentColumns(t *testing.T) {
 				},
 			},
 			columnsFlag: []string{"component", "stack", "type", "enabled"},
-			expectLen:   3, // parseColumnsFlag returns default for now
+			expectLen:   4, // CLI flag now properly parses column specifications
+			expectName:  "Component",
 		},
 		{
 			name: "Columns from config",
@@ -442,18 +443,49 @@ func TestParseColumnsFlag(t *testing.T) {
 		columnsFlag []string
 		expectLen   int
 		expectName  string
+		expectValue string
 	}{
 		{
 			name:        "Empty columns",
 			columnsFlag: []string{},
-			expectLen:   3, // Returns default
-			expectName:  "Component",
+			expectLen:   0,
+			expectName:  "",
+			expectValue: "",
 		},
 		{
-			name:        "Multiple columns",
-			columnsFlag: []string{"component", "stack", "type"},
-			expectLen:   3, // Returns default for now (TODO)
+			name:        "Single simple column",
+			columnsFlag: []string{"component"},
+			expectLen:   1,
 			expectName:  "Component",
+			expectValue: "{{ .component }}",
+		},
+		{
+			name:        "Multiple simple columns",
+			columnsFlag: []string{"component", "stack", "type"},
+			expectLen:   3,
+			expectName:  "Component",
+			expectValue: "{{ .component }}",
+		},
+		{
+			name:        "Named column with template",
+			columnsFlag: []string{"Name={{ .component }}"},
+			expectLen:   1,
+			expectName:  "Name",
+			expectValue: "{{ .component }}",
+		},
+		{
+			name:        "Named column with simple field",
+			columnsFlag: []string{"MyStack=stack"},
+			expectLen:   1,
+			expectName:  "MyStack",
+			expectValue: "{{ .stack }}",
+		},
+		{
+			name:        "Mixed formats",
+			columnsFlag: []string{"component", "MyType={{ .type }}"},
+			expectLen:   2,
+			expectName:  "Component",
+			expectValue: "{{ .component }}",
 		},
 	}
 
@@ -465,8 +497,252 @@ func TestParseColumnsFlag(t *testing.T) {
 			if tc.expectName != "" && len(result) > 0 {
 				assert.Equal(t, tc.expectName, result[0].Name)
 			}
+			if tc.expectValue != "" && len(result) > 0 {
+				assert.Equal(t, tc.expectValue, result[0].Value)
+			}
 		})
 	}
+}
+
+// TestParseColumnSpec tests parsing individual column specifications.
+func TestParseColumnSpec(t *testing.T) {
+	testCases := []struct {
+		name        string
+		spec        string
+		expectName  string
+		expectValue string
+	}{
+		{
+			name:        "Empty spec",
+			spec:        "",
+			expectName:  "",
+			expectValue: "",
+		},
+		{
+			name:        "Whitespace only",
+			spec:        "   ",
+			expectName:  "",
+			expectValue: "",
+		},
+		{
+			name:        "Simple field name",
+			spec:        "component",
+			expectName:  "Component",
+			expectValue: "{{ .component }}",
+		},
+		{
+			name:        "Field with leading/trailing whitespace",
+			spec:        "  stack  ",
+			expectName:  "Stack",
+			expectValue: "{{ .stack }}",
+		},
+		{
+			name:        "Named column with template",
+			spec:        "MyColumn={{ .component }}",
+			expectName:  "MyColumn",
+			expectValue: "{{ .component }}",
+		},
+		{
+			name:        "Named column with simple field (auto-wrap)",
+			spec:        "MyStack=stack",
+			expectName:  "MyStack",
+			expectValue: "{{ .stack }}",
+		},
+		{
+			name:        "Named column with whitespace",
+			spec:        " Name = {{ .field }} ",
+			expectName:  "Name",
+			expectValue: "{{ .field }}",
+		},
+		{
+			name:        "Complex template",
+			spec:        "Info={{ .component }}-{{ .stack }}",
+			expectName:  "Info",
+			expectValue: "{{ .component }}-{{ .stack }}",
+		},
+		{
+			name:        "Template with function",
+			spec:        "Upper={{ upper .component }}",
+			expectName:  "Upper",
+			expectValue: "{{ upper .component }}",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := parseColumnSpec(tc.spec)
+			assert.Equal(t, tc.expectName, result.Name)
+			assert.Equal(t, tc.expectValue, result.Value)
+		})
+	}
+}
+
+// TestParseColumnsFlag_EdgeCases tests edge cases for column flag parsing.
+func TestParseColumnsFlag_EdgeCases(t *testing.T) {
+	testCases := []struct {
+		name        string
+		columnsFlag []string
+		expectLen   int
+		checkFirst  bool
+		firstName   string
+		firstValue  string
+	}{
+		{
+			name:        "Single empty string in slice",
+			columnsFlag: []string{""},
+			expectLen:   0, // Empty strings are skipped
+		},
+		{
+			name:        "Multiple empty strings",
+			columnsFlag: []string{"", "", ""},
+			expectLen:   0,
+		},
+		{
+			name:        "Mix of empty and valid",
+			columnsFlag: []string{"", "component", ""},
+			expectLen:   1,
+			checkFirst:  true,
+			firstName:   "Component",
+			firstValue:  "{{ .component }}",
+		},
+		{
+			name:        "Underscore field name",
+			columnsFlag: []string{"component_type"},
+			expectLen:   1,
+			checkFirst:  true,
+			firstName:   "Component_type",
+			firstValue:  "{{ .component_type }}",
+		},
+		{
+			name:        "Field with numbers",
+			columnsFlag: []string{"var1"},
+			expectLen:   1,
+			checkFirst:  true,
+			firstName:   "Var1",
+			firstValue:  "{{ .var1 }}",
+		},
+		{
+			name:        "Named column with equals in template",
+			columnsFlag: []string{"Check={{ if eq .enabled true }}yes{{ end }}"},
+			expectLen:   1,
+			checkFirst:  true,
+			firstName:   "Check",
+			firstValue:  "{{ if eq .enabled true }}yes{{ end }}",
+		},
+		{
+			name:        "Multiple named columns",
+			columnsFlag: []string{"A={{ .a }}", "B={{ .b }}", "C={{ .c }}"},
+			expectLen:   3,
+			checkFirst:  true,
+			firstName:   "A",
+			firstValue:  "{{ .a }}",
+		},
+		{
+			name:        "Column name only (equals at end)",
+			columnsFlag: []string{"Name="},
+			expectLen:   1,
+			checkFirst:  true,
+			firstName:   "Name",
+			firstValue:  "{{ . }}",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := parseColumnsFlag(tc.columnsFlag)
+			assert.Equal(t, tc.expectLen, len(result), "Expected %d columns, got %d", tc.expectLen, len(result))
+
+			if tc.checkFirst && len(result) > 0 {
+				assert.Equal(t, tc.firstName, result[0].Name)
+				assert.Equal(t, tc.firstValue, result[0].Value)
+			}
+		})
+	}
+}
+
+// TestParseColumnSpec_SpecialCharacters tests parsing with special characters.
+func TestParseColumnSpec_SpecialCharacters(t *testing.T) {
+	testCases := []struct {
+		name        string
+		spec        string
+		expectName  string
+		expectValue string
+	}{
+		{
+			name:        "Dot in field name",
+			spec:        "vars.region",
+			expectName:  "Vars.Region", // strings.Title capitalizes after dots.
+			expectValue: "{{ .vars.region }}",
+		},
+		{
+			name:        "Hyphen in field name",
+			spec:        "my-field",
+			expectName:  "My-Field", // strings.Title capitalizes after hyphens.
+			expectValue: "{{ .my-field }}",
+		},
+		{
+			name:        "Template with pipe",
+			spec:        "Upper={{ .component | upper }}",
+			expectName:  "Upper",
+			expectValue: "{{ .component | upper }}",
+		},
+		{
+			name:        "Template with multiple pipes",
+			spec:        "Formatted={{ .name | lower | truncate 10 }}",
+			expectName:  "Formatted",
+			expectValue: "{{ .name | lower | truncate 10 }}",
+		},
+		{
+			name:        "Template with conditional",
+			spec:        "Status={{ if .enabled }}on{{ else }}off{{ end }}",
+			expectName:  "Status",
+			expectValue: "{{ if .enabled }}on{{ else }}off{{ end }}",
+		},
+		{
+			name:        "Template with range",
+			spec:        "Items={{ range .items }}{{ . }}{{ end }}",
+			expectName:  "Items",
+			expectValue: "{{ range .items }}{{ . }}{{ end }}",
+		},
+		{
+			name:        "Named column with colon in name",
+			spec:        "Type:Info={{ .type }}",
+			expectName:  "Type:Info",
+			expectValue: "{{ .type }}",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := parseColumnSpec(tc.spec)
+			assert.Equal(t, tc.expectName, result.Name)
+			assert.Equal(t, tc.expectValue, result.Value)
+		})
+	}
+}
+
+// TestParseColumnsFlag_VerifyAllColumns tests that all columns are parsed correctly.
+func TestParseColumnsFlag_VerifyAllColumns(t *testing.T) {
+	columnsFlag := []string{
+		"component",
+		"Stack={{ .stack }}",
+		"MyType=type",
+	}
+
+	result := parseColumnsFlag(columnsFlag)
+	assert.Equal(t, 3, len(result))
+
+	// Check first column (simple field)
+	assert.Equal(t, "Component", result[0].Name)
+	assert.Equal(t, "{{ .component }}", result[0].Value)
+
+	// Check second column (named with template)
+	assert.Equal(t, "Stack", result[1].Name)
+	assert.Equal(t, "{{ .stack }}", result[1].Value)
+
+	// Check third column (named with field)
+	assert.Equal(t, "MyType", result[2].Name)
+	assert.Equal(t, "{{ .type }}", result[2].Value)
 }
 
 // TestColumnsCompletionForComponents tests tab completion for columns flag.

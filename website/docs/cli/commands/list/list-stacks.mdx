@@ -67,6 +67,18 @@ atmos list stacks --sort stack:asc
 atmos list stacks --component vpc --sort component:desc
 ```
 
+Custom columns:
+```shell
+# Simple field names (auto-generates templates)
+atmos list stacks --columns stack
+
+# Named columns with custom templates
+atmos list stacks --columns "Name={{ .stack }}"
+
+# When filtering by component, show both stack and component
+atmos list stacks --component vpc --columns stack,component
+```
+
 View stacks in tree format:
 ```shell
 # Tree view without import details
@@ -83,25 +95,22 @@ atmos list stacks --component vpc --format tree --provenance
 
 <dl>
   <dt>`--component` / `-c`</dt>
-  <dd>Filter stacks by component name</dd>
+  <dd>Filter stacks by component name.<br/>Environment variable: `ATMOS_COMPONENT`</dd>
 
   <dt>`--format` / `-f`</dt>
-  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree`. Overrides `stacks.list.format` configuration in atmos.yaml (default: `table`)</dd>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree`. Overrides `stacks.list.format` configuration in atmos.yaml (default: `table`).<br/>Environment variable: `ATMOS_LIST_FORMAT`</dd>
 
   <dt>`--columns`</dt>
-  <dd>Columns to display (comma-separated). Overrides `stacks.list.columns` configuration in atmos.yaml</dd>
-
-  <dt>`--delimiter`</dt>
-  <dd>Delimiter for CSV/TSV output (default: tab for tsv, comma for csv)</dd>
+  <dd>Columns to display. Supports simple field names (e.g., `stack`), named columns with templates (e.g., `"Name={{ .stack }}"`), or named with field reference (e.g., `"MyStack=stack"`). Overrides `stacks.list.columns` configuration in atmos.yaml. Environment variable: `ATMOS_LIST_COLUMNS`</dd>
 
   <dt>`--sort`</dt>
-  <dd>Sort by column:order (e.g., `stack:asc,component:desc`)</dd>
+  <dd>Sort by column:order (e.g., `stack:asc,component:desc`). Multiple sort columns separated by comma.<br/>Environment variable: `ATMOS_LIST_SORT`</dd>
 
   <dt>`--provenance`</dt>
-  <dd>Show import provenance in tree format. Only works with `--format=tree`. Displays the import hierarchy showing which files each stack inherits from.</dd>
+  <dd>Show import provenance in tree format. Only works with `--format=tree`. Displays the import hierarchy showing which files each stack inherits from.<br/>Environment variable: `ATMOS_PROVENANCE`</dd>
 
   <dt>`--identity` / `-i` <em>(optional)</em></dt>
-  <dd>Authenticate with a specific identity before listing stacks.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list stacks --identity my-aws-identity`<br/><br/>Can also be set via `ATMOS_IDENTITY` environment variable.</dd>
+  <dd>Authenticate with a specific identity before listing stacks.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list stacks --identity my-aws-identity`<br/><br/>Environment variable: `ATMOS_IDENTITY`</dd>
 </dl>
 
 ## Tree Format with Import Provenance
@@ -220,14 +229,30 @@ Available functions:
 
 ### Override Columns via CLI
 
-Override configured columns using the `--columns` flag:
+Override configured columns using the `--columns` flag. The flag supports multiple formats:
 
+**Simple field names** (auto-generates templates and title-case names):
 ```shell
-# Display only stack and file columns
-atmos list stacks --columns stack,file
+# Display only stack column
+atmos list stacks --columns stack
 
-# Display custom subset
-atmos list stacks --columns "stack,components,file"
+# When filtering by component, show both
+atmos list stacks --component vpc --columns stack,component
+```
+
+**Named columns with templates** (full control over display name and value):
+```shell
+# Custom column names with templates
+atmos list stacks --columns "StackName={{ .stack }}"
+
+# Multiple named columns
+atmos list stacks --columns "Name={{ .stack }},Components={{ .components | len }}"
+```
+
+**Named columns with field reference** (auto-wraps field in template):
+```shell
+# Shorthand: Name=field becomes Name={{ .field }}
+atmos list stacks --columns "MyStack=stack"
 ```
 
 ## Related Commands

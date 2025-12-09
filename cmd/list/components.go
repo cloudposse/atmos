@@ -2,6 +2,7 @@ package list
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -308,18 +309,64 @@ func buildComponentSorters(sortSpec string) ([]*listSort.Sorter, error) {
 	return listSort.ParseSortSpec(sortSpec)
 }
 
-// parseColumnsFlag parses column names from CLI flag.
+// parseColumnsFlag parses column specifications from CLI flag.
+// Supports two formats:
+//   - Simple field name: "component" → Name: "component", Value: "{{ .component }}"
+//   - Named column with template: "Name=template" → Name: "Name", Value: "template"
+//
+// Examples:
+//
+//	--columns component,stack,type
+//	--columns "Component={{ .component }},Stack={{ .stack }}"
+//	--columns component --columns stack
 func parseColumnsFlag(columnsFlag []string) []column.Config {
 	defer perf.Track(nil, "list.components.parseColumnsFlag")()
 
-	// TODO: Implement parsing of column specifications from CLI.
-	// For now, warn user and return default columns.
-	if len(columnsFlag) > 0 {
-		_ = ui.Warning("Custom --columns parsing not yet implemented, using defaults")
+	var configs []column.Config
+
+	for _, spec := range columnsFlag {
+		cfg := parseColumnSpec(spec)
+		if cfg.Name != "" {
+			configs = append(configs, cfg)
+		}
 	}
-	return []column.Config{
-		{Name: "Component", Value: "{{ .component }}"},
-		{Name: "Stack", Value: "{{ .stack }}"},
-		{Name: "Type", Value: "{{ .type }}"},
+
+	return configs
+}
+
+// parseColumnSpec parses a single column specification.
+// Format: "name" or "Name=template".
+func parseColumnSpec(spec string) column.Config {
+	defer perf.Track(nil, "list.components.parseColumnSpec")()
+
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return column.Config{}
+	}
+
+	// Check for Name=template format.
+	if idx := strings.Index(spec, "="); idx > 0 {
+		name := strings.TrimSpace(spec[:idx])
+		value := strings.TrimSpace(spec[idx+1:])
+
+		// If value doesn't contain template syntax, wrap it.
+		if !strings.Contains(value, "{{") {
+			value = "{{ ." + value + " }}"
+		}
+
+		return column.Config{
+			Name:  name,
+			Value: value,
+		}
+	}
+
+	// Simple field name: auto-generate template.
+	// Use title case for display name.
+	name := strings.Title(spec) //nolint:staticcheck // strings.Title is deprecated but works for simple ASCII column names
+	value := "{{ ." + spec + " }}"
+
+	return column.Config{
+		Name:  name,
+		Value: value,
 	}
 }

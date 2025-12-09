@@ -29,6 +29,40 @@ var (
 	jsonSchemaCacheMu sync.RWMutex
 )
 
+// deepCopyBaseComponentConfigMaps deep copies all map fields from src to dst.
+// Returns an error if any deep copy fails.
+func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error {
+	var err error
+	if dst.BaseComponentVars, err = m.DeepCopyMap(src.BaseComponentVars); err != nil {
+		return err
+	}
+	if dst.BaseComponentSettings, err = m.DeepCopyMap(src.BaseComponentSettings); err != nil {
+		return err
+	}
+	if dst.BaseComponentEnv, err = m.DeepCopyMap(src.BaseComponentEnv); err != nil {
+		return err
+	}
+	if dst.BaseComponentAuth, err = m.DeepCopyMap(src.BaseComponentAuth); err != nil {
+		return err
+	}
+	if dst.BaseComponentMetadata, err = m.DeepCopyMap(src.BaseComponentMetadata); err != nil {
+		return err
+	}
+	if dst.BaseComponentProviders, err = m.DeepCopyMap(src.BaseComponentProviders); err != nil {
+		return err
+	}
+	if dst.BaseComponentHooks, err = m.DeepCopyMap(src.BaseComponentHooks); err != nil {
+		return err
+	}
+	if dst.BaseComponentBackendSection, err = m.DeepCopyMap(src.BaseComponentBackendSection); err != nil {
+		return err
+	}
+	if dst.BaseComponentRemoteStateBackendSection, err = m.DeepCopyMap(src.BaseComponentRemoteStateBackendSection); err != nil {
+		return err
+	}
+	return nil
+}
+
 // getCachedBaseComponentConfig retrieves a cached base component config if it exists.
 // Returns a deep copy to prevent mutations affecting the cache.
 func getCachedBaseComponentConfig(cacheKey string) (*schema.BaseComponentConfig, *[]string, bool) {
@@ -52,30 +86,8 @@ func getCachedBaseComponentConfig(cacheKey string) (*schema.BaseComponentConfig,
 	}
 
 	// Deep copy all map fields.
-	var err error
-	if copyConfig.BaseComponentVars, err = m.DeepCopyMap(cached.BaseComponentVars); err != nil {
+	if err := deepCopyBaseComponentConfigMaps(&copyConfig, cached); err != nil {
 		// If deep copy fails, return not found to force reprocessing.
-		return nil, nil, false
-	}
-	if copyConfig.BaseComponentSettings, err = m.DeepCopyMap(cached.BaseComponentSettings); err != nil {
-		return nil, nil, false
-	}
-	if copyConfig.BaseComponentEnv, err = m.DeepCopyMap(cached.BaseComponentEnv); err != nil {
-		return nil, nil, false
-	}
-	if copyConfig.BaseComponentAuth, err = m.DeepCopyMap(cached.BaseComponentAuth); err != nil {
-		return nil, nil, false
-	}
-	if copyConfig.BaseComponentProviders, err = m.DeepCopyMap(cached.BaseComponentProviders); err != nil {
-		return nil, nil, false
-	}
-	if copyConfig.BaseComponentHooks, err = m.DeepCopyMap(cached.BaseComponentHooks); err != nil {
-		return nil, nil, false
-	}
-	if copyConfig.BaseComponentBackendSection, err = m.DeepCopyMap(cached.BaseComponentBackendSection); err != nil {
-		return nil, nil, false
-	}
-	if copyConfig.BaseComponentRemoteStateBackendSection, err = m.DeepCopyMap(cached.BaseComponentRemoteStateBackendSection); err != nil {
 		return nil, nil, false
 	}
 
@@ -105,30 +117,8 @@ func cacheBaseComponentConfig(cacheKey string, config *schema.BaseComponentConfi
 	}
 
 	// Deep copy all map fields.
-	var err error
-	if copyConfig.BaseComponentVars, err = m.DeepCopyMap(config.BaseComponentVars); err != nil {
-		// If deep copy fails, don't cache - log and return.
-		return
-	}
-	if copyConfig.BaseComponentSettings, err = m.DeepCopyMap(config.BaseComponentSettings); err != nil {
-		return
-	}
-	if copyConfig.BaseComponentEnv, err = m.DeepCopyMap(config.BaseComponentEnv); err != nil {
-		return
-	}
-	if copyConfig.BaseComponentAuth, err = m.DeepCopyMap(config.BaseComponentAuth); err != nil {
-		return
-	}
-	if copyConfig.BaseComponentProviders, err = m.DeepCopyMap(config.BaseComponentProviders); err != nil {
-		return
-	}
-	if copyConfig.BaseComponentHooks, err = m.DeepCopyMap(config.BaseComponentHooks); err != nil {
-		return
-	}
-	if copyConfig.BaseComponentBackendSection, err = m.DeepCopyMap(config.BaseComponentBackendSection); err != nil {
-		return
-	}
-	if copyConfig.BaseComponentRemoteStateBackendSection, err = m.DeepCopyMap(config.BaseComponentRemoteStateBackendSection); err != nil {
+	if err := deepCopyBaseComponentConfigMaps(&copyConfig, config); err != nil {
+		// If deep copy fails, don't cache - return silently.
 		return
 	}
 

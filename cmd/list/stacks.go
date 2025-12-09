@@ -148,7 +148,7 @@ func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOption
 	}
 
 	// Handle tree format specially - it shows import hierarchies.
-	if opts.Format == "tree" {
+	if opts.Format == string(format.FormatTree) {
 		return renderStacksTreeFormat(&atmosConfig, stacks, opts.Provenance, authManager)
 	}
 	_ = stacksMap // Unused in non-tree format.

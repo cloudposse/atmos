@@ -60,6 +60,15 @@ atmos list components --enabled=true
 atmos list components --locked=true
 ```
 
+Include abstract components:
+```shell
+# Include abstract components (normally hidden by default)
+atmos list components --abstract
+
+# Equivalent: show all component types
+atmos list components --type all
+```
+
 Output in different formats:
 ```shell
 # JSON format
@@ -67,37 +76,64 @@ atmos list components --format json
 
 # YAML format
 atmos list components --format yaml
+
+# CSV format with custom delimiter
+atmos list components --format csv
+```
+
+Custom columns:
+```shell
+# Simple field names (auto-generates templates)
+atmos list components --columns component,stack,type
+
+# Named columns with custom templates
+atmos list components --columns "Name={{ .component }},Stack={{ .stack }}"
+
+# Named columns with simple field reference
+atmos list components --columns "MyStack=stack,MyType=type"
+
+# Mix of formats
+atmos list components --columns component,"Status={{ if .enabled }}Active{{ else }}Disabled{{ end }}"
+```
+
+Sort results:
+```shell
+# Sort by component name ascending
+atmos list components --sort component:asc
+
+# Sort by multiple columns
+atmos list components --sort "stack:asc,component:desc"
 ```
 
 ## Flags
 
 <dl>
   <dt>`--stack` / `-s`</dt>
-  <dd>Filter by specific stack name</dd>
+  <dd>Filter by stack name pattern (supports glob patterns like `plat-*-prod`).<br/>Environment variable: `ATMOS_STACK`</dd>
 
   <dt>`--format` / `-f`</dt>
-  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`. Overrides `components.list.format` configuration in atmos.yaml (default: `table`)</dd>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree`. Overrides `components.list.format` configuration in atmos.yaml (default: `table`).<br/>Environment variable: `ATMOS_LIST_FORMAT`</dd>
 
   <dt>`--columns`</dt>
-  <dd>Columns to display (comma-separated). Overrides `components.list.columns` configuration in atmos.yaml</dd>
+  <dd>Columns to display. Supports simple field names (e.g., `component,stack,type`), named columns with templates (e.g., `"Name={{ .component }}"`), or named with field reference (e.g., `"MyStack=stack"`). Overrides `components.list.columns` configuration in atmos.yaml. Environment variable: `ATMOS_LIST_COLUMNS`</dd>
 
   <dt>`--type` / `-t`</dt>
-  <dd>Component type: `real`, `abstract`, `all` (default: `real`)</dd>
+  <dd>Component type: `real`, `abstract`, `all` (default: `real`).<br/>Environment variable: `ATMOS_COMPONENT_TYPE`</dd>
+
+  <dt>`--abstract`</dt>
+  <dd>Include abstract components in output. Equivalent to `--type all`.<br/>Environment variable: `ATMOS_ABSTRACT`</dd>
 
   <dt>`--enabled`</dt>
-  <dd>Filter by enabled status (omit for all, `--enabled=true` for enabled only)</dd>
+  <dd>Filter by enabled status (omit for all, `--enabled=true` for enabled only, `--enabled=false` for disabled only).<br/>Environment variable: `ATMOS_COMPONENT_ENABLED`</dd>
 
   <dt>`--locked`</dt>
-  <dd>Filter by locked status (omit for all, `--locked=true` for locked only)</dd>
-
-  <dt>`--filter`</dt>
-  <dd>Filter expression using YQ syntax</dd>
+  <dd>Filter by locked status (omit for all, `--locked=true` for locked only, `--locked=false` for unlocked only).<br/>Environment variable: `ATMOS_COMPONENT_LOCKED`</dd>
 
   <dt>`--sort`</dt>
-  <dd>Sort by column:order (e.g., `component:asc,stack:desc`)</dd>
+  <dd>Sort by column:order (e.g., `component:asc,stack:desc`). Multiple sort columns separated by comma.<br/>Environment variable: `ATMOS_LIST_SORT`</dd>
 
   <dt>`--identity` / `-i` <em>(optional)</em></dt>
-  <dd>Authenticate with a specific identity before listing components.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list components --identity my-aws-identity`<br/><br/>Can also be set via `ATMOS_IDENTITY` environment variable.</dd>
+  <dd>Authenticate with a specific identity before listing components.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list components --identity my-aws-identity`<br/><br/>Environment variable: `ATMOS_IDENTITY`</dd>
 </dl>
 
 ## Configuration
@@ -179,14 +215,36 @@ Available functions:
 
 ### Override Columns via CLI
 
-Override configured columns using the `--columns` flag:
+Override configured columns using the `--columns` flag. The flag supports multiple formats:
 
+**Simple field names** (auto-generates templates and title-case names):
 ```shell
-# Display only component and stack columns
-atmos list components --columns atmos_component,atmos_stack
+# Display component, stack, and type columns
+atmos list components --columns component,stack,type
 
-# Display custom subset
-atmos list components --columns "atmos_component,atmos_stack,vars.region,enabled"
+# Include enabled status
+atmos list components --columns component,stack,enabled
+```
+
+**Named columns with templates** (full control over display name and value):
+```shell
+# Custom column names with templates
+atmos list components --columns "Name={{ .component }},Stack={{ .stack }}"
+
+# Complex templates with conditionals
+atmos list components --columns "Status={{ if .enabled }}Active{{ else }}Disabled{{ end }}"
+```
+
+**Named columns with field reference** (auto-wraps field in template):
+```shell
+# Shorthand: Name=field becomes Name={{ .field }}
+atmos list components --columns "MyComponent=component,MyStack=stack"
+```
+
+**Mixed formats**:
+```shell
+# Combine simple fields and named columns
+atmos list components --columns component,"CustomType={{ .type | upper }}"
 ```
 
 ## Related Commands
