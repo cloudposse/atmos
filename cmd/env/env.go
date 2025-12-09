@@ -43,8 +43,21 @@ var envCmd = &cobra.Command{
 		// Get output file path.
 		output, _ := cmd.Flags().GetString("output")
 
+		// Build ConfigAndStacksInfo with CLI overrides (--config, --config-path, --base-path).
+		// These are persistent flags inherited from the root command.
+		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		if bp, _ := cmd.Flags().GetString("base-path"); bp != "" {
+			configAndStacksInfo.AtmosBasePath = bp
+		}
+		if cfgFiles, _ := cmd.Flags().GetStringSlice("config"); len(cfgFiles) > 0 {
+			configAndStacksInfo.AtmosConfigFilesFromArg = cfgFiles
+		}
+		if cfgDirs, _ := cmd.Flags().GetStringSlice("config-path"); len(cfgDirs) > 0 {
+			configAndStacksInfo.AtmosConfigDirsFromArg = cfgDirs
+		}
+
 		// Load atmos configuration (processStacks=false since env command doesn't require stack manifests).
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			return fmt.Errorf("failed to load atmos config: %w", err)
 		}
