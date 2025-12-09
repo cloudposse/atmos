@@ -176,6 +176,19 @@ func processSimpleTags(
 		}
 		return res, true, nil
 	}
+	// AWS YAML functions - note these check for exact match since they take no arguments.
+	if input == u.AtmosYamlFuncAwsAccountID && !skipFunc(skip, u.AtmosYamlFuncAwsAccountID) {
+		return processTagAwsAccountID(atmosConfig, input, stackInfo), true, nil
+	}
+	if input == u.AtmosYamlFuncAwsCallerIdentityArn && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityArn) {
+		return processTagAwsCallerIdentityArn(atmosConfig, input, stackInfo), true, nil
+	}
+	if input == u.AtmosYamlFuncAwsCallerIdentityUserID && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityUserID) {
+		return processTagAwsCallerIdentityUserID(atmosConfig, input, stackInfo), true, nil
+	}
+	if input == u.AtmosYamlFuncAwsRegion && !skipFunc(skip, u.AtmosYamlFuncAwsRegion) {
+		return processTagAwsRegion(atmosConfig, input, stackInfo), true, nil
+	}
 	return nil, false, nil
 }
 
