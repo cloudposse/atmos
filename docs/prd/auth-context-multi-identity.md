@@ -556,7 +556,7 @@ func LoadAWSConfigWithAuth(
 	// Load base config.
 	baseCfg, err := config.LoadDefaultConfig(ctx, cfgOpts...)
 	if err != nil {
-		return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAwsConfig, err)
+		return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAWSConfig, err)
 	}
 
 	// Conditionally assume role if specified.
