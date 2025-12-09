@@ -61,8 +61,8 @@ func processNodesWithContext(
 ) (map[string]any, error) {
 	newMap := make(map[string]any)
 	var firstErr error
-	var recurse func(any) any
 
+	var recurse func(any) any
 	recurse = func(node any) any {
 		// If we already have an error, skip processing.
 		if firstErr != nil {
@@ -74,7 +74,7 @@ func processNodesWithContext(
 			result, err := processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
 			if err != nil {
 				firstErr = err
-				return node
+				return v
 			}
 			return result
 
@@ -101,7 +101,11 @@ func processNodesWithContext(
 		newMap[k] = recurse(v)
 	}
 
-	return newMap, firstErr
+	if firstErr != nil {
+		return nil, firstErr
+	}
+
+	return newMap, nil
 }
 
 func processCustomTags(
@@ -120,6 +124,7 @@ func matchesPrefix(input, prefix string, skip []string) bool {
 }
 
 // processContextAwareTags processes tags that support cycle detection.
+// Returns (result, handled, error) where handled indicates if a matching tag was found.
 func processContextAwareTags(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
@@ -140,6 +145,7 @@ func processContextAwareTags(
 }
 
 // processSimpleTags processes tags that don't need cycle detection.
+// Returns (result, handled, error) where handled indicates if a matching tag was found.
 func processSimpleTags(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
@@ -152,7 +158,10 @@ func processSimpleTags(
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncExec, skip) {
 		res, err := u.ProcessTagExec(input)
-		return res, true, err
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncStoreGet, skip) {
 		return processTagStoreGet(atmosConfig, input, currentStack), true, nil
@@ -162,7 +171,10 @@ func processSimpleTags(
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncEnv, skip) {
 		res, err := u.ProcessTagEnv(input, stackInfo)
-		return res, true, err
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
 	}
 	// AWS YAML functions - note these check for exact match since they take no arguments.
 	if input == u.AtmosYamlFuncAwsAccountID && !skipFunc(skip, u.AtmosYamlFuncAwsAccountID) {

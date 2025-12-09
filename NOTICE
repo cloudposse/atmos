@@ -99,7 +99,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.40.1/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.41.0/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream
     License: Apache-2.0
@@ -560,7 +560,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/internal/sync/singleflight
     License: BSD-3-Clause
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.40.1/internal/sync/singleflight/LICENSE
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.41.0/internal/sync/singleflight/LICENSE
 
   - github.com/aws/aws-sdk-go/internal/sync/singleflight
     License: BSD-3-Clause
