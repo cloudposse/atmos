@@ -103,11 +103,12 @@ func init() {
 
 // getCacheKey generates a cache key based on the auth context.
 // Different auth contexts (different credentials) get different cache entries.
+// Includes Profile, CredentialsFile, and ConfigFile since all three affect AWS config loading.
 func getCacheKey(authContext *schema.AWSAuthContext) string {
 	if authContext == nil {
 		return "default"
 	}
-	return fmt.Sprintf("%s:%s", authContext.Profile, authContext.CredentialsFile)
+	return fmt.Sprintf("%s:%s:%s", authContext.Profile, authContext.CredentialsFile, authContext.ConfigFile)
 }
 
 // getAWSCallerIdentityCached retrieves the AWS caller identity with caching.

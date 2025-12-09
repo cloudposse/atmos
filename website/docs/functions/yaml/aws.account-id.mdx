@@ -89,8 +89,8 @@ components:
 terraform:
   backend:
     s3:
-      # Use the current account ID in the state bucket name
-      bucket: "terraform-state-!aws.account_id"
+      # Pass account ID to Terraform for constructing bucket names
+      account_id: !aws.account_id
 ```
 </File>
 

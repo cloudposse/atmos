@@ -28,11 +28,9 @@ components:
   terraform:
     s3-bucket:
       vars:
-        # Name bucket with account ID for uniqueness
-        bucket_name: !template 'app-data-{{ exec "atmos" (list "yaml" "eval" "!aws.account_id") }}'
-
-        # Use current region
-        region: !aws.region
+        # Pass account ID and region for bucket naming in Terraform
+        aws_account_id: !aws.account_id
+        aws_region: !aws.region
 
     iam-policy:
       vars:

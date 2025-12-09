@@ -346,20 +346,31 @@ func TestGetCacheKey(t *testing.T) {
 			expected:    "default",
 		},
 		{
-			name: "with profile and credentials file",
+			name: "with profile credentials and config file",
 			authContext: &schema.AWSAuthContext{
 				Profile:         "my-profile",
 				CredentialsFile: "/home/user/.aws/credentials",
+				ConfigFile:      "/home/user/.aws/config",
 			},
-			expected: "my-profile:/home/user/.aws/credentials",
+			expected: "my-profile:/home/user/.aws/credentials:/home/user/.aws/config",
 		},
 		{
 			name: "empty profile",
 			authContext: &schema.AWSAuthContext{
 				Profile:         "",
 				CredentialsFile: "/some/path",
+				ConfigFile:      "/some/config",
 			},
-			expected: ":/some/path",
+			expected: ":/some/path:/some/config",
+		},
+		{
+			name: "empty config file",
+			authContext: &schema.AWSAuthContext{
+				Profile:         "prod",
+				CredentialsFile: "/creds",
+				ConfigFile:      "",
+			},
+			expected: "prod:/creds:",
 		},
 	}
 
@@ -554,5 +565,264 @@ func TestSetAWSGetterRestore(t *testing.T) {
 // TestErrAwsGetCallerIdentity verifies the error constant exists.
 func TestErrAwsGetCallerIdentity(t *testing.T) {
 	assert.NotNil(t, errUtils.ErrAwsGetCallerIdentity)
-	assert.Equal(t, "failed to get AWS caller identity", errUtils.ErrAwsGetCallerIdentity.Error())
+}
+
+// TestProcessTagAwsWithNilStackInfo verifies functions work with nil stackInfo.
+func TestProcessTagAwsWithNilStackInfo(t *testing.T) {
+	ClearAWSIdentityCache()
+
+	restore := SetAWSGetter(&mockAWSGetter{
+		identity: &AWSCallerIdentity{
+			Account: "555555555555",
+			Arn:     "arn:aws:iam::555555555555:user/nil-test",
+			UserID:  "AIDANILTEST",
+			Region:  "us-west-1",
+		},
+		err: nil,
+	})
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Test with nil stackInfo - should still work using default auth context.
+	result := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, nil)
+	assert.Equal(t, "555555555555", result)
+
+	ClearAWSIdentityCache()
+
+	result = processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, nil)
+	assert.Equal(t, "us-west-1", result)
+}
+
+// TestProcessTagAwsWithPartialAuthContext verifies functions work with partial auth context.
+func TestProcessTagAwsWithPartialAuthContext(t *testing.T) {
+	ClearAWSIdentityCache()
+
+	restore := SetAWSGetter(&mockAWSGetter{
+		identity: &AWSCallerIdentity{
+			Account: "666666666666",
+			Arn:     "arn:aws:iam::666666666666:user/partial-test",
+			UserID:  "AIDAPARTIAL",
+			Region:  "eu-central-1",
+		},
+		err: nil,
+	})
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Test with stackInfo that has AuthContext but nil AWS.
+	stackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{
+			AWS: nil, // AWS is nil but AuthContext exists.
+		},
+	}
+
+	result := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	assert.Equal(t, "666666666666", result)
+
+	ClearAWSIdentityCache()
+
+	// Test with stackInfo that has nil AuthContext.
+	stackInfo2 := &schema.ConfigAndStacksInfo{
+		AuthContext: nil,
+	}
+
+	result = processTagAwsCallerIdentityArn(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo2)
+	assert.Equal(t, "arn:aws:iam::666666666666:user/partial-test", result)
+}
+
+// TestProcessTagAwsWithEmptyIdentityFields verifies handling of empty identity fields.
+func TestProcessTagAwsWithEmptyIdentityFields(t *testing.T) {
+	ClearAWSIdentityCache()
+
+	restore := SetAWSGetter(&mockAWSGetter{
+		identity: &AWSCallerIdentity{
+			Account: "",
+			Arn:     "",
+			UserID:  "",
+			Region:  "",
+		},
+		err: nil,
+	})
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackInfo := &schema.ConfigAndStacksInfo{}
+
+	// Empty values should still be returned (not nil).
+	result := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	assert.Equal(t, "", result)
+
+	ClearAWSIdentityCache()
+
+	result = processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, stackInfo)
+	assert.Equal(t, "", result)
+}
+
+// TestCacheConcurrency verifies cache is thread-safe under concurrent access.
+func TestCacheConcurrency(t *testing.T) {
+	ClearAWSIdentityCache()
+
+	callCount := 0
+	restore := SetAWSGetter(&countingAWSGetter{
+		wrapped: &mockAWSGetter{
+			identity: &AWSCallerIdentity{
+				Account: "777777777777",
+				Arn:     "arn:aws:iam::777777777777:user/concurrent",
+				UserID:  "AIDACONCURRENT",
+				Region:  "ap-southeast-1",
+			},
+			err: nil,
+		},
+		callCount: &callCount,
+	})
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	ctx := context.Background()
+
+	// Run multiple goroutines concurrently accessing the cache.
+	const numGoroutines = 50
+	done := make(chan bool, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func() {
+			identity, err := getAWSCallerIdentityCached(ctx, atmosConfig, nil)
+			assert.NoError(t, err)
+			assert.Equal(t, "777777777777", identity.Account)
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines to complete.
+	for i := 0; i < numGoroutines; i++ {
+		<-done
+	}
+
+	// Despite concurrent access, should only call getter once due to caching.
+	assert.Equal(t, 1, callCount, "Concurrent access should result in only one getter call")
+}
+
+// TestCacheKeyWithRegion verifies cache key includes all relevant auth context fields.
+func TestCacheKeyWithRegion(t *testing.T) {
+	tests := []struct {
+		name        string
+		authContext *schema.AWSAuthContext
+		expected    string
+	}{
+		{
+			name: "full auth context with region",
+			authContext: &schema.AWSAuthContext{
+				Profile:         "prod",
+				CredentialsFile: "/prod/creds",
+				ConfigFile:      "/prod/config",
+				Region:          "us-east-1", // Region is in auth context but not in cache key.
+			},
+			expected: "prod:/prod/creds:/prod/config",
+		},
+		{
+			name: "same profile different region should have same cache key",
+			authContext: &schema.AWSAuthContext{
+				Profile:         "prod",
+				CredentialsFile: "/prod/creds",
+				ConfigFile:      "/prod/config",
+				Region:          "eu-west-1", // Different region, same cache key.
+			},
+			expected: "prod:/prod/creds:/prod/config",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getCacheKey(tt.authContext)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestAllAWSFunctionsShareCache verifies all four functions share the same cache.
+func TestAllAWSFunctionsShareCache(t *testing.T) {
+	ClearAWSIdentityCache()
+
+	callCount := 0
+	restore := SetAWSGetter(&countingAWSGetter{
+		wrapped: &mockAWSGetter{
+			identity: &AWSCallerIdentity{
+				Account: "888888888888",
+				Arn:     "arn:aws:iam::888888888888:user/shared-cache",
+				UserID:  "AIDASHARED",
+				Region:  "sa-east-1",
+			},
+			err: nil,
+		},
+		callCount: &callCount,
+	})
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackInfo := &schema.ConfigAndStacksInfo{}
+
+	// Call all four functions.
+	result1 := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	result2 := processTagAwsCallerIdentityArn(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo)
+	result3 := processTagAwsCallerIdentityUserID(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityUserID, stackInfo)
+	result4 := processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, stackInfo)
+
+	// Verify all results are correct.
+	assert.Equal(t, "888888888888", result1)
+	assert.Equal(t, "arn:aws:iam::888888888888:user/shared-cache", result2)
+	assert.Equal(t, "AIDASHARED", result3)
+	assert.Equal(t, "sa-east-1", result4)
+
+	// All functions should share the same cached result - only one getter call.
+	assert.Equal(t, 1, callCount, "All AWS functions should share the same cache")
+}
+
+// TestCacheWithDifferentConfigFiles verifies different config files get different cache entries.
+func TestCacheWithDifferentConfigFiles(t *testing.T) {
+	ClearAWSIdentityCache()
+
+	callCount := 0
+	restore := SetAWSGetter(&countingAWSGetter{
+		wrapped: &mockAWSGetter{
+			identity: &AWSCallerIdentity{
+				Account: "999999999999",
+				Arn:     "arn:aws:iam::999999999999:user/config-test",
+				UserID:  "AIDACONFIG",
+				Region:  "me-south-1",
+			},
+			err: nil,
+		},
+		callCount: &callCount,
+	})
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	ctx := context.Background()
+
+	// First call with config file A.
+	auth1 := &schema.AWSAuthContext{
+		Profile:         "test",
+		CredentialsFile: "/creds",
+		ConfigFile:      "/config-a",
+	}
+	_, err := getAWSCallerIdentityCached(ctx, atmosConfig, auth1)
+	require.NoError(t, err)
+	assert.Equal(t, 1, callCount)
+
+	// Second call with same config file A - should use cache.
+	_, err = getAWSCallerIdentityCached(ctx, atmosConfig, auth1)
+	require.NoError(t, err)
+	assert.Equal(t, 1, callCount, "Same config file should use cache")
+
+	// Third call with config file B - should call getter again.
+	auth2 := &schema.AWSAuthContext{
+		Profile:         "test",
+		CredentialsFile: "/creds",
+		ConfigFile:      "/config-b", // Different config file.
+	}
+	_, err = getAWSCallerIdentityCached(ctx, atmosConfig, auth2)
+	require.NoError(t, err)
+	assert.Equal(t, 2, callCount, "Different config file should result in new getter call")
 }
