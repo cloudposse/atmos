@@ -112,6 +112,9 @@ func TestExecWithPTY_WithMasking(t *testing.T) {
 		t.Fatalf("ExecWithPTY() error = %v", err)
 	}
 
+	// Allow time for PTY output buffers to fully flush in CI environments.
+	time.Sleep(50 * time.Millisecond)
+
 	output := stdout.String()
 
 	// Output should NOT contain the actual secret.
@@ -156,11 +159,14 @@ func TestExecWithPTY_MaskingDisabled(t *testing.T) {
 		t.Fatalf("ExecWithPTY() error = %v", err)
 	}
 
+	// Allow time for PTY output buffers to fully flush in CI environments.
+	time.Sleep(50 * time.Millisecond)
+
 	output := stdout.String()
 
 	// Output SHOULD contain the actual secret when masking is disabled.
 	if !strings.Contains(output, secretKey) {
-		t.Errorf("Output should contain unmasked secret when masking disabled, got: %s", output)
+		t.Errorf("Output should contain unmasked secret when masking disabled, got: %q (bytes: %v)", output, []byte(output))
 	}
 }
 
