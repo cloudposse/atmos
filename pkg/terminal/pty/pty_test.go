@@ -97,8 +97,9 @@ func TestExecWithPTY_WithMasking(t *testing.T) {
 	var stdout bytes.Buffer
 
 	// Echo a known AWS access key pattern.
+	// Use printf with explicit newline for more reliable PTY output on CI.
 	secretKey := "AKIAIOSFODNN7EXAMPLE"
-	cmd := exec.Command("echo", secretKey)
+	cmd := exec.Command("sh", "-c", "printf '%s\\n' '"+secretKey+"'")
 
 	opts := &Options{
 		Stdin:         strings.NewReader(""), // Provide empty stdin for CI environments.
@@ -113,7 +114,7 @@ func TestExecWithPTY_WithMasking(t *testing.T) {
 	}
 
 	// Allow time for PTY output buffers to fully flush in CI environments.
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	output := stdout.String()
 
@@ -144,8 +145,9 @@ func TestExecWithPTY_MaskingDisabled(t *testing.T) {
 
 	var stdout bytes.Buffer
 
+	// Use printf with explicit newline for more reliable PTY output on CI.
 	secretKey := "AKIAIOSFODNN7EXAMPLE"
-	cmd := exec.Command("echo", secretKey)
+	cmd := exec.Command("sh", "-c", "printf '%s\\n' '"+secretKey+"'")
 
 	opts := &Options{
 		Stdin:         strings.NewReader(""), // Provide empty stdin for CI environments.
@@ -160,7 +162,7 @@ func TestExecWithPTY_MaskingDisabled(t *testing.T) {
 	}
 
 	// Allow time for PTY output buffers to fully flush in CI environments.
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 	output := stdout.String()
 
