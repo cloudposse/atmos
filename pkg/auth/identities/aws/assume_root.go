@@ -496,18 +496,23 @@ func (i *assumeRootIdentity) LoadCredentials(ctx context.Context) (types.ICreden
 func (i *assumeRootIdentity) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "aws.assumeRootIdentity.Logout")()
 
-	log.Debug("Logout assume-root identity", logKeyIdentity, i.name, "provider", i.rootProviderName)
+	// Resolve root provider name consistently with other methods.
+	providerName, err := i.resolveRootProviderName()
+	if err != nil {
+		log.Debug("Failed to resolve root provider for logout", logKeyIdentity, i.name, "error", err)
+		return fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
+	}
 
-	basePath := ""
+	log.Debug("Logout assume-root identity", logKeyIdentity, i.name, "provider", providerName)
 
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	fileManager, err := awsCloud.NewAWSFileManager("")
 	if err != nil {
 		log.Debug("Failed to create file manager for logout", logKeyIdentity, i.name, "error", err)
 		return fmt.Errorf("failed to create AWS file manager: %w", err)
 	}
 
 	// Remove this identity's profile from the provider's config files.
-	if err := fileManager.DeleteIdentity(ctx, i.rootProviderName, i.name); err != nil {
+	if err := fileManager.DeleteIdentity(ctx, providerName, i.name); err != nil {
 		log.Debug("Failed to delete identity files", logKeyIdentity, i.name, "error", err)
 		return fmt.Errorf("failed to delete identity files: %w", err)
 	}
