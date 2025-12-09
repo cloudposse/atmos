@@ -3,7 +3,9 @@ package extract
 import (
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // getStatusIndicator returns a colored dot indicator based on enabled/locked state.
@@ -15,14 +17,14 @@ func getStatusIndicator(enabled, locked bool) string {
 
 	switch {
 	case locked:
-		// Red for locked.
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(statusDot)
+		// Red for locked - use theme error color.
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetErrorColor())).Render(statusDot)
 	case enabled:
-		// Green for enabled.
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(statusDot)
+		// Green for enabled - use theme success color.
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetSuccessColor())).Render(statusDot)
 	default:
-		// Gray for disabled.
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(statusDot)
+		// Gray for disabled - use theme muted color.
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray)).Render(statusDot)
 	}
 }
 
@@ -38,9 +40,11 @@ type instanceMetadata struct {
 	status          string
 }
 
-// ExtractMetadata transforms schema.Instance slice into []map[string]any for renderer.
-// Extracts metadata fields and makes them accessible to column templates.
+// Metadata transforms a slice of schema.Instance into []map[string]any for the renderer.
+// It extracts metadata fields and makes them accessible to column templates.
 func Metadata(instances []schema.Instance) []map[string]any {
+	defer perf.Track(nil, "extract.Metadata")()
+
 	result := make([]map[string]any, 0, len(instances))
 
 	for i := range instances {

@@ -156,6 +156,8 @@ func cacheCompiledSchema(schemaPath string, schema *jsonschema.Schema) {
 // ClearBaseComponentConfigCache clears the base component config cache.
 // This should be called between independent operations (like tests) to ensure fresh processing.
 func ClearBaseComponentConfigCache() {
+	defer perf.Track(nil, "exec.ClearBaseComponentConfigCache")()
+
 	baseComponentConfigCacheMu.Lock()
 	defer baseComponentConfigCacheMu.Unlock()
 	baseComponentConfigCache = make(map[string]*schema.BaseComponentConfig)
@@ -164,6 +166,8 @@ func ClearBaseComponentConfigCache() {
 // ClearJsonSchemaCache clears the JSON schema cache.
 // This should be called between independent operations (like tests) to ensure fresh processing.
 func ClearJsonSchemaCache() {
+	defer perf.Track(nil, "exec.ClearJsonSchemaCache")()
+
 	jsonSchemaCacheMu.Lock()
 	defer jsonSchemaCacheMu.Unlock()
 	jsonSchemaCache = make(map[string]*jsonschema.Schema)

@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/list/tree"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -18,6 +19,8 @@ import (
 // ResolveImportTree resolves the complete import tree for all stacks.
 // Returns a map of stack names to their import trees.
 func ResolveImportTree(stacksMap map[string]interface{}, atmosConfig *schema.AtmosConfiguration) (map[string][]*tree.ImportNode, error) {
+	defer perf.Track(atmosConfig, "importresolver.ResolveImportTree")()
+
 	result := make(map[string][]*tree.ImportNode)
 
 	// Cache to avoid re-reading the same import file multiple times.

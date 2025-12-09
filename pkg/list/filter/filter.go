@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Filter interface for composability.
@@ -38,6 +39,8 @@ type Chain struct {
 
 // NewGlobFilter creates a filter that matches field values against glob pattern.
 func NewGlobFilter(field, pattern string) (*GlobFilter, error) {
+	defer perf.Track(nil, "filter.NewGlobFilter")()
+
 	if field == "" {
 		return nil, fmt.Errorf("%w: field cannot be empty", errUtils.ErrInvalidConfig)
 	}
@@ -59,6 +62,8 @@ func NewGlobFilter(field, pattern string) (*GlobFilter, error) {
 
 // Apply filters data by glob pattern matching.
 func (f *GlobFilter) Apply(data interface{}) (interface{}, error) {
+	defer perf.Track(nil, "filter.GlobFilter.Apply")()
+
 	items, ok := data.([]map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("%w: expected []map[string]any, got %T", errUtils.ErrInvalidConfig, data)
@@ -87,6 +92,8 @@ func (f *GlobFilter) Apply(data interface{}) (interface{}, error) {
 
 // NewColumnFilter creates a filter for exact column value matching.
 func NewColumnFilter(column, value string) *ColumnValueFilter {
+	defer perf.Track(nil, "filter.NewColumnFilter")()
+
 	return &ColumnValueFilter{
 		Column: column,
 		Value:  value,
@@ -95,6 +102,8 @@ func NewColumnFilter(column, value string) *ColumnValueFilter {
 
 // Apply filters data by exact column value match.
 func (f *ColumnValueFilter) Apply(data interface{}) (interface{}, error) {
+	defer perf.Track(nil, "filter.ColumnValueFilter.Apply")()
+
 	items, ok := data.([]map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("%w: expected []map[string]any, got %T", errUtils.ErrInvalidConfig, data)
@@ -119,6 +128,8 @@ func (f *ColumnValueFilter) Apply(data interface{}) (interface{}, error) {
 // NewBoolFilter creates a filter for boolean field values.
 // Value nil = all, true = only true values, false = only false values.
 func NewBoolFilter(field string, value *bool) *BoolFilter {
+	defer perf.Track(nil, "filter.NewBoolFilter")()
+
 	return &BoolFilter{
 		Field: field,
 		Value: value,
@@ -127,6 +138,8 @@ func NewBoolFilter(field string, value *bool) *BoolFilter {
 
 // Apply filters data by boolean field value.
 func (f *BoolFilter) Apply(data interface{}) (interface{}, error) {
+	defer perf.Track(nil, "filter.BoolFilter.Apply")()
+
 	items, ok := data.([]map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("%w: expected []map[string]any, got %T", errUtils.ErrInvalidConfig, data)
@@ -161,11 +174,15 @@ func (f *BoolFilter) Apply(data interface{}) (interface{}, error) {
 
 // NewChain creates a filter chain that applies filters in sequence (AND logic).
 func NewChain(filters ...Filter) *Chain {
+	defer perf.Track(nil, "filter.NewChain")()
+
 	return &Chain{filters: filters}
 }
 
 // Apply applies all filters in sequence.
 func (c *Chain) Apply(data interface{}) (interface{}, error) {
+	defer perf.Track(nil, "filter.Chain.Apply")()
+
 	current := data
 	for i, filter := range c.filters {
 		result, err := filter.Apply(current)

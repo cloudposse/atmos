@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -22,6 +23,8 @@ type VendorInfo struct {
 // Vendor transforms vendorInfos into structured data.
 // Returns []map[string]any suitable for the renderer pipeline.
 func Vendor(vendorInfos []VendorInfo) ([]map[string]any, error) {
+	defer perf.Track(nil, "extract.Vendor")()
+
 	var vendors []map[string]any
 
 	for _, vi := range vendorInfos {

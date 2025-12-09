@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss/tree"
 
 	listtree "github.com/cloudposse/atmos/pkg/list/tree"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -25,6 +26,8 @@ const (
 // Structure: Stacks → Components → Imports.
 // If showImports is false, only shows stacks and components without import details.
 func RenderInstancesTree(stacksWithComponents map[string]map[string][]*listtree.ImportNode, showImports bool) string {
+	defer perf.Track(nil, "format.RenderInstancesTree")()
+
 	if len(stacksWithComponents) == 0 {
 		return "No stacks found"
 	}

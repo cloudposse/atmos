@@ -205,36 +205,36 @@ Spawned processes get derived env vars:
 //   VendorPull(..., authContext.GitHub)      // GitHub vendoring uses GitHub creds
 //   GetTerraformState(..., authContext.AWS)  // Terraform state uses AWS creds
 type AuthContext struct {
-	// AWS holds AWS credentials if an AWS identity is active.
-	AWS *AWSAuthContext `json:"aws,omitempty" yaml:"aws,omitempty"`
+    // AWS holds AWS credentials if an AWS identity is active.
+    AWS *AWSAuthContext `json:"aws,omitempty" yaml:"aws,omitempty"`
 
-	// GitHub holds GitHub credentials if a GitHub identity is active (future).
-	// GitHub *GitHubAuthContext `json:"github,omitempty" yaml:"github,omitempty"`
+    // GitHub holds GitHub credentials if a GitHub identity is active (future).
+    // GitHub *GitHubAuthContext `json:"github,omitempty" yaml:"github,omitempty"`
 
-	// Azure holds Azure credentials if an Azure identity is active (future).
-	// Azure *AzureAuthContext `json:"azure,omitempty" yaml:"azure,omitempty"`
+    // Azure holds Azure credentials if an Azure identity is active (future).
+    // Azure *AzureAuthContext `json:"azure,omitempty" yaml:"azure,omitempty"`
 
-	// GCP holds GCP credentials if a GCP identity is active (future).
-	// GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty"`
+    // GCP holds GCP credentials if a GCP identity is active (future).
+    // GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty"`
 }
 
 // AWSAuthContext holds AWS-specific authentication context.
 // This is populated by the AWS auth system and consumed by AWS SDK calls.
 type AWSAuthContext struct {
-	// CredentialsFile is the absolute path to the AWS credentials file managed by Atmos.
-	// Example: /home/user/.atmos/auth/aws-sso/credentials
-	CredentialsFile string `json:"credentials_file" yaml:"credentials_file"`
+    // CredentialsFile is the absolute path to the AWS credentials file managed by Atmos.
+    // Example: /home/user/.atmos/auth/aws-sso/credentials
+    CredentialsFile string `json:"credentials_file" yaml:"credentials_file"`
 
-	// ConfigFile is the absolute path to the AWS config file managed by Atmos.
-	// Example: /home/user/.atmos/auth/aws-sso/config
-	ConfigFile string `json:"config_file" yaml:"config_file"`
+    // ConfigFile is the absolute path to the AWS config file managed by Atmos.
+    // Example: /home/user/.atmos/auth/aws-sso/config
+    ConfigFile string `json:"config_file" yaml:"config_file"`
 
-	// Profile is the AWS profile name to use from the credentials file.
-	// This corresponds to the identity name in Atmos auth config.
-	Profile string `json:"profile" yaml:"profile"`
+    // Profile is the AWS profile name to use from the credentials file.
+    // This corresponds to the identity name in Atmos auth config.
+    Profile string `json:"profile" yaml:"profile"`
 
-	// Region is the AWS region (optional, may be empty if not specified in identity).
-	Region string `json:"region,omitempty" yaml:"region,omitempty"`
+    // Region is the AWS region (optional, may be empty if not specified in identity).
+    Region string `json:"region,omitempty" yaml:"region,omitempty"`
 }
 
 // Future: Add Azure, GCP, GitHub auth contexts following same pattern
@@ -249,23 +249,23 @@ type AWSAuthContext struct {
 
 ```go
 type ConfigAndStacksInfo struct {
-	// ... existing fields ...
-	ComponentEnvSection           AtmosSectionMapType
-	ComponentAuthSection          AtmosSectionMapType
-	ComponentEnvList              []string
+    // ... existing fields ...
+    ComponentEnvSection           AtmosSectionMapType
+    ComponentAuthSection          AtmosSectionMapType
+    ComponentEnvList              []string
 
-	// AuthContext is a REFERENCE to the runtime authentication context.
-	// The actual AuthContext is created by commands and passed throughout execution.
-	// ConfigAndStacksInfo holds a reference for convenience (e.g., in YAML processing).
-	//
-	// Ownership: Commands create AuthContext, ConfigAndStacksInfo just references it.
-	// Lifetime: Single command execution (not persisted).
-	//
-	// It enables multiple cloud provider identities to be active simultaneously
-	// (e.g., AWS + GitHub credentials in the same component).
-	AuthContext *AuthContext
+    // AuthContext is a REFERENCE to the runtime authentication context.
+    // The actual AuthContext is created by commands and passed throughout execution.
+    // ConfigAndStacksInfo holds a reference for convenience (e.g., in YAML processing).
+    //
+    // Ownership: Commands create AuthContext, ConfigAndStacksInfo just references it.
+    // Lifetime: Single command execution (not persisted).
+    //
+    // It enables multiple cloud provider identities to be active simultaneously
+    // (e.g., AWS + GitHub credentials in the same component).
+    AuthContext *AuthContext
 
-	// ... remaining fields ...
+    // ... remaining fields ...
 }
 ```
 
@@ -390,53 +390,53 @@ This separation allows:
 //   - identityName: Identity name (e.g., "dev-admin")
 //   - creds: Authenticated credentials (may contain region info)
 func SetAuthContext(authContext *schema.AuthContext, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string, creds types.ICredentials) error {
-	if authContext == nil {
-		return nil // No auth context to populate
-	}
+    if authContext == nil {
+        return nil // No auth context to populate
+    }
 
-	m, err := NewAWSFileManager()
-	if err != nil {
-		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
-	}
+    m, err := NewAWSFileManager()
+    if err != nil {
+        return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
+    }
 
-	credentialsPath := m.GetCredentialsPath(providerName)
-	configPath := m.GetConfigPath(providerName)
+    credentialsPath := m.GetCredentialsPath(providerName)
+    configPath := m.GetConfigPath(providerName)
 
-	// Extract region from credentials if available.
-	var region string
-	if awsCreds, ok := creds.(*AWSCredentials); ok && awsCreds != nil {
-		region = awsCreds.Region
-	}
+    // Extract region from credentials if available.
+    var region string
+    if awsCreds, ok := creds.(*AWSCredentials); ok && awsCreds != nil {
+        region = awsCreds.Region
+    }
 
-	// Check for component-level region override from merged auth config.
-	// Stack inheritance allows components to override identity configuration.
-	if stackInfo != nil && stackInfo.ComponentAuthSection != nil {
-		if identities, ok := stackInfo.ComponentAuthSection["identities"].(map[string]any); ok {
-			if identityCfg, ok := identities[identityName].(map[string]any); ok {
-				if regionOverride, ok := identityCfg["region"].(string); ok && regionOverride != "" {
-					region = regionOverride
-					log.Debug("Using component-level region override", "region", region)
-				}
-			}
-		}
-	}
+    // Check for component-level region override from merged auth config.
+    // Stack inheritance allows components to override identity configuration.
+    if stackInfo != nil && stackInfo.ComponentAuthSection != nil {
+        if identities, ok := stackInfo.ComponentAuthSection["identities"].(map[string]any); ok {
+            if identityCfg, ok := identities[identityName].(map[string]any); ok {
+                if regionOverride, ok := identityCfg["region"].(string); ok && regionOverride != "" {
+                    region = regionOverride
+                    log.Debug("Using component-level region override", "region", region)
+                }
+            }
+        }
+    }
 
-	// Populate AWS auth context.
-	authContext.AWS = &schema.AWSAuthContext{
-		CredentialsFile: credentialsPath,
-		ConfigFile:      configPath,
-		Profile:         identityName,
-		Region:          region,
-	}
+    // Populate AWS auth context.
+    authContext.AWS = &schema.AWSAuthContext{
+        CredentialsFile: credentialsPath,
+        ConfigFile:      configPath,
+        Profile:         identityName,
+        Region:          region,
+    }
 
-	log.Debug("Set AWS auth context",
-		"profile", identityName,
-		"credentials", credentialsPath,
-		"config", configPath,
-		"region", region,
-	)
+    log.Debug("Set AWS auth context",
+        "profile", identityName,
+        "credentials", credentialsPath,
+        "config", configPath,
+        "region", region,
+    )
 
-	return nil
+    return nil
 }
 ```
 
@@ -449,22 +449,22 @@ func SetAuthContext(authContext *schema.AuthContext, stackInfo *schema.ConfigAnd
 // This derives environment variables from the auth context (single source of truth).
 // The env vars are used by spawned processes (terraform, helmfile, packer).
 func SetEnvironmentVariables(stackInfo *schema.ConfigAndStacksInfo) error {
-	if stackInfo == nil || stackInfo.AuthContext == nil || stackInfo.AuthContext.AWS == nil {
-		return nil // No auth context to derive from
-	}
+    if stackInfo == nil || stackInfo.AuthContext == nil || stackInfo.AuthContext.AWS == nil {
+        return nil // No auth context to derive from
+    }
 
-	awsAuth := stackInfo.AuthContext.AWS
+    awsAuth := stackInfo.AuthContext.AWS
 
-	// Derive environment variables from auth context.
-	utils.SetEnvironmentVariable(stackInfo, "AWS_SHARED_CREDENTIALS_FILE", awsAuth.CredentialsFile)
-	utils.SetEnvironmentVariable(stackInfo, "AWS_CONFIG_FILE", awsAuth.ConfigFile)
-	utils.SetEnvironmentVariable(stackInfo, "AWS_PROFILE", awsAuth.Profile)
+    // Derive environment variables from auth context.
+    utils.SetEnvironmentVariable(stackInfo, "AWS_SHARED_CREDENTIALS_FILE", awsAuth.CredentialsFile)
+    utils.SetEnvironmentVariable(stackInfo, "AWS_CONFIG_FILE", awsAuth.ConfigFile)
+    utils.SetEnvironmentVariable(stackInfo, "AWS_PROFILE", awsAuth.Profile)
 
-	if awsAuth.Region != "" {
-		utils.SetEnvironmentVariable(stackInfo, "AWS_REGION", awsAuth.Region)
-	}
+    if awsAuth.Region != "" {
+        utils.SetEnvironmentVariable(stackInfo, "AWS_REGION", awsAuth.Region)
+    }
 
-	return nil
+    return nil
 }
 ```
 
@@ -477,29 +477,29 @@ func SetEnvironmentVariables(stackInfo *schema.ConfigAndStacksInfo) error {
 
 ```go
 func (i *AssumeRoleIdentity) PostAuthenticate(
-	ctx context.Context,
-	stackInfo *schema.ConfigAndStacksInfo,
-	providerName, identityName string,
-	creds types.ICredentials,
+    ctx context.Context,
+    stackInfo *schema.ConfigAndStacksInfo,
+    providerName, identityName string,
+    creds types.ICredentials,
 ) error {
-	// ... existing credential setup ...
+    // ... existing credential setup ...
 
-	if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
-		return errors.Join(errUtils.ErrAwsAuth, err)
-	}
+    if err := awsCloud.SetupFiles(providerName, identityName, creds); err != nil {
+        return errors.Join(errUtils.ErrAwsAuth, err)
+    }
 
-	// NEW: Set auth context (single source of truth).
-	if err := awsCloud.SetAuthContext(stackInfo, providerName, identityName); err != nil {
-		return errors.Join(errUtils.ErrAwsAuth, err)
-	}
+    // NEW: Set auth context (single source of truth).
+    if err := awsCloud.SetAuthContext(stackInfo, providerName, identityName); err != nil {
+        return errors.Join(errUtils.ErrAwsAuth, err)
+    }
 
-	// NEW: Derive environment variables from auth context.
-	// This populates ComponentEnvSection from the auth context.
-	if err := awsCloud.SetEnvironmentVariables(stackInfo); err != nil {
-		return errors.Join(errUtils.ErrAwsAuth, err)
-	}
+    // NEW: Derive environment variables from auth context.
+    // This populates ComponentEnvSection from the auth context.
+    if err := awsCloud.SetEnvironmentVariables(stackInfo); err != nil {
+        return errors.Join(errUtils.ErrAwsAuth, err)
+    }
 
-	return nil
+    return nil
 }
 
 // Apply same pattern to PermissionSetIdentity and UserIdentity
@@ -516,73 +516,73 @@ func (i *AssumeRoleIdentity) PostAuthenticate(
 // If authContext is provided, it uses the Atmos-managed credentials files and profile.
 // Otherwise, it falls back to standard AWS SDK credential resolution.
 func LoadAWSConfigWithAuth(
-	ctx context.Context,
-	region string,
-	roleArn string,
-	assumeRoleDuration time.Duration,
-	authContext *schema.AWSAuthContext,
+    ctx context.Context,
+    region string,
+    roleArn string,
+    assumeRoleDuration time.Duration,
+    authContext *schema.AWSAuthContext,
 ) (aws.Config, error) {
-	defer perf.Track(nil, "aws_utils.LoadAWSConfigWithAuth")()
+    defer perf.Track(nil, "aws_utils.LoadAWSConfigWithAuth")()
 
-	var cfgOpts []func(*config.LoadOptions) error
+    var cfgOpts []func(*config.LoadOptions) error
 
-	// If auth context is provided, use Atmos-managed credentials.
-	if authContext != nil {
-		log.Debug("Using Atmos auth context for AWS SDK",
-			"profile", authContext.Profile,
-			"credentials", authContext.CredentialsFile,
-			"config", authContext.ConfigFile,
-		)
+    // If auth context is provided, use Atmos-managed credentials.
+    if authContext != nil {
+        log.Debug("Using Atmos auth context for AWS SDK",
+            "profile", authContext.Profile,
+            "credentials", authContext.CredentialsFile,
+            "config", authContext.ConfigFile,
+        )
 
-		// Set custom credential and config file paths.
-		// This overrides the default ~/.aws/credentials and ~/.aws/config.
-		cfgOpts = append(cfgOpts,
-			config.WithSharedCredentialsFiles([]string{authContext.CredentialsFile}),
-			config.WithSharedConfigFiles([]string{authContext.ConfigFile}),
-			config.WithSharedConfigProfile(authContext.Profile),
-		)
+        // Set custom credential and config file paths.
+        // This overrides the default ~/.aws/credentials and ~/.aws/config.
+        cfgOpts = append(cfgOpts,
+            config.WithSharedCredentialsFiles([]string{authContext.CredentialsFile}),
+            config.WithSharedConfigFiles([]string{authContext.ConfigFile}),
+            config.WithSharedConfigProfile(authContext.Profile),
+        )
 
-		// Use region from auth context if not explicitly provided.
-		if region == "" && authContext.Region != "" {
-			region = authContext.Region
-		}
-	}
+        // Use region from auth context if not explicitly provided.
+        if region == "" && authContext.Region != "" {
+            region = authContext.Region
+        }
+    }
 
-	// Set region if provided.
-	if region != "" {
-		cfgOpts = append(cfgOpts, config.WithRegion(region))
-	}
+    // Set region if provided.
+    if region != "" {
+        cfgOpts = append(cfgOpts, config.WithRegion(region))
+    }
 
-	// Load base config.
-	baseCfg, err := config.LoadDefaultConfig(ctx, cfgOpts...)
-	if err != nil {
-		return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAWSConfig, err)
-	}
+    // Load base config.
+    baseCfg, err := config.LoadDefaultConfig(ctx, cfgOpts...)
+    if err != nil {
+        return aws.Config{}, fmt.Errorf("%w: %v", errUtils.ErrLoadAWSConfig, err)
+    }
 
-	// Conditionally assume role if specified.
-	if roleArn != "" {
-		log.Debug("Assuming role", "ARN", roleArn)
-		stsClient := sts.NewFromConfig(baseCfg)
+    // Conditionally assume role if specified.
+    if roleArn != "" {
+        log.Debug("Assuming role", "ARN", roleArn)
+        stsClient := sts.NewFromConfig(baseCfg)
 
-		creds := stscreds.NewAssumeRoleProvider(stsClient, roleArn, func(o *stscreds.AssumeRoleOptions) {
-			o.Duration = assumeRoleDuration
-		})
+        creds := stscreds.NewAssumeRoleProvider(stsClient, roleArn, func(o *stscreds.AssumeRoleOptions) {
+            o.Duration = assumeRoleDuration
+        })
 
-		cfgOpts = append(cfgOpts, config.WithCredentialsProvider(aws.NewCredentialsCache(creds)))
+        cfgOpts = append(cfgOpts, config.WithCredentialsProvider(aws.NewCredentialsCache(creds)))
 
-		// Reload full config with assumed role credentials.
-		return config.LoadDefaultConfig(ctx, cfgOpts...)
-	}
+        // Reload full config with assumed role credentials.
+        return config.LoadDefaultConfig(ctx, cfgOpts...)
+    }
 
-	return baseCfg, nil
+    return baseCfg, nil
 }
 
 // LoadAWSConfig is kept for backward compatibility.
 // It wraps LoadAWSConfigWithAuth with nil authContext.
 func LoadAWSConfig(ctx context.Context, region string, roleArn string, assumeRoleDuration time.Duration) (aws.Config, error) {
-	defer perf.Track(nil, "aws_utils.LoadAWSConfig")()
+    defer perf.Track(nil, "aws_utils.LoadAWSConfig")()
 
-	return LoadAWSConfigWithAuth(ctx, region, roleArn, assumeRoleDuration, nil)
+    return LoadAWSConfigWithAuth(ctx, region, roleArn, assumeRoleDuration, nil)
 }
 ```
 
@@ -594,34 +594,34 @@ func LoadAWSConfig(ctx context.Context, region string, roleArn string, assumeRol
 
 ```go
 func GetTerraformState(
-	atmosConfig *schema.AtmosConfiguration,
-	yamlFunc string,
-	stack string,
-	component string,
-	output string,
-	skipCache bool,
-	authContext *schema.AuthContext, // NEW: Optional auth context
+    atmosConfig *schema.AtmosConfiguration,
+    yamlFunc string,
+    stack string,
+    component string,
+    output string,
+    skipCache bool,
+    authContext *schema.AuthContext, // NEW: Optional auth context
 ) (any, error) {
-	defer perf.Track(atmosConfig, "exec.GetTerraformState")()
+    defer perf.Track(atmosConfig, "exec.GetTerraformState")()
 
-	// ... existing cache logic ...
+    // ... existing cache logic ...
 
-	componentSections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
-	if err != nil {
-		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
-		return nil, er
-	}
+    componentSections, err := ExecuteDescribeComponent(component, stack, true, true, nil)
+    if err != nil {
+        er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
+        return nil, er
+    }
 
-	// ... existing static remote state logic ...
+    // ... existing static remote state logic ...
 
-	// Read Terraform backend with auth context.
-	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, authContext)
-	if err != nil {
-		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
-		return nil, er
-	}
+    // Read Terraform backend with auth context.
+    backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, authContext)
+    if err != nil {
+        er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
+        return nil, er
+    }
 
-	// ... existing output retrieval logic ...
+    // ... existing output retrieval logic ...
 }
 ```
 
@@ -629,31 +629,31 @@ func GetTerraformState(
 
 ```go
 func GetTerraformBackend(
-	atmosConfig *schema.AtmosConfiguration,
-	componentSections *map[string]any,
-	authContext *schema.AuthContext, // NEW: Optional auth context
+    atmosConfig *schema.AtmosConfiguration,
+    componentSections *map[string]any,
+    authContext *schema.AuthContext, // NEW: Optional auth context
 ) (map[string]any, error) {
-	defer perf.Track(atmosConfig, "terraform_backend.GetTerraformBackend")()
+    defer perf.Track(atmosConfig, "terraform_backend.GetTerraformBackend")()
 
-	RegisterTerraformBackends()
+    RegisterTerraformBackends()
 
-	backendType := GetComponentBackendType(componentSections)
-	if backendType == "" {
-		backendType = cfg.BackendTypeLocal
-	}
+    backendType := GetComponentBackendType(componentSections)
+    if backendType == "" {
+        backendType = cfg.BackendTypeLocal
+    }
 
-	readBackendStateFunc := GetTerraformBackendReadFunc(backendType)
-	if readBackendStateFunc == nil {
-		return nil, fmt.Errorf("%w: `%s`\nsupported backends: `local`, `s3`", errUtils.ErrUnsupportedBackendType, backendType)
-	}
+    readBackendStateFunc := GetTerraformBackendReadFunc(backendType)
+    if readBackendStateFunc == nil {
+        return nil, fmt.Errorf("%w: `%s`\nsupported backends: `local`, `s3`", errUtils.ErrUnsupportedBackendType, backendType)
+    }
 
-	// Pass auth context to backend reader.
-	content, err := readBackendStateFunc(atmosConfig, componentSections, authContext)
-	if err != nil {
-		return nil, err
-	}
+    // Pass auth context to backend reader.
+    content, err := readBackendStateFunc(atmosConfig, componentSections, authContext)
+    if err != nil {
+        return nil, err
+    }
 
-	// ... existing state file processing ...
+    // ... existing state file processing ...
 }
 ```
 
@@ -662,64 +662,64 @@ func GetTerraformBackend(
 ```go
 // Update function signature type.
 type TerraformBackendReadFunc func(
-	atmosConfig *schema.AtmosConfiguration,
-	componentSections *map[string]any,
-	authContext *schema.AuthContext, // NEW: Optional auth context
+    atmosConfig *schema.AtmosConfiguration,
+    componentSections *map[string]any,
+    authContext *schema.AuthContext, // NEW: Optional auth context
 ) ([]byte, error)
 
 func ReadTerraformBackendS3(
-	atmosConfig *schema.AtmosConfiguration,
-	componentSections *map[string]any,
-	authContext *schema.AuthContext, // NEW: Optional auth context
+    atmosConfig *schema.AtmosConfiguration,
+    componentSections *map[string]any,
+    authContext *schema.AuthContext, // NEW: Optional auth context
 ) ([]byte, error) {
-	defer perf.Track(nil, "terraform_backend.ReadTerraformBackendS3")()
+    defer perf.Track(nil, "terraform_backend.ReadTerraformBackendS3")()
 
-	backend := GetComponentBackend(componentSections)
+    backend := GetComponentBackend(componentSections)
 
-	// Use auth context if available.
-	s3Client, err := getCachedS3ClientWithAuth(&backend, authContext)
-	if err != nil {
-		return nil, err
-	}
+    // Use auth context if available.
+    s3Client, err := getCachedS3ClientWithAuth(&backend, authContext)
+    if err != nil {
+        return nil, err
+    }
 
-	return ReadTerraformBackendS3Internal(s3Client, componentSections, &backend)
+    return ReadTerraformBackendS3Internal(s3Client, componentSections, &backend)
 }
 
 // getCachedS3ClientWithAuth creates or retrieves a cached S3 client with auth context support.
 func getCachedS3ClientWithAuth(backend *map[string]any, authContext *schema.AuthContext) (S3API, error) {
-	region := GetBackendAttribute(backend, "region")
-	roleArn := GetS3BackendAssumeRoleArn(backend)
+    region := GetBackendAttribute(backend, "region")
+    roleArn := GetS3BackendAssumeRoleArn(backend)
 
-	// Build cache key based on region, role, and auth profile.
-	cacheKey := fmt.Sprintf("region=%s;role_arn=%s", region, roleArn)
-	if authContext != nil && authContext.AWS != nil {
-		cacheKey += fmt.Sprintf(";profile=%s", authContext.AWS.Profile)
-	}
+    // Build cache key based on region, role, and auth profile.
+    cacheKey := fmt.Sprintf("region=%s;role_arn=%s", region, roleArn)
+    if authContext != nil && authContext.AWS != nil {
+        cacheKey += fmt.Sprintf(";profile=%s", authContext.AWS.Profile)
+    }
 
-	// Check cache.
-	if cached, ok := s3ClientCache.Load(cacheKey); ok {
-		return cached.(S3API), nil
-	}
+    // Check cache.
+    if cached, ok := s3ClientCache.Load(cacheKey); ok {
+        return cached.(S3API), nil
+    }
 
-	// Build S3 client with auth context.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+    // Build S3 client with auth context.
+    ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+    defer cancel()
 
-	// Extract AWS auth context.
-	var awsAuthContext *schema.AWSAuthContext
-	if authContext != nil {
-		awsAuthContext = authContext.AWS
-	}
+    // Extract AWS auth context.
+    var awsAuthContext *schema.AWSAuthContext
+    if authContext != nil {
+        awsAuthContext = authContext.AWS
+    }
 
-	// Load AWS config with auth context.
-	cfg, err := awsUtils.LoadAWSConfigWithAuth(ctx, region, roleArn, 15*time.Minute, awsAuthContext)
-	if err != nil {
-		return nil, err
-	}
+    // Load AWS config with auth context.
+    cfg, err := awsUtils.LoadAWSConfigWithAuth(ctx, region, roleArn, 15*time.Minute, awsAuthContext)
+    if err != nil {
+        return nil, err
+    }
 
-	s3Client := s3.NewFromConfig(cfg)
-	s3ClientCache.Store(cacheKey, s3Client)
-	return s3Client, nil
+    s3Client := s3.NewFromConfig(cfg)
+    s3ClientCache.Store(cacheKey, s3Client)
+    return s3Client, nil
 }
 ```
 
@@ -728,13 +728,13 @@ func getCachedS3ClientWithAuth(backend *map[string]any, authContext *schema.Auth
 ```go
 // Update to match new signature (auth context not used for local backend).
 func ReadTerraformBackendLocal(
-	_ *schema.AtmosConfiguration,
-	componentSections *map[string]any,
-	_ *schema.AuthContext, // Unused for local backend
+    _ *schema.AtmosConfiguration,
+    componentSections *map[string]any,
+    _ *schema.AuthContext, // Unused for local backend
 ) ([]byte, error) {
-	defer perf.Track(nil, "terraform_backend.ReadTerraformBackendLocal")()
+    defer perf.Track(nil, "terraform_backend.ReadTerraformBackendLocal")()
 
-	// ... existing implementation unchanged ...
+    // ... existing implementation unchanged ...
 }
 ```
 
@@ -746,87 +746,87 @@ func ReadTerraformBackendLocal(
 
 ```go
 func ProcessCustomYamlTags(
-	atmosConfig *schema.AtmosConfiguration,
-	input schema.AtmosSectionMapType,
-	currentStack string,
-	skip []string,
-	stackInfo *schema.ConfigAndStacksInfo, // NEW: Stack info for auth context
+    atmosConfig *schema.AtmosConfiguration,
+    input schema.AtmosSectionMapType,
+    currentStack string,
+    skip []string,
+    stackInfo *schema.ConfigAndStacksInfo, // NEW: Stack info for auth context
 ) (schema.AtmosSectionMapType, error) {
-	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTags")()
+    defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTags")()
 
-	return processNodes(atmosConfig, input, currentStack, skip, stackInfo), nil
+    return processNodes(atmosConfig, input, currentStack, skip, stackInfo), nil
 }
 
 func processNodes(
-	atmosConfig *schema.AtmosConfiguration,
-	data map[string]any,
-	currentStack string,
-	skip []string,
-	stackInfo *schema.ConfigAndStacksInfo, // NEW
+    atmosConfig *schema.AtmosConfiguration,
+    data map[string]any,
+    currentStack string,
+    skip []string,
+    stackInfo *schema.ConfigAndStacksInfo, // NEW
 ) map[string]any {
-	newMap := make(map[string]any)
-	var recurse func(any) any
+    newMap := make(map[string]any)
+    var recurse func(any) any
 
-	recurse = func(node any) any {
-		switch v := node.(type) {
-		case string:
-			return processCustomTags(atmosConfig, v, currentStack, skip, stackInfo)
+    recurse = func(node any) any {
+        switch v := node.(type) {
+        case string:
+            return processCustomTags(atmosConfig, v, currentStack, skip, stackInfo)
 
-		case map[string]any:
-			newNestedMap := make(map[string]any)
-			for k, val := range v {
-				newNestedMap[k] = recurse(val)
-			}
-			return newNestedMap
+        case map[string]any:
+            newNestedMap := make(map[string]any)
+            for k, val := range v {
+                newNestedMap[k] = recurse(val)
+            }
+            return newNestedMap
 
-		case []any:
-			newSlice := make([]any, len(v))
-			for i, val := range v {
-				newSlice[i] = recurse(val)
-			}
-			return newSlice
+        case []any:
+            newSlice := make([]any, len(v))
+            for i, val := range v {
+                newSlice[i] = recurse(val)
+            }
+            return newSlice
 
-		default:
-			return v
-		}
-	}
+        default:
+            return v
+        }
+    }
 
-	for k, v := range data {
-		newMap[k] = recurse(v)
-	}
+    for k, v := range data {
+        newMap[k] = recurse(v)
+    }
 
-	return newMap
+    return newMap
 }
 
 func processCustomTags(
-	atmosConfig *schema.AtmosConfiguration,
-	input string,
-	currentStack string,
-	skip []string,
-	stackInfo *schema.ConfigAndStacksInfo, // NEW
+    atmosConfig *schema.AtmosConfiguration,
+    input string,
+    currentStack string,
+    skip []string,
+    stackInfo *schema.ConfigAndStacksInfo, // NEW
 ) any {
-	switch {
-	case strings.HasPrefix(input, u.AtmosYamlFuncTemplate) && !skipFunc(skip, u.AtmosYamlFuncTemplate):
-		return processTagTemplate(input)
-	case strings.HasPrefix(input, u.AtmosYamlFuncExec) && !skipFunc(skip, u.AtmosYamlFuncExec):
-		res, err := u.ProcessTagExec(input)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return res
-	case strings.HasPrefix(input, u.AtmosYamlFuncStoreGet) && !skipFunc(skip, u.AtmosYamlFuncStoreGet):
-		return processTagStoreGet(atmosConfig, input, currentStack)
-	case strings.HasPrefix(input, u.AtmosYamlFuncStore) && !skipFunc(skip, u.AtmosYamlFuncStore):
-		return processTagStore(atmosConfig, input, currentStack)
-	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformOutput) && !skipFunc(skip, u.AtmosYamlFuncTerraformOutput):
-		return processTagTerraformOutput(atmosConfig, input, currentStack)
-	case strings.HasPrefix(input, u.AtmosYamlFuncTerraformState) && !skipFunc(skip, u.AtmosYamlFuncTerraformState):
-		return processTagTerraformState(atmosConfig, input, currentStack, stackInfo) // Pass stackInfo
-	case strings.HasPrefix(input, u.AtmosYamlFuncEnv) && !skipFunc(skip, u.AtmosYamlFuncEnv):
-		res, err := u.ProcessTagEnv(input)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return res
-	default:
-		return input
-	}
+    switch {
+    case strings.HasPrefix(input, u.AtmosYamlFuncTemplate) && !skipFunc(skip, u.AtmosYamlFuncTemplate):
+        return processTagTemplate(input)
+    case strings.HasPrefix(input, u.AtmosYamlFuncExec) && !skipFunc(skip, u.AtmosYamlFuncExec):
+        res, err := u.ProcessTagExec(input)
+        errUtils.CheckErrorPrintAndExit(err, "", "")
+        return res
+    case strings.HasPrefix(input, u.AtmosYamlFuncStoreGet) && !skipFunc(skip, u.AtmosYamlFuncStoreGet):
+        return processTagStoreGet(atmosConfig, input, currentStack)
+    case strings.HasPrefix(input, u.AtmosYamlFuncStore) && !skipFunc(skip, u.AtmosYamlFuncStore):
+        return processTagStore(atmosConfig, input, currentStack)
+    case strings.HasPrefix(input, u.AtmosYamlFuncTerraformOutput) && !skipFunc(skip, u.AtmosYamlFuncTerraformOutput):
+        return processTagTerraformOutput(atmosConfig, input, currentStack)
+    case strings.HasPrefix(input, u.AtmosYamlFuncTerraformState) && !skipFunc(skip, u.AtmosYamlFuncTerraformState):
+        return processTagTerraformState(atmosConfig, input, currentStack, stackInfo) // Pass stackInfo
+    case strings.HasPrefix(input, u.AtmosYamlFuncEnv) && !skipFunc(skip, u.AtmosYamlFuncEnv):
+        res, err := u.ProcessTagEnv(input)
+        errUtils.CheckErrorPrintAndExit(err, "", "")
+        return res
+    default:
+        return input
+    }
 }
 ```
 
@@ -834,34 +834,34 @@ func processCustomTags(
 
 ```go
 func processTagTerraformState(
-	atmosConfig *schema.AtmosConfiguration,
-	input string,
-	currentStack string,
-	stackInfo *schema.ConfigAndStacksInfo, // NEW: Stack info for auth context
+    atmosConfig *schema.AtmosConfiguration,
+    input string,
+    currentStack string,
+    stackInfo *schema.ConfigAndStacksInfo, // NEW: Stack info for auth context
 ) any {
-	defer perf.Track(atmosConfig, "exec.processTagTerraformState")()
+    defer perf.Track(atmosConfig, "exec.processTagTerraformState")()
 
-	log.Debug("Executing Atmos YAML function", "function", input)
+    log.Debug("Executing Atmos YAML function", "function", input)
 
-	str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformState)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+    str, err := getStringAfterTag(input, u.AtmosYamlFuncTerraformState)
+    errUtils.CheckErrorPrintAndExit(err, "", "")
 
-	var component string
-	var stack string
-	var output string
+    var component string
+    var stack string
+    var output string
 
-	// ... existing argument parsing ...
+    // ... existing argument parsing ...
 
-	// Extract auth context from stack info.
-	var authContext *schema.AuthContext
-	if stackInfo != nil {
-		authContext = stackInfo.AuthContext
-	}
+    // Extract auth context from stack info.
+    var authContext *schema.AuthContext
+    if stackInfo != nil {
+        authContext = stackInfo.AuthContext
+    }
 
-	// Pass auth context to GetTerraformState.
-	value, err := GetTerraformState(atmosConfig, input, stack, component, output, false, authContext)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-	return value
+    // Pass auth context to GetTerraformState.
+    value, err := GetTerraformState(atmosConfig, input, stack, component, output, false, authContext)
+    errUtils.CheckErrorPrintAndExit(err, "", "")
+    return value
 }
 ```
 
@@ -878,18 +878,18 @@ func processTagTerraformState(
 ```go
 // Process YAML functions in Atmos manifest sections.
 if processYamlFunctions {
-	// Pass configAndStacksInfo to provide auth context.
-	componentSectionConverted, err := ProcessCustomYamlTags(
-		atmosConfig,
-		configAndStacksInfo.ComponentSection,
-		configAndStacksInfo.Stack,
-		skip,
-		&configAndStacksInfo, // NEW: Pass stack info
-	)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-	configAndStacksInfo.ComponentSection = componentSectionConverted
+    // Pass configAndStacksInfo to provide auth context.
+    componentSectionConverted, err := ProcessCustomYamlTags(
+        atmosConfig,
+        configAndStacksInfo.ComponentSection,
+        configAndStacksInfo.Stack,
+        skip,
+        &configAndStacksInfo, // NEW: Pass stack info
+    )
+    if err != nil {
+        return configAndStacksInfo, err
+    }
+    configAndStacksInfo.ComponentSection = componentSectionConverted
 }
 ```
 
@@ -974,33 +974,33 @@ if processYamlFunctions {
 **Auth Context Population:**
 ```go
 func TestSetAuthContext(t *testing.T) {
-	stackInfo := &schema.ConfigAndStacksInfo{}
-	err := awsCloud.SetAuthContext(stackInfo, "aws-sso", "my-identity")
+    stackInfo := &schema.ConfigAndStacksInfo{}
+    err := awsCloud.SetAuthContext(stackInfo, "aws-sso", "my-identity")
 
-	require.NoError(t, err)
-	require.NotNil(t, stackInfo.AuthContext)
-	require.NotNil(t, stackInfo.AuthContext.AWS)
-	assert.Equal(t, "my-identity", stackInfo.AuthContext.AWS.Profile)
-	assert.Contains(t, stackInfo.AuthContext.AWS.CredentialsFile, ".atmos/auth")
+    require.NoError(t, err)
+    require.NotNil(t, stackInfo.AuthContext)
+    require.NotNil(t, stackInfo.AuthContext.AWS)
+    assert.Equal(t, "my-identity", stackInfo.AuthContext.AWS.Profile)
+    assert.Contains(t, stackInfo.AuthContext.AWS.CredentialsFile, ".atmos/auth")
 }
 ```
 
 **AWS Config Loading:**
 ```go
 func TestLoadAWSConfigWithAuth(t *testing.T) {
-	authContext := &schema.AWSAuthContext{
-		CredentialsFile: "/test/credentials",
-		ConfigFile:      "/test/config",
-		Profile:         "test-profile",
-		Region:          "us-east-1",
-	}
+    authContext := &schema.AWSAuthContext{
+        CredentialsFile: "/test/credentials",
+        ConfigFile:      "/test/config",
+        Profile:         "test-profile",
+        Region:          "us-east-1",
+    }
 
-	ctx := context.Background()
-	cfg, err := LoadAWSConfigWithAuth(ctx, "", "", 0, authContext)
+    ctx := context.Background()
+    cfg, err := LoadAWSConfigWithAuth(ctx, "", "", 0, authContext)
 
-	require.NoError(t, err)
-	assert.Equal(t, "us-east-1", cfg.Region)
-	// Verify config uses custom files (requires AWS SDK testing utilities)
+    require.NoError(t, err)
+    assert.Equal(t, "us-east-1", cfg.Region)
+    // Verify config uses custom files (requires AWS SDK testing utilities)
 }
 ```
 
@@ -1009,22 +1009,22 @@ func TestLoadAWSConfigWithAuth(t *testing.T) {
 **End-to-End Test:**
 ```go
 func TestTerraformStateWithAuth(t *testing.T) {
-	// Setup: Create test stack with !terraform.state
-	// Setup: Mock S3 backend with test state file
-	// Setup: Create Atmos auth identity
+    // Setup: Create test stack with !terraform.state
+    // Setup: Mock S3 backend with test state file
+    // Setup: Create Atmos auth identity
 
-	// Authenticate
-	authManager := /* create auth manager */
-	_, err := authManager.Authenticate(ctx, "test-identity")
-	require.NoError(t, err)
+    // Authenticate
+    authManager := /* create auth manager */
+    _, err := authManager.Authenticate(ctx, "test-identity")
+    require.NoError(t, err)
 
-	// Process component with !terraform.state
-	stackInfo, err := ExecuteDescribeComponent("test-component", "test-stack", true, true, nil)
-	require.NoError(t, err)
+    // Process component with !terraform.state
+    stackInfo, err := ExecuteDescribeComponent("test-component", "test-stack", true, true, nil)
+    require.NoError(t, err)
 
-	// Verify auth context was used (check logs or mock calls)
-	assert.NotNil(t, stackInfo.AuthContext)
-	assert.NotNil(t, stackInfo.AuthContext.AWS)
+    // Verify auth context was used (check logs or mock calls)
+    assert.NotNil(t, stackInfo.AuthContext)
+    assert.NotNil(t, stackInfo.AuthContext.AWS)
 }
 ```
 
@@ -1071,10 +1071,10 @@ func TestTerraformStateWithAuth(t *testing.T) {
 **Azure:**
 ```go
 type AzureAuthContext struct {
-	SubscriptionID string
-	TenantID       string
-	ClientID       string
-	TokenFile      string
+    SubscriptionID string
+    TenantID       string
+    ClientID       string
+    TokenFile      string
 }
 
 authContext.Azure = &AzureAuthContext{...}
@@ -1083,9 +1083,9 @@ authContext.Azure = &AzureAuthContext{...}
 **GCP:**
 ```go
 type GCPAuthContext struct {
-	ProjectID           string
-	ServiceAccountFile  string
-	ImpersonateAccount  string
+    ProjectID           string
+    ServiceAccountFile  string
+    ImpersonateAccount  string
 }
 
 authContext.GCP = &GCPAuthContext{...}
@@ -1094,10 +1094,10 @@ authContext.GCP = &GCPAuthContext{...}
 **GitHub:**
 ```go
 type GitHubAuthContext struct {
-	Token     string
-	TokenFile string
-	AppID     string
-	InstallID string
+    Token     string
+    TokenFile string
+    AppID     string
+    InstallID string
 }
 
 authContext.GitHub = &GitHubAuthContext{...}
@@ -1109,12 +1109,12 @@ The `!store` YAML function could also benefit from auth context for accessing se
 
 ```go
 func processTagStore(
-	atmosConfig *schema.AtmosConfiguration,
-	input string,
-	currentStack string,
-	stackInfo *schema.ConfigAndStacksInfo, // Add stack info
+    atmosConfig *schema.AtmosConfiguration,
+    input string,
+    currentStack string,
+    stackInfo *schema.ConfigAndStacksInfo, // Add stack info
 ) any {
-	// Use authContext for AWS SSM Parameter Store, Azure Key Vault, etc.
+    // Use authContext for AWS SSM Parameter Store, Azure Key Vault, etc.
 }
 ```
 

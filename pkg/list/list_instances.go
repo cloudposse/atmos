@@ -21,6 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -353,6 +354,8 @@ func processInstances(atmosConfig *schema.AtmosConfiguration, authManager auth.A
 //
 //nolint:revive,cyclop,funlen // Complexity and length from format branching and upload handling (unavoidable pattern).
 func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
+	defer perf.Track(nil, "list.ExecuteListInstancesCmd")()
+
 	log.Trace("ExecuteListInstancesCmd starting")
 	// Initialize CLI config.
 	atmosConfig, err := cfg.InitCliConfig(*opts.Info, true)

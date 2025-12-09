@@ -4,11 +4,14 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// ExtractStacks transforms stacksMap into structured stack data.
-// Returns []map[string]any suitable for the renderer pipeline.
+// Stacks transforms stacksMap into structured stack data.
+// It returns []map[string]any suitable for the renderer pipeline.
 func Stacks(stacksMap map[string]any) ([]map[string]any, error) {
+	defer perf.Track(nil, "extract.Stacks")()
+
 	if stacksMap == nil {
 		return nil, errUtils.ErrStackNotFound
 	}
@@ -26,8 +29,10 @@ func Stacks(stacksMap map[string]any) ([]map[string]any, error) {
 	return stacks, nil
 }
 
-// ExtractStacksForComponent extracts stacks that contain a specific component.
+// StacksForComponent extracts stacks that contain a specific component.
 func StacksForComponent(componentName string, stacksMap map[string]any) ([]map[string]any, error) {
+	defer perf.Track(nil, "extract.StacksForComponent")()
+
 	if stacksMap == nil {
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrStackNotFound, componentName)
 	}

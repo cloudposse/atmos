@@ -7,11 +7,14 @@ import (
 	"github.com/charmbracelet/lipgloss/tree"
 
 	listtree "github.com/cloudposse/atmos/pkg/list/tree"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // RenderStacksTree renders stacks with their import hierarchies as a tree.
 // If showImports is false, only stack names are shown without import details.
 func RenderStacksTree(stacksWithImports map[string][]*listtree.ImportNode, showImports bool) string {
+	defer perf.Track(nil, "format.RenderStacksTree")()
+
 	if len(stacksWithImports) == 0 {
 		return "No stacks found"
 	}
