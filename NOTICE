@@ -756,23 +756,23 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/oauth2
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/oauth2/+/v0.33.0:LICENSE
+    URL: https://cs.opensource.google/go/x/oauth2/+/v0.34.0:LICENSE
 
   - golang.org/x/sync
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/sync/+/v0.18.0:LICENSE
+    URL: https://cs.opensource.google/go/x/sync/+/v0.19.0:LICENSE
 
   - golang.org/x/sys
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/sys/+/v0.38.0:LICENSE
+    URL: https://cs.opensource.google/go/x/sys/+/v0.39.0:LICENSE
 
   - golang.org/x/term
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/term/+/v0.37.0:LICENSE
+    URL: https://cs.opensource.google/go/x/term/+/v0.38.0:LICENSE
 
   - golang.org/x/text
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/text/+/v0.31.0:LICENSE
+    URL: https://cs.opensource.google/go/x/text/+/v0.32.0:LICENSE
 
   - golang.org/x/time/rate
     License: BSD-3-Clause
