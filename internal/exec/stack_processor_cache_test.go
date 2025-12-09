@@ -161,6 +161,9 @@ func TestCacheBaseComponentConfig(t *testing.T) {
 		BaseComponentAuth: map[string]any{
 			"auth_type": "aws",
 		},
+		BaseComponentMetadata: map[string]any{
+			"component_type": "terraform",
+		},
 		BaseComponentProviders: map[string]any{
 			"aws": map[string]any{"region": "us-east-1"},
 		},
@@ -195,6 +198,7 @@ func TestCacheBaseComponentConfig(t *testing.T) {
 	assert.Equal(t, true, cached.BaseComponentSettings["setting1"])
 	assert.Equal(t, "value", cached.BaseComponentEnv["ENV_VAR"])
 	assert.Equal(t, "aws", cached.BaseComponentAuth["auth_type"])
+	assert.Equal(t, "terraform", cached.BaseComponentMetadata["component_type"])
 	assert.Equal(t, "my-bucket", cached.BaseComponentBackendSection["bucket"])
 	assert.Equal(t, "state-bucket", cached.BaseComponentRemoteStateBackendSection["bucket"])
 	assert.Equal(t, []string{"base1", "base2"}, cached.ComponentInheritanceChain)
@@ -212,9 +216,13 @@ func TestCacheBaseComponentConfigDeepCopy(t *testing.T) {
 	originalVars := map[string]any{
 		"key": "original",
 	}
+	originalMetadata := map[string]any{
+		"type": "original",
+	}
 	config := &schema.BaseComponentConfig{
 		FinalBaseComponentName:    "test",
 		BaseComponentVars:         originalVars,
+		BaseComponentMetadata:     originalMetadata,
 		ComponentInheritanceChain: []string{"base1"},
 	}
 
@@ -223,6 +231,7 @@ func TestCacheBaseComponentConfigDeepCopy(t *testing.T) {
 
 	// Modify the original after caching.
 	originalVars["key"] = "modified"
+	originalMetadata["type"] = "modified"
 	config.ComponentInheritanceChain[0] = "modified-base"
 
 	// Retrieve from cache.
@@ -231,14 +240,17 @@ func TestCacheBaseComponentConfigDeepCopy(t *testing.T) {
 
 	// Cached values should NOT be affected by modifications to original.
 	assert.Equal(t, "original", cached.BaseComponentVars["key"], "cached vars should not be modified")
+	assert.Equal(t, "original", cached.BaseComponentMetadata["type"], "cached metadata should not be modified")
 
 	// Now modify the cached value.
 	cached.BaseComponentVars["key"] = "cached-modified"
+	cached.BaseComponentMetadata["type"] = "cached-modified"
 
 	// Retrieve again and verify it's still the original.
 	cached2, _, found := getCachedBaseComponentConfig("test-key")
 	require.True(t, found)
 	assert.Equal(t, "original", cached2.BaseComponentVars["key"], "cache should return independent copies")
+	assert.Equal(t, "original", cached2.BaseComponentMetadata["type"], "cache should return independent copies for metadata")
 
 	// Clean up.
 	ClearBaseComponentConfigCache()
