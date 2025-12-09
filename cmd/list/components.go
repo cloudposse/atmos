@@ -206,7 +206,9 @@ func buildComponentFilters(opts *ComponentsOptions) []filter.Filter {
 	// Stack filter (glob pattern).
 	if opts.Stack != "" {
 		globFilter, err := filter.NewGlobFilter("stack", opts.Stack)
-		if err == nil {
+		if err != nil {
+			_ = ui.Warning(fmt.Sprintf("Invalid glob pattern '%s': %v, filter will be ignored", opts.Stack, err))
+		} else {
 			filters = append(filters, globFilter)
 		}
 	}

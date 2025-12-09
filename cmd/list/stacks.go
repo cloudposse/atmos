@@ -8,7 +8,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -118,142 +120,121 @@ func init() {
 	}
 }
 
-//nolint:gocognit,revive,cyclop,funlen // Complexity and length from necessary validation and format branching.
 func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOptions) error {
 	// Early validation: --provenance only works with --format=tree.
-	// This check runs before config loading for fast feedback when format is explicitly provided.
-	if opts.Provenance && opts.Format != "" && opts.Format != string(format.FormatTree) {
-		return fmt.Errorf("%w: --provenance flag only works with --format=tree", errUtils.ErrInvalidFlag)
+	if err := validateProvenanceFlag(opts); err != nil {
+		return err
 	}
 
-	// Process command line args to get real ConfigAndStacksInfo with CLI flags.
-	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	// Initialize configuration and auth.
+	atmosConfig, authManager, err := initStacksConfig(cmd, args, opts)
 	if err != nil {
 		return err
 	}
 
-	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrInitializingCLIConfig, err)
-	}
-
-	// If format is empty, check command-specific config.
-	if opts.Format == "" && atmosConfig.Stacks.List.Format != "" {
-		opts.Format = atmosConfig.Stacks.List.Format
-	}
-
-	// Validate that --provenance only works with --format=tree (after resolving format from config).
-	if opts.Provenance && opts.Format != string(format.FormatTree) {
-		return fmt.Errorf("%w: --provenance flag only works with --format=tree", errUtils.ErrInvalidFlag)
-	}
-
-	// Create AuthManager for authentication support.
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	// Execute describe stacks and extract results.
+	stacks, stacksMap, err := executeAndExtractStacks(&atmosConfig, opts, authManager)
 	if err != nil {
 		return err
 	}
-
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
-	}
-
-	// Extract stacks into structured data.
-	var stacks []map[string]any
-	if opts.Component != "" {
-		stacks, err = extract.StacksForComponent(opts.Component, stacksMap)
-		if err != nil {
-			return err
-		}
-	} else {
-		stacks, err = extract.Stacks(stacksMap)
-		if err != nil {
-			return err
-		}
-	}
-
 	if len(stacks) == 0 {
 		_ = ui.Info("No stacks found")
 		return nil
 	}
 
 	// Handle tree format specially - it shows import hierarchies.
-	//nolint:nestif // Nesting required for tree format handling.
 	if opts.Format == "tree" {
-		log.Trace("Tree format detected, enabling provenance tracking")
-		// Enable provenance tracking to capture import chains.
-		atmosConfig.TrackProvenance = true
+		return renderStacksTreeFormat(&atmosConfig, stacks, opts.Provenance, authManager)
+	}
+	_ = stacksMap // Unused in non-tree format.
 
-		// Clear caches to ensure fresh processing with provenance enabled.
-		e.ClearMergeContexts()
-		e.ClearFindStacksMapCache()
-		log.Trace("Caches cleared, re-processing with provenance")
+	// Render stacks with filters, columns, and sorters.
+	return renderStacksTable(&atmosConfig, stacks, opts)
+}
 
-		// Re-process stacks with provenance tracking enabled.
-		stacksMap, err = e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
-		if err != nil {
-			return fmt.Errorf("error re-processing stacks with provenance: %w", err)
-		}
+// validateProvenanceFlag checks that --provenance is only used with --format=tree.
+func validateProvenanceFlag(opts *StacksOptions) error {
+	if opts.Provenance && opts.Format != "" && opts.Format != string(format.FormatTree) {
+		return fmt.Errorf("%w: --provenance flag only works with --format=tree", errUtils.ErrInvalidFlag)
+	}
+	return nil
+}
 
-		// Resolve import trees using provenance system.
-		importTreesWithComponents, err := importresolver.ResolveImportTreeFromProvenance(stacksMap, &atmosConfig)
-		if err != nil {
-			return fmt.Errorf("error resolving import tree from provenance: %w", err)
-		}
-
-		// Build a set of allowed stack names from the already-filtered stacks slice.
-		allowedStacks := make(map[string]bool)
-		for _, stack := range stacks {
-			if stackName, ok := stack["stack"].(string); ok {
-				allowedStacks[stackName] = true
-			}
-		}
-
-		// Flatten component level - for stacks view, we just need stack → imports.
-		// All components in a stack share the same import chain from the stack file.
-		importTrees := make(map[string][]*tree.ImportNode)
-		for stackName, componentImports := range importTreesWithComponents {
-			// Only include stacks present in the filtered result (honors --component filter).
-			if !allowedStacks[stackName] {
-				continue
-			}
-
-			// Just take the first component's imports (they're all the same for a stack file).
-			for _, imports := range componentImports {
-				importTrees[stackName] = imports
-				break
-			}
-		}
-
-		// Render the tree.
-		// Use showImports from --provenance flag.
-		output := format.RenderStacksTree(importTrees, opts.Provenance)
-		fmt.Println(output)
-		return nil
+// initStacksConfig initializes configuration and authentication for the stacks command.
+func initStacksConfig(
+	cmd *cobra.Command,
+	args []string,
+	opts *StacksOptions,
+) (schema.AtmosConfiguration, auth.AuthManager, error) {
+	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	if err != nil {
+		return schema.AtmosConfiguration{}, nil, err
 	}
 
-	// Build filters.
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return schema.AtmosConfiguration{}, nil, fmt.Errorf("%w: %w", errUtils.ErrInitializingCLIConfig, err)
+	}
+
+	// Apply format from config if not set via flag.
+	if opts.Format == "" && atmosConfig.Stacks.List.Format != "" {
+		opts.Format = atmosConfig.Stacks.List.Format
+	}
+
+	// Validate provenance after resolving format from config.
+	if opts.Provenance && opts.Format != string(format.FormatTree) {
+		return schema.AtmosConfiguration{}, nil, fmt.Errorf("%w: --provenance flag only works with --format=tree", errUtils.ErrInvalidFlag)
+	}
+
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	if err != nil {
+		return schema.AtmosConfiguration{}, nil, err
+	}
+
+	return atmosConfig, authManager, nil
+}
+
+// executeAndExtractStacks runs describe stacks and extracts the results.
+func executeAndExtractStacks(
+	atmosConfig *schema.AtmosConfiguration,
+	opts *StacksOptions,
+	authManager auth.AuthManager,
+) ([]map[string]any, map[string]any, error) {
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
+	}
+
+	var stacks []map[string]any
+	if opts.Component != "" {
+		stacks, err = extract.StacksForComponent(opts.Component, stacksMap)
+	} else {
+		stacks, err = extract.Stacks(stacksMap)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return stacks, stacksMap, nil
+}
+
+// renderStacksTable renders stacks in table format with filters, columns, and sorters.
+func renderStacksTable(atmosConfig *schema.AtmosConfiguration, stacks []map[string]any, opts *StacksOptions) error {
 	filters := buildStackFilters(opts)
+	columns := getStackColumns(atmosConfig, opts.Columns, opts.Component != "")
 
-	// Get column configuration.
-	columns := getStackColumns(&atmosConfig, opts.Columns, opts.Component != "")
-
-	// Build column selector.
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
 	if err != nil {
 		return fmt.Errorf("error creating column selector: %w", err)
 	}
 
-	// Build sorters.
 	sorters, err := buildStackSorters(opts.Sort)
 	if err != nil {
 		return fmt.Errorf("error parsing sort specification: %w", err)
 	}
 
-	// Create renderer and execute pipeline.
 	outputFormat := format.Format(opts.Format)
 	r := renderer.New(filters, selector, sorters, outputFormat, "")
-
 	return r.Render(stacks)
 }
 
@@ -300,6 +281,82 @@ func getStackColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []strin
 	return []column.Config{
 		{Name: "Stack", Value: "{{ .stack }}"},
 	}
+}
+
+// renderStacksTreeFormat handles the tree format output for stacks.
+// It enables provenance tracking, re-processes stacks, and renders the import hierarchy.
+func renderStacksTreeFormat(
+	atmosConfig *schema.AtmosConfiguration,
+	stacks []map[string]any,
+	showProvenance bool,
+	authManager auth.AuthManager,
+) error {
+	log.Trace("Tree format detected, enabling provenance tracking")
+	atmosConfig.TrackProvenance = true
+
+	// Clear caches to ensure fresh processing with provenance enabled.
+	e.ClearMergeContexts()
+	e.ClearFindStacksMapCache()
+	log.Trace("Caches cleared, re-processing with provenance")
+
+	// Re-process stacks with provenance tracking enabled.
+	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
+	if err != nil {
+		return fmt.Errorf("error re-processing stacks with provenance: %w", err)
+	}
+
+	// Resolve import trees and filter to allowed stacks.
+	importTrees, err := resolveAndFilterImportTrees(stacksMap, atmosConfig, stacks)
+	if err != nil {
+		return err
+	}
+
+	// Render and output the tree.
+	output := format.RenderStacksTree(importTrees, showProvenance)
+	_ = data.Writeln(output)
+	return nil
+}
+
+// resolveAndFilterImportTrees resolves import trees from provenance and filters to allowed stacks.
+func resolveAndFilterImportTrees(
+	stacksMap map[string]any,
+	atmosConfig *schema.AtmosConfiguration,
+	stacks []map[string]any,
+) (map[string][]*tree.ImportNode, error) {
+	importTreesWithComponents, err := importresolver.ResolveImportTreeFromProvenance(stacksMap, atmosConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error resolving import tree from provenance: %w", err)
+	}
+
+	// Build a set of allowed stack names from the already-filtered stacks slice.
+	allowedStacks := buildAllowedStacksSet(stacks)
+
+	// Flatten component level - for stacks view, we just need stack → imports.
+	// All components in a stack share the same import chain from the stack file.
+	importTrees := make(map[string][]*tree.ImportNode)
+	for stackName, componentImports := range importTreesWithComponents {
+		if !allowedStacks[stackName] {
+			continue
+		}
+		// Just take the first component's imports (they're all the same for a stack file).
+		for _, imports := range componentImports {
+			importTrees[stackName] = imports
+			break
+		}
+	}
+
+	return importTrees, nil
+}
+
+// buildAllowedStacksSet creates a set of stack names from a slice of stack maps.
+func buildAllowedStacksSet(stacks []map[string]any) map[string]bool {
+	allowedStacks := make(map[string]bool)
+	for _, stack := range stacks {
+		if stackName, ok := stack["stack"].(string); ok {
+			allowedStacks[stackName] = true
+		}
+	}
+	return allowedStacks
 }
 
 // buildStackSorters creates sorters from sort specification.

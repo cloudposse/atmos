@@ -1,3 +1,4 @@
+//nolint:revive // file-length-limit: This file contains tightly coupled stack processing logic that benefits from co-location.
 package exec
 
 import (
@@ -580,6 +581,21 @@ func ProcessYAMLConfigFileWithContext(
 	)
 }
 
+// importFileResult holds the result of processing a single import file in parallel.
+type importFileResult struct {
+	index                        int
+	importFile                   string
+	yamlConfig                   map[string]any
+	yamlConfigRaw                map[string]any
+	terraformOverridesInline     map[string]any
+	terraformOverridesImports    map[string]any
+	helmfileOverridesInline      map[string]any
+	helmfileOverridesImports     map[string]any
+	importRelativePathWithoutExt string
+	mergeContext                 *m.MergeContext
+	err                          error
+}
+
 // processYAMLConfigFileWithContextInternal is the internal recursive implementation.
 //
 //nolint:gocognit,revive,cyclop,funlen
@@ -859,21 +875,6 @@ func processYAMLConfigFileWithContextInternal(
 		}
 	}
 
-	// importFileResult holds the result of processing a single import file in parallel.
-	type importFileResult struct {
-		index                        int
-		importFile                   string
-		yamlConfig                   map[string]any
-		yamlConfigRaw                map[string]any
-		terraformOverridesInline     map[string]any
-		terraformOverridesImports    map[string]any
-		helmfileOverridesInline      map[string]any
-		helmfileOverridesImports     map[string]any
-		importRelativePathWithoutExt string
-		mergeContext                 *m.MergeContext
-		err                          error
-	}
-
 	//nolint:staticcheck // atmosConfig nil check is present.
 	log.Trace("Processing import structs", "count", len(importStructs), "file", relativeFilePath, "track_provenance", atmosConfig != nil && atmosConfig.TrackProvenance)
 	for _, importStruct := range importStructs {
@@ -1053,38 +1054,8 @@ func processYAMLConfigFileWithContextInternal(
 				return nil, nil, nil, nil, nil, nil, nil, nil, result.err
 			}
 
-			//nolint:nestif // Nesting required for provenance tracking.
 			// Store merge context for imported files if provenance tracking is enabled.
-			if atmosConfig != nil && atmosConfig.TrackProvenance {
-				switch {
-				case result.mergeContext == nil:
-					log.Trace("Import has nil merge context", "import", result.importRelativePathWithoutExt)
-				case !result.mergeContext.IsProvenanceEnabled():
-					log.Trace("Import has merge context but provenance not enabled", "import", result.importRelativePathWithoutExt)
-				default:
-					log.Trace("Storing merge context for import", "import", result.importRelativePathWithoutExt, "chain_length", len(result.mergeContext.ImportChain))
-					SetMergeContextForStack(result.importRelativePathWithoutExt, result.mergeContext)
-
-					// Add imported files to parent merge context's import chain.
-					// The imported file's chain includes its own imports, so we take all files from it.
-					for _, importedFile := range result.mergeContext.ImportChain {
-						// Skip the first file if it's the same as the result's own file path (to avoid duplicates).
-						if len(result.mergeContext.ImportChain) > 0 && importedFile == result.mergeContext.ImportChain[0] {
-							// This is the imported file itself, add it only once.
-							if !u.SliceContainsString(mergeContext.ImportChain, importedFile) {
-								mergeContext.ImportChain = append(mergeContext.ImportChain, importedFile)
-								log.Trace("Added import to parent import chain", "file", importedFile)
-							}
-						} else {
-							// This is a nested import from the imported file.
-							if !u.SliceContainsString(mergeContext.ImportChain, importedFile) {
-								mergeContext.ImportChain = append(mergeContext.ImportChain, importedFile)
-								log.Trace("Added nested import to parent import chain", "file", importedFile)
-							}
-						}
-					}
-				}
-			}
+			processImportProvenanceTracking(atmosConfig, &result, mergeContext)
 
 			// From the imported manifest, get the `overrides` sections and merge them with the parent `overrides` section.
 			// The inline `overrides` section takes precedence over the imported `overrides` section inside the imported manifest.
@@ -1899,4 +1870,47 @@ func FindComponentsDerivedFromBaseComponents(
 	}
 
 	return res, nil
+}
+
+// processImportProvenanceTracking handles storing merge context and updating import chains.
+// It stores the merge context for imported files and adds imported files to the parent's import chain.
+func processImportProvenanceTracking(
+	atmosConfig *schema.AtmosConfiguration,
+	result *importFileResult,
+	mergeContext *m.MergeContext,
+) {
+	if atmosConfig == nil || !atmosConfig.TrackProvenance {
+		return
+	}
+
+	if result.mergeContext == nil {
+		log.Trace("Import has nil merge context", "import", result.importRelativePathWithoutExt)
+		return
+	}
+
+	if !result.mergeContext.IsProvenanceEnabled() {
+		log.Trace("Import has merge context but provenance not enabled", "import", result.importRelativePathWithoutExt)
+		return
+	}
+
+	log.Trace("Storing merge context for import", "import", result.importRelativePathWithoutExt, "chain_length", len(result.mergeContext.ImportChain))
+	SetMergeContextForStack(result.importRelativePathWithoutExt, result.mergeContext)
+
+	// Add imported files to parent merge context's import chain.
+	updateParentImportChain(result.mergeContext, mergeContext)
+}
+
+// updateParentImportChain adds imported files from the child's import chain to the parent's chain.
+func updateParentImportChain(childContext, parentContext *m.MergeContext) {
+	for i, importedFile := range childContext.ImportChain {
+		if u.SliceContainsString(parentContext.ImportChain, importedFile) {
+			continue
+		}
+		parentContext.ImportChain = append(parentContext.ImportChain, importedFile)
+		if i == 0 {
+			log.Trace("Added import to parent import chain", "file", importedFile)
+		} else {
+			log.Trace("Added nested import to parent import chain", "file", importedFile)
+		}
+	}
 }
