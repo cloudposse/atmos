@@ -10,6 +10,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/workflow"
 )
 
 func TestExecuteWorkflow(t *testing.T) {
@@ -333,7 +334,7 @@ func TestCheckAndGenerateWorkflowStepNames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			checkAndGenerateWorkflowStepNames(tt.input)
+			workflow.CheckAndGenerateWorkflowStepNames(tt.input)
 			assert.Equal(t, tt.expected, tt.input)
 		})
 	}

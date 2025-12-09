@@ -26,6 +26,51 @@ atmos helmfile <command> <component> -s <stack> [options]
 atmos helmfile <command> <component> --stack <stack> [options]
 ```
 
+## Path-Based Component Resolution
+
+Atmos supports using filesystem paths instead of component names for convenience. This allows you to navigate to a component directory and use `.` to reference it:
+
+<Terminal>
+```shell
+# Navigate to component directory
+cd components/helmfile/echo-server
+
+# Use . to reference current directory
+atmos helmfile diff . -s dev
+atmos helmfile apply . -s dev
+```
+</Terminal>
+
+This automatically resolves the path to the component name configured in your stack, eliminating the need to remember exact component names.
+
+**Supported path formats:**
+- `.` - Current directory
+- `./component` - Relative path from current directory
+- `../other-component` - Relative path to sibling directory
+- `/absolute/path/to/component` - Absolute path
+
+**Requirements:**
+- Must be inside a component directory under the configured base path
+- Must specify `--stack` flag
+- Component must exist in the specified stack configuration
+- **The component path must resolve to a unique component name** - If multiple components in the stack reference the same component path, you must use the unique component name instead of the path
+
+:::warning Path Resolution Limitation
+Path-based resolution only works when the component path resolves to a **single unique component** in the stack.
+
+For example, if both `app/1` and `app/2` reference `components/helmfile/my-app`:
+```bash
+cd components/helmfile/my-app
+atmos helmfile apply . --stack dev  # ❌ Error: ambiguous - which component?
+```
+
+Instead, you must use the unique component names:
+```bash
+atmos helmfile apply app/1 --stack dev  # ✓ Explicit and unambiguous
+atmos helmfile apply app/2 --stack dev  # ✓ Explicit and unambiguous
+```
+:::
+
 :::info
 Atmos supports all `helmfile` commands and options described in [Helmfile CLI reference](https://github.com/helmfile/helmfile#cli-reference).
 
@@ -51,6 +96,8 @@ Run `atmos helmfile --help` to see all the available options
 
 ## Examples
 
+### Component Name Examples
+
 ```shell
 atmos helmfile diff echo-server -s tenant1-ue2-dev
 atmos helmfile diff echo-server -s tenant1-ue2-dev --redirect-stderr /dev/null
@@ -65,11 +112,41 @@ atmos helmfile destroy echo-server --stack=tenant1-ue2-dev
 atmos helmfile destroy echo-server --stack=tenant1-ue2-dev --redirect-stderr /dev/stdout
 ```
 
+### Path-Based Examples
+
+```shell
+# Navigate to component directory and use current directory
+cd components/helmfile/echo-server
+atmos helmfile diff . -s dev
+atmos helmfile apply . -s dev
+
+# Use relative path from components/helmfile directory
+cd components/helmfile
+atmos helmfile sync ./echo-server -s prod
+
+# Use from project root with relative path
+atmos helmfile apply components/helmfile/echo-server -s dev
+
+# Combine with other flags
+cd components/helmfile/echo-server
+atmos helmfile diff . -s dev --redirect-stderr /dev/null
+atmos helmfile sync . -s dev --global-options="--no-color"
+```
+
 ## Arguments
 
 <dl>
   <dt>`component` <em>(required)</em></dt>
-  <dd>Atmos component.</dd>
+  <dd>
+    Atmos component name or filesystem path.<br/><br/>
+    Supports both:
+    <ul>
+      <li>Component names: <code>echo-server</code>, <code>apps/nginx</code></li>
+      <li>Filesystem paths: <code>.</code> (current directory), <code>./echo-server</code>, <code>components/helmfile/echo-server</code></li>
+    </ul>
+    When using paths, Atmos automatically resolves the path to the component name based on your stack configuration.
+    See <a href="#path-based-component-resolution">Path-Based Component Resolution</a> above.
+  </dd>
 </dl>
 
 ## Flags

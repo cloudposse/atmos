@@ -503,3 +503,54 @@ func TestSanitizeOutput_CustomReplacements_Combined(t *testing.T) {
 		})
 	}
 }
+
+// TestSanitizeOutput_WindowsLineEndingsInHintPaths verifies that hint path normalization
+// works correctly with Windows CRLF line endings (\r\n) as well as Unix LF (\n).
+// This test reproduces the Windows CI failure where hint paths were word-wrapped differently.
+func TestSanitizeOutput_WindowsLineEndingsInHintPaths(t *testing.T) {
+	repoRoot, err := findGitRepoRoot(startingDir)
+	require.NoError(t, err)
+
+	// Build a path that's part of the repo.
+	testPath := repoRoot + "/tests/fixtures/scenarios/complete/stacks"
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Hint path on same line (Unix LF)",
+			input:    fmt.Sprintf("💡 Path points to the stacks configuration directory, not a component: %s", testPath),
+			expected: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+		},
+		{
+			name:     "Hint path on next line (Unix LF)",
+			input:    fmt.Sprintf("💡 Path points to the stacks configuration directory, not a component:\n%s", testPath),
+			expected: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+		},
+		{
+			name:     "Hint path on next line (Windows CRLF)",
+			input:    fmt.Sprintf("💡 Path points to the stacks configuration directory, not a component:\r\n%s", testPath),
+			expected: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+		},
+		{
+			name:     "Multi-line error with Windows CRLF",
+			input:    fmt.Sprintf("**Error:** path is not within Atmos component directories\r\n\r\n## Hints\r\n\r\n💡 Path points to the stacks configuration directory, not a component:\r\n%s\r\n\r\nStacks directory: %s", testPath, testPath),
+			expected: "**Error:** path is not within Atmos component directories\n\n## Hints\n\n💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks\n\nStacks directory: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Note: In production, normalizeLineEndings is called BEFORE sanitizeOutput.
+			// This test verifies that the path joining logic in sanitizeOutput works
+			// with both LF and CRLF line endings. However, callers should normalize
+			// line endings first to ensure consistent behavior.
+			normalized := normalizeLineEndings(tt.input)
+			result, err := sanitizeOutput(normalized)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

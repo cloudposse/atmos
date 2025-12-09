@@ -131,6 +131,137 @@ Or, using the shorthand, we can just write:
 atmos hello -n world
 ```
 
+## Boolean Flags
+
+Flags can be defined as boolean type using `type: bool`. Boolean flags don't require a value to be passed—when present, they are set to `true`.
+
+```yaml
+commands:
+  - name: deploy
+    description: Deploy to environment
+    flags:
+      - name: dry-run
+        shorthand: d
+        description: Perform a dry run without making changes
+        type: bool
+      - name: verbose
+        shorthand: v
+        description: Enable verbose output
+        type: bool
+        default: false
+      - name: auto-approve
+        description: Auto-approve without prompting
+        type: bool
+        default: true
+    steps:
+      - |
+        {{ if .Flags.dry-run }}
+        echo "DRY RUN MODE"
+        {{ end }}
+        {{ if .Flags.verbose }}
+        echo "Verbose output enabled"
+        {{ end }}
+        {{ if .Flags.auto-approve }}
+        terraform apply -auto-approve
+        {{ else }}
+        terraform apply
+        {{ end }}
+```
+
+Usage:
+```shell
+# Enable dry-run (sets it to true)
+atmos deploy --dry-run
+
+# Use short flag
+atmos deploy -d
+
+# Boolean with explicit value
+atmos deploy --auto-approve=false
+```
+
+### Using Boolean Flags in Steps
+
+Boolean flags are available as Go template variables with values `true` or `false`. Here are common patterns for using them in bash:
+
+```yaml
+commands:
+  - name: build
+    description: Build the project
+    flags:
+      - name: verbose
+        shorthand: v
+        type: bool
+        description: Enable verbose output
+      - name: clean
+        type: bool
+        default: true
+        description: Clean before building
+    steps:
+      # Pattern 1: Conditional command execution with if/else
+      - |
+        {{ if .Flags.verbose }}
+        echo "Verbose mode enabled"
+        set -x
+        {{ end }}
+
+      # Pattern 2: Inline conditional flag
+      - echo "Building{{ if .Flags.verbose }} with verbose output{{ end }}..."
+
+      # Pattern 3: Pass as flag to another command
+      - make build {{ if .Flags.verbose }}VERBOSE=1{{ end }}
+
+      # Pattern 4: Conditional step execution
+      - |
+        {{ if .Flags.clean }}
+        echo "Cleaning build directory..."
+        rm -rf ./build
+        {{ end }}
+
+      # Pattern 5: Negation check
+      - |
+        {{ if not .Flags.clean }}
+        echo "Skipping clean step"
+        {{ end }}
+
+      # Pattern 6: Convert to shell variable
+      - |
+        VERBOSE={{ .Flags.verbose }}
+        if [ "$VERBOSE" = "true" ]; then
+          echo "Verbose is on"
+        fi
+
+      # Pattern 7: Using printf for explicit string conversion
+      - |
+        VERBOSE={{ printf "%t" .Flags.verbose }}
+        echo "Verbose flag is: $VERBOSE"
+```
+
+:::tip
+Boolean values automatically render as `true` or `false` (lowercase strings) when used in templates. You can reference them directly with `{{ .Flags.name }}`—no conversion needed!
+:::
+
+## Flag Defaults
+
+Both string and boolean flags support default values using the `default` attribute:
+
+```yaml
+flags:
+  - name: environment
+    description: Target environment
+    default: "development"
+  - name: force
+    type: bool
+    description: Force the operation
+    default: false
+  - name: auto-approve
+    type: bool
+    description: Skip confirmation prompts
+    default: true
+```
+
+When a flag has a default value, users can omit it from the command line. The default value will be used unless explicitly overridden.
+
 ## Advanced Examples
 
 ### Define a New Terraform Command
