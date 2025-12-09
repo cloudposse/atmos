@@ -55,5 +55,5 @@ func (p *ComponentYAMLProcessor) ProcessYAMLFunctionString(value string) (any, e
 		p.skip,
 		p.resolutionCtx,
 		p.stackInfo,
-	), nil
+	)
 }

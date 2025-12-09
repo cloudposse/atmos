@@ -94,16 +94,26 @@ var (
 	ErrDescribeComponent                = errors.New("failed to describe component")
 	ErrReadTerraformState               = errors.New("failed to read Terraform state")
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
-	ErrUnsupportedBackendType           = errors.New("unsupported backend type")
-	ErrProcessTerraformStateFile        = errors.New("error processing terraform state file")
-	ErrGetObjectFromS3                  = errors.New("failed to get object from S3")
-	ErrReadS3ObjectBody                 = errors.New("failed to read S3 object body")
-	ErrS3BucketAccessDenied             = errors.New("access denied to S3 bucket")
-	ErrCreateGCSClient                  = errors.New("failed to create GCS client")
-	ErrGetObjectFromGCS                 = errors.New("failed to get object from GCS")
-	ErrReadGCSObjectBody                = errors.New("failed to read GCS object body")
-	ErrGCSBucketRequired                = errors.New("bucket is required for gcs backend")
-	ErrInvalidBackendConfig             = errors.New("invalid backend configuration")
+
+	// Recoverable YAML function errors - use YQ default if available.
+	// These errors indicate the data is not available but do not represent API failures.
+	ErrTerraformStateNotProvisioned = errors.New("terraform state not provisioned")
+	ErrTerraformOutputNotFound      = errors.New("terraform output not found")
+
+	// API/infrastructure errors - should cause non-zero exit.
+	// These errors indicate backend API failures that should not use YQ defaults.
+	ErrTerraformBackendAPIError  = errors.New("terraform backend API error")
+	ErrUnsupportedBackendType    = errors.New("unsupported backend type")
+	ErrProcessTerraformStateFile = errors.New("error processing terraform state file")
+	ErrLoadAwsConfig             = errors.New("failed to load AWS config")
+	ErrGetObjectFromS3           = errors.New("failed to get object from S3")
+	ErrReadS3ObjectBody          = errors.New("failed to read S3 object body")
+	ErrS3BucketAccessDenied      = errors.New("access denied to S3 bucket")
+	ErrCreateGCSClient           = errors.New("failed to create GCS client")
+	ErrGetObjectFromGCS          = errors.New("failed to get object from GCS")
+	ErrReadGCSObjectBody         = errors.New("failed to read GCS object body")
+	ErrGCSBucketRequired         = errors.New("bucket is required for gcs backend")
+	ErrInvalidBackendConfig      = errors.New("invalid backend configuration")
 
 	// Azure Blob Storage specific errors.
 	ErrGetBlobFromAzure       = errors.New("failed to get blob from Azure Blob Storage")
