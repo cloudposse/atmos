@@ -58,13 +58,16 @@ var componentsCmd = &cobra.Command{
 
 		// Parse enabled/locked flags as tri-state (*bool).
 		// nil = unset (show all), true = filter for true, false = filter for false.
+		// Use cmd.Flags().Changed() instead of v.IsSet() because IsSet returns true
+		// when a default value is registered, but we only want to filter when
+		// the user explicitly provided the flag.
 		var enabledPtr *bool
-		if v.IsSet("enabled") {
+		if cmd.Flags().Changed("enabled") {
 			val := v.GetBool("enabled")
 			enabledPtr = &val
 		}
 		var lockedPtr *bool
-		if v.IsSet("locked") {
+		if cmd.Flags().Changed("locked") {
 			val := v.GetBool("locked")
 			lockedPtr = &val
 		}
@@ -287,11 +290,14 @@ func getComponentColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []s
 		return configs
 	}
 
-	// Default columns for components.
+	// Default columns: show all standard component fields.
 	return []column.Config{
 		{Name: "Component", Value: "{{ .component }}"},
 		{Name: "Stack", Value: "{{ .stack }}"},
 		{Name: "Type", Value: "{{ .type }}"},
+		{Name: "Component Type", Value: "{{ .component_type }}"},
+		{Name: "Enabled", Value: "{{ .enabled }}"},
+		{Name: "Locked", Value: "{{ .locked }}"},
 	}
 }
 

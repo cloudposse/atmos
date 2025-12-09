@@ -341,7 +341,7 @@ func TestGetComponentColumns(t *testing.T) {
 				},
 			},
 			columnsFlag: []string{},
-			expectLen:   3,
+			expectLen:   6, // All standard fields: Component, Stack, Type, Component Type, Enabled, Locked
 			expectName:  "Component",
 		},
 		{
