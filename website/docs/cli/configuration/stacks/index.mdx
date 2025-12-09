@@ -31,6 +31,8 @@ stacks:
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
+  inherit:
+    metadata: true  # See /cli/configuration/stacks/inherit for details
 ```
 </File>
 
@@ -104,6 +106,20 @@ stacks:
     **Example:**
     ```yaml
     name_pattern: "{tenant}-{environment}-{stage}"
+    ```
+  </dd>
+
+  <dt>`inherit`</dt>
+  <dd>
+    Controls what sections are inherited when components use `metadata.inherits`.
+
+    **See:** [Inheritance Behavior](/cli/configuration/stacks/inherit) for complete documentation.
+
+    **Example:**
+    ```yaml
+    stacks:
+      inherit:
+        metadata: true  # Enable metadata inheritance (default)
     ```
   </dd>
 </dl>
@@ -250,6 +266,12 @@ stacks:
 Refer to [Atmos Design Patterns](/design-patterns) for examples on configuring the `stacks` section for different use-cases.
 :::
 
+## Stack Configuration Options
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/configuration/stacks/inherit', label: 'Inheritance Behavior', description: 'Configure what sections are inherited'},
+]} />
+
 ## Related Commands
 
 <DocCardList items={[
@@ -257,4 +279,5 @@ Refer to [Atmos Design Patterns](/design-patterns) for examples on configuring t
   {type: 'link', href: '/cli/commands/describe/stacks', label: 'atmos describe stacks', description: 'Describe stacks and their components'},
   {type: 'link', href: '/cli/commands/describe/affected', label: 'atmos describe affected', description: 'Show stacks affected by changes'},
   {type: 'link', href: '/cli/commands/validate/stacks', label: 'atmos validate stacks', description: 'Validate stack configurations'},
+  {type: 'link', href: '/howto/inheritance', label: 'Inheritance Guide', description: 'Learn about component inheritance'},
 ]} />
