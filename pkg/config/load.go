@@ -1075,7 +1075,7 @@ func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfigur
 		}
 	}
 
-	log.Debug("Preserved case-sensitive map keys", "paths", caseSensitivePaths)
+	log.Trace("Preserved case-sensitive map keys", "paths", caseSensitivePaths)
 
 	return nil
 }
