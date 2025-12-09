@@ -114,6 +114,21 @@ func (mr *MockProviderMockRecorder) Logout(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockProvider)(nil).Logout), ctx)
 }
 
+// Paths mocks base method.
+func (m *MockProvider) Paths() ([]Path, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Paths")
+	ret0, _ := ret[0].([]Path)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Paths indicates an expected call of Paths.
+func (mr *MockProviderMockRecorder) Paths() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Paths", reflect.TypeOf((*MockProvider)(nil).Paths))
+}
+
 // Name mocks base method.
 func (m *MockProvider) Name() string {
 	m.ctrl.T.Helper()
@@ -335,6 +350,21 @@ func (m *MockIdentity) Logout(ctx context.Context) error {
 func (mr *MockIdentityMockRecorder) Logout(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockIdentity)(nil).Logout), ctx)
+}
+
+// Paths mocks base method.
+func (m *MockIdentity) Paths() ([]Path, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Paths")
+	ret0, _ := ret[0].([]Path)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Paths indicates an expected call of Paths.
+func (mr *MockIdentityMockRecorder) Paths() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Paths", reflect.TypeOf((*MockIdentity)(nil).Paths))
 }
 
 // PostAuthenticate mocks base method.

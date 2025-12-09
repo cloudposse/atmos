@@ -6,9 +6,10 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -40,14 +41,16 @@ func (m modelSpinner) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m modelSpinner) View() string {
-	return fmt.Sprintf("\r%s %s", m.spinner.View(), m.message)
+	return fmt.Sprintf("%s%s %s", terminal.EscCarriageReturn, m.spinner.View(), m.message)
 }
 
-// NewSpinner initializes a spinner and returns a pointer to a tea.Program.
+// NewSpinner creates a tea.Program that displays an animated spinner with the provided message.
+// It applies the current UI spinner style. If stdout lacks TTY support, the program is configured
+// without a renderer and without input; a debug message is logged and the message is written to stderr
+// as a fallback.
 func NewSpinner(message string) *tea.Program {
 	s := spinner.New()
-	styles := theme.GetCurrentStyles()
-	s.Style = styles.Link
+	s.Style = theme.GetCurrentStyles().Spinner
 
 	var opts []tea.ProgramOption
 	if !term.IsTTYSupportForStdout() {

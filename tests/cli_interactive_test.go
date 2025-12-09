@@ -41,6 +41,14 @@ func TestInteractiveIdentitySelection(t *testing.T) {
 
 		combinedOutput := stdout.String() + stderr.String()
 
+		// Defer output logging - only runs if THIS subtest fails
+		defer func() {
+			if t.Failed() {
+				t.Logf("\n=== Full output from failed test ===")
+				t.Logf("Output (%d bytes):\n%s", len(combinedOutput), combinedOutput)
+			}
+		}()
+
 		// Should NOT show selector.
 		assert.NotContains(t, combinedOutput, "Select an identity",
 			"Should not show selector when explicit identity provided")
@@ -48,8 +56,6 @@ func TestInteractiveIdentitySelection(t *testing.T) {
 		// Should mention the explicit identity (either "not found" or used successfully).
 		assert.Contains(t, combinedOutput, "explicit-test-identity",
 			"Should reference the explicit identity value")
-
-		t.Logf("Output:\n%s", combinedOutput)
 	})
 
 	t.Run("identity flag without value should fail gracefully in non-TTY", func(t *testing.T) {
@@ -78,6 +84,14 @@ func TestInteractiveIdentitySelection(t *testing.T) {
 
 		combinedOutput := stdout.String() + stderr.String()
 
+		// Defer output logging - only runs if THIS subtest fails
+		defer func() {
+			if t.Failed() {
+				t.Logf("\n=== Full output from failed test ===")
+				t.Logf("Output (%d bytes):\n%s", len(combinedOutput), combinedOutput)
+			}
+		}()
+
 		// Should fail with appropriate error, not show selector.
 		assert.NotContains(t, combinedOutput, "Select an identity",
 			"Should not show selector when stdin is not a TTY")
@@ -88,8 +102,6 @@ func TestInteractiveIdentitySelection(t *testing.T) {
 				strings.Contains(combinedOutput, "authentication") ||
 				strings.Contains(combinedOutput, "identity"),
 			"Should fail with identity-related error, got: %s", combinedOutput)
-
-		t.Logf("Output:\n%s", combinedOutput)
 	})
 
 	t.Run("identity flag without value should fail in CI environment", func(t *testing.T) {
@@ -114,6 +126,14 @@ func TestInteractiveIdentitySelection(t *testing.T) {
 
 		combinedOutput := stdout.String() + stderr.String()
 
+		// Defer output logging - only runs if THIS subtest fails
+		defer func() {
+			if t.Failed() {
+				t.Logf("\n=== Full output from failed test ===")
+				t.Logf("Output (%d bytes):\n%s", len(combinedOutput), combinedOutput)
+			}
+		}()
+
 		// Should NOT show selector in CI.
 		assert.NotContains(t, combinedOutput, "Select an identity",
 			"Should not show selector in CI environment")
@@ -126,8 +146,6 @@ func TestInteractiveIdentitySelection(t *testing.T) {
 				strings.Contains(normalizedOutput, "authentication") ||
 				strings.Contains(normalizedOutput, "requires a TTY"),
 			"Should fail with identity error in CI, got: %s", combinedOutput)
-
-		t.Logf("Output:\n%s", combinedOutput)
 	})
 
 	t.Run("terraform with explicit identity should work even with piped output", func(t *testing.T) {
@@ -147,11 +165,17 @@ func TestInteractiveIdentitySelection(t *testing.T) {
 
 		combinedOutput := stdout.String() + stderr.String()
 
+		// Defer output logging - only runs if THIS subtest fails
+		defer func() {
+			if t.Failed() {
+				t.Logf("\n=== Full output from failed test ===")
+				t.Logf("Output (%d bytes):\n%s", len(combinedOutput), combinedOutput)
+			}
+		}()
+
 		// Should NOT show selector.
 		assert.NotContains(t, combinedOutput, "Select an identity",
 			"Should not show selector when explicit identity provided to terraform")
-
-		t.Logf("Output:\n%s", combinedOutput)
 	})
 }
 
@@ -234,6 +258,14 @@ func TestCIEnvironmentDetection(t *testing.T) {
 
 			combinedOutput := stdout.String() + stderr.String()
 
+			// Defer output logging - only runs if THIS subtest fails
+			defer func() {
+				if t.Failed() {
+					t.Logf("\n=== Full output from failed test ===")
+					t.Logf("%s output (%d bytes):\n%s", ciEnv.name, len(combinedOutput), combinedOutput)
+				}
+			}()
+
 			// Should NOT show interactive selector in CI.
 			assert.NotContains(t, combinedOutput, "Select an identity",
 				"Should not show selector in %s", ciEnv.desc)
@@ -246,8 +278,6 @@ func TestCIEnvironmentDetection(t *testing.T) {
 					strings.Contains(normalizedOutput, "authentication") ||
 					strings.Contains(normalizedOutput, "requires a TTY"),
 				"Should fail with identity error in %s, got: %s", ciEnv.desc, combinedOutput)
-
-			t.Logf("%s output:\n%s", ciEnv.name, combinedOutput)
 		})
 	}
 }
@@ -349,6 +379,14 @@ func TestExplicitIdentityAlwaysWorks(t *testing.T) {
 
 			combinedOutput := stdout.String() + stderr.String()
 
+			// Defer output logging - only runs if THIS subtest fails
+			defer func() {
+				if t.Failed() {
+					t.Logf("\n=== Full output from failed test ===")
+					t.Logf("%s output (%d bytes):\n%s", scenario.name, len(combinedOutput), combinedOutput)
+				}
+			}()
+
 			// Should NOT show interactive selector.
 			assert.NotContains(t, combinedOutput, "Select an identity",
 				"%s: should not show selector with explicit identity", scenario.desc)
@@ -356,8 +394,6 @@ func TestExplicitIdentityAlwaysWorks(t *testing.T) {
 			// Should reference the explicit identity.
 			assert.Contains(t, combinedOutput, "my-explicit-identity",
 				"%s: should use explicit identity value", scenario.desc)
-
-			t.Logf("%s output:\n%s", scenario.name, combinedOutput)
 		})
 	}
 }

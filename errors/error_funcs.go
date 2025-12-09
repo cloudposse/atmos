@@ -1,6 +1,7 @@
 package errors
 
 import (
+	goerrors "errors"
 	"fmt"
 	"os"
 	"strings"
@@ -181,7 +182,7 @@ func printFormattedError(err error, title string, suggestion string) {
 	}
 }
 
-// printMarkdownError prints an error using the markdown renderer.
+// printMarkdownError renders an error using the Markdown renderer with fallback to plain text.
 func printMarkdownError(err error, title string, suggestion string) {
 	// If markdown renderer is not initialized, fall back to plain error output.
 	if render == nil {
@@ -206,12 +207,40 @@ func printMarkdownError(err error, title string, suggestion string) {
 	}
 }
 
-// CheckErrorPrintAndExit prints an error message and exits with exit code 1.
+// CheckErrorPrintAndExit prints a non-nil error using the package's error formatter
+// and terminates the process with an appropriate exit code.
+// If the error is an ExitCodeError and its Code is 0, the function exits successfully without printing.
+// If the Code is non-zero it prints the error, closes Sentry if enabled, and exits with that code.
+// For all other errors it prints the error, closes Sentry if enabled, and exits with the code
+// returned by GetExitCode. The provided title and suggestion are used when printing the error.
 func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 	if err == nil {
 		return
 	}
 
+	// Check for ExitCodeError first (from ShellRunner preserving interp.ExitStatus)
+	var exitCodeErr ExitCodeError
+	if goerrors.As(err, &exitCodeErr) {
+		// Special case: exit code 0 means successful completion - don't print error
+		// This allows commands like 'version' to display output and exit successfully
+		// without using os.Exit() directly (which is untestable).
+		if exitCodeErr.Code == 0 {
+			Exit(0)
+			return
+		}
+		// Non-zero exit codes: print error and exit with that code
+		CheckErrorAndPrint(err, title, suggestion)
+
+		// Close Sentry before exiting.
+		if atmosConfig != nil && atmosConfig.Errors.Sentry.Enabled {
+			CloseSentry()
+		}
+
+		Exit(exitCodeErr.Code)
+		return
+	}
+
+	// Print error message for all other error types
 	CheckErrorAndPrint(err, title, suggestion)
 
 	// Close Sentry before exiting.

@@ -233,3 +233,11 @@ func (i *Identity) Logout(ctx context.Context) error {
 
 	return nil
 }
+
+// Paths returns mock credential file paths for mounting into containers.
+func (i *Identity) Paths() ([]types.Path, error) {
+	defer perf.Track(nil, "mock.Identity.Paths")()
+
+	// Mock identities return an empty list since they don't use real credential files.
+	return []types.Path{}, nil
+}

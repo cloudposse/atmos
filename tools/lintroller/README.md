@@ -250,7 +250,7 @@ The custom binary integrates with GitHub Actions via `golangci-lint-action`:
 
 ```yaml
 - name: Install golangci-lint v2
-  run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0
+  run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.1
 
 - name: Build custom golangci-lint with plugins
   run: |

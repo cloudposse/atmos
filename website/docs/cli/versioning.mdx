@@ -38,6 +38,19 @@ A patch release will be published when bug fixes were included, but no breaking 
 To ensure patch releases can fix existing code without introducing new issues from the new features, patch releases will always be published prior to
 a minor release.
 
+## Version Constraints
+
+You can enforce Atmos version requirements in your `atmos.yaml` configuration to ensure consistent behavior across teams and environments:
+
+```yaml
+version:
+  constraint:
+    require: ">=1.100.0, <2.0.0"
+    enforcement: "fatal"
+```
+
+See [Version Constraints](/cli/configuration/version/constraint) for complete documentation.
+
 ## Changelog
 
 To see a list of all notable changes to `atmos` please refer to the [changelog](/changelog).

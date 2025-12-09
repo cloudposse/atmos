@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 // Profiler-specific errors.
