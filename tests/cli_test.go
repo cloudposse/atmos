@@ -680,8 +680,9 @@ func TestMain(m *testing.M) {
 		logger.Fatal("failed to locate git repository", "dir", startingDir)
 	}
 
-	// Check for the atmos binary
-	binaryPath, skipReason := validateAtmosBinary(repoRoot)
+	// Check for the atmos binary.
+	var binaryPath string
+	binaryPath, skipReason = validateAtmosBinary(repoRoot)
 	if skipReason != "" {
 		logger.Info("Tests will be skipped", "reason", skipReason)
 	}
