@@ -137,7 +137,8 @@ func TestProcessUnsetTag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processNodes(atmosConfig, tt.input, "", []string{}, nil)
+			result, err := processNodes(atmosConfig, tt.input, "", []string{}, nil)
+			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -153,7 +154,8 @@ func TestProcessUnsetWithSkip(t *testing.T) {
 	}
 
 	// Test with unset in skip list - should not process !unset.
-	result := processNodes(atmosConfig, input, "", []string{"unset"}, nil)
+	result, err := processNodes(atmosConfig, input, "", []string{"unset"}, nil)
+	assert.NoError(t, err)
 
 	expected := map[string]any{
 		"key1": "value1",
@@ -177,13 +179,15 @@ func TestProcessCustomTagsWithUnset(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Test that processCustomTags returns UnsetMarker for !unset tag.
-	result := processCustomTags(atmosConfig, "!unset", "", []string{}, nil)
+	result, err := processCustomTags(atmosConfig, "!unset", "", []string{}, nil)
+	assert.NoError(t, err)
 	marker, ok := result.(UnsetMarker)
 	assert.True(t, ok)
 	assert.True(t, marker.IsUnset)
 
 	// Test that other tags are still processed normally.
-	result2 := processCustomTags(atmosConfig, "!env HOME", "", []string{}, nil)
+	result2, err2 := processCustomTags(atmosConfig, "!env HOME", "", []string{}, nil)
+	assert.NoError(t, err2)
 	_, isMarker := result2.(UnsetMarker)
 	assert.False(t, isMarker)
 }
@@ -238,10 +242,12 @@ func TestUnsetInheritanceScenario(t *testing.T) {
 	}
 
 	// Process parent (no unset tags).
-	processedParent := processNodes(atmosConfig, parent, "", []string{}, nil)
+	processedParent, err := processNodes(atmosConfig, parent, "", []string{}, nil)
+	assert.NoError(t, err)
 
 	// Process child (with unset tag).
-	processedChild := processNodes(atmosConfig, child, "", []string{}, nil)
+	processedChild, err := processNodes(atmosConfig, child, "", []string{}, nil)
+	assert.NoError(t, err)
 
 	// Verify the unset tag removed the key from child.
 	childVars := processedChild["vars"].(map[string]any)
@@ -278,7 +284,8 @@ func TestUnsetWithComplexArray(t *testing.T) {
 		},
 	}
 
-	result := processNodes(atmosConfig, input, "", []string{}, nil)
+	result, err := processNodes(atmosConfig, input, "", []string{}, nil)
+	assert.NoError(t, err)
 	assert.Equal(t, expected, result)
 }
 
@@ -297,6 +304,7 @@ func TestUnsetEmptyString(t *testing.T) {
 		"key3": "value3",
 	}
 
-	result := processNodes(atmosConfig, input, "", []string{}, nil)
+	result, err := processNodes(atmosConfig, input, "", []string{}, nil)
+	assert.NoError(t, err)
 	assert.Equal(t, expected, result)
 }
