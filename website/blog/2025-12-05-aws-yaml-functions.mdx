@@ -1,0 +1,76 @@
+---
+slug: aws-yaml-functions
+title: "AWS YAML Functions for Identity and Region"
+authors: [osterman]
+tags: [feature, terraform, cloud-architecture]
+date: 2025-12-05
+---
+
+Atmos now includes four AWS YAML functions that retrieve identity and region information directly in stack configurations: `!aws.account_id`, `!aws.caller_identity_arn`, `!aws.caller_identity_user_id`, and `!aws.region`.
+
+<!--truncate-->
+
+## What's New
+
+These functions use the AWS STS GetCallerIdentity API to retrieve information about the current AWS credentials:
+
+| Function | Returns | Example Output |
+|----------|---------|----------------|
+| `!aws.account_id` | AWS account ID | `123456789012` |
+| `!aws.caller_identity_arn` | Full ARN of caller | `arn:aws:iam::123456789012:user/deploy` |
+| `!aws.caller_identity_user_id` | Unique user identifier | `AIDAEXAMPLE123456789` |
+| `!aws.region` | Current AWS region | `us-east-1` |
+
+## Usage
+
+```yaml
+components:
+  terraform:
+    s3-bucket:
+      vars:
+        # Pass account ID and region for bucket naming in Terraform
+        aws_account_id: !aws.account_id
+        aws_region: !aws.region
+
+    iam-policy:
+      vars:
+        # Reference caller identity in policies
+        deployer_arn: !aws.caller_identity_arn
+```
+
+## Use Cases
+
+**Dynamic Resource Naming**: Include account IDs in S3 bucket names, DynamoDB tables, or other resources that require globally unique names.
+
+**Audit and Logging**: Capture the ARN or user ID of the identity running deployments for audit trails.
+
+**Cross-Account References**: Build ARNs dynamically when referencing resources across accounts.
+
+**Region-Aware Configuration**: Configure resources based on the current AWS region without hardcoding values.
+
+## Caching and Performance
+
+All four functions share a single cached STS API call per CLI invocation. The first function call fetches the identity; subsequent calls use the cached result. This means using multiple AWS functions in the same configuration adds no extra API overhead.
+
+## Authentication Integration
+
+When using [Atmos Authentication](/cli/commands/auth/usage), these functions automatically use the credentials from the configured auth context. This works with AWS SSO, IAM roles, and other credential sources supported by the AWS SDK.
+
+## Comparison with Terragrunt
+
+These functions provide equivalent functionality to Terragrunt's built-in helpers:
+
+| Atmos | Terragrunt |
+|-------|------------|
+| `!aws.account_id` | `get_aws_account_id()` |
+| `!aws.caller_identity_arn` | `get_aws_caller_identity_arn()` |
+| `!aws.caller_identity_user_id` | `get_aws_caller_identity_user_id()` |
+| `!aws.region` | Similar to region from `get_aws_caller_identity()` |
+
+## Learn More
+
+- [`!aws.account_id`](/functions/yaml/aws.account-id) - Full documentation
+- [`!aws.caller_identity_arn`](/functions/yaml/aws.caller-identity-arn) - Full documentation
+- [`!aws.caller_identity_user_id`](/functions/yaml/aws.caller-identity-user-id) - Full documentation
+- [`!aws.region`](/functions/yaml/aws.region) - Full documentation
+- [YAML Functions Overview](/functions/yaml/) - All available YAML functions

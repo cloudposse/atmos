@@ -72,6 +72,7 @@ commands:
             description: Name of the stack
             usage: ""
             required: true
+            default: null
         component_config:
           component: ""
           stack: ""
@@ -111,6 +112,7 @@ commands:
             description: Name of the stack
             usage: ""
             required: true
+            default: null
         component_config:
           component: ""
           stack: ""
@@ -163,6 +165,7 @@ commands:
             description: Name of the stack
             usage: ""
             required: true
+            default: null
         component_config:
           component: '{{ .Arguments.component }}'
           stack: '{{ .Flags.stack }}'
