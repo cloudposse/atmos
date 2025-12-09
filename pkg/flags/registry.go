@@ -93,7 +93,6 @@ func (r *FlagRegistry) SetCompletionFunc(name string, fn func(*cobra.Command, []
 	// Only StringFlag supports completion functions currently.
 	if stringFlag, ok := flag.(*StringFlag); ok {
 		stringFlag.CompletionFunc = fn
-		r.flags[name] = stringFlag
 	}
 }
 

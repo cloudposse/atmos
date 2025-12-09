@@ -314,8 +314,8 @@ func ProvidersCompatFlags() map[string]compat.CompatibilityFlag {
 }
 
 // AllTerraformCompatFlags returns a combined set of all terraform compatibility flags.
-// This is used for preprocessing in Execute() to identify terraform pass-through flags
-// before Cobra parses the command line. By combining all possible flags, we can
+// This is used for preprocessing in Execute() to identify terraform pass-through flags.
+// Before Cobra parses the command line, we combine all possible flags so we can
 // correctly separate pass-through flags regardless of which subcommand is being called.
 func AllTerraformCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.AllTerraformCompatFlags")()

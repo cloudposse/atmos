@@ -96,7 +96,7 @@ func LoadAWSConfigWithAuth(
 	baseCfg, err := config.LoadDefaultConfig(ctx, cfgOpts...)
 	if err != nil {
 		log.Debug("Failed to load AWS config", "error", err)
-		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAWSConfig, err)
+		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAwsConfig, err)
 	}
 	log.Debug("Successfully loaded AWS SDK config", "region", baseCfg.Region)
 
@@ -125,55 +125,4 @@ func LoadAWSConfig(ctx context.Context, region string, roleArn string, assumeRol
 	defer perf.Track(nil, "aws_utils.LoadAWSConfig")()
 
 	return LoadAWSConfigWithAuth(ctx, region, roleArn, assumeRoleDuration, nil)
-}
-
-// AWSCallerIdentityResult holds the result of GetAWSCallerIdentity.
-type AWSCallerIdentityResult struct {
-	Account string
-	Arn     string
-	UserID  string
-	Region  string
-}
-
-// GetAWSCallerIdentity retrieves AWS caller identity using STS GetCallerIdentity API.
-// Returns account ID, ARN, user ID, and region.
-// This function keeps AWS SDK STS imports contained within aws_utils package.
-func GetAWSCallerIdentity(
-	ctx context.Context,
-	region string,
-	roleArn string,
-	assumeRoleDuration time.Duration,
-	authContext *schema.AWSAuthContext,
-) (*AWSCallerIdentityResult, error) {
-	defer perf.Track(nil, "aws_utils.GetAWSCallerIdentity")()
-
-	// Load AWS config.
-	cfg, err := LoadAWSConfigWithAuth(ctx, region, roleArn, assumeRoleDuration, authContext)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create STS client and get caller identity.
-	stsClient := sts.NewFromConfig(cfg)
-	output, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsGetCallerIdentity, err)
-	}
-
-	result := &AWSCallerIdentityResult{
-		Region: cfg.Region,
-	}
-
-	// Extract values from pointers.
-	if output.Account != nil {
-		result.Account = *output.Account
-	}
-	if output.Arn != nil {
-		result.Arn = *output.Arn
-	}
-	if output.UserId != nil {
-		result.UserID = *output.UserId
-	}
-
-	return result, nil
 }
