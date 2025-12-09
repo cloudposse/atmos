@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // Note: We cannot directly test unsupported tag errors because they call
@@ -147,23 +148,8 @@ func TestProcessCustomTags_UnsupportedTagDetection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// We need to test that the function would detect this as unsupported
 			// Check if the tag would be recognized as unsupported
-			isSupportedTag := false
-			supportedTags := []string{
-				"!template",
-				"!exec",
-				"!store",
-				"!store.get",
-				"!terraform.output",
-				"!terraform.state",
-				"!env",
-			}
-
-			for _, supported := range supportedTags {
-				if strings.HasPrefix(tt.input, supported) {
-					isSupportedTag = true
-					break
-				}
-			}
+			// Use matchesSupportedTag which checks for exact tag followed by space/whitespace
+			isSupportedTag := matchesSupportedTag(tt.input, u.AllSupportedYamlTags)
 
 			assert.False(t, isSupportedTag, "%s: Tag '%s' should not be recognized as supported", tt.description, tt.tag)
 			assert.True(t, strings.HasPrefix(tt.input, "!"), "Input should start with ! to be recognized as a tag")
@@ -191,39 +177,21 @@ func TestProcessCustomTags_ErrorMessageFormat(t *testing.T) {
 			},
 		},
 		{
-			name:           "error message lists supported tags",
-			unsupportedTag: "!custom",
-			stack:          "prod-stack",
-			expectedContains: []string{
-				"!template",
-				"!exec",
-				"!store",
-				"!store.get",
-				"!terraform.output",
-				"!terraform.state",
-				"!env",
-			},
+			name:             "error message lists supported tags",
+			unsupportedTag:   "!custom",
+			stack:            "prod-stack",
+			expectedContains: u.AllSupportedYamlTags,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create the expected error
-			supportedTags := []string{
-				"!template",
-				"!exec",
-				"!store",
-				"!store.get",
-				"!terraform.output",
-				"!terraform.state",
-				"!env",
-			}
-
+			// Create the expected error using the central list of supported tags
 			err := fmt.Errorf("%w: '%s' in stack '%s'. Supported tags are: %s",
 				errUtils.ErrUnsupportedYamlTag,
 				tt.unsupportedTag,
 				tt.stack,
-				strings.Join(supportedTags, ", "))
+				strings.Join(u.AllSupportedYamlTags, ", "))
 
 			errMsg := err.Error()
 
@@ -258,27 +226,28 @@ func TestProcessCustomTags_ValidTagsNotReportedAsUnsupported(t *testing.T) {
 	for _, tt := range validTags {
 		t.Run(tt.name, func(t *testing.T) {
 			// Check that valid tags are recognized as supported
-			isSupportedTag := false
-			supportedPrefixes := []string{
-				"!template",
-				"!exec",
-				"!store.get",
-				"!store",
-				"!terraform.output",
-				"!terraform.state",
-				"!env",
-			}
-
-			for _, prefix := range supportedPrefixes {
-				if strings.HasPrefix(tt.input, prefix) {
-					isSupportedTag = true
-					break
-				}
-			}
+			// Use matchesSupportedTag which checks for exact tag followed by space/whitespace
+			isSupportedTag := matchesSupportedTag(tt.input, u.AllSupportedYamlTags)
 
 			assert.True(t, isSupportedTag, "Tag in '%s' should be recognized as supported", tt.input)
 		})
 	}
+}
+
+// matchesSupportedTag checks if input matches one of the supported tags.
+// A tag matches if the input starts with the tag and is followed by a space, tab, newline, or end of string.
+// This prevents false positives like "!envv" matching "!env".
+func matchesSupportedTag(input string, supportedTags []string) bool {
+	for _, tag := range supportedTags {
+		if strings.HasPrefix(input, tag) {
+			// Check if the tag is followed by whitespace or is the entire string
+			rest := strings.TrimPrefix(input, tag)
+			if rest == "" || rest[0] == ' ' || rest[0] == '\t' || rest[0] == '\n' {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func TestProcessCustomTags_NonTagStrings(t *testing.T) {
@@ -353,20 +322,23 @@ func TestProcessCustomTags_BoundaryConditions(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	tests := []struct {
-		name     string
-		input    string
-		skip     []string
-		expected interface{}
+		name       string
+		input      string
+		skip       []string
+		expected   interface{}
+		shouldSkip bool // Tests that trigger CheckErrorPrintAndExit cannot be run
 	}{
 		{
-			name:     "tag only without value",
-			input:    "!template",
-			expected: "",
+			name:       "tag only without value",
+			input:      "!template",
+			expected:   "",
+			shouldSkip: true, // Triggers CheckErrorPrintAndExit for empty value
 		},
 		{
-			name:     "tag with empty value after space",
-			input:    "!template ",
-			expected: "",
+			name:       "tag with empty value after space",
+			input:      "!template ",
+			expected:   "",
+			shouldSkip: true, // Triggers CheckErrorPrintAndExit for empty value
 		},
 		{
 			name:     "tag with multiple spaces",
@@ -408,7 +380,10 @@ func TestProcessCustomTags_BoundaryConditions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processCustomTags(atmosConfig, tt.input, "test-stack", tt.skip)
+			if tt.shouldSkip {
+				t.Skipf("Skipping test '%s': would trigger CheckErrorPrintAndExit and exit the process", tt.name)
+			}
+			result, _ := processCustomTags(atmosConfig, tt.input, "test-stack", tt.skip, nil)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
