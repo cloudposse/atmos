@@ -48,6 +48,14 @@ repos:
         files: ^go\.mod$
         pass_filenames: false
 
+      - id: claude-md-size-check
+        name: Check CLAUDE.md size limit
+        description: Ensure CLAUDE.md files stay under 40KB size limit
+        entry: scripts/check-claude-md-size.sh
+        language: system
+        files: ^(CLAUDE\.md|\.conductor/.*/CLAUDE\.md)$
+        pass_filenames: false
+
 
   # General file hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks

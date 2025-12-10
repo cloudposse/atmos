@@ -38,6 +38,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
@@ -84,11 +85,12 @@ var chdirProcessed bool
 // It recognizes `--chdir=value`, `--chdir value`, `-C=value`, `-Cvalue`, and `-C value` forms.
 // If no chdir flag is found, it returns an empty string.
 func parseChdirFromArgs() string {
-	return parseChdirFromArgList(os.Args)
+	return parseChdirFromArgsInternal(os.Args)
 }
 
-// parseChdirFromArgList manually parses --chdir or -C flag from the given argument list.
-func parseChdirFromArgList(args []string) string {
+// parseChdirFromArgsInternal manually parses --chdir or -C flag from the provided args.
+// This internal version accepts args as a parameter for testability.
+func parseChdirFromArgsInternal(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
@@ -405,6 +407,11 @@ var RootCmd = &cobra.Command{
 		ui.InitFormatter(ioCtx)
 		data.InitWriter(ioCtx)
 		data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
+
+		// Configure lipgloss color profile based on terminal capabilities.
+		// This ensures tables and styled output degrade gracefully when piped or in non-TTY environments.
+		term := terminal.New()
+		lipgloss.SetColorProfile(convertToTermenvProfile(term.ColorProfile()))
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
@@ -1293,7 +1300,25 @@ func getInvalidCommandName(input string) string {
 
 // displayPerformanceHeatmap shows the performance heatmap visualization.
 //
+// ConvertToTermenvProfile converts our terminal.ColorProfile to termenv.Profile.
+//
 //nolint:unparam // cmd parameter reserved for future use
+func convertToTermenvProfile(profile terminal.ColorProfile) termenv.Profile {
+	switch profile {
+	case terminal.ColorNone:
+		return termenv.Ascii
+	case terminal.Color16:
+		return termenv.ANSI
+	case terminal.Color256:
+		return termenv.ANSI256
+	case terminal.ColorTrue:
+		return termenv.TrueColor
+	default:
+		// Default to ASCII (no color) for unknown profiles.
+		return termenv.Ascii
+	}
+}
+
 func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	// Print performance summary to console, filtering out zero-time functions.
 	snap := perf.SnapshotTopFiltered("total", defaultTopFunctionsMax)

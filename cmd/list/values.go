@@ -18,6 +18,7 @@ import (
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -34,13 +35,6 @@ var (
 // Error format strings.
 const (
 	ErrFmtWrapErr = "%w: %v" // Format for wrapping errors.
-)
-
-// Flag name constants.
-const (
-	flagAbstract         = "abstract"
-	flagProcessTemplates = "process-templates"
-	flagProcessFunctions = "process-functions"
 )
 
 var (
@@ -155,13 +149,13 @@ var varsCmd = &cobra.Command{
 		if err != nil {
 			var componentVarsNotFoundErr *listerrors.ComponentVarsNotFoundError
 			if errors.As(err, &componentVarsNotFoundErr) {
-				log.Info("No vars found", "component", componentVarsNotFoundErr.Component)
+				_ = ui.Info("No vars found for component: " + componentVarsNotFoundErr.Component)
 				return nil
 			}
 
 			var noValuesErr *listerrors.NoValuesFoundError
 			if errors.As(err, &noValuesErr) {
-				log.Info("No values found for query '.vars'", "component", args[0])
+				_ = ui.Info("No values found for query '.vars' for component: " + args[0])
 				return nil
 			}
 
@@ -174,56 +168,65 @@ var varsCmd = &cobra.Command{
 }
 
 func init() {
-	// Create parser for values command with all flags
-	valuesParser = newCommonListParser(
-		flags.WithBoolFlag(flagAbstract, "", false, "Include abstract components"),
-		flags.WithBoolFlag("vars", "", false, "Show only vars (equivalent to --query .vars)"),
-		flags.WithBoolFlag(flagProcessTemplates, "", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command"),
-		flags.WithBoolFlag(flagProcessFunctions, "", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command"),
-		flags.WithEnvVars(flagAbstract, "ATMOS_LIST_ABSTRACT"),
-		flags.WithEnvVars("vars", "ATMOS_LIST_VARS"),
-		flags.WithEnvVars(flagProcessTemplates, "ATMOS_PROCESS_TEMPLATES"),
-		flags.WithEnvVars(flagProcessFunctions, "ATMOS_PROCESS_FUNCTIONS"),
+	// Create parser for values command using flag wrappers.
+	valuesParser = NewListParser(
+		WithFormatFlag,
+		WithDelimiterFlag,
+		WithStackFlag,
+		WithQueryFlag,
+		WithMaxColumnsFlag,
+		WithAbstractFlag,
+		WithProcessTemplatesFlag,
+		WithProcessFunctionsFlag,
+		// Add vars flag only for values command.
+		func(options *[]flags.Option) {
+			*options = append(*options,
+				flags.WithBoolFlag("vars", "", false, "Show only vars (equivalent to --query .vars)"),
+				flags.WithEnvVars("vars", "ATMOS_LIST_VARS"),
+			)
+		},
 	)
 
-	// Register flags for values command
+	// Register flags for values command.
 	valuesParser.RegisterFlags(valuesCmd)
 
-	// Customize query flag usage for values command
+	// Customize query flag usage for values command.
 	if queryFlag := valuesCmd.PersistentFlags().Lookup("query"); queryFlag != nil {
 		queryFlag.Usage = "Filter the results using YQ expressions"
 	}
 
-	// Add stack completion
+	// Add stack completion.
 	addStackCompletion(valuesCmd)
 
-	// Bind flags to Viper for environment variable support
+	// Bind flags to Viper for environment variable support.
 	if err := valuesParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
 
-	// Create parser for vars command (no vars flag, as it's always .vars)
-	varsParser = newCommonListParser(
-		flags.WithBoolFlag(flagAbstract, "", false, "Include abstract components"),
-		flags.WithBoolFlag(flagProcessTemplates, "", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command"),
-		flags.WithBoolFlag(flagProcessFunctions, "", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command"),
-		flags.WithEnvVars(flagAbstract, "ATMOS_LIST_ABSTRACT"),
-		flags.WithEnvVars(flagProcessTemplates, "ATMOS_PROCESS_TEMPLATES"),
-		flags.WithEnvVars(flagProcessFunctions, "ATMOS_PROCESS_FUNCTIONS"),
+	// Create parser for vars command (no vars flag, as it's always .vars).
+	varsParser = NewListParser(
+		WithFormatFlag,
+		WithDelimiterFlag,
+		WithStackFlag,
+		WithQueryFlag,
+		WithMaxColumnsFlag,
+		WithAbstractFlag,
+		WithProcessTemplatesFlag,
+		WithProcessFunctionsFlag,
 	)
 
-	// Register flags for vars command
+	// Register flags for vars command.
 	varsParser.RegisterFlags(varsCmd)
 
-	// Customize query flag usage for vars command
+	// Customize query flag usage for vars command.
 	if queryFlag := varsCmd.PersistentFlags().Lookup("query"); queryFlag != nil {
 		queryFlag.Usage = "Filter the results using YQ expressions"
 	}
 
-	// Add stack completion
+	// Add stack completion.
 	addStackCompletion(varsCmd)
 
-	// Bind flags to Viper for environment variable support
+	// Bind flags to Viper for environment variable support.
 	if err := varsParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
@@ -270,12 +273,12 @@ func getFilterOptionsFromValues(opts *ValuesOptions) *l.FilterOptions {
 	}
 }
 
-// logNoValuesFoundMessage logs an appropriate message when no values or vars are found.
-func logNoValuesFoundMessage(componentName string, query string) {
+// displayNoValuesFoundMessage displays an appropriate message when no values or vars are found.
+func displayNoValuesFoundMessage(componentName string, query string) {
 	if query == ".vars" {
-		log.Info("No vars found", "component", componentName)
+		_ = ui.Info("No vars found for component: " + componentName)
 	} else {
-		log.Info("No values found", "component", componentName)
+		_ = ui.Info("No values found for component: " + componentName)
 	}
 }
 
@@ -358,7 +361,7 @@ func listValuesWithOptions(cmd *cobra.Command, opts *ValuesOptions, args []strin
 	if err != nil {
 		var noValuesErr *listerrors.NoValuesFoundError
 		if errors.As(err, &noValuesErr) {
-			logNoValuesFoundMessage(componentName, filterOptions.Query)
+			displayNoValuesFoundMessage(componentName, filterOptions.Query)
 			return "", nil
 		}
 		return "", err
