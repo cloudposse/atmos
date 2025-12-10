@@ -207,6 +207,9 @@ func parseHCLBodyWithBlocks(body hcl.Body, filename string) (map[string]any, err
 						for k, v := range blockContent {
 							existingMap[k] = v
 						}
+					} else {
+						// Type mismatch - existing value is not a map, overwrite.
+						result[block.Type] = blockContent
 					}
 				} else {
 					result[block.Type] = blockContent
@@ -218,7 +221,10 @@ func parseHCLBodyWithBlocks(body hcl.Body, filename string) (map[string]any, err
 				if _, ok := current[block.Type]; !ok {
 					current[block.Type] = make(map[string]any)
 				}
-				typeMap := current[block.Type].(map[string]any)
+				typeMap, ok := current[block.Type].(map[string]any)
+				if !ok {
+					return nil, fmt.Errorf("%w, file: %s, block type %s has unexpected value type", ErrFailedToProcessHclFile, filename, block.Type)
+				}
 				for i, label := range block.Labels {
 					if i == len(block.Labels)-1 {
 						typeMap[label] = blockContent
@@ -226,7 +232,11 @@ func parseHCLBodyWithBlocks(body hcl.Body, filename string) (map[string]any, err
 						if _, ok := typeMap[label]; !ok {
 							typeMap[label] = make(map[string]any)
 						}
-						typeMap = typeMap[label].(map[string]any)
+						labelMap, ok := typeMap[label].(map[string]any)
+						if !ok {
+							return nil, fmt.Errorf("%w, file: %s, block label %s has unexpected value type", ErrFailedToProcessHclFile, filename, label)
+						}
+						typeMap = labelMap
 					}
 				}
 			}

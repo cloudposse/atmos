@@ -118,6 +118,14 @@ func (ctx *ResolutionContext) buildCircularDependencyError(newNode DependencyNod
 }
 
 // parseNodeKey extracts stack and component from a key in format "stack-component".
+// KNOWN LIMITATION: This format uses a hyphen delimiter which can be ambiguous
+// with hyphenated stack or component names (e.g., "my-stack-my-component" could be
+// parsed as stack="my" component="stack-my-component" instead of the intended
+// stack="my-stack" component="my-component"). This is acceptable because:
+// 1. The key is only used for internal cycle detection, not user-facing output
+// 2. The Label field in resolution.Node provides accurate component/stack names for display
+// 3. Changing the delimiter would break backward compatibility
+// If this becomes problematic, consider using a different delimiter like "::" or "\x00".
 func parseNodeKey(key string) (component, stack string) {
 	parts := strings.SplitN(key, "-", 2)
 	if len(parts) == 2 {
