@@ -46,13 +46,8 @@ func registerExecutionFlags(registry *flags.FlagRegistry) {
 		Description: "Skip terraform init before running command",
 		EnvVars:     []string{"ATMOS_SKIP_INIT"},
 	})
-	registry.Register(&flags.StringFlag{
-		Name:        "from-plan",
-		Shorthand:   "",
-		Default:     "",
-		Description: "Apply from plan file (uses deterministic location if path not specified)",
-		EnvVars:     []string{"ATMOS_FROM_PLAN"},
-	})
+	// Note: from-plan flag is defined in apply.go and deploy.go with NoOptDefVal
+	// to support both --from-plan (boolean-like) and --from-plan=<path> usage.
 	registry.Register(&flags.BoolFlag{
 		Name:        "init-pass-vars",
 		Shorthand:   "",

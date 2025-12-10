@@ -13,7 +13,8 @@ func TestTerraformFlags(t *testing.T) {
 	registry := TerraformFlags()
 
 	// Should have common flags (stack, dry-run) + Terraform-specific flags including identity.
-	assert.GreaterOrEqual(t, registry.Count(), 13)
+	// Note: from-plan is defined in apply.go and deploy.go with NoOptDefVal, not here.
+	assert.GreaterOrEqual(t, registry.Count(), 12)
 
 	// Should include common flags.
 	assert.True(t, registry.Has("stack"))
@@ -25,7 +26,7 @@ func TestTerraformFlags(t *testing.T) {
 	// Should include Terraform-specific flags.
 	assert.True(t, registry.Has("upload-status"))
 	assert.True(t, registry.Has("skip-init"))
-	assert.True(t, registry.Has("from-plan"))
+	// Note: from-plan is not in shared TerraformFlags - it's defined in apply.go/deploy.go.
 	assert.True(t, registry.Has("init-pass-vars"))
 	assert.True(t, registry.Has("append-user-agent"))
 	assert.True(t, registry.Has("process-templates"))
@@ -75,7 +76,7 @@ func TestWithTerraformFlags(t *testing.T) {
 	registry := parser.Registry()
 
 	// Should have all terraform flags.
-	assert.GreaterOrEqual(t, registry.Count(), 13)
+	assert.GreaterOrEqual(t, registry.Count(), 12)
 	assert.True(t, registry.Has("stack"))
 	assert.True(t, registry.Has("upload-status"))
 	assert.True(t, registry.Has("identity"))
@@ -106,7 +107,7 @@ func TestCombinedTerraformFlags(t *testing.T) {
 	registry := parser.Registry()
 
 	// Should have all flags from both registries.
-	assert.GreaterOrEqual(t, registry.Count(), 20)
+	assert.GreaterOrEqual(t, registry.Count(), 19)
 
 	// Should include terraform flags.
 	assert.True(t, registry.Has("stack"))
