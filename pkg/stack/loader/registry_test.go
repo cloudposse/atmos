@@ -243,8 +243,8 @@ func TestRegistryClear(t *testing.T) {
 //
 //	go test -race ./pkg/stack/loader/...
 //
-// TODO: Consider adding -race to the CI test targets (make testacc) to catch
-// race conditions automatically. This would require updating the Makefile.
+// Note: Adding -race to CI test targets would increase test duration significantly.
+// Run race detection locally when modifying concurrent code.
 func TestRegistryConcurrentAccess(t *testing.T) {
 	r := NewRegistry()
 	done := make(chan bool)
