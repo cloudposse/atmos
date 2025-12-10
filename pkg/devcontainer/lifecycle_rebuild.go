@@ -68,9 +68,20 @@ func rebuildContainer(p *rebuildParams) error {
 		return err
 	}
 
-	// Pull latest image unless --no-pull is set.
-	if err := pullImageIfNeeded(p.ctx, p.runtime, p.config.Image, p.noPull); err != nil {
+	// Build image if build configuration is specified.
+	// This must happen before createContainer since it sets config.Image.
+	// Track whether we built the image to skip pulling in that case.
+	builtLocally := p.config.Build != nil
+	if err := buildImageIfNeeded(p.ctx, p.runtime, p.config, p.name); err != nil {
 		return err
+	}
+
+	// Pull latest image unless --no-pull is set or image was built locally.
+	// Locally built images don't exist in remote registries, so pulling would fail.
+	if !builtLocally {
+		if err := pullImageIfNeeded(p.ctx, p.runtime, p.config.Image, p.noPull); err != nil {
+			return err
+		}
 	}
 
 	// Create and start new container.
