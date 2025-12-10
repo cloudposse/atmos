@@ -106,16 +106,10 @@ func TestExecFunctionWithContext(t *testing.T) {
 	var capturedWorkingDir string
 	var capturedEnv []string
 
-	executor := &mockShellExecutor{}
-	// Capture the working dir and env.
-	originalExecute := executor.Execute
-	executor = &mockShellExecutor{}
 	fn := NewExecFunction(&capturingExecutor{
 		capturedWorkingDir: &capturedWorkingDir,
 		capturedEnv:        &capturedEnv,
 	})
-
-	_ = originalExecute // Avoid unused variable warning.
 
 	execCtx := &ExecutionContext{
 		WorkingDir: "/custom/path",

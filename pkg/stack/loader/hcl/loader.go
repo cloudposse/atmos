@@ -15,6 +15,7 @@ import (
 	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/zclconf/go-cty/cty"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/stack/loader"
 )
@@ -116,7 +117,7 @@ func (l *Loader) Encode(ctx context.Context, data any, opts ...loader.EncodeOpti
 
 	// Convert the data to HCL.
 	if err := l.writeValue(rootBody, data); err != nil {
-		return nil, fmt.Errorf(errWrap, loader.ErrEncodeFailed, err)
+		return nil, fmt.Errorf(errWrap, errUtils.ErrEncodeFailed, err)
 	}
 
 	return f.Bytes(), nil
@@ -232,6 +233,11 @@ func (l *Loader) storeInCache(key string, entry *cacheEntry) {
 }
 
 // getLock returns or creates a lock for the given cache key.
+// KNOWN LIMITATION: The locks map grows unbounded as new cache keys are added.
+// In practice, this is bounded by the number of unique files processed during
+// the Atmos session, which is typically small. Memory impact is minimal (one
+// sync.Mutex per file). If memory becomes a concern, consider implementing
+// periodic cleanup or using sync.Pool for lock recycling.
 func (l *Loader) getLock(key string) *sync.Mutex {
 	l.locksMu.Lock()
 	defer l.locksMu.Unlock()
@@ -307,7 +313,7 @@ func (l *Loader) parseHCLFile(data []byte, filename string) (*hcl.File, error) {
 		return nil, err
 	}
 	if file == nil {
-		return nil, fmt.Errorf("%w: file parsing returned nil", loader.ErrParseFailed)
+		return nil, fmt.Errorf("%w: file parsing returned nil", errUtils.ErrLoaderParseFailed)
 	}
 	return file, nil
 }
@@ -342,7 +348,7 @@ func (l *Loader) extractAttributes(file *hcl.File) (map[string]any, map[string]l
 func (l *Loader) evaluateAttribute(attr *hcl.Attribute, name string, positions map[string]loader.Position) (any, error) {
 	ctyValue, diags := attr.Expr.Value(nil)
 	if diags != nil && diags.HasErrors() {
-		return nil, fmt.Errorf("%w: attribute %q: %s", loader.ErrParseFailed, name, diags.Error())
+		return nil, fmt.Errorf("%w: attribute %q: %s", errUtils.ErrLoaderParseFailed, name, diags.Error())
 	}
 	return ctyToGo(ctyValue, name, positions)
 }
@@ -350,7 +356,7 @@ func (l *Loader) evaluateAttribute(attr *hcl.Attribute, name string, positions m
 // checkDiags checks HCL diagnostics and returns an error if there are any errors.
 func checkDiags(diags hcl.Diagnostics) error {
 	if diags != nil && diags.HasErrors() {
-		return fmt.Errorf("%w: %s", loader.ErrParseFailed, diags.Error())
+		return fmt.Errorf("%w: %s", errUtils.ErrLoaderParseFailed, diags.Error())
 	}
 	return nil
 }
@@ -501,6 +507,12 @@ func (l *Loader) ParseBlocks(ctx context.Context, data []byte, filename string) 
 }
 
 // extractPartialContent extracts attributes from HCL using partial content parsing.
+// NOTE: Attribute evaluation errors are intentionally silently skipped to allow
+// partial extraction of valid attributes. This is useful when some attributes
+// reference undefined variables or functions - we extract what we can and continue.
+// Debug logging could be added here if needed for troubleshooting, but would be
+// noisy in normal operation since some attributes may legitimately fail evaluation
+// until the full context is available.
 func (l *Loader) extractPartialContent(file *hcl.File) (map[string]any, error) {
 	content, _, diags := file.Body.PartialContent(&hcl.BodySchema{})
 	if err := checkDiags(diags); err != nil {
@@ -511,11 +523,14 @@ func (l *Loader) extractPartialContent(file *hcl.File) (map[string]any, error) {
 	for name, attr := range content.Attributes {
 		ctyValue, attrDiags := attr.Expr.Value(nil)
 		if attrDiags != nil && attrDiags.HasErrors() {
+			// Skip attributes that fail evaluation - they may reference undefined
+			// variables or functions that will be resolved later in processing.
 			continue
 		}
 		positions := make(map[string]loader.Position)
 		goValue, err := ctyToGo(ctyValue, name, positions)
 		if err != nil {
+			// Skip attributes that fail type conversion.
 			continue
 		}
 		result[name] = goValue

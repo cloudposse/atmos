@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sync"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/stack/loader"
 )
@@ -118,7 +119,7 @@ func (l *Loader) Encode(ctx context.Context, data any, opts ...loader.EncodeOpti
 	encoder.SetEscapeHTML(false)
 
 	if err := encoder.Encode(data); err != nil {
-		return nil, fmt.Errorf(errWrap, loader.ErrEncodeFailed, err)
+		return nil, fmt.Errorf(errWrap, errUtils.ErrEncodeFailed, err)
 	}
 
 	return buf.Bytes(), nil
@@ -160,6 +161,11 @@ func (l *Loader) storeInCache(key string, entry *cacheEntry) {
 }
 
 // getLock returns or creates a lock for the given cache key.
+// KNOWN LIMITATION: The locks map grows unbounded as new cache keys are added.
+// In practice, this is bounded by the number of unique files processed during
+// the Atmos session, which is typically small. Memory impact is minimal (one
+// sync.Mutex per file). If memory becomes a concern, consider implementing
+// periodic cleanup or using sync.Pool for lock recycling.
 func (l *Loader) getLock(key string) *sync.Mutex {
 	l.locksMu.Lock()
 	defer l.locksMu.Unlock()
@@ -226,7 +232,7 @@ func (l *Loader) parse(ctx context.Context, data []byte) (any, map[string]loader
 	decoder.UseNumber() // Preserve number precision.
 
 	if err := decoder.Decode(&result); err != nil {
-		return nil, nil, fmt.Errorf(errWrap, loader.ErrParseFailed, err)
+		return nil, nil, fmt.Errorf(errWrap, errUtils.ErrLoaderParseFailed, err)
 	}
 
 	// Extract positions from the parsed structure.
@@ -260,6 +266,13 @@ func (l *Loader) extractPositions(data any, path string, positions map[string]lo
 }
 
 // findKeyPosition finds the approximate line and column of a key in JSON content.
+// KNOWN LIMITATION: This finds the first occurrence of the key pattern in the file,
+// which may not be the correct position for nested objects with duplicate key names.
+// For example, if {"a": {"name": 1}, "b": {"name": 2}}, searching for "name" will
+// always return the position of the first occurrence. This is acceptable because:
+// 1. Position tracking is best-effort for error reporting, not precise source mapping
+// 2. Accurate nested key positioning requires a full JSON parser with position tracking
+// 3. The primary use case (error messages) benefits from approximate locations.
 func (l *Loader) findKeyPosition(content []byte, key string) loader.Position {
 	// Search for the quoted key followed by colon.
 	searchPattern := fmt.Sprintf(`"%s"`, key)
