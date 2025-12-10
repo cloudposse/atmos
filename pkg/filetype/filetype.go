@@ -153,6 +153,9 @@ func parseHCLBody(body hcl.Body, filename string) (map[string]any, error) {
 	attrs, attrDiags := body.JustAttributes()
 
 	// If JustAttributes fails (due to blocks present), use PartialContent approach.
+	// NOTE: This assumes JustAttributes failures are due to blocks. Other HCL syntax errors
+	// may also trigger this path, but parseHCLBodyWithBlocks provides a safe fallback that
+	// will surface genuine syntax errors through its own error handling.
 	if attrDiags != nil && attrDiags.HasErrors() {
 		// There are blocks present - we need to handle them differently.
 		// Use a dynamic approach to discover block types.
