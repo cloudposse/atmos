@@ -218,7 +218,7 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 		// Create a new merge context to track import chain for better error messages
 		mergeContext := m.NewMergeContext()
 
-		stackConfig, importsConfig, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
+		stackConfig, importsConfig, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
 			atmosConfig,
 			atmosConfig.StacksBaseAbsolutePath,
 			filePath,
