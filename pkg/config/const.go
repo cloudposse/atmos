@@ -62,6 +62,7 @@ const (
 	AtmosVendorConfigFileName     = "vendor"
 
 	ImportSectionName                 = "import"
+	NameSectionName                   = "name"
 	OverridesSectionName              = "overrides"
 	ProvidersSectionName              = "providers"
 	HooksSectionName                  = "hooks"

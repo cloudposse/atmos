@@ -53,6 +53,14 @@ func ProcessStackConfig(
 
 	stackName := trimStackExtensions(u.TrimBasePathFromPath(stacksBasePath+"/", stack))
 
+	// Extract the stack-level 'name' field (logical name override) if present.
+	var stackManifestName string
+	if i, ok := config[cfg.NameSectionName]; ok {
+		if name, ok := i.(string); ok {
+			stackManifestName = name
+		}
+	}
+
 	globalVarsSection := map[string]any{}
 	globalHooksSection := map[string]any{}
 	globalSettingsSection := map[string]any{}
@@ -514,6 +522,11 @@ func ProcessStackConfig(
 
 	result := map[string]any{
 		cfg.ComponentsSectionName: allComponents,
+	}
+
+	// Include the stack-level 'name' field if it was set.
+	if stackManifestName != "" {
+		result[cfg.NameSectionName] = stackManifestName
 	}
 
 	return result, nil
