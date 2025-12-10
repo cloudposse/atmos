@@ -4,6 +4,7 @@ This example demonstrates using a custom Dockerfile with Atmos devcontainers. Th
 
 ## Files
 
+- **`atmos.yaml`** - Configuration showing how to use devcontainers with Dockerfile builds
 - **`devcontainer.json`** - Devcontainer configuration using `build` instead of `image`
 - **`Dockerfile`** - Custom Dockerfile extending Geodesic with Atmos pre-installed
 
@@ -17,8 +18,7 @@ The `devcontainer.json` uses the `build` section to specify how to build the con
     "dockerfile": "Dockerfile",
     "context": ".",
     "args": {
-      "GEODESIC_VERSION": "latest",
-      "ATMOS_VERSION": "latest"
+      "GEODESIC_VERSION": "latest"
     }
   }
 }
@@ -29,48 +29,62 @@ The `devcontainer.json` uses the `build` section to specify how to build the con
 The Dockerfile accepts build arguments for customization:
 
 - **`GEODESIC_VERSION`** - Version of Geodesic to use (default: `latest`)
-- **`ATMOS_VERSION`** - Version of Atmos to install (default: `latest`)
 
 ## Usage
 
-### Using with atmos.yaml
+### Quick Start
 
-Add this devcontainer to your `atmos.yaml`:
+```bash
+# From this directory, build and launch the devcontainer
+cd examples/devcontainer-build
+atmos devcontainer shell geodesic
 
-```yaml
-devcontainers:
-  geodesic-atmos:
-    # Reference the devcontainer.json file
-    configFile: examples/devcontainer-build/devcontainer.json
+# Force rebuild (when Dockerfile changes)
+atmos devcontainer shell geodesic --replace
 ```
 
-Or define it inline:
+### Using with atmos.yaml
 
+The included `atmos.yaml` shows two approaches:
+
+**Option 1: Include devcontainer.json file**
 ```yaml
-devcontainers:
-  geodesic-atmos:
-    name: "Geodesic with Atmos"
-    build:
-      dockerfile: examples/devcontainer-build/Dockerfile
-      context: examples/devcontainer-build
-      args:
-        GEODESIC_VERSION: "latest"
-        ATMOS_VERSION: "1.100.0"  # Pin to specific version
-    workspaceFolder: /workspace
-    workspaceMount: type=bind,source=${localWorkspaceFolder},target=/workspace
+devcontainer:
+  geodesic:
+    spec:
+      - !include devcontainer.json
+```
+
+**Option 2: Define build configuration inline**
+```yaml
+devcontainer:
+  geodesic-inline:
+    spec:
+      name: "Geodesic with Atmos"
+      build:
+        dockerfile: "Dockerfile"
+        context: "."
+        args:
+          GEODESIC_VERSION: "latest"
+          ATMOS_VERSION: "latest"
+      workspaceFolder: "/workspace"
+      workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
+      containerEnv:
+        ATMOS_BASE_PATH: "/workspace"
+      remoteUser: "root"
 ```
 
 ### Launch the devcontainer
 
 ```bash
 # Build and launch
-atmos devcontainer shell geodesic-atmos
+atmos devcontainer shell geodesic
 
 # Force rebuild (when Dockerfile changes)
-atmos devcontainer rebuild geodesic-atmos
+atmos devcontainer shell geodesic --replace
 
-# Use specific Atmos version
-atmos devcontainer shell geodesic-atmos --build-arg ATMOS_VERSION=1.95.0
+# List available devcontainers
+atmos devcontainer list
 ```
 
 ## What's Included

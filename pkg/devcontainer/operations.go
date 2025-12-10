@@ -350,15 +350,14 @@ func buildImageIfNeeded(ctx context.Context, runtime container.Runtime, config *
 					WithHint("Review the Dockerfile for syntax errors or invalid instructions").
 					WithHint("See DevContainer build spec: https://containers.dev/implementors/json_reference/#build-properties").
 					WithHint("See Atmos docs: https://atmos.tools/cli/commands/devcontainer/configuration/").
-					WithExample(`components:
-  devcontainer:
-    my-dev:
-      spec:
-        build:
-          context: .
-          dockerfile: Dockerfile
-          args:
-            VARIANT: "1.24"`).
+					WithExample(`devcontainer:
+  my-dev:
+    spec:
+      build:
+        context: .
+        dockerfile: Dockerfile
+        args:
+          VARIANT: "1.24"`).
 					WithContext("devcontainer_name", devcontainerName).
 					WithContext("image_name", imageName).
 					WithContext("dockerfile", config.Build.Dockerfile).

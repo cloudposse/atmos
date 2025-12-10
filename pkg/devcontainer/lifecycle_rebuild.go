@@ -68,7 +68,13 @@ func rebuildContainer(p *rebuildParams) error {
 		return err
 	}
 
-	// Pull latest image unless --no-pull is set.
+	// Build image if build configuration is specified.
+	// This must happen before createContainer since it sets config.Image.
+	if err := buildImageIfNeeded(p.ctx, p.runtime, p.config, p.name); err != nil {
+		return err
+	}
+
+	// Pull latest image unless --no-pull is set (only applies when using pre-built image).
 	if err := pullImageIfNeeded(p.ctx, p.runtime, p.config.Image, p.noPull); err != nil {
 		return err
 	}
