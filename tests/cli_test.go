@@ -450,15 +450,15 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// These appear in trace logs as path=/var/folders/.../mock-git-root or /tmp/TestCLI.../mock-git-root.
 	// Replace with a stable placeholder since these are test-specific paths.
 	// IMPORTANT: This MUST run before the generic external path sanitization (12b) to avoid matching those patterns.
-	// Matches: /var/folders/.../mock-git-root, /tmp/.../mock-git-root, /Users/.../mock-git-root, D:/a/.../mock-git-root
-	tempGitRootRegex := regexp.MustCompile(`path=(/var/folders/[^\s]+/mock-git-root|/tmp/[^\s]+/mock-git-root|/Users/[^\s]+/mock-git-root|[A-Z]:/[^\s]+/mock-git-root)`)
+	// Matches: /var/folders/.../mock-git-root, /tmp/.../mock-git-root, /Users/.../mock-git-root, /home/.../mock-git-root, D:/a/.../mock-git-root
+	tempGitRootRegex := regexp.MustCompile(`path=(/var/folders/[^\s]+/mock-git-root|/tmp/[^\s]+/mock-git-root|/Users/[^\s]+/mock-git-root|/home/[^\s]+/mock-git-root|[A-Z]:/[^\s]+/mock-git-root)`)
 	result = tempGitRootRegex.ReplaceAllString(result, "path=/mock-git-root")
 
 	// 12b. Normalize temp home directory paths in trace logs (e.g., path=/var/folders/.../T/TestCLI.../.atmos).
 	// These are used for home directory mocking in tests.
 	// IMPORTANT: This MUST run before the generic external path sanitization (12c) to avoid matching those patterns.
-	// Matches: /var/folders/.../.atmos, /tmp/.../.atmos, /Users/.../.atmos, D:/a/.../.atmos
-	tempHomeDirRegex := regexp.MustCompile(`path=(/var/folders/[^\s]+/\.atmos|/tmp/[^\s]+/\.atmos|/Users/[^\s]+/\.atmos|[A-Z]:/[^\s]+/\.atmos)`)
+	// Matches: /var/folders/.../.atmos, /tmp/.../.atmos, /Users/.../.atmos, /home/.../.atmos, D:/a/.../.atmos
+	tempHomeDirRegex := regexp.MustCompile(`path=(/var/folders/[^\s]+/\.atmos|/tmp/[^\s]+/\.atmos|/Users/[^\s]+/\.atmos|/home/[^\s]+/\.atmos|[A-Z]:/[^\s]+/\.atmos)`)
 	result = tempHomeDirRegex.ReplaceAllString(result, "path=/mock-home/.atmos")
 
 	// 12c. Normalize external absolute paths to avoid environment-specific paths in snapshots.

@@ -87,6 +87,36 @@ func TestSanitizeOutput(t *testing.T) {
 			input:    "TRCE  Checking for atmos.yaml in home directory path=/tmp/TestCLICommands123456789/001/.atmos",
 			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
 		},
+		{
+			name:     "GitHub Actions macOS runner path should be normalized for mock-git-root",
+			input:    "TRCE  Using test Git root override path=/Users/runner/work/atmos/atmos/mock-git-root",
+			expected: "TRCE  Using test Git root override path=/mock-git-root",
+		},
+		{
+			name:     "GitHub Actions macOS runner path should be normalized for .atmos",
+			input:    "TRCE  Checking for atmos.yaml in home directory path=/Users/runner/.atmos",
+			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
+		},
+		{
+			name:     "GitHub Actions Linux runner path should be normalized for mock-git-root",
+			input:    "TRCE  Using test Git root override path=/home/runner/work/atmos/atmos/mock-git-root",
+			expected: "TRCE  Using test Git root override path=/mock-git-root",
+		},
+		{
+			name:     "GitHub Actions Linux runner path should be normalized for .atmos",
+			input:    "TRCE  Checking for atmos.yaml in home directory path=/home/runner/.atmos",
+			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
+		},
+		{
+			name:     "Windows path should be normalized for mock-git-root",
+			input:    "TRCE  Using test Git root override path=D:/a/atmos/atmos/mock-git-root",
+			expected: "TRCE  Using test Git root override path=/mock-git-root",
+		},
+		{
+			name:     "Windows path should be normalized for .atmos",
+			input:    "TRCE  Checking for atmos.yaml in home directory path=C:/Users/runner/.atmos",
+			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
+		},
 	}
 
 	for _, tt := range tests {
