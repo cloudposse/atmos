@@ -2,6 +2,7 @@ package vendoring
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -183,9 +184,9 @@ func TestWriteOutput(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.outputFile != "" {
-				// Create temp directory for file output
+				// Create temp directory for file output.
 				tempDir := t.TempDir()
-				tt.outputFile = tempDir + "/" + tt.outputFile
+				tt.outputFile = filepath.Join(tempDir, tt.outputFile)
 			}
 
 			err := writeOutput(tt.data, tt.outputFile)

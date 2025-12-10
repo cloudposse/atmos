@@ -1135,9 +1135,10 @@ var (
 **File:** `website/docs/cli/commands/vendor/vendor-diff.mdx`
 
 **Sections:**
-- Purpose note (alias to vendor update --check)
-- Usage syntax
-- Link to vendor-update.mdx for details
+- Purpose note (distinct command for viewing Git diffs between component versions)
+- Usage syntax with command-specific flags (--from-version, --to-version, --context-lines, --output)
+- Examples showing diff output between vendor versions
+- See also: link to vendor-update.mdx for related version management context
 
 ### 2. Blog Post
 

@@ -114,7 +114,7 @@ func init() {
 
 	// Bind flags to Viper for environment variable support.
 	if err := vendorParser.BindToViper(viper.GetViper()); err != nil {
-		log.Error("Failed to bind vendor list flags to viper", "error", err)
+		panic(err)
 	}
 }
 
