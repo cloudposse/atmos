@@ -40,7 +40,7 @@ atmos devcontainer shell <name> [flags]
   <dd>Always create a new instance with auto-generated numbered name based on the `--instance` value (e.g., `default-1`, `default-2`, or `alice-1` with `--instance alice`). Use this when you want a fresh container that doesn't reuse existing instances.</dd>
 
   <dt>`--replace`</dt>
-  <dd>Destroy and recreate the instance specified by `--instance` flag. This rebuilds the container from scratch, pulling the latest image and recreating with current configuration.</dd>
+  <dd>Destroy and recreate the instance specified by `--instance` flag. This rebuilds the container from scratch: if using a `build` configuration, it rebuilds the image from the Dockerfile; if using an `image`, it pulls the latest version. The container is then recreated with current configuration.</dd>
 
   <dt>`--rm`</dt>
   <dd>Automatically remove the container when you exit the shell. Similar to Docker's `docker run --rm` behavior. Useful for temporary or one-off containers.</dd>
@@ -81,6 +81,20 @@ atmos devcontainer shell terraform --replace
 # Rebuild a specific named instance
 atmos devcontainer shell terraform --instance prod --replace
 ```
+
+### Rebuilding Custom Dockerfiles
+
+When using a devcontainer with a custom Dockerfile (using `build` configuration), the `--replace` flag will rebuild the image from your Dockerfile:
+
+```shell
+# After modifying your Dockerfile, rebuild and relaunch
+atmos devcontainer shell geodesic --replace
+```
+
+This is particularly useful when:
+- You've updated your Dockerfile with new tools or dependencies
+- You want to pick up changes to build arguments
+- You need a fresh container with the latest image build
 
 ### Temporary Containers
 
