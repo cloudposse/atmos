@@ -19,7 +19,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	perf "github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -113,7 +112,7 @@ func init() {
 
 	// Bind flags to Viper for environment variable support.
 	if err := vendorParser.BindToViper(viper.GetViper()); err != nil {
-		log.Error("Failed to bind vendor list flags to viper", "error", err)
+		panic(err)
 	}
 }
 

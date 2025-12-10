@@ -666,7 +666,7 @@ var (
 	ErrComponentConfigFileNotFound = errors.New("component vendoring config file does not exist in the folder")
 	ErrFolderNotFound              = errors.New("folder does not exist")
 	ErrInvalidComponentKind        = errors.New("invalid 'kind' in the component vendoring config file. Supported kinds: 'ComponentVendorConfig'")
-	ErrUriMustSpecified            = errors.New("'uri' must be specified in 'source.uri' in the component vendoring config file")
+	ErrURIMustBeSpecified          = errors.New("'uri' must be specified in 'source.uri' in the component vendoring config file")
 
 	// Component path resolution errors.
 	ErrPathNotInComponentDir  = errors.New("path is not within Atmos component directories")

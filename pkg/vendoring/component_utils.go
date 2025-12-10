@@ -224,7 +224,7 @@ func ExecuteComponentVendorInternal(
 	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorInternal")()
 
 	if vendorComponentSpec.Source.Uri == "" {
-		return fmt.Errorf("%w:'%s'", errUtils.ErrUriMustSpecified, cfg.ComponentVendorConfigFileName)
+		return fmt.Errorf("%w:'%s'", errUtils.ErrURIMustBeSpecified, cfg.ComponentVendorConfigFileName)
 	}
 	uri := vendorComponentSpec.Source.Uri
 	// Parse 'uri' template
