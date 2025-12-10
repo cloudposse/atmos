@@ -316,9 +316,9 @@ func TestLogNoValuesFoundMessage(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// This function only logs, so we just verify it doesn't panic
+			// This function only displays UI output, so we just verify it doesn't panic
 			assert.NotPanics(t, func() {
-				logNoValuesFoundMessage(tc.componentName, tc.query)
+				displayNoValuesFoundMessage(tc.componentName, tc.query)
 			})
 		})
 	}
