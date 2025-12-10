@@ -31,6 +31,10 @@
       "base_path": "",
       "command": ""
     },
+    "list": {
+      "format": "",
+      "columns": null
+    },
     "Plugins": null
   },
   "stacks": {
@@ -43,6 +47,10 @@
     ],
     "name_pattern": "{stage}",
     "name_template": "",
+    "list": {
+      "format": "",
+      "columns": null
+    },
     "inherit": {}
   },
   "workflows": {

@@ -1,10 +1,8 @@
 package list
 
 import (
-	"encoding/csv"
 	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -12,22 +10,81 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
-	term "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/extract"
+	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/importresolver"
+	"github.com/cloudposse/atmos/pkg/list/renderer"
+	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-const (
-	componentHeader = "Component"
-	stackHeader     = "Stack"
-)
+// Default columns for list instances if not specified in atmos.yaml.
+var defaultInstanceColumns = []column.Config{
+	{Name: "Component", Value: "{{ .component }}"},
+	{Name: "Stack", Value: "{{ .stack }}"},
+}
+
+// InstancesCommandOptions contains options for the list instances command.
+type InstancesCommandOptions struct {
+	Info        *schema.ConfigAndStacksInfo
+	Cmd         *cobra.Command
+	Args        []string
+	ShowImports bool
+	ColumnsFlag []string
+	FilterSpec  string
+	SortSpec    string
+	Delimiter   string
+	Query       string
+	AuthManager auth.AuthManager
+}
+
+// parseColumnsFlag parses column specifications from CLI flag.
+// Each flag value should be in the format: "Name=TemplateExpression"
+// Example: --columns "Component={{ .component }}" --columns "Stack={{ .stack }}"
+// Returns error if any column specification is invalid.
+func parseColumnsFlag(columnsFlag []string) ([]column.Config, error) {
+	if len(columnsFlag) == 0 {
+		return defaultInstanceColumns, nil
+	}
+
+	columns := make([]column.Config, 0, len(columnsFlag))
+	for i, spec := range columnsFlag {
+		// Split on first '=' to separate name from template
+		parts := strings.SplitN(spec, "=", 2)
+		if len(parts) != 2 {
+			return nil, fmt.Errorf("%w: column spec %d must be in format 'Name=Template', got: %q",
+				errUtils.ErrInvalidConfig, i+1, spec)
+		}
+
+		name := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		if name == "" {
+			return nil, fmt.Errorf("%w: column spec %d has empty name", errUtils.ErrInvalidConfig, i+1)
+		}
+		if value == "" {
+			return nil, fmt.Errorf("%w: column spec %d has empty template", errUtils.ErrInvalidConfig, i+1)
+		}
+
+		columns = append(columns, column.Config{
+			Name:  name,
+			Value: value,
+		})
+	}
+
+	return columns, nil
+}
 
 // processComponentConfig processes a single component configuration and returns an instance if valid.
 func processComponentConfig(stackName, componentName, componentType string, componentConfig interface{}) *schema.Instance {
@@ -168,41 +225,33 @@ func sortInstances(instances []schema.Instance) []schema.Instance {
 	return instances
 }
 
-// formatInstances formats the instances for output.
-func formatInstances(instances []schema.Instance) string {
-	formatOpts := format.FormatOptions{
-		TTY:           term.IsTTYSupportForStdout(),
-		CustomHeaders: []string{componentHeader, stackHeader},
+// getInstanceColumns returns column configuration from CLI flag, atmos.yaml, or defaults.
+// Returns error if CLI flag parsing fails.
+func getInstanceColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) ([]column.Config, error) {
+	// If --columns flag is provided, parse it and return.
+	if len(columnsFlag) > 0 {
+		columns, err := parseColumnsFlag(columnsFlag)
+		if err != nil {
+			return nil, err
+		}
+		return columns, nil
 	}
 
-	// If not in a TTY environment, output CSV.
-	if !formatOpts.TTY {
-		var output strings.Builder
-		csvWriter := csv.NewWriter(&output)
-		if err := csvWriter.Write([]string{componentHeader, stackHeader}); err != nil {
-			return ""
-		}
-		for _, i := range instances {
-			if err := csvWriter.Write([]string{i.Component, i.Stack}); err != nil {
-				return ""
+	// Check if custom columns are configured in atmos.yaml.
+	if len(atmosConfig.Components.List.Columns) > 0 {
+		columns := make([]column.Config, len(atmosConfig.Components.List.Columns))
+		for i, col := range atmosConfig.Components.List.Columns {
+			columns[i] = column.Config{
+				Name:  col.Name,
+				Value: col.Value,
+				Width: col.Width,
 			}
 		}
-		csvWriter.Flush()
-		if err := csvWriter.Error(); err != nil {
-			log.Error(errUtils.ErrFailedToFinalizeCSVOutput.Error(), "error", err)
-			return ""
-		}
-		return output.String()
+		return columns, nil
 	}
 
-	// For TTY mode, create a styled table with only Component and Stack columns.
-	tableRows := make([][]string, 0, len(instances))
-	for _, i := range instances {
-		row := []string{i.Component, i.Stack}
-		tableRows = append(tableRows, row)
-	}
-
-	return format.CreateStyledTable(formatOpts.CustomHeaders, tableRows)
+	// Return default columns.
+	return defaultInstanceColumns, nil
 }
 
 // uploadInstancesWithDeps uploads instances to Atmos Pro API using injected dependencies.
@@ -302,41 +351,156 @@ func processInstances(atmosConfig *schema.AtmosConfiguration, authManager auth.A
 }
 
 // ExecuteListInstancesCmd executes the list instances command.
-func ExecuteListInstancesCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string, authManager auth.AuthManager) error {
-	// Inline initializeConfig.
-	atmosConfig, err := cfg.InitCliConfig(*info, true)
+//
+//nolint:revive,cyclop,funlen // Complexity and length from format branching and upload handling (unavoidable pattern).
+func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
+	defer perf.Track(nil, "list.ExecuteListInstancesCmd")()
+
+	log.Trace("ExecuteListInstancesCmd starting")
+	// Initialize CLI config.
+	atmosConfig, err := cfg.InitCliConfig(*opts.Info, true)
 	if err != nil {
 		log.Error(errUtils.ErrFailedToInitConfig.Error(), "error", err)
 		return errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
 
 	// Get flags.
-	upload, err := cmd.Flags().GetBool("upload")
+	upload, err := opts.Cmd.Flags().GetBool("upload")
 	if err != nil {
 		log.Error(errUtils.ErrParseFlag.Error(), "flag", "upload", "error", err)
 		return errors.Join(errUtils.ErrParseFlag, err)
 	}
 
-	// Process instances.
-	instances, err := processInstances(&atmosConfig, authManager)
+	formatFlag, err := opts.Cmd.Flags().GetString("format")
+	if err != nil {
+		log.Error(errUtils.ErrParseFlag.Error(), "flag", "format", "error", err)
+		return errors.Join(errUtils.ErrParseFlag, err)
+	}
+
+	// Handle tree format specially - branch before calling processInstances to avoid double processing.
+	log.Trace("Checking format flag", "format_flag", formatFlag, "format_tree", format.FormatTree, "match", formatFlag == string(format.FormatTree))
+	if formatFlag == string(format.FormatTree) {
+		// Tree format does not support --upload.
+		if upload {
+			return fmt.Errorf("%w: --upload is not supported with --format=tree", errUtils.ErrInvalidFlag)
+		}
+
+		// Enable provenance tracking to capture import chains.
+		atmosConfig.TrackProvenance = true
+
+		// Clear caches to ensure fresh processing with provenance enabled.
+		e.ClearMergeContexts()
+		e.ClearFindStacksMapCache()
+
+		// Get all stacks for provenance-based import resolution (single call).
+		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, opts.AuthManager)
+		if err != nil {
+			log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
+			return errors.Join(errUtils.ErrExecuteDescribeStacks, err)
+		}
+
+		// Resolve import trees using provenance system.
+		importTrees, err := importresolver.ResolveImportTreeFromProvenance(stacksMap, &atmosConfig)
+		if err != nil {
+			return fmt.Errorf("failed to resolve import trees: %w", err)
+		}
+
+		// Render tree view.
+		// Use showImports parameter from --provenance flag.
+		output := format.RenderInstancesTree(importTrees, opts.ShowImports)
+		fmt.Println(output)
+		return nil
+	}
+
+	// For non-tree formats, process instances normally.
+	instances, err := processInstances(&atmosConfig, opts.AuthManager)
 	if err != nil {
 		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
 		return errors.Join(errUtils.ErrProcessInstances, err)
 	}
 
-	// Inline handleOutput.
-	output := formatInstances(instances)
-	fmt.Fprint(os.Stdout, output)
+	// Extract instances into renderer-compatible format with metadata fields.
+	data := extract.Metadata(instances)
+
+	// Get column configuration.
+	columns, err := getInstanceColumns(&atmosConfig, opts.ColumnsFlag)
+	if err != nil {
+		log.Error("failed to get columns", "error", err)
+		return errors.Join(errUtils.ErrInvalidConfig, err)
+	}
+
+	// Create column selector.
+	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
+	if err != nil {
+		return fmt.Errorf("failed to create column selector: %w", err)
+	}
+
+	// Build filters from filter specification.
+	filters, err := buildInstanceFilters(opts.FilterSpec)
+	if err != nil {
+		return fmt.Errorf("failed to build filters: %w", err)
+	}
+
+	// Build sorters from sort specification.
+	// Pass columns to allow smart default sorting based on available columns.
+	sorters, err := buildInstanceSorters(opts.SortSpec, columns)
+	if err != nil {
+		return fmt.Errorf("failed to build sorters: %w", err)
+	}
+
+	// Create renderer.
+	r := renderer.New(filters, selector, sorters, format.Format(formatFlag), opts.Delimiter)
+
+	// Render output.
+	if err := r.Render(data); err != nil {
+		return fmt.Errorf("failed to render instances: %w", err)
+	}
 
 	// Handle upload if requested.
 	if upload {
 		proInstances := filterProEnabledInstances(instances)
 		if len(proInstances) == 0 {
-			u.PrintfMessageToTUI("No Atmos Pro-enabled instances found; nothing to upload.")
+			_ = ui.Info("No Atmos Pro-enabled instances found; nothing to upload.")
 			return nil
 		}
 		return uploadInstances(proInstances)
 	}
 
 	return nil
+}
+
+// buildInstanceFilters creates filters from filter specification.
+// The filter spec format is currently undefined for instances,
+// so this returns an empty filter list for now.
+func buildInstanceFilters(filterSpec string) ([]filter.Filter, error) {
+	// TODO: Implement filter parsing when filter spec format is defined.
+	// For now, return empty filter list.
+	return nil, nil
+}
+
+// buildInstanceSorters creates sorters from sort specification.
+// When sortSpec is empty and columns contain default "Component" and "Stack",
+// applies default sorting. Otherwise returns empty sorters (natural order).
+func buildInstanceSorters(sortSpec string, columns []column.Config) ([]*listSort.Sorter, error) {
+	// If user provided explicit sort spec, use it.
+	if sortSpec != "" {
+		return listSort.ParseSortSpec(sortSpec)
+	}
+
+	// Build map of available column names.
+	columnNames := make(map[string]bool)
+	for _, col := range columns {
+		columnNames[col.Name] = true
+	}
+
+	// Only apply default sort if both Component and Stack columns exist.
+	if columnNames["Component"] && columnNames["Stack"] {
+		return []*listSort.Sorter{
+			listSort.NewSorter("Component", listSort.Ascending),
+			listSort.NewSorter("Stack", listSort.Ascending),
+		}, nil
+	}
+
+	// No default sort for custom columns - return empty sorters (natural order).
+	return nil, nil
 }
