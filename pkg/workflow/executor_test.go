@@ -932,3 +932,192 @@ func TestExecutor_Execute_NilAtmosConfig(t *testing.T) {
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, errUtils.ErrNilParam)
 }
+
+// TestExecutor_Execute_WorkingDirectory tests working_directory support.
+func TestExecutor_Execute_WorkingDirectory(t *testing.T) {
+	tests := []struct {
+		name                 string
+		workflowWorkDir      string
+		stepWorkDir          string
+		basePath             string
+		expectedShellWorkDir string
+		expectedAtmosWorkDir string
+	}{
+		{
+			name:                 "no working directory",
+			workflowWorkDir:      "",
+			stepWorkDir:          "",
+			basePath:             "/base",
+			expectedShellWorkDir: ".",
+			expectedAtmosWorkDir: ".",
+		},
+		{
+			name:                 "workflow level absolute path",
+			workflowWorkDir:      "/tmp",
+			stepWorkDir:          "",
+			basePath:             "/base",
+			expectedShellWorkDir: "/tmp",
+			expectedAtmosWorkDir: "/tmp",
+		},
+		{
+			name:                 "workflow level relative path",
+			workflowWorkDir:      "subdir",
+			stepWorkDir:          "",
+			basePath:             "/base",
+			expectedShellWorkDir: "/base/subdir",
+			expectedAtmosWorkDir: "/base/subdir",
+		},
+		{
+			name:                 "step overrides workflow",
+			workflowWorkDir:      "/workflow-dir",
+			stepWorkDir:          "/step-dir",
+			basePath:             "/base",
+			expectedShellWorkDir: "/step-dir",
+			expectedAtmosWorkDir: "/step-dir",
+		},
+		{
+			name:                 "step relative overrides workflow",
+			workflowWorkDir:      "/workflow-dir",
+			stepWorkDir:          "step-subdir",
+			basePath:             "/base",
+			expectedShellWorkDir: "/base/step-subdir",
+			expectedAtmosWorkDir: "/base/step-subdir",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			// Create mocks.
+			mockRunner := NewMockCommandRunner(ctrl)
+			mockUI := NewMockUIProvider(ctrl)
+
+			// Expect shell command with correct working directory.
+			mockRunner.EXPECT().
+				RunShell("echo shell", "test-workflow-step-0", tt.expectedShellWorkDir, []string{}, false).
+				Return(nil)
+
+			// Expect atmos command with correct working directory.
+			mockRunner.EXPECT().
+				RunAtmos(gomock.Any()).
+				DoAndReturn(func(params *AtmosExecParams) error {
+					assert.Equal(t, tt.expectedAtmosWorkDir, params.Dir, "atmos command working directory mismatch")
+					return nil
+				})
+
+			mockUI.EXPECT().PrintMessage(gomock.Any(), gomock.Any()).AnyTimes()
+
+			// Create executor.
+			executor := NewExecutor(mockRunner, nil, mockUI)
+
+			// Define workflow with working_directory.
+			workflowDef := &schema.WorkflowDefinition{
+				WorkingDirectory: tt.workflowWorkDir,
+				Steps: []schema.WorkflowStep{
+					{
+						Name:             "shell-step",
+						Command:          "echo shell",
+						Type:             "shell",
+						WorkingDirectory: tt.stepWorkDir,
+					},
+					{
+						Name:             "atmos-step",
+						Command:          "version",
+						Type:             "atmos",
+						WorkingDirectory: tt.stepWorkDir,
+					},
+				},
+			}
+
+			params := &WorkflowParams{
+				Ctx:                context.Background(),
+				AtmosConfig:        &schema.AtmosConfiguration{BasePath: tt.basePath},
+				Workflow:           "test-workflow",
+				WorkflowPath:       "test.yaml",
+				WorkflowDefinition: workflowDef,
+				Opts:               ExecuteOptions{},
+			}
+
+			// Execute.
+			result, err := executor.Execute(params)
+
+			require.NoError(t, err)
+			assert.True(t, result.Success)
+			assert.Len(t, result.Steps, 2)
+		})
+	}
+}
+
+// TestCalculateWorkingDirectory tests the calculateWorkingDirectory function directly.
+func TestCalculateWorkingDirectory(t *testing.T) {
+	tests := []struct {
+		name        string
+		workflowDir string
+		stepDir     string
+		basePath    string
+		expected    string
+	}{
+		{
+			name:        "empty returns empty",
+			workflowDir: "",
+			stepDir:     "",
+			basePath:    "/base",
+			expected:    "",
+		},
+		{
+			name:        "workflow absolute path",
+			workflowDir: "/absolute/path",
+			stepDir:     "",
+			basePath:    "/base",
+			expected:    "/absolute/path",
+		},
+		{
+			name:        "workflow relative path resolved against base",
+			workflowDir: "relative/path",
+			stepDir:     "",
+			basePath:    "/base",
+			expected:    "/base/relative/path",
+		},
+		{
+			name:        "step overrides workflow",
+			workflowDir: "/workflow/dir",
+			stepDir:     "/step/dir",
+			basePath:    "/base",
+			expected:    "/step/dir",
+		},
+		{
+			name:        "step relative resolved against base",
+			workflowDir: "",
+			stepDir:     "step/relative",
+			basePath:    "/base",
+			expected:    "/base/step/relative",
+		},
+		{
+			name:        "whitespace trimmed",
+			workflowDir: "  /with/spaces  ",
+			stepDir:     "",
+			basePath:    "/base",
+			expected:    "/with/spaces",
+		},
+	}
+
+	executor := NewExecutor(nil, nil, nil)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workflowDef := &schema.WorkflowDefinition{
+				WorkingDirectory: tt.workflowDir,
+			}
+			step := &schema.WorkflowStep{
+				WorkingDirectory: tt.stepDir,
+			}
+
+			result, err := executor.calculateWorkingDirectory(workflowDef, step, tt.basePath)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

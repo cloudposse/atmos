@@ -177,13 +177,27 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 	// Calculate final stack.
 	finalStack := e.calculateFinalStack(params.WorkflowDefinition, step, params.Opts.CommandLineStack)
 
+	// Calculate working directory with inheritance from workflow-level.
+	workDir, err := e.calculateWorkingDirectory(params.WorkflowDefinition, step, params.AtmosConfig.BasePath)
+	if err != nil {
+		return stepResultInternal{
+			StepResult: StepResult{
+				StepName: step.Name,
+				Command:  command,
+				Success:  false,
+				Error:    err,
+			},
+		}
+	}
+
 	// Execute the command based on type.
 	cmdParams := &runCommandParams{
-		command:     command,
-		commandType: commandType,
-		stepIdx:     stepIdx,
-		finalStack:  finalStack,
-		stepEnv:     stepEnv,
+		command:          command,
+		commandType:      commandType,
+		stepIdx:          stepIdx,
+		finalStack:       finalStack,
+		stepEnv:          stepEnv,
+		workingDirectory: workDir,
 	}
 	err = e.runCommand(params, cmdParams)
 	if err != nil {
@@ -210,21 +224,28 @@ func (e *Executor) prepareStepEnvironment(ctx context.Context, stepIdentity, ste
 
 // runCommandParams holds parameters for command execution.
 type runCommandParams struct {
-	command     string
-	commandType string
-	stepIdx     int
-	finalStack  string
-	stepEnv     []string
+	command          string
+	commandType      string
+	stepIdx          int
+	finalStack       string
+	stepEnv          []string
+	workingDirectory string
 }
 
 // runCommand executes the appropriate command type.
 func (e *Executor) runCommand(params *WorkflowParams, cmdParams *runCommandParams) error {
+	// Use working directory if set, otherwise default to current directory.
+	workDir := cmdParams.workingDirectory
+	if workDir == "" {
+		workDir = "."
+	}
+
 	switch cmdParams.commandType {
 	case "shell":
 		commandName := fmt.Sprintf("%s-step-%d", params.Workflow, cmdParams.stepIdx)
-		return e.runner.RunShell(cmdParams.command, commandName, ".", cmdParams.stepEnv, params.Opts.DryRun)
+		return e.runner.RunShell(cmdParams.command, commandName, workDir, cmdParams.stepEnv, params.Opts.DryRun)
 	case "atmos":
-		return e.executeAtmosCommand(params, cmdParams.command, cmdParams.finalStack, cmdParams.stepEnv)
+		return e.executeAtmosCommand(params, cmdParams.command, cmdParams.finalStack, cmdParams.stepEnv, workDir)
 	default:
 		// Return error without printing - handleStepError will print it with resume context.
 		return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
@@ -317,7 +338,7 @@ func (e *Executor) prepareAuthenticatedEnvironment(ctx context.Context, identity
 }
 
 // executeAtmosCommand executes an atmos command with the given parameters.
-func (e *Executor) executeAtmosCommand(params *WorkflowParams, command, finalStack string, stepEnv []string) error {
+func (e *Executor) executeAtmosCommand(params *WorkflowParams, command, finalStack string, stepEnv []string, workDir string) error {
 	// Parse command using shell.Fields for proper quote handling.
 	args, parseErr := shell.Fields(command, nil)
 	if parseErr != nil {
@@ -340,7 +361,7 @@ func (e *Executor) executeAtmosCommand(params *WorkflowParams, command, finalSta
 		Ctx:         params.Ctx,
 		AtmosConfig: params.AtmosConfig,
 		Args:        args,
-		Dir:         ".",
+		Dir:         workDir,
 		Env:         stepEnv,
 		DryRun:      params.Opts.DryRun,
 	}
@@ -365,6 +386,32 @@ func (e *Executor) calculateFinalStack(workflowDef *schema.WorkflowDefinition, s
 	}
 
 	return finalStack
+}
+
+// calculateWorkingDirectory determines the working directory with validation.
+// Step-level working_directory overrides workflow-level.
+// Relative paths are resolved against base_path.
+func (e *Executor) calculateWorkingDirectory(workflowDef *schema.WorkflowDefinition, step *schema.WorkflowStep, basePath string) (string, error) {
+	// Step-level overrides workflow-level.
+	workDir := strings.TrimSpace(workflowDef.WorkingDirectory)
+	if stepWorkDir := strings.TrimSpace(step.WorkingDirectory); stepWorkDir != "" {
+		workDir = stepWorkDir
+	}
+
+	if workDir == "" {
+		return "", nil
+	}
+
+	// Resolve relative paths against base_path.
+	if !filepath.IsAbs(workDir) {
+		workDir = filepath.Join(basePath, workDir)
+	}
+
+	// Note: Directory validation happens at execution time in the adapters.
+	// This allows YAML functions like !repo-root to be resolved first during config loading.
+	log.Debug("Using working directory for workflow step", "working_directory", workDir)
+
+	return workDir, nil
 }
 
 // buildResumeCommand builds a command to resume the workflow from a specific step.

@@ -450,6 +450,25 @@ func executeCustomCommand(
 		log.Debug("Authenticated with identity for custom command", "identity", commandIdentity, "command", commandConfig.Name)
 	}
 
+	// Determine working directory for command execution.
+	workDir := currentDirPath
+	if commandConfig.WorkingDirectory != "" {
+		workDir = commandConfig.WorkingDirectory
+		// Resolve relative paths against base_path.
+		if !filepath.IsAbs(workDir) {
+			workDir = filepath.Join(atmosConfig.BasePath, workDir)
+		}
+		// Validate directory exists.
+		if info, err := os.Stat(workDir); os.IsNotExist(err) {
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("working directory does not exist: %s", workDir), "", "")
+		} else if err != nil {
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to access working directory %s: %w", workDir, err), "", "")
+		} else if !info.IsDir() {
+			errUtils.CheckErrorPrintAndExit(fmt.Errorf("working directory path is not a directory: %s", workDir), "", "")
+		}
+		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
+	}
+
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
 		// Prepare template data for arguments
@@ -531,7 +550,7 @@ func executeCustomCommand(
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
-				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, env, false)
+				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, workDir, env, false)
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 				value = strings.TrimRight(res, "\r\n")
 			} else {
@@ -572,7 +591,7 @@ func executeCustomCommand(
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
 
 		// Pass the prepared environment with custom variables to the subprocess
-		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, env, false)
+		err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
