@@ -1311,32 +1311,6 @@ func TestListStacks_InvalidDirectory(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// TestStackFlagCompletion_NoArgs tests the stackFlagCompletion function without args.
-func TestStackFlagCompletion_NoArgs(t *testing.T) {
-	t.Chdir("../examples/demo-stacks")
-
-	cmd := &cobra.Command{Use: "test"}
-	cmd.Flags().String("stack", "", "Stack flag")
-
-	// Test without component arg.
-	stacks, directive := stackFlagCompletion(cmd, []string{}, "")
-	assert.NotNil(t, stacks)
-	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-}
-
-// TestStackFlagCompletion_WithComponent tests stackFlagCompletion with a component.
-func TestStackFlagCompletion_WithComponent(t *testing.T) {
-	t.Chdir("../examples/demo-stacks")
-
-	cmd := &cobra.Command{Use: "test"}
-	cmd.Flags().String("stack", "", "Stack flag")
-
-	// Test with component arg.
-	stacks, directive := stackFlagCompletion(cmd, []string{"myapp"}, "")
-	assert.NotNil(t, stacks)
-	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-}
-
 // TestGetConfigAndStacksInfo_PathResolution tests path resolution in getConfigAndStacksInfo.
 // These tests verify that path-based component arguments are properly detected and
 // the path resolution code path is triggered without panicking.

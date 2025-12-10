@@ -1342,6 +1342,43 @@ func max(a, b int) int {
 	return b
 }
 
+// validateYAMLFormatSilent checks YAML validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateYAMLFormatSilent(output string) bool {
+	var data interface{}
+	err := yaml.Unmarshal([]byte(output), &data)
+	return err == nil
+}
+
+// validateJSONFormatSilent checks JSON validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateJSONFormatSilent(output string) bool {
+	var data interface{}
+	err := json.Unmarshal([]byte(output), &data)
+	return err == nil
+}
+
+// validateFormatValidationSilent checks if output is valid in any of the specified formats.
+// Used in tests that expect validation to fail.
+func validateFormatValidationSilent(output string, formats []string) bool {
+	for _, format := range formats {
+		switch format {
+		case "json":
+			if !validateJSONFormatSilent(output) {
+				return false
+			}
+		case "yaml":
+			if !validateYAMLFormatSilent(output) {
+				return false
+			}
+		default:
+			// Unknown format - return false without logging.
+			return false
+		}
+	}
+	return true
+}
+
 func updateSnapshot(fullPath, output string) {
 	err := os.MkdirAll(filepath.Dir(fullPath), 0o755) // Ensure parent directories exist
 	if err != nil {

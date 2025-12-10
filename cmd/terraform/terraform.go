@@ -7,6 +7,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/terraform/generate"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
 // terraformParser handles flag parsing for shared terraform flags.
@@ -28,8 +29,8 @@ func init() {
 	// Create parser with shared terraform flags using functional options.
 	// These flags are inherited by all terraform subcommands.
 	terraformParser = flags.NewStandardParser(
-		flags.WithTerraformFlags(),
-		flags.WithTerraformAffectedFlags(),
+		WithTerraformFlags(),
+		WithTerraformAffectedFlags(),
 	)
 
 	// Set stack completion function on the flag registry to avoid import cycle.
@@ -75,5 +76,20 @@ func (t *TerraformCommandProvider) GetGroup() string {
 
 // GetAliases returns command aliases.
 func (t *TerraformCommandProvider) GetAliases() []internal.CommandAlias {
-	return nil // No aliases for terraform command
+	return nil // No aliases for terraform command.
+}
+
+// GetFlagsBuilder returns the flags builder for this command.
+func (t *TerraformCommandProvider) GetFlagsBuilder() flags.Builder {
+	return nil // Flags are handled by terraformParser.
+}
+
+// GetPositionalArgsBuilder returns the positional args builder for this command.
+func (t *TerraformCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil // Terraform command has subcommands, not positional args.
+}
+
+// GetCompatibilityFlags returns compatibility flags for this command.
+func (t *TerraformCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return AllTerraformCompatFlags()
 }

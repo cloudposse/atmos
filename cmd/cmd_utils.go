@@ -809,7 +809,7 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 
 // GetConfigAndStacksInfo processes the CLI config and stacks.
 // Exported for use by command packages (e.g., terraform package).
-func GetConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
+func GetConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
 	return getConfigAndStacksInfo(commandName, cmd, args)
 }
 

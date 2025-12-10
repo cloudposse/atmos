@@ -257,8 +257,6 @@ func TestUserAbortExitCode(t *testing.T) {
 }
 
 func TestCheckTerraformFlags_ComponentWithQuery(t *testing.T) {
-	tk := NewTestKit(t)
-
 	// Test component with query flag.
 	info := &schema.ConfigAndStacksInfo{
 		ComponentFromArg: "test-component",
@@ -266,7 +264,7 @@ func TestCheckTerraformFlags_ComponentWithQuery(t *testing.T) {
 	}
 
 	err := checkTerraformFlags(info)
-	assert.ErrorIs(tk, err, errUtils.ErrInvalidTerraformComponentWithMultiComponentFlags)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponentWithMultiComponentFlags)
 }
 
 func TestCheckTerraformFlags_AllEdgeCases(t *testing.T) {
@@ -311,11 +309,9 @@ func TestCheckTerraformFlags_AllEdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tk := NewTestKit(t)
-
 			err := checkTerraformFlags(tt.info)
 			// All test cases in this table expect errors - asserting the specific error type.
-			assert.ErrorIs(tk, err, tt.expectedError)
+			assert.ErrorIs(t, err, tt.expectedError)
 		})
 	}
 }
