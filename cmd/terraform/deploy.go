@@ -19,7 +19,24 @@ var deployCmd = &cobra.Command{
 
 This ensures that the changes defined in your Terraform configuration are applied without requiring manual confirmation, streamlining the deployment process.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return terraformRun(terraformCmd, cmd, args)
+		v := viper.GetViper()
+
+		// Bind both parent and subcommand parsers.
+		if err := terraformParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+		if err := deployParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		// Parse base terraform options.
+		opts := ParseTerraformRunOptions(v)
+
+		// Deploy-specific flags (deploy-run-init, from-plan, planfile) flow through
+		// the legacy ProcessCommandLineArgs which sets info.DeployRunInit, etc.
+		// The Viper binding above ensures flag > env > config precedence works.
+
+		return terraformRunWithOptions(terraformCmd, cmd, args, opts)
 	},
 	PostRunE: func(cmd *cobra.Command, args []string) error {
 		return runHooks(h.AfterTerraformApply, cmd, args)

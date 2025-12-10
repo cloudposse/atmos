@@ -20,6 +20,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// errWrapFormat is the format string for wrapping errors with a cause.
+const errWrapFormat = "%w: %w"
+
 func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
 	// Build args for ProcessCommandLineArgs.
 	// Note: Double-dash processing is handled by AtmosFlagParser in terraformRun (RunE).
@@ -54,14 +57,58 @@ func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
 	return nil
 }
 
-// populateInfoFromViper populates info fields from Viper configuration.
-func populateInfoFromViper(info *schema.ConfigAndStacksInfo) {
-	v := viper.GetViper()
-	info.ProcessTemplates = v.GetBool("process-templates")
-	info.ProcessFunctions = v.GetBool("process-functions")
-	info.Skip = v.GetStringSlice("skip")
-	info.Components = v.GetStringSlice("components")
-	info.DryRun = v.GetBool("dry-run")
+// resolveComponentPath resolves a path-based component argument to a component name.
+// It validates the component exists in the specified stack and handles ambiguous paths.
+func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) error {
+	// Initialize config with processStacks=true to enable stack-based validation.
+	// This is needed to detect ambiguous paths (multiple components referencing the same folder).
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, errUtils.ErrPathResolutionFailed, err)
+	}
+
+	// Resolve component from path WITH stack validation.
+	// This will:
+	// 1. Extract the component name from the path (e.g., "vpc" from "components/terraform/vpc").
+	// 2. Look up which Atmos components reference this terraform folder in the stack.
+	// 3. If multiple components reference the same folder, return an ambiguous path error.
+	resolvedComponent, err := e.ResolveComponentFromPath(
+		&atmosConfig,
+		info.ComponentFromArg,
+		info.Stack,
+		commandName,
+	)
+	if err != nil {
+		return handlePathResolutionError(err)
+	}
+
+	log.Debug("Resolved component from path",
+		"original_path", info.ComponentFromArg,
+		"resolved_component", resolvedComponent,
+		"stack", info.Stack,
+	)
+
+	info.ComponentFromArg = resolvedComponent
+	info.NeedsPathResolution = false // Mark as resolved.
+	return nil
+}
+
+// handlePathResolutionError wraps path resolution errors with appropriate hints.
+func handlePathResolutionError(err error) error {
+	// These errors already have detailed hints from the resolver, return directly.
+	// Using fmt.Errorf to wrap would lose the cockroachdb/errors hints.
+	if errors.Is(err, errUtils.ErrAmbiguousComponentPath) ||
+		errors.Is(err, errUtils.ErrComponentNotInStack) ||
+		errors.Is(err, errUtils.ErrStackNotFound) ||
+		errors.Is(err, errUtils.ErrUserAborted) {
+		return err
+	}
+	// Generic path resolution error - add hint.
+	// Use WithCause to preserve the underlying error for errors.Is introspection.
+	return errUtils.Build(errUtils.ErrPathResolutionFailed).
+		WithCause(err).
+		WithHint("Make sure the path is within your component directories").
+		Err()
 }
 
 // executeAffectedCommand handles the --affected flag execution flow.
@@ -108,24 +155,52 @@ func executeSingleComponent(info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
+// terraformRun is for simple subcommands without their own parsers.
+// It binds terraformParser and delegates to terraformRunWithOptions.
 func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []string) error {
+	v := viper.GetViper()
+	if err := terraformParser.BindFlagsToViper(actualCmd, v); err != nil {
+		return err
+	}
+
+	opts := ParseTerraformRunOptions(v)
+	return terraformRunWithOptions(parentCmd, actualCmd, args, opts)
+}
+
+// applyOptionsToInfo transfers parsed options to the info struct.
+func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOptions) {
+	info.ProcessTemplates = opts.ProcessTemplates
+	info.ProcessFunctions = opts.ProcessFunctions
+	info.Skip = opts.Skip
+	info.Components = opts.Components
+	info.DryRun = opts.DryRun
+	info.All = opts.All
+	info.Affected = opts.Affected
+	info.Query = opts.Query
+}
+
+// terraformRunWithOptions is the shared execution logic for terraform subcommands.
+// Commands with their own parsers (plan, apply, deploy) should bind their parsers
+// in their RunE and call this function with the parsed options.
+func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string, opts *TerraformRunOptions) error {
 	subCommand := actualCmd.Name()
-	log.Debug("terraformRun entry", "subCommand", subCommand, "args", args)
+	log.Debug("terraformRunWithOptions entry", "subCommand", subCommand, "args", args)
 
-	// Get separated args from preprocessing (set by preprocessCompatibilityFlags() in Execute()).
-	// These contain terraform pass-through flags like -out, -var, etc.
+	// Get separated args (terraform pass-through flags like -out, -var, etc.).
 	separatedArgs := compat.GetSeparated()
-	log.Debug("separatedArgs from preprocessing", "separatedArgs", separatedArgs)
 
-	// Build info from args.
-	// Prepend subcommand to positional args for ProcessCommandLineArgs.
-	// SeparatedArgs contain terraform pass-through flags (e.g., -out=<file>, -var, etc.)
-	// and must be passed as the 4th argument (additionalArgsAndFlags).
+	// Build info from args. SeparatedArgs are passed as additionalArgsAndFlags.
 	argsWithSubCommand := append([]string{subCommand}, args...)
-	log.Debug("argsWithSubCommand", "args", argsWithSubCommand, "separatedArgs", separatedArgs)
 	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, parentCmd, argsWithSubCommand, separatedArgs)
 	if err != nil {
 		return err
+	}
+
+	// Resolve path-based component arguments (e.g., ".", "./vpc", absolute paths).
+	if info.NeedsPathResolution && info.ComponentFromArg != "" {
+		if err := resolveComponentPath(&info, cfg.TerraformComponentType); err != nil {
+			return err
+		}
 	}
 
 	if info.NeedHelp {
@@ -134,40 +209,27 @@ func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []str
 		return nil
 	}
 
-	// Get flag values from Viper (respects precedence: flag > env > config > default).
-	populateInfoFromViper(&info)
+	applyOptionsToInfo(&info, opts)
 
-	// Handle --identity flag for interactive selection.
-	// ProcessCommandLineArgs already parsed the identity value correctly via processArgsAndFlags.
-	// We only need to handle the special case where --identity was used without a value (interactive selection).
-	// Note: We cannot use flags.GetString("identity") here because Cobra's NoOptDefVal behavior
-	// with positional args causes it to return "__SELECT__" even when a value was provided
-	// (e.g., "atmos terraform plan vpc --identity asd" treats "asd" as positional, not flag value).
+	// Handle --identity flag for interactive selection when used without a value.
 	if info.Identity == cfg.IdentityFlagSelectValue {
 		handleInteractiveIdentitySelection(&info)
 	}
-	// Otherwise, info.Identity already has the correct value from ProcessCommandLineArgs
-	// (either from --identity <value>, ATMOS_IDENTITY env var, or empty string).
 
 	// Check Terraform Single-Component and Multi-Component flags.
 	err = checkTerraformFlags(&info)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 
-	// Execute `atmos terraform <sub-command> --affected` or `atmos terraform <sub-command> --affected --stack <stack>`.
+	// Route to appropriate execution path.
 	if info.Affected {
 		return executeAffectedCommand(parentCmd, args, &info)
 	}
-
-	// Execute `atmos terraform <sub-command>` with filters if multi-component flags are specified.
-	log.Debug("terraformRun routing decision", "All", info.All, "Components", info.Components, "Query", info.Query, "Stack", info.Stack, "ComponentFromArg", info.ComponentFromArg, "SubCommand", info.SubCommand)
 	if isMultiComponentExecution(&info) {
 		log.Debug("Routing to ExecuteTerraformQuery (multi-component)")
 		err = e.ExecuteTerraformQuery(&info)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
-
-	// Execute `atmos terraform <sub-command> <component> --stack <stack>`.
 	return executeSingleComponent(&info)
 }
 
@@ -212,7 +274,7 @@ func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
 	// Use false to skip stack processing - only auth config is needed.
 	atmosConfig, err := cfg.InitCliConfig(*info, false)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrInitializeCLIConfig, err), "", "")
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf(errWrapFormat, errUtils.ErrInitializeCLIConfig, err), "", "")
 	}
 
 	// Check if auth is configured. If not, we can't select an identity.
@@ -230,7 +292,7 @@ func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
 		cfg.IdentityFlagSelectValue,
 	)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf(errWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err), "", "")
 	}
 
 	// Get default identity with forced interactive selection.
@@ -245,7 +307,7 @@ func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
 			// Note: We bypass error formatting as user abort is not an error condition.
 			errUtils.Exit(errUtils.ExitCodeSIGINT)
 		}
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrDefaultIdentity, err), "", "")
+		errUtils.CheckErrorPrintAndExit(fmt.Errorf(errWrapFormat, errUtils.ErrDefaultIdentity, err), "", "")
 	}
 
 	info.Identity = selectedIdentity

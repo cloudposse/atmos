@@ -23,7 +23,24 @@ For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/plan
   https://opentofu.org/docs/cli/commands/plan`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return terraformRun(terraformCmd, cmd, args)
+		v := viper.GetViper()
+
+		// Bind both parent and subcommand parsers.
+		if err := terraformParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+		if err := planParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		// Parse base terraform options.
+		opts := ParseTerraformRunOptions(v)
+
+		// Plan-specific flags (upload-status, skip-planfile) flow through the
+		// legacy ProcessCommandLineArgs which sets info.PlanSkipPlanfile.
+		// The Viper binding above ensures flag > env > config precedence works.
+
+		return terraformRunWithOptions(terraformCmd, cmd, args, opts)
 	},
 }
 

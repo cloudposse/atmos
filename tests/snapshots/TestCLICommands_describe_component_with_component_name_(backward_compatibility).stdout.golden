@@ -413,8 +413,15 @@ component_info:
         type: ""
     requiredcore:
       - '>= 1.0.0'
-    requiredproviders: {}
-    providerconfigs: {}
+    requiredproviders:
+      context:
+        source: ""
+        versionconstraints: []
+        configurationaliases: []
+    providerconfigs:
+      context:
+        name: context
+        alias: ""
     managedresources: {}
     dataresources: {}
     modulecalls:
