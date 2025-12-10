@@ -219,8 +219,20 @@ func TestComponentsOptions_AllFields(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.expectedStack, tc.opts.Stack)
 			assert.Equal(t, tc.expectedType, tc.opts.Type)
-			assert.Equal(t, tc.expectedEnabled, tc.opts.Enabled)
-			assert.Equal(t, tc.expectedLocked, tc.opts.Locked)
+
+			// Compare tri-state booleans by value, not pointer identity.
+			if tc.expectedEnabled == nil {
+				assert.Nil(t, tc.opts.Enabled)
+			} else if assert.NotNil(t, tc.opts.Enabled) {
+				assert.Equal(t, *tc.expectedEnabled, *tc.opts.Enabled)
+			}
+
+			if tc.expectedLocked == nil {
+				assert.Nil(t, tc.opts.Locked)
+			} else if assert.NotNil(t, tc.opts.Locked) {
+				assert.Equal(t, *tc.expectedLocked, *tc.opts.Locked)
+			}
+
 			assert.Equal(t, tc.expectedFormat, tc.opts.Format)
 			assert.Equal(t, tc.expectedColumns, tc.opts.Columns)
 			assert.Equal(t, tc.expectedSort, tc.opts.Sort)
@@ -915,6 +927,33 @@ func TestRenderComponents(t *testing.T) {
 			},
 			expectError: false,
 		},
+		{
+			name: "Components with csv format",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					List: schema.ListConfig{},
+				},
+			},
+			opts: &ComponentsOptions{Format: "csv"},
+			components: []map[string]any{
+				{"component": "vpc", "stack": "prod-us-east-1", "type": "terraform"},
+				{"component": "rds", "stack": "prod-us-east-1", "type": "terraform"},
+			},
+			expectError: false,
+		},
+		{
+			name: "Components with tsv format",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					List: schema.ListConfig{},
+				},
+			},
+			opts: &ComponentsOptions{Format: "tsv"},
+			components: []map[string]any{
+				{"component": "vpc", "stack": "prod", "type": "terraform"},
+			},
+			expectError: false,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -1077,6 +1116,5 @@ func TestRenderComponents_TypeFilter(t *testing.T) {
 }
 
 // TestInitAndExtractComponents is documented in integration tests.
-// Unit testing with nil command is not meaningful as ProcessCommandLineArgs
-// requires a valid command context. See tests/cli_list_commands_test.go for
-// integration tests that exercise the full command flow.
+// Unit testing with nil command is not meaningful as ProcessCommandLineArgs requires a valid command context.
+// See tests/cli_list_commands_test.go for integration tests that exercise the full command flow.

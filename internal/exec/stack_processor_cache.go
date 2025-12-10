@@ -138,8 +138,8 @@ func getCachedCompiledSchema(schemaPath string) (*jsonschema.Schema, bool) {
 	jsonSchemaCacheMu.RLock()
 	defer jsonSchemaCacheMu.RUnlock()
 
-	schema, found := jsonSchemaCache[schemaPath]
-	return schema, found
+	compiledSchema, found := jsonSchemaCache[schemaPath]
+	return compiledSchema, found
 }
 
 // cacheCompiledSchema stores a compiled JSON schema in the cache.
