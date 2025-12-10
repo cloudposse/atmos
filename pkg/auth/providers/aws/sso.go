@@ -144,7 +144,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	// to avoid conflicts with external AWS env vars.
 	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
-		return nil, errUtils.Build(errUtils.ErrLoadAwsConfig).
+		return nil, errUtils.Build(errUtils.ErrLoadAWSConfig).
 			WithExplanationf("Failed to load AWS configuration for SSO authentication in region '%s'", p.region).
 			WithHint("Verify that the AWS region is valid and accessible").
 			WithHint("Check your network connectivity and AWS service availability").

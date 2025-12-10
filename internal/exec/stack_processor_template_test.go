@@ -151,7 +151,7 @@ metadata:
 			require.NoError(t, err)
 
 			// Process the file
-			result, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
+			result, _, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
 				atmosConfig,
 				tempDir,
 				filePath,
@@ -317,7 +317,7 @@ components:
 
 	// Process the main stack file
 	stackPath := filepath.Join(tempDir, "stack.yaml")
-	result, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext( //nolint:dogsled
+	result, _, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext( //nolint:dogsled
 		atmosConfig,
 		tempDir,
 		stackPath,
@@ -387,7 +387,7 @@ components:
 	}
 
 	// Test with skipTemplatesProcessingInImports = true
-	result, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext( //nolint:dogsled
+	result, _, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext( //nolint:dogsled
 		atmosConfig,
 		tempDir,
 		templateFile,
@@ -419,7 +419,7 @@ components:
 	assert.Equal(t, 10, vars["value"])
 
 	// Test with skipTemplatesProcessingInImports = false
-	result2, _, _, _, _, _, _, err2 := ProcessYAMLConfigFileWithContext( //nolint:dogsled
+	result2, _, _, _, _, _, _, _, err2 := ProcessYAMLConfigFileWithContext( //nolint:dogsled
 		atmosConfig,
 		tempDir,
 		templateFile,

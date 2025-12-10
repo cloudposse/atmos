@@ -260,6 +260,16 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 // FindStacksMap processes stack config and returns a map of all stacks.
 // Results are cached to avoid re-processing the same YAML files multiple times
 // within the same command execution (e.g., when ValidateStacks is called before ExecuteDescribeStacks).
+// ClearFindStacksMapCache clears the FindStacksMap cache.
+func ClearFindStacksMapCache() {
+	defer perf.Track(nil, "exec.ClearFindStacksMapCache")()
+
+	log.Trace("ClearFindStacksMapCache called")
+	findStacksMapCacheMu.Lock()
+	findStacksMapCache = make(map[string]*findStacksMapCacheEntry)
+	findStacksMapCacheMu.Unlock()
+}
+
 func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,

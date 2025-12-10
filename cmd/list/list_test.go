@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/list/errors"
@@ -240,5 +241,40 @@ func TestListCmds_NoResults(t *testing.T) {
 		output, err := l.FilterAndListStacks(stacksMap, "nonexistent-component")
 		assert.NoError(t, err)
 		assert.Nil(t, output, "Expected nil output when no matching stacks exist")
+	})
+}
+
+// TestListCommandProvider tests the ListCommandProvider interface methods.
+func TestListCommandProvider(t *testing.T) {
+	provider := &ListCommandProvider{}
+
+	t.Run("GetCommand returns listCmd", func(t *testing.T) {
+		cmd := provider.GetCommand()
+		require.NotNil(t, cmd)
+		assert.Equal(t, "list", cmd.Use)
+	})
+
+	t.Run("GetName returns list", func(t *testing.T) {
+		assert.Equal(t, "list", provider.GetName())
+	})
+
+	t.Run("GetGroup returns Stack Introspection", func(t *testing.T) {
+		assert.Equal(t, "Stack Introspection", provider.GetGroup())
+	})
+
+	t.Run("GetFlagsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetFlagsBuilder())
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
+	})
+
+	t.Run("GetAliases returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetAliases())
 	})
 }
