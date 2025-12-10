@@ -535,6 +535,7 @@ func renderDryRunFileList(selectedConfig *templates.Configuration, targetDir str
 		return err
 	}
 
+	fileCount := 0
 	for _, file := range selectedConfig.Files {
 		if file.Path == config.ScaffoldConfigFileName {
 			continue
@@ -544,9 +545,10 @@ func renderDryRunFileList(selectedConfig *templates.Configuration, targetDir str
 		if err := printFilePath(targetDir, renderedPath); err != nil {
 			return err
 		}
+		fileCount++
 	}
 
-	return atmosui.Writef("\nTotal: %d files would be generated\n", len(selectedConfig.Files)-1) // -1 for scaffold.yaml.
+	return atmosui.Writef("\nTotal: %d files would be generated\n", fileCount)
 }
 
 // renderFilePath applies simple variable substitution to a file path.
