@@ -129,7 +129,7 @@ When you run `atmos devcontainer shell`, Atmos will:
 1. **Build the image** (if not already built or if changed)
    - Uses `docker build` or `podman build`
    - Passes build args from `devcontainer.json`
-   - Tags the image as `atmos-devcontainer-geodesic-atmos`
+   - Tags the image as `atmos-devcontainer-geodesic`
 
 2. **Create the container** from the built image
 
@@ -141,10 +141,10 @@ To rebuild the image after changing the Dockerfile:
 
 ```bash
 # Rebuild the devcontainer
-atmos devcontainer rebuild geodesic-atmos
+atmos devcontainer rebuild geodesic
 
 # Or use --replace flag with shell command
-atmos devcontainer shell geodesic-atmos --replace
+atmos devcontainer shell geodesic --replace
 ```
 
 ## Benefits of Custom Dockerfiles
