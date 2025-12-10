@@ -317,3 +317,131 @@ func TestAddIdentityCompletion(t *testing.T) {
 		addIdentityCompletion(cmd)
 	})
 }
+
+func TestWorkflowCommandProvider(t *testing.T) {
+	provider := &WorkflowCommandProvider{}
+
+	t.Run("GetCommand returns workflowCmd", func(t *testing.T) {
+		cmd := provider.GetCommand()
+		assert.NotNil(t, cmd)
+		assert.Equal(t, "workflow [name]", cmd.Use)
+	})
+
+	t.Run("GetName returns workflow", func(t *testing.T) {
+		name := provider.GetName()
+		assert.Equal(t, "workflow", name)
+	})
+
+	t.Run("GetGroup returns correct group", func(t *testing.T) {
+		group := provider.GetGroup()
+		assert.Equal(t, "Core Stack Commands", group)
+	})
+
+	t.Run("GetFlagsBuilder returns nil", func(t *testing.T) {
+		builder := provider.GetFlagsBuilder()
+		assert.Nil(t, builder)
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		builder := provider.GetPositionalArgsBuilder()
+		assert.Nil(t, builder)
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		flags := provider.GetCompatibilityFlags()
+		assert.Nil(t, flags)
+	})
+
+	t.Run("GetAliases returns nil", func(t *testing.T) {
+		aliases := provider.GetAliases()
+		assert.Nil(t, aliases)
+	})
+}
+
+func TestHandleHelpRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "help argument",
+			args: []string{"help"},
+		},
+		{
+			name: "--help flag",
+			args: []string{"--help"},
+		},
+		{
+			name: "-h flag",
+			args: []string{"-h"},
+		},
+		{
+			name: "no help args",
+			args: []string{"deploy"},
+		},
+		{
+			name: "empty args",
+			args: []string{},
+		},
+		{
+			name: "help in middle",
+			args: []string{"deploy", "help"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "test"}
+
+			// handleHelpRequest should not panic.
+			assert.NotPanics(t, func() {
+				handleHelpRequest(cmd, tt.args)
+			})
+		})
+	}
+}
+
+func TestWorkflowOptions(t *testing.T) {
+	opts := WorkflowOptions{
+		File:     "deploy.yaml",
+		DryRun:   true,
+		Stack:    "dev",
+		FromStep: "step2",
+		Identity: "admin",
+	}
+
+	assert.Equal(t, "deploy.yaml", opts.File)
+	assert.True(t, opts.DryRun)
+	assert.Equal(t, "dev", opts.Stack)
+	assert.Equal(t, "step2", opts.FromStep)
+	assert.Equal(t, "admin", opts.Identity)
+}
+
+func TestExecuteWorkflowWithOptions(t *testing.T) {
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", fixturesPath)
+	t.Setenv("ATMOS_BASE_PATH", fixturesPath)
+
+	cmd := &cobra.Command{}
+	// Add required flags.
+	cmd.PersistentFlags().StringP("file", "f", "", "Workflow file")
+	cmd.PersistentFlags().Bool("dry-run", false, "Dry run")
+	cmd.PersistentFlags().StringP("stack", "s", "", "Stack")
+	cmd.PersistentFlags().String("from-step", "", "From step")
+	cmd.PersistentFlags().String("identity", "", "Identity")
+	cmd.PersistentFlags().String("base-path", "", "Base path")
+	cmd.PersistentFlags().StringSlice("config", []string{}, "Config files")
+	cmd.PersistentFlags().StringSlice("config-path", []string{}, "Config paths")
+	cmd.PersistentFlags().StringSlice("profile", []string{}, "Configuration profile")
+
+	err := cmd.ParseFlags([]string{"--file", "test.yaml"})
+	require.NoError(t, err)
+
+	opts := &WorkflowOptions{
+		File:   "test.yaml",
+		DryRun: false,
+	}
+
+	// Execute should call the underlying workflow function.
+	err = executeWorkflowWithOptions(cmd, []string{"shell-pass"}, opts)
+	assert.NoError(t, err)
+}

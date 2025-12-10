@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/workflow"
@@ -558,5 +560,93 @@ func TestExecuteWorkflowCmd(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrWorkflowNoWorkflow)
+	})
+
+	t.Run("auto-discovery single match", func(t *testing.T) {
+		stacksPath := "../../tests/fixtures/scenarios/workflows"
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+		t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+		cmd := createWorkflowCmd()
+		// Don't set --file flag - auto-discovery should find the single match.
+
+		// Use a workflow name that exists in only one file.
+		args := []string{"shell-pass"}
+		err := ExecuteWorkflowCmd(cmd, args)
+
+		// Should succeed with auto-discovery finding the single match.
+		assert.NoError(t, err)
+	})
+
+	t.Run("auto-discovery multiple matches in non-TTY", func(t *testing.T) {
+		// Create a temp directory with multiple workflow files containing the same workflow.
+		tmpDir := t.TempDir()
+		workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
+		stacksDir := filepath.Join(tmpDir, "stacks")
+		err := os.MkdirAll(workflowsDir, 0o755)
+		require.NoError(t, err)
+
+		// Create a dummy stack file to satisfy config validation.
+		dummyStack := `components: {}`
+		err = os.WriteFile(filepath.Join(stacksDir, "dummy.yaml"), []byte(dummyStack), 0o644)
+		require.NoError(t, err)
+
+		// Create atmos.yaml with complete config.
+		atmosConfig := `
+base_path: ""
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "workflows/**/*"
+  name_pattern: "{stack}"
+workflows:
+  base_path: "stacks/workflows"
+`
+		err = os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
+		require.NoError(t, err)
+
+		// Create two workflow files with the same workflow name.
+		workflow1 := `
+workflows:
+  duplicate-workflow:
+    steps:
+      - name: step1
+        type: shell
+        command: echo file1
+`
+		err = os.WriteFile(filepath.Join(workflowsDir, "file1.yaml"), []byte(workflow1), 0o644)
+		require.NoError(t, err)
+
+		workflow2 := `
+workflows:
+  duplicate-workflow:
+    steps:
+      - name: step1
+        type: shell
+        command: echo file2
+`
+		err = os.WriteFile(filepath.Join(workflowsDir, "file2.yaml"), []byte(workflow2), 0o644)
+		require.NoError(t, err)
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+		// CI env variable ensures non-TTY detection.
+		t.Setenv("CI", "true")
+
+		cmd := createWorkflowCmd()
+		// Don't set --file flag - auto-discovery will find multiple matches.
+
+		args := []string{"duplicate-workflow"}
+		err = ExecuteWorkflowCmd(cmd, args)
+
+		// Should error with multiple matches message since we're in CI.
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrWorkflowNoWorkflow)
+		// Use Format to get the full formatted error including hints.
+		formattedErr := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+		assert.Contains(t, formattedErr, "Multiple workflow files")
 	})
 }
