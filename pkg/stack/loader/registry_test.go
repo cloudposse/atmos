@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // mockLoader is a test implementation of StackLoader.
@@ -66,7 +68,7 @@ func TestRegistryRegisterDuplicate(t *testing.T) {
 
 	err = r.Register(loader2)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrDuplicateLoader))
+	assert.True(t, errors.Is(err, errUtils.ErrDuplicateLoader))
 }
 
 func TestRegistryRegisterExtensionConflict(t *testing.T) {
@@ -80,7 +82,7 @@ func TestRegistryRegisterExtensionConflict(t *testing.T) {
 
 	err = r.Register(loader2)
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrDuplicateLoader))
+	assert.True(t, errors.Is(err, errUtils.ErrDuplicateLoader))
 }
 
 func TestRegistryGetByExtension(t *testing.T) {
@@ -130,7 +132,7 @@ func TestRegistryGetByExtensionNotFound(t *testing.T) {
 
 	_, err := r.GetByExtension(".unknown")
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrLoaderNotFound))
+	assert.True(t, errors.Is(err, errUtils.ErrLoaderNotFound))
 }
 
 func TestRegistryGetByName(t *testing.T) {
@@ -149,7 +151,7 @@ func TestRegistryGetByNameNotFound(t *testing.T) {
 
 	_, err := r.GetByName("NonExistent")
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrLoaderNotFound))
+	assert.True(t, errors.Is(err, errUtils.ErrLoaderNotFound))
 }
 
 func TestRegistryHasExtension(t *testing.T) {
@@ -216,7 +218,7 @@ func TestRegistryUnregisterNotFound(t *testing.T) {
 
 	err := r.Unregister("NonExistent")
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrLoaderNotFound))
+	assert.True(t, errors.Is(err, errUtils.ErrLoaderNotFound))
 }
 
 func TestRegistryClear(t *testing.T) {
@@ -236,6 +238,13 @@ func TestRegistryClear(t *testing.T) {
 	assert.False(t, r.HasExtension(".json"))
 }
 
+// TestRegistryConcurrentAccess tests thread safety of the registry.
+// NOTE: For proper race condition detection, run this test with the -race flag:
+//
+//	go test -race ./pkg/stack/loader/...
+//
+// TODO: Consider adding -race to the CI test targets (make testacc) to catch
+// race conditions automatically. This would require updating the Makefile.
 func TestRegistryConcurrentAccess(t *testing.T) {
 	r := NewRegistry()
 	done := make(chan bool)

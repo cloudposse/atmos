@@ -10,6 +10,7 @@ import (
 
 	yaml "gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/stack/loader"
 )
@@ -96,7 +97,7 @@ func (l *Loader) Encode(ctx context.Context, data any, opts ...loader.EncodeOpti
 	// Recover from yaml.v3 panics on unsupported types (channels, functions, etc.).
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("%w: %v", loader.ErrEncodeFailed, r)
+			err = fmt.Errorf("%w: %v", errUtils.ErrEncodeFailed, r)
 		}
 	}()
 
@@ -113,11 +114,11 @@ func (l *Loader) Encode(ctx context.Context, data any, opts ...loader.EncodeOpti
 	encoder.SetIndent(indentWidth)
 
 	if err := encoder.Encode(data); err != nil {
-		return nil, fmt.Errorf(errWrap, loader.ErrEncodeFailed, err)
+		return nil, fmt.Errorf(errWrap, errUtils.ErrEncodeFailed, err)
 	}
 
 	if err := encoder.Close(); err != nil {
-		return nil, fmt.Errorf(errWrap, loader.ErrEncodeFailed, err)
+		return nil, fmt.Errorf(errWrap, errUtils.ErrEncodeFailed, err)
 	}
 
 	return buf.Bytes(), nil
@@ -213,7 +214,7 @@ func (l *Loader) parse(ctx context.Context, data []byte) (any, map[string]loader
 	// Parse into yaml.Node for position tracking.
 	var node yaml.Node
 	if err := yaml.Unmarshal(data, &node); err != nil {
-		return nil, nil, fmt.Errorf(errWrap, loader.ErrParseFailed, err)
+		return nil, nil, fmt.Errorf(errWrap, errUtils.ErrLoaderParseFailed, err)
 	}
 
 	// Extract positions.
@@ -222,7 +223,7 @@ func (l *Loader) parse(ctx context.Context, data []byte) (any, map[string]loader
 	// Decode into generic structure.
 	var result any
 	if err := node.Decode(&result); err != nil {
-		return nil, nil, fmt.Errorf(errWrap, loader.ErrParseFailed, err)
+		return nil, nil, fmt.Errorf(errWrap, errUtils.ErrLoaderParseFailed, err)
 	}
 
 	return result, positions, nil

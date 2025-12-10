@@ -6,7 +6,6 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // convertCmd converts stack configuration files between formats.
@@ -39,12 +38,6 @@ Examples:
 		toFormat, _ := cmd.Flags().GetString("to")
 		outputPath, _ := cmd.Flags().GetString("output")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
-
-		// Validate required flag.
-		if toFormat == "" {
-			_ = ui.Error("--to flag is required (yaml, json, or hcl)")
-			return nil
-		}
 
 		// Load atmos configuration.
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)

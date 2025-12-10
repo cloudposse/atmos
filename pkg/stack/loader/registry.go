@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -40,14 +41,14 @@ func (r *Registry) Register(loader StackLoader) error {
 
 	// Check if the name is already registered.
 	if _, exists := r.loaders[name]; exists {
-		return fmt.Errorf(errFmtWithName, ErrDuplicateLoader, name)
+		return fmt.Errorf(errFmtWithName, errUtils.ErrDuplicateLoader, name)
 	}
 
 	// Check if any extensions conflict.
 	for _, ext := range loader.Extensions() {
 		normalizedExt := normalizeExtension(ext)
 		if existingName, exists := r.extensions[normalizedExt]; exists {
-			return fmt.Errorf("%w: extension %s already registered for %s", ErrDuplicateLoader, ext, existingName)
+			return fmt.Errorf("%w: extension %s already registered for %s", errUtils.ErrDuplicateLoader, ext, existingName)
 		}
 	}
 
@@ -73,12 +74,12 @@ func (r *Registry) GetByExtension(ext string) (StackLoader, error) {
 	normalizedExt := normalizeExtension(ext)
 	loaderName, exists := r.extensions[normalizedExt]
 	if !exists {
-		return nil, fmt.Errorf(errFmtWithName, ErrLoaderNotFound, ext)
+		return nil, fmt.Errorf(errFmtWithName, errUtils.ErrLoaderNotFound, ext)
 	}
 
 	loader, exists := r.loaders[loaderName]
 	if !exists {
-		return nil, fmt.Errorf("%w: %s (registered but not found)", ErrLoaderNotFound, ext)
+		return nil, fmt.Errorf("%w: %s (registered but not found)", errUtils.ErrLoaderNotFound, ext)
 	}
 
 	return loader, nil
@@ -93,7 +94,7 @@ func (r *Registry) GetByName(name string) (StackLoader, error) {
 
 	loader, exists := r.loaders[name]
 	if !exists {
-		return nil, fmt.Errorf(errFmtWithName, ErrLoaderNotFound, name)
+		return nil, fmt.Errorf(errFmtWithName, errUtils.ErrLoaderNotFound, name)
 	}
 
 	return loader, nil
@@ -158,7 +159,7 @@ func (r *Registry) Unregister(name string) error {
 
 	loader, exists := r.loaders[name]
 	if !exists {
-		return fmt.Errorf(errFmtWithName, ErrLoaderNotFound, name)
+		return fmt.Errorf(errFmtWithName, errUtils.ErrLoaderNotFound, name)
 	}
 
 	// Remove extensions first.
