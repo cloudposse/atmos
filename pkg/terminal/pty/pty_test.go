@@ -95,13 +95,16 @@ func TestExecWithPTY_WithMasking(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
-
-	// Echo a known AWS access key pattern.
 	secretKey := "AKIAIOSFODNN7EXAMPLE"
-	cmd := exec.Command("echo", secretKey)
+
+	// Subprocess writes output then sleeps briefly before exiting.
+	// The sleep ensures the PTY has time to read all buffered output before
+	// the subprocess exits and triggers EIO. This avoids the race condition
+	// described in https://go.dev/issue/57141
+	cmd := exec.Command("sh", "-c", "printf '%s\\n' '"+secretKey+"'; sleep 0.1")
 
 	opts := &Options{
-		Stdin:         strings.NewReader(""), // Provide empty stdin for CI environments.
+		Stdin:         strings.NewReader(""),
 		Stdout:        &stdout,
 		Masker:        ioCtx.Masker(),
 		EnableMasking: true,
@@ -140,12 +143,16 @@ func TestExecWithPTY_MaskingDisabled(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
-
 	secretKey := "AKIAIOSFODNN7EXAMPLE"
-	cmd := exec.Command("echo", secretKey)
+
+	// Subprocess writes output then sleeps briefly before exiting.
+	// The sleep ensures the PTY has time to read all buffered output before
+	// the subprocess exits and triggers EIO. This avoids the race condition
+	// described in https://go.dev/issue/57141
+	cmd := exec.Command("sh", "-c", "printf '%s\\n' '"+secretKey+"'; sleep 0.1")
 
 	opts := &Options{
-		Stdin:         strings.NewReader(""), // Provide empty stdin for CI environments.
+		Stdin:         strings.NewReader(""),
 		Stdout:        &stdout,
 		Masker:        ioCtx.Masker(),
 		EnableMasking: false, // Explicitly disabled.
@@ -160,7 +167,7 @@ func TestExecWithPTY_MaskingDisabled(t *testing.T) {
 
 	// Output SHOULD contain the actual secret when masking is disabled.
 	if !strings.Contains(output, secretKey) {
-		t.Errorf("Output should contain unmasked secret when masking disabled, got: %s", output)
+		t.Errorf("Output should contain unmasked secret when masking disabled, got: %q (bytes: %v)", output, []byte(output))
 	}
 }
 
