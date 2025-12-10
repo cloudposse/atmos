@@ -114,6 +114,21 @@ func (mr *MockProviderMockRecorder) Logout(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockProvider)(nil).Logout), ctx)
 }
 
+// Paths mocks base method.
+func (m *MockProvider) Paths() ([]Path, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Paths")
+	ret0, _ := ret[0].([]Path)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Paths indicates an expected call of Paths.
+func (mr *MockProviderMockRecorder) Paths() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Paths", reflect.TypeOf((*MockProvider)(nil).Paths))
+}
+
 // Name mocks base method.
 func (m *MockProvider) Name() string {
 	m.ctrl.T.Helper()
@@ -169,6 +184,45 @@ func (m *MockProvider) Validate() error {
 func (mr *MockProviderMockRecorder) Validate() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validate", reflect.TypeOf((*MockProvider)(nil).Validate))
+}
+
+// MockProvisioner is a mock of Provisioner interface.
+type MockProvisioner struct {
+	ctrl     *gomock.Controller
+	recorder *MockProvisionerMockRecorder
+	isgomock struct{}
+}
+
+// MockProvisionerMockRecorder is the mock recorder for MockProvisioner.
+type MockProvisionerMockRecorder struct {
+	mock *MockProvisioner
+}
+
+// NewMockProvisioner creates a new mock instance.
+func NewMockProvisioner(ctrl *gomock.Controller) *MockProvisioner {
+	mock := &MockProvisioner{ctrl: ctrl}
+	mock.recorder = &MockProvisionerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockProvisioner) EXPECT() *MockProvisionerMockRecorder {
+	return m.recorder
+}
+
+// ProvisionIdentities mocks base method.
+func (m *MockProvisioner) ProvisionIdentities(ctx context.Context, creds ICredentials) (*ProvisioningResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProvisionIdentities", ctx, creds)
+	ret0, _ := ret[0].(*ProvisioningResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ProvisionIdentities indicates an expected call of ProvisionIdentities.
+func (mr *MockProvisionerMockRecorder) ProvisionIdentities(ctx, creds any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProvisionIdentities", reflect.TypeOf((*MockProvisioner)(nil).ProvisionIdentities), ctx, creds)
 }
 
 // MockIdentity is a mock of Identity interface.
@@ -298,6 +352,21 @@ func (mr *MockIdentityMockRecorder) Logout(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockIdentity)(nil).Logout), ctx)
 }
 
+// Paths mocks base method.
+func (m *MockIdentity) Paths() ([]Path, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Paths")
+	ret0, _ := ret[0].([]Path)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Paths indicates an expected call of Paths.
+func (mr *MockIdentityMockRecorder) Paths() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Paths", reflect.TypeOf((*MockIdentity)(nil).Paths))
+}
+
 // PostAuthenticate mocks base method.
 func (m *MockIdentity) PostAuthenticate(ctx context.Context, params *PostAuthenticateParams) error {
 	m.ctrl.T.Helper()
@@ -378,6 +447,21 @@ func (m *MockAuthManager) Authenticate(ctx context.Context, identityName string)
 func (mr *MockAuthManagerMockRecorder) Authenticate(ctx, identityName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authenticate", reflect.TypeOf((*MockAuthManager)(nil).Authenticate), ctx, identityName)
+}
+
+// AuthenticateProvider mocks base method.
+func (m *MockAuthManager) AuthenticateProvider(ctx context.Context, providerName string) (*WhoamiInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AuthenticateProvider", ctx, providerName)
+	ret0, _ := ret[0].(*WhoamiInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AuthenticateProvider indicates an expected call of AuthenticateProvider.
+func (mr *MockAuthManagerMockRecorder) AuthenticateProvider(ctx, providerName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthenticateProvider", reflect.TypeOf((*MockAuthManager)(nil).AuthenticateProvider), ctx, providerName)
 }
 
 // GetCachedCredentials mocks base method.
@@ -553,45 +637,45 @@ func (mr *MockAuthManagerMockRecorder) ListProviders() *gomock.Call {
 }
 
 // Logout mocks base method.
-func (m *MockAuthManager) Logout(ctx context.Context, identityName string) error {
+func (m *MockAuthManager) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Logout", ctx, identityName)
+	ret := m.ctrl.Call(m, "Logout", ctx, identityName, deleteKeychain)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Logout indicates an expected call of Logout.
-func (mr *MockAuthManagerMockRecorder) Logout(ctx, identityName any) *gomock.Call {
+func (mr *MockAuthManagerMockRecorder) Logout(ctx, identityName, deleteKeychain any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockAuthManager)(nil).Logout), ctx, identityName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockAuthManager)(nil).Logout), ctx, identityName, deleteKeychain)
 }
 
 // LogoutAll mocks base method.
-func (m *MockAuthManager) LogoutAll(ctx context.Context) error {
+func (m *MockAuthManager) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LogoutAll", ctx)
+	ret := m.ctrl.Call(m, "LogoutAll", ctx, deleteKeychain)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // LogoutAll indicates an expected call of LogoutAll.
-func (mr *MockAuthManagerMockRecorder) LogoutAll(ctx any) *gomock.Call {
+func (mr *MockAuthManagerMockRecorder) LogoutAll(ctx, deleteKeychain any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutAll", reflect.TypeOf((*MockAuthManager)(nil).LogoutAll), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutAll", reflect.TypeOf((*MockAuthManager)(nil).LogoutAll), ctx, deleteKeychain)
 }
 
 // LogoutProvider mocks base method.
-func (m *MockAuthManager) LogoutProvider(ctx context.Context, providerName string) error {
+func (m *MockAuthManager) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LogoutProvider", ctx, providerName)
+	ret := m.ctrl.Call(m, "LogoutProvider", ctx, providerName, deleteKeychain)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // LogoutProvider indicates an expected call of LogoutProvider.
-func (mr *MockAuthManagerMockRecorder) LogoutProvider(ctx, providerName any) *gomock.Call {
+func (mr *MockAuthManagerMockRecorder) LogoutProvider(ctx, providerName, deleteKeychain any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutProvider", reflect.TypeOf((*MockAuthManager)(nil).LogoutProvider), ctx, providerName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogoutProvider", reflect.TypeOf((*MockAuthManager)(nil).LogoutProvider), ctx, providerName, deleteKeychain)
 }
 
 // PrepareShellEnvironment mocks base method.

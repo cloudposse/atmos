@@ -20,6 +20,7 @@ type StyleSet struct {
 	Warning lipgloss.Style
 	Error   lipgloss.Style
 	Info    lipgloss.Style
+	Notice  lipgloss.Style
 	Debug   lipgloss.Style
 	Trace   lipgloss.Style
 
@@ -29,6 +30,7 @@ type StyleSet struct {
 	Command     lipgloss.Style
 	Description lipgloss.Style
 	Label       lipgloss.Style // Section labels/headers (non-status)
+	Spinner     lipgloss.Style // Loading/progress indicators
 
 	// Table styles
 	TableHeader    lipgloss.Style
@@ -107,6 +109,7 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		Warning: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
 		Error:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)),
 		Info:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Link)),
+		Notice:  lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
 		Debug:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
 		Trace:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)).Faint(true),
 
@@ -116,6 +119,7 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		Command:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Primary)),
 		Description: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextPrimary)),
 		Label:       lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Primary)).Bold(true),
+		Spinner:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Spinner)),
 
 		// Table styles
 		TableHeader:    getTableHeaderStyle(scheme),
@@ -368,6 +372,23 @@ func InitializeStylesFromTheme(themeName string) error {
 	return nil
 }
 
+// InvalidateStyleCache clears the cached styles, forcing them to be regenerated.
+// This is needed when the terminal color profile changes (e.g., NO_COLOR is set)
+// because lipgloss styles bake in ANSI codes at creation time.
+//
+// Note: This also regenerates the deprecated theme.Styles global variable
+// to ensure backward compatibility with code still using the legacy API.
+func InvalidateStyleCache() {
+	CurrentStyles = nil
+	currentThemeName = ""
+	lastColorScheme = nil
+
+	// Force regeneration of legacy Styles global variable.
+	// This is needed because some code still uses theme.Styles.Checkmark/XMark
+	// which have ANSI codes baked in at creation time.
+	refreshLegacyStyles()
+}
+
 // getActiveThemeName determines the active theme name from configuration or environment.
 func getActiveThemeName() string {
 	// Bind environment variables on demand to ensure they're available
@@ -432,6 +453,16 @@ func GetInfoStyle() lipgloss.Style {
 		return lipgloss.NewStyle()
 	}
 	return styles.Info
+}
+
+// GetNoticeStyle returns the notice style from the current theme.
+// Notice style is used for neutral informational messages, typically in empty states.
+func GetNoticeStyle() lipgloss.Style {
+	styles := GetCurrentStyles()
+	if styles == nil {
+		return lipgloss.NewStyle()
+	}
+	return styles.Notice
 }
 
 // GetDebugStyle returns the debug style from the current theme.

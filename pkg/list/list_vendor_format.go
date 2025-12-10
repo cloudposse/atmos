@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -26,7 +27,7 @@ var (
 )
 
 // buildVendorRows constructs the slice of row maps for the vendor table.
-func buildVendorRows(vendorInfos []VendorInfo, columns []schema.ListColumnConfig) []map[string]interface{} {
+func buildVendorRows(vendorInfos []extract.VendorInfo, columns []schema.ListColumnConfig) []map[string]interface{} {
 	var rows []map[string]interface{}
 	for _, vi := range vendorInfos {
 		row := make(map[string]interface{})

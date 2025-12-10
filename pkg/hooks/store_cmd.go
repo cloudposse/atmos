@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 

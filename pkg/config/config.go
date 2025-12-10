@@ -18,6 +18,9 @@ import (
 // https://dev.to/techschoolguru/load-config-from-file-environment-variables-in-golang-with-viper-2j2d
 // https://medium.com/@bnprashanth256/reading-configuration-files-and-environment-variables-in-go-golang-c2607f912b63
 //
+// NOTE: Global flags (like --profile) must be synced to Viper before calling this function.
+// This is done by syncGlobalFlagsToViper() in cmd/root.go PersistentPreRun.
+//
 // TODO: Change configAndStacksInfo to pointer.
 // Temporarily suppressing gocritic warnings; refactoring InitCliConfig would require extensive changes.
 //
@@ -195,23 +198,67 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 // AtmosConfigAbsolutePaths converts all base paths in the configuration to absolute paths.
 // This function sets TerraformDirAbsolutePath, HelmfileDirAbsolutePath, PackerDirAbsolutePath,
 // StacksBaseAbsolutePath, IncludeStackAbsolutePaths, and ExcludeStackAbsolutePaths.
-func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
-	// Convert the base path to an absolute path if it's relative.
-	// This ensures all subsequent path operations work correctly regardless of where atmos is run from.
-	if !filepath.IsAbs(atmosConfig.BasePath) {
-		absBasePath, err := filepath.Abs(atmosConfig.BasePath)
-		if err != nil {
-			return fmt.Errorf("failed to convert base_path to absolute: %w", err)
-		}
-		atmosConfig.BasePath = absBasePath
+// ResolveAbsolutePath converts a path to absolute form, resolving relative paths.
+// Relative to the CLI config directory (where atmos.yaml is located) instead of CWD.
+// This allows ATMOS_BASE_PATH to work correctly when set to a relative path.
+//
+// Resolution order:
+// 1. If path is already absolute → return as-is
+// 2. If path is relative and cliConfigPath is set → resolve relative to cliConfigPath
+// 3. Otherwise → resolve relative to current working directory (fallback for backwards compatibility).
+func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
+	// If already absolute, return as-is.
+	if filepath.IsAbs(path) {
+		return path, nil
 	}
 
-	// Convert stacks base path to an absolute path
-	stacksBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+	// If we have a CLI config path, resolve relative to it.
+	// This is the key fix: when ATMOS_BASE_PATH is relative (e.g., "../../.."),
+	// we need to resolve it relative to where atmos.yaml is, not relative to CWD.
+	if cliConfigPath != "" {
+		basePath := filepath.Join(cliConfigPath, path)
+		absPath, err := filepath.Abs(basePath)
+		if err != nil {
+			return "", fmt.Errorf("resolving path %q relative to config %q: %w", path, cliConfigPath, err)
+		}
+		return absPath, nil
+	}
+
+	// Fallback: resolve relative to CWD (for backwards compatibility when cliConfigPath is empty).
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolving path %q: %w", path, err)
+	}
+	return absPath, nil
+}
+
+func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
+	// First, resolve the base path itself to an absolute path.
+	// Relative paths are resolved relative to atmos.yaml location (atmosConfig.CliConfigPath).
+	var atmosBasePathAbs string
+	var err error
+	atmosBasePathAbs, err = resolveAbsolutePath(atmosConfig.BasePath, atmosConfig.CliConfigPath)
+	if err != nil {
+		return err
+	}
+
+	// Clean up any path duplication that might occur from incorrect configuration or symlink resolution.
+	atmosBasePathAbs = u.CleanDuplicatedPath(atmosBasePathAbs)
+
+	// Store the absolute base path in BasePathAbsolute field.
+	// This allows other code (like schema validation) to use the absolute path while
+	// preserving the original BasePath value (which may be relative) for display/serialization.
+	atmosConfig.BasePathAbsolute = atmosBasePathAbs
+
+	// Convert stacks base path to an absolute path.
+	// Now we join the absolute base path with the stacks base path.
+	stacksBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Stacks.BasePath)
 	stacksBaseAbsPath, err := filepath.Abs(stacksBasePath)
 	if err != nil {
 		return err
 	}
+	// Clean up any path duplication that might occur from incorrect configuration or symlink resolution.
+	stacksBaseAbsPath = u.CleanDuplicatedPath(stacksBaseAbsPath)
 	atmosConfig.StacksBaseAbsolutePath = stacksBaseAbsPath
 
 	// Convert the included stack paths to absolute paths
@@ -229,7 +276,7 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.ExcludeStackAbsolutePaths = excludeStackAbsPaths
 
 	// Convert Terraform dir to an absolute path.
-	terraformBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath)
+	terraformBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.Terraform.BasePath)
 	terraformDirAbsPath, err := filepath.Abs(terraformBasePath)
 	if err != nil {
 		return err
@@ -237,7 +284,7 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.TerraformDirAbsolutePath = terraformDirAbsPath
 
 	// Convert Helmfile dir to an absolute path.
-	helmfileBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
+	helmfileBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.Helmfile.BasePath)
 	helmfileDirAbsPath, err := filepath.Abs(helmfileBasePath)
 	if err != nil {
 		return err
@@ -245,7 +292,7 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 	atmosConfig.HelmfileDirAbsolutePath = helmfileDirAbsPath
 
 	// Convert Packer dir to an absolute path.
-	packerBasePath := u.JoinPath(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
+	packerBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.Packer.BasePath)
 	packerDirAbsPath, err := filepath.Abs(packerBasePath)
 	if err != nil {
 		return err

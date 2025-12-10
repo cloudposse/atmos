@@ -15,6 +15,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 //go:embed markdown/atmos_version_list_usage.md
@@ -88,7 +89,9 @@ func fetchReleasesCmd(client GitHubClient, opts ReleaseOptions) tea.Cmd {
 	}
 }
 
-// fetchReleasesWithSpinner fetches releases with a spinner if TTY is available.
+// fetchReleasesWithSpinner fetches releases for the cloudposse/atmos repository and displays a spinner on stderr when a TTY is available.
+// If a TTY is present, an interactive spinner is shown while fetching; any error from the spinner runtime or the fetch is returned.
+// If no TTY is present, releases are fetched directly via the provided client and any client error is returned.
 func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*github.RepositoryRelease, error) {
 	defer perf.Track(nil, "version.fetchReleasesWithSpinner")()
 
@@ -98,6 +101,7 @@ func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*gith
 		// Create spinner model.
 		s := spinner.New()
 		s.Spinner = spinner.Dot
+		s.Style = theme.GetCurrentStyles().Spinner
 
 		// Fetch releases with spinner.
 		m := &listModel{spinner: s, client: client, opts: opts}
@@ -152,7 +156,7 @@ var listCmd = &cobra.Command{
 		// Validate format.
 		normalizedFormat := strings.ToLower(listFormat)
 		if normalizedFormat != "table" && normalizedFormat != "json" && normalizedFormat != "yaml" {
-			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrUnsupportedOutputFormat, listFormat)
+			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrInvalidFormat, listFormat)
 		}
 
 		// Parse since date if provided.
@@ -188,7 +192,7 @@ var listCmd = &cobra.Command{
 		case "yaml":
 			return formatReleaseListYAML(releases)
 		default:
-			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrUnsupportedOutputFormat, listFormat)
+			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrInvalidFormat, listFormat)
 		}
 	},
 }

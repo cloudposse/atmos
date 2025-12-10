@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
 // PermissionCache stores persistent permission decisions.
@@ -30,7 +32,7 @@ type PermissionSet struct {
 func NewPermissionCache(basePath string) (*PermissionCache, error) {
 	// Default to .atmos/ai.settings.local.json if basePath is empty.
 	if basePath == "" {
-		home, err := os.UserHomeDir()
+		home, err := homedir.Dir()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get home directory: %w", err)
 		}

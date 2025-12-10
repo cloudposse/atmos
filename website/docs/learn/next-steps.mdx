@@ -1,0 +1,191 @@
+---
+title: What's Next
+sidebar_position: 9
+sidebar_label: Next Steps
+description: Where to go after learning the basics
+id: next-steps
+---
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+You've completed the Learn Atmos path! You understand components, stacks, YAML configuration, imports, inheritance, organization, and how to connect components. Now let's explore what's next.
+</Intro>
+
+## What You've Learned
+
+Over the last 8 pages, you've built a solid foundation in Atmos:
+
+✅ **Why Atmos exists** - Solving configuration complexity for enterprise infrastructure
+✅ **Core concepts** - Components, stacks, and separation of configuration from code
+✅ **Your first stack** - A working example from scratch
+✅ **YAML in Atmos** - Scope, deep merge, tags vs templates
+✅ **Imports** - Reusing configuration across stacks
+✅ **Inheritance** - Creating component variations without duplication
+✅ **Organization** - Structuring stacks for maintainability and scale
+✅ **Connecting components** - Sharing data via remote state
+
+This is enough to build real infrastructure with Atmos. Everything else is refinement.
+
+## Learn Advanced Techniques
+
+Ready to level up? Explore advanced Atmos features:
+
+<ActionCard>
+### Advanced Stack Configuration
+
+Go deeper into stack mechanics:
+
+- **[Advanced Imports](/stacks/imports)** - Templates, context, and dynamic imports
+- **[Multiple Inheritance](/howto/inheritance)** - Mixins and hierarchical inheritance
+- **[Stack Dependencies](/stacks/settings/depends_on)** - Explicit component ordering
+- **[Stack Overrides](/stacks/overrides)** - Selective configuration replacement
+- **[Stack Hooks](/stacks/hooks)** - Run commands before/after operations
+
+<PrimaryCTA to="/stacks/">Explore Stack Configuration</PrimaryCTA>
+</ActionCard>
+
+<ActionCard>
+### Templates & Functions
+
+Learn Atmos templating:
+
+- **[YAML Functions](/functions/yaml/)** - Native YAML extensions
+- **[Template Functions](/functions/template/)** - Go template functions
+- **[Gomplate Integration](/templates/)** - Advanced templating with datasources
+
+<PrimaryCTA to="/functions/">Explore Functions</PrimaryCTA>
+</ActionCard>
+
+<ActionCard>
+### Workflows
+
+Automate complex deployments:
+
+- **[Workflow Basics](/workflows)** - Multi-step automation
+- **[Workflow Orchestration](/workflows)** - Conditional logic and error handling
+- **[Custom Commands](/cli/configuration/commands)** - Extend Atmos with your own commands
+
+<PrimaryCTA to="/workflows">Learn Workflows</PrimaryCTA>
+</ActionCard>
+
+<ActionCard>
+### Validation & Policy
+
+Enforce standards and prevent errors:
+
+- **[Schema Validation](/cli/commands/validate/schema)** - JSON Schema for stack configurations
+- **[OPA Policies](/cli/commands/validate/stacks)** - Policy-as-code with Open Policy Agent
+- **[Component Validation](/cli/commands/validate/component)** - Validate before deployment
+
+<PrimaryCTA to="/validation/validating">Learn Validation</PrimaryCTA>
+</ActionCard>
+
+<ActionCard>
+### Vendoring
+
+Manage external components:
+
+- **[Vendor Configuration](/vendor/)** - Pull components from remote sources
+- **[Component Libraries](/vendor/component-manifest)** - Share components across teams
+- **[Version Management](/vendor/vendor-config)** - Lock dependencies for consistency
+
+<PrimaryCTA to="/vendor/">Learn Vendoring</PrimaryCTA>
+</ActionCard>
+
+## Best Practices & Patterns
+
+Learn from real-world experience:
+
+- **[Best Practices](/best-practices/)** - Production-ready patterns
+- **[Design Patterns](/design-patterns/)** - Proven architectural approaches
+- **[Troubleshooting](/troubleshoot/debugging)** - Common issues and solutions
+
+## Migrate from Other Tools
+
+Coming from another tool? We have migration guides:
+
+- **[From Native Terraform](/migration/native-terraform)** - You're already 90% there - minimal changes needed
+- **[From Terragrunt](/migration/terragrunt)** - Concept mapping and migration steps
+- **[From Terraform Workspaces](/migration/terraform-workspaces)** - Moving away from workspaces
+- **[Terraform Maturity Journey](/intro/why-atmos/)** - Understanding where you are and where you're going
+
+## Get Help & Connect
+
+You're not alone! Join the community:
+
+- **[Slack Community](/community/slack)** - Ask questions, share solutions
+- **[Office Hours](/community/office-hours)** - Weekly live support
+- **[GitHub Discussions](https://github.com/cloudposse/atmos/discussions)** - Longer-form discussions
+- **[GitHub Issues](https://github.com/cloudposse/atmos/issues)** - Bug reports and feature requests
+
+## Quick Reference
+
+Bookmark these for quick lookups:
+
+- **[CLI Commands](/cli/commands/)** - Complete command reference
+- **[Configuration Reference](/cli/configuration)** - `atmos.yaml` options
+- **[Glossary](/terms/)** - Atmos terminology
+- **[Cheat Sheets](/cheatsheets/commands)** - Quick reference guides
+
+## Real-World Examples
+
+See Atmos in action:
+
+- **[Example Stacks](https://github.com/cloudposse/atmos/tree/main/examples)** - Sample configurations
+- **[Reference Architecture](https://github.com/cloudposse/reference-architecture-aws)** - Production AWS architecture
+- **[Component Library](https://github.com/cloudposse/terraform-aws-components)** - Reusable Terraform components
+
+## Keep Learning
+
+Atmos is actively developed. Stay up to date:
+
+- **[Changelog](https://github.com/cloudposse/atmos/releases)** - Latest features and fixes
+- **[Roadmap](https://github.com/cloudposse/atmos/milestones)** - Upcoming features
+- **[Blog](https://cloudposse.com/blog/)** - Deep dives and tutorials
+
+## What to Build
+
+Here are some projects to solidify your learning:
+
+### Beginner Projects
+
+1. **Multi-environment VPC** - Deploy the same VPC to dev, staging, prod with different CIDR blocks
+2. **Shared services architecture** - Central account with shared RDS, accessed by app accounts
+3. **Component library** - Create abstract base components for your team to inherit from
+
+### Intermediate Projects
+
+1. **Multi-region deployment** - Same stack across multiple AWS regions
+2. **Custom workflow** - Automate deployment of 5+ dependent components in order
+3. **Validation policies** - OPA policies enforcing naming conventions and tagging
+
+### Advanced Projects
+
+1. **Multi-cloud architecture** - AWS and GCP components in the same stack
+2. **GitOps pipeline** - Automated Atmos deployment via GitHub Actions
+3. **Component vendoring** - Pull and customize external component libraries
+
+## You're Ready
+
+You have everything you need to build production infrastructure with Atmos. The rest is practice and refinement.
+
+**Start small.** Deploy a VPC. Add an EKS cluster. Connect them. Build from there.
+
+**Keep it simple.** Use advanced features when you need them, not before.
+
+**Ask for help.** The community is friendly and responsive.
+
+Welcome to the Atmos community. We're excited to see what you build! 🚀
+
+---
+
+## Quick Links
+
+<div className="button-group">
+  <a href="/best-practices/" className="button button--primary button--lg">Best Practices</a>
+  <a href="/stacks/" className="button button--secondary button--lg">Stack Reference</a>
+  <a href="/cli/commands/" className="button button--secondary button--lg">CLI Commands</a>
+  <a href="/community/slack" className="button button--secondary button--lg">Join Slack</a>
+</div>

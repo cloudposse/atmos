@@ -1,0 +1,18 @@
+base_path: "./"
+
+components:
+  terraform:
+    # Reference shared components instead of local duplicates
+    base_path: "../../components/terraform"
+    apply_auto_approve: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  level: Info

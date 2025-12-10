@@ -1,0 +1,280 @@
+package list
+
+import (
+	"testing"
+
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	l "github.com/cloudposse/atmos/pkg/list"
+	"github.com/cloudposse/atmos/pkg/list/errors"
+)
+
+// setupTestCommand creates a test command with the necessary flags.
+func setupTestCommand(use string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use: use,
+	}
+	cmd.PersistentFlags().String("format", "", "Output format")
+	cmd.PersistentFlags().String("delimiter", "", "Delimiter for CSV/TSV output")
+	cmd.PersistentFlags().String("stack", "", "Stack pattern")
+	cmd.PersistentFlags().String("query", "", "JQ query")
+	cmd.PersistentFlags().Int("max-columns", 0, "Maximum columns")
+	cmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing")
+	cmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing")
+	return cmd
+}
+
+// TestComponentDefinitionNotFoundError tests that the ComponentDefinitionNotFoundError.
+func TestComponentDefinitionNotFoundError(t *testing.T) {
+	testCases := []struct {
+		name           string
+		componentName  string
+		expectedOutput string
+		runFunc        func(cmd *cobra.Command, args []string) (string, error)
+	}{
+		{
+			name:           "list values - component not found",
+			componentName:  "nonexistent-component",
+			expectedOutput: "component 'nonexistent-component' does not exist",
+			runFunc: func(cmd *cobra.Command, args []string) (string, error) {
+				return "", &errors.ComponentDefinitionNotFoundError{Component: args[0]}
+			},
+		},
+		{
+			name:           "list settings - component not found",
+			componentName:  "nonexistent-component",
+			expectedOutput: "component 'nonexistent-component' does not exist",
+			runFunc: func(cmd *cobra.Command, args []string) (string, error) {
+				return "", &errors.ComponentDefinitionNotFoundError{Component: args[0]}
+			},
+		},
+		{
+			name:           "list metadata - component not found",
+			componentName:  "nonexistent-component",
+			expectedOutput: "component 'nonexistent-component' does not exist",
+			runFunc: func(cmd *cobra.Command, args []string) (string, error) {
+				return "", &errors.ComponentDefinitionNotFoundError{Component: args[0]}
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create test command
+			cmd := setupTestCommand(tc.name)
+			args := []string{tc.componentName}
+
+			// Mock the listValues/listSettings/listMetadata function
+			mockRunFunc := tc.runFunc
+
+			// Run the command with the mocked function
+			output, err := mockRunFunc(cmd, args)
+			assert.Equal(t, "", output)
+			assert.Error(t, err)
+
+			// Check that the error is of the expected type
+			var componentNotFoundErr *errors.ComponentDefinitionNotFoundError
+			assert.ErrorAs(t, err, &componentNotFoundErr)
+			assert.Equal(t, tc.componentName, componentNotFoundErr.Component)
+			assert.Contains(t, componentNotFoundErr.Error(), tc.expectedOutput)
+
+			// Verify that the error would be properly returned by the RunE function
+			// This simulates what would happen in the actual command execution
+			// where errors are returned to main() instead of being logged
+			assert.NotNil(t, err, "Error should be returned to be handled by main()")
+		})
+	}
+}
+
+// TestNoValuesFoundError tests that the NoValuesFoundError is properly handled.
+func TestNoValuesFoundError(t *testing.T) {
+	testCases := []struct {
+		name            string
+		componentName   string
+		query           string
+		expectedOutput  string
+		runFunc         func(cmd *cobra.Command, args []string) (string, error)
+		shouldReturnNil bool
+	}{
+		{
+			name:           "list values - no values found",
+			componentName:  "test-component",
+			expectedOutput: "No values found for component 'test-component'",
+			runFunc: func(cmd *cobra.Command, args []string) (string, error) {
+				return "", &errors.NoValuesFoundError{Component: args[0]}
+			},
+			shouldReturnNil: false,
+		},
+		{
+			name:           "list vars - no vars found",
+			componentName:  "test-component",
+			query:          ".vars",
+			expectedOutput: "No vars found for component 'test-component'",
+			runFunc: func(cmd *cobra.Command, args []string) (string, error) {
+				cmd.Flags().Set("query", ".vars")
+				return "", &errors.NoValuesFoundError{Component: args[0]}
+			},
+			shouldReturnNil: true,
+		},
+		{
+			name:           "list settings - no settings found with component",
+			componentName:  "test-component",
+			expectedOutput: "No settings found for component 'test-component'",
+			runFunc: func(cmd *cobra.Command, args []string) (string, error) {
+				return "", &errors.NoValuesFoundError{Component: args[0]}
+			},
+			shouldReturnNil: false,
+		},
+		{
+			name:           "list settings - no settings found without component",
+			componentName:  "",
+			expectedOutput: "No settings found",
+			runFunc: func(cmd *cobra.Command, args []string) (string, error) {
+				return "", &errors.NoValuesFoundError{}
+			},
+			shouldReturnNil: false,
+		},
+		{
+			name:           "list metadata - no metadata found with component",
+			componentName:  "test-component",
+			expectedOutput: "No metadata found for component 'test-component'",
+			runFunc: func(cmd *cobra.Command, args []string) (string, error) {
+				return "", &errors.NoValuesFoundError{Component: args[0]}
+			},
+			shouldReturnNil: false,
+		},
+		{
+			name:           "list metadata - no metadata found without component",
+			componentName:  "",
+			expectedOutput: "No metadata found",
+			runFunc: func(cmd *cobra.Command, args []string) (string, error) {
+				return "", &errors.NoValuesFoundError{}
+			},
+			shouldReturnNil: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := setupTestCommand(tc.name)
+			args := []string{}
+			if tc.componentName != "" {
+				args = append(args, tc.componentName)
+			}
+
+			if tc.query != "" {
+				cmd.Flags().Set("query", tc.query)
+			}
+
+			mockRunFunc := tc.runFunc
+
+			output, err := mockRunFunc(cmd, args)
+			assert.Equal(t, "", output)
+			assert.Error(t, err)
+
+			var noValuesErr *errors.NoValuesFoundError
+			assert.ErrorAs(t, err, &noValuesErr)
+		})
+	}
+}
+
+func TestListCmds_Error(t *testing.T) {
+	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	err := componentsCmd.RunE(componentsCmd, []string{"--invalid-flag"})
+	assert.Error(t, err, "list components command should return an error when called with invalid flags")
+
+	err = metadataCmd.RunE(metadataCmd, []string{"--invalid-flag"})
+	assert.Error(t, err, "list metadata command should return an error when called with invalid flags")
+
+	err = settingsCmd.RunE(settingsCmd, []string{"--invalid-flag"})
+	assert.Error(t, err, "list settings command should return an error when called with invalid flags")
+
+	err = valuesCmd.RunE(valuesCmd, []string{"--invalid-flag"})
+	assert.Error(t, err, "list values command should return an error when called with invalid flags")
+
+	err = vendorCmd.RunE(vendorCmd, []string{"--invalid-flag"})
+	assert.Error(t, err, "list vendor command should return an error when called with invalid flags")
+
+	err = workflowsCmd.RunE(workflowsCmd, []string{"--invalid-flag"})
+	assert.Error(t, err, "list workflows command should return an error when called with invalid flags")
+}
+
+// TestListCmds_NoResults verifies that the list commands can handle empty results.
+// This tests the condition that triggers "No components found" and "No stacks found" messages.
+// Note: This test verifies the underlying filter functions return empty slices, which is the
+// condition that causes the RunE functions to display the "No X found" UI error messages.
+func TestListCmds_NoResults(t *testing.T) {
+	// Test that FilterAndListComponents can return empty results
+	t.Run("list components returns empty when no components exist", func(t *testing.T) {
+		emptyStacksMap := map[string]any{
+			"test-stack": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{},
+					"helmfile":  map[string]any{},
+				},
+			},
+		}
+
+		output, err := l.FilterAndListComponents("", emptyStacksMap)
+		assert.NoError(t, err)
+		assert.Empty(t, output, "Expected empty output when no components exist")
+	})
+
+	// Test that FilterAndListStacks can return empty results
+	t.Run("list stacks returns empty when no matching stacks exist", func(t *testing.T) {
+		stacksMap := map[string]any{
+			"test-stack": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"existing-component": map[string]any{},
+					},
+				},
+			},
+		}
+
+		output, err := l.FilterAndListStacks(stacksMap, "nonexistent-component")
+		assert.NoError(t, err)
+		assert.Nil(t, output, "Expected nil output when no matching stacks exist")
+	})
+}
+
+// TestListCommandProvider tests the ListCommandProvider interface methods.
+func TestListCommandProvider(t *testing.T) {
+	provider := &ListCommandProvider{}
+
+	t.Run("GetCommand returns listCmd", func(t *testing.T) {
+		cmd := provider.GetCommand()
+		require.NotNil(t, cmd)
+		assert.Equal(t, "list", cmd.Use)
+	})
+
+	t.Run("GetName returns list", func(t *testing.T) {
+		assert.Equal(t, "list", provider.GetName())
+	})
+
+	t.Run("GetGroup returns Stack Introspection", func(t *testing.T) {
+		assert.Equal(t, "Stack Introspection", provider.GetGroup())
+	})
+
+	t.Run("GetFlagsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetFlagsBuilder())
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetPositionalArgsBuilder())
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetCompatibilityFlags())
+	})
+
+	t.Run("GetAliases returns nil", func(t *testing.T) {
+		assert.Nil(t, provider.GetAliases())
+	})
+}

@@ -4,6 +4,7 @@ import (
 	stdIo "io"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -292,4 +293,132 @@ func TestMaskConfiguration(t *testing.T) {
 // boolPtr returns a pointer to a bool value.
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// TestNewContextRegistersCommonSecrets verifies that common secret patterns
+// are automatically registered when NewContext() is called.
+// This test would have caught the bug where registerCommonSecrets() was never invoked.
+func TestNewContextRegistersCommonSecrets(t *testing.T) {
+	// Reset viper state.
+	viper.Reset()
+	viper.SetDefault("mask", true)
+
+	ctx, err := NewContext()
+	if err != nil {
+		t.Fatalf("NewContext() error = %v", err)
+	}
+
+	masker := ctx.Masker()
+	if masker == nil {
+		t.Fatal("Masker() returned nil")
+	}
+
+	// Verify masker is enabled.
+	if !masker.Enabled() {
+		t.Error("Masker should be enabled by default")
+	}
+
+	// Test cases: known secret values that should be masked.
+	tests := []struct {
+		name   string
+		input  string
+		masked bool
+	}{
+		{
+			name:   "AWS Secret Access Key (40-char base64)",
+			input:  "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+			masked: true,
+		},
+		{
+			name:   "AWS Access Key ID",
+			input:  "AKIAIOSFODNN7EXAMPLE",
+			masked: true,
+		},
+		{
+			name:   "GitHub Personal Access Token (classic)",
+			input:  "ghp_1234567890abcdefghijklmnopqrstuvwxyz",
+			masked: true,
+		},
+		{
+			name:   "GitHub OAuth Token",
+			input:  "gho_abcdefghijklmnopqrstuvwxyz1234567890",
+			masked: true,
+		},
+		{
+			name:   "GitHub Fine-grained PAT",
+			input:  "github_pat_11AAAAAAAAAAAAAAAAAA_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			masked: true,
+		},
+		{
+			name:   "GitLab Personal Access Token",
+			input:  "glpat-abcdefghij1234567890",
+			masked: true,
+		},
+		{
+			name:   "OpenAI API Key",
+			input:  "sk-abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLM",
+			masked: true,
+		},
+		{
+			name:   "Bearer Token",
+			input:  "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0=",
+			masked: true,
+		},
+		{
+			name:   "Regular text should not be masked",
+			input:  "This is just regular text without secrets",
+			masked: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output := masker.Mask(tt.input)
+
+			if tt.masked {
+				// Output should be masked (contain MaskReplacement).
+				if output == tt.input {
+					t.Errorf("Expected input to be masked, but got original value.\nInput:  %s\nOutput: %s", tt.input, output)
+				}
+				// Check that output contains the mask replacement string.
+				if !strings.Contains(output, MaskReplacement) {
+					t.Errorf("Expected output to contain '%s', but got: %s", MaskReplacement, output)
+				}
+			} else if output != tt.input {
+				// Output should NOT be masked (unchanged).
+				t.Errorf("Expected input to remain unchanged, but it was masked.\nInput:  %s\nOutput: %s", tt.input, output)
+			}
+		})
+	}
+}
+
+// TestNewContextWithMaskingDisabled verifies that when masking is disabled,
+// secrets are not masked even though patterns are registered.
+func TestNewContextWithMaskingDisabled(t *testing.T) {
+	// Reset viper state.
+	viper.Reset()
+	viper.Set("mask", false)
+
+	ctx, err := NewContext()
+	if err != nil {
+		t.Fatalf("NewContext() error = %v", err)
+	}
+
+	masker := ctx.Masker()
+	if masker == nil {
+		t.Fatal("Masker() returned nil")
+	}
+
+	// Verify masker is disabled.
+	if masker.Enabled() {
+		t.Error("Masker should be disabled when mask=false")
+	}
+
+	// Test that secrets are NOT masked when masking is disabled.
+	secretKey := "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+	output := masker.Mask(secretKey)
+
+	if output != secretKey {
+		t.Errorf("When masking is disabled, output should be unchanged.\nInput:  %s\nOutput: %s", secretKey, output)
+	}
 }

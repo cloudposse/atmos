@@ -12,6 +12,7 @@ Valid subcommands are:
 • aws
 • completion
 • describe
+• devcontainer
 • docs
 • helmfile
 • help
@@ -20,6 +21,7 @@ Valid subcommands are:
 • mcp-server
 • packer
 • pro
+• profile
 • show
 • support
 • terraform

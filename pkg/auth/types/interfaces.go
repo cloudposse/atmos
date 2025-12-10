@@ -17,6 +17,41 @@ const (
 	CredentialStoreTypeFile          = "file"
 )
 
+// PathType indicates what kind of filesystem entity the path represents.
+type PathType string
+
+const (
+	// PathTypeFile indicates a single file (e.g., ~/.aws/credentials).
+	PathTypeFile PathType = "file"
+	// PathTypeDirectory indicates a directory (e.g., ~/.azure/).
+	PathTypeDirectory PathType = "directory"
+)
+
+// Path represents a credential file or directory used by the provider/identity.
+type Path struct {
+	// Location is the filesystem path (may contain ~ for home directory).
+	Location string `json:"location"`
+
+	// Type indicates if this is a file or directory.
+	Type PathType `json:"type"`
+
+	// Required indicates if path must exist for provider to function.
+	// If false, missing paths are optional (provider works without them).
+	Required bool `json:"required"`
+
+	// Purpose describes what this path is used for (helps with debugging/logging).
+	// Examples: "AWS credentials file", "Azure config directory", "GCP service account key"
+	Purpose string `json:"purpose"`
+
+	// Metadata holds optional provider-specific information.
+	// Consumers can use this for advanced features without breaking interface.
+	// Examples:
+	//   - "selinux_label": "system_u:object_r:container_file_t:s0" (future SELinux support)
+	//   - "read_only": "true" (hint that path should be read-only)
+	//   - "mount_target": "/workspace/.aws" (suggested container path)
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
 // Provider defines the interface that all authentication providers must implement.
 type Provider interface {
 	// Kind returns the provider kind (e.g., "aws/iam-identity-center").
@@ -38,6 +73,11 @@ type Provider interface {
 	// Environment returns environment variables that should be set for this provider.
 	Environment() (map[string]string, error)
 
+	// Paths returns credential files/directories used by this provider.
+	// Returns empty slice if provider doesn't use filesystem credentials (e.g., GitHub tokens).
+	// Consumers decide how to use these paths (mount, copy, delete, etc.).
+	Paths() ([]Path, error)
+
 	// PrepareEnvironment prepares environment variables for external processes (Terraform, workflows, etc.).
 	// Takes current environment and returns modified environment suitable for the provider's SDK/CLI.
 	// Implementations should:
@@ -55,6 +95,16 @@ type Provider interface {
 	// Returns the configured path if set, otherwise a default path.
 	// For display purposes only (may use ~ for home directory).
 	GetFilesDisplayPath() string
+}
+
+// Provisioner is an optional interface that providers can implement
+// to auto-provision identities from external sources (e.g., AWS SSO permission sets).
+// Provisioning is run after successful provider authentication and is non-fatal.
+type Provisioner interface {
+	// ProvisionIdentities provisions identities from the external source.
+	// Returns provisioned identities and metadata, or error if provisioning fails.
+	// Implementations should be non-fatal - errors are logged but don't block authentication.
+	ProvisionIdentities(ctx context.Context, creds ICredentials) (*ProvisioningResult, error)
 }
 
 // PostAuthenticateParams contains parameters for PostAuthenticate method.
@@ -84,6 +134,11 @@ type Identity interface {
 
 	// Environment returns environment variables that should be set for this identity.
 	Environment() (map[string]string, error)
+
+	// Paths returns credential files/directories used by this identity.
+	// Returns empty slice if identity doesn't use filesystem credentials.
+	// Paths are in addition to provider paths (identities can add more files).
+	Paths() ([]Path, error)
 
 	// PrepareEnvironment prepares environment variables for external processes (Terraform, workflows, etc.).
 	// Takes current environment (already modified by provider's PrepareEnvironment) and returns
@@ -129,6 +184,14 @@ type AuthManager interface {
 	// This may trigger interactive authentication flows (SSO device prompts, etc.).
 	// Use this when you want to force fresh authentication (e.g., `auth login` command).
 	Authenticate(ctx context.Context, identityName string) (*WhoamiInfo, error)
+
+	// AuthenticateProvider performs authentication directly with a provider.
+	// This is used for provider-level operations like SSO auto-provisioning where
+	// you want to authenticate to a provider without specifying a particular identity.
+	// If the provider has auto_provision_identities enabled, this will trigger
+	// automatic discovery and provisioning of all available identities.
+	// Use this when you want to authenticate to a provider (e.g., `auth login --provider sso-prod`).
+	AuthenticateProvider(ctx context.Context, providerName string) (*WhoamiInfo, error)
 
 	// Whoami returns information about the specified identity's credentials.
 	// First checks for cached credentials, then falls back to chain authentication
@@ -188,16 +251,19 @@ type AuthManager interface {
 	GetProviders() map[string]schema.Provider
 
 	// Logout removes credentials for the specified identity and its authentication chain.
+	// If deleteKeychain is true, also removes credentials from system keychain.
 	// Best-effort: continues cleanup even if individual steps fail.
-	Logout(ctx context.Context, identityName string) error
+	Logout(ctx context.Context, identityName string, deleteKeychain bool) error
 
 	// LogoutProvider removes all credentials for the specified provider.
+	// If deleteKeychain is true, also removes credentials from system keychain.
 	// Best-effort: continues cleanup even if individual steps fail.
-	LogoutProvider(ctx context.Context, providerName string) error
+	LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error
 
 	// LogoutAll removes all cached credentials for all identities.
+	// If deleteKeychain is true, also removes credentials from system keychain.
 	// Best-effort: continues cleanup even if individual steps fail.
-	LogoutAll(ctx context.Context) error
+	LogoutAll(ctx context.Context, deleteKeychain bool) error
 
 	// GetEnvironmentVariables returns the environment variables for an identity
 	// without performing authentication or validation.

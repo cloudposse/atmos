@@ -4,6 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
 // Provider implements CommandProvider for the mcp-server command.
@@ -22,6 +24,26 @@ func (p *Provider) GetName() string {
 // GetGroup returns the command group for help organization.
 func (p *Provider) GetGroup() string {
 	return "Other Commands"
+}
+
+// GetFlagsBuilder returns the flags builder for this command.
+func (p *Provider) GetFlagsBuilder() flags.Builder {
+	return nil
+}
+
+// GetPositionalArgsBuilder returns the positional args builder for this command.
+func (p *Provider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+// GetCompatibilityFlags returns compatibility flags for this command.
+func (p *Provider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
+}
+
+// GetAliases returns a list of command aliases to register.
+func (p *Provider) GetAliases() []internal.CommandAlias {
+	return nil
 }
 
 func init() {

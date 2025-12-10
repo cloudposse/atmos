@@ -1,0 +1,15 @@
+# This stack has a custom name override
+name: "my-legacy-prod-stack"
+
+import:
+  - catalog/base
+
+vars:
+  environment: prod
+  stage: legacy
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"

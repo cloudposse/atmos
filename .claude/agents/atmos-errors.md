@@ -414,6 +414,106 @@ return errUtils.Build(errUtils.ErrComponentNotFound).
     Err()
 ```
 
+## Usage Examples for Error Messages
+
+When creating errors with complex usage examples (especially for format or syntax errors), you can embed example content using `WithExampleFile()` or `WithExample()`.
+
+### When to Include Examples
+
+Include usage examples when:
+- Error is about invalid format/syntax (e.g., `--format json` vs `--format xml`)
+- Error is about missing or malformed configuration
+- Multiple correct usage patterns exist
+- User needs to see concrete examples to understand the fix
+
+### Example Format Guidelines
+
+**IMPORTANT: Examples should be succinct commands only, NO output.**
+
+Examples should be stored in markdown files and embedded using go:embed:
+
+```markdown
+# examples/version_format.md
+
+- Display version in JSON format
+
+```bash
+$ atmos version --format json
+```
+
+- Display version in YAML format
+
+```bash
+$ atmos version --format yaml
+```
+
+- Pipe JSON output to jq
+
+```bash
+$ atmos version --format json | jq -r .version
+```
+```
+
+**Format rules:**
+- Each example starts with `- Description` (bullet point)
+- Followed by blank line
+- Command in triple backticks with `bash` language hint
+- Commands use `$` prompt
+- NO "Output:" sections
+- NO example output shown
+- Keep it succinct - just show the commands
+
+### Where to Store Examples
+
+**IMPORTANT: Use go:embed for multi-line examples.**
+
+Create markdown files and embed them:
+
+```go
+// internal/exec/version.go
+
+//go:embed examples/version_format.md
+var versionFormatExample string
+
+// Use in error:
+return errUtils.Build(errUtils.ErrVersionFormatInvalid).
+    WithExplanationf("The format '%s' is not supported for version output", format).
+    WithExample(versionFormatExample).
+    WithHint("Use --format json for JSON output").
+    WithHint("Use --format yaml for YAML output").
+    WithContext("format", format).
+    WithExitCode(2).
+    Err()
+```
+
+**File structure:**
+```
+internal/exec/
+├── version.go
+└── examples/
+    ├── version_format.md
+    └── other_examples.md
+```
+
+**Why go:embed:**
+- Clean, readable markdown files (not escaped strings)
+- Proper syntax highlighting in editors
+- Easy to edit without string concatenation hell
+- No escaped backticks or quotes
+
+**Note:** This is different from CLI command usage files which go in `cmd/markdown/atmos_*_usage.md` and are displayed via `--help`.
+
+### Inline Examples for Simple Cases
+
+For simple examples, use `WithExample()` directly:
+
+```go
+return errUtils.Build(errUtils.ErrInvalidFormat).
+    WithExample("```yaml\nworkflows:\n  deploy:\n    steps:\n      - command: terraform apply\n```").
+    WithHint("Check your workflow syntax").
+    Err()
+```
+
 ## Testing & Sentry
 
 Test with `errors.Is()` and `errUtils.GetExitCode()`. Format with `errUtils.Format(err, config)`.

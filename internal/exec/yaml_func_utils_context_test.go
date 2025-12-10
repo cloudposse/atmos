@@ -85,8 +85,9 @@ func TestProcessNodesWithContextNestedMaps(t *testing.T) {
 		},
 	}
 
-	result := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 
+	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, input, result)
 }
@@ -105,8 +106,9 @@ func TestProcessNodesWithContextSlices(t *testing.T) {
 		},
 	}
 
-	result := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 
+	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, input, result)
 }
@@ -126,8 +128,9 @@ func TestProcessNodesWithContextMixedTypes(t *testing.T) {
 		"complex": []any{map[string]any{"nested": true}},
 	}
 
-	result := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	result, err := processNodesWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 
+	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, input, result)
 }
@@ -141,16 +144,19 @@ func TestProcessCustomTagsWithContextSkipFunctions(t *testing.T) {
 
 	// These should not be processed (just returned as-is).
 	input1 := "!terraform.state vpc dev output"
-	result1 := processCustomTagsWithContext(atmosConfig, input1, "test-stack", skip, ctx, nil)
+	result1, err := processCustomTagsWithContext(atmosConfig, input1, "test-stack", skip, ctx, nil)
+	require.NoError(t, err)
 	assert.Equal(t, input1, result1)
 
 	input2 := "!terraform.output vpc dev output"
-	result2 := processCustomTagsWithContext(atmosConfig, input2, "test-stack", skip, ctx, nil)
+	result2, err := processCustomTagsWithContext(atmosConfig, input2, "test-stack", skip, ctx, nil)
+	require.NoError(t, err)
 	assert.Equal(t, input2, result2)
 
 	// Non-skipped functions should still be processed.
 	input3 := "!env HOME"
-	result3 := processCustomTagsWithContext(atmosConfig, input3, "test-stack", skip, ctx, nil)
+	result3, err := processCustomTagsWithContext(atmosConfig, input3, "test-stack", skip, ctx, nil)
+	require.NoError(t, err)
 	// Result should be different (env var value or empty string).
 	assert.IsType(t, "", result3)
 }
@@ -161,7 +167,8 @@ func TestProcessCustomTagsWithContextTemplateFunction(t *testing.T) {
 
 	// Template function should work without errors.
 	input := "!template {{ .test }}"
-	result := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	result, err := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	require.NoError(t, err)
 
 	// Should return a string (the template).
 	assert.IsType(t, "", result)
@@ -173,7 +180,8 @@ func TestProcessCustomTagsWithContextEnvFunction(t *testing.T) {
 
 	// Test !env function.
 	input := "!env USER"
-	result := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	result, err := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	require.NoError(t, err)
 
 	// Should return a string.
 	assert.IsType(t, "", result)
@@ -185,7 +193,8 @@ func TestProcessCustomTagsWithContextUnknownTag(t *testing.T) {
 
 	// Unknown tags should be returned as-is.
 	input := "!unknown.function arg1 arg2"
-	result := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	result, err := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
+	require.NoError(t, err)
 
 	assert.Equal(t, input, result)
 }

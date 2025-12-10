@@ -19,6 +19,7 @@ import (
 	"github.com/versent/saml2aws/v2/pkg/creds"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -57,29 +58,66 @@ func TestSAMLProvider_RequestedSessionSeconds(t *testing.T) {
 }
 
 func TestSAMLProvider_GetProviderType(t *testing.T) {
-	// Explicit driver config always wins.
+	// Explicit driver config always wins, regardless of Playwright driver availability.
 	p := &samlProvider{config: &schema.Provider{ProviderType: "Okta"}, url: "https://idp"}
 	assert.Equal(t, "Okta", p.getDriver())
 
-	// When Playwright drivers are available (or can be downloaded), Browser is preferred.
-	// This is the correct behavior for best compatibility.
-	// The actual driver returned depends on whether playwright drivers are installed.
-	p = &samlProvider{config: &schema.Provider{}, url: "https://accounts.google.com/saml"}
-	driver := p.getDriver()
-	// Should be either "Browser" (if drivers available) or "GoogleApps" (fallback).
-	assert.Contains(t, []string{"Browser", "GoogleApps"}, driver)
+	p = &samlProvider{config: &schema.Provider{Driver: "GoogleApps"}, url: "https://idp"}
+	assert.Equal(t, "GoogleApps", p.getDriver())
 
-	p = &samlProvider{config: &schema.Provider{}, url: "https://example.okta.com"}
-	driver = p.getDriver()
-	assert.Contains(t, []string{"Browser", "Okta"}, driver)
+	// Without explicit driver config, behavior depends on Playwright driver availability.
+	// If drivers are available or can be downloaded, Browser is preferred.
+	// Otherwise, falls back to provider-specific types based on URL.
+	t.Run("provider-specific-fallback-or-browser", func(t *testing.T) {
+		testCases := []struct {
+			name             string
+			url              string
+			expectedFallback string // Expected when no Playwright drivers
+		}{
+			{
+				name:             "google",
+				url:              "https://accounts.google.com/saml",
+				expectedFallback: "GoogleApps",
+			},
+			{
+				name:             "okta",
+				url:              "https://example.okta.com",
+				expectedFallback: "Okta",
+			},
+			{
+				name:             "adfs",
+				url:              "https://corp/adfs/ls",
+				expectedFallback: "ADFS",
+			},
+			{
+				name:             "unknown",
+				url:              "https://idp",
+				expectedFallback: "Browser", // Unknown provider defaults to Browser
+			},
+		}
 
-	p = &samlProvider{config: &schema.Provider{}, url: "https://corp/adfs/ls"}
-	driver = p.getDriver()
-	assert.Contains(t, []string{"Browser", "ADFS"}, driver)
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				// Disable auto-download to avoid affecting fallback behavior.
+				p := &samlProvider{config: &schema.Provider{DownloadBrowserDriver: false}, url: tc.url}
+				driver := p.getDriver()
 
-	// Unknown provider: Browser if drivers available, otherwise Browser with auto-download.
-	p = &samlProvider{config: &schema.Provider{}, url: "https://idp"}
-	assert.Equal(t, "Browser", p.getDriver())
+				// If Playwright drivers are installed, Browser is returned.
+				// Otherwise, provider-specific type is returned.
+				if p.playwrightDriversInstalled() {
+					assert.Equal(t, "Browser", driver, "With Playwright drivers installed, should use Browser")
+				} else {
+					assert.Equal(t, tc.expectedFallback, driver, "Without Playwright drivers, should fall back to provider-specific type")
+				}
+			})
+		}
+	})
+
+	// When DownloadBrowserDriver is explicitly enabled, always expect Browser.
+	t.Run("download-enabled", func(t *testing.T) {
+		p := &samlProvider{config: &schema.Provider{DownloadBrowserDriver: true}, url: "https://accounts.google.com/saml"}
+		assert.Equal(t, "Browser", p.getDriver(), "With download enabled, should always use Browser")
+	})
 }
 
 func TestSAMLProvider_ValidateAndEnvironment(t *testing.T) {
@@ -111,6 +149,10 @@ func (s stubSamlMgr) GetCachedCredentials(context.Context, string) (*types.Whoam
 func (s stubSamlMgr) Authenticate(context.Context, string) (*types.WhoamiInfo, error) {
 	return nil, nil
 }
+
+func (s stubSamlMgr) AuthenticateProvider(context.Context, string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
 func (s stubSamlMgr) Whoami(context.Context, string) (*types.WhoamiInfo, error) { return nil, nil }
 func (s stubSamlMgr) Validate() error                                           { return nil }
 func (s stubSamlMgr) GetDefaultIdentity(_ bool) (string, error)                 { return "", nil }
@@ -123,9 +165,9 @@ func (s stubSamlMgr) GetStackInfo() *schema.ConfigAndStacksInfo                 
 func (s stubSamlMgr) ListProviders() []string                                   { return nil }
 func (s stubSamlMgr) GetIdentities() map[string]schema.Identity                 { return s.idmap }
 func (s stubSamlMgr) GetProviders() map[string]schema.Provider                  { return nil }
-func (s stubSamlMgr) Logout(context.Context, string) error                      { return nil }
-func (s stubSamlMgr) LogoutProvider(context.Context, string) error              { return nil }
-func (s stubSamlMgr) LogoutAll(context.Context) error                           { return nil }
+func (s stubSamlMgr) Logout(context.Context, string, bool) error                { return nil }
+func (s stubSamlMgr) LogoutProvider(context.Context, string, bool) error        { return nil }
+func (s stubSamlMgr) LogoutAll(context.Context, bool) error                     { return nil }
 func (s stubSamlMgr) GetEnvironmentVariables(string) (map[string]string, error) {
 	return make(map[string]string), nil
 }
@@ -628,6 +670,10 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 				t.Setenv("HOME", homeDir)
 				t.Setenv("USERPROFILE", homeDir)
 
+				// Clear homedir cache to ensure environment variables take effect.
+				t.Cleanup(homedir.Reset)
+				homedir.Reset()
+
 				// Create a mock playwright driver directory with a file inside to pass validation.
 				playwrightPath := filepath.Join(homeDir, ".cache", "ms-playwright", "chromium-1084")
 				err := os.MkdirAll(playwrightPath, 0o755)
@@ -642,6 +688,10 @@ func TestSAMLProvider_shouldDownloadBrowser(t *testing.T) {
 				tmpDir := t.TempDir()
 				t.Setenv("HOME", tmpDir)
 				t.Setenv("USERPROFILE", tmpDir)
+
+				// Clear homedir cache to ensure environment variables take effect.
+				t.Cleanup(homedir.Reset)
+				homedir.Reset()
 			}
 
 			result := sp.shouldDownloadBrowser()
@@ -867,4 +917,43 @@ func TestSAMLProvider_Environment_AutoDownload(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSAMLProvider_Paths(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+
+	// Disable homedir cache to ensure our test environment is used.
+	homedir.DisableCache = true
+	t.Cleanup(func() { homedir.DisableCache = false })
+
+	provider, err := NewSAMLProvider("test-saml", &schema.Provider{
+		Kind:   "aws/saml",
+		URL:    "https://idp.example.com/saml",
+		Region: "us-west-2",
+	})
+	require.NoError(t, err)
+
+	paths, err := provider.Paths()
+	assert.NoError(t, err)
+	assert.Len(t, paths, 3, "should return credentials, config, and cache paths")
+
+	// Verify credentials file.
+	assert.Equal(t, types.PathTypeFile, paths[0].Type)
+	assert.True(t, paths[0].Required)
+	assert.Contains(t, paths[0].Location, "credentials")
+	assert.Equal(t, "true", paths[0].Metadata["read_only"])
+
+	// Verify config file.
+	assert.Equal(t, types.PathTypeFile, paths[1].Type)
+	assert.False(t, paths[1].Required, "config file is optional")
+	assert.Contains(t, paths[1].Location, "config")
+	assert.Equal(t, "true", paths[1].Metadata["read_only"])
+
+	// Verify cache directory.
+	assert.Equal(t, types.PathTypeDirectory, paths[2].Type)
+	assert.False(t, paths[2].Required, "cache is optional")
+	assert.Contains(t, paths[2].Purpose, "cache")
+	assert.Equal(t, "false", paths[2].Metadata["read_only"], "cache must be writable")
 }

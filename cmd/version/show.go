@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 //go:embed markdown/atmos_version_show_usage.md
@@ -84,7 +85,7 @@ func fetchRelease(client GitHubClient, versionArg string) (*github.RepositoryRel
 	return client.GetRelease("cloudposse", "atmos", versionArg)
 }
 
-// fetchReleaseWithSpinner fetches a release with a spinner if TTY is available.
+// program fails to run, if the spinner returns a nil or unexpected model, or if the spinner-run model reports an internal error.
 func fetchReleaseWithSpinner(client GitHubClient, versionArg string) (*github.RepositoryRelease, error) {
 	defer perf.Track(nil, "version.fetchReleaseWithSpinner")()
 
@@ -101,6 +102,7 @@ func fetchReleaseWithSpinner(client GitHubClient, versionArg string) (*github.Re
 	// Create spinner model.
 	s := spinner.New()
 	s.Spinner = spinner.Dot
+	s.Style = theme.GetCurrentStyles().Spinner
 
 	// Fetch release with spinner.
 	m := &showModel{spinner: s, client: client, versionArg: versionArg}
@@ -166,7 +168,7 @@ var showCmd = &cobra.Command{
 		case "yaml":
 			return formatReleaseDetailYAML(release)
 		default:
-			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrUnsupportedOutputFormat, showFormat)
+			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrInvalidFormat, showFormat)
 		}
 	},
 }

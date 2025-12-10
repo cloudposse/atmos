@@ -31,6 +31,10 @@
       "base_path": "",
       "command": ""
     },
+    "list": {
+      "format": "",
+      "columns": null
+    },
     "Plugins": null
   },
   "stacks": {
@@ -42,7 +46,12 @@
       "**/_defaults.yaml"
     ],
     "name_pattern": "{stage}",
-    "name_template": ""
+    "name_template": "",
+    "list": {
+      "format": "",
+      "columns": null
+    },
+    "inherit": {}
   },
   "workflows": {
     "base_path": "",
@@ -82,7 +91,7 @@
     "list_merge_strategy": "",
     "terminal": {
       "max_width": 0,
-      "pager": "0",
+      "pager": "false",
       "unicode": false,
       "syntax_highlighting": {
         "enabled": false,
@@ -176,6 +185,7 @@
     }
   },
   "initialized": true,
+  "basePathAbsolute": "/absolute/path/to/repo/examples/demo-stacks",
   "stacksBaseAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/stacks",
   "includeStackAbsolutePaths": [
     "/absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*"
@@ -188,11 +198,8 @@
   "packerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
-    "Check": {
-      "Enabled": false,
-      "Timeout": 0,
-      "Frequency": ""
-    }
+    "check": {},
+    "constraint": {}
   },
   "validate": {
     "editorconfig": {}
@@ -224,5 +231,7 @@
     "host": "",
     "file": "",
     "profile_type": ""
-  }
+  },
+  "profiles": {},
+  "metadata": {}
 }

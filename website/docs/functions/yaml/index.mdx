@@ -44,18 +44,18 @@ YAML supports three types of data: core, defined, and user-defined.
 ## Use-cases
 
  - The [__`!terraform.output`__](/functions/yaml/terraform.output) YAML function allows you to
-   [access component outputs (remote state) directly within Atmos stack manifests](/core-concepts/share-data/remote-state).
+   [access component outputs (remote state) directly within Atmos stack manifests](/stacks/remote-state).
    Note that this requires initializing each component (`terraform/tofu init`), which initializes all Terraform/OpenTofu
    modules and downloads all Terraform/OpenTofu providers, which may significantly impact performance. Consider using `!store` or `!terraform.state` functions instead, which don't have this performance penalty.
 
- - The [__`!terraform.state`__](/functions/yaml/terraform.state) YAML function reads outputs **directly from the configured Terraform or OpenTofu backend**, without initializing providers or running Terraform — it's **very fast** and currently supports [S3 and local backends](/core-concepts/components/terraform/backends) for accessing [remote state](/core-concepts/share-data/remote-state).
+ - The [__`!terraform.state`__](/functions/yaml/terraform.state) YAML function reads outputs **directly from the configured Terraform or OpenTofu backend**, without initializing providers or running Terraform — it's **very fast** and currently supports [S3 and local backends](/components/terraform/backends) for accessing [remote state](/stacks/remote-state).
 
  - The [__`!store`__](/functions/yaml/store) YAML function allows reading the values from a
-   remote [store](/core-concepts/projects/configuration/stores) (e.g. SSM Parameter Store, Artifactory, etc.)
+   remote [store](/cli/configuration/stores) (e.g. SSM Parameter Store, Artifactory, etc.)
    into Atmos stack manifests
 
  - The [__`!store.get`__](/functions/yaml/store.get) YAML function allows retrieving arbitrary keys
-   directly from a [store](/core-concepts/projects/configuration/stores)
+   directly from a [store](/cli/configuration/stores)
    without following the Atmos stack/component/key naming convention.
    This is useful for accessing values stored by external systems
    or for retrieving global configuration that doesn't belong to a specific component
@@ -75,8 +75,23 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!repo-root`__](/functions/yaml/repo-root) YAML function is used to retrieve the
    root directory of the Atmos repository
 
+ - The [__`!random`__](/functions/yaml/random) YAML function generates a cryptographically secure random integer
+   within a specified range, useful for generating random port numbers or IDs
+
+ - The [__`!aws.account_id`__](/functions/yaml/aws.account-id) YAML function retrieves the AWS account ID
+   of the current caller identity using STS GetCallerIdentity
+
+ - The [__`!aws.caller_identity_arn`__](/functions/yaml/aws.caller-identity-arn) YAML function retrieves the full ARN
+   of the current AWS caller identity using STS GetCallerIdentity
+
+ - The [__`!aws.caller_identity_user_id`__](/functions/yaml/aws.caller-identity-user-id) YAML function retrieves the unique user ID
+   of the current AWS caller identity using STS GetCallerIdentity
+
+ - The [__`!aws.region`__](/functions/yaml/aws.region) YAML function retrieves the AWS region
+   from the current SDK configuration
+
 :::tip
-You can combine [Atmos Stack Manifest Templating](/core-concepts/stacks/templates) with Atmos YAML functions within the same stack configuration.
+You can combine [Atmos Stack Manifest Templating](/templates) with Atmos YAML functions within the same stack configuration.
 Atmos processes templates first, followed by YAML functions, enabling you to dynamically provide parameters to the YAML functions.
 :::
 
@@ -148,6 +163,21 @@ components:
         # Download a remote JSON file with .json extension and query data using YQ
         # Note: URLs without extensions are treated as text, so use URLs with appropriate extensions
         github_data: !include ./github-meta.json .api
+
+        # Generate a random port number between 1024 and 65535
+        app_port: !random 1024 65535
+
+        # Get the current AWS account ID
+        aws_account_id: !aws.account_id
+
+        # Get the ARN of the current AWS caller identity
+        aws_caller_arn: !aws.caller_identity_arn
+
+        # Get the unique user ID of the current AWS caller identity
+        aws_user_id: !aws.caller_identity_user_id
+
+        # Get the current AWS region
+        aws_region: !aws.region
 ```
 </File>
 

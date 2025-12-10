@@ -1,0 +1,102 @@
+---
+title: Aliases
+sidebar_label: aliases
+sidebar_class_name: command
+description: Create shortcut names for Atmos CLI commands using aliases.
+id: aliases
+slug: /cli/configuration/aliases
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Aliases let you create shortcut names for existing CLI commands. Any CLI command can be aliased, including Atmos native commands like `terraform apply` or `describe stacks`, as well as [custom commands](/cli/configuration/commands).
+</Intro>
+
+## Configuration
+
+CLI command aliases are configured in the `aliases` section:
+
+<File title="atmos.yaml">
+```yaml
+# CLI command aliases
+aliases:
+  # Aliases for Atmos native commands
+  tf: terraform
+  tp: terraform plan
+  up: terraform apply
+  down: terraform destroy
+  ds: describe stacks
+  dc: describe component
+  # Aliases for Atmos custom commands
+  ls: list stacks
+  lc: list components
+```
+</File>
+
+## Using Aliases
+
+Execute an alias as you would any Atmos native or custom command:
+
+<Terminal title="'atmos ls' command alias">
+```console
+> atmos ls
+
+plat-ue2-dev
+plat-ue2-prod
+plat-ue2-staging
+plat-uw2-dev
+plat-uw2-prod
+plat-uw2-staging
+```
+</Terminal>
+
+## Aliases in Help
+
+The aliases configured in the `aliases` section automatically appear in Atmos help, shown as `alias for '<command>'`.
+
+<Terminal title="atmos --help">
+![`atmos --help`](/img/cli/help/atmos-help-command-3.png)
+</Terminal>
+
+## Argument Support
+
+An alias automatically supports all command line arguments and flags that the aliased command accepts.
+
+For example:
+
+| Alias Command | Equivalent To |
+|---------------|---------------|
+| `atmos up <component> -s <stack>` | `atmos terraform apply <component> -s <stack>` |
+| `atmos dc <component> -s <stack>` | `atmos describe component <component> -s <stack>` |
+
+## Common Aliases
+
+Here are some commonly used aliases:
+
+```yaml
+aliases:
+  # Terraform shortcuts
+  tf: terraform
+  tp: terraform plan
+  up: terraform apply
+  down: terraform destroy
+
+  # Describe shortcuts
+  ds: describe stacks
+  dc: describe component
+  da: describe affected
+
+  # Workflow shortcuts
+  wf: workflow
+
+  # List shortcuts (requires custom commands)
+  ls: list stacks
+  lc: list components
+```
+
+## See Also
+
+- [CLI Configuration](/cli/configuration) — Overview of CLI configuration
+- [Custom Commands](/cli/configuration/commands) — Create custom Atmos commands

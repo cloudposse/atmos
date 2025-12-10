@@ -1,0 +1,306 @@
+---
+title: atmos terraform plan
+sidebar_label: plan
+sidebar_class_name: command
+id: plan
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to generate a Terraform execution plan for an Atmos component in a stack, showing what changes would be made to your infrastructure.
+</Intro>
+
+<Screengrab title="atmos terraform plan --help" slug="atmos-terraform-plan--help" />
+
+## Usage
+
+Execute the `terraform plan` command like this:
+
+```shell
+atmos terraform plan <component> -s <stack> [options]
+```
+
+This command generates an execution plan that shows:
+- Resources that will be created, modified, or destroyed
+- Changes to resource attributes
+- Data source reads that will be performed
+
+By default, Atmos saves the plan to a file using a standardized naming convention: `<context>-<component>.planfile`. This planfile can later be used with `atmos terraform apply --from-plan` to ensure that only the reviewed changes are applied.
+
+:::tip
+Run `atmos terraform plan --help` to see all the available options
+:::
+
+## Examples
+
+### Basic Planning
+
+Generate a plan for the `vpc` component in the `dev` stack:
+
+```shell
+atmos terraform plan vpc -s dev
+```
+
+### Custom Planfile Output
+
+Save the plan to a specific file using the `-out` flag (native Terraform flag):
+
+```shell
+atmos terraform plan vpc -s dev -out=my-custom.planfile
+```
+
+### Skip Planfile Generation
+
+When using Terraform Cloud (which doesn't support the `-out` flag), skip planfile generation:
+
+```shell
+atmos terraform plan vpc -s dev --skip-planfile
+```
+
+### Planning with Variable Overrides
+
+Pass additional variables to the plan:
+
+```shell
+atmos terraform plan vpc -s dev -var="instance_type=t3.large"
+```
+
+### Targeted Planning
+
+Plan changes only for specific resources:
+
+```shell
+atmos terraform plan vpc -s dev -target=aws_subnet.private
+```
+
+### Destroy Planning
+
+Generate a plan to destroy infrastructure:
+
+```shell
+atmos terraform plan vpc -s dev -destroy
+```
+
+## Planfile Management
+
+### Default Behavior
+
+When you run `atmos terraform plan`, Atmos automatically:
+
+1. Generates a planfile with the naming pattern:
+   - Without folder prefix: `<context>-<component>.planfile`
+   - With folder prefix: `<context>-<folder_prefix>-<component>.planfile`
+
+2. Saves the planfile in the component's working directory
+
+3. The planfile can be used later with:
+   ```shell
+   atmos terraform apply <component> -s <stack> --from-plan
+   ```
+
+### Custom Planfile Locations
+
+You can specify a custom planfile location using the standard Terraform `-out` flag:
+
+```shell
+# Absolute path
+atmos terraform plan vpc -s dev -out=/tmp/my-plan.tfplan
+
+# Relative path (relative to component directory)
+atmos terraform plan vpc -s dev -out=plans/vpc.tfplan
+```
+
+### Skipping Planfile Generation
+
+To run a plan without generating a planfile (useful for quick checks or when using Terraform Cloud):
+
+```shell
+atmos terraform plan vpc -s dev --skip-planfile
+```
+
+You can also configure this globally in `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    plan:
+      skip_planfile: true
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name to plan.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-planfile` <em>(optional)</em></dt>
+    <dd>
+        Skip writing the plan to a file. When set, Atmos will not pass the `-out` flag to Terraform.
+
+        This is useful when:
+        - Using Terraform Cloud (which doesn't support `-out`)
+        - Running quick plan checks without saving the output
+        - Running in CI/CD environments where planfiles aren't needed
+
+        ```shell
+        atmos terraform plan vpc -s dev --skip-planfile
+        ```
+    </dd>
+
+    <dt>`--affected` <em>(optional)</em></dt>
+    <dd>
+        Plan only affected components based on changes in the repository. This is a global operation that identifies and plans all components affected by recent changes across all stacks.
+
+        ```shell
+        # Plan only affected components across all stacks
+        atmos terraform plan --affected
+        ```
+    </dd>
+
+    <dt>`--all` <em>(optional)</em></dt>
+    <dd>
+        Plan all components in all stacks (use with caution).
+
+        ```shell
+        atmos terraform plan --all
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the plan.
+
+        ```shell
+        atmos terraform plan vpc -s dev --dry-run
+        ```
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before planning.
+
+        ```shell
+        atmos terraform plan vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--process-templates` <em>(optional)</em></dt>
+    <dd>
+        Enable/disable Go template processing in Atmos stack manifests.
+
+        Default: `true`
+
+        ```shell
+        atmos terraform plan vpc -s dev --process-templates=false
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+The `atmos terraform plan` command supports all native `terraform plan` flags. To pass native Terraform flags, you have two options:
+
+1. **Direct flags** - Pass Terraform flags directly if they don't conflict with Atmos flags
+2. **Double-dash separator** - Use `--` to explicitly separate Atmos flags from Terraform flags
+
+:::tip Using the Double-Dash Separator
+The `--` separator is a common Unix convention that indicates "end of options". Everything after `--` is passed directly to Terraform without interpretation by Atmos. This is useful when:
+- You want to ensure a flag is passed to Terraform, not Atmos
+- You're using flags that might conflict with Atmos flags
+- You want to be explicit about which tool receives which flags
+
+**Example:**
+```shell
+atmos terraform plan vpc -s dev -- -refresh=false -out=my-custom.tfplan
+```
+:::
+
+Some commonly used native flags include:
+
+<dl>
+    <dt>`-out=FILE`</dt>
+    <dd>
+        Write the plan to a file at the specified path. This is the standard Terraform flag for specifying a custom planfile location.
+
+        ```shell
+        atmos terraform plan vpc -s dev -out=my-plan.tfplan
+        ```
+    </dd>
+
+    <dt>`-destroy`</dt>
+    <dd>
+        Create a plan to destroy all resources.
+
+        ```shell
+        atmos terraform plan vpc -s dev -destroy
+        ```
+    </dd>
+
+    <dt>`-target=RESOURCE`</dt>
+    <dd>
+        Plan only specific resources. Can be specified multiple times.
+
+        ```shell
+        atmos terraform plan vpc -s dev -target=aws_subnet.private -target=aws_route_table.private
+        ```
+    </dd>
+
+    <dt>`-var 'NAME=VALUE'`</dt>
+    <dd>
+        Set a variable value. Can be specified multiple times.
+
+        ```shell
+        atmos terraform plan vpc -s dev -var="instance_count=3" -var="environment=staging"
+        ```
+    </dd>
+
+    <dt>`-refresh-only`</dt>
+    <dd>
+        Create a plan to update the state to match remote systems.
+
+        ```shell
+        atmos terraform plan vpc -s dev -refresh-only
+        ```
+    </dd>
+</dl>
+
+## Related Commands
+
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply the changes from a plan
+- [`atmos terraform deploy`](/cli/commands/terraform/deploy) - Deploy with auto-approval
+- [`atmos terraform plan-diff`](/cli/commands/terraform/plan-diff) - Compare two plan files
+- [`atmos terraform generate planfile`](/cli/commands/terraform/generate-planfile) - Generate a planfile in JSON/YAML format
+
+## Configuration
+
+Configure default behavior for `terraform plan` in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    plan:
+      # Skip generating planfiles by default (useful for Terraform Cloud)
+      skip_planfile: false
+```
+
+This can also be set using the environment variable:
+```shell
+export ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE=true
+```
+
+:::info
+See [Terraform Planfiles](/components/terraform/planfiles) for a comprehensive guide on working with planfiles in Atmos.
+:::

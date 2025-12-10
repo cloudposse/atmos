@@ -4,6 +4,10 @@
   "title": "JSON Schema for Atmos Stack Manifest files. Version 1.0. https://atmos.tools",
   "type": "object",
   "properties": {
+    "name": {
+      "type": "string",
+      "description": "Logical name for this stack. Takes precedence over name_template and name_pattern from atmos.yaml."
+    },
     "import": {
       "$ref": "#/definitions/import"
     },
@@ -103,6 +107,11 @@
         {
           "required": [
             "overrides"
+          ]
+        },
+        {
+          "required": [
+            "name"
           ]
         }
       ]
@@ -503,6 +512,10 @@
                 "real"
               ]
             },
+            "name": {
+              "type": "string",
+              "description": "Logical component identity used for workspace key prefix auto-generation. Inheritable from base components."
+            },
             "enabled": {
               "type": "boolean",
               "description": "Flag to enable or disable the component"
@@ -543,7 +556,7 @@
                 },
                 {
                   "type": "object",
-                  "description": "Custom configuration per component, not inherited by derived components",
+                  "description": "Custom configuration per component. Inherited when stacks.inherit.metadata is enabled (default).",
                   "additionalProperties": true,
                   "title": "custom"
                 }

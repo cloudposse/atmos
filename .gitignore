@@ -101,6 +101,7 @@ performance-optimization/
 # Merge conflict artifacts and backup files
 *.orig
 *.rej
+.scratch
 *.bak
 *.go.bak
 **/*.go.bak
@@ -109,3 +110,6 @@ performance-optimization/
 .scratch/
 TEST_FAILURE_ANALYSIS.md
 scratch/
+COVERAGE_SUMMARY.md
+TESTABILITY_CHANGES_SUMMARY.md
+*.ansi

@@ -67,6 +67,7 @@ linters:
             - "!**/pkg/auth/types/aws_credentials.go"
             - "!**/pkg/auth/types/github_oidc_credentials.go"
             - "!**/pkg/ai/**"
+            - "!**/internal/aws_utils/**"
             - "$test"
           deny:
             # AWS: Identity and auth-related SDKs
@@ -106,6 +107,8 @@ linters:
       forbid:
         - pattern: os\.Getenv
           msg: Use `viper.BindEnv` for new environment variables instead of `os.Getenv`
+        - pattern: os\.UserHomeDir
+          msg: Use `homedir.Dir()` from `github.com/cloudposse/atmos/pkg/config/homedir` instead of `os.UserHomeDir()` for better cross-platform support, caching, and OS-specific methods
         - pattern: '\.(Skip|SkipNow)\('
           msg: Use `t.Skipf("<reason>")` with a descriptive reason; do not use `t.Skip`/`t.SkipNow`
         - pattern: ^path\.Join$
@@ -122,6 +125,10 @@ linters:
           msg: "Do not use deprecated github.com/pkg/errors; use static sentinel errors from errors/errors.go instead"
         - pattern: '\bpkgerrors\.'
           msg: "Do not use deprecated pkg/errors; use static sentinel errors from errors/errors.go instead"
+        - pattern: 'assert\.Contains\(.*,\s*err\.Error\('
+          msg: "NEVER use string matching on errors; use assert.ErrorIs(err, sentinel) to check sentinel errors from errors/errors.go"
+        - pattern: 'strings\.Contains\(err\.Error\('
+          msg: "NEVER use string matching on errors; use errors.Is(err, sentinel) to check sentinel errors from errors/errors.go"
         - pattern: github\.com/golang/mock
           msg: Use `go.uber.org/mock` instead of archived `github.com/golang/mock`
         - pattern: github\.com/mitchellh/go-homedir
@@ -132,6 +139,12 @@ linters:
           msg: Use `log.Debug()` for debug messages instead of `log.Warn()` with "DEBUG" in the message
         - pattern: log\.Error\(.*[Dd][Ee][Bb][Uu][Gg]
           msg: Use `log.Debug()` for debug messages instead of `log.Error()` with "DEBUG" in the message
+        # Flag Binding Protection: ENFORCED
+        # pkg/flags/ infrastructure is fully implemented - these patterns are now banned outside pkg/flags/.
+        - pattern: viper\.BindEnv\(
+          msg: NEVER call viper.BindEnv() directly - use pkg/flags/ unified flag parser (consult flag-handler agent)
+        - pattern: viper\.BindPFlag\(
+          msg: NEVER call viper.BindPFlag() directly - use pkg/flags/ unified flag parser (consult flag-handler agent)
       exclude-godoc-examples: false
       analyze-types: true
     funlen:
@@ -326,6 +339,15 @@ linters:
           - funlen
           - revive
         path: pkg/ai/tools/atmos/validate_file_lsp.*
+      # Allow viper.BindEnv and viper.BindPFlag in pkg/flags/ and test files
+      - linters:
+          - forbidigo
+        path: ^pkg/flags/
+        text: "viper\\.BindEnv|viper\\.BindPFlag"
+      - linters:
+          - forbidigo
+        path: _test\.go$
+        text: "viper\\.BindEnv|viper\\.BindPFlag"
     paths:
       - experiments/.*
       - third_party$
@@ -345,6 +367,21 @@ severity:
     - linters:
         - nestif
         - nolintlint
+        - gocognit
+      severity: warning
+    - linters:
+        - gocritic
+      text: "hugeParam.*Init|hugeParam.*Update|hugeParam.*View"
+      severity: warning
+    - linters:
+        - gosec
+      text: "G204"
+      path: "pkg/container/.*\\.go$"
+      severity: warning
+    - linters:
+        - gosec
+      text: "G204"
+      path: "pkg/devcontainer/.*\\.go$"
       severity: warning
 formatters:
   enable:

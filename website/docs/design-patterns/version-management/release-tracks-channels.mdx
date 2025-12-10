@@ -1,0 +1,536 @@
+---
+title: Release Tracks/Channels
+sidebar_position: 4
+sidebar_label: Release Tracks/Channels
+description: Release Tracks/Channels - Organize components by named channels within Continuous Version Deployment
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<PillBox>Atmos Design Pattern</PillBox>
+<Intro>
+**Release Tracks/Channels** extends [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning) with named release channels using **label-based [versioning schemes](/design-patterns/version-management/versioning-schemes)** (`alpha/vpc`, `beta/vpc`, `prod/vpc`) within the [Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment) strategy. Environments subscribe to channels and converge to whatever version is in their track through progressive automated rollout.
+</Intro>
+
+This approach provides a middle ground between simple folder-based versioning and [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning). By organizing components into channels using **moving targets** (labels that point to evolving versions), you promote tracks rather than individual environment pins, reducing operational overhead while maintaining control. Environments grouped to the same track converge together, providing early feedback on changes before broader rollout.
+
+:::info Label-Based Versioning Schemes
+Release Tracks/Channels work with **label-based [versioning schemes](/design-patterns/version-management/versioning-schemes)** that create evolving stage identifiers:
+- **[Maturity Levels](/design-patterns/version-management/versioning-schemes#maturity-levels)** (`alpha`, `beta`, `stable`) - Stability indicators
+- **[Environment Names](/design-patterns/version-management/versioning-schemes#environment-names)** (`dev`, `staging`, `prod`) - Deployment stage alignment
+
+These are **moving targets**—the label stays the same but points to different versions as they're promoted through tracks. This contrasts with [Strict Version Pinning](/design-patterns/version-management/strict-version-pinning) which uses **fixed points** (numbers like `1.2.3`) that never change once created.
+:::
+
+<KeyPoints>
+- How tracks reduce version management overhead across many environments
+- Why promoting tracks instead of environments improves convergence
+- The operational semantics of track-based promotion
+- Implementation strategies using folders, variables, or vendoring
+</KeyPoints>
+
+## Use Cases
+
+Use the **Release Tracks/Channels** pattern when:
+
+- You have **many environments** that would be burdensome to pin individually
+- You want **fast convergence** and early detection of breaking changes
+- Your team prefers to **roll forward** but needs the ability to roll back tracks
+- You need **clear promotion semantics** without per-environment overhead
+- You want **strong feedback** during planning across environment tiers
+- You can group environments into **logical promotion stages**
+
+## Problem
+
+Managing individual version pins across many environments creates several challenges:
+
+- **Pin Management Overhead**: Updating dozens or hundreds of individual pins
+- **Delayed Feedback**: Issues only surface when promoting to specific environments
+- **Convergence Drift**: Environments naturally diverge without constant updates
+- **Promotion Complexity**: Coordinating updates across many environments
+
+Release Tracks solve these problems by introducing an abstraction layer between versions and environments.
+
+## Solution
+
+Instead of each environment pinning versions directly, define tracks that represent promotion stages. Environments subscribe to tracks, and you promote versions by updating the track definition.
+
+:::info Builds on Folder-Based Versioning
+This pattern extends the [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning) strategy by adding a layer of indirection. While folder-based versioning requires each environment to explicitly reference version folders, Release Tracks allow multiple environments to follow a shared track that points to the appropriate version.
+:::
+
+### Track Design Principles
+
+1. **Tracks are Moving Targets**: Unlike static versions, tracks point to the "current" version for their stage
+2. **Environments Follow Tracks**: Multiple environments can subscribe to the same track
+3. **Promote the Track**: Update the track's version reference to promote all subscribers
+4. **Gradual Rollout**: Versions flow through tracks (alpha → beta → prod)
+
+## Implementation Approaches
+
+Atmos supports multiple ways to implement release tracks. The two primary approaches differ in how they organize the track structure:
+
+<Tabs>
+<TabItem value="tracks-per-component" label="Tracks Per Component" default>
+
+### Component-Centric Organization
+
+<File title="Directory Structure">
+```text
+components/
+  terraform/
+    vpc/
+      alpha/     # Alpha track for VPC
+        main.tf
+        variables.tf
+        versions.tf
+      beta/      # Beta track for VPC
+        main.tf
+        variables.tf
+        versions.tf
+      prod/      # Production track for VPC
+        main.tf
+        variables.tf
+        versions.tf
+    rds/
+      alpha/     # Alpha track for RDS
+        main.tf
+        variables.tf
+      beta/      # Beta track for RDS
+        main.tf
+        variables.tf
+      prod/      # Production track for RDS
+        main.tf
+        variables.tf
+```
+</File>
+
+<File title="stacks/catalog/vpc.yaml and rds.yaml">
+```yaml
+# Define base components with stable identity
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+        name: vpc  # Convention: top-level folder
+
+    rds/defaults:
+      metadata:
+        type: abstract
+        name: rds  # Convention: top-level folder
+```
+</File>
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc
+  - catalog/rds
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+        component: vpc/prod  # Subscribe to VPC production track
+        # Inherits name: vpc → workspace_key_prefix: "vpc"
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+
+    rds:
+      metadata:
+        inherits: [rds/defaults]
+        component: rds/prod  # Subscribe to RDS production track
+        # Inherits name: rds → workspace_key_prefix: "rds"
+      vars:
+        instance_class: "db.t3.large"
+```
+</File>
+
+Each component has its own track folders, making it easy to see all tracks for a specific component.
+
+**Benefits:**
+- **Independent Component Evolution**: Each component can move through tracks at its own pace without affecting others
+- **Clear Version History**: Easy to trace how a specific component evolved through alpha, beta, and production stages
+- **Granular Control**: Teams can adopt cutting-edge versions of specific components while keeping others stable
+
+**Drawbacks:**
+- **Complex Dependency Management**: Components with interdependencies may require coordinated track updates
+- **Increased Cognitive Load**: Teams must understand the state of multiple components across different tracks
+- **Potential for Incompatibility**: Independent tracking can lead to version combinations that weren't tested together
+
+**Use This Approach When:**
+- Components have independent release cycles
+- Different teams own different components
+- You need fine-grained control over component versions
+
+</TabItem>
+<TabItem value="track-first" label="Track-First Organization">
+
+### Track-Centric Organization
+
+<File title="Directory Structure">
+```text
+components/
+  terraform/
+    alpha/      # Alpha track (all components)
+      vpc/
+        main.tf
+        variables.tf
+        versions.tf
+      rds/
+        main.tf
+        variables.tf
+      eks/
+        main.tf
+        variables.tf
+    beta/       # Beta track (all components)
+      vpc/
+        main.tf
+        variables.tf
+        versions.tf
+      rds/
+        main.tf
+        variables.tf
+      eks/
+        main.tf
+        variables.tf
+    prod/       # Production track (all components)
+      vpc/
+        main.tf
+        variables.tf
+        versions.tf
+      rds/
+        main.tf
+        variables.tf
+      eks/
+        main.tf
+        variables.tf
+```
+</File>
+
+<File title="stacks/catalog/vpc.yaml and rds.yaml">
+```yaml
+# Define base components with stable identity
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+        name: vpc  # Convention: top-level folder
+
+    rds/defaults:
+      metadata:
+        type: abstract
+        name: rds  # Convention: top-level folder
+```
+</File>
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc
+  - catalog/rds
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+        component: prod/vpc  # VPC from production track
+        # Inherits name: vpc → workspace_key_prefix: "vpc"
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+
+    rds:
+      metadata:
+        inherits: [rds/defaults]
+        component: prod/rds  # RDS from production track
+        # Inherits name: rds → workspace_key_prefix: "rds"
+      vars:
+        instance_class: "db.t3.large"
+```
+</File>
+
+All components for a track are grouped together, making it easy to see what's available in each release track.
+
+**Benefits:**
+- **Component Visibility**: Immediately see which components are available in each track - as components are deprecated, they can be removed from tracks
+- **Cohesive Promotion**: All components in a track are tested and promoted together, ensuring compatibility
+- **Simplified Mental Model**: Teams only need to understand track states rather than individual component versions
+
+**Drawbacks:**
+- **Reduced Flexibility**: All components in a track must move together, even if only one needs updating
+- **Potential for Blocking**: A problem with one component can hold back the entire track
+- **Larger Blast Radius**: Issues affect all components in the track, not just the problematic one
+
+**Use This Approach When:**
+- You want strong consistency across components
+- Components are tightly coupled and should move together
+- You prefer simplicity over granular control
+
+</TabItem>
+</Tabs>
+
+:::tip Alternative: Stack-Level Base Path
+Instead of setting `metadata.component` with the track prefix on every component, you can set the stack-level `base_path` to apply the track prefix automatically to all components in that stack.
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    base_path: "components/terraform/prod"  # Stack-wide track prefix
+
+    vpc:
+      # Resolves to: prod/vpc (no metadata.component needed)
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+
+    rds:
+      # Resolves to: prod/rds (no metadata.component needed)
+      vars:
+        instance_class: "db.t3.large"
+```
+</File>
+
+**Trade-off**: This approach is more DRY (Don't Repeat Yourself) and keeps stack configurations cleaner, but it's less explicit—you must check the stack-level `base_path` setting to know which track components are using. The explicit `metadata.component` approach shown above makes the track immediately visible in each component configuration.
+:::
+
+## Choosing Between Approaches
+
+The choice between **Tracks Per Component** and **Track-First Organization** depends on your operational model:
+
+| Aspect | Tracks Per Component | Track-First Organization |
+|--------|---------------------|------------------------|
+| **Best For** | Microservices, independent teams | Monolithic apps, platform teams |
+| **Component Updates** | Independent per component | Coordinated across components |
+| **Testing Strategy** | Component-level validation | Full-stack integration testing |
+| **Rollback Scope** | Single component | Entire track |
+| **Complexity** | Higher (many tracks to manage) | Lower (fewer tracks to manage) |
+| **Flexibility** | Maximum | Limited but consistent |
+
+:::tip Choose Your Convention and Be Consistent
+The examples above demonstrate both path conventions:
+- **Component-first** (`vpc/prod`, `rds/beta`) - Read as "VPC's production version" or "RDS's beta version"
+- **Track-first** (`prod/vpc`, `beta/rds`) - Read as "Production track of VPC" or "Beta track of RDS"
+
+**Both conventions work equally well.** The key is to **choose one and apply it consistently** throughout your infrastructure. Mixing conventions makes component paths harder to reason about and increases cognitive load on your team.
+
+In this documentation, we show both to illustrate the options—your organization should pick one based on whether you think primarily in terms of **components** (component-first) or **deployment stages** (track-first).
+:::
+
+## Naming Strategy Considerations
+
+The choice of track names is a key design decision that shapes how teams think about promotion:
+
+### Maturity Model (alpha/beta/stable)
+**Benefits:**
+- Technology-agnostic naming that focuses on stability
+- Clear expectations about reliability and feature completeness
+- Works well for components at different maturity levels
+
+**Drawbacks:**
+- May not align with organizational deployment stages
+- Can be confusing if "beta" doesn't map to staging environment
+
+### Environment Stages (dev/staging/prod)
+**Benefits:**
+- Direct mapping to environment tiers
+- Intuitive for teams already using these environment names
+- Clear promotion path matching deployment pipeline
+
+**Drawbacks:**
+- Implies tight coupling between tracks and specific environments
+- Less flexible if you have multiple staging or dev environments
+
+:::tip
+Choose names that reflect your organization's mental model. If your team thinks in terms of stability (alpha/beta/stable), use those. If you think in terms of deployment stages (dev/staging/prod), use those instead.
+:::
+
+### Managing Track Versions
+
+With folder-based tracks, versions are managed by vendoring components into track-specific folders:
+
+<File title="vendor.yaml">
+```yaml
+# Vendor components to track-specific folders
+spec:
+  sources:
+    # Alpha track - latest version
+    - component: alpha
+      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.14.0"
+      targets:
+        - "components/terraform/{{.Component}}/vpc"
+
+    # Beta track - stable version
+    - component: beta
+      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.13.2"
+      targets:
+        - "components/terraform/{{.Component}}/vpc"
+
+    # Production track - proven version
+    - component: prod
+      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.8"
+      targets:
+        - "components/terraform/{{.Component}}/vpc"
+```
+</File>
+
+## Track Promotion Workflow
+
+Here's a typical workflow for promoting versions through tracks:
+
+### 1. Development Testing
+New versions land in the `alpha` track for initial testing:
+
+**Update vendor.yaml** to vendor the new version to the alpha track folder, then pull and test:
+
+```bash
+# Vendor new version to alpha track
+atmos vendor pull --component vpc-alpha
+
+# Test in alpha environments
+atmos terraform plan vpc --stack dev-us-east-1
+atmos terraform apply vpc --stack dev-us-east-1
+```
+
+### 2. Staging Validation
+After validation, **promote to `beta` track** by updating vendor.yaml to vendor the validated version to the beta track folder:
+
+```bash
+# Vendor promoted version to beta track
+atmos vendor pull --component vpc-beta
+
+# Validate in staging environments
+atmos terraform plan vpc --stack staging-us-east-1
+atmos terraform apply vpc --stack staging-us-east-1
+```
+
+### 3. Production Deployment
+Finally, **promote to production track** by updating vendor.yaml to vendor the proven version to the prod track folder:
+
+```bash
+# Vendor promoted version to prod track
+atmos vendor pull --component vpc-prod
+
+# Deploy to production environments
+atmos terraform plan vpc --stack prod-us-east-1
+atmos terraform apply vpc --stack prod-us-east-1
+```
+
+:::tip Track Promotion
+Track promotion means updating the component version reference in `vendor.yaml` for the target track, then running `atmos vendor pull` to update that track's folder. This makes the new version available to all environments subscribing to that track.
+:::
+
+## Benefits
+
+The **Release Tracks/Channels** pattern provides:
+
+- **Reduced Operational Overhead**: Update tracks instead of individual environment pins
+- **Strong Convergence**: Environments following the same track stay in sync
+- **Early Problem Detection**: Issues surface in alpha/beta before reaching production
+- **Clear Promotion Semantics**: Obvious progression through track stages
+- **Flexible Grouping**: Organize environments by team, region, or criticality
+- **Simplified Rollback**: Revert entire tracks rather than individual environments
+
+## Drawbacks
+
+The pattern also has limitations:
+
+- **Less Granular Control**: Cannot pin specific environments to exact versions easily
+- **Track Coupling**: Environments on the same track must accept the same versions
+- **Coordination Required**: Track updates affect multiple environments simultaneously
+- **Learning Curve**: Teams must understand track semantics and promotion patterns
+- **Potential for Wide Impact**: A bad track update affects all subscribed environments
+
+## Rollback Strategy
+
+Release tracks make rollback simple by reverting the track folder to a previous version:
+
+### Revert Track Version in vendor.yaml
+
+Update the version reference for the problematic track:
+
+```yaml
+# vendor.yaml - Revert prod track to previous version
+spec:
+  sources:
+    - component: vpc-prod
+      # Was: v1.13.2 (problematic)
+      # Reverting to: v1.12.8 (last known good)
+      source: "git::https://github.com/acme/terraform-components.git//modules/vpc?ref=v1.12.8"
+      targets:
+        - "components/terraform/prod/vpc"
+```
+
+### Apply the Rollback
+
+```bash
+# Re-vendor the track folder with previous version
+atmos vendor pull --component vpc-prod
+
+# Validate rollback across all prod stacks
+atmos validate stacks | grep prod
+
+# Apply rollback to production
+atmos terraform apply vpc --stack prod-us-east-1
+```
+
+:::tip
+Track-based rollback affects all environments subscribed to that track, providing consistent rollback across similar environments. The folder structure (`prod/vpc`) stays the same, only the component code inside changes.
+:::
+
+## Best Practices
+
+- **Design Clear Track Hierarchy:** Define tracks that match your promotion flow: `alpha` or `dev` for latest changes with highest risk, `beta` or `staging` for pre-production validation, `prod` or `stable` for production-ready versions, and optionally `lts` for long-term support of critical systems.
+
+- **Automate Track Promotion:** Use CI/CD pipelines to automate version promotion through tracks by updating track configuration files (such as `tracks.yaml`) and running validation before deployment. This ensures consistent promotion processes and reduces manual errors.
+
+- **Monitor Track Health:** Monitor track version consistency to identify and address drift between environments subscribed to the same track.
+
+- **Document Track Policy:** Maintain clear documentation about track policies including track definitions, promotion criteria, and emergency procedures.
+
+  <File title="docs/track-policy.md">
+  ```markdown
+  # Release Track Policy
+
+  ## Track Definitions
+  - **Alpha**: Latest development versions, updated daily
+  - **Beta**: Release candidates, updated weekly
+  - **Prod**: Stable versions, updated bi-weekly
+
+  ## Promotion Criteria
+  - Alpha → Beta: Passing all automated tests
+  - Beta → Prod: 7 days in staging without issues
+
+  ## Emergency Procedures
+  - Hotfixes can skip alpha and go directly to beta
+  - Critical security updates can be applied to all tracks simultaneously
+  ```
+  </File>
+
+- **Plan Across Tracks:** Regularly run Terraform plans across all environments within a track to validate consistency and catch issues before deployment.
+
+## Summary
+
+Release Tracks/Channels provide an excellent balance between control and operational efficiency. By grouping environments into tracks and promoting versions through tracks rather than individual environments, teams can maintain strong convergence and feedback loops while reducing management overhead. This pattern scales well and is particularly effective for organizations with many environments that need to stay relatively synchronized.
+
+:::tip Key Takeaway
+Release tracks reduce the operational burden of version management while maintaining strong feedback loops. They're ideal for teams that want convergence without sacrificing control over the promotion process.
+:::
+
+## Related Patterns
+
+- [Versioning Schemes](./versioning-schemes) - Label-based schemes (Maturity Levels, Environment Names) that work with tracks
+- [Strict Version Pinning](./strict-version-pinning) - Individual version control per environment
+- [Folder-Based Versioning](./folder-based-versioning) - Version through repository structure
+- [Vendoring Components](./vendoring-components) - Local control with bulk updates
+- [Git Flow: Branches as Channels](./git-flow-branches-as-channels) - Branch-based track management

@@ -62,6 +62,7 @@ const (
 	AtmosVendorConfigFileName     = "vendor"
 
 	ImportSectionName                 = "import"
+	NameSectionName                   = "name"
 	OverridesSectionName              = "overrides"
 	ProvidersSectionName              = "providers"
 	HooksSectionName                  = "hooks"
@@ -144,4 +145,7 @@ const (
 	ProfilerTypeFlag    = "--profiler-type"
 	HeatmapFlag         = "--heatmap"
 	HeatmapModeFlag     = "--heatmap-mode"
+
+	// AtmosProfileFlag is the CLI flag for specifying Atmos profiles.
+	AtmosProfileFlag = "--profile"
 )

@@ -4,6 +4,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -56,4 +58,24 @@ func (a *AICommandProvider) GetName() string {
 
 func (a *AICommandProvider) GetGroup() string {
 	return "Other Commands"
+}
+
+// GetFlagsBuilder returns the flags builder for this command.
+func (a *AICommandProvider) GetFlagsBuilder() flags.Builder {
+	return nil
+}
+
+// GetPositionalArgsBuilder returns the positional args builder for this command.
+func (a *AICommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+// GetCompatibilityFlags returns compatibility flags for this command.
+func (a *AICommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
+}
+
+// GetAliases returns a list of command aliases to register.
+func (a *AICommandProvider) GetAliases() []internal.CommandAlias {
+	return nil
 }

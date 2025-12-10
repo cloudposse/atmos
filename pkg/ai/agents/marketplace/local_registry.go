@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -186,7 +187,7 @@ func (r *LocalRegistry) save() error {
 
 // getRegistryPath returns the path to the local registry file.
 func getRegistryPath() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := homedir.Dir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
@@ -196,7 +197,7 @@ func getRegistryPath() (string, error) {
 
 // GetAgentsDir returns the directory where agents are installed.
 func GetAgentsDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := homedir.Dir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}

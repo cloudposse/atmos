@@ -4,7 +4,7 @@
 
 # Workflow Error
 
-**Error:** workflow step execution failed
+**Error:** workflow step execution failed: subcommand exited with code 127
 
 ## Explanation
 
@@ -12,7 +12,9 @@ The following command failed to execute:
 
  nonexistentcommand
 
-To resume the workflow from this step, run:
+## Hints
+
+💡 To resume the workflow from this step, run:
 
  atmos workflow shell-command-not-found -f
 Users/andriyknysh/Documents/Projects/Go/src/github.
