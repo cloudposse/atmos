@@ -1,7 +1,5 @@
 package function
 
-import "github.com/cloudposse/atmos/pkg/perf"
-
 // Phase determines when a function is processed in the stack loading pipeline.
 type Phase int
 
@@ -16,9 +14,8 @@ const (
 )
 
 // String returns the string representation of the phase.
+// Note: No perf.Track here as this is a trivial accessor called in hot paths.
 func (p Phase) String() string {
-	defer perf.Track(nil, "function.Phase.String")()
-
 	switch p {
 	case PreMerge:
 		return "pre-merge"
