@@ -500,6 +500,11 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	tempGitRootRegex := regexp.MustCompile(`path=(/var/folders/[^/]+/[^/]+/T/[^\s]+/mock-git-root|/tmp/[^\s]+/mock-git-root|C:/[^\s]+/mock-git-root)`)
 	result = tempGitRootRegex.ReplaceAllString(result, "path=/mock-git-root")
 
+	// 19. Normalize temp home directory paths in trace logs (e.g., path=/var/folders/.../T/TestCLI.../.atmos).
+	// These are used for home directory mocking in tests.
+	tempHomeDirRegex := regexp.MustCompile(`path=(/var/folders/[^/]+/[^/]+/T/[^\s]+/\.atmos|/tmp/[^\s]+/\.atmos)`)
+	result = tempHomeDirRegex.ReplaceAllString(result, "path=/mock-home/.atmos")
+
 	return result, nil
 }
 

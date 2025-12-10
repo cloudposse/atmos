@@ -77,6 +77,16 @@ func TestSanitizeOutput(t *testing.T) {
 			input:    "TRCE  Using test Git root override path=/tmp/TestCLICommands2870082120/001/mock-git-root",
 			expected: "TRCE  Using test Git root override path=/mock-git-root",
 		},
+		{
+			name:     "macOS temp home directory path should be normalized",
+			input:    "TRCE  Checking for atmos.yaml in home directory path=/var/folders/ly/sz00b8054kv_85k1m9_0dmfc0000gn/T/TestCLICommands123456789/001/.atmos",
+			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
+		},
+		{
+			name:     "Linux temp home directory path should be normalized",
+			input:    "TRCE  Checking for atmos.yaml in home directory path=/tmp/TestCLICommands123456789/001/.atmos",
+			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
+		},
 	}
 
 	for _, tt := range tests {
