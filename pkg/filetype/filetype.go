@@ -152,14 +152,15 @@ func parseHCLBody(body hcl.Body, filename string) (map[string]any, error) {
 	// First, try to get just attributes (for simple HCL files or attribute-only sections).
 	attrs, attrDiags := body.JustAttributes()
 
-	// If JustAttributes fails (due to blocks present), use PartialContent approach.
-	// NOTE: This assumes JustAttributes failures are due to blocks. Other HCL syntax errors
-	// may also trigger this path, but parseHCLBodyWithBlocks provides a safe fallback that
-	// will surface genuine syntax errors through its own error handling.
+	// If JustAttributes fails, check if it's due to blocks or actual syntax errors.
 	if attrDiags != nil && attrDiags.HasErrors() {
-		// There are blocks present - we need to handle them differently.
-		// Use a dynamic approach to discover block types.
-		return parseHCLBodyWithBlocks(body, filename)
+		// Check if the diagnostics indicate blocks are present vs. real syntax errors.
+		if isBlockRelatedDiagnostic(attrDiags) {
+			// There are blocks present - we need to handle them differently.
+			return parseHCLBodyWithBlocks(body, filename)
+		}
+		// This is a genuine syntax error - propagate it.
+		return nil, fmt.Errorf(errFmtProcessHCLFile, ErrFailedToProcessHclFile, filename, attrDiags.Error())
 	}
 
 	// Process attributes only (no blocks in this body).
@@ -261,6 +262,25 @@ func parseHCLBodyWithBlocks(body hcl.Body, filename string) (map[string]any, err
 		result[name] = ctyToGo(ctyValue)
 	}
 	return result, nil
+}
+
+// isBlockRelatedDiagnostic checks if the diagnostics indicate blocks are present
+// rather than genuine syntax errors like unexpected tokens or invalid expressions.
+func isBlockRelatedDiagnostic(diags hcl.Diagnostics) bool {
+	for _, diag := range diags {
+		// HCL reports "Argument or block definition required" when blocks are present.
+		// Other common block-related messages include mentions of "block" in the summary.
+		summary := strings.ToLower(diag.Summary)
+		detail := strings.ToLower(diag.Detail)
+
+		// Block-related patterns.
+		if strings.Contains(summary, "block") ||
+			strings.Contains(detail, "block") ||
+			strings.Contains(summary, "argument or block") {
+			return true
+		}
+	}
+	return false
 }
 
 // ctyToGo converts cty.Value to Go types.
