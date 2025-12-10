@@ -70,9 +70,9 @@ All auth errors MUST include the following context when available:
 | `profiles` | Active profiles or "(not set)" | `ATMOS_PROFILE=devops` |
 | `chain_step` | Current step in auth chain | `2 of 3` |
 
-### R2: Identity Configuration Display
+### R2: Identity Configuration Display (Verbose Mode Only)
 
-When an identity-related error occurs, the error MUST display the full identity configuration in YAML format:
+When `--verbose` flag is set and an identity-related error occurs, the error SHOULD display the full identity configuration in YAML format:
 
 ```
 Identity configuration:
@@ -84,7 +84,14 @@ Identity configuration:
       assume_role: arn:aws:iam::344349181611:role/ins-plat-gbl-dev-terraform
 ```
 
-Special cases:
+**Behavior by mode:**
+
+| Mode | Identity Config Display |
+|------|------------------------|
+| Default (non-verbose) | Not shown - only identity name in context |
+| `--verbose` | Full YAML configuration displayed |
+
+Special cases (verbose mode only):
 - If identity not found in config: Display `Identity configuration: (not found in current profile)`
 - If identity config is partial: Display available fields only
 
@@ -167,7 +174,35 @@ Use appropriate sentinel errors for each category:
 
 ## Example Error Output
 
-### Example 1: Authentication Failed (Profile Set)
+### Example 1: Authentication Failed (Default Mode)
+
+```markdown
+# Authentication Error
+
+**Error:** authentication failed
+
+## Explanation
+
+Failed to authenticate via credential chain for identity "plat-dev/terraform".
+
+## Hints
+
+💡 Run `atmos auth --help` for troubleshooting
+💡 Check that the GitHub OIDC provider is correctly configured
+
+## Context
+
+| Key | Value |
+|-----|-------|
+| identity | plat-dev/terraform |
+| provider | github-oidc |
+| profiles | ATMOS_PROFILE=devops |
+| chain_step | 1 of 2 |
+```
+
+### Example 2: Authentication Failed (Verbose Mode)
+
+With `--verbose` flag, the identity configuration is included:
 
 ```markdown
 # Authentication Error
@@ -204,7 +239,7 @@ plat-dev/terraform:
 | chain_step | 1 of 2 |
 ```
 
-### Example 2: Credentials Expired (No Profile)
+### Example 3: Credentials Expired (No Profile)
 
 ```markdown
 # Authentication Error
@@ -214,17 +249,6 @@ plat-dev/terraform:
 ## Explanation
 
 Cached credentials for identity "core-auto/terraform" have expired.
-
-## Identity Configuration
-
-```yaml
-core-auto/terraform:
-  kind: aws/assume-role
-  via:
-    provider: aws-sso
-  principal:
-    assume_role: arn:aws:iam::101071483060:role/ins-core-gbl-auto-terraform
-```
 
 ## Hints
 
@@ -241,7 +265,7 @@ core-auto/terraform:
 | expiration | 2024-01-15T10:30:00Z |
 ```
 
-### Example 3: Identity Not Found in Profile
+### Example 4: Identity Not Found in Profile
 
 ```markdown
 # Authentication Error
@@ -251,10 +275,6 @@ core-auto/terraform:
 ## Explanation
 
 Identity "plat-sandbox/terraform" not found in the current configuration.
-
-## Identity Configuration
-
-(not found in current profile)
 
 ## Hints
 
@@ -278,7 +298,7 @@ Identity "plat-sandbox/terraform" not found in the current configuration.
 Create helper functions for consistent formatting:
 
 ```go
-// FormatProfiles formats profile information for error display
+// FormatProfiles formats profile information for error display.
 func FormatProfiles(profiles []string) string {
     if len(profiles) == 0 {
         return "(not set)"
@@ -286,16 +306,31 @@ func FormatProfiles(profiles []string) string {
     return "ATMOS_PROFILE=" + strings.Join(profiles, ",")
 }
 
-// FormatIdentityConfig formats identity config as YAML for error display
+// FormatIdentityConfig formats identity config as YAML for error display.
+// Only called when verbose mode is enabled.
 func FormatIdentityConfig(identity types.Identity) string {
     // Marshal identity to YAML format
 }
 
-// FormatIdentityNotFound returns placeholder for missing identity
+// FormatIdentityNotFound returns placeholder for missing identity.
 func FormatIdentityNotFound() string {
     return "(not found in current profile)"
 }
+
+// IsVerbose checks if verbose mode is enabled via --verbose flag or config.
+func IsVerbose(atmosConfig *schema.AtmosConfiguration) bool {
+    return atmosConfig != nil && atmosConfig.Logs.Level == "trace"
+}
 ```
+
+### Verbose Mode Detection
+
+The `--verbose` flag maps to the existing verbose/trace logging configuration in atmos. Identity configuration details are only included when:
+
+1. `--verbose` flag is passed on the command line, OR
+2. `logs.level: trace` is set in `atmos.yaml`
+
+This aligns with the existing ErrorBuilder behavior where the `## Context` table is already shown only in verbose mode.
 
 ### Files to Modify
 
