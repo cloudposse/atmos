@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/huh"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
@@ -57,7 +59,6 @@ func (ui *ProductionUI) PromptForTemplate(configs map[string]templates.Configura
 		return templates.Configuration{}, errUtils.Build(errUtils.ErrTTYRequired).
 			WithExplanation("Interactive prompt requires a TTY (terminal)").
 			WithHint("Use non-interactive mode: atmos scaffold generate <template> <target>").
-			WithHint("Or remove the `--dry-run` flag to use interactive mode").
 			WithContext("mode", "interactive").
 			Err()
 	}
@@ -83,20 +84,9 @@ func (ui *ProductionUI) PromptForValue(prompt PromptConfig, defaultValue interfa
 	// Implementation depends on prompt type.
 	switch prompt.Type {
 	case "input":
-		defStr := ""
-		if defaultValue != nil {
-			defStr = fmt.Sprintf("%v", defaultValue)
-		}
-		// Implement simple input prompt inline since InitUI doesn't have PromptForInput.
-		result := defStr
-		// For now, return the default value.
-		// In a full implementation, this would use huh.NewInput() to prompt the user.
-		return result, nil
+		return ui.promptForInput(prompt, defaultValue)
 	case "confirm":
-		// Implement simple confirmation prompt inline since InitUI doesn't have PromptForConfirmation.
-		// For now, return false as default.
-		// In a full implementation, this would use huh.NewConfirm() to prompt the user.
-		return false, nil
+		return ui.promptForConfirm(prompt, defaultValue)
 	default:
 		return nil, errUtils.Build(errUtils.ErrScaffoldInvalidPrompt).
 			WithExplanationf("Unsupported prompt type: %s", prompt.Type).
@@ -104,6 +94,77 @@ func (ui *ProductionUI) PromptForValue(prompt PromptConfig, defaultValue interfa
 			WithContext("type", prompt.Type).
 			Err()
 	}
+}
+
+// promptForInput prompts the user for text input using huh.
+func (ui *ProductionUI) promptForInput(prompt PromptConfig, defaultValue interface{}) (interface{}, error) {
+	defStr := ""
+	if defaultValue != nil {
+		defStr = fmt.Sprintf("%v", defaultValue)
+	}
+
+	var result string
+	title := prompt.Name
+	if prompt.Description != "" {
+		title = prompt.Description
+	}
+
+	input := huh.NewInput().
+		Title(title).
+		Value(&result)
+
+	if defStr != "" {
+		input = input.Placeholder(defStr)
+		result = defStr
+	}
+
+	form := huh.NewForm(huh.NewGroup(input))
+	if err := form.Run(); err != nil {
+		return nil, errUtils.Build(errUtils.ErrPromptFailed).
+			WithCause(err).
+			WithExplanation("Failed to prompt for input").
+			WithHint("Interactive prompts require a TTY (terminal)").
+			WithContext("prompt", prompt.Name).
+			Err()
+	}
+
+	return result, nil
+}
+
+// promptForConfirm prompts the user for confirmation using huh.
+func (ui *ProductionUI) promptForConfirm(prompt PromptConfig, defaultValue interface{}) (interface{}, error) {
+	defBool := false
+	if defaultValue != nil {
+		if b, ok := defaultValue.(bool); ok {
+			defBool = b
+		}
+	}
+
+	var result bool
+	title := prompt.Name
+	if prompt.Description != "" {
+		title = prompt.Description
+	}
+
+	confirm := huh.NewConfirm().
+		Title(title).
+		Value(&result).
+		Affirmative("Yes").
+		Negative("No")
+
+	result = defBool
+
+	form := huh.NewForm(huh.NewGroup(confirm))
+	if err := form.Run(); err != nil {
+		return nil, errUtils.Build(errUtils.ErrPromptFailed).
+			WithCause(err).
+			WithExplanation("Failed to prompt for confirmation").
+			WithHint("Interactive prompts require a TTY (terminal)").
+			WithContext("prompt", prompt.Name).
+			Err()
+	}
+
+	return result, nil
 }
 
 // Complex rendering.
