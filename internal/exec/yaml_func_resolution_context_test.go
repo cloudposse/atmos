@@ -38,7 +38,7 @@ func TestResolutionContextPushPop(t *testing.T) {
 
 	assert.Equal(t, 1, len(ctx.CallStack()))
 	assert.Equal(t, 1, len(ctx.Visited()))
-	assert.True(t, ctx.Visited()["dev-vpc"])
+	assert.True(t, ctx.Visited()["dev::vpc"])
 
 	node2 := DependencyNode{
 		Component:    "rds",
@@ -53,15 +53,15 @@ func TestResolutionContextPushPop(t *testing.T) {
 
 	assert.Equal(t, 2, len(ctx.CallStack()))
 	assert.Equal(t, 2, len(ctx.Visited()))
-	assert.True(t, ctx.Visited()["dev-rds"])
+	assert.True(t, ctx.Visited()["dev::rds"])
 
 	// Pop second node.
 	ctx.Pop(atmosConfig)
 
 	assert.Equal(t, 1, len(ctx.CallStack()))
 	assert.Equal(t, 1, len(ctx.Visited()))
-	assert.False(t, ctx.Visited()["dev-rds"])
-	assert.True(t, ctx.Visited()["dev-vpc"])
+	assert.False(t, ctx.Visited()["dev::rds"])
+	assert.True(t, ctx.Visited()["dev::vpc"])
 
 	// Pop first node.
 	ctx.Pop(atmosConfig)
@@ -245,7 +245,7 @@ func TestResolutionContextClone(t *testing.T) {
 	assert.Equal(t, len(ctx.CallStack()), len(cloned.CallStack()))
 	assert.Equal(t, len(ctx.Visited()), len(cloned.Visited()))
 	assert.Equal(t, ctx.CallStack()[0], cloned.CallStack()[0])
-	assert.True(t, cloned.Visited()["dev-vpc"])
+	assert.True(t, cloned.Visited()["dev::vpc"])
 
 	// Modify original - should not affect clone.
 	node2 := DependencyNode{
@@ -386,8 +386,8 @@ func TestResolutionContextMultipleStacksSameComponent(t *testing.T) {
 	require.NoError(t, ctx.Push(atmosConfig, node2))
 
 	assert.Equal(t, 2, len(ctx.CallStack()))
-	assert.True(t, ctx.Visited()["dev-vpc"])
-	assert.True(t, ctx.Visited()["staging-vpc"])
+	assert.True(t, ctx.Visited()["dev::vpc"])
+	assert.True(t, ctx.Visited()["staging::vpc"])
 }
 
 func TestResolutionContextDiamondDependency(t *testing.T) {
