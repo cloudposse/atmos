@@ -113,11 +113,11 @@ func LoadIsolatedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptio
 	})
 
 	if isolateErr != nil {
-		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAwsConfig, isolateErr)
+		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAWSConfig, isolateErr)
 	}
 
 	if err != nil {
-		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAwsConfig, err)
+		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAWSConfig, err)
 	}
 
 	return cfg, nil
@@ -180,7 +180,7 @@ func LoadAtmosManagedAWSConfig(ctx context.Context, optFns ...func(*config.LoadO
 
 	if err != nil {
 		log.Debug("Failed to load AWS SDK config", "error", err)
-		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAwsConfig, err)
+		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAWSConfig, err)
 	}
 
 	log.Debug("Successfully loaded AWS SDK config", "region", cfg.Region)

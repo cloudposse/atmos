@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"testing"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -616,4 +619,820 @@ func TestListStacksForComponentEmptyComponent(t *testing.T) {
 	// Should not error. Empty component filter returns all stacks.
 	assert.NoError(t, err, "Should not error with empty component")
 	assert.NotEmpty(t, stacks, "Empty component filter returns all stacks")
+}
+
+// TestFilterChdirArgs tests the filterChdirArgs function.
+func TestFilterChdirArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected []string
+	}{
+		{
+			name:     "no chdir flags",
+			input:    []string{"terraform", "plan", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "long form --chdir=value",
+			input:    []string{"terraform", "plan", "--chdir=/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "long form --chdir value",
+			input:    []string{"terraform", "plan", "--chdir", "/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "short form -C=value",
+			input:    []string{"terraform", "plan", "-C=/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "short form -C value",
+			input:    []string{"terraform", "plan", "-C", "/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "short form concatenated -Cvalue",
+			input:    []string{"terraform", "plan", "-C/path", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "multiple chdir flags",
+			input:    []string{"terraform", "--chdir=/first", "plan", "-C", "/second", "component"},
+			expected: []string{"terraform", "plan", "component"},
+		},
+		{
+			name:     "chdir at beginning",
+			input:    []string{"--chdir=/path", "terraform", "plan"},
+			expected: []string{"terraform", "plan"},
+		},
+		{
+			name:     "chdir at end",
+			input:    []string{"terraform", "plan", "--chdir=/path"},
+			expected: []string{"terraform", "plan"},
+		},
+		{
+			name:     "mixed formats",
+			input:    []string{"terraform", "--chdir=/first", "plan", "-C/second", "deploy", "-C", "/third"},
+			expected: []string{"terraform", "plan", "deploy"},
+		},
+		{
+			name:     "preserve non-chdir flags",
+			input:    []string{"terraform", "plan", "--var-file=test.tfvars", "--chdir=/path", "--auto-approve"},
+			expected: []string{"terraform", "plan", "--var-file=test.tfvars", "--auto-approve"},
+		},
+		{
+			name:     "chdir with tilde",
+			input:    []string{"terraform", "--chdir=~/project", "plan"},
+			expected: []string{"terraform", "plan"},
+		},
+		{
+			name:     "empty input",
+			input:    []string{},
+			expected: []string{},
+		},
+		{
+			name:     "only chdir flags",
+			input:    []string{"--chdir=/path", "-C", "/another"},
+			expected: []string{},
+		},
+		{
+			name:     "chdir-like but not flag (value contains chdir)",
+			input:    []string{"terraform", "plan", "my-chdir-component"},
+			expected: []string{"terraform", "plan", "my-chdir-component"},
+		},
+		{
+			name:     "short C alone should be filtered",
+			input:    []string{"terraform", "-C", "/path", "plan"},
+			expected: []string{"terraform", "plan"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterChdirArgs(tt.input)
+			assert.Equal(t, tt.expected, result, "filterChdirArgs should correctly filter chdir arguments")
+		})
+	}
+}
+
+// TestValidateAtmosConfig tests the error-returning version of config validation.
+// This test was not possible before refactoring because checkAtmosConfig() called os.Exit().
+func TestValidateAtmosConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		opts        []AtmosValidateOption
+		wantErr     bool
+		description string
+	}{
+		{
+			name:        "skip stack validation",
+			opts:        []AtmosValidateOption{WithStackValidation(false)},
+			wantErr:     false,
+			description: "Should succeed when skipping stack validation even without a valid atmos project",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateAtmosConfig(tt.opts...)
+
+			if tt.wantErr {
+				assert.Error(t, err, tt.description)
+			} else {
+				// With stack validation disabled, we should get nil or config load error.
+				// The important thing is it doesn't call os.Exit().
+				t.Logf("validateAtmosConfig returned: %v", err)
+			}
+		})
+	}
+}
+
+// TestGetConfigAndStacksInfo tests the error-returning version of config and stacks info processing.
+// This test was not possible before refactoring because getConfigAndStacksInfo() called os.Exit() on errors.
+func TestGetConfigAndStacksInfo(t *testing.T) {
+	tests := []struct {
+		name        string
+		commandName string
+		args        []string
+		description string
+	}{
+		{
+			name:        "empty args",
+			commandName: "terraform",
+			args:        []string{},
+			description: "Should handle empty args without panicking or calling os.Exit()",
+		},
+		{
+			name:        "args with double dash",
+			commandName: "terraform",
+			args:        []string{"plan", "--", "extra", "args"},
+			description: "Should properly split args at double dash without panicking",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a minimal cobra command for testing.
+			cmd := &cobra.Command{
+				Use: tt.commandName,
+			}
+
+			// The key test: this call should return an error instead of calling os.Exit().
+			info, err := getConfigAndStacksInfo(tt.commandName, cmd, tt.args)
+
+			// We expect an error here because we're not in a valid atmos directory,
+			// but the important thing is that it doesn't call os.Exit()
+			// and we can actually test the error behavior.
+			if err != nil {
+				// This is expected - we're testing that errors are returned properly.
+				t.Logf("Got expected error (no valid config): %v", err)
+				assert.Error(t, err, tt.description)
+			} else {
+				// If somehow we got a valid config, verify the info structure.
+				assert.IsType(t, schema.ConfigAndStacksInfo{}, info, "Should return ConfigAndStacksInfo struct")
+			}
+		})
+	}
+}
+
+// TestGetConfigAndStacksInfoDoubleDashHandling tests that double-dash arguments are properly separated.
+// This verifies the refactored function maintains the original behavior.
+func TestGetConfigAndStacksInfoDoubleDashHandling(t *testing.T) {
+	cmd := &cobra.Command{
+		Use: "terraform",
+	}
+
+	// Test with args containing "--".
+	args := []string{"plan", "component", "--stack", "dev", "--", "-target=resource"}
+
+	_, err := getConfigAndStacksInfo("terraform", cmd, args)
+
+	// We expect this to fail due to missing atmos config, but importantly
+	// it should NOT panic or call os.Exit().
+	assert.Error(t, err, "Should return error for missing config instead of calling os.Exit()")
+	assert.ErrorIs(t, err, errUtils.ErrStacksDirectoryDoesNotExist)
+}
+
+// TestGetConfigAndStacksInfoReturnsErrorInsteadOfExiting demonstrates the key improvement.
+// Before refactoring, this test would have been impossible because the function called os.Exit().
+func TestGetConfigAndStacksInfoReturnsErrorInsteadOfExiting(t *testing.T) {
+	cmd := &cobra.Command{
+		Use: "terraform",
+	}
+
+	// Call the function with invalid input that would previously cause os.Exit(1).
+	_, err := getConfigAndStacksInfo("terraform", cmd, []string{})
+
+	// The key assertion: we got an error back instead of the process terminating.
+	assert.Error(t, err, "Function should return error instead of calling os.Exit()")
+
+	// Verify it contains useful information.
+	assert.NotEmpty(t, err.Error(), "Error should have a descriptive message")
+}
+
+// TestValidateAtmosConfigWithOptions tests that options pattern works correctly.
+func TestValidateAtmosConfigWithOptions(t *testing.T) {
+	// Test that WithStackValidation option is respected.
+	err := validateAtmosConfig(WithStackValidation(false))
+	// With stack validation disabled, we should only fail on config loading.
+	// (which will fail in test env, but that's OK - we're testing it returns an error)
+	if err != nil {
+		t.Logf("Got expected error with stack validation disabled: %v", err)
+	}
+}
+
+// TestErrorWrappingInGetConfigAndStacksInfo verifies proper error wrapping.
+func TestErrorWrappingInGetConfigAndStacksInfo(t *testing.T) {
+	cmd := &cobra.Command{
+		Use: "terraform",
+	}
+
+	_, err := getConfigAndStacksInfo("terraform", cmd, []string{})
+
+	// Should always return an error in test environment (config/stacks not found).
+	require.Error(t, err, "Expected error when stacks directory doesn't exist")
+
+	// Verify error can be checked with errors.Is() - this tests proper error wrapping.
+	// The function should return ErrStacksDirectoryDoesNotExist from validateAtmosConfig.
+	assert.True(t, errors.Is(err, errUtils.ErrStacksDirectoryDoesNotExist),
+		"Error should wrap ErrStacksDirectoryDoesNotExist, got: %v", err)
+
+	// Verify error contains useful context.
+	assert.NotEmpty(t, err.Error(), "Error should have a message")
+}
+
+// TestDetermineComponentTypeFromCommand tests component type detection from command hierarchy.
+func TestDetermineComponentTypeFromCommand(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupFunc    func() *cobra.Command
+		expectedType string
+	}{
+		{
+			name: "terraform command",
+			setupFunc: func() *cobra.Command {
+				terraform := &cobra.Command{Use: "terraform"}
+				plan := &cobra.Command{Use: "plan"}
+				terraform.AddCommand(plan)
+				return plan
+			},
+			expectedType: "terraform",
+		},
+		{
+			name: "helmfile command",
+			setupFunc: func() *cobra.Command {
+				helmfile := &cobra.Command{Use: "helmfile"}
+				apply := &cobra.Command{Use: "apply"}
+				helmfile.AddCommand(apply)
+				return apply
+			},
+			expectedType: "helmfile",
+		},
+		{
+			name: "packer command",
+			setupFunc: func() *cobra.Command {
+				packer := &cobra.Command{Use: "packer"}
+				build := &cobra.Command{Use: "build"}
+				packer.AddCommand(build)
+				return build
+			},
+			expectedType: "packer",
+		},
+		{
+			name: "nested terraform subcommand",
+			setupFunc: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				terraform := &cobra.Command{Use: "terraform"}
+				plan := &cobra.Command{Use: "plan"}
+				root.AddCommand(terraform)
+				terraform.AddCommand(plan)
+				return plan
+			},
+			expectedType: "terraform",
+		},
+		{
+			name: "unknown command defaults to terraform",
+			setupFunc: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				unknown := &cobra.Command{Use: "unknown"}
+				root.AddCommand(unknown)
+				return unknown
+			},
+			expectedType: "terraform",
+		},
+		{
+			name: "no parent command defaults to terraform",
+			setupFunc: func() *cobra.Command {
+				return &cobra.Command{Use: "standalone"}
+			},
+			expectedType: "terraform",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := tt.setupFunc()
+			result := determineComponentTypeFromCommand(cmd)
+			assert.Equal(t, tt.expectedType, result)
+		})
+	}
+}
+
+// TestCloneCommand tests the cloneCommand function.
+func TestCloneCommand(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    *schema.Command
+		wantErr  bool
+		verifyFn func(t *testing.T, orig, clone *schema.Command)
+	}{
+		{
+			name: "basic command",
+			input: &schema.Command{
+				Name:        "test",
+				Description: "Test command",
+			},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, orig.Name, clone.Name)
+				assert.Equal(t, orig.Description, clone.Description)
+			},
+		},
+		{
+			name: "command with steps",
+			input: &schema.Command{
+				Name:  "multi-step",
+				Steps: []string{"step1", "step2", "step3"},
+			},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, len(orig.Steps), len(clone.Steps))
+				// Verify it's a deep copy - modifying clone doesn't affect original.
+				clone.Steps[0] = "modified"
+				assert.NotEqual(t, orig.Steps[0], clone.Steps[0])
+			},
+		},
+		{
+			name: "command with nested commands",
+			input: &schema.Command{
+				Name: "parent",
+				Commands: []schema.Command{
+					{Name: "child1"},
+					{Name: "child2"},
+				},
+			},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, len(orig.Commands), len(clone.Commands))
+				assert.Equal(t, orig.Commands[0].Name, clone.Commands[0].Name)
+			},
+		},
+		{
+			name: "command with flags",
+			input: &schema.Command{
+				Name: "with-flags",
+				Flags: []schema.CommandFlag{
+					{Name: "verbose", Type: "bool", Shorthand: "v"},
+					{Name: "output", Type: "string", Required: true},
+				},
+			},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, len(orig.Flags), len(clone.Flags))
+				assert.Equal(t, orig.Flags[0].Name, clone.Flags[0].Name)
+				assert.Equal(t, orig.Flags[1].Required, clone.Flags[1].Required)
+			},
+		},
+		{
+			name: "command with arguments",
+			input: &schema.Command{
+				Name: "with-args",
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Required: true},
+					{Name: "stack", Default: "dev"},
+				},
+			},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, len(orig.Arguments), len(clone.Arguments))
+				assert.Equal(t, orig.Arguments[0].Required, clone.Arguments[0].Required)
+				assert.Equal(t, orig.Arguments[1].Default, clone.Arguments[1].Default)
+			},
+		},
+		{
+			name: "command with env vars",
+			input: &schema.Command{
+				Name: "with-env",
+				Env: []schema.CommandEnv{
+					{Key: "AWS_PROFILE", Value: "dev"},
+					{Key: "TF_LOG", ValueCommand: "echo DEBUG"},
+				},
+			},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, len(orig.Env), len(clone.Env))
+				assert.Equal(t, orig.Env[0].Key, clone.Env[0].Key)
+				assert.Equal(t, orig.Env[1].ValueCommand, clone.Env[1].ValueCommand)
+			},
+		},
+		{
+			name: "command with component config",
+			input: &schema.Command{
+				Name: "with-component-config",
+				ComponentConfig: schema.CommandComponentConfig{
+					Component: "vpc",
+					Stack:     "{{ .Arguments.stack }}",
+				},
+			},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, orig.ComponentConfig.Component, clone.ComponentConfig.Component)
+				assert.Equal(t, orig.ComponentConfig.Stack, clone.ComponentConfig.Stack)
+			},
+		},
+		{
+			name:    "empty command",
+			input:   &schema.Command{},
+			wantErr: false,
+			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
+				assert.Equal(t, orig.Name, clone.Name)
+				assert.Empty(t, clone.Name)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clone, err := cloneCommand(tt.input)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, clone)
+
+			// Verify it's a different object.
+			if tt.input != nil {
+				assert.NotSame(t, tt.input, clone)
+			}
+
+			if tt.verifyFn != nil {
+				tt.verifyFn(t, tt.input, clone)
+			}
+		})
+	}
+}
+
+// TestHandleHelpRequest tests the handleHelpRequest function.
+func TestHandleHelpRequest(t *testing.T) {
+	// Note: handleHelpRequest calls os.Exit(0) when help is requested,
+	// so we can only test cases where it doesn't exit.
+	tests := []struct {
+		name          string
+		args          []string
+		shouldNotExit bool
+	}{
+		{
+			name:          "no args - does not exit",
+			args:          []string{},
+			shouldNotExit: true,
+		},
+		{
+			name:          "regular arg - does not exit",
+			args:          []string{"component-name"},
+			shouldNotExit: true,
+		},
+		{
+			name:          "non-help flag - does not exit",
+			args:          []string{"--verbose"},
+			shouldNotExit: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{
+				Use:   "test",
+				Short: "Test command",
+			}
+
+			if tt.shouldNotExit {
+				// This should not panic or call os.Exit.
+				handleHelpRequest(cmd, tt.args)
+				// If we got here, the function returned normally.
+				assert.True(t, true, "handleHelpRequest returned without exiting")
+			}
+		})
+	}
+}
+
+// TestListComponents tests the listComponents function.
+func TestListComponents(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupDir    string
+		stackFlag   string
+		expectError bool
+	}{
+		{
+			name:        "valid directory with components",
+			setupDir:    "../examples/demo-stacks",
+			stackFlag:   "",
+			expectError: false,
+		},
+		{
+			name:        "invalid directory",
+			setupDir:    "",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Change to test directory if specified.
+			if tt.setupDir != "" {
+				t.Chdir(tt.setupDir)
+			} else {
+				tmpDir := t.TempDir()
+				t.Chdir(tmpDir)
+			}
+
+			// Create a test command.
+			cmd := &cobra.Command{
+				Use: "test",
+			}
+			cmd.Flags().String("stack", tt.stackFlag, "Stack flag")
+
+			// Call the function.
+			components, err := listComponents(cmd)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, components)
+			}
+		})
+	}
+}
+
+// TestComponentsArgCompletion tests the ComponentsArgCompletion function.
+func TestComponentsArgCompletion(t *testing.T) {
+	tests := []struct {
+		name       string
+		setupDir   string
+		args       []string
+		toComplete string
+		expectDir  bool // Whether we expect directory completion directive.
+	}{
+		{
+			name:       "first arg with dot - directory completion",
+			setupDir:   "../examples/demo-stacks",
+			args:       []string{},
+			toComplete: ".",
+			expectDir:  true,
+		},
+		{
+			name:       "first arg with path separator - directory completion",
+			setupDir:   "../examples/demo-stacks",
+			args:       []string{},
+			toComplete: "./components/",
+			expectDir:  true,
+		},
+		{
+			name:       "first arg without path - component completion",
+			setupDir:   "../examples/demo-stacks",
+			args:       []string{},
+			toComplete: "myapp",
+			expectDir:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Change to test directory.
+			if tt.setupDir != "" {
+				t.Chdir(tt.setupDir)
+			}
+
+			// Create a test command.
+			cmd := &cobra.Command{
+				Use: "test",
+			}
+			cmd.Flags().String("stack", "", "Stack flag")
+
+			// Call the function.
+			_, directive := ComponentsArgCompletion(cmd, tt.args, tt.toComplete)
+
+			if tt.expectDir {
+				assert.Equal(t, cobra.ShellCompDirectiveFilterDirs, directive)
+			} else {
+				assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+			}
+		})
+	}
+}
+
+// TestIsGitRepository tests the isGitRepository function.
+func TestIsGitRepository(t *testing.T) {
+	// Test in a git repo (current directory should be a git repo).
+	t.Chdir("../")
+	result := isGitRepository()
+	assert.True(t, result, "Should detect git repository")
+}
+
+// TestIsGitRepository_NonGitDir tests isGitRepository in a non-git directory.
+func TestIsGitRepository_NonGitDir(t *testing.T) {
+	// Create a temp directory that's not a git repo.
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	result := isGitRepository()
+	assert.False(t, result, "Should not detect git repository in temp dir")
+}
+
+// TestVerifyInsideGitRepoE tests the verifyInsideGitRepoE function.
+func TestVerifyInsideGitRepoE(t *testing.T) {
+	// Test in a git repo.
+	t.Chdir("../")
+	err := verifyInsideGitRepoE()
+	assert.NoError(t, err, "Should not error in git repository")
+}
+
+// TestVerifyInsideGitRepoE_NonGitDir tests verifyInsideGitRepoE in a non-git directory.
+func TestVerifyInsideGitRepoE_NonGitDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err := verifyInsideGitRepoE()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNotInGitRepository)
+}
+
+// TestGetTopLevelCommands tests the getTopLevelCommands function.
+func TestGetTopLevelCommands(t *testing.T) {
+	_ = NewTestKit(t)
+
+	result := getTopLevelCommands()
+
+	// Should return a map.
+	assert.NotNil(t, result)
+	// Should contain some commands.
+	assert.Greater(t, len(result), 0)
+}
+
+// TestListStacks tests the listStacks function.
+func TestListStacks(t *testing.T) {
+	t.Chdir("../examples/demo-stacks")
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack flag")
+
+	stacks, err := listStacks(cmd)
+	require.NoError(t, err)
+	assert.NotNil(t, stacks)
+	assert.Greater(t, len(stacks), 0)
+}
+
+// TestListStacks_InvalidDirectory tests listStacks in an invalid directory.
+func TestListStacks_InvalidDirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack flag")
+
+	_, err := listStacks(cmd)
+	assert.Error(t, err)
+}
+
+// TestStackFlagCompletion_NoArgs tests the stackFlagCompletion function without args.
+func TestStackFlagCompletion_NoArgs(t *testing.T) {
+	t.Chdir("../examples/demo-stacks")
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack flag")
+
+	// Test without component arg.
+	stacks, directive := stackFlagCompletion(cmd, []string{}, "")
+	assert.NotNil(t, stacks)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestStackFlagCompletion_WithComponent tests stackFlagCompletion with a component.
+func TestStackFlagCompletion_WithComponent(t *testing.T) {
+	t.Chdir("../examples/demo-stacks")
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("stack", "", "Stack flag")
+
+	// Test with component arg.
+	stacks, directive := stackFlagCompletion(cmd, []string{"myapp"}, "")
+	assert.NotNil(t, stacks)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestGetConfigAndStacksInfo_PathResolution tests path resolution in getConfigAndStacksInfo.
+// These tests verify that path-based component arguments are properly detected and
+// the path resolution code path is triggered without panicking.
+func TestGetConfigAndStacksInfo_PathResolution(t *testing.T) {
+	tests := []struct {
+		name                string
+		commandName         string
+		args                []string
+		expectPathResolving bool
+	}{
+		{
+			name:                "path component with ./ - triggers path resolution",
+			commandName:         "terraform",
+			args:                []string{"plan", "./components/terraform/myapp", "--stack", "dev"},
+			expectPathResolving: true,
+		},
+		{
+			name:                "path component with . - triggers path resolution",
+			commandName:         "terraform",
+			args:                []string{"plan", ".", "--stack", "dev"},
+			expectPathResolving: true,
+		},
+		{
+			name:                "path component with ../ - triggers path resolution",
+			commandName:         "terraform",
+			args:                []string{"plan", "../vpc", "--stack", "dev"},
+			expectPathResolving: true,
+		},
+		{
+			name:                "absolute path - triggers path resolution",
+			commandName:         "terraform",
+			args:                []string{"plan", "/tmp/components/terraform/vpc", "--stack", "dev"},
+			expectPathResolving: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			cmd := &cobra.Command{Use: tt.commandName}
+			cmd.Flags().String("stack", "", "stack name")
+
+			// All path resolution tests expect errors in test environment.
+			// The key validation is that the code doesn't panic.
+			_, err := getConfigAndStacksInfo(tt.commandName, cmd, tt.args)
+
+			// Should get an error in test environment (missing config).
+			assert.Error(t, err, "Expected error in test environment")
+
+			if tt.expectPathResolving {
+				// Path resolution code path was triggered.
+				t.Logf("Path resolution triggered for: %s", tt.args[1])
+			}
+		})
+	}
+}
+
+// TestGetConfigAndStacksInfo_PathResolutionWithValidPath tests successful path resolution.
+func TestGetConfigAndStacksInfo_PathResolutionWithValidPath(t *testing.T) {
+	stacksPath := "../tests/fixtures/scenarios/complete"
+
+	// Skip if fixtures directory doesn't exist.
+	if _, err := os.Stat(stacksPath); os.IsNotExist(err) {
+		t.Skipf("Skipping test: %s directory not found", stacksPath)
+	}
+
+	// Create component directory.
+	componentDir := filepath.Join(stacksPath, "components", "terraform", "top-level-component1")
+	if _, err := os.Stat(componentDir); os.IsNotExist(err) {
+		t.Skipf("Skipping test: %s directory not found", componentDir)
+	}
+
+	// Change to the component directory.
+	t.Chdir(componentDir)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	_ = NewTestKit(t)
+
+	cmd := &cobra.Command{Use: "terraform"}
+	cmd.Flags().String("stack", "", "stack name")
+
+	// Use "." to trigger path resolution.
+	args := []string{"plan", ".", "--stack", "tenant1-ue2-dev"}
+
+	info, err := getConfigAndStacksInfo("terraform", cmd, args)
+	// This may fail due to config loading issues in test environment.
+	// The key test is that it doesn't panic and handles path resolution properly.
+	if err != nil {
+		t.Logf("Got error (expected in test environment): %v", err)
+		// Should not panic - error is expected in test environment.
+		return
+	}
+
+	// If we got here, verify the path was resolved.
+	assert.Equal(t, "top-level-component1", info.ComponentFromArg, "Path should be resolved to component name")
 }

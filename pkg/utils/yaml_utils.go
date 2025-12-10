@@ -19,16 +19,21 @@ import (
 
 const (
 	// Atmos YAML functions.
-	AtmosYamlFuncExec            = "!exec"
-	AtmosYamlFuncStore           = "!store"
-	AtmosYamlFuncStoreGet        = "!store.get"
-	AtmosYamlFuncTemplate        = "!template"
-	AtmosYamlFuncTerraformOutput = "!terraform.output"
-	AtmosYamlFuncTerraformState  = "!terraform.state"
-	AtmosYamlFuncEnv             = "!env"
-	AtmosYamlFuncInclude         = "!include"
-	AtmosYamlFuncIncludeRaw      = "!include.raw"
-	AtmosYamlFuncGitRoot         = "!repo-root"
+	AtmosYamlFuncExec                    = "!exec"
+	AtmosYamlFuncStore                   = "!store"
+	AtmosYamlFuncStoreGet                = "!store.get"
+	AtmosYamlFuncTemplate                = "!template"
+	AtmosYamlFuncTerraformOutput         = "!terraform.output"
+	AtmosYamlFuncTerraformState          = "!terraform.state"
+	AtmosYamlFuncEnv                     = "!env"
+	AtmosYamlFuncInclude                 = "!include"
+	AtmosYamlFuncIncludeRaw              = "!include.raw"
+	AtmosYamlFuncGitRoot                 = "!repo-root"
+	AtmosYamlFuncRandom                  = "!random"
+	AtmosYamlFuncAwsAccountID            = "!aws.account_id"
+	AtmosYamlFuncAwsCallerIdentityArn    = "!aws.caller_identity_arn"
+	AtmosYamlFuncAwsCallerIdentityUserID = "!aws.caller_identity_user_id"
+	AtmosYamlFuncAwsRegion               = "!aws.region"
 
 	DefaultYAMLIndent = 2
 
@@ -46,19 +51,29 @@ var (
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncRandom,
+		AtmosYamlFuncAwsAccountID,
+		AtmosYamlFuncAwsCallerIdentityArn,
+		AtmosYamlFuncAwsCallerIdentityUserID,
+		AtmosYamlFuncAwsRegion,
 	}
 
 	// AtmosYamlTagsMap provides O(1) lookup for custom tag checking.
 	// This optimization replaces the O(n) SliceContainsString calls that were previously
 	// called 75M+ times, causing significant performance overhead.
 	atmosYamlTagsMap = map[string]bool{
-		AtmosYamlFuncExec:            true,
-		AtmosYamlFuncStore:           true,
-		AtmosYamlFuncStoreGet:        true,
-		AtmosYamlFuncTemplate:        true,
-		AtmosYamlFuncTerraformOutput: true,
-		AtmosYamlFuncTerraformState:  true,
-		AtmosYamlFuncEnv:             true,
+		AtmosYamlFuncExec:                    true,
+		AtmosYamlFuncStore:                   true,
+		AtmosYamlFuncStoreGet:                true,
+		AtmosYamlFuncTemplate:                true,
+		AtmosYamlFuncTerraformOutput:         true,
+		AtmosYamlFuncTerraformState:          true,
+		AtmosYamlFuncEnv:                     true,
+		AtmosYamlFuncRandom:                  true,
+		AtmosYamlFuncAwsAccountID:            true,
+		AtmosYamlFuncAwsCallerIdentityArn:    true,
+		AtmosYamlFuncAwsCallerIdentityUserID: true,
+		AtmosYamlFuncAwsRegion:               true,
 	}
 
 	// ParsedYAMLCache stores parsed yaml.Node objects and their position information

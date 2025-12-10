@@ -10,7 +10,9 @@
 The --from-step flag was set to dne, but this step does not exist in workflow
 pass.
 
-### Available steps:
+## Hints
+
+💡 Available steps:
 
 • step1
 

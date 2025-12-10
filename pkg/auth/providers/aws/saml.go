@@ -21,6 +21,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -396,6 +397,60 @@ func (p *samlProvider) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// Paths returns the credential and config file paths used by this SAML provider.
+// It returns provider-namespaced paths using AWSFileManager to support multiple
+// AWS provider instances. The credentials path is required, and the config path
+// is optional. Both paths are marked read-only for container mounting security.
+//
+//nolint:dupl // SSO and SAML providers have identical path logic but are separate implementations
+func (p *samlProvider) Paths() ([]types.Path, error) {
+	basePath := awsCloud.GetFilesBasePath(p.config)
+
+	// Use AWSFileManager to get correct provider-namespaced paths.
+	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	if err != nil {
+		return nil, err
+	}
+
+	paths := []types.Path{
+		{
+			Location: fileManager.GetCredentialsPath(p.name),
+			Type:     types.PathTypeFile,
+			Required: true,
+			Purpose:  fmt.Sprintf("AWS credentials file for provider %s", p.name),
+			Metadata: map[string]string{
+				"read_only": "true",
+			},
+		},
+		{
+			Location: fileManager.GetConfigPath(p.name),
+			Type:     types.PathTypeFile,
+			Required: false, // Config file is optional.
+			Purpose:  fmt.Sprintf("AWS config file for provider %s", p.name),
+			Metadata: map[string]string{
+				"read_only": "true",
+			},
+		},
+	}
+
+	// Add AWS cache directory if it can be determined (contains SSO and CLI cache).
+	// This directory should be writable so the AWS SDK can update cache.
+	awsCacheDir := fileManager.GetCachePath()
+	if awsCacheDir != "" {
+		paths = append(paths, types.Path{
+			Location: awsCacheDir,
+			Type:     types.PathTypeDirectory,
+			Required: false, // Cache is optional - AWS SDK will create if needed.
+			Purpose:  "AWS SDK cache directory (SSO tokens, CLI cache)",
+			Metadata: map[string]string{
+				"read_only": "false", // Cache must be writable.
+			},
+		})
+	}
+
+	return paths, nil
+}
+
 // PrepareEnvironment prepares environment variables for external processes.
 // For SAML providers, this method is typically not called directly since SAML providers
 // authenticate to get identity credentials, which then have their own PrepareEnvironment.
@@ -411,7 +466,7 @@ func (p *samlProvider) PrepareEnvironment(_ context.Context, environ map[string]
 // playwrightDriversInstalled checks if valid Playwright drivers are installed in standard locations.
 // Returns true if drivers are found, false if not found or home directory cannot be determined.
 func (p *samlProvider) playwrightDriversInstalled() bool {
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := homedir.Dir()
 	if err != nil {
 		log.Debug("Cannot determine home directory for driver detection", "error", err)
 		return false

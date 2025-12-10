@@ -31,8 +31,11 @@ func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
 	enableHeatmapIfRequested()
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
-	info := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
+	info, err := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
+	if err != nil {
+		return err
+	}
 	info.CliArgs = []string{"helmfile", commandName}
-	err := e.ExecuteHelmfile(info)
+	err = e.ExecuteHelmfile(info)
 	return err
 }

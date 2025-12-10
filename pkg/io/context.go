@@ -28,6 +28,9 @@ func NewContext(opts ...ContextOption) (Context, error) {
 	// Create masker
 	masker := newMasker(cfg)
 
+	// Register common secrets and patterns for automatic masking
+	registerCommonSecrets(masker)
+
 	// Create streams with masking
 	streams := newStreams(masker, cfg)
 

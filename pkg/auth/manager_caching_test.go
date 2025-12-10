@@ -237,6 +237,10 @@ func (m *mockIdentityWithStorage) Environment() (map[string]string, error) {
 	return map[string]string{"TEST_VAR": "test-value"}, nil
 }
 
+func (m *mockIdentityWithStorage) Paths() ([]types.Path, error) {
+	return []types.Path{}, nil
+}
+
 func (m *mockIdentityWithStorage) CredentialsExist() (bool, error) {
 	return m.creds != nil, nil
 }

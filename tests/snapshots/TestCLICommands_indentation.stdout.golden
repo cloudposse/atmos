@@ -62,6 +62,7 @@ settings:
         token: phc_TEST_TOKEN_PLACEHOLDER
         logging: false
 initialized: true
+basePathAbsolute: /absolute/path/to/repo
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation/stacks
 includeStackAbsolutePaths:
     - /absolute/path/to/repo/tests/fixtures/scenarios/indentation/stacks/deploy/**/*

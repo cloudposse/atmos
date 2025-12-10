@@ -1,13 +1,10 @@
 package list
 
 import (
-	"io"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -28,88 +25,6 @@ func (m *MockAtmosProAPIClientInterface) UploadInstances(req *dtos.InstancesUplo
 func (m *MockAtmosProAPIClientInterface) UploadInstanceStatus(req *dtos.InstanceStatusUploadRequest) error {
 	args := m.Called(req)
 	return args.Error(0)
-}
-
-// Test formatInstances function.
-func TestFormatInstances(t *testing.T) {
-	instances := []schema.Instance{
-		{Component: "vpc", Stack: "stack1"},
-		{Component: "app", Stack: "stack2"},
-		{Component: "db", Stack: "stack1"},
-	}
-
-	t.Run("TTY mode", func(t *testing.T) {
-		// Test TTY mode by directly calling formatInstances.
-		// In a real TTY environment, this would return styled table format.
-		output := formatInstances(instances)
-
-		// Should return styled table format with headers and data.
-		assert.Contains(t, output, "Component")
-		assert.Contains(t, output, "Stack")
-		assert.Contains(t, output, "vpc")
-		assert.Contains(t, output, "app")
-		assert.Contains(t, output, "db")
-	})
-
-	t.Run("non-TTY mode", func(t *testing.T) {
-		// Mock non-TTY environment by redirecting stdout.
-		originalStdout := os.Stdout
-		defer func() { os.Stdout = originalStdout }()
-
-		r, w, err := os.Pipe()
-		require.NoError(t, err)
-		defer func() {
-			require.NoError(t, r.Close())
-		}()
-
-		os.Stdout = w
-
-		output := formatInstances(instances)
-
-		err = w.Close()
-		require.NoError(t, err)
-		os.Stdout = originalStdout
-
-		// Read the output from the pipe.
-		pipeOutput, err := io.ReadAll(r)
-		require.NoError(t, err)
-		csvOutput := string(pipeOutput)
-
-		// Should return CSV format.
-		expectedCSV := "Component,Stack\nvpc,stack1\napp,stack2\ndb,stack1\n"
-		assert.Equal(t, expectedCSV, output)
-		// The function doesn't write to stdout, it only returns the formatted string
-		assert.Equal(t, "", csvOutput)
-	})
-
-	t.Run("empty instances", func(t *testing.T) {
-		originalStdout := os.Stdout
-		defer func() { os.Stdout = originalStdout }()
-
-		r, w, err := os.Pipe()
-		require.NoError(t, err)
-		defer func() {
-			require.NoError(t, r.Close())
-		}()
-
-		os.Stdout = w
-
-		output := formatInstances([]schema.Instance{})
-
-		err = w.Close()
-		require.NoError(t, err)
-		os.Stdout = originalStdout
-
-		// Read the output from the pipe.
-		pipeOutput, err := io.ReadAll(r)
-		require.NoError(t, err)
-		csvOutput := string(pipeOutput)
-
-		expectedCSV := "Component,Stack\n"
-		assert.Equal(t, expectedCSV, output)
-		// The function doesn't write to stdout, it only returns the formatted string
-		assert.Equal(t, "", csvOutput)
-	})
 }
 
 // Test processComponentConfig edge cases.

@@ -4,9 +4,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -82,6 +84,13 @@ func TestIsKnownWorkflowError(t *testing.T) {
 		{
 			name:     "wrapped ExitCodeError is known",
 			err:      errors.Join(errors.New("wrapper"), errUtils.ExitCodeError{Code: 2}),
+			expected: true,
+		},
+		{
+			name: "ErrorBuilder wrapped error is known",
+			err: errUtils.Build(errUtils.ErrWorkflowNoSteps).
+				WithExplanationf("Workflow %s is empty", "test").
+				Err(),
 			expected: true,
 		},
 	}
@@ -408,4 +417,116 @@ func TestKnownWorkflowErrorsSlice(t *testing.T) {
 // TestWorkflowErrTitle tests the error title constant.
 func TestWorkflowErrTitle(t *testing.T) {
 	assert.Equal(t, "Workflow Error", WorkflowErrTitle)
+}
+
+// TestStringsFieldsQuotedArguments documents the historical issue with strings.Fields().
+// It demonstrates why shell.Fields() from mvdan.cc/sh is used instead for workflow commands.
+// Multi-component flags like --query with quoted expressions were incorrectly split.
+func TestStringsFieldsQuotedArguments(t *testing.T) {
+	// This test documents why strings.Fields() is NOT used for workflow command parsing.
+	// The production code in pkg/workflow/executor.go uses shell.Fields() instead.
+	command := "terraform plan --query '.metadata.component == \"gcp/compute/v0.2.0\"' -s dev"
+
+	// strings.Fields incorrectly splits quoted expressions.
+	stringsFieldsResult := strings.Fields(command)
+
+	// The quoted expression is broken into multiple parts (incorrect).
+	assert.Contains(t, stringsFieldsResult, "'.metadata.component")
+	assert.Contains(t, stringsFieldsResult, "==")
+	assert.Contains(t, stringsFieldsResult, "\"gcp/compute/v0.2.0\"'")
+
+	// shell.Fields correctly preserves quoted expressions.
+	shellFieldsResult, err := shell.Fields(command, nil)
+	assert.NoError(t, err)
+
+	// The quoted expression is preserved as a single argument (correct).
+	assert.Contains(t, shellFieldsResult, ".metadata.component == \"gcp/compute/v0.2.0\"")
+}
+
+// TestShellFieldsCorrectParsing verifies that shell.Fields() from mvdan.cc/sh correctly parses.
+// It tests workflow commands with quoted arguments that would break with strings.Fields().
+// This is the fix for the multi-component operation issue.
+func TestShellFieldsCorrectParsing(t *testing.T) {
+	tests := []struct {
+		name         string
+		command      string
+		expectedArgs []string
+	}{
+		{
+			name:    "query with single-quoted expression containing spaces",
+			command: "terraform plan --query '.metadata.component == \"gcp/compute/v0.2.0\"' -s dev",
+			expectedArgs: []string{
+				"terraform", "plan",
+				"--query", ".metadata.component == \"gcp/compute/v0.2.0\"",
+				"-s", "dev",
+			},
+		},
+		{
+			name:    "query with double-quoted expression containing spaces",
+			command: `terraform plan --query ".settings.enabled == true" -s nonprod`,
+			expectedArgs: []string{
+				"terraform", "plan",
+				"--query", ".settings.enabled == true",
+				"-s", "nonprod",
+			},
+		},
+		{
+			name:    "components with comma-separated values (no spaces)",
+			command: "terraform plan --components gcp/compute/001,gcp/compute/101 -s dev",
+			expectedArgs: []string{
+				"terraform", "plan",
+				"--components", "gcp/compute/001,gcp/compute/101",
+				"-s", "dev",
+			},
+		},
+		{
+			name:    "components with spaces after commas (quoted)",
+			command: `terraform plan --components "gcp/compute/001, gcp/compute/101" -s dev`,
+			expectedArgs: []string{
+				"terraform", "plan",
+				"--components", "gcp/compute/001, gcp/compute/101",
+				"-s", "dev",
+			},
+		},
+		{
+			name:    "simple command without quotes",
+			command: "terraform plan vpc -s dev",
+			expectedArgs: []string{
+				"terraform", "plan", "vpc", "-s", "dev",
+			},
+		},
+		{
+			name:    "all flag (no arguments)",
+			command: "terraform plan --all -s dev",
+			expectedArgs: []string{
+				"terraform", "plan", "--all", "-s", "dev",
+			},
+		},
+		{
+			name:    "complex query with nested quotes",
+			command: `terraform plan --query '.metadata.component == "mock" and .settings.enabled == true' -s nonprod`,
+			expectedArgs: []string{
+				"terraform", "plan",
+				"--query", ".metadata.component == \"mock\" and .settings.enabled == true",
+				"-s", "nonprod",
+			},
+		},
+		{
+			name:    "command with double-dash separator",
+			command: "terraform plan vpc -s dev -- -var foo=bar",
+			expectedArgs: []string{
+				"terraform", "plan", "vpc", "-s", "dev", "--", "-var", "foo=bar",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use shell.Fields() - the same function now used in workflow_utils.go
+			actualArgs, err := shell.Fields(tt.command, nil)
+			assert.NoError(t, err, "shell.Fields should not return an error")
+			assert.Equal(t, tt.expectedArgs, actualArgs,
+				"shell.Fields should correctly parse quoted arguments")
+		})
+	}
 }
