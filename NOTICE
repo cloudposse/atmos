@@ -127,7 +127,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/internal/endpoints/v2
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/endpoints/v2.7.16/internal/endpoints/v2/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/internal/endpoints/v2.7.16/internal/endpoints/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/internal/ini
     License: Apache-2.0
