@@ -35,7 +35,8 @@ func HCLFunctions(registry *Registry, execCtx *ExecutionContext) map[string]func
 }
 
 // HCLEvalContextWithFunctions creates an hcl.EvalContext with Atmos functions.
-// Functions are available at the top level: env("VAR"), exec("cmd"), etc.
+// Functions are available in the atmos:: namespace: atmos::env("VAR"), atmos::exec("cmd"), etc.
+// Due to HCL's underscore-to-namespace conversion, atmos_env("VAR") also works.
 func HCLEvalContextWithFunctions(registry *Registry, execCtx *ExecutionContext) *hcl.EvalContext {
 	defer perf.Track(nil, "function.HCLEvalContextWithFunctions")()
 
@@ -58,7 +59,10 @@ func wrapAtmosFunction(registry *Registry, name string, execCtx *ExecutionContex
 			Name: "extra_args",
 			Type: cty.String,
 		},
-		Type: function.StaticReturnType(cty.String),
+		// Use DynamicPseudoType to allow functions to return various types (string, number, bool, list, object).
+		Type: func(args []cty.Value) (cty.Type, error) {
+			return cty.DynamicPseudoType, nil
+		},
 		Impl: func(args []cty.Value, retType cty.Type) (cty.Value, error) {
 			fn, err := registry.Get(name)
 			if err != nil {
