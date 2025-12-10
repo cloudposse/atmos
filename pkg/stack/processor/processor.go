@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/function"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/stack/loader"
@@ -57,7 +58,7 @@ func (p *Processor) ProcessPreMerge(ctx context.Context, data any, sourceFile st
 	defer perf.Track(nil, "processor.Processor.ProcessPreMerge")()
 
 	if p == nil {
-		return nil, ErrNilProcessor
+		return nil, errUtils.ErrNilProcessor
 	}
 
 	execCtx := function.NewExecutionContext(nil, "", sourceFile)
@@ -72,11 +73,11 @@ func (p *Processor) ProcessPostMerge(ctx context.Context, stackCtx *StackContext
 	defer perf.Track(nil, "processor.Processor.ProcessPostMerge")()
 
 	if p == nil {
-		return nil, ErrNilProcessor
+		return nil, errUtils.ErrNilProcessor
 	}
 
 	if stackCtx == nil {
-		return nil, fmt.Errorf("%w: stack context is required for post-merge processing", ErrNilContext)
+		return nil, fmt.Errorf("%w: stack context is required for post-merge processing", errUtils.ErrProcessorNilContext)
 	}
 
 	return p.processData(ctx, data, stackCtx, function.PostMerge)
