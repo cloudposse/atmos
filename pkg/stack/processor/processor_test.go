@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/function"
 	"github.com/cloudposse/atmos/pkg/stack/loader"
 )
@@ -62,10 +63,10 @@ func TestProcessorNil(t *testing.T) {
 	assert.Nil(t, p.LoaderRegistry())
 
 	_, err := p.ProcessPreMerge(context.Background(), nil, "test.yaml")
-	assert.ErrorIs(t, err, ErrNilProcessor)
+	assert.ErrorIs(t, err, errUtils.ErrNilProcessor)
 
 	_, err = p.ProcessPostMerge(context.Background(), NewStackContext(nil), nil)
-	assert.ErrorIs(t, err, ErrNilProcessor)
+	assert.ErrorIs(t, err, errUtils.ErrNilProcessor)
 }
 
 func TestProcessPreMerge(t *testing.T) {

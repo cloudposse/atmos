@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/stack/loader"
 )
 
@@ -124,7 +125,7 @@ func TestLoaderLoad(t *testing.T) {
 
 			if tt.expectError {
 				require.Error(t, err)
-				assert.True(t, errors.Is(err, loader.ErrParseFailed))
+				assert.True(t, errors.Is(err, errUtils.ErrLoaderParseFailed))
 				return
 			}
 
@@ -225,7 +226,7 @@ func TestLoaderEncodeInvalidInput(t *testing.T) {
 	// Encode expects map[string]any.
 	_, err := l.Encode(context.Background(), "not a map")
 	assert.Error(t, err)
-	assert.True(t, errors.Is(err, loader.ErrEncodeFailed))
+	assert.True(t, errors.Is(err, errUtils.ErrEncodeFailed))
 }
 
 func TestLoaderCaching(t *testing.T) {

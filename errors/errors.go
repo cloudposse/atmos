@@ -567,6 +567,22 @@ var (
 	ErrIdentityNotInConfig                  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig                  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
+
+	// Stack loader errors.
+	ErrUnsupportedFormat = errors.New("unsupported file format")
+	ErrLoaderParseFailed = errors.New("failed to parse file")
+	ErrEncodeFailed      = errors.New("failed to encode data")
+	ErrLoaderNotFound    = errors.New("no loader found for extension")
+	ErrDuplicateLoader   = errors.New("loader already registered for extension")
+
+	// Stack processor errors.
+	ErrProcessingFailed          = errors.New("processing failed")
+	ErrProcessorFunctionNotFound = errors.New("function not found")
+	ErrProcessorInvalidData      = errors.New("invalid data structure")
+	ErrSkippedFunction           = errors.New("function skipped")
+	ErrProcessorCycleDetected    = errors.New("dependency cycle detected")
+	ErrNilProcessor              = errors.New("nil processor")
+	ErrProcessorNilContext       = errors.New("nil context")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
