@@ -210,9 +210,23 @@ func (e *ECRIdentity) Logout(ctx context.Context, authCtx *schema.AuthContext) e
 **File:** `pkg/auth/cloud/docker/config.go`
 
 ```go
+import "github.com/cloudposse/atmos/pkg/xdg"
+
 // ConfigManager manages Docker config.json for ECR authentication.
 type ConfigManager struct {
     configPath string
+}
+
+// NewConfigManager creates a new Docker config manager using XDG paths.
+func NewConfigManager() (*ConfigManager, error) {
+    // Use pkg/xdg to get the config path, respecting XDG environment variables.
+    configDir, err := xdg.GetXDGConfigDir("docker", 0700)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get docker config directory: %w", err)
+    }
+    return &ConfigManager{
+        configPath: filepath.Join(configDir, "config.json"),
+    }, nil
 }
 
 // WriteAuth writes ECR authorization to Docker config.
@@ -224,6 +238,8 @@ func (m *ConfigManager) RemoveAuth(registries ...string) error
 // GetAuthenticatedRegistries returns list of authenticated ECR registries.
 func (m *ConfigManager) GetAuthenticatedRegistries() ([]string, error)
 ```
+
+**Note:** Uses `pkg/xdg.GetXDGConfigDir()` to determine the config path, which respects `ATMOS_XDG_CONFIG_HOME` and `XDG_CONFIG_HOME` environment variables and uses platform-appropriate defaults.
 
 **Docker Config Format:**
 
@@ -297,16 +313,27 @@ func (c *ECRCredentials) Validate(ctx context.Context) (*types.ValidationInfo, e
 Add ECR identity type to the factory:
 
 ```go
+// Identity kind constants (add to pkg/auth/types/kinds.go).
+const (
+    IdentityKindAWSUser          = "aws/user"
+    IdentityKindAWSPermissionSet = "aws/permission-set"
+    IdentityKindAWSAssumeRole    = "aws/assume-role"
+    IdentityKindAWSECR           = "aws/ecr"
+    IdentityKindAzureSubscription = "azure/subscription"
+)
+
 func (f *Factory) CreateIdentity(name string, config *IdentityConfig, authConfig *schema.AuthConfiguration) (Identity, error) {
     switch config.Kind {
     // ... existing cases ...
-    case "aws/ecr":
+    case types.IdentityKindAWSECR:
         return aws.NewECRIdentity(name, config, authConfig)
     default:
         return nil, fmt.Errorf("unknown identity kind: %s", config.Kind)
     }
 }
 ```
+
+**Note:** Identity kind strings should be defined as constants in `pkg/auth/types/kinds.go` for consistency and to avoid typos. This refactoring should be applied to existing identity kinds as well.
 
 ### 5. Environment Variables
 
@@ -502,7 +529,7 @@ jobs:
 
 ## Security Considerations
 
-1. **Credential Isolation**: Docker config stored in `~/.config/atmos/docker/` separate from user's default `~/.docker/config.json`
+1. **Credential Isolation**: Docker config stored in Atmos XDG config directory (via `pkg/xdg.GetXDGConfigDir("docker", 0700)`), separate from user's default `~/.docker/config.json`. This respects `ATMOS_XDG_CONFIG_HOME` and `XDG_CONFIG_HOME` environment variables.
 2. **File Permissions**: Docker config created with `0600` permissions
 3. **Token Lifetime**: ECR tokens expire after 12 hours (AWS-enforced)
 4. **Credential Cleanup**: `atmos auth logout` removes credentials from config file
