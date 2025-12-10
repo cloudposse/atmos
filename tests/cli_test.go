@@ -348,7 +348,13 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 		return "", errors.New("failed to determine repository root")
 	}
 
-	// 2. Normalize the repository root:
+	// 2. Pre-process: Join word-wrapped paths that were broken by Glamour rendering.
+	// Glamour may wrap long paths like "/Users/erik/conductor/atmos/.\nconductor/hanoi/..."
+	// This regex finds patterns where a path ends with a dot or slash followed by newline and continues
+	wrappedPathRegex := regexp.MustCompile(`(/[^\s\n]+[./])\n([a-zA-Z0-9._-]+/)`)
+	output = wrappedPathRegex.ReplaceAllString(output, "$1$2")
+
+	// 3. Normalize the repository root:
 	//    - Clean the path (which may not collapse all extra slashes after the drive letter, etc.)
 	//    - Convert to forward slashes,
 	//    - And explicitly collapse extra slashes.
@@ -443,8 +449,10 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// 12. Normalize external absolute paths to avoid environment-specific paths in snapshots.
 	// Replace common absolute path prefixes with generic placeholders.
 	// This handles paths outside the repo (e.g., /Users/username/other-projects/).
-	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:\Users\, etc.).
-	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^/\s":]+|/home/[^/]+/[^/]+/[^/]+/[^/\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
+	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:/Users/, etc.).
+	// Note: Windows paths use forward slashes here because filepath.ToSlash normalizes them earlier.
+	// The pattern matches the entire path including subdirectories by not excluding slashes in the final segment.
+	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^\s":]+|/home/[^/]+/[^/]+/[^/]+/[^\s":]+|C:/Users/[^/]+/[^/]+/[^/]+/[^\s":]+)`)
 	result = externalPathRegex.ReplaceAllString(result, "/absolute/path/to/external")
 
 	// 13. Normalize "Last Updated" timestamps in auth whoami output.
@@ -465,6 +473,25 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
 	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
 	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
+
+	// 15. Normalize basePathAbsolute values in config output.
+	// This field shows the absolute path to the repo, which varies by environment.
+	// Replace with the normalized path placeholder for consistency.
+	basePathAbsoluteRegex := regexp.MustCompile(`(?m)^basePathAbsolute: /absolute/path/to/repo.*$`)
+	result = basePathAbsoluteRegex.ReplaceAllString(result, "basePathAbsolute: /absolute/path/to/repo")
+
+	// 16. Normalize provisioned_by_user values in component output.
+	// This field shows the current username, which varies by environment (erik, runner, etc.).
+	// Replace with a generic placeholder.
+	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
+	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
+
+	// 17. Join hint messages where the sanitized path ended up on the next line.
+	// This must run AFTER path sanitization because it matches the sanitized path pattern.
+	// E.g., "💡 Stacks directory not found:\n/absolute/path" vs "💡 Stacks directory not found: /absolute/path"
+	// Also handles plain labels like "Stacks directory:\n/path"
+	hintPathRegex := regexp.MustCompile(`(?m)(💡[^\n]{0,200}?:|^[A-Z][^\n]{0,200}?directory:)\s*\n(/absolute/path/to/repo[^\s\n]*)`)
+	result = hintPathRegex.ReplaceAllString(result, "$1 $2")
 
 	return result, nil
 }
@@ -667,8 +694,11 @@ func checkPreconditions(t *testing.T, preconditions []string) {
 
 	// Map of precondition names to their check functions
 	preconditionChecks := map[string]func(*testing.T){
-		"github_token":    RequireOCIAuthentication,
-		"aws_credentials": RequireAWSCredentials,
+		"github_token":      RequireOCIAuthentication,
+		"aws_credentials":   RequireAWSCredentials,
+		"container-runtime": func(t *testing.T) { RequireContainerRuntime(t) },
+		"docker":            RequireDocker,
+		"podman":            RequirePodman,
 	}
 
 	// Check each precondition
@@ -1004,6 +1034,16 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 	var stdout, stderr bytes.Buffer
 	var exitCode int
 
+	// Defer output logging - only runs if THIS subtest fails
+	defer func() {
+		if t.Failed() {
+			t.Logf("\n=== Full output from failed test ===")
+			t.Logf("Exit Code: %d", exitCode)
+			t.Logf("\nStdout (%d bytes):\n%s", len(stdout.String()), stdout.String())
+			t.Logf("\nStderr (%d bytes):\n%s", len(stderr.String()), stderr.String())
+		}
+	}()
+
 	if tc.Tty {
 		// Run the command in TTY mode
 		ptyOutput, err := simulateTtyCommand(t, cmd, "")
@@ -1011,8 +1051,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		// Check if the context timeout was exceeded
 		if ctx.Err() == context.DeadlineExceeded {
 			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
-			t.Errorf("Captured stdout:\n%s", stdout.String())
-			t.Errorf("Captured stderr:\n%s", stderr.String())
 			return
 		}
 
@@ -1043,8 +1081,6 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		if ctx.Err() == context.DeadlineExceeded {
 			// Handle the timeout case first
 			t.Errorf("Reason: Test timed out after %s", tc.Expect.Timeout)
-			t.Errorf("Captured stdout:\n%s", stdout.String())
-			t.Errorf("Captured stderr:\n%s", stderr.String())
 			return
 		}
 
@@ -1200,11 +1236,9 @@ func verifyOutput(t *testing.T, outputType, output string, patterns []MatchPatte
 		match := re.MatchString(output)
 		if pattern.Negate && match {
 			t.Errorf("Reason: %s unexpectedly matched negated pattern %q.", outputType, pattern.Pattern)
-			t.Errorf("Output: %q", output)
 			success = false
 		} else if !pattern.Negate && !match {
 			t.Errorf("Reason: %s did not match pattern %q.", outputType, pattern.Pattern)
-			t.Errorf("Output: %q", output)
 			success = false
 		}
 	}
@@ -1256,14 +1290,12 @@ func verifyFileContains(t *testing.T, filePatterns map[string][]MatchPattern) bo
 				// Negated pattern: Ensure the pattern does NOT match
 				if re.Match(content) {
 					t.Errorf("Reason: File %q unexpectedly matched negated pattern %q.", file, matchPattern.Pattern)
-					t.Errorf("Content: %q", string(content))
 					success = false
 				}
 			} else {
 				// Regular pattern: Ensure the pattern matches
 				if !re.Match(content) {
 					t.Errorf("Reason: File %q did not match pattern %q.", file, matchPattern.Pattern)
-					t.Errorf("Content: %q", string(content))
 					success = false
 				}
 			}
@@ -1284,7 +1316,28 @@ func verifyFormatValidation(t *testing.T, output string, formats []string) bool 
 				return false
 			}
 		default:
-			t.Logf("Unknown format: %s", format)
+			t.Errorf("Unknown format: %s", format)
+			return false
+		}
+	}
+	return true
+}
+
+// validateFormatValidationSilent checks format validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateFormatValidationSilent(output string, formats []string) bool {
+	for _, format := range formats {
+		switch format {
+		case "json":
+			if !validateJSONFormatSilent(output) {
+				return false
+			}
+		case "yaml":
+			if !validateYAMLFormatSilent(output) {
+				return false
+			}
+		default:
+			// Unknown format - return false without logging
 			return false
 		}
 	}
@@ -1295,24 +1348,32 @@ func verifyYAMLFormat(t *testing.T, output string) bool {
 	var data interface{}
 	err := yaml.Unmarshal([]byte(output), &data)
 	if err != nil {
-		t.Logf("YAML validation failed: %v", err)
+		t.Errorf("YAML validation failed: %v", err)
 		// Show context around the error if possible.
 		lines := strings.Split(output, "\n")
 		preview := strings.Join(lines[:min(10, len(lines))], "\n")
 		if len(preview) > 500 {
 			preview = preview[:500] + "..."
 		}
-		t.Logf("Output preview:\n%s", preview)
+		t.Errorf("Output preview:\n%s", preview)
 		return false
 	}
 	return true
+}
+
+// validateYAMLFormatSilent checks YAML validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateYAMLFormatSilent(output string) bool {
+	var data interface{}
+	err := yaml.Unmarshal([]byte(output), &data)
+	return err == nil
 }
 
 func verifyJSONFormat(t *testing.T, output string) bool {
 	var data interface{}
 	err := json.Unmarshal([]byte(output), &data)
 	if err != nil {
-		t.Logf("JSON validation failed: %v", err)
+		t.Errorf("JSON validation failed: %v", err)
 		// Try to provide context about where the error occurred.
 		if syntaxErr, ok := err.(*json.SyntaxError); ok {
 			offset := syntaxErr.Offset
@@ -1320,11 +1381,19 @@ func verifyJSONFormat(t *testing.T, output string) bool {
 			start := max(0, int(offset)-50)
 			end := min(len(output), int(offset)+50)
 			snippet := output[start:end]
-			t.Logf("Error at offset %d, context: ...%s...", offset, snippet)
+			t.Errorf("Error at offset %d, context: ...%s...", offset, snippet)
 		}
 		return false
 	}
 	return true
+}
+
+// validateJSONFormatSilent checks JSON validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateJSONFormatSilent(output string) bool {
+	var data interface{}
+	err := json.Unmarshal([]byte(output), &data)
+	return err == nil
 }
 
 func min(a, b int) int {
@@ -1522,6 +1591,12 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 		return true
 	}
 
+	// Normalize line endings FIRST before sanitization.
+	// This ensures sanitizeOutput regex patterns work consistently across platforms.
+	// On Windows, CLI output may contain CRLF (\r\n) but our regex patterns expect LF (\n).
+	stdoutOutput = normalizeLineEndings(stdoutOutput)
+	stderrOutput = normalizeLineEndings(stderrOutput)
+
 	// Sanitize outputs and fail the test if sanitization fails.
 	var err error
 	var sanitizeOpts []sanitizeOption
@@ -1537,11 +1612,6 @@ func verifySnapshot(t *testing.T, tc TestCase, stdoutOutput, stderrOutput string
 	if err != nil {
 		t.Fatalf("failed to sanitize stderr output: %v", err)
 	}
-
-	// Normalize line endings in actual output for cross-platform consistency.
-	// This handles cases where CLI might output CRLF on Windows but snapshots use LF.
-	stdoutOutput = normalizeLineEndings(stdoutOutput)
-	stderrOutput = normalizeLineEndings(stderrOutput)
 
 	stdoutPath, stderrPath, ttyPath := getSnapshotFilenames(t.Name(), tc.Tty)
 
@@ -1619,7 +1689,7 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 			// Generate a colorized diff for better readability
 			diff = colorizeDiffWithThreshold(filteredStderrActual, filteredStderrExpected, 10)
 		}
-		t.Errorf("Stderr diff mismatch for %q:\n%s", stdoutPath, diff)
+		t.Errorf("Stderr diff mismatch for %q:\n%s", stderrPath, diff)
 	}
 
 	return true

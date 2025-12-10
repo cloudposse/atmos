@@ -45,6 +45,51 @@ atmos terraform <command> <component> --stack <stack> [options]
 ```
 </Terminal>
 
+### Path-Based Component Resolution
+
+Atmos supports using filesystem paths instead of component names for convenience. This allows you to navigate to a component directory and use `.` to reference it:
+
+<Terminal>
+```shell
+# Navigate to component directory
+cd components/terraform/vpc
+
+# Use . to reference current directory
+atmos terraform plan . -s dev
+atmos terraform apply . -s dev
+```
+</Terminal>
+
+This automatically resolves the path to the component name configured in your stack, eliminating the need to remember exact component names.
+
+**Supported path formats:**
+- `.` - Current directory
+- `./component` - Relative path from current directory
+- `../other-component` - Relative path to sibling directory
+- `/absolute/path/to/component` - Absolute path
+
+**Requirements:**
+- Must be inside a component directory under the configured base path
+- Must specify `--stack` flag
+- Component must exist in the specified stack configuration
+- **The component path must resolve to a unique component name** - If multiple components in the stack reference the same component path, you must use the unique component name instead of the path
+
+:::warning Path Resolution Limitation
+Path-based resolution only works when the component path resolves to a **single unique component** in the stack.
+
+For example, if both `station/1` and `station/2` reference `components/terraform/weather`:
+```bash
+cd components/terraform/weather
+atmos terraform plan . --stack dev  # ❌ Error: ambiguous - which component?
+```
+
+Instead, you must use the unique component names:
+```bash
+atmos terraform plan station/1 --stack dev  # ✓ Explicit and unambiguous
+atmos terraform plan station/2 --stack dev  # ✓ Explicit and unambiguous
+```
+:::
+
 ## Multi-Component Commands (Bulk Operations) Usage
 
 Use multi-component commands to run Terraform operations across multiple components simultaneously. You can target components by stack, selector, query, or change detection—often making this approach more efficient than using Atmos workflows for certain use cases.
@@ -169,6 +214,8 @@ Run `atmos terraform --help` to see all the available options
 
 ## Examples
 
+### Component Name Examples
+
 <Terminal>
 ```shell
 atmos terraform plan test/test-component-override-3 -s tenant1-ue2-dev
@@ -185,7 +232,38 @@ atmos terraform destroy test/test-component-override-2 -s tenant1-ue2-dev --redi
 atmos terraform destroy test/test-component-override -s tenant1-ue2-dev --redirect-stderr /dev/null
 
 atmos terraform init test/test-component-override-3 -s tenant1-ue2-dev
+```
+</Terminal>
 
+### Path-Based Examples
+
+<Terminal>
+```shell
+# Navigate to component directory and use current directory
+cd components/terraform/vpc
+atmos terraform plan . -s dev
+atmos terraform apply . -s dev
+
+# Use relative path from components/terraform directory
+cd components/terraform
+atmos terraform plan ./vpc -s dev
+atmos terraform apply ./infra/security-group -s prod
+
+# Use from project root with relative path
+atmos terraform plan components/terraform/vpc -s dev
+
+# Combine with other flags
+cd components/terraform/vpc
+atmos terraform plan . -s dev --skip-init
+atmos terraform apply . -s dev -- -auto-approve
+atmos terraform destroy . -s dev --dry-run
+```
+</Terminal>
+
+### Clean Examples
+
+<Terminal>
+```shell
 # Clean all components (with confirmation)
 atmos terraform clean
 
@@ -215,7 +293,14 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
 <dl>
     <dt>`component` <em>(required for Single-Component commands)</em></dt>
     <dd>
-        Atmos Terraform/OpenTofu component.
+        Atmos Terraform/OpenTofu component name or filesystem path.<br/><br/>
+        Supports both:
+        <ul>
+            <li>Component names: <code>vpc</code>, <code>infra/vpc</code>, <code>test/test-component</code></li>
+            <li>Filesystem paths: <code>.</code> (current directory), <code>./vpc</code>, <code>components/terraform/vpc</code></li>
+        </ul>
+        When using paths, Atmos automatically resolves the path to the component name based on your stack configuration.
+        See <a href="#path-based-component-resolution">Path-Based Component Resolution</a> above.
     </dd>
 </dl>
 

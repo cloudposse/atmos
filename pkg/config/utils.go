@@ -8,11 +8,14 @@ import (
 	"strconv"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // FindAllStackConfigsInPathsForStack finds all stack manifests in the paths specified by globs for the provided stack.
@@ -432,6 +435,87 @@ func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) err
 			}
 			return err
 		}
+	}
+
+	// Validate version constraint.
+	if err := validateVersionConstraint(atmosConfig.Version.Constraint); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// getVersionEnforcement returns the enforcement level, checking env var override.
+func getVersionEnforcement(configEnforcement string) string {
+	if envEnforcement := os.Getenv("ATMOS_VERSION_ENFORCEMENT"); envEnforcement != "" { //nolint:forbidigo
+		return envEnforcement
+	}
+	if configEnforcement == "" {
+		return "fatal"
+	}
+	return configEnforcement
+}
+
+// buildVersionConstraintError builds the error for unsatisfied version constraint.
+func buildVersionConstraintError(constraint schema.VersionConstraint) error {
+	builder := errUtils.Build(errUtils.ErrVersionConstraint).
+		WithExplanationf("This configuration requires Atmos version %s, but you are running %s",
+			constraint.Require, version.Version).
+		WithHint("Please upgrade: https://atmos.tools/install").
+		WithContext("required", constraint.Require).
+		WithContext("current", version.Version).
+		WithExitCode(1)
+
+	if constraint.Message != "" {
+		builder = builder.WithHint(constraint.Message)
+	}
+
+	return builder.Err()
+}
+
+// warnVersionConstraint logs a warning for unsatisfied version constraint.
+func warnVersionConstraint(constraint schema.VersionConstraint) {
+	_ = ui.Warning(fmt.Sprintf(
+		"Atmos version constraint not satisfied\n  Required: %s\n  Current:  %s",
+		constraint.Require,
+		version.Version,
+	))
+	if constraint.Message != "" {
+		_ = ui.Warning(constraint.Message)
+	}
+}
+
+// validateVersionConstraint validates the current Atmos version against the constraint
+// specified in atmos.yaml. Uses the Atmos error builder pattern - no deep exits.
+func validateVersionConstraint(constraint schema.VersionConstraint) error {
+	if constraint.Require == "" {
+		return nil
+	}
+
+	enforcement := getVersionEnforcement(constraint.Enforcement)
+	if enforcement == "silent" {
+		return nil
+	}
+
+	satisfied, err := version.ValidateConstraint(constraint.Require)
+	if err != nil {
+		return errUtils.Build(errors.Join(errUtils.ErrInvalidVersionConstraint, err)).
+			WithHint("Please use valid semver constraint syntax").
+			WithHint("Reference: https://github.com/hashicorp/go-version").
+			WithContext("constraint", constraint.Require).
+			WithExitCode(1).
+			Err()
+	}
+
+	if satisfied {
+		return nil
+	}
+
+	switch enforcement {
+	case "fatal":
+		return buildVersionConstraintError(constraint)
+	case "warn":
+		warnVersionConstraint(constraint)
 	}
 
 	return nil

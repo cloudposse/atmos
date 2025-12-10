@@ -1,0 +1,1015 @@
+atlantis_project: tenant1-ue2-dev-top-level-component1
+atmos_cli_config:
+  base_path: .
+  components:
+    terraform:
+      base_path: components/terraform
+      apply_auto_approve: false
+      append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
+      deploy_run_init: true
+      init_run_reconfigure: true
+      auto_generate_backend_file: false
+      command: terraform
+      shell:
+        prompt: ""
+      init:
+        pass_vars: false
+      plan:
+        skip_planfile: false
+    helmfile:
+      base_path: components/helmfile
+      use_eks: true
+      kubeconfig_path: /dev/shm
+      helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
+      cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+      command: ""
+    packer:
+      base_path: ""
+      command: ""
+  stacks:
+    base_path: stacks
+    included_paths:
+      - orgs/**/*
+    excluded_paths:
+      - '**/_defaults.yaml'
+    name_pattern: ""
+    name_template: '{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}'
+  workflows:
+    base_path: stacks/workflows
+    list:
+      format: ""
+      columns: []
+atmos_component: top-level-component1
+atmos_manifest: orgs/cp/tenant1/dev/us-east-2
+atmos_stack: tenant1-ue2-dev
+atmos_stack_file: orgs/cp/tenant1/dev/us-east-2
+auth: {}
+backend:
+  acl: bucket-owner-full-control
+  bucket: cp-ue2-root-tfstate
+  dynamodb_table: cp-ue2-root-tfstate-lock
+  encrypt: true
+  key: terraform.tfstate
+  profile: cp-gbl-root-tfstate
+  region: us-east-2
+  role_arn: null
+  workspace_key_prefix: top-level-component1
+backend_type: s3
+cli_args:
+  - describe
+  - component
+command: terraform
+component: top-level-component1
+component_info:
+  component_path: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1
+  component_type: terraform
+  terraform_config:
+    path: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1
+    variables:
+      additional_tag_map:
+        name: additional_tag_map
+        type: map(string)
+        description: |
+          Additional key-value pairs to add to each map in `tags_as_list_of_maps`. Not added to `tags` or `id`.
+          This is for some rare cases where resources want additional configuration of tags
+          and therefore take a list of maps with tag key, value, and additional configuration.
+        default: {}
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 181
+      attributes:
+        name: attributes
+        type: list(string)
+        description: |
+          ID element. Additional attributes (e.g. `workers` or `cluster`) to add to `id`,
+          in the order they appear in the list. New attributes are appended to the
+          end of the list. The elements of the list are joined by the `delimiter`
+          and treated as a single ID element.
+        default: []
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 146
+      context:
+        name: context
+        type: any
+        description: |
+          Single object for setting entire context at once.
+          See description of individual variables for details.
+          Leave string and numeric variables as `null` to use default value.
+          Individual variable settings (non-null) override settings in context object,
+          except for attributes, tags, and additional_tag_map, which are merged.
+        default:
+          additional_tag_map: {}
+          attributes: []
+          delimiter: null
+          descriptor_formats: {}
+          enabled: true
+          environment: null
+          id_length_limit: null
+          label_key_case: null
+          label_order: []
+          label_value_case: null
+          labels_as_tags:
+            - unset
+          name: null
+          namespace: null
+          regex_replace_chars: null
+          stage: null
+          tags: {}
+          tenant: null
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 50
+      delimiter:
+        name: delimiter
+        type: string
+        description: |
+          Delimiter to be used between ID elements.
+          Defaults to `-` (hyphen). Set to `""` to use no delimiter at all.
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 137
+      descriptor_formats:
+        name: descriptor_formats
+        type: any
+        description: |
+          Describe additional descriptors to be output in the `descriptors` output map.
+          Map of maps. Keys are names of descriptors. Values are maps of the form
+          `{
+             format = string
+             labels = list(string)
+          }`
+          (Type is `any` so the map values can later be enhanced to provide additional options.)
+          `format` is a Terraform format string to be passed to the `format()` function.
+          `labels` is a list of labels, in order, to pass to `format()` function.
+          Label values will be normalized before being passed to `format()` so they will be
+          identical to how they appear in `id`.
+          Default is `{}` (`descriptors` output will be empty).
+        default: {}
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 260
+      enabled:
+        name: enabled
+        type: bool
+        description: Set to false to prevent the module from creating any resources
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 97
+      environment:
+        name: environment
+        type: string
+        description: ID element. Usually used for region e.g. 'uw2', 'us-west-2', OR role 'prod', 'staging', 'dev', 'UAT'
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 115
+      id_length_limit:
+        name: id_length_limit
+        type: number
+        description: |
+          Limit `id` to this many characters (minimum 6).
+          Set to `0` for unlimited length.
+          Set to `null` for keep the existing setting, which defaults to `0`.
+          Does not affect `id_full`.
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 211
+      label_key_case:
+        name: label_key_case
+        type: string
+        description: |
+          Controls the letter case of the `tags` keys (label names) for tags generated by this module.
+          Does not affect keys of tags passed in via the `tags` input.
+          Possible values: `lower`, `title`, `upper`.
+          Default value: `title`.
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 226
+      label_order:
+        name: label_order
+        type: list(string)
+        description: |
+          The order in which the labels (ID elements) appear in the `id`.
+          Defaults to ["namespace", "environment", "stage", "name", "attributes"].
+          You can omit any of the 6 labels ("tenant" is the 6th), but at least one must be present.
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 191
+      label_value_case:
+        name: label_value_case
+        type: string
+        description: |
+          Controls the letter case of ID elements (labels) as included in `id`,
+          set as tag values, and output by this module individually.
+          Does not affect values of tags passed in via the `tags` input.
+          Possible values: `lower`, `title`, `upper` and `none` (no transformation).
+          Set this to `title` and set `delimiter` to `""` to yield Pascal Case IDs.
+          Default value: `lower`.
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 242
+      labels_as_tags:
+        name: labels_as_tags
+        type: set(string)
+        description: |
+          Set of labels (ID elements) to include as tags in the `tags` output.
+          Default is to include all labels.
+          Tags with empty values will not be included in the `tags` output.
+          Set to `[]` to suppress all generated tags.
+          **Notes:**
+            The value of the `name` tag, if included, will be the `id`, not the `name`.
+            Unlike other `null-label` inputs, the initial setting of `labels_as_tags` cannot be
+            changed in later chained modules. Attempts to change it will be silently ignored.
+        default:
+          - default
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 157
+      name:
+        name: name
+        type: string
+        description: |
+          ID element. Usually the component or solution name, e.g. 'app' or 'jenkins'.
+          This is the only ID element not also included as a `tag`.
+          The "name" tag is set to the full `id` string. There is no tag with the value of the `name` input.
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 127
+      namespace:
+        name: namespace
+        type: string
+        description: ID element. Usually an abbreviation of your organization name, e.g. 'eg' or 'cp', to help ensure generated IDs are globally unique
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 103
+      regex_replace_chars:
+        name: regex_replace_chars
+        type: string
+        description: |
+          Terraform regular expression (regex) string.
+          Characters matching the regex will be removed from the ID elements.
+          If not set, `"/[^a-zA-Z0-9-]/"` is used to remove all characters other than hyphens, letters and digits.
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 201
+      region:
+        name: region
+        type: string
+        description: Region
+        default: null
+        required: true
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/variables.tf
+          line: 1
+      service_1_list:
+        name: service_1_list
+        type: list(string)
+        description: Service 1 list
+        default: []
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/variables.tf
+          line: 11
+      service_1_map:
+        name: service_1_map
+        type: map(string)
+        description: Service 1 map
+        default: {}
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/variables.tf
+          line: 17
+      service_1_name:
+        name: service_1_name
+        type: string
+        description: Service 1 name
+        default: null
+        required: true
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/variables.tf
+          line: 6
+      service_2_list:
+        name: service_2_list
+        type: list(string)
+        description: Service 2 list
+        default: []
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/variables.tf
+          line: 28
+      service_2_map:
+        name: service_2_map
+        type: map(string)
+        description: Service 2 map
+        default: {}
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/variables.tf
+          line: 34
+      service_2_name:
+        name: service_2_name
+        type: string
+        description: Service 2 name
+        default: null
+        required: true
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/variables.tf
+          line: 23
+      stage:
+        name: stage
+        type: string
+        description: ID element. Usually used to indicate role, e.g. 'prod', 'staging', 'source', 'build', 'test', 'deploy', 'release'
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 121
+      tags:
+        name: tags
+        type: map(string)
+        description: |
+          Additional tags (e.g. `{'BusinessUnit': 'XYZ'}`).
+          Neither the tag keys nor the tag values will be modified by this module.
+        default: {}
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 172
+      tenant:
+        name: tenant
+        type: string
+        description: ID element _(Rarely used, not included by default)_. A customer identifier, indicating who this instance of a resource is for
+        default: null
+        required: false
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 109
+    outputs:
+      service_1_id:
+        name: service_1_id
+        description: Service 1 ID
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/outputs.tf
+          line: 1
+        type: ""
+      service_2_id:
+        name: service_2_id
+        description: Service 2 ID
+        sensitive: false
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/outputs.tf
+          line: 6
+        type: ""
+    requiredcore:
+      - '>= 1.0.0'
+    requiredproviders: {}
+    providerconfigs: {}
+    managedresources: {}
+    dataresources: {}
+    modulecalls:
+      service_1_label:
+        name: service_1_label
+        source: cloudposse/label/null
+        version: 0.25.0
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/main.tf
+          line: 1
+      service_2_label:
+        name: service_2_label
+        source: ../../../modules/label
+        version: ""
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/main.tf
+          line: 10
+      this:
+        name: this
+        source: cloudposse/label/null
+        version: 0.25.0
+        pos:
+          filename: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform/top-level-component1/context.tf
+          line: 23
+    diagnostics: []
+component_type: terraform
+deps:
+  - catalog/terraform/services/top-level-service-1
+  - catalog/terraform/services/top-level-service-2
+  - catalog/terraform/spacelift-and-backend-override-1
+  - catalog/terraform/top-level-component1
+  - mixins/region/us-east-2
+  - mixins/stage/dev
+  - orgs/cp/_defaults
+  - orgs/cp/tenant1/_defaults
+  - orgs/cp/tenant1/dev/us-east-2
+deps_all:
+  - catalog/terraform/services/top-level-service-1
+  - catalog/terraform/services/top-level-service-2
+  - catalog/terraform/spacelift-and-backend-override-1
+  - catalog/terraform/top-level-component1
+  - mixins/region/us-east-2
+  - mixins/stage/dev
+  - orgs/cp/_defaults
+  - orgs/cp/tenant1/_defaults
+  - orgs/cp/tenant1/dev/us-east-2
+env: {}
+hooks: {}
+imports: []
+inheritance: []
+metadata: {}
+overrides:
+  providers:
+    context: {}
+providers:
+  context:
+    delimiter: '-'
+    enabled: true
+    properties:
+      environment:
+        max_length: 6
+        min_length: 2
+        required: true
+      namespace:
+        max_length: 4
+        min_length: 2
+        required: true
+      stage:
+        max_length: 20
+        min_length: 2
+        required: true
+      tenant:
+        max_length: 10
+        min_length: 2
+        required: true
+    values:
+      atmos_component: top-level-component1
+      atmos_stack: tenant1-ue2-dev
+      environment: ue2
+      namespace: cp
+      stage: dev
+      tenant: tenant1
+remote_state_backend:
+  acl: bucket-owner-full-control
+  bucket: cp-ue2-root-tfstate
+  dynamodb_table: cp-ue2-root-tfstate-lock
+  encrypt: true
+  key: terraform.tfstate
+  profile: cp-gbl-root-tfstate
+  region: us-east-2
+  role_arn: arn:aws:iam::123456789012:role/cp-gbl-root-terraform
+  workspace_key_prefix: top-level-component1
+remote_state_backend_type: s3
+settings:
+  atlantis:
+    config_template:
+      allowed_regexp_prefixes:
+        - dev/
+      automerge: false
+      delete_source_branch_on_merge: false
+      parallel_apply: false
+      parallel_plan: true
+      version: 3
+    config_template_name: config-1
+    project_template:
+      apply_requirements:
+        - approved
+      autoplan:
+        enabled: true
+        when_modified:
+          - '**/*.tf'
+          - varfiles/$PROJECT_NAME.tfvars.json
+      delete_source_branch_on_merge: false
+      dir: '{component-path}'
+      name: '{tenant}-{environment}-{stage}-{component}'
+      terraform_version: v1.3
+      workflow: workflow-1
+      workspace: '{workspace}'
+    project_template_name: project-1
+    workflow_templates:
+      workflow-1:
+        apply:
+          steps:
+            - run: terraform apply $PLANFILE
+        plan:
+          steps:
+            - run: terraform init
+            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+            - run: terraform plan -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+      workflow-2:
+        apply:
+          steps:
+            - run: terraform apply $PLANFILE
+        plan:
+          steps:
+            - run: terraform init -reconfigure
+            - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+            - run: terraform plan -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+  config:
+    is_prod: false
+  depends_on:
+    1:
+      component: test/test-component-override
+    2:
+      component: test/test-component
+      stage: dev
+  integrations:
+    github:
+      gitops:
+        infracost-enabled: false
+        opentofu-version: 1.8.4
+        terraform-version: 1.9.8
+  spacelift:
+    admin_stack_selector:
+      component: infrastructure-tenant1
+      environment: ue2
+      stage: prod
+      tenant: tenant1
+    autodeploy: false
+    protect_from_deletion: true
+    stack_destructor_enabled: false
+    workspace_enabled: true
+  templates:
+    settings:
+      gomplate:
+        datasources:
+          ip:
+            headers:
+              accept:
+                - application/json
+            url: https://api.ipify.org?format=json
+        timeout: 20
+      sprig: {}
+sources:
+  backend:
+    acl:
+      final_value: bucket-owner-full-control
+      name: acl
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          variable_value: bucket-owner-full-control
+        - dependency_type: import
+          stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          variable_value: bucket-owner-full-control
+    bucket:
+      final_value: cp-ue2-root-tfstate
+      name: bucket
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          variable_value: cp-ue2-root-tfstate
+        - dependency_type: import
+          stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          variable_value: cp-ue2-root-tfstate
+    dynamodb_table:
+      final_value: cp-ue2-root-tfstate-lock
+      name: dynamodb_table
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          variable_value: cp-ue2-root-tfstate-lock
+        - dependency_type: import
+          stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          variable_value: cp-ue2-root-tfstate-lock
+    encrypt:
+      final_value: true
+      name: encrypt
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          variable_value: true
+        - dependency_type: import
+          stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          variable_value: true
+    key:
+      final_value: terraform.tfstate
+      name: key
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          variable_value: terraform.tfstate
+        - dependency_type: import
+          stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          variable_value: terraform.tfstate
+    profile:
+      final_value: cp-gbl-root-tfstate
+      name: profile
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          variable_value: cp-gbl-root-tfstate
+    region:
+      final_value: us-east-2
+      name: region
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: terraform.backend.s3
+          variable_value: us-east-2
+        - dependency_type: import
+          stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          variable_value: us-east-2
+    role_arn:
+      final_value: null
+      name: role_arn
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.backend.s3
+          variable_value: null
+    workspace_key_prefix:
+      final_value: top-level-component1
+      name: workspace_key_prefix
+      stack_dependencies: []
+  env: {}
+  settings:
+    atlantis:
+      final_value:
+        config_template:
+          allowed_regexp_prefixes:
+            - dev/
+          automerge: false
+          delete_source_branch_on_merge: false
+          parallel_apply: false
+          parallel_plan: true
+          version: 3
+        config_template_name: config-1
+        project_template:
+          apply_requirements:
+            - approved
+          autoplan:
+            enabled: true
+            when_modified:
+              - '**/*.tf'
+              - varfiles/$PROJECT_NAME.tfvars.json
+          delete_source_branch_on_merge: false
+          dir: '{component-path}'
+          name: '{tenant}-{environment}-{stage}-{component}'
+          terraform_version: v1.3
+          workflow: workflow-1
+          workspace: '{workspace}'
+        project_template_name: project-1
+        workflow_templates:
+          workflow-1:
+            apply:
+              steps:
+                - run: terraform apply $PLANFILE
+            plan:
+              steps:
+                - run: terraform init
+                - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+                - run: terraform plan -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+          workflow-2:
+            apply:
+              steps:
+                - run: terraform apply $PLANFILE
+            plan:
+              steps:
+                - run: terraform init -reconfigure
+                - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+                - run: terraform plan -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+      name: atlantis
+      stack_dependencies:
+        - dependency_type: inline
+          stack_file: orgs/cp/tenant1/dev/us-east-2
+          stack_file_section: settings
+          variable_value:
+            config_template:
+              allowed_regexp_prefixes:
+                - dev/
+              automerge: false
+              delete_source_branch_on_merge: false
+              parallel_apply: false
+              parallel_plan: true
+              version: 3
+            project_template:
+              apply_requirements:
+                - approved
+              autoplan:
+                enabled: true
+                when_modified:
+                  - '**/*.tf'
+                  - varfiles/$PROJECT_NAME.tfvars.json
+              delete_source_branch_on_merge: false
+              dir: '{component-path}'
+              name: '{tenant}-{environment}-{stage}-{component}'
+              terraform_version: v1.3
+              workflow: workflow-1
+              workspace: '{workspace}'
+        - dependency_type: import
+          stack_file: orgs/cp/_defaults
+          stack_file_section: settings
+          variable_value:
+            config_template_name: config-1
+            project_template_name: project-1
+            workflow_templates:
+              workflow-1:
+                apply:
+                  steps:
+                    - run: terraform apply $PLANFILE
+                plan:
+                  steps:
+                    - run: terraform init
+                    - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+                    - run: terraform plan -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+              workflow-2:
+                apply:
+                  steps:
+                    - run: terraform apply $PLANFILE
+                plan:
+                  steps:
+                    - run: terraform init -reconfigure
+                    - run: terraform workspace select $WORKSPACE || terraform workspace new $WORKSPACE
+                    - run: terraform plan -out $PLANFILE -var-file varfiles/$PROJECT_NAME.tfvars.json
+    config:
+      final_value:
+        is_prod: false
+      name: config
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: mixins/stage/dev
+          stack_file_section: settings
+          variable_value:
+            is_prod: false
+    depends_on:
+      final_value:
+        1:
+          component: test/test-component-override
+        2:
+          component: test/test-component
+          stage: dev
+      name: depends_on
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/top-level-component1
+          stack_file_section: components.terraform.settings
+          variable_value:
+            1:
+              component: test/test-component-override
+            2:
+              component: test/test-component
+              stage: dev
+    integrations:
+      final_value:
+        github:
+          gitops:
+            infracost-enabled: false
+            opentofu-version: 1.8.4
+            terraform-version: 1.9.8
+      name: integrations
+      stack_dependencies: []
+    spacelift:
+      final_value:
+        admin_stack_selector:
+          component: infrastructure-tenant1
+          environment: ue2
+          stage: prod
+          tenant: tenant1
+        autodeploy: false
+        protect_from_deletion: true
+        stack_destructor_enabled: false
+        workspace_enabled: true
+      name: spacelift
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/top-level-component1
+          stack_file_section: components.terraform.settings
+          variable_value:
+            workspace_enabled: true
+        - dependency_type: import
+          stack_file: catalog/terraform/spacelift-and-backend-override-1
+          stack_file_section: settings
+          variable_value:
+            protect_from_deletion: true
+            stack_destructor_enabled: false
+            workspace_enabled: true
+        - dependency_type: import
+          stack_file: orgs/cp/_defaults
+          stack_file_section: settings
+          variable_value:
+            autodeploy: false
+            workspace_enabled: false
+        - dependency_type: import
+          stack_file: orgs/cp/tenant1/_defaults
+          stack_file_section: settings
+          variable_value:
+            admin_stack_selector:
+              component: infrastructure-tenant1
+              environment: ue2
+              stage: prod
+              tenant: tenant1
+    templates:
+      final_value:
+        settings:
+          gomplate:
+            datasources:
+              ip:
+                headers:
+                  accept:
+                    - application/json
+                url: https://api.ipify.org?format=json
+            timeout: 20
+          sprig: {}
+      name: templates
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: orgs/cp/_defaults
+          stack_file_section: settings
+          variable_value:
+            settings:
+              gomplate:
+                datasources:
+                  ip:
+                    headers:
+                      accept:
+                        - application/json
+                    url: https://api.ipify.org?format=json
+                timeout: 20
+              sprig: {}
+  vars:
+    enabled:
+      final_value: true
+      name: enabled
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/top-level-component1
+          stack_file_section: components.terraform.vars
+          variable_value: true
+        - dependency_type: inline
+          stack_file: orgs/cp/tenant1/dev/us-east-2
+          stack_file_section: terraform.vars
+          variable_value: false
+        - dependency_type: inline
+          stack_file: orgs/cp/tenant1/dev/us-east-2
+          stack_file_section: vars
+          variable_value: true
+    environment:
+      final_value: ue2
+      name: environment
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: mixins/region/us-east-2
+          stack_file_section: vars
+          variable_value: ue2
+    namespace:
+      final_value: cp
+      name: namespace
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: orgs/cp/_defaults
+          stack_file_section: vars
+          variable_value: cp
+    region:
+      final_value: us-east-2
+      name: region
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: mixins/region/us-east-2
+          stack_file_section: vars
+          variable_value: us-east-2
+    service_1_name:
+      final_value: top-level-service-1
+      name: service_1_name
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/services/top-level-service-1
+          stack_file_section: components.terraform.vars
+          variable_value: top-level-service-1
+    service_2_name:
+      final_value: top-level-service-2
+      name: service_2_name
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: catalog/terraform/services/top-level-service-2
+          stack_file_section: components.terraform.vars
+          variable_value: top-level-service-2
+    stage:
+      final_value: dev
+      name: stage
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: mixins/stage/dev
+          stack_file_section: vars
+          variable_value: dev
+    tags:
+      final_value:
+        atlantis_project: tenant1-ue2-dev-top-level-component1
+        atmos_component: '{{ .atmos_component }}'
+        atmos_component_description: Top-Level-Component1 component provisioned in the stack "tenant1-ue2-dev"
+        atmos_manifest: orgs/cp/tenant1/dev/us-east-2
+        atmos_stack: tenant1-ue2-dev
+        provisioned_by_user: user
+        region: us-east-2
+        spacelift_stack: tenant1-ue2-dev-top-level-component1
+        terraform_component: top-level-component1
+        terraform_workspace: tenant1-ue2-dev
+      name: tags
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: orgs/cp/_defaults
+          stack_file_section: terraform.vars
+          variable_value:
+            atlantis_project: tenant1-ue2-dev-top-level-component1
+            atmos_component: '{{ .atmos_component }}'
+            atmos_component_description: Top-Level-Component1 component provisioned in the stack "tenant1-ue2-dev"
+            atmos_manifest: orgs/cp/tenant1/dev/us-east-2
+            atmos_stack: tenant1-ue2-dev
+            provisioned_by_user: user
+            region: us-east-2
+            spacelift_stack: tenant1-ue2-dev-top-level-component1
+            terraform_component: top-level-component1
+            terraform_workspace: tenant1-ue2-dev
+    tenant:
+      final_value: tenant1
+      name: tenant
+      stack_dependencies:
+        - dependency_type: import
+          stack_file: orgs/cp/tenant1/_defaults
+          stack_file_section: vars
+          variable_value: tenant1
+spacelift_stack: tenant1-ue2-dev-top-level-component1
+stack: tenant1-ue2-dev
+tf_cli_vars: {}
+vars:
+  enabled: true
+  environment: ue2
+  namespace: cp
+  region: us-east-2
+  service_1_name: top-level-service-1
+  service_2_name: top-level-service-2
+  stage: dev
+  tags:
+    atlantis_project: tenant1-ue2-dev-top-level-component1
+    atmos_component: '{{ .atmos_component }}'
+    atmos_component_description: Top-Level-Component1 component provisioned in the stack "tenant1-ue2-dev"
+    atmos_manifest: orgs/cp/tenant1/dev/us-east-2
+    atmos_stack: tenant1-ue2-dev
+    provisioned_by_user: user
+    region: us-east-2
+    spacelift_stack: tenant1-ue2-dev-top-level-component1
+    terraform_component: top-level-component1
+    terraform_workspace: tenant1-ue2-dev
+  tenant: tenant1
+workspace: tenant1-ue2-dev
+

@@ -172,20 +172,59 @@ components/
 
 ## Workspace Key Management
 
-:::warning Workspace Key Configuration
-This pattern works best with Atmos auto-generated [backend configuration](/components/terraform/backends). The `workspace_key_prefix` must remain stable across version changes to prevent state conflicts:
+When vendoring multiple versions of the same component, you need to ensure the Terraform state path remains stable across version upgrades.
+
+### How Atmos Calculates `workspace_key_prefix`
+
+Atmos automatically generates the [`workspace_key_prefix`](https://developer.hashicorp.com/terraform/language/backend/s3#workspace_key_prefix) (S3), `prefix` (GCS), or `key` (Azure) for your backend using this priority order:
+
+| Priority | Source | Example | When to Use |
+|----------|--------|---------|-------------|
+| 1 (Highest) | Explicit backend config | `backend.s3.workspace_key_prefix: custom` | Full control, overrides everything |
+| 2 | `metadata.name` | `metadata.name: vpc` | **Recommended** - Stable logical identity |
+| 3 | `metadata.component` | `metadata.component: vpc/v2` | Physical path (includes version) |
+| 4 (Lowest) | Atmos component name | YAML key: `vpc-prod` | Default fallback |
+
+### Recommended: Use `metadata.name`
+
+The `metadata.name` field provides a stable logical identity that doesn't change when you upgrade component versions:
 
 ```yaml
-# WRONG - Version in workspace key causes state problems
-settings:
-  workspace_key_prefix: "prod/vpc/v2"  # Don't do this!
-
-# CORRECT - Stable workspace key across versions
-settings:
-  workspace_key_prefix: "prod/vpc"     # Version-agnostic key
+components:
+  terraform:
+    vpc:
+      metadata:
+        name: vpc              # Stable logical identity
+        component: vpc/v2      # Physical version path
+      # Result: effective workspace_key_prefix will be "vpc"
+      # When you upgrade to vpc/v3, workspace_key_prefix STAYS "vpc"
+      # No Terraform state migration needed!
 ```
 
-When the workspace key includes version information, switching versions requires complex state migrations. Keep it stable!
+:::tip Why This Matters
+**Problem:** If `workspace_key_prefix` includes the version (e.g., `vpc-v2`), upgrading to a new version creates a NEW state file, and you lose your existing infrastructure state.
+
+**Solution:** `metadata.name` separates the stable logical identity (`vpc`) from the physical version path (`vpc/v2`), so state paths remain stable across upgrades.
+:::
+
+### Alternative: Explicit Override
+
+If you need full control, explicitly set the workspace key prefix in your backend configuration:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      backend:
+        s3:
+          workspace_key_prefix: vpc  # Explicit override (highest priority)
+      metadata:
+        component: vpc/v2
+      # Result: effective workspace_key_prefix will be "vpc"
+```
+
+:::important
+If not using the S3 backend, use the appropriate parameter for your backend to ensure the workspace is stable across versions of the component deployed.
 :::
 
 ## Migration Strategies

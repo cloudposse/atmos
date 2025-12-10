@@ -17,6 +17,16 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// getBasePathToUse returns the appropriate base path for file resolution.
+// It prefers BasePathAbsolute for correct resolution when base_path is relative
+// (e.g., when using ATMOS_CLI_CONFIG_PATH), falling back to BasePath for backward compatibility.
+func getBasePathToUse(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig.BasePathAbsolute != "" {
+		return atmosConfig.BasePathAbsolute
+	}
+	return atmosConfig.BasePath
+}
+
 // ExecuteValidateComponentCmd executes `validate component` command.
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, string, error) {
 	defer perf.Track(nil, "exec.ExecuteValidateComponentCmd")()
@@ -214,19 +224,20 @@ func validateComponentInternal(
 	}
 
 	// Check if the file pointed to by 'schemaPath' exists.
-	// If not, join it with the schemas `base_path` from the CLI config
+	// If not, join it with the schemas `base_path` from the CLI config.
 	var filePath string
 	if u.FileExists(schemaPath) {
 		filePath = schemaPath
 	} else {
+		basePathToUse := getBasePathToUse(atmosConfig)
 		switch schemaType {
 		case "jsonschema":
 			{
-				filePath = filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("jsonschema").BasePath, schemaPath)
+				filePath = filepath.Join(basePathToUse, atmosConfig.GetResourcePath("jsonschema").BasePath, schemaPath)
 			}
 		case "opa":
 			{
-				filePath = filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("opa").BasePath, schemaPath)
+				filePath = filepath.Join(basePathToUse, atmosConfig.GetResourcePath("opa").BasePath, schemaPath)
 			}
 		}
 
@@ -256,7 +267,8 @@ func validateComponentInternal(
 		}
 	case "opa":
 		{
-			modulePathsAbsolute, err := u.JoinPaths(filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("opa").BasePath), modulePaths)
+			basePathToUse := getBasePathToUse(atmosConfig)
+			modulePathsAbsolute, err := u.JoinPaths(filepath.Join(basePathToUse, atmosConfig.GetResourcePath("opa").BasePath), modulePaths)
 			if err != nil {
 				return false, err
 			}

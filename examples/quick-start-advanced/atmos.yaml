@@ -54,6 +54,30 @@ components:
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV var
     cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
 
+  # List command configuration for components
+  list:
+    # Custom columns for 'atmos list instances' command
+    # Each column supports Go template syntax with access to instance data
+    columns:
+      - name: " "
+        value: "{{ .status }}"
+      - name: Stack
+        value: "{{ .stack }}"
+      - name: Component
+        value: "{{ .component }}"
+      - name: Type
+        value: "{{ .type }}"
+      - name: Tenant
+        value: "{{ .vars.tenant }}"
+      - name: Environment
+        value: "{{ .vars.environment }}"
+      - name: Stage
+        value: "{{ .vars.stage }}"
+      - name: Region
+        value: "{{ .vars.region }}"
+      - name: Component Folder
+        value: "{{ .component_folder }}"
+
 stacks:
   # Can also be set using 'ATMOS_STACKS_BASE_PATH' ENV var, or '--config-dir' and '--stacks-dir' command-line arguments
   # Supports both absolute and relative paths

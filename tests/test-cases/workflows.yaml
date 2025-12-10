@@ -143,9 +143,12 @@ tests:
         - "invalid workflow step type"
         - "## Explanation"
         - "Step type invalid is not supported. Each step must specify a valid type."
-        - "### Available types:"
+        - "## Hints"
+        - "Available types:"
         - "atmos"
         - "shell"
+        - "To resume the workflow from this step, run:"
+        - "atmos workflow invalid-step-type -f test --from-step step1"
       exit_code: 1
 
   - name: atmos workflow invalid from step
@@ -169,7 +172,8 @@ tests:
         - "## Explanation"
         - "The --from-step flag was set to dne, but this step does not exist in workflow"
         - "pass"
-        - "### Available steps:"
+        - "## Hints"
+        - "Available steps:"
         - "step1"
       exit_code: 1
 
@@ -305,4 +309,56 @@ tests:
       diff: []
       stdout:
         - "PATH="
+      exit_code: 0
+
+  # Test cases for multi-component operations with quoted arguments
+  # These test the fix for the issue where strings.Fields() incorrectly splits quoted arguments
+
+  - name: atmos workflow shell echo with quoted arguments
+    enabled: true
+    snapshot: false
+    description: "Ensure shell commands with quoted arguments are parsed correctly"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "shell-echo-args"
+      - "--file"
+      - "test"
+    expect:
+      diff: []
+      stdout:
+        - "argument with spaces single quoted double quoted"
+      exit_code: 0
+
+  - name: atmos workflow multi-component with components flag
+    enabled: true
+    snapshot: false
+    description: "Ensure multi-component workflow with --components flag works"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "multi-component-list"
+      - "--file"
+      - "test"
+      - "--dry-run"
+    expect:
+      diff: []
+      exit_code: 0
+
+  - name: atmos workflow multi-component with all flag
+    enabled: true
+    snapshot: false
+    description: "Ensure multi-component workflow with --all flag works"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "multi-component-all"
+      - "--file"
+      - "test"
+      - "--dry-run"
+    expect:
+      diff: []
       exit_code: 0

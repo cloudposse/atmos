@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -256,6 +257,14 @@ func TestGenerateComponentBackendConfig(t *testing.T) {
 				},
 			},
 		},
+		{
+			name:               "empty-backend-type-returns-error",
+			backendType:        "",
+			backendConfig:      map[string]any{},
+			terraformWorkspace: "",
+			expected:           nil,
+			expectError:        true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -264,6 +273,7 @@ func TestGenerateComponentBackendConfig(t *testing.T) {
 
 			if tt.expectError {
 				assert.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrBackendTypeRequired)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expected, result)

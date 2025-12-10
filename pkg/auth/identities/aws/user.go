@@ -455,6 +455,12 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	return env, nil
 }
 
+// Paths returns credential files/directories used by this identity.
+func (i *userIdentity) Paths() ([]types.Path, error) {
+	// AWS user identities don't add additional credential files beyond the provider.
+	return []types.Path{}, nil
+}
+
 // PrepareEnvironment prepares environment variables for external processes.
 // For AWS user identities, we use the shared AWS PrepareEnvironment helper
 // which configures credential files, profile, region, and disables IMDS fallback.
