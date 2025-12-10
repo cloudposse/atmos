@@ -55,7 +55,7 @@ var componentsCmd = &cobra.Command{
 		}
 
 		if len(output) == 0 {
-			ui.Info("No components found")
+			_ = ui.Info("No components found")
 			return nil
 		}
 
@@ -84,7 +84,7 @@ func listComponentsWithOptions(cmd *cobra.Command, opts *ComponentsOptions) ([]s
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
-		return nil, fmt.Errorf("error initializing CLI config: %v", err)
+		return nil, fmt.Errorf("error initializing CLI config: %w", err)
 	}
 
 	// Create AuthManager for authentication support.
@@ -95,7 +95,7 @@ func listComponentsWithOptions(cmd *cobra.Command, opts *ComponentsOptions) ([]s
 
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, authManager)
 	if err != nil {
-		return nil, fmt.Errorf("error describing stacks: %v", err)
+		return nil, fmt.Errorf("error describing stacks: %w", err)
 	}
 
 	output, err := l.FilterAndListComponents(opts.Stack, stacksMap)

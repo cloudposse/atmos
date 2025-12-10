@@ -646,11 +646,11 @@ func processYAMLConfigFileWithContextInternal(
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 			}
-			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, tmplErr)
+			wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrInvalidStackManifest, tmplErr)
 			if mergeContext != nil {
 				return nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			}
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
 		}
 	}
 
@@ -1394,7 +1394,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 	return result, nil
 }
 
-// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty
+// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty.
 func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck []string) bool {
 	for _, s := range sectionsToCheck {
 		if len(s) > 0 {

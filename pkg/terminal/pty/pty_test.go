@@ -95,14 +95,16 @@ func TestExecWithPTY_WithMasking(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
-
-	// Echo a known AWS access key pattern.
-	// Use printf with explicit newline for more reliable PTY output on CI.
 	secretKey := "AKIAIOSFODNN7EXAMPLE"
-	cmd := exec.Command("sh", "-c", "printf '%s\\n' '"+secretKey+"'")
+
+	// Subprocess writes output then sleeps briefly before exiting.
+	// The sleep ensures the PTY has time to read all buffered output before
+	// the subprocess exits and triggers EIO. This avoids the race condition
+	// described in https://go.dev/issue/57141
+	cmd := exec.Command("sh", "-c", "printf '%s\\n' '"+secretKey+"'; sleep 0.1")
 
 	opts := &Options{
-		Stdin:         strings.NewReader(""), // Provide empty stdin for CI environments.
+		Stdin:         strings.NewReader(""),
 		Stdout:        &stdout,
 		Masker:        ioCtx.Masker(),
 		EnableMasking: true,
@@ -112,9 +114,6 @@ func TestExecWithPTY_WithMasking(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecWithPTY() error = %v", err)
 	}
-
-	// Allow time for PTY output buffers to fully flush in CI environments.
-	time.Sleep(100 * time.Millisecond)
 
 	output := stdout.String()
 
@@ -144,13 +143,16 @@ func TestExecWithPTY_MaskingDisabled(t *testing.T) {
 	}
 
 	var stdout bytes.Buffer
-
-	// Use printf with explicit newline for more reliable PTY output on CI.
 	secretKey := "AKIAIOSFODNN7EXAMPLE"
-	cmd := exec.Command("sh", "-c", "printf '%s\\n' '"+secretKey+"'")
+
+	// Subprocess writes output then sleeps briefly before exiting.
+	// The sleep ensures the PTY has time to read all buffered output before
+	// the subprocess exits and triggers EIO. This avoids the race condition
+	// described in https://go.dev/issue/57141
+	cmd := exec.Command("sh", "-c", "printf '%s\\n' '"+secretKey+"'; sleep 0.1")
 
 	opts := &Options{
-		Stdin:         strings.NewReader(""), // Provide empty stdin for CI environments.
+		Stdin:         strings.NewReader(""),
 		Stdout:        &stdout,
 		Masker:        ioCtx.Masker(),
 		EnableMasking: false, // Explicitly disabled.
@@ -160,9 +162,6 @@ func TestExecWithPTY_MaskingDisabled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExecWithPTY() error = %v", err)
 	}
-
-	// Allow time for PTY output buffers to fully flush in CI environments.
-	time.Sleep(100 * time.Millisecond)
 
 	output := stdout.String()
 

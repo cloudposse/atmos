@@ -36,6 +36,13 @@ const (
 	ErrFmtWrapErr = "%w: %v" // Format for wrapping errors.
 )
 
+// Flag name constants.
+const (
+	flagAbstract         = "abstract"
+	flagProcessTemplates = "process-templates"
+	flagProcessFunctions = "process-functions"
+)
+
 var (
 	valuesParser *flags.StandardParser
 	varsParser   *flags.StandardParser
@@ -169,14 +176,14 @@ var varsCmd = &cobra.Command{
 func init() {
 	// Create parser for values command with all flags
 	valuesParser = newCommonListParser(
-		flags.WithBoolFlag("abstract", "", false, "Include abstract components"),
+		flags.WithBoolFlag(flagAbstract, "", false, "Include abstract components"),
 		flags.WithBoolFlag("vars", "", false, "Show only vars (equivalent to --query .vars)"),
-		flags.WithBoolFlag("process-templates", "", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command"),
-		flags.WithBoolFlag("process-functions", "", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command"),
-		flags.WithEnvVars("abstract", "ATMOS_LIST_ABSTRACT"),
+		flags.WithBoolFlag(flagProcessTemplates, "", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command"),
+		flags.WithBoolFlag(flagProcessFunctions, "", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command"),
+		flags.WithEnvVars(flagAbstract, "ATMOS_LIST_ABSTRACT"),
 		flags.WithEnvVars("vars", "ATMOS_LIST_VARS"),
-		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
-		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
+		flags.WithEnvVars(flagProcessTemplates, "ATMOS_PROCESS_TEMPLATES"),
+		flags.WithEnvVars(flagProcessFunctions, "ATMOS_PROCESS_FUNCTIONS"),
 	)
 
 	// Register flags for values command
@@ -197,12 +204,12 @@ func init() {
 
 	// Create parser for vars command (no vars flag, as it's always .vars)
 	varsParser = newCommonListParser(
-		flags.WithBoolFlag("abstract", "", false, "Include abstract components"),
-		flags.WithBoolFlag("process-templates", "", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command"),
-		flags.WithBoolFlag("process-functions", "", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command"),
-		flags.WithEnvVars("abstract", "ATMOS_LIST_ABSTRACT"),
-		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
-		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
+		flags.WithBoolFlag(flagAbstract, "", false, "Include abstract components"),
+		flags.WithBoolFlag(flagProcessTemplates, "", true, "Enable/disable Go template processing in Atmos stack manifests when executing the command"),
+		flags.WithBoolFlag(flagProcessFunctions, "", true, "Enable/disable YAML functions processing in Atmos stack manifests when executing the command"),
+		flags.WithEnvVars(flagAbstract, "ATMOS_LIST_ABSTRACT"),
+		flags.WithEnvVars(flagProcessTemplates, "ATMOS_PROCESS_TEMPLATES"),
+		flags.WithEnvVars(flagProcessFunctions, "ATMOS_PROCESS_FUNCTIONS"),
 	)
 
 	// Register flags for vars command
