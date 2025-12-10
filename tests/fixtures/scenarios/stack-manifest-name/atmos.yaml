@@ -1,0 +1,12 @@
+base_path: "./"
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/catalog/**"
+
+components:
+  terraform:
+    base_path: components/terraform
