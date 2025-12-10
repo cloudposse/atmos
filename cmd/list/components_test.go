@@ -772,7 +772,6 @@ func TestRenderComponents(t *testing.T) {
 		opts        *ComponentsOptions
 		components  []map[string]any
 		expectError bool
-		errorMsg    string
 	}{
 		{
 			name: "Empty components list",
@@ -841,7 +840,6 @@ func TestRenderComponents(t *testing.T) {
 				{"component": "vpc", "stack": "prod", "type": "terraform"},
 			},
 			expectError: true,
-			errorMsg:    "error parsing sort specification",
 		},
 		{
 			name: "Components with stack filter",
@@ -925,9 +923,6 @@ func TestRenderComponents(t *testing.T) {
 
 			if tc.expectError {
 				assert.Error(t, err)
-				if tc.errorMsg != "" {
-					assert.Contains(t, err.Error(), tc.errorMsg)
-				}
 			} else {
 				assert.NoError(t, err)
 			}

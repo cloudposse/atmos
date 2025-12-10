@@ -1,12 +1,12 @@
 package exec
 
 import (
-	"fmt"
 	"os"
 	"sync"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -184,19 +184,26 @@ func ClearFileContentCache() {
 	})
 }
 
-// GetFileContent tries to read and return the file content from the sync map if it exists in the map,
-// otherwise it reads the file, stores its content in the map and returns the content.
+// GetFileContent tries to read and return the file content from the sync map if it exists in the map.
+// Otherwise, it reads the file, stores its content in the map, and returns the content.
 func GetFileContent(filePath string) (string, error) {
 	defer perf.Track(nil, "exec.GetFileContent")()
 
-	existingContent, found := getFileContentSyncMap.Load(filePath)
-	if found && existingContent != nil {
-		return fmt.Sprintf("%s", existingContent), nil
+	if existingContent, found := getFileContentSyncMap.Load(filePath); found {
+		switch v := existingContent.(type) {
+		case []byte:
+			return string(v), nil
+		case string:
+			return v, nil
+		}
 	}
 
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return "", err
+		return "", errUtils.Build(errUtils.ErrReadFile).
+			WithCause(err).
+			WithContext("path", filePath).
+			Err()
 	}
 	getFileContentSyncMap.Store(filePath, content)
 
@@ -210,7 +217,10 @@ func GetFileContentWithoutCache(filePath string) (string, error) {
 
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return "", err
+		return "", errUtils.Build(errUtils.ErrReadFile).
+			WithCause(err).
+			WithContext("path", filePath).
+			Err()
 	}
 
 	return string(content), nil
