@@ -10,12 +10,21 @@ import Intro from '@site/src/components/Intro'
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Use this command to manage development containers (devcontainers) for your Atmos workflows.
 
 Devcontainers provide isolated, reproducible development environments with all required tools and dependencies pre-configured.
 </Intro>
+
+<ActionCard title="Configure Devcontainers">
+    Learn how to configure devcontainers in your `atmos.yaml`, including runtime selection, mounts, environment variables, and container specifications.
+    <div>
+      <PrimaryCTA to="/cli/configuration/devcontainer">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 <Screengrab title="atmos devcontainer --help" slug="atmos-devcontainer--help" />
 
