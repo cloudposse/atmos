@@ -434,11 +434,8 @@ func TestManager_Rebuild(t *testing.T) {
 						assert.Equal(t, map[string]string{"ATMOS_VERSION": "1.201.0"}, buildConfig.Args)
 						return nil
 					})
-				// After build, Pull should be called with the built image name.
-				// pullImageIfNeeded is called with config.Image which was updated by buildImageIfNeeded.
-				runtime.EXPECT().
-					Pull(gomock.Any(), "atmos-devcontainer-geodesic").
-					Return(nil)
+				// Pull is NOT called for locally built images since they don't exist
+				// in remote registries and pulling would fail.
 				// Create new container.
 				runtime.EXPECT().
 					Create(gomock.Any(), gomock.Any()).
