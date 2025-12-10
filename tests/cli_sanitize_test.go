@@ -67,6 +67,16 @@ func TestSanitizeOutput(t *testing.T) {
 			input:    "token=phc_ABC123def456GHI789jkl012MNO345pqr678",
 			expected: "token=phc_TEST_TOKEN_PLACEHOLDER",
 		},
+		{
+			name:     "macOS temp directory path should be normalized",
+			input:    "TRCE  Using test Git root override path=/var/folders/_l/91ns3hs96sd11p4_lzxh1l140000gn/T/TestCLICommands2870082120/001/mock-git-root",
+			expected: "TRCE  Using test Git root override path=/mock-git-root",
+		},
+		{
+			name:     "Linux temp directory path should be normalized",
+			input:    "TRCE  Using test Git root override path=/tmp/TestCLICommands2870082120/001/mock-git-root",
+			expected: "TRCE  Using test Git root override path=/mock-git-root",
+		},
 	}
 
 	for _, tt := range tests {

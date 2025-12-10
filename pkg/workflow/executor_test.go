@@ -1114,9 +1114,8 @@ func TestCalculateWorkingDirectory(t *testing.T) {
 				WorkingDirectory: tt.stepDir,
 			}
 
-			result, err := executor.calculateWorkingDirectory(workflowDef, step, tt.basePath)
+			result := executor.calculateWorkingDirectory(workflowDef, step, tt.basePath)
 
-			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

@@ -178,17 +178,7 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 	finalStack := e.calculateFinalStack(params.WorkflowDefinition, step, params.Opts.CommandLineStack)
 
 	// Calculate working directory with inheritance from workflow-level.
-	workDir, err := e.calculateWorkingDirectory(params.WorkflowDefinition, step, params.AtmosConfig.BasePath)
-	if err != nil {
-		return stepResultInternal{
-			StepResult: StepResult{
-				StepName: step.Name,
-				Command:  command,
-				Success:  false,
-				Error:    err,
-			},
-		}
-	}
+	workDir := e.calculateWorkingDirectory(params.WorkflowDefinition, step, params.AtmosConfig.BasePath)
 
 	// Execute the command based on type.
 	cmdParams := &runCommandParams{
@@ -388,10 +378,10 @@ func (e *Executor) calculateFinalStack(workflowDef *schema.WorkflowDefinition, s
 	return finalStack
 }
 
-// calculateWorkingDirectory determines the working directory with validation.
+// calculateWorkingDirectory determines the working directory for a workflow step.
 // Step-level working_directory overrides workflow-level.
 // Relative paths are resolved against base_path.
-func (e *Executor) calculateWorkingDirectory(workflowDef *schema.WorkflowDefinition, step *schema.WorkflowStep, basePath string) (string, error) {
+func (e *Executor) calculateWorkingDirectory(workflowDef *schema.WorkflowDefinition, step *schema.WorkflowStep, basePath string) string {
 	// Step-level overrides workflow-level.
 	workDir := strings.TrimSpace(workflowDef.WorkingDirectory)
 	if stepWorkDir := strings.TrimSpace(step.WorkingDirectory); stepWorkDir != "" {
@@ -399,7 +389,7 @@ func (e *Executor) calculateWorkingDirectory(workflowDef *schema.WorkflowDefinit
 	}
 
 	if workDir == "" {
-		return "", nil
+		return ""
 	}
 
 	// Resolve relative paths against base_path.
@@ -411,7 +401,7 @@ func (e *Executor) calculateWorkingDirectory(workflowDef *schema.WorkflowDefinit
 	// This allows YAML functions like !repo-root to be resolved first during config loading.
 	log.Debug("Using working directory for workflow step", "working_directory", workDir)
 
-	return workDir, nil
+	return workDir
 }
 
 // buildResumeCommand builds a command to resume the workflow from a specific step.

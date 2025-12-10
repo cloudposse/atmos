@@ -451,21 +451,11 @@ func executeCustomCommand(
 	}
 
 	// Determine working directory for command execution.
-	workDir := currentDirPath
+	workDir, err := resolveWorkingDirectory(commandConfig.WorkingDirectory, atmosConfig.BasePath, currentDirPath)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
 	if commandConfig.WorkingDirectory != "" {
-		workDir = commandConfig.WorkingDirectory
-		// Resolve relative paths against base_path.
-		if !filepath.IsAbs(workDir) {
-			workDir = filepath.Join(atmosConfig.BasePath, workDir)
-		}
-		// Validate directory exists.
-		if info, err := os.Stat(workDir); os.IsNotExist(err) {
-			errUtils.CheckErrorPrintAndExit(fmt.Errorf("working directory does not exist: %s", workDir), "", "")
-		} else if err != nil {
-			errUtils.CheckErrorPrintAndExit(fmt.Errorf("failed to access working directory %s: %w", workDir, err), "", "")
-		} else if !info.IsDir() {
-			errUtils.CheckErrorPrintAndExit(fmt.Errorf("working directory path is not a directory: %s", workDir), "", "")
-		}
 		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
 	}
 

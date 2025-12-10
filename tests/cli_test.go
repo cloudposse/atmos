@@ -493,6 +493,13 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	hintPathRegex := regexp.MustCompile(`(?m)(💡[^\n]{0,200}?:|^[A-Z][^\n]{0,200}?directory:)\s*\n(/absolute/path/to/repo[^\s\n]*)`)
 	result = hintPathRegex.ReplaceAllString(result, "$1 $2")
 
+	// 18. Normalize temporary directory paths from TEST_GIT_ROOT and other test fixtures.
+	// These appear in trace logs as path=/var/folders/.../mock-git-root or /tmp/TestCLI.../mock-git-root.
+	// Replace with a stable placeholder since these are test-specific paths.
+	// Match common temp directory patterns on macOS (/var/folders/), Linux (/tmp/), and Windows.
+	tempGitRootRegex := regexp.MustCompile(`path=(/var/folders/[^/]+/[^/]+/T/[^\s]+/mock-git-root|/tmp/[^\s]+/mock-git-root|C:/[^\s]+/mock-git-root)`)
+	result = tempGitRootRegex.ReplaceAllString(result, "path=/mock-git-root")
+
 	return result, nil
 }
 
