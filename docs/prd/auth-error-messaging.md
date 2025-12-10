@@ -8,7 +8,7 @@ This PRD defines requirements for improving error messaging in `atmos auth` to p
 
 When authentication fails, users receive minimal error messages like:
 
-```
+```text
 Error: authentication failed: failed to authenticate via credential chain
 for identity "plat-dev/terraform": authentication failed: identity=plat-
 dev/terraform step=1: authentication failed
@@ -74,7 +74,7 @@ All auth errors MUST include the following context when available:
 
 When `--verbose` flag is set and an identity-related error occurs, the error SHOULD display the full identity configuration in YAML format:
 
-```
+```yaml
 Identity configuration:
   plat-dev/terraform:
     kind: aws/assume-role
@@ -99,19 +99,19 @@ Special cases (verbose mode only):
 
 All auth errors MUST include current profile status:
 
-```
+```text
 Current profile: ATMOS_PROFILE=devops
 ```
 
 Or if not set:
 
-```
+```text
 Current profile: (not set)
 ```
 
 Multiple profiles should be comma-separated:
 
-```
+```text
 Current profile: ATMOS_PROFILE=ci,developer
 ```
 
