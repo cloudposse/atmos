@@ -10,52 +10,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// HCLEvalContext creates an hcl.EvalContext with Atmos functions available.
-// Functions are namespaced under "atmos." (e.g., atmos.env("VAR")).
-func HCLEvalContext(registry *Registry, execCtx *ExecutionContext) *hcl.EvalContext {
-	defer perf.Track(nil, "function.HCLEvalContext")()
-
-	if registry == nil {
-		registry = DefaultRegistry(nil)
-	}
-
-	// Build the atmos namespace with functions.
-	atmosFunctions := make(map[string]function.Function)
-
-	// Register env function.
-	if registry.Has("env") {
-		atmosFunctions["env"] = wrapAtmosFunction(registry, "env", execCtx)
-	}
-
-	// Register exec function.
-	if registry.Has("exec") {
-		atmosFunctions["exec"] = wrapAtmosFunction(registry, "exec", execCtx)
-	}
-
-	// Register template function.
-	if registry.Has("template") {
-		atmosFunctions["template"] = wrapAtmosFunction(registry, "template", execCtx)
-	}
-
-	// Register repo-root function (as repo_root since HCL doesn't allow hyphens).
-	if registry.Has("repo-root") {
-		atmosFunctions["repo_root"] = wrapAtmosFunction(registry, "repo-root", execCtx)
-	}
-
-	return &hcl.EvalContext{
-		Functions: map[string]function.Function{
-			// Create an atmos namespace object that provides function access.
-			// Usage: atmos.env("VAR"), atmos.exec("command"), etc.
-		},
-		Variables: map[string]cty.Value{
-			"atmos": cty.ObjectVal(map[string]cty.Value{
-				// We need a different approach - HCL doesn't support
-				// function calls on object members directly.
-			}),
-		},
-	}
-}
-
 // HCLFunctions returns a map of cty functions that wrap Atmos functions.
 // Functions are registered in the "atmos::" namespace, allowing both syntaxes:
 //   - atmos::env("VAR")  - explicit namespace with double colon
