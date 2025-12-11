@@ -2,9 +2,13 @@
 
 ## Executive Summary
 
-Add `aws/ecr` identity type to Atmos auth system to enable Docker authentication with AWS Elastic Container Registry (ECR). This allows users to pull and push container images using Atmos-managed AWS credentials without manual `docker login` commands.
+Add ECR authentication support to Atmos using a **hybrid approach**:
+1. **PostAuthenticate hook** - Automatic ECR login as opt-in side effect on existing AWS identities
+2. **Standalone command** - `atmos auth ecr-login` for ad-hoc use with current AWS credentials
 
-**Key Design Decision:** Implement ECR as an identity type (not a profile) that chains from existing AWS identities. ECR authentication tokens are written to an Atmos-managed Docker config file (`~/.config/atmos/docker/config.json`), isolating Atmos credentials from user's default Docker config.
+This approach avoids the management overhead of a separate ECR identity type while providing flexibility for different workflows.
+
+**Key Design Decision:** ECR login is implemented as an opt-in extension to existing AWS identities (via `ecr_login: true` in principal config) rather than a separate identity type. This mirrors the existing workflow where users set `AWS_PROFILE` and then login to ECR.
 
 ## Problem Statement
 
@@ -38,53 +42,63 @@ $ aws ecr get-login-password --region us-east-2 | \
 # Must also configure DOCKER_CONFIG for isolation
 ```
 
-**Desired Experience:**
+**Desired Experience (Option A - Automatic):**
 ```bash
-# User configures ECR identity in atmos.yaml
-# Then authenticates:
-$ atmos auth login my-ecr
+# Configure ecr_login: true in identity config
+$ atmos auth login aws-dev
+✓ Authenticated as arn:aws:sts::123456789012:assumed-role/DevRole/user
+✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 
 # Docker commands work automatically
 $ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
 # Success!
+```
 
-# Token refresh is handled automatically
-$ atmos auth refresh my-ecr
+**Desired Experience (Option B - Explicit):**
+```bash
+# Get AWS credentials however you want
+$ export AWS_PROFILE=dev
+
+# Explicitly login to ECR
+$ atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
+✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
+
+$ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
+# Success!
 ```
 
 ## Design Goals
 
-1. **Identity-Based Architecture**: ECR as a first-class identity type, consistent with existing auth patterns
-2. **Credential Chaining**: ECR identity chains from existing AWS identities (SSO, assume-role, IAM user)
-3. **Isolated Docker Config**: Use Atmos-managed Docker config file to avoid polluting user's default config
-4. **XDG Compliance**: Store Docker config at `~/.config/atmos/docker/config.json`
-5. **Multi-Registry Support**: Support multiple ECR registries across different accounts/regions
-6. **Explicit Authentication**: User explicitly logs in (no automatic background refresh initially)
-7. **Clean Logout**: Remove ECR credentials on `atmos auth logout`
+1. **Minimal Management Overhead**: No separate ECR identity to configure and manage
+2. **Single Login Experience**: `atmos auth login` can do both AWS auth and ECR login
+3. **Explicit Control**: Standalone command for users who prefer explicit ECR login
+4. **Non-Blocking Errors**: ECR failures don't block AWS authentication
+5. **Isolated Docker Config**: Use Atmos-managed Docker config file to avoid polluting user's default config
+6. **XDG Compliance**: Use `pkg/xdg` for config paths
+7. **Multi-Registry Support**: Support multiple ECR registries
 
 ## Technical Specification
 
-### 1. Identity Configuration
+### 1. Configuration
 
-ECR is configured as an identity in `atmos.yaml` using the existing `principal` map pattern:
+#### Option A: Identity-Level ECR Login (PostAuthenticate hook)
+
+Add ECR configuration to existing AWS identity's `principal` map:
 
 ```yaml
 auth:
   identities:
-    my-ecr:
-      kind: aws/ecr
-      description: "Development ECR registry"
+    dev-admin:
+      kind: aws/permission-set
+      via:
+        provider: aws-sso
       principal:
-        # Credential source (required): identity that provides AWS credentials
-        identity: aws-dev
-
-        # Registry configuration (required): at least one of these
-        account_id: "123456789012"     # Explicit account ID
-        # OR
-        region: "us-east-2"            # If account_id omitted, uses caller identity's account
-
-        # Optional: multiple registries
-        registries:
+        name: AdministratorAccess
+        account:
+          name: dev
+        # NEW: Opt-in ECR login after AWS authentication
+        ecr_login: true
+        ecr_registries:                    # Optional: specific registries
           - account_id: "123456789012"
             region: "us-east-2"
           - account_id: "987654321098"
@@ -95,62 +109,96 @@ auth:
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `kind` | Yes | Must be `aws/ecr` |
-| `description` | No | Human-readable description |
-| `principal.identity` | Yes | Source identity for AWS credentials |
-| `principal.account_id` | No* | AWS account ID for registry |
-| `principal.region` | No* | AWS region for registry |
-| `principal.registries` | No* | List of multiple registries |
+| `principal.ecr_login` | No | Enable automatic ECR login (default: false) |
+| `principal.ecr_registries` | No | List of registries; if omitted, uses current account/region |
+| `principal.ecr_registries[].account_id` | Yes* | AWS account ID for registry |
+| `principal.ecr_registries[].region` | Yes* | AWS region for registry |
 
-*At least one of `account_id`, `region`, or `registries` must be specified.
+*Required if `ecr_registries` is specified.
+
+#### Option B: Standalone Command (Ad-hoc)
+
+```bash
+# Use current AWS credentials (from profile, env, or atmos auth)
+atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
+
+# Auto-detect from current account/region
+atmos auth ecr-login
+
+# Multiple registries
+atmos auth ecr-login \
+  --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com \
+  --registry 987654321098.dkr.ecr.us-west-2.amazonaws.com
+```
 
 ### 2. Authentication Flow
+
+#### Option A: PostAuthenticate Hook Flow
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ 1. User Executes Command                                        │
-│    $ atmos auth login my-ecr                                    │
+│    $ atmos auth login dev-admin                                 │
 └─────────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│ 2. Resolve ECR Identity Configuration                           │
-│    - Load identity config from atmos.yaml                       │
-│    - Validate principal.identity exists                         │
-│    - Parse registry configuration                               │
+│ 2. Normal AWS Authentication                                    │
+│    - SSO login / assume role / IAM user auth                    │
+│    - Obtain AWS credentials                                     │
 └─────────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│ 3. Authenticate Source Identity                                 │
-│    - Call authManager.Authenticate(ctx, "aws-dev")              │
-│    - Obtain AWS credentials from source identity                │
-│    - Source identity must be already authenticated              │
+│ 3. PostAuthenticate Hook                                        │
+│    - SetupFiles() - write AWS credential files                  │
+│    - SetAuthContext() - populate in-process auth                │
+│    - SetEnvironmentVariables() - configure subprocess env       │
+│    - NEW: PerformECRLogin() if ecr_login: true                  │
 └─────────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│ 4. Call ECR GetAuthorizationToken API                           │
-│    - Use AWS credentials from source identity                   │
-│    - Request token for configured registries                    │
-│    - Response: base64(username:password), expiration            │
+│ 4. ECR Login (if enabled)                                       │
+│    - Call ecr:GetAuthorizationToken for each registry           │
+│    - Write to Atmos Docker config                               │
+│    - Log success/warning (non-fatal errors)                     │
 └─────────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│ 5. Write Docker Config                                          │
-│    - Create/update ~/.config/atmos/docker/config.json           │
-│    - Add auth entry for each registry URL                       │
-│    - Format: base64(AWS:password) in "auths" map                │
+│ 5. Return Success                                               │
+│    ✓ Authenticated as arn:aws:sts::...                          │
+│    ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Option B: Standalone Command Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ 1. User Executes Command                                        │
+│    $ atmos auth ecr-login --registry ...                        │
 └─────────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│ 6. Set DOCKER_CONFIG Environment Variable                       │
-│    - Add to auth context environment                            │
-│    - DOCKER_CONFIG=~/.config/atmos/docker                       │
-│    - Docker commands use Atmos-managed config                   │
+│ 2. Load AWS Credentials                                         │
+│    - Use default AWS credential chain                           │
+│    - AWS_PROFILE, env vars, or atmos auth context               │
 └─────────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│ 7. Return Success with Expiration Info                          │
-│    - Display authenticated registries                           │
-│    - Show token expiration time (12 hours from now)             │
+│ 3. Determine Registries                                         │
+│    - Use --registry flags if provided                           │
+│    - Otherwise, detect from current account/region              │
+└─────────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 4. ECR Login                                                    │
+│    - Call ecr:GetAuthorizationToken for each registry           │
+│    - Write to Atmos Docker config                               │
+│    - Set DOCKER_CONFIG environment variable                     │
+└─────────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────────┐
+│ 5. Return Success                                               │
+│    ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com    │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -160,52 +208,24 @@ auth:
 
 ```
 pkg/auth/
-├── identities/
-│   └── aws/
-│       └── ecr.go              # ECR identity implementation
 ├── cloud/
 │   ├── aws/
-│   │   └── ecr.go              # ECR API client (GetAuthorizationToken)
+│   │   ├── ecr.go              # ECR token fetcher
+│   │   └── ecr_login.go        # ECR login helper for PostAuthenticate
 │   └── docker/
 │       └── config.go           # Docker config.json manager
-└── types/
-    └── ecr_credentials.go      # ECRCredentials type
+├── identities/
+│   └── aws/
+│       ├── user.go             # Modified: add ECR login in PostAuthenticate
+│       ├── permission_set.go   # Modified: add ECR login in PostAuthenticate
+│       └── assume_role.go      # Modified: add ECR login in PostAuthenticate
+└── ecr_login.go                # Standalone command implementation
+
+cmd/auth/
+└── ecr_login.go                # atmos auth ecr-login command
 ```
 
-#### 3.2 ECR Identity Interface Implementation
-
-**File:** `pkg/auth/identities/aws/ecr.go`
-
-```go
-// ECRIdentity implements ECR authentication as an identity.
-type ECRIdentity struct {
-    name           string
-    config         *ECRIdentityConfig
-    authConfig     *schema.AuthConfiguration
-    dockerConfig   *docker.ConfigManager
-    authenticating bool
-    creds          *types.ECRCredentials
-}
-
-// Kind returns the identity kind.
-func (e *ECRIdentity) Kind() string {
-    return "aws/ecr"
-}
-
-// Authenticate retrieves ECR authorization token and writes Docker config.
-func (e *ECRIdentity) Authenticate(ctx context.Context, authCtx *schema.AuthContext) (*types.WhoamiInfo, error)
-
-// Validate checks if ECR credentials are still valid.
-func (e *ECRIdentity) Validate(ctx context.Context, authCtx *schema.AuthContext) (*types.ValidationInfo, error)
-
-// PostAuthenticate sets DOCKER_CONFIG environment variable.
-func (e *ECRIdentity) PostAuthenticate(ctx context.Context, authCtx *schema.AuthContext, whoami *types.WhoamiInfo) error
-
-// Logout removes ECR credentials from Docker config.
-func (e *ECRIdentity) Logout(ctx context.Context, authCtx *schema.AuthContext) error
-```
-
-#### 3.3 Docker Config Manager
+#### 3.2 Docker Config Manager
 
 **File:** `pkg/auth/cloud/docker/config.go`
 
@@ -235,11 +255,14 @@ func (m *ConfigManager) WriteAuth(registry string, username string, password str
 // RemoveAuth removes ECR authorization from Docker config.
 func (m *ConfigManager) RemoveAuth(registries ...string) error
 
+// GetConfigDir returns the directory containing the Docker config.
+func (m *ConfigManager) GetConfigDir() string
+
 // GetAuthenticatedRegistries returns list of authenticated ECR registries.
 func (m *ConfigManager) GetAuthenticatedRegistries() ([]string, error)
 ```
 
-**Note:** Uses `pkg/xdg.GetXDGConfigDir()` to determine the config path, which respects `ATMOS_XDG_CONFIG_HOME` and `XDG_CONFIG_HOME` environment variables and uses platform-appropriate defaults.
+**Note:** Uses `pkg/xdg.GetXDGConfigDir()` to determine the config path, which respects `ATMOS_XDG_CONFIG_HOME` and `XDG_CONFIG_HOME` environment variables.
 
 **Docker Config Format:**
 
@@ -255,95 +278,162 @@ func (m *ConfigManager) GetAuthenticatedRegistries() ([]string, error)
 
 The `auth` field contains `base64(username:password)` where username is always `AWS` and password is the authorization token from ECR.
 
-#### 3.4 ECR API Client
+#### 3.3 ECR Token Fetcher
 
 **File:** `pkg/auth/cloud/aws/ecr.go`
 
 ```go
-// GetECRAuthorizationToken retrieves ECR authorization token.
-func GetECRAuthorizationToken(ctx context.Context, cfg aws.Config, registryIDs []string) (*ECRAuthResult, error)
-
 // ECRAuthResult contains ECR authorization token information.
 type ECRAuthResult struct {
-    Token      string    // Base64-decoded authorization token
     Username   string    // Always "AWS"
-    Password   string    // Actual password from token
-    Expiration time.Time // Token expiration time
-    ProxyURL   string    // Registry proxy endpoint URL
+    Password   string    // Decoded authorization token
+    Registry   string    // e.g., 123456789012.dkr.ecr.us-east-1.amazonaws.com
+    ExpiresAt  time.Time // Token expiration time
 }
+
+// GetAuthorizationToken retrieves ECR credentials using AWS config.
+func GetAuthorizationToken(ctx context.Context, cfg aws.Config, accountID, region string) (*ECRAuthResult, error)
+
+// BuildRegistryURL constructs ECR registry URL from account ID and region.
+func BuildRegistryURL(accountID, region string) string
+
+// ParseRegistryURL extracts account ID and region from ECR registry URL.
+func ParseRegistryURL(registryURL string) (accountID, region string, err error)
 ```
 
-#### 3.5 ECR Credentials Type
+#### 3.4 ECR Login Helper (PostAuthenticate)
 
-**File:** `pkg/auth/types/ecr_credentials.go`
+**File:** `pkg/auth/cloud/aws/ecr_login.go`
 
 ```go
-// ECRCredentials contains ECR-specific credential information.
-type ECRCredentials struct {
-    Registries   []ECRRegistry `json:"registries"`
-    ConfigPath   string        `json:"config_path"`
-    Expiration   string        `json:"expiration,omitempty"`
-    SourceIdentity string      `json:"source_identity"`
+// ECRLoginConfig holds configuration for ECR login.
+type ECRLoginConfig struct {
+    Enabled    bool
+    Registries []ECRRegistry
 }
 
-// ECRRegistry represents a single ECR registry.
+// ECRRegistry represents a single ECR registry configuration.
 type ECRRegistry struct {
-    URL        string `json:"url"`
-    AccountID  string `json:"account_id"`
-    Region     string `json:"region"`
+    AccountID string `mapstructure:"account_id"`
+    Region    string `mapstructure:"region"`
 }
 
-// IsExpired returns true if the ECR token is expired.
-func (c *ECRCredentials) IsExpired() bool
+// ParseECRConfig extracts ECR configuration from identity principal map.
+func ParseECRConfig(principal map[string]interface{}) *ECRLoginConfig
 
-// GetExpiration returns the token expiration time.
-func (c *ECRCredentials) GetExpiration() (*time.Time, error)
-
-// BuildWhoamiInfo populates whoami information for ECR.
-func (c *ECRCredentials) BuildWhoamiInfo(info *types.WhoamiInfo)
-
-// Validate validates ECR credentials by checking Docker config.
-func (c *ECRCredentials) Validate(ctx context.Context) (*types.ValidationInfo, error)
+// PerformECRLogin executes ECR login for configured registries.
+// Called from PostAuthenticate hook when ecr_login: true.
+// Errors are non-fatal and logged as warnings.
+func PerformECRLogin(ctx context.Context, awsCfg aws.Config, ecrConfig *ECRLoginConfig) error
 ```
 
-### 4. Identity Registration
+#### 3.5 Modify Existing AWS Identities
 
-**File:** `pkg/auth/factory/factory.go`
+**Files to modify:**
+- `pkg/auth/identities/aws/user.go`
+- `pkg/auth/identities/aws/permission_set.go`
+- `pkg/auth/identities/aws/assume_role.go`
 
-Add ECR identity type to the factory:
+In each identity's `PostAuthenticate()` method, add ECR login support:
 
 ```go
-// Identity kind constants (add to pkg/auth/types/kinds.go).
-const (
-    IdentityKindAWSUser          = "aws/user"
-    IdentityKindAWSPermissionSet = "aws/permission-set"
-    IdentityKindAWSAssumeRole    = "aws/assume-role"
-    IdentityKindAWSECR           = "aws/ecr"
-    IdentityKindAzureSubscription = "azure/subscription"
-)
+func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
+    // Existing code...
+    if err := awsCloud.SetupFiles(...); err != nil { /* handle */ }
+    if err := awsCloud.SetAuthContext(...); err != nil { /* handle */ }
+    if err := awsCloud.SetEnvironmentVariables(...); err != nil { /* handle */ }
 
-func (f *Factory) CreateIdentity(name string, config *IdentityConfig, authConfig *schema.AuthConfiguration) (Identity, error) {
-    switch config.Kind {
-    // ... existing cases ...
-    case types.IdentityKindAWSECR:
-        return aws.NewECRIdentity(name, config, authConfig)
-    default:
-        return nil, fmt.Errorf("unknown identity kind: %s", config.Kind)
+    // NEW: Handle ECR login if configured
+    ecrConfig := awsCloud.ParseECRConfig(i.config.Principal)
+    if ecrConfig.Enabled {
+        awsCfg, err := buildAWSConfig(ctx, params.Credentials)
+        if err != nil {
+            log.Warn("Failed to build AWS config for ECR login", "error", err)
+        } else if err := awsCloud.PerformECRLogin(ctx, awsCfg, ecrConfig); err != nil {
+            log.Warn("ECR login failed", "error", err)
+            // Non-fatal - don't block authentication
+        }
     }
+
+    return nil
 }
 ```
 
-**Note:** Identity kind strings should be defined as constants in `pkg/auth/types/kinds.go` for consistency and to avoid typos. This refactoring should be applied to existing identity kinds as well.
+#### 3.6 Standalone Command
 
-### 5. Environment Variables
+**File:** `cmd/auth/ecr_login.go`
 
-The ECR identity sets the following environment variables on successful authentication:
+```go
+var ecrLoginCmd = &cobra.Command{
+    Use:   "ecr-login",
+    Short: "Login to AWS ECR registries",
+    Long: `Login to AWS ECR registries using current AWS credentials.
 
-| Variable | Value | Purpose |
-|----------|-------|---------|
-| `DOCKER_CONFIG` | `~/.config/atmos/docker` | Points Docker to Atmos-managed config |
+Uses AWS credentials from:
+- Current AWS_PROFILE environment variable
+- Atmos auth context (if authenticated)
+- Default AWS credential chain`,
+    RunE: func(cmd *cobra.Command, args []string) error {
+        registries, _ := cmd.Flags().GetStringArray("registry")
+        return auth.ECRLogin(ctx, registries)
+    },
+}
 
-### 6. Error Handling
+func init() {
+    ecrLoginCmd.Flags().StringArrayP("registry", "r", nil, "ECR registry URL(s)")
+    authCmd.AddCommand(ecrLoginCmd)
+}
+```
+
+**File:** `pkg/auth/ecr_login.go`
+
+```go
+// ECRLogin performs ECR authentication using current AWS credentials.
+func ECRLogin(ctx context.Context, registries []string) error {
+    // 1. Load AWS config from environment/profile
+    awsCfg, err := config.LoadDefaultConfig(ctx)
+    if err != nil {
+        return fmt.Errorf("failed to load AWS config: %w", err)
+    }
+
+    // 2. If no registries specified, use current account
+    if len(registries) == 0 {
+        accountID, region := getCurrentAccountAndRegion(ctx, awsCfg)
+        registries = []string{awsCloud.BuildRegistryURL(accountID, region)}
+    }
+
+    // 3. Get tokens and write Docker config
+    dockerConfig, err := docker.NewConfigManager()
+    if err != nil {
+        return err
+    }
+
+    for _, registry := range registries {
+        accountID, region, err := awsCloud.ParseRegistryURL(registry)
+        if err != nil {
+            return fmt.Errorf("invalid registry URL %s: %w", registry, err)
+        }
+
+        result, err := awsCloud.GetAuthorizationToken(ctx, awsCfg, accountID, region)
+        if err != nil {
+            return fmt.Errorf("ECR login failed for %s: %w", registry, err)
+        }
+
+        if err := dockerConfig.WriteAuth(result.Registry, result.Username, result.Password); err != nil {
+            return fmt.Errorf("failed to write Docker config: %w", err)
+        }
+
+        ui.Success("ECR login: %s (expires in 12h)", result.Registry)
+    }
+
+    // 4. Set DOCKER_CONFIG for current session
+    os.Setenv("DOCKER_CONFIG", dockerConfig.GetConfigDir())
+
+    return nil
+}
+```
+
+### 4. Error Handling
 
 Add sentinel errors to `errors/errors.go`:
 
@@ -353,21 +443,25 @@ var (
     ErrECRAuthenticationFailed = errors.New("ECR authentication failed")
     ErrECRTokenExpired         = errors.New("ECR authorization token expired")
     ErrECRRegistryNotFound     = errors.New("ECR registry not found")
-    ErrCleanupCredentials      = errors.New("failed to clean up credentials")
 )
 ```
 
-**Error Scenarios:**
+**Error Behavior:**
 
-| Scenario | Error | User Message |
-|----------|-------|--------------|
-| Source identity not authenticated | `ErrAuthenticationFailed` | "Source identity 'aws-dev' is not authenticated. Run: atmos auth login aws-dev" |
-| Invalid AWS credentials | `ErrECRAuthenticationFailed` | "Failed to retrieve ECR authorization token: {aws_error}" |
-| Registry not accessible | `ErrECRRegistryNotFound` | "ECR registry not found or not accessible: {registry_url}" |
-| Docker config write failure | `ErrECRAuthenticationFailed` | "Failed to write Docker config: {error}" |
-| Token expired | `ErrECRTokenExpired` | "ECR token expired. Run: atmos auth refresh my-ecr" |
+| Context | Error Behavior |
+|---------|----------------|
+| PostAuthenticate hook | Non-fatal: log warning, continue AWS auth |
+| Standalone command | Fatal: return error to user |
 
-### 7. File Locking
+### 5. Environment Variables
+
+When ECR login succeeds, set:
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `DOCKER_CONFIG` | `~/.config/atmos/docker` | Points Docker to Atmos-managed config |
+
+### 6. File Locking
 
 The Docker config manager uses file locking to prevent concurrent modification:
 
@@ -384,42 +478,60 @@ func (m *ConfigManager) WriteAuth(...) error {
 }
 ```
 
-### 8. User Experience Examples
+## User Experience Examples
 
-#### 8.1 Basic ECR Authentication
+### Single Login with Automatic ECR
 
 ```bash
-# Configure ECR identity in atmos.yaml
-# (see configuration section above)
-
-# First, authenticate source AWS identity
-$ atmos auth login aws-dev
+# Configure ecr_login: true in identity (see Configuration section)
+$ atmos auth login dev-admin
 ✓ Authenticated as arn:aws:sts::123456789012:assumed-role/DevRole/user
+✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 
-# Then authenticate ECR identity
-$ atmos auth login my-ecr
-✓ Authenticated to ECR registry: 123456789012.dkr.ecr.us-east-2.amazonaws.com
-  Token expires: 2024-01-15 23:45:00 (in 12 hours)
-
-# Pull images using Atmos-managed credentials
+# Docker commands work automatically
 $ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
 latest: Pulling from my-app
 ...
 Status: Downloaded newer image for my-app:latest
 ```
 
-#### 8.2 Multi-Registry Authentication
+### Explicit ECR Login
+
+```bash
+# First, get AWS credentials however you want
+$ export AWS_PROFILE=dev
+# OR
+$ atmos auth login dev-admin
+
+# Then explicitly login to ECR
+$ atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
+✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
+
+$ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
+```
+
+### Auto-Detect Registry
+
+```bash
+# Login to ECR in current account/region
+$ atmos auth ecr-login
+✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
+```
+
+### Multi-Registry Login
 
 ```yaml
 # atmos.yaml
 auth:
   identities:
-    all-ecr:
-      kind: aws/ecr
-      description: "All ECR registries"
+    all-envs:
+      kind: aws/permission-set
+      via:
+        provider: aws-sso
       principal:
-        identity: aws-admin
-        registries:
+        name: DevOpsAccess
+        ecr_login: true
+        ecr_registries:
           - account_id: "123456789012"
             region: "us-east-2"
           - account_id: "987654321098"
@@ -427,48 +539,13 @@ auth:
 ```
 
 ```bash
-$ atmos auth login all-ecr
-✓ Authenticated to ECR registries:
-  - 123456789012.dkr.ecr.us-east-2.amazonaws.com
-  - 987654321098.dkr.ecr.us-west-2.amazonaws.com
-  Token expires: 2024-01-15 23:45:00 (in 12 hours)
+$ atmos auth login all-envs
+✓ Authenticated as arn:aws:sts::123456789012:assumed-role/DevOpsAccess/user
+✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
+✓ ECR login: 987654321098.dkr.ecr.us-west-2.amazonaws.com (expires in 12h)
 ```
 
-#### 8.3 Whoami Information
-
-```bash
-$ atmos auth whoami my-ecr
-Identity: my-ecr
-Kind: aws/ecr
-Source Identity: aws-dev
-Registries:
-  - 123456789012.dkr.ecr.us-east-2.amazonaws.com
-Docker Config: ~/.config/atmos/docker/config.json
-Expiration: 2024-01-15 23:45:00 (in 11h 30m)
-```
-
-#### 8.4 Logout
-
-```bash
-$ atmos auth logout my-ecr
-✓ Removed ECR credentials for: 123456789012.dkr.ecr.us-east-2.amazonaws.com
-```
-
-### 9. Integration with Devcontainers
-
-ECR authentication integrates with devcontainer identity support:
-
-```bash
-# Authenticate and launch devcontainer with ECR access
-$ atmos auth login my-ecr
-$ atmos devcontainer shell geodesic --identity my-ecr
-
-# Inside container: Docker commands use Atmos ECR credentials
-geodesic:~ $ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
-# Success! DOCKER_CONFIG is set automatically
-```
-
-### 10. GitHub Actions Integration
+### GitHub Actions Integration
 
 ```yaml
 # .github/workflows/build.yaml
@@ -481,7 +558,9 @@ jobs:
       - name: Configure Atmos Auth
         run: |
           atmos auth login aws-ci
-          atmos auth login my-ecr
+          # ECR login happens automatically if ecr_login: true
+          # OR explicitly:
+          atmos auth ecr-login
 
       - name: Build and Push
         run: |
@@ -491,48 +570,48 @@ jobs:
 
 ## Implementation Checklist
 
-### Phase 1: Core Implementation
-- [ ] Add ECRCredentials type (`pkg/auth/types/ecr_credentials.go`)
+### Phase 1: Core Infrastructure
 - [ ] Add Docker config manager (`pkg/auth/cloud/docker/config.go`)
-- [ ] Add ECR API client (`pkg/auth/cloud/aws/ecr.go`)
-- [ ] Add ECR identity (`pkg/auth/identities/aws/ecr.go`)
-- [ ] Register ECR identity in factory (`pkg/auth/factory/factory.go`)
+- [ ] Add ECR token fetcher (`pkg/auth/cloud/aws/ecr.go`)
+- [ ] Add ECR login helper (`pkg/auth/cloud/aws/ecr_login.go`)
 - [ ] Add sentinel errors (`errors/errors.go`)
 
-### Phase 2: Testing
+### Phase 2: PostAuthenticate Integration
+- [ ] Modify `pkg/auth/identities/aws/user.go`
+- [ ] Modify `pkg/auth/identities/aws/permission_set.go`
+- [ ] Modify `pkg/auth/identities/aws/assume_role.go`
+
+### Phase 3: Standalone Command
+- [ ] Add `cmd/auth/ecr_login.go`
+- [ ] Add `pkg/auth/ecr_login.go`
+
+### Phase 4: Testing
 - [ ] Unit tests for Docker config manager
-- [ ] Unit tests for ECR API client (mocked)
-- [ ] Unit tests for ECR identity
-- [ ] Integration tests with LocalStack ECR
+- [ ] Unit tests for ECR token fetcher (mocked)
+- [ ] Unit tests for PostAuthenticate integration
+- [ ] Integration tests for `atmos auth ecr-login` command
 
-### Phase 3: Documentation
+### Phase 5: Documentation
 - [ ] Update `website/docs/cli/commands/auth/login.mdx`
+- [ ] Add `website/docs/cli/commands/auth/ecr-login.mdx`
 - [ ] Add ECR configuration examples to auth docs
-- [ ] Update schema documentation
-
-### Phase 4: Future Enhancements
-- [ ] Automatic token refresh before expiration
-- [ ] Support for ECR Public (public.ecr.aws)
-- [ ] Credential helper mode (docker-credential-atmos)
 
 ## Success Criteria
 
-1. ✅ Users can configure ECR identity in `atmos.yaml`
-2. ✅ `atmos auth login <ecr-identity>` retrieves token and writes Docker config
+1. ✅ `atmos auth login <identity>` with `ecr_login: true` performs ECR login automatically
+2. ✅ `atmos auth ecr-login` works with current AWS credentials
 3. ✅ Docker commands use Atmos-managed credentials via `DOCKER_CONFIG`
-4. ✅ `atmos auth logout` removes ECR credentials
-5. ✅ `atmos auth whoami` shows ECR registry and expiration
-6. ✅ Multi-registry support works correctly
-7. ✅ Credential chaining from AWS identities works
-8. ✅ Tests achieve >80% coverage
-9. ✅ Documentation includes usage examples
+4. ✅ Multi-registry support works correctly
+5. ✅ ECR login failures don't block AWS authentication (PostAuthenticate)
+6. ✅ Tests achieve >80% coverage
+7. ✅ Documentation includes usage examples
 
 ## Security Considerations
 
 1. **Credential Isolation**: Docker config stored in Atmos XDG config directory (via `pkg/xdg.GetXDGConfigDir("docker", 0700)`), separate from user's default `~/.docker/config.json`. This respects `ATMOS_XDG_CONFIG_HOME` and `XDG_CONFIG_HOME` environment variables.
 2. **File Permissions**: Docker config created with `0600` permissions
 3. **Token Lifetime**: ECR tokens expire after 12 hours (AWS-enforced)
-4. **Credential Cleanup**: `atmos auth logout` removes credentials from config file
+4. **Non-Fatal Errors**: ECR login failures in PostAuthenticate don't expose errors that could leak information
 5. **No Secrets in Logs**: Authorization tokens are never logged
 6. **Secret Masking**: ECR tokens follow Atmos secret masking patterns
 
@@ -540,6 +619,4 @@ jobs:
 
 - [AWS ECR GetAuthorizationToken API](https://docs.aws.amazon.com/AmazonECR/latest/APIReference/API_GetAuthorizationToken.html)
 - [Docker Config File Specification](https://docs.docker.com/engine/reference/commandline/cli/#configuration-files)
-- [Auth Context Multi-Identity PRD](./auth-context-multi-identity.md)
-- [Auth Mounts Interface PRD](./auth-mounts-interface.md)
 - [XDG Base Directory Specification PRD](./xdg-base-directory-specification.md)
