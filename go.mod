@@ -34,12 +34,12 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.9.1
 	github.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7
 	github.com/charmbracelet/bubbletea v1.3.10
-	github.com/charmbracelet/colorprofile v0.3.3
+	github.com/charmbracelet/colorprofile v0.4.1
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/charmbracelet/huh v0.8.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/log v0.4.2
-	github.com/charmbracelet/x/ansi v0.11.2
+	github.com/charmbracelet/x/ansi v0.11.3
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/cockroachdb/errors v1.12.0
 	github.com/creack/pty v1.1.24
@@ -70,7 +70,7 @@ require (
 	github.com/jfrog/jfrog-client-go v1.55.0
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/go-supportscolor v1.2.0
-	github.com/kubescape/go-git-url v0.0.30
+	github.com/kubescape/go-git-url v0.0.31
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-runewidth v0.0.19
@@ -179,7 +179,7 @@ require (
 	github.com/charmbracelet/x/cellbuf v0.0.14 // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20250327172914-2fdc97757edf // indirect
 	github.com/charmbracelet/x/exp/strings v0.0.0-20240722160745-212f7b056ed0 // indirect
-	github.com/clipperhouse/displaywidth v0.6.0 // indirect
+	github.com/clipperhouse/displaywidth v0.6.1 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.3.0 // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
