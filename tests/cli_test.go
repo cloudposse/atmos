@@ -397,6 +397,21 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 		return groups[1] + fixedRemainder
 	})
 
+	// 5b. Join hint paths that may be split across lines due to terminal width wrapping.
+	// This ensures consistent snapshots across platforms with different terminal widths.
+	// Example:
+	//   Input:  "💡 Path points to the stacks configuration directory, not a component:\n/absolute/path/to/repo/..."
+	//   Output: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/..."
+	hintPathRegex := regexp.MustCompile(`(💡[^:]+:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
+	result = hintPathRegex.ReplaceAllString(result, "$1 $2")
+
+	// Also handle "Stacks directory:" and "Workflows directory:" patterns.
+	// Example:
+	//   Input:  "Stacks directory:\n/absolute/path/to/repo/..."
+	//   Output: "Stacks directory: /absolute/path/to/repo/..."
+	dirPathRegex := regexp.MustCompile(`((?:Stacks|Workflows) directory:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
+	result = dirPathRegex.ReplaceAllString(result, "$1 $2")
+
 	// 6. Handle URLs in the output to ensure they are normalized.
 	//    Use a regex to find URLs and collapse extra slashes while preserving the protocol.
 	urlRegex := regexp.MustCompile(`(https?:/+[^\s]+)`)
