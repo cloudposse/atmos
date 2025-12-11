@@ -409,7 +409,7 @@ func TestManager_Rebuild(t *testing.T) {
 						Context:    ".",
 						Dockerfile: "Dockerfile",
 						Args: map[string]string{
-							"ATMOS_VERSION": "1.201.0",
+							"ATMOS_VERSION": "1.202.0",
 						},
 					},
 				}
