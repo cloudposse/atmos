@@ -3,7 +3,7 @@ slug: workflow-file-auto-discovery
 title: "Workflow File Auto-Discovery: Run Workflows Without Specifying Files"
 sidebar_label: "Workflow Auto-Discovery"
 authors: [osterman]
-tags: [enhancement, workflows, developer-experience]
+tags: [enhancement, dx]
 date: 2025-11-18
 ---
 
