@@ -119,6 +119,10 @@ func (b *GlobalOptionsBuilder) registerAuthenticationFlags(defaults *global.Flag
 	b.options = append(b.options, WithEnvVars("identity", "ATMOS_IDENTITY"))
 	b.options = append(b.options, WithNoOptDefVal("identity", "__SELECT__"))
 
+	// GitHub authentication token for accessing private repositories.
+	b.options = append(b.options, WithStringFlag("github-token", "", defaults.GitHubToken, "GitHub authentication token for accessing private repositories and increasing rate limits"))
+	b.options = append(b.options, WithEnvVars("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"))
+
 	// Profiles - configuration profiles.
 	b.options = append(b.options, func(cfg *parserConfig) {
 		cfg.registry.Register(&StringSliceFlag{

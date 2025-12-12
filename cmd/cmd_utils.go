@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -428,6 +429,26 @@ func executeCustomCommand(
 	if mergedArgsStr == "" {
 		// If for some reason no annotation was set, just fallback
 		finalArgs = args
+	}
+
+	// Resolve and install command dependencies
+	resolver := dependencies.NewResolver(&atmosConfig)
+	deps, err := resolver.ResolveCommandDependencies(commandConfig)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to resolve dependencies for command '%s'", commandConfig.Name))
+	}
+
+	if len(deps) > 0 {
+		log.Debug("Installing command dependencies", "command", commandConfig.Name, "tools", deps)
+		installer := dependencies.NewInstaller(&atmosConfig)
+		if err := installer.EnsureTools(deps); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to install dependencies for command '%s'", commandConfig.Name))
+		}
+
+		// Update PATH to include installed tools
+		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to update PATH for command '%s'", commandConfig.Name))
+		}
 	}
 
 	// Create auth manager if identity is specified for this custom command.

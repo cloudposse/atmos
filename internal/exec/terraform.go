@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -23,6 +24,8 @@ import (
 
 	// Import backend provisioner to register S3 provisioner.
 	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
+
+	"github.com/cloudposse/atmos/toolchain"
 )
 
 const (
@@ -209,6 +212,35 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// Check if trying to use `workspace` commands with HTTP backend.
 	if info.SubCommand == "workspace" && info.ComponentBackendType == "http" {
 		return errUtils.ErrHTTPBackendWorkspaces
+	}
+
+// Resolve and install component dependencies.
+	if shouldProcess {
+		// Initialize toolchain with atmosConfig so it uses the configured install path.
+		toolchain.SetAtmosConfig(&atmosConfig)
+		resolver := dependencies.NewResolver(&atmosConfig)
+		deps, err := resolver.ResolveComponentDependencies("terraform", info.StackSection, info.ComponentSection)
+		if err != nil {
+			return fmt.Errorf("failed to resolve component dependencies: %w", err)
+		}
+
+		if len(deps) > 0 {
+			log.Debug("Installing component dependencies", logFieldComponent, info.ComponentFromArg, "stack", info.Stack, "tools", deps)
+			installer := dependencies.NewInstaller(&atmosConfig)
+			if err := installer.EnsureTools(deps); err != nil {
+				return fmt.Errorf("failed to install component dependencies: %w", err)
+			}
+
+			// Build PATH with toolchain binaries and add to component environment.
+			// This does NOT modify the global process environment - only the subprocess environment.
+			toolchainPATH, err := dependencies.BuildToolchainPATH(&atmosConfig, deps)
+			if err != nil {
+				return fmt.Errorf("failed to build toolchain PATH: %w", err)
+			}
+
+			// Propagate toolchain PATH into environment for subprocess.
+			info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
+		}
 	}
 
 	varFile := constructTerraformComponentVarfileName(&info)

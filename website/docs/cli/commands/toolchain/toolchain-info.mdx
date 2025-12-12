@@ -1,0 +1,48 @@
+---
+title: atmos toolchain info
+sidebar_label: info
+sidebar_class_name: command
+id: info
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Display detailed information about installed toolchain tools, including version, installation path, and metadata. This helps you verify that the correct tools are available for your components and workflows.
+</Intro>
+
+<Screengrab title="atmos toolchain info --help" slug="atmos-toolchain-info--help" />
+
+## Usage
+
+Execute the `atmos toolchain info` command like this:
+
+```shell
+atmos toolchain info <tool>
+```
+
+## Examples
+
+```shell
+atmos toolchain info terraform
+```
+
+## Arguments
+
+<dl>
+    <dt>`tool` <em>(required)</em></dt>
+    <dd>
+        Tool name to display information about
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--output`  <em>(optional)</em></dt>
+    <dd>
+        Output format table or json
+    </dd>
+
+</dl>

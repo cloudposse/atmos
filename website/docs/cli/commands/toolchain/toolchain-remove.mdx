@@ -1,0 +1,52 @@
+---
+title: atmos toolchain remove
+sidebar_label: remove
+sidebar_class_name: command
+id: remove
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Remove tool entries from your toolchain configuration when they're no longer needed by your components, commands, or workflows. This keeps your toolchain lean and focused on active dependencies.
+</Intro>
+
+<Screengrab title="atmos toolchain remove --help" slug="atmos-toolchain-remove--help" />
+
+## Usage
+
+Execute the `toolchain remove` command like this:
+
+```shell
+atmos toolchain remove <tool>@<version>
+```
+
+## Examples
+
+```shell
+atmos toolchain remove terraform
+atmos toolchain remove hashicorp/terraform
+atmos toolchain remove terraform@1.11.4
+atmos toolchain remove hashicorp/terraform@1.11.4
+atmos toolchain remove --file /path/to/.tool-versions kubectl@1.28.0`,
+```
+
+## Arguments
+
+<dl>
+    <dt>`package` <em>(required)</em></dt>
+    <dd>
+        Package to remove from the toolchain configuration
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--file`  <em>(optional)</em></dt>
+    <dd>
+        Path to tool-versions file (defaults to global --tool-versions-file)
+    </dd>
+
+</dl>

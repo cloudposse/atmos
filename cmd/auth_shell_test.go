@@ -1,59 +1,66 @@
 package cmd
 
 import (
+	"path/filepath"
 	"runtime"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestAuthShellCmd_FlagParsing(t *testing.T) {
 	tests := []struct {
-		name          string
-		args          []string
-		expectedError string
+		name                string
+		args                []string
+		expectedSentinelErr error // The specific sentinel error expected
 	}{
 		{
 			name: "no identity specified uses default",
 			args: []string{},
-			// This will fail with auth errors since we don't have real AWS SSO configured.
-			expectedError: "authentication failed",
+			// Fixture has test-admin as default. Will fail at authentication since we don't have real AWS SSO.
+			expectedSentinelErr: errUtils.ErrAuthenticationFailed,
 		},
 		{
-			name:          "nonexistent identity",
-			args:          []string{"--identity=nonexistent"},
-			expectedError: "identity not found",
+			name:                "nonexistent identity",
+			args:                []string{"--identity=nonexistent"},
+			expectedSentinelErr: errUtils.ErrIdentityNotFound,
 		},
 		{
 			name: "valid identity",
 			args: []string{"--identity=test-user"},
-			// This will fail with auth errors since we don't have real AWS credentials.
-			expectedError: "authentication failed",
+			// This will fail at authentication since we don't have real AWS credentials.
+			expectedSentinelErr: errUtils.ErrAuthenticationFailed,
 		},
 		{
 			name: "shell override flag",
 			args: []string{"--shell", "/bin/bash"},
-			// This will fail with auth errors since we don't have real AWS credentials.
-			expectedError: "authentication failed",
+			// Fixture has test-admin as default. Will fail at authentication since we don't have real AWS SSO.
+			expectedSentinelErr: errUtils.ErrAuthenticationFailed,
 		},
 		{
 			name: "shell args after double dash",
 			args: []string{"--", "-c", "echo test"},
-			// This will fail with auth errors since we don't have real AWS credentials.
-			expectedError: "authentication failed",
+			// Fixture has test-admin as default. Will fail at authentication since we don't have real AWS SSO.
+			expectedSentinelErr: errUtils.ErrAuthenticationFailed,
 		},
 		{
 			name: "identity with shell args",
 			args: []string{"--identity=test-user", "--", "-c", "env"},
-			// This will fail with auth errors since we don't have real AWS credentials.
-			expectedError: "authentication failed",
+			// This will fail at authentication since we don't have real AWS credentials.
+			expectedSentinelErr: errUtils.ErrAuthenticationFailed,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Reset viper state to ensure clean test isolation.
+			viper.Reset()
+
 			// Set up test fixture with auth configuration for each subtest.
 			testDir := "../tests/fixtures/scenarios/atmos-auth"
 			t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
@@ -69,11 +76,11 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 			// Call the core business logic directly, bypassing handleHelpRequest and checkAtmosConfig.
 			err := executeAuthShellCommandCore(testCmd, tt.args)
 
-			if tt.expectedError != "" {
-				assert.Error(t, err)
-				if err != nil {
-					assert.Contains(t, err.Error(), tt.expectedError)
-				}
+			if tt.expectedSentinelErr != nil {
+				require.Error(t, err, "Expected an error but got nil")
+				assert.ErrorIs(t, err, tt.expectedSentinelErr,
+					"Expected error chain to contain %v, but got: %v",
+					tt.expectedSentinelErr, err)
 			} else {
 				assert.NoError(t, err)
 			}
@@ -82,6 +89,8 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 }
 
 func TestAuthShellCmd_CommandStructure(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Test that the real authShellCmd has the expected structure.
 	assert.Equal(t, "shell", authShellCmd.Use)
 	assert.True(t, authShellCmd.DisableFlagParsing, "DisableFlagParsing should be true to allow pass-through of shell arguments")
@@ -100,6 +109,8 @@ func TestAuthShellCmd_CommandStructure(t *testing.T) {
 }
 
 func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Set up test fixture.
 	testDir := "../tests/fixtures/scenarios/atmos-auth"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
@@ -119,7 +130,9 @@ func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
 func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
 	// Test that the command handles nil environment variables gracefully.
 	// This tests the path where envVars is nil and gets initialized to empty map.
-	testDir := "../tests/fixtures/scenarios/atmos-auth"
+	testDir, err := filepath.Abs("../tests/fixtures/scenarios/atmos-auth")
+	require.NoError(t, err, "Failed to get absolute path to test fixture")
+
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
 	t.Setenv("ATMOS_BASE_PATH", testDir)
 
@@ -130,13 +143,16 @@ func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
 	testCmd.Flags().AddFlagSet(authShellCmd.Flags())
 
 	// This will fail at authentication but will exercise the env var initialization path.
-	err := executeAuthShellCommandCore(testCmd, []string{"--identity=test-user"})
-	assert.Error(t, err)
-	// Should contain authentication failed, not nil pointer errors.
-	assert.Contains(t, err.Error(), "authentication failed")
+	err = executeAuthShellCommandCore(testCmd, []string{"--identity=test-user"})
+	// Should be an authentication error, not nil pointer errors.
+	require.Error(t, err, "Expected an error but got nil")
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed,
+		"Expected ErrAuthenticationFailed, but got: %v", err)
 }
 
 func TestAuthShellCmd_HelpRequest(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Test that the command handles help request arguments.
 	// When DisableFlagParsing is true, Cobra doesn't add the help flag automatically,
 	// so handleHelpRequest in cmd/helpers.go handles --help and -h manually.
@@ -153,6 +169,8 @@ func TestAuthShellCmd_HelpRequest(t *testing.T) {
 }
 
 func TestAuthShellCmd_ShellEnvironmentBinding(t *testing.T) {
+	_ = NewTestKit(t)
+
 	// Test that SHELL and ATMOS_SHELL environment variables are bound.
 	// This verifies the init() function's viper bindings work correctly.
 	testShell := "/bin/test-shell"
@@ -169,6 +187,8 @@ func TestAuthShellCmd_ShellEnvironmentBinding(t *testing.T) {
 }
 
 func TestAuthShellCmd_WithMockProvider(t *testing.T) {
+	_ = NewTestKit(t)
+
 	if testing.Short() {
 		t.Skipf("Skipping integration test in short mode: spawns actual shell process")
 	}
@@ -211,6 +231,8 @@ func TestAuthShellCmd_WithMockProvider(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
 			// Set up mock auth provider fixture for each subtest.
 			testDir := "../tests/fixtures/scenarios/atmos-auth-mock"
 			t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
@@ -234,6 +256,8 @@ func TestAuthShellCmd_WithMockProvider(t *testing.T) {
 }
 
 func TestAuthShellCmd_MockProviderEnvironmentVariables(t *testing.T) {
+	_ = NewTestKit(t)
+
 	if testing.Short() {
 		t.Skipf("Skipping integration test in short mode: spawns actual shell process")
 	}

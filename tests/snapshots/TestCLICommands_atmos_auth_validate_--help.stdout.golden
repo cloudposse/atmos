@@ -1,8 +1,8 @@
 
 👽 test linux/amd64
 
-Validate the authentication configuration in atmos.yaml for syntax and logical  
-errors.                                                                         
+Validate the authentication configuration in atmos.yaml for syntax and logical
+errors.                                                                       
 
 USAGE
 
@@ -32,6 +32,9 @@ GLOBAL FLAGS
 
       --force-tty               Force TTY mode with sane defaults when terminal detection fails (useful for
                                 screenshots)
+
+      --github-token string     GitHub authentication token for accessing private repositories and increasing rate
+                                limits
 
       --heatmap                 Show performance heatmap visualization after command execution (includes P95 latency)
 

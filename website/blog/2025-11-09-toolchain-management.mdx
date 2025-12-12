@@ -1,0 +1,369 @@
+---
+slug: toolchain-management
+title: "Native Toolchain Management with Aqua Registry Integration"
+authors: [osterman]
+tags: [feature]
+date: 2025-11-09
+---
+
+Atmos now includes native toolchain management that seamlessly integrates with the Aqua registry ecosystem—giving you access to hundreds of pre-configured CLI tools without the overhead of external tool managers.
+
+<!--truncate-->
+
+## What's New
+
+Atmos now includes **built-in toolchain management** commands that let you install, manage, and version control CLI tools directly within your infrastructure projects. This feature integrates natively with the [Aqua registry](https://aquaproj.github.io/), leveraging its extensive ecosystem of package definitions while providing deep integration with Atmos workflows and components.
+
+### Why This Matters
+
+Managing tool versions across infrastructure teams has always been a challenge. Different developers use different versions of terraform, kubectl, helm, and dozens of other CLIs—leading to "works on my machine" problems and deployment inconsistencies.
+
+Traditional solutions require:
+- Installing separate tool managers (asdf, aqua, tfenv, etc.)
+- Maintaining separate configuration files
+- Context switching between your infrastructure tool and your tool manager
+- No integration with your infrastructure automation workflows
+
+**Now you can manage all your CLI tools directly from Atmos**—with zero external dependencies and seamless integration with your infrastructure workflows.
+
+## How It Works
+
+### Getting Started
+
+When you run `atmos toolchain list` without a `.tool-versions` file, Atmos provides helpful guidance:
+
+```
+# No Configuration Found
+
+No .tool-versions file found at: .tool-versions
+
+## To get started:
+
+Add a tool to automatically create your configuration:
+
+atmos toolchain add terraform@1.6.0
+
+Then list your tools:
+
+atmos toolchain list
+```
+
+### Installation
+
+Install tools with simple commands:
+
+```bash
+# Install specific versions using aliases
+atmos toolchain install terraform@1.9.8
+atmos toolchain install opentofu@1.10.3
+atmos toolchain install kubectl@1.28.0
+
+# Install using canonical registry paths
+atmos toolchain install hashicorp/terraform@1.9.8
+atmos toolchain install opentofu/opentofu@1.10.3
+
+# Install all tools from .tool-versions file
+atmos toolchain install
+```
+
+### Version Management
+
+Manage tool versions with `.tool-versions` files (asdf-compatible):
+
+```
+terraform 1.9.8
+opentofu 1.10.3
+kubectl 1.28.0
+helm 3.13.0
+```
+
+```bash
+# Add a tool to .tool-versions
+atmos toolchain add terraform@1.9.8
+
+# Remove a tool from .tool-versions
+atmos toolchain remove terraform
+
+# Set default version when multiple are installed
+atmos toolchain set terraform 1.9.8
+
+# List installed tools with status
+atmos toolchain list
+```
+
+The `list` command displays a comprehensive table showing:
+- Tool aliases and registry paths
+- Installed versions and their status (✓ or ✗)
+- Installation dates and binary sizes
+- Multiple versions when configured
+
+### Execution
+
+Run tools directly through Atmos:
+
+```bash
+# Execute a specific version
+atmos toolchain exec terraform@1.9.8 -- plan
+
+# Use the version from .tool-versions
+atmos toolchain exec terraform -- plan
+
+# Get tool paths for integration
+atmos toolchain path
+atmos toolchain which terraform
+```
+
+### Registry Discovery
+
+Browse available tools and search the registry:
+
+```bash
+# List all available tools in the Aqua registry
+atmos toolchain registry list aqua
+
+# Search for specific tools
+atmos toolchain registry search terraform
+atmos toolchain registry search kubectl
+
+# Get detailed information about a tool
+atmos toolchain info terraform
+```
+
+## Aqua Registry Integration
+
+The power of Atmos toolchain comes from its integration with the [Aqua registry](https://github.com/aquaproj/aqua-registry)—a community-maintained collection of over 1,000 CLI tool definitions.
+
+### Benefits of Aqua Registry
+
+- **Extensive Coverage**: Pre-configured definitions for terraform, kubectl, helm, aws-cli, and hundreds more
+- **Community Maintained**: Regular updates and new tools added by the community
+- **Proven Format**: Battle-tested YAML format used by thousands of teams
+- **No Vendor Lock-in**: Compatible with asdf `.tool-versions` files
+
+### How Registry Resolution Works
+
+Atmos automatically resolves tool names using a smart resolution system:
+
+1. **Exact matches**: `hashicorp/terraform` → `hashicorp/terraform`
+2. **Alias resolution**: `terraform` → `hashicorp/terraform`
+3. **Registry lookup**: Searches Aqua registry for canonical paths
+
+This means you can use short, friendly names like `terraform` or `kubectl` without needing to remember full registry paths.
+
+## Component Dependencies
+
+Atmos toolchain integrates seamlessly with stack configuration. Declare tool dependencies at multiple levels with proper inheritance:
+
+```yaml
+# Global dependencies (applies to all components)
+dependencies:
+  tools:
+    aws-cli: "2.0.0"
+    jq: "latest"
+
+# Component type dependencies (applies to all terraform components)
+terraform:
+  dependencies:
+    tools:
+      terraform: "1.9.8"
+      tflint: "0.54.0"
+
+# Component instance dependencies (specific component)
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "1.9.8"
+          checkov: "latest"
+```
+
+When you provision a component, Atmos automatically:
+1. Resolves tool dependencies from stack configuration (with inheritance)
+2. Installs missing tools
+3. Updates PATH to include installed tools
+4. Executes the component with the correct tool versions
+
+This ensures every component runs with exactly the tools it needs, eliminating version conflicts. Dependencies also work for workflows and custom commands!
+
+## Configuration Flexibility
+
+Atmos toolchain supports multiple configuration sources with proper precedence:
+
+**Environment Variables:**
+```bash
+export ATMOS_TOOL_VERSIONS=/path/to/.tool-versions
+export ATMOS_TOOLS_DIR=/custom/tools/dir
+export ATMOS_TOOLCHAIN_GET_ALL=true
+export ATMOS_TOOLCHAIN_GET_LIMIT=50
+```
+
+**Command Line Flags:**
+```bash
+atmos toolchain list --tool-versions /path/to/.tool-versions
+atmos toolchain get terraform --all --limit 20
+```
+
+**Configuration Files:**
+Configure default behavior in `atmos.yaml`:
+
+```yaml
+toolchain:
+  versions_file: .tool-versions
+  install_path: .tools
+```
+
+Precedence: **flags > environment variables > config files > defaults**
+
+## XDG Base Directory Support
+
+Atmos toolchain follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html) for cache storage:
+
+- **Cache**: `$XDG_CACHE_HOME/toolchain` (or `~/.cache/toolchain`)
+- **Fallback**: Falls back to `~/.cache/tools-cache` if XDG directories are unavailable
+- **Override**: Set `XDG_CACHE_HOME` or `ATMOS_XDG_CACHE_HOME` to customize
+
+This ensures proper integration with system conventions and user preferences.
+
+## Safety and Reliability
+
+The toolchain includes safety features for robust operation:
+
+- **Version pinning**: `.tool-versions` ensures consistent tool versions across environments
+- **Error handling**: Graceful fallbacks for missing files or network issues
+- **Helpful messages**: Clear guidance when configuration is missing or tools aren't found
+- **Clean uninstall**: `atmos toolchain clean` removes unused tool versions
+- **Cross-platform**: Works consistently on Linux, macOS, and Windows
+
+## Benefits Over Traditional Tool Managers
+
+### For Developers
+
+- **Single Command**: No need to install or learn asdf, aqua, tfenv, etc.
+- **Zero Setup**: Works immediately with Atmos—no plugins or configuration
+- **Helpful Guidance**: Clear error messages guide you to the correct workflow
+- **Consistent Interface**: Same command structure as other Atmos operations
+
+### For Teams
+
+- **Version Consistency**: `.tool-versions` ensures everyone uses the same versions
+- **CI/CD Integration**: Works seamlessly in automated pipelines
+- **Component Isolation**: Different components can use different tool versions
+- **Audit Trail**: Lockfiles provide cryptographic proof of tool versions
+
+### For Infrastructure
+
+- **Dependency Declaration**: Tools specified alongside infrastructure code
+- **Automatic Installation**: Components install their own dependencies
+- **PATH Management**: Automatic PATH configuration for spawned processes
+- **Cross-Platform**: Works on Linux, macOS, and Windows
+
+## Migration from Other Tool Managers
+
+### From asdf
+
+Atmos toolchain is compatible with asdf `.tool-versions` files—no changes needed:
+
+```bash
+# Your existing .tool-versions file works as-is
+terraform 1.9.8
+kubectl 1.28.0
+helm 3.13.0
+
+# Just use Atmos toolchain commands instead
+atmos toolchain install
+atmos toolchain list
+```
+
+### From Aqua
+
+If you're using Aqua directly, migration is straightforward:
+
+```bash
+# Convert aqua.yaml to .tool-versions
+grep -E '^\s+name:' aqua.yaml | \
+  sed 's/name://' | \
+  xargs -I {} atmos toolchain add {}
+
+# Then use Atmos toolchain
+atmos toolchain install
+```
+
+### From tfenv/rbenv/pyenv
+
+Create a `.tool-versions` file with your current versions:
+
+```bash
+# Check current versions
+terraform version
+kubectl version --client
+
+# Add to .tool-versions
+echo "terraform $(terraform version | head -1 | awk '{print $2}' | tr -d 'v')" > .tool-versions
+echo "kubectl $(kubectl version --client -o json | jq -r '.clientVersion.gitVersion' | tr -d 'v')" >> .tool-versions
+
+# Install via Atmos
+atmos toolchain install
+```
+
+## Implementation Details
+
+### User Interface
+
+The toolchain uses Atmos's modern UI system with:
+- **Markdown rendering**: Helpful messages with formatted code blocks
+- **Status indicators**: Automatic checkmarks (✓) for success, warnings (⚠), and errors (✗)
+- **Table display**: Clean, formatted tables with proper column sizing
+- **Color degradation**: Automatic color support detection and graceful fallback
+- **Consistent formatting**: All output follows Atmos UI conventions
+
+### Technical Architecture
+
+Key architectural decisions:
+
+- **Registry pattern**: Extensible design supports multiple registries
+- **Interface-driven**: All components use interfaces for testability
+- **Options pattern**: Configuration via functional options, not parameter drilling
+- **Context propagation**: Proper cancellation and timeout support
+- **XDG compliance**: Follows system conventions for cache directories
+- **Error wrapping**: Sentinel errors with context chains
+
+## Getting Started
+
+Try it now:
+
+```bash
+# Add a tool
+atmos toolchain add terraform@1.9.8
+
+# List your tools
+atmos toolchain list
+
+# Install everything
+atmos toolchain install
+
+# Use in your components
+atmos toolchain exec terraform -- version
+```
+
+No configuration required—just start using it!
+
+## Backward Compatibility
+
+Atmos toolchain is fully backward compatible:
+
+- Existing `.tool-versions` files (asdf format) work without modification
+- No breaking changes to component or stack configuration
+- All existing commands continue to work as before
+- Toolchain commands are completely additive
+
+## Future Enhancements
+
+We're continually improving the toolchain experience. Planned enhancements include:
+
+- **Lockfile support**: Reproducible builds with checksums and platform-specific binaries
+- **Custom registries**: Support for private tool registries
+- **Version constraints**: Semantic version ranges (e.g., `^1.9.0`, `~> 1.10.0`)
+- **Performance optimizations**: Parallel downloads and improved caching
+
+We'd love your feedback! Try the toolchain commands and let us know what you think.

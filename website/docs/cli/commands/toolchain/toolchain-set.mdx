@@ -1,0 +1,55 @@
+---
+title: atmos toolchain set
+sidebar_label: set
+sidebar_class_name: command
+id: set
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Set or update the version of a specific tool in your toolchain configuration. This allows you to pin tool versions for consistent execution across your components and workflows, or upgrade to newer versions when ready.
+</Intro>
+
+<Screengrab title="atmos toolchain set --help" slug="atmos-toolchain-set--help" />
+
+## Usage
+
+Execute the `toolchain set` command like this:
+
+```shell
+atmos toolchain set <tool> <version>
+```
+
+## Examples
+
+```shell
+atmos toolchain set terraform 1.11.4
+atmos toolchain set hashicorp/terraform 1.11.4
+atmos toolchain set terraform  # Interactive version selection
+atmos toolchain set --file /path/to/.tool-versions kubectl 1.28.0
+```
+
+## Arguments
+
+<dl>
+    <dt>`package` <em>(required)</em></dt>
+    <dd>
+        Package to set in the toolchain configuration
+    </dd>
+    <dt>`version` <em>(optional)</em></dt>
+    <dd>
+        The version to set (if omitted, interactive version selection is used)
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--file`  <em>(optional)</em></dt>
+    <dd>
+        Path to tool-versions file (defaults to global --tool-versions-file)
+    </dd>
+
+</dl>

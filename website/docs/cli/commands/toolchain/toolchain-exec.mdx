@@ -1,0 +1,41 @@
+---
+title: atmos toolchain exec
+sidebar_label: exec
+sidebar_class_name: command
+id: exec
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Execute toolchain-managed CLI tools directly from your Atmos commands and workflows without modifying your PATH. This ensures you always use the correct tool versions specified in your toolchain configuration.
+</Intro>
+
+<Screengrab title="atmos toolchain exec --help" slug="atmos-toolchain-exec--help" />
+
+## Usage
+
+Execute the `atmos toolchain exec` command like this:
+
+```shell
+atmos toolchain exec <tool> <arguments>
+```
+
+## Examples
+
+```shell
+atmos toolchain exec terraform --version         # Uses latest version
+atmos toolchain exec terraform@1.9.8 --version   # Uses specific version
+atmos toolchain exec opentofu@1.10.1 init
+atmos toolchain exec terraform@1.5.7 plan -var-file=prod.tfvars
+```
+
+## Arguments
+
+<dl>
+    <dt>`tool` <em>(required)</em></dt>
+    <dd>
+        Tool to use to exec the command
+    </dd>
+</dl>

@@ -49,7 +49,8 @@ type Flags struct {
 	Pager PagerSelector
 
 	// Authentication.
-	Identity IdentitySelector
+	Identity    IdentitySelector
+	GitHubToken string // GitHub authentication token for accessing private repositories.
 
 	// Profiles.
 	Profile []string // Profile selects which configuration profiles to activate.
