@@ -237,6 +237,9 @@ func processCommandAliases(
 				Short:              aliasFor,
 				Long:               aliasFor,
 				FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+				Annotations: map[string]string{
+					"configAlias": aliasCmd, // marks as CLI config alias, stores target command
+				},
 				Run: func(cmd *cobra.Command, args []string) {
 					err := cmd.ParseFlags(args)
 					errUtils.CheckErrorPrintAndExit(err, "", "")
