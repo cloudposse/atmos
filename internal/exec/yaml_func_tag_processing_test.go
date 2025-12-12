@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -135,9 +134,8 @@ func TestProcessCustomTags_AllTagBranches(t *testing.T) {
 		BasePath: "/test/base",
 	}
 
-	// Set a test environment variable
-	os.Setenv("TEST_VAR", "test_value")
-	defer os.Unsetenv("TEST_VAR")
+	// Set a test environment variable.
+	t.Setenv("TEST_VAR", "test_value")
 
 	tests := []struct {
 		name    string
@@ -246,7 +244,8 @@ func TestProcessCustomTags_AllTagBranches(t *testing.T) {
 				t.Skipf("Skipping test '%s': %s requires external setup", tt.name, tt.input)
 			}
 
-			result := processCustomTags(atmosConfig, tt.input, tt.stack, tt.skip)
+			result, err := processCustomTags(atmosConfig, tt.input, tt.stack, tt.skip, nil)
+			assert.NoError(t, err)
 			assert.True(t, tt.checkFn(result), "Result check failed for %s", tt.name)
 		})
 	}
@@ -362,7 +361,8 @@ func TestProcessNodes_RecursiveProcessing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processNodes(atmosConfig, tt.input, "test-stack", []string{})
+			result, err := processNodes(atmosConfig, tt.input, "test-stack", []string{}, nil)
+			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -393,7 +393,8 @@ func TestProcessCustomTags_ExecTagHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processCustomTags(atmosConfig, tt.input, "test-stack", tt.skip)
+			result, err := processCustomTags(atmosConfig, tt.input, "test-stack", tt.skip, nil)
+			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
