@@ -151,10 +151,12 @@ func TestGeneratePatterns_DirectoryPath(t *testing.T) {
 	tempDir := t.TempDir()
 
 	patterns := generatePatterns(tempDir)
-	assert.Len(t, patterns, 2) // Should generate *.yaml and *.yml patterns
+	assert.Len(t, patterns, 4) // Should generate *.yaml, *.yml, *.json, and *.hcl patterns
 	assert.Contains(t, patterns[0], "**")
 	assert.Contains(t, patterns[0], ".yaml")
 	assert.Contains(t, patterns[1], ".yml")
+	assert.Contains(t, patterns[2], ".json")
+	assert.Contains(t, patterns[3], ".hcl")
 }
 
 // TestGeneratePatterns_FileWithExtension tests file path at imports.go:297-307.
@@ -173,9 +175,11 @@ func TestGeneratePatterns_FileWithoutExtension(t *testing.T) {
 	filePathNoExt := filepath.Join(tempDir, "config")
 
 	patterns := generatePatterns(filePathNoExt)
-	assert.Len(t, patterns, 2) // Should append .yaml and .yml
+	assert.Len(t, patterns, 4) // Should append .yaml, .yml, .json, and .hcl
 	assert.Equal(t, filePathNoExt+".yaml", patterns[0])
 	assert.Equal(t, filePathNoExt+".yml", patterns[1])
+	assert.Equal(t, filePathNoExt+".json", patterns[2])
+	assert.Equal(t, filePathNoExt+".hcl", patterns[3])
 }
 
 // TestConvertToAbsolutePaths_AbsPathError tests error path at imports.go:314-318.
