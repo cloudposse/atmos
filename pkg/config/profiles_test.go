@@ -396,12 +396,13 @@ func TestProfileWithImports(t *testing.T) {
 		name           string
 		profileContent string
 		importContent  string
+		importSubdir   string // subdirectory for import file (empty = same directory as profile)
 		validateConfig func(t *testing.T, v *viper.Viper)
 	}{
 		{
 			name: "profile with import loads imported values",
 			profileContent: `import:
-  - ./imported.yaml
+  - ./imports/imported.yaml
 settings:
   terminal:
     max_width: 100
@@ -412,6 +413,7 @@ settings:
 logs:
   level: debug
 `,
+			importSubdir: "imports",
 			validateConfig: func(t *testing.T, v *viper.Viper) {
 				// Profile values should be present.
 				assert.Equal(t, 100, v.GetInt("settings.terminal.max_width"))
@@ -421,9 +423,9 @@ logs:
 			},
 		},
 		{
-			name: "imports are processed after profile - imports override profile values",
+			name: "importing file takes precedence over imported files",
 			profileContent: `import:
-  - ./imported.yaml
+  - ./imports/imported.yaml
 settings:
   terminal:
     max_width: 120
@@ -433,11 +435,14 @@ settings:
     max_width: 80
     color: true
 `,
+			importSubdir: "imports",
 			validateConfig: func(t *testing.T, v *viper.Viper) {
-				// Import is processed after profile merge, so import value wins.
-				// This is because processFileImportsIfPresent runs after mergeConfigFile.
-				assert.Equal(t, 80, v.GetInt("settings.terminal.max_width"))
-				// Import value should also be present.
+				// The importing file (profile) takes precedence over imported files.
+				// This aligns with mergeConfig() semantics: "importing file always takes precedence".
+				// NOTE: The import file is placed in a subdirectory to ensure it's only loaded
+				// via the import mechanism, not via directory scanning.
+				assert.Equal(t, 120, v.GetInt("settings.terminal.max_width"))
+				// Import value should still be present when not overridden by the importing file.
 				assert.Equal(t, true, v.GetBool("settings.terminal.color"))
 			},
 		},
@@ -468,15 +473,23 @@ settings:
 
 			// Write imported file if content provided.
 			if tt.importContent != "" {
-				importFile := filepath.Join(profileDir, "imported.yaml")
+				importDir := profileDir
+				if tt.importSubdir != "" {
+					importDir = filepath.Join(profileDir, tt.importSubdir)
+					require.NoError(t, os.MkdirAll(importDir, 0o755))
+				}
+				importFile := filepath.Join(importDir, "imported.yaml")
 				require.NoError(t, os.WriteFile(importFile, []byte(tt.importContent), 0o644))
 			}
 
 			// Load the profile using loadAtmosConfigsFromDirectory.
+			// Use pattern without ** to only load files in the profile directory,
+			// not subdirectories. Import files in subdirectories are loaded via
+			// the import mechanism, not via directory scanning.
 			v := viper.New()
 			v.SetConfigType("yaml")
 
-			searchPattern := filepath.Join(profileDir, "**", "*")
+			searchPattern := filepath.Join(profileDir, "*")
 			err := loadAtmosConfigsFromDirectory(searchPattern, v, "test-profile")
 			require.NoError(t, err)
 
