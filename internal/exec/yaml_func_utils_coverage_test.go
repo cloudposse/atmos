@@ -118,7 +118,7 @@ func TestProcessCustomTags_Coverage(t *testing.T) {
 				t.Skipf("Skipping test '%s': requires external setup", tt.name)
 			}
 
-			result := processCustomTags(atmosConfig, tt.input, tt.stack, tt.skip)
+			result, _ := processCustomTags(atmosConfig, tt.input, tt.stack, tt.skip, nil)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -235,7 +235,7 @@ func TestProcessNodes_Coverage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processNodes(atmosConfig, tt.input, "test-stack", []string{})
+			result, _ := processNodes(atmosConfig, tt.input, "test-stack", []string{}, nil)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -261,7 +261,7 @@ func TestProcessCustomYamlTags_Integration(t *testing.T) {
 		"regular": "normal_string",
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", []string{})
+	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", []string{}, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expected, result)
 }
