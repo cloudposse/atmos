@@ -315,11 +315,32 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	}
 
 	// Inject provisioned identities after profiles are loaded.
-	// This ensures auth.providers (which may be defined in profiles) is available,
-	// and that the provisioned identities cache file exists from prior authentication.
+	// This ensures auth.providers (which may be defined in profiles) is available for lookup.
 	if err := injectProvisionedIdentitiesPostLoad(v); err != nil {
 		log.Debug("Failed to inject provisioned identities post-load", "error", err)
 		// Non-fatal: continue with config loading even if injection fails.
+	}
+
+	// Re-apply user config after provisioned identities so user config takes precedence.
+	// This ensures manually configured identities override auto-provisioned ones.
+	// Re-apply main config sources.
+	if err := reapplyUserConfigForPrecedence(v); err != nil {
+		log.Debug("Failed to re-apply user config for precedence", "error", err)
+		// Non-fatal: continue with config loading.
+	}
+
+	// Re-apply profiles if any were specified.
+	if len(configAndStacksInfo.ProfilesFromArg) > 0 {
+		var tempConfig schema.AtmosConfiguration
+		if err := v.Unmarshal(&tempConfig); err != nil {
+			return atmosConfig, err
+		}
+		tempConfig.CliConfigPath = atmosConfig.CliConfigPath
+
+		if err := loadProfiles(v, configAndStacksInfo.ProfilesFromArg, &tempConfig); err != nil {
+			return atmosConfig, err
+		}
+		log.Debug("Re-applied profiles for precedence over provisioned identities")
 	}
 
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
@@ -1205,6 +1226,20 @@ func injectProvisionedIdentitiesPostLoad(v *viper.Viper) error {
 		}
 	}
 
+	return nil
+}
+
+// reapplyUserConfigForPrecedence re-applies user config files after provisioned identities.
+// This ensures user-defined configuration takes precedence over auto-provisioned identities.
+func reapplyUserConfigForPrecedence(v *viper.Viper) error {
+	// Re-apply config from the main config file if one was used.
+	configFile := v.ConfigFileUsed()
+	if configFile != "" {
+		log.Debug("Re-applying user config for precedence", "file", configFile)
+		if err := mergeConfigFile(configFile, v); err != nil {
+			return fmt.Errorf("failed to re-apply config file %s: %w", configFile, err)
+		}
+	}
 	return nil
 }
 
