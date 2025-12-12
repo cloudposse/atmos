@@ -16,6 +16,22 @@ import (
 // Error types for provisioning operations.
 var ErrUnsupportedProvisionerType = errors.New("unsupported provisioner type")
 
+// getAtmosConfigFromProvisionParams safely extracts AtmosConfig from ProvisionParams.
+func getAtmosConfigFromProvisionParams(params *ProvisionParams) *schema.AtmosConfiguration {
+	if params == nil {
+		return nil
+	}
+	return params.AtmosConfig
+}
+
+// getAtmosConfigFromDeleteParams safely extracts AtmosConfig from DeleteBackendParams.
+func getAtmosConfigFromDeleteParams(params *DeleteBackendParams) *schema.AtmosConfiguration {
+	if params == nil {
+		return nil
+	}
+	return params.AtmosConfig
+}
+
 // ExecuteDescribeComponentFunc is a function that describes a component from a stack.
 // This allows us to inject the describe component logic without circular dependencies.
 type ExecuteDescribeComponentFunc func(
@@ -36,7 +52,7 @@ type ProvisionParams struct {
 // Provision provisions infrastructure resources using a params struct.
 // It validates the provisioner type, loads component configuration, and executes the provisioner.
 func ProvisionWithParams(params *ProvisionParams) error {
-	defer perf.Track(nil, "provisioner.ProvisionWithParams")()
+	defer perf.Track(getAtmosConfigFromProvisionParams(params), "provisioner.ProvisionWithParams")()
 
 	if params == nil {
 		return fmt.Errorf("%w: provision params", errUtils.ErrNilParam)
@@ -141,7 +157,7 @@ func getBackendConfigFromComponent(componentConfig map[string]any, component, st
 
 // DeleteBackendWithParams deletes a backend using a params struct.
 func DeleteBackendWithParams(params *DeleteBackendParams) error {
-	defer perf.Track(nil, "provisioner.DeleteBackendWithParams")()
+	defer perf.Track(getAtmosConfigFromDeleteParams(params), "provisioner.DeleteBackendWithParams")()
 
 	if err := validateDeleteParams(params); err != nil {
 		return err
