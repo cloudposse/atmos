@@ -9,9 +9,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// TagExec is the YAML tag for the exec function.
-const TagExec = "!exec"
-
 // ShellExecutor defines the interface for executing shell commands.
 // This allows for dependency injection and testing.
 type ShellExecutor interface {

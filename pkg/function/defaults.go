@@ -34,18 +34,6 @@ func Tags() map[string]string {
 		TagEnv:      "env",
 		TagExec:     "exec",
 		TagTemplate: "template",
-		TagGitRoot:  "repo-root",
-	}
-}
-
-// AllTags returns a list of all known function tags.
-func AllTags() []string {
-	defer perf.Track(nil, "function.AllTags")()
-
-	return []string{
-		TagEnv,
-		TagExec,
-		TagTemplate,
-		TagGitRoot,
+		TagRepoRoot: "repo-root",
 	}
 }

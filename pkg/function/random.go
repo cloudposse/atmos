@@ -10,7 +10,6 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -55,12 +54,11 @@ func (f *RandomFunction) Execute(ctx context.Context, args string, execCtx *Exec
 		return generateRandom(defaultRandomMin, defaultRandomMax)
 	}
 
-	parts, err := utils.SplitStringByDelimiter(args, ' ')
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidArguments, args)
-	}
+	// Split by whitespace - simple splitting is sufficient for numeric arguments.
+	parts := strings.Fields(args)
 
 	var min, max int
+	var err error
 
 	switch len(parts) {
 	case 0:

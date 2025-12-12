@@ -12,9 +12,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// TagGitRoot is the YAML tag for the repo-root function.
-const TagGitRoot = "!repo-root"
-
 // GitRootFunction implements the !repo-root YAML function.
 // It returns the root directory of the Git repository.
 type GitRootFunction struct {

@@ -10,9 +10,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// TagEnv is the YAML tag for the env function.
-const TagEnv = "!env"
-
 // EnvFunction implements the !env YAML function.
 // It retrieves environment variables with optional defaults.
 type EnvFunction struct {

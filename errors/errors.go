@@ -758,6 +758,75 @@ var (
 	ErrProcessorCycleDetected    = errors.New("dependency cycle detected")
 	ErrNilProcessor              = errors.New("nil processor")
 	ErrProcessorNilContext       = errors.New("nil context")
+
+	// AWS identity errors.
+	ErrAwsGetCallerIdentity = errors.New("failed to get AWS caller identity")
+
+	// Git reference errors.
+	ErrGitRefNotFound = errors.New("git reference not found")
+
+	// Configuration and template errors.
+	ErrInvalidConfig      = errors.New("invalid configuration")
+	ErrTemplateEvaluation = errors.New("template evaluation failed")
+
+	// Interactive terminal errors.
+	ErrInteractiveNotAvailable = errors.New("interactive mode not available")
+
+	// Backend configuration errors.
+	ErrBackendTypeRequired = errors.New("backend type is required")
+
+	// Special YAML handling errors.
+	ErrSpecialYAMLHandling = errors.New("special YAML handling required")
+
+	// Stack discovery errors.
+	ErrNoStacksFound = errors.New("no stacks found")
+
+	// Version constraint errors.
+	ErrVersionConstraint        = errors.New("version constraint error")
+	ErrInvalidVersionConstraint = errors.New("invalid version constraint")
+
+	// Workflow execution errors.
+	ErrWorkflowNoSteps          = errors.New("workflow has no steps")
+	ErrInvalidFromStep          = errors.New("invalid from-step")
+	ErrInvalidWorkflowStepType  = errors.New("invalid workflow step type")
+	ErrWorkflowStepFailed       = errors.New("workflow step failed")
+	ErrAuthProviderNotAvailable = errors.New("auth provider not available")
+	ErrWorkflowNoWorkflow       = errors.New("workflow not found")
+	ErrWorkflowFileNotFound     = errors.New("workflow file not found")
+	ErrInvalidWorkflowManifest  = errors.New("invalid workflow manifest")
+
+	// Terraform module loading errors.
+	ErrFailedToLoadTerraformComponent = errors.New("failed to load terraform component")
+
+	// Terraform backend generation errors.
+	ErrMissingTerraformBackendType        = errors.New("missing terraform backend type")
+	ErrMissingTerraformBackendConfig      = errors.New("missing terraform backend config")
+	ErrMissingTerraformWorkspaceKeyPrefix = errors.New("missing terraform workspace key prefix")
+	ErrDeprecatedCmdNotCallable           = errors.New("deprecated command is not callable")
+	ErrBackendSectionMissing              = errors.New("backend section missing")
+	ErrBackendTypeMissing                 = errors.New("backend type missing")
+	ErrBackendConfigEmpty                 = errors.New("backend config is empty")
+	ErrBackendTypeEmptyAfterRender        = errors.New("backend type is empty after rendering")
+
+	// Workflow selection errors.
+	ErrNoWorkflowFilesToSelect = errors.New("no workflow files to select from")
+	ErrNonTTYWorkflowSelection = errors.New("workflow file selection requires TTY")
+
+	// Configuration errors.
+	ErrMissingAtmosConfig = errors.New("atmos configuration is missing")
+	ErrNotInGitRepository = errors.New("not in a git repository")
+
+	// Working directory errors.
+	ErrWorkingDirNotFound     = errors.New("working directory not found")
+	ErrWorkingDirAccessFailed = errors.New("failed to access working directory")
+	ErrWorkingDirNotDirectory = errors.New("working directory is not a directory")
+
+	// PTY errors.
+	ErrPTYNotSupported = errors.New("PTY not supported on this platform")
+
+	// Container runtime errors.
+	ErrContainerRuntimeOperation = errors.New("container runtime operation failed")
+	ErrRuntimeNotAvailable       = errors.New("container runtime not available")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

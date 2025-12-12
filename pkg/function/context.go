@@ -1,6 +1,9 @@
 package function
 
-import "github.com/cloudposse/atmos/pkg/perf"
+import (
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
 
 // ExecutionContext provides the minimal context needed for function execution.
 // This contains basic execution environment information.
@@ -14,6 +17,21 @@ type ExecutionContext struct {
 
 	// SourceFile is the file containing this function call.
 	SourceFile string
+
+	// Stack is the current stack name being processed.
+	Stack string
+
+	// AtmosConfig is the Atmos configuration.
+	AtmosConfig *schema.AtmosConfiguration
+
+	// StackInfo contains stack processing information including auth context.
+	StackInfo *StackInfo
+}
+
+// StackInfo contains information about the stack being processed.
+type StackInfo struct {
+	// AuthContext contains authentication context for cloud providers.
+	AuthContext *schema.AuthContext
 }
 
 // NewExecutionContext creates a new execution context with the given parameters.
