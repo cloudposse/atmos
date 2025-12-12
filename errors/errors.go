@@ -232,7 +232,7 @@ var (
 	ErrInvalidTerraformComponent        = errors.New("invalid Terraform component")
 	ErrNoTty                            = errors.New("no TTY attached")
 	ErrNoSuitableShell                  = errors.New("no suitable shell found")
-	ErrFailedToLoadTerraformModule      = errors.New("failed to load terraform module")
+	ErrFailedToLoadTerraformComponent   = errors.New("failed to load terraform component")
 	ErrNoJSONOutput                     = errors.New("no JSON output found in terraform show output")
 	ErrOriginalPlanFileRequired         = errors.New("original plan file is required")
 	ErrOriginalPlanFileNotExist         = errors.New("original plan file does not exist")

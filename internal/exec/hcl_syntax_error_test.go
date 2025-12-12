@@ -31,14 +31,14 @@ func TestHCLSyntaxErrorReturnsProperError(t *testing.T) {
 	})
 
 	// The error should NOT be ErrInvalidComponent (component not found).
-	// Instead, it should be ErrFailedToLoadTerraformModule (HCL parsing error).
+	// Instead, it should be ErrFailedToLoadTerraformComponent (HCL parsing error).
 	require.Error(t, err, "Expected an error for invalid HCL syntax")
 
 	// Assert that the error is about HCL/Terraform module loading, not about
 	// the component being missing.
 	assert.True(t,
-		errors.Is(err, errUtils.ErrFailedToLoadTerraformModule),
-		"Expected ErrFailedToLoadTerraformModule for HCL syntax error, got: %v", err)
+		errors.Is(err, errUtils.ErrFailedToLoadTerraformComponent),
+		"Expected ErrFailedToLoadTerraformComponent for HCL syntax error, got: %v", err)
 
 	// The error should NOT be about "component not found".
 	assert.False(t,

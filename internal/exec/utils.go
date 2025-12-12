@@ -815,7 +815,7 @@ func ProcessStacks(
 								configAndStacksInfo.ComponentFromArg)
 						}
 
-						err := errUtils.Build(errUtils.ErrFailedToLoadTerraformModule).
+						err := errUtils.Build(errUtils.ErrFailedToLoadTerraformComponent).
 							WithCause(diagErr).
 							WithExplanation(explanation).
 							WithHintf("Run 'atmos terraform validate' to see more details:\n```\natmos terraform validate %s -s %s\n```",
