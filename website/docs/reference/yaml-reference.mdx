@@ -439,6 +439,35 @@ vars:
 ```
 </File>
 
+### Explicit Type Tags
+
+When quoting isn't desired, you can use YAML's explicit type tags to force a specific type. This is an alternative to quoting:
+
+<File title="stacks/config.yaml">
+```yaml
+vars:
+  # Force string type (alternative to quoting)
+  country: !!str NO           # String "NO" (not boolean)
+  version: !!str 1.20         # String "1.20" (not float)
+  zip_code: !!str 07094       # String "07094" (leading zero preserved)
+
+  # Force numeric types
+  port: !!int "8080"          # Integer 8080 (from quoted string)
+  ratio: !!float "1.5"        # Float 1.5
+
+  # Explicit boolean
+  enabled: !!bool "true"      # Boolean true
+```
+</File>
+
+**When to use explicit type tags vs quoting:**
+- ✅ Use quotes (`"value"`) - Simpler, more common, widely understood
+- ✅ Use type tags (`!!str`) - When you need to be explicit about intent, or in generated YAML
+
+:::tip
+Most Atmos users prefer quoting over type tags. Type tags are useful when generating YAML programmatically or when you want to be very explicit about types.
+:::
+
 ## Quoting Best Practices
 
 ### When You MUST Quote
@@ -740,20 +769,50 @@ vars:
 - Maps merge recursively
 - Lists replace entirely
 
-### 4. Empty Values
+### 4. Empty Values, Null Values, and the Tilde (`~`)
+
+In YAML, `~` is a shorthand for `null`. This is part of the YAML 1.1 specification and is commonly used for concise null assignments.
 
 <File title="stacks/config.yaml">
 ```yaml
 vars:
-  # These are different!
-  null_value: null           # null
-  tilde_value: ~             # null (YAML 1.1)
-  empty_string: ""           # empty string
-  no_value:                  # null (key with no value)
+  # These are ALL equivalent ways to express null:
+  null_value: null           # Explicit null
+  tilde_value: ~             # Shorthand for null
+  no_value:                  # Key with no value = null
 
-  # For Atmos, prefer explicit empty string or null
-  description: ""            # Empty string
-  optional_field: null       # Explicitly null
+  # Example: Setting a value to null (unset it)
+  overseer: ~                # Same as overseer: null
+
+  # This is DIFFERENT - it's an empty string, not null:
+  empty_string: ""           # Empty string (not null!)
+```
+</File>
+
+:::warning Null vs Empty String
+`null` and `""` are **not the same**:
+- `null` (or `~`) means "no value" - the key exists but has no value
+- `""` means "empty string" - the key has a string value that happens to be empty
+
+This distinction matters in Terraform where `null` triggers default behavior while `""` is an explicit empty value.
+:::
+
+**When to use `~` vs `null` vs `""`:**
+- ✅ Use `~` for concise configuration when unsetting values
+- ✅ Use `null` when you want to be explicit about the intent
+- ✅ Use `""` when you need an actual empty string (not null)
+
+**Common use case - Overriding inherited values to null:**
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        # Unset an inherited value by setting it to null
+        optional_feature: ~      # Removes this from the final config
+        legacy_setting: null     # Same effect, more explicit
 ```
 </File>
 
@@ -945,6 +1004,8 @@ See [Validation](/validation/validating) for comprehensive validation strategies
 | **Merge** | `<<: *name` | Combine anchor with new keys |
 | **Literal Block** | `\|` | Multi-line string, preserve newlines |
 | **Folded Block** | `>` | Multi-line string, fold to single line |
+| **Null** | `~` or `null` | Explicit null value (unset) |
+| **Type Tag** | `!!str`, `!!int` | Force specific type (alternative to quoting) |
 | **Quote Strings** | `"string"` | Prevent type coercion, escape special chars |
 | **Go Template** | `"{{ .vars.x }}"` | Dynamic values (MUST quote) |
 | **JSON in YAML** | `{"key": "val"}` | Compact objects (use sparingly) |
