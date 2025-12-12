@@ -439,7 +439,7 @@ vars:
 ```
 </File>
 
-### Explicit Type Tags
+### Explicit Typing
 
 When quoting isn't desired, you can use YAML's explicit type tags to force a specific type. This is an alternative to quoting:
 
@@ -1005,7 +1005,7 @@ See [Validation](/validation/validating) for comprehensive validation strategies
 | **Literal Block** | `\|` | Multi-line string, preserve newlines |
 | **Folded Block** | `>` | Multi-line string, fold to single line |
 | **Null** | `~` or `null` | Explicit null value (unset) |
-| **Type Tag** | `!!str`, `!!int` | Force specific type (alternative to quoting) |
+| **Explicit Typing** | `!!str`, `!!int` | Force specific type (alternative to quoting) |
 | **Quote Strings** | `"string"` | Prevent type coercion, escape special chars |
 | **Go Template** | `"{{ .vars.x }}"` | Dynamic values (MUST quote) |
 | **JSON in YAML** | `{"key": "val"}` | Compact objects (use sparingly) |
