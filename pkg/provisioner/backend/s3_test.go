@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	//nolint:depguard
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/smithy-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -1104,3 +1105,186 @@ func TestShowDeletionWarning_WithStateFiles(t *testing.T) {
 }
 
 // The tests above provide comprehensive unit test coverage using mocked S3 client.
+
+// Additional tests for improved coverage.
+
+// mockAPIError implements smithy.APIError for testing error code paths.
+type mockAPIError struct {
+	code    string
+	message string
+}
+
+func (e *mockAPIError) Error() string                 { return e.message }
+func (e *mockAPIError) ErrorCode() string             { return e.code }
+func (e *mockAPIError) ErrorMessage() string          { return e.message }
+func (e *mockAPIError) ErrorFault() smithy.ErrorFault { return smithy.FaultUnknown }
+
+// mockHTTPError implements an interface with HTTPStatusCode for testing.
+type mockHTTPError struct {
+	statusCode int
+	message    string
+}
+
+func (e *mockHTTPError) Error() string       { return e.message }
+func (e *mockHTTPError) HTTPStatusCode() int { return e.statusCode }
+
+func TestBucketExists_AccessDeniedAPIError(t *testing.T) {
+	ctx := context.Background()
+	mockClient := &mockS3Client{
+		headBucketFunc: func(ctx context.Context, params *s3.HeadBucketInput, optFns ...func(*s3.Options)) (*s3.HeadBucketOutput, error) {
+			return nil, &mockAPIError{code: "AccessDenied", message: "access denied"}
+		},
+	}
+
+	exists, err := bucketExists(ctx, mockClient, "test-bucket")
+	require.Error(t, err)
+	assert.False(t, exists)
+	assert.ErrorIs(t, err, errUtils.ErrS3BucketAccessDenied)
+}
+
+func TestBucketExists_ForbiddenAPIError(t *testing.T) {
+	ctx := context.Background()
+	mockClient := &mockS3Client{
+		headBucketFunc: func(ctx context.Context, params *s3.HeadBucketInput, optFns ...func(*s3.Options)) (*s3.HeadBucketOutput, error) {
+			return nil, &mockAPIError{code: "Forbidden", message: "forbidden"}
+		},
+	}
+
+	exists, err := bucketExists(ctx, mockClient, "test-bucket")
+	require.Error(t, err)
+	assert.False(t, exists)
+	assert.ErrorIs(t, err, errUtils.ErrS3BucketAccessDenied)
+}
+
+func TestBucketExists_HTTPForbiddenStatusCode(t *testing.T) {
+	ctx := context.Background()
+	mockClient := &mockS3Client{
+		headBucketFunc: func(ctx context.Context, params *s3.HeadBucketInput, optFns ...func(*s3.Options)) (*s3.HeadBucketOutput, error) {
+			return nil, &mockHTTPError{statusCode: 403, message: "forbidden"}
+		},
+	}
+
+	exists, err := bucketExists(ctx, mockClient, "test-bucket")
+	require.Error(t, err)
+	assert.False(t, exists)
+	assert.ErrorIs(t, err, errUtils.ErrS3BucketAccessDenied)
+}
+
+func TestBucketExists_HTTPNotFoundStatusCode(t *testing.T) {
+	ctx := context.Background()
+	mockClient := &mockS3Client{
+		headBucketFunc: func(ctx context.Context, params *s3.HeadBucketInput, optFns ...func(*s3.Options)) (*s3.HeadBucketOutput, error) {
+			return nil, &mockHTTPError{statusCode: 404, message: "not found"}
+		},
+	}
+
+	exists, err := bucketExists(ctx, mockClient, "test-bucket")
+	require.NoError(t, err)
+	assert.False(t, exists)
+}
+
+func TestListAllObjects_ListError(t *testing.T) {
+	ctx := context.Background()
+	mockClient := &mockS3Client{
+		listObjectVersionsFunc: func(ctx context.Context, params *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error) {
+			return nil, errors.New("list failed")
+		},
+	}
+
+	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket")
+	require.Error(t, err)
+	assert.Equal(t, 0, totalObjects)
+	assert.Equal(t, 0, stateFiles)
+	assert.ErrorIs(t, err, errUtils.ErrListObjects)
+}
+
+func TestDeleteAllObjects_ListError(t *testing.T) {
+	ctx := context.Background()
+	mockClient := &mockS3Client{
+		listObjectVersionsFunc: func(ctx context.Context, params *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error) {
+			return nil, errors.New("list failed")
+		},
+	}
+
+	err := deleteAllObjects(ctx, mockClient, "test-bucket")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrListObjects)
+}
+
+func TestDeleteAllObjects_EmptyBucket(t *testing.T) {
+	ctx := context.Background()
+	deleteObjectsCalled := false
+	mockClient := &mockS3Client{
+		listObjectVersionsFunc: func(ctx context.Context, params *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error) {
+			return &s3.ListObjectVersionsOutput{
+				Versions:      []types.ObjectVersion{},
+				DeleteMarkers: []types.DeleteMarkerEntry{},
+				IsTruncated:   aws.Bool(false),
+			}, nil
+		},
+		deleteObjectsFunc: func(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error) {
+			deleteObjectsCalled = true
+			return &s3.DeleteObjectsOutput{}, nil
+		},
+	}
+
+	err := deleteAllObjects(ctx, mockClient, "test-bucket")
+	require.NoError(t, err)
+	assert.False(t, deleteObjectsCalled, "DeleteObjects should not be called for empty bucket")
+}
+
+func TestDeleteAllObjects_Pagination(t *testing.T) {
+	ctx := context.Background()
+	listCallCount := 0
+	deleteCallCount := 0
+	mockClient := &mockS3Client{
+		listObjectVersionsFunc: func(ctx context.Context, params *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error) {
+			listCallCount++
+			if listCallCount == 1 {
+				return &s3.ListObjectVersionsOutput{
+					Versions: []types.ObjectVersion{
+						{Key: aws.String("file1.txt"), VersionId: aws.String("v1")},
+					},
+					IsTruncated:         aws.Bool(true),
+					NextKeyMarker:       aws.String("file1.txt"),
+					NextVersionIdMarker: aws.String("v1"),
+				}, nil
+			}
+			return &s3.ListObjectVersionsOutput{
+				Versions: []types.ObjectVersion{
+					{Key: aws.String("file2.txt"), VersionId: aws.String("v2")},
+				},
+				IsTruncated: aws.Bool(false),
+			}, nil
+		},
+		deleteObjectsFunc: func(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error) {
+			deleteCallCount++
+			return &s3.DeleteObjectsOutput{}, nil
+		},
+	}
+
+	err := deleteAllObjects(ctx, mockClient, "test-bucket")
+	require.NoError(t, err)
+	assert.Equal(t, 2, listCallCount, "Should list twice for pagination")
+	assert.Equal(t, 2, deleteCallCount, "Should delete twice for pagination")
+}
+
+func TestListAllObjects_NilKeyHandling(t *testing.T) {
+	ctx := context.Background()
+	mockClient := &mockS3Client{
+		listObjectVersionsFunc: func(ctx context.Context, params *s3.ListObjectVersionsInput, optFns ...func(*s3.Options)) (*s3.ListObjectVersionsOutput, error) {
+			return &s3.ListObjectVersionsOutput{
+				Versions: []types.ObjectVersion{
+					{Key: nil, VersionId: aws.String("v1")}, // Nil key - should not panic.
+					{Key: aws.String("terraform.tfstate"), VersionId: aws.String("v2")},
+				},
+				IsTruncated: aws.Bool(false),
+			}, nil
+		},
+	}
+
+	totalObjects, stateFiles, err := listAllObjects(ctx, mockClient, "test-bucket")
+	require.NoError(t, err)
+	assert.Equal(t, 2, totalObjects)
+	assert.Equal(t, 1, stateFiles) // Only the non-nil key ending with .tfstate.
+}
