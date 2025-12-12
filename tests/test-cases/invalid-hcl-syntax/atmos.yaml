@@ -1,0 +1,14 @@
+base_path: "."
+
+stacks:
+  base_path: "stacks"
+  name_pattern: "{stage}"
+  included_paths:
+    - "**/*"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+logs:
+  level: "Debug"
