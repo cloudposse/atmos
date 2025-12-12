@@ -105,63 +105,6 @@ func TestIsKnownWorkflowError(t *testing.T) {
 	}
 }
 
-// TestFormatList tests the FormatList function.
-func TestFormatList(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []string
-		expected string
-	}{
-		{
-			name:     "empty list",
-			input:    []string{},
-			expected: "",
-		},
-		{
-			name:     "single item",
-			input:    []string{"item1"},
-			expected: "- `item1`\n",
-		},
-		{
-			name:     "multiple items",
-			input:    []string{"item1", "item2", "item3"},
-			expected: "- `item1`\n- `item2`\n- `item3`\n",
-		},
-		{
-			name:     "items with spaces",
-			input:    []string{"item with spaces", "another item"},
-			expected: "- `item with spaces`\n- `another item`\n",
-		},
-		{
-			name:     "items with special characters",
-			input:    []string{"item-1", "item_2", "item.3"},
-			expected: "- `item-1`\n- `item_2`\n- `item.3`\n",
-		},
-		{
-			name:     "items with backticks in name",
-			input:    []string{"item`with`backticks"},
-			expected: "- `item`with`backticks`\n",
-		},
-		{
-			name:     "empty string item",
-			input:    []string{""},
-			expected: "- ``\n",
-		},
-		{
-			name:     "mixed empty and non-empty items",
-			input:    []string{"item1", "", "item3"},
-			expected: "- `item1`\n- ``\n- `item3`\n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := FormatList(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 // TestCheckAndMergeDefaultIdentity tests the checkAndMergeDefaultIdentity function.
 func TestCheckAndMergeDefaultIdentity(t *testing.T) {
 	tests := []struct {
@@ -947,4 +890,37 @@ func TestExecuteDescribeWorkflows_SkipsInvalidFiles(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, listResult, 1)
 	assert.Equal(t, "valid-workflow", listResult[0].Workflow)
+}
+
+// TestWorkflowStepErrorContext_Fields tests the workflowStepErrorContext struct.
+func TestWorkflowStepErrorContext_Fields(t *testing.T) {
+	ctx := workflowStepErrorContext{
+		WorkflowPath:     "/path/to/workflow.yaml",
+		WorkflowBasePath: "/path/to",
+		Workflow:         "my-workflow",
+		StepName:         "step-1",
+		Command:          "echo test",
+		CommandType:      "shell",
+		FinalStack:       "dev",
+	}
+
+	assert.Equal(t, "/path/to/workflow.yaml", ctx.WorkflowPath)
+	assert.Equal(t, "/path/to", ctx.WorkflowBasePath)
+	assert.Equal(t, "my-workflow", ctx.Workflow)
+	assert.Equal(t, "step-1", ctx.StepName)
+	assert.Equal(t, "echo test", ctx.Command)
+	assert.Equal(t, "shell", ctx.CommandType)
+	assert.Equal(t, "dev", ctx.FinalStack)
+}
+
+// TestErrNoWorkflowFilesToSelect tests the error sentinel.
+func TestErrNoWorkflowFilesToSelect(t *testing.T) {
+	assert.Error(t, ErrNoWorkflowFilesToSelect)
+	assert.Contains(t, ErrNoWorkflowFilesToSelect.Error(), "no workflow files")
+}
+
+// TestErrNonTTYWorkflowSelection tests the error sentinel.
+func TestErrNonTTYWorkflowSelection(t *testing.T) {
+	assert.Error(t, ErrNonTTYWorkflowSelection)
+	assert.Contains(t, ErrNonTTYWorkflowSelection.Error(), "TTY")
 }

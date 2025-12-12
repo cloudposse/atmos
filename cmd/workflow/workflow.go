@@ -8,20 +8,9 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
-	"github.com/cloudposse/atmos/pkg/flags/global"
 )
 
 var workflowParser *flags.StandardParser
-
-// WorkflowOptions contains parsed flags for the workflow command.
-type WorkflowOptions struct {
-	global.Flags        // Embedded global flags
-	File         string // Workflow file to run (optional if name is unique)
-	DryRun       bool   // Simulate without making changes
-	Stack        string // Stack name
-	FromStep     string // Resume from specific step
-	Identity     string // Identity for workflow steps
-}
 
 // workflowCmd executes a workflow.
 var workflowCmd = &cobra.Command{
@@ -38,7 +27,11 @@ name, an interactive selector will prompt you to choose which one to run.`,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		handleHelpRequest(cmd, args)
+		// Handle "atmos workflow help" - show help and return.
+		// Note: Cobra already handles -h/--help flags before RunE executes.
+		if len(args) > 0 && args[0] == "help" {
+			return cmd.Help()
+		}
 
 		// If no arguments are provided, start the workflow UI.
 		if len(args) == 0 {
@@ -50,23 +43,8 @@ name, an interactive selector will prompt you to choose which one to run.`,
 			return nil
 		}
 
-		// Parse flags into options struct.
-		v := viper.GetViper()
-		if err := workflowParser.BindFlagsToViper(cmd, v); err != nil {
-			return err
-		}
-
-		opts := &WorkflowOptions{
-			Flags:    flags.ParseGlobalFlags(cmd, v),
-			File:     v.GetString("file"),
-			DryRun:   v.GetBool("dry-run"),
-			Stack:    v.GetString("stack"),
-			FromStep: v.GetString("from-step"),
-			Identity: v.GetString("identity"),
-		}
-
-		// Execute the workflow command with options.
-		return executeWorkflowWithOptions(cmd, args, opts)
+		// Execute the workflow command.
+		return e.ExecuteWorkflowCmd(cmd, args)
 	},
 }
 
@@ -140,18 +118,4 @@ func (w *WorkflowCommandProvider) GetCompatibilityFlags() map[string]compat.Comp
 // GetAliases returns command aliases (none for workflow).
 func (w *WorkflowCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
-}
-
-// executeWorkflowWithOptions executes the workflow command with parsed options.
-func executeWorkflowWithOptions(cmd *cobra.Command, args []string, _ *WorkflowOptions) error {
-	// Execute the workflow command and return any errors to main.go for centralized formatting.
-	return e.ExecuteWorkflowCmd(cmd, args)
-}
-
-// handleHelpRequest handles the help request for the workflow command.
-func handleHelpRequest(cmd *cobra.Command, args []string) {
-	// Check if help is requested.
-	if len(args) > 0 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h") {
-		_ = cmd.Help()
-	}
 }

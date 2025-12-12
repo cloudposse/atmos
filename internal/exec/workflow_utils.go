@@ -269,7 +269,7 @@ func ExecuteWorkflow(
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
 			return errUtils.Build(ErrInvalidFromStep).
 				WithTitle(WorkflowErrTitle).
-				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.\n\n### Available steps:\n\n%s", fromStep, workflow, FormatList(stepNames)).
+				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.\n\n### Available steps:\n\n%s", fromStep, workflow, u.FormatList(stepNames)).
 				WithContext("from_step", fromStep).
 				WithContext("workflow", workflow).
 				WithExitCode(1).
@@ -386,15 +386,6 @@ func ExecuteWorkflow(
 	}
 
 	return nil
-}
-
-// FormatList formats a list of strings into a markdown bullet list.
-func FormatList(items []string) string {
-	var result strings.Builder
-	for _, item := range items {
-		result.WriteString(fmt.Sprintf("- `%s`\n", item))
-	}
-	return result.String()
 }
 
 // ExecuteDescribeWorkflows executes `atmos describe workflows` command.
