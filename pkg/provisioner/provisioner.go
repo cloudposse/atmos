@@ -36,7 +36,7 @@ type ProvisionParams struct {
 // Provision provisions infrastructure resources using a params struct.
 // It validates the provisioner type, loads component configuration, and executes the provisioner.
 func ProvisionWithParams(params *ProvisionParams) error {
-	defer perf.Track(nil, "provision.ProvisionWithParams")()
+	defer perf.Track(nil, "provisioner.ProvisionWithParams")()
 
 	if params == nil {
 		return fmt.Errorf("%w: provision params", errUtils.ErrNilParam)
@@ -141,7 +141,7 @@ func getBackendConfigFromComponent(componentConfig map[string]any, component, st
 
 // DeleteBackendWithParams deletes a backend using a params struct.
 func DeleteBackendWithParams(params *DeleteBackendParams) error {
-	defer perf.Track(nil, "provision.DeleteBackend")()
+	defer perf.Track(nil, "provisioner.DeleteBackendWithParams")()
 
 	if err := validateDeleteParams(params); err != nil {
 		return err

@@ -649,12 +649,12 @@ return errUtils.Build(ErrBackendProvision).
 	WithExitCode(2).
 	Err()
 
-// Permission error
+// Permission error (exit code 3 per exit code table)
 return errUtils.Build(ErrBackendProvision).
 	WithHint("Required permissions: s3:CreateBucket, s3:PutBucketVersioning, s3:PutBucketEncryption").
 	WithHintf("Check IAM policy for identity: %s", authContext.AWS.Profile).
 	WithContext("bucket", bucket).
-	WithExitCode(2).
+	WithExitCode(3).
 	Err()
 ```
 
@@ -832,15 +832,30 @@ Each backend provisioner MUST document:
 
 ## CLI Commands
 
-### Backend Provisioning Command
+### Backend Management Commands
 
 ```bash
-# Provision backend explicitly
-atmos provision backend <component> --stack <stack>
+# Create/provision backend explicitly
+atmos terraform backend create <component> --stack <stack>
+
+# Update existing backend configuration
+atmos terraform backend update <component> --stack <stack>
+
+# List all backends in a stack
+atmos terraform backend list --stack <stack>
+
+# Describe backend configuration for a component
+atmos terraform backend describe <component> --stack <stack>
+
+# Delete backend (requires --force flag)
+atmos terraform backend delete <component> --stack <stack> --force
 
 # Examples
-atmos provision backend vpc --stack dev
-atmos provision backend eks --stack prod
+atmos terraform backend create vpc --stack dev
+atmos terraform backend create eks --stack prod
+atmos terraform backend list --stack dev --format json
+atmos terraform backend describe vpc --stack dev --format yaml
+atmos terraform backend delete vpc --stack dev --force
 ```
 
 #### When to Use
@@ -848,6 +863,7 @@ atmos provision backend eks --stack prod
 - Separate provisioning from Terraform execution (CI/CD pipelines)
 - Troubleshoot provisioning issues
 - Pre-provision backends for multiple components
+- Manage backend lifecycle independently
 
 #### Automatic Provisioning (via Hooks)
 
@@ -861,7 +877,7 @@ atmos terraform apply vpc --stack dev
 #### Provisioning Failure Stops Execution
 
 ```bash
-$ atmos provision backend vpc --stack dev
+$ atmos terraform backend create vpc --stack dev
 Error: provisioner 'backend' failed: backend provisioning failed:
 failed to create bucket: AccessDenied
 

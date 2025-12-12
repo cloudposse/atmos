@@ -33,8 +33,6 @@ import (
 // 6. Delete bucket itself
 //
 // This operation is irreversible. State files will be permanently lost.
-//
-//revive:disable:cyclomatic
 func DeleteS3Backend(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
@@ -95,8 +93,6 @@ func DeleteS3Backend(
 	_ = ui.Success(fmt.Sprintf("✓ Backend deleted: bucket '%s' and all contents removed", config.bucket))
 	return nil
 }
-
-//revive:enable:cyclomatic
 
 // deleteBackendContents displays warnings and deletes all objects from a bucket.
 func deleteBackendContents(ctx context.Context, client S3ClientAPI, bucket string, objectCount, stateFileCount int) error {
@@ -165,63 +161,63 @@ func listAllObjects(ctx context.Context, client S3ClientAPI, bucket string) (tot
 	return totalObjects, stateFiles, nil
 }
 
+// collectObjectIdentifiers builds a list of object identifiers from versions and delete markers.
+func collectObjectIdentifiers(output *s3.ListObjectVersionsOutput) []types.ObjectIdentifier {
+	objects := make([]types.ObjectIdentifier, 0, len(output.Versions)+len(output.DeleteMarkers))
+	for i := range output.Versions {
+		objects = append(objects, types.ObjectIdentifier{
+			Key: output.Versions[i].Key, VersionId: output.Versions[i].VersionId,
+		})
+	}
+	for i := range output.DeleteMarkers {
+		objects = append(objects, types.ObjectIdentifier{
+			Key: output.DeleteMarkers[i].Key, VersionId: output.DeleteMarkers[i].VersionId,
+		})
+	}
+	return objects
+}
+
+// deleteBatch deletes a batch of objects and handles partial failures.
+func deleteBatch(ctx context.Context, client S3ClientAPI, bucket string, objects []types.ObjectIdentifier) error {
+	if len(objects) == 0 {
+		return nil
+	}
+	resp, err := client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+		Bucket: aws.String(bucket),
+		Delete: &types.Delete{Objects: objects, Quiet: aws.Bool(true)},
+	})
+	if err != nil {
+		return fmt.Errorf(errFormat, errUtils.ErrDeleteObjects, err)
+	}
+	// Handle partial failures - DeleteObjects can return HTTP 200 with per-key errors.
+	if resp != nil && len(resp.Errors) > 0 {
+		e := resp.Errors[0]
+		return fmt.Errorf("%w: key=%s version=%s code=%s message=%s",
+			errUtils.ErrDeleteObjects, aws.ToString(e.Key), aws.ToString(e.VersionId),
+			aws.ToString(e.Code), aws.ToString(e.Message))
+	}
+	return nil
+}
+
 // deleteAllObjects deletes all objects and versions from a bucket in batches.
 func deleteAllObjects(ctx context.Context, client S3ClientAPI, bucket string) error {
-	var continuationKeyMarker *string
-	var continuationVersionMarker *string
-
+	var keyMarker, versionMarker *string
 	for {
-		// List objects and versions to delete.
 		output, err := client.ListObjectVersions(ctx, &s3.ListObjectVersionsInput{
-			Bucket:          aws.String(bucket),
-			KeyMarker:       continuationKeyMarker,
-			VersionIdMarker: continuationVersionMarker,
-			MaxKeys:         aws.Int32(1000), // AWS limit for batch delete.
+			Bucket: aws.String(bucket), KeyMarker: keyMarker,
+			VersionIdMarker: versionMarker, MaxKeys: aws.Int32(1000),
 		})
 		if err != nil {
 			return fmt.Errorf(errFormat, errUtils.ErrListObjects, err)
 		}
-
-		// Build list of objects to delete (versions + delete markers).
-		var objectsToDelete []types.ObjectIdentifier
-
-		for i := range output.Versions {
-			objectsToDelete = append(objectsToDelete, types.ObjectIdentifier{
-				Key:       output.Versions[i].Key,
-				VersionId: output.Versions[i].VersionId,
-			})
+		if err := deleteBatch(ctx, client, bucket, collectObjectIdentifiers(output)); err != nil {
+			return err
 		}
-
-		for i := range output.DeleteMarkers {
-			objectsToDelete = append(objectsToDelete, types.ObjectIdentifier{
-				Key:       output.DeleteMarkers[i].Key,
-				VersionId: output.DeleteMarkers[i].VersionId,
-			})
-		}
-
-		// Delete this batch if there are objects.
-		if len(objectsToDelete) > 0 {
-			_, err := client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
-				Bucket: aws.String(bucket),
-				Delete: &types.Delete{
-					Objects: objectsToDelete,
-					Quiet:   aws.Bool(true), // Don't return deleted objects in response.
-				},
-			})
-			if err != nil {
-				return fmt.Errorf(errFormat, errUtils.ErrDeleteObjects, err)
-			}
-		}
-
-		// Check if there are more pages.
 		if !aws.ToBool(output.IsTruncated) {
 			break
 		}
-
-		continuationKeyMarker = output.NextKeyMarker
-		continuationVersionMarker = output.NextVersionIdMarker
+		keyMarker, versionMarker = output.NextKeyMarker, output.NextVersionIdMarker
 	}
-
 	return nil
 }
 

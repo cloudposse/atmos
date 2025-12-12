@@ -120,18 +120,18 @@ atmos terraform backend delete vpc --stack dev --force
 
 #### Non-Empty Bucket Handling
 
-**Default behavior (no --force is not allowed):**
-- The command ALWAYS requires `--force` flag
-- If bucket contains objects, deletion proceeds with warning
-- If bucket contains `.tfstate` files, count is shown in output
-- User must acknowledge data loss risk by using `--force`
+The `--force` flag is always required. When provided, the command:
 
-**With --force flag:**
 - Lists all objects and versions in bucket
 - Shows count of objects and state files to be deleted
+- Displays warning if `.tfstate` files are present
 - Deletes all objects (including versions)
-- Deletes bucket itself
+- Deletes the bucket itself
 - Operation is irreversible
+
+**Without `--force` flag:**
+- Command exits with error: "the --force flag is required for deletion"
+- No bucket inspection or deletion occurs
 
 ### Delete Process
 
@@ -490,6 +490,10 @@ func getCachedS3ProvisionerClient(
 }
 
 // checkS3BucketExists checks if an S3 bucket exists.
+// Returns:
+//   - (true, nil) if bucket exists and is accessible
+//   - (false, nil) if bucket does not exist (404/NotFound)
+//   - (false, error) if access denied (403) or other errors occur
 func checkS3BucketExists(ctx context.Context, client *s3.Client, bucket string) (bool, error) {
 	defer perf.Track(nil, "provisioner.backend.checkS3BucketExists")()
 
@@ -498,8 +502,16 @@ func checkS3BucketExists(ctx context.Context, client *s3.Client, bucket string) 
 	})
 
 	if err != nil {
-		// Bucket doesn't exist or access denied (treat as doesn't exist)
-		return false, nil
+		// Check for specific error types to distinguish between "not found" and "access denied".
+		var notFound *s3types.NotFound
+		var noSuchBucket *s3types.NoSuchBucket
+		if errors.As(err, &notFound) || errors.As(err, &noSuchBucket) {
+			// Bucket genuinely doesn't exist - safe to proceed with creation.
+			return false, nil
+		}
+		// For AccessDenied (403) or other errors, return the error.
+		// This prevents attempting to create a bucket we can't access.
+		return false, fmt.Errorf("failed to check bucket existence: %w", err)
 	}
 
 	return true, nil

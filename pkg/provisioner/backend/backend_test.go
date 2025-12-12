@@ -443,7 +443,7 @@ func TestProvisionBackend_MultipleBackendTypes(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	s3Called := false
-	gcsCALLED := false
+	gcsCalled := false
 
 	mockS3Provisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
 		s3Called = true
@@ -451,7 +451,7 @@ func TestProvisionBackend_MultipleBackendTypes(t *testing.T) {
 	}
 
 	mockGCSProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
-		gcsCALLED = true
+		gcsCalled = true
 		return nil
 	}
 
@@ -475,11 +475,11 @@ func TestProvisionBackend_MultipleBackendTypes(t *testing.T) {
 	err := ProvisionBackend(ctx, atmosConfig, componentConfigS3, nil)
 	require.NoError(t, err)
 	assert.True(t, s3Called, "S3 provisioner should have been called")
-	assert.False(t, gcsCALLED, "GCS provisioner should not have been called")
+	assert.False(t, gcsCalled, "GCS provisioner should not have been called")
 
 	// Reset flags.
 	s3Called = false
-	gcsCALLED = false
+	gcsCalled = false
 
 	// Test GCS backend.
 	componentConfigGCS := map[string]any{
@@ -498,7 +498,7 @@ func TestProvisionBackend_MultipleBackendTypes(t *testing.T) {
 	err = ProvisionBackend(ctx, atmosConfig, componentConfigGCS, nil)
 	require.NoError(t, err)
 	assert.False(t, s3Called, "S3 provisioner should not have been called")
-	assert.True(t, gcsCALLED, "GCS provisioner should have been called")
+	assert.True(t, gcsCalled, "GCS provisioner should have been called")
 }
 
 func TestConcurrentBackendProvisioning(t *testing.T) {
@@ -520,7 +520,8 @@ func TestConcurrentBackendProvisioning(t *testing.T) {
 
 	RegisterBackendCreate("s3", mockProvisioner)
 
-	componentConfig := map[string]any{
+	// Base config template - each goroutine will get its own copy.
+	baseComponentConfig := map[string]any{
 		"backend_type": "s3",
 		"backend": map[string]any{
 			"bucket": "test-bucket",
@@ -539,6 +540,12 @@ func TestConcurrentBackendProvisioning(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// Create per-goroutine copy to avoid data race if ProvisionBackend mutates the map.
+			componentConfig := map[string]any{
+				"backend_type": baseComponentConfig["backend_type"],
+				"backend":      baseComponentConfig["backend"],
+				"provision":    baseComponentConfig["provision"],
+			}
 			err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 			assert.NoError(t, err)
 		}()
