@@ -1663,9 +1663,11 @@ func TestInjectProvisionedIdentitiesPostLoad(t *testing.T) {
 			},
 		},
 		{
-			name: "providers configured with cache file - should load identities",
+			name: "providers configured with cache file - should load identities when auto_provision enabled",
 			setupConfig: func(t *testing.T, v *viper.Viper) {
 				v.Set("auth.providers.aws-sso.kind", "aws/iam-identity-center")
+				// Enable auto_provision_identities so cached identities are loaded.
+				v.Set("auth.providers.aws-sso.auto_provision_identities", true)
 			},
 			setupCacheDir: func(t *testing.T, cacheDir string) {
 				// Create provisioned identities cache file.
@@ -1693,10 +1695,13 @@ func TestInjectProvisionedIdentitiesPostLoad(t *testing.T) {
 			},
 		},
 		{
-			name: "multiple providers - only one has cache file",
+			name: "multiple providers - only one has cache file and auto_provision enabled",
 			setupConfig: func(t *testing.T, v *viper.Viper) {
 				v.Set("auth.providers.aws-sso.kind", "aws/iam-identity-center")
+				// Enable auto_provision_identities for aws-sso.
+				v.Set("auth.providers.aws-sso.auto_provision_identities", true)
 				v.Set("auth.providers.azure.kind", "azure/entra-id")
+				// Azure doesn't have auto_provision_identities enabled.
 			},
 			setupCacheDir: func(t *testing.T, cacheDir string) {
 				// Only create cache file for aws-sso.
@@ -1717,6 +1722,31 @@ func TestInjectProvisionedIdentitiesPostLoad(t *testing.T) {
 				identities := v.GetStringMap("auth.identities")
 				assert.NotEmpty(t, identities)
 				assert.Contains(t, identities, "prod/admin")
+			},
+		},
+		{
+			name: "providers with cache file but auto_provision_identities disabled - should skip",
+			setupConfig: func(t *testing.T, v *viper.Viper) {
+				v.Set("auth.providers.aws-sso.kind", "aws/iam-identity-center")
+				// auto_provision_identities NOT set (defaults to false).
+			},
+			setupCacheDir: func(t *testing.T, cacheDir string) {
+				// Create cache file - but it shouldn't be loaded since auto_provision is not enabled.
+				providerDir := filepath.Join(cacheDir, "atmos", "auth", "aws-sso")
+				require.NoError(t, os.MkdirAll(providerDir, 0o700))
+				provisionedFile := filepath.Join(providerDir, "provisioned-identities.yaml")
+				content := `auth:
+  identities:
+    prod/admin:
+      kind: aws/permission-set
+      provider: aws-sso
+`
+				require.NoError(t, os.WriteFile(provisionedFile, []byte(content), 0o600))
+			},
+			expectIdentitiesLoad: false,
+			validateConfig: func(t *testing.T, v *viper.Viper) {
+				// Should NOT have any identities loaded when auto_provision_identities is not enabled.
+				assert.Empty(t, v.GetStringMap("auth.identities"))
 			},
 		},
 	}
@@ -1780,11 +1810,12 @@ func TestUserConfigOverridesProvisionedIdentities(t *testing.T) {
 	cacheDir := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", cacheDir)
 
-	// Create user config file with provider and an identity.
+	// Create user config file with provider (with auto_provision_identities enabled) and an identity.
 	userConfigContent := `auth:
   providers:
     aws-sso:
       kind: aws/iam-identity-center
+      auto_provision_identities: true
   identities:
     prod/admin:
       kind: aws/permission-set
