@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"os"
 	"os/signal"
 	"syscall"
@@ -49,16 +48,13 @@ func main() {
 
 	err := cmd.Execute()
 	if err != nil {
-		// Check for typed exit code error first to preserve subcommand exit codes.
-		var exitCodeErr errUtils.ExitCodeError
-		if errors.As(err, &exitCodeErr) {
-			log.Debug("Exiting with subcommand exit code", "code", exitCodeErr.Code)
-			errUtils.Exit(exitCodeErr.Code)
-		}
-		if errors.Is(err, errUtils.ErrPlanHasDiff) {
-			log.Debug("Exiting with code 2 due to plan differences")
-			errUtils.Exit(2)
-		}
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		// Format and print error using centralized formatter.
+		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+		os.Stderr.WriteString(formatted + "\n")
+
+		// Extract and use the correct exit code.
+		exitCode := errUtils.GetExitCode(err)
+		log.Debug("Exiting with exit code", "code", exitCode)
+		errUtils.Exit(exitCode)
 	}
 }
