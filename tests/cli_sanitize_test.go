@@ -117,6 +117,16 @@ func TestSanitizeOutput(t *testing.T) {
 			input:    "TRCE  Checking for atmos.yaml in home directory path=C:/Users/runner/.atmos",
 			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
 		},
+		{
+			name:     "Already sanitized repo path with mock-git-root should be normalized",
+			input:    "TRCE  Using test Git root override path=/absolute/path/to/repo/mock-git-root",
+			expected: "TRCE  Using test Git root override path=/mock-git-root",
+		},
+		{
+			name:     "Already sanitized repo path with .atmos should be normalized",
+			input:    "TRCE  Checking for atmos.yaml in home directory path=/absolute/path/to/repo/some/subdir/.atmos",
+			expected: "TRCE  Checking for atmos.yaml in home directory path=/mock-home/.atmos",
+		},
 	}
 
 	for _, tt := range tests {
