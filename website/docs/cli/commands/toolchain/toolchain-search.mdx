@@ -1,0 +1,235 @@
+---
+title: atmos toolchain search
+sidebar_label: search
+sidebar_class_name: command
+id: search
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Quick alias for searching tools across registries. A convenient shortcut to `atmos toolchain registry search` for faster tool discovery.
+</Intro>
+
+<Screengrab title="atmos toolchain search --help" slug="atmos-toolchain-search--help" />
+
+## Overview
+
+The `atmos toolchain search` command is a convenient alias to [`atmos toolchain registry search`](/cli/commands/toolchain/registry/registry-search). It provides the exact same functionality with a shorter command for faster tool discovery workflows.
+
+Both commands are identical:
+
+```shell
+# These are equivalent
+atmos toolchain search terraform
+atmos toolchain registry search terraform
+```
+
+## Usage
+
+```shell
+atmos toolchain search <query>
+```
+
+Searches for tools matching the query string across all configured registries. The query is matched against:
+- Tool owner (organization/user)
+- Repository name
+- Tool description
+
+Results are sorted by relevance score.
+
+## Quick Examples
+
+### Basic Search
+
+```shell
+# Search for Terraform tools
+atmos toolchain search terraform
+
+# Search for Kubernetes tools
+atmos toolchain search kubernetes
+
+# Search for AWS CLI tools
+atmos toolchain search aws
+```
+
+### Limit Results
+
+```shell
+# Show top 10 results
+atmos toolchain search terraform --limit 10
+```
+
+### Filter by Installation Status
+
+```shell
+# Show only installed tools
+atmos toolchain search terraform --installed-only
+
+# Show only available tools
+atmos toolchain search kubernetes --available-only
+```
+
+### Output Formats
+
+```shell
+# JSON output
+atmos toolchain search terraform --format json
+
+# YAML output
+atmos toolchain search kubectl --format yaml
+```
+
+## Why Use This Alias?
+
+### Shorter Command
+
+The alias provides a more ergonomic command for frequent searches:
+
+```shell
+# Shorter (21 characters)
+atmos toolchain search terraform
+
+# vs. Longer (30 characters)
+atmos toolchain registry search terraform
+```
+
+### Muscle Memory
+
+Aligns with other popular tool managers:
+- `asdf search` - Search asdf plugins
+- `brew search` - Search Homebrew packages
+- `apt search` - Search APT packages
+
+### Workflow Efficiency
+
+Common workflows benefit from the shorter command:
+
+```shell
+# Quick search and install workflow
+atmos toolchain search tflint
+atmos toolchain install terraform-linters/tflint@latest
+```
+
+## Complete Documentation
+
+For complete documentation including all flags, arguments, examples, and use cases, see:
+
+**[`atmos toolchain registry search`](/cli/commands/toolchain/registry/registry-search)**
+
+This includes:
+- All available flags (`--limit`, `--registry`, `--format`, `--installed-only`, `--available-only`)
+- Installation status indicators
+- Search behavior and relevance scoring
+- Comprehensive use cases and examples
+- Integration with other commands
+
+## Arguments
+
+<dl>
+    <dt>`query` <em>(required)</em></dt>
+    <dd>
+        Search query string to match against tool owner, repository name, and description.
+
+        Examples: `terraform`, `kubernetes`, `aws`, `helm`, `docker`
+    </dd>
+</dl>
+
+## Flags
+
+All flags from [`atmos toolchain registry search`](/cli/commands/toolchain/registry/registry-search) are supported:
+
+<dl>
+    <dt>`--limit` <em>(optional)</em></dt>
+    <dd>
+        Maximum number of results to display. Default: `20`
+
+        Environment variable: `ATMOS_TOOLCHAIN_LIMIT`
+    </dd>
+
+    <dt>`--registry` <em>(optional)</em></dt>
+    <dd>
+        Search only in the specified registry.
+
+        Environment variable: `ATMOS_TOOLCHAIN_REGISTRY`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `table`, `json`, or `yaml`. Default: `table`
+
+        Environment variable: `ATMOS_TOOLCHAIN_FORMAT`
+    </dd>
+
+    <dt>`--installed-only` <em>(optional)</em></dt>
+    <dd>
+        Show only installed tools.
+
+        Environment variable: `ATMOS_TOOLCHAIN_INSTALLED_ONLY`
+    </dd>
+
+    <dt>`--available-only` <em>(optional)</em></dt>
+    <dd>
+        Show only available (not installed) tools.
+
+        Environment variable: `ATMOS_TOOLCHAIN_AVAILABLE_ONLY`
+    </dd>
+</dl>
+
+## Common Use Cases
+
+### Quick Tool Discovery
+
+```shell
+# Find Terraform tools
+atmos toolchain search terraform
+
+# Find linters
+atmos toolchain search linter
+
+# Find security tools
+atmos toolchain search security
+```
+
+### Fast Install Workflow
+
+```shell
+# Search for tool
+atmos toolchain search tflint
+
+# Install from results
+atmos toolchain install terraform-linters/tflint@0.44.1
+```
+
+### Check Installation Status
+
+```shell
+# What Kubernetes tools do I have?
+atmos toolchain search kubernetes --installed-only
+```
+
+## Aliases Comparison
+
+Atmos provides several convenient command aliases:
+
+| Full Command | Alias | Purpose |
+|--------------|-------|---------|
+| `toolchain registry search` | `toolchain search` | Search for tools |
+| `terraform plan` | `tf plan` | Run Terraform (when configured) |
+| `helmfile apply` | `hf apply` | Run Helmfile (when configured) |
+
+The `search` alias follows this pattern of providing shorter alternatives for frequently used commands.
+
+## Related Commands
+
+- [`atmos toolchain registry search`](/cli/commands/toolchain/registry/registry-search) - Full command documentation
+- [`atmos toolchain registry list`](/cli/commands/toolchain/registry/registry-list) - Browse all tools in a registry
+- [`atmos toolchain install`](/cli/commands/toolchain/install) - Install tools from search results
+- [`atmos toolchain info`](/cli/commands/toolchain/info) - View detailed tool information
+
+## Related Documentation
+
+- [Toolchain Registry Overview](/cli/commands/toolchain/registry/usage) - Registry concepts and configuration
+- [Toolchain Overview](/cli/commands/toolchain/usage) - Complete toolchain documentation
+- [Aqua Registry](https://github.com/aquaproj/aqua-registry) - Browse the official registry online

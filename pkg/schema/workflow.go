@@ -14,9 +14,11 @@ type WorkflowStep struct {
 }
 
 type WorkflowDefinition struct {
-	Description string         `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
-	Steps       []WorkflowStep `yaml:"steps" json:"steps" mapstructure:"steps"`
-	Stack       string         `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
+	// Dependencies lists external tools required for this workflow to execute successfully.
+	Dependencies *Dependencies  `yaml:"dependencies,omitempty" json:"dependencies,omitempty" mapstructure:"dependencies"`
+	Steps        []WorkflowStep `yaml:"steps" json:"steps" mapstructure:"steps"`
+	Stack        string         `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
 }
 
 type WorkflowConfig map[string]WorkflowDefinition

@@ -1,0 +1,55 @@
+---
+title: atmos toolchain install
+sidebar_label: install
+sidebar_class_name: command
+id: install
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Install CLI tools required by your Atmos components, commands, and workflows. This command downloads and sets up the exact tool versions specified in your toolchain configuration, ensuring consistent execution across your team.
+</Intro>
+
+<Screengrab title="atmos toolchain install --help" slug="atmos-toolchain-install--help" />
+
+## Usage
+
+Execute the `toolchain install` command like this:
+
+```shell
+atmos toolchain install
+```
+
+## Examples
+
+```shell
+atmos toolchain install suzuki-shunsuke/github-comment@v3.5.0
+atmos toolchain install hashicorp/terraform@v1.5.0
+atmos toolchain install                    # Install from .tool-versions file
+```
+
+## Arguments
+
+<dl>
+    <dt>`package@version` <em>(optional)</em></dt>
+    <dd>
+        Package to install from the aqua repository
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--default`  <em>(optional)</em></dt>
+    <dd>
+        Set installed version as default (front of .tool-versions)
+    </dd>
+
+    <dt>`--reinstall` <em>(optional)</em></dt>
+
+    <dd>
+        Reinstall even if already installed
+    </dd>
+</dl>

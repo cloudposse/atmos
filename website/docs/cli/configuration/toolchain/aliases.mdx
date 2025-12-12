@@ -1,0 +1,323 @@
+---
+title: Toolchain Aliases
+sidebar_position: 3
+sidebar_label: Aliases
+description: Configure tool name aliases for convenient CLI usage
+---
+
+import Intro from '@site/src/components/Intro';
+import KeyPoints from '@site/src/components/KeyPoints';
+import File from '@site/src/components/File';
+import Note from '@site/src/components/Note';
+
+<Intro>
+Tool aliases provide convenient shorthand names for tools, allowing you to use simple names like `terraform` instead of the full registry path `hashicorp/terraform`.
+</Intro>
+
+<KeyPoints>
+- Define short names for frequently used tools
+- Multiple aliases can point to the same tool
+- Aliases are resolved before registry lookups
+- Works with all registry types (Aqua, inline, custom)
+- Use aliases with any toolchain command
+</KeyPoints>
+
+## Basic Configuration
+
+Define aliases in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  aliases:
+    # HashiCorp tools
+    terraform: hashicorp/terraform
+    tf: hashicorp/terraform        # Multiple aliases → same tool
+    packer: hashicorp/packer
+    vault: hashicorp/vault
+    consul: hashicorp/consul
+
+    # OpenTofu
+    opentofu: opentofu/opentofu
+    tofu: opentofu/opentofu
+
+    # Kubernetes tools
+    kubectl: kubernetes-sigs/kubectl
+    helm: helm/helm
+    k9s: derailed/k9s
+
+    # AWS tools
+    aws: aws/aws-cli
+    awscli: aws/aws-cli
+```
+</File>
+
+## How Aliases Work
+
+Aliases are resolved **before** registry lookups:
+
+1. User runs: `atmos toolchain install terraform@1.9.8`
+2. Atmos checks aliases: `terraform` → `hashicorp/terraform`
+3. Atmos searches registries for `hashicorp/terraform`
+4. Tool is installed
+
+Without aliases, you would need to use the full path:
+
+```bash
+# Without alias
+atmos toolchain install hashicorp/terraform@1.9.8
+
+# With alias
+atmos toolchain install terraform@1.9.8
+```
+
+## Multiple Aliases
+
+Multiple aliases can point to the same tool:
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  aliases:
+    terraform: hashicorp/terraform
+    tf: hashicorp/terraform         # Shorthand
+    hc-terraform: hashicorp/terraform  # Explicit
+```
+</File>
+
+All these commands install the same tool:
+
+```bash
+atmos toolchain install terraform@1.9.8
+atmos toolchain install tf@1.9.8
+atmos toolchain install hc-terraform@1.9.8
+```
+
+## Alias Precedence
+
+Aliases are resolved in this order:
+
+1. **Exact alias match** - `terraform` → `hashicorp/terraform`
+2. **Registry search** - If no alias, search all registries by priority
+3. **Error** - Tool not found in aliases or registries
+
+## Common Alias Patterns
+
+### HashiCorp Tools
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  aliases:
+    terraform: hashicorp/terraform
+    tf: hashicorp/terraform
+    packer: hashicorp/packer
+    vault: hashicorp/vault
+    consul: hashicorp/consul
+    nomad: hashicorp/nomad
+    waypoint: hashicorp/waypoint
+```
+</File>
+
+### Kubernetes Ecosystem
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  aliases:
+    kubectl: kubernetes-sigs/kubectl
+    k: kubernetes-sigs/kubectl     # Very short
+    helm: helm/helm
+    k9s: derailed/k9s
+    kustomize: kubernetes-sigs/kustomize
+    skaffold: GoogleContainerTools/skaffold
+```
+</File>
+
+### Cloud Provider CLIs
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  aliases:
+    aws: aws/aws-cli
+    awscli: aws/aws-cli
+    az: Azure/azure-cli
+    azure: Azure/azure-cli
+    gcloud: google-cloud-sdk/google-cloud-sdk
+```
+</File>
+
+### Terraform Ecosystem
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  aliases:
+    terraform: hashicorp/terraform
+    opentofu: opentofu/opentofu
+    tofu: opentofu/opentofu
+    terragrunt: gruntwork-io/terragrunt
+    tg: gruntwork-io/terragrunt
+    tflint: terraform-linters/tflint
+    tfsec: aquasecurity/tfsec
+    checkov: bridgecrewio/checkov
+```
+</File>
+
+## Using Aliases in Commands
+
+Aliases work with all toolchain commands:
+
+```bash
+# Install
+atmos toolchain install terraform@1.9.8
+atmos toolchain install tf@1.9.8
+
+# Add to .tool-versions
+atmos toolchain add terraform@1.9.8
+
+# Remove from .tool-versions
+atmos toolchain remove terraform
+
+# Execute
+atmos toolchain exec terraform -- version
+atmos toolchain exec tf -- version
+
+# Get information
+atmos toolchain info terraform
+atmos toolchain which tf
+
+# Search
+atmos toolchain search terraform
+```
+
+## Using Aliases in .tool-versions
+
+Aliases work in `.tool-versions` files:
+
+<File title=".tool-versions">
+```
+terraform 1.9.8
+tf 1.9.8              # Same as terraform
+kubectl 1.28.0
+helm 3.13.0
+```
+</File>
+
+<Note>
+Both `terraform` and `tf` resolve to `hashicorp/terraform`, so they represent the same tool. Use consistent naming to avoid confusion.
+</Note>
+
+## Listing Configured Aliases
+
+View all configured aliases:
+
+```bash
+atmos toolchain aliases
+```
+
+Output:
+```
+Configured Toolchain Aliases:
+
+terraform    → hashicorp/terraform
+tf           → hashicorp/terraform
+opentofu     → opentofu/opentofu
+tofu         → opentofu/opentofu
+kubectl      → kubernetes-sigs/kubectl
+helm         → helm/helm
+aws          → aws/aws-cli
+```
+
+## Aliases with Custom Registries
+
+Aliases work with all registry types:
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  # Aliases
+  aliases:
+    my-tool: corp/internal-cli
+    internal: corp/internal-cli
+
+  # Inline registry
+  registries:
+    - name: corporate
+      type: atmos
+      priority: 150
+      tools:
+        corp/internal-cli:
+          type: http
+          url: "https://artifacts.corp.com/cli/{{.Version}}/binary"
+```
+</File>
+
+Usage:
+
+```bash
+# Both work
+atmos toolchain install my-tool@1.0.0
+atmos toolchain install corp/internal-cli@1.0.0
+```
+
+## Complete Example
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  install_path: ".tools"
+  file_path: ".tool-versions"
+
+  # Tool name aliases
+  aliases:
+    # HashiCorp
+    terraform: hashicorp/terraform
+    tf: hashicorp/terraform
+    packer: hashicorp/packer
+    vault: hashicorp/vault
+    consul: hashicorp/consul
+
+    # OpenTofu
+    opentofu: opentofu/opentofu
+    tofu: opentofu/opentofu
+
+    # Kubernetes
+    kubectl: kubernetes-sigs/kubectl
+    k: kubernetes-sigs/kubectl
+    helm: helm/helm
+    k9s: derailed/k9s
+
+    # Terraform ecosystem
+    terragrunt: gruntwork-io/terragrunt
+    tg: gruntwork-io/terragrunt
+    tflint: terraform-linters/tflint
+    tfsec: aquasecurity/tfsec
+
+    # AWS
+    aws: aws/aws-cli
+    awscli: aws/aws-cli
+
+  # Registries
+  registries:
+    - name: aqua
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+```
+</File>
+
+## Best Practices
+
+1. **Use consistent naming** - Don't mix aliases and full names in `.tool-versions`
+2. **Document custom aliases** - Add comments in `atmos.yaml` for team awareness
+3. **Keep aliases simple** - Use common abbreviations (tf, k, tg)
+4. **Avoid conflicts** - Don't create aliases that match existing tool names
+5. **Team agreement** - Ensure team members use the same aliases
+
+## Related Documentation
+
+- [Toolchain Overview](/cli/configuration/toolchain/) - Basic toolchain configuration
+- [Registries](/cli/configuration/toolchain/registries) - Configure tool registries
+- [Toolchain Commands](/cli/commands/toolchain/usage) - Full command reference

@@ -175,3 +175,15 @@ func TestTestKit_OsArgsRestoration(t *testing.T) {
 	// Verify os.Args was restored after subtest.
 	assert.Equal(t, initialArgs, os.Args, "os.Args should be restored after subtest")
 }
+
+func TestTestKit_ViperStateRestoration(t *testing.T) {
+	t.Skip("Viper restoration temporarily disabled - viper.Set(key, nil) breaks BindPFlag connections")
+}
+
+func TestTestKit_ViperAndFlagsRestoration(t *testing.T) {
+	t.Skip("Viper restoration temporarily disabled - viper.Set(key, nil) breaks BindPFlag connections")
+}
+
+func TestTestKit_ViperTableDrivenTests(t *testing.T) {
+	t.Skip("Viper restoration temporarily disabled - viper.Set(key, nil) breaks BindPFlag connections")
+}

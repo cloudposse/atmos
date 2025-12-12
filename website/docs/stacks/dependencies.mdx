@@ -1,0 +1,293 @@
+---
+title: Configure Dependencies
+sidebar_position: 11
+sidebar_label: dependencies
+sidebar_class_name: command
+description: Use the dependencies section to declare tool version requirements and component dependencies.
+id: dependencies
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Note from '@site/src/components/Note'
+
+<Intro>
+The `dependencies` section defines both tool version requirements and component dependencies. Tool dependencies ensure your components use the correct versions of CLI tools like Terraform, kubectl, or helm. Component dependencies control execution order.
+</Intro>
+
+## Use Cases
+
+- **Tool Version Requirements:** Ensure components use specific Terraform, kubectl, or helm versions
+- **Team Consistency:** Version-control tool requirements for reproducible deployments
+- **Component Execution Order:** Define which components must run before others
+- **CI/CD Reliability:** Guarantee correct tool versions in automated pipelines
+
+## Tool Dependencies
+
+The `dependencies.tools` section declares which CLI tool versions a component requires. Atmos automatically installs and uses the specified versions when executing the component.
+
+### Configuration Scopes
+
+Tool dependencies can be defined at multiple levels, with more specific levels taking precedence.
+
+#### Global Level
+
+Tool versions defined at the root level apply to all components:
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+# Global tool dependencies
+dependencies:
+  tools:
+    terraform: "1.9.8"      # All Terraform components use this version
+    kubectl: "1.28.0"        # All kubectl commands use this version
+```
+</File>
+
+#### Component-Type Level
+
+Tool versions defined under `terraform`, `helmfile`, or `packer` apply to all components of that type:
+
+<File title="stacks/orgs/acme/plat/prod/_defaults.yaml">
+```yaml
+terraform:
+  dependencies:
+    tools:
+      terraform: "1.9.8"     # All Terraform components use 1.9.8
+      tflint: "0.44.1"       # All Terraform components use tflint 0.44.1
+
+helmfile:
+  dependencies:
+    tools:
+      helm: "3.13.0"         # All Helmfile releases use helm 3.13.0
+      kubectl: "1.28.0"      # All Helmfile releases use kubectl 1.28.0
+```
+</File>
+
+#### Component Level
+
+Tool versions defined within a component override all higher-level settings:
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "1.8.5"   # This component uses older Terraform version
+          aws-cli: "2.13.0"    # Component-specific AWS CLI version
+```
+</File>
+
+### Version Resolution
+
+Tool dependencies support multiple version formats:
+
+<dl>
+  <dt>Exact version</dt>
+  <dd>
+    Use a specific version: `"1.9.8"`
+  </dd>
+
+  <dt>Latest version</dt>
+  <dd>
+    Use the latest available version: `"latest"`
+  </dd>
+
+  <dt>Semver constraint (planned)</dt>
+  <dd>
+    Use semantic version ranges: `">=1.8.0"`, `"~>1.9.0"`
+  </dd>
+</dl>
+
+### Inheritance and Merge Behavior
+
+Tool dependencies are merged from the most general to the most specific level:
+
+1. **Global `dependencies.tools`** (applies to all components)
+2. **Component-type `terraform.dependencies.tools`** (applies to all components of that type)
+3. **Component `components.terraform.<name>.dependencies.tools`** (applies to specific component)
+
+More specific levels override less specific levels. For example:
+
+<File title="Example: Version Override">
+```yaml
+# Global default
+dependencies:
+  tools:
+    terraform: "1.9.8"
+
+# Component-type override
+terraform:
+  dependencies:
+    tools:
+      terraform: "1.9.8"
+      tflint: "0.44.1"     # Added for all Terraform components
+
+# Component-specific override
+components:
+  terraform:
+    legacy-vpc:
+      dependencies:
+        tools:
+          terraform: "1.5.0"  # This component uses older version
+          tflint: "0.44.1"    # Inherited from component-type level
+```
+</File>
+
+Result:
+- Most Terraform components use Terraform 1.9.8
+- `legacy-vpc` component uses Terraform 1.5.0
+- All Terraform components use tflint 0.44.1
+
+### Integration with Toolchain
+
+Tool dependencies integrate seamlessly with the [toolchain management system](/cli/commands/toolchain/usage):
+
+1. **Automatic Installation:** When you run a component, Atmos installs the required tool versions automatically
+2. **Version Isolation:** Each component uses its declared versions, isolated from other components
+3. **Cache Efficiency:** Tools are cached and reused across components with the same version requirements
+
+Example workflow:
+
+```bash
+# Component declares terraform: "1.9.8"
+atmos terraform plan vpc -s prod
+
+# Atmos automatically:
+# 1. Checks if terraform 1.9.8 is installed
+# 2. Installs it if missing (from toolchain registries)
+# 3. Executes: terraform plan (using 1.9.8)
+```
+
+### Complete Tool Dependencies Example
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+# Global tool dependencies (all components)
+dependencies:
+  tools:
+    terraform: "1.9.8"
+    kubectl: "1.28.0"
+
+# Component-type dependencies (all Terraform components)
+terraform:
+  dependencies:
+    tools:
+      terraform: "1.9.8"      # Override global if needed
+      tflint: "0.44.1"        # Terraform-specific tool
+      tfsec: "1.28.0"         # Security scanning
+      aws-cli: "latest"       # Use latest AWS CLI
+
+# Component-type dependencies (all Helmfile releases)
+helmfile:
+  dependencies:
+    tools:
+      helm: "3.13.0"
+      kubectl: "1.28.0"
+      helmfile: "0.157.0"
+
+# Component-specific dependencies
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "1.9.8"    # Use default
+          aws-cli: "2.13.0"     # Component needs specific AWS CLI version
+
+    legacy-app:
+      dependencies:
+        tools:
+          terraform: "1.5.0"    # Legacy component requires older version
+          aws-cli: "2.10.0"
+
+  helmfile:
+    monitoring:
+      dependencies:
+        tools:
+          helm: "3.13.0"
+          kubectl: "1.28.0"
+```
+</File>
+
+## Component Dependencies
+
+The `dependencies` section also supports component dependencies to control execution order. This ensures components run in the correct sequence.
+
+<Note>
+This page focuses primarily on tool dependencies. For cross-component data dependencies, see the [!terraform.output](/functions/yaml/terraform.output) YAML function.
+</Note>
+
+### Basic Component Dependency
+
+<File title="stacks/catalog/vpc.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        name: vpc
+
+    subnet:
+      dependencies:
+        - vpc              # subnet depends on vpc
+      vars:
+        vpc_id: !terraform.output vpc.vpc_id
+```
+</File>
+
+When you run `atmos terraform apply subnet -s prod`, Atmos automatically:
+1. Applies `vpc` first (dependency)
+2. Applies `subnet` second (dependent)
+
+### Combining Tool and Component Dependencies
+
+You can use both tool dependencies and component dependencies together:
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "1.9.8"
+          aws-cli: "2.13.0"
+      vars:
+        name: vpc
+
+    subnet:
+      dependencies:
+        # Component dependencies (execution order)
+        - vpc
+        # Tool dependencies (CLI versions)
+        tools:
+          terraform: "1.9.8"
+          aws-cli: "2.13.0"
+      vars:
+        vpc_id: !terraform.output vpc.vpc_id
+```
+</File>
+
+## Best Practices
+
+### Tool Dependencies
+
+1. **Pin Versions Explicitly** - Use exact versions (`"1.9.8"`) instead of `"latest"` for production
+2. **Consistent Team Standards** - Define global defaults in `_defaults.yaml` files
+3. **Component-Specific Overrides** - Only override when necessary (legacy code, compatibility)
+4. **Document Reasons** - Add comments explaining why a component uses a different version
+5. **Test Before Upgrading** - Test tool version changes in dev/staging before production
+
+### Component Dependencies
+
+1. **Explicit Dependencies** - Declare all dependencies, even if execution order seems obvious
+2. **Avoid Circular Dependencies** - Component A can't depend on B if B depends on A
+3. **Use YAML Functions** - Combine with `!terraform.output` for data flow between components
+
+## Related Documentation
+
+- [Toolchain Management](/cli/commands/toolchain/usage) - Installing and managing CLI tools
+- [Toolchain Configuration](/cli/configuration/toolchain/) - Configuring toolchain behavior
+- [YAML Functions](/functions/yaml) - Using `!terraform.output` and other functions for cross-component dependencies
