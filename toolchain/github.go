@@ -1,6 +1,8 @@
 package toolchain
 
 import (
+	"sync"
+
 	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -27,13 +29,18 @@ func (g *GitHubAPIClient) FetchReleases(owner, repo string, limit int) ([]string
 	return github.GetReleaseVersions(owner, repo, limit)
 }
 
-// Global GitHub API client instance.
-var defaultGitHubAPI GitHubAPI = NewGitHubAPIClient()
+// Global GitHub API client instance with mutex protection for concurrent access.
+var (
+	defaultGitHubAPI GitHubAPI = NewGitHubAPIClient()
+	githubAPIMu      sync.RWMutex
+)
 
 // SetGitHubAPI sets the global GitHub API client (for testing).
 func SetGitHubAPI(api GitHubAPI) {
 	defer perf.Track(nil, "toolchain.SetGitHubAPI")()
 
+	githubAPIMu.Lock()
+	defer githubAPIMu.Unlock()
 	defaultGitHubAPI = api
 }
 
@@ -41,10 +48,15 @@ func SetGitHubAPI(api GitHubAPI) {
 func ResetGitHubAPI() {
 	defer perf.Track(nil, "toolchain.ResetGitHubAPI")()
 
+	githubAPIMu.Lock()
+	defer githubAPIMu.Unlock()
 	defaultGitHubAPI = NewGitHubAPIClient()
 }
 
 // fetchAllGitHubVersions is the public function that uses the global GitHub API client.
 func fetchAllGitHubVersions(owner, repo string, limit int) ([]string, error) {
-	return defaultGitHubAPI.FetchReleases(owner, repo, limit)
+	githubAPIMu.RLock()
+	api := defaultGitHubAPI
+	githubAPIMu.RUnlock()
+	return api.FetchReleases(owner, repo, limit)
 }
