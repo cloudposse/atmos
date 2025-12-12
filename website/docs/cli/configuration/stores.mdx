@@ -19,40 +19,34 @@ The `stores` section in `atmos.yaml` configures external key-value stores that c
 stores:
   # AWS SSM Parameter Store
   prod/ssm:
-    backend: aws/ssm
-    config:
-      region: us-east-1
-
-  # AWS Secrets Manager
-  prod/secrets:
-    backend: aws/secretsmanager
-    config:
+    type: aws-ssm-parameter-store
+    options:
       region: us-east-1
 
   # Azure Key Vault
   prod/azure:
-    backend: azure/keyvault
-    config:
-      vault_name: my-keyvault
+    type: azure-key-vault
+    options:
+      vault_url: "https://my-keyvault.vault.azure.net/"
 
   # Google Secret Manager
   prod/gcp:
-    backend: gcp/secretmanager
-    config:
+    type: google-secret-manager
+    options:
       project_id: my-project
 
   # Redis
   cache:
-    backend: redis
-    config:
-      host: localhost
-      port: 6379
+    type: redis
+    options:
+      url: "redis://localhost:6379"
 
   # Artifactory
   artifacts:
-    backend: artifactory
-    config:
+    type: artifactory
+    options:
       url: https://artifactory.example.com
+      repo_name: my-repo
 ```
 </File>
 
@@ -71,19 +65,16 @@ vars:
   api_key: !store prod/ssm::/app/api-key
 ```
 
-## Supported Backends
+## Supported Store Types
 
 <dl>
-  <dt>`aws/ssm`</dt>
+  <dt>`aws-ssm-parameter-store`</dt>
   <dd>AWS Systems Manager Parameter Store. Stores and retrieves parameters from SSM.</dd>
 
-  <dt>`aws/secretsmanager`</dt>
-  <dd>AWS Secrets Manager. Stores and retrieves secrets with automatic rotation support.</dd>
-
-  <dt>`azure/keyvault`</dt>
+  <dt>`azure-key-vault`</dt>
   <dd>Azure Key Vault. Stores and retrieves secrets from Azure.</dd>
 
-  <dt>`gcp/secretmanager`</dt>
+  <dt>`google-secret-manager` (or `gsm`)</dt>
   <dd>Google Cloud Secret Manager. Stores and retrieves secrets from GCP.</dd>
 
   <dt>`redis`</dt>
@@ -93,7 +84,7 @@ vars:
   <dd>JFrog Artifactory. Stores and retrieves artifacts and metadata.</dd>
 </dl>
 
-## Backend Configuration
+## Store Type Configuration
 
 ### AWS SSM Parameter Store
 
@@ -101,25 +92,15 @@ vars:
 ```yaml
 stores:
   prod/ssm:
-    backend: aws/ssm
-    config:
+    type: aws-ssm-parameter-store
+    options:
       region: us-east-1
+      # Optional
+      prefix: myapp
+      stack_delimiter: "/"
       # Optional: assume role for cross-account access
-      role_arn: arn:aws:iam::123456789012:role/SSMReader
-```
-</File>
-
-### AWS Secrets Manager
-
-<File title="atmos.yaml">
-```yaml
-stores:
-  prod/secrets:
-    backend: aws/secretsmanager
-    config:
-      region: us-east-1
-      # Optional: version stage (AWSCURRENT, AWSPREVIOUS, or custom)
-      version_stage: AWSCURRENT
+      read_role_arn: arn:aws:iam::123456789012:role/SSMReader
+      write_role_arn: arn:aws:iam::123456789012:role/SSMWriter
 ```
 </File>
 
@@ -129,13 +110,16 @@ stores:
 ```yaml
 stores:
   prod/azure:
-    backend: azure/keyvault
-    config:
-      vault_name: my-keyvault
-      # Optional: specific tenant ID
-      tenant_id: 12345678-1234-1234-1234-123456789012
+    type: azure-key-vault
+    options:
+      vault_url: "https://my-keyvault.vault.azure.net/"
+      # Optional
+      prefix: myapp
+      stack_delimiter: "-"
 ```
 </File>
+
+Authentication uses the [Azure Default Credential chain](https://learn.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication), which checks environment variables, managed identity, Azure CLI, and other sources.
 
 ### Google Secret Manager
 
@@ -143,9 +127,18 @@ stores:
 ```yaml
 stores:
   prod/gcp:
-    backend: gcp/secretmanager
-    config:
+    type: google-secret-manager  # or "gsm"
+    options:
       project_id: my-project
+      # Optional
+      prefix: myapp
+      stack_delimiter: "_"
+      # Optional: JSON credentials (or use GOOGLE_APPLICATION_CREDENTIALS env var)
+      credentials: '{"type":"service_account",...}'
+      # Optional: replication locations
+      locations:
+        - us-east1
+        - us-west1
 ```
 </File>
 
@@ -155,13 +148,32 @@ stores:
 ```yaml
 stores:
   cache:
-    backend: redis
-    config:
-      host: localhost
-      port: 6379
-      # Optional: authentication
-      password: ${REDIS_PASSWORD}
-      db: 0
+    type: redis
+    options:
+      url: "redis://localhost:6379"  # or use ATMOS_REDIS_URL env var
+      # Optional
+      prefix: myapp
+      stack_delimiter: "/"
+```
+</File>
+
+The `url` option supports Redis URL format including authentication: `redis://:password@host:port/db`
+
+### Artifactory
+
+<File title="atmos.yaml">
+```yaml
+stores:
+  artifacts:
+    type: artifactory
+    options:
+      url: https://artifactory.example.com
+      repo_name: my-repo
+      # Optional: access token (or use ARTIFACTORY_ACCESS_TOKEN env var)
+      access_token: "..."
+      # Optional
+      prefix: myapp
+      stack_delimiter: "/"
 ```
 </File>
 
