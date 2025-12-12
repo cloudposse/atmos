@@ -55,6 +55,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
 	"github.com/cloudposse/atmos/cmd/version"
+	_ "github.com/cloudposse/atmos/cmd/workflow"
 )
 
 const (
