@@ -727,17 +727,18 @@ func getValueWithTag(n *yaml.Node) string {
 	return strings.TrimSpace(tag + " " + val)
 }
 
-// hasCustomTags performs a fast scan to check if a node or any of its children contain custom Atmos tags.
-// This enables early exit optimization in processCustomTags, avoiding expensive recursive processing
-// for YAML subtrees that don't use custom tags (which is the majority of YAML content).
+// hasCustomTags performs a fast scan to check if a node or any of its children contain custom tags.
+// This includes both supported Atmos tags and potentially unsupported tags that need validation.
+// This enables the processCustomTags function to perform unsupported tag detection.
 func hasCustomTags(node *yaml.Node) bool {
 	if node == nil {
 		return false
 	}
 
-	// Check if this node has a custom tag.
+	// Check if this node has a custom tag (any non-standard tag starting with !).
+	// Standard YAML tags start with !! (e.g., !!str, !!int).
 	tag := strings.TrimSpace(node.Tag)
-	if atmosYamlTagsMap[tag] || tag == AtmosYamlFuncInclude || tag == AtmosYamlFuncIncludeRaw {
+	if tag != "" && !strings.HasPrefix(tag, "!!") {
 		return true
 	}
 

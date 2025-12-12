@@ -116,7 +116,8 @@ func TestProcessCustomTags_AllSupportedTags(t *testing.T) {
 				t.Skipf("Skipping test '%s': requires external store/terraform setup", tt.name)
 			}
 
-			result := processCustomTags(atmosConfig, tt.input, "test-stack", tt.skip)
+			result, err := processCustomTags(atmosConfig, tt.input, "test-stack", tt.skip, nil)
+			assert.NoError(t, err)
 
 			// For env tag, check if result is not empty (since PATH should exist)
 			if tt.input == "!env PATH" && len(tt.skip) == 0 {
@@ -165,7 +166,8 @@ func TestProcessCustomTags_TagPrefixes(t *testing.T) {
 				t.Skipf("Skipping test '%s': would trigger unsupported tag error and exit", tt.name)
 			}
 
-			result := processCustomTags(atmosConfig, tt.input, "test-stack", []string{})
+			result, err := processCustomTags(atmosConfig, tt.input, "test-stack", []string{}, nil)
+			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -294,7 +296,8 @@ func TestProcessNodes_ComplexStructures(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processNodes(atmosConfig, tt.input, "test-stack", tt.skip)
+			result, err := processNodes(atmosConfig, tt.input, "test-stack", tt.skip, nil)
+			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -385,7 +388,8 @@ func TestProcessCustomTags_EdgeCases(t *testing.T) {
 				t.Skipf("Skipping test '%s': would trigger unsupported tag error", tt.name)
 			}
 
-			result := processCustomTags(atmosConfig, tt.input, "test-stack", []string{})
+			result, err := processCustomTags(atmosConfig, tt.input, "test-stack", []string{}, nil)
+			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -408,7 +412,8 @@ func TestProcessNodes_LargeDataStructure(t *testing.T) {
 		}
 	}
 
-	result := processNodes(atmosConfig, largeMap, "test-stack", []string{})
+	result, err := processNodes(atmosConfig, largeMap, "test-stack", []string{}, nil)
+	assert.NoError(t, err)
 
 	// Verify structure is preserved.
 	assert.Len(t, result, 100)
@@ -448,12 +453,13 @@ func TestProcessCustomTags_AllTagsCoverage(t *testing.T) {
 
 	for _, tag := range supportedTagsWithArgs {
 		t.Run("tag_"+tag, func(t *testing.T) {
-			// Test with skip to avoid actual execution
+			// Test with skip to avoid actual execution.
 			input := tag + " test_value"
 			tagName := tag[1:] // Remove the ! prefix
-			result := processCustomTags(atmosConfig, input, "test-stack", []string{tagName})
+			result, err := processCustomTags(atmosConfig, input, "test-stack", []string{tagName}, nil)
+			assert.NoError(t, err)
 
-			// When skipped, the tag should be returned as-is
+			// When skipped, the tag should be returned as-is.
 			assert.Equal(t, input, result)
 		})
 	}

@@ -312,7 +312,7 @@ func TestProcessCustomTags_NonTagStrings(t *testing.T) {
 
 	for _, tt := range nonTagStrings {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processCustomTags(atmosConfig, tt.input, "test-stack", []string{})
+			result, _ := processCustomTags(atmosConfig, tt.input, "test-stack", []string{}, nil)
 			assert.Equal(t, tt.expected, result, "Non-tag string should be returned as-is")
 		})
 	}
@@ -409,7 +409,7 @@ func TestProcessNodes_TypePreservation(t *testing.T) {
 		},
 	}
 
-	result := processNodes(atmosConfig, input, "test-stack", []string{})
+	result, _ := processNodes(atmosConfig, input, "test-stack", []string{}, nil)
 
 	// Check type preservation
 	assert.IsType(t, "", result["string"])
