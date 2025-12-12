@@ -68,7 +68,7 @@ The workflow name can be anything you want, and the workflow can also accept com
 
 :::
 
-If you define this workflow in the file `workflow1.yaml`, it can we executed like this to provision
+If you define this workflow in the file `workflow1.yaml`, it can be executed like this to provision
 the `vpc`, `eks/cluster` and `eks/alb-controller` [Atmos Components](/components) into
 the `tenant1-ue2-dev` [Atmos Stack](/learn/stacks):
 
@@ -81,6 +81,74 @@ atmos workflow eks-up -f workflow1 --stack tenant1-ue2-dev
 Refer to [`atmos workflow`](/cli/commands/workflow) for the complete description of the CLI command
 
 :::
+
+## Workflow File Auto-Discovery
+
+Atmos can automatically discover workflow files, eliminating the need to specify `--file` for uniquely named workflows.
+
+### Running Workflows Without `--file`
+
+If your workflow name is unique across all workflow files, Atmos automatically finds and runs it:
+
+```shell
+# Just specify the workflow name - Atmos finds the file automatically
+atmos workflow eks-up --stack tenant1-ue2-dev
+```
+
+This is equivalent to:
+
+```shell
+# Explicitly specifying the file (still supported)
+atmos workflow eks-up -f workflow1 --stack tenant1-ue2-dev
+```
+
+### How Auto-Discovery Works
+
+When you run `atmos workflow <name>` without `--file`:
+
+1. **Scans workflow directory** - Atmos searches all YAML files in your configured `workflows.base_path`
+2. **Finds matching workflows** - Looks for workflows with the specified name
+3. **Auto-selects if unique** - If only one file contains that workflow name, it runs automatically
+4. **Prompts if multiple** - If multiple files have the same workflow name, shows an interactive selector (TTY) or an error with hints (CI/non-TTY)
+
+### Interactive Selection for Duplicate Workflow Names
+
+If multiple workflow files contain the same workflow name, Atmos presents an interactive selector:
+
+```console
+$ atmos workflow deploy
+
+Multiple workflows found with name 'deploy'. Please choose:
+> production.yaml - Deploy to production environment
+  staging.yaml - Deploy to staging environment
+  development.yaml - Deploy to development environment
+```
+
+You can still use `--file` to skip the prompt and specify exactly which file to use:
+
+```shell
+atmos workflow deploy --file production
+```
+
+### When to Use `--file`
+
+The `--file` flag is optional for most workflows. You only need it when:
+
+- Multiple workflow files contain a workflow with the same name
+- You want to explicitly specify which file to use (e.g., in CI/CD scripts)
+- You're running in a non-interactive environment where prompts aren't available
+
+### Backward Compatibility
+
+All existing workflows with explicit `--file` flags continue to work exactly as before:
+
+```shell
+# Explicit --file flag still works
+atmos workflow deploy --file workflows/deploy
+
+# Auto-discovery is purely additive
+atmos workflow deploy
+```
 
 ## Configuration
 
