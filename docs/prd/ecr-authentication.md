@@ -145,7 +145,7 @@ atmos auth ecr-login \
 
 #### Option A: PostAuthenticate Hook Flow
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │ 1. User Executes Command                                        │
 │    $ atmos auth login dev-admin                                 │
@@ -181,7 +181,7 @@ atmos auth ecr-login \
 
 #### Option B: Standalone Command Flow
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │ 1. User Executes Command                                        │
 │    $ atmos auth ecr-login --registry ...                        │
@@ -216,7 +216,7 @@ atmos auth ecr-login \
 
 #### 3.1 Package Structure
 
-```
+```text
 pkg/auth/
 ├── cloud/
 │   ├── aws/
@@ -655,7 +655,7 @@ jobs:
 3. **Token Lifetime**: ECR tokens expire after 12 hours (AWS-enforced)
 4. **Non-Fatal Errors**: ECR login failures in PostAuthenticate don't expose errors that could leak information
 5. **No Secrets in Logs**: Authorization tokens are never logged
-6. **Secret Masking**: ECR tokens follow Atmos secret masking patterns
+6. **Secret Masking**: ECR tokens follow Atmos secret masking patterns.
 
 ## References
 
