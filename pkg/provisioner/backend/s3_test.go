@@ -5,11 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	//nolint:depguard
 	"github.com/aws/aws-sdk-go-v2/aws"
-	//nolint:depguard
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	//nolint:depguard
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	"github.com/stretchr/testify/assert"
@@ -19,7 +16,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-//nolint:dupl // Mock struct intentionally mirrors S3ClientAPI interface for testing.
+// mockS3Client provides a manual mock for S3ClientAPI interface.
+// Manual mock used instead of mockgen because the S3ClientAPI interface wraps
+// external AWS SDK types with variadic options that mockgen doesn't handle well.
+//
+//nolint:dupl // Mock struct mirrors interface definition - intentional for test clarity.
 type mockS3Client struct {
 	headBucketFunc           func(ctx context.Context, params *s3.HeadBucketInput, optFns ...func(*s3.Options)) (*s3.HeadBucketOutput, error)
 	createBucketFunc         func(ctx context.Context, params *s3.CreateBucketInput, optFns ...func(*s3.Options)) (*s3.CreateBucketOutput, error)
@@ -414,8 +415,7 @@ func TestBucketExists_NetworkError(t *testing.T) {
 	exists, err := bucketExists(ctx, mockClient, "test-bucket")
 	require.Error(t, err)
 	assert.False(t, exists)
-	// Error wraps errUtils.ErrCheckBucketExist.
-	assert.Contains(t, err.Error(), "failed to check bucket existence")
+	assert.ErrorIs(t, err, errUtils.ErrCheckBucketExist)
 }
 
 func TestCreateBucket_Success(t *testing.T) {
@@ -455,12 +455,14 @@ func TestCreateBucket_Failure(t *testing.T) {
 	ctx := context.Background()
 	mockClient := &mockS3Client{
 		createBucketFunc: func(ctx context.Context, params *s3.CreateBucketInput, optFns ...func(*s3.Options)) (*s3.CreateBucketOutput, error) {
+			// Simulate AWS SDK error (third-party error, no sentinel).
 			return nil, errors.New("bucket already exists in another region")
 		},
 	}
 
 	err := createBucket(ctx, mockClient, "test-bucket", "us-west-2")
 	require.Error(t, err)
+	// String matching OK for third-party errors per repo standards.
 	assert.Contains(t, err.Error(), "bucket already exists")
 }
 
@@ -851,7 +853,6 @@ func TestDeleteS3Backend_ForceRequired(t *testing.T) {
 	err := DeleteS3Backend(ctx, atmosConfig, backendConfig, nil, false)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrForceRequired)
-	assert.Contains(t, err.Error(), "--force flag")
 }
 
 func TestDeleteS3Backend_MissingBucket(t *testing.T) {

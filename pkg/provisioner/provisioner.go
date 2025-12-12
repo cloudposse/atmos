@@ -33,32 +33,7 @@ type ProvisionParams struct {
 	AuthContext       *schema.AuthContext
 }
 
-// Provision provisions infrastructure resources.
-// It validates the provisioner type, loads component configuration, and executes the provisioner.
-//
-//revive:disable:argument-limit
-func Provision(
-	atmosConfig *schema.AtmosConfiguration,
-	provisionerType string,
-	component string,
-	stack string,
-	describeComponent ExecuteDescribeComponentFunc,
-	authContext *schema.AuthContext,
-) error {
-	//revive:enable:argument-limit
-	defer perf.Track(atmosConfig, "provision.Provision")()
-
-	return ProvisionWithParams(&ProvisionParams{
-		AtmosConfig:       atmosConfig,
-		ProvisionerType:   provisionerType,
-		Component:         component,
-		Stack:             stack,
-		DescribeComponent: describeComponent,
-		AuthContext:       authContext,
-	})
-}
-
-// ProvisionWithParams provisions infrastructure resources using a params struct.
+// Provision provisions infrastructure resources using a params struct.
 // It validates the provisioner type, loads component configuration, and executes the provisioner.
 func ProvisionWithParams(params *ProvisionParams) error {
 	defer perf.Track(nil, "provision.ProvisionWithParams")()
@@ -107,66 +82,96 @@ func ProvisionWithParams(params *ProvisionParams) error {
 func ListBackends(atmosConfig *schema.AtmosConfiguration, opts interface{}) error {
 	defer perf.Track(atmosConfig, "provision.ListBackends")()
 
-	_ = ui.Info("Listing backends")
-	_ = ui.Warning("List functionality not yet implemented")
-	return nil
+	return errUtils.Build(errUtils.ErrNotImplemented).
+		WithExplanation("List backends functionality is not yet implemented").
+		WithHint("This feature is planned for a future release").
+		Err()
 }
 
 // DescribeBackend returns the backend configuration from stack.
 func DescribeBackend(atmosConfig *schema.AtmosConfiguration, component string, opts interface{}) error {
 	defer perf.Track(atmosConfig, "provision.DescribeBackend")()
 
-	_ = ui.Info(fmt.Sprintf("Describing backend for component '%s'", component))
-	_ = ui.Warning("Describe functionality not yet implemented")
+	return errUtils.Build(errUtils.ErrNotImplemented).
+		WithExplanation("Describe backend functionality is not yet implemented").
+		WithHint("This feature is planned for a future release").
+		WithContext("component", component).
+		Err()
+}
+
+// DeleteBackendParams contains parameters for the DeleteBackend function.
+type DeleteBackendParams struct {
+	AtmosConfig       *schema.AtmosConfiguration
+	Component         string
+	Stack             string
+	Force             bool
+	DescribeComponent ExecuteDescribeComponentFunc
+	AuthContext       *schema.AuthContext
+}
+
+// validateDeleteParams validates DeleteBackendParams and returns an error if invalid.
+func validateDeleteParams(params *DeleteBackendParams) error {
+	if params == nil {
+		return errUtils.Build(errUtils.ErrNilParam).WithExplanation("delete backend params cannot be nil").Err()
+	}
+	if params.DescribeComponent == nil {
+		return errUtils.Build(errUtils.ErrNilParam).WithExplanation("DescribeComponent callback cannot be nil").Err()
+	}
 	return nil
 }
 
-// DeleteBackend deletes a backend.
-// It loads the component configuration, gets the appropriate backend deleter from the registry,
-// and executes the deletion with the force flag.
-//
-//revive:disable:argument-limit
-func DeleteBackend(
-	atmosConfig *schema.AtmosConfiguration,
-	component string,
-	stack string,
-	force bool,
-	describeComponent ExecuteDescribeComponentFunc,
-	authContext *schema.AuthContext,
-) error {
-	//revive:enable:argument-limit
-	defer perf.Track(atmosConfig, "provision.DeleteBackend")()
-
-	_ = ui.Info(fmt.Sprintf("Deleting backend for component '%s' in stack '%s'", component, stack))
-
-	// Get component configuration from stack.
-	componentConfig, err := describeComponent(component, stack)
-	if err != nil {
-		return fmt.Errorf("failed to describe component: %w", err)
-	}
-
-	// Get backend configuration.
+// getBackendConfigFromComponent extracts backend configuration from component config.
+func getBackendConfigFromComponent(componentConfig map[string]any, component, stack string) (map[string]any, string, error) {
 	backendConfig, ok := componentConfig["backend"].(map[string]any)
 	if !ok {
-		return fmt.Errorf("%w: backend configuration not found", errUtils.ErrBackendNotFound)
+		return nil, "", errUtils.Build(errUtils.ErrBackendNotFound).
+			WithExplanation("Backend configuration not found in component").
+			WithContext("component", component).WithContext("stack", stack).
+			WithHint("Ensure the component has a 'backend' block configured").Err()
 	}
-
 	backendType, ok := componentConfig["backend_type"].(string)
 	if !ok {
-		return fmt.Errorf("%w: backend_type not specified", errUtils.ErrBackendTypeRequired)
+		return nil, "", errUtils.Build(errUtils.ErrBackendTypeRequired).
+			WithExplanation("Backend type not specified in component configuration").
+			WithContext("component", component).WithContext("stack", stack).
+			WithHint("Add 'backend_type' (e.g., 's3', 'gcs', 'azurerm') to the component configuration").Err()
+	}
+	return backendConfig, backendType, nil
+}
+
+// DeleteBackendWithParams deletes a backend using a params struct.
+func DeleteBackendWithParams(params *DeleteBackendParams) error {
+	defer perf.Track(nil, "provision.DeleteBackend")()
+
+	if err := validateDeleteParams(params); err != nil {
+		return err
 	}
 
-	// Get delete function for backend type.
+	_ = ui.Info(fmt.Sprintf("Deleting backend for component '%s' in stack '%s'", params.Component, params.Stack))
+
+	componentConfig, err := params.DescribeComponent(params.Component, params.Stack)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrDescribeComponent).WithCause(err).
+			WithExplanation("Failed to describe component").
+			WithContext("component", params.Component).WithContext("stack", params.Stack).
+			WithHint("Verify the component exists in the specified stack").Err()
+	}
+
+	backendConfig, backendType, err := getBackendConfigFromComponent(componentConfig, params.Component, params.Stack)
+	if err != nil {
+		return err
+	}
+
 	deleteFunc := backend.GetBackendDelete(backendType)
 	if deleteFunc == nil {
-		return fmt.Errorf("%w: %s (supported: s3)", errUtils.ErrDeleteNotImplemented, backendType)
+		return errUtils.Build(errUtils.ErrDeleteNotImplemented).
+			WithExplanation("Delete operation not implemented for backend type").
+			WithContext("backend_type", backendType).
+			WithHint("Supported backend types for deletion: s3").Err()
 	}
 
-	// Execute backend delete function.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	// Pass authContext directly to backend delete function.
-	// The AuthContext was populated by the command layer and contains provider-specific credentials.
-	return deleteFunc(ctx, atmosConfig, backendConfig, authContext, force)
+	return deleteFunc(ctx, params.AtmosConfig, backendConfig, params.AuthContext, params.Force)
 }

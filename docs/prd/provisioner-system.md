@@ -1,6 +1,6 @@
 # PRD: Provisioner System
 
-**Status:** Draft for Review
+**Status:** Implemented
 **Version:** 1.0
 **Last Updated:** 2025-11-19
 **Author:** Erik Osterman
@@ -243,7 +243,8 @@ provision:
     # Provisioner-specific configuration
 ```
 
-**Key Points:**
+#### Key Points
+
 - `provision` block contains all provisioner configurations
 - Each provisioner type has its own sub-block
 - Provisioners check their own `enabled` flag
@@ -356,7 +357,7 @@ components:
 
 ### Authentication Flow
 
-```
+```text
 Component Definition (stack manifest)
   ↓
 auth.providers.aws.identity: "dev-admin"
@@ -399,13 +400,14 @@ func ProvisionBackend(
 
 ### Identity Inheritance
 
-**Provisioners inherit the component's identity:**
+Provisioners inherit the component's identity:
+
 - Component defines `auth.providers.aws.identity: "dev-admin"`
 - Auth system populates `AuthContext`
 - Provisioners receive `AuthContext` automatically
 - No separate provisioning identity needed
 
-**Role assumption** (if needed) extracted from provisioner-specific config:
+Role assumption (if needed) extracted from provisioner-specific config:
 - Backend: `backend.assume_role.role_arn`
 - Component: `component.source.assume_role` (hypothetical)
 - Each provisioner defines its own role assumption pattern
@@ -414,7 +416,7 @@ func ProvisionBackend(
 
 ## Package Structure
 
-```
+```text
 pkg/provisioner/
   ├── provisioner.go           # Core registry and types
   ├── provisioner_test.go      # Registry tests
@@ -552,7 +554,8 @@ const (
 
 ### Unit Tests
 
-**Registry Tests:**
+Registry Tests:
+
 ```go
 func TestRegisterProvisioner(t *testing.T)
 func TestGetProvisionersForEvent(t *testing.T)
@@ -560,7 +563,8 @@ func TestGetProvisionersForEvent_NoProvisioners(t *testing.T)
 func TestMultipleProvisionersForSameEvent(t *testing.T)
 ```
 
-**Hook Integration Tests:**
+Hook Integration Tests:
+
 ```go
 func TestExecuteProvisionerHooks(t *testing.T)
 func TestExecuteProvisionerHooks_ProvisionerDisabled(t *testing.T)
@@ -603,7 +607,8 @@ func TestProvisionerSystemIntegration(t *testing.T) {
 
 **Hook Event:** `before.component.load`
 
-**Configuration:**
+Configuration:
+
 ```yaml
 provision:
   component:
@@ -611,7 +616,8 @@ provision:
     source: "github.com/cloudposse/terraform-aws-components//modules/vpc"
 ```
 
-**Implementation:**
+Implementation:
+
 ```go
 func init() {
 	provisioner.RegisterProvisioner(provisioner.Provisioner{
@@ -628,7 +634,8 @@ func init() {
 
 **Hook Event:** `before.component.init`
 
-**Configuration:**
+Configuration:
+
 ```yaml
 provision:
   network:
@@ -642,7 +649,8 @@ provision:
 
 **Hook Event:** `before.workflow.execute`
 
-**Configuration:**
+Configuration:
+
 ```yaml
 provision:
   workflow:
@@ -672,12 +680,14 @@ func getCachedClient(cacheKey string, authContext) (Client, error) {
 
 ### Idempotency
 
-**All provisioners must be idempotent:**
+All provisioners must be idempotent:
+
 - Check if resource exists before creating
 - Return nil (no error) if already provisioned
 - Safe to run multiple times
 
-**Example:**
+Example:
+
 ```go
 func ProvisionResource(config, authContext) error {
 	exists, err := checkResourceExists(config.Name)
@@ -953,7 +963,8 @@ done
 
 ### Automatic vs Manual Provisioning
 
-**Automatic (via hooks):**
+Automatic (via hooks):
+
 ```bash
 # Provisioning happens automatically before terraform init
 atmos terraform apply vpc --stack dev
@@ -963,7 +974,8 @@ atmos terraform apply vpc --stack dev
 # → terraform apply
 ```
 
-**Manual (explicit command):**
+Manual (explicit command):
+
 ```bash
 # User explicitly provisions resources
 atmos provision backend vpc --stack dev
@@ -985,7 +997,8 @@ atmos terraform apply vpc --stack dev
 
 ### Error Handling Contract
 
-**All provisioners MUST:**
+All provisioners MUST:
+
 1. Return `error` on failure (never panic)
 2. Return `nil` on success or idempotent skip
 3. Use wrapped errors with context
@@ -993,7 +1006,7 @@ atmos terraform apply vpc --stack dev
 
 ### Error Propagation Flow
 
-```
+```text
 Provisioner fails
   ↓
 Returns error with context
@@ -1046,7 +1059,8 @@ func ExecuteProvisionerHooks(
 
 ### Error Examples
 
-**Configuration Error:**
+Configuration Error:
+
 ```go
 if bucket == "" {
 	return fmt.Errorf("%w: bucket name is required in backend configuration",
@@ -1054,7 +1068,8 @@ if bucket == "" {
 }
 ```
 
-**Provisioning Error:**
+Provisioning Error:
+
 ```go
 if err := createBucket(bucket); err != nil {
 	return errUtils.Build(errUtils.ErrBackendProvision).
@@ -1066,7 +1081,8 @@ if err := createBucket(bucket); err != nil {
 }
 ```
 
-**Permission Error:**
+Permission Error:
+
 ```go
 if isPermissionDenied(err) {
 	return errUtils.Build(errUtils.ErrBackendProvision).
@@ -1123,7 +1139,8 @@ func ExecuteTerraform(atmosConfig, stackInfo, ...) error {
 
 ### CI/CD Integration
 
-**GitHub Actions Example:**
+GitHub Actions Example:
+
 ```yaml
 - name: Provision Backend
   run: atmos provision backend vpc --stack dev
@@ -1134,8 +1151,9 @@ func ExecuteTerraform(atmosConfig, stackInfo, ...) error {
   # Only runs if previous step succeeded
 ```
 
-**Error Output:**
-```
+Error Output:
+
+```text
 Error: provisioner 'backend' failed: backend provisioning failed:
 failed to create bucket: operation error S3: CreateBucket,
 https response error StatusCode: 403, AccessDenied
@@ -1244,10 +1262,12 @@ components:
 
 ---
 
-**End of PRD**
+## Conclusion
 
-**Status:** Ready for Review
-**Next Steps:**
+This PRD has been implemented. The provisioner system is now part of Atmos.
+
+### Next Steps
+
 1. Review provisioner system architecture
 2. Implement core registry (`pkg/provisioner/provisioner.go`)
 3. Integrate with hook system (`pkg/hooks/system_hooks.go`)

@@ -75,9 +75,13 @@ Atmos can create backend infrastructure automatically. Currently supports S3 (AW
 
 - **Solves the Bootstrap Problem**: No chicken-and-egg with state storage
 - **Secure Defaults**: Versioning, encryption, public access blocked
-- **Cross-Account Support**: Use `assume_role` to provision backends in different AWS accounts
+- **Cross-Account Support**: Use nested `assume_role.role_arn` to provision backends in different AWS accounts
 
 See [Backend Provisioning](/components/terraform/backend-provisioning) for details.
+
+:::note Backend Configuration vs. Provisioning
+The examples below show **backend configuration** using root-level `role_arn`—this is the role Terraform assumes to *access* state. For **backend provisioning** (creating the bucket), use the nested `assume_role.role_arn` format shown in [Backend Provisioning](/components/terraform/backend-provisioning#cross-account-provisioning).
+:::
 
 ## Backend Inheritance
 

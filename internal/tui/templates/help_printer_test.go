@@ -250,10 +250,8 @@ func TestCalculateMaxFlagLength(t *testing.T) {
 }
 
 func TestPrintHelpFlag_EmptyLinesAfterFirstLineRemoval(t *testing.T) {
-	// This test specifically validates the fix for handling empty lines
-	// after removing the first line from markdown-rendered content.
-	// The code at lines 125-141 in help_printer.go checks if len(lines) > 0
-	// before accessing lines[0] to prevent index out of range panic.
+	// This test validates behavior for empty/whitespace/newline usage values.
+	// It should not panic and should still print the flag row.
 	tests := []struct {
 		name       string
 		flag       *pflag.Flag

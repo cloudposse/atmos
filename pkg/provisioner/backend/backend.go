@@ -77,6 +77,18 @@ func GetBackendDelete(backendType string) BackendDeleteFunc {
 	return backendDeleters[backendType]
 }
 
+// ResetRegistryForTesting clears the backend provisioner registry.
+// This function is intended for use in tests to ensure test isolation.
+// It should be called via t.Cleanup() to restore clean state after each test.
+func ResetRegistryForTesting() {
+	defer perf.Track(nil, "backend.ResetRegistryForTesting")()
+
+	registryMu.Lock()
+	defer registryMu.Unlock()
+	backendCreators = make(map[string]BackendCreateFunc)
+	backendDeleters = make(map[string]BackendDeleteFunc)
+}
+
 // ProvisionBackend provisions a backend if provisioning is enabled.
 // Returns an error if provisioning fails or no provisioner is registered.
 func ProvisionBackend(

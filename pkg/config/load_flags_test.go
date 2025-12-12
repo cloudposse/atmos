@@ -214,7 +214,7 @@ func TestGetProfilesFromFlagsOrEnv(t *testing.T) {
 			viper.Reset()
 			t.Cleanup(viper.Reset)
 
-			// Setup Viper
+			// Setup Viper.
 			tt.setupViper()
 
 			// Setup environment variables using t.Setenv for automatic cleanup

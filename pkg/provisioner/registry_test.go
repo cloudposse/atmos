@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -36,13 +37,48 @@ func TestRegisterProvisioner(t *testing.T) {
 	}
 
 	// Register the provisioner.
-	RegisterProvisioner(provisioner)
+	err := RegisterProvisioner(provisioner)
+	require.NoError(t, err)
 
 	// Verify it was registered.
 	provisioners := GetProvisionersForEvent(event)
 	require.Len(t, provisioners, 1)
 	assert.Equal(t, "backend", provisioners[0].Type)
 	assert.Equal(t, event, provisioners[0].HookEvent)
+}
+
+func TestRegisterProvisioner_NilFuncReturnsError(t *testing.T) {
+	// Reset registry before test.
+	resetRegistry()
+
+	provisioner := Provisioner{
+		Type:      "backend",
+		HookEvent: HookEvent("before.terraform.init"),
+		Func:      nil,
+	}
+
+	// Should return error when Func is nil.
+	err := RegisterProvisioner(provisioner)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nil Func")
+}
+
+func TestRegisterProvisioner_EmptyHookEventReturnsError(t *testing.T) {
+	// Reset registry before test.
+	resetRegistry()
+
+	provisioner := Provisioner{
+		Type:      "backend",
+		HookEvent: "",
+		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
+			return nil
+		},
+	}
+
+	// Should return error when HookEvent is empty.
+	err := RegisterProvisioner(provisioner)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty HookEvent")
 }
 
 func TestRegisterProvisioner_MultipleForSameEvent(t *testing.T) {
@@ -68,8 +104,10 @@ func TestRegisterProvisioner_MultipleForSameEvent(t *testing.T) {
 	}
 
 	// Register both provisioners.
-	RegisterProvisioner(provisioner1)
-	RegisterProvisioner(provisioner2)
+	err := RegisterProvisioner(provisioner1)
+	require.NoError(t, err)
+	err = RegisterProvisioner(provisioner2)
+	require.NoError(t, err)
 
 	// Verify both were registered.
 	provisioners := GetProvisionersForEvent(event)
@@ -104,7 +142,8 @@ func TestGetProvisionersForEvent_ReturnsCopy(t *testing.T) {
 		},
 	}
 
-	RegisterProvisioner(provisioner)
+	err := RegisterProvisioner(provisioner)
+	require.NoError(t, err)
 
 	// Get provisioners twice.
 	provisioners1 := GetProvisionersForEvent(event)
@@ -157,14 +196,15 @@ func TestExecuteProvisioners_SingleProvisionerSuccess(t *testing.T) {
 		},
 	}
 
-	RegisterProvisioner(provisioner)
+	err := RegisterProvisioner(provisioner)
+	require.NoError(t, err)
 
 	atmosConfig := &schema.AtmosConfiguration{}
 	componentConfig := map[string]any{
 		"backend_type": "s3",
 	}
 
-	err := ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
+	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
 	require.NoError(t, err)
 	assert.True(t, provisionerCalled, "Provisioner should have been called")
 }
@@ -196,13 +236,15 @@ func TestExecuteProvisioners_MultipleProvisionersSuccess(t *testing.T) {
 		},
 	}
 
-	RegisterProvisioner(provisioner1)
-	RegisterProvisioner(provisioner2)
+	err := RegisterProvisioner(provisioner1)
+	require.NoError(t, err)
+	err = RegisterProvisioner(provisioner2)
+	require.NoError(t, err)
 
 	atmosConfig := &schema.AtmosConfiguration{}
 	componentConfig := map[string]any{}
 
-	err := ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
+	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
 	require.NoError(t, err)
 	assert.True(t, provisioner1Called, "Provisioner 1 should have been called")
 	assert.True(t, provisioner2Called, "Provisioner 2 should have been called")
@@ -216,12 +258,14 @@ func TestExecuteProvisioners_FailFast(t *testing.T) {
 	event := HookEvent("before.terraform.init")
 
 	provisioner1Called := false
+	provisioner2Called := false
+	expectedErr := errors.New("provisioning failed")
 	provisioner1 := Provisioner{
 		Type:      "backend",
 		HookEvent: event,
 		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
 			provisioner1Called = true
-			return errors.New("provisioning failed")
+			return expectedErr
 		},
 	}
 
@@ -229,24 +273,26 @@ func TestExecuteProvisioners_FailFast(t *testing.T) {
 		Type:      "validation",
 		HookEvent: event,
 		Func: func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, componentConfig map[string]any, authContext *schema.AuthContext) error {
-			// This provisioner should not be called if provisioner1 fails.
+			provisioner2Called = true
 			return nil
 		},
 	}
 
-	RegisterProvisioner(provisioner1)
-	RegisterProvisioner(provisioner2)
+	// Register provisioner1 first - execution order is deterministic (slice append order).
+	err := RegisterProvisioner(provisioner1)
+	require.NoError(t, err)
+	err = RegisterProvisioner(provisioner2)
+	require.NoError(t, err)
 
 	atmosConfig := &schema.AtmosConfiguration{}
 	componentConfig := map[string]any{}
 
-	err := ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
+	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "provisioner backend failed")
-	assert.Contains(t, err.Error(), "provisioning failed")
+	assert.ErrorIs(t, err, errUtils.ErrProvisionerFailed, "Should return ErrProvisionerFailed sentinel")
+	assert.ErrorIs(t, err, expectedErr, "Should wrap the underlying error")
 	assert.True(t, provisioner1Called, "Provisioner 1 should have been called")
-	// Note: We can't assert provisioner2Called is false because order is not guaranteed.
-	// If provisioner1 is registered first and fails, provisioner2 won't be called.
+	assert.False(t, provisioner2Called, "Provisioner 2 should not have been called due to fail-fast")
 }
 
 func TestExecuteProvisioners_WithAuthContext(t *testing.T) {
@@ -266,7 +312,8 @@ func TestExecuteProvisioners_WithAuthContext(t *testing.T) {
 		},
 	}
 
-	RegisterProvisioner(provisioner)
+	err := RegisterProvisioner(provisioner)
+	require.NoError(t, err)
 
 	atmosConfig := &schema.AtmosConfiguration{}
 	componentConfig := map[string]any{}
@@ -277,7 +324,7 @@ func TestExecuteProvisioners_WithAuthContext(t *testing.T) {
 		},
 	}
 
-	err := ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, authContext)
+	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, authContext)
 	require.NoError(t, err)
 	require.NotNil(t, capturedAuthContext)
 	require.NotNil(t, capturedAuthContext.AWS)
@@ -313,14 +360,16 @@ func TestExecuteProvisioners_DifferentEvents(t *testing.T) {
 		},
 	}
 
-	RegisterProvisioner(provisioner1)
-	RegisterProvisioner(provisioner2)
+	err := RegisterProvisioner(provisioner1)
+	require.NoError(t, err)
+	err = RegisterProvisioner(provisioner2)
+	require.NoError(t, err)
 
 	atmosConfig := &schema.AtmosConfiguration{}
 	componentConfig := map[string]any{}
 
 	// Execute event1 provisioners.
-	err := ExecuteProvisioners(ctx, event1, atmosConfig, componentConfig, nil)
+	err = ExecuteProvisioners(ctx, event1, atmosConfig, componentConfig, nil)
 	require.NoError(t, err)
 	assert.True(t, provisioner1Called, "Event1 provisioner should have been called")
 	assert.False(t, provisioner2Called, "Event2 provisioner should not have been called")
@@ -353,7 +402,7 @@ func TestConcurrentRegistration(t *testing.T) {
 					return nil
 				},
 			}
-			RegisterProvisioner(provisioner)
+			_ = RegisterProvisioner(provisioner)
 		}()
 	}
 
@@ -384,7 +433,8 @@ func TestExecuteProvisioners_ContextCancellation(t *testing.T) {
 		},
 	}
 
-	RegisterProvisioner(provisioner)
+	err := RegisterProvisioner(provisioner)
+	require.NoError(t, err)
 
 	// Create a cancelled context.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -393,9 +443,10 @@ func TestExecuteProvisioners_ContextCancellation(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	componentConfig := map[string]any{}
 
-	err := ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
+	err = ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "context canceled")
+	assert.ErrorIs(t, err, errUtils.ErrProvisionerFailed, "Should return ErrProvisionerFailed sentinel")
+	assert.ErrorIs(t, err, context.Canceled, "Should wrap the context.Canceled error")
 }
 
 func TestHookEventType(t *testing.T) {
@@ -414,4 +465,57 @@ func TestHookEventType(t *testing.T) {
 
 	assert.Equal(t, "init", eventMap[event2])
 	assert.Equal(t, "apply", eventMap[event3])
+}
+
+func TestExecuteProvisioners_NilFuncDefensiveCheck(t *testing.T) {
+	// Reset registry before test.
+	resetRegistry()
+
+	ctx := context.Background()
+	event := HookEvent("before.terraform.init")
+
+	// Directly inject a provisioner with nil Func into the registry.
+	// This bypasses RegisterProvisioner validation to test the defensive check.
+	registryMu.Lock()
+	provisionersByEvent[event] = []Provisioner{
+		{
+			Type:      "invalid-provisioner",
+			HookEvent: event,
+			Func:      nil, // Invalid: nil function.
+		},
+	}
+	registryMu.Unlock()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	componentConfig := map[string]any{}
+
+	err := ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrProvisionerFailed, "Should return ErrProvisionerFailed for nil Func")
+}
+
+func TestExecuteProvisioners_NilFuncWithEmptyType(t *testing.T) {
+	// Reset registry before test.
+	resetRegistry()
+
+	ctx := context.Background()
+	event := HookEvent("before.terraform.init")
+
+	// Directly inject a provisioner with nil Func and empty Type into the registry.
+	registryMu.Lock()
+	provisionersByEvent[event] = []Provisioner{
+		{
+			Type:      "", // Empty type.
+			HookEvent: event,
+			Func:      nil,
+		},
+	}
+	registryMu.Unlock()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	componentConfig := map[string]any{}
+
+	err := ExecuteProvisioners(ctx, event, atmosConfig, componentConfig, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrProvisionerFailed, "Should return ErrProvisionerFailed for nil Func with empty type")
 }

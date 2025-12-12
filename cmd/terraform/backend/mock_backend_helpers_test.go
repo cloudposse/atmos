@@ -81,31 +81,31 @@ func (m *MockProvisioner) EXPECT() *MockProvisionerMockRecorder {
 }
 
 // CreateBackend mocks base method.
-func (m *MockProvisioner) CreateBackend(atmosConfig *schema.AtmosConfiguration, component, stack string, describeFunc func(string, string) (map[string]any, error), authContext *schema.AuthContext) error {
+func (m *MockProvisioner) CreateBackend(params *CreateBackendParams) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateBackend", atmosConfig, component, stack, describeFunc, authContext)
+	ret := m.ctrl.Call(m, "CreateBackend", params)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CreateBackend indicates an expected call of CreateBackend.
-func (mr *MockProvisionerMockRecorder) CreateBackend(atmosConfig, component, stack, describeFunc, authContext any) *gomock.Call {
+func (mr *MockProvisionerMockRecorder) CreateBackend(params any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBackend", reflect.TypeOf((*MockProvisioner)(nil).CreateBackend), atmosConfig, component, stack, describeFunc, authContext)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateBackend", reflect.TypeOf((*MockProvisioner)(nil).CreateBackend), params)
 }
 
 // DeleteBackend mocks base method.
-func (m *MockProvisioner) DeleteBackend(atmosConfig *schema.AtmosConfiguration, component, stack string, force bool, describeFunc func(string, string) (map[string]any, error), authContext *schema.AuthContext) error {
+func (m *MockProvisioner) DeleteBackend(params *DeleteBackendParams) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteBackend", atmosConfig, component, stack, force, describeFunc, authContext)
+	ret := m.ctrl.Call(m, "DeleteBackend", params)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteBackend indicates an expected call of DeleteBackend.
-func (mr *MockProvisionerMockRecorder) DeleteBackend(atmosConfig, component, stack, force, describeFunc, authContext any) *gomock.Call {
+func (mr *MockProvisionerMockRecorder) DeleteBackend(params any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteBackend", reflect.TypeOf((*MockProvisioner)(nil).DeleteBackend), atmosConfig, component, stack, force, describeFunc, authContext)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteBackend", reflect.TypeOf((*MockProvisioner)(nil).DeleteBackend), params)
 }
 
 // DescribeBackend mocks base method.

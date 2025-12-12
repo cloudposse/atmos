@@ -357,7 +357,7 @@ components:
 
 ### Package Structure
 
-```
+```text
 pkg/provisioner/backend/
   ├── s3.go              # S3 backend provisioner
   ├── s3_test.go         # Unit tests
@@ -802,7 +802,7 @@ Every auto-provisioned S3 bucket includes:
 #### 1. Bucket Name Already Taken
 
 **Error:**
-```
+```text
 failed to provision S3 bucket: BucketAlreadyExists: The requested bucket name is not available
 ```
 
@@ -818,7 +818,7 @@ backend:
 #### 2. Permission Denied
 
 **Error:**
-```
+```text
 failed to create S3 client: operation error HeadBucket: AccessDenied
 ```
 
@@ -832,7 +832,7 @@ failed to create S3 client: operation error HeadBucket: AccessDenied
 #### 3. Invalid Region
 
 **Error:**
-```
+```text
 failed to create bucket: InvalidLocationConstraint
 ```
 
@@ -847,7 +847,7 @@ backend:
 #### 4. Cross-Account Role Assumption Failed
 
 **Error:**
-```
+```text
 failed to create S3 client: operation error STS: AssumeRole, AccessDenied
 ```
 
@@ -1186,14 +1186,14 @@ Exit code: 0
 
 ---
 
-## Error Handling
+## Error Categories and Exit Codes
 
 ### Error Categories
 
 #### 1. Configuration Errors (Exit Code 2)
 
 **Missing bucket name:**
-```
+```text
 Error: backend.bucket is required in backend configuration
 
 Hint: Add bucket name to stack manifest
@@ -1207,7 +1207,7 @@ Exit code: 2
 ```
 
 **Missing region:**
-```
+```text
 Error: backend.region is required in backend configuration
 
 Hint: Specify AWS region for S3 bucket
@@ -1221,7 +1221,7 @@ Exit code: 2
 #### 2. Permission Errors (Exit Code 3)
 
 **IAM permission denied:**
-```
+```text
 Error: failed to create bucket: AccessDenied
 
 Hint: Verify AWS credentials have s3:CreateBucket permission
@@ -1242,7 +1242,7 @@ Exit code: 3
 ```
 
 **Cross-account role assumption failed:**
-```
+```text
 Error: failed to create S3 client: operation error STS: AssumeRole, AccessDenied
 
 Hint: Verify trust policy allows source identity to assume role
@@ -1260,7 +1260,7 @@ Exit code: 3
 #### 3. Resource Conflicts (Exit Code 4)
 
 **Bucket name already taken:**
-```
+```text
 Error: failed to create bucket: BucketAlreadyExists
 
 Hint: S3 bucket names are globally unique across all AWS accounts
@@ -1279,7 +1279,7 @@ Exit code: 4
 #### 4. Network Errors (Exit Code 5)
 
 **Connection timeout:**
-```
+```text
 Error: failed to create bucket: RequestTimeout
 
 Hint: Check network connectivity to AWS API endpoints

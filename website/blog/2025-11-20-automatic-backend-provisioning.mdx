@@ -121,6 +121,8 @@ Provisioners integrate with Atmos AuthManager for cross-account operations:
 components:
   terraform:
     vpc:
+      backend_type: s3  # Must be at component level
+
       backend:
         bucket: my-terraform-state
         region: us-east-1

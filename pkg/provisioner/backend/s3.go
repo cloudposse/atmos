@@ -7,11 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	//nolint:depguard
 	"github.com/aws/aws-sdk-go-v2/aws"
-	//nolint:depguard
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	//nolint:depguard
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
@@ -27,7 +24,7 @@ const errFormat = "%w: %w"
 // S3ClientAPI defines the interface for S3 operations.
 // This interface allows for mocking in tests.
 //
-//nolint:dupl // Interface definition intentionally mirrors mock struct signatures.
+//nolint:dupl // Interface mirrors AWS SDK client signatures - intentional design for testability.
 type S3ClientAPI interface {
 	HeadBucket(ctx context.Context, params *s3.HeadBucketInput, optFns ...func(*s3.Options)) (*s3.HeadBucketOutput, error)
 	CreateBucket(ctx context.Context, params *s3.CreateBucketInput, optFns ...func(*s3.Options)) (*s3.CreateBucketOutput, error)

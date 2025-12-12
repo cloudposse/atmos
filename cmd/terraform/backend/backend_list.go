@@ -19,12 +19,7 @@ var listCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "backend.list.RunE")()
 
-		// Parse flags.
 		v := viper.GetViper()
-		if err := listParser.BindFlagsToViper(cmd, v); err != nil {
-			return err
-		}
-
 		opts, err := ParseCommonFlags(cmd, listParser)
 		if err != nil {
 			return err

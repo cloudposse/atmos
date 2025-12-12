@@ -25,10 +25,29 @@ type ConfigInitializer interface {
 	InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfiguration, *schema.AuthContext, error)
 }
 
+// CreateBackendParams contains parameters for CreateBackend operation.
+type CreateBackendParams struct {
+	AtmosConfig  *schema.AtmosConfiguration
+	Component    string
+	Stack        string
+	DescribeFunc func(string, string) (map[string]any, error)
+	AuthContext  *schema.AuthContext
+}
+
+// DeleteBackendParams contains parameters for DeleteBackend operation.
+type DeleteBackendParams struct {
+	AtmosConfig  *schema.AtmosConfiguration
+	Component    string
+	Stack        string
+	Force        bool
+	DescribeFunc func(string, string) (map[string]any, error)
+	AuthContext  *schema.AuthContext
+}
+
 // Provisioner abstracts provisioning operations for testability.
 type Provisioner interface {
-	CreateBackend(atmosConfig *schema.AtmosConfiguration, component, stack string, describeFunc func(string, string) (map[string]any, error), authContext *schema.AuthContext) error
-	DeleteBackend(atmosConfig *schema.AtmosConfiguration, component, stack string, force bool, describeFunc func(string, string) (map[string]any, error), authContext *schema.AuthContext) error
+	CreateBackend(params *CreateBackendParams) error
+	DeleteBackend(params *DeleteBackendParams) error
 	DescribeBackend(atmosConfig *schema.AtmosConfiguration, component string, opts interface{}) error
 	ListBackends(atmosConfig *schema.AtmosConfiguration, opts interface{}) error
 }
@@ -43,14 +62,26 @@ func (d *defaultConfigInitializer) InitConfigAndAuth(component, stack, identity 
 // defaultProvisioner implements Provisioner using production code.
 type defaultProvisioner struct{}
 
-func (d *defaultProvisioner) CreateBackend(atmosConfig *schema.AtmosConfiguration, component, stack string, describeFunc func(string, string) (map[string]any, error), authContext *schema.AuthContext) error {
-	return provisioner.Provision(atmosConfig, "backend", component, stack, describeFunc, authContext)
+func (d *defaultProvisioner) CreateBackend(params *CreateBackendParams) error {
+	return provisioner.ProvisionWithParams(&provisioner.ProvisionParams{
+		AtmosConfig:       params.AtmosConfig,
+		ProvisionerType:   "backend",
+		Component:         params.Component,
+		Stack:             params.Stack,
+		DescribeComponent: params.DescribeFunc,
+		AuthContext:       params.AuthContext,
+	})
 }
 
-//revive:disable:argument-limit
-func (d *defaultProvisioner) DeleteBackend(atmosConfig *schema.AtmosConfiguration, component, stack string, force bool, describeFunc func(string, string) (map[string]any, error), authContext *schema.AuthContext) error {
-	//revive:enable:argument-limit
-	return provisioner.DeleteBackend(atmosConfig, component, stack, force, describeFunc, authContext)
+func (d *defaultProvisioner) DeleteBackend(params *DeleteBackendParams) error {
+	return provisioner.DeleteBackendWithParams(&provisioner.DeleteBackendParams{
+		AtmosConfig:       params.AtmosConfig,
+		Component:         params.Component,
+		Stack:             params.Stack,
+		Force:             params.Force,
+		DescribeComponent: params.DescribeFunc,
+		AuthContext:       params.AuthContext,
+	})
 }
 
 func (d *defaultProvisioner) DescribeBackend(atmosConfig *schema.AtmosConfiguration, component string, opts interface{}) error {
@@ -68,12 +99,22 @@ var (
 )
 
 // SetConfigInitializer sets the config initializer (for testing).
+// If nil is passed, resets to default implementation.
 func SetConfigInitializer(ci ConfigInitializer) {
+	if ci == nil {
+		configInit = &defaultConfigInitializer{}
+		return
+	}
 	configInit = ci
 }
 
 // SetProvisioner sets the provisioner (for testing).
+// If nil is passed, resets to default implementation.
 func SetProvisioner(p Provisioner) {
+	if p == nil {
+		prov = &defaultProvisioner{}
+		return
+	}
 	prov = p
 }
 
@@ -209,5 +250,11 @@ func ExecuteProvisionCommand(cmd *cobra.Command, args []string, parser *flags.St
 	}
 
 	// Execute provision command using injected provisioner.
-	return prov.CreateBackend(atmosConfig, component, opts.Stack, describeFunc, authContext)
+	return prov.CreateBackend(&CreateBackendParams{
+		AtmosConfig:  atmosConfig,
+		Component:    component,
+		Stack:        opts.Stack,
+		DescribeFunc: describeFunc,
+		AuthContext:  authContext,
+	})
 }

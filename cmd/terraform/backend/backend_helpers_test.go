@@ -12,6 +12,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 )
 
+// TestParseCommonFlags tests the ParseCommonFlags function.
+// Note: This test mutates the global Viper instance because ParseCommonFlags
+// uses viper.GetViper() internally (standard pattern for CLI flag handling).
+// The setupViperForTest helper ensures proper cleanup via t.Cleanup().
 func TestParseCommonFlags(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -43,8 +47,11 @@ func TestParseCommonFlags(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a fresh Viper instance for each test.
-			v := viper.New()
+			// Use helper to safely set up and restore global Viper state.
+			setupViperForTest(t, map[string]any{
+				"stack":    tt.stack,
+				"identity": tt.identity,
+			})
 
 			// Create a test command.
 			cmd := &cobra.Command{
@@ -61,25 +68,8 @@ func TestParseCommonFlags(t *testing.T) {
 			parser.RegisterFlags(cmd)
 
 			// Bind to viper.
-			err := parser.BindToViper(v)
+			err := parser.BindToViper(viper.GetViper())
 			require.NoError(t, err)
-
-			// Set flag values in Viper.
-			v.Set("stack", tt.stack)
-			v.Set("identity", tt.identity)
-
-			// Replace global viper with test viper.
-			oldViper := viper.GetViper()
-			viper.Reset()
-			for _, key := range v.AllKeys() {
-				viper.Set(key, v.Get(key))
-			}
-			defer func() {
-				viper.Reset()
-				for _, key := range oldViper.AllKeys() {
-					viper.Set(key, oldViper.Get(key))
-				}
-			}()
 
 			// Parse common flags.
 			opts, err := ParseCommonFlags(cmd, parser)

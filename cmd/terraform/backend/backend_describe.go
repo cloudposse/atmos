@@ -25,12 +25,7 @@ This includes backend settings, variables, and metadata from the stack manifest.
 
 		component := args[0]
 
-		// Parse flags using StandardParser with Viper precedence.
 		v := viper.GetViper()
-		if err := describeParser.BindFlagsToViper(cmd, v); err != nil {
-			return err
-		}
-
 		opts, err := ParseCommonFlags(cmd, describeParser)
 		if err != nil {
 			return err

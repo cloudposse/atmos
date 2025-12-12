@@ -84,6 +84,9 @@ func TestProvisionWithParams_DescribeComponentFailure(t *testing.T) {
 }
 
 func TestProvisionWithParams_BackendProvisioningSuccess(t *testing.T) {
+	// Clean up registry after test to ensure test isolation.
+	t.Cleanup(backend.ResetRegistryForTesting)
+
 	// Register a mock backend provisioner for testing.
 	mockProvisionerCalled := false
 	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
@@ -136,6 +139,9 @@ func TestProvisionWithParams_BackendProvisioningSuccess(t *testing.T) {
 }
 
 func TestProvisionWithParams_BackendProvisioningFailure(t *testing.T) {
+	// Clean up registry after test to ensure test isolation.
+	t.Cleanup(backend.ResetRegistryForTesting)
+
 	// Register a mock backend provisioner that fails.
 	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
 		return errors.New("provisioning failed: bucket already exists in another account")
@@ -175,6 +181,9 @@ func TestProvisionWithParams_BackendProvisioningFailure(t *testing.T) {
 }
 
 func TestProvision_DelegatesToProvisionWithParams(t *testing.T) {
+	// Clean up registry after test to ensure test isolation.
+	t.Cleanup(backend.ResetRegistryForTesting)
+
 	// This test verifies that the Provision wrapper function correctly creates
 	// a ProvisionParams struct and delegates to ProvisionWithParams.
 
@@ -205,16 +214,24 @@ func TestProvision_DelegatesToProvisionWithParams(t *testing.T) {
 	backend.RegisterBackendCreate("s3", mockProvisioner)
 
 	atmosConfig := &schema.AtmosConfiguration{}
-	err := Provision(atmosConfig, "backend", "vpc", "dev", mockDescribe, nil)
+	err := ProvisionWithParams(&ProvisionParams{
+		AtmosConfig:       atmosConfig,
+		ProvisionerType:   "backend",
+		Component:         "vpc",
+		Stack:             "dev",
+		DescribeComponent: mockDescribe,
+		AuthContext:       nil,
+	})
 
 	require.NoError(t, err)
 	assert.True(t, mockProvisionerCalled, "Backend provisioner should have been called")
 }
 
 func TestProvisionWithParams_WithAuthContext(t *testing.T) {
-	// This test verifies that when an AuthContext is provided, provisioning still works correctly.
-	// Note: The current implementation passes nil authContext to the backend provisioner
-	// and relies on AWS SDK credential chain to pick up credentials written by authentication.
+	// Clean up registry after test to ensure test isolation.
+	t.Cleanup(backend.ResetRegistryForTesting)
+
+	// This test verifies that AuthContext is correctly passed through to the backend provisioner.
 
 	mockDescribe := func(component string, stack string) (map[string]any, error) {
 		return map[string]any{
@@ -233,21 +250,19 @@ func TestProvisionWithParams_WithAuthContext(t *testing.T) {
 
 	// Register a mock backend provisioner that verifies authContext handling.
 	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
-		// Current implementation passes nil authContext even when AuthManager is provided.
-		// This is documented in the TODO comment in provision.go.
-		assert.Nil(t, authContext, "Current implementation should pass nil authContext")
+		// AuthContext is passed through from params; nil here because test provides nil.
+		assert.Nil(t, authContext, "AuthContext should be nil when params.AuthContext is nil")
 		return nil
 	}
 	backend.RegisterBackendCreate("s3", mockProvisioner)
 
-	// Create a mock AuthManager (nil is acceptable for this test).
 	params := &ProvisionParams{
 		AtmosConfig:       &schema.AtmosConfiguration{},
 		ProvisionerType:   "backend",
 		Component:         "vpc",
 		Stack:             "dev",
 		DescribeComponent: mockDescribe,
-		AuthContext:       nil, // In real usage, this would be a valid AuthContext.
+		AuthContext:       nil,
 	}
 
 	err := ProvisionWithParams(params)
@@ -255,6 +270,9 @@ func TestProvisionWithParams_WithAuthContext(t *testing.T) {
 }
 
 func TestProvisionWithParams_BackendTypeValidation(t *testing.T) {
+	// Clean up registry after test to ensure test isolation.
+	t.Cleanup(backend.ResetRegistryForTesting)
+
 	tests := []struct {
 		name          string
 		provisionType string
@@ -331,45 +349,111 @@ func TestProvisionWithParams_BackendTypeValidation(t *testing.T) {
 }
 
 func TestListBackends(t *testing.T) {
-	t.Run("returns no error for placeholder implementation", func(t *testing.T) {
+	t.Run("returns ErrNotImplemented", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{}
 		opts := map[string]string{"format": "table"}
 
 		err := ListBackends(atmosConfig, opts)
-		assert.NoError(t, err, "ListBackends should not error")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
 	})
 
-	t.Run("accepts nil opts", func(t *testing.T) {
+	t.Run("returns ErrNotImplemented with nil opts", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{}
 		err := ListBackends(atmosConfig, nil)
-		assert.NoError(t, err, "ListBackends should accept nil opts")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
 	})
 }
 
 func TestDescribeBackend(t *testing.T) {
-	t.Run("returns no error for placeholder implementation", func(t *testing.T) {
+	t.Run("returns ErrNotImplemented", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{}
 		component := "vpc"
 		opts := map[string]string{"format": "yaml"}
 
 		err := DescribeBackend(atmosConfig, component, opts)
-		assert.NoError(t, err, "DescribeBackend should not error")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
 	})
 
-	t.Run("accepts nil opts", func(t *testing.T) {
+	t.Run("returns ErrNotImplemented with nil opts", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{}
 		err := DescribeBackend(atmosConfig, "vpc", nil)
-		assert.NoError(t, err, "DescribeBackend should accept nil opts")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
 	})
 
-	t.Run("accepts empty component", func(t *testing.T) {
+	t.Run("returns ErrNotImplemented with empty component", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{}
 		err := DescribeBackend(atmosConfig, "", map[string]string{"format": "json"})
-		assert.NoError(t, err, "DescribeBackend should accept empty component")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
 	})
 }
 
 func TestDeleteBackend(t *testing.T) {
+	// Clean up registry after test to ensure test isolation.
+	t.Cleanup(backend.ResetRegistryForTesting)
+
+	t.Run("returns error when params is nil", func(t *testing.T) {
+		err := DeleteBackendWithParams(nil)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrNilParam)
+	})
+
+	t.Run("returns error when DescribeComponent is nil", func(t *testing.T) {
+		err := DeleteBackendWithParams(&DeleteBackendParams{
+			AtmosConfig:       &schema.AtmosConfiguration{},
+			Component:         "vpc",
+			Stack:             "dev",
+			Force:             true,
+			DescribeComponent: nil,
+			AuthContext:       nil,
+		})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrNilParam)
+	})
+
+	t.Run("returns error when describe component fails", func(t *testing.T) {
+		mockDescribe := func(component string, stack string) (map[string]any, error) {
+			return nil, errors.New("component not found in stack")
+		}
+
+		err := DeleteBackendWithParams(&DeleteBackendParams{
+			AtmosConfig:       &schema.AtmosConfiguration{},
+			Component:         "vpc",
+			Stack:             "dev",
+			Force:             true,
+			DescribeComponent: mockDescribe,
+			AuthContext:       nil,
+		})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrDescribeComponent)
+	})
+
+	t.Run("returns error when backend_type not specified", func(t *testing.T) {
+		mockDescribe := func(component string, stack string) (map[string]any, error) {
+			return map[string]any{
+				"backend": map[string]any{
+					"bucket": "test-bucket",
+				},
+				// No backend_type
+			}, nil
+		}
+
+		err := DeleteBackendWithParams(&DeleteBackendParams{
+			AtmosConfig:       &schema.AtmosConfiguration{},
+			Component:         "vpc",
+			Stack:             "dev",
+			Force:             true,
+			DescribeComponent: mockDescribe,
+			AuthContext:       nil,
+		})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrBackendTypeRequired)
+	})
+
 	t.Run("deletes backend successfully", func(t *testing.T) {
 		// Register a mock delete function.
 		mockDeleter := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, force bool) error {
@@ -389,7 +473,14 @@ func TestDeleteBackend(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{}
-		err := DeleteBackend(atmosConfig, "vpc", "dev", true, mockDescribe, nil)
+		err := DeleteBackendWithParams(&DeleteBackendParams{
+			AtmosConfig:       atmosConfig,
+			Component:         "vpc",
+			Stack:             "dev",
+			Force:             true,
+			DescribeComponent: mockDescribe,
+			AuthContext:       nil,
+		})
 		assert.NoError(t, err, "DeleteBackend should not error")
 	})
 
@@ -402,9 +493,16 @@ func TestDeleteBackend(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{}
-		err := DeleteBackend(atmosConfig, "vpc", "dev", true, mockDescribe, nil)
+		err := DeleteBackendWithParams(&DeleteBackendParams{
+			AtmosConfig:       atmosConfig,
+			Component:         "vpc",
+			Stack:             "dev",
+			Force:             true,
+			DescribeComponent: mockDescribe,
+			AuthContext:       nil,
+		})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "backend configuration not found")
+		assert.ErrorIs(t, err, errUtils.ErrBackendNotFound)
 	})
 
 	t.Run("returns error when delete function not implemented", func(t *testing.T) {
@@ -418,7 +516,14 @@ func TestDeleteBackend(t *testing.T) {
 		}
 
 		atmosConfig := &schema.AtmosConfiguration{}
-		err := DeleteBackend(atmosConfig, "vpc", "dev", true, mockDescribe, nil)
+		err := DeleteBackendWithParams(&DeleteBackendParams{
+			AtmosConfig:       atmosConfig,
+			Component:         "vpc",
+			Stack:             "dev",
+			Force:             true,
+			DescribeComponent: mockDescribe,
+			AuthContext:       nil,
+		})
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrDeleteNotImplemented)
 	})

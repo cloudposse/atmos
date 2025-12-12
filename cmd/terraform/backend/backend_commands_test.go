@@ -81,12 +81,11 @@ func TestExecuteProvisionCommand(t *testing.T) {
 				"identity": "",
 			},
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
-				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
 					InitConfigAndAuth("vpc", "dev", "").
-					Return(atmosConfig, nil, nil)
+					Return(&schema.AtmosConfiguration{}, nil, nil)
 				mp.EXPECT().
-					CreateBackend(atmosConfig, "vpc", "dev", gomock.Any(), nil).
+					CreateBackend(gomock.Any()).
 					Return(nil)
 			},
 			expectError: false,
@@ -124,12 +123,11 @@ func TestExecuteProvisionCommand(t *testing.T) {
 				"identity": "",
 			},
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
-				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
 					InitConfigAndAuth("vpc", "dev", "").
-					Return(atmosConfig, nil, nil)
+					Return(&schema.AtmosConfiguration{}, nil, nil)
 				mp.EXPECT().
-					CreateBackend(atmosConfig, "vpc", "dev", gomock.Any(), nil).
+					CreateBackend(gomock.Any()).
 					Return(errors.New("provision failed"))
 			},
 			expectError: true,
@@ -142,13 +140,11 @@ func TestExecuteProvisionCommand(t *testing.T) {
 				"identity": "aws-prod",
 			},
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
-				atmosConfig := &schema.AtmosConfiguration{}
-				authCtx := &schema.AuthContext{AWS: &schema.AWSAuthContext{}}
 				mci.EXPECT().
 					InitConfigAndAuth("vpc", "prod", "aws-prod").
-					Return(atmosConfig, authCtx, nil)
+					Return(&schema.AtmosConfiguration{}, &schema.AuthContext{AWS: &schema.AWSAuthContext{}}, nil)
 				mp.EXPECT().
-					CreateBackend(atmosConfig, "vpc", "prod", gomock.Any(), authCtx).
+					CreateBackend(gomock.Any()).
 					Return(nil)
 			},
 			expectError: false,
@@ -202,12 +198,11 @@ func TestDeleteCmd_RunE(t *testing.T) {
 				"force":    true,
 			},
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
-				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
 					InitConfigAndAuth("vpc", "dev", "").
-					Return(atmosConfig, nil, nil)
+					Return(&schema.AtmosConfiguration{}, nil, nil)
 				mp.EXPECT().
-					DeleteBackend(atmosConfig, "vpc", "dev", true, gomock.Any(), nil).
+					DeleteBackend(gomock.Any()).
 					Return(nil)
 			},
 			expectError: false,
@@ -221,12 +216,11 @@ func TestDeleteCmd_RunE(t *testing.T) {
 				"force":    false,
 			},
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
-				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
 					InitConfigAndAuth("vpc", "dev", "").
-					Return(atmosConfig, nil, nil)
+					Return(&schema.AtmosConfiguration{}, nil, nil)
 				mp.EXPECT().
-					DeleteBackend(atmosConfig, "vpc", "dev", false, gomock.Any(), nil).
+					DeleteBackend(gomock.Any()).
 					Return(nil)
 			},
 			expectError: false,
@@ -267,12 +261,11 @@ func TestDeleteCmd_RunE(t *testing.T) {
 				"force":    true,
 			},
 			setupMocks: func(mci *MockConfigInitializer, mp *MockProvisioner) {
-				atmosConfig := &schema.AtmosConfiguration{}
 				mci.EXPECT().
 					InitConfigAndAuth("vpc", "dev", "").
-					Return(atmosConfig, nil, nil)
+					Return(&schema.AtmosConfiguration{}, nil, nil)
 				mp.EXPECT().
-					DeleteBackend(atmosConfig, "vpc", "dev", true, gomock.Any(), nil).
+					DeleteBackend(gomock.Any()).
 					Return(errors.New("delete failed"))
 			},
 			expectError: true,

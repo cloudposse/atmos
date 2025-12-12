@@ -27,14 +27,16 @@ The Backend Provisioner is a system hook that:
 
 ### Scope
 
-**In Scope:**
+#### In Scope
+
 - ✅ S3 backend provisioning (Phase 1 - see `s3-backend-provisioner.md`)
 - ✅ GCS backend provisioning (Phase 2)
 - ✅ Azure Blob backend provisioning (Phase 2)
 - ✅ Secure defaults (encryption, versioning, public access blocking)
 - ✅ Development/testing focus
 
-**Out of Scope:**
+#### Out of Scope
+
 - ❌ Production-grade features (custom KMS, replication, lifecycle policies)
 - ❌ DynamoDB table provisioning (Terraform 1.10+ has native S3 locking)
 - ❌ Backend migration/destruction
@@ -326,7 +328,8 @@ components:
 # vpc component has provision.backend.enabled: false
 ```
 
-**Key Benefits:**
+#### Key Benefits
+
 - **DRY Principle**: Set defaults once at high levels
 - **Environment Flexibility**: Dev uses auto-provision, prod uses pre-provisioned
 - **Component Control**: Override per component when needed
@@ -392,7 +395,8 @@ components:
           enabled: true
 ```
 
-**Flow:**
+#### Flow
+
 1. Auth system authenticates as `dev-admin` (account 111111111111)
 2. Backend provisioner extracts `role_arn` from backend config
 3. Provisioner assumes role in target account (999999999999)
@@ -708,7 +712,8 @@ func TestBackendProvisioning_S3_Idempotent(t *testing.T) {
 
 Backend provisioners require specific permissions. Document these clearly:
 
-**AWS S3 Backend:**
+#### AWS S3 Backend
+
 ```json
 {
   "Version": "2012-10-17",
@@ -729,13 +734,15 @@ Backend provisioners require specific permissions. Document these clearly:
 }
 ```
 
-**GCP GCS Backend:**
+#### GCP GCS Backend
+
 ```yaml
 roles:
   - roles/storage.admin  # For bucket creation
 ```
 
-**Azure Blob Backend:**
+#### Azure Blob Backend
+
 ```yaml
 permissions:
   - Microsoft.Storage/storageAccounts/write
@@ -836,12 +843,14 @@ atmos provision backend vpc --stack dev
 atmos provision backend eks --stack prod
 ```
 
-**When to use:**
+#### When to Use
+
 - Separate provisioning from Terraform execution (CI/CD pipelines)
 - Troubleshoot provisioning issues
 - Pre-provision backends for multiple components
 
-**Automatic provisioning (via hooks):**
+#### Automatic Provisioning (via Hooks)
+
 ```bash
 # Backend provisioned automatically if provision.backend.enabled: true
 atmos terraform apply vpc --stack dev
@@ -849,7 +858,8 @@ atmos terraform apply vpc --stack dev
 
 ### Error Handling in CLI
 
-**Provisioning failure stops execution:**
+#### Provisioning Failure Stops Execution
+
 ```bash
 $ atmos provision backend vpc --stack dev
 Error: provisioner 'backend' failed: backend provisioning failed:
@@ -861,7 +871,8 @@ Context: bucket=acme-state-dev, region=us-east-1
 Exit code: 3
 ```
 
-**Terraform won't run if provisioning fails:**
+#### Terraform Won't Run if Provisioning Fails
+
 ```bash
 $ atmos terraform apply vpc --stack dev
 Running backend provisioner...
@@ -877,7 +888,7 @@ Exit code: 2
 
 ### Error Handling Requirements
 
-**All backend provisioners MUST:**
+All backend provisioners MUST:
 
 1. **Return errors (never panic)**
    ```go
@@ -915,7 +926,7 @@ Exit code: 2
 
 ### Error Propagation Flow
 
-```
+```text
 Backend Provisioner (ProvisionS3Backend)
   ↓ returns error
 Backend Provisioner Wrapper (ProvisionBackend)
@@ -945,14 +956,16 @@ CI/CD Pipeline
 
 #### S3 Backend Errors
 
-**Configuration Error:**
+Configuration Error:
+
 ```go
 if bucket == "" {
     return fmt.Errorf("%w: backend.bucket is required", errUtils.ErrBackendConfig)
 }
 ```
 
-**Permission Error:**
+Permission Error:
+
 ```go
 if isAccessDenied(err) {
     return errUtils.Build(errUtils.ErrBackendProvision).
@@ -964,7 +977,8 @@ if isAccessDenied(err) {
 }
 ```
 
-**Resource Conflict:**
+Resource Conflict:
+
 ```go
 if isBucketNameTaken(err) {
     return errUtils.Build(errUtils.ErrBackendProvision).
@@ -978,7 +992,8 @@ if isBucketNameTaken(err) {
 
 #### GCS Backend Errors (Future)
 
-**Permission Error:**
+Permission Error:
+
 ```go
 return errUtils.Build(errUtils.ErrBackendProvision).
     WithHint("Required GCP permissions: storage.buckets.create").
@@ -990,7 +1005,8 @@ return errUtils.Build(errUtils.ErrBackendProvision).
 
 #### Azure Backend Errors (Future)
 
-**Permission Error:**
+Permission Error:
+
 ```go
 return errUtils.Build(errUtils.ErrBackendProvision).
     WithHint("Required Azure permissions: Microsoft.Storage/storageAccounts/write").
@@ -1001,7 +1017,8 @@ return errUtils.Build(errUtils.ErrBackendProvision).
 
 ### Testing Error Handling
 
-**Unit Tests:**
+Unit Tests:
+
 ```go
 func TestProvisionS3Backend_ConfigurationError(t *testing.T) {
     componentSections := map[string]any{
@@ -1055,10 +1072,12 @@ func TestProvisionS3Backend_PermissionDenied(t *testing.T) {
 
 ---
 
-**End of PRD**
+## Conclusion
 
-**Status:** Ready for Review
-**Next Steps:**
+**Status:** Implemented
+
+### Next Steps
+
 1. Review backend provisioner interface
 2. Implement S3 backend provisioner (see `s3-backend-provisioner.md`)
 3. Test with localstack/real AWS account

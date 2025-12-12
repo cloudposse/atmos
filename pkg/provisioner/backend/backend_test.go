@@ -62,6 +62,111 @@ func TestGetBackendCreate_MultipleTypes(t *testing.T) {
 	assert.Nil(t, GetBackendCreate("azurerm"))
 }
 
+func TestRegisterBackendDelete(t *testing.T) {
+	// Reset registry before test.
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	mockDeleter := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, force bool) error {
+		return nil
+	}
+
+	RegisterBackendDelete("s3", mockDeleter)
+
+	deleter := GetBackendDelete("s3")
+	assert.NotNil(t, deleter)
+}
+
+func TestGetBackendDelete_NotFound(t *testing.T) {
+	// Reset registry before test.
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	deleter := GetBackendDelete("nonexistent")
+	assert.Nil(t, deleter)
+}
+
+func TestGetBackendDelete_MultipleTypes(t *testing.T) {
+	// Reset registry before test.
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	s3Deleter := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, force bool) error {
+		return nil
+	}
+
+	gcsDeleter := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, force bool) error {
+		return nil
+	}
+
+	RegisterBackendDelete("s3", s3Deleter)
+	RegisterBackendDelete("gcs", gcsDeleter)
+
+	assert.NotNil(t, GetBackendDelete("s3"))
+	assert.NotNil(t, GetBackendDelete("gcs"))
+	assert.Nil(t, GetBackendDelete("azurerm"))
+}
+
+func TestResetRegistryForTesting(t *testing.T) {
+	// Register some functions first.
+	mockCreator := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
+		return nil
+	}
+	mockDeleter := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, force bool) error {
+		return nil
+	}
+
+	RegisterBackendCreate("test-backend", mockCreator)
+	RegisterBackendDelete("test-backend", mockDeleter)
+
+	// Verify they're registered.
+	assert.NotNil(t, GetBackendCreate("test-backend"))
+	assert.NotNil(t, GetBackendDelete("test-backend"))
+
+	// Reset the registry.
+	ResetRegistryForTesting()
+
+	// Verify they're cleared.
+	assert.Nil(t, GetBackendCreate("test-backend"))
+	assert.Nil(t, GetBackendDelete("test-backend"))
+}
+
+func TestResetRegistryForTesting_ClearsAllEntries(t *testing.T) {
+	// Reset at start.
+	ResetRegistryForTesting()
+
+	mockCreator := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
+		return nil
+	}
+	mockDeleter := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, force bool) error {
+		return nil
+	}
+
+	// Register multiple backends.
+	RegisterBackendCreate("s3", mockCreator)
+	RegisterBackendCreate("gcs", mockCreator)
+	RegisterBackendCreate("azurerm", mockCreator)
+	RegisterBackendDelete("s3", mockDeleter)
+	RegisterBackendDelete("gcs", mockDeleter)
+
+	// Verify all are registered.
+	assert.NotNil(t, GetBackendCreate("s3"))
+	assert.NotNil(t, GetBackendCreate("gcs"))
+	assert.NotNil(t, GetBackendCreate("azurerm"))
+	assert.NotNil(t, GetBackendDelete("s3"))
+	assert.NotNil(t, GetBackendDelete("gcs"))
+
+	// Reset.
+	ResetRegistryForTesting()
+
+	// Verify all are cleared.
+	assert.Nil(t, GetBackendCreate("s3"))
+	assert.Nil(t, GetBackendCreate("gcs"))
+	assert.Nil(t, GetBackendCreate("azurerm"))
+	assert.Nil(t, GetBackendDelete("s3"))
+	assert.Nil(t, GetBackendDelete("gcs"))
+}
+
 func TestProvisionBackend_NoProvisioningConfiguration(t *testing.T) {
 	ctx := context.Background()
 	atmosConfig := &schema.AtmosConfiguration{}

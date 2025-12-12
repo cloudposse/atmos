@@ -24,12 +24,7 @@ Requires the --force flag for safety. The backend must be empty
 
 		component := args[0]
 
-		// Parse flags.
 		v := viper.GetViper()
-		if err := deleteParser.BindFlagsToViper(cmd, v); err != nil {
-			return err
-		}
-
 		opts, err := ParseCommonFlags(cmd, deleteParser)
 		if err != nil {
 			return err
@@ -47,7 +42,14 @@ Requires the --force flag for safety. The backend must be empty
 		describeFunc := CreateDescribeComponentFunc(nil) // Auth already handled in InitConfigAndAuth
 
 		// Execute delete command using injected provisioner.
-		return prov.DeleteBackend(atmosConfig, component, opts.Stack, force, describeFunc, authContext)
+		return prov.DeleteBackend(&DeleteBackendParams{
+			AtmosConfig:  atmosConfig,
+			Component:    component,
+			Stack:        opts.Stack,
+			Force:        force,
+			DescribeFunc: describeFunc,
+			AuthContext:  authContext,
+		})
 	},
 }
 

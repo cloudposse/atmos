@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	//nolint:depguard
 	"github.com/aws/aws-sdk-go-v2/aws"
-	//nolint:depguard
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	//nolint:depguard
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
