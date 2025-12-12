@@ -1185,3 +1185,73 @@ func TestInjectProvisionedIdentitiesPostLoad_ErrorHandling(t *testing.T) {
 		assert.NoError(t, err)
 	})
 }
+
+// TestUserConfigOverridesProvisionedIdentities tests that user config takes precedence over provisioned.
+func TestUserConfigOverridesProvisionedIdentities(t *testing.T) {
+	tmpDir := t.TempDir()
+	cacheDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", cacheDir)
+
+	// Create user config file with provider and an identity.
+	userConfigContent := `auth:
+  providers:
+    aws-sso:
+      kind: aws/iam-identity-center
+  identities:
+    prod/admin:
+      kind: aws/permission-set
+      description: User-defined admin role
+`
+	userConfigFile := filepath.Join(tmpDir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(userConfigFile, []byte(userConfigContent), 0o644))
+
+	// Create provisioned identities cache file with the same identity name but different values.
+	providerDir := filepath.Join(cacheDir, "atmos", "auth", "aws-sso")
+	require.NoError(t, os.MkdirAll(providerDir, 0o700))
+	provisionedFile := filepath.Join(providerDir, "provisioned-identities.yaml")
+	provisionedContent := `auth:
+  identities:
+    prod/admin:
+      kind: aws/permission-set
+      description: Auto-provisioned admin role
+    staging/developer:
+      kind: aws/permission-set
+      description: Auto-provisioned developer role
+`
+	require.NoError(t, os.WriteFile(provisionedFile, []byte(provisionedContent), 0o600))
+
+	// Load user config file into viper (simulating loadConfigSources).
+	v := viper.New()
+	v.SetConfigType("yaml")
+	v.SetConfigFile(userConfigFile)
+	require.NoError(t, v.ReadInConfig())
+
+	// Verify user config is loaded.
+	assert.Equal(t, "User-defined admin role", v.GetString("auth.identities.prod/admin.description"))
+
+	// Inject provisioned identities.
+	err := injectProvisionedIdentitiesPostLoad(v)
+	assert.NoError(t, err)
+
+	// After injection, the provisioned identities are merged.
+	// The staging/developer identity should be added.
+	identities := v.GetStringMap("auth.identities")
+	assert.Contains(t, identities, "prod/admin")
+	assert.Contains(t, identities, "staging/developer")
+
+	// The prod/admin description should now be the provisioned one (merged last).
+	prodAdminDesc := v.GetString("auth.identities.prod/admin.description")
+	assert.Equal(t, "Auto-provisioned admin role", prodAdminDesc)
+
+	// Now re-apply user config (this is what reapplyUserConfigForPrecedence does).
+	err = reapplyUserConfigForPrecedence(v)
+	assert.NoError(t, err)
+
+	// Now the user config should take precedence.
+	prodAdminDescAfter := v.GetString("auth.identities.prod/admin.description")
+	assert.Equal(t, "User-defined admin role", prodAdminDescAfter)
+
+	// The auto-provisioned identity that user didn't override should still exist.
+	stagingDevDesc := v.GetString("auth.identities.staging/developer.description")
+	assert.Equal(t, "Auto-provisioned developer role", stagingDevDesc)
+}
