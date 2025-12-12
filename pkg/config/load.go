@@ -990,6 +990,10 @@ func loadAtmosConfigsFromDirectory(searchPattern string, dst *viper.Viper, sourc
 	// 1. First process any imports (so they are merged first)
 	// 2. Then merge the main file on top (so it takes precedence over its imports)
 	// This aligns with mergeConfig() semantics: "importing file always takes precedence over imported files".
+	//
+	// Note: All yaml files in the directory are loaded. If an import file is in the same directory
+	// as the importing file, it will be loaded twice (once via import, once via directory scan).
+	// For clean separation, place import files in subdirectories.
 	for _, filePath := range foundPaths {
 		// Process any imports in the file FIRST.
 		// This enables import: directives to work in profile files.
