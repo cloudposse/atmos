@@ -460,9 +460,9 @@ vars:
 ```
 </File>
 
-**When to use explicit type tags vs quoting:**
-- ✅ Use quotes (`"value"`) - Simpler, more common, widely understood
-- ✅ Use type tags (`!!str`) - When you need to be explicit about intent, or in generated YAML
+**When to use explicit typing vs quoting:**<br/>
+✅ Use quotes (`"value"`) - Simpler, more common, widely understood<br/>
+✅ Use type tags (`!!str`) - When you need to be explicit about intent, or in generated YAML
 
 :::tip
 Most Atmos users prefer quoting over type tags. Type tags are useful when generating YAML programmatically or when you want to be very explicit about types.
@@ -797,10 +797,10 @@ vars:
 This distinction matters in Terraform where `null` triggers default behavior while `""` is an explicit empty value.
 :::
 
-**When to use `~` vs `null` vs `""`:**
-- ✅ Use `~` for concise configuration when unsetting values
-- ✅ Use `null` when you want to be explicit about the intent
-- ✅ Use `""` when you need an actual empty string (not null)
+**When to use `~` vs `null` vs `""`:**<br/>
+✅ Use `~` for concise configuration when unsetting values<br/>
+✅ Use `null` when you want to be explicit about the intent<br/>
+✅ Use `""` when you need an actual empty string (not null)
 
 **Common use case - Overriding inherited values to null:**
 
