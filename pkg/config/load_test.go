@@ -1035,3 +1035,153 @@ base_path: /test/parent-should-not-find
 		})
 	}
 }
+
+// TestInjectProvisionedIdentitiesPostLoad tests the post-load injection of provisioned identities.
+func TestInjectProvisionedIdentitiesPostLoad(t *testing.T) {
+	tests := []struct {
+		name                 string
+		setupConfig          func(t *testing.T, v *viper.Viper)
+		setupCacheDir        func(t *testing.T, cacheDir string)
+		expectIdentitiesLoad bool
+		validateConfig       func(t *testing.T, v *viper.Viper)
+	}{
+		{
+			name: "no providers configured - should skip",
+			setupConfig: func(t *testing.T, v *viper.Viper) {
+				// No auth.providers configured.
+				v.Set("base_path", "/test")
+			},
+			setupCacheDir: func(t *testing.T, cacheDir string) {
+				// No cache files needed.
+			},
+			expectIdentitiesLoad: false,
+			validateConfig: func(t *testing.T, v *viper.Viper) {
+				// Should not have any identities.
+				assert.Empty(t, v.GetStringMap("auth.identities"))
+			},
+		},
+		{
+			name: "providers configured but no cache file - should skip gracefully",
+			setupConfig: func(t *testing.T, v *viper.Viper) {
+				v.Set("auth.providers.aws-sso.kind", "aws/iam-identity-center")
+			},
+			setupCacheDir: func(t *testing.T, cacheDir string) {
+				// No cache file created - simulates first run before auth.
+			},
+			expectIdentitiesLoad: false,
+			validateConfig: func(t *testing.T, v *viper.Viper) {
+				// Should not have any identities loaded.
+				assert.Empty(t, v.GetStringMap("auth.identities"))
+			},
+		},
+		{
+			name: "providers configured with cache file - should load identities",
+			setupConfig: func(t *testing.T, v *viper.Viper) {
+				v.Set("auth.providers.aws-sso.kind", "aws/iam-identity-center")
+			},
+			setupCacheDir: func(t *testing.T, cacheDir string) {
+				// Create provisioned identities cache file.
+				providerDir := filepath.Join(cacheDir, "atmos", "auth", "aws-sso")
+				require.NoError(t, os.MkdirAll(providerDir, 0o700))
+				provisionedFile := filepath.Join(providerDir, "provisioned-identities.yaml")
+				content := `auth:
+  identities:
+    prod/admin:
+      kind: aws/permission-set
+      provider: aws-sso
+    staging/developer:
+      kind: aws/permission-set
+      provider: aws-sso
+`
+				require.NoError(t, os.WriteFile(provisionedFile, []byte(content), 0o600))
+			},
+			expectIdentitiesLoad: true,
+			validateConfig: func(t *testing.T, v *viper.Viper) {
+				// Should have identities loaded.
+				identities := v.GetStringMap("auth.identities")
+				assert.NotEmpty(t, identities)
+				assert.Contains(t, identities, "prod/admin")
+				assert.Contains(t, identities, "staging/developer")
+			},
+		},
+		{
+			name: "multiple providers - only one has cache file",
+			setupConfig: func(t *testing.T, v *viper.Viper) {
+				v.Set("auth.providers.aws-sso.kind", "aws/iam-identity-center")
+				v.Set("auth.providers.azure.kind", "azure/entra-id")
+			},
+			setupCacheDir: func(t *testing.T, cacheDir string) {
+				// Only create cache file for aws-sso.
+				providerDir := filepath.Join(cacheDir, "atmos", "auth", "aws-sso")
+				require.NoError(t, os.MkdirAll(providerDir, 0o700))
+				provisionedFile := filepath.Join(providerDir, "provisioned-identities.yaml")
+				content := `auth:
+  identities:
+    prod/admin:
+      kind: aws/permission-set
+      provider: aws-sso
+`
+				require.NoError(t, os.WriteFile(provisionedFile, []byte(content), 0o600))
+			},
+			expectIdentitiesLoad: true,
+			validateConfig: func(t *testing.T, v *viper.Viper) {
+				// Should have identities from aws-sso only.
+				identities := v.GetStringMap("auth.identities")
+				assert.NotEmpty(t, identities)
+				assert.Contains(t, identities, "prod/admin")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup temp cache directory.
+			cacheDir := t.TempDir()
+			t.Setenv("XDG_CACHE_HOME", cacheDir)
+
+			// Setup viper with config.
+			v := viper.New()
+			v.SetConfigType("yaml")
+			tt.setupConfig(t, v)
+
+			// Setup cache files.
+			tt.setupCacheDir(t, cacheDir)
+
+			// Run the function.
+			err := injectProvisionedIdentitiesPostLoad(v)
+			assert.NoError(t, err)
+
+			// Validate the result.
+			tt.validateConfig(t, v)
+		})
+	}
+}
+
+// TestInjectProvisionedIdentitiesPostLoad_ErrorHandling tests error handling in post-load injection.
+func TestInjectProvisionedIdentitiesPostLoad_ErrorHandling(t *testing.T) {
+	t.Run("invalid cache file should continue gracefully", func(t *testing.T) {
+		cacheDir := t.TempDir()
+		t.Setenv("XDG_CACHE_HOME", cacheDir)
+
+		// Setup viper with provider.
+		v := viper.New()
+		v.SetConfigType("yaml")
+		v.Set("auth.providers.aws-sso.kind", "aws/iam-identity-center")
+
+		// Create an invalid YAML file.
+		providerDir := filepath.Join(cacheDir, "atmos", "auth", "aws-sso")
+		require.NoError(t, os.MkdirAll(providerDir, 0o700))
+		provisionedFile := filepath.Join(providerDir, "provisioned-identities.yaml")
+		invalidContent := `auth:
+  identities:
+    - this: is
+    - invalid: yaml
+      for: identities
+`
+		require.NoError(t, os.WriteFile(provisionedFile, []byte(invalidContent), 0o600))
+
+		// Should not return error - it's non-fatal.
+		err := injectProvisionedIdentitiesPostLoad(v)
+		assert.NoError(t, err)
+	})
+}
