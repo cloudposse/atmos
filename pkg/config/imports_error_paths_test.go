@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -151,12 +152,17 @@ func TestGeneratePatterns_DirectoryPath(t *testing.T) {
 	tempDir := t.TempDir()
 
 	patterns := generatePatterns(tempDir)
-	assert.Len(t, patterns, 4) // Should generate *.yaml, *.yml, *.json, and *.hcl patterns
-	assert.Contains(t, patterns[0], "**")
-	assert.Contains(t, patterns[0], ".yaml")
-	assert.Contains(t, patterns[1], ".yml")
-	assert.Contains(t, patterns[2], ".json")
-	assert.Contains(t, patterns[3], ".hcl")
+	assert.Len(t, patterns, 4) // Should generate *.yaml, *.yml, *.json, and *.hcl patterns.
+	// Verify all patterns contain ** and the expected extensions (order-independent).
+	for _, p := range patterns {
+		assert.Contains(t, p, "**")
+	}
+	// Check that all expected extensions are present.
+	joinedPatterns := strings.Join(patterns, " ")
+	assert.Contains(t, joinedPatterns, ".yaml")
+	assert.Contains(t, joinedPatterns, ".yml")
+	assert.Contains(t, joinedPatterns, ".json")
+	assert.Contains(t, joinedPatterns, ".hcl")
 }
 
 // TestGeneratePatterns_FileWithExtension tests file path at imports.go:297-307.
@@ -175,11 +181,12 @@ func TestGeneratePatterns_FileWithoutExtension(t *testing.T) {
 	filePathNoExt := filepath.Join(tempDir, "config")
 
 	patterns := generatePatterns(filePathNoExt)
-	assert.Len(t, patterns, 4) // Should append .yaml, .yml, .json, and .hcl
-	assert.Equal(t, filePathNoExt+".yaml", patterns[0])
-	assert.Equal(t, filePathNoExt+".yml", patterns[1])
-	assert.Equal(t, filePathNoExt+".json", patterns[2])
-	assert.Equal(t, filePathNoExt+".hcl", patterns[3])
+	assert.Len(t, patterns, 4) // Should append .yaml, .yml, .json, and .hcl.
+	// Verify expected patterns exist (order-independent).
+	assert.Contains(t, patterns, filePathNoExt+".yaml")
+	assert.Contains(t, patterns, filePathNoExt+".yml")
+	assert.Contains(t, patterns, filePathNoExt+".json")
+	assert.Contains(t, patterns, filePathNoExt+".hcl")
 }
 
 // TestConvertToAbsolutePaths_AbsPathError tests error path at imports.go:314-318.

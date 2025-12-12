@@ -3,6 +3,7 @@ package exec
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -23,8 +24,15 @@ const (
 )
 
 // trimStackExtensions removes any supported stack config extension from the stack path.
+// Extensions are sorted by length descending to ensure compound extensions
+// (like .yaml.tmpl) are matched before their base extensions (like .yaml).
 func trimStackExtensions(stack string) string {
-	for _, ext := range u.StackConfigExtensions() {
+	exts := u.StackConfigExtensions()
+	// Sort by length descending to match compound extensions first.
+	sort.Slice(exts, func(i, j int) bool {
+		return len(exts[i]) > len(exts[j])
+	})
+	for _, ext := range exts {
 		if strings.HasSuffix(stack, ext) {
 			return strings.TrimSuffix(stack, ext)
 		}
