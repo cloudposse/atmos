@@ -54,13 +54,20 @@ $ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
 # Success!
 ```
 
-**Desired Experience (Option B - Explicit):**
+**Desired Experience (Option B - Explicit with default identity):**
 ```bash
-# Get AWS credentials however you want
-$ export AWS_PROFILE=dev
+# Explicitly login to ECR using default identity's ECR config
+$ atmos auth ecr-login
+✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 
-# Explicitly login to ECR
-$ atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
+$ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
+# Success!
+```
+
+**Desired Experience (Option B - Explicit with specific identity):**
+```bash
+# Explicitly login to ECR using a specific identity's ECR config
+$ atmos auth ecr-login --identity plat-dev
 ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 
 $ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
@@ -119,13 +126,16 @@ auth:
 #### Option B: Standalone Command (Ad-hoc)
 
 ```bash
-# Use current AWS credentials (from profile, env, or atmos auth)
-atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
-
-# Auto-detect from current account/region
+# Use default identity's ECR config
 atmos auth ecr-login
 
-# Multiple registries
+# Use specific identity's ECR config
+atmos auth ecr-login --identity plat-dev
+
+# Override with explicit registry (ignores identity ECR config)
+atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
+
+# Multiple registries (explicit)
 atmos auth ecr-login \
   --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com \
   --registry 987654321098.dkr.ecr.us-west-2.amazonaws.com
@@ -367,20 +377,20 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostA
 var ecrLoginCmd = &cobra.Command{
     Use:   "ecr-login",
     Short: "Login to AWS ECR registries",
-    Long: `Login to AWS ECR registries using current AWS credentials.
+    Long: `Login to AWS ECR registries using an identity's ECR configuration.
 
-Uses AWS credentials from:
-- Current AWS_PROFILE environment variable
-- Atmos auth context (if authenticated)
-- Default AWS credential chain`,
+By default, uses the default identity's ECR config. Use --identity to specify
+a different identity. Use --registry to override with explicit registry URLs.`,
     RunE: func(cmd *cobra.Command, args []string) error {
+        identity, _ := cmd.Flags().GetString("identity")
         registries, _ := cmd.Flags().GetStringArray("registry")
-        return auth.ECRLogin(ctx, registries)
+        return auth.ECRLogin(ctx, identity, registries)
     },
 }
 
 func init() {
-    ecrLoginCmd.Flags().StringArrayP("registry", "r", nil, "ECR registry URL(s)")
+    ecrLoginCmd.Flags().StringP("identity", "i", "", "Identity to use for ECR config (default: default identity)")
+    ecrLoginCmd.Flags().StringArrayP("registry", "r", nil, "ECR registry URL(s) - overrides identity config")
     authCmd.AddCommand(ecrLoginCmd)
 }
 ```
@@ -388,21 +398,48 @@ func init() {
 **File:** `pkg/auth/ecr_login.go`
 
 ```go
-// ECRLogin performs ECR authentication using current AWS credentials.
-func ECRLogin(ctx context.Context, registries []string) error {
-    // 1. Load AWS config from environment/profile
-    awsCfg, err := config.LoadDefaultConfig(ctx)
+// ECRLogin performs ECR authentication using an identity's ECR configuration.
+// If identityName is empty, uses the default identity.
+// If registries is non-empty, overrides the identity's ECR config.
+func ECRLogin(ctx context.Context, identityName string, registries []string) error {
+    // 1. Get identity and its ECR config
+    authManager, err := createAuthManager()
     if err != nil {
-        return fmt.Errorf("failed to load AWS config: %w", err)
+        return err
     }
 
-    // 2. If no registries specified, use current account
+    // Resolve identity (default if not specified)
+    if identityName == "" {
+        identityName, err = authManager.GetDefaultIdentity()
+        if err != nil {
+            return fmt.Errorf("no default identity configured: %w", err)
+        }
+    }
+
+    // 2. Authenticate the identity to get AWS credentials
+    whoami, err := authManager.Authenticate(ctx, identityName)
+    if err != nil {
+        return fmt.Errorf("failed to authenticate identity '%s': %w", identityName, err)
+    }
+
+    // 3. Get ECR registries from identity config (unless overridden)
     if len(registries) == 0 {
-        accountID, region := getCurrentAccountAndRegion(ctx, awsCfg)
-        registries = []string{awsCloud.BuildRegistryURL(accountID, region)}
+        ecrConfig := awsCloud.ParseECRConfig(whoami.Identity.Principal)
+        if !ecrConfig.Enabled || len(ecrConfig.Registries) == 0 {
+            return fmt.Errorf("identity '%s' has no ECR registries configured", identityName)
+        }
+        for _, reg := range ecrConfig.Registries {
+            registries = append(registries, awsCloud.BuildRegistryURL(reg.AccountID, reg.Region))
+        }
     }
 
-    // 3. Get tokens and write Docker config
+    // 4. Build AWS config from authenticated credentials
+    awsCfg, err := buildAWSConfigFromCredentials(whoami.Credentials)
+    if err != nil {
+        return err
+    }
+
+    // 5. Get tokens and write Docker config
     dockerConfig, err := docker.NewConfigManager()
     if err != nil {
         return err
@@ -426,7 +463,7 @@ func ECRLogin(ctx context.Context, registries []string) error {
         ui.Success("ECR login: %s (expires in 12h)", result.Registry)
     }
 
-    // 4. Set DOCKER_CONFIG for current session
+    // 6. Set DOCKER_CONFIG for current session
     os.Setenv("DOCKER_CONFIG", dockerConfig.GetConfigDir())
 
     return nil
@@ -495,26 +532,31 @@ latest: Pulling from my-app
 Status: Downloaded newer image for my-app:latest
 ```
 
-### Explicit ECR Login
+### Explicit ECR Login (Default Identity)
 
 ```bash
-# First, get AWS credentials however you want
-$ export AWS_PROFILE=dev
-# OR
-$ atmos auth login dev-admin
-
-# Then explicitly login to ECR
-$ atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
+# Login to ECR using default identity's ECR config
+$ atmos auth ecr-login
 ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 
 $ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
 ```
 
-### Auto-Detect Registry
+### Explicit ECR Login (Specific Identity)
 
 ```bash
-# Login to ECR in current account/region
-$ atmos auth ecr-login
+# Login to ECR using a specific identity's ECR config
+$ atmos auth ecr-login --identity plat-dev
+✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
+
+$ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
+```
+
+### Explicit ECR Login (Override with Registry URL)
+
+```bash
+# Override identity config with explicit registry URL
+$ atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
 ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 ```
 
