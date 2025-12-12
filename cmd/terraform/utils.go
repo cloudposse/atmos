@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -185,6 +186,13 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string, opts *TerraformRunOptions) error {
 	subCommand := actualCmd.Name()
 	log.Debug("terraformRunWithOptions entry", "subCommand", subCommand, "args", args)
+
+	// Validate Atmos config first to provide specific error messages.
+	// This check ensures the stacks directory exists before attempting to process,
+	// preventing generic "failed to find import" errors in favor of actionable ones.
+	if err := internal.ValidateAtmosConfig(); err != nil {
+		return err
+	}
 
 	// Get separated args (terraform pass-through flags like -out, -var, etc.).
 	separatedArgs := compat.GetSeparated()

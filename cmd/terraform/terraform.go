@@ -1,13 +1,18 @@
 package terraform
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/terraform/generate"
+	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // terraformParser handles flag parsing for shared terraform flags.
@@ -23,6 +28,10 @@ var terraformCmd = &cobra.Command{
 	// FParseErrWhitelist allows unknown flags to pass through to Terraform/OpenTofu.
 	// Unlike DisableFlagParsing, this still allows Cobra to parse known Atmos flags.
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+	// RunE handles the case when terraform is called without a subcommand.
+	// This allows global compat flags like -help and -version to be passed through
+	// to the underlying terraform/tofu command.
+	RunE: terraformGlobalFlagsHandler,
 }
 
 func init() {
@@ -51,6 +60,10 @@ func init() {
 
 	// Register other completion functions (component args, identity).
 	RegisterTerraformCompletions(terraformCmd)
+
+	// Register global compat flags for terraform command itself (not just subcommands).
+	// This enables the COMPATIBILITY FLAGS section in help output.
+	internal.RegisterCommandCompatFlags("terraform", "terraform", TerraformGlobalCompatFlags())
 
 	// Register this command with the registry.
 	internal.Register(&TerraformCommandProvider{})
@@ -92,4 +105,58 @@ func (t *TerraformCommandProvider) GetPositionalArgsBuilder() *flags.PositionalA
 // GetCompatibilityFlags returns compatibility flags for this command.
 func (t *TerraformCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
 	return AllTerraformCompatFlags()
+}
+
+// flagPrefix is the prefix for CLI flags.
+const flagPrefix = "-"
+
+// terraformGlobalFlagsHandler handles the terraform command when called without a subcommand.
+// It checks for global compat flags (like -help, -version) that were separated by
+// preprocessCompatibilityFlags() and passes them through to the underlying terraform/tofu command.
+//
+// This integrates with the compat flag system:
+//   - The preprocessCompatibilityFlags() in cmd/root.go separates compat flags before Cobra parses.
+//   - Separated flags are stored via compat.SetSeparated() and retrieved via compat.GetSeparated().
+//   - This handler retrieves those flags and executes terraform with them.
+func terraformGlobalFlagsHandler(cmd *cobra.Command, args []string) error {
+	// Check for global compat flags that were separated by preprocessCompatibilityFlags().
+	// These flags (like -help, -version) should be passed directly to terraform.
+	separated := compat.GetSeparated()
+
+	// Look for global flags that should be passed through.
+	globalFlags := TerraformGlobalCompatFlags()
+	for _, arg := range separated {
+		if !strings.HasPrefix(arg, flagPrefix) {
+			continue
+		}
+
+		// Extract the flag name (handle both -flag and --flag, and -flag=value).
+		flagName := strings.TrimPrefix(strings.TrimPrefix(arg, flagPrefix), flagPrefix)
+		if idx := strings.Index(flagName, "="); idx != -1 {
+			flagName = flagName[:idx]
+		}
+
+		// Check if it's a global flag that should be passed through.
+		if _, isGlobal := globalFlags[flagPrefix+flagName]; isGlobal {
+			// Initialize config to get terraform command.
+			atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+			if err != nil {
+				return err
+			}
+
+			// Execute terraform with the separated args (global flags).
+			return e.ExecuteShellCommand(
+				atmosConfig,
+				atmosConfig.Components.Terraform.Command, // "terraform" or "tofu"
+				separated,
+				"",    // dir (current dir)
+				nil,   // env
+				false, // dryRun
+				"",    // redirectStdError
+			)
+		}
+	}
+
+	// No global flag found and no subcommand provided - show usage.
+	return cmd.Usage()
 }
