@@ -9,7 +9,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
-// workflowCmd executes a workflow
+// workflowCmd executes a workflow.
 var workflowCmd = &cobra.Command{
 	Use:   "workflow",
 	Short: "Run predefined tasks using workflows",

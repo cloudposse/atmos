@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -59,7 +58,9 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		if workflowFile == "" {
-			return errors.New("'--file' flag is required to specify a workflow manifest")
+			return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+				WithExplanation("'--file' flag is required to specify a workflow manifest").
+				Err()
 		}
 	}
 

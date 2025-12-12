@@ -242,11 +242,16 @@ func ExecuteDescribeWorkflows(
 
 		workflowManifest, err := u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("error parsing the workflow manifest '%s': %v", f, err)
+			return nil, nil, nil, errUtils.Build(errUtils.ErrInvalidWorkflowManifest).
+				WithCause(err).
+				WithExplanation(fmt.Sprintf("error parsing the workflow manifest '%s'", f)).
+				Err()
 		}
 
 		if workflowManifest.Workflows == nil {
-			return nil, nil, nil, fmt.Errorf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", workflowPath)
+			return nil, nil, nil, errUtils.Build(errUtils.ErrInvalidWorkflowManifest).
+				WithExplanation(fmt.Sprintf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", workflowPath)).
+				Err()
 		}
 
 		workflowConfig := workflowManifest.Workflows
