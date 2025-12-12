@@ -35,12 +35,10 @@ func DeleteS3Backend(
 ) error {
 	defer perf.Track(atmosConfig, "backend.DeleteS3Backend")()
 
-	// Require force flag to prevent accidental deletion.
 	if !force {
-		return fmt.Errorf("%w: use --force flag to confirm deletion", errUtils.ErrForceRequired)
+		return errForceRequired()
 	}
 
-	// Extract and validate required configuration.
 	config, err := extractS3Config(backendConfig)
 	if err != nil {
 		return err
@@ -48,43 +46,74 @@ func DeleteS3Backend(
 
 	_ = ui.Info(fmt.Sprintf("Deleting S3 backend: bucket=%s region=%s", config.bucket, config.region))
 
-	// Load AWS configuration with auth context.
-	awsConfig, err := loadAWSConfigWithAuth(ctx, config.region, config.roleArn, authContext)
-	if err != nil {
-		return fmt.Errorf(errFormat, errUtils.ErrLoadAWSConfig, err)
-	}
-
-	// Create S3 client.
-	client := s3.NewFromConfig(awsConfig)
-
-	// Check if bucket exists before attempting deletion.
-	exists, err := bucketExists(ctx, client, config.bucket)
+	client, err := createS3ClientForDeletion(ctx, config, authContext)
 	if err != nil {
 		return err
 	}
 
-	if !exists {
-		return fmt.Errorf("%w: bucket '%s' does not exist", errUtils.ErrBackendNotFound, config.bucket)
-	}
-
-	// List all objects and versions to get count and detect state files.
-	objectCount, stateFileCount, err := listAllObjects(ctx, client, config.bucket)
-	if err != nil {
+	if err := validateBucketExistsForDeletion(ctx, client, config); err != nil {
 		return err
 	}
 
-	// Show warning and delete all contents.
-	if err := deleteBackendContents(ctx, client, config.bucket, objectCount, stateFileCount); err != nil {
-		return err
-	}
-
-	// Delete the bucket itself.
-	if err := deleteBucket(ctx, client, config.bucket); err != nil {
+	if err := deleteS3BucketAndContents(ctx, client, config.bucket); err != nil {
 		return err
 	}
 
 	_ = ui.Success(fmt.Sprintf("✓ Backend deleted: bucket '%s' and all contents removed", config.bucket))
 	return nil
+}
+
+// errForceRequired returns an error indicating --force flag is required.
+func errForceRequired() error {
+	return errUtils.Build(errUtils.ErrForceRequired).
+		WithExplanation("Backend deletion requires explicit confirmation").
+		WithHint("Use --force flag to confirm you want to permanently delete the backend").
+		Err()
+}
+
+// createS3ClientForDeletion loads AWS config and creates an S3 client.
+func createS3ClientForDeletion(ctx context.Context, config *s3Config, authContext *schema.AuthContext) (S3ClientAPI, error) {
+	awsConfig, err := loadAWSConfigWithAuth(ctx, config.region, config.roleArn, authContext)
+	if err != nil {
+		return nil, errUtils.Build(errUtils.ErrLoadAWSConfig).
+			WithCause(err).
+			WithExplanation("Failed to load AWS configuration for backend deletion").
+			WithContext("region", config.region).
+			WithHint("Check AWS credentials and region configuration").
+			Err()
+	}
+	return s3.NewFromConfig(awsConfig), nil
+}
+
+// validateBucketExistsForDeletion checks if the bucket exists before deletion.
+func validateBucketExistsForDeletion(ctx context.Context, client S3ClientAPI, config *s3Config) error {
+	exists, err := bucketExists(ctx, client, config.bucket)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return errUtils.Build(errUtils.ErrBackendNotFound).
+			WithExplanation("Cannot delete backend - bucket does not exist").
+			WithContext("bucket", config.bucket).
+			WithContext("region", config.region).
+			WithHint("Verify the bucket name in your backend configuration").
+			Err()
+	}
+	return nil
+}
+
+// deleteS3BucketAndContents lists, warns, deletes objects, and deletes the bucket.
+func deleteS3BucketAndContents(ctx context.Context, client S3ClientAPI, bucket string) error {
+	objectCount, stateFileCount, err := listAllObjects(ctx, client, bucket)
+	if err != nil {
+		return err
+	}
+
+	if err := deleteBackendContents(ctx, client, bucket, objectCount, stateFileCount); err != nil {
+		return err
+	}
+
+	return deleteBucket(ctx, client, bucket)
 }
 
 // deleteBackendContents displays warnings and deletes all objects from a bucket.
@@ -128,7 +157,12 @@ func listAllObjects(ctx context.Context, client S3ClientAPI, bucket string) (tot
 			VersionIdMarker: continuationVersionMarker,
 		})
 		if err != nil {
-			return 0, 0, fmt.Errorf(errFormat, errUtils.ErrListObjects, err)
+			return 0, 0, errUtils.Build(errUtils.ErrListObjects).
+				WithCause(err).
+				WithExplanation("Failed to list objects in bucket").
+				WithContext("bucket", bucket).
+				WithHint("Check IAM permissions for s3:ListBucketVersions").
+				Err()
 		}
 
 		// Count versions (actual objects).
@@ -180,14 +214,25 @@ func deleteBatch(ctx context.Context, client S3ClientAPI, bucket string, objects
 		Delete: &types.Delete{Objects: objects, Quiet: aws.Bool(true)},
 	})
 	if err != nil {
-		return fmt.Errorf(errFormat, errUtils.ErrDeleteObjects, err)
+		return errUtils.Build(errUtils.ErrDeleteObjects).
+			WithCause(err).
+			WithExplanation("Failed to delete objects from bucket").
+			WithContext("bucket", bucket).
+			WithHint("Check IAM permissions for s3:DeleteObject and s3:DeleteObjectVersion").
+			Err()
 	}
 	// Handle partial failures - DeleteObjects can return HTTP 200 with per-key errors.
 	if resp != nil && len(resp.Errors) > 0 {
 		e := resp.Errors[0]
-		return fmt.Errorf("%w: key=%s version=%s code=%s message=%s",
-			errUtils.ErrDeleteObjects, aws.ToString(e.Key), aws.ToString(e.VersionId),
-			aws.ToString(e.Code), aws.ToString(e.Message))
+		return errUtils.Build(errUtils.ErrDeleteObjects).
+			WithExplanation("Partial failure when deleting objects").
+			WithContext("bucket", bucket).
+			WithContext("key", aws.ToString(e.Key)).
+			WithContext("version", aws.ToString(e.VersionId)).
+			WithContext("code", aws.ToString(e.Code)).
+			WithContext("message", aws.ToString(e.Message)).
+			WithHint("Check object-level permissions or bucket policies").
+			Err()
 	}
 	return nil
 }
@@ -201,7 +246,12 @@ func deleteAllObjects(ctx context.Context, client S3ClientAPI, bucket string) er
 			VersionIdMarker: versionMarker, MaxKeys: aws.Int32(1000),
 		})
 		if err != nil {
-			return fmt.Errorf(errFormat, errUtils.ErrListObjects, err)
+			return errUtils.Build(errUtils.ErrListObjects).
+				WithCause(err).
+				WithExplanation("Failed to list object versions for deletion").
+				WithContext("bucket", bucket).
+				WithHint("Check IAM permissions for s3:ListBucketVersions").
+				Err()
 		}
 		if err := deleteBatch(ctx, client, bucket, collectObjectIdentifiers(output)); err != nil {
 			return err
@@ -220,7 +270,12 @@ func deleteBucket(ctx context.Context, client S3ClientAPI, bucket string) error 
 		Bucket: aws.String(bucket),
 	})
 	if err != nil {
-		return fmt.Errorf(errFormat, errUtils.ErrDeleteBucket, err)
+		return errUtils.Build(errUtils.ErrDeleteBucket).
+			WithCause(err).
+			WithExplanation("Failed to delete S3 bucket").
+			WithContext("bucket", bucket).
+			WithHint("Check IAM permissions for s3:DeleteBucket and ensure bucket is empty").
+			Err()
 	}
 	return nil
 }
