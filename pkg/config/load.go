@@ -314,6 +314,14 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 			"count", len(configAndStacksInfo.ProfilesFromArg))
 	}
 
+	// Inject provisioned identities after profiles are loaded.
+	// This ensures auth.providers (which may be defined in profiles) is available,
+	// and that the provisioned identities cache file exists from prior authentication.
+	if err := injectProvisionedIdentitiesPostLoad(v); err != nil {
+		log.Debug("Failed to inject provisioned identities post-load", "error", err)
+		// Non-fatal: continue with config loading even if injection fails.
+	}
+
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err := v.Unmarshal(&atmosConfig, atmosDecodeHook())
@@ -962,6 +970,13 @@ func loadAtmosConfigsFromDirectory(searchPattern string, dst *viper.Viper, sourc
 			return fmt.Errorf("%w: failed to load configuration file from %s: %s: %w", errUtils.ErrParseFile, source, filePath, err)
 		}
 
+		// Process any imports in the file.
+		// This enables import: directives to work in profile files.
+		if err := processFileImportsIfPresent(filePath, filepath.Dir(filePath), dst); err != nil {
+			log.Debug("Failed to process imports in file", "file", filePath, "error", err)
+			// Non-fatal: continue loading even if import processing fails.
+		}
+
 		log.Trace("Loaded configuration file", "path", filePath, "source", source)
 	}
 
@@ -971,6 +986,38 @@ func loadAtmosConfigsFromDirectory(searchPattern string, dst *viper.Viper, sourc
 		"pattern", searchPattern)
 
 	return nil
+}
+
+// processFileImportsIfPresent checks if a config file has imports and processes them.
+// This enables import: directives to work in profile files and other config files
+// that are loaded via loadAtmosConfigsFromDirectory().
+func processFileImportsIfPresent(filePath string, basePath string, v *viper.Viper) error {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+
+	// Parse to check for imports.
+	tempViper := viper.New()
+	tempViper.SetConfigType(yamlType)
+	if err := tempViper.ReadConfig(bytes.NewReader(content)); err != nil {
+		return err
+	}
+
+	importPaths := tempViper.GetStringSlice("import")
+	if len(importPaths) == 0 {
+		return nil // No imports to process.
+	}
+
+	log.Debug("Processing imports from file", "file", filePath, "imports", len(importPaths))
+
+	// Create temp config and process imports.
+	src := &schema.AtmosConfiguration{
+		Import:   importPaths,
+		BasePath: basePath,
+	}
+
+	return processConfigImports(src, v)
 }
 
 // mergeDefaultImports merges default imports (`atmos.d/`,`.atmos.d/`)
@@ -1112,6 +1159,50 @@ func injectProvisionedIdentityImports(src *schema.AtmosConfiguration) error {
 	if len(provisionedImports) > 0 {
 		log.Debug("Injecting provisioned identity imports", "count", len(provisionedImports))
 		src.Import = append(provisionedImports, src.Import...)
+	}
+
+	return nil
+}
+
+// injectProvisionedIdentitiesPostLoad loads provisioned identity files after all config
+// sources (including profiles) have been loaded. This ensures auth.providers is populated
+// and that provisioned identity cache files from prior authentication are available.
+// This function runs after profiles are loaded but before the final unmarshal.
+func injectProvisionedIdentitiesPostLoad(v *viper.Viper) error {
+	// Unmarshal to get the fully loaded config with providers.
+	var tempConfig schema.AtmosConfiguration
+	if err := v.Unmarshal(&tempConfig); err != nil {
+		return err
+	}
+
+	// Check if there are any auth providers configured.
+	if len(tempConfig.Auth.Providers) == 0 {
+		log.Debug("No auth providers configured, skipping provisioned identity injection")
+		return nil
+	}
+
+	// Get XDG cache directory for provisioned identities.
+	const authSubDir = "auth"
+	const authDirPerms = 0o700
+	const providerKey = "provider"
+	baseProvisioningDir, err := xdg.GetXDGCacheDir(authSubDir, authDirPerms)
+	if err != nil {
+		return fmt.Errorf("failed to get provisioning cache directory: %w", err)
+	}
+
+	// For each provider, check for and load provisioned identities.
+	for providerName := range tempConfig.Auth.Providers {
+		provisionedFile := filepath.Join(baseProvisioningDir, providerName, provisioning.ProvisionedFileName)
+
+		if _, err := os.Stat(provisionedFile); err == nil {
+			log.Debug("Loading provisioned identities post-load", providerKey, providerName, "file", provisionedFile)
+			if err := mergeConfigFile(provisionedFile, v); err != nil {
+				log.Debug("Failed to load provisioned identities", providerKey, providerName, "error", err)
+				// Non-fatal: continue with other providers.
+			}
+		} else {
+			log.Debug("No provisioned identities cache file found", providerKey, providerName, "file", provisionedFile)
+		}
 	}
 
 	return nil
