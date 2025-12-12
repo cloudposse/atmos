@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,14 +33,12 @@ func TestHCLSyntaxErrorReturnsProperError(t *testing.T) {
 	// Instead, it should be ErrFailedToLoadTerraformComponent (HCL parsing error).
 	require.Error(t, err, "Expected an error for invalid HCL syntax")
 
-	// Assert that the error is about HCL/Terraform module loading, not about
+	// Assert that the error is about HCL/Terraform component loading, not about
 	// the component being missing.
-	assert.True(t,
-		errors.Is(err, errUtils.ErrFailedToLoadTerraformComponent),
+	assert.ErrorIs(t, err, errUtils.ErrFailedToLoadTerraformComponent,
 		"Expected ErrFailedToLoadTerraformComponent for HCL syntax error, got: %v", err)
 
 	// The error should NOT be about "component not found".
-	assert.False(t,
-		errors.Is(err, errUtils.ErrInvalidComponent),
+	assert.NotErrorIs(t, err, errUtils.ErrInvalidComponent,
 		"Should NOT get ErrInvalidComponent for HCL syntax error - the component exists in the stack manifest")
 }
