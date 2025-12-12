@@ -74,13 +74,14 @@ When `provision.backend.enabled: true` and bucket doesn't exist:
 #### Always Enabled (No Configuration)
 
 1. **Versioning**: Enabled for state file recovery
-2. **Encryption**: Server-side encryption (AES-256 or AWS-managed KMS)
+2. **Encryption**: Server-side encryption with SSE-S3 (AES-256, AWS-managed keys)
 3. **Public Access**: All 4 public access settings blocked
-4. **Bucket Key**: Enabled for encryption cost reduction
-5. **Resource Tags**:
+4. **Resource Tags**:
    - `ManagedBy: Atmos`
-   - `CreatedAt: <ISO8601 timestamp>`
-   - `Purpose: TerraformState`
+   - `Name: <bucket-name>`
+
+> **Note**: Bucket Key is not enabled because it only applies to SSE-KMS encryption.
+> The implementation uses SSE-S3 (AES-256) for simplicity and zero additional cost.
 
 #### NOT Created
 

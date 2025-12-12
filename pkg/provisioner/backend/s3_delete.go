@@ -17,20 +17,13 @@ import (
 
 // DeleteS3Backend deletes an S3 backend and all its contents.
 //
-// Safety mechanisms:
-// - Requires force=true flag (enforced at command level)
-// - Lists all objects and versions before deletion
-// - Detects and counts .tfstate files
-// - Warns user about data loss
-// - Deletes all objects/versions before bucket deletion
+// Safety mechanisms include requiring force=true flag, listing all objects and versions
+// before deletion, detecting and counting .tfstate files, warning user about data loss,
+// and deleting all objects/versions before bucket deletion.
 //
-// Process:
-// 1. Validate bucket configuration
-// 2. Check bucket exists
-// 3. List all objects and versions
-// 4. Count state files for warning
-// 5. Delete all objects in batches (AWS limit: 1000 per request)
-// 6. Delete bucket itself
+// The process validates bucket configuration, checks bucket exists, lists all objects
+// and versions, counts state files for warning, deletes all objects in batches
+// (AWS limit: 1000 per request), and finally deletes the bucket itself.
 //
 // This operation is irreversible. State files will be permanently lost.
 func DeleteS3Backend(
