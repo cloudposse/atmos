@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1060,11 +1061,20 @@ func TestExecutor_Execute_WorkingDirectory(t *testing.T) {
 // TestCalculateWorkingDirectory tests the calculateWorkingDirectory function directly.
 func TestCalculateWorkingDirectory(t *testing.T) {
 	// Use OS-portable paths for cross-platform compatibility.
-	base := filepath.FromSlash("/base")
-	absolutePath := filepath.FromSlash("/absolute/path")
-	workflowDirPath := filepath.FromSlash("/workflow/dir")
-	stepDirPath := filepath.FromSlash("/step/dir")
-	withSpaces := filepath.FromSlash("/with/spaces")
+	// On Windows, paths like "/base" become "\base" which is NOT absolute.
+	// We need to use proper absolute paths for each platform.
+	var base, absolutePath, workflowDirPath, stepDirPath string
+	if runtime.GOOS == "windows" {
+		base = `C:\base`
+		absolutePath = `C:\absolute\path`
+		workflowDirPath = `C:\workflow\dir`
+		stepDirPath = `C:\step\dir`
+	} else {
+		base = "/base"
+		absolutePath = "/absolute/path"
+		workflowDirPath = "/workflow/dir"
+		stepDirPath = "/step/dir"
+	}
 
 	tests := []struct {
 		name        string
@@ -1109,11 +1119,11 @@ func TestCalculateWorkingDirectory(t *testing.T) {
 			expected:    filepath.Join(base, filepath.FromSlash("step/relative")),
 		},
 		{
-			name:        "whitespace trimmed",
-			workflowDir: "  " + withSpaces + "  ",
+			name:        "whitespace trimmed from absolute path",
+			workflowDir: "  " + absolutePath + "  ",
 			stepDir:     "",
 			basePath:    base,
-			expected:    withSpaces,
+			expected:    absolutePath,
 		},
 	}
 
