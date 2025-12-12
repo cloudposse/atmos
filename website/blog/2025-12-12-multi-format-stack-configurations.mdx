@@ -31,20 +31,22 @@ If you're already writing Terraform, HCL feels natural:
 
 ```hcl
 # stacks/deploy/production.hcl
-components = {
-  terraform = {
-    vpc = {
-      vars = {
-        cidr_block         = "10.0.0.0/16"
-        availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
-        enable_nat_gateway = true
+stack {
+  components {
+    terraform {
+      component "vpc" {
+        vars {
+          cidr_block         = "10.0.0.0/16"
+          availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
+          enable_nat_gateway = true
+        }
       }
     }
   }
 }
 ```
 
-HCL brings explicit typing, native support for expressions, and the same syntax your Terraform modules use. No context switching required.
+HCL uses labeled block syntax—`component "vpc"` instead of a nested object—which aligns with how Terraform resources are defined. No context switching required.
 
 ### JSON: Machine-Friendly and Strict
 
@@ -120,14 +122,24 @@ Stack inheritance works across formats. A YAML catalog can be imported by an HCL
 HCL configurations support Atmos functions in the `atmos::` namespace:
 
 ```hcl
-# Use environment variables
-api_key = atmos::env("API_KEY")
+stack {
+  components {
+    terraform {
+      component "app" {
+        vars {
+          # Use environment variables
+          api_key = atmos::env("API_KEY")
 
-# Execute shell commands
-git_sha = atmos::exec("git rev-parse --short HEAD")
+          # Execute shell commands
+          git_sha = atmos::exec("git rev-parse --short HEAD")
 
-# Get repository root
-base_path = atmos::repo_root()
+          # Get repository root
+          base_path = atmos::repo_root()
+        }
+      }
+    }
+  }
+}
 ```
 
 ## When to Use Each Format
