@@ -8,9 +8,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// TagTemplate is the YAML tag for the template function.
-const TagTemplate = "!template"
-
 // TemplateFunction implements the !template YAML function.
 // It parses JSON content embedded in YAML strings.
 type TemplateFunction struct {
@@ -69,8 +66,9 @@ func ProcessTemplateTagsOnly(input map[string]any) map[string]any {
 		switch v := node.(type) {
 		case string:
 			// Only process !template tags, leave other tags as-is.
-			if strings.HasPrefix(v, TagTemplate) {
-				args := strings.TrimPrefix(v, TagTemplate)
+			yamlTag := YAMLTag(TagTemplate)
+			if strings.HasPrefix(v, yamlTag) {
+				args := strings.TrimPrefix(v, yamlTag)
 				result, _ := templateFn.Execute(context.Background(), args, nil)
 				return result
 			}

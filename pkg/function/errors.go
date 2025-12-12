@@ -21,4 +21,8 @@ var (
 
 	// ErrUnclosedQuote is returned when a string has an unclosed quote.
 	ErrUnclosedQuote = errors.New("unclosed quote")
+
+	// ErrSpecialYAMLHandling indicates that a function requires special YAML node processing.
+	// Functions like !include need to modify the YAML tree directly.
+	ErrSpecialYAMLHandling = errors.New("special YAML handling required")
 )

@@ -8,7 +8,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/store"
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/yq"
 )
 
 // StoreFunction implements the store function for retrieving values from configured stores.
@@ -68,7 +68,7 @@ func (f *StoreFunction) Execute(ctx context.Context, args string, execCtx *Execu
 
 	// Execute the YQ expression if provided.
 	if params.query != "" {
-		value, err = utils.EvaluateYqExpression(execCtx.AtmosConfig, value, params.query)
+		value, err = yq.EvaluateExpression(execCtx.AtmosConfig, value, params.query)
 		if err != nil {
 			return nil, err
 		}
@@ -148,7 +148,7 @@ func (f *StoreGetFunction) Execute(ctx context.Context, args string, execCtx *Ex
 
 	// Execute the YQ expression if provided.
 	if params.query != "" {
-		return utils.EvaluateYqExpression(execCtx.AtmosConfig, value, params.query)
+		return yq.EvaluateExpression(execCtx.AtmosConfig, value, params.query)
 	}
 
 	return value, nil

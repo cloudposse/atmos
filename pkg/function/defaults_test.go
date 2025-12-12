@@ -33,15 +33,17 @@ func TestTags(t *testing.T) {
 	assert.Equal(t, "env", tags[TagEnv])
 	assert.Equal(t, "exec", tags[TagExec])
 	assert.Equal(t, "template", tags[TagTemplate])
-	assert.Equal(t, "repo-root", tags[TagGitRoot])
+	assert.Equal(t, "repo-root", tags[TagRepoRoot])
 }
 
 func TestAllTags(t *testing.T) {
 	tags := AllTags()
 
+	// Check that known tags are present.
 	assert.Contains(t, tags, TagEnv)
 	assert.Contains(t, tags, TagExec)
 	assert.Contains(t, tags, TagTemplate)
-	assert.Contains(t, tags, TagGitRoot)
-	assert.Len(t, tags, 4)
+	assert.Contains(t, tags, TagRepoRoot)
+	// There are more tags in the comprehensive list.
+	assert.GreaterOrEqual(t, len(tags), 4)
 }

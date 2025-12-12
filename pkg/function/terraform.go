@@ -7,7 +7,6 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 // terraformArgs holds parsed terraform function arguments.
@@ -22,10 +21,8 @@ type terraformArgs struct {
 //   - 2 parts: component output_name (stack from context)
 //   - 3 parts: component stack output_name
 func parseTerraformArgs(args string, execCtx *ExecutionContext) (*terraformArgs, error) {
-	parts, err := utils.SplitStringByDelimiter(args, ' ')
-	if err != nil {
-		return nil, err
-	}
+	// Split by whitespace - Terraform component/stack/output names don't contain spaces.
+	parts := strings.Fields(args)
 
 	var component, stack, output string
 
