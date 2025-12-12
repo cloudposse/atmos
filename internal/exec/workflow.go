@@ -69,7 +69,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 			switch {
 			case len(matches) == 0:
-				return errUtils.Build(ErrWorkflowNoWorkflow).
+				return errUtils.Build(errUtils.ErrWorkflowNoWorkflow).
 					WithHintf("No workflow found with name `%s`", workflowName).
 					WithHint("Use 'atmos describe workflows' to see all available workflows").
 					WithExitCode(1).
@@ -85,7 +85,9 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 					for i, match := range matches {
 						fileList[i] = match.File
 					}
-					return errUtils.Build(ErrWorkflowNoWorkflow).
+					// Sort for deterministic output (important for tests and snapshots).
+					sort.Strings(fileList)
+					return errUtils.Build(errUtils.ErrWorkflowNoWorkflow).
 						WithHintf("Multiple workflow files contain workflow `%s`", workflowName).
 						WithHintf("Matching files: %s", strings.Join(fileList, ", ")).
 						WithHintf("Use --file flag to specify which one: atmos workflow %s --file <file>", workflowName).
@@ -141,7 +143,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if !u.FileExists(workflowPath) {
-		return errUtils.Build(ErrWorkflowFileNotFound).
+		return errUtils.Build(errUtils.ErrWorkflowFileNotFound).
 			WithHintf("The workflow manifest file `%s` does not exist", filepath.ToSlash(workflowPath)).
 			WithExitCode(1).
 			Err()
@@ -162,7 +164,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	}
 
 	if workflowManifest.Workflows == nil {
-		return errUtils.Build(ErrInvalidWorkflowManifest).
+		return errUtils.Build(errUtils.ErrInvalidWorkflowManifest).
 			WithExplanationf("The workflow manifest `%s` must be a map with the top-level `workflows:` key", filepath.ToSlash(workflowPath)).
 			WithHint("Add a top-level 'workflows:' key to the manifest file").
 			WithExitCode(1).
@@ -179,7 +181,7 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 		// sorting so that the output is deterministic.
 		sort.Strings(validWorkflows)
 
-		return errUtils.Build(ErrWorkflowNoWorkflow).
+		return errUtils.Build(errUtils.ErrWorkflowNoWorkflow).
 			WithHintf("No workflow exists with name `%s`", workflowName).
 			WithHintf("Available workflows in %s: %s", filepath.Base(workflowPath), u.FormatList(validWorkflows)).
 			WithExitCode(1).

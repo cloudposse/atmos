@@ -36,7 +36,8 @@ func TestExecuteWorkflow(t *testing.T) {
 		commandLineStack string
 		fromStep         string
 		wantErr          bool
-		errMsg           string
+		wantSentinel     error
+		errContains      string
 	}{
 		{
 			name:         "valid workflow execution",
@@ -72,7 +73,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "workflow has no steps defined",
+			wantSentinel:     errUtils.ErrWorkflowNoSteps,
 		},
 		{
 			name:         "invalid step type",
@@ -91,7 +92,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "invalid workflow step type",
+			wantSentinel:     errUtils.ErrInvalidWorkflowStepType,
 		},
 		{
 			name:         "invalid from-step",
@@ -110,7 +111,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "nonexistent-step",
 			wantErr:          true,
-			errMsg:           "invalid from-step flag",
+			wantSentinel:     errUtils.ErrInvalidFromStep,
 		},
 		{
 			name:         "failing shell command",
@@ -129,7 +130,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "subcommand exited with code 1",
+			wantSentinel:     errUtils.ErrWorkflowStepFailed,
 		},
 		{
 			name:         "failing atmos command",
@@ -148,7 +149,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "subcommand exited with code",
+			wantSentinel:     errUtils.ErrWorkflowStepFailed,
 		},
 		{
 			name:         "workflow with stack override",
@@ -187,7 +188,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "subcommand exited with code",
+			wantSentinel:     errUtils.ErrWorkflowStepFailed,
 		},
 		{
 			name:         "failing atmos command with command line stack override",
@@ -207,7 +208,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "dev",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "subcommand exited with code",
+			wantSentinel:     errUtils.ErrWorkflowStepFailed,
 		},
 	}
 
@@ -226,8 +227,11 @@ func TestExecuteWorkflow(t *testing.T) {
 
 			if tt.wantErr {
 				assert.Error(t, err)
-				if tt.errMsg != "" {
-					assert.Contains(t, err.Error(), tt.errMsg)
+				if tt.wantSentinel != nil {
+					assert.ErrorIs(t, err, tt.wantSentinel)
+				}
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
 				}
 			} else {
 				assert.NoError(t, err)
@@ -399,7 +403,7 @@ func TestExecuteWorkflowCmd(t *testing.T) {
 
 		// Should error with "no workflow found" message.
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, ErrWorkflowNoWorkflow)
+		assert.ErrorIs(t, err, errUtils.ErrWorkflowNoWorkflow)
 	})
 
 	t.Run("file not found", func(t *testing.T) {
@@ -416,7 +420,7 @@ func TestExecuteWorkflowCmd(t *testing.T) {
 		err = ExecuteWorkflowCmd(cmd, args)
 
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, ErrWorkflowFileNotFound)
+		assert.ErrorIs(t, err, errUtils.ErrWorkflowFileNotFound)
 	})
 
 	t.Run("absolute file path", func(t *testing.T) {
@@ -541,7 +545,7 @@ func TestExecuteWorkflowCmd(t *testing.T) {
 		err = ExecuteWorkflowCmd(cmd, args)
 
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, ErrInvalidWorkflowManifest)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidWorkflowManifest)
 	})
 
 	t.Run("workflow name not found in manifest", func(t *testing.T) {
@@ -559,7 +563,7 @@ func TestExecuteWorkflowCmd(t *testing.T) {
 		err = ExecuteWorkflowCmd(cmd, args)
 
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, ErrWorkflowNoWorkflow)
+		assert.ErrorIs(t, err, errUtils.ErrWorkflowNoWorkflow)
 	})
 
 	t.Run("auto-discovery single match", func(t *testing.T) {
@@ -644,7 +648,7 @@ workflows:
 
 		// Should error with multiple matches message since we're in CI.
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, ErrWorkflowNoWorkflow)
+		assert.ErrorIs(t, err, errUtils.ErrWorkflowNoWorkflow)
 		// Use Format to get the full formatted error including hints.
 		formattedErr := errUtils.Format(err, errUtils.DefaultFormatterConfig())
 		assert.Contains(t, formattedErr, "Multiple workflow files")

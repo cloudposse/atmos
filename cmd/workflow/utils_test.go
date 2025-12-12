@@ -47,10 +47,14 @@ func TestListAllStacks_Success(t *testing.T) {
 
 	results, err := listAllStacks()
 
-	// May error if the fixtures don't have valid stacks configured.
-	// The important thing is that the function runs without panicking.
-	_ = err
-	_ = results
+	// With valid fixtures, we expect no error and at least the stacks defined in fixtures.
+	// The workflows fixture has minimal stack config, so we just verify no panic and valid return types.
+	if err == nil {
+		// If successful, results should be a valid slice (possibly empty).
+		assert.NotNil(t, results)
+	}
+	// If err is non-nil, that's acceptable - fixtures may not have valid stacks.
+	// The key assertion is that this code path executes without panicking.
 }
 
 func TestListAllStacks_ConfigError(t *testing.T) {
@@ -347,11 +351,15 @@ func TestWorkflowCmdRunE_WorkflowExecution(t *testing.T) {
 
 	cmd := workflowCmd
 
-	// Test running an existing workflow.
+	// This test verifies the RunE function doesn't panic when executed.
+	// Full workflow execution testing is done in internal/exec/workflow_test.go
+	// where a properly configured cmd with all flags is used.
+	// Here we verify the code path handles missing flags gracefully.
 	err := cmd.RunE(cmd, []string{"shell-pass"})
-	// May succeed or fail based on workflow content.
-	// The important test is that it doesn't panic.
-	_ = err
+
+	// Error is expected due to missing global flags (base-path, etc.) that are
+	// normally added by the root command. The important thing is no panic.
+	assert.Error(t, err)
 }
 
 func TestWorkflowCommandProvider(t *testing.T) {

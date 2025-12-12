@@ -127,8 +127,12 @@ Multiple workflows found with name 'deploy'. Please choose:
 You can still use `--file` to skip the prompt and specify exactly which file to use:
 
 ```shell
-atmos workflow deploy --file production
+atmos workflow deploy --file production.yaml
 ```
+
+:::note
+The `--file` value is relative to your configured `workflows.base_path`. You can omit the `.yaml` extension - Atmos adds it automatically if not provided.
+:::
 
 ### When to Use `--file`
 
@@ -144,7 +148,7 @@ All existing workflows with explicit `--file` flags continue to work exactly as 
 
 ```shell
 # Explicit --file flag still works
-atmos workflow deploy --file workflows/deploy
+atmos workflow deploy --file deploy.yaml
 
 # Auto-discovery is purely additive
 atmos workflow deploy

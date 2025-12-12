@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -53,6 +54,7 @@ func initTestConfig(t *testing.T) schema.AtmosConfiguration {
 func TestExecuteDescribeWorkflows(t *testing.T) {
 	// Setup test environment
 	tmpDir := setupTestWorkflowEnvironment(t)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
 
 	workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
 
@@ -90,7 +92,8 @@ workflows:
 		name          string
 		config        schema.AtmosConfiguration
 		wantErr       bool
-		errMsg        string
+		wantSentinel  error
+		errContains   string
 		wantWorkflows int
 	}{
 		{
@@ -106,8 +109,8 @@ workflows:
 					BasePath: "",
 				},
 			},
-			wantErr: true,
-			errMsg:  "'workflows.base_path' must be configured in 'atmos.yaml'",
+			wantErr:      true,
+			wantSentinel: errUtils.ErrWorkflowBasePathNotConfigured,
 		},
 		{
 			name: "nonexistent workflows directory",
@@ -116,8 +119,8 @@ workflows:
 					BasePath: "nonexistent",
 				},
 			},
-			wantErr: true,
-			errMsg:  "the workflow directory 'nonexistent' does not exist",
+			wantErr:     true,
+			errContains: "the workflow directory 'nonexistent' does not exist",
 		},
 	}
 
@@ -127,8 +130,11 @@ workflows:
 
 			if tt.wantErr {
 				assert.Error(t, err)
-				if tt.errMsg != "" {
-					assert.Contains(t, err.Error(), tt.errMsg)
+				if tt.wantSentinel != nil {
+					assert.ErrorIs(t, err, tt.wantSentinel)
+				}
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
 				}
 			} else {
 				assert.NoError(t, err)
@@ -142,6 +148,7 @@ workflows:
 
 func TestFindWorkflowAcrossFiles(t *testing.T) {
 	tmpDir := setupTestWorkflowEnvironment(t)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
 
 	workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
 
@@ -252,11 +259,12 @@ func TestFindWorkflowAcrossFiles_ExecuteDescribeWorkflowsError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, matches)
-	assert.Contains(t, err.Error(), "'workflows.base_path' must be configured")
+	assert.ErrorIs(t, err, errUtils.ErrWorkflowBasePathNotConfigured)
 }
 
 func TestExecuteDescribeWorkflows_InvalidYAMLFile(t *testing.T) {
 	tmpDir := setupTestWorkflowEnvironment(t)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
 
 	workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
 
@@ -292,6 +300,7 @@ workflows:
 
 func TestExecuteDescribeWorkflows_FileWithoutWorkflowsKey(t *testing.T) {
 	tmpDir := setupTestWorkflowEnvironment(t)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
 
 	workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
 
@@ -330,6 +339,7 @@ some_other_key:
 
 func TestExecuteDescribeWorkflows_EmptyWorkflowsDirectory(t *testing.T) {
 	tmpDir := setupTestWorkflowEnvironment(t)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
 
 	config := initTestConfig(t)
 	config.BasePath = tmpDir

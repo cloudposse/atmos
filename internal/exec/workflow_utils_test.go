@@ -30,42 +30,42 @@ func TestIsKnownWorkflowError(t *testing.T) {
 		},
 		{
 			name:     "ErrWorkflowNoSteps",
-			err:      ErrWorkflowNoSteps,
+			err:      errUtils.ErrWorkflowNoSteps,
 			expected: true,
 		},
 		{
 			name:     "ErrInvalidWorkflowStepType",
-			err:      ErrInvalidWorkflowStepType,
+			err:      errUtils.ErrInvalidWorkflowStepType,
 			expected: true,
 		},
 		{
 			name:     "ErrInvalidFromStep",
-			err:      ErrInvalidFromStep,
+			err:      errUtils.ErrInvalidFromStep,
 			expected: true,
 		},
 		{
 			name:     "ErrWorkflowStepFailed",
-			err:      ErrWorkflowStepFailed,
+			err:      errUtils.ErrWorkflowStepFailed,
 			expected: true,
 		},
 		{
 			name:     "ErrWorkflowNoWorkflow",
-			err:      ErrWorkflowNoWorkflow,
+			err:      errUtils.ErrWorkflowNoWorkflow,
 			expected: true,
 		},
 		{
 			name:     "ErrWorkflowFileNotFound",
-			err:      ErrWorkflowFileNotFound,
+			err:      errUtils.ErrWorkflowFileNotFound,
 			expected: true,
 		},
 		{
 			name:     "ErrInvalidWorkflowManifest",
-			err:      ErrInvalidWorkflowManifest,
+			err:      errUtils.ErrInvalidWorkflowManifest,
 			expected: true,
 		},
 		{
 			name:     "wrapped known error",
-			err:      errors.Join(ErrWorkflowNoSteps, errors.New("additional context")),
+			err:      errors.Join(errUtils.ErrWorkflowNoSteps, errors.New("additional context")),
 			expected: true,
 		},
 		{
@@ -90,7 +90,7 @@ func TestIsKnownWorkflowError(t *testing.T) {
 		},
 		{
 			name: "ErrorBuilder wrapped error is known",
-			err: errUtils.Build(ErrWorkflowNoSteps).
+			err: errUtils.Build(errUtils.ErrWorkflowNoSteps).
 				WithExplanationf("Workflow %s is empty", "test").
 				Err(),
 			expected: true,
@@ -221,6 +221,10 @@ func TestCheckAndMergeDefaultIdentity_WithStackLoading(t *testing.T) {
 
 // TestCheckAndMergeDefaultIdentity_LoadError tests behavior when stack loading fails.
 func TestCheckAndMergeDefaultIdentity_LoadError(t *testing.T) {
+	// Use a platform-neutral malformed glob pattern that will cause glob to return error.
+	tmpDir := t.TempDir()
+	invalidGlobPath := filepath.Join(tmpDir, "does-not-exist", "[invalid")
+
 	// Create config with invalid include paths (will cause load to return error).
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth: schema.AuthConfig{
@@ -231,8 +235,8 @@ func TestCheckAndMergeDefaultIdentity_LoadError(t *testing.T) {
 				},
 			},
 		},
-		// Invalid path that will cause glob to return error.
-		IncludeStackAbsolutePaths: []string{"/nonexistent/path/[invalid/glob"},
+		// Invalid glob pattern that will cause glob to return error.
+		IncludeStackAbsolutePaths: []string{invalidGlobPath},
 	}
 
 	// Should still return true because atmos.yaml has a default.
@@ -242,6 +246,10 @@ func TestCheckAndMergeDefaultIdentity_LoadError(t *testing.T) {
 
 // TestCheckAndMergeDefaultIdentity_LoadErrorNoDefault tests behavior when stack loading fails and no default in atmos.yaml.
 func TestCheckAndMergeDefaultIdentity_LoadErrorNoDefault(t *testing.T) {
+	// Use a platform-neutral malformed glob pattern that will cause glob to return error.
+	tmpDir := t.TempDir()
+	invalidGlobPath := filepath.Join(tmpDir, "does-not-exist", "[invalid")
+
 	// Create config with invalid include paths and no default in atmos.yaml.
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth: schema.AuthConfig{
@@ -252,8 +260,8 @@ func TestCheckAndMergeDefaultIdentity_LoadErrorNoDefault(t *testing.T) {
 				},
 			},
 		},
-		// Invalid path that will cause glob to return error.
-		IncludeStackAbsolutePaths: []string{"/nonexistent/path/[invalid/glob"},
+		// Invalid glob pattern that will cause glob to return error.
+		IncludeStackAbsolutePaths: []string{invalidGlobPath},
 	}
 
 	// Should return false because no default anywhere.
@@ -336,13 +344,13 @@ func TestCheckAndMergeDefaultIdentity_EmptyStackDefaults(t *testing.T) {
 func TestKnownWorkflowErrorsSlice(t *testing.T) {
 	// Verify all expected errors are in the slice.
 	expectedErrors := []error{
-		ErrWorkflowNoSteps,
-		ErrInvalidWorkflowStepType,
-		ErrInvalidFromStep,
-		ErrWorkflowStepFailed,
-		ErrWorkflowNoWorkflow,
-		ErrWorkflowFileNotFound,
-		ErrInvalidWorkflowManifest,
+		errUtils.ErrWorkflowNoSteps,
+		errUtils.ErrInvalidWorkflowStepType,
+		errUtils.ErrInvalidFromStep,
+		errUtils.ErrWorkflowStepFailed,
+		errUtils.ErrWorkflowNoWorkflow,
+		errUtils.ErrWorkflowFileNotFound,
+		errUtils.ErrInvalidWorkflowManifest,
 	}
 
 	assert.Equal(t, len(expectedErrors), len(KnownWorkflowErrors))
@@ -479,13 +487,12 @@ func TestShellFieldsCorrectParsing(t *testing.T) {
 // TestBuildWorkflowStepError tests the buildWorkflowStepError function.
 func TestBuildWorkflowStepError(t *testing.T) {
 	tests := []struct {
-		name            string
-		err             error
-		ctx             *workflowStepErrorContext
-		expectContains  []string
-		expectResumeCmd bool
-		expectSentinel  error
-		expectExitCode  int
+		name           string
+		err            error
+		ctx            *workflowStepErrorContext
+		expectContains []string
+		expectSentinel error
+		expectExitCode int
 	}{
 		{
 			name: "shell command failure with stack",
@@ -499,9 +506,8 @@ func TestBuildWorkflowStepError(t *testing.T) {
 				CommandType:      "shell",
 				FinalStack:       "dev-us-east-1",
 			},
-			expectContains:  []string{"deploy-all", "step1", "echo hello", "dev-us-east-1"},
-			expectResumeCmd: true,
-			expectSentinel:  ErrWorkflowStepFailed,
+			expectContains: []string{"deploy-all", "step1", "echo hello", "dev-us-east-1"},
+			expectSentinel: errUtils.ErrWorkflowStepFailed,
 		},
 		{
 			name: "atmos command failure without stack",
@@ -515,9 +521,8 @@ func TestBuildWorkflowStepError(t *testing.T) {
 				CommandType:      "atmos",
 				FinalStack:       "",
 			},
-			expectContains:  []string{"provision", "terraform-step", "atmos terraform plan vpc"},
-			expectResumeCmd: true,
-			expectSentinel:  ErrWorkflowStepFailed,
+			expectContains: []string{"provision", "terraform-step", "atmos terraform plan vpc"},
+			expectSentinel: errUtils.ErrWorkflowStepFailed,
 		},
 		{
 			name: "atmos command failure with stack",
@@ -531,9 +536,8 @@ func TestBuildWorkflowStepError(t *testing.T) {
 				CommandType:      "atmos",
 				FinalStack:       "prod",
 			},
-			expectContains:  []string{"deploy", "plan-step", "atmos", "prod"},
-			expectResumeCmd: true,
-			expectSentinel:  ErrWorkflowStepFailed,
+			expectContains: []string{"deploy", "plan-step", "atmos", "prod"},
+			expectSentinel: errUtils.ErrWorkflowStepFailed,
 		},
 		{
 			name: "error with exit code",
@@ -547,10 +551,9 @@ func TestBuildWorkflowStepError(t *testing.T) {
 				CommandType:      "shell",
 				FinalStack:       "",
 			},
-			expectContains:  []string{"test-wf", "failing-step"},
-			expectResumeCmd: true,
-			expectSentinel:  ErrWorkflowStepFailed,
-			expectExitCode:  2,
+			expectContains: []string{"test-wf", "failing-step"},
+			expectSentinel: errUtils.ErrWorkflowStepFailed,
+			expectExitCode: 2,
 		},
 		{
 			name: "workflow file in nested directory",
@@ -564,9 +567,8 @@ func TestBuildWorkflowStepError(t *testing.T) {
 				CommandType:      "shell",
 				FinalStack:       "",
 			},
-			expectContains:  []string{"deploy", "step1", "team/project/deploy"},
-			expectResumeCmd: true,
-			expectSentinel:  ErrWorkflowStepFailed,
+			expectContains: []string{"deploy", "step1", "team/project/deploy"},
+			expectSentinel: errUtils.ErrWorkflowStepFailed,
 		},
 	}
 
@@ -601,7 +603,10 @@ func TestPromptForWorkflowFile_EmptyMatches(t *testing.T) {
 
 // TestPromptForWorkflowFile_NonTTY tests promptForWorkflowFile in non-TTY environment.
 func TestPromptForWorkflowFile_NonTTY(t *testing.T) {
-	// In CI/test environment, IsTTYSupportForStdin returns false.
+	// Force CI mode to ensure non-TTY behavior even when running from interactive terminal.
+	// This prevents the test from hanging if stdin is a TTY.
+	t.Setenv("CI", "true")
+
 	matches := []WorkflowMatch{
 		{File: "deploy.yaml", Name: "deploy", Description: "Deploy workflow"},
 		{File: "test.yaml", Name: "deploy", Description: "Test workflow"},
@@ -609,7 +614,7 @@ func TestPromptForWorkflowFile_NonTTY(t *testing.T) {
 
 	result, err := promptForWorkflowFile(matches)
 
-	// Should get non-TTY error since tests run without TTY.
+	// Should get non-TTY error since CI mode forces non-interactive behavior.
 	assert.ErrorIs(t, err, ErrNonTTYWorkflowSelection)
 	assert.Empty(t, result)
 }
@@ -691,8 +696,12 @@ func TestExecuteDescribeWorkflows_Coverage(t *testing.T) {
 	})
 
 	t.Run("with nonexistent workflow directory", func(t *testing.T) {
+		// Use a platform-neutral path to a guaranteed-missing directory.
+		tmpDir := t.TempDir()
+		nonexistentPath := filepath.Join(tmpDir, "does-not-exist")
+
 		atmosConfig := schema.AtmosConfiguration{
-			BasePath: "/nonexistent/path",
+			BasePath: nonexistentPath,
 			Workflows: schema.Workflows{
 				BasePath: "workflows",
 			},

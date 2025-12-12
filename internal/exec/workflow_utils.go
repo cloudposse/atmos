@@ -31,29 +31,25 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// Static error definitions.
+// Workflow error title for formatted output.
+const WorkflowErrTitle = "Workflow Error"
+
+// Local errors not in shared package (workflow-specific internal errors).
 var (
-	WorkflowErrTitle           = "Workflow Error"
-	ErrWorkflowNoSteps         = errors.New("workflow has no steps defined")
-	ErrInvalidWorkflowStepType = errors.New("invalid workflow step type")
-	ErrInvalidFromStep         = errors.New("invalid from-step flag")
-	ErrWorkflowStepFailed      = errors.New("workflow step execution failed")
-	ErrWorkflowNoWorkflow      = errors.New("no workflow found")
-	ErrWorkflowFileNotFound    = errors.New("workflow file not found")
-	ErrInvalidWorkflowManifest = errors.New("invalid workflow manifest")
 	ErrNoWorkflowFilesToSelect = errors.New("no workflow files to select from")
 	ErrNonTTYWorkflowSelection = errors.New("interactive workflow selection not available in non-TTY or CI environments")
-
-	KnownWorkflowErrors = []error{
-		ErrWorkflowNoSteps,
-		ErrInvalidWorkflowStepType,
-		ErrInvalidFromStep,
-		ErrWorkflowStepFailed,
-		ErrWorkflowNoWorkflow,
-		ErrWorkflowFileNotFound,
-		ErrInvalidWorkflowManifest,
-	}
 )
+
+// KnownWorkflowErrors contains all known workflow sentinel errors for error handling.
+var KnownWorkflowErrors = []error{
+	errUtils.ErrWorkflowNoSteps,
+	errUtils.ErrInvalidWorkflowStepType,
+	errUtils.ErrInvalidFromStep,
+	errUtils.ErrWorkflowStepFailed,
+	errUtils.ErrWorkflowNoWorkflow,
+	errUtils.ErrWorkflowFileNotFound,
+	errUtils.ErrInvalidWorkflowManifest,
+}
 
 // workflowStepErrorContext contains context needed to build workflow step errors.
 type workflowStepErrorContext struct {
@@ -102,7 +98,7 @@ func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
 	// Build error with context about the failed command.
 	// Use fmt.Errorf with %w to wrap the underlying error while adding ErrWorkflowStepFailed to the chain.
 	// This preserves both the error sentinel for errors.Is() checks and the underlying error's exit code.
-	wrappedErr := fmt.Errorf("%w: %w", ErrWorkflowStepFailed, err)
+	wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrWorkflowStepFailed, err)
 
 	// Now build the error with hints using the wrapped error.
 	// This preserves the error chain while adding formatted hints.
@@ -239,7 +235,7 @@ func ExecuteWorkflow(
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
-		return errUtils.Build(ErrWorkflowNoSteps).
+		return errUtils.Build(errUtils.ErrWorkflowNoSteps).
 			WithTitle(WorkflowErrTitle).
 			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", workflow).
 			WithContext("workflow", workflow).
@@ -267,7 +263,7 @@ func ExecuteWorkflow(
 
 		if len(steps) == 0 {
 			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
-			return errUtils.Build(ErrInvalidFromStep).
+			return errUtils.Build(errUtils.ErrInvalidFromStep).
 				WithTitle(WorkflowErrTitle).
 				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.\n\n### Available steps:\n\n%s", fromStep, workflow, u.FormatList(stepNames)).
 				WithContext("from_step", fromStep).
@@ -365,7 +361,8 @@ func ExecuteWorkflow(
 				ExecuteShellCommand,
 				atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
 		default:
-			return errUtils.Build(ErrInvalidWorkflowStepType).
+			return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
+				WithTitle(WorkflowErrTitle).
 				WithHintf("Step type '%s' is not supported", commandType).
 				WithHint("Each step must specify a valid type: 'atmos' or 'shell'").
 				WithExitCode(1).

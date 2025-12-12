@@ -80,20 +80,18 @@ When you run `atmos workflow <name>` without `--file`:
 
 If multiple workflow files contain the same workflow name, Atmos presents an interactive selector:
 
-```bash
-$ atmos workflow deploy
+```text
+Multiple workflows found with name 'deploy'. Please choose:
+> production.yaml - Deploy to production environment
+  staging.yaml - Deploy to staging environment
+  development.yaml - Deploy to development environment
 
-Found workflow 'deploy' in multiple files:
-  1. workflows/production.yaml
-  2. workflows/staging.yaml
-  3. workflows/development.yaml
-
-Select which workflow to run:
+Press ctrl+c or esc to exit
 ```
 
 You can still use `--file` to skip the prompt:
 
-```bash
+```shell
 atmos workflow deploy --file workflows/production.yaml
 ```
 
