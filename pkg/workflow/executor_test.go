@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -935,6 +936,12 @@ func TestExecutor_Execute_NilAtmosConfig(t *testing.T) {
 
 // TestExecutor_Execute_WorkingDirectory tests working_directory support.
 func TestExecutor_Execute_WorkingDirectory(t *testing.T) {
+	// Use OS-portable paths for cross-platform compatibility.
+	base := filepath.FromSlash("/base")
+	tmp := filepath.FromSlash("/tmp")
+	workflowDir := filepath.FromSlash("/workflow-dir")
+	stepDir := filepath.FromSlash("/step-dir")
+
 	tests := []struct {
 		name                 string
 		workflowWorkDir      string
@@ -947,41 +954,41 @@ func TestExecutor_Execute_WorkingDirectory(t *testing.T) {
 			name:                 "no working directory",
 			workflowWorkDir:      "",
 			stepWorkDir:          "",
-			basePath:             "/base",
+			basePath:             base,
 			expectedShellWorkDir: ".",
 			expectedAtmosWorkDir: ".",
 		},
 		{
 			name:                 "workflow level absolute path",
-			workflowWorkDir:      "/tmp",
+			workflowWorkDir:      tmp,
 			stepWorkDir:          "",
-			basePath:             "/base",
-			expectedShellWorkDir: "/tmp",
-			expectedAtmosWorkDir: "/tmp",
+			basePath:             base,
+			expectedShellWorkDir: tmp,
+			expectedAtmosWorkDir: tmp,
 		},
 		{
 			name:                 "workflow level relative path",
 			workflowWorkDir:      "subdir",
 			stepWorkDir:          "",
-			basePath:             "/base",
-			expectedShellWorkDir: "/base/subdir",
-			expectedAtmosWorkDir: "/base/subdir",
+			basePath:             base,
+			expectedShellWorkDir: filepath.Join(base, "subdir"),
+			expectedAtmosWorkDir: filepath.Join(base, "subdir"),
 		},
 		{
 			name:                 "step overrides workflow",
-			workflowWorkDir:      "/workflow-dir",
-			stepWorkDir:          "/step-dir",
-			basePath:             "/base",
-			expectedShellWorkDir: "/step-dir",
-			expectedAtmosWorkDir: "/step-dir",
+			workflowWorkDir:      workflowDir,
+			stepWorkDir:          stepDir,
+			basePath:             base,
+			expectedShellWorkDir: stepDir,
+			expectedAtmosWorkDir: stepDir,
 		},
 		{
 			name:                 "step relative overrides workflow",
-			workflowWorkDir:      "/workflow-dir",
+			workflowWorkDir:      workflowDir,
 			stepWorkDir:          "step-subdir",
-			basePath:             "/base",
-			expectedShellWorkDir: "/base/step-subdir",
-			expectedAtmosWorkDir: "/base/step-subdir",
+			basePath:             base,
+			expectedShellWorkDir: filepath.Join(base, "step-subdir"),
+			expectedAtmosWorkDir: filepath.Join(base, "step-subdir"),
 		},
 	}
 
@@ -1052,6 +1059,13 @@ func TestExecutor_Execute_WorkingDirectory(t *testing.T) {
 
 // TestCalculateWorkingDirectory tests the calculateWorkingDirectory function directly.
 func TestCalculateWorkingDirectory(t *testing.T) {
+	// Use OS-portable paths for cross-platform compatibility.
+	base := filepath.FromSlash("/base")
+	absolutePath := filepath.FromSlash("/absolute/path")
+	workflowDirPath := filepath.FromSlash("/workflow/dir")
+	stepDirPath := filepath.FromSlash("/step/dir")
+	withSpaces := filepath.FromSlash("/with/spaces")
+
 	tests := []struct {
 		name        string
 		workflowDir string
@@ -1063,43 +1077,43 @@ func TestCalculateWorkingDirectory(t *testing.T) {
 			name:        "empty returns empty",
 			workflowDir: "",
 			stepDir:     "",
-			basePath:    "/base",
+			basePath:    base,
 			expected:    "",
 		},
 		{
 			name:        "workflow absolute path",
-			workflowDir: "/absolute/path",
+			workflowDir: absolutePath,
 			stepDir:     "",
-			basePath:    "/base",
-			expected:    "/absolute/path",
+			basePath:    base,
+			expected:    absolutePath,
 		},
 		{
 			name:        "workflow relative path resolved against base",
-			workflowDir: "relative/path",
+			workflowDir: filepath.FromSlash("relative/path"),
 			stepDir:     "",
-			basePath:    "/base",
-			expected:    "/base/relative/path",
+			basePath:    base,
+			expected:    filepath.Join(base, filepath.FromSlash("relative/path")),
 		},
 		{
 			name:        "step overrides workflow",
-			workflowDir: "/workflow/dir",
-			stepDir:     "/step/dir",
-			basePath:    "/base",
-			expected:    "/step/dir",
+			workflowDir: workflowDirPath,
+			stepDir:     stepDirPath,
+			basePath:    base,
+			expected:    stepDirPath,
 		},
 		{
 			name:        "step relative resolved against base",
 			workflowDir: "",
-			stepDir:     "step/relative",
-			basePath:    "/base",
-			expected:    "/base/step/relative",
+			stepDir:     filepath.FromSlash("step/relative"),
+			basePath:    base,
+			expected:    filepath.Join(base, filepath.FromSlash("step/relative")),
 		},
 		{
 			name:        "whitespace trimmed",
-			workflowDir: "  /with/spaces  ",
+			workflowDir: "  " + withSpaces + "  ",
 			stepDir:     "",
-			basePath:    "/base",
-			expected:    "/with/spaces",
+			basePath:    base,
+			expected:    withSpaces,
 		},
 	}
 

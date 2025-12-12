@@ -40,7 +40,7 @@ Custom commands and workflow steps can now specify a `working_directory` to cont
 # .atmos.d/commands.yaml
 commands:
   - name: build
-    working_directory: !repo-root
+    working_directory: !repo-root .
     steps:
       - make build
 ```
@@ -60,19 +60,6 @@ workflows:
 - **Absolute paths** are used as-is
 - **Relative paths** resolve against `base_path`
 - **Step-level** overrides workflow-level settings
-
-## Git Root Discovery for `.atmos.d/`
-
-Atmos now automatically discovers `.atmos.d/` at your git repository root, even when running from subdirectories. Define shared custom commands once at the repo root and use them from anywhere.
-
-```
-repo/
-├── .atmos.d/
-│   └── commands.yaml    # Available repo-wide
-├── atmos.yaml
-└── components/terraform/vpc/
-    └── main.tf          # Run atmos from here
-```
 
 ## Documentation
 

@@ -221,7 +221,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		}
 
 		// Also search git root for .atmos.d even with default config.
-		// This enables custom commands defined in .atmos.d at the repo root
+		// This enables custom commands defined in .atmos.d at the repo root.
 		// to work when running from any subdirectory.
 		gitRoot, err := u.ProcessTagGitRoot("!repo-root .")
 		if err == nil && gitRoot != "" && gitRoot != "." {

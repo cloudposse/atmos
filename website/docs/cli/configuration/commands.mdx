@@ -470,7 +470,7 @@ Custom commands can specify a `working_directory` field to control where the com
 commands:
   - name: build
     description: Build the project from repository root
-    working_directory: !repo-root
+    working_directory: !repo-root .
     steps:
       - make build
       - make test
@@ -505,7 +505,7 @@ commands:
 Since `components/terraform/vpc` is a relative path, it will be resolved against `base_path`.
 
 :::tip
-Use `working_directory: !repo-root` when defining commands in `.atmos.d/` at the repository root. This ensures commands work correctly when invoked from any subdirectory in your project.
+Use `working_directory: !repo-root .` when defining commands in `.atmos.d/` at the repository root. This ensures commands work correctly when invoked from any subdirectory in your project.
 :::
 
 ## Using Authentication with Custom Commands

@@ -393,8 +393,13 @@ func (e *Executor) calculateWorkingDirectory(workflowDef *schema.WorkflowDefinit
 	}
 
 	// Resolve relative paths against base_path.
+	// Guard against empty basePath to avoid accidentally relative paths.
 	if !filepath.IsAbs(workDir) {
-		workDir = filepath.Join(basePath, workDir)
+		resolvedBasePath := basePath
+		if strings.TrimSpace(resolvedBasePath) == "" {
+			resolvedBasePath = "."
+		}
+		workDir = filepath.Join(resolvedBasePath, workDir)
 	}
 
 	// Note: Directory validation happens at execution time in the adapters.
