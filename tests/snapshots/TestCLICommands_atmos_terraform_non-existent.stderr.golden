@@ -6,6 +6,7 @@
 Valid subcommands are:
 
 • apply
+• backend
 • clean
 • console
 • deploy
