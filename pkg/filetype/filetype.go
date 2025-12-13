@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	hclv1 "github.com/hashicorp/hcl"
@@ -419,7 +420,11 @@ func parseHCLBodyForStacks(body hcl.Body, filename string) ([]StackDocument, err
 				if _, ok := merged[otherBlock.Type]; !ok {
 					merged[otherBlock.Type] = make(map[string]any)
 				}
-				typeMap := merged[otherBlock.Type].(map[string]any)
+				typeMap, ok := merged[otherBlock.Type].(map[string]any)
+				if !ok {
+					return nil, fmt.Errorf("%w, file: %s, block type '%s' conflicts with existing attribute of different type",
+						ErrFailedToProcessHclFile, filename, otherBlock.Type)
+				}
 				for i, label := range otherBlock.Labels {
 					if i == len(otherBlock.Labels)-1 {
 						typeMap[label] = blockContent
@@ -427,7 +432,12 @@ func parseHCLBodyForStacks(body hcl.Body, filename string) ([]StackDocument, err
 						if _, ok := typeMap[label]; !ok {
 							typeMap[label] = make(map[string]any)
 						}
-						typeMap = typeMap[label].(map[string]any)
+						nestedMap, ok := typeMap[label].(map[string]any)
+						if !ok {
+							return nil, fmt.Errorf("%w, file: %s, nested label '%s' conflicts with existing value of different type",
+								ErrFailedToProcessHclFile, filename, label)
+						}
+						typeMap = nestedMap
 					}
 				}
 			}
@@ -463,7 +473,7 @@ func ParseYAMLStacks(data []byte) ([]StackDocument, error) {
 		err := decoder.Decode(&doc)
 		if err != nil {
 			// Check if we reached the end of the stream.
-			if err.Error() == "EOF" {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 			return nil, fmt.Errorf("failed to parse YAML document: %w", err)
