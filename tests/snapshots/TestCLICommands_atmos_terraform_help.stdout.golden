@@ -38,6 +38,7 @@ AVAILABLE COMMANDS
       generate [command]  Generate Terraform configuration files for Atmos components and stacks
       get                 Install or upgrade remote Terraform modules
       graph               Generate a Graphviz graph of the steps in an operation
+      help                Show help for terraform command
       import              Import existing infrastructure into Terraform state
       init                Prepare your working directory for other commands
       login               Obtain and save credentials for a remote host
@@ -70,8 +71,6 @@ FLAGS
       --components strings        Filter by specific components
 
       --dry-run                   Perform dry run without making actual changes
-
-  -h, --help                      help for terraform
 
   -i, --identity string           Specify the identity to authenticate to before running Terraform commands. Use
                                   without value to interactively select.
