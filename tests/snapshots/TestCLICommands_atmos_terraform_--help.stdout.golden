@@ -70,8 +70,6 @@ FLAGS
 
       --dry-run                   Perform dry run without making actual changes
 
-      --from-plan string          Apply from plan file (uses deterministic location if path not specified)
-
   -h, --help                      help for terraform
 
   -i, --identity string           Specify the identity to authenticate to before running Terraform commands. Use
