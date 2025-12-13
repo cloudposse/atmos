@@ -1,0 +1,45 @@
+---
+slug: working-directory-support
+title: "Working Directory Support for Commands and Workflows"
+authors: [osterman]
+tags: [feature, dx]
+date: 2025-12-09
+---
+
+Custom commands and workflow steps can now specify a `working_directory` to control where they execute.
+
+<!--truncate-->
+
+## Working Directory for Commands and Workflows
+
+Custom commands and workflow steps can now specify a `working_directory` to control where they execute:
+
+```yaml
+# .atmos.d/commands.yaml
+commands:
+  - name: build
+    working_directory: !repo-root .
+    steps:
+      - make build
+```
+
+```yaml
+# stacks/workflows/deploy.yaml
+workflows:
+  download-tools:
+    working_directory: /tmp
+    steps:
+      - command: wget https://example.com/tools.tar.gz
+        type: shell
+      - command: tar -xzf tools.tar.gz
+        type: shell
+```
+
+- **Absolute paths** are used as-is
+- **Relative paths** resolve against `base_path`
+- **Step-level** overrides workflow-level settings
+
+## Documentation
+
+- [Custom Commands](/cli/configuration/commands#working-directory)
+- [Workflows](/cli/configuration/workflows#working-directory)
