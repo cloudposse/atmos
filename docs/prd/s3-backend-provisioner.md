@@ -373,19 +373,19 @@ pkg/provisioner/backend/
 package backend
 
 import (
-	"context"
-	"fmt"
-	"sync"
-	"time"
+  "context"
+  "fmt"
+  "sync"
+  "time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+  "github.com/aws/aws-sdk-go-v2/aws"
+  "github.com/aws/aws-sdk-go-v2/service/s3"
+  s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	awsUtils "github.com/cloudposse/atmos/internal/aws"
-	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
+  awsUtils "github.com/cloudposse/atmos/internal/aws"
+  "github.com/cloudposse/atmos/pkg/perf"
+  "github.com/cloudposse/atmos/pkg/schema"
+  "github.com/cloudposse/atmos/pkg/ui"
 )
 
 // S3 client cache (performance optimization)
@@ -393,101 +393,101 @@ var s3ProvisionerClientCache sync.Map
 
 // ProvisionS3Backend provisions an S3 bucket for Terraform state.
 func ProvisionS3Backend(
-	atmosConfig *schema.AtmosConfiguration,
-	componentSections *map[string]any,
-	authContext *schema.AuthContext,
+  atmosConfig *schema.AtmosConfiguration,
+  componentSections *map[string]any,
+  authContext *schema.AuthContext,
 ) error {
-	defer perf.Track(atmosConfig, "provisioner.backend.ProvisionS3Backend")()
+  defer perf.Track(atmosConfig, "provisioner.backend.ProvisionS3Backend")()
 
-	// 1. Extract backend configuration
-	backendConfig, ok := (*componentSections)["backend"].(map[string]any)
-	if !ok {
-		return fmt.Errorf("backend configuration not found")
-	}
+  // 1. Extract backend configuration
+  backendConfig, ok := (*componentSections)["backend"].(map[string]any)
+  if !ok {
+    return fmt.Errorf("backend configuration not found")
+  }
 
-	bucket, ok := backendConfig["bucket"].(string)
-	if !ok || bucket == "" {
-		return fmt.Errorf("bucket name is required in backend configuration")
-	}
+  bucket, ok := backendConfig["bucket"].(string)
+  if !ok || bucket == "" {
+    return fmt.Errorf("bucket name is required in backend configuration")
+  }
 
-	region, ok := backendConfig["region"].(string)
-	if !ok || region == "" {
-		return fmt.Errorf("region is required in backend configuration")
-	}
+  region, ok := backendConfig["region"].(string)
+  if !ok || region == "" {
+    return fmt.Errorf("region is required in backend configuration")
+  }
 
-	// 2. Get or create S3 client (with role assumption if needed)
-	client, err := getCachedS3ProvisionerClient(region, &backendConfig, authContext)
-	if err != nil {
-		return fmt.Errorf("failed to create S3 client: %w", err)
-	}
+  // 2. Get or create S3 client (with role assumption if needed)
+  client, err := getCachedS3ProvisionerClient(region, &backendConfig, authContext)
+  if err != nil {
+    return fmt.Errorf("failed to create S3 client: %w", err)
+  }
 
-	// 3. Check if bucket exists (idempotent)
-	ctx := context.Background()
-	exists, err := checkS3BucketExists(ctx, client, bucket)
-	if err != nil {
-		return fmt.Errorf("failed to check bucket existence: %w", err)
-	}
+  // 3. Check if bucket exists (idempotent)
+  ctx := context.Background()
+  exists, err := checkS3BucketExists(ctx, client, bucket)
+  if err != nil {
+    return fmt.Errorf("failed to check bucket existence: %w", err)
+  }
 
-	if exists {
-		ui.Info(fmt.Sprintf("S3 bucket '%s' already exists (idempotent)", bucket))
-		return nil
-	}
+  if exists {
+    ui.Info(fmt.Sprintf("S3 bucket '%s' already exists (idempotent)", bucket))
+    return nil
+  }
 
-	// 4. Create bucket with hardcoded best practices
-	ui.Info(fmt.Sprintf("Creating S3 bucket '%s' with secure defaults...", bucket))
-	if err := provisionS3BucketWithDefaults(ctx, client, bucket, region); err != nil {
-		return fmt.Errorf("failed to provision S3 bucket: %w", err)
-	}
+  // 4. Create bucket with hardcoded best practices
+  ui.Info(fmt.Sprintf("Creating S3 bucket '%s' with secure defaults...", bucket))
+  if err := provisionS3BucketWithDefaults(ctx, client, bucket, region); err != nil {
+    return fmt.Errorf("failed to provision S3 bucket: %w", err)
+  }
 
-	ui.Success(fmt.Sprintf("Successfully created S3 bucket '%s'", bucket))
-	return nil
+  ui.Success(fmt.Sprintf("Successfully created S3 bucket '%s'", bucket))
+  return nil
 }
 
 // getCachedS3ProvisionerClient returns a cached or new S3 client.
 func getCachedS3ProvisionerClient(
-	region string,
-	backendConfig *map[string]any,
-	authContext *schema.AuthContext,
+  region string,
+  backendConfig *map[string]any,
+  authContext *schema.AuthContext,
 ) (*s3.Client, error) {
-	defer perf.Track(nil, "provisioner.backend.getCachedS3ProvisionerClient")()
+  defer perf.Track(nil, "provisioner.backend.getCachedS3ProvisionerClient")()
 
-	// Extract role ARN if specified
-	roleArn := GetS3BackendAssumeRoleArn(backendConfig)
+  // Extract role ARN if specified
+  roleArn := GetS3BackendAssumeRoleArn(backendConfig)
 
-	// Build deterministic cache key
-	cacheKey := fmt.Sprintf("region=%s", region)
-	if authContext != nil && authContext.AWS != nil {
-		cacheKey += fmt.Sprintf(";profile=%s", authContext.AWS.Profile)
-	}
-	if roleArn != "" {
-		cacheKey += fmt.Sprintf(";role=%s", roleArn)
-	}
+  // Build deterministic cache key
+  cacheKey := fmt.Sprintf("region=%s", region)
+  if authContext != nil && authContext.AWS != nil {
+    cacheKey += fmt.Sprintf(";profile=%s", authContext.AWS.Profile)
+  }
+  if roleArn != "" {
+    cacheKey += fmt.Sprintf(";role=%s", roleArn)
+  }
 
-	// Check cache
-	if cached, ok := s3ProvisionerClientCache.Load(cacheKey); ok {
-		return cached.(*s3.Client), nil
-	}
+  // Check cache
+  if cached, ok := s3ProvisionerClientCache.Load(cacheKey); ok {
+    return cached.(*s3.Client), nil
+  }
 
-	// Create new client with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+  // Create new client with timeout
+  ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+  defer cancel()
 
-	// Load AWS config with auth context + role assumption
-	cfg, err := awsUtils.LoadAWSConfigWithAuth(
-		ctx,
-		region,
-		roleArn,
-		15*time.Minute,
-		authContext.AWS,
-	)
-	if err != nil {
-		return nil, err
-	}
+  // Load AWS config with auth context + role assumption
+  cfg, err := awsUtils.LoadAWSConfigWithAuth(
+    ctx,
+    region,
+    roleArn,
+    15*time.Minute,
+    authContext.AWS,
+  )
+  if err != nil {
+    return nil, err
+  }
 
-	// Create S3 client
-	client := s3.NewFromConfig(cfg)
-	s3ProvisionerClientCache.Store(cacheKey, client)
-	return client, nil
+  // Create S3 client
+  client := s3.NewFromConfig(cfg)
+  s3ProvisionerClientCache.Store(cacheKey, client)
+  return client, nil
 }
 
 // checkS3BucketExists checks if an S3 bucket exists.
@@ -496,131 +496,131 @@ func getCachedS3ProvisionerClient(
 //   - (false, nil) if bucket does not exist (404/NotFound)
 //   - (false, error) if access denied (403) or other errors occur
 func checkS3BucketExists(ctx context.Context, client *s3.Client, bucket string) (bool, error) {
-	defer perf.Track(nil, "provisioner.backend.checkS3BucketExists")()
+  defer perf.Track(nil, "provisioner.backend.checkS3BucketExists")()
 
-	_, err := client.HeadBucket(ctx, &s3.HeadBucketInput{
-		Bucket: aws.String(bucket),
-	})
+  _, err := client.HeadBucket(ctx, &s3.HeadBucketInput{
+    Bucket: aws.String(bucket),
+  })
 
-	if err != nil {
-		// Check for specific error types to distinguish between "not found" and "access denied".
-		var notFound *s3types.NotFound
-		var noSuchBucket *s3types.NoSuchBucket
-		if errors.As(err, &notFound) || errors.As(err, &noSuchBucket) {
-			// Bucket genuinely doesn't exist - safe to proceed with creation.
-			return false, nil
-		}
-		// For AccessDenied (403) or other errors, return the error.
-		// This prevents attempting to create a bucket we can't access.
-		return false, fmt.Errorf("failed to check bucket existence: %w", err)
-	}
+  if err != nil {
+    // Check for specific error types to distinguish between "not found" and "access denied".
+    var notFound *s3types.NotFound
+    var noSuchBucket *s3types.NoSuchBucket
+    if errors.As(err, &notFound) || errors.As(err, &noSuchBucket) {
+      // Bucket genuinely doesn't exist - safe to proceed with creation.
+      return false, nil
+    }
+    // For AccessDenied (403) or other errors, return the error.
+    // This prevents attempting to create a bucket we can't access.
+    return false, fmt.Errorf("failed to check bucket existence: %w", err)
+  }
 
-	return true, nil
+  return true, nil
 }
 
 // provisionS3BucketWithDefaults creates an S3 bucket with hardcoded best practices.
 func provisionS3BucketWithDefaults(
-	ctx context.Context,
-	client *s3.Client,
-	bucket, region string,
+  ctx context.Context,
+  client *s3.Client,
+  bucket, region string,
 ) error {
-	defer perf.Track(nil, "provisioner.backend.provisionS3BucketWithDefaults")()
+  defer perf.Track(nil, "provisioner.backend.provisionS3BucketWithDefaults")()
 
-	// 1. Create bucket
-	createInput := &s3.CreateBucketInput{
-		Bucket: aws.String(bucket),
-	}
+  // 1. Create bucket
+  createInput := &s3.CreateBucketInput{
+    Bucket: aws.String(bucket),
+  }
 
-	// For regions other than us-east-1, must specify location constraint
-	if region != "us-east-1" {
-		createInput.CreateBucketConfiguration = &s3types.CreateBucketConfiguration{
-			LocationConstraint: s3types.BucketLocationConstraint(region),
-		}
-	}
+  // For regions other than us-east-1, must specify location constraint
+  if region != "us-east-1" {
+    createInput.CreateBucketConfiguration = &s3types.CreateBucketConfiguration{
+      LocationConstraint: s3types.BucketLocationConstraint(region),
+    }
+  }
 
-	if _, err := client.CreateBucket(ctx, createInput); err != nil {
-		return fmt.Errorf("failed to create bucket: %w", err)
-	}
+  if _, err := client.CreateBucket(ctx, createInput); err != nil {
+    return fmt.Errorf("failed to create bucket: %w", err)
+  }
 
-	// Wait for bucket to be available (eventual consistency)
-	time.Sleep(2 * time.Second)
+  // Wait for bucket to be available (eventual consistency)
+  time.Sleep(2 * time.Second)
 
-	// 2. Enable versioning (ALWAYS)
-	ui.Info("Enabling bucket versioning...")
-	if _, err := client.PutBucketVersioning(ctx, &s3.PutBucketVersioningInput{
-		Bucket: aws.String(bucket),
-		VersioningConfiguration: &s3types.VersioningConfiguration{
-			Status: s3types.BucketVersioningStatusEnabled,
-		},
-	}); err != nil {
-		return fmt.Errorf("failed to enable versioning: %w", err)
-	}
+  // 2. Enable versioning (ALWAYS)
+  ui.Info("Enabling bucket versioning...")
+  if _, err := client.PutBucketVersioning(ctx, &s3.PutBucketVersioningInput{
+    Bucket: aws.String(bucket),
+    VersioningConfiguration: &s3types.VersioningConfiguration{
+      Status: s3types.BucketVersioningStatusEnabled,
+    },
+  }); err != nil {
+    return fmt.Errorf("failed to enable versioning: %w", err)
+  }
 
-	// 3. Enable encryption (ALWAYS - AES-256)
-	ui.Info("Enabling bucket encryption (AES-256)...")
-	if _, err := client.PutBucketEncryption(ctx, &s3.PutBucketEncryptionInput{
-		Bucket: aws.String(bucket),
-		ServerSideEncryptionConfiguration: &s3types.ServerSideEncryptionConfiguration{
-			Rules: []s3types.ServerSideEncryptionRule{
-				{
-					ApplyServerSideEncryptionByDefault: &s3types.ServerSideEncryptionByDefault{
-						SSEAlgorithm: s3types.ServerSideEncryptionAes256,
-					},
-					BucketKeyEnabled: aws.Bool(true),
-				},
-			},
-		},
-	}); err != nil {
-		return fmt.Errorf("failed to enable encryption: %w", err)
-	}
+  // 3. Enable encryption (ALWAYS - AES-256)
+  ui.Info("Enabling bucket encryption (AES-256)...")
+  if _, err := client.PutBucketEncryption(ctx, &s3.PutBucketEncryptionInput{
+    Bucket: aws.String(bucket),
+    ServerSideEncryptionConfiguration: &s3types.ServerSideEncryptionConfiguration{
+      Rules: []s3types.ServerSideEncryptionRule{
+        {
+          ApplyServerSideEncryptionByDefault: &s3types.ServerSideEncryptionByDefault{
+            SSEAlgorithm: s3types.ServerSideEncryptionAes256,
+          },
+          BucketKeyEnabled: aws.Bool(true),
+        },
+      },
+    },
+  }); err != nil {
+    return fmt.Errorf("failed to enable encryption: %w", err)
+  }
 
-	// 4. Block public access (ALWAYS)
-	ui.Info("Blocking public access...")
-	if _, err := client.PutPublicAccessBlock(ctx, &s3.PutPublicAccessBlockInput{
-		Bucket: aws.String(bucket),
-		PublicAccessBlockConfiguration: &s3types.PublicAccessBlockConfiguration{
-			BlockPublicAcls:       aws.Bool(true),
-			BlockPublicPolicy:     aws.Bool(true),
-			IgnorePublicAcls:      aws.Bool(true),
-			RestrictPublicBuckets: aws.Bool(true),
-		},
-	}); err != nil {
-		return fmt.Errorf("failed to block public access: %w", err)
-	}
+  // 4. Block public access (ALWAYS)
+  ui.Info("Blocking public access...")
+  if _, err := client.PutPublicAccessBlock(ctx, &s3.PutPublicAccessBlockInput{
+    Bucket: aws.String(bucket),
+    PublicAccessBlockConfiguration: &s3types.PublicAccessBlockConfiguration{
+      BlockPublicAcls:       aws.Bool(true),
+      BlockPublicPolicy:     aws.Bool(true),
+      IgnorePublicAcls:      aws.Bool(true),
+      RestrictPublicBuckets: aws.Bool(true),
+    },
+  }); err != nil {
+    return fmt.Errorf("failed to block public access: %w", err)
+  }
 
-	// 5. Apply standard tags (ALWAYS)
-	ui.Info("Applying resource tags...")
-	if _, err := client.PutBucketTagging(ctx, &s3.PutBucketTaggingInput{
-		Bucket: aws.String(bucket),
-		Tagging: &s3types.Tagging{
-			TagSet: []s3types.Tag{
-				{Key: aws.String("ManagedBy"), Value: aws.String("Atmos")},
-				{Key: aws.String("CreatedAt"), Value: aws.String(time.Now().Format(time.RFC3339))},
-				{Key: aws.String("Purpose"), Value: aws.String("TerraformState")},
-			},
-		},
-	}); err != nil {
-		return fmt.Errorf("failed to apply tags: %w", err)
-	}
+  // 5. Apply standard tags (ALWAYS)
+  ui.Info("Applying resource tags...")
+  if _, err := client.PutBucketTagging(ctx, &s3.PutBucketTaggingInput{
+    Bucket: aws.String(bucket),
+    Tagging: &s3types.Tagging{
+      TagSet: []s3types.Tag{
+        {Key: aws.String("ManagedBy"), Value: aws.String("Atmos")},
+        {Key: aws.String("CreatedAt"), Value: aws.String(time.Now().Format(time.RFC3339))},
+        {Key: aws.String("Purpose"), Value: aws.String("TerraformState")},
+      },
+    },
+  }); err != nil {
+    return fmt.Errorf("failed to apply tags: %w", err)
+  }
 
-	return nil
+  return nil
 }
 
 // GetS3BackendAssumeRoleArn extracts role ARN from backend config (standard Terraform syntax).
 func GetS3BackendAssumeRoleArn(backend *map[string]any) string {
-	// Try assume_role block first (standard Terraform)
-	if assumeRoleSection, ok := (*backend)["assume_role"].(map[string]any); ok {
-		if roleArn, ok := assumeRoleSection["role_arn"].(string); ok && roleArn != "" {
-			return roleArn
-		}
-	}
+  // Try assume_role block first (standard Terraform)
+  if assumeRoleSection, ok := (*backend)["assume_role"].(map[string]any); ok {
+    if roleArn, ok := assumeRoleSection["role_arn"].(string); ok && roleArn != "" {
+      return roleArn
+    }
+  }
 
-	// Fallback to top-level role_arn (legacy)
-	if roleArn, ok := (*backend)["role_arn"].(string); ok && roleArn != "" {
-		return roleArn
-	}
+  // Fallback to top-level role_arn (legacy)
+  if roleArn, ok := (*backend)["role_arn"].(string); ok && roleArn != "" {
+    return roleArn
+  }
 
-	return ""
+  return ""
 }
 ```
 
@@ -634,43 +634,43 @@ func GetS3BackendAssumeRoleArn(backend *map[string]any) string {
 
 ```go
 func TestProvisionS3Backend_NewBucket(t *testing.T) {
-	// Test: Bucket doesn't exist → create bucket with all settings
+  // Test: Bucket doesn't exist → create bucket with all settings
 }
 
 func TestProvisionS3Backend_ExistingBucket(t *testing.T) {
-	// Test: Bucket exists → return nil (idempotent)
+  // Test: Bucket exists → return nil (idempotent)
 }
 
 func TestProvisionS3Backend_InvalidConfig(t *testing.T) {
-	// Test: Missing bucket/region → return error
+  // Test: Missing bucket/region → return error
 }
 
 func TestProvisionS3Backend_RoleAssumption(t *testing.T) {
-	// Test: Role ARN specified → assume role and create bucket
+  // Test: Role ARN specified → assume role and create bucket
 }
 
 func TestCheckS3BucketExists(t *testing.T) {
-	// Test: HeadBucket returns 200 → true
-	// Test: HeadBucket returns 404 → false
+  // Test: HeadBucket returns 200 → true
+  // Test: HeadBucket returns 404 → false
 }
 
 func TestProvisionS3BucketWithDefaults(t *testing.T) {
-	// Test: All bucket settings applied correctly
-	// Test: Versioning enabled
-	// Test: Encryption enabled
-	// Test: Public access blocked
-	// Test: Tags applied
+  // Test: All bucket settings applied correctly
+  // Test: Versioning enabled
+  // Test: Encryption enabled
+  // Test: Public access blocked
+  // Test: Tags applied
 }
 
 func TestGetCachedS3ProvisionerClient(t *testing.T) {
-	// Test: Client cached and reused
-	// Test: Different cache key per region/profile/role
+  // Test: Client cached and reused
+  // Test: Different cache key per region/profile/role
 }
 
 func TestGetS3BackendAssumeRoleArn(t *testing.T) {
-	// Test: Extract from assume_role.role_arn
-	// Test: Fallback to top-level role_arn
-	// Test: Return empty string if not specified
+  // Test: Extract from assume_role.role_arn
+  // Test: Fallback to top-level role_arn
+  // Test: Return empty string if not specified
 }
 ```
 
@@ -685,33 +685,33 @@ func TestGetS3BackendAssumeRoleArn(t *testing.T) {
 
 ```go
 func TestS3BackendProvisioning_Localstack(t *testing.T) {
-	// Requires: Docker with localstack
-	tests.RequireLocalstack(t)
+  // Requires: Docker with localstack
+  tests.RequireLocalstack(t)
 
-	// Create S3 bucket via provisioner
-	// Verify bucket exists
-	// Verify versioning enabled
-	// Verify encryption enabled
-	// Verify public access blocked
-	// Verify tags applied
+  // Create S3 bucket via provisioner
+  // Verify bucket exists
+  // Verify versioning enabled
+  // Verify encryption enabled
+  // Verify public access blocked
+  // Verify tags applied
 }
 
 func TestS3BackendProvisioning_RealAWS(t *testing.T) {
-	// Requires: Real AWS account with credentials
-	tests.RequireAWSAccess(t)
+  // Requires: Real AWS account with credentials
+  tests.RequireAWSAccess(t)
 
-	// Create unique bucket name
-	bucket := fmt.Sprintf("atmos-test-%s", randomString())
+  // Create unique bucket name
+  bucket := fmt.Sprintf("atmos-test-%s", randomString())
 
-	// Provision bucket
-	// Verify bucket created with all settings
-	// Cleanup: delete bucket
+  // Provision bucket
+  // Verify bucket created with all settings
+  // Cleanup: delete bucket
 }
 
 func TestS3BackendProvisioning_Idempotent(t *testing.T) {
-	// Create bucket first
-	// Run provisioner again
-	// Verify no error (idempotent)
+  // Create bucket first
+  // Run provisioner again
+  // Verify no error (idempotent)
 }
 ```
 
