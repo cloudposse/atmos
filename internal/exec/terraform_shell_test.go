@@ -82,36 +82,3 @@ func TestPrintShellDryRunInfo(t *testing.T) {
 		})
 	}
 }
-
-func TestShellConfigStruct(t *testing.T) {
-	tests := []struct {
-		name string
-		cfg  shellConfig
-	}{
-		{
-			name: "All fields populated",
-			cfg: shellConfig{
-				componentPath: "/path/to/component",
-				workingDir:    "/working/dir",
-				varFile:       "vars.tfvars.json",
-			},
-		},
-		{
-			name: "Empty struct",
-			cfg:  shellConfig{},
-		},
-		{
-			name: "Partial fields",
-			cfg: shellConfig{
-				componentPath: "/path/to/component",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Verify struct can be created and accessed.
-			assert.NotNil(t, tt.cfg)
-		})
-	}
-}
