@@ -4,7 +4,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -40,10 +39,7 @@ var planfileCmd = &cobra.Command{
 		processFunctions := v.GetBool("process-functions")
 		skip := v.GetStringSlice("skip")
 
-		// Validate required flags
-		if stack == "" {
-			return errUtils.ErrMissingStack
-		}
+		// Note: Stack is validated by Cobra's MarkFlagRequired in init().
 
 		// Initialize Atmos configuration
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)

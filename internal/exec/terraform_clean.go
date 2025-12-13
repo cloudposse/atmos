@@ -622,7 +622,7 @@ func promptForConfirmation(tfDataDirFolders []Directory, tfDataDir string, messa
 		u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? ", tfDataDir))
 	}
 	u.PrintMessage(message)
-	println()
+	u.PrintMessage("")
 	return confirmDeletion()
 }
 

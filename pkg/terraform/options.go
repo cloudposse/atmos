@@ -1,5 +1,5 @@
 // Package terraform provides terraform-specific types and utilities for Atmos.
-// This package contains shared data structures used by cmd/terraform and internal/exec
+// This package contains shared data structures used by cmd/terraform and internal/exec.
 // for terraform operations.
 package terraform
 

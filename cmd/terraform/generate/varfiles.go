@@ -39,10 +39,7 @@ var varfilesCmd = &cobra.Command{
 		componentsCsv := v.GetString("components")
 		format := v.GetString("format")
 
-		// Validate required flags
-		if fileTemplate == "" {
-			return errUtils.ErrFileTemplateRequired
-		}
+		// Note: file-template is validated by Cobra's MarkFlagRequired in init().
 
 		// Parse CSV values
 		var stacks []string
