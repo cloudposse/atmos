@@ -89,8 +89,8 @@ type AtmosConfiguration struct {
 	Import          []string            `yaml:"import" json:"import" mapstructure:"import"`
 	Docs            Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Auth            AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
-	Env             map[string]string   `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
-	CaseMaps        *casemap.CaseMaps   `yaml:"-" json:"-" mapstructure:"-"` // Stores original case for YAML map keys (Viper lowercases them)
+	Env             map[string]string   `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv
+	CaseMaps        *casemap.CaseMaps   `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them)
 	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
 	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
 	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
@@ -367,7 +367,7 @@ type TemplatesSettings struct {
 	Gomplate    TemplatesSettingsGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
 	Delimiters  []string                  `yaml:"delimiters,omitempty" json:"delimiters,omitempty" mapstructure:"delimiters"`
 	Evaluations int                       `yaml:"evaluations,omitempty" json:"evaluations,omitempty" mapstructure:"evaluations"`
-	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv
 }
 
 type TemplatesSettingsSprig struct {

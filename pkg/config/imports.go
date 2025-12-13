@@ -142,7 +142,7 @@ func processImports(basePath string, importPaths []string, tempDir string, curre
 			// Handle remote imports
 			paths, err := processRemoteImport(basePath, importPath, tempDir, currentDepth, maxDepth)
 			if err != nil {
-				log.Debug("failed to process remote import", "path", importPath, "error", err)
+				log.Warn("Failed to process remote import", "path", importPath, "error", err)
 				continue
 			}
 			resolvedPaths = append(resolvedPaths, paths...)
