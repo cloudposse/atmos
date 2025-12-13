@@ -504,6 +504,205 @@ func TestSanitizeOutput_CustomReplacements_Combined(t *testing.T) {
 	}
 }
 
+// TestSanitizeOutput_WordWrappedPaths verifies that paths broken across lines by terminal
+// width wrapping are correctly rejoined before sanitization. This handles cases where
+// glamour/terminal rendering wraps long paths at arbitrary positions, breaking paths mid-word.
+func TestSanitizeOutput_WordWrappedPaths(t *testing.T) {
+	repoRoot, err := findGitRepoRoot(startingDir)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Path not wrapped (baseline)",
+			input:    fmt.Sprintf("%s/tests/fixtures/file.txt", repoRoot),
+			expected: "/absolute/path/to/repo/tests/fixtures/file.txt",
+		},
+		{
+			name:     "Path wrapped mid-word in last segment",
+			input:    fmt.Sprintf("%s/tests/fixtures/file.txt", repoRoot[:len(repoRoot)-3]+"\n"+repoRoot[len(repoRoot)-3:]),
+			expected: "/absolute/path/to/repo/tests/fixtures/file.txt",
+		},
+		{
+			name:     "Path wrapped mid-word near end",
+			input:    fmt.Sprintf("%s/tests/fixtures/file.txt", repoRoot[:len(repoRoot)-5]+"\n"+repoRoot[len(repoRoot)-5:]),
+			expected: "/absolute/path/to/repo/tests/fixtures/file.txt",
+		},
+		{
+			name:     "Multiple paths with one wrapped",
+			input:    fmt.Sprintf("First: %s/file1.txt\nSecond: %s/file2.txt", repoRoot, repoRoot[:len(repoRoot)-2]+"\n"+repoRoot[len(repoRoot)-2:]),
+			expected: "First: /absolute/path/to/repo/file1.txt\nSecond: /absolute/path/to/repo/file2.txt",
+		},
+		{
+			name:     "Error message with wrapped path",
+			input:    fmt.Sprintf("**Error:** path not found\n\n💡 Hint: Check path: %s/tests/fixtures/file.txt", repoRoot[:len(repoRoot)-2]+"\n"+repoRoot[len(repoRoot)-2:]),
+			expected: "**Error:** path not found\n\n💡 Hint: Check path: /absolute/path/to/repo/tests/fixtures/file.txt",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := sanitizeOutput(tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSanitizeOutput_WordWrappedPathsSpecificBreaks tests specific word-wrap scenarios
+// that were observed in CI failures.
+func TestSanitizeOutput_WordWrappedPathsSpecificBreaks(t *testing.T) {
+	repoRoot, err := findGitRepoRoot(startingDir)
+	require.NoError(t, err)
+
+	// Build test paths by inserting newlines at specific positions within the repo root.
+	// This simulates terminal width wrapping at arbitrary character positions.
+
+	tests := []struct {
+		name        string
+		breakOffset int // Offset from end of repoRoot to insert newline
+		suffix      string
+		expected    string
+	}{
+		{
+			name:        "Break 1 char from end",
+			breakOffset: 1,
+			suffix:      "/tests/file.txt",
+			expected:    "/absolute/path/to/repo/tests/file.txt",
+		},
+		{
+			name:        "Break 2 chars from end",
+			breakOffset: 2,
+			suffix:      "/tests/file.txt",
+			expected:    "/absolute/path/to/repo/tests/file.txt",
+		},
+		{
+			name:        "Break 3 chars from end",
+			breakOffset: 3,
+			suffix:      "/tests/file.txt",
+			expected:    "/absolute/path/to/repo/tests/file.txt",
+		},
+		{
+			name:        "Break 5 chars from end",
+			breakOffset: 5,
+			suffix:      "/tests/file.txt",
+			expected:    "/absolute/path/to/repo/tests/file.txt",
+		},
+		{
+			name:        "Break 10 chars from end",
+			breakOffset: 10,
+			suffix:      "/tests/file.txt",
+			expected:    "/absolute/path/to/repo/tests/file.txt",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.breakOffset >= len(repoRoot) {
+				t.Skip("Break offset exceeds repo root length")
+			}
+
+			// Insert newline at the specified offset from the end.
+			breakPoint := len(repoRoot) - tt.breakOffset
+			wrappedPath := repoRoot[:breakPoint] + "\n" + repoRoot[breakPoint:] + tt.suffix
+
+			result, err := sanitizeOutput(wrappedPath)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result, "Failed for input: %q", wrappedPath)
+		})
+	}
+}
+
+// TestSanitizeOutput_WordWrappedPathsRealWorldScenarios tests real-world scenarios
+// that were observed in CI test failures.
+func TestSanitizeOutput_WordWrappedPathsRealWorldScenarios(t *testing.T) {
+	repoRoot, err := findGitRepoRoot(startingDir)
+	require.NoError(t, err)
+
+	// Simulate the exact error format that caused CI failures.
+	testPath := repoRoot + "/tests/fixtures/scenarios/complete/stacks"
+
+	tests := []struct {
+		name     string
+		builder  func() string
+		expected string
+	}{
+		{
+			name: "Hint with path wrapped mid-word",
+			builder: func() string {
+				// Simulate path wrapped at arbitrary position (like "da-\nnang").
+				if len(repoRoot) > 5 {
+					breakPoint := len(repoRoot) - 3
+					return fmt.Sprintf("💡 Path points to stacks:\n%s\n%s", repoRoot[:breakPoint], repoRoot[breakPoint:]+"/tests/fixtures/scenarios/complete/stacks")
+				}
+				return fmt.Sprintf("💡 Path points to stacks:\n%s", testPath)
+			},
+			expected: "💡 Path points to stacks: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+		},
+		{
+			name: "Stacks directory with wrapped path",
+			builder: func() string {
+				if len(repoRoot) > 5 {
+					breakPoint := len(repoRoot) - 3
+					return fmt.Sprintf("Stacks directory: %s\n%s", repoRoot[:breakPoint], repoRoot[breakPoint:]+"/tests/fixtures/scenarios/complete/stacks")
+				}
+				return fmt.Sprintf("Stacks directory: %s", testPath)
+			},
+			expected: "Stacks directory: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks",
+		},
+		{
+			name: "Full error output with multiple wrapped paths",
+			builder: func() string {
+				if len(repoRoot) > 5 {
+					breakPoint := len(repoRoot) - 3
+					wrappedPath := repoRoot[:breakPoint] + "\n" + repoRoot[breakPoint:]
+					return fmt.Sprintf(`**Error:** path is not within Atmos component directories
+
+## Hints
+
+💡 Path points to the stacks configuration directory, not a component:
+%s/tests/fixtures/scenarios/complete/stacks
+
+Stacks directory: %s/tests/fixtures/scenarios/complete/stacks
+
+💡 Components are located in component directories`, wrappedPath, wrappedPath)
+				}
+				return fmt.Sprintf(`**Error:** path is not within Atmos component directories
+
+## Hints
+
+💡 Path points to the stacks configuration directory, not a component:
+%s
+
+Stacks directory: %s
+
+💡 Components are located in component directories`, testPath, testPath)
+			},
+			expected: `**Error:** path is not within Atmos component directories
+
+## Hints
+
+💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks
+
+Stacks directory: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stacks
+
+💡 Components are located in component directories`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			input := tt.builder()
+			result, err := sanitizeOutput(input)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 // TestSanitizeOutput_WindowsLineEndingsInHintPaths verifies that hint path normalization
 // works correctly with Windows CRLF line endings (\r\n) as well as Unix LF (\n).
 // This test reproduces the Windows CI failure where hint paths were word-wrapped differently.
