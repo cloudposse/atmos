@@ -37,11 +37,19 @@ func HCLFunctions(registry *Registry, execCtx *ExecutionContext) map[string]func
 // HCLEvalContextWithFunctions creates an hcl.EvalContext with Atmos functions.
 // Functions are available in the atmos:: namespace: atmos::env("VAR"), atmos::exec("cmd"), etc.
 // Due to HCL's underscore-to-namespace conversion, atmos_env("VAR") also works.
+// Standard library functions (lower, upper, concat, etc.) are available without namespace prefix.
 func HCLEvalContextWithFunctions(registry *Registry, execCtx *ExecutionContext) *hcl.EvalContext {
 	defer perf.Track(nil, "function.HCLEvalContextWithFunctions")()
 
+	funcs := HCLFunctions(registry, execCtx)
+
+	// Add stdlib functions (no namespace prefix).
+	for name, fn := range StdlibFunctions() {
+		funcs[name] = fn
+	}
+
 	return &hcl.EvalContext{
-		Functions: HCLFunctions(registry, execCtx),
+		Functions: funcs,
 	}
 }
 
