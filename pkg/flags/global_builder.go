@@ -119,9 +119,8 @@ func (b *GlobalOptionsBuilder) registerAuthenticationFlags(defaults *global.Flag
 	b.options = append(b.options, WithEnvVars("identity", "ATMOS_IDENTITY"))
 	b.options = append(b.options, WithNoOptDefVal("identity", "__SELECT__"))
 
-	// GitHub authentication token for accessing private repositories.
-	b.options = append(b.options, WithStringFlag("github-token", "", defaults.GitHubToken, "GitHub authentication token for accessing private repositories and increasing rate limits"))
-	b.options = append(b.options, WithEnvVars("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"))
+	// Note: --github-token is NOT a global flag. It's only used by toolchain commands
+	// and is registered as a persistent flag on the toolchain command in cmd/toolchain/toolchain.go.
 
 	// Profiles - configuration profiles.
 	b.options = append(b.options, func(cfg *parserConfig) {

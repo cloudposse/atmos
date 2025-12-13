@@ -418,7 +418,8 @@ func TestVerify_NilPlatformEntry(t *testing.T) {
 
 	err = Verify(tmpFile)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "nil platform entry: hashicorp/terraform/darwin_arm64")
+	assert.ErrorIs(t, err, ErrPlatformEntryNil)
+	assert.Contains(t, err.Error(), "hashicorp/terraform/darwin_arm64")
 }
 
 func TestVerify_FileNotFound(t *testing.T) {
