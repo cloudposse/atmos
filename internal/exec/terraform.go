@@ -1,12 +1,14 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
@@ -15,11 +17,20 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+
+	// Import backend provisioner to register S3 provisioner.
+	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
 )
 
 const (
+	// BeforeTerraformInitEvent is the hook event name for provisioners that run before terraform init.
+	// This matches the hook event registered by backend provisioners in pkg/provisioner/backend/backend.go.
+	// See pkg/hooks/event.go (hooks.BeforeTerraformInit) for the canonical definition.
+	beforeTerraformInitEvent = "before.terraform.init"
+
 	autoApproveFlag           = "-auto-approve"
 	outFlag                   = "-out"
 	varFileFlag               = "-var-file"
@@ -382,6 +393,16 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory.
 		cleanTerraformWorkspace(atmosConfig, componentPath)
 
+		// Execute provisioners registered for before.terraform.init hook event.
+		// This runs backend provisioners to ensure backends exist before Terraform tries to configure them.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		err = provisioner.ExecuteProvisioners(ctx, provisioner.HookEvent(beforeTerraformInitEvent), &atmosConfig, info.ComponentSection, info.AuthContext)
+		if err != nil {
+			return fmt.Errorf("provisioner execution failed: %w", err)
+		}
+
 		err = ExecuteShellCommand(
 			atmosConfig,
 			info.Command,
@@ -473,6 +494,16 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	case "init":
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory.
 		cleanTerraformWorkspace(atmosConfig, componentPath)
+
+		// Execute provisioners registered for before.terraform.init hook event.
+		// This runs backend provisioners to ensure backends exist before Terraform tries to configure them.
+		initCtx, initCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer initCancel()
+
+		err = provisioner.ExecuteProvisioners(initCtx, provisioner.HookEvent(beforeTerraformInitEvent), &atmosConfig, info.ComponentSection, info.AuthContext)
+		if err != nil {
+			return fmt.Errorf("provisioner execution failed: %w", err)
+		}
 
 		if atmosConfig.Components.Terraform.InitRunReconfigure {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)

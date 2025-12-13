@@ -146,6 +146,7 @@ EXAMPLES
 AVAILABLE COMMANDS
 
       apply               Apply changes to infrastructure
+      backend [command]   Manage Terraform state backends
       clean               Clean up Terraform state and artifacts.
       console             Try Terraform expressions at an interactive command prompt
       deploy              Deploy the specified infrastructure using Terraform

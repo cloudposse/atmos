@@ -216,12 +216,33 @@ See `docs/developing-atmos-commands.md` and `docs/prd/command-registry-pattern.m
 ### Documentation (MANDATORY)
 All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. Use `<dl>` for args/flags. Build: `cd website && npm run build`
 
-**Verifying Documentation Links:** Always verify URLs before adding links:
-```bash
-find website/docs/cli/commands -name "*keyword*"
-head -10 <file> | grep slug
-grep -r "<url>" website/docs/
-```
+**Verifying Links:** Find doc file (`find website/docs/cli/commands -name "*keyword*"`), check slug in frontmatter (`head -10 <file> | grep slug`), verify existing links (`grep -r "<url>" website/docs/`).
+
+**Common mistakes:** Using command name vs. filename, not checking slug frontmatter, guessing URLs.
+
+### Documentation Requirements (MANDATORY)
+CLI command docs MUST include:
+1. **Frontmatter** - title, sidebar_label, sidebar_class_name, id, description
+2. **Intro component** - `import Intro from '@site/src/components/Intro'` then `<Intro>Brief description</Intro>`
+3. **Screengrab** - `import Screengrab from '@site/src/components/Screengrab'` then `<Screengrab title="..." slug="..." />`
+4. **Usage section** - Shell code block with command syntax
+5. **Arguments/Flags** - Use `<dl><dt>` for each argument/flag with `<dd>` description
+6. **Examples section** - Practical usage examples
+
+File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
+
+### Website Build (MANDATORY)
+ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken links, missing images, MDX component rendering.
+
+### Regenerating Screengrabs (IMPORTANT)
+**When:** After modifying CLI behavior/help/output, adding commands. NOT for doc-only changes.
+
+**How (Linux/CI only):**
+1. GitHub Actions: `gh workflow run screengrabs.yaml` (creates PR)
+2. Local Linux: `cd demo/screengrabs && make all`
+3. Docker (macOS): `make -C demo/screengrabs docker-all`
+
+**Notes:** Captures exact output, ANSI→HTML, `script` syntax differs BSD/GNU, regenerate all together, no pipe indirection.
 
 ### PRD Documentation (MANDATORY)
 All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use kebab-case filenames.
