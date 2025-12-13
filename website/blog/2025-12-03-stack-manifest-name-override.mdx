@@ -1,6 +1,6 @@
 ---
 slug: stack-manifest-name-override
-title: Multi-Format Stack Configurations with Explicit Naming
+title: Explicit Stack Names in Stack Manifests
 authors:
   - osterman
 tags:
@@ -8,21 +8,13 @@ tags:
 date: 2025-12-03T00:00:00.000Z
 ---
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
-You can now specify explicit stack names in both YAML and HCL stack manifests. HCL stacks use a labeled block syntax (`stack "name" { }`), while YAML stacks use a `name` field. This is especially useful when migrating from other tools like Terragrunt, or when your infrastructure doesn't follow a strict naming convention.
+You can now specify an explicit `name` field in stack manifests to override the logical stack name. This is especially useful when migrating from other tools like Terragrunt, or when your infrastructure doesn't follow a strict naming convention.
 
 <!--truncate-->
 
 ## What's New
 
-Stack manifests now support explicit stack naming in both formats:
-
-- **YAML**: Add a top-level `name` field
-- **HCL**: Use a labeled `stack` block: `stack "my-name" { }`
-
-Both approaches take precedence over `name_template` and `name_pattern` configured in `atmos.yaml`, giving you imperative control over stack naming when you need it.
+Stack manifests now support a top-level `name` field that explicitly sets the logical stack name. This takes precedence over `name_template` and `name_pattern` configured in `atmos.yaml`, giving you imperative control over stack naming when you need it.
 
 ## The Problem
 
@@ -40,11 +32,7 @@ These declarative approaches work well for greenfield projects with consistent n
 
 ## The Solution
 
-Add an explicit name to any stack manifest to set its logical name.
-
-### YAML Format
-
-Use a top-level `name` field:
+Add a `name` field to any stack manifest to explicitly set its logical name:
 
 ```yaml
 # stacks/legacy-prod.yaml
@@ -60,32 +48,7 @@ components:
         cidr: "10.0.0.0/16"
 ```
 
-### HCL Format
-
-Use a labeled `stack` block:
-
-```hcl
-# stacks/legacy-prod.hcl
-stack "my-legacy-prod-stack" {
-  import = ["catalog/base"]
-
-  components {
-    terraform {
-      vpc {
-        vars {
-          cidr = "10.0.0.0/16"
-        }
-      }
-    }
-  }
-}
-```
-
-With either configuration, the stack is identified as `my-legacy-prod-stack` regardless of the filename or any naming patterns configured in `atmos.yaml`. The Terraform workspace will also use this name.
-
-:::tip HCL without label
-A `stack { }` block without a label is also valid - in that case, the stack name will be derived from `name_template`, `name_pattern`, or the filename as usual.
-:::
+With this configuration, the stack is identified as `my-legacy-prod-stack` regardless of the filename or any naming patterns configured in `atmos.yaml`. The Terraform workspace will also use this name.
 
 ## Precedence Order
 
@@ -98,100 +61,11 @@ Stack names are now resolved in this order:
 
 This means you can still use `name_template` or `name_pattern` for most stacks while selectively overriding specific stacks that don't fit the pattern.
 
-## Multiple Stacks Per File
-
-Both HCL and YAML formats support defining multiple stacks in a single file.
-
-### HCL: Multiple Stack Blocks
-
-Define multiple labeled `stack` blocks in a single HCL file:
-
-```hcl
-# stacks/environments.hcl
-stack "dev" {
-  import = ["catalog/base"]
-
-  vars {
-    environment = "dev"
-    stage       = "development"
-  }
-
-  components {
-    terraform {
-      vpc {
-        vars {
-          cidr = "10.10.0.0/16"
-        }
-      }
-    }
-  }
-}
-
-stack "staging" {
-  import = ["catalog/base"]
-
-  vars {
-    environment = "staging"
-    stage       = "staging"
-  }
-
-  components {
-    terraform {
-      vpc {
-        vars {
-          cidr = "10.20.0.0/16"
-        }
-      }
-    }
-  }
-}
-```
-
-### YAML: Multi-Document Format
-
-Use the YAML multi-document separator (`---`) to define multiple stacks:
-
-```yaml
-# stacks/environments.yaml
-name: dev
-import:
-  - catalog/base
-
-vars:
-  environment: dev
-  stage: development
-
-components:
-  terraform:
-    vpc:
-      vars:
-        cidr: "10.10.0.0/16"
----
-name: staging
-import:
-  - catalog/base
-
-vars:
-  environment: staging
-  stage: staging
-
-components:
-  terraform:
-    vpc:
-      vars:
-        cidr: "10.20.0.0/16"
-```
-
-Both examples create two stacks (`dev` and `staging`) from a single file, making it easier to manage related environments together.
-
 ## Use Cases
 
 ### Migrating from Terragrunt
 
 When migrating from Terragrunt, your existing state files are tied to specific workspace names that may not match Atmos naming conventions:
-
-<Tabs>
-  <TabItem value="yaml" label="YAML" default>
 
 ```yaml
 # stacks/us-east-1/prod/vpc.yaml
@@ -206,29 +80,6 @@ components:
       vars:
         cidr: "10.0.0.0/16"
 ```
-
-  </TabItem>
-  <TabItem value="hcl" label="HCL">
-
-```hcl
-# stacks/us-east-1/prod/vpc.hcl
-stack "prod-us-east-1-vpc" {  # Matches existing Terraform workspace
-  import = ["catalog/vpc"]
-
-  components {
-    terraform {
-      vpc {
-        vars {
-          cidr = "10.0.0.0/16"
-        }
-      }
-    }
-  }
-}
-```
-
-  </TabItem>
-</Tabs>
 
 ### Legacy Infrastructure
 
@@ -265,7 +116,7 @@ components:
 
 ## How It Works
 
-The explicit stack name (from the YAML `name` field or HCL block label) is extracted during stack processing and used wherever the logical stack name is needed:
+The `name` field is extracted during stack processing and used wherever the logical stack name is needed:
 
 - **Stack identification** - `atmos describe stacks` shows the custom name
 - **Stack selection** - Use `-s my-legacy-prod-stack` on the command line
@@ -289,8 +140,4 @@ This feature is analogous to `metadata.name` for components, which allows renami
 
 ## Get Started
 
-Add an explicit name to any stack manifest that needs one:
-- **YAML**: Add a `name` field
-- **HCL**: Use a labeled `stack "name" { }` block
-
-This feature is fully backward compatible - stacks without explicit names continue to use `name_template`, `name_pattern`, or the filename as before.
+Add a `name` field to any stack manifest that needs an explicit name. This feature is fully backward compatible - stacks without a `name` field continue to use `name_template`, `name_pattern`, or the filename as before.
