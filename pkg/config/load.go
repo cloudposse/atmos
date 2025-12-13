@@ -1242,5 +1242,11 @@ func preserveIdentityCase(v *viper.Viper, atmosConfig *schema.AtmosConfiguration
 
 	log.Debug("Preserved identity case mapping", "identities", len(caseMap))
 
+	// Also preserve case from provisioned identity cache files.
+	if err := preserveProvisionedIdentityCase(atmosConfig); err != nil {
+		log.Debug("Failed to preserve provisioned identity case", "error", err)
+		// Non-fatal: continue without provisioned identity case preservation.
+	}
+
 	return nil
 }
