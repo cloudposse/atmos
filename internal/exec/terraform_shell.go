@@ -33,7 +33,7 @@ func printShellDryRunInfo(info *schema.ConfigAndStacksInfo, cfg *shellConfig) {
 func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteTerraformShell")()
 
-	log.Debug("ExecuteShell called",
+	log.Debug("ExecuteTerraformShell called",
 		"component", opts.Component, "stack", opts.Stack,
 		"processTemplates", opts.ProcessTemplates, "processFunctions", opts.ProcessFunctions,
 		"skip", opts.Skip, "dryRun", opts.DryRun,
