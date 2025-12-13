@@ -608,6 +608,17 @@ func TrimRight(s string) string {
 	return result.String()
 }
 
+// TrimLinesRight trims trailing whitespace from each line in a multi-line string.
+// This is useful after lipgloss.Render() which pads all lines to the same width.
+// Uses ANSI-aware TrimRight to handle whitespace wrapped in ANSI codes.
+func TrimLinesRight(s string) string {
+	lines := strings.Split(s, newline)
+	for i, line := range lines {
+		lines[i] = TrimRight(line)
+	}
+	return strings.Join(lines, newline)
+}
+
 // trimTrailingWhitespace splits rendered markdown by newlines and trims trailing spaces
 // that Glamour adds for padding (including ANSI-wrapped spaces). For empty lines (all whitespace),
 // it preserves the leading indent (first 2 spaces) to maintain paragraph structure.
