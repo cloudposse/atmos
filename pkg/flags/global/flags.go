@@ -50,7 +50,7 @@ type Flags struct {
 
 	// Authentication.
 	Identity IdentitySelector
-	// Note: GitHubToken is NOT a global flag. It is only used by toolchain commands
+	// Note: GitHubToken is NOT a global flag. It is only used by toolchain commands,
 	// and is registered locally on the toolchain command in cmd/toolchain/toolchain.go.
 
 	// Profiles.
