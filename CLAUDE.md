@@ -538,7 +538,15 @@ All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. Use `<dl>` 
 **Common mistakes:** Using command name vs. filename, not checking slug frontmatter, guessing URLs.
 
 ### Documentation Requirements (MANDATORY)
-Use `<dl>` for arguments/flags. Follow Docusaurus conventions: frontmatter, purpose note, screengrab, usage/examples/arguments/flags sections. File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
+CLI command docs MUST include:
+1. **Frontmatter** - title, sidebar_label, sidebar_class_name, id, description
+2. **Intro component** - `import Intro from '@site/src/components/Intro'` then `<Intro>Brief description</Intro>`
+3. **Screengrab** - `import Screengrab from '@site/src/components/Screengrab'` then `<Screengrab title="..." slug="..." />`
+4. **Usage section** - Shell code block with command syntax
+5. **Arguments/Flags** - Use `<dl><dt>` for each argument/flag with `<dd>` description
+6. **Examples section** - Practical usage examples
+
+File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
 
 ### Website Build (MANDATORY)
 ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken links, missing images, MDX component rendering.
