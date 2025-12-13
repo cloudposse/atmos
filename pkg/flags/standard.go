@@ -343,11 +343,23 @@ func (p *StandardFlagParser) registerPersistentCompletions(cmd *cobra.Command) {
 		if completionFunc := flag.GetCompletionFunc(); completionFunc != nil {
 			_ = cmd.RegisterFlagCompletionFunc(flagName, completionFunc)
 
-			// Recursively register on all child commands.
-			for _, child := range cmd.Commands() {
-				_ = child.RegisterFlagCompletionFunc(flagName, completionFunc)
-			}
+			// Recursively register on all descendant commands.
+			registerCompletionRecursive(cmd, flagName, completionFunc)
 		}
+	}
+}
+
+// registerCompletionRecursive registers a flag completion function on all descendant commands.
+// This is necessary because Cobra doesn't automatically propagate completion functions
+// from parent to children for persistent flags.
+func registerCompletionRecursive(cmd *cobra.Command, flagName string, completionFunc func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective)) {
+	for _, child := range cmd.Commands() {
+		// Only register if the flag is accessible on this child command.
+		if child.Flags().Lookup(flagName) != nil || child.PersistentFlags().Lookup(flagName) != nil {
+			_ = child.RegisterFlagCompletionFunc(flagName, completionFunc)
+		}
+		// Recurse into grandchildren.
+		registerCompletionRecursive(child, flagName, completionFunc)
 	}
 }
 
