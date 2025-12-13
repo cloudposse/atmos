@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	"github.com/cloudposse/atmos/cmd/terraform/generate"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -57,6 +58,9 @@ func init() {
 
 	// Add generate subcommand from the generate subpackage.
 	terraformCmd.AddCommand(generate.GenerateCmd)
+
+	// Add backend subcommand from the backend subpackage.
+	terraformCmd.AddCommand(backend.GetBackendCommand())
 
 	// Register other completion functions (component args, identity).
 	RegisterTerraformCompletions(terraformCmd)
