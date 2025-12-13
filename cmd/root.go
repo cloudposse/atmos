@@ -759,7 +759,7 @@ func renderSingleFlag(w io.Writer, f *pflag.Flag, layout flagRenderLayout, style
 	if renderer != nil {
 		rendered, err := renderer.RenderWithoutWordWrap(wrapped)
 		if err == nil {
-			wrapped = strings.TrimSpace(rendered)
+			wrapped = ui.TrimLinesRight(rendered)
 		}
 	}
 
