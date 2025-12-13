@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -14,6 +13,9 @@ import (
 )
 
 func TestAuthShellCmd_FlagParsing(t *testing.T) {
+	// Use TestKit to ensure proper test isolation.
+	_ = NewTestKit(t)
+
 	tests := []struct {
 		name                string
 		args                []string
@@ -58,9 +60,6 @@ func TestAuthShellCmd_FlagParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset viper state to ensure clean test isolation.
-			viper.Reset()
-
 			// Set up test fixture with auth configuration for each subtest.
 			testDir := "../tests/fixtures/scenarios/atmos-auth"
 			t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
