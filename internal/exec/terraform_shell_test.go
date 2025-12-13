@@ -5,10 +5,11 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestPrintShellDryRunInfo(t *testing.T) {
@@ -67,24 +68,31 @@ func TestPrintShellDryRunInfo(t *testing.T) {
 
 			// Capture stderr where UI output goes.
 			oldStderr := os.Stderr
-			r, w, _ := os.Pipe()
+			r, w, err := os.Pipe()
+			require.NoError(t, err, "failed to create pipe for stderr capture")
+
+			// Ensure stderr is restored and pipe ends are closed even on panic.
+			defer func() {
+				os.Stderr = oldStderr
+				r.Close()
+			}()
+
 			os.Stderr = w
 
 			// Initialize the UI formatter with a standard I/O context.
 			ioCtx, err := iolib.NewContext()
-			assert.NoError(t, err)
+			require.NoError(t, err, "failed to create I/O context")
 			ui.InitFormatter(ioCtx)
 
 			printShellDryRunInfo(tt.info, tt.cfg)
 
-			// Restore stderr and read the output.
+			// Close write end and read the output.
 			w.Close()
-			os.Stderr = oldStderr
 			_, _ = buf.ReadFrom(r)
 
 			output := buf.String()
 			for _, expected := range tt.expectedOutput {
-				assert.Contains(t, output, expected)
+				require.Contains(t, output, expected)
 			}
 		})
 	}

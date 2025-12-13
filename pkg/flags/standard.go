@@ -76,7 +76,10 @@ func NewStandardFlagParser(opts ...Option) *StandardFlagParser {
 
 // Registry returns the underlying flag registry.
 // This allows access to the registry for operations like SetCompletionFunc()
-// that need to modify flags after parser creation.
+// that need to modify flags after parser creation. Any mutations to the
+// returned registry must be made before calling RegisterFlags or
+// RegisterPersistentFlags; changes made afterward will not affect
+// already-registered flags.
 func (p *StandardFlagParser) Registry() *FlagRegistry {
 	defer perf.Track(nil, "flags.StandardFlagParser.Registry")()
 

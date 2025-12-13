@@ -31,7 +31,7 @@ func printShellDryRunInfo(info *schema.ConfigAndStacksInfo, cfg *shellConfig) {
 
 // ExecuteTerraformShell starts an interactive shell configured for a terraform component.
 func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfiguration) error {
-	defer perf.Track(atmosConfig, "exec.ExecuteShell")()
+	defer perf.Track(atmosConfig, "exec.ExecuteTerraformShell")()
 
 	log.Debug("ExecuteShell called",
 		"component", opts.Component, "stack", opts.Stack,

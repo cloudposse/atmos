@@ -490,17 +490,6 @@ func ExecuteClean(opts *CleanOptions, atmosConfig *schema.AtmosConfiguration) er
 	return HandleCleanSubCommand(&info, componentPath, atmosConfig)
 }
 
-// CleanContext holds the context for clean operations.
-type CleanContext struct {
-	Info          *schema.ConfigAndStacksInfo
-	AtmosConfig   *schema.AtmosConfiguration
-	ComponentPath string
-	CleanPath     string
-	RelativePath  string
-	Force         bool
-	FilesToClear  []string
-}
-
 // buildCleanPath determines the path to clean based on component info.
 func buildCleanPath(info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
 	if info.ComponentFromArg != "" && info.StackFromArg == "" {
