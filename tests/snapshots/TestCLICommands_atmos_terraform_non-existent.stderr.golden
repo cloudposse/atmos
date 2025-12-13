@@ -46,7 +46,7 @@ Valid subcommands are:
 
 – Execute a terraform subcommand
 
-  $ atmos terraform [subcommand] <component-name> -s <stack-name>
+$ atmos terraform [subcommand]  -s
 
 ## Hints
 
