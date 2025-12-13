@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,7 +13,6 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"go.yaml.in/yaml/v3"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -29,6 +27,7 @@ const (
 	FormatJSON      = "json"
 	FormatHCL       = "hcl"
 	filePermissions = 0o600
+	nameSectionName = "name"
 )
 
 var (
@@ -38,6 +37,7 @@ var (
 )
 
 // ExecuteStackConvert converts a stack configuration file between formats.
+// Supports multi-document YAML files and multi-stack HCL files.
 func ExecuteStackConvert(
 	atmosConfig *schema.AtmosConfiguration,
 	inputPath string,
@@ -53,8 +53,8 @@ func ExecuteStackConvert(
 		return fmt.Errorf("%w: %s (must be yaml, json, or hcl)", ErrUnsupportedFormat, targetFormat)
 	}
 
-	// Read and parse input file.
-	inputData, sourceFormat, err := readAndParseFile(inputPath)
+	// Read and parse input file (supports multi-document).
+	stacks, sourceFormat, err := readAndParseMultiDocFile(inputPath)
 	if err != nil {
 		return err
 	}
@@ -65,7 +65,7 @@ func ExecuteStackConvert(
 	}
 
 	// Convert to target format.
-	output, err := convertToFormat(inputData, targetFormat)
+	output, err := convertStacksToFormat(stacks, targetFormat)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrConversionFailed, err)
 	}
@@ -102,144 +102,230 @@ func isValidFormat(format string) bool {
 	}
 }
 
-// readAndParseFile reads a file and parses it, returning the data and detected format.
-//
-//nolint:cyclop,funlen,gocognit,nolintlint,revive
-func readAndParseFile(path string) (map[string]any, string, error) {
+// readAndParseMultiDocFile reads a file and parses it, supporting multi-document YAML and multi-stack HCL.
+// Returns a slice of StackDocument and the detected source format.
+func readAndParseMultiDocFile(path string) ([]filetype.StackDocument, string, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to read file: %w", err)
 	}
 
-	data := string(content)
+	dataStr := string(content)
+	ext := strings.ToLower(filepath.Ext(path))
 
-	// Detect format and parse.
-	var parsed any
-	var format string
-
-	switch {
-	case filetype.IsJSON(data):
-		format = FormatJSON
-		if err := json.Unmarshal(content, &parsed); err != nil {
-			return nil, "", fmt.Errorf("failed to parse JSON: %w", err)
-		}
-	case filetype.IsHCL(data):
-		format = FormatHCL
-		parsed, err = filetype.DetectFormatAndParseFile(os.ReadFile, path)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to parse HCL: %w", err)
-		}
-		// Unwrap HCL "stack" block if present.
-		if m, ok := parsed.(map[string]any); ok {
-			if stack, hasStack := m["stack"]; hasStack {
-				if stackMap, ok := stack.(map[string]any); ok {
-					parsed = stackMap
-				}
-			}
-		}
-	case filetype.IsYAML(data):
-		format = FormatYAML
-		if err := yaml.Unmarshal(content, &parsed); err != nil {
-			return nil, "", fmt.Errorf("failed to parse YAML: %w", err)
-		}
-	default:
-		// Try to infer from extension.
-		ext := strings.ToLower(filepath.Ext(path))
-		switch ext {
-		case ".yaml", ".yml":
-			format = FormatYAML
-			if err := yaml.Unmarshal(content, &parsed); err != nil {
-				return nil, "", fmt.Errorf("failed to parse YAML: %w", err)
-			}
-		case ".json":
-			format = FormatJSON
-			if err := json.Unmarshal(content, &parsed); err != nil {
-				return nil, "", fmt.Errorf("failed to parse JSON: %w", err)
-			}
-		case ".hcl":
-			format = FormatHCL
-			parsed, err = filetype.DetectFormatAndParseFile(os.ReadFile, path)
-			if err != nil {
-				return nil, "", fmt.Errorf("failed to parse HCL: %w", err)
-			}
-		default:
-			return nil, "", fmt.Errorf("%w: could not detect format for %s", ErrUnknownSourceFormat, path)
-		}
+	// Detect format.
+	format := detectFormat(dataStr, ext)
+	if format == "" {
+		return nil, "", fmt.Errorf("%w: could not detect format for %s", ErrUnknownSourceFormat, path)
 	}
 
-	// Ensure we have a map.
-	result, ok := parsed.(map[string]any)
-	if !ok {
-		return nil, "", fmt.Errorf("%w: expected map, got %T", errUtils.ErrParseFile, parsed)
+	// Parse based on format.
+	stacks, err := parseByFormat(content, path, format)
+	if err != nil {
+		return nil, "", err
 	}
 
-	return result, format, nil
+	return stacks, format, nil
 }
 
-// convertToFormat converts the data to the specified format.
-func convertToFormat(data map[string]any, format string) (string, error) {
+// detectFormat detects the format from content or falls back to file extension.
+func detectFormat(content, ext string) string {
+	switch {
+	case filetype.IsJSON(content):
+		return FormatJSON
+	case filetype.IsHCL(content):
+		return FormatHCL
+	case filetype.IsYAML(content):
+		return FormatYAML
+	}
+
+	// Fall back to extension.
+	switch ext {
+	case ".yaml", ".yml":
+		return FormatYAML
+	case ".json":
+		return FormatJSON
+	case ".hcl":
+		return FormatHCL
+	default:
+		return ""
+	}
+}
+
+// parseByFormat parses content according to the specified format.
+func parseByFormat(content []byte, path, format string) ([]filetype.StackDocument, error) {
 	switch format {
 	case FormatYAML:
-		return convertToYAML(data)
-	case FormatJSON:
-		return convertToJSON(data)
+		stacks, err := filetype.ParseYAMLStacks(content)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse YAML: %w", err)
+		}
+		return stacks, nil
 	case FormatHCL:
-		return convertToHCL(data)
+		stacks, err := filetype.ParseHCLStacks(content, path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse HCL: %w", err)
+		}
+		return stacks, nil
+	case FormatJSON:
+		return parseJSONStack(content)
+	default:
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedFormat, format)
+	}
+}
+
+// parseJSONStack parses JSON content as a single stack document.
+func parseJSONStack(content []byte) ([]filetype.StackDocument, error) {
+	var parsed map[string]any
+	if err := json.Unmarshal(content, &parsed); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+	// Extract name if present.
+	name := ""
+	if n, ok := parsed[nameSectionName].(string); ok {
+		name = n
+	}
+	return []filetype.StackDocument{{Name: name, Config: parsed}}, nil
+}
+
+// convertStacksToFormat converts multiple stacks to the specified format.
+func convertStacksToFormat(stacks []filetype.StackDocument, format string) (string, error) {
+	switch format {
+	case FormatYAML:
+		return convertStacksToYAML(stacks)
+	case FormatJSON:
+		return convertStacksToJSON(stacks)
+	case FormatHCL:
+		return convertStacksToHCL(stacks)
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnsupportedFormat, format)
 	}
 }
 
-// convertToYAML converts data to YAML format.
-func convertToYAML(data map[string]any) (string, error) {
-	out, err := yaml.Marshal(data)
+// convertStacksToYAML converts stacks to multi-document YAML format.
+func convertStacksToYAML(stacks []filetype.StackDocument) (string, error) {
+	if len(stacks) == 0 {
+		return "", nil
+	}
+
+	var result strings.Builder
+	for i, stack := range stacks {
+		if i > 0 {
+			result.WriteString("---\n")
+		}
+		// If stack has a name, ensure it's in the config.
+		config := stack.Config
+		if stack.Name != "" {
+			if config == nil {
+				config = make(map[string]any)
+			}
+			config[nameSectionName] = stack.Name
+		}
+		out, err := yaml.Marshal(config)
+		if err != nil {
+			return "", err
+		}
+		result.Write(out)
+	}
+	return result.String(), nil
+}
+
+// convertStacksToJSON converts stacks to JSON format.
+// For multiple stacks, outputs a JSON array.
+func convertStacksToJSON(stacks []filetype.StackDocument) (string, error) {
+	if len(stacks) == 0 {
+		return "{}", nil
+	}
+
+	// For a single stack, output as object.
+	if len(stacks) == 1 {
+		config := prepareStackConfig(stacks[0])
+		out, err := json.MarshalIndent(config, "", "  ")
+		if err != nil {
+			return "", err
+		}
+		return string(out), nil
+	}
+
+	// For multiple stacks, output as array.
+	configs := make([]map[string]any, 0, len(stacks))
+	for _, stack := range stacks {
+		configs = append(configs, prepareStackConfig(stack))
+	}
+	out, err := json.MarshalIndent(configs, "", "  ")
 	if err != nil {
 		return "", err
 	}
 	return string(out), nil
 }
 
-// convertToJSON converts data to JSON format.
-func convertToJSON(data map[string]any) (string, error) {
-	out, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return "", err
+// prepareStackConfig ensures the stack name is included in the config map.
+func prepareStackConfig(stack filetype.StackDocument) map[string]any {
+	config := stack.Config
+	if stack.Name != "" {
+		if config == nil {
+			config = make(map[string]any)
+		}
+		config[nameSectionName] = stack.Name
 	}
-	return string(out), nil
+	return config
 }
 
-// convertToHCL converts data to HCL format with stack wrapper block.
-// Uses labeled blocks for components: component "name" { }.
-// This format supports future stack naming: stack "name" { }.
-func convertToHCL(data map[string]any) (string, error) {
+// convertStacksToHCL converts stacks to multi-stack HCL format.
+func convertStacksToHCL(stacks []filetype.StackDocument) (string, error) {
+	if len(stacks) == 0 {
+		return "", nil
+	}
+
 	hclFile := hclwrite.NewEmptyFile()
 	rootBody := hclFile.Body()
 
-	// Create stack wrapper block.
-	stackBlock := rootBody.AppendNewBlock("stack", nil)
-	stackBody := stackBlock.Body()
-
-	// Sort top-level keys for deterministic output.
-	keys := make([]string, 0, len(data))
-	for k := range data {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	// Write each top-level section.
-	for _, key := range keys {
-		value := data[key]
-		switch key {
-		case "components":
-			// Special handling for components section.
-			writeComponentsBlock(stackBody, value)
-		default:
-			// Generic block for other sections (vars, settings, etc.).
-			writeGenericBlock(stackBody, key, value)
+	for i, stack := range stacks {
+		if i > 0 {
+			rootBody.AppendNewline()
 		}
+		writeStackToHCL(rootBody, stack)
 	}
 
 	return string(hclFile.Bytes()), nil
+}
+
+// writeStackToHCL writes a single stack document to the HCL body.
+func writeStackToHCL(rootBody *hclwrite.Body, stack filetype.StackDocument) {
+	// Use stack name as block label if present.
+	var stackLabels []string
+	if stack.Name != "" {
+		stackLabels = []string{stack.Name}
+	}
+
+	stackBlock := rootBody.AppendNewBlock("stack", stackLabels)
+	stackBody := stackBlock.Body()
+
+	// Get sorted keys, excluding name if used as block label.
+	keys := getStackConfigKeys(stack.Config, len(stackLabels) > 0)
+
+	// Write each top-level section.
+	for _, key := range keys {
+		value := stack.Config[key]
+		if key == "components" {
+			writeComponentsBlock(stackBody, value)
+		} else {
+			writeGenericBlock(stackBody, key, value)
+		}
+	}
+}
+
+// getStackConfigKeys returns sorted keys from config, optionally excluding the name key.
+func getStackConfigKeys(config map[string]any, excludeName bool) []string {
+	keys := make([]string, 0, len(config))
+	for k := range config {
+		if excludeName && k == nameSectionName {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // writeComponentsBlock writes the components section with special handling for labeled blocks.
@@ -378,60 +464,4 @@ func sortedKeys(m map[string]any) []string {
 	}
 	sort.Strings(keys)
 	return keys
-}
-
-// ConvertStackToBytes converts stack data to the specified format as bytes.
-// This is useful for programmatic use.
-func ConvertStackToBytes(data map[string]any, format string) ([]byte, error) {
-	defer perf.Track(nil, "exec.ConvertStackToBytes")()
-
-	output, err := convertToFormat(data, format)
-	if err != nil {
-		return nil, err
-	}
-	return []byte(output), nil
-}
-
-// DetectStackFormat detects the format of a stack file by its content.
-func DetectStackFormat(content string) string {
-	defer perf.Track(nil, "exec.DetectStackFormat")()
-
-	switch {
-	case filetype.IsJSON(content):
-		return FormatJSON
-	case filetype.IsHCL(content):
-		return FormatHCL
-	case filetype.IsYAML(content):
-		return FormatYAML
-	default:
-		return ""
-	}
-}
-
-// ParseStackFile parses a stack file and returns the data.
-func ParseStackFile(path string) (map[string]any, error) {
-	defer perf.Track(nil, "exec.ParseStackFile")()
-
-	data, _, err := readAndParseFile(path)
-	return data, err
-}
-
-// WriteStackFile writes stack data to a file in the specified format.
-func WriteStackFile(path string, data map[string]any, format string) error {
-	defer perf.Track(nil, "exec.WriteStackFile")()
-
-	output, err := convertToFormat(data, format)
-	if err != nil {
-		return err
-	}
-
-	var content bytes.Buffer
-	content.WriteString(output)
-
-	// Ensure trailing newline.
-	if !strings.HasSuffix(output, "\n") {
-		content.WriteByte('\n')
-	}
-
-	return os.WriteFile(path, content.Bytes(), filePermissions)
 }

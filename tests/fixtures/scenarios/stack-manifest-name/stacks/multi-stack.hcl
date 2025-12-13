@@ -11,7 +11,7 @@ stack "dev-stack" {
 
   components {
     terraform {
-      vpc {
+      component "vpc" {
         vars {
           cidr = "10.10.0.0/16"
         }
@@ -30,7 +30,7 @@ stack "staging-stack" {
 
   components {
     terraform {
-      vpc {
+      component "vpc" {
         vars {
           cidr = "10.20.0.0/16"
         }
