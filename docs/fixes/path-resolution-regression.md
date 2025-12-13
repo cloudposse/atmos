@@ -12,7 +12,7 @@ were incorrectly resolved relative to the `ATMOS_CLI_CONFIG_PATH` directory inst
 **Symptoms**:
 
 - After upgrading from `v1.200.0` to `v1.201.0`, `atmos validate stacks` fails with:
-  ```
+  ```text
   The atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks, but the directory does not exist.
   ```
 

@@ -1029,6 +1029,80 @@ func TestResolveAbsolutePath(t *testing.T) {
 		},
 	}
 
+	// Add platform-specific test cases for Windows-style paths.
+	// On Windows, backslash is the path separator so .\\ and ..\\ are explicit relative paths.
+	// On Unix, backslash is a literal character so .\\ paths are just regular paths (resolve to CWD).
+	if filepath.Separator == '\\' {
+		// Windows: backslash paths should resolve to config dir.
+		windowsTests := []struct {
+			name          string
+			path          string
+			cliConfigPath string
+			expectedBase  string
+		}{
+			{
+				name:          "Windows-style .\\subpath resolves to config dir",
+				path:          ".\\subpath",
+				cliConfigPath: configDir,
+				expectedBase:  "config",
+			},
+			{
+				name:          "Windows-style ..\\sibling resolves to config dir",
+				path:          "..\\sibling",
+				cliConfigPath: configDir,
+				expectedBase:  "config",
+			},
+			{
+				name:          "Windows-style .\\subpath with empty config path resolves to CWD",
+				path:          ".\\subpath",
+				cliConfigPath: "",
+				expectedBase:  "cwd",
+			},
+			{
+				name:          "Windows-style ..\\sibling with empty config path resolves to CWD",
+				path:          "..\\sibling",
+				cliConfigPath: "",
+				expectedBase:  "cwd",
+			},
+			{
+				name:          "Windows-style .\\nested\\path resolves to config dir",
+				path:          ".\\nested\\path",
+				cliConfigPath: configDir,
+				expectedBase:  "config",
+			},
+			{
+				name:          "Windows-style ..\\..\\parent resolves to config dir",
+				path:          "..\\..\\parent",
+				cliConfigPath: configDir,
+				expectedBase:  "config",
+			},
+		}
+		tests = append(tests, windowsTests...)
+	} else {
+		// Unix: backslash is a literal character, so these paths resolve to CWD.
+		// This tests that we don't incorrectly treat backslash as a path separator on Unix.
+		unixBackslashTests := []struct {
+			name          string
+			path          string
+			cliConfigPath string
+			expectedBase  string
+		}{
+			{
+				name:          "Unix treats .\\subpath as literal (not path separator), resolves to CWD",
+				path:          ".\\subpath",
+				cliConfigPath: configDir,
+				expectedBase:  "cwd",
+			},
+			{
+				name:          "Unix treats ..\\sibling as literal (not path separator), resolves to CWD",
+				path:          "..\\sibling",
+				cliConfigPath: configDir,
+				expectedBase:  "cwd",
+			},
+		}
+		tests = append(tests, unixBackslashTests...)
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := resolveAbsolutePath(tt.path, tt.cliConfigPath)

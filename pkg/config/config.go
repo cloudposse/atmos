@@ -202,8 +202,12 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 //
 // Resolution order:
 //  1. If path is already absolute → return as-is
-//  2. If path explicitly references a relative location (starts with "..", "./" or is exactly ".")
-//     AND cliConfigPath is set → resolve relative to cliConfigPath (where atmos.yaml is located)
+//  2. If path explicitly references a relative location AND cliConfigPath is set →
+//     resolve relative to cliConfigPath (where atmos.yaml is located).
+//     Explicit relative paths are detected strictly:
+//     - Exactly "." or ".." (current or parent directory)
+//     - Starts with "./" or "../" (Unix-style)
+//     - Starts with ".\" or "..\" (Windows-style, via filepath.Separator)
 //  3. Otherwise (simple paths like "stacks", "components/terraform", or empty string) →
 //     resolve relative to current working directory (for backward compatibility)
 //
