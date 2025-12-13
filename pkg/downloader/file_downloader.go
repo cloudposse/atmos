@@ -122,9 +122,18 @@ func (fd *fileDownloader) FetchData(src string) ([]byte, error) {
 // FetchAtomic downloads a file atomically to the destination.
 // Uses temp file + fsync + atomic rename to prevent partial downloads or corruption.
 func (fd *fileDownloader) FetchAtomic(src, dest string, mode ClientMode, timeout time.Duration) error {
+	// FetchAtomic only supports file mode as it assumes tempPath is a file.
+	if mode != ClientModeFile {
+		return errUtils.Build(errUtils.ErrInvalidClientMode).
+			WithExplanation(fmt.Sprintf("FetchAtomic requires ClientModeFile, got mode %d", mode)).
+			WithContext("src", src).
+			WithContext("dest", dest).
+			Err()
+	}
+
 	// Download to a temporary location first.
 	tempPath := fd.tempPathGenerator()
-	defer os.Remove(tempPath)
+	defer os.RemoveAll(tempPath) // Safely handles files and directories.
 
 	// Fetch to temp location.
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -132,22 +141,40 @@ func (fd *fileDownloader) FetchAtomic(src, dest string, mode ClientMode, timeout
 
 	client, err := fd.clientFactory.NewClient(ctx, src, tempPath, mode)
 	if err != nil {
-		return fmt.Errorf(errWrapFormat, errUtils.ErrCreateDownloadClient, err)
+		return errUtils.Build(errUtils.ErrCreateDownloadClient).
+			WithCause(err).
+			WithContext("src", src).
+			WithContext("dest", dest).
+			Err()
 	}
 
-	if err := client.Get(); err != nil {
-		return fmt.Errorf(errWrapFormat, errUtils.ErrDownloadFile, err)
+	if getErr := client.Get(); getErr != nil {
+		return errUtils.Build(errUtils.ErrDownloadFile).
+			WithCause(getErr).
+			WithContext("src", src).
+			WithContext("dest", dest).
+			Err()
 	}
 
 	// Read the downloaded content.
-	data, err := fd.fileReader(tempPath)
-	if err != nil {
-		return fmt.Errorf("%w: failed to read downloaded file: %w", errUtils.ErrDownloadFile, err)
+	data, readErr := fd.fileReader(tempPath)
+	if readErr != nil {
+		return errUtils.Build(errUtils.ErrDownloadFile).
+			WithCause(readErr).
+			WithExplanation("failed to read downloaded file").
+			WithContext("src", src).
+			WithContext("dest", dest).
+			Err()
 	}
 
 	// Write atomically to final destination using injected writer.
-	if err := fd.atomicWriter(dest, data, 0o644); err != nil {
-		return fmt.Errorf("%w: failed to write file atomically: %w", errUtils.ErrDownloadFile, err)
+	if writeErr := fd.atomicWriter(dest, data, 0o644); writeErr != nil {
+		return errUtils.Build(errUtils.ErrDownloadFile).
+			WithCause(writeErr).
+			WithExplanation("failed to write file atomically").
+			WithContext("src", src).
+			WithContext("dest", dest).
+			Err()
 	}
 
 	return nil

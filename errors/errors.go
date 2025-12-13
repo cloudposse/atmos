@@ -15,6 +15,7 @@ const (
 var (
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrDownloadFile                          = errors.New("failed to download file")
+	ErrInvalidClientMode                     = errors.New("invalid client mode for operation")
 	ErrParseFile                             = errors.New("failed to parse file")
 	ErrParseURL                              = errors.New("failed to parse URL")
 	ErrInvalidURL                            = errors.New("invalid URL")

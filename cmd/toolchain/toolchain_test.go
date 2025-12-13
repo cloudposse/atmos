@@ -183,9 +183,8 @@ func TestToolchainCommandsWithoutToolVersionsFile(t *testing.T) {
 
 	// Test that list command handles missing file gracefully.
 	err = listCmd.RunE(listCmd, []string{})
-	// Should either return error or handle gracefully.
-	// We're just checking it doesn't panic.
-	_ = err
+	// Command should handle missing tool-versions file gracefully without error.
+	assert.NoError(t, err, "list command should handle missing .tool-versions gracefully")
 }
 
 func TestToolchainCleanCommand(t *testing.T) {
@@ -512,6 +511,12 @@ func TestToolchainUninstallCommand(t *testing.T) {
 
 // TestSetAtmosConfig tests the SetAtmosConfig function.
 func TestSetAtmosConfig(t *testing.T) {
+	// Capture current config for restoration.
+	prevAtmosConfig := toolchainpkg.GetAtmosConfig()
+	t.Cleanup(func() {
+		toolchainpkg.SetAtmosConfig(prevAtmosConfig)
+	})
+
 	tempDir := t.TempDir()
 	atmosCfg := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{
