@@ -2107,6 +2107,34 @@ func TestPreserveProvisionedIdentityCase_EdgeCases(t *testing.T) {
 			expectedCaseMapLen: 0,
 			description:        "AutoProvisionIdentities is nil (treated as disabled)",
 		},
+		{
+			name: "malformed_yaml_syntax",
+			cacheContent: `{{{{{{{{{{
+this is not: valid yaml: at: all
+  - : :
+`,
+			autoProvision:      &autoProvisionTrue,
+			expectedCaseMapLen: 0,
+			description:        "completely malformed YAML that fails parsing",
+		},
+		{
+			name:               "auth_section_is_string",
+			cacheContent:       `auth: "not a map"`,
+			autoProvision:      &autoProvisionTrue,
+			expectedCaseMapLen: 0,
+			description:        "auth section is a string instead of a map",
+		},
+		{
+			name: "identities_section_is_list",
+			cacheContent: `auth:
+  identities:
+    - item1
+    - item2
+`,
+			autoProvision:      &autoProvisionTrue,
+			expectedCaseMapLen: 0,
+			description:        "identities section is a list instead of a map",
+		},
 	}
 
 	for _, tt := range tests {
@@ -2274,4 +2302,242 @@ func TestPreserveProvisionedIdentityCase_NilIdentityCaseMap(t *testing.T) {
 	assert.NotNil(t, atmosConfig.Auth.IdentityCaseMap)
 	assert.Len(t, atmosConfig.Auth.IdentityCaseMap, 1)
 	assert.Equal(t, "MyAccount/MyRole", atmosConfig.Auth.IdentityCaseMap["myaccount/myrole"])
+}
+
+// TestPreserveProvisionedIdentityCase_UnreadableFile tests handling when cache file cannot be read.
+func TestPreserveProvisionedIdentityCase_UnreadableFile(t *testing.T) {
+	// Note: Cannot use t.Parallel() with t.Setenv() as they are incompatible.
+
+	tempDir := t.TempDir()
+	providerName := "test-sso"
+
+	// Create provider cache directory structure.
+	authDir := filepath.Join(tempDir, "atmos", "auth")
+	providerCacheDir := filepath.Join(authDir, providerName)
+	err := os.MkdirAll(providerCacheDir, 0o755)
+	require.NoError(t, err)
+
+	// Create cache file with no read permissions (simulates read error).
+	cacheFile := filepath.Join(providerCacheDir, "provisioned-identities.yaml")
+	err = os.WriteFile(cacheFile, []byte("auth:\n  identities:\n    test: {}"), 0o000)
+	require.NoError(t, err)
+
+	// Ensure cleanup can happen by restoring permissions.
+	t.Cleanup(func() {
+		_ = os.Chmod(cacheFile, 0o644)
+	})
+
+	autoProvision := true
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				providerName: {
+					Kind:                    "aws/iam-identity-center",
+					AutoProvisionIdentities: &autoProvision,
+				},
+			},
+			IdentityCaseMap: make(map[string]string),
+		},
+	}
+
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", "")
+
+	// Should not return error - unreadable file is non-fatal.
+	err = preserveProvisionedIdentityCase(atmosConfig)
+	assert.NoError(t, err)
+
+	// Case map should be empty because file couldn't be read.
+	assert.Empty(t, atmosConfig.Auth.IdentityCaseMap)
+}
+
+// TestPreserveProvisionedIdentityCase_XDGCacheDirError tests handling when XDG cache directory cannot be accessed.
+func TestPreserveProvisionedIdentityCase_XDGCacheDirError(t *testing.T) {
+	// Note: Cannot use t.Parallel() with t.Setenv() as they are incompatible.
+
+	// Set XDG_CACHE_HOME to a path that can't be created (file instead of directory).
+	tempDir := t.TempDir()
+	invalidCachePath := filepath.Join(tempDir, "not-a-directory")
+
+	// Create a file where XDG expects to create a directory.
+	err := os.WriteFile(invalidCachePath, []byte("blocking file"), 0o644)
+	require.NoError(t, err)
+
+	autoProvision := true
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"test-sso": {
+					Kind:                    "aws/iam-identity-center",
+					AutoProvisionIdentities: &autoProvision,
+				},
+			},
+			IdentityCaseMap: make(map[string]string),
+		},
+	}
+
+	t.Setenv("XDG_CACHE_HOME", invalidCachePath)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", "")
+
+	// Should return error when XDG cache directory cannot be accessed.
+	err = preserveProvisionedIdentityCase(atmosConfig)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get provisioning cache directory")
+}
+
+// TestExtractIdentitiesFromYAML tests the extractIdentitiesFromYAML function directly.
+func TestExtractIdentitiesFromYAML(t *testing.T) {
+	tests := []struct {
+		name           string
+		yamlContent    string
+		expectedResult map[string]interface{}
+	}{
+		{
+			name: "valid YAML with identities",
+			yamlContent: `auth:
+  identities:
+    test/Identity:
+      kind: aws/permission-set
+`,
+			expectedResult: map[string]interface{}{
+				"test/Identity": map[string]interface{}{
+					"kind": "aws/permission-set",
+				},
+			},
+		},
+		{
+			name:           "missing auth section",
+			yamlContent:    `other: value`,
+			expectedResult: nil,
+		},
+		{
+			name: "auth is not a map",
+			yamlContent: `auth:
+  - list
+  - items
+`,
+			expectedResult: nil,
+		},
+		{
+			name: "identities is not a map",
+			yamlContent: `auth:
+  identities: "string value"
+`,
+			expectedResult: nil,
+		},
+		{
+			name:           "invalid YAML syntax",
+			yamlContent:    `{{invalid yaml`,
+			expectedResult: nil,
+		},
+		{
+			name: "empty identities",
+			yamlContent: `auth:
+  identities: {}
+`,
+			expectedResult: map[string]interface{}{},
+		},
+		{
+			name: "multiple identities with mixed case",
+			yamlContent: `auth:
+  identities:
+    Account/AdminRole:
+      kind: aws/permission-set
+    account/devRole:
+      kind: aws/permission-set
+    ACCOUNT/READONLY:
+      kind: aws/permission-set
+`,
+			expectedResult: map[string]interface{}{
+				"Account/AdminRole": map[string]interface{}{"kind": "aws/permission-set"},
+				"account/devRole":   map[string]interface{}{"kind": "aws/permission-set"},
+				"ACCOUNT/READONLY":  map[string]interface{}{"kind": "aws/permission-set"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractIdentitiesFromYAML([]byte(tt.yamlContent), "test-provider")
+			if tt.expectedResult == nil {
+				assert.Nil(t, result)
+			} else {
+				assert.NotNil(t, result)
+				assert.Equal(t, len(tt.expectedResult), len(result))
+				for k := range tt.expectedResult {
+					assert.Contains(t, result, k)
+				}
+			}
+		})
+	}
+}
+
+// TestPreserveProviderIdentityCase tests the preserveProviderIdentityCase function directly.
+func TestPreserveProviderIdentityCase(t *testing.T) {
+	t.Run("file does not exist", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Auth: schema.AuthConfig{
+				IdentityCaseMap: make(map[string]string),
+			},
+		}
+
+		// Call with non-existent file - should silently return.
+		preserveProviderIdentityCase(atmosConfig, "provider", "/non/existent/path/file.yaml")
+
+		assert.Empty(t, atmosConfig.Auth.IdentityCaseMap)
+	})
+
+	t.Run("successful case mapping", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cacheFile := filepath.Join(tempDir, "provisioned-identities.yaml")
+
+		yamlContent := `auth:
+  identities:
+    MyAccount/AdminRole:
+      kind: aws/permission-set
+    myaccount/developerrole:
+      kind: aws/permission-set
+`
+		err := os.WriteFile(cacheFile, []byte(yamlContent), 0o644)
+		require.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{
+			Auth: schema.AuthConfig{
+				IdentityCaseMap: make(map[string]string),
+			},
+		}
+
+		preserveProviderIdentityCase(atmosConfig, "test-provider", cacheFile)
+
+		assert.Len(t, atmosConfig.Auth.IdentityCaseMap, 2)
+		assert.Equal(t, "MyAccount/AdminRole", atmosConfig.Auth.IdentityCaseMap["myaccount/adminrole"])
+		assert.Equal(t, "myaccount/developerrole", atmosConfig.Auth.IdentityCaseMap["myaccount/developerrole"])
+	})
+
+	t.Run("user config takes precedence", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cacheFile := filepath.Join(tempDir, "provisioned-identities.yaml")
+
+		yamlContent := `auth:
+  identities:
+    MyAccount/AdminRole:
+      kind: aws/permission-set
+`
+		err := os.WriteFile(cacheFile, []byte(yamlContent), 0o644)
+		require.NoError(t, err)
+
+		// Pre-populate case map with user-defined case.
+		atmosConfig := &schema.AtmosConfiguration{
+			Auth: schema.AuthConfig{
+				IdentityCaseMap: map[string]string{
+					"myaccount/adminrole": "myaccount/ADMINROLE", // User-defined case.
+				},
+			},
+		}
+
+		preserveProviderIdentityCase(atmosConfig, "test-provider", cacheFile)
+
+		// User-defined case should be preserved.
+		assert.Equal(t, "myaccount/ADMINROLE", atmosConfig.Auth.IdentityCaseMap["myaccount/adminrole"])
+	})
 }
