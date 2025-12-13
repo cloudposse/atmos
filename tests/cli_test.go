@@ -348,11 +348,38 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 		return "", errors.New("failed to determine repository root")
 	}
 
-	// 2. Normalize the repository root:
+	// 2. Pre-process: Join word-wrapped paths that were broken by terminal width wrapping.
+	// Glamour/terminal rendering may wrap long paths at arbitrary positions, breaking paths like:
+	//   "/Users/erik/conductor/atmos/.conductor/da-\nnang/tests/..." (broken mid-word)
+	// This regex finds the repo root path broken across lines and rejoins it.
+	// We need to handle this BEFORE normalizing because the repo root regex won't match split paths.
+	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(repoRoot)))
+
+	// Build a pattern that matches the repo root potentially split by newlines anywhere.
+	// For path "/a/b/c", create pattern that allows optional \n between characters.
+	// We need to handle escape sequences from QuoteMeta carefully - don't insert [\n]?
+	// between \ and the character it escapes (like \. for literal dot).
+	var wrappedRootPattern strings.Builder
+	runes := []rune(normalizedRepoRoot)
+	for i, r := range runes {
+		if i > 0 {
+			// Insert optional newline between characters (not at start).
+			wrappedRootPattern.WriteString("[\n]?")
+		}
+		// Escape the rune for regex.
+		escaped := regexp.QuoteMeta(string(r))
+		wrappedRootPattern.WriteString(escaped)
+	}
+	wrappedRootRegex, err := regexp.Compile(wrappedRootPattern.String())
+	if err == nil {
+		// Replace any wrapped occurrences with the normalized (unwrapped) version.
+		output = wrappedRootRegex.ReplaceAllString(output, normalizedRepoRoot)
+	}
+
+	// 3. Normalize the repository root:
 	//    - Clean the path (which may not collapse all extra slashes after the drive letter, etc.)
 	//    - Convert to forward slashes,
 	//    - And explicitly collapse extra slashes.
-	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(repoRoot)))
 	// Also normalize the output to use forward slashes.
 	// Note: filepath.ToSlash() on Windows converts path separators; on Unix it does nothing.
 	// We also need to handle Windows-style paths that may appear in test output even on Unix (for testing).
