@@ -511,6 +511,10 @@ func TestSanitizeOutput_WordWrappedPaths(t *testing.T) {
 	repoRoot, err := findGitRepoRoot(startingDir)
 	require.NoError(t, err)
 
+	// Normalize to forward slashes for cross-platform consistency.
+	// This matches how sanitizeOutput() normalizes paths internally.
+	repoRoot = filepath.ToSlash(repoRoot)
+
 	tests := []struct {
 		name     string
 		input    string
@@ -557,6 +561,10 @@ func TestSanitizeOutput_WordWrappedPaths(t *testing.T) {
 func TestSanitizeOutput_WordWrappedPathsSpecificBreaks(t *testing.T) {
 	repoRoot, err := findGitRepoRoot(startingDir)
 	require.NoError(t, err)
+
+	// Normalize to forward slashes for cross-platform consistency.
+	// This matches how sanitizeOutput() normalizes paths internally.
+	repoRoot = filepath.ToSlash(repoRoot)
 
 	// Build test paths by inserting newlines at specific positions within the repo root.
 	// This simulates terminal width wrapping at arbitrary character positions.
@@ -621,6 +629,10 @@ func TestSanitizeOutput_WordWrappedPathsSpecificBreaks(t *testing.T) {
 func TestSanitizeOutput_WordWrappedPathsRealWorldScenarios(t *testing.T) {
 	repoRoot, err := findGitRepoRoot(startingDir)
 	require.NoError(t, err)
+
+	// Normalize to forward slashes for cross-platform consistency.
+	// This matches how sanitizeOutput() normalizes paths internally.
+	repoRoot = filepath.ToSlash(repoRoot)
 
 	// Simulate the exact error format that caused CI failures.
 	testPath := repoRoot + "/tests/fixtures/scenarios/complete/stacks"
@@ -748,6 +760,50 @@ func TestSanitizeOutput_WindowsLineEndingsInHintPaths(t *testing.T) {
 			// line endings first to ensure consistent behavior.
 			normalized := normalizeLineEndings(tt.input)
 			result, err := sanitizeOutput(normalized)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestSanitizeOutput_WindowsBackslashPaths verifies that Windows-style paths
+// with backslashes are correctly sanitized on all platforms.
+// Note: The wrapped path handling only works with forward slashes because
+// sanitizeOutput normalizes paths to forward slashes before building the regex.
+// This matches real-world behavior where CLI output is already normalized.
+func TestSanitizeOutput_WindowsBackslashPaths(t *testing.T) {
+	repoRoot, err := findGitRepoRoot(startingDir)
+	require.NoError(t, err)
+
+	// Normalize to forward slashes first, then convert to Windows-style for testing.
+	normalizedRoot := filepath.ToSlash(repoRoot)
+	windowsStyleRoot := strings.ReplaceAll(normalizedRoot, "/", "\\")
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Windows backslash path",
+			input:    windowsStyleRoot + "\\tests\\fixtures\\file.txt",
+			expected: "/absolute/path/to/repo/tests/fixtures/file.txt",
+		},
+		{
+			name:     "Mixed slashes (forward and back)",
+			input:    windowsStyleRoot + "/tests\\fixtures/file.txt",
+			expected: "/absolute/path/to/repo/tests/fixtures/file.txt",
+		},
+		{
+			name:     "Windows path in error message",
+			input:    fmt.Sprintf("**Error:** path not found: %s\\tests\\file.txt", windowsStyleRoot),
+			expected: "**Error:** path not found: /absolute/path/to/repo/tests/file.txt",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := sanitizeOutput(tt.input)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
