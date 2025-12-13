@@ -5,44 +5,45 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/yq"
 )
 
-// StoreFunction implements the store function for retrieving values from configured stores.
+// Store function tags.
+// Store function tags are defined in tags.go.
+// Use YAMLTag(TagStore) and YAMLTag(TagStoreGet) to get the YAML tag format.
+
+// StoreFunction implements the !store YAML function.
+// It retrieves values from configured stores.
+// Note: This is a PostMerge function that requires stack context.
+// During HCL parsing, it returns a placeholder for later resolution.
 type StoreFunction struct {
 	BaseFunction
 }
 
-// NewStoreFunction creates a new store function handler.
+// NewStoreFunction creates a new StoreFunction.
 func NewStoreFunction() *StoreFunction {
 	defer perf.Track(nil, "function.NewStoreFunction")()
 
 	return &StoreFunction{
 		BaseFunction: BaseFunction{
-			FunctionName:    TagStore,
-			FunctionAliases: nil,
+			FunctionName:    "store",
+			FunctionAliases: []string{"store.get"},
 			FunctionPhase:   PostMerge,
 		},
 	}
 }
 
-// Execute processes the store function.
-// Usage:
-//
-//	!store store_name stack component key
-//	!store store_name component key            - Uses current stack
-//	!store store_name stack component key | default "value"
-//	!store store_name stack component key | query ".foo.bar"
+// Execute returns a placeholder for post-merge resolution.
+// Syntax: !store store_name key
+// Syntax: !store.get store_name key
+// The actual store lookup happens during YAML post-merge processing.
 func (f *StoreFunction) Execute(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
 	defer perf.Track(nil, "function.StoreFunction.Execute")()
 
-	log.Debug("Executing store function", "args", args)
-
-	if execCtx == nil || execCtx.AtmosConfig == nil {
-		return nil, fmt.Errorf("%w: store function requires AtmosConfig", ErrExecutionFailed)
+	args = strings.TrimSpace(args)
+	if args == "" {
+		return nil, fmt.Errorf("%w: !store requires arguments: store_name key", ErrInvalidArguments)
 	}
 
 	// Parse parameters.
@@ -77,55 +78,35 @@ func (f *StoreFunction) Execute(ctx context.Context, args string, execCtx *Execu
 	return value, nil
 }
 
-// StoreGetFunction implements the store.get function for retrieving arbitrary keys from stores.
+// StoreGetFunction implements the !store.get YAML function.
+// This is an alias for !store with explicit .get suffix.
+// Note: This is a PostMerge function that requires stack context.
 type StoreGetFunction struct {
 	BaseFunction
 }
 
-// NewStoreGetFunction creates a new store.get function handler.
+// NewStoreGetFunction creates a new StoreGetFunction.
 func NewStoreGetFunction() *StoreGetFunction {
 	defer perf.Track(nil, "function.NewStoreGetFunction")()
 
 	return &StoreGetFunction{
 		BaseFunction: BaseFunction{
-			FunctionName:    TagStoreGet,
+			FunctionName:    "store.get",
 			FunctionAliases: nil,
 			FunctionPhase:   PostMerge,
 		},
 	}
 }
 
-// retrieveFromStore gets a value from the store and applies defaults if needed.
-func retrieveFromStore(s store.Store, params *storeGetParams) (any, error) {
-	value, err := s.GetKey(params.key)
-	if err != nil {
-		if params.defaultValue != nil {
-			return *params.defaultValue, nil
-		}
-		return nil, fmt.Errorf("%w: failed to get key '%s': %w", ErrExecutionFailed, params.key, err)
-	}
-
-	// Check if the retrieved value is nil and use default if provided.
-	if value == nil && params.defaultValue != nil {
-		return *params.defaultValue, nil
-	}
-
-	return value, nil
-}
-
-// Execute processes the store.get function.
-// Usage:
-//
-//	!store.get store_name key
-//	!store.get store_name key | default "value"
-//	!store.get store_name key | query ".foo.bar"
+// Execute returns a placeholder for post-merge resolution.
+// Syntax: !store.get store_name key
+// The actual store lookup happens during YAML post-merge processing.
 func (f *StoreGetFunction) Execute(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
 	defer perf.Track(nil, "function.StoreGetFunction.Execute")()
 
-	log.Debug("Executing store.get function", "args", args)
-
-	if execCtx == nil || execCtx.AtmosConfig == nil {
-		return nil, fmt.Errorf("%w: store.get function requires AtmosConfig", ErrExecutionFailed)
+	args = strings.TrimSpace(args)
+	if args == "" {
+		return nil, fmt.Errorf("%w: !store.get requires arguments: store_name key", ErrInvalidArguments)
 	}
 
 	// Parse parameters.
@@ -270,4 +251,16 @@ func extractPipeOptions(parts []string) (*string, string, error) {
 	}
 
 	return defaultValue, query, nil
+}
+
+// retrieveFromStore retrieves a value from the store using storeGetParams.
+func retrieveFromStore(store interface{ Get(string, string, string) (any, error) }, params *storeGetParams) (any, error) {
+	value, err := store.Get("", "", params.key)
+	if err != nil {
+		if params.defaultValue != nil {
+			return *params.defaultValue, nil
+		}
+		return nil, fmt.Errorf("%w: failed to get key '%s': %w", ErrExecutionFailed, params.key, err)
+	}
+	return value, nil
 }
