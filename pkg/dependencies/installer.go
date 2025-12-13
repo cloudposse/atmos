@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/viper"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -96,11 +94,9 @@ func fileExists(path string) bool {
 	return err == nil
 }
 
-// getPathFromEnv retrieves PATH from environment using viper.
+// getPathFromEnv retrieves PATH from environment.
 func getPathFromEnv() string {
-	v := viper.New()
-	_ = v.BindEnv("path", "PATH")
-	return v.GetString("path")
+	return os.Getenv("PATH") //nolint:forbidigo // Reading PATH env var directly is intentional here
 }
 
 // BuildToolchainPATH constructs a PATH string with toolchain binaries prepended.

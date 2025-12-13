@@ -145,6 +145,16 @@ func executeSearchCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Validate limit flag.
+	if searchLimit < 0 {
+		return fmt.Errorf("%w: limit must be non-negative", errUtils.ErrInvalidFlag)
+	}
+
+	// Validate conflicting filter flags.
+	if searchInstalledOnly && searchAvailableOnly {
+		return fmt.Errorf("%w: cannot use both --installed-only and --available-only", errUtils.ErrInvalidFlag)
+	}
+
 	// Create registry based on flag or use default.
 	reg, err := createSearchRegistry(searchRegistry)
 	if err != nil {
@@ -296,7 +306,7 @@ func displaySearchResults(tools []*toolchainregistry.Tool) {
 	// Add padding.
 	const columnPaddingPerSide = 2
 	const totalColumnPadding = columnPaddingPerSide * 2
-	const statusPadding = 2 // Minimal padding for status column (1 char + 1 space on right)
+	const statusPadding = 2 // Minimal padding for status column (1 char + 1 space on right).
 	statusWidth += statusPadding
 	toolNameWidth += totalColumnPadding
 	typeWidth += totalColumnPadding

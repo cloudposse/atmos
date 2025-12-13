@@ -109,12 +109,11 @@ func TestCleanToolsAndCaches(t *testing.T) {
 		}
 		ui.InitFormatter(ioCtx)
 
-		// Ensure stderr is restored and pipes are closed even if f() panics.
+		// Ensure stderr is restored and read pipe is closed even if f() panics.
 		defer func() {
 			os.Stderr = originalStderr
 		}()
 		defer r.Close()
-		defer w.Close()
 
 		f()
 

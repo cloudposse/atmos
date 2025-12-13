@@ -941,10 +941,5 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 	}
 
 	// Remove trailing whitespace that glamour adds for padding.
-	lines := strings.Split(rendered, "\n")
-	for i, line := range lines {
-		lines[i] = strings.TrimRight(line, " \t")
-	}
-
-	return strings.Join(lines, "\n"), nil
+	return TrimLinesRight(rendered), nil
 }

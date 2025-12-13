@@ -50,6 +50,12 @@ var (
 	ErrToolAlreadyExists = errors.New("tool already exists")
 )
 
+// SearchTotalProvider is an optional interface that registries can implement
+// to provide the total count of search results (for pagination UI).
+type SearchTotalProvider interface {
+	GetLastSearchTotal() int
+}
+
 // ToolRegistry defines the interface for tool metadata registries.
 // This abstraction allows multiple registry implementations (Aqua, custom URL-based, etc.)
 // while keeping the toolchain package decoupled from specific registry formats.

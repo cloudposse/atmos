@@ -33,7 +33,7 @@ const (
 	defaultTerminalWidth = 120 // Fallback if terminal width cannot be detected.
 	columnPaddingPerSide = 2   // Padding on each side of column content.
 	totalColumnPadding   = columnPaddingPerSide * 2
-	statusIndicator      = "●" // Dot character for installation status
+	statusIndicator      = "●" // Dot character for installation status.
 )
 
 // toolRow represents a single row in the tools table.

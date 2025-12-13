@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	// userAgent is the User-Agent header value for HTTP requests.
+	// UserAgent is the User-Agent header value for HTTP requests.
 	userAgent = "atmos-toolchain/1.0"
 
 	// MaxErrorBodySize limits how much of an HTTP error response body to include in error messages.
@@ -105,10 +105,13 @@ type GitHubAuthenticatedTransport struct {
 func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	defer perf.Track(nil, "http.GitHubAuthenticatedTransport.RoundTrip")()
 
-	host := req.URL.Hostname()
+	// Clone request to avoid mutating caller's request.
+	reqClone := req.Clone(req.Context())
+
+	host := reqClone.URL.Hostname()
 	if (host == "api.github.com" || host == "raw.githubusercontent.com") && t.GitHubToken != "" {
-		req.Header.Set("Authorization", "Bearer "+t.GitHubToken)
-		req.Header.Set("User-Agent", userAgent)
+		reqClone.Header.Set("Authorization", "Bearer "+t.GitHubToken)
+		reqClone.Header.Set("User-Agent", userAgent)
 	}
 
 	base := t.Base
@@ -116,7 +119,7 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 		base = http.DefaultTransport
 	}
 
-	resp, err := base.RoundTrip(req)
+	resp, err := base.RoundTrip(reqClone)
 	if err != nil {
 		return nil, fmt.Errorf("GitHub transport roundtrip: %w", err)
 	}

@@ -121,9 +121,9 @@ func TestToolchainAddCommand(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify the tool was added.
-	data, err := os.ReadFile(toolVersionsPath)
+	fileContent, err := os.ReadFile(toolVersionsPath)
 	require.NoError(t, err)
-	assert.Contains(t, string(data), "1.5.7")
+	assert.Contains(t, string(fileContent), "1.5.7")
 }
 
 func TestToolchainRemoveCommand(t *testing.T) {
@@ -134,9 +134,9 @@ func TestToolchainRemoveCommand(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify the tool was removed.
-	data, err := os.ReadFile(toolVersionsPath)
+	fileContent, err := os.ReadFile(toolVersionsPath)
 	require.NoError(t, err)
-	assert.NotContains(t, string(data), "terraform")
+	assert.NotContains(t, string(fileContent), "terraform")
 }
 
 func TestToolchainCommandsWithoutToolVersionsFile(t *testing.T) {
@@ -435,9 +435,9 @@ func TestToolchainSetCommand(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify the version was set as default (first).
-	data, err := os.ReadFile(toolVersionsPath)
+	fileContent, err := os.ReadFile(toolVersionsPath)
 	require.NoError(t, err)
-	assert.Contains(t, string(data), "1.5.7")
+	assert.Contains(t, string(fileContent), "1.5.7")
 }
 
 func TestToolchainUninstallCommand(t *testing.T) {

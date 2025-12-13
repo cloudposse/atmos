@@ -12,6 +12,7 @@ var registryCmd = &cobra.Command{
 	Use:   "registry",
 	Short: "Manage toolchain registries",
 	Long:  `Commands for searching and listing tools in toolchain registries.`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Show help when no subcommands are provided.
 		return cmd.Help()

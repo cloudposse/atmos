@@ -17,7 +17,7 @@ func EmitEnv(format string, relativeFlag bool) error {
 
 	installer := NewInstaller()
 
-	// Read tool-versions file.
+	// Read tool-versions file from the configured path.
 	toolVersions, err := LoadToolVersions(GetToolVersionsFilePath())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -30,17 +30,17 @@ func EmitEnv(format string, relativeFlag bool) error {
 		return fmt.Errorf("%w: no tools installed from .tool-versions file", ErrToolNotFound)
 	}
 
-	// Build PATH entries for each tool (reuse helper from path.go).
+	// Build PATH entries for each tool using the helper from path.go.
 	pathEntries, toolPaths, err := buildPathEntries(toolVersions, installer, relativeFlag)
 	if err != nil {
 		return err
 	}
 
-	// Get current PATH and construct final PATH.
+	// Get current PATH and construct the final PATH value.
 	currentPath := getCurrentPath()
 	finalPath := constructFinalPath(pathEntries, currentPath)
 
-	// Output based on format.
+	// Output based on the requested format.
 	return emitEnvOutput(toolPaths, finalPath, format)
 }
 

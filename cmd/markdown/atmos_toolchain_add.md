@@ -5,5 +5,5 @@
 
 - Use a custom tool versions file
 ```
- $ atmos toolchain add --file <path/to/.tool-version> <tool-name> <version>
+ $ atmos toolchain add --file <path/to/.tool-versions> <tool-name> <version>
 ```

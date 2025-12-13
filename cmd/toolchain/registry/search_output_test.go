@@ -9,22 +9,22 @@ import (
 
 	"github.com/cloudposse/atmos/toolchain"
 	toolchainregistry "github.com/cloudposse/atmos/toolchain/registry"
-	"github.com/cloudposse/atmos/toolchain/registry/aqua"
 	"github.com/cloudposse/atmos/toolchain/registry/cache"
 )
 
-// TestTypeAssertion verifies the type assertion works correctly.
-func TestTypeAssertion(t *testing.T) {
+// TestSearchTotalProvider verifies the registry implements SearchTotalProvider interface.
+func TestSearchTotalProvider(t *testing.T) {
 	reg := toolchain.NewAquaRegistry()
 
 	t.Logf("Registry type: %T", reg)
 
-	// Try the type assertion that's in the code.
-	if aquaReg, ok := reg.(*aqua.AquaRegistry); ok {
-		t.Logf("SUCCESS: Type assertion to *aqua.AquaRegistry succeeded")
-		t.Logf("AquaRegistry pointer: %p", aquaReg)
+	// Use interface assertion instead of concrete type assertion.
+	if provider, ok := reg.(toolchainregistry.SearchTotalProvider); ok {
+		t.Logf("SUCCESS: Registry implements SearchTotalProvider interface")
+		total := provider.GetLastSearchTotal()
+		t.Logf("GetLastSearchTotal() returned: %d", total)
 	} else {
-		t.Errorf("FAILED: Type assertion to *aqua.AquaRegistry failed")
+		t.Errorf("FAILED: Registry does not implement SearchTotalProvider interface")
 		t.Errorf("Actual type: %T", reg)
 	}
 }
@@ -106,13 +106,13 @@ func TestSearchShowsTotalCount(t *testing.T) {
 
 	t.Logf("Requested limit: %d, got %d results from search", limit, len(results))
 
-	// Get total count using the same type assertion as the command.
+	// Get total count using interface assertion instead of concrete type.
 	totalResults := len(results)
-	if aquaReg, ok := reg.(*aqua.AquaRegistry); ok {
-		totalResults = aquaReg.GetLastSearchTotal()
+	if provider, ok := reg.(toolchainregistry.SearchTotalProvider); ok {
+		totalResults = provider.GetLastSearchTotal()
 		t.Logf("Total search results from GetLastSearchTotal: %d", totalResults)
 	} else {
-		t.Errorf("Failed to get total count - type assertion to *aqua.AquaRegistry failed")
+		t.Errorf("Failed to get total count - registry does not implement SearchTotalProvider")
 		t.Errorf("Actual type: %T", reg)
 	}
 

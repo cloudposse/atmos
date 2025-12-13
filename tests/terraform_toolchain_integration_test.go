@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -47,6 +48,8 @@ import (
 //
 // NOTE: This test requires network access to download terraform from the toolchain registry.
 func TestTerraformToolchain_WithDependencies(t *testing.T) {
+	defer perf.Track(nil, "tests.TestTerraformToolchain_WithDependencies")()
+
 	// Skip if we can't download tools (network required)
 	if testing.Short() {
 		t.Skip("Skipping toolchain integration test in short mode (requires network)")
@@ -133,9 +136,11 @@ func TestTerraformToolchain_WithDependencies(t *testing.T) {
 // dependencies, the toolchain integration does not provide the binary.
 //
 // Expected behavior:
-// - If system terraform is available: uses system terraform
-// - If system terraform is NOT available: command fails with "terraform not found"
+//   - If system terraform is available: uses system terraform.
+//   - If system terraform is NOT available: command fails with "terraform not found".
 func TestTerraformToolchain_WithoutDependencies(t *testing.T) {
+	defer perf.Track(nil, "tests.TestTerraformToolchain_WithoutDependencies")()
+
 	workDir := "fixtures/scenarios/toolchain-terraform-integration"
 	t.Chdir(workDir)
 
@@ -219,6 +224,8 @@ func TestTerraformToolchain_WithoutDependencies(t *testing.T) {
 // This test focuses on the environment variable propagation mechanism to ensure
 // that PATH modifications reach the subprocess correctly.
 func TestTerraformToolchain_PathPropagation(t *testing.T) {
+	defer perf.Track(nil, "tests.TestTerraformToolchain_PathPropagation")()
+
 	// Skip if we can't download tools
 	if testing.Short() {
 		t.Skip("Skipping toolchain integration test in short mode")
@@ -291,6 +298,8 @@ func TestTerraformToolchain_PathPropagation(t *testing.T) {
 // TestTerraformToolchain_BinaryLocation verifies that installed binaries are in the
 // correct location and have the correct permissions.
 func TestTerraformToolchain_BinaryLocation(t *testing.T) {
+	defer perf.Track(nil, "tests.TestTerraformToolchain_BinaryLocation")()
+
 	if testing.Short() {
 		t.Skip("Skipping toolchain integration test in short mode")
 	}
@@ -332,19 +341,21 @@ func TestTerraformToolchain_BinaryLocation(t *testing.T) {
 
 	foundBinary := false
 	for _, expectedPath := range expectedPaths {
-		if info, err := os.Stat(expectedPath); err == nil {
-			foundBinary = true
-			t.Logf("✓ Binary found at: %s", expectedPath)
-			t.Logf("  Size: %d bytes", info.Size())
-			t.Logf("  Mode: %s", info.Mode())
-
-			// On Unix systems, verify executable permission
-			if !strings.HasSuffix(expectedPath, ".exe") {
-				assert.True(t, info.Mode()&0o111 != 0,
-					"Binary should be executable: %s", info.Mode())
-			}
-			break
+		info, err := os.Stat(expectedPath)
+		if err != nil {
+			continue
 		}
+		foundBinary = true
+		t.Logf("✓ Binary found at: %s", expectedPath)
+		t.Logf("  Size: %d bytes", info.Size())
+		t.Logf("  Mode: %s", info.Mode())
+
+		// On Unix systems, verify executable permission.
+		if !strings.HasSuffix(expectedPath, ".exe") {
+			assert.True(t, info.Mode()&0o111 != 0,
+				"Binary should be executable: %s", info.Mode())
+		}
+		break
 	}
 
 	assert.True(t, foundBinary, "Terraform binary should be installed at expected location")

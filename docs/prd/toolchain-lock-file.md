@@ -60,7 +60,7 @@ Add native lock file support for the Atmos toolchain to provide deterministic, c
 
 ### Lock File Location
 
-```
+```text
 <toolchain.install_path>/toolchain.lock.yaml
 ```
 
@@ -190,7 +190,7 @@ toolchain:
 
 ### Installation Flow
 
-```
+```text
 1. User runs: atmos toolchain install terraform@1.13.4
 
 2. Resolve tool from registries
@@ -244,7 +244,7 @@ atmos toolchain lock --regenerate
 
 ### Verification Flow
 
-```
+```text
 1. User runs tool (e.g., via atmos terraform apply)
 
 2. Check lock file exists
@@ -410,7 +410,7 @@ toolchain:
 
 ### Lock File Errors
 
-```
+```text
 Error: Lock file checksum mismatch for hashicorp/terraform@1.13.4
 Expected: sha256:abc123...
 Got:      sha256:def456...
@@ -428,7 +428,7 @@ To fix:
 
 ### Missing Lock File
 
-```
+```text
 Warning: Lock file not found at .tools/toolchain.lock.yaml
 
 The lock file ensures reproducible tool installations and verifies binary integrity.
@@ -442,7 +442,7 @@ To disable:
 
 ### Platform Missing
 
-```
+```text
 Error: No darwin_arm64 entry in lock file for hashicorp/terraform@1.13.4
 
 Your platform (darwin_arm64) is not in the lock file.
@@ -518,19 +518,19 @@ jobs:
 
 ```bash
 # Developer A (macOS ARM64) adds new tool
-$ atmos toolchain install kubectl@1.34.1
-$ git add .tools/toolchain.lock.yaml
-$ git commit -m "Add kubectl to toolchain"
+atmos toolchain install kubectl@1.34.1
+git add .tools/toolchain.lock.yaml
+git commit -m "Add kubectl to toolchain"
 
 # Developer B (Linux AMD64) pulls changes
-$ git pull
-$ atmos toolchain install kubectl@1.34.1
+git pull
+atmos toolchain install kubectl@1.34.1
 # Installs linux_amd64 variant, verifies checksum from lock file
 # Lock file already has linux_amd64 entry (added by Developer A's install)
 
 # Developer C (Windows) pulls changes
-$ git pull
-$ atmos toolchain install kubectl@1.34.1
+git pull
+atmos toolchain install kubectl@1.34.1
 # Installs windows_amd64 variant, verifies checksum
 ```
 

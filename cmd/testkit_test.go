@@ -176,14 +176,7 @@ func TestTestKit_OsArgsRestoration(t *testing.T) {
 	assert.Equal(t, initialArgs, os.Args, "os.Args should be restored after subtest")
 }
 
-func TestTestKit_ViperStateRestoration(t *testing.T) {
-	t.Skip("Viper restoration temporarily disabled - viper.Set(key, nil) breaks BindPFlag connections")
-}
-
-func TestTestKit_ViperAndFlagsRestoration(t *testing.T) {
-	t.Skip("Viper restoration temporarily disabled - viper.Set(key, nil) breaks BindPFlag connections")
-}
-
-func TestTestKit_ViperTableDrivenTests(t *testing.T) {
-	t.Skip("Viper restoration temporarily disabled - viper.Set(key, nil) breaks BindPFlag connections")
-}
+// Note: Viper restoration tests were removed because viper.Set(key, nil) breaks BindPFlag connections.
+// Viper state isolation between tests requires a different approach (e.g., temporary viper instances)
+// which is out of scope for the current TestKit implementation. Tests that need viper isolation
+// should use explicit cleanup as demonstrated in auth_login_test.go.
