@@ -583,3 +583,17 @@ tests:
       sanitize:
         "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
+  - name: atmos --help config aliases section
+    enabled: true
+    snapshot: true
+    description: "'atmos --help' should show config aliases in dedicated ALIASES section"
+    workdir: "fixtures/scenarios/subcommand-alias"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: atmos
+    args:
+      - "--help"
+    expect:
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
+      exit_code: 0
