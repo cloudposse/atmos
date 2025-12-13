@@ -106,7 +106,7 @@ func (c *componentPathPatternCache) getTerraformModulePatterns(
 			c.cacheEmptyPatterns(component)
 			return []string{}, nil
 		}
-		return nil, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diags.Err())
+		return nil, errors.Join(errUtils.ErrFailedToLoadTerraformComponent, diags.Err())
 	}
 
 	if terraformConfiguration == nil {
