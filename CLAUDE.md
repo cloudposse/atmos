@@ -538,7 +538,15 @@ All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. Use `<dl>` 
 **Common mistakes:** Using command name vs. filename, not checking slug frontmatter, guessing URLs.
 
 ### Documentation Requirements (MANDATORY)
-Use `<dl>` for arguments/flags. Follow Docusaurus conventions: frontmatter, purpose note, screengrab, usage/examples/arguments/flags sections. File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
+CLI command docs MUST include:
+1. **Frontmatter** - title, sidebar_label, sidebar_class_name, id, description
+2. **Intro component** - `import Intro from '@site/src/components/Intro'` then `<Intro>Brief description</Intro>`
+3. **Screengrab** - `import Screengrab from '@site/src/components/Screengrab'` then `<Screengrab title="..." slug="..." />`
+4. **Usage section** - Shell code block with command syntax
+5. **Arguments/Flags** - Use `<dl><dt>` for each argument/flag with `<dd>` description
+6. **Examples section** - Practical usage examples
+
+File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
 
 ### Website Build (MANDATORY)
 ALWAYS build after doc changes: `cd website && npm run build`. Verify: no broken links, missing images, MDX component rendering.
@@ -562,8 +570,8 @@ Follow template (what/why/references).
 **Blog Posts (CI Enforced):**
 - PRs labeled `minor`/`major` MUST include blog post: `website/blog/YYYY-MM-DD-feature-name.mdx`
 - Use `.mdx` with YAML front matter, `<!--truncate-->` after intro
-- **ONLY use existing tags** - check `website/blog/*.mdx` for valid tags before writing
-- Author: committer's GitHub username, add to `website/blog/authors.yml`
+- **MUST read `website/blog/tags.yml`** - Only use tags defined there, never invent new tags
+- **MUST read `website/blog/authors.yml`** - Use existing author or add new entry for committer
 
 **Blog Template:**
 ```markdown
@@ -571,21 +579,16 @@ Follow template (what/why/references).
 slug: descriptive-slug
 title: "Clear Title"
 authors: [username]
-tags: [primary-tag, secondary-tag]
+tags: [feature]
 ---
 Brief intro.
 <!--truncate-->
 ## What Changed / Why This Matters / How to Use It / Get Involved
 ```
 
-**Existing Tags (use only these):**
-- Primary: `feature`, `enhancement`, `bugfix`
-- Secondary: `dx`, `security`, `documentation`, `core`, `breaking-change`
-
-**Finding valid tags:**
-```bash
-grep -h "^  - " website/blog/*.mdx | sort | uniq -c | sort -rn
-```
+**Valid Tags (from `website/blog/tags.yml`):**
+- User-facing: `feature`, `enhancement`, `bugfix`, `dx`, `breaking-change`, `security`, `documentation`, `deprecation`
+- Internal: `core` (for contributor-only changes with zero user impact)
 
 Use `no-release` label for docs-only changes.
 

@@ -16,6 +16,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // workflowErrorTitle is the standard title for workflow errors.
@@ -113,8 +114,7 @@ func (e *Executor) handleFromStep(
 	if len(steps) == 0 {
 		stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
 		err := errUtils.Build(errUtils.ErrInvalidFromStep).
-			WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.", fromStep, workflow).
-			WithHintf("Available steps:\n%s", FormatList(stepNames)).
+			WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.\n\n### Available steps:\n\n%s", fromStep, workflow, u.FormatList(stepNames)).
 			Err()
 		e.printError(err)
 		result.Success = false
@@ -229,7 +229,7 @@ func (e *Executor) runCommand(params *WorkflowParams, cmdParams *runCommandParam
 		// Return error without printing - handleStepError will print it with resume context.
 		return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
 			WithExplanationf("Step type `%s` is not supported. Each step must specify a valid type.", cmdParams.commandType).
-			WithHintf("Available types:\n%s", FormatList([]string{"atmos", "shell"})).
+			WithHintf("Available types:\n%s", u.FormatList([]string{"atmos", "shell"})).
 			Err()
 	}
 }
@@ -409,13 +409,4 @@ func CheckAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefini
 			steps[index].Name = fmt.Sprintf("step%d", index+1)
 		}
 	}
-}
-
-// FormatList formats a list of strings into a markdown bullet list.
-func FormatList(items []string) string {
-	var result strings.Builder
-	for _, item := range items {
-		result.WriteString(fmt.Sprintf("- `%s`\n", item))
-	}
-	return result.String()
 }

@@ -694,38 +694,6 @@ func TestCheckAndGenerateWorkflowStepNames(t *testing.T) {
 	}
 }
 
-// TestFormatList tests the list formatting function.
-func TestFormatList(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []string
-		expected string
-	}{
-		{
-			name:     "empty list",
-			input:    []string{},
-			expected: "",
-		},
-		{
-			name:     "single item",
-			input:    []string{"item1"},
-			expected: "- `item1`\n",
-		},
-		{
-			name:     "multiple items",
-			input:    []string{"item1", "item2", "item3"},
-			expected: "- `item1`\n- `item2`\n- `item3`\n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := FormatList(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 // TestExecutor_Execute_NilUIProvider tests that executor works without UI provider.
 func TestExecutor_Execute_NilUIProvider(t *testing.T) {
 	ctrl := gomock.NewController(t)
