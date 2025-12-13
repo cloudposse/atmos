@@ -102,35 +102,56 @@ spec:
 ```
 </File>
 
+<File title="stacks/catalog/vpc.yaml">
+```yaml
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+        name: vpc  # Convention: top-level folder (stable across versions)
+        # Derived components override 'component' to point to specific version
+```
+</File>
+
 <File title="stacks/prod/us-east-1.yaml">
 ```yaml
+import:
+  - catalog/vpc
+
 components:
   terraform:
     vpc:
       metadata:
+        inherits: [vpc/defaults]
         component: vpc/v1.12.3  # Points to vendored component at specific version
+        # Inherits name: vpc → workspace_key_prefix: "vpc"
       vars:
         name: "prod-vpc"
         cidr_block: "10.0.0.0/16"
-      settings:
-        # CRITICAL: Don't include version in workspace_key_prefix
-        workspace_key_prefix: "vpc"
 ```
 </File>
 
 ### 2. Maintain Stable Workspace Keys
 
 :::warning Critical Configuration
-Never include version information in `workspace_key_prefix`. This ensures state remains stable when versions change:
+Use `metadata.name` in your catalog base component to ensure state remains stable when versions change:
 
 ```yaml
-# WRONG - Will cause state migration issues
-settings:
-  workspace_key_prefix: "prod/vpc/v1.12.3"
+# RECOMMENDED: Use metadata.name in catalog (inherited by all environments)
+# stacks/catalog/vpc.yaml
+vpc/defaults:
+  metadata:
+    type: abstract
+    name: vpc  # Convention: top-level folder
 
-# CORRECT - Stable across version changes
+# WRONG - Manual workspace_key_prefix (error-prone, not inherited)
 settings:
   workspace_key_prefix: "vpc"
+
+# WRONG - Including version in workspace key
+settings:
+  workspace_key_prefix: "prod/vpc/v1.12.3"
 ```
 :::
 

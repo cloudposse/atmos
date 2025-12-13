@@ -1,0 +1,283 @@
+---
+title: Stack Behavior
+sidebar_position: 3
+sidebar_label: stacks
+sidebar_class_name: command
+id: stacks
+description: Use the `atmos.yaml` to configure where Atmos will discover stack configurations.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+The `stacks` section of the `atmos.yaml` defines how Atmos locates and manages your stack configurations. Think of it as the bootstrapping configuration. Here you can define the stack name pattern or template used to build the "slugs" and specify where to find stack files.
+</Intro>
+
+:::important
+Do not confuse this configuration with [stack configuration](/learn/stacks).
+This configuration below is defined in the `atmos.yaml` and instructs atmos where to find
+your stack configurations.
+:::
+
+<File title="atmos.yaml">
+```yaml
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "orgs/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
+  inherit:
+    metadata: true  # See /cli/configuration/stacks/inherit for details
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`base_path`</dt>
+  <dd>
+    Path to the folder where all Atmos stack configuration files (stack manifests) are defined.
+
+    **Environment variable:** `ATMOS_STACKS_BASE_PATH`
+    **Command-line flags:** `--config-dir`, `--stacks-dir`
+
+    Supports both absolute and relative paths. If the global `base_path` is defined, `stacks.base_path` is relative to it.
+  </dd>
+
+  <dt>`included_paths`</dt>
+  <dd>
+    Glob patterns specifying where to search for top-level stack manifests.
+
+    **Environment variable:** `ATMOS_STACKS_INCLUDED_PATHS` (comma-separated)
+
+    Top-level stack manifests are configuration files that define all settings and components for a corresponding environment (organization, OU/tenant, account, region). They are used in CLI commands like `atmos terraform plan <component> -s <stack>`.
+
+    **Example:**
+    ```yaml
+    included_paths:
+      - "orgs/**/*"
+    ```
+  </dd>
+
+  <dt>`excluded_paths`</dt>
+  <dd>
+    Glob patterns specifying which paths from `included_paths` to exclude from stack discovery.
+
+    **Environment variable:** `ATMOS_STACKS_EXCLUDED_PATHS` (comma-separated)
+
+    Commonly used to exclude `_defaults.yaml` files which contain default values but are not top-level stacks themselves.
+
+    **Example:**
+    ```yaml
+    excluded_paths:
+      - "**/_defaults.yaml"
+    ```
+  </dd>
+
+  <dt>`name_template`</dt>
+  <dd>
+    **(Recommended)** Defines the naming convention using Go templates. This is the preferred approach as it provides more flexibility and uses your actual variable names.
+
+    **Environment variable:** `ATMOS_STACKS_NAME_TEMPLATE`
+
+    Supports [Go templates](https://pkg.go.dev/text/template), [Atmos Template Functions](/functions/template), [Sprig Functions](https://masterminds.github.io/sprig/), [Gomplate Functions](https://docs.gomplate.ca/functions/), and [Gomplate Datasources](https://docs.gomplate.ca/datasources/).
+
+    You can use any Atmos sections (e.g., `vars`, `providers`, `settings`) that [`atmos describe component`](/cli/commands/describe/component) generates.
+
+    **Example:**
+    ```yaml
+    name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
+    ```
+  </dd>
+
+  <dt>`name_pattern`</dt>
+  <dd>
+    Defines the naming convention using predefined context tokens. Consider using `name_template` instead for more flexibility.
+
+    **Environment variable:** `ATMOS_STACKS_NAME_PATTERN`
+
+    Available tokens: `{namespace}`, `{tenant}`, `{environment}`, `{stage}`
+
+    **Example:**
+    ```yaml
+    name_pattern: "{tenant}-{environment}-{stage}"
+    ```
+  </dd>
+
+  <dt>`inherit`</dt>
+  <dd>
+    Controls what sections are inherited when components use `metadata.inherits`.
+
+    **See:** [Inheritance Behavior](/cli/configuration/stacks/inherit) for complete documentation.
+
+    **Example:**
+    ```yaml
+    stacks:
+      inherit:
+        metadata: true  # Enable metadata inheritance (default)
+    ```
+  </dd>
+</dl>
+
+## The `_defaults.yaml` Convention
+
+The `_defaults.yaml` naming convention is the recommended way to define stack manifests with default configurations for organizations, OUs/tenants, accounts, and regions.
+
+:::note
+This is a naming convention, not an Atmos feature. The `_defaults.yaml` files are not top-level Atmos stacks—they contain default values to make configuration reusable and DRY. The underscore prefix ensures these files sort to the top of directory listings and are visually distinct from actual stack configurations.
+:::
+
+:::info
+The `_defaults.yaml` stack manifests are not imported automatically. You must explicitly import them using [imports](/stacks/imports). Atmos has no special knowledge of this naming pattern—these files are only excluded from stack discovery because they match the `**/_defaults.yaml` pattern in `excluded_paths`.
+
+See the [_defaults.yaml Design Pattern](/design-patterns/stack-organization/defaults-pattern) for a complete explanation.
+:::
+
+## Stack Naming with `name_template` (Recommended)
+
+Use `name_template` to define your stack naming convention. This approach references your actual `vars` and provides more flexibility than `name_pattern`.
+
+:::tip Prefer `name_template` over `name_pattern`
+While `name_pattern` uses predefined tokens like `{tenant}`, `name_template` references your actual variables like `{{.vars.tenant}}`. This makes your configuration more explicit and allows for custom variable names, validation logic, and complex transformations.
+:::
+
+### Common Patterns
+
+Choose a pattern based on your organizational structure:
+
+```yaml title="Single region, few accounts"
+stacks:
+  name_template: "{{.vars.stage}}"
+# Results: dev, staging, prod
+```
+
+```yaml title="Multiple regions and accounts"
+stacks:
+  name_template: "{{.vars.environment}}-{{.vars.stage}}"
+# Results: ue2-dev, uw2-staging, ue1-prod
+```
+
+```yaml title="Multiple tenants (OUs)"
+stacks:
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
+# Results: plat-ue2-dev, core-uw2-prod
+```
+
+```yaml title="Multi-organization"
+stacks:
+  name_template: "{{.vars.namespace}}-{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
+# Results: org1-plat-ue2-dev, org2-core-uw2-prod
+```
+
+### Custom Variable Names
+
+Use `name_template` to define your own naming convention with custom variables. For example, to use `division`, `account`, and `region` instead of the standard names:
+
+```yaml title="atmos.yaml"
+stacks:
+  name_template: "{{.vars.division}}-{{.vars.account}}-{{.vars.region}}"
+```
+
+Commands: `atmos terraform apply vpc -s <division-account-region>`
+
+### Advanced Template with Validation
+
+`name_template` supports complex logic with template expressions and functions:
+
+<File title="atmos.yaml">
+```yaml
+name_template: |-
+  {{- $ns := .vars.namespace -}}
+  {{- $tenant := .vars.tenant -}}
+  {{- $env := .vars.environment -}}
+  {{- $stage := .vars.stage -}}
+  {{- $stack_name := "" -}}
+
+  {{- if eq $ns "" -}}
+  {{- fail "Error: 'namespace' is required." -}}
+  {{- end -}}
+
+  {{- if and (ne $tenant "") (eq $ns "") -}}
+  {{- fail "Error: 'tenant' requires 'namespace'." -}}
+  {{- end -}}
+
+  {{- if and (ne $env "") (or (eq $tenant "") (eq $ns "")) -}}
+  {{- fail "Error: 'environment' requires 'tenant' and 'namespace'." -}}
+  {{- end -}}
+
+  {{- if and (ne $stage "") (or (eq $env "") (eq $tenant "") (eq $ns "")) -}}
+  {{- fail "Error: 'stage' requires 'environment', 'tenant', and 'namespace'." -}}
+  {{- end -}}
+
+  {{- if ne $tenant "" -}}
+  {{- $stack_name = $tenant -}}
+  {{- end -}}
+
+  {{- if ne $env "" -}}
+  {{- $stack_name = printf "%s-%s" $stack_name $env -}}
+  {{- end -}}
+
+  {{- if ne $stage "" -}}
+  {{- $stack_name = printf "%s-%s" $stack_name $stage -}}
+  {{- end -}}
+
+  {{- $stack_name -}}
+```
+</File>
+
+This template:
+- Enforces hierarchical dependencies (`stage` requires `environment`, which requires `tenant`, which requires `namespace`)
+- Constructs the stack name progressively from available variables
+- For variables `namespace: acme`, `tenant: plat`, `environment: ue2`, `stage: prod`, outputs `plat-ue2-prod`
+
+## Using `name_pattern` (Legacy)
+
+:::caution Prefer `name_template`
+`name_pattern` uses predefined tokens that map to specific variable names. We recommend using `name_template` instead, which references your actual variables and provides more flexibility. If both are specified, `name_template` takes precedence.
+:::
+
+The `name_pattern` option uses predefined tokens:
+
+| Token | Maps to Variable |
+|-------|-----------------|
+| `{namespace}` | `vars.namespace` |
+| `{tenant}` | `vars.tenant` |
+| `{environment}` | `vars.environment` |
+| `{stage}` | `vars.stage` |
+
+```yaml
+stacks:
+  name_pattern: "{tenant}-{environment}-{stage}"
+```
+
+This is equivalent to:
+
+```yaml
+stacks:
+  name_template: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"
+```
+
+:::tip
+Refer to [Atmos Design Patterns](/design-patterns) for examples on configuring the `stacks` section for different use-cases.
+:::
+
+## Stack Configuration Options
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/configuration/stacks/inherit', label: 'Inheritance Behavior', description: 'Configure what sections are inherited'},
+]} />
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/list/stacks', label: 'atmos list stacks', description: 'List all stacks in the project'},
+  {type: 'link', href: '/cli/commands/describe/stacks', label: 'atmos describe stacks', description: 'Describe stacks and their components'},
+  {type: 'link', href: '/cli/commands/describe/affected', label: 'atmos describe affected', description: 'Show stacks affected by changes'},
+  {type: 'link', href: '/cli/commands/validate/stacks', label: 'atmos validate stacks', description: 'Validate stack configurations'},
+  {type: 'link', href: '/howto/inheritance', label: 'Inheritance Guide', description: 'Learn about component inheritance'},
+]} />

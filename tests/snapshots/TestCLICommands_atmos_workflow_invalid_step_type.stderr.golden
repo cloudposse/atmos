@@ -5,13 +5,10 @@
 
 **Error:** invalid workflow step type
 
-## Explanation
+## Hints
 
-Step type invalid is not supported. Each step must specify a valid type.
+💡 Step type 'invalid' is not supported
 
-### Available types:
-
-• atmos
-• shell
+💡 Each step must specify a valid type: 'atmos' or 'shell'
 
 

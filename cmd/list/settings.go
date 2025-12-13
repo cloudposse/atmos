@@ -1,7 +1,8 @@
 package list
 
 import (
-	log "github.com/cloudposse/atmos/pkg/logger"
+	"errors"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/ui"
 	utils "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -106,12 +109,12 @@ func setupSettingsOptions(opts *SettingsOptions, componentFilter string) *l.Filt
 	}
 }
 
-// logNoSettingsFoundMessage logs an appropriate message when no settings are found.
-func logNoSettingsFoundMessage(componentFilter string) {
+// displayNoSettingsFoundMessage displays an appropriate message when no settings are found.
+func displayNoSettingsFoundMessage(componentFilter string) {
 	if componentFilter != "" {
-		log.Info("No settings found", "component", componentFilter)
+		_ = ui.Info("No settings found for component: " + componentFilter)
 	} else {
-		log.Info("No settings found")
+		_ = ui.Info("No settings found")
 	}
 }
 
@@ -148,7 +151,12 @@ func listSettingsWithOptions(cmd *cobra.Command, opts *SettingsOptions, args []s
 	filterOptions := setupSettingsOptions(opts, componentFilter)
 	output, err := l.FilterAndListValues(stacksMap, filterOptions)
 	if err != nil {
-		return handleNoValuesError(err, componentFilter, logNoSettingsFoundMessage)
+		var noValuesErr *listerrors.NoValuesFoundError
+		if errors.As(err, &noValuesErr) {
+			displayNoSettingsFoundMessage(componentFilter)
+			return "", nil
+		}
+		return "", err
 	}
 
 	return output, nil

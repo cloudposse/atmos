@@ -38,6 +38,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
@@ -53,8 +54,10 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/profile"
 	_ "github.com/cloudposse/atmos/cmd/scaffold"
+	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
 	"github.com/cloudposse/atmos/cmd/version"
+	_ "github.com/cloudposse/atmos/cmd/workflow"
 )
 
 const (
@@ -86,7 +89,12 @@ var chdirProcessed bool
 // It recognizes `--chdir=value`, `--chdir value`, `-C=value`, `-Cvalue`, and `-C value` forms.
 // If no chdir flag is found, it returns an empty string.
 func parseChdirFromArgs() string {
-	args := os.Args
+	return parseChdirFromArgsInternal(os.Args)
+}
+
+// parseChdirFromArgsInternal manually parses --chdir or -C flag from the provided args.
+// This internal version accepts args as a parameter for testability.
+func parseChdirFromArgsInternal(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
@@ -403,6 +411,11 @@ var RootCmd = &cobra.Command{
 		ui.InitFormatter(ioCtx)
 		data.InitWriter(ioCtx)
 		data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
+
+		// Configure lipgloss color profile based on terminal capabilities.
+		// This ensures tables and styled output degrade gracefully when piped or in non-TTY environments.
+		term := terminal.New()
+		lipgloss.SetColorProfile(convertToTermenvProfile(term.ColorProfile()))
 	},
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
 		// Stop profiler after command execution.
@@ -1213,11 +1226,18 @@ func Execute() error {
 	version.SetAtmosConfig(&atmosConfig)
 	devcontainer.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
+	backend.SetAtmosConfig(&atmosConfig)
 
 	if initErr != nil {
 		// Handle config initialization errors based on command context.
 		if err := handleConfigInitError(initErr, &atmosConfig); err != nil {
 			return err
+		}
+		// Only log "not found" message when the error is specifically NotFound.
+		// Other cases (e.g., version command with invalid config) log differently
+		// inside handleConfigInitError.
+		if errors.Is(initErr, cfg.NotFound) {
+			log.Debug("Warning: CLI configuration 'atmos.yaml' file not found", "error", initErr)
 		}
 	}
 
@@ -1285,7 +1305,25 @@ func getInvalidCommandName(input string) string {
 
 // displayPerformanceHeatmap shows the performance heatmap visualization.
 //
+// ConvertToTermenvProfile converts our terminal.ColorProfile to termenv.Profile.
+//
 //nolint:unparam // cmd parameter reserved for future use
+func convertToTermenvProfile(profile terminal.ColorProfile) termenv.Profile {
+	switch profile {
+	case terminal.ColorNone:
+		return termenv.Ascii
+	case terminal.Color16:
+		return termenv.ANSI
+	case terminal.Color256:
+		return termenv.ANSI256
+	case terminal.ColorTrue:
+		return termenv.TrueColor
+	default:
+		// Default to ASCII (no color) for unknown profiles.
+		return termenv.Ascii
+	}
+}
+
 func displayPerformanceHeatmap(cmd *cobra.Command, mode string) error {
 	// Print performance summary to console, filtering out zero-time functions.
 	snap := perf.SnapshotTopFiltered("total", defaultTopFunctionsMax)

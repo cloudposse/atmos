@@ -52,9 +52,39 @@ export ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=true
 export ATMOS_COMPONENTS_TERRAFORM_WORKSPACES_ENABLED=true
 ```
 
-### Dynamic Workspace Naming
+### Recommended: Stable Keys with metadata.name
 
-The `workspace_key_prefix` backend configuration supports Go templates for dynamic workspace naming. This is configured at the stack level, not in `atmos.yaml`:
+The recommended way to ensure stable workspace keys is using `metadata.name` for logical component identity:
+
+```yaml
+# stacks/catalog/vpc.yaml
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+        name: vpc              # Convention: top-level folder
+        component: vpc/v2      # Version can change
+
+# stacks/prod/us-east-1.yaml
+import:
+  - catalog/vpc
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+        # workspace_key_prefix auto-generates as "vpc" from inherited metadata.name
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+
+This keeps state paths stable when upgrading component versions. See [folder-based versioning](/design-patterns/version-management/folder-based-versioning) for details.
+
+### Advanced: Dynamic Workspace Naming
+
+For advanced use cases requiring dynamic workspace keys, `workspace_key_prefix` supports Go templates. This is configured at the stack level, not in `atmos.yaml`:
 
 ```yaml
 components:

@@ -1,0 +1,160 @@
+---
+title: "Customize List Command Output to Explore Your Cloud Architecture"
+slug: customizable-list-command-output
+description: "Configure custom columns in atmos.yaml to tailor list command output to your team's needs"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Atmos lets you model your cloud architecture, so why shouldn't you be able to easily explore that? This is especially a pain point for people new to a team who just want to see what exists without having to understand your complete cloud architecture. Atmos List makes that possible.
+
+We've enhanced all column-supporting list commands (`instances`, `components`, `stacks`, `workflows`, `vendor`) to support customizable output columns via `atmos.yaml` configuration.
+
+<!--truncate-->
+
+## The Problem
+
+When exploring a new infrastructure codebase, you're often overwhelmed with questions:
+- What components are deployed in production?
+- Which stacks use a specific component?
+- What's the region and environment for each deployment?
+
+Running `atmos list instances` gives you raw data, but not the specific view you need to answer these questions quickly.
+
+## The Solution
+
+Configure custom columns in `atmos.yaml` to show exactly what your team needs:
+
+```yaml
+# atmos.yaml
+components:
+  list:
+    columns:
+      - name: Stack
+        value: "{{ .stack }}"
+      - name: Component
+        value: "{{ .component }}"
+      - name: Region
+        value: "{{ .vars.region }}"
+      - name: Environment
+        value: "{{ .vars.environment }}"
+      - name: Stage
+        value: "{{ .vars.stage }}"
+      - name: Description
+        value: "{{ .metadata.description }}"
+```
+
+Now `atmos list instances` shows a clean, team-specific view:
+
+```shell
+atmos list instances
+┌─────────────────────┬───────────┬───────────┬─────────────┬──────┬────────────────────────┐
+│        Stack        │ Component │  Region   │ Environment │ Stage│      Description       │
+├─────────────────────┼───────────┼───────────┼─────────────┼──────┼────────────────────────┤
+│ plat-ue2-prod       │ vpc       │ us-east-2 │ ue2         │ prod │ Production VPC         │
+│ plat-ue2-prod       │ eks       │ us-east-2 │ ue2         │ prod │ Production EKS cluster │
+│ plat-uw2-staging    │ vpc       │ us-west-2 │ uw2         │ stage│ Staging VPC            │
+└─────────────────────┴───────────┴───────────┴─────────────┴──────┴────────────────────────┘
+```
+
+## Practical Examples
+
+### Find All Production Infrastructure
+
+Filter by stack pattern and see critical details:
+
+```shell
+atmos list instances --stack "*-prod" --columns "component,vars.region,enabled"
+```
+
+### Explore Vendored Dependencies
+
+See what external components you're using:
+
+```yaml
+# atmos.yaml
+vendor:
+  list:
+    columns:
+      - name: Component
+        value: "{{ .component }}"
+      - name: Source
+        value: "{{ .source | truncate 50 }}"
+      - name: Version
+        value: "{{ .version }}"
+```
+
+```shell
+atmos list vendor
+┌───────────┬──────────────────────────────────────────────────┬─────────┐
+│ Component │                     Source                       │ Version │
+├───────────┼──────────────────────────────────────────────────┼─────────┤
+│ vpc       │ github.com/cloudposse/terraform-aws-vpc          │ 1.5.0   │
+│ eks       │ github.com/cloudposse/terraform-aws-eks          │ 2.0.0   │
+└───────────┴──────────────────────────────────────────────────┴─────────┘
+```
+
+### Audit Workflows
+
+See all available automation:
+
+```yaml
+# atmos.yaml
+workflows:
+  list:
+    columns:
+      - name: Workflow
+        value: "{{ .name }}"
+      - name: File
+        value: "{{ .file }}"
+      - name: Steps
+        value: "{{ .steps | len }} steps"
+```
+
+### Use Template Functions
+
+Transform data with built-in functions:
+
+```yaml
+components:
+  list:
+    columns:
+      - name: Component
+        value: "{{ .component | upper }}"
+      - name: Status
+        value: "{{ if .enabled }}✓ Enabled{{ else }}✗ Disabled{{ end }}"
+      - name: Short Description
+        value: "{{ .metadata.description | truncate 40 }}"
+```
+
+## Override from CLI
+
+Need a different view for a one-off query? Override columns via CLI:
+
+```shell
+# Quick component-stack view
+atmos list instances --columns stack,component
+
+# Region-specific query
+atmos list instances --columns "component,vars.region,vars.account_id"
+```
+
+## What's Supported
+
+Column customization is available for:
+- ✅ `atmos list instances` - All component instances across stacks
+- ✅ `atmos list components` - Components in your project
+- ✅ `atmos list stacks` - Stack configurations
+- ✅ `atmos list workflows` - Available workflows
+- ✅ `atmos list vendor` - Vendored dependencies
+
+Each command has access to its own template context with fields like `.stack`, `.component`, `.vars.*`, `.settings.*`, `.metadata.*`, and more.
+
+## Learn More
+
+- [List Instances Documentation](/cli/commands/list/list-instances)
+- [List Components Documentation](/cli/commands/list/components)
+- [List Workflows Documentation](/cli/commands/list/list-workflows)
+- [List Vendor Documentation](/cli/commands/list/list-vendor)
+
+Make exploring your cloud architecture as easy as modeling it. Configure your columns once, and every team member gets the view they need.

@@ -6,6 +6,7 @@
 Valid subcommands are:
 
 • apply
+• backend
 • clean
 • console
 • deploy
@@ -25,6 +26,7 @@ Valid subcommands are:
 • plan
 • plan-diff
 • providers
+• provision
 • refresh
 • shell
 • show

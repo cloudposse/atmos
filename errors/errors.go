@@ -13,7 +13,6 @@ const (
 )
 
 var (
-	ErrNoGitRepo                             = errors.New("not in a git repository")
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrDownloadFile                          = errors.New("failed to download file")
 	ErrParseFile                             = errors.New("failed to parse file")
@@ -46,6 +45,8 @@ var (
 	ErrPathResolution                        = errors.New("failed to resolve absolute path")
 	ErrInvalidTemplateFunc                   = errors.New("invalid template function")
 	ErrInvalidTemplateSettings               = errors.New("invalid template settings")
+	ErrTemplateEvaluation                    = errors.New("template evaluation failed")
+	ErrInvalidConfig                         = errors.New("invalid configuration")
 	ErrRefuseDeleteSymbolicLink              = errors.New("refusing to delete symbolic link")
 	ErrNoDocsGenerateEntry                   = errors.New("no docs.generate entry found")
 	ErrMissingDocType                        = errors.New("doc-type argument missing")
@@ -53,6 +54,8 @@ var (
 	ErrMissingStackNameTemplateAndPattern    = errors.New("'stacks.name_pattern' or 'stacks.name_template' needs to be specified in 'atmos.yaml'")
 	ErrFailedMarshalConfigToYaml             = errors.New("failed to marshal config to YAML")
 	ErrStacksDirectoryDoesNotExist           = errors.New("directory for Atmos stacks does not exist")
+	ErrMissingAtmosConfig                    = errors.New("atmos configuration not found or invalid")
+	ErrNotInGitRepository                    = errors.New("not inside a git repository")
 	ErrCommandNil                            = errors.New("command cannot be nil")
 	ErrGitHubRateLimitExceeded               = errors.New("GitHub API rate limit exceeded")
 	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
@@ -75,9 +78,11 @@ var (
 	ErrInvalidAuthManagerType = errors.New("invalid authManager type")
 
 	// Component and positional argument errors.
-	ErrComponentRequired     = errors.New("component is required")
-	ErrInvalidPositionalArgs = errors.New("invalid positional arguments")
-	ErrWorkflowNameRequired  = errors.New("workflow name is required")
+	ErrComponentRequired          = errors.New("component is required")
+	ErrInvalidPositionalArgs      = errors.New("invalid positional arguments")
+	ErrWorkflowNameRequired       = errors.New("workflow name is required")
+	ErrInvalidStackConfiguration  = errors.New("invalid stack configuration")
+	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -87,19 +92,29 @@ var (
 	ErrInvalidTerraformSingleComponentAndMultiComponentFlags = errors.New("the single-component flags (`--from-plan`, `--planfile`) can't be used with the multi-component (bulk operations) flags (`--affected`, `--all`, `--query`, `--components`)")
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
+	ErrAwsGetCallerIdentity             = errors.New("failed to get AWS caller identity")
 	ErrDescribeComponent                = errors.New("failed to describe component")
 	ErrReadTerraformState               = errors.New("failed to read Terraform state")
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
-	ErrUnsupportedBackendType           = errors.New("unsupported backend type")
-	ErrProcessTerraformStateFile        = errors.New("error processing terraform state file")
-	ErrLoadAwsConfig                    = errors.New("failed to load AWS config")
-	ErrGetObjectFromS3                  = errors.New("failed to get object from S3")
-	ErrReadS3ObjectBody                 = errors.New("failed to read S3 object body")
-	ErrCreateGCSClient                  = errors.New("failed to create GCS client")
-	ErrGetObjectFromGCS                 = errors.New("failed to get object from GCS")
-	ErrReadGCSObjectBody                = errors.New("failed to read GCS object body")
-	ErrGCSBucketRequired                = errors.New("bucket is required for gcs backend")
-	ErrInvalidBackendConfig             = errors.New("invalid backend configuration")
+
+	// Recoverable YAML function errors - use YQ default if available.
+	// These errors indicate the data is not available but do not represent API failures.
+	ErrTerraformStateNotProvisioned = errors.New("terraform state not provisioned")
+	ErrTerraformOutputNotFound      = errors.New("terraform output not found")
+
+	// API/infrastructure errors - should cause non-zero exit.
+	// These errors indicate backend API failures that should not use YQ defaults.
+	ErrTerraformBackendAPIError  = errors.New("terraform backend API error")
+	ErrUnsupportedBackendType    = errors.New("unsupported backend type")
+	ErrProcessTerraformStateFile = errors.New("error processing terraform state file")
+	ErrGetObjectFromS3           = errors.New("failed to get object from S3")
+	ErrReadS3ObjectBody          = errors.New("failed to read S3 object body")
+	ErrS3BucketAccessDenied      = errors.New("access denied to S3 bucket")
+	ErrCreateGCSClient           = errors.New("failed to create GCS client")
+	ErrGetObjectFromGCS          = errors.New("failed to get object from GCS")
+	ErrReadGCSObjectBody         = errors.New("failed to read GCS object body")
+	ErrGCSBucketRequired         = errors.New("bucket is required for gcs backend")
+	ErrInvalidBackendConfig      = errors.New("invalid backend configuration")
 
 	// Azure Blob Storage specific errors.
 	ErrGetBlobFromAzure       = errors.New("failed to get blob from Azure Blob Storage")
@@ -218,7 +233,7 @@ var (
 	ErrInvalidTerraformComponent        = errors.New("invalid Terraform component")
 	ErrNoTty                            = errors.New("no TTY attached")
 	ErrNoSuitableShell                  = errors.New("no suitable shell found")
-	ErrFailedToLoadTerraformModule      = errors.New("failed to load terraform module")
+	ErrFailedToLoadTerraformComponent   = errors.New("failed to load terraform component")
 	ErrNoJSONOutput                     = errors.New("no JSON output found in terraform show output")
 	ErrOriginalPlanFileRequired         = errors.New("original plan file is required")
 	ErrOriginalPlanFileNotExist         = errors.New("original plan file does not exist")
@@ -454,6 +469,14 @@ var (
 	ErrTerraformEnvCliVarJSON        = errors.New("failed to parse JSON variable from TF_CLI_ARGS environment variable")
 	ErrWorkflowBasePathNotConfigured = errors.New("'workflows.base_path' must be configured in 'atmos.yaml'")
 	ErrWorkflowDirectoryDoesNotExist = errors.New("workflow directory does not exist")
+	ErrWorkflowNoSteps               = errors.New("workflow has no steps defined")
+	ErrInvalidWorkflowStepType       = errors.New("invalid workflow step type")
+	ErrInvalidFromStep               = errors.New("invalid from-step flag")
+	ErrWorkflowStepFailed            = errors.New("workflow step execution failed")
+	ErrWorkflowNoWorkflow            = errors.New("no workflow found")
+	ErrWorkflowFileNotFound          = errors.New("workflow file not found")
+	ErrInvalidWorkflowManifest       = errors.New("invalid workflow manifest")
+	ErrAuthProviderNotAvailable      = errors.New("auth provider is not available")
 	ErrInvalidComponentArgument      = errors.New("invalid arguments. The command requires one argument 'componentName'")
 	ErrValidation                    = errors.New("validation failed")
 	ErrCUEValidationUnsupported      = errors.New("validation using CUE is not supported yet")
@@ -466,6 +489,7 @@ var (
 	ErrParseStacks               = errors.New("could not parse stacks")
 	ErrParseComponents           = errors.New("could not parse components")
 	ErrNoComponentsFound         = errors.New("no components found")
+	ErrNoStacksFound             = errors.New("no stacks found")
 	ErrStackNotFound             = errors.New("stack not found")
 	ErrProcessStack              = errors.New("error processing stack")
 
@@ -629,6 +653,36 @@ var (
 	ErrIdentityNotInConfig                  = errors.New("identity not found in configuration")
 	ErrProviderNotInConfig                  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
+
+	// Backend provisioning errors.
+	ErrBucketRequired       = errors.New("backend.bucket is required")
+	ErrRegionRequired       = errors.New("backend.region is required")
+	ErrBackendNotFound      = errors.New("backend configuration not found")
+	ErrCreateNotImplemented = errors.New("create not implemented for backend type")
+	ErrDeleteNotImplemented = errors.New("delete not implemented for backend type")
+	ErrProvisionerFailed    = errors.New("provisioner failed")
+	ErrLoadAWSConfig        = errors.New("failed to load AWS config")
+	ErrCheckBucketExist     = errors.New("failed to check bucket existence")
+	ErrCreateBucket         = errors.New("failed to create bucket")
+	ErrApplyBucketDefaults  = errors.New("failed to apply bucket defaults")
+	ErrEnableVersioning     = errors.New("failed to enable versioning")
+	ErrEnableEncryption     = errors.New("failed to enable encryption")
+	ErrBlockPublicAccess    = errors.New("failed to block public access")
+	ErrApplyTags            = errors.New("failed to apply tags")
+	ErrForceRequired        = errors.New("--force flag required for backend deletion")
+	ErrBucketNotEmpty       = errors.New("bucket contains objects and cannot be deleted")
+	ErrStateFilesExist      = errors.New("bucket contains terraform state files")
+	ErrDeleteObjects        = errors.New("failed to delete objects from bucket")
+	ErrDeleteBucket         = errors.New("failed to delete bucket")
+	ErrListObjects          = errors.New("failed to list bucket objects")
+
+	// Component path resolution errors.
+	ErrPathNotInComponentDir  = errors.New("path is not within Atmos component directories")
+	ErrComponentTypeMismatch  = errors.New("path component type does not match command")
+	ErrComponentNotInStack    = errors.New("component not found in stack configuration")
+	ErrPathResolutionFailed   = errors.New("failed to resolve component from path")
+	ErrPathIsComponentBase    = errors.New("must specify a component directory, not the base directory")
+	ErrAmbiguousComponentPath = errors.New("ambiguous component path")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

@@ -31,6 +31,10 @@
       "base_path": "",
       "command": ""
     },
+    "list": {
+      "format": "",
+      "columns": null
+    },
     "Plugins": null
   },
   "stacks": {
@@ -42,7 +46,12 @@
       "**/_defaults.yaml"
     ],
     "name_pattern": "{stage}",
-    "name_template": ""
+    "name_template": "",
+    "list": {
+      "format": "",
+      "columns": null
+    },
+    "inherit": {}
   },
   "workflows": {
     "base_path": "",
@@ -166,6 +175,7 @@
     }
   },
   "initialized": true,
+  "basePathAbsolute": "/absolute/path/to/repo/examples/demo-stacks",
   "stacksBaseAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/stacks",
   "includeStackAbsolutePaths": [
     "/absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*"

@@ -4,16 +4,16 @@
 
 # Workflow Error
 
-**Error:** workflow step execution failed
+**Error:** workflow step execution failed: subcommand exited with code 127
 
-## Explanation
+## Hints
 
-The following command failed to execute:
+💡 The following command failed to execute:
 
  nonexistentcommand
 
-To resume the workflow from this step, run:
+💡 To resume the workflow from this step, run:
 
- atmos workflow shell-command-not-found -f test --from-step step1
+ atmos workflow shell-command-not-found -f test --from-step 'step1'
 
 

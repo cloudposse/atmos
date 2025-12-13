@@ -62,6 +62,7 @@ type ComponentProcessorResult struct {
 	BaseComponentSettings      map[string]any
 	BaseComponentEnv           map[string]any
 	BaseComponentAuth          map[string]any
+	BaseComponentMetadata      map[string]any
 	BaseComponentCommand       string
 	ComponentInheritanceChain  []string
 	BaseComponents             []string

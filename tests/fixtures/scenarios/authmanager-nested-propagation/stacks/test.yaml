@@ -6,6 +6,11 @@
 # 2. Components can override auth configuration at any nesting level
 # 3. Components without auth config inherit parent's AuthManager
 # 4. Nested auth overrides work correctly in complex scenarios
+#
+# IMPORTANT: Tests with ProcessYamlFunctions: true MUST mock the stateGetter
+# (see setupMockStateGetter in describe_component_nested_authmanager_test.go)
+# because the !terraform.state functions would otherwise try to read actual
+# terraform state files which don't exist.
 
 vars:
   stage: test

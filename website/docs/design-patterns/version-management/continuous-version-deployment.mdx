@@ -532,25 +532,48 @@ terraform/
 
 **With [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning)**:
 
-Create explicit version boundaries through folder structure. Environments reference specific version folders during the divergence period.
+Create explicit version boundaries through folder structure. Define base components in catalog with `metadata.name` for stable workspace keys, then environments reference specific version folders during the divergence period.
+
+<File title="stacks/catalog/vpc.yaml and database.yaml">
+```yaml
+components:
+  terraform:
+    # Most components use trunk-based convergence
+    vpc/defaults:
+      metadata:
+        type: abstract
+        name: vpc  # Convention: top-level folder
+
+    # Database uses versioned folders for planned divergence
+    database/defaults:
+      metadata:
+        type: abstract
+        name: database  # Convention: top-level folder (stable across versions)
+```
+</File>
 
 <Tabs>
 <TabItem value="dev" label="Development" default>
 <File title="stacks/dev/us-east-1.yaml">
 ```yaml
+import:
+  - catalog/vpc
+  - catalog/database
+
 components:
   terraform:
     # Most components converge continuously
     vpc:
       metadata:
+        inherits: [vpc/defaults]
         component: vpc  # Uses trunk
 
     # Database has planned divergence
     database:
       metadata:
+        inherits: [database/defaults]
         component: database/v2  # Testing new version
-      settings:
-        workspace_key_prefix: "database"  # Stable across versions
+        # Inherits name: database → workspace_key_prefix: "database"
       vars:
         engine: "postgres"
         engine_version: "15.4"
@@ -561,19 +584,24 @@ components:
 <TabItem value="prod" label="Production">
 <File title="stacks/prod/us-east-1.yaml">
 ```yaml
+import:
+  - catalog/vpc
+  - catalog/database
+
 components:
   terraform:
     # Most components converge continuously
     vpc:
       metadata:
+        inherits: [vpc/defaults]
         component: vpc  # Uses trunk
 
     # Database pinned during migration
     database:
       metadata:
+        inherits: [database/defaults]
         component: database/v1  # Stable on old version
-      settings:
-        workspace_key_prefix: "database"  # Stable across versions
+        # Inherits name: database → workspace_key_prefix: "database"
       vars:
         engine: "postgres"
         engine_version: "13.11"

@@ -106,10 +106,15 @@ func processCustomCommands(
 			customCommand.PersistentFlags().String("identity", "", "Identity to use for authentication (overrides identity in command config)")
 			AddIdentityCompletion(customCommand)
 
-			// Process and add flags to the command
+			// Process and add flags to the command.
 			for _, flag := range commandConfig.Flags {
 				if flag.Type == "bool" {
 					defaultVal := false
+					if flag.Default != nil {
+						if boolVal, ok := flag.Default.(bool); ok {
+							defaultVal = boolVal
+						}
+					}
 					if flag.Shorthand != "" {
 						customCommand.PersistentFlags().BoolP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
 					} else {
@@ -117,6 +122,11 @@ func processCustomCommands(
 					}
 				} else {
 					defaultVal := ""
+					if flag.Default != nil {
+						if strVal, ok := flag.Default.(string); ok {
+							defaultVal = strVal
+						}
+					}
 					if flag.Shorthand != "" {
 						customCommand.PersistentFlags().StringP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
 					} else {
@@ -582,8 +592,9 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	return &clone, nil
 }
 
-// checkAtmosConfig checks Atmos config.
-func checkAtmosConfig(opts ...AtmosValidateOption) {
+// validateAtmosConfig checks the Atmos configuration and returns an error instead of exiting.
+// This makes the function testable by allowing errors to be handled by the caller.
+func validateAtmosConfig(opts ...AtmosValidateOption) error {
 	vCfg := &ValidateConfig{
 		CheckStack: true, // Default value true to check the stack
 	}
@@ -594,15 +605,87 @@ func checkAtmosConfig(opts ...AtmosValidateOption) {
 	}
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return err
+	}
 
 	if vCfg.CheckStack {
 		atmosConfigExists, err := u.IsDirectory(atmosConfig.StacksBaseAbsolutePath)
 		if !atmosConfigExists || err != nil {
-			printMessageForMissingAtmosConfig(atmosConfig)
-			errUtils.Exit(1)
+			// Return an error with context instead of printing and exiting
+			return errUtils.Build(errUtils.ErrStacksDirectoryDoesNotExist).
+				WithHintf("Stacks directory not found:  \n%s", atmosConfig.StacksBaseAbsolutePath).
+				WithContext("base_path", atmosConfig.BasePath).
+				WithContext("stacks_base_path", atmosConfig.Stacks.BasePath).
+				Err()
 		}
 	}
+
+	return nil
+}
+
+// checkAtmosConfig checks Atmos config and exits on error.
+// This is the legacy wrapper that preserves existing behavior for backward compatibility.
+func checkAtmosConfig(opts ...AtmosValidateOption) {
+	err := validateAtmosConfig(opts...)
+	if err != nil {
+		// Try to load config for error display (may fail, that's OK)
+		atmosConfig, _ := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		printMessageForMissingAtmosConfig(atmosConfig)
+		errUtils.Exit(1)
+	}
+}
+
+// checkAtmosConfigE checks Atmos config and returns an error instead of exiting.
+// This is the testable version that should be used in commands' RunE functions.
+// The returned error has exit code 1 attached for proper process termination.
+func checkAtmosConfigE(opts ...AtmosValidateOption) error {
+	err := validateAtmosConfig(opts...)
+	if err == nil {
+		return nil
+	}
+
+	// Try to load config for error display (may fail, that's OK).
+	atmosConfig, _ := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+
+	// Build the error using the error builder pattern.
+	builder := errUtils.Build(errUtils.ErrMissingAtmosConfig).
+		WithExitCode(1)
+
+	// Build explanation with problem details.
+	var explanation strings.Builder
+	stacksDir := filepath.Join(atmosConfig.BasePath, atmosConfig.Stacks.BasePath)
+
+	// Add git repo warning to explanation if applicable.
+	if gitErr := verifyInsideGitRepoE(); gitErr != nil {
+		explanation.WriteString(gitErr.Error())
+		explanation.WriteString("\n\n")
+	}
+
+	if _, statErr := os.Stat(atmosConfig.CliConfigPath); os.IsNotExist(statErr) {
+		explanation.WriteString("The `atmos.yaml` CLI config file was not found.\n\n")
+	}
+
+	if _, statErr := os.Stat(stacksDir); os.IsNotExist(statErr) {
+		fmt.Fprintf(&explanation, "The default Atmos stacks directory `%s` does not exist in the current path.\n\n", stacksDir)
+	} else if atmosConfig.CliConfigPath != "" {
+		if _, statErr := os.Stat(atmosConfig.CliConfigPath); !os.IsNotExist(statErr) {
+			fmt.Fprintf(&explanation, "The `atmos.yaml` config file specifies stacks directory as `%s`, but it does not exist.\n\n", stacksDir)
+		}
+	}
+
+	if explanation.Len() > 0 {
+		builder = builder.WithExplanation(strings.TrimSpace(explanation.String()))
+	}
+
+	// Add actionable hints - what the user should DO.
+	builder = builder.
+		WithHint("Initialize your git repository if you haven't already: git init").
+		WithHint("Create atmos.yaml configuration file in your repository root").
+		WithHint("Set up your stacks directory structure").
+		WithHint("See documentation: https://atmos.tools/cli/configuration")
+
+	return builder.Err()
 }
 
 // printMessageForMissingAtmosConfig prints Atmos logo and instructions on how to configure and start using Atmos.
@@ -722,9 +805,12 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 }
 
 // getConfigAndStacksInfo processes the CLI config and stacks.
-func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) schema.ConfigAndStacksInfo {
-	// Check Atmos configuration
-	checkAtmosConfig()
+// Returns error instead of calling os.Exit for better testability.
+func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
+	// Check Atmos configuration.
+	if err := validateAtmosConfig(); err != nil {
+		return schema.ConfigAndStacksInfo{}, err
+	}
 
 	var argsAfterDoubleDash []string
 	finalArgs := args
@@ -736,8 +822,72 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 	}
 
 	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-	return info
+	if err != nil {
+		return schema.ConfigAndStacksInfo{}, err
+	}
+
+	// Resolve path-based component arguments to component names.
+	if info.NeedsPathResolution && info.ComponentFromArg != "" {
+		if err := resolveComponentPath(&info, commandName); err != nil {
+			return schema.ConfigAndStacksInfo{}, err
+		}
+	}
+
+	return info, nil
+}
+
+// resolveComponentPath resolves a path-based component argument to a component name.
+// It validates the component exists in the specified stack and handles ambiguous paths.
+func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) error {
+	// Initialize config with processStacks=true to enable stack-based validation.
+	// This is needed to detect ambiguous paths (multiple components referencing the same folder).
+	atmosConfig, err := cfg.InitCliConfig(*info, true)
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrPathResolutionFailed, err)
+	}
+
+	// Resolve component from path WITH stack validation.
+	// This will:
+	// 1. Extract the component name from the path (e.g., "vpc" from "components/terraform/vpc")
+	// 2. Look up which Atmos components reference this terraform folder in the stack
+	// 3. If multiple components reference the same folder, return an ambiguous path error.
+	resolvedComponent, err := e.ResolveComponentFromPath(
+		&atmosConfig,
+		info.ComponentFromArg,
+		info.Stack,
+		commandName, // Component type is the command name (terraform, helmfile, packer).
+	)
+	if err != nil {
+		return handlePathResolutionError(err)
+	}
+
+	log.Debug("Resolved component from path",
+		"original_path", info.ComponentFromArg,
+		"resolved_component", resolvedComponent,
+		"stack", info.Stack,
+	)
+
+	info.ComponentFromArg = resolvedComponent
+	info.NeedsPathResolution = false // Mark as resolved.
+	return nil
+}
+
+// handlePathResolutionError wraps path resolution errors with appropriate hints.
+func handlePathResolutionError(err error) error {
+	// These errors already have detailed hints from the resolver, return directly.
+	// Using fmt.Errorf to wrap would lose the cockroachdb/errors hints.
+	if errors.Is(err, errUtils.ErrAmbiguousComponentPath) ||
+		errors.Is(err, errUtils.ErrComponentNotInStack) ||
+		errors.Is(err, errUtils.ErrStackNotFound) ||
+		errors.Is(err, errUtils.ErrUserAborted) {
+		return err
+	}
+	// Generic path resolution error - add hint.
+	// Use WithCause to preserve the underlying error for errors.Is introspection.
+	return errUtils.Build(errUtils.ErrPathResolutionFailed).
+		WithCause(err).
+		WithHint("Make sure the path is within your component directories").
+		Err()
 }
 
 // enableHeatmapIfRequested checks os.Args for --heatmap and --heatmap-mode flags.
@@ -776,6 +926,15 @@ func verifyInsideGitRepo() bool {
 		return false
 	}
 	return true
+}
+
+// verifyInsideGitRepoE returns an error if not inside a git repository.
+// This is the testable version that returns an error instead of just logging.
+func verifyInsideGitRepoE() error {
+	if !isGitRepository() {
+		return fmt.Errorf("%w: Atmos feels lonely outside, bring it home", errUtils.ErrNotInGitRepository)
+	}
+	return nil
 }
 
 func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
@@ -820,7 +979,48 @@ func showUsageExample(cmd *cobra.Command, details string) {
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// If a component was provided as the first argument, filter stacks by that component.
 	if len(args) > 0 && args[0] != "" {
-		output, err := listStacksForComponent(args[0])
+		component := args[0]
+
+		// Check if argument is a path that needs resolution
+		// Paths are: ".", or contain path separators
+		if component == "." || strings.Contains(component, string(filepath.Separator)) {
+			// Attempt to resolve path to component name for stack filtering
+			// Use silent error handling - if resolution fails, just list all stacks (graceful degradation)
+			configAndStacksInfo := schema.ConfigAndStacksInfo{}
+			atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+			if err == nil {
+				// Determine component type from command
+				// Walk up command chain to find root command (terraform, helmfile, packer)
+				componentType := determineComponentTypeFromCommand(cmd)
+
+				// Try to resolve the path (without stack context for completion)
+				resolvedComponent, err := e.ResolveComponentFromPath(
+					&atmosConfig,
+					component,
+					"", // No stack context yet - we're completing the stack flag
+					componentType,
+				)
+				if err != nil {
+					// If resolution fails, fall through to list all stacks (graceful degradation)
+					log.Trace("Could not resolve path for stack completion, listing all stacks",
+						"path", component,
+						"error", err,
+					)
+					output, err := listStacks(cmd)
+					if err != nil {
+						return nil, cobra.ShellCompDirectiveNoFileComp
+					}
+					return output, cobra.ShellCompDirectiveNoFileComp
+				}
+				component = resolvedComponent
+				log.Trace("Resolved path for stack completion",
+					"original", args[0],
+					"resolved", component,
+				)
+			}
+		}
+
+		output, err := listStacksForComponent(component)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
@@ -833,6 +1033,25 @@ func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return output, cobra.ShellCompDirectiveNoFileComp
+}
+
+// determineComponentTypeFromCommand walks up the command chain to find the component type.
+func determineComponentTypeFromCommand(cmd *cobra.Command) string {
+	// Walk up to find the root component command (terraform, helmfile, packer).
+	current := cmd
+	for current != nil {
+		switch current.Name() {
+		case "terraform":
+			return "terraform"
+		case "helmfile":
+			return "helmfile"
+		case "packer":
+			return "packer"
+		}
+		current = current.Parent()
+	}
+	// Default to terraform if we can't determine
+	return "terraform"
 }
 
 // listStacksForComponent returns stacks that contain the specified component.
@@ -958,6 +1177,15 @@ func identityArgCompletion(cmd *cobra.Command, args []string, toComplete string)
 
 func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) == 0 {
+		// Check if user is typing a path
+		// Enable directory completion for paths
+		// Check for both platform-specific separator and forward slash (works on all platforms)
+		if toComplete == "." || strings.Contains(toComplete, string(filepath.Separator)) || strings.Contains(toComplete, "/") {
+			log.Trace("Enabling directory completion for path input", "toComplete", toComplete)
+			return nil, cobra.ShellCompDirectiveFilterDirs
+		}
+
+		// Otherwise, suggest component names from stack configurations
 		output, err := listComponents(cmd)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
