@@ -202,13 +202,14 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 //
 // Resolution order:
 //  1. If path is already absolute → return as-is
-//  2. If path explicitly references parent/current dir (starts with ".." or "./") AND cliConfigPath is set
-//     → resolve relative to cliConfigPath (where atmos.yaml is located)
-//  3. Otherwise → resolve relative to current working directory (for backward compatibility)
+//  2. If path explicitly references a relative location (starts with "..", "./" or is exactly ".")
+//     AND cliConfigPath is set → resolve relative to cliConfigPath (where atmos.yaml is located)
+//  3. Otherwise (simple paths like "stacks", "components/terraform", or empty string) →
+//     resolve relative to current working directory (for backward compatibility)
 //
 // This approach maintains backward compatibility: simple relative paths like "stacks" or
 // "components/terraform" are resolved relative to CWD, while paths that explicitly reference
-// the config directory location (like "../.." or "./subdir") are resolved relative to atmos.yaml.
+// the config directory location (like "../..", "./subdir", or ".") are resolved relative to atmos.yaml.
 // This fixes GitHub issue #1858 where ATMOS_CLI_CONFIG_PATH pointing to a subdirectory
 // caused "stacks" to incorrectly resolve relative to the config directory instead of CWD.
 func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
@@ -221,8 +222,9 @@ func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
 	// This includes:
 	// - Paths starting with ".." (parent directory traversal)
 	// - Paths starting with "./" (explicit current directory reference)
+	// - Exactly "." (explicit current directory, meaning "where atmos.yaml is")
 	// These should resolve relative to where atmos.yaml is located.
-	isExplicitRelativePath := strings.HasPrefix(path, "..") || strings.HasPrefix(path, "./")
+	isExplicitRelativePath := strings.HasPrefix(path, "..") || strings.HasPrefix(path, "./") || path == "."
 
 	if isExplicitRelativePath && cliConfigPath != "" {
 		// Resolve relative to CLI config path (atmos.yaml location).
@@ -236,7 +238,7 @@ func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
 		return absPath, nil
 	}
 
-	// For simple relative paths (like "stacks", "components/terraform", "", "."),
+	// For simple relative paths (like "stacks", "components/terraform", or empty string ""),
 	// resolve relative to CWD for backward compatibility.
 	// This maintains the behavior from v1.200.0 and earlier.
 	absPath, err := filepath.Abs(path)

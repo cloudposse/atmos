@@ -11,14 +11,15 @@ were incorrectly resolved relative to the `ATMOS_CLI_CONFIG_PATH` directory inst
 
 **Symptoms**:
 
-- After upgrading from v1.200.0 to v1.201.0, `atmos validate stacks` fails with:
+- After upgrading from `v1.200.0` to `v1.201.0`, `atmos validate stacks` fails with:
   ```
   The atmos.yaml CLI config file specifies the directory for Atmos stacks as stacks, but the directory does not exist.
   ```
+
 - This occurs when `ATMOS_CLI_CONFIG_PATH` points to a subdirectory (e.g., `./rootfs/usr/local/etc/atmos`) while the
   `stacks/` and `components/` directories are at the repository root.
 
-**Example Configuration** (from user report):
+**Example Configuration**:
 
 ```yaml
 # Located at ./rootfs/usr/local/etc/atmos/atmos.yaml
@@ -50,7 +51,8 @@ config directory location:
 
 1. **Paths starting with `..`** (parent directory traversal) → Resolve relative to atmos.yaml location
 2. **Paths starting with `./`** (explicit current directory reference) → Resolve relative to atmos.yaml location
-3. **All other relative paths** (like `stacks`, `components/terraform`, empty string, `.`) → Resolve relative to CWD for
+3. **Exactly `.`** (explicit current directory) → Resolve relative to atmos.yaml location
+4. **All other relative paths** (like `stacks`, `components/terraform`, empty string) → Resolve relative to CWD for
    backward compatibility
 
 ### Code Change
@@ -75,7 +77,9 @@ func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
         return path, nil
     }
     // Only resolve relative to config dir for explicit relative paths
-    isExplicitRelativePath := strings.HasPrefix(path, "..") || strings.HasPrefix(path, "./")
+    // including "..", "./", and exactly "."
+    isExplicitRelativePath := strings.HasPrefix(path, "..") ||
+        strings.HasPrefix(path, "./") || path == "."
     if isExplicitRelativePath && cliConfigPath != "" {
         basePath := filepath.Join(cliConfigPath, path)
         // ...
@@ -124,7 +128,7 @@ You can manually verify the fix using the test fixture at `tests/fixtures/scenar
 
 ### Fixture Structure
 
-```
+```text
 tests/fixtures/scenarios/cli-config-path/
 ├── components/
 │   └── terraform/
@@ -171,13 +175,13 @@ atmos describe config | grep -E "(base_path|stacks_base_absolute|terraform_dir_a
 # Expected: Paths should point to repo root, not inside config/
 ```
 
-### Expected vs Broken Behavior
+### Expected vs. Broken Behavior
 
-| Command | v1.200.0 (Working) | v1.201.0 (Broken) | This Fix |
-|---------|-------------------|-------------------|----------|
-| `atmos validate stacks` | ✅ Success | ❌ "stacks directory does not exist" | ✅ Success |
-| `atmos list stacks` | ✅ Shows "dev" | ❌ Error | ✅ Shows "dev" |
-| `atmos list components` | ✅ Shows component | ❌ Error | ✅ Shows component |
+| Command                 | v1.200.0 (Working) | v1.201.0 (Broken)                   | This Fix          |
+|-------------------------|--------------------|-------------------------------------|-------------------|
+| `atmos validate stacks` | ✅ Success          | ❌ "stacks directory does not exist" | ✅ Success         |
+| `atmos list stacks`     | ✅ Shows "dev"      | ❌ Error                             | ✅ Shows "dev"     |
+| `atmos list components` | ✅ Shows component  | ❌ Error                             | ✅ Shows component |
 
 ## Related PRs/Commits
 

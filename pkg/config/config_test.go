@@ -897,10 +897,10 @@ func TestResolveAbsolutePath(t *testing.T) {
 			expectedBase:  "cwd",
 		},
 		{
-			name:          "dot path resolves to CWD",
+			name:          "dot path resolves to config dir (explicit current directory reference)",
 			path:          ".",
 			cliConfigPath: configDir,
-			expectedBase:  "cwd",
+			expectedBase:  "config",
 		},
 		{
 			name:          "path with parent dir (..) resolves to config dir",
