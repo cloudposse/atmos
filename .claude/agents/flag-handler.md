@@ -515,7 +515,7 @@ func init() {
     })
     specs, validator, usage := builder.Build()
 
-    themeShowParser = flags.NewStandardFlagParser(
+    themeShowParser = flags.NewStandardParser(
         flags.WithPositionalArgPrompt("theme-name", "Choose a theme to preview", ThemesArgCompletion),
     )
     themeShowParser.SetPositionalArgs(specs, validator, usage)
