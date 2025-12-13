@@ -18,6 +18,7 @@ Valid subcommands are:
 • generate
 • get
 • graph
+• help
 • import
 • init
 • login
