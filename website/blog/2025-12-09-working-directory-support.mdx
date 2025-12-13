@@ -17,21 +17,23 @@ Custom commands and workflow steps can now specify a `working_directory` to cont
 ```yaml
 # .atmos.d/commands.yaml
 commands:
-  - name: build
-    working_directory: !repo-root .
+  - name: localstack
+    description: Start LocalStack for local development
+    working_directory: docker/localstack
     steps:
-      - make build
+      - docker compose up -d
 ```
 
 ```yaml
 # stacks/workflows/deploy.yaml
 workflows:
-  download-tools:
-    working_directory: /tmp
+  build-and-deploy:
     steps:
-      - command: wget https://example.com/tools.tar.gz
+      - command: make build
+        working_directory: !repo-root
         type: shell
-      - command: tar -xzf tools.tar.gz
+      - command: docker compose up -d
+        working_directory: docker/app
         type: shell
 ```
 
