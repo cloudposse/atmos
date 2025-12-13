@@ -597,3 +597,33 @@ tests:
       sanitize:
         "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
+  - name: config alias tp --help shows terraform plan help
+    enabled: true
+    snapshot: true
+    description: "Config alias 'tp' should show terraform plan help"
+    workdir: "fixtures/scenarios/subcommand-alias"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: atmos
+    args:
+      - "tp"
+      - "--help"
+    expect:
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
+      exit_code: 0
+  - name: config alias tr --help shows terraform help
+    enabled: true
+    snapshot: true
+    description: "Config alias 'tr' should show terraform help"
+    workdir: "fixtures/scenarios/subcommand-alias"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: atmos
+    args:
+      - "tr"
+      - "--help"
+    expect:
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
+      exit_code: 0
