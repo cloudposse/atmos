@@ -9,9 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudposse/atmos/pkg/data"
-	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
 // TestAuth_EnvCommand_E2E tests the complete workflow of logging in and
@@ -215,17 +212,10 @@ func TestAuth_WhoamiCommand_E2E(t *testing.T) {
 
 	// Step 3: Test whoami with JSON output.
 	t.Run("whoami json output", func(t *testing.T) {
-		// Reset I/O layer before capturing stdout to ensure data.WriteJSON uses the new pipe.
-		iolib.Reset()
-
 		// Capture stdout.
 		oldStdout := os.Stdout
 		r, w, _ := os.Pipe()
 		os.Stdout = w
-
-		// Re-initialize I/O layer with new stdout.
-		_ = iolib.Initialize()
-		data.InitWriter(iolib.GetContext())
 
 		RootCmd.SetArgs([]string{"auth", "whoami", "--identity=mock-identity", "--output", "json"})
 
