@@ -100,19 +100,20 @@ func createSearchRegistry(registryName string) (toolchainregistry.ToolRegistry, 
 func displaySearchTable(results []*toolchainregistry.Tool, query string, searchLimit int) {
 	totalMatches := len(results)
 	displayResults := results
-	if totalMatches > searchLimit {
+	// Only apply limit when searchLimit > 0 (0 means no limit).
+	if searchLimit > 0 && totalMatches > searchLimit {
 		displayResults = results[:searchLimit]
 	}
 
 	// Display results with info toast showing range vs total.
-	if totalMatches <= searchLimit {
-		// Showing all results.
+	if searchLimit <= 0 || totalMatches <= searchLimit {
+		// Showing all results (no limit or within limit).
 		_ = ui.Infof("Found **%d tools** matching `%s`:", totalMatches, query)
 	} else {
 		// Showing subset of results.
 		_ = ui.Infof("Showing **%d** of **%d tools** matching `%s`:", len(displayResults), totalMatches, query)
 	}
-	_ = ui.Writeln("") // Blank line after toast
+	_ = ui.Writeln("") // Blank line after toast.
 	displaySearchResults(displayResults)
 
 	// Show helpful hints after table.
@@ -188,9 +189,9 @@ Try:
 		return nil
 	}
 
-	// Apply display limit for JSON/YAML.
+	// Apply display limit for JSON/YAML (0 means no limit).
 	displayResults := results
-	if len(results) > searchLimit {
+	if searchLimit > 0 && len(results) > searchLimit {
 		displayResults = results[:searchLimit]
 	}
 

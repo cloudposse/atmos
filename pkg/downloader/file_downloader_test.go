@@ -404,7 +404,8 @@ func TestFileDownloader_FetchAtomic_ReadError(t *testing.T) {
 	err := fd.FetchAtomic("src", "dest", ClientModeFile, 10*time.Second)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrDownloadFile)
-	assert.Contains(t, err.Error(), "failed to read downloaded file")
+	// Verify cause error is in the chain.
+	assert.ErrorIs(t, err, readErr)
 }
 
 func TestFileDownloader_FetchAtomic_WriteError(t *testing.T) {
@@ -436,7 +437,30 @@ func TestFileDownloader_FetchAtomic_WriteError(t *testing.T) {
 	err := fd.FetchAtomic("src", "dest", ClientModeFile, 10*time.Second)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrDownloadFile)
-	assert.Contains(t, err.Error(), "failed to write file atomically")
+	// Verify cause error is in the chain.
+	assert.ErrorIs(t, err, writeErr)
+}
+
+func TestFileDownloader_FetchAtomic_InvalidClientMode(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFactory := NewMockClientFactory(ctrl)
+	fd := &fileDownloader{
+		clientFactory:     mockFactory,
+		tempPathGenerator: func() string { return "/tmp/testfile" },
+		fileReader:        os.ReadFile,
+		atomicWriter:      writeFileAtomicDefault,
+	}
+
+	// FetchAtomic should reject non-file modes.
+	err := fd.FetchAtomic("src", "dest", ClientModeDir, 10*time.Second)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidClientMode)
+
+	err = fd.FetchAtomic("src", "dest", ClientModeAny, 10*time.Second)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidClientMode)
 }
 
 func TestNewFileDownloader(t *testing.T) {
