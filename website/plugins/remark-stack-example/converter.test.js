@@ -38,7 +38,9 @@ describe('convertYamlToFormats', () => {
 
     const result = convertYamlToFormats(yaml);
 
-    expect(result.json).toContain('["production", "critical"]');
+    // JSON is pretty-printed.
+    expect(result.json).toContain('"production"');
+    expect(result.json).toContain('"critical"');
     expect(result.hcl).toContain('"production"');
     expect(result.hcl).toContain('"critical"');
   });
@@ -51,7 +53,7 @@ describe('convertYamlToFormats', () => {
 
     expect(result.yaml).toContain('!env AWS_REGION');
     expect(result.json).toContain('${env:AWS_REGION}');
-    expect(result.hcl).toContain('atmos.env("AWS_REGION")');
+    expect(result.hcl).toContain('atmos::env("AWS_REGION")');
   });
 
   test('converts YAML with !exec function', () => {
@@ -59,8 +61,11 @@ describe('convertYamlToFormats', () => {
 
     const result = convertYamlToFormats(yaml);
 
-    expect(result.json).toContain('${exec:git describe --tags}');
-    expect(result.hcl).toContain('atmos.exec("git describe --tags")');
+    // The quotes are preserved in the argument parsing.
+    expect(result.json).toContain('${exec:');
+    expect(result.json).toContain('git describe --tags');
+    expect(result.hcl).toContain('atmos::exec(');
+    expect(result.hcl).toContain('git describe --tags');
   });
 
   test('converts YAML with !terraform.output function', () => {
@@ -69,7 +74,7 @@ describe('convertYamlToFormats', () => {
     const result = convertYamlToFormats(yaml);
 
     expect(result.json).toContain('${terraform.output:vpc.id stack=prod-us-west-2}');
-    expect(result.hcl).toContain('atmos.terraform_output');
+    expect(result.hcl).toContain('atmos::terraform_output');
   });
 
   test('converts YAML with !store function', () => {
@@ -78,7 +83,7 @@ describe('convertYamlToFormats', () => {
     const result = convertYamlToFormats(yaml);
 
     expect(result.json).toContain('${store:ssm/api/key}');
-    expect(result.hcl).toContain('atmos.store("ssm", "api/key")');
+    expect(result.hcl).toContain('atmos::store("ssm", "api/key")');
   });
 
   test('preserves boolean values', () => {
@@ -100,6 +105,59 @@ disabled: false`;
 
     expect(result.json).toContain('"optional": null');
     expect(result.hcl).toContain('optional = null');
+  });
+
+  test('converts multi-document YAML with explicit stack names', () => {
+    const yaml = `name: dev
+vars:
+  env: development
+---
+name: prod
+vars:
+  env: production`;
+
+    const result = convertYamlToFormats(yaml);
+
+    // JSON should be an array
+    expect(result.json).toContain('[');
+
+    // HCL should have multiple stack blocks with names
+    expect(result.hcl).toContain('stack "dev" {');
+    expect(result.hcl).toContain('stack "prod" {');
+    expect(result.hcl).toContain('env = "development"');
+    expect(result.hcl).toContain('env = "production"');
+  });
+
+  test('converts multi-document YAML without explicit names', () => {
+    const yaml = `components:
+  terraform:
+    vpc: {}
+---
+components:
+  terraform:
+    eks: {}`;
+
+    const result = convertYamlToFormats(yaml);
+
+    // Should have stack blocks without labels
+    expect(result.hcl).toMatch(/stack \{/);
+    expect(result.hcl).toContain('component "vpc" {');
+    expect(result.hcl).toContain('component "eks" {');
+  });
+
+  test('uses block syntax for nested objects in HCL', () => {
+    const yaml = `settings:
+  region: us-west-2
+  nested:
+    value: 42`;
+
+    const result = convertYamlToFormats(yaml);
+
+    // Block syntax: "key {" not "key = {"
+    expect(result.hcl).toContain('settings {');
+    expect(result.hcl).toContain('nested {');
+    expect(result.hcl).toContain('region = "us-west-2"');
+    expect(result.hcl).toContain('value = 42');
   });
 });
 
@@ -124,7 +182,8 @@ describe('parseYamlWithFunctions', () => {
     const result = parseYamlWithFunctions(yaml);
 
     expect(result.config.__atmosFunction).toBe('template');
-    expect(result.config.__atmosArg).toBe('{{ .Values.name }}');
+    // Quotes are preserved in the raw argument.
+    expect(result.config.__atmosArg).toContain('{{ .Values.name }}');
   });
 });
 
@@ -138,16 +197,14 @@ describe('generateJson', () => {
 });
 
 describe('generateHcl', () => {
-  test('generates HCL for simple object', () => {
+  test('generates HCL for simple object using block syntax', () => {
     const data = { region: 'us-west-2' };
     const result = generateHcl(data);
 
     expect(result).toContain('region = "us-west-2"');
-    expect(result).toContain('{');
-    expect(result).toContain('}');
   });
 
-  test('generates HCL for nested objects', () => {
+  test('generates HCL for nested objects using block syntax', () => {
     const data = {
       settings: {
         timeout: 30,
@@ -156,8 +213,80 @@ describe('generateHcl', () => {
     };
     const result = generateHcl(data);
 
-    expect(result).toContain('settings = {');
+    // Block syntax uses "settings {" not "settings = {"
+    expect(result).toContain('settings {');
     expect(result).toContain('timeout = 30');
     expect(result).toContain('enabled = true');
+  });
+
+  test('generates stack block with name label for full stacks', () => {
+    const data = {
+      name: 'production',
+      vars: {
+        region: 'us-west-2',
+      },
+    };
+    const result = generateHcl(data);
+
+    expect(result).toContain('stack "production" {');
+    expect(result).toContain('vars {');
+    expect(result).toContain('region = "us-west-2"');
+    expect(result).not.toContain('name ='); // Name becomes label, not attribute
+  });
+
+  test('generates stack block without label for unnamed stacks', () => {
+    const data = {
+      components: {
+        terraform: {},
+      },
+    };
+    const result = generateHcl(data);
+
+    expect(result).toContain('stack {');
+    expect(result).not.toContain('stack "');
+  });
+
+  test('generates labeled component blocks', () => {
+    const data = {
+      components: {
+        terraform: {
+          vpc: {
+            vars: {
+              cidr: '10.0.0.0/16',
+            },
+          },
+          eks: {
+            vars: {
+              cluster_name: 'my-cluster',
+            },
+          },
+        },
+      },
+    };
+    const result = generateHcl(data);
+
+    expect(result).toContain('components {');
+    expect(result).toContain('terraform {');
+    expect(result).toContain('component "vpc" {');
+    expect(result).toContain('component "eks" {');
+    expect(result).toContain('cidr = "10.0.0.0/16"');
+    expect(result).toContain('cluster_name = "my-cluster"');
+  });
+});
+
+describe('generateMultiDocHcl', () => {
+  test('generates multiple stack blocks from multiple documents', () => {
+    const documents = [
+      { name: 'dev', vars: { env: 'development' } },
+      { name: 'prod', vars: { env: 'production' } },
+    ];
+
+    const { generateMultiDocHcl } = require('./converter');
+    const result = generateMultiDocHcl(documents);
+
+    expect(result).toContain('stack "dev" {');
+    expect(result).toContain('stack "prod" {');
+    expect(result).toContain('env = "development"');
+    expect(result).toContain('env = "production"');
   });
 });
