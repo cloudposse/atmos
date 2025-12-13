@@ -220,6 +220,7 @@ var (
 	ErrRequiredFlagNotProvided                    = errors.New("required flag not provided")
 	ErrRequiredFlagEmpty                          = errors.New("required flag cannot be empty")
 	ErrInvalidArguments                           = errors.New("invalid arguments")
+	ErrUnknownSubcommand                          = errors.New("unknown subcommand")
 	ErrInvalidComponent                           = errors.New("invalid component")
 	ErrInvalidComponentMapType                    = errors.New("invalid component map type")
 	ErrAbstractComponentCantBeProvisioned         = errors.New("abstract component cannot be provisioned")

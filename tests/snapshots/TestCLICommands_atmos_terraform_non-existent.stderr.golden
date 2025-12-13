@@ -3,7 +3,11 @@
 
 # Incorrect Usage
 
-**Error:** Unknown command non-existent for atmos terraform
+**Error:** unknown subcommand
+
+## Explanation
+
+Unknown command non-existent for atmos terraform
 
 Valid subcommands are:
 

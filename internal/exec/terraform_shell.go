@@ -4,6 +4,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -19,13 +20,13 @@ type shellConfig struct {
 
 // printShellDryRunInfo prints the shell configuration in dry-run mode.
 func printShellDryRunInfo(info *schema.ConfigAndStacksInfo, cfg *shellConfig) {
-	u.PrintMessage("Dry run mode: shell would be started with the following configuration:")
-	u.PrintMessage("  Component: " + info.ComponentFromArg)
-	u.PrintMessage("  Stack: " + info.Stack)
-	u.PrintMessage("  Working directory: " + cfg.workingDir)
-	u.PrintMessage("  Terraform workspace: " + info.TerraformWorkspace)
-	u.PrintMessage("  Component path: " + cfg.componentPath)
-	u.PrintMessage("  Varfile: " + cfg.varFile)
+	_ = ui.Writeln("Dry run mode: shell would be started with the following configuration:")
+	_ = ui.Writeln("  Component: " + info.ComponentFromArg)
+	_ = ui.Writeln("  Stack: " + info.Stack)
+	_ = ui.Writeln("  Working directory: " + cfg.workingDir)
+	_ = ui.Writeln("  Terraform workspace: " + info.TerraformWorkspace)
+	_ = ui.Writeln("  Component path: " + cfg.componentPath)
+	_ = ui.Writeln("  Varfile: " + cfg.varFile)
 }
 
 // ExecuteTerraformShell starts an interactive shell configured for a terraform component.

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -15,8 +16,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // EnvTFDataDir is the environment variable name for TF_DATA_DIR.
@@ -287,7 +287,7 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 
 	fileInfo, err := os.Lstat(fullPath)
 	if os.IsNotExist(err) {
-		u.PrintfMessageToTUI("%s Cannot delete %s: path does not exist\n", theme.Styles.XMark, normalizedObjectName)
+		_ = ui.Errorf("Cannot delete %s: path does not exist", normalizedObjectName)
 		return err
 	}
 	if fileInfo.Mode()&os.ModeSymlink != 0 {
@@ -296,10 +296,10 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 	// Proceed with deletion
 	err = os.RemoveAll(fullPath)
 	if err != nil {
-		u.PrintfMessageToTUI("%s Error deleting %s\n", theme.Styles.XMark, normalizedObjectName)
+		_ = ui.Errorf("Error deleting %s", normalizedObjectName)
 		return err
 	}
-	u.PrintfMessageToTUI("%s Deleted %s\n", theme.Styles.Checkmark, normalizedObjectName)
+	_ = ui.Successf("Deleted %s", normalizedObjectName)
 	return nil
 }
 
@@ -389,7 +389,7 @@ func initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig *schema
 	planFile := constructTerraformComponentPlanfileName(&info)
 	files := []string{".terraform", varFile, planFile}
 
-	if !u.SliceContainsString(info.AdditionalArgsAndFlags, skipTerraformLockFileFlag) {
+	if !slices.Contains(info.AdditionalArgsAndFlags, skipTerraformLockFileFlag) {
 		files = append(files, ".terraform.lock.hcl")
 	}
 
@@ -430,6 +430,10 @@ func IsValidDataDir(tfDataDir string) error {
 // ExecuteClean cleans up Terraform state and artifacts for a component.
 func ExecuteClean(opts *CleanOptions, atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteClean")()
+
+	if opts == nil {
+		return errUtils.ErrNilParam
+	}
 
 	log.Debug("ExecuteClean called",
 		"component", opts.Component,
@@ -577,15 +581,18 @@ func countFilesToDelete(folders []Directory, tfDataDirFolders []Directory) int {
 	for _, folder := range folders {
 		count += len(folder.Files)
 	}
-	return count + len(tfDataDirFolders)
+	for _, folder := range tfDataDirFolders {
+		count += len(folder.Files)
+	}
+	return count
 }
 
 // printDryRunOutput prints what would be deleted in dry-run mode.
 func printDryRunOutput(folders []Directory, tfDataDirFolders []Directory, basePath string, total int) {
-	u.PrintMessage("Dry run mode: the following files would be deleted:")
+	_ = ui.Writeln("Dry run mode: the following files would be deleted:")
 	printFolderFiles(folders, basePath)
 	printFolderFiles(tfDataDirFolders, basePath)
-	u.PrintMessage(fmt.Sprintf("\nTotal: %d files would be deleted", total))
+	_ = ui.Writeln(fmt.Sprintf("\nTotal: %d files would be deleted", total))
 }
 
 // printFolderFiles prints files from a list of folders.
@@ -596,7 +603,7 @@ func printFolderFiles(folders []Directory, basePath string) {
 			if err != nil {
 				fileRel = file.Name
 			}
-			u.PrintMessage(fmt.Sprintf("  %s", fileRel))
+			_ = ui.Writeln(fmt.Sprintf("  %s", fileRel))
 		}
 	}
 }
@@ -618,11 +625,11 @@ func buildConfirmationMessage(info *schema.ConfigAndStacksInfo, total int) strin
 // promptForConfirmation prompts user for confirmation and returns true if confirmed.
 func promptForConfirmation(tfDataDirFolders []Directory, tfDataDir string, message string) (bool, error) {
 	if len(tfDataDirFolders) > 0 {
-		u.PrintMessage(fmt.Sprintf("Found ENV var %s=%s", EnvTFDataDir, tfDataDir))
-		u.PrintMessage(fmt.Sprintf("Do you want to delete the folder '%s'? ", tfDataDir))
+		_ = ui.Writeln(fmt.Sprintf("Found ENV var %s=%s", EnvTFDataDir, tfDataDir))
+		_ = ui.Writeln(fmt.Sprintf("Do you want to delete the folder '%s'? ", tfDataDir))
 	}
-	u.PrintMessage(message)
-	u.PrintMessage("")
+	_ = ui.Writeln(message)
+	_ = ui.Writeln("")
 	return confirmDeletion()
 }
 
@@ -675,7 +682,7 @@ func HandleCleanSubCommand(info *schema.ConfigAndStacksInfo, componentPath strin
 		return err
 	}
 
-	force := u.SliceContainsString(info.AdditionalArgsAndFlags, forceFlag)
+	force := slices.Contains(info.AdditionalArgsAndFlags, forceFlag)
 	filesToClear := initializeFilesToClear(*info, atmosConfig)
 
 	folders, err := collectAllFolders(info, atmosConfig, cleanPath, filesToClear)
@@ -687,7 +694,9 @@ func HandleCleanSubCommand(info *schema.ConfigAndStacksInfo, componentPath strin
 	total := countFilesToDelete(folders, tfDataDirFolders)
 
 	if total == 0 {
-		u.PrintfMessageToTUI("\n%s Nothing to delete\n\n", theme.Styles.Checkmark)
+		_ = ui.Writeln("")
+		_ = ui.Success("Nothing to delete")
+		_ = ui.Writeln("")
 		return nil
 	}
 

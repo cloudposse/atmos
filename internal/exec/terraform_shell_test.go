@@ -5,7 +5,9 @@ import (
 	"os"
 	"testing"
 
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -60,20 +62,25 @@ func TestPrintShellDryRunInfo(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Capture stdout.
-			old := os.Stdout
+			// Create a buffer to capture UI output (stderr).
+			var buf bytes.Buffer
+
+			// Capture stderr where UI output goes.
+			oldStderr := os.Stderr
 			r, w, _ := os.Pipe()
-			os.Stdout = w
+			os.Stderr = w
+
+			// Initialize the UI formatter with a standard I/O context.
+			ioCtx, err := iolib.NewContext()
+			assert.NoError(t, err)
+			ui.InitFormatter(ioCtx)
 
 			printShellDryRunInfo(tt.info, tt.cfg)
 
-			// Restore stdout.
+			// Restore stderr and read the output.
 			w.Close()
-			os.Stdout = old
-
-			var buf bytes.Buffer
-			_, err := buf.ReadFrom(r)
-			assert.NoError(t, err)
+			os.Stderr = oldStderr
+			_, _ = buf.ReadFrom(r)
 
 			output := buf.String()
 			for _, expected := range tt.expectedOutput {

@@ -1,7 +1,6 @@
 package terraform
 
 import (
-	"errors"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -184,40 +183,42 @@ func terraformGlobalFlagsHandler(cmd *cobra.Command, args []string) error {
 func showUnknownSubcommandError(cmd *cobra.Command, unknownCmd string) {
 	commandPath := cmd.CommandPath()
 
-	// Build error details.
-	var details strings.Builder
-	details.WriteString("Unknown command `")
-	details.WriteString(unknownCmd)
-	details.WriteString("` for `")
-	details.WriteString(commandPath)
-	details.WriteString("`\n")
+	// Build error explanation.
+	var explanation strings.Builder
+	explanation.WriteString("Unknown command `")
+	explanation.WriteString(unknownCmd)
+	explanation.WriteString("` for `")
+	explanation.WriteString(commandPath)
+	explanation.WriteString("`\n")
 
 	// Check for suggestions.
 	suggestions := cmd.SuggestionsFor(unknownCmd)
 	if len(suggestions) > 0 {
-		details.WriteString("Did you mean this?\n")
+		explanation.WriteString("\nDid you mean this?\n\n")
 		for _, suggestion := range suggestions {
-			details.WriteString("* ")
-			details.WriteString(suggestion)
-			details.WriteString("\n")
+			explanation.WriteString("- ")
+			explanation.WriteString(suggestion)
+			explanation.WriteString("\n")
 		}
 	} else if len(cmd.Commands()) > 0 {
-		details.WriteString("\nValid subcommands are:\n")
+		explanation.WriteString("\nValid subcommands are:\n\n")
 		for _, subCmd := range cmd.Commands() {
-			details.WriteString("* ")
-			details.WriteString(subCmd.Name())
-			details.WriteString("\n")
+			explanation.WriteString("- ")
+			explanation.WriteString(subCmd.Name())
+			explanation.WriteString("\n")
 		}
 	}
 
 	// Add usage examples section.
-	details.WriteString("\n## Usage Examples:\n")
-	details.WriteString("\n– Execute a terraform subcommand\n\n")
-	details.WriteString("  $ atmos terraform [subcommand] <component-name> -s <stack-name>\n")
+	explanation.WriteString("\n## Usage Examples:\n")
+	explanation.WriteString("\n– Execute a terraform subcommand\n\n")
+	explanation.WriteString("  $ atmos terraform [subcommand] <component-name> -s <stack-name>\n")
 
-	hint := "https://atmos.tools/cli/commands/terraform/usage"
+	// Build the error using the sentinel + ErrorBuilder pattern.
+	err := errUtils.Build(errUtils.ErrUnknownSubcommand).
+		WithExplanation(explanation.String()).
+		WithHint("https://atmos.tools/cli/commands/terraform/usage").
+		Err()
 
-	// Use fmt.Errorf with the sentinel error to satisfy the linter.
-	//nolint:err113 // Dynamic error message is intentional for unknown command handling - mirrors cmd/cmd_utils.go:985
-	errUtils.CheckErrorPrintAndExit(errors.New(details.String()), "Incorrect Usage", hint)
+	errUtils.CheckErrorPrintAndExit(err, "Incorrect Usage", "")
 }

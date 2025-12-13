@@ -10,7 +10,7 @@ import (
 // ValidateConfig holds configuration options for Atmos config validation.
 type ValidateConfig struct {
 	CheckStack bool
-	// Other configuration fields can be added here.
+	ConfigInfo schema.ConfigAndStacksInfo
 }
 
 // ValidateOption is a functional option for configuring validation.
@@ -20,6 +20,15 @@ type ValidateOption func(*ValidateConfig)
 func WithStackValidation(check bool) ValidateOption {
 	return func(cfg *ValidateConfig) {
 		cfg.CheckStack = check
+	}
+}
+
+// WithConfigInfo sets the config info for validation, respecting config selection flags.
+func WithConfigInfo(info *schema.ConfigAndStacksInfo) ValidateOption {
+	return func(cfg *ValidateConfig) {
+		if info != nil {
+			cfg.ConfigInfo = *info
+		}
 	}
 }
 
@@ -42,7 +51,8 @@ func ValidateAtmosConfig(opts ...ValidateOption) error {
 		opt(vCfg)
 	}
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	// Use provided ConfigInfo to respect config selection flags (--config, etc.).
+	atmosConfig, err := cfg.InitCliConfig(vCfg.ConfigInfo, false)
 	if err != nil {
 		return err
 	}
