@@ -938,10 +938,20 @@ func TestExecutor_Execute_NilAtmosConfig(t *testing.T) {
 // TestExecutor_Execute_WorkingDirectory tests working_directory support.
 func TestExecutor_Execute_WorkingDirectory(t *testing.T) {
 	// Use OS-portable paths for cross-platform compatibility.
-	base := filepath.FromSlash("/base")
-	tmp := filepath.FromSlash("/tmp")
-	workflowDir := filepath.FromSlash("/workflow-dir")
-	stepDir := filepath.FromSlash("/step-dir")
+	// On Windows, paths like "/base" become "\base" which is NOT absolute.
+	// We need to use proper absolute paths for each platform.
+	var base, tmp, workflowDir, stepDir string
+	if runtime.GOOS == "windows" {
+		base = `C:\base`
+		tmp = `C:\tmp`
+		workflowDir = `C:\workflow-dir`
+		stepDir = `C:\step-dir`
+	} else {
+		base = "/base"
+		tmp = "/tmp"
+		workflowDir = "/workflow-dir"
+		stepDir = "/step-dir"
+	}
 
 	tests := []struct {
 		name                 string
