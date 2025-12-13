@@ -9,7 +9,7 @@ stack "my-hcl-legacy-stack" {
 
   components {
     terraform {
-      vpc {
+      component "vpc" {
         vars {
           cidr = "10.2.0.0/16"
         }
