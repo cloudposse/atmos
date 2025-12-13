@@ -2,6 +2,7 @@ package downloader
 
 import (
 	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -285,4 +286,172 @@ func TestFileDownloader_FetchData_ReadError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, data)
 	assert.Equal(t, readErr, err)
+}
+
+func TestFileDownloader_Fetch_GetError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockClient := NewMockDownloadClient(ctrl)
+	mockFactory := NewMockClientFactory(ctrl)
+	expectedErr := errors.New("network error")
+
+	mockFactory.EXPECT().NewClient(gomock.Any(), "src", "dest", ClientModeFile).Return(mockClient, nil)
+	mockClient.EXPECT().Get().Return(expectedErr)
+
+	fd := NewFileDownloader(mockFactory)
+	err := fd.Fetch("src", "dest", ClientModeFile, 10*time.Second)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDownloadFile)
+}
+
+func TestFileDownloader_FetchAtomic_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockClient := NewMockDownloadClient(ctrl)
+	mockFactory := NewMockClientFactory(ctrl)
+	tempFile := "/tmp/testfile"
+	fileContent := []byte("downloaded content")
+
+	mockFactory.EXPECT().NewClient(gomock.Any(), "src", tempFile, ClientModeFile).Return(mockClient, nil)
+	mockClient.EXPECT().Get().Return(nil)
+
+	var writtenPath string
+	var writtenData []byte
+
+	fd := &fileDownloader{
+		clientFactory: mockFactory,
+		tempPathGenerator: func() string {
+			return tempFile
+		},
+		fileReader: func(_ string) ([]byte, error) {
+			return fileContent, nil
+		},
+		atomicWriter: func(path string, data []byte, _ os.FileMode) error {
+			writtenPath = path
+			writtenData = data
+			return nil
+		},
+	}
+
+	err := fd.FetchAtomic("src", "dest", ClientModeFile, 10*time.Second)
+	assert.NoError(t, err)
+	assert.Equal(t, "dest", writtenPath)
+	assert.Equal(t, fileContent, writtenData)
+}
+
+func TestFileDownloader_FetchAtomic_CreateClientError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFactory := NewMockClientFactory(ctrl)
+	expectedErr := errors.New("invalid URL")
+	mockFactory.EXPECT().NewClient(gomock.Any(), "src", gomock.Any(), ClientModeFile).Return(nil, expectedErr)
+
+	fd := NewFileDownloader(mockFactory)
+	err := fd.FetchAtomic("src", "dest", ClientModeFile, 10*time.Second)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCreateDownloadClient)
+}
+
+func TestFileDownloader_FetchAtomic_GetError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockClient := NewMockDownloadClient(ctrl)
+	mockFactory := NewMockClientFactory(ctrl)
+	tempFile := "/tmp/testfile"
+	expectedErr := errors.New("network error")
+
+	mockFactory.EXPECT().NewClient(gomock.Any(), "src", tempFile, ClientModeFile).Return(mockClient, nil)
+	mockClient.EXPECT().Get().Return(expectedErr)
+
+	fd := &fileDownloader{
+		clientFactory: mockFactory,
+		tempPathGenerator: func() string {
+			return tempFile
+		},
+	}
+
+	err := fd.FetchAtomic("src", "dest", ClientModeFile, 10*time.Second)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDownloadFile)
+}
+
+func TestFileDownloader_FetchAtomic_ReadError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockClient := NewMockDownloadClient(ctrl)
+	mockFactory := NewMockClientFactory(ctrl)
+	tempFile := "/tmp/testfile"
+	readErr := errors.New("file read error")
+
+	mockFactory.EXPECT().NewClient(gomock.Any(), "src", tempFile, ClientModeFile).Return(mockClient, nil)
+	mockClient.EXPECT().Get().Return(nil)
+
+	fd := &fileDownloader{
+		clientFactory: mockFactory,
+		tempPathGenerator: func() string {
+			return tempFile
+		},
+		fileReader: func(_ string) ([]byte, error) {
+			return nil, readErr
+		},
+	}
+
+	err := fd.FetchAtomic("src", "dest", ClientModeFile, 10*time.Second)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDownloadFile)
+	assert.Contains(t, err.Error(), "failed to read downloaded file")
+}
+
+func TestFileDownloader_FetchAtomic_WriteError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockClient := NewMockDownloadClient(ctrl)
+	mockFactory := NewMockClientFactory(ctrl)
+	tempFile := "/tmp/testfile"
+	fileContent := []byte("downloaded content")
+	writeErr := errors.New("disk full")
+
+	mockFactory.EXPECT().NewClient(gomock.Any(), "src", tempFile, ClientModeFile).Return(mockClient, nil)
+	mockClient.EXPECT().Get().Return(nil)
+
+	fd := &fileDownloader{
+		clientFactory: mockFactory,
+		tempPathGenerator: func() string {
+			return tempFile
+		},
+		fileReader: func(_ string) ([]byte, error) {
+			return fileContent, nil
+		},
+		atomicWriter: func(_ string, _ []byte, _ os.FileMode) error {
+			return writeErr
+		},
+	}
+
+	err := fd.FetchAtomic("src", "dest", ClientModeFile, 10*time.Second)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDownloadFile)
+	assert.Contains(t, err.Error(), "failed to write file atomically")
+}
+
+func TestNewFileDownloader(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFactory := NewMockClientFactory(ctrl)
+	fd := NewFileDownloader(mockFactory)
+
+	assert.NotNil(t, fd)
+	// Type assert to access internal fields (for testing only).
+	internalFD, ok := fd.(*fileDownloader)
+	assert.True(t, ok)
+	assert.NotNil(t, internalFD.clientFactory)
+	assert.NotNil(t, internalFD.tempPathGenerator)
+	assert.NotNil(t, internalFD.fileReader)
+	assert.NotNil(t, internalFD.atomicWriter)
 }

@@ -407,6 +407,11 @@ func TestToolchainCommandProvider(t *testing.T) {
 		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
 	})
 
+	t.Run("GetAliases returns nil", func(t *testing.T) {
+		aliases := provider.GetAliases()
+		assert.Nil(t, aliases, "toolchain command has no aliases")
+	})
+
 	t.Run("GetFlagsBuilder returns non-nil parser", func(t *testing.T) {
 		builder := provider.GetFlagsBuilder()
 		require.NotNil(t, builder, "toolchain command has persistent flags and should return parser")

@@ -276,3 +276,210 @@ func TestLockFileManager_DefaultFilePath(t *testing.T) {
 	expectedPath := filepath.Join(".custom-tools", "toolchain.lock.yaml")
 	assert.Equal(t, expectedPath, mgr.filePath)
 }
+
+func TestLockFileManager_RemoveTool_Disabled(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "toolchain.lock.yaml")
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseLockFile: false,
+			LockFile:    tmpFile,
+		},
+	}
+
+	mgr := NewLockFileManager(config)
+	ctx := context.Background()
+
+	// RemoveTool should return nil when disabled.
+	err := mgr.RemoveTool(ctx, "hashicorp/terraform", "1.13.4")
+	assert.NoError(t, err)
+}
+
+func TestLockFileManager_RemoveTool_FileNotExist(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "nonexistent.lock.yaml")
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseLockFile: true,
+			LockFile:    tmpFile,
+		},
+	}
+
+	mgr := NewLockFileManager(config)
+	ctx := context.Background()
+
+	// RemoveTool should return nil when file doesn't exist.
+	err := mgr.RemoveTool(ctx, "hashicorp/terraform", "1.13.4")
+	assert.NoError(t, err)
+}
+
+func TestLockFileManager_RemoveTool_ToolNotInLockfile(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "toolchain.lock.yaml")
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseLockFile: true,
+			LockFile:    tmpFile,
+		},
+	}
+
+	mgr := NewLockFileManager(config)
+	ctx := context.Background()
+
+	// Add a tool first.
+	err := mgr.AddTool(ctx, "hashicorp/terraform", "1.13.4")
+	require.NoError(t, err)
+
+	// Try to remove a tool that doesn't exist.
+	err = mgr.RemoveTool(ctx, "kubernetes/kubectl", "1.34.1")
+	assert.NoError(t, err)
+
+	// Original tool should still exist.
+	content, err := os.ReadFile(tmpFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "hashicorp/terraform")
+}
+
+func TestLockFileManager_RemoveTool_VersionMismatch(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "toolchain.lock.yaml")
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseLockFile: true,
+			LockFile:    tmpFile,
+		},
+	}
+
+	mgr := NewLockFileManager(config)
+	ctx := context.Background()
+
+	// Add a tool with specific version.
+	err := mgr.AddTool(ctx, "hashicorp/terraform", "1.13.4")
+	require.NoError(t, err)
+
+	// Try to remove with wrong version.
+	err = mgr.RemoveTool(ctx, "hashicorp/terraform", "1.10.0")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "lockfile version")
+}
+
+func TestLockFileManager_RemoveTool_EmptyVersion(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "toolchain.lock.yaml")
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseLockFile: true,
+			LockFile:    tmpFile,
+		},
+	}
+
+	mgr := NewLockFileManager(config)
+	ctx := context.Background()
+
+	// Add a tool.
+	err := mgr.AddTool(ctx, "hashicorp/terraform", "1.13.4")
+	require.NoError(t, err)
+
+	// Remove with empty version (should remove regardless of version).
+	err = mgr.RemoveTool(ctx, "hashicorp/terraform", "")
+	assert.NoError(t, err)
+
+	// Tool should be removed.
+	content, err := os.ReadFile(tmpFile)
+	require.NoError(t, err)
+	assert.NotContains(t, string(content), "hashicorp/terraform")
+}
+
+func TestLockFileManager_SetDefault_Disabled(t *testing.T) {
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseLockFile: false,
+		},
+	}
+
+	mgr := NewLockFileManager(config)
+	ctx := context.Background()
+
+	// SetDefault should return nil when disabled.
+	err := mgr.SetDefault(ctx, "hashicorp/terraform", "1.13.4")
+	assert.NoError(t, err)
+}
+
+func TestLockFileManager_GetTools_Disabled(t *testing.T) {
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseLockFile: false,
+		},
+	}
+
+	mgr := NewLockFileManager(config)
+	ctx := context.Background()
+
+	// GetTools should return nil when disabled.
+	tools, err := mgr.GetTools(ctx)
+	assert.NoError(t, err)
+	assert.Nil(t, tools)
+}
+
+func TestLockFileManager_Verify_Disabled(t *testing.T) {
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseLockFile: false,
+		},
+	}
+
+	mgr := NewLockFileManager(config)
+	ctx := context.Background()
+
+	// Verify should return nil when disabled.
+	err := mgr.Verify(ctx)
+	assert.NoError(t, err)
+}
+
+func TestLockFileManager_DefaultFilePath_NoInstallPath(t *testing.T) {
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseLockFile: true,
+			// No InstallPath set.
+		},
+	}
+
+	mgr := NewLockFileManager(config)
+
+	// Should use default .tools/toolchain.lock.yaml.
+	expectedPath := filepath.Join(".tools", "toolchain.lock.yaml")
+	assert.Equal(t, expectedPath, mgr.filePath)
+}
+
+func TestLockFileManager_AddTool_WithPlatform(t *testing.T) {
+	tmpDir := t.TempDir()
+	tmpFile := filepath.Join(tmpDir, "toolchain.lock.yaml")
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			UseLockFile: true,
+			LockFile:    tmpFile,
+		},
+	}
+
+	mgr := NewLockFileManager(config)
+	ctx := context.Background()
+
+	// Add tool with explicit platform.
+	err := mgr.AddTool(ctx, "hashicorp/terraform", "1.13.4",
+		WithPlatform("linux_amd64"),
+		WithURL("https://example.com/terraform_linux.zip"),
+		WithChecksum("sha256:linux123"),
+	)
+	require.NoError(t, err)
+
+	// Verify file contains platform-specific info.
+	content, err := os.ReadFile(tmpFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "linux_amd64")
+}
