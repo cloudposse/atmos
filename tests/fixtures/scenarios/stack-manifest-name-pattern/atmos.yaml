@@ -1,0 +1,14 @@
+base_path: "./"
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/catalog/**"
+  # name_pattern should be used when no explicit 'name' or 'name_template' is set.
+  name_pattern: "{environment}-{stage}"
+
+components:
+  terraform:
+    base_path: components/terraform

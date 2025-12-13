@@ -444,7 +444,8 @@ func TestProcessSimpleTagsWithAWSFunctions(t *testing.T) {
 	stackInfo := &schema.ConfigAndStacksInfo{}
 
 	// Test !aws.account_id through processSimpleTags.
-	result, handled := processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsAccountID, "", nil, stackInfo)
+	result, handled, err := processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsAccountID, "", nil, stackInfo)
+	assert.NoError(t, err)
 	assert.True(t, handled)
 	assert.Equal(t, "333333333333", result)
 
@@ -452,7 +453,8 @@ func TestProcessSimpleTagsWithAWSFunctions(t *testing.T) {
 	ClearAWSIdentityCache()
 
 	// Test !aws.caller_identity_arn through processSimpleTags.
-	result, handled = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, "", nil, stackInfo)
+	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, "", nil, stackInfo)
+	assert.NoError(t, err)
 	assert.True(t, handled)
 	assert.Equal(t, "arn:aws:iam::333333333333:user/integration-test", result)
 
@@ -460,7 +462,8 @@ func TestProcessSimpleTagsWithAWSFunctions(t *testing.T) {
 	ClearAWSIdentityCache()
 
 	// Test !aws.caller_identity_user_id through processSimpleTags.
-	result, handled = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityUserID, "", nil, stackInfo)
+	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityUserID, "", nil, stackInfo)
+	assert.NoError(t, err)
 	assert.True(t, handled)
 	assert.Equal(t, "AIDAINTEGRATION", result)
 
@@ -468,7 +471,8 @@ func TestProcessSimpleTagsWithAWSFunctions(t *testing.T) {
 	ClearAWSIdentityCache()
 
 	// Test !aws.region through processSimpleTags.
-	result, handled = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsRegion, "", nil, stackInfo)
+	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsRegion, "", nil, stackInfo)
+	assert.NoError(t, err)
 	assert.True(t, handled)
 	assert.Equal(t, "us-west-2", result)
 }
@@ -479,25 +483,29 @@ func TestProcessSimpleTagsSkipsAWSFunctions(t *testing.T) {
 
 	// Test that skipping works for aws.account_id.
 	skip := []string{"aws.account_id"}
-	result, handled := processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsAccountID, "", skip, stackInfo)
+	result, handled, err := processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsAccountID, "", skip, stackInfo)
+	assert.NoError(t, err)
 	assert.False(t, handled)
 	assert.Nil(t, result)
 
 	// Test that skipping works for aws.caller_identity_arn.
 	skip = []string{"aws.caller_identity_arn"}
-	result, handled = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, "", skip, stackInfo)
+	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, "", skip, stackInfo)
+	assert.NoError(t, err)
 	assert.False(t, handled)
 	assert.Nil(t, result)
 
 	// Test that skipping works for aws.caller_identity_user_id.
 	skip = []string{"aws.caller_identity_user_id"}
-	result, handled = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityUserID, "", skip, stackInfo)
+	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityUserID, "", skip, stackInfo)
+	assert.NoError(t, err)
 	assert.False(t, handled)
 	assert.Nil(t, result)
 
 	// Test that skipping works for aws.region.
 	skip = []string{"aws.region"}
-	result, handled = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsRegion, "", skip, stackInfo)
+	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsRegion, "", skip, stackInfo)
+	assert.NoError(t, err)
 	assert.False(t, handled)
 	assert.Nil(t, result)
 }

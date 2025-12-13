@@ -130,9 +130,10 @@ func GetTerraformState(
 	// Cache the result.
 	terraformStateCache.Store(stackSlug, backend)
 
-	// If `backend` is `nil`, return `nil` (the component in the stack has not been provisioned yet).
+	// If `backend` is `nil`, return a recoverable error (the component in the stack has not been provisioned yet).
+	// This allows callers to use YQ defaults if available.
 	if backend == nil {
-		return nil, nil
+		return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
 	}
 
 	// Get the output.

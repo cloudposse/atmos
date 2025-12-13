@@ -4,8 +4,7 @@
     "dockerfile": "Dockerfile",
     "context": ".",
     "args": {
-      "GEODESIC_VERSION": "latest",
-      "ATMOS_VERSION": "latest"
+      "GEODESIC_VERSION": "latest"
     }
   },
   "workspaceFolder": "/workspace",

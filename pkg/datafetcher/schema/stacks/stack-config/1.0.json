@@ -4,6 +4,10 @@
   "title": "JSON Schema for Atmos Stack Manifest files. Version 1.0. https://atmos.tools",
   "type": "object",
   "properties": {
+    "name": {
+      "type": "string",
+      "description": "Logical name for this stack. Takes precedence over name_template and name_pattern from atmos.yaml."
+    },
     "import": {
       "$ref": "#/definitions/import"
     },
@@ -103,6 +107,11 @@
         {
           "required": [
             "overrides"
+          ]
+        },
+        {
+          "required": [
+            "name"
           ]
         }
       ]

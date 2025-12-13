@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -26,7 +25,7 @@ func ProcessCustomYamlTags(
 
 	// Get the fresh context we just installed.
 	resolutionCtx := GetOrCreateResolutionContext()
-	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo), nil
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo)
 }
 
 func ProcessCustomYamlTagsWithContext(
@@ -39,7 +38,7 @@ func ProcessCustomYamlTagsWithContext(
 ) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTagsWithContext")()
 
-	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo), nil
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo)
 }
 
 func processNodes(
@@ -48,7 +47,7 @@ func processNodes(
 	currentStack string,
 	skip []string,
 	stackInfo *schema.ConfigAndStacksInfo,
-) map[string]any {
+) (map[string]any, error) {
 	return processNodesWithContext(atmosConfig, data, currentStack, skip, nil, stackInfo)
 }
 
@@ -59,14 +58,25 @@ func processNodesWithContext(
 	skip []string,
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
-) map[string]any {
+) (map[string]any, error) {
 	newMap := make(map[string]any)
-	var recurse func(any) any
+	var firstErr error
 
+	var recurse func(any) any
 	recurse = func(node any) any {
+		// If we already have an error, skip processing.
+		if firstErr != nil {
+			return node
+		}
+
 		switch v := node.(type) {
 		case string:
-			return processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
+			result, err := processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
+			if err != nil {
+				firstErr = err
+				return v
+			}
+			return result
 
 		case map[string]any:
 			newNestedMap := make(map[string]any)
@@ -91,7 +101,11 @@ func processNodesWithContext(
 		newMap[k] = recurse(v)
 	}
 
-	return newMap
+	if firstErr != nil {
+		return nil, firstErr
+	}
+
+	return newMap, nil
 }
 
 func processCustomTags(
@@ -100,7 +114,7 @@ func processCustomTags(
 	currentStack string,
 	skip []string,
 	stackInfo *schema.ConfigAndStacksInfo,
-) any {
+) (any, error) {
 	return processCustomTagsWithContext(atmosConfig, input, currentStack, skip, nil, stackInfo)
 }
 
@@ -110,6 +124,7 @@ func matchesPrefix(input, prefix string, skip []string) bool {
 }
 
 // processContextAwareTags processes tags that support cycle detection.
+// Returns (result, handled, error) where handled indicates if a matching tag was found.
 func processContextAwareTags(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
@@ -117,57 +132,64 @@ func processContextAwareTags(
 	skip []string,
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
-) (any, bool) {
+) (any, bool, error) {
 	if matchesPrefix(input, u.AtmosYamlFuncTerraformOutput, skip) {
-		return processTagTerraformOutputWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo), true
+		result, err := processTagTerraformOutputWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo)
+		return result, true, err
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncTerraformState, skip) {
-		return processTagTerraformStateWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo), true
+		result, err := processTagTerraformStateWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo)
+		return result, true, err
 	}
-	return nil, false
+	return nil, false, nil
 }
 
 // processSimpleTags processes tags that don't need cycle detection.
+// Returns (result, handled, error) where handled indicates if a matching tag was found.
 func processSimpleTags(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	currentStack string,
 	skip []string,
 	stackInfo *schema.ConfigAndStacksInfo,
-) (any, bool) {
+) (any, bool, error) {
 	if matchesPrefix(input, u.AtmosYamlFuncTemplate, skip) {
-		return processTagTemplate(input), true
+		return processTagTemplate(input), true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncExec, skip) {
 		res, err := u.ProcessTagExec(input)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return res, true
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncStoreGet, skip) {
-		return processTagStoreGet(atmosConfig, input, currentStack), true
+		return processTagStoreGet(atmosConfig, input, currentStack), true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncStore, skip) {
-		return processTagStore(atmosConfig, input, currentStack), true
+		return processTagStore(atmosConfig, input, currentStack), true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncEnv, skip) {
 		res, err := u.ProcessTagEnv(input, stackInfo)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-		return res, true
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
 	}
 	// AWS YAML functions - note these check for exact match since they take no arguments.
 	if input == u.AtmosYamlFuncAwsAccountID && !skipFunc(skip, u.AtmosYamlFuncAwsAccountID) {
-		return processTagAwsAccountID(atmosConfig, input, stackInfo), true
+		return processTagAwsAccountID(atmosConfig, input, stackInfo), true, nil
 	}
 	if input == u.AtmosYamlFuncAwsCallerIdentityArn && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityArn) {
-		return processTagAwsCallerIdentityArn(atmosConfig, input, stackInfo), true
+		return processTagAwsCallerIdentityArn(atmosConfig, input, stackInfo), true, nil
 	}
 	if input == u.AtmosYamlFuncAwsCallerIdentityUserID && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityUserID) {
-		return processTagAwsCallerIdentityUserID(atmosConfig, input, stackInfo), true
+		return processTagAwsCallerIdentityUserID(atmosConfig, input, stackInfo), true, nil
 	}
 	if input == u.AtmosYamlFuncAwsRegion && !skipFunc(skip, u.AtmosYamlFuncAwsRegion) {
-		return processTagAwsRegion(atmosConfig, input, stackInfo), true
+		return processTagAwsRegion(atmosConfig, input, stackInfo), true, nil
 	}
-	return nil, false
+	return nil, false, nil
 }
 
 func processCustomTagsWithContext(
@@ -177,19 +199,19 @@ func processCustomTagsWithContext(
 	skip []string,
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
-) any {
+) (any, error) {
 	// Try context-aware tags first.
-	if result, handled := processContextAwareTags(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo); handled {
-		return result
+	if result, handled, err := processContextAwareTags(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo); handled {
+		return result, err
 	}
 
 	// Try simple tags.
-	if result, handled := processSimpleTags(atmosConfig, input, currentStack, skip, stackInfo); handled {
-		return result
+	if result, handled, err := processSimpleTags(atmosConfig, input, currentStack, skip, stackInfo); handled {
+		return result, err
 	}
 
 	// If any other YAML explicit tag (not currently supported by Atmos) is used, return it w/o processing.
-	return input
+	return input, nil
 }
 
 func skipFunc(skip []string, f string) bool {
