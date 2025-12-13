@@ -1874,3 +1874,199 @@ func TestUserConfigOverridesProvisionedIdentities(t *testing.T) {
 	stagingDevDesc := v.GetString("auth.identities.staging/developer.description")
 	assert.Equal(t, "Auto-provisioned developer role", stagingDevDesc)
 }
+
+// TestPreserveProvisionedIdentityCase tests that case is preserved for provisioned identities.
+func TestPreserveProvisionedIdentityCase(t *testing.T) {
+	// Note: Cannot use t.Parallel() with t.Setenv() as they are incompatible.
+
+	// Create temp directory for cache.
+	tempDir := t.TempDir()
+	providerName := "test-sso"
+
+	// Create provider cache directory.
+	providerCacheDir := filepath.Join(tempDir, providerName)
+	err := os.MkdirAll(providerCacheDir, 0o755)
+	require.NoError(t, err)
+
+	// Create provisioned identities cache file with mixed-case names.
+	provisionedContent := `auth:
+  identities:
+    core-artifacts/AdministratorAccess:
+      kind: aws/permission-set
+      provider: test-sso
+    core-artifacts/PowerUserAccess:
+      kind: aws/permission-set
+      provider: test-sso
+    Core-Audit/BillingAdministratorAccess:
+      kind: aws/permission-set
+      provider: test-sso
+`
+	cacheFile := filepath.Join(providerCacheDir, "provisioned-identities.yaml")
+	err = os.WriteFile(cacheFile, []byte(provisionedContent), 0o644)
+	require.NoError(t, err)
+
+	// Create atmosConfig with provider that has auto_provision_identities enabled.
+	autoProvision := true
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				providerName: {
+					Kind:                    "aws/iam-identity-center",
+					AutoProvisionIdentities: &autoProvision,
+				},
+			},
+			IdentityCaseMap: make(map[string]string),
+		},
+	}
+
+	// xdg.GetXDGCacheDir("auth", ...) returns $XDG_CACHE_HOME/atmos/auth.
+	// So we need to restructure our temp directory accordingly.
+	authDir := filepath.Join(tempDir, "atmos", "auth")
+	err = os.MkdirAll(authDir, 0o755)
+	require.NoError(t, err)
+
+	// Move provider cache directory to correct location.
+	newProviderCacheDir := filepath.Join(authDir, providerName)
+	err = os.Rename(providerCacheDir, newProviderCacheDir)
+	require.NoError(t, err)
+
+	// Override the XDG cache directory for testing.
+	// t.Setenv automatically restores the original value after the test.
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", "")
+
+	// Call the function under test.
+	err = preserveProvisionedIdentityCase(atmosConfig)
+	require.NoError(t, err)
+
+	// Verify case map contains original case names.
+	assert.NotNil(t, atmosConfig.Auth.IdentityCaseMap)
+	assert.Len(t, atmosConfig.Auth.IdentityCaseMap, 3)
+
+	// Check individual mappings.
+	assert.Equal(t, "core-artifacts/AdministratorAccess",
+		atmosConfig.Auth.IdentityCaseMap["core-artifacts/administratoraccess"])
+	assert.Equal(t, "core-artifacts/PowerUserAccess",
+		atmosConfig.Auth.IdentityCaseMap["core-artifacts/poweruseraccess"])
+	assert.Equal(t, "Core-Audit/BillingAdministratorAccess",
+		atmosConfig.Auth.IdentityCaseMap["core-audit/billingadministratoraccess"])
+}
+
+// TestPreserveProvisionedIdentityCase_UserConfigTakesPrecedence tests that user-defined case takes precedence.
+func TestPreserveProvisionedIdentityCase_UserConfigTakesPrecedence(t *testing.T) {
+	// Note: Cannot use t.Parallel() with t.Setenv() as they are incompatible.
+
+	// Create temp directory for cache.
+	tempDir := t.TempDir()
+	providerName := "test-sso"
+
+	// Create provider cache directory structure.
+	authDir := filepath.Join(tempDir, "atmos", "auth")
+	providerCacheDir := filepath.Join(authDir, providerName)
+	err := os.MkdirAll(providerCacheDir, 0o755)
+	require.NoError(t, err)
+
+	// Create provisioned identities cache file with mixed-case names.
+	provisionedContent := `auth:
+  identities:
+    core-artifacts/AdministratorAccess:
+      kind: aws/permission-set
+`
+	cacheFile := filepath.Join(providerCacheDir, "provisioned-identities.yaml")
+	err = os.WriteFile(cacheFile, []byte(provisionedContent), 0o644)
+	require.NoError(t, err)
+
+	// Create atmosConfig with user-defined case already in the case map.
+	autoProvision := true
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				providerName: {
+					Kind:                    "aws/iam-identity-center",
+					AutoProvisionIdentities: &autoProvision,
+				},
+			},
+			IdentityCaseMap: map[string]string{
+				// User defined this with different case - should be preserved.
+				"core-artifacts/administratoraccess": "core-artifacts/ADMINISTRATORACCESS",
+			},
+		},
+	}
+
+	// Override the XDG cache directory for testing.
+	// t.Setenv automatically restores the original value after the test.
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", "")
+
+	// Call the function under test.
+	err = preserveProvisionedIdentityCase(atmosConfig)
+	require.NoError(t, err)
+
+	// User-defined case should be preserved (not overwritten by provisioned).
+	assert.Equal(t, "core-artifacts/ADMINISTRATORACCESS",
+		atmosConfig.Auth.IdentityCaseMap["core-artifacts/administratoraccess"])
+}
+
+// TestPreserveProvisionedIdentityCase_NoProviders tests that function handles no providers gracefully.
+func TestPreserveProvisionedIdentityCase_NoProviders(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{},
+		},
+	}
+
+	err := preserveProvisionedIdentityCase(atmosConfig)
+	assert.NoError(t, err)
+}
+
+// TestPreserveProvisionedIdentityCase_AutoProvisionDisabled tests that disabled providers are skipped.
+func TestPreserveProvisionedIdentityCase_AutoProvisionDisabled(t *testing.T) {
+	// Note: Cannot use t.Parallel() with t.Setenv() as they are incompatible.
+
+	// Create temp directory for cache.
+	tempDir := t.TempDir()
+	providerName := "test-sso"
+
+	// Create provider cache directory structure.
+	authDir := filepath.Join(tempDir, "atmos", "auth")
+	providerCacheDir := filepath.Join(authDir, providerName)
+	err := os.MkdirAll(providerCacheDir, 0o755)
+	require.NoError(t, err)
+
+	// Create provisioned identities cache file.
+	provisionedContent := `auth:
+  identities:
+    SomeIdentity/WithCase:
+      kind: aws/permission-set
+`
+	cacheFile := filepath.Join(providerCacheDir, "provisioned-identities.yaml")
+	err = os.WriteFile(cacheFile, []byte(provisionedContent), 0o644)
+	require.NoError(t, err)
+
+	// Create atmosConfig with auto_provision_identities disabled.
+	autoProvision := false
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				providerName: {
+					Kind:                    "aws/iam-identity-center",
+					AutoProvisionIdentities: &autoProvision,
+				},
+			},
+			IdentityCaseMap: make(map[string]string),
+		},
+	}
+
+	// Override the XDG cache directory for testing.
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", "")
+
+	// Call the function under test.
+	err = preserveProvisionedIdentityCase(atmosConfig)
+	require.NoError(t, err)
+
+	// Case map should be empty because provider has auto_provision disabled.
+	assert.Empty(t, atmosConfig.Auth.IdentityCaseMap)
+}
