@@ -22,7 +22,8 @@ func SetSeparated(separatedArgs []string) {
 
 	separatedMu.Lock()
 	defer separatedMu.Unlock()
-	globalSeparatedArgs = separatedArgs
+	// Defensive copy to prevent callers from mutating the global state.
+	globalSeparatedArgs = append([]string(nil), separatedArgs...)
 }
 
 // GetSeparated returns the separated args (terraform pass-through flags like -out, -var).
