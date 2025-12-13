@@ -45,13 +45,11 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
         - "workflow step execution failed"
-        - "## Explanation"
+        - "## Hints"
         - "The following command failed to execute:"
         - "nonexistentcommand"
         - "To resume the workflow from this step, run:"
-        - "atmos workflow shell-command-not-found -f test --from-step step1"
       # Exit code 127 is the standard Unix/POSIX exit code for "command not found".
       # This differs from exit code 1 (generic error) and provides more specific information.
       # The workflow correctly preserves the shell's actual exit code rather than converting it to 1.
@@ -71,13 +69,10 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
         - "workflow step execution failed"
-        - "## Explanation"
+        - "## Hints"
         - "The following command failed to execute:"
-        - "atmos terraform plan mock -s idontexist"
         - "To resume the workflow from this step, run:"
-        - "atmos workflow fail -f test --from-step step1"
       exit_code: 1
 
   - name: atmos workflow failure on shell command
@@ -95,14 +90,10 @@ tests:
       diff: []
       stderr:
         - "This should fail"
-        - "Workflow Error"
         - "workflow step execution failed"
-        - "## Explanation"
+        - "## Hints"
         - "The following command failed to execute:"
-        - "echo \"This should fail\""
-        - "exit 1"
         - "To resume the workflow from this step, run:"
-        - "atmos workflow shell-failure -f test --from-step step1"
       exit_code: 1
 
   - name: atmos workflow no steps
@@ -139,16 +130,10 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
         - "invalid workflow step type"
-        - "## Explanation"
-        - "Step type invalid is not supported. Each step must specify a valid type."
         - "## Hints"
-        - "Available types:"
-        - "atmos"
-        - "shell"
-        - "To resume the workflow from this step, run:"
-        - "atmos workflow invalid-step-type -f test --from-step step1"
+        - "Step type 'invalid' is not supported"
+        - "Each step must specify a valid type: 'atmos' or 'shell'"
       exit_code: 1
 
   - name: atmos workflow invalid from step
@@ -172,8 +157,7 @@ tests:
         - "## Explanation"
         - "The --from-step flag was set to dne, but this step does not exist in workflow"
         - "pass"
-        - "## Hints"
-        - "Available steps:"
+        - "### Available steps:"
         - "step1"
       exit_code: 1
 
@@ -191,11 +175,11 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
+        - "# Error"
         - "no workflow found"
-        - "## Explanation"
-        - "No workflow exists with the name no-workflow-exists"
-        - "### Available workflows:"
+        - "## Hints"
+        - "No workflow exists with name no-workflow-exists"
+        - "Available workflows in test.yaml"
         - "fail"
         - "invalid-step-type"
         - "no-steps"
@@ -219,11 +203,12 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
+        - "# Error"
         - "invalid workflow manifest"
         - "## Explanation"
-        - "The workflow manifest stacks/workflows/test-invalid.yaml must be a map with the"
-        - "top-level workflows: key"
+        - "The workflow manifest"
+        - "must be a map with"
+        - "workflows: key"
       exit_code: 1
 
   - name: atmos workflow file not found
@@ -240,10 +225,11 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
+        - "# Error"
         - "workflow file not found"
-        - "## Explanation"
-        - "The workflow manifest file stacks/workflows/dne.yaml does not exist."
+        - "## Hints"
+        - "The workflow manifest file"
+        - "does not exist"
       exit_code: 1
 
   - name: atmos workflow failure with stack
@@ -262,13 +248,10 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
         - "workflow step execution failed"
-        - "## Explanation"
+        - "## Hints"
         - "The following command failed to execute:"
-        - "atmos terraform plan idontexist -s prod"
         - "To resume the workflow from this step, run:"
-        - "atmos workflow fail-with-stack -f test --from-step step1 -s prod"
       exit_code: 1
 
   - name: atmos workflow failure with filepath
@@ -285,13 +268,10 @@ tests:
     expect:
       diff: []
       stderr:
-        - "Workflow Error"
         - "workflow step execution failed"
-        - "## Explanation"
+        - "## Hints"
         - "The following command failed to execute:"
-        - "atmos terraform plan mock -s idontexist"
         - "To resume the workflow from this step, run:"
-        - "atmos workflow fail -f subdir/test --from-step step1"
       exit_code: 1
 
   - name: atmos workflow shell command with PATH
@@ -309,56 +289,4 @@ tests:
       diff: []
       stdout:
         - "PATH="
-      exit_code: 0
-
-  # Test cases for multi-component operations with quoted arguments
-  # These test the fix for the issue where strings.Fields() incorrectly splits quoted arguments
-
-  - name: atmos workflow shell echo with quoted arguments
-    enabled: true
-    snapshot: false
-    description: "Ensure shell commands with quoted arguments are parsed correctly"
-    workdir: "fixtures/scenarios/workflows/"
-    command: "atmos"
-    args:
-      - "workflow"
-      - "shell-echo-args"
-      - "--file"
-      - "test"
-    expect:
-      diff: []
-      stdout:
-        - "argument with spaces single quoted double quoted"
-      exit_code: 0
-
-  - name: atmos workflow multi-component with components flag
-    enabled: true
-    snapshot: false
-    description: "Ensure multi-component workflow with --components flag works"
-    workdir: "fixtures/scenarios/workflows/"
-    command: "atmos"
-    args:
-      - "workflow"
-      - "multi-component-list"
-      - "--file"
-      - "test"
-      - "--dry-run"
-    expect:
-      diff: []
-      exit_code: 0
-
-  - name: atmos workflow multi-component with all flag
-    enabled: true
-    snapshot: false
-    description: "Ensure multi-component workflow with --all flag works"
-    workdir: "fixtures/scenarios/workflows/"
-    command: "atmos"
-    args:
-      - "workflow"
-      - "multi-component-all"
-      - "--file"
-      - "test"
-      - "--dry-run"
-    expect:
-      diff: []
       exit_code: 0

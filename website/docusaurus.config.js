@@ -66,6 +66,15 @@ const config = {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'
                     },
+                    // Backend documentation reorganization
+                    {
+                        from: '/core-concepts/components/terraform/state-backend',
+                        to: '/components/terraform/remote-state'
+                    },
+                    {
+                        from: '/core-concepts/components/terraform/remote-state',
+                        to: '/components/terraform/remote-state'
+                    },
                     // Component Catalog redirects for reorganization
                     {
                         from: '/design-patterns/component-catalog-with-mixins',
