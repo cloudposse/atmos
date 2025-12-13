@@ -55,6 +55,17 @@ config directory location:
 4. **All other relative paths** (like `stacks`, `components/terraform`, empty string) → Resolve relative to CWD for
    backward compatibility
 
+### Why `.` Resolves to Config Directory
+
+The single dot `.` is treated as an explicit relative path (resolving to config dir) rather than a simple path
+(resolving to CWD) because:
+
+- When a user sets `ATMOS_BASE_PATH="."` along with `ATMOS_CLI_CONFIG_PATH` pointing to a different directory, they're
+  explicitly saying "use the directory where atmos.yaml is located as the base path"
+- This is essential for **path-based component resolution**, where users run commands like `atmos terraform plan .` from
+  within a component directory while `ATMOS_CLI_CONFIG_PATH` points back to the repo root
+- An empty string `""` is the correct way to indicate "use CWD as the base path" when backward compatibility is needed
+
 ### Code Change
 
 ```go
@@ -97,7 +108,7 @@ Added comprehensive tests in `pkg/config/config_test.go`:
 - Absolute paths remain unchanged
 - Simple relative paths resolve to CWD
 - Empty path resolves to CWD
-- Dot path (`.`) resolves to CWD
+- Dot path (`.`) resolves to config dir (explicit current directory reference)
 - Path with `..` resolves to config dir
 - Path starting with `../` resolves to config dir
 - Path starting with `./` resolves to config dir
@@ -119,8 +130,9 @@ Added test fixture in `tests/fixtures/scenarios/`:
 This fix maintains backward compatibility with v1.200.0 behavior:
 
 - Simple relative paths like `stacks` and `components/terraform` resolve relative to CWD
-- Paths that explicitly use `..` or `./` to navigate from the config directory location continue to work as intended by
-  PR #1774
+- Empty `base_path` (`""`) resolves relative to CWD
+- Paths that explicitly use `..`, `./`, or `.` to reference the config directory location resolve relative to atmos.yaml
+  as intended by PR #1774
 
 ## Manual Testing
 

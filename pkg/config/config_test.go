@@ -878,6 +878,7 @@ func TestResolveAbsolutePath(t *testing.T) {
 		cliConfigPath string
 		expectedBase  string // Expected base directory for resolution
 	}{
+		// Absolute paths - should always remain unchanged.
 		{
 			name:          "absolute path remains unchanged",
 			path:          "/absolute/path",
@@ -885,11 +886,39 @@ func TestResolveAbsolutePath(t *testing.T) {
 			expectedBase:  "", // N/A - absolute paths don't need base
 		},
 		{
+			name:          "absolute path with empty config path remains unchanged",
+			path:          "/usr/local/bin",
+			cliConfigPath: "",
+			expectedBase:  "", // N/A - absolute paths don't need base
+		},
+
+		// Simple relative paths - should resolve to CWD for backward compatibility.
+		{
 			name:          "simple relative path resolves to CWD",
 			path:          "stacks",
 			cliConfigPath: configDir,
 			expectedBase:  "cwd",
 		},
+		{
+			name:          "complex relative path without ./ prefix resolves to CWD",
+			path:          "components/terraform",
+			cliConfigPath: configDir,
+			expectedBase:  "cwd",
+		},
+		{
+			name:          "deeply nested relative path resolves to CWD",
+			path:          "a/b/c/d/e",
+			cliConfigPath: configDir,
+			expectedBase:  "cwd",
+		},
+		{
+			name:          "simple relative path with empty config path resolves to CWD",
+			path:          "stacks",
+			cliConfigPath: "",
+			expectedBase:  "cwd",
+		},
+
+		// Empty path - should resolve to CWD for backward compatibility (issue #1858).
 		{
 			name:          "empty path resolves to CWD",
 			path:          "",
@@ -897,11 +926,53 @@ func TestResolveAbsolutePath(t *testing.T) {
 			expectedBase:  "cwd",
 		},
 		{
+			name:          "empty path with empty config path resolves to CWD",
+			path:          "",
+			cliConfigPath: "",
+			expectedBase:  "cwd",
+		},
+
+		// Single dot (.) - should resolve to config dir (explicit current directory reference).
+		{
 			name:          "dot path resolves to config dir (explicit current directory reference)",
 			path:          ".",
 			cliConfigPath: configDir,
 			expectedBase:  "config",
 		},
+		{
+			name:          "dot path with empty config path resolves to CWD",
+			path:          ".",
+			cliConfigPath: "",
+			expectedBase:  "cwd",
+		},
+
+		// Paths starting with "./" - should resolve to config dir.
+		{
+			name:          "path starting with ./ resolves to config dir",
+			path:          "./subpath",
+			cliConfigPath: configDir,
+			expectedBase:  "config",
+		},
+		{
+			name:          "path ./ alone resolves to config dir",
+			path:          "./",
+			cliConfigPath: configDir,
+			expectedBase:  "config",
+		},
+		{
+			name:          "path starting with ./ and nested dirs resolves to config dir",
+			path:          "./a/b/c",
+			cliConfigPath: configDir,
+			expectedBase:  "config",
+		},
+		{
+			name:          "path starting with ./ with empty config path resolves to CWD",
+			path:          "./subpath",
+			cliConfigPath: "",
+			expectedBase:  "cwd",
+		},
+
+		// Paths starting with ".." - should resolve to config dir.
 		{
 			name:          "path with parent dir (..) resolves to config dir",
 			path:          "..",
@@ -915,22 +986,36 @@ func TestResolveAbsolutePath(t *testing.T) {
 			expectedBase:  "config",
 		},
 		{
-			name:          "path starting with ./ resolves to config dir",
-			path:          "./subpath",
+			name:          "path with multiple parent traversals resolves to config dir",
+			path:          "../../grandparent",
 			cliConfigPath: configDir,
 			expectedBase:  "config",
 		},
 		{
-			name:          "complex relative path without ./ prefix resolves to CWD",
-			path:          "components/terraform",
+			name:          "path starting with .. with empty config path resolves to CWD",
+			path:          "../sibling",
+			cliConfigPath: "",
+			expectedBase:  "cwd",
+		},
+
+		// Edge cases - paths that look like they might start with . but don't.
+		{
+			name:          "path starting with dot but not ./ or .. resolves to CWD",
+			path:          ".hidden",
 			cliConfigPath: configDir,
 			expectedBase:  "cwd",
 		},
 		{
-			name:          "simple relative path with empty config path resolves to CWD",
-			path:          "stacks",
-			cliConfigPath: "",
+			name:          "path with dots in middle resolves to CWD",
+			path:          "foo/bar/../baz",
+			cliConfigPath: configDir,
 			expectedBase:  "cwd",
+		},
+		{
+			name:          "path starting with ... resolves to config dir (starts with ..)",
+			path:          ".../something",
+			cliConfigPath: configDir,
+			expectedBase:  "config", // ".../something" starts with ".." so it resolves to config dir
 		},
 	}
 
@@ -1022,5 +1107,72 @@ func TestCliConfigPathRegression(t *testing.T) {
 		// BasePathAbsolute should be the repo root (parent of config/).
 		assert.Equal(t, cwd, cfg.BasePathAbsolute,
 			"Base path should resolve to repo root (parent of config/)")
+	})
+}
+
+// TestPathBasedComponentResolution tests the scenario for path-based component resolution
+// where users run atmos commands from within a component directory using ATMOS_BASE_PATH="."
+// with ATMOS_CLI_CONFIG_PATH pointing back to the repo root.
+func TestPathBasedComponentResolution(t *testing.T) {
+	// Clear environment variables that might interfere.
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	require.NoError(t, err)
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	require.NoError(t, err)
+
+	t.Run("ATMOS_BASE_PATH=. with ATMOS_CLI_CONFIG_PATH should resolve to config dir", func(t *testing.T) {
+		// This test verifies path-based component resolution:
+		// When running from a component directory with ATMOS_BASE_PATH="." and
+		// ATMOS_CLI_CONFIG_PATH pointing to the repo root, the base path should
+		// resolve to the repo root (where atmos.yaml is), not to CWD.
+		changeWorkingDir(t, "../../tests/fixtures/scenarios/complete/components/terraform/top-level-component1")
+
+		// Point to the repo root where atmos.yaml is located.
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", "../../..")
+		// Set base_path to "." - this should resolve relative to CLI config path.
+		t.Setenv("ATMOS_BASE_PATH", ".")
+
+		cfg, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		require.NoError(t, err, "InitCliConfig should succeed")
+
+		// Get the repo root (where atmos.yaml is).
+		cwd, err := os.Getwd()
+		require.NoError(t, err)
+		repoRoot := filepath.Clean(filepath.Join(cwd, "..", "..", ".."))
+
+		// BasePathAbsolute should be the repo root (where atmos.yaml is), not CWD.
+		assert.Equal(t, repoRoot, cfg.BasePathAbsolute,
+			"Base path with '.' should resolve to config dir (repo root), not CWD")
+
+		// Stacks should be found at repo_root/stacks.
+		expectedStacksPath := filepath.Join(repoRoot, "stacks")
+		assert.Equal(t, expectedStacksPath, cfg.StacksBaseAbsolutePath,
+			"Stacks path should be at repo root, not inside component dir")
+
+		// Components should be found at repo_root/components/terraform.
+		expectedComponentsPath := filepath.Join(repoRoot, "components", "terraform")
+		assert.Equal(t, expectedComponentsPath, cfg.TerraformDirAbsolutePath,
+			"Terraform components path should be at repo root, not inside component dir")
+	})
+
+	t.Run("empty ATMOS_BASE_PATH should resolve to CWD for backward compatibility", func(t *testing.T) {
+		// This test verifies issue #1858 backward compatibility:
+		// When ATMOS_BASE_PATH is empty (or not set), paths should resolve relative to CWD.
+		changeWorkingDir(t, "../../tests/fixtures/scenarios/complete")
+
+		// Don't set ATMOS_CLI_CONFIG_PATH - use default discovery.
+		// Don't set ATMOS_BASE_PATH - should default to CWD.
+
+		cfg, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		require.NoError(t, err, "InitCliConfig should succeed")
+
+		cwd, err := os.Getwd()
+		require.NoError(t, err)
+
+		// BasePathAbsolute should be CWD (since base_path: "." in atmos.yaml).
+		// Note: The fixture's atmos.yaml has base_path: "." which resolves to config dir.
+		// Since we're running from the same dir as atmos.yaml, config dir == CWD.
+		assert.Equal(t, cwd, cfg.BasePathAbsolute,
+			"Base path should resolve to CWD when running from repo root")
 	})
 }
