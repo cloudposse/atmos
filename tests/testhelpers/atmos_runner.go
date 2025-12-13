@@ -71,7 +71,8 @@ func (r *AtmosRunner) buildWithoutCoverage() error {
 		return fmt.Errorf("failed to find repository root: %w", err)
 	}
 
-	cmd := exec.Command("go", "build", "-o", tempBinary, ".")
+	// Use -buildvcs=false to support git worktrees where VCS stamping fails.
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", tempBinary, ".")
 	cmd.Dir = repoRoot
 
 	// Run the build command.
@@ -116,7 +117,8 @@ func (r *AtmosRunner) buildWithCoverage() error {
 		return fmt.Errorf("failed to find repository root: %w", err)
 	}
 
-	cmd := exec.Command("go", "build", "-cover", "-o", tempBinary, ".")
+	// Use -buildvcs=false to support git worktrees where VCS stamping fails.
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-cover", "-o", tempBinary, ".")
 	cmd.Dir = repoRoot
 
 	// Run the build command.
