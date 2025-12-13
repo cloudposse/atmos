@@ -8,6 +8,9 @@ tags:
   - dx
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 Atmos now supports defining stack configurations in **YAML**, **JSON**, and **HCL** formats. Use the format that best fits your workflow, tooling, and team preferences.
 
 {/* truncate */}
@@ -29,6 +32,31 @@ These aren't reasons to abandon YAML—it remains excellent for many use cases. 
 
 If you're already writing Terraform, HCL feels natural:
 
+<Tabs>
+  <TabItem value="with-name" label="With Explicit Name" default>
+
+```hcl
+# stacks/deploy/production.hcl
+stack "production" {
+  components {
+    terraform {
+      component "vpc" {
+        vars {
+          cidr_block         = "10.0.0.0/16"
+          availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
+          enable_nat_gateway = true
+        }
+      }
+    }
+  }
+}
+```
+
+The block label `"production"` becomes the explicit stack name, overriding any `name_template` or `name_pattern`.
+
+  </TabItem>
+  <TabItem value="without-name" label="Without Explicit Name">
+
 ```hcl
 # stacks/deploy/production.hcl
 stack {
@@ -45,6 +73,11 @@ stack {
   }
 }
 ```
+
+Without a label, the stack name is derived from `name_template`, `name_pattern`, or the filename.
+
+  </TabItem>
+</Tabs>
 
 HCL uses labeled block syntax—`component "vpc"` instead of a nested object—which aligns with how Terraform resources are defined. No context switching required.
 
