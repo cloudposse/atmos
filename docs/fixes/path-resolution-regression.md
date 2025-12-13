@@ -49,11 +49,13 @@ explicitly referencing the config directory.
 Modified `resolveAbsolutePath()` to only resolve paths relative to `cliConfigPath` when they explicitly reference the
 config directory location:
 
-1. **Paths starting with `..`** (parent directory traversal) → Resolve relative to atmos.yaml location
-2. **Paths starting with `./`** (explicit current directory reference) → Resolve relative to atmos.yaml location
-3. **Exactly `.`** (explicit current directory) → Resolve relative to atmos.yaml location
-4. **All other relative paths** (like `stacks`, `components/terraform`, empty string) → Resolve relative to CWD for
-   backward compatibility
+1. **Exactly `.` or `..`** (current or parent directory) → Resolve relative to atmos.yaml location
+2. **Paths starting with `./` or `../`** (Unix-style explicit relative) → Resolve relative to atmos.yaml location
+3. **Paths starting with `.\` or `..\`** (Windows-style explicit relative) → Resolve relative to atmos.yaml location
+4. **All other relative paths** (like `stacks`, `components/terraform`, `.hidden`, `..foo`, empty string) → Resolve
+   relative to CWD for backward compatibility
+
+Note: The detection is strict to avoid misclassifying paths like `.hidden` or `..foo` as explicit relative paths.
 
 ### Why `.` Resolves to Config Directory
 
@@ -87,10 +89,12 @@ func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
     if filepath.IsAbs(path) {
         return path, nil
     }
-    // Only resolve relative to config dir for explicit relative paths
-    // including "..", "./", and exactly "."
-    isExplicitRelativePath := strings.HasPrefix(path, "..") ||
-        strings.HasPrefix(path, "./") || path == "."
+    // Only resolve relative to config dir for explicit relative paths.
+    // Strict detection avoids misclassifying ".hidden" or "..foo".
+    sep := string(filepath.Separator)
+    isExplicitRelativePath := path == "." || path == ".." ||
+        strings.HasPrefix(path, "."+sep) || strings.HasPrefix(path, ".."+sep) ||
+        strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../")
     if isExplicitRelativePath && cliConfigPath != "" {
         basePath := filepath.Join(cliConfigPath, path)
         // ...

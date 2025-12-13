@@ -220,11 +220,21 @@ func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
 
 	// Check if the path explicitly references a relative location from the config directory.
 	// This includes:
-	// - Paths starting with ".." (parent directory traversal)
-	// - Paths starting with "./" (explicit current directory reference)
-	// - Exactly "." (explicit current directory, meaning "where atmos.yaml is")
+	// - Exactly "." or ".." (current or parent directory)
+	// - Paths starting with "./" or "../" (Unix-style explicit relative)
+	// - Paths starting with ".\" or "..\" (Windows-style explicit relative)
 	// These should resolve relative to where atmos.yaml is located.
-	isExplicitRelativePath := strings.HasPrefix(path, "..") || strings.HasPrefix(path, "./") || path == "."
+	//
+	// Note: We check for exact matches first to avoid misclassifying paths like
+	// "..foo" or ".hidden" as explicit relative paths.
+	sep := string(filepath.Separator)
+	isExplicitRelativePath := path == "." ||
+		path == ".." ||
+		strings.HasPrefix(path, "."+sep) ||
+		strings.HasPrefix(path, ".."+sep) ||
+		// Allow forward slashes in config even on Windows for portability.
+		strings.HasPrefix(path, "./") ||
+		strings.HasPrefix(path, "../")
 
 	if isExplicitRelativePath && cliConfigPath != "" {
 		// Resolve relative to CLI config path (atmos.yaml location).

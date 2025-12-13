@@ -872,6 +872,10 @@ func TestResolveAbsolutePath(t *testing.T) {
 	err := os.MkdirAll(configDir, 0o755)
 	require.NoError(t, err)
 
+	// Create platform-neutral absolute paths for testing.
+	absPath1 := filepath.Join(tmpDir, "absolute", "path")
+	absPath2 := filepath.Join(tmpDir, "another", "absolute")
+
 	tests := []struct {
 		name          string
 		path          string
@@ -881,13 +885,13 @@ func TestResolveAbsolutePath(t *testing.T) {
 		// Absolute paths - should always remain unchanged.
 		{
 			name:          "absolute path remains unchanged",
-			path:          "/absolute/path",
+			path:          absPath1,
 			cliConfigPath: configDir,
 			expectedBase:  "", // N/A - absolute paths don't need base
 		},
 		{
 			name:          "absolute path with empty config path remains unchanged",
-			path:          "/usr/local/bin",
+			path:          absPath2,
 			cliConfigPath: "",
 			expectedBase:  "", // N/A - absolute paths don't need base
 		},
@@ -998,12 +1002,18 @@ func TestResolveAbsolutePath(t *testing.T) {
 			expectedBase:  "cwd",
 		},
 
-		// Edge cases - paths that look like they might start with . but don't.
+		// Edge cases - paths that look like they might start with . or .. but don't.
 		{
 			name:          "path starting with dot but not ./ or .. resolves to CWD",
 			path:          ".hidden",
 			cliConfigPath: configDir,
 			expectedBase:  "cwd",
+		},
+		{
+			name:          "path starting with ..foo resolves to CWD (not parent traversal)",
+			path:          "..foo",
+			cliConfigPath: configDir,
+			expectedBase:  "cwd", // "..foo" is NOT ".." or "../" so it resolves to CWD
 		},
 		{
 			name:          "path with dots in middle resolves to CWD",
@@ -1012,10 +1022,10 @@ func TestResolveAbsolutePath(t *testing.T) {
 			expectedBase:  "cwd",
 		},
 		{
-			name:          "path starting with ... resolves to config dir (starts with ..)",
+			name:          "path starting with ... resolves to CWD (not parent traversal)",
 			path:          ".../something",
 			cliConfigPath: configDir,
-			expectedBase:  "config", // ".../something" starts with ".." so it resolves to config dir
+			expectedBase:  "cwd", // ".../something" is NOT "../" so it resolves to CWD
 		},
 	}
 
