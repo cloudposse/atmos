@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -415,16 +416,29 @@ func detectComponentType(
 		authManager:          params.AuthManager,
 	}
 
-	// Try Terraform
+	// Try Terraform.
 	baseParams.componentType = cfg.TerraformComponentType
 	result, err := tryProcessWithComponentType(&baseParams)
 	if err != nil {
-		// Try Helmfile
+		// If this is NOT a "component not found" type error, don't try other component types.
+		// For example, if the component has invalid HCL syntax, we should report that error
+		// rather than trying Helmfile/Packer and ultimately returning "component not found".
+		// This fixes https://github.com/cloudposse/atmos/issues/1864
+		if !errors.Is(err, errUtils.ErrInvalidComponent) {
+			return result, err
+		}
+
+		// Try Helmfile.
 		baseParams.configAndStacksInfo = result
 		baseParams.componentType = cfg.HelmfileComponentType
 		result, err = tryProcessWithComponentType(&baseParams)
 		if err != nil {
-			// Try Packer
+			// Same check for Helmfile errors.
+			if !errors.Is(err, errUtils.ErrInvalidComponent) {
+				return result, err
+			}
+
+			// Try Packer.
 			baseParams.configAndStacksInfo = result
 			baseParams.componentType = cfg.PackerComponentType
 			result, err = tryProcessWithComponentType(&baseParams)

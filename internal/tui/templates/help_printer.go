@@ -126,14 +126,17 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 		lines = lines[1:]
 	}
 
-	if _, err := fmt.Fprintf(p.out, "%-*s%s\n", descIndent, flagSection, lines[0]); err != nil {
-		return
-	}
-
-	// Print remaining lines with proper indentation
-	for _, line := range lines[1:] {
-		if _, err := fmt.Fprintf(p.out, "%s%s\n", strings.Repeat(" ", descIndent), line); err != nil {
+	// Check if there are any lines remaining after removing the first line.
+	if len(lines) > 0 {
+		if _, err := fmt.Fprintf(p.out, "%-*s%s\n", descIndent, flagSection, lines[0]); err != nil {
 			return
+		}
+
+		// Print remaining lines with proper indentation.
+		for _, line := range lines[1:] {
+			if _, err := fmt.Fprintf(p.out, "%s%s\n", strings.Repeat(" ", descIndent), line); err != nil {
+				return
+			}
 		}
 	}
 
