@@ -118,6 +118,67 @@ This fix maintains backward compatibility with v1.200.0 behavior:
 - Paths that explicitly use `..` or `./` to navigate from the config directory location continue to work as intended by
   PR #1774
 
+## Manual Testing
+
+You can manually verify the fix using the test fixture at `tests/fixtures/scenarios/cli-config-path/`.
+
+### Fixture Structure
+
+```
+tests/fixtures/scenarios/cli-config-path/
+├── components/
+│   └── terraform/
+│       └── test-component/
+│           └── main.tf
+├── config/
+│   └── atmos.yaml          # Config in subdirectory with base_path: ".."
+└── stacks/
+    └── dev.yaml
+```
+
+The `config/atmos.yaml` uses `base_path: ".."` to reference the parent directory (repo root), while `stacks` and
+`components/terraform` are simple relative paths that should resolve relative to CWD.
+
+### Test Commands
+
+Run these commands from the fixture directory:
+
+```bash
+# Navigate to the test fixture
+cd tests/fixtures/scenarios/cli-config-path
+
+# Set ATMOS_CLI_CONFIG_PATH to point to the config subdirectory
+export ATMOS_CLI_CONFIG_PATH=./config
+
+# Test 1: Validate stacks (this was failing in v1.201.0)
+atmos validate stacks
+# Expected: "✓ All stacks validated successfully"
+
+# Test 2: List stacks
+atmos list stacks
+# Expected: "dev"
+
+# Test 3: List components
+atmos list components
+# Expected: "test-component  dev  terraform  real  true  false"
+
+# Test 4: Describe component
+atmos describe component test-component -s dev
+# Expected: Component configuration output (not an error)
+
+# Test 5: Describe config (verify path resolution)
+atmos describe config | grep -E "(base_path|stacks_base_absolute|terraform_dir_absolute)"
+# Expected: Paths should point to repo root, not inside config/
+```
+
+### Expected vs Broken Behavior
+
+| Command | v1.200.0 (Working) | v1.201.0 (Broken) | This Fix |
+|---------|-------------------|-------------------|----------|
+| `atmos validate stacks` | ✅ Success | ❌ "stacks directory does not exist" | ✅ Success |
+| `atmos list stacks` | ✅ Shows "dev" | ❌ Error | ✅ Shows "dev" |
+| `atmos list components` | ✅ Shows component | ❌ Error | ✅ Shows component |
+
 ## Related PRs/Commits
 
 - **Commit `2aad133f6`**: "fix: resolve ATMOS_BASE_PATH relative to CLI config directory" (introduced the regression)
