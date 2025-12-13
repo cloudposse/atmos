@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -26,6 +27,9 @@ const (
 // SupportedFormats lists all supported output formats.
 var SupportedFormats = []string{"bash", "json", "dotenv", "github"}
 
+// envParser handles flag parsing with Viper precedence.
+var envParser *flags.StandardParser
+
 // envCmd outputs environment variables from atmos.yaml.
 var envCmd = &cobra.Command{
 	Use:   "env",
@@ -33,8 +37,14 @@ var envCmd = &cobra.Command{
 	Long:  `Outputs environment variables from the 'env' section of atmos.yaml in various formats suitable for shell evaluation, .env files, JSON consumption, or GitHub Actions workflows.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Parse flags using Viper (respects precedence: flags > env > config > defaults).
+		v := viper.GetViper()
+		if err := envParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
 		// Get output format.
-		format, _ := cmd.Flags().GetString("format")
+		format := v.GetString("format")
 		if !slices.Contains(SupportedFormats, format) {
 			return errUtils.Build(errUtils.ErrInvalidArgumentError).
 				WithExplanationf("Invalid --format value %q.", format).
@@ -43,7 +53,7 @@ var envCmd = &cobra.Command{
 		}
 
 		// Get output file path.
-		output, _ := cmd.Flags().GetString("output")
+		output := v.GetString("output")
 
 		// Build ConfigAndStacksInfo with CLI overrides (--config, --config-path, --base-path).
 		// These are persistent flags inherited from the root command.
@@ -205,8 +215,21 @@ func sortedKeys(m map[string]string) []string {
 }
 
 func init() {
-	envCmd.Flags().StringP("format", "f", "bash", "Output format: bash, json, dotenv, github")
-	envCmd.Flags().StringP("output", "o", "", "Output file path (default: stdout, or $GITHUB_ENV for github format)")
+	// Create parser with env-specific flags using functional options.
+	envParser = flags.NewStandardParser(
+		flags.WithStringFlag("format", "f", "bash", "Output format: bash, json, dotenv, github"),
+		flags.WithStringFlag("output", "o", "", "Output file path (default: stdout, or $GITHUB_ENV for github format)"),
+		flags.WithEnvVars("format", "ATMOS_ENV_FORMAT"),
+		flags.WithEnvVars("output", "ATMOS_ENV_OUTPUT"),
+	)
+
+	// Register flags using the standard RegisterFlags method.
+	envParser.RegisterFlags(envCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := envParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
 	// Register format flag completion.
 	if err := envCmd.RegisterFlagCompletionFunc("format", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -240,7 +263,7 @@ func (e *EnvCommandProvider) GetGroup() string {
 
 // GetFlagsBuilder returns the flags builder for this command.
 func (e *EnvCommandProvider) GetFlagsBuilder() flags.Builder {
-	return nil
+	return envParser
 }
 
 // GetPositionalArgsBuilder returns the positional args builder for this command.
