@@ -14,7 +14,7 @@ import (
 
 const (
 	errDownloadFileFormat = "%w: '%s': %v"
-	errWrapFormat         = "%w: %w"
+	errWrapFormat         = "%w: %v"
 )
 
 // fileDownloader handles downloading files and directories from various sources

@@ -44,8 +44,12 @@ func calculateDirectorySize(dirPath string) (int64, error) {
 
 	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			// Skip files/directories we can't access.
-			return err
+			// For the root path, return the error (non-existent directory).
+			if path == dirPath {
+				return err
+			}
+			// Skip files/directories we can't access during the walk.
+			return nil
 		}
 		if !info.IsDir() {
 			size += info.Size()

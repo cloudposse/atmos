@@ -86,11 +86,10 @@ func TestDuExec_NonExistentDirectory(t *testing.T) {
 
 func TestCalculateDirectorySize(t *testing.T) {
 	tests := []struct {
-		name          string
-		setupFunc     func(t *testing.T) string
-		expectedSize  int64
-		expectError   bool
-		errorContains string
+		name         string
+		setupFunc    func(t *testing.T) string
+		expectedSize int64
+		expectError  bool
 	}{
 		{
 			name: "empty directory",

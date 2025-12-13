@@ -18,14 +18,15 @@ import (
 // maskContent applies the native io package masking to content.
 // This is used as a fallback when the data package is not available.
 // It leverages the centralized masking infrastructure from pkg/io.
+// Returns empty string if masking is unavailable to prevent data leaks.
 func maskContent(content string) string {
 	// Try to get the global I/O context for its masker.
 	ioCtx := iolib.GetContext()
 	if ioCtx == nil {
-		// If context is not initialized, return content unmasked.
-		// This shouldn't happen in production since io.Initialize() is called in root.go.
-		log.Debug("io context not initialized, content will not be masked")
-		return content
+		// If context is not initialized, refuse to return unmasked content.
+		// This prevents accidental data leaks when masking is unavailable.
+		log.Error("io context not initialized, refusing to return unmasked content")
+		return ""
 	}
 
 	// Use the native masker.
