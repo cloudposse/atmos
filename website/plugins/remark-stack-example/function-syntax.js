@@ -4,15 +4,24 @@
  * Translates Atmos function objects to target format syntax:
  *
  * Format translations:
- * | YAML                    | JSON                         | HCL                                    |
- * |-------------------------|------------------------------|----------------------------------------|
- * | !env VAR                | ${env:VAR}                   | atmos.env("VAR")                       |
- * | !template "..."         | ${template:...}              | atmos.template("...")                  |
- * | !exec "cmd"             | ${exec:cmd}                  | atmos.exec("cmd")                      |
- * | !repo-root              | ${repo-root}                 | atmos.repo_root()                      |
- * | !terraform.output ...   | ${terraform.output:...}      | atmos.terraform_output(...)            |
- * | !terraform.state ...    | ${terraform.state:...}       | atmos.terraform_state(...)             |
- * | !store provider/key     | ${store:provider/key}        | atmos.store("provider", "key")         |
+ * | YAML                    | JSON                         | HCL                                      |
+ * |-------------------------|------------------------------|------------------------------------------|
+ * | !env VAR                | ${env:VAR}                   | atmos::env("VAR")                        |
+ * | !template "..."         | ${template:...}              | atmos::template("...")                   |
+ * | !exec "cmd"             | ${exec:cmd}                  | atmos::exec("cmd")                       |
+ * | !repo-root              | ${repo-root}                 | atmos::repo_root()                       |
+ * | !terraform.output ...   | ${terraform.output:...}      | atmos::terraform_output(...)             |
+ * | !terraform.state ...    | ${terraform.state:...}       | atmos::terraform_state(...)              |
+ * | !store provider/key     | ${store:provider/key}        | atmos::store("provider", "key")          |
+ * | !store.get provider/key | ${store.get:provider/key}    | atmos::store_get("provider", "key")      |
+ * | !include path           | ${include:path}              | atmos::include("path")                   |
+ * | !include.raw path       | ${include.raw:path}          | atmos::include_raw("path")               |
+ * | !random                 | ${random}                    | atmos::random()                          |
+ * | !aws.account_id         | ${aws.account_id}            | atmos::aws_account_id()                  |
+ * | !aws.region             | ${aws.region}                | atmos::aws_region()                      |
+ *
+ * Note: HCL treats foo_bar() as foo::bar(), so atmos::env("VAR") can also
+ * be written as atmos_env("VAR").
  */
 
 /**
@@ -87,20 +96,21 @@ function translateToJson(funcName, arg) {
 
 /**
  * Translate function to HCL function call syntax.
- * Uses namespaced format: atmos.func_name()
+ * Uses namespaced format: atmos::func_name()
+ * HCL treats foo_bar() as foo::bar(), so atmos::env allows both syntaxes.
  */
 function translateToHcl(funcName, arg) {
-  // Normalize function name for HCL (replace - with _, keep . for terraform functions).
-  // Result: atmos.env, atmos.exec, atmos.repo_root, atmos.terraform_output, etc.
+  // Normalize function name for HCL (replace - with _, replace . with _).
+  // Result: atmos::env, atmos::exec, atmos::repo_root, atmos::terraform_output, etc.
   const normalizedName = funcName.replace(/-/g, '_').replace(/\./g, '_');
-  const hclFuncName = `atmos.${normalizedName}`;
+  const hclFuncName = `atmos::${normalizedName}`;
 
   if (funcName === 'repo-root') {
     return `${hclFuncName}()`;
   }
 
-  if (funcName === 'store') {
-    // Parse store argument: provider/key -> atmos_store("provider", "key").
+  if (funcName === 'store' || funcName === 'store.get') {
+    // Parse store argument: provider/key -> atmos::store("provider", "key").
     const parts = (arg || '').split('/');
     if (parts.length >= 2) {
       const provider = parts[0];
@@ -108,6 +118,22 @@ function translateToHcl(funcName, arg) {
       return `${hclFuncName}("${provider}", "${key}")`;
     }
     return `${hclFuncName}("${arg || ''}")`;
+  }
+
+  if (funcName === 'random') {
+    // Random: !random -> atmos::random().
+    return `${hclFuncName}()`;
+  }
+
+  if (funcName.startsWith('aws.')) {
+    // AWS functions: !aws.account_id -> atmos::aws_account_id().
+    return `${hclFuncName}()`;
+  }
+
+  if (funcName === 'include' || funcName === 'include.raw') {
+    // Include: !include path -> atmos::include("path").
+    const includePath = (arg || '').replace(/^["']|["']$/g, '');
+    return `${hclFuncName}("${includePath}")`;
   }
 
   if (funcName === 'terraform.output' || funcName === 'terraform.state') {
