@@ -3,6 +3,7 @@ package stack
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/markdown"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -15,24 +16,10 @@ var convertCmd = &cobra.Command{
 	Long: `Convert stack configuration files between YAML, JSON, and HCL formats.
 
 All formats parse to the same internal data structure, enabling seamless
-bidirectional conversion between any supported format.
-
-Examples:
-  # Convert YAML to HCL (output to stdout)
-  atmos stack convert stacks/prod.yaml --to hcl
-
-  # Convert YAML to HCL (output to file)
-  atmos stack convert stacks/prod.yaml --to hcl --output prod.hcl
-
-  # Convert HCL to YAML
-  atmos stack convert stacks/prod.hcl --to yaml
-
-  # Convert JSON to YAML with output file
-  atmos stack convert stacks/prod.json --to yaml --output prod.yaml
-
-  # Preview conversion without writing (dry-run)
-  atmos stack convert stacks/prod.yaml --to hcl --dry-run`,
-	Args: cobra.ExactArgs(1),
+bidirectional conversion between any supported format. Supports multi-document
+YAML files and multi-stack HCL files.`,
+	Example: markdown.StackConvertUsageMarkdown,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Get flag values.
 		toFormat, _ := cmd.Flags().GetString("to")
