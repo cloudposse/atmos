@@ -1,0 +1,170 @@
+---
+slug: yaml-multi-document-stacks
+title: "Define Multiple Stacks in a Single YAML File"
+authors:
+  - osterman
+tags:
+  - feature
+  - dx
+---
+
+You can now define multiple stacks in a single YAML file using the standard multi-document format. This makes it easier to manage related environments together and reduces file sprawl in your stacks directory.
+
+{/* truncate */}
+
+## The Problem
+
+Managing many small, similar stack files can become tedious. If you have `dev`, `staging`, and `prod` environments that share most of their configuration, you end up with:
+
+```
+stacks/
+├── dev.yaml
+├── staging.yaml
+└── prod.yaml
+```
+
+Each file contains nearly identical content with only minor differences. This leads to:
+
+- **File sprawl** - Many files to navigate and maintain
+- **Repetition** - Copy-paste errors when creating new environments
+- **Context switching** - Jumping between files to compare configurations
+
+## The Solution
+
+Use YAML's multi-document format to define multiple stacks in a single file. Documents are separated by `---`:
+
+```yaml
+# stacks/environments.yaml
+name: dev
+import:
+  - catalog/base
+
+vars:
+  environment: dev
+  stage: development
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.10.0.0/16"
+---
+name: staging
+import:
+  - catalog/base
+
+vars:
+  environment: staging
+  stage: staging
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.20.0.0/16"
+---
+name: prod
+import:
+  - catalog/base
+
+vars:
+  environment: prod
+  stage: production
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.30.0.0/16"
+```
+
+Each document becomes a separate stack. The `name` field in each document sets the logical stack name.
+
+## How It Works
+
+When Atmos encounters a YAML file with multiple documents:
+
+1. **Parsing** - Each document separated by `---` is parsed independently
+2. **Stack creation** - Each document becomes a separate stack
+3. **Naming** - The `name` field determines the stack's logical name
+4. **Processing** - Imports, inheritance, and templating work normally for each stack
+
+The stacks behave exactly as if they were in separate files. You can:
+
+- Reference them with `-s dev`, `-s staging`, `-s prod`
+- Use them in `depends_on` references
+- View them with `atmos describe stacks`
+
+## When to Use Multi-Document Stacks
+
+**Good use cases:**
+
+- Related environments (dev/staging/prod) with similar configurations
+- Regional deployments with minor differences
+- Tenant configurations in multi-tenant architectures
+- Feature flag variations
+
+**Consider separate files when:**
+
+- Stacks have significantly different configurations
+- Different teams own different stacks
+- You need separate file-level access controls
+
+## Comparison with HCL
+
+HCL supports the same pattern using multiple labeled `stack` blocks:
+
+```hcl
+# stacks/environments.hcl
+stack "dev" {
+  import = ["catalog/base"]
+
+  vars {
+    environment = "dev"
+    stage       = "development"
+  }
+
+  components {
+    terraform {
+      vpc {
+        vars {
+          cidr = "10.10.0.0/16"
+        }
+      }
+    }
+  }
+}
+
+stack "staging" {
+  import = ["catalog/base"]
+
+  vars {
+    environment = "staging"
+    stage       = "staging"
+  }
+
+  components {
+    terraform {
+      vpc {
+        vars {
+          cidr = "10.20.0.0/16"
+        }
+      }
+    }
+  }
+}
+```
+
+Choose the format that fits your team's preferences.
+
+## Get Started
+
+1. **Combine related stacks** - Identify stacks that logically belong together
+2. **Add `name` fields** - Each document needs a `name` to identify the stack
+3. **Join with `---`** - Separate documents with the YAML document separator
+4. **Test** - Run `atmos describe stacks` to verify the stacks are recognized
+
+## Learn More
+
+- [Stack Configuration Reference](/stacks) - Complete stack syntax documentation
+- [Explicit Stack Names](/blog/stack-manifest-name-override) - Using the `name` field for stack identification
