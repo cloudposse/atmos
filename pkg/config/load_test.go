@@ -1781,10 +1781,12 @@ func TestInjectProvisionedIdentitiesPostLoad_ErrorHandling(t *testing.T) {
 		cacheDir := t.TempDir()
 		t.Setenv("XDG_CACHE_HOME", cacheDir)
 
-		// Setup viper with provider.
+		// Setup viper with provider that has auto_provision_identities enabled.
+		// This ensures the invalid YAML path is actually exercised.
 		v := viper.New()
 		v.SetConfigType("yaml")
 		v.Set("auth.providers.aws-sso.kind", "aws/iam-identity-center")
+		v.Set("auth.providers.aws-sso.auto_provision_identities", true)
 
 		// Create an invalid YAML file.
 		providerDir := filepath.Join(cacheDir, "atmos", "auth", "aws-sso")
