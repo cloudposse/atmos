@@ -2,34 +2,58 @@
  * YAML to JSON/HCL Converter with Atmos function syntax translation.
  *
  * Translates Atmos YAML function syntax to equivalent formats:
- * - YAML: !env VAR, !template "...", !exec "...", !terraform.output, !store
+ * - YAML: !env VAR, !template "...", !exec "...", !terraform.output, !store, etc.
  * - JSON: ${env:VAR}, ${template:...}, ${exec:...}, ${terraform.output:...}, ${store:...}
- * - HCL: atmos_env("VAR"), atmos_template("..."), atmos_exec("..."), atmos_terraform_output(...), atmos_store(...)
+ * - HCL: atmos::env("VAR"), atmos::template("..."), atmos::exec("..."), etc.
+ *
+ * HCL output uses proper block syntax:
+ * - Nested objects use block notation: key { }
+ * - Components use labeled blocks: component "name" { }
+ * - Full stacks wrap in: stack "name" { } or stack { }
  */
 const yaml = require('js-yaml');
 const { translateFunctions } = require('./function-syntax');
 
 /**
  * Convert YAML string to all supported formats.
+ * Supports multi-document YAML (separated by ---).
  * @param {string} yamlStr - The YAML source string.
  * @returns {{ yaml: string, json: string, hcl: string }} - Converted formats.
  */
 function convertYamlToFormats(yamlStr) {
-  // Parse YAML with custom tags to preserve function syntax.
+  // Check for multi-document YAML.
+  const documents = splitYamlDocuments(yamlStr);
+
+  if (documents.length > 1) {
+    // Multi-document: generate multiple stack blocks.
+    const parsedDocs = documents.map((doc) => parseYamlWithFunctions(doc));
+
+    return {
+      yaml: normalizeYaml(yamlStr),
+      json: generateMultiDocJson(parsedDocs),
+      hcl: generateMultiDocHcl(parsedDocs),
+    };
+  }
+
+  // Single document.
   const parsed = parseYamlWithFunctions(yamlStr);
 
-  // Generate each format.
-  const jsonOutput = generateJson(parsed);
-  const hclOutput = generateHcl(parsed);
-
-  // Clean YAML for display (normalize formatting).
-  const yamlOutput = normalizeYaml(yamlStr);
-
   return {
-    yaml: yamlOutput,
-    json: jsonOutput,
-    hcl: hclOutput,
+    yaml: normalizeYaml(yamlStr),
+    json: generateJson(parsed),
+    hcl: generateHcl(parsed),
   };
+}
+
+/**
+ * Split YAML string into separate documents.
+ * @param {string} yamlStr - The YAML source string.
+ * @returns {string[]} - Array of YAML document strings.
+ */
+function splitYamlDocuments(yamlStr) {
+  // Split on document separators (--- at start of line).
+  const docs = yamlStr.split(/^---$/m).filter((doc) => doc.trim());
+  return docs;
 }
 
 /**
@@ -40,15 +64,44 @@ function convertYamlToFormats(yamlStr) {
  * and we only need to identify function calls for documentation purposes.
  */
 function parseYamlWithFunctions(yamlStr) {
-  // First, extract function calls and replace with placeholders.
-  const atmosFunctions = ['env', 'template', 'exec', 'repo-root', 'terraform.output', 'terraform.state', 'store'];
+  // List of all Atmos functions to extract.
+  const atmosFunctions = [
+    'env',
+    'template',
+    'exec',
+    'repo-root',
+    'terraform.output',
+    'terraform.state',
+    'store',
+    'store.get',
+    'include',
+    'include.raw',
+    'random',
+    'aws.account_id',
+    'aws.region',
+    'aws.caller_identity_arn',
+    'aws.caller_identity_user_id',
+  ];
   const functionMarkers = [];
   let processedYaml = yamlStr;
 
   // Match YAML function syntax: !funcname args
   // Handle both simple (!env VAR) and quoted (!env 'VAR "default"') forms.
   atmosFunctions.forEach((funcName) => {
-    const regex = new RegExp(`!${funcName.replace('.', '\\.')}\\s+(.+?)(?=\\n|$)`, 'g');
+    // Functions without arguments (like !repo-root, !random).
+    const noArgRegex = new RegExp(`!${funcName.replace(/\./g, '\\.')}(?=\\s*$|\\s*\\n)`, 'gm');
+    processedYaml = processedYaml.replace(noArgRegex, () => {
+      const marker = `__ATMOS_FN_${functionMarkers.length}__`;
+      functionMarkers.push({
+        marker,
+        funcName,
+        args: '',
+      });
+      return `"${marker}"`;
+    });
+
+    // Functions with arguments.
+    const regex = new RegExp(`!${funcName.replace(/\./g, '\\.')}\\s+(.+?)(?=\\n|$)`, 'g');
     processedYaml = processedYaml.replace(regex, (match, args) => {
       const marker = `__ATMOS_FN_${functionMarkers.length}__`;
       functionMarkers.push({
@@ -122,49 +175,145 @@ function generateJson(data) {
 }
 
 /**
+ * Generate JSON for multiple documents.
+ * @param {Object[]} documents - Array of parsed YAML documents.
+ * @returns {string} - JSON array string.
+ */
+function generateMultiDocJson(documents) {
+  const translated = documents.map((doc) => translateFunctions(doc, 'json'));
+  return JSON.stringify(translated, null, 2);
+}
+
+/**
  * Generate HCL with translated function syntax.
+ * Uses proper HCL block syntax with stack wrapper and component labels.
  */
 function generateHcl(data) {
   const translated = translateFunctions(data, 'hcl');
-  return objectToHcl(translated, 0);
+
+  // Detect if this is a full stack (has components or explicit name).
+  const isFullStack = 'components' in translated || 'name' in translated;
+
+  if (isFullStack) {
+    // Extract stack name for block label.
+    const stackName = translated.name || null;
+    return writeStackHcl(translated, stackName);
+  }
+
+  // Partial snippet - no stack wrapper.
+  return writeBodyHcl(translated, 0).trim();
 }
 
 /**
- * Convert JavaScript object to HCL format.
+ * Generate HCL for multiple documents.
+ * @param {Object[]} documents - Array of parsed YAML documents.
+ * @returns {string} - HCL string with multiple stack blocks.
  */
-function objectToHcl(obj, indent = 0) {
+function generateMultiDocHcl(documents) {
+  const hclParts = documents.map((doc) => {
+    const translated = translateFunctions(doc, 'hcl');
+    const stackName = translated.name || null;
+    return writeStackHcl(translated, stackName);
+  });
+
+  return hclParts.join('\n');
+}
+
+/**
+ * Write a stack block with optional name label.
+ * @param {Object} data - Stack configuration data.
+ * @param {string|null} stackName - Optional stack name for block label.
+ * @returns {string} - HCL stack block.
+ */
+function writeStackHcl(data, stackName) {
+  const label = stackName ? ` "${stackName}"` : '';
+  let result = `stack${label} {\n`;
+
+  // Write body, excluding 'name' field (it's the block label).
+  const bodyData = { ...data };
+  delete bodyData.name;
+
+  result += writeBodyHcl(bodyData, 1);
+  result += '}\n';
+  return result;
+}
+
+/**
+ * Write HCL body content with proper block syntax.
+ * @param {Object} obj - Object to convert.
+ * @param {number} indent - Current indentation level.
+ * @returns {string} - HCL body content.
+ */
+function writeBodyHcl(obj, indent) {
+  if (!obj || typeof obj !== 'object') {
+    return '';
+  }
+
   const spaces = '  '.repeat(indent);
-  const lines = [];
+  let result = '';
 
-  if (Array.isArray(obj)) {
-    lines.push('[');
-    obj.forEach((item, index) => {
-      const value = valueToHcl(item, indent + 1);
-      const comma = index < obj.length - 1 ? ',' : '';
-      lines.push(`${spaces}  ${value}${comma}`);
-    });
-    lines.push(`${spaces}]`);
-    return lines.join('\n');
+  for (const [key, value] of Object.entries(obj)) {
+    if (key === 'components') {
+      // Special handling for components section.
+      result += writeComponentsHcl(value, indent);
+    } else if (isPlainObject(value)) {
+      // Block syntax for nested objects.
+      result += `${spaces}${key} {\n`;
+      result += writeBodyHcl(value, indent + 1);
+      result += `${spaces}}\n`;
+    } else {
+      // Attribute syntax for primitives and arrays.
+      result += `${spaces}${key} = ${formatHclValue(value, indent)}\n`;
+    }
   }
 
-  if (typeof obj === 'object' && obj !== null) {
-    lines.push('{');
-    const keys = Object.keys(obj);
-    keys.forEach((key, index) => {
-      const value = valueToHcl(obj[key], indent + 1);
-      lines.push(`${spaces}  ${key} = ${value}`);
-    });
-    lines.push(`${spaces}}`);
-    return lines.join('\n');
-  }
-
-  return valueToHcl(obj, indent);
+  return result;
 }
 
 /**
- * Convert a single value to HCL format.
+ * Write components section with labeled component blocks.
+ * @param {Object} components - Components object with terraform/helmfile sections.
+ * @param {number} indent - Current indentation level.
+ * @returns {string} - HCL components block.
  */
-function valueToHcl(value, indent) {
+function writeComponentsHcl(components, indent) {
+  if (!components || typeof components !== 'object') {
+    return '';
+  }
+
+  const spaces = '  '.repeat(indent);
+  let result = `\n${spaces}components {\n`;
+
+  for (const [type, typeComponents] of Object.entries(components)) {
+    if (!typeComponents || typeof typeComponents !== 'object') {
+      continue;
+    }
+
+    result += `${spaces}  ${type} {\n`;
+
+    for (const [name, config] of Object.entries(typeComponents)) {
+      // Labeled block: component "name" { }.
+      result += `${spaces}    component "${name}" {\n`;
+      if (config && typeof config === 'object') {
+        result += writeBodyHcl(config, indent + 3);
+      }
+      result += `${spaces}    }\n`;
+    }
+
+    result += `${spaces}  }\n`;
+  }
+
+  result += `${spaces}}\n`;
+  return result;
+}
+
+/**
+ * Format a value for HCL output.
+ * @param {any} value - Value to format.
+ * @param {number} indent - Current indentation level.
+ * @returns {string} - Formatted HCL value.
+ */
+function formatHclValue(value, indent) {
   const spaces = '  '.repeat(indent);
 
   if (value === null || value === undefined) {
@@ -181,7 +330,7 @@ function valueToHcl(value, indent) {
 
   if (typeof value === 'string') {
     // Check if it's an HCL function call (already translated).
-    if (value.startsWith('atmos.')) {
+    if (value.startsWith('atmos::') || value.startsWith('atmos_')) {
       return value;
     }
     // Escape special characters in strings.
@@ -193,8 +342,13 @@ function valueToHcl(value, indent) {
     if (value.length === 0) {
       return '[]';
     }
-    const items = value.map((item) => valueToHcl(item, indent + 1));
-    return `[\n${spaces}  ${items.join(`,\n${spaces}  `)}\n${spaces}]`;
+    const items = value.map((item) => formatHclValue(item, indent + 1));
+    // Simple arrays on single line, complex on multiple lines.
+    const allPrimitives = value.every((v) => typeof v !== 'object' || v === null);
+    if (allPrimitives && items.join(', ').length < 60) {
+      return `[${items.join(', ')}]`;
+    }
+    return `[\n${spaces}  ${items.join(`,\n${spaces}  `)},\n${spaces}]`;
   }
 
   if (typeof value === 'object') {
@@ -202,11 +356,18 @@ function valueToHcl(value, indent) {
     if (entries.length === 0) {
       return '{}';
     }
-    const lines = entries.map(([k, v]) => `${spaces}  ${k} = ${valueToHcl(v, indent + 1)}`);
+    const lines = entries.map(([k, v]) => `${spaces}  ${k} = ${formatHclValue(v, indent + 1)}`);
     return `{\n${lines.join('\n')}\n${spaces}}`;
   }
 
   return String(value);
+}
+
+/**
+ * Check if a value is a plain object (not array, null, or other).
+ */
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**
@@ -221,10 +382,21 @@ function normalizeYaml(yamlStr) {
     .trim();
 }
 
+// Legacy export for backwards compatibility.
+function objectToHcl(obj, indent = 0) {
+  // For backwards compatibility, delegate to new implementation.
+  return formatHclValue(obj, indent);
+}
+
 module.exports = {
   convertYamlToFormats,
   parseYamlWithFunctions,
   generateJson,
   generateHcl,
+  generateMultiDocHcl,
   objectToHcl,
+  writeStackHcl,
+  writeBodyHcl,
+  writeComponentsHcl,
+  formatHclValue,
 };
