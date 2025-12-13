@@ -1,6 +1,7 @@
 package filetype
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,7 +19,24 @@ import (
 
 var ErrFailedToProcessHclFile = errors.New("failed to process HCL file")
 
-const errFmtProcessHCLFile = "%w, file: %s, error: %s"
+const (
+	errFmtProcessHCLFile = "%w, file: %s, error: %s"
+
+	// StackBlockType is the HCL block type for Atmos stack configurations.
+	// When this block has a label, it becomes the explicit stack name.
+	stackBlockType = "stack"
+
+	// NameSectionName is the key for explicit stack names in stack manifests.
+	// Duplicated here to avoid import cycle with pkg/config.
+	nameSectionName = "name"
+)
+
+// StackDocument represents a single stack from a multi-stack file.
+// Used when a file contains multiple stack definitions.
+type StackDocument struct {
+	Name   string         // Explicit stack name (from label or name field).
+	Config map[string]any // Stack configuration.
+}
 
 // hclEvalContext returns an HCL evaluation context with Atmos functions available.
 // Functions like env(), exec(), template(), and repo_root() can be used in HCL expressions.
@@ -281,6 +299,199 @@ func isBlockRelatedDiagnostic(diags hcl.Diagnostics) bool {
 		}
 	}
 	return false
+}
+
+// ParseHCLStacks parses an HCL file that may contain multiple stack blocks.
+// Returns a slice of StackDocument, one for each stack block found.
+// If no stack blocks are found, returns a single StackDocument with the entire file content.
+func ParseHCLStacks(data []byte, filename string) ([]StackDocument, error) {
+	parser := hclparse.NewParser()
+	file, diags := parser.ParseHCL(data, filename)
+	if diags != nil && diags.HasErrors() {
+		return nil, fmt.Errorf(errFmtProcessHCLFile, ErrFailedToProcessHclFile, filename, diags.Error())
+	}
+	if file == nil {
+		return nil, fmt.Errorf("%w, file: %s, file parsing returned nil", ErrFailedToProcessHclFile, filename)
+	}
+
+	return parseHCLBodyForStacks(file.Body, filename)
+}
+
+// parseHCLBodyForStacks parses an HCL body looking for stack blocks.
+// Returns multiple StackDocuments if stack blocks are found.
+//
+//nolint:cyclop,funlen,gocognit,nestif,nolintlint,revive
+func parseHCLBodyForStacks(body hcl.Body, filename string) ([]StackDocument, error) {
+	evalCtx := hclEvalContext()
+
+	// Type assert to get the underlying hclsyntax.Body.
+	syntaxBody, ok := body.(*hclsyntax.Body)
+	if !ok {
+		// Fallback to regular parsing if type assertion fails.
+		result, err := parseHCLBody(body, filename)
+		if err != nil {
+			return nil, err
+		}
+		return []StackDocument{{Config: result}}, nil
+	}
+
+	// Collect top-level attributes (outside any stack block).
+	topLevelAttrs := make(map[string]any)
+	for name, attr := range syntaxBody.Attributes {
+		ctyValue, valDiags := attr.Expr.Value(evalCtx)
+		if valDiags != nil && valDiags.HasErrors() {
+			return nil, fmt.Errorf("%w, file: %s, attribute %s error: %s",
+				ErrFailedToProcessHclFile, filename, name, valDiags.Error())
+		}
+		topLevelAttrs[name] = ctyToGo(ctyValue)
+	}
+
+	// Find stack blocks and other blocks.
+	var stackBlocks []*hclsyntax.Block
+	var otherBlocks []*hclsyntax.Block
+	for _, block := range syntaxBody.Blocks {
+		if block.Type == stackBlockType {
+			stackBlocks = append(stackBlocks, block)
+		} else {
+			otherBlocks = append(otherBlocks, block)
+		}
+	}
+
+	// If no stack blocks found, treat entire file as single stack.
+	if len(stackBlocks) == 0 {
+		result, err := parseHCLBodyWithBlocks(body, filename)
+		if err != nil {
+			return nil, err
+		}
+		// Check for explicit name field.
+		name := ""
+		if n, ok := result[nameSectionName].(string); ok {
+			name = n
+		}
+		return []StackDocument{{Name: name, Config: result}}, nil
+	}
+
+	// Process each stack block.
+	var stacks []StackDocument
+	for _, block := range stackBlocks {
+		// Validate: stack blocks can have at most one label.
+		if len(block.Labels) > 1 {
+			return nil, fmt.Errorf("%w, file: %s, stack block cannot have more than one label",
+				ErrFailedToProcessHclFile, filename)
+		}
+
+		// Parse the stack block content.
+		stackConfig, err := parseHCLBodyWithBlocks(block.Body, filename)
+		if err != nil {
+			return nil, err
+		}
+
+		// Merge top-level attributes into stack config (stack block takes precedence).
+		merged := make(map[string]any)
+		for k, v := range topLevelAttrs {
+			merged[k] = v
+		}
+		for k, v := range stackConfig {
+			merged[k] = v
+		}
+
+		// Process other blocks (non-stack) and merge into this stack.
+		for _, otherBlock := range otherBlocks {
+			blockContent, err := parseHCLBodyWithBlocks(otherBlock.Body, filename)
+			if err != nil {
+				return nil, err
+			}
+			// Merge block content like the original parseHCLBodyWithBlocks does.
+			if len(otherBlock.Labels) == 0 {
+				if existing, ok := merged[otherBlock.Type]; ok {
+					if existingMap, ok := existing.(map[string]any); ok {
+						for k, v := range blockContent {
+							existingMap[k] = v
+						}
+					} else {
+						merged[otherBlock.Type] = blockContent
+					}
+				} else {
+					merged[otherBlock.Type] = blockContent
+				}
+			} else {
+				// Labeled blocks get nested.
+				if _, ok := merged[otherBlock.Type]; !ok {
+					merged[otherBlock.Type] = make(map[string]any)
+				}
+				typeMap := merged[otherBlock.Type].(map[string]any)
+				for i, label := range otherBlock.Labels {
+					if i == len(otherBlock.Labels)-1 {
+						typeMap[label] = blockContent
+					} else {
+						if _, ok := typeMap[label]; !ok {
+							typeMap[label] = make(map[string]any)
+						}
+						typeMap = typeMap[label].(map[string]any)
+					}
+				}
+			}
+		}
+
+		// Determine stack name: label takes precedence, then name field.
+		stackName := ""
+		if len(block.Labels) == 1 {
+			stackName = block.Labels[0]
+			// Also set the name field in the config.
+			merged[nameSectionName] = stackName
+		} else if n, ok := merged[nameSectionName].(string); ok {
+			stackName = n
+		}
+
+		stacks = append(stacks, StackDocument{
+			Name:   stackName,
+			Config: merged,
+		})
+	}
+
+	return stacks, nil
+}
+
+// ParseYAMLStacks parses a YAML file that may contain multiple documents (separated by ---).
+// Returns a slice of StackDocument, one for each document found.
+func ParseYAMLStacks(data []byte) ([]StackDocument, error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+
+	var stacks []StackDocument
+	for {
+		var doc map[string]any
+		err := decoder.Decode(&doc)
+		if err != nil {
+			// Check if we reached the end of the stream.
+			if err.Error() == "EOF" {
+				break
+			}
+			return nil, fmt.Errorf("failed to parse YAML document: %w", err)
+		}
+
+		// Skip empty documents.
+		if doc == nil {
+			continue
+		}
+
+		// Extract name if present.
+		name := ""
+		if n, ok := doc[nameSectionName].(string); ok {
+			name = n
+		}
+
+		stacks = append(stacks, StackDocument{
+			Name:   name,
+			Config: doc,
+		})
+	}
+
+	// If no documents found, return empty slice.
+	if len(stacks) == 0 {
+		return []StackDocument{}, nil
+	}
+
+	return stacks, nil
 }
 
 // ctyToGo converts cty.Value to Go types.
