@@ -708,7 +708,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/redis/go-redis/v9
     License: BSD-2-Clause
-    URL: https://github.com/redis/go-redis/blob/v9.12.1/LICENSE
+    URL: https://github.com/redis/go-redis/blob/v9.17.0/LICENSE
 
   - github.com/rogpeppe/go-internal/fmtsort
     License: BSD-3-Clause
