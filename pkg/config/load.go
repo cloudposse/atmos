@@ -1486,5 +1486,11 @@ func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfigur
 	atmosConfig.CaseMaps = mergedCaseMaps
 	populateLegacyIdentityCaseMap(mergedCaseMaps, atmosConfig)
 
+	// Also preserve case from provisioned identity cache files.
+	if err := preserveProvisionedIdentityCase(atmosConfig); err != nil {
+		log.Trace("Failed to preserve provisioned identity case", "error", err)
+		// Non-fatal: continue without provisioned identity case preservation.
+	}
+
 	log.Trace("Preserved case-sensitive map keys", "paths", caseSensitivePaths, "files_processed", len(filesToProcess))
 }

@@ -89,6 +89,42 @@ func TestResolveIdentityName_CaseSensitivity(t *testing.T) {
 			expectedResolved: "",
 			expectedFound:    false,
 		},
+		{
+			name: "provisioned identity - original case input works",
+			identities: map[string]types.Identity{
+				"core-artifacts/administratoraccess": nil, // lowercase key from Viper
+			},
+			identityCaseMap: map[string]string{
+				"core-artifacts/administratoraccess": "core-artifacts/AdministratorAccess",
+			},
+			inputName:        "core-artifacts/AdministratorAccess", // user input with original case
+			expectedResolved: "core-artifacts/administratoraccess", // returns lowercase for internal use
+			expectedFound:    true,
+		},
+		{
+			name: "provisioned identity - mixed case account name works",
+			identities: map[string]types.Identity{
+				"core-audit/billingadministratoraccess": nil,
+			},
+			identityCaseMap: map[string]string{
+				"core-audit/billingadministratoraccess": "Core-Audit/BillingAdministratorAccess",
+			},
+			inputName:        "Core-Audit/BillingAdministratorAccess",
+			expectedResolved: "core-audit/billingadministratoraccess",
+			expectedFound:    true,
+		},
+		{
+			name: "provisioned identity - all caps input works",
+			identities: map[string]types.Identity{
+				"myaccount/poweruser": nil,
+			},
+			identityCaseMap: map[string]string{
+				"myaccount/poweruser": "MyAccount/PowerUser",
+			},
+			inputName:        "MYACCOUNT/POWERUSER", // user types all caps
+			expectedResolved: "myaccount/poweruser",
+			expectedFound:    true,
+		},
 	}
 
 	for _, tt := range tests {
