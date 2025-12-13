@@ -30,7 +30,7 @@ variable. This example shows how to:
 atmos env
 
 # Export to your shell
-eval $(atmos env)
+eval "$(atmos env)"
 ```
 
 ### 2. Run Terraform via Atmos
@@ -50,7 +50,7 @@ atmos terraform output github-repo -s demo
 ```
 
 Example output:
-```
+```text
 default_branch = "main"
 description = "Universal Tool for DevOps and Cloud Automation"
 html_url = "https://github.com/cloudposse/atmos"

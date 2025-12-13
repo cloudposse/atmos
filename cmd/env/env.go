@@ -36,8 +36,10 @@ var envCmd = &cobra.Command{
 		// Get output format.
 		format, _ := cmd.Flags().GetString("format")
 		if !slices.Contains(SupportedFormats, format) {
-			return fmt.Errorf("%w: invalid format '%s', supported formats: %s",
-				errUtils.ErrInvalidArgumentError, format, strings.Join(SupportedFormats, ", "))
+			return errUtils.Build(errUtils.ErrInvalidArgumentError).
+				WithExplanationf("Invalid --format value %q.", format).
+				WithHintf("Supported formats: %s.", strings.Join(SupportedFormats, ", ")).
+				Err()
 		}
 
 		// Get output file path.
@@ -47,7 +49,7 @@ var envCmd = &cobra.Command{
 		// These are persistent flags inherited from the root command.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		if bp, _ := cmd.Flags().GetString("base-path"); bp != "" {
-			configAndStacksInfo.AtmosBasePath = bp
+			configAndStacksInfo.BasePath = bp
 		}
 		if cfgFiles, _ := cmd.Flags().GetStringSlice("config"); len(cfgFiles) > 0 {
 			configAndStacksInfo.AtmosConfigFilesFromArg = cfgFiles
@@ -76,8 +78,9 @@ var envCmd = &cobra.Command{
 				//nolint:forbidigo // GITHUB_ENV is an external CI env var, not Atmos config
 				output = os.Getenv("GITHUB_ENV")
 				if output == "" {
-					return fmt.Errorf("%w: --format=github requires GITHUB_ENV environment variable to be set, or use --output to specify a file path",
-						errUtils.ErrRequiredFlagNotProvided)
+					return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+						WithExplanation("--format=github requires GITHUB_ENV environment variable to be set, or use --output to specify a file path.").
+						Err()
 				}
 			}
 			return writeEnvToFile(envVars, output, formatGitHub)
