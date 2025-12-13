@@ -12,23 +12,67 @@ import (
 	"github.com/cloudposse/atmos/toolchain"
 )
 
+// InstallFunc is the function signature for installing a tool.
+type InstallFunc func(toolSpec string, setAsDefault, reinstallFlag bool) error
+
 // Installer handles automatic tool installation.
 type Installer struct {
-	atmosConfig *schema.AtmosConfiguration
-	resolver    toolchain.ToolResolver
+	atmosConfig    *schema.AtmosConfiguration
+	resolver       toolchain.ToolResolver
+	installFunc    InstallFunc
+	fileExistsFunc func(path string) bool
+}
+
+// InstallerOption is a functional option for configuring Installer.
+type InstallerOption func(*Installer)
+
+// WithResolver sets a custom ToolResolver (for testing).
+func WithResolver(resolver toolchain.ToolResolver) InstallerOption {
+	defer perf.Track(nil, "dependencies.WithResolver")()
+
+	return func(i *Installer) {
+		i.resolver = resolver
+	}
+}
+
+// WithInstallFunc sets a custom install function (for testing).
+func WithInstallFunc(fn InstallFunc) InstallerOption {
+	defer perf.Track(nil, "dependencies.WithInstallFunc")()
+
+	return func(i *Installer) {
+		i.installFunc = fn
+	}
+}
+
+// WithFileExistsFunc sets a custom file exists function (for testing).
+func WithFileExistsFunc(fn func(path string) bool) InstallerOption {
+	defer perf.Track(nil, "dependencies.WithFileExistsFunc")()
+
+	return func(i *Installer) {
+		i.fileExistsFunc = fn
+	}
 }
 
 // NewInstaller creates a new tool installer.
-func NewInstaller(atmosConfig *schema.AtmosConfiguration) *Installer {
+func NewInstaller(atmosConfig *schema.AtmosConfiguration, opts ...InstallerOption) *Installer {
 	defer perf.Track(nil, "dependencies.NewInstaller")()
 
 	// Get the resolver from toolchain package for alias and registry resolution.
 	tcInstaller := toolchain.NewInstaller()
 
-	return &Installer{
-		atmosConfig: atmosConfig,
-		resolver:    tcInstaller.GetResolver(),
+	inst := &Installer{
+		atmosConfig:    atmosConfig,
+		resolver:       tcInstaller.GetResolver(),
+		installFunc:    toolchain.RunInstall,
+		fileExistsFunc: fileExists,
 	}
+
+	// Apply options.
+	for _, opt := range opts {
+		opt(inst)
+	}
+
+	return inst
 }
 
 // EnsureTools ensures all required tools are installed.
@@ -53,14 +97,14 @@ func (i *Installer) EnsureTools(dependencies map[string]string) error {
 func (i *Installer) ensureTool(tool string, version string) error {
 	defer perf.Track(i.atmosConfig, "dependencies.ensureTool")()
 
-	// Check if already installed
+	// Check if already installed.
 	if i.isToolInstalled(tool, version) {
 		return nil
 	}
 
-	// Install missing tool
+	// Install missing tool.
 	toolSpec := fmt.Sprintf("%s@%s", tool, version)
-	if err := toolchain.RunInstall(toolSpec, false, false); err != nil {
+	if err := i.installFunc(toolSpec, false, false); err != nil {
 		return fmt.Errorf("%w: failed to install %s: %w", errUtils.ErrToolInstall, toolSpec, err)
 	}
 
@@ -85,7 +129,7 @@ func (i *Installer) isToolInstalled(tool string, version string) bool {
 
 	// Check if binary exists.
 	binaryPath := filepath.Join(toolsDir, "bin", owner, repo, version, repo)
-	return fileExists(binaryPath)
+	return i.fileExistsFunc(binaryPath)
 }
 
 // fileExists checks if a file exists.
