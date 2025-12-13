@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -2307,6 +2308,11 @@ func TestPreserveProvisionedIdentityCase_NilIdentityCaseMap(t *testing.T) {
 // TestPreserveProvisionedIdentityCase_UnreadableFile tests handling when cache file cannot be read.
 func TestPreserveProvisionedIdentityCase_UnreadableFile(t *testing.T) {
 	// Note: Cannot use t.Parallel() with t.Setenv() as they are incompatible.
+
+	// Skip on Windows - file permissions work differently there.
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows - file permissions don't prevent reading")
+	}
 
 	tempDir := t.TempDir()
 	providerName := "test-sso"
