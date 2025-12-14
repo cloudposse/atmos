@@ -365,53 +365,59 @@ func TestStandardFlagParser_RegisterPositionalArgsValidator(t *testing.T) {
 
 // TestStandardFlagParser_ValidateSingleFlag tests single flag validation.
 func TestStandardFlagParser_ValidateSingleFlag(t *testing.T) {
-	t.Run("returns nil for valid value", func(t *testing.T) {
-		parser := NewStandardFlagParser(
-			WithStringFlag("format", "f", "json", "Output format"),
-			WithValidValues("format", "json", "yaml", "table"),
-		)
+	tests := []struct {
+		name          string
+		flagDefault   string
+		flags         map[string]interface{}
+		expectError   bool
+		errorContains []string
+	}{
+		{
+			name:        "valid value",
+			flagDefault: "json",
+			flags:       map[string]interface{}{"format": "json"},
+			expectError: false,
+		},
+		{
+			name:          "invalid value",
+			flagDefault:   "json",
+			flags:         map[string]interface{}{"format": "xml"},
+			expectError:   true,
+			errorContains: []string{"xml", "format"},
+		},
+		{
+			name:        "empty value",
+			flagDefault: "",
+			flags:       map[string]interface{}{"format": ""},
+			expectError: false,
+		},
+		{
+			name:        "flag not in result",
+			flagDefault: "json",
+			flags:       map[string]interface{}{}, // format not present.
+			expectError: false,
+		},
+	}
 
-		flags := map[string]interface{}{"format": "json"}
+	validValues := []string{"json", "yaml", "table"}
 
-		err := parser.validateSingleFlag("format", []string{"json", "yaml", "table"}, flags, nil)
-		assert.NoError(t, err, "should return nil for valid value")
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewStandardFlagParser(
+				WithStringFlag("format", "f", tt.flagDefault, "Output format"),
+				WithValidValues("format", validValues...),
+			)
 
-	t.Run("returns error for invalid value", func(t *testing.T) {
-		parser := NewStandardFlagParser(
-			WithStringFlag("format", "f", "json", "Output format"),
-			WithValidValues("format", "json", "yaml", "table"),
-		)
+			err := parser.validateSingleFlag("format", validValues, tt.flags, nil)
 
-		flags := map[string]interface{}{"format": "xml"}
-
-		err := parser.validateSingleFlag("format", []string{"json", "yaml", "table"}, flags, nil)
-		assert.Error(t, err, "should return error for invalid value")
-		assert.Contains(t, err.Error(), "xml", "error should mention invalid value")
-		assert.Contains(t, err.Error(), "format", "error should mention flag name")
-	})
-
-	t.Run("returns nil for empty value", func(t *testing.T) {
-		parser := NewStandardFlagParser(
-			WithStringFlag("format", "f", "", "Output format"),
-			WithValidValues("format", "json", "yaml", "table"),
-		)
-
-		flags := map[string]interface{}{"format": ""}
-
-		err := parser.validateSingleFlag("format", []string{"json", "yaml", "table"}, flags, nil)
-		assert.NoError(t, err, "should return nil for empty value")
-	})
-
-	t.Run("returns nil when flag not in result", func(t *testing.T) {
-		parser := NewStandardFlagParser(
-			WithStringFlag("format", "f", "json", "Output format"),
-			WithValidValues("format", "json", "yaml", "table"),
-		)
-
-		flags := map[string]interface{}{} // format not present.
-
-		err := parser.validateSingleFlag("format", []string{"json", "yaml", "table"}, flags, nil)
-		assert.NoError(t, err, "should return nil when flag not in result")
-	})
+			if tt.expectError {
+				assert.Error(t, err)
+				for _, text := range tt.errorContains {
+					assert.Contains(t, err.Error(), text)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
