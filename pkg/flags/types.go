@@ -11,13 +11,13 @@ import (
 // It's used both for shell completion and for interactive prompts.
 //
 // Parameters:
-//   - cmd: The cobra command being completed
-//   - args: Positional arguments provided so far
-//   - toComplete: Partial string being completed
+//   - cmd: The cobra command being completed.
+//   - args: Positional arguments provided so far.
+//   - toComplete: Partial string being completed.
 //
 // Returns:
-//   - []string: List of completion options
-//   - cobra.ShellCompDirective: Directive for shell completion behavior
+//   - []string: List of completion options.
+//   - cobra.ShellCompDirective: Directive for shell completion behavior.
 type CompletionFunc func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
 
 // Flag represents a command-line flag configuration.

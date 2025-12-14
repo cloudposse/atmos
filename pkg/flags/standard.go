@@ -3,6 +3,7 @@ package flags
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -832,7 +833,15 @@ func (p *StandardFlagParser) promptForOptionalValueFlags(result *ParsedConfig, c
 		return nil
 	}
 
-	for flagName, promptConfig := range p.optionalValuePrompts {
+	// Sort flag names for deterministic prompt order.
+	flagNames := make([]string, 0, len(p.optionalValuePrompts))
+	for flagName := range p.optionalValuePrompts {
+		flagNames = append(flagNames, flagName)
+	}
+	sort.Strings(flagNames)
+
+	for _, flagName := range flagNames {
+		promptConfig := p.optionalValuePrompts[flagName]
 		// Get current flag value.
 		flagValue, ok := result.Flags[flagName].(string)
 		if !ok {
@@ -845,21 +854,26 @@ func (p *StandardFlagParser) promptForOptionalValueFlags(result *ParsedConfig, c
 		}
 
 		// Prompt for value.
-		selectedValue, err := PromptForOptionalValue(
-			flagName,
-			flagValue,
-			promptConfig.PromptTitle,
-			promptConfig.CompletionFunc,
-			p.cmd,
-			result.PositionalArgs,
-		)
+		selectedValue, err := PromptForOptionalValue(&OptionalValuePromptContext{
+			FlagName:       flagName,
+			FlagValue:      flagValue,
+			PromptTitle:    promptConfig.PromptTitle,
+			CompletionFunc: promptConfig.CompletionFunc,
+			Cmd:            p.cmd,
+			Args:           result.PositionalArgs,
+		})
 		if err != nil {
 			// Prompt failed (user aborted, error occurred, etc.) - return the error.
 			return err
 		}
 
 		if selectedValue == "" {
-			// Not interactive or no options available - keep sentinel value.
+			// Not interactive or no options available - fall back to default.
+			if f := combinedFlags.Lookup(flagName); f != nil {
+				result.Flags[flagName] = f.DefValue
+			} else {
+				result.Flags[flagName] = ""
+			}
 			continue
 		}
 
@@ -879,38 +893,53 @@ func (p *StandardFlagParser) promptForMissingRequiredFlags(result *ParsedConfig,
 		return nil
 	}
 
-	for flagName, promptConfig := range p.flagPrompts {
-		// Check if flag is missing (empty or not set).
-		flagValue, ok := result.Flags[flagName].(string)
-		if ok && flagValue != "" {
-			continue // Flag has value, no prompt needed.
-		}
+	// Sort flag names for deterministic prompt order.
+	flagNames := make([]string, 0, len(p.flagPrompts))
+	for flagName := range p.flagPrompts {
+		flagNames = append(flagNames, flagName)
+	}
+	sort.Strings(flagNames)
 
-		// Check if flag was explicitly set to empty (user intentionally passed empty value).
-		cobraFlag := combinedFlags.Lookup(flagName)
-		if cobraFlag != nil && cobraFlag.Changed {
-			continue // User explicitly set the value (even if empty), don't prompt.
-		}
-
-		// Prompt for missing required flag.
-		selectedValue, err := PromptForMissingRequired(
-			flagName,
-			promptConfig.PromptTitle,
-			promptConfig.CompletionFunc,
-			p.cmd,
-			result.PositionalArgs,
-		)
-		if err != nil {
-			// Prompt failed (user aborted, error occurred, etc.) - return the error.
+	for _, flagName := range flagNames {
+		if err := p.promptForSingleMissingFlag(flagName, result, combinedFlags); err != nil {
 			return err
 		}
+	}
 
-		if selectedValue == "" {
-			// Not interactive or no options available - let command validation handle it.
-			continue
-		}
+	return nil
+}
 
-		// Update flag value with selection.
+// promptForSingleMissingFlag prompts for a single missing required flag if needed.
+func (p *StandardFlagParser) promptForSingleMissingFlag(flagName string, result *ParsedConfig, combinedFlags *pflag.FlagSet) error {
+	defer perf.Track(nil, "flags.StandardFlagParser.promptForSingleMissingFlag")()
+
+	promptConfig := p.flagPrompts[flagName]
+
+	// Check if flag is missing (empty or not set).
+	flagValue, ok := result.Flags[flagName].(string)
+	if ok && flagValue != "" {
+		return nil // Flag has value, no prompt needed.
+	}
+
+	// Check if flag was explicitly set to empty (user intentionally passed empty value).
+	cobraFlag := combinedFlags.Lookup(flagName)
+	if cobraFlag != nil && cobraFlag.Changed {
+		return nil // User explicitly set the value (even if empty), don't prompt.
+	}
+
+	// Prompt for missing required flag.
+	selectedValue, err := PromptForMissingRequired(
+		flagName,
+		promptConfig.PromptTitle,
+		promptConfig.CompletionFunc,
+		p.cmd,
+		result.PositionalArgs,
+	)
+	if err != nil {
+		return err
+	}
+
+	if selectedValue != "" {
 		result.Flags[flagName] = selectedValue
 	}
 

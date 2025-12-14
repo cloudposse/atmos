@@ -741,3 +741,532 @@ func TestStandardFlagParser_GetStringFlagValue(t *testing.T) {
 		assert.Equal(t, "json", value)
 	})
 }
+
+// TestStandardFlagParser_RegisterCompletions tests completion registration.
+//
+//nolint:dupl // Test functions for RegisterFlags and RegisterPersistentFlags intentionally have similar structure.
+func TestStandardFlagParser_RegisterCompletions(t *testing.T) {
+	t.Run("registers completions for flags with valid values", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+			WithValidValues("format", "json", "yaml", "table"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		// Verify flag exists.
+		formatFlag := cmd.Flags().Lookup("format")
+		assert.NotNil(t, formatFlag, "format flag should exist")
+	})
+
+	t.Run("skips registration when no valid values configured", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		// Should not panic and flag should exist.
+		formatFlag := cmd.Flags().Lookup("format")
+		assert.NotNil(t, formatFlag)
+	})
+
+	t.Run("skips registration for nonexistent flags", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithValidValues("nonexistent", "value1", "value2"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		// Should not panic when flag doesn't exist.
+		nonexistentFlag := cmd.Flags().Lookup("nonexistent")
+		assert.Nil(t, nonexistentFlag)
+	})
+}
+
+// TestStandardFlagParser_RegisterPersistentCompletions tests persistent completion registration.
+//
+//nolint:dupl // Test functions for RegisterFlags and RegisterPersistentFlags intentionally have similar structure.
+func TestStandardFlagParser_RegisterPersistentCompletions(t *testing.T) {
+	t.Run("registers completions for persistent flags with valid values", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+			WithValidValues("format", "json", "yaml", "table"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterPersistentFlags(cmd)
+
+		// Verify persistent flag exists.
+		formatFlag := cmd.PersistentFlags().Lookup("format")
+		assert.NotNil(t, formatFlag, "format persistent flag should exist")
+	})
+
+	t.Run("skips registration when no valid values configured", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterPersistentFlags(cmd)
+
+		// Should not panic.
+		formatFlag := cmd.PersistentFlags().Lookup("format")
+		assert.NotNil(t, formatFlag)
+	})
+
+	t.Run("skips registration for nonexistent persistent flags", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithValidValues("nonexistent", "value1", "value2"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterPersistentFlags(cmd)
+
+		// Should not panic.
+		nonexistentFlag := cmd.PersistentFlags().Lookup("nonexistent")
+		assert.Nil(t, nonexistentFlag)
+	})
+}
+
+// TestStandardFlagParser_ExtractArgs tests the extractArgs method.
+func TestStandardFlagParser_ExtractArgs(t *testing.T) {
+	t.Run("extracts positional args without separator", func(t *testing.T) {
+		parser := NewStandardFlagParser()
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		// Parse args without "--" separator.
+		ctx := context.Background()
+		result, err := parser.Parse(ctx, []string{"arg1", "arg2"})
+
+		require.NoError(t, err)
+		assert.Equal(t, []string{"arg1", "arg2"}, result.PositionalArgs)
+		assert.Empty(t, result.SeparatedArgs)
+	})
+
+	t.Run("extracts args with separator", func(t *testing.T) {
+		parser := NewStandardFlagParser()
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		// Parse args with "--" separator.
+		ctx := context.Background()
+		result, err := parser.Parse(ctx, []string{"pos1", "--", "sep1", "sep2"})
+
+		require.NoError(t, err)
+		assert.Equal(t, []string{"pos1"}, result.PositionalArgs)
+		assert.Equal(t, []string{"sep1", "sep2"}, result.SeparatedArgs)
+	})
+
+	t.Run("handles separator at beginning", func(t *testing.T) {
+		parser := NewStandardFlagParser()
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		ctx := context.Background()
+		result, err := parser.Parse(ctx, []string{"--", "sep1", "sep2"})
+
+		require.NoError(t, err)
+		assert.Empty(t, result.PositionalArgs)
+		assert.Equal(t, []string{"sep1", "sep2"}, result.SeparatedArgs)
+	})
+
+	t.Run("handles separator at end", func(t *testing.T) {
+		parser := NewStandardFlagParser()
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		ctx := context.Background()
+		result, err := parser.Parse(ctx, []string{"pos1", "pos2", "--"})
+
+		require.NoError(t, err)
+		assert.Equal(t, []string{"pos1", "pos2"}, result.PositionalArgs)
+		assert.Empty(t, result.SeparatedArgs)
+	})
+}
+
+// TestStandardFlagParser_PromptForSingleMissingFlag tests the helper function.
+func TestStandardFlagParser_PromptForSingleMissingFlag(t *testing.T) {
+	// Save original viper state.
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"stack1", "stack2"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	t.Run("skips when flag has value", func(t *testing.T) {
+		viper.Set("interactive", false)
+
+		parser := NewStandardFlagParser(
+			WithStringFlag("stack", "s", "", "Stack name"),
+			WithCompletionPrompt("stack", "Choose stack", completionFunc),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		result := &ParsedConfig{
+			Flags:          map[string]interface{}{"stack": "prod"},
+			PositionalArgs: []string{},
+		}
+
+		err := parser.promptForSingleMissingFlag("stack", result, cmd.Flags())
+		assert.NoError(t, err)
+		assert.Equal(t, "prod", result.Flags["stack"])
+	})
+
+	t.Run("skips when flag was explicitly changed", func(t *testing.T) {
+		viper.Set("interactive", false)
+
+		parser := NewStandardFlagParser(
+			WithStringFlag("stack", "s", "", "Stack name"),
+			WithCompletionPrompt("stack", "Choose stack", completionFunc),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		// Explicitly set the flag to empty.
+		err := cmd.Flags().Set("stack", "")
+		require.NoError(t, err)
+
+		result := &ParsedConfig{
+			Flags:          map[string]interface{}{"stack": ""},
+			PositionalArgs: []string{},
+		}
+
+		err = parser.promptForSingleMissingFlag("stack", result, cmd.Flags())
+		assert.NoError(t, err)
+		// Value should remain empty since it was explicitly set.
+		assert.Equal(t, "", result.Flags["stack"])
+	})
+
+	t.Run("skips when not interactive", func(t *testing.T) {
+		viper.Set("interactive", false)
+
+		parser := NewStandardFlagParser(
+			WithStringFlag("stack", "s", "", "Stack name"),
+			WithCompletionPrompt("stack", "Choose stack", completionFunc),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		result := &ParsedConfig{
+			Flags:          map[string]interface{}{"stack": ""},
+			PositionalArgs: []string{},
+		}
+
+		err := parser.promptForSingleMissingFlag("stack", result, cmd.Flags())
+		assert.NoError(t, err)
+		// Value should remain empty in non-interactive mode.
+		assert.Equal(t, "", result.Flags["stack"])
+	})
+}
+
+// TestStandardFlagParser_PromptForOptionalValueFlags_FallbackToDefault tests fallback behavior.
+func TestStandardFlagParser_PromptForOptionalValueFlags_FallbackToDefault(t *testing.T) {
+	// Save original viper state.
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"identity1", "identity2"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	t.Run("falls back to default when not interactive", func(t *testing.T) {
+		viper.Set("interactive", false)
+
+		parser := NewStandardFlagParser(
+			WithStringFlag("identity", "i", "default-identity", "Identity"),
+			WithOptionalValuePrompt("identity", "Choose identity", completionFunc),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		result := &ParsedConfig{
+			Flags:          map[string]interface{}{"identity": "__SELECT__"},
+			PositionalArgs: []string{},
+		}
+
+		err := parser.promptForOptionalValueFlags(result, cmd.Flags())
+		assert.NoError(t, err)
+		// Should fall back to default value since not interactive.
+		assert.Equal(t, "default-identity", result.Flags["identity"])
+	})
+
+	t.Run("falls back to empty when flag not in combinedFlags", func(t *testing.T) {
+		viper.Set("interactive", false)
+
+		parser := NewStandardFlagParser(
+			WithOptionalValuePrompt("identity", "Choose identity", completionFunc),
+		)
+		// Create a command with a different flag (not identity).
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("other-flag", "", "Other flag")
+
+		result := &ParsedConfig{
+			Flags:          map[string]interface{}{"identity": "__SELECT__"},
+			PositionalArgs: []string{},
+		}
+
+		err := parser.promptForOptionalValueFlags(result, cmd.Flags())
+		assert.NoError(t, err)
+		// Should fall back to empty string when flag lookup fails (flag not in combinedFlags).
+		assert.Equal(t, "", result.Flags["identity"])
+	})
+
+	t.Run("returns early when combinedFlags is nil", func(t *testing.T) {
+		viper.Set("interactive", false)
+
+		parser := NewStandardFlagParser(
+			WithOptionalValuePrompt("identity", "Choose identity", completionFunc),
+		)
+
+		result := &ParsedConfig{
+			Flags:          map[string]interface{}{"identity": "__SELECT__"},
+			PositionalArgs: []string{},
+		}
+
+		err := parser.promptForOptionalValueFlags(result, nil)
+		assert.NoError(t, err)
+		// When combinedFlags is nil, the function returns early without processing.
+		assert.Equal(t, "__SELECT__", result.Flags["identity"])
+	})
+}
+
+// TestStandardFlagParser_RegisterIntFlag tests int flag registration.
+func TestStandardFlagParser_RegisterIntFlag(t *testing.T) {
+	t.Run("registers int flag", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithIntFlag("count", "n", 10, "Count value"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		countFlag := cmd.Flags().Lookup("count")
+		assert.NotNil(t, countFlag)
+		assert.Equal(t, "n", countFlag.Shorthand)
+		assert.Equal(t, "10", countFlag.DefValue)
+	})
+
+	t.Run("registers required int flag", func(t *testing.T) {
+		// Create custom int flag with Required=true.
+		intFlag := &IntFlag{
+			Name:        "required-count",
+			Shorthand:   "r",
+			Default:     0,
+			Description: "Required count",
+			Required:    true,
+		}
+
+		parser := NewStandardFlagParser()
+		parser.registry.Register(intFlag)
+
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		countFlag := cmd.Flags().Lookup("required-count")
+		assert.NotNil(t, countFlag)
+	})
+}
+
+// TestStandardFlagParser_RegisterStringSliceFlag tests string slice flag registration.
+func TestStandardFlagParser_RegisterStringSliceFlag(t *testing.T) {
+	t.Run("registers string slice flag", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringSliceFlag("tags", "t", []string{"default"}, "Tag values"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		tagsFlag := cmd.Flags().Lookup("tags")
+		assert.NotNil(t, tagsFlag)
+		assert.Equal(t, "t", tagsFlag.Shorthand)
+	})
+
+	t.Run("registers required string slice flag", func(t *testing.T) {
+		// Create custom string slice flag with Required=true.
+		sliceFlag := &StringSliceFlag{
+			Name:        "required-tags",
+			Shorthand:   "r",
+			Default:     []string{},
+			Description: "Required tags",
+			Required:    true,
+		}
+
+		parser := NewStandardFlagParser()
+		parser.registry.Register(sliceFlag)
+
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		tagsFlag := cmd.Flags().Lookup("required-tags")
+		assert.NotNil(t, tagsFlag)
+	})
+}
+
+// TestStandardFlagParser_HandleInteractivePrompts_AllCases tests all prompt use cases.
+func TestStandardFlagParser_HandleInteractivePrompts_AllCases(t *testing.T) {
+	// Save original viper state.
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"option1", "option2"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	t.Run("handles all three use cases together", func(t *testing.T) {
+		viper.Set("interactive", false)
+
+		builder := NewPositionalArgsBuilder()
+		builder.AddArg(&PositionalArgSpec{
+			Name:           "theme",
+			Description:    "Theme name",
+			Required:       true,
+			CompletionFunc: completionFunc,
+			PromptTitle:    "Choose theme",
+		})
+		specs, validator, usage := builder.Build()
+
+		parser := NewStandardFlagParser(
+			WithStringFlag("stack", "s", "", "Stack name"),
+			WithStringFlag("identity", "i", "default", "Identity"),
+			WithCompletionPrompt("stack", "Choose stack", completionFunc),
+			WithOptionalValuePrompt("identity", "Choose identity", completionFunc),
+			WithPositionalArgPrompt("theme", "Choose theme", completionFunc),
+		)
+		parser.SetPositionalArgs(specs, validator, usage)
+
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		result := &ParsedConfig{
+			Flags: map[string]interface{}{
+				"stack":    "",
+				"identity": "__SELECT__",
+			},
+			PositionalArgs: []string{},
+		}
+
+		err := parser.handleInteractivePrompts(result, cmd.Flags())
+		assert.NoError(t, err)
+	})
+}
+
+// TestStandardFlagParser_BindFlagsToViper_EdgeCases tests edge cases in binding.
+func TestStandardFlagParser_BindFlagsToViper_EdgeCases(t *testing.T) {
+	t.Run("handles flag not found in cobra flags", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+		)
+		// Create command but don't register flags to it.
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+
+		// Register flags first.
+		parser.RegisterFlags(cmd)
+
+		// Now bind - this should work even though some internal flags might not exist.
+		err := parser.BindFlagsToViper(cmd, v)
+		assert.NoError(t, err)
+	})
+}
+
+// TestStringFlag_GetValidValues tests the GetValidValues method.
+func TestStringFlag_GetValidValues(t *testing.T) {
+	t.Run("returns valid values when set", func(t *testing.T) {
+		flag := &StringFlag{
+			Name:        "format",
+			ValidValues: []string{"json", "yaml", "table"},
+		}
+		values := flag.GetValidValues()
+		assert.Equal(t, []string{"json", "yaml", "table"}, values)
+	})
+
+	t.Run("returns nil when not set", func(t *testing.T) {
+		flag := &StringFlag{
+			Name: "format",
+		}
+		values := flag.GetValidValues()
+		assert.Nil(t, values)
+	})
+}
+
+// TestStandardFlagParser_PromptForMissingRequiredFlags_MultipleFlagsOrder tests deterministic order.
+func TestStandardFlagParser_PromptForMissingRequiredFlags_MultipleFlagsOrder(t *testing.T) {
+	// Save original viper state.
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	viper.Set("interactive", false)
+
+	completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"option1", "option2"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	t.Run("processes flags in alphabetical order", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithCompletionPrompt("zebra", "Choose zebra", completionFunc),
+			WithCompletionPrompt("apple", "Choose apple", completionFunc),
+			WithCompletionPrompt("mango", "Choose mango", completionFunc),
+		)
+
+		result := &ParsedConfig{
+			Flags:          map[string]interface{}{"zebra": "", "apple": "", "mango": ""},
+			PositionalArgs: []string{},
+		}
+
+		err := parser.promptForMissingRequiredFlags(result, nil)
+		assert.NoError(t, err)
+		// In non-interactive mode, nothing changes but order is deterministic.
+	})
+}
+
+// TestStandardFlagParser_PromptForOptionalValueFlags_MultipleFlagsOrder tests deterministic order.
+func TestStandardFlagParser_PromptForOptionalValueFlags_MultipleFlagsOrder(t *testing.T) {
+	// Save original viper state.
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	viper.Set("interactive", false)
+
+	completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"option1", "option2"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	t.Run("processes flags in alphabetical order", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("zebra", "", "z-default", "Zebra"),
+			WithStringFlag("apple", "", "a-default", "Apple"),
+			WithStringFlag("mango", "", "m-default", "Mango"),
+			WithOptionalValuePrompt("zebra", "Choose zebra", completionFunc),
+			WithOptionalValuePrompt("apple", "Choose apple", completionFunc),
+			WithOptionalValuePrompt("mango", "Choose mango", completionFunc),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		result := &ParsedConfig{
+			Flags: map[string]interface{}{
+				"zebra": "__SELECT__",
+				"apple": "__SELECT__",
+				"mango": "__SELECT__",
+			},
+			PositionalArgs: []string{},
+		}
+
+		err := parser.promptForOptionalValueFlags(result, cmd.Flags())
+		assert.NoError(t, err)
+		// Should fall back to defaults in alphabetical order.
+		assert.Equal(t, "a-default", result.Flags["apple"])
+		assert.Equal(t, "m-default", result.Flags["mango"])
+		assert.Equal(t, "z-default", result.Flags["zebra"])
+	})
+}

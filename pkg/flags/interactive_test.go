@@ -103,14 +103,28 @@ func TestPromptForOptionalValue(t *testing.T) {
 	}
 
 	t.Run("returns value unchanged when not sentinel", func(t *testing.T) {
-		result, err := PromptForOptionalValue("test-flag", "real-value", "Choose option", completionFunc, cmd, args)
+		result, err := PromptForOptionalValue(&OptionalValuePromptContext{
+			FlagName:       "test-flag",
+			FlagValue:      "real-value",
+			PromptTitle:    "Choose option",
+			CompletionFunc: completionFunc,
+			Cmd:            cmd,
+			Args:           args,
+		})
 		assert.NoError(t, err, "should not return error")
 		assert.Equal(t, "real-value", result, "should return unchanged value when not sentinel")
 	})
 
 	t.Run("returns empty when not interactive and value is sentinel", func(t *testing.T) {
 		viper.Set("interactive", false)
-		result, err := PromptForOptionalValue("test-flag", "__SELECT__", "Choose option", completionFunc, cmd, args)
+		result, err := PromptForOptionalValue(&OptionalValuePromptContext{
+			FlagName:       "test-flag",
+			FlagValue:      "__SELECT__",
+			PromptTitle:    "Choose option",
+			CompletionFunc: completionFunc,
+			Cmd:            cmd,
+			Args:           args,
+		})
 		assert.NoError(t, err, "should not return error when not interactive")
 		assert.Empty(t, result, "should return empty when not interactive")
 	})
@@ -482,7 +496,14 @@ func TestPromptForOptionalValue_NonSentinelValues(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := PromptForOptionalValue("identity", tc.value, "Choose", completionFunc, cmd, args)
+			result, err := PromptForOptionalValue(&OptionalValuePromptContext{
+				FlagName:       "identity",
+				FlagValue:      tc.value,
+				PromptTitle:    "Choose",
+				CompletionFunc: completionFunc,
+				Cmd:            cmd,
+				Args:           args,
+			})
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expected, result)
 		})
@@ -506,7 +527,14 @@ func TestPromptForOptionalValue_SentinelWithEmptyCompletions(t *testing.T) {
 
 	t.Run("sentinel with empty completions returns empty when not interactive", func(t *testing.T) {
 		viper.Set("interactive", false)
-		result, err := PromptForOptionalValue("identity", "__SELECT__", "Choose", emptyCompletionFunc, cmd, args)
+		result, err := PromptForOptionalValue(&OptionalValuePromptContext{
+			FlagName:       "identity",
+			FlagValue:      "__SELECT__",
+			PromptTitle:    "Choose",
+			CompletionFunc: emptyCompletionFunc,
+			Cmd:            cmd,
+			Args:           args,
+		})
 		assert.NoError(t, err)
 		assert.Empty(t, result, "should return empty when not interactive")
 	})
@@ -714,8 +742,7 @@ func TestIsInteractive_TTYAndCIBehavior(t *testing.T) {
 		viper.Set("interactive", true)
 		// In test environment, this typically returns false (no TTY or CI detected).
 		// We just verify the function executes without panic.
-		result := isInteractive()
-		// Result depends on actual environment, but should be boolean.
-		assert.IsType(t, true, result || !result, "should return boolean")
+		_ = isInteractive()
+		// Result depends on actual environment; just verify no panic.
 	})
 }

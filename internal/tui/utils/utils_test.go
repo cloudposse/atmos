@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 func TestHighlightCode(t *testing.T) {
@@ -449,24 +451,26 @@ func TestRenderMarkdown_EdgeCases(t *testing.T) {
 
 // TestNewAtmosHuhTheme tests the NewAtmosHuhTheme function.
 func TestNewAtmosHuhTheme(t *testing.T) {
-	// Create theme once and run table-driven assertions.
-	theme := NewAtmosHuhTheme()
-	require.NotNil(t, theme, "NewAtmosHuhTheme should return a non-nil theme")
+	t.Run("returns a theme wired to current Atmos styles", func(t *testing.T) {
+		huhTheme := NewAtmosHuhTheme()
+		require.NotNil(t, huhTheme, "NewAtmosHuhTheme should return a non-nil theme")
 
-	tests := []struct {
-		name  string
-		check func() interface{}
-	}{
-		{"Focused styles", func() interface{} { return theme.Focused }},
-		{"Blurred styles", func() interface{} { return theme.Blurred }},
-		{"Focused.SelectSelector", func() interface{} { return theme.Focused.SelectSelector }},
-		{"Blurred.Title", func() interface{} { return theme.Blurred.Title }},
-		{"Focused.FocusedButton", func() interface{} { return theme.Focused.FocusedButton }},
-	}
+		// Get the current Atmos styles to verify the theme uses them.
+		styles := theme.GetCurrentStyles()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.NotNil(t, tt.check(), "theme should have %s", tt.name)
-		})
-	}
+		// Extract expected colors from Atmos theme.
+		expectedPrimary := styles.Selected.GetForeground()
+		expectedBtnFg := styles.Interactive.ButtonForeground.GetForeground()
+		expectedBtnBg := styles.Interactive.ButtonBackground.GetBackground()
+
+		// Verify the Huh theme is wired to Atmos colors.
+		assert.Equal(t, expectedPrimary, huhTheme.Focused.SelectSelector.GetForeground(),
+			"SelectSelector should use theme's primary color")
+		assert.Equal(t, expectedPrimary, huhTheme.Blurred.Title.GetForeground(),
+			"Blurred.Title should use theme's primary color")
+		assert.Equal(t, expectedBtnFg, huhTheme.Focused.FocusedButton.GetForeground(),
+			"FocusedButton foreground should use theme's button foreground")
+		assert.Equal(t, expectedBtnBg, huhTheme.Focused.FocusedButton.GetBackground(),
+			"FocusedButton background should use theme's button background")
+	})
 }

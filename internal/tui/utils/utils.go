@@ -168,6 +168,9 @@ func NewAtmosHuhTheme() *huh.Theme {
 
 	// Get current theme styles for consistent colors.
 	styles := theme.GetCurrentStyles()
+	if styles == nil {
+		return t
+	}
 
 	// Extract colors from theme for interactive elements.
 	buttonForeground := styles.Interactive.ButtonForeground.GetForeground()

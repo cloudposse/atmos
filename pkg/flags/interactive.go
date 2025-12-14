@@ -59,7 +59,7 @@ func PromptForValue(name, title string, options []string) (string, error) {
 	// Limit height to 20 rows to prevent excessive scrolling and reduce terminal rendering artifacts.
 	// Note: Huh v0.8.0 has case-sensitive filtering (by design).
 	// Users can filter by typing "/" followed by search text, but it only matches exact case.
-	// Example: typing "dark" matches "neobones_dark" but not "Builtin Dark"
+	// Example: typing "dark" matches "neobones_dark" but not "Builtin Dark".
 	// TODO: Consider filing upstream feature request for case-insensitive filtering option.
 	selector := huh.NewSelect[string]().
 		Value(&choice).
@@ -89,16 +89,26 @@ func PromptForMissingRequired(flagName, promptTitle string, completionFunc Compl
 	defer perf.Track(nil, "flags.PromptForMissingRequired")()
 
 	if !isInteractive() {
-		return "", nil // Gracefully return empty - Cobra will handle the error
+		return "", nil // Gracefully return empty - Cobra will handle the error.
 	}
 
 	// Call completion function to get options.
 	options, _ := completionFunc(cmd, args, "")
 	if len(options) == 0 {
-		return "", nil // No options available, let Cobra handle the error
+		return "", nil // No options available, let Cobra handle the error.
 	}
 
 	return PromptForValue(flagName, promptTitle, options)
+}
+
+// OptionalValuePromptContext holds the context for prompting when a flag is used without a value.
+type OptionalValuePromptContext struct {
+	FlagName       string
+	FlagValue      string
+	PromptTitle    string
+	CompletionFunc CompletionFunc
+	Cmd            *cobra.Command
+	Args           []string
 }
 
 // PromptForOptionalValue prompts for a flag that was used without a value.
@@ -115,27 +125,25 @@ func PromptForMissingRequired(flagName, promptTitle string, completionFunc Compl
 //	  yaml
 //	> json
 //	  table
-//
-//nolint:revive // argument-limit: 6 args needed for prompt context
-func PromptForOptionalValue(flagName, flagValue, promptTitle string, completionFunc CompletionFunc, cmd *cobra.Command, args []string) (string, error) {
+func PromptForOptionalValue(ctx *OptionalValuePromptContext) (string, error) {
 	defer perf.Track(nil, "flags.PromptForOptionalValue")()
 
 	// Check if flag value matches the sentinel (indicating user wants interactive selection).
-	if flagValue != cfg.IdentityFlagSelectValue {
-		return flagValue, nil // Real value provided, no prompt needed
+	if ctx.FlagValue != cfg.IdentityFlagSelectValue {
+		return ctx.FlagValue, nil // Real value provided, no prompt needed.
 	}
 
 	if !isInteractive() {
-		return "", nil // Gracefully return empty - command can use default
+		return "", nil // Gracefully return empty - command can use default.
 	}
 
 	// Call completion function to get options.
-	options, _ := completionFunc(cmd, args, "")
+	options, _ := ctx.CompletionFunc(ctx.Cmd, ctx.Args, "")
 	if len(options) == 0 {
-		return "", nil // No options available, use default
+		return "", nil // No options available, use default.
 	}
 
-	return PromptForValue(flagName, promptTitle, options)
+	return PromptForValue(ctx.FlagName, ctx.PromptTitle, options)
 }
 
 // PromptForPositionalArg prompts for a required positional argument that is missing.
@@ -152,14 +160,14 @@ func PromptForPositionalArg(argName, promptTitle string, completionFunc Completi
 	defer perf.Track(nil, "flags.PromptForPositionalArg")()
 
 	if !isInteractive() {
-		return "", nil // Gracefully return empty - Cobra will handle the error
+		return "", nil // Gracefully return empty - Cobra will handle the error.
 	}
 
 	// Call completion function to get options.
 	// Pass current args in case completion is context-dependent (e.g., stack completion depends on component).
 	options, _ := completionFunc(cmd, currentArgs, "")
 	if len(options) == 0 {
-		return "", nil // No options available, let Cobra handle the error
+		return "", nil // No options available, let Cobra handle the error.
 	}
 
 	return PromptForValue(argName, promptTitle, options)
