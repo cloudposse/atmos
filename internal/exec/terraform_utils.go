@@ -15,6 +15,29 @@ import (
 
 const commandStr = "command"
 
+// parseUploadStatusFlag parses the upload status flag from the arguments.
+// It supports --flag, --flag=true, and --flag=false forms.
+// Returns true if the flag is present and not explicitly set to false.
+func parseUploadStatusFlag(args []string, flagName string) bool {
+	flagPrefix := "--" + flagName + "="
+
+	// Check for --flag (without value, defaults to true).
+	if u.SliceContainsString(args, "--"+flagName) {
+		return true
+	}
+
+	// Check for --flag=value forms.
+	for _, arg := range args {
+		if strings.HasPrefix(arg, flagPrefix) {
+			value := strings.TrimPrefix(arg, flagPrefix)
+			// Parse boolean value, default to true if not a valid boolean.
+			return value != "false"
+		}
+	}
+
+	return false
+}
+
 func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
 	if len(atmosConfig.Components.Terraform.BasePath) < 1 {
 		return errors.New("Base path to terraform components must be provided in 'components.terraform.base_path' config or " +
@@ -177,68 +200,6 @@ func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	return true
 }
 
-// executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
-func executeTerraformAffectedComponentInDepOrder(
-	info *schema.ConfigAndStacksInfo,
-	affectedList []schema.Affected,
-	affectedComponent string,
-	affectedStack string,
-	parentComponent string,
-	parentStack string,
-	dependents []schema.Dependent,
-	args *DescribeAffectedCmdArgs,
-) error {
-	var logFunc func(msg any, keyvals ...any)
-	if info.DryRun {
-		logFunc = log.Info
-	} else {
-		logFunc = log.Debug
-	}
-
-	info.Component = affectedComponent
-	info.ComponentFromArg = affectedComponent
-	info.Stack = affectedStack
-
-	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
-
-	if args.IncludeDependents && parentComponent != "" && parentStack != "" {
-		logFunc("Executing", commandStr, command, "dependency of component", parentComponent, "in stack", parentStack)
-	} else {
-		logFunc("Executing", commandStr, command)
-	}
-
-	if !info.DryRun {
-		// Execute the terraform command for the affected component
-		err := ExecuteTerraform(*info)
-		if err != nil {
-			return err
-		}
-	}
-
-	for i := 0; i < len(dependents); i++ {
-		dep := &dependents[i]
-		if args.IncludeDependents || isComponentInStackAffected(affectedList, dep.StackSlug) {
-			if !dep.IncludedInDependents {
-				err := executeTerraformAffectedComponentInDepOrder(
-					info,
-					affectedList,
-					dep.Component,
-					dep.Stack,
-					affectedComponent,
-					affectedStack,
-					dep.Dependents,
-					args,
-				)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
 // walkTerraformComponents iterates over all Terraform components in the provided stacks map.
 // For each component it calls the provided function, stopping if the function returns an error.
 func walkTerraformComponents(
@@ -289,12 +250,12 @@ func processTerraformComponent(
 		return nil
 	}
 
-	// Skip abstract components
+	// Skip abstract components.
 	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
 		return nil
 	}
 
-	// Skip disabled components
+	// Skip disabled components.
 	if !isComponentEnabled(metadataSection, componentName) {
 		return nil
 	}
@@ -329,25 +290,64 @@ func processTerraformComponent(
 	return nil
 }
 
-// parseUploadStatusFlag parses the upload status flag from the arguments.
-// It supports --flag, --flag=true, and --flag=false forms.
-// Returns true if the flag is present and not explicitly set to false.
-func parseUploadStatusFlag(args []string, flagName string) bool {
-	flagPrefix := "--" + flagName + "="
-
-	// Check for --flag (without value, defaults to true).
-	if u.SliceContainsString(args, "--"+flagName) {
-		return true
+// executeTerraformAffectedComponentInDepOrder recursively processes the affected components in the dependency order.
+func executeTerraformAffectedComponentInDepOrder(
+	info *schema.ConfigAndStacksInfo,
+	affectedList []schema.Affected,
+	affectedComponent string,
+	affectedStack string,
+	parentComponent string,
+	parentStack string,
+	dependents []schema.Dependent,
+	args *DescribeAffectedCmdArgs,
+) error {
+	var logFunc func(msg any, keyvals ...any)
+	if info.DryRun {
+		logFunc = log.Info
+	} else {
+		logFunc = log.Debug
 	}
 
-	// Check for --flag=value forms
-	for _, arg := range args {
-		if strings.HasPrefix(arg, flagPrefix) {
-			value := strings.TrimPrefix(arg, flagPrefix)
-			// Parse boolean value, default to true if not a valid boolean.
-			return value != "false"
+	info.Component = affectedComponent
+	info.ComponentFromArg = affectedComponent
+	info.Stack = affectedStack
+
+	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, affectedComponent, affectedStack)
+
+	if args.IncludeDependents && parentComponent != "" && parentStack != "" {
+		logFunc("Executing", commandStr, command, "dependency of component", parentComponent, "in stack", parentStack)
+	} else {
+		logFunc("Executing", commandStr, command)
+	}
+
+	if !info.DryRun {
+		// Execute the terraform command for the affected component.
+		err := ExecuteTerraform(*info)
+		if err != nil {
+			return err
 		}
 	}
 
-	return false
+	for i := 0; i < len(dependents); i++ {
+		dep := &dependents[i]
+		if args.IncludeDependents || isComponentInStackAffected(affectedList, dep.StackSlug) {
+			if !dep.IncludedInDependents {
+				err := executeTerraformAffectedComponentInDepOrder(
+					info,
+					affectedList,
+					dep.Component,
+					dep.Stack,
+					affectedComponent,
+					affectedStack,
+					dep.Dependents,
+					args,
+				)
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	return nil
 }
