@@ -14,6 +14,24 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
+// ThemesArgCompletion provides auto-completion for theme names.
+func ThemesArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	defer perf.Track(nil, "theme.ThemesArgCompletion")()
+
+	registry, err := theme.NewRegistry()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	themes := registry.List()
+	names := make([]string, 0, len(themes))
+	for _, t := range themes {
+		names = append(names, t.Name)
+	}
+
+	return names, cobra.ShellCompDirectiveNoFileComp
+}
+
 //go:embed markdown/atmos_theme_show_usage.md
 var themeShowUsage string
 
@@ -27,19 +45,39 @@ type ThemeShowOptions struct {
 
 // themeShowCmd shows details and preview of a specific theme.
 var themeShowCmd = &cobra.Command{
-	Use:     "show [theme-name]",
+	Use:     "show",
 	Short:   "Show details and preview of a specific theme",
 	Long:    "Display color palette and sample UI elements for a specific terminal theme.",
 	Example: themeShowUsage,
-	Args:    cobra.ExactArgs(1),
-	RunE:    executeThemeShow,
+	// Args validator will be set by positional args builder.
+	RunE: executeThemeShow,
 }
 
 func init() {
-	// Create flag parser (no flags currently, but sets up the pattern).
-	themeShowParser = flags.NewStandardFlagParser()
+	// Build positional args specification.
+	builder := flags.NewPositionalArgsBuilder()
+	builder.AddArg(&flags.PositionalArgSpec{
+		Name:        "theme-name",
+		Description: "Theme name to preview",
+		Required:    true,
+		TargetField: "ThemeName",
+	})
+	specs, validator, usage := builder.Build()
 
-	// Register flags with cobra.
+	// Create flag parser with interactive prompt config.
+	themeShowParser = flags.NewStandardFlagParser(
+		flags.WithPositionalArgPrompt("theme-name", "Choose a theme to preview", ThemesArgCompletion),
+	)
+
+	// Set positional args configuration.
+	themeShowParser.SetPositionalArgs(specs, validator, usage)
+
+	// Update command's Use field with positional args usage.
+	themeShowCmd.Use = "show " + usage
+
+	// Register flags with cobra (registers positional arg completion).
+	// The flag handler will set a prompt-aware Args validator automatically
+	// when prompts are configured, allowing missing args to trigger prompts.
 	themeShowParser.RegisterFlags(themeShowCmd)
 
 	// Bind both env vars and pflags to viper for full precedence support (flag > env > config > default).
@@ -59,9 +97,24 @@ func init() {
 func executeThemeShow(cmd *cobra.Command, args []string) error {
 	defer perf.Track(atmosConfigPtr, "theme.show.RunE")()
 
-	// Parse command arguments into options.
+	// Parse flags and positional args (handles interactive prompts).
+	parsed, err := themeShowParser.Parse(cmd.Context(), args)
+	if err != nil {
+		return err
+	}
+
+	// Extract theme name from positional args.
+	if len(parsed.PositionalArgs) == 0 {
+		return errUtils.Build(errUtils.ErrInvalidPositionalArgs).
+			WithExplanation("Theme name is required").
+			WithHintf("Run `atmos list themes` to see all available themes").
+			WithHint("Browse themes at https://atmos.tools/cli/commands/theme/browse").
+			WithExitCode(2).
+			Err()
+	}
+
 	opts := &ThemeShowOptions{
-		ThemeName: args[0],
+		ThemeName: parsed.PositionalArgs[0],
 	}
 
 	result := theme.ShowTheme(theme.ShowThemeOptions{

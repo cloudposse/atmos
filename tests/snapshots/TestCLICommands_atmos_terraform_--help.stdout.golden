@@ -266,6 +266,10 @@ GLOBAL FLAGS
       --heatmap-mode string     Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI) (default
                                 bar)
 
+      --interactive             Enable interactive prompts for missing required flags, optional value flags using the
+                                sentinel pattern, and missing positional arguments (requires TTY, disabled in CI)
+                                (default true)
+
       --logs-file string        The file to write Atmos logs to. Logs can be written to any file or any standard file
                                 descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
                                 /dev/stderr)

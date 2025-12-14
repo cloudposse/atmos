@@ -174,3 +174,570 @@ func TestStandardFlagParser_RequiredFlags(t *testing.T) {
 	assert.NotNil(t, componentFlag)
 	// Cobra marks required flags internally, we just verify it's registered
 }
+
+// TestStandardFlagParser_ParsedFlags tests the ParsedFlags method.
+func TestStandardFlagParser_ParsedFlags(t *testing.T) {
+	t.Run("returns nil before Parse is called", func(t *testing.T) {
+		parser := NewStandardFlagParser(WithCommonFlags())
+		assert.Nil(t, parser.ParsedFlags(), "should return nil before Parse")
+	})
+
+	t.Run("returns combined flags after Parse is called", func(t *testing.T) {
+		parser := NewStandardFlagParser(WithCommonFlags())
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		ctx := context.Background()
+		_, err := parser.Parse(ctx, []string{"--stack", "dev"})
+		require.NoError(t, err)
+
+		parsedFlags := parser.ParsedFlags()
+		assert.NotNil(t, parsedFlags, "should return combined flags after Parse")
+		// The parsedFlags should contain the registered flags.
+		stackFlag := parsedFlags.Lookup("stack")
+		assert.NotNil(t, stackFlag, "should contain stack flag")
+	})
+}
+
+// TestGetActualArgs tests the GetActualArgs function.
+func TestGetActualArgs(t *testing.T) {
+	t.Run("returns cmd.Flags().Args() when DisableFlagParsing is false", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.DisableFlagParsing = false
+		// When DisableFlagParsing is false, cmd.Flags().Args() returns parsed positional args.
+		// For this test, we just verify the function handles this case.
+		args := GetActualArgs(cmd, []string{"atmos", "test", "arg1", "arg2"})
+		// With no actual parsing, this returns empty.
+		assert.Empty(t, args, "should return empty when no args parsed")
+	})
+
+	t.Run("extracts args from osArgs when DisableFlagParsing is true", func(t *testing.T) {
+		// Create a proper command hierarchy to get CommandPath() = "test".
+		cmd := &cobra.Command{Use: "test"}
+		cmd.DisableFlagParsing = true
+		// Simulate command path "test" (depth 1).
+		osArgs := []string{"test", "arg1", "arg2"}
+		args := GetActualArgs(cmd, osArgs)
+		assert.Equal(t, []string{"arg1", "arg2"}, args, "should extract args after command path")
+	})
+
+	t.Run("handles nested command paths", func(t *testing.T) {
+		rootCmd := &cobra.Command{Use: "atmos"}
+		parentCmd := &cobra.Command{Use: "describe"}
+		childCmd := &cobra.Command{Use: "component"}
+		childCmd.DisableFlagParsing = true
+
+		rootCmd.AddCommand(parentCmd)
+		parentCmd.AddCommand(childCmd)
+
+		// Command path is "atmos describe component" (depth 3).
+		osArgs := []string{"atmos", "describe", "component", "vpc", "stack-name"}
+		args := GetActualArgs(childCmd, osArgs)
+		assert.Equal(t, []string{"vpc", "stack-name"}, args, "should extract args after nested command path")
+	})
+
+	t.Run("returns empty when osArgs shorter than command depth", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.DisableFlagParsing = true
+		osArgs := []string{"atmos"}
+		args := GetActualArgs(cmd, osArgs)
+		assert.Empty(t, args, "should return empty when osArgs is shorter than command depth")
+	})
+}
+
+// TestValidateArgsOrNil tests the ValidateArgsOrNil function.
+func TestValidateArgsOrNil(t *testing.T) {
+	t.Run("returns nil when cmd.Args is nil", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Args = nil
+		err := ValidateArgsOrNil(cmd, []string{"arg1", "arg2"})
+		assert.NoError(t, err, "should return nil when no validator")
+	})
+
+	t.Run("returns nil when Args validator passes", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Args = cobra.ExactArgs(2)
+		err := ValidateArgsOrNil(cmd, []string{"arg1", "arg2"})
+		assert.NoError(t, err, "should return nil when validation passes")
+	})
+
+	t.Run("returns error when Args validator fails", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Args = cobra.ExactArgs(2)
+		err := ValidateArgsOrNil(cmd, []string{"arg1"})
+		assert.Error(t, err, "should return error when validation fails")
+	})
+
+	t.Run("handles MinimumNArgs validator", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Args = cobra.MinimumNArgs(1)
+
+		// Should pass with 1+ args.
+		err := ValidateArgsOrNil(cmd, []string{"arg1"})
+		assert.NoError(t, err, "should pass with minimum args")
+
+		// Should fail with 0 args.
+		err = ValidateArgsOrNil(cmd, []string{})
+		assert.Error(t, err, "should fail with less than minimum args")
+	})
+}
+
+// TestStandardFlagParser_SetPositionalArgs tests the SetPositionalArgs method.
+func TestStandardFlagParser_SetPositionalArgs(t *testing.T) {
+	t.Run("sets positional args configuration", func(t *testing.T) {
+		parser := NewStandardFlagParser()
+
+		specs := []*PositionalArgSpec{
+			{Name: "component", Description: "Component name", Required: true},
+			{Name: "stack", Description: "Stack name", Required: false},
+		}
+		validator := cobra.MinimumNArgs(1)
+		usage := "<component> [stack]"
+
+		parser.SetPositionalArgs(specs, validator, usage)
+
+		assert.NotNil(t, parser.positionalArgs, "should set positionalArgs")
+		assert.Equal(t, specs, parser.positionalArgs.specs, "should set specs")
+		assert.NotNil(t, parser.positionalArgs.validator, "should set validator")
+		assert.Equal(t, usage, parser.positionalArgs.usage, "should set usage")
+	})
+}
+
+// TestStandardFlagParser_RegisterPositionalArgsValidator tests positional args validator registration.
+func TestStandardFlagParser_RegisterPositionalArgsValidator(t *testing.T) {
+	completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"option1", "option2"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	t.Run("skips when no positional args configured", func(t *testing.T) {
+		parser := NewStandardFlagParser()
+		cmd := &cobra.Command{Use: "test"}
+
+		parser.RegisterFlags(cmd)
+
+		// Args should remain nil when no positional args are configured.
+		assert.Nil(t, cmd.Args, "should not set Args when no positional args")
+	})
+
+	t.Run("sets prompt-aware validator when prompts configured", func(t *testing.T) {
+		builder := NewPositionalArgsBuilder()
+		builder.AddArg(&PositionalArgSpec{
+			Name:           "theme",
+			Description:    "Theme name",
+			Required:       true,
+			CompletionFunc: completionFunc,
+			PromptTitle:    "Choose theme",
+		})
+		specs, validator, usage := builder.Build()
+
+		parser := NewStandardFlagParser(
+			WithPositionalArgPrompt("theme", "Choose theme", completionFunc),
+		)
+		parser.SetPositionalArgs(specs, validator, usage)
+
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		// Args should be set to a prompt-aware validator.
+		assert.NotNil(t, cmd.Args, "should set Args validator")
+	})
+
+	t.Run("sets validator without prompts when no prompts configured", func(t *testing.T) {
+		builder := NewPositionalArgsBuilder()
+		builder.AddArg(&PositionalArgSpec{
+			Name:        "component",
+			Description: "Component name",
+			Required:    true,
+			// No CompletionFunc or PromptTitle.
+		})
+		specs, validator, usage := builder.Build()
+
+		parser := NewStandardFlagParser()
+		parser.SetPositionalArgs(specs, validator, usage)
+
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		// Args should be set (the builder generates one).
+		assert.NotNil(t, cmd.Args, "should set Args validator even without prompts")
+	})
+}
+
+// TestStandardFlagParser_ValidateSingleFlag tests single flag validation.
+func TestStandardFlagParser_ValidateSingleFlag(t *testing.T) {
+	tests := []struct {
+		name          string
+		flagDefault   string
+		flags         map[string]interface{}
+		expectError   bool
+		errorContains []string
+	}{
+		{
+			name:        "valid value",
+			flagDefault: "json",
+			flags:       map[string]interface{}{"format": "json"},
+			expectError: false,
+		},
+		{
+			name:          "invalid value",
+			flagDefault:   "json",
+			flags:         map[string]interface{}{"format": "xml"},
+			expectError:   true,
+			errorContains: []string{"xml", "format"},
+		},
+		{
+			name:        "empty value",
+			flagDefault: "",
+			flags:       map[string]interface{}{"format": ""},
+			expectError: false,
+		},
+		{
+			name:        "flag not in result",
+			flagDefault: "json",
+			flags:       map[string]interface{}{}, // format not present.
+			expectError: false,
+		},
+	}
+
+	validValues := []string{"json", "yaml", "table"}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parser := NewStandardFlagParser(
+				WithStringFlag("format", "f", tt.flagDefault, "Output format"),
+				WithValidValues("format", validValues...),
+			)
+
+			err := parser.validateSingleFlag("format", validValues, tt.flags, nil)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				for _, text := range tt.errorContains {
+					assert.Contains(t, err.Error(), text)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestStandardFlagParser_ParseWithPositionalArgs tests parsing with positional arguments.
+func TestStandardFlagParser_ParseWithPositionalArgs(t *testing.T) {
+	t.Run("parses flags with command registered", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+		v := viper.New()
+		err := parser.BindFlagsToViper(cmd, v)
+		require.NoError(t, err)
+
+		ctx := context.Background()
+		result, err := parser.Parse(ctx, []string{"--format", "yaml"})
+
+		require.NoError(t, err)
+		assert.Equal(t, "yaml", result.Flags["format"])
+	})
+
+	t.Run("handles empty args", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+		)
+
+		ctx := context.Background()
+		result, err := parser.Parse(ctx, []string{})
+
+		require.NoError(t, err)
+		assert.Empty(t, result.PositionalArgs)
+		assert.Empty(t, result.SeparatedArgs)
+	})
+
+	t.Run("uses default value when flag not provided", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+		v := viper.New()
+		err := parser.BindFlagsToViper(cmd, v)
+		require.NoError(t, err)
+
+		ctx := context.Background()
+		result, err := parser.Parse(ctx, []string{})
+
+		require.NoError(t, err)
+		assert.Equal(t, "json", result.Flags["format"])
+	})
+}
+
+// TestStandardFlagParser_ValidatePositionalArgs tests positional arg validation.
+func TestStandardFlagParser_ValidatePositionalArgs(t *testing.T) {
+	t.Run("skips validation when prompts configured", func(t *testing.T) {
+		completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			return []string{"option1"}, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		builder := NewPositionalArgsBuilder()
+		builder.AddArg(&PositionalArgSpec{
+			Name:        "theme-name",
+			Description: "Theme name",
+			Required:    true,
+		})
+		specs, validator, usage := builder.Build()
+
+		parser := NewStandardFlagParser(
+			WithPositionalArgPrompt("theme-name", "Choose theme", completionFunc),
+		)
+		parser.SetPositionalArgs(specs, validator, usage)
+
+		// Should not error even with empty args because prompts are configured.
+		err := parser.validatePositionalArgs([]string{})
+		assert.NoError(t, err)
+	})
+
+	t.Run("validates when no prompts configured", func(t *testing.T) {
+		builder := NewPositionalArgsBuilder()
+		builder.AddArg(&PositionalArgSpec{
+			Name:        "required-arg",
+			Description: "Required argument",
+			Required:    true,
+		})
+		specs, validator, usage := builder.Build()
+
+		parser := NewStandardFlagParser()
+		parser.SetPositionalArgs(specs, validator, usage)
+
+		// Should error because required arg is missing and no prompts configured.
+		err := parser.validatePositionalArgs([]string{})
+		assert.Error(t, err)
+	})
+}
+
+// TestStandardFlagParser_GetViperKey tests the getViperKey method.
+func TestStandardFlagParser_GetViperKey(t *testing.T) {
+	t.Run("returns flag name without prefix", func(t *testing.T) {
+		parser := NewStandardFlagParser()
+		key := parser.getViperKey("my-flag")
+		assert.Equal(t, "my-flag", key)
+	})
+
+	t.Run("returns prefixed key with prefix", func(t *testing.T) {
+		parser := NewStandardFlagParser(WithViperPrefix("myprefix"))
+		key := parser.getViperKey("my-flag")
+		assert.Equal(t, "myprefix.my-flag", key)
+	})
+}
+
+// TestStandardFlagParser_Reset tests the Reset method.
+func TestStandardFlagParser_Reset(t *testing.T) {
+	t.Run("resets command flags to defaults", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		// Set a flag value.
+		err := cmd.Flags().Set("format", "yaml")
+		require.NoError(t, err)
+
+		// Verify it's set.
+		val, _ := cmd.Flags().GetString("format")
+		assert.Equal(t, "yaml", val)
+
+		// Reset.
+		parser.Reset()
+
+		// Verify it's reset.
+		val, _ = cmd.Flags().GetString("format")
+		assert.Equal(t, "json", val)
+	})
+
+	t.Run("handles nil command gracefully", func(t *testing.T) {
+		parser := NewStandardFlagParser()
+		// Should not panic.
+		parser.Reset()
+	})
+}
+
+// TestStandardFlagParser_IsFlagExplicitlyChanged tests the isFlagExplicitlyChanged method.
+func TestStandardFlagParser_IsFlagExplicitlyChanged(t *testing.T) {
+	t.Run("returns true when combinedFlags is nil", func(t *testing.T) {
+		parser := NewStandardFlagParser()
+		result := parser.isFlagExplicitlyChanged("any-flag", nil)
+		assert.True(t, result)
+	})
+
+	t.Run("returns true when flag is changed", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		// Parse with the flag set.
+		err := cmd.Flags().Set("format", "yaml")
+		require.NoError(t, err)
+
+		result := parser.isFlagExplicitlyChanged("format", cmd.Flags())
+		assert.True(t, result)
+	})
+
+	t.Run("returns false when flag is not changed", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		// Don't set the flag.
+		result := parser.isFlagExplicitlyChanged("format", cmd.Flags())
+		assert.False(t, result)
+	})
+}
+
+// TestStandardFlagParser_IsValueValid tests the isValueValid method.
+func TestStandardFlagParser_IsValueValid(t *testing.T) {
+	parser := NewStandardFlagParser()
+
+	tests := []struct {
+		name        string
+		value       string
+		validValues []string
+		expected    bool
+	}{
+		{
+			name:        "value in list",
+			value:       "json",
+			validValues: []string{"json", "yaml", "table"},
+			expected:    true,
+		},
+		{
+			name:        "value not in list",
+			value:       "xml",
+			validValues: []string{"json", "yaml", "table"},
+			expected:    false,
+		},
+		{
+			name:        "empty list",
+			value:       "json",
+			validValues: []string{},
+			expected:    false,
+		},
+		{
+			name:        "case sensitive match",
+			value:       "JSON",
+			validValues: []string{"json", "yaml"},
+			expected:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parser.isValueValid(tt.value, tt.validValues)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestStandardFlagParser_CreateValidationError tests error message generation.
+func TestStandardFlagParser_CreateValidationError(t *testing.T) {
+	t.Run("uses default message", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+			WithValidValues("format", "json", "yaml"),
+		)
+
+		err := parser.createValidationError("format", "xml", []string{"json", "yaml"})
+		assert.Contains(t, err.Error(), "invalid value")
+		assert.Contains(t, err.Error(), "xml")
+		assert.Contains(t, err.Error(), "format")
+		assert.Contains(t, err.Error(), "json, yaml")
+	})
+}
+
+// TestStandardFlagParser_ValidateFlagValues tests flag value validation.
+func TestStandardFlagParser_ValidateFlagValues(t *testing.T) {
+	t.Run("returns nil when no valid values configured", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+		)
+
+		flags := map[string]interface{}{"format": "any-value"}
+		err := parser.validateFlagValues(flags, nil)
+		assert.NoError(t, err)
+	})
+
+	t.Run("validates all flags with valid values", func(t *testing.T) {
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+			WithValidValues("format", "json", "yaml"),
+		)
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		// Set the flag to an invalid value.
+		err := cmd.Flags().Set("format", "xml")
+		require.NoError(t, err)
+
+		flags := map[string]interface{}{"format": "xml"}
+		err = parser.validateFlagValues(flags, cmd.Flags())
+		assert.Error(t, err)
+	})
+}
+
+// TestStandardFlagParser_GetStringFlagValue tests the getStringFlagValue method.
+func TestStandardFlagParser_GetStringFlagValue(t *testing.T) {
+	t.Run("returns viper value when not empty", func(t *testing.T) {
+		v := viper.New()
+		v.Set("format", "yaml")
+
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+		)
+		parser.viper = v
+
+		strFlag := &StringFlag{
+			Name:    "format",
+			Default: "json",
+		}
+		value := parser.getStringFlagValue(strFlag, "format", "format", nil)
+		assert.Equal(t, "yaml", value)
+	})
+
+	t.Run("returns default when viper empty and flag not changed", func(t *testing.T) {
+		v := viper.New()
+
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+		)
+		parser.viper = v
+		cmd := &cobra.Command{Use: "test"}
+		parser.RegisterFlags(cmd)
+
+		strFlag := &StringFlag{
+			Name:    "format",
+			Default: "json",
+		}
+		value := parser.getStringFlagValue(strFlag, "format", "format", cmd.Flags())
+		assert.Equal(t, "json", value)
+	})
+
+	t.Run("returns default when combinedFlags is nil", func(t *testing.T) {
+		v := viper.New()
+
+		parser := NewStandardFlagParser(
+			WithStringFlag("format", "f", "json", "Output format"),
+		)
+		parser.viper = v
+
+		strFlag := &StringFlag{
+			Name:    "format",
+			Default: "json",
+		}
+		value := parser.getStringFlagValue(strFlag, "format", "format", nil)
+		assert.Equal(t, "json", value)
+	})
+}

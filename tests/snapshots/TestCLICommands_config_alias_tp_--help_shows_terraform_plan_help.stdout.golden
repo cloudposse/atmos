@@ -83,6 +83,10 @@ GLOBAL FLAGS
       --init-pass-vars            Pass the generated varfile to terraform init using the --var-file flag. OpenTofu
                                   supports passing a varfile to init to dynamically configure backends
 
+      --interactive               Enable interactive prompts for missing required flags, optional value flags using
+                                  the sentinel pattern, and missing positional arguments (requires TTY, disabled in
+                                  CI) (default true)
+
       --logs-file string          The file to write Atmos logs to. Logs can be written to any file or any standard
                                   file descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
                                   /dev/stderr)

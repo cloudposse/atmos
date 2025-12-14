@@ -11,7 +11,6 @@ import (
 	"github.com/arsham/figurine/figurine"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/jwalton/go-supportscolor"
 	"github.com/spf13/viper"
 	xterm "golang.org/x/term"
@@ -19,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/schema"
 	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -162,12 +162,24 @@ func RenderMarkdown(markdownText string, style string) (string, error) {
 }
 
 // NewAtmosHuhTheme returns the Atmos-styled Huh theme for interactive prompts.
+// Uses the current theme's color scheme from pkg/ui/theme for consistency.
 func NewAtmosHuhTheme() *huh.Theme {
 	t := huh.ThemeCharm()
-	cream := lipgloss.AdaptiveColor{Light: "#FFFDF5", Dark: "#FFFDF5"}
-	purple := lipgloss.AdaptiveColor{Light: "#5B00FF", Dark: "#5B00FF"}
-	t.Focused.FocusedButton = t.Focused.FocusedButton.Foreground(cream).Background(purple)
-	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(purple)
-	t.Blurred.Title = t.Blurred.Title.Foreground(purple)
+
+	// Get current theme styles for consistent colors.
+	styles := theme.GetCurrentStyles()
+
+	// Extract colors from theme for interactive elements.
+	buttonForeground := styles.Interactive.ButtonForeground.GetForeground()
+	buttonBackground := styles.Interactive.ButtonBackground.GetBackground()
+	primaryColor := styles.Selected.GetForeground()
+
+	// Use theme's colors for interactive elements.
+	t.Focused.FocusedButton = t.Focused.FocusedButton.
+		Foreground(buttonForeground).
+		Background(buttonBackground)
+	t.Focused.SelectSelector = t.Focused.SelectSelector.Foreground(primaryColor)
+	t.Blurred.Title = t.Blurred.Title.Foreground(primaryColor)
+
 	return t
 }

@@ -446,3 +446,35 @@ func TestRenderMarkdown_EdgeCases(t *testing.T) {
 		// Just verify it renders without error - exact formatting may vary.
 	})
 }
+
+// TestNewAtmosHuhTheme tests the NewAtmosHuhTheme function.
+func TestNewAtmosHuhTheme(t *testing.T) {
+	t.Run("returns a valid Huh theme", func(t *testing.T) {
+		theme := NewAtmosHuhTheme()
+
+		assert.NotNil(t, theme, "should return a non-nil theme")
+		assert.NotNil(t, theme.Focused, "should have Focused styles")
+		assert.NotNil(t, theme.Blurred, "should have Blurred styles")
+	})
+
+	t.Run("theme has styled select selector", func(t *testing.T) {
+		theme := NewAtmosHuhTheme()
+
+		// The SelectSelector should be styled.
+		assert.NotNil(t, theme.Focused.SelectSelector, "should have SelectSelector style")
+	})
+
+	t.Run("theme has styled title", func(t *testing.T) {
+		theme := NewAtmosHuhTheme()
+
+		// The Blurred Title should be styled.
+		assert.NotNil(t, theme.Blurred.Title, "should have Title style")
+	})
+
+	t.Run("theme has styled focused button", func(t *testing.T) {
+		theme := NewAtmosHuhTheme()
+
+		// The FocusedButton should be styled.
+		assert.NotNil(t, theme.Focused.FocusedButton, "should have FocusedButton style")
+	})
+}
