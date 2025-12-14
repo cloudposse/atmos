@@ -29,6 +29,7 @@ const (
 	AtmosYamlFuncInclude                 = "!include"
 	AtmosYamlFuncIncludeRaw              = "!include.raw"
 	AtmosYamlFuncGitRoot                 = "!repo-root"
+	AtmosYamlFuncAppend                  = "!append"
 	AtmosYamlFuncRandom                  = "!random"
 	AtmosYamlFuncAwsAccountID            = "!aws.account_id"
 	AtmosYamlFuncAwsCallerIdentityArn    = "!aws.caller_identity_arn"
