@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -240,6 +241,9 @@ func processCommandAliases(
 				Short:              aliasFor,
 				Long:               aliasFor,
 				FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+				Annotations: map[string]string{
+					"configAlias": aliasCmd, // marks as CLI config alias, stores target command
+				},
 				Run: func(cmd *cobra.Command, args []string) {
 					err := cmd.ParseFlags(args)
 					errUtils.CheckErrorPrintAndExit(err, "", "")
@@ -260,9 +264,28 @@ func processCommandAliases(
 					// from re-applying the parent's chdir directive.
 					filteredEnv := filterChdirEnv(os.Environ())
 
-					commandToRun := fmt.Sprintf("%s %s %s", execPath, aliasCmd, strings.Join(filteredArgs, " "))
-					err = e.ExecuteShell(commandToRun, commandToRun, currentDirPath, filteredEnv, false)
-					errUtils.CheckErrorPrintAndExit(err, "", "")
+					// Build command arguments: split aliasCmd into parts and append filteredArgs.
+					// Use direct process execution instead of shell to avoid path escaping
+					// issues on Windows where backslashes in paths are misinterpreted.
+					cmdArgs := strings.Fields(aliasCmd)
+					cmdArgs = append(cmdArgs, filteredArgs...)
+
+					execCmd := exec.Command(execPath, cmdArgs...)
+					execCmd.Dir = currentDirPath
+					execCmd.Env = filteredEnv
+					execCmd.Stdin = os.Stdin
+					execCmd.Stdout = os.Stdout
+					execCmd.Stderr = os.Stderr
+
+					err = execCmd.Run()
+					if err != nil {
+						var exitErr *exec.ExitError
+						if errors.As(err, &exitErr) {
+							// Preserve the subprocess exit code.
+							err = errUtils.WithExitCode(err, exitErr.ExitCode())
+						}
+						errUtils.CheckErrorPrintAndExit(err, "", "")
+					}
 				},
 			}
 
