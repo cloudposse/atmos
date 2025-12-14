@@ -2,9 +2,9 @@ package exec
 
 import (
 	"fmt"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	fn "github.com/cloudposse/atmos/pkg/function"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -21,35 +21,6 @@ func processTagTerraformOutput(
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, error) {
 	return processTagTerraformOutputWithContext(atmosConfig, input, currentStack, nil, stackInfo)
-}
-
-// trackOutputDependency records the dependency in the resolution context and returns a cleanup function.
-// It returns an error if cycle detection fails.
-func trackOutputDependency(
-	atmosConfig *schema.AtmosConfiguration,
-	resolutionCtx *ResolutionContext,
-	component string,
-	stack string,
-	input string,
-) (func(), error) {
-	if resolutionCtx == nil {
-		return func() {}, nil
-	}
-
-	node := DependencyNode{
-		Component:    component,
-		Stack:        stack,
-		FunctionType: "terraform.output",
-		FunctionCall: input,
-	}
-
-	// Check and record this dependency.
-	if err := resolutionCtx.Push(atmosConfig, node); err != nil {
-		return nil, err
-	}
-
-	// Return cleanup function.
-	return func() { resolutionCtx.Pop(atmosConfig) }, nil
 }
 
 // processTagTerraformOutputWithContext processes `!terraform.output` YAML tag with cycle detection.
@@ -69,43 +40,45 @@ func processTagTerraformOutputWithContext(
 		return nil, err
 	}
 
-	var component string
-	var stack string
-	var output string
+	// Parse function arguments using the purpose-built parser.
+	// Format: component [stack] expression
+	// Stack is optional - if not provided, uses currentStack.
+	component, stack, output := fn.ParseArgs(str)
 
-	// Split the string into slices based on any whitespace (one or more spaces, tabs, or newlines),
-	// while also ignoring leading and trailing whitespace.
-	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
-	parts, err := u.SplitStringByDelimiter(str, ' ')
-	if err != nil {
-		return nil, err
+	if component == "" {
+		return nil, fmt.Errorf("%w: missing component: %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
-	partsLen := len(parts)
+	if output == "" {
+		return nil, fmt.Errorf("%w: missing output expression: %s", errUtils.ErrYamlFuncInvalidArguments, input)
+	}
 
-	switch partsLen {
-	case 3:
-		component = strings.TrimSpace(parts[0])
-		stack = strings.TrimSpace(parts[1])
-		output = strings.TrimSpace(parts[2])
-	case 2:
-		component = strings.TrimSpace(parts[0])
+	// If no stack was specified, use the current stack.
+	if stack == "" {
 		stack = currentStack
-		output = strings.TrimSpace(parts[1])
 		log.Debug("Executing Atmos YAML function with component and output parameters; using current stack",
 			log.FieldFunction, input,
 			"stack", currentStack,
 		)
-	default:
-		return nil, fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
-	// Track dependency and get cleanup function.
-	cleanup, err := trackOutputDependency(atmosConfig, resolutionCtx, component, stack, input)
-	if err != nil {
-		return nil, err
+	// Check for circular dependencies if resolution context is provided.
+	if resolutionCtx != nil {
+		node := DependencyNode{
+			Component:    component,
+			Stack:        stack,
+			FunctionType: "terraform.output",
+			FunctionCall: input,
+		}
+
+		// Check and record this dependency.
+		if err := resolutionCtx.Push(atmosConfig, node); err != nil {
+			return nil, err
+		}
+
+		// Defer pop to ensure we clean up even if there's an error.
+		defer resolutionCtx.Pop(atmosConfig)
 	}
-	defer cleanup()
 
 	// Extract authContext and authManager from stackInfo if available.
 	var authContext *schema.AuthContext

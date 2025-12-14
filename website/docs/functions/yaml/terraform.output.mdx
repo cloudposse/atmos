@@ -186,39 +186,52 @@ Atmos distinguishes between **recoverable errors** (component not provisioned, o
 This ensures that infrastructure failures are never silently masked by default values.
 :::
 
-:::note
-To provide a default value, you use the `//` YQ operator.
-The whole YQ expression contains spaces, and to make it a single parameter, you need to double-quote it.
+:::tip Clean Syntax
+Wrap the entire expression in YAML single quotes. No inner escaping is needed - just write normal JSON inside:
 
-YQ requires the strings in the default values to be double-quoted as well.
-This means that you have to escape the double-quotes in the default values by using two double-quotes.
+```yaml
+value: !terraform.output 'component .output // {"key": "fallback"}'
+```
 :::
 
 For example:
 
 - Specify a string default value.
   Read the `username` output from the `config` component in the current stack.
-  If the `config` component has not been provisioned yet, return the default value `default-user`
+  If the `config` component has not been provisioned yet, return the default value `default-user`.
 
 ```yaml
-username: !terraform.output config ".username // ""default-user"""
+username: !terraform.output 'config .username // "default-user"'
 ```
 
 - Specify a list default value.
   Read the `private_subnet_ids` output from the `vpc` component in the current stack.
-  If the `vpc` component has not been provisioned yet, return the default value `["mock-subnet1", "mock-subnet2"]`
+  If the `vpc` component has not been provisioned yet, return the default value `["mock-subnet1", "mock-subnet2"]`.
 
 ```yaml
-subnet_ids: !terraform.output vpc ".private_subnet_ids // [""mock-subnet1"", ""mock-subnet2""]"
+subnet_ids: !terraform.output 'vpc .private_subnet_ids // ["mock-subnet1", "mock-subnet2"]'
 ```
 
 - Specify a map default value.
   Read the `config_map` output from the `config` component in the current stack.
-  If the `config` component has not been provisioned yet, return the default value `{"api_endpoint": "localhost:3000", "user": "test"}`
+  If the `config` component has not been provisioned yet, return the default value `{"api_endpoint": "localhost:3000", "user": "test"}`.
 
 ```yaml
-config_map: !terraform.output 'config ".config_map // {""api_endpoint"": ""localhost:3000"", ""user"": ""test""}"'
+config_map: !terraform.output 'config .config_map // {"api_endpoint": "localhost:3000", "user": "test"}'
 ```
+
+### Using YAML Block Scalars for Complex Expressions
+
+For very complex expressions, you can use YAML folded block scalars (`>-`) to improve readability.
+The folded block scalar folds newlines into spaces:
+
+```yaml
+config_map: !terraform.output >-
+  config
+  .config_map // {"api_endpoint": "localhost:3000", "user": "test", "timeout": 30}
+```
+
+This is equivalent to the single-line version but easier to read for long expressions.
 
 For more details, review the following docs:
 
@@ -247,13 +260,21 @@ postgres_url: !terraform.output aurora-postgres .master_hostname
 To prepend and append strings to the output, you can use YQ pipes and the `add` function (`+` operator):
 
 ```yaml
-postgres_url: !terraform.output aurora-postgres ".master_hostname | ""jdbc:postgresql://"" + . + "":5432/events"""
+postgres_url: !terraform.output 'aurora-postgres .master_hostname | "jdbc:postgresql://" + . + ":5432/events"'
 ```
 
-:::note
-The double quotes are required around the whole YQ expression, and around the strings inside the YQ expression,
-hence the double-double quotes `""` to escape it.
+:::tip
+Wrap the entire expression in YAML single quotes. This allows you to use normal double quotes inside the expression
+without any escaping.
 :::
+
+For complex string transformations, you can use YAML block scalars for better readability:
+
+```yaml
+postgres_url: !terraform.output >-
+  aurora-postgres
+  .master_hostname | "jdbc:postgresql://" + . + ":5432/events"
+```
 
 After the `!terraform.output` function is executed, the `postgres_url` variable will have the final value similar to:
 

@@ -169,7 +169,6 @@ func TestProcessCustomTagsWithContextTemplateFunction(t *testing.T) {
 	input := "!template {{ .test }}"
 	result, err := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 	require.NoError(t, err)
-
 	// Should return a string (the template).
 	assert.IsType(t, "", result)
 }
@@ -182,7 +181,6 @@ func TestProcessCustomTagsWithContextEnvFunction(t *testing.T) {
 	input := "!env USER"
 	result, err := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 	require.NoError(t, err)
-
 	// Should return a string.
 	assert.IsType(t, "", result)
 }
@@ -195,7 +193,6 @@ func TestProcessCustomTagsWithContextUnknownTag(t *testing.T) {
 	input := "!unknown.function arg1 arg2"
 	result, err := processCustomTagsWithContext(atmosConfig, input, "test-stack", nil, ctx, nil)
 	require.NoError(t, err)
-
 	assert.Equal(t, input, result)
 }
 
