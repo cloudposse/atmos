@@ -852,6 +852,161 @@ func TestPrintSubcommandAliases(t *testing.T) {
 	}
 }
 
+func TestPrintConfigAliases(t *testing.T) {
+	tests := []struct {
+		name        string
+		subcommands []*cobra.Command
+		shouldPrint bool
+		contains    []string
+	}{
+		{
+			name: "with config aliases",
+			subcommands: []*cobra.Command{
+				{
+					Use:   "tp",
+					Short: "alias for `terraform plan`",
+					Annotations: map[string]string{
+						"configAlias": "terraform plan",
+					},
+					Run: func(cmd *cobra.Command, args []string) {},
+				},
+				{
+					Use:   "ta",
+					Short: "alias for `terraform apply`",
+					Annotations: map[string]string{
+						"configAlias": "terraform apply",
+					},
+					Run: func(cmd *cobra.Command, args []string) {},
+				},
+			},
+			shouldPrint: true,
+			contains:    []string{"ALIASES", "tp", "ta", "alias for"},
+		},
+		{
+			name: "no config aliases",
+			subcommands: []*cobra.Command{
+				{Use: "apply", Short: "Apply changes", Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "destroy", Short: "Destroy resources", Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: false,
+			contains:    []string{},
+		},
+		{
+			name: "mixed - some with config aliases, some without",
+			subcommands: []*cobra.Command{
+				{Use: "apply", Short: "Apply changes", Run: func(cmd *cobra.Command, args []string) {}},
+				{
+					Use:   "tp",
+					Short: "alias for `terraform plan`",
+					Annotations: map[string]string{
+						"configAlias": "terraform plan",
+					},
+					Run: func(cmd *cobra.Command, args []string) {},
+				},
+			},
+			shouldPrint: true,
+			contains:    []string{"ALIASES", "tp"},
+		},
+		{
+			name:        "no subcommands",
+			subcommands: []*cobra.Command{},
+			shouldPrint: false,
+			contains:    []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderer := lipgloss.NewRenderer(&buf)
+			styles := createHelpStyles(renderer)
+
+			cmd := &cobra.Command{
+				Use:   "test",
+				Short: "Test command",
+			}
+
+			for _, subcmd := range tt.subcommands {
+				cmd.AddCommand(subcmd)
+			}
+
+			ctx := &helpRenderContext{
+				writer: &buf,
+				styles: &styles,
+			}
+
+			printConfigAliases(ctx, cmd)
+
+			output := buf.String()
+			if tt.shouldPrint && output == "" {
+				t.Error("Expected config aliases to be printed")
+			}
+			if !tt.shouldPrint && output != "" {
+				t.Errorf("Expected no output, got: %q", output)
+			}
+
+			for _, expected := range tt.contains {
+				if !strings.Contains(output, expected) {
+					t.Errorf("Expected output to contain %q, got: %q", expected, output)
+				}
+			}
+		})
+	}
+}
+
+func TestIsConfigAlias(t *testing.T) {
+	tests := []struct {
+		name     string
+		cmd      *cobra.Command
+		expected bool
+	}{
+		{
+			name: "command with configAlias annotation",
+			cmd: &cobra.Command{
+				Use: "tp",
+				Annotations: map[string]string{
+					"configAlias": "terraform plan",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "command without annotations",
+			cmd: &cobra.Command{
+				Use: "apply",
+			},
+			expected: false,
+		},
+		{
+			name: "command with different annotation",
+			cmd: &cobra.Command{
+				Use: "plan",
+				Annotations: map[string]string{
+					"nativeCommand": "true",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "command with nil annotations",
+			cmd: &cobra.Command{
+				Use:         "destroy",
+				Annotations: nil,
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isConfigAlias(tt.cmd)
+			if result != tt.expected {
+				t.Errorf("isConfigAlias() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestFormatCommandLine(t *testing.T) {
 	tests := []struct {
 		name     string
