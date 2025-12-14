@@ -58,6 +58,22 @@ Git root discovery does NOT apply:
 - `ATMOS_CLI_CONFIG_PATH` - Specifies config file location
 - `ATMOS_GIT_ROOT_BASEPATH=false` - Disables git root discovery
 
+#### FR5: Config File Search Order
+
+Atmos searches for `atmos.yaml` in the following order (highest to lowest priority):
+
+| Priority | Source | Description |
+|----------|--------|-------------|
+| 1 | CLI flags | `--config`, `--config-path` |
+| 2 | Environment variable | `ATMOS_CLI_CONFIG_PATH` |
+| 3 | Current directory | `./atmos.yaml` (CWD only, no parent search) |
+| 4 | Git repository root | `repo-root/atmos.yaml` |
+| 5 | Parent directory search | Walks up from CWD looking for `atmos.yaml` |
+| 6 | Home directory | `~/.atmos/atmos.yaml` |
+| 7 | System directory | `/usr/local/etc/atmos/atmos.yaml` |
+
+**Note:** Viper deep-merges configurations, so settings from higher-priority sources override those from lower-priority sources.
+
 ### Non-Functional Requirements
 
 #### NFR1: Testability

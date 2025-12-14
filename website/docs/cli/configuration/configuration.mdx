@@ -31,9 +31,11 @@ Atmos discovers configuration from multiple sources in the following precedence 
 
 1. **Command-line flags** (`--config`, `--config-path`)
 2. **Environment variable** (`ATMOS_CLI_CONFIG_PATH`)
-3. **Current directory** (`./atmos.yaml`)
-4. **Home directory** (`~/.atmos/atmos.yaml`)
-5. **System directory** (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+3. **Current directory** (`./atmos.yaml`) - CWD only, no parent search
+4. **Git repository root** (`repo-root/atmos.yaml`) - if in a git repository
+5. **Parent directory search** - walks up from CWD looking for `atmos.yaml`
+6. **Home directory** (`~/.atmos/atmos.yaml`)
+7. **System directory** (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
 
 Each configuration file discovered is deep-merged with the preceding configurations.
 
