@@ -15,6 +15,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -50,10 +51,6 @@ var withCacheFileLock func(cacheFile string, fn func() error) error
 // loadCacheWithReadLock is a platform-specific function for loading cache with read locks.
 // It is set during init() in cache_lock_unix.go.
 var loadCacheWithReadLock func(cacheFile string) (CacheConfig, error)
-
-// writeFileAtomic is a platform-specific function for atomic file writing.
-// It is set during init() in cache_atomic_unix.go or cache_atomic_windows.go.
-var writeFileAtomic func(filename string, data []byte, perm os.FileMode) error
 
 func LoadCache() (CacheConfig, error) {
 	cacheFile, err := GetCacheFilePath()
@@ -121,8 +118,9 @@ func SaveCache(cfg CacheConfig) error {
 			return errors.Join(errUtils.ErrCacheMarshal, err)
 		}
 
-		// Write atomically.
-		if err := writeFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
+		// Write atomically using filesystem package.
+		fs := filesystem.NewOSFileSystem()
+		if err := fs.WriteFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
 			return errors.Join(errUtils.ErrCacheWrite, err)
 		}
 		return nil
@@ -183,8 +181,9 @@ func UpdateCache(update func(*CacheConfig)) error {
 			return errors.Join(errUtils.ErrCacheMarshal, err)
 		}
 
-		// Write atomically.
-		if err := writeFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
+		// Write atomically using filesystem package.
+		fs := filesystem.NewOSFileSystem()
+		if err := fs.WriteFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
 			return errors.Join(errUtils.ErrCacheWrite, err)
 		}
 		return nil

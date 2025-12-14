@@ -1,0 +1,191 @@
+---
+title: Toolchain Configuration
+sidebar_position: 1
+sidebar_label: Overview
+description: Configure toolchain management for CLI tools and dependencies
+---
+
+import Intro from '@site/src/components/Intro';
+import KeyPoints from '@site/src/components/KeyPoints';
+import File from '@site/src/components/File';
+
+<Intro>
+The toolchain feature enables you to manage CLI tool versions (Terraform, kubectl, helm, etc.) directly within Atmos, ensuring consistency across your team and CI/CD environments.
+</Intro>
+
+<KeyPoints>
+- Manage tool versions with `.tool-versions` files
+- Install CLI binaries from GitHub releases and other sources
+- Integrate with the Aqua registry ecosystem for 1,000+ pre-configured tools
+- Version control your tools for team consistency
+- Automatic tool provisioning in workflows
+</KeyPoints>
+
+## Basic Configuration
+
+Configure toolchain behavior in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+# Toolchain configuration
+toolchain:
+  # Path to .tool-versions file (relative or absolute)
+  file_path: ".tool-versions"
+
+  # Directory where tools are installed (relative or absolute)
+  install_path: ".tools"
+```
+</File>
+
+### Configuration Options
+
+<dl>
+  <dt>`file_path`</dt>
+  <dd>
+    Path to the `.tool-versions` file that tracks tool versions for your project.
+    - Default: `.tool-versions`
+    - Supports relative or absolute paths
+    - Compatible with asdf format
+  </dd>
+
+  <dt>`install_path`</dt>
+  <dd>
+    Directory where toolchain binaries will be installed.
+    - Default: `.tools`
+    - Supports relative or absolute paths
+    - Tools are organized by name and version: `.tools/bin/{os}/{tool}/{version}/{tool}`
+  </dd>
+
+  <dt>`versions_file`</dt>
+  <dd>
+    Alternative name for `file_path`. Use `file_path` for consistency.
+  </dd>
+
+  <dt>`tools_dir`</dt>
+  <dd>
+    Alternative name for `install_path`. Use `install_path` for consistency.
+  </dd>
+</dl>
+
+## Tool Versions File
+
+Create a `.tool-versions` file to track tool dependencies:
+
+<File title=".tool-versions">
+```
+terraform 1.9.8
+opentofu 1.10.3
+kubectl 1.28.0
+helm 3.13.0
+tflint 0.44.1
+```
+</File>
+
+This file follows the asdf format:
+- One tool per line
+- Format: `<tool-name> <version>`
+- Commit to version control for team consistency
+
+## Installing Tools
+
+Install all tools from `.tool-versions`:
+
+```bash
+atmos toolchain install
+```
+
+Install a specific tool:
+
+```bash
+atmos toolchain install terraform@1.9.8
+atmos toolchain install kubectl@1.28.0
+```
+
+## Directory Structure
+
+After installation, tools are organized as follows:
+
+```
+.tools/
+├── bin/
+│   └── darwin/                    # OS-specific directory
+│       ├── terraform/
+│       │   └── 1.9.8/
+│       │       └── terraform      # Binary
+│       ├── kubectl/
+│       │   └── 1.28.0/
+│       │       └── kubectl
+│       └── helm/
+│           └── 3.13.0/
+│               └── helm
+└── cache/
+    └── downloads/                 # Downloaded archives
+```
+
+## Advanced Configuration
+
+For advanced toolchain features, see:
+
+- [Registries](/cli/configuration/toolchain/registries) - Configure tool registries (Aqua, custom, inline)
+- [Aliases](/cli/configuration/toolchain/aliases) - Define tool name aliases
+
+## Complete Example
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  # Basic settings
+  file_path: ".tool-versions"
+  install_path: ".tools"
+
+  # Tool name aliases
+  aliases:
+    terraform: hashicorp/terraform
+    tf: hashicorp/terraform
+    tofu: opentofu/opentofu
+    kubectl: kubernetes-sigs/kubectl
+    helm: helm/helm
+
+  # Registries
+  registries:
+    - name: aqua
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+```
+</File>
+
+## Environment Variables
+
+Configure toolchain behavior via environment variables:
+
+<dl>
+  <dt>`ATMOS_TOOLCHAIN_FILE_PATH`</dt>
+  <dd>Override the tool versions file path</dd>
+
+  <dt>`ATMOS_TOOLCHAIN_INSTALL_PATH`</dt>
+  <dd>Override the tool installation directory</dd>
+
+  <dt>`ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`</dt>
+  <dd>
+    GitHub personal access token for:
+    - Higher API rate limits (5,000 req/hour vs 60 unauthenticated)
+    - Access to private repositories
+    - Better reliability during bulk operations
+  </dd>
+</dl>
+
+## CLI Precedence
+
+Configuration is resolved in this order (highest to lowest priority):
+
+1. **CLI flags**: `atmos toolchain install --install-path=/custom/path`
+2. **Environment variables**: `ATMOS_TOOLCHAIN_INSTALL_PATH=/custom/path`
+3. **Configuration file**: `toolchain.install_path` in `atmos.yaml`
+4. **Defaults**: `.tools` for install_path, `.tool-versions` for file_path
+
+## Related Documentation
+
+- [Toolchain Commands](/cli/commands/toolchain/usage) - Full command reference
+- [Workflows](/workflows) - Integrate toolchain with workflows
+- [Stack Dependencies](/stacks/dependencies) - Declare tool requirements per component

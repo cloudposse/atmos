@@ -97,6 +97,15 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentMetadata = componentMetadata
 	}
 
+	// Extract dependencies section (for toolchain tool dependencies).
+	if i, ok := opts.ComponentMap[cfg.DependenciesSectionName]; ok {
+		componentDependencies, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.dependencies' in the file '%s'", errUtils.ErrInvalidComponentDependencies, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentDependencies = componentDependencies
+	}
+
 	// Terraform-specific: extract backend configuration.
 	if opts.ComponentType == cfg.TerraformComponentType {
 		if i, ok := opts.ComponentMap[cfg.BackendTypeSectionName]; ok {

@@ -534,14 +534,15 @@ func FilterComputedFields(componentSection map[string]any) map[string]any {
 
 	// Fields to keep (from stack files)
 	fieldsToKeep := map[string]bool{
-		"vars":      true,
-		"settings":  true,
-		"env":       true,
-		"backend":   true,
-		"metadata":  true,
-		"overrides": true,
-		"providers": true,
-		"imports":   true,
+		"vars":         true,
+		"settings":     true,
+		"env":          true,
+		"backend":      true,
+		"metadata":     true,
+		"overrides":    true,
+		"providers":    true,
+		"imports":      true,
+		"dependencies": true,
 	}
 
 	filtered := make(map[string]any)

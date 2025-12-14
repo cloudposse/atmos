@@ -1,4 +1,3 @@
-
 # Incorrect Usage
 
 **Error:** Unknown command non-existent for atmos
@@ -24,6 +23,7 @@ Valid subcommands are:
 • terraform
 • tf
 • theme
+• toolchain
 • validate
 • vendor
 • version
@@ -32,5 +32,3 @@ Valid subcommands are:
 ## Hints
 
 💡 Run atmos --help for usage
-
-

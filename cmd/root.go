@@ -54,8 +54,10 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/profile"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
+	toolchainCmd "github.com/cloudposse/atmos/cmd/toolchain"
 	"github.com/cloudposse/atmos/cmd/version"
 	_ "github.com/cloudposse/atmos/cmd/workflow"
+	"github.com/cloudposse/atmos/toolchain"
 )
 
 const (
@@ -754,7 +756,7 @@ func renderSingleFlag(w io.Writer, f *pflag.Flag, layout flagRenderLayout, style
 	if renderer != nil {
 		rendered, err := renderer.RenderWithoutWordWrap(wrapped)
 		if err == nil {
-			wrapped = strings.TrimSpace(rendered)
+			wrapped = ui.TrimLinesRight(rendered)
 		}
 	}
 
@@ -1224,6 +1226,8 @@ func Execute() error {
 	version.SetAtmosConfig(&atmosConfig)
 	devcontainer.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
+	toolchainCmd.SetAtmosConfig(&atmosConfig)
+	toolchain.SetAtmosConfig(&atmosConfig)
 	backend.SetAtmosConfig(&atmosConfig)
 
 	if initErr != nil {
@@ -1413,11 +1417,12 @@ func init() {
 	// This must happen before initCobraConfig() creates Boa styles.
 	setupColorProfileFromEnv()
 
-	// Bind environment variables for GitHub authentication.
-	// ATMOS_GITHUB_TOKEN takes precedence over GITHUB_TOKEN.
-	if err := viper.BindEnv("ATMOS_GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"); err != nil {
-		log.Error("Failed to bind ATMOS_GITHUB_TOKEN environment variable", "error", err)
-	}
+	// Note: GitHub token is now bound via GlobalOptionsBuilder in pkg/flags/global_builder.go.
+	// It supports both ATMOS_GITHUB_TOKEN and GITHUB_TOKEN environment variables,
+	// and can be overridden with the --github-token CLI flag.
+
+	// Note: Toolchain command is now registered via the command registry pattern.
+	// The blank import of cmd/toolchain automatically registers it.
 
 	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)

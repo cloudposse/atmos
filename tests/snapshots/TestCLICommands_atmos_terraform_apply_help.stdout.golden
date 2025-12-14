@@ -2,7 +2,7 @@
 👽 test linux/amd64
 
 Apply the changes required to reach the desired state of the configuration. This
-will prompt for confirmation before making changes.                             
+will prompt for confirmation before making changes.
 
 USAGE
 

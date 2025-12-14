@@ -2,7 +2,7 @@
 👽 test linux/amd64
 
 Atmos is a universal tool for DevOps and cloud automation used for provisioning,
-managing and orchestrating workflows across various toolchains                  
+managing and orchestrating workflows across various toolchains
 
 USAGE
 
@@ -36,6 +36,7 @@ AVAILABLE COMMANDS
       support                 Show Atmos support options
       terraform [command]     Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations
       theme [command]         Manage terminal themes for Atmos CLI
+      toolchain [command]     Manage tool versions and installations
       validate [command]      Validate configurations against OPA policies and JSON schemas
       vendor [command]        Manage external dependencies for components or stacks
       version [command]       Display the version of Atmos you are running and check for updates

@@ -1,4 +1,3 @@
-
 # Incorrect Usage
 
 **Error:** Unknown command non-existent for atmos terraform
@@ -49,5 +48,3 @@ Valid subcommands are:
 ## Hints
 
 💡 https://atmos.tools/cli/commands/terraform/usage
-
-

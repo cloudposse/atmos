@@ -36,6 +36,7 @@ var (
 	globalContext Context
 	initOnce      sync.Once
 	initErr       error
+	globalMu      sync.RWMutex
 )
 
 // Initialize sets up the global I/O writers with automatic masking.
@@ -45,6 +46,9 @@ func Initialize() error {
 	defer perf.Track(nil, "io.Initialize")()
 
 	initOnce.Do(func() {
+		globalMu.Lock()
+		defer globalMu.Unlock()
+
 		// Create I/O context
 		globalContext, initErr = NewContext()
 		if initErr != nil {
@@ -123,7 +127,9 @@ func registerCommonPatterns(masker Masker) {
 		`sk-[A-Za-z0-9]{48}`,                         // OpenAI API key
 		`Bearer [A-Za-z0-9\-._~+/]+=*`,               // Bearer tokens
 		`AKIA[0-9A-Z]{16}`,                           // AWS Access Key ID
-		`[A-Za-z0-9/+=]{40}`,                         // AWS Secret Access Key (40 chars)
+		// Note: AWS Secret Access Keys are 40-char base64 strings, but too generic to pattern match.
+		// They are captured via AWS_SECRET_ACCESS_KEY env var (registerEnvSecrets) and contextual
+		// patterns when paired with access keys (masker.RegisterAWSAccessKey).
 	}
 
 	for _, pattern := range patterns {
@@ -142,15 +148,22 @@ func registerCommonPatterns(masker Masker) {
 func MaskWriter(w stdio.Writer) stdio.Writer {
 	defer perf.Track(nil, "io.MaskWriter")()
 
-	if globalContext == nil {
+	globalMu.RLock()
+	ctx := globalContext
+	globalMu.RUnlock()
+
+	if ctx == nil {
 		_ = Initialize()
+		globalMu.RLock()
+		ctx = globalContext
+		globalMu.RUnlock()
 	}
-	if globalContext == nil {
+	if ctx == nil {
 		return w // Return unmasked if initialization failed
 	}
 	return &maskedWriter{
 		underlying: w,
-		masker:     globalContext.Masker(),
+		masker:     ctx.Masker(),
 	}
 }
 
@@ -170,15 +183,22 @@ func RegisterSecret(secret string) {
 		return
 	}
 
-	if globalContext == nil {
+	globalMu.RLock()
+	ctx := globalContext
+	globalMu.RUnlock()
+
+	if ctx == nil {
 		_ = Initialize()
+		globalMu.RLock()
+		ctx = globalContext
+		globalMu.RUnlock()
 	}
-	if globalContext == nil {
+	if ctx == nil {
 		return
 	}
 
 	// Delegate to masker's RegisterSecret which handles all encodings
-	globalContext.Masker().RegisterSecret(secret)
+	ctx.Masker().RegisterSecret(secret)
 }
 
 // RegisterValue registers a literal value for masking.
@@ -194,14 +214,21 @@ func RegisterValue(value string) {
 		return
 	}
 
-	if globalContext == nil {
+	globalMu.RLock()
+	ctx := globalContext
+	globalMu.RUnlock()
+
+	if ctx == nil {
 		_ = Initialize()
+		globalMu.RLock()
+		ctx = globalContext
+		globalMu.RUnlock()
 	}
-	if globalContext == nil {
+	if ctx == nil {
 		return
 	}
 
-	globalContext.Masker().RegisterValue(value)
+	ctx.Masker().RegisterValue(value)
 }
 
 // RegisterPattern registers a regex pattern for masking.
@@ -217,16 +244,23 @@ func RegisterPattern(pattern string) error {
 		return nil
 	}
 
-	if globalContext == nil {
+	globalMu.RLock()
+	ctx := globalContext
+	globalMu.RUnlock()
+
+	if ctx == nil {
 		if err := Initialize(); err != nil {
 			return fmt.Errorf("failed to initialize global I/O context: %w", err)
 		}
+		globalMu.RLock()
+		ctx = globalContext
+		globalMu.RUnlock()
 	}
-	if globalContext == nil {
+	if ctx == nil {
 		return errUtils.ErrIOContextNotInitialized
 	}
 
-	return globalContext.Masker().RegisterPattern(pattern)
+	return ctx.Masker().RegisterPattern(pattern)
 }
 
 // GetContext returns the global I/O context for advanced usage.
@@ -234,8 +268,34 @@ func RegisterPattern(pattern string) error {
 func GetContext() Context {
 	defer perf.Track(nil, "io.GetContext")()
 
-	if globalContext == nil {
+	globalMu.RLock()
+	ctx := globalContext
+	globalMu.RUnlock()
+
+	if ctx == nil {
 		_ = Initialize()
+		globalMu.RLock()
+		ctx = globalContext
+		globalMu.RUnlock()
 	}
-	return globalContext
+	return ctx
+}
+
+// Reset clears the global I/O context and resets the initialization state.
+// This is primarily used in tests to ensure clean state between test executions.
+// The next call to Initialize() will pick up the current os.Stdout/os.Stderr values.
+func Reset() {
+	defer perf.Track(nil, "io.Reset")()
+
+	globalMu.Lock()
+	defer globalMu.Unlock()
+
+	globalContext = nil
+	initOnce = sync.Once{}
+	initErr = nil
+	// DO NOT set Data/UI to os.Stdout/os.Stderr here - that would capture
+	// whatever stdout/stderr happen to be at Reset() time (e.g., a test pipe).
+	// Instead, leave them unmodified so Initialize() will set them correctly
+	// based on the CURRENT os.Stdout/os.Stderr when Initialize() runs.
+	// Initialize() is called automatically by PersistentPreRun in each test.
 }

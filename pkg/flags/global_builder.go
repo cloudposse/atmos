@@ -115,6 +115,9 @@ func (b *GlobalOptionsBuilder) registerAuthenticationFlags(defaults *global.Flag
 	b.options = append(b.options, WithEnvVars("identity", "ATMOS_IDENTITY"))
 	b.options = append(b.options, WithNoOptDefVal("identity", "__SELECT__"))
 
+	// Note: --github-token is NOT a global flag. It's only used by toolchain commands
+	// and is registered as a persistent flag on the toolchain command in cmd/toolchain/toolchain.go.
+
 	// Profiles - configuration profiles.
 	b.options = append(b.options, func(cfg *parserConfig) {
 		cfg.registry.Register(&StringSliceFlag{
