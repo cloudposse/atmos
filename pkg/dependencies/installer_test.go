@@ -326,7 +326,7 @@ func TestIsToolInstalled(t *testing.T) {
 			version: "1.10.0",
 			config: &schema.AtmosConfiguration{
 				Toolchain: schema.Toolchain{
-					InstallPath: "/custom/tools",
+					InstallPath: filepath.Join("custom", "tools"),
 				},
 			},
 			setupMock: func() (*mockResolver, func(string) bool) {
@@ -335,12 +335,10 @@ func TestIsToolInstalled(t *testing.T) {
 						return "hashicorp", "terraform", nil
 					},
 				}
-				var capturedPath string
 				fileExists := func(path string) bool {
-					capturedPath = path
-					_ = capturedPath
-					// Verify the custom path is used.
-					return strings.HasPrefix(path, "/custom/tools")
+					// Verify the custom path is used (cross-platform).
+					expectedPrefix := filepath.Join("custom", "tools")
+					return strings.HasPrefix(path, expectedPrefix)
 				}
 				return resolver, fileExists
 			},
