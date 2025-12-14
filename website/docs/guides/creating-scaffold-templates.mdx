@@ -1,0 +1,408 @@
+---
+title: Creating Scaffold Templates
+sidebar_position: 10
+sidebar_label: Creating Scaffold Templates
+description: Step-by-step guide to creating custom scaffold templates for Atmos projects.
+---
+
+This guide walks you through creating custom scaffold templates for Atmos, from basic file structures to advanced templates with prompts and conditionals.
+
+## Prerequisites
+
+- Atmos installed and configured
+- Basic understanding of [scaffold templates](/core-concepts/scaffold-templates)
+- Familiarity with [Go template syntax](https://pkg.go.dev/text/template)
+
+## Template Structure
+
+Every scaffold template follows this structure:
+
+```
+my-template/
+├── scaffold.yaml           # Template configuration
+├── files/                  # Template files
+│   ├── atmos.yaml.tmpl    # Template files (*.tmpl)
+│   ├── README.md          # Static files
+│   ├── components/
+│   │   └── terraform/
+│   │       └── vpc/
+│   │           └── main.tf.tmpl
+│   └── stacks/
+│       └── stack.yaml.tmpl
+└── README.md              # Template documentation
+```
+
+## Creating a Basic Template
+
+### Step 1: Create Template Directory
+
+```shell
+mkdir -p my-template/files
+```
+
+### Step 2: Create scaffold.yaml
+
+The `scaffold.yaml` defines your template's metadata and prompts:
+
+```yaml
+name: my-template
+description: My custom Atmos template
+version: 1.0.0
+author: Your Name <your.email@example.com>
+
+prompts:
+  - name: project_name
+    type: input
+    message: "What is your project name?"
+    required: true
+    pattern: "^[a-z][a-z0-9-]*$"
+    validation_message: "Must start with letter, lowercase alphanumeric and hyphens only"
+
+  - name: environment
+    type: select
+    message: "Select environment:"
+    options:
+      - dev
+      - staging
+      - prod
+    default: dev
+
+  - name: enable_monitoring
+    type: confirm
+    message: "Enable monitoring?"
+    default: false
+```
+
+### Step 3: Create Template Files
+
+Create `files/atmos.yaml.tmpl`:
+
+```yaml
+# Atmos Configuration
+# Generated from: {{ .template.name }}
+
+base_path: {{ .values.project_name }}
+
+components:
+  terraform:
+    base_path: components/terraform
+    apply_auto_approve: {{ if eq .values.environment "dev" }}true{{ else }}false{{ end }}
+
+{{ if .values.enable_monitoring }}
+settings:
+  monitoring:
+    enabled: true
+{{ end }}
+```
+
+Create `files/README.md`:
+
+```markdown
+# {{ .values.project_name }}
+
+Environment: {{ .values.environment }}
+
+## Getting Started
+
+1. Configure your cloud credentials
+2. Run `atmos terraform plan vpc -s {{ .values.environment }}`
+3. Run `atmos terraform apply vpc -s {{ .values.environment }}`
+```
+
+## Prompt Types
+
+### Input Prompts
+
+Free-form text input:
+
+```yaml
+prompts:
+  - name: project_name
+    type: input
+    message: "Enter project name:"
+    required: true
+    default: "my-project"
+```
+
+### Select Prompts
+
+Single choice from a list:
+
+```yaml
+prompts:
+  - name: cloud_provider
+    type: select
+    message: "Choose cloud provider:"
+    options:
+      - aws
+      - azure
+      - gcp
+    default: aws
+```
+
+### Multi-Select Prompts
+
+Multiple choices from a list:
+
+```yaml
+prompts:
+  - name: regions
+    type: multiselect
+    message: "Select regions (space to select, enter to confirm):"
+    options:
+      - us-east-1
+      - us-west-2
+      - eu-west-1
+      - ap-southeast-1
+    required: true
+```
+
+### Confirm Prompts
+
+Yes/no questions:
+
+```yaml
+prompts:
+  - name: enable_logging
+    type: confirm
+    message: "Enable centralized logging?"
+    default: true
+```
+
+## Template Variables
+
+Access prompt values in templates using `.values`:
+
+```yaml
+# Access simple values
+project: {{ .values.project_name }}
+
+# Access with defaults
+region: {{ .values.region | default "us-east-1" }}
+
+# Transform values
+identifier: {{ .values.name | replace "-" "_" }}
+```
+
+### Available Template Variables
+
+- `.values` - User-provided prompt values
+- `.template.name` - Template name
+- `.template.version` - Template version
+- `.template.description` - Template description
+
+## Conditional File Generation
+
+### Using File Paths
+
+Include files conditionally based on user input:
+
+```
+files/
+├── base/
+│   └── atmos.yaml.tmpl
+├── monitoring/              # Only if enable_monitoring = true
+│   └── monitoring.yaml.tmpl
+└── logging/                 # Only if enable_logging = true
+    └── logging.yaml.tmpl
+```
+
+### Using Template Conditionals
+
+```yaml
+{{ if .values.enable_monitoring }}
+# Monitoring configuration
+monitoring:
+  provider: {{ .values.monitoring_provider }}
+  endpoints:
+{{ range .values.regions }}
+    - region: {{ . }}
+      enabled: true
+{{ end }}
+{{ end }}
+```
+
+## Advanced Features
+
+### Nested Prompts
+
+Prompts can depend on previous answers:
+
+```yaml
+prompts:
+  - name: deployment_type
+    type: select
+    message: "Deployment type:"
+    options:
+      - single-region
+      - multi-region
+
+  - name: regions
+    type: multiselect
+    message: "Select regions:"
+    when: '{{ eq .values.deployment_type "multi-region" }}'
+    options:
+      - us-east-1
+      - us-west-2
+      - eu-west-1
+```
+
+### Complex Validation
+
+```yaml
+prompts:
+  - name: vpc_cidr
+    type: input
+    message: "VPC CIDR block:"
+    pattern: "^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}/\\d{1,2}$"
+    validation_message: "Must be valid CIDR notation (e.g., 10.0.0.0/16)"
+    default: "10.0.0.0/16"
+```
+
+### Template Functions
+
+Use Go template functions for complex logic:
+
+```yaml
+{{ $projectUpper := .values.project_name | upper }}
+{{ $projectSnake := .values.project_name | replace "-" "_" }}
+
+environment_variables:
+  PROJECT_NAME: {{ $projectUpper }}
+  PROJECT_ID: {{ $projectSnake }}
+
+{{ if kindIs "slice" .values.tags }}
+tags:
+{{ range .values.tags }}
+  - {{ . }}
+{{ end }}
+{{ else }}
+tags: [{{ .values.tags }}]
+{{ end }}
+```
+
+## Testing Your Template
+
+### 1. Place Template in Scaffolds Directory
+
+```shell
+# Create scaffolds directory if it doesn't exist
+mkdir -p ~/.atmos/scaffolds
+
+# Copy your template
+cp -r my-template ~/.atmos/scaffolds/
+```
+
+### 2. List Available Templates
+
+```shell
+atmos scaffold list
+```
+
+### 3. Test Generation
+
+```shell
+atmos init my-template --target-dir ./test-output
+```
+
+### 4. Validate Generated Files
+
+```shell
+cd test-output
+atmos validate stacks
+```
+
+## Example: Multi-Region Template
+
+Complete example of a multi-region template:
+
+**scaffold.yaml:**
+
+```yaml
+name: multi-region-app
+description: Multi-region application template with VPC and app components
+version: 1.0.0
+
+prompts:
+  - name: app_name
+    type: input
+    message: "Application name:"
+    required: true
+    pattern: "^[a-z][a-z0-9-]*$"
+
+  - name: regions
+    type: multiselect
+    message: "Select deployment regions:"
+    options:
+      - us-east-1
+      - us-west-2
+      - eu-west-1
+      - ap-southeast-1
+    required: true
+
+  - name: environment
+    type: select
+    message: "Environment:"
+    options: [dev, staging, prod]
+    default: dev
+
+  - name: enable_ha
+    type: confirm
+    message: "Enable high availability?"
+    default: true
+```
+
+**files/stacks/stack.yaml.tmpl:**
+
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        environment: {{ .values.environment }}
+        {{ if .values.enable_ha }}
+        availability_zones: 3
+        {{ else }}
+        availability_zones: 2
+        {{ end }}
+
+{{ range .values.regions }}
+    app-{{ . }}:
+      component: app
+      vars:
+        region: {{ . }}
+        environment: {{ $.values.environment }}
+        app_name: {{ $.values.app_name }}
+{{ end }}
+```
+
+## Best Practices
+
+1. **Provide Clear Prompts** - Use descriptive messages and helpful defaults
+2. **Validate Input** - Use patterns and validation messages
+3. **Document Templates** - Include README.md with usage instructions
+4. **Test Thoroughly** - Test with various input combinations
+5. **Version Your Templates** - Use semantic versioning
+6. **Provide Examples** - Include example values in prompts
+7. **Handle Errors Gracefully** - Provide clear error messages
+
+## Distributing Templates
+
+### Via Git Repository
+
+```shell
+# Users can reference your template
+atmos init https://github.com/your-org/atmos-templates//my-template
+```
+
+### Via Package Registry
+
+Package your template and publish to a registry for team sharing.
+
+## Related Documentation
+
+- [Scaffold Templates](/core-concepts/scaffold-templates) - Template concepts
+- [Template Functions](/core-concepts/template-functions) - Available template functions
+- [`atmos init`](/cli/commands/init) - Initialize projects from templates
+- [`atmos scaffold`](/cli/commands/scaffold) - Scaffold commands
+- [Scaffold Schema Reference](/cli/commands/scaffold/schema) - Complete schema documentation

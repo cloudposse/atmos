@@ -1,0 +1,344 @@
+---
+title: Template Functions
+sidebar_position: 11
+sidebar_label: Template Functions
+description: Template functions available in Atmos configurations and scaffold templates for dynamic value generation.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Atmos provides powerful template functions for dynamically generating configuration values in stack files and scaffold templates. These functions enable cross-component references, secret resolution, and complex data transformations.
+</Intro>
+
+## Template Engines
+
+Atmos uses two template engines:
+
+1. **Go Templates** - Built-in [text/template](https://pkg.go.dev/text/template) for basic templating
+2. **Gomplate** - Extended templating with [Gomplate functions](https://docs.gomplate.ca/) for advanced use-cases
+
+## Stack Template Functions
+
+These functions are available in stack YAML files for dynamic configuration:
+
+### Component Functions
+
+#### `atmos.Component`
+
+Get the complete configuration of another component.
+
+```yaml
+# Reference another component's configuration
+components:
+  terraform:
+    app:
+      vars:
+        vpc_id: '{{ (atmos.Component "vpc" "prod").outputs.vpc_id }}'
+```
+
+#### `atmos.Stack`
+
+Get the complete stack configuration.
+
+```yaml
+vars:
+  stack_name: '{{ (atmos.Stack).stack }}'
+```
+
+### Terraform Functions
+
+#### `terraform.output`
+
+Get Terraform output from another component.
+
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        vpc_id: '{{ terraform.output "vpc" "prod" "vpc_id" }}'
+        subnet_ids: '{{ terraform.output "vpc" "prod" "private_subnet_ids" }}'
+```
+
+#### `terraform.state`
+
+Query Terraform state directly.
+
+```yaml
+vars:
+  instance_id: '{{ terraform.state "ec2" "prod" "resources.aws_instance.main.id" }}'
+```
+
+### Store Functions
+
+Retrieve secrets and values from external stores at runtime.
+
+#### `store.get`
+
+Get value from a configured store.
+
+```yaml
+components:
+  terraform:
+    app:
+      vars:
+        # AWS SSM Parameter Store
+        db_password: '{{ store.get "ssm" "prod" "app" "db_password" }}'
+
+        # Azure Key Vault
+        api_key: '{{ store.get "azure" "prod" "app" "api_key" }}'
+
+        # Google Secret Manager
+        secret_token: '{{ store.get "gcp" "prod" "app" "secret_token" }}'
+```
+
+Supported stores:
+- `ssm` - AWS Systems Manager Parameter Store
+- `azure` - Azure Key Vault
+- `gcp` - Google Secret Manager
+- `redis` - Redis
+- `artifactory` - JFrog Artifactory
+
+### Utility Functions
+
+#### `env`
+
+Get environment variable value.
+
+```yaml
+vars:
+  ci_build_id: '{{ env "CI_BUILD_ID" }}'
+  deployment_user: '{{ env "USER" | default "automated" }}'
+```
+
+#### `exec`
+
+Execute shell command and use output.
+
+```yaml
+vars:
+  git_sha: '{{ exec "git" "rev-parse" "HEAD" | trim }}'
+  aws_account: '{{ exec "aws" "sts" "get-caller-identity" "--query" "Account" "--output" "text" }}'
+```
+
+## Scaffold Template Functions
+
+These functions are available in scaffold templates (`.tmpl` files):
+
+### Value Access
+
+Access user-provided values from prompts:
+
+```yaml
+# scaffold.yaml
+prompts:
+  - name: project_name
+    type: input
+```
+
+```yaml
+# atmos.yaml.tmpl
+base_path: {{ .values.project_name }}
+
+components:
+  terraform:
+    base_path: {{ .values.project_name }}/components/terraform
+```
+
+### Conditional Logic
+
+```yaml
+{{ if .values.enable_monitoring }}
+monitoring:
+  enabled: true
+  provider: {{ .values.monitoring_provider }}
+{{ end }}
+
+{{ if eq .values.environment "production" }}
+  replicas: 3
+{{ else }}
+  replicas: 1
+{{ end }}
+```
+
+### Loops
+
+```yaml
+{{ range .values.regions }}
+region_{{ . }}:
+  enabled: true
+{{ end }}
+
+# With index
+{{ range $i, $region := .values.regions }}
+region_{{ $i }}: {{ $region }}
+{{ end }}
+```
+
+### String Functions
+
+```yaml
+# Convert to uppercase
+name: {{ .values.project_name | upper }}
+
+# Convert to lowercase
+domain: {{ .values.domain | lower }}
+
+# Replace characters
+identifier: {{ .values.name | replace "-" "_" }}
+
+# Trim whitespace
+clean: {{ .values.input | trim }}
+
+# Default value
+value: {{ .values.optional | default "default-value" }}
+```
+
+### Type Checking
+
+```yaml
+{{ if kindIs "slice" .values.regions }}
+# Handle as array
+{{ range .values.regions }}
+  - {{ . }}
+{{ end }}
+{{ else }}
+# Handle as single value
+region: {{ .values.regions }}
+{{ end }}
+```
+
+## Gomplate Functions
+
+For advanced templating, Atmos supports [Gomplate functions](https://docs.gomplate.ca/):
+
+### Data Sources
+
+```yaml
+# HTTP data source
+config: '{{ (datasource "config" "https://api.example.com/config").value }}'
+
+# File data source
+version: '{{ (datasource "version" "file:///path/to/version.json").version }}'
+```
+
+### JSON/YAML Processing
+
+```yaml
+# Parse JSON
+data: '{{ (datasource "api" "https://api.example.com/data" | json).field }}'
+
+# Parse YAML
+config: '{{ (datasource "config" "file:///config.yaml" | yaml).setting }}'
+```
+
+### Cryptography
+
+```yaml
+# Generate UUID
+id: '{{ uuid }}'
+
+# Hash values
+hash: '{{ sha256 "value" }}'
+```
+
+### Math
+
+```yaml
+# Calculations
+total: '{{ add 10 20 }}'
+percent: '{{ div (mul .values.count 100) .values.total }}'
+```
+
+## Template Syntax
+
+### Variables
+
+```yaml
+{{ $name := "value" }}
+{{ $name }}
+```
+
+### Whitespace Control
+
+```yaml
+{{- /* trim leading whitespace */ -}}
+value: {{- .value -}}
+{{- /* trim trailing whitespace */ }}
+```
+
+### Comments
+
+```yaml
+{{/* This is a comment */}}
+{{ /* This is also a comment */ }}
+```
+
+## Best Practices
+
+1. **Use type checking** - Verify value types before operations
+2. **Provide defaults** - Use `default` function for optional values
+3. **Validate inputs** - Check for required values early
+4. **Handle errors** - Provide clear error messages for missing data
+5. **Document templates** - Add comments explaining template logic
+
+## Examples
+
+### Cross-Component Reference
+
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+
+    app:
+      vars:
+        # Reference VPC component output
+        vpc_id: '{{ (atmos.Component "vpc" .stack).outputs.vpc_id }}'
+        # Reference VPC component variable
+        vpc_cidr: '{{ (atmos.Component "vpc" .stack).vars.cidr }}'
+```
+
+### Environment-Specific Configuration
+
+```yaml
+{{ if eq .values.environment "production" }}
+vars:
+  instance_type: "t3.large"
+  replica_count: 3
+  enable_monitoring: true
+{{ else if eq .values.environment "staging" }}
+vars:
+  instance_type: "t3.medium"
+  replica_count: 2
+  enable_monitoring: true
+{{ else }}
+vars:
+  instance_type: "t3.small"
+  replica_count: 1
+  enable_monitoring: false
+{{ end }}
+```
+
+### Secret Resolution
+
+```yaml
+components:
+  terraform:
+    database:
+      vars:
+        # Retrieve secrets from multiple stores
+        master_password: '{{ store.get "ssm" .stack "database" "master_password" }}'
+        api_keys:
+          stripe: '{{ store.get "azure" .stack "payments" "stripe_key" }}'
+          sendgrid: '{{ store.get "gcp" .stack "email" "sendgrid_key" }}'
+```
+
+## Related Documentation
+
+- [Stacks Templates](/core-concepts/stacks/templates) - Using templates in stack configurations
+- [Scaffold Templates](/core-concepts/scaffold-templates) - Creating reusable project templates
+- [Gomplate Documentation](https://docs.gomplate.ca/) - Complete Gomplate function reference
+- [Go Templates](https://pkg.go.dev/text/template) - Go template syntax reference
