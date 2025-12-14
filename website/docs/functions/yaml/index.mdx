@@ -75,6 +75,10 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!repo-root`__](/functions/yaml/repo-root) YAML function is used to retrieve the
    root directory of the Atmos repository
 
+ - The [__`!cwd`__](/functions/yaml/cwd) YAML function is used to retrieve the current working directory
+   where Atmos is executed from. Useful when you need paths relative to where you run Atmos
+   rather than relative to the configuration file
+
  - The [__`!random`__](/functions/yaml/random) YAML function generates a cryptographically secure random integer
    within a specified range, useful for generating random port numbers or IDs
 

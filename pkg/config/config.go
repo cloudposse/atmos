@@ -198,52 +198,50 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 // AtmosConfigAbsolutePaths converts all base paths in the configuration to absolute paths.
 // This function sets TerraformDirAbsolutePath, HelmfileDirAbsolutePath, PackerDirAbsolutePath,
 // StacksBaseAbsolutePath, IncludeStackAbsolutePaths, and ExcludeStackAbsolutePaths.
-// ResolveAbsolutePath converts a path to absolute form, resolving relative paths.
+// It converts a path to absolute form, resolving relative paths according to the semantics below.
 //
-// Resolution order:
-//  1. If path is already absolute → return as-is
-//  2. If path explicitly references a relative location AND cliConfigPath is set →
-//     resolve relative to cliConfigPath (where atmos.yaml is located).
-//     Explicit relative paths are detected strictly:
-//     - Exactly "." or ".." (current or parent directory)
-//     - Starts with "./" or "../" (Unix-style)
-//     - Starts with ".\" or "..\" (Windows-style, via filepath.Separator)
-//  3. Otherwise (simple paths like "stacks", "components/terraform", or empty string) →
-//     resolve relative to current working directory (for backward compatibility)
+// Resolution semantics (see docs/prd/base-path-resolution-semantics.md):
 //
-// This approach maintains backward compatibility: simple relative paths like "stacks" or
-// "components/terraform" are resolved relative to CWD, while paths that explicitly reference
-// the config directory location (like "../..", "./subdir", or ".") are resolved relative to atmos.yaml.
-// This fixes GitHub issue #1858 where ATMOS_CLI_CONFIG_PATH pointing to a subdirectory
-// caused "stacks" to incorrectly resolve relative to the config directory instead of CWD.
+//  1. Absolute paths → return as-is
+//  2. ".", "./foo", "..", "../foo" → resolve relative to cliConfigPath (config-file-relative)
+//  3. "" (empty) or simple paths like "foo" → try git root, fallback to cliConfigPath
+//
+// Fallback order when primary resolution fails:
+//  1. Config directory (cliConfigPath / dirname(atmos.yaml))
+//  2. Git repository root
+//  3. CWD (last resort)
+//
+// Key semantic distinctions:
+//   - "." means dirname(atmos.yaml) (config-file-relative)
+//   - "" means git repo root with fallback to dirname(atmos.yaml) (smart default)
+//   - "./foo" means dirname(atmos.yaml)/foo (config-file-relative)
+//   - "foo" means git-root/foo with fallback to dirname(atmos.yaml) (search path)
+//   - "../foo" means dirname(atmos.yaml)/../foo (config-file-relative navigation)
+//
+// This follows the convention of tsconfig.json, package.json, .eslintrc - paths in
+// config files are relative to the config file location, not where you run from.
+// Use the !cwd YAML tag if you need paths relative to CWD.
 func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
 	// If already absolute, return as-is.
 	if filepath.IsAbs(path) {
 		return path, nil
 	}
 
-	// Check if the path explicitly references a relative location from the config directory.
-	// This includes:
-	// - Exactly "." or ".." (current or parent directory)
-	// - Paths starting with "./" or "../" (Unix-style explicit relative)
-	// - Paths starting with ".\" or "..\" (Windows-style explicit relative)
-	// These should resolve relative to where atmos.yaml is located.
-	//
-	// Note: We check for exact matches first to avoid misclassifying paths like
-	// "..foo" or ".hidden" as explicit relative paths.
 	sep := string(filepath.Separator)
-	isExplicitRelativePath := path == "." ||
-		path == ".." ||
-		strings.HasPrefix(path, "."+sep) ||
-		strings.HasPrefix(path, ".."+sep) ||
-		// Allow forward slashes in config even on Windows for portability.
-		strings.HasPrefix(path, "./") ||
-		strings.HasPrefix(path, "../")
 
-	if isExplicitRelativePath && cliConfigPath != "" {
-		// Resolve relative to CLI config path (atmos.yaml location).
-		// This is needed when ATMOS_BASE_PATH is set to something like "../../.."
-		// to navigate from the config directory to the repo root.
+	// Check for explicit relative paths: ".", "./...", "..", or "../..."
+	// These resolve relative to atmos.yaml location (config-file-relative).
+	// This follows the convention of tsconfig.json, package.json, .eslintrc.
+	isExplicitRelative := path == "." ||
+		path == ".." ||
+		strings.HasPrefix(path, "./") ||
+		strings.HasPrefix(path, "."+sep) ||
+		strings.HasPrefix(path, "../") ||
+		strings.HasPrefix(path, ".."+sep)
+
+	// For explicit relative paths (".", "./...", "..", "../..."):
+	// Resolve relative to config directory (cliConfigPath).
+	if isExplicitRelative && cliConfigPath != "" {
 		basePath := filepath.Join(cliConfigPath, path)
 		absPath, err := filepath.Abs(basePath)
 		if err != nil {
@@ -252,14 +250,96 @@ func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
 		return absPath, nil
 	}
 
-	// For simple relative paths (like "stacks", "components/terraform", or empty string ""),
-	// resolve relative to CWD for backward compatibility.
-	// This maintains the behavior from v1.200.0 and earlier.
+	// For empty path or simple relative paths (like "stacks", "components/terraform"):
+	// Try git root first.
+	return tryResolveWithGitRoot(path, isExplicitRelative, cliConfigPath)
+}
+
+// tryResolveWithGitRoot attempts to resolve a path using git root as the base.
+// If git root is unavailable, falls back to cliConfigPath, then CWD.
+func tryResolveWithGitRoot(path string, isExplicitRelative bool, cliConfigPath string) (string, error) {
+	gitRoot := getGitRootOrEmpty()
+	if gitRoot == "" {
+		return tryResolveWithConfigPath(path, cliConfigPath)
+	}
+
+	// Git root available - resolve relative to it.
+	if path == "" {
+		return gitRoot, nil
+	}
+
+	// For explicit relative paths without cliConfigPath, resolve relative to git root.
+	if isExplicitRelative {
+		basePath := filepath.Join(gitRoot, path)
+		absPath, err := filepath.Abs(basePath)
+		if err != nil {
+			return "", fmt.Errorf("resolving path %q relative to git root %q: %w", path, gitRoot, err)
+		}
+		return absPath, nil
+	}
+
+	return filepath.Join(gitRoot, path), nil
+}
+
+// tryResolveWithConfigPath resolves a path using cliConfigPath as the base,
+// falling back to CWD if cliConfigPath is unavailable.
+func tryResolveWithConfigPath(path string, cliConfigPath string) (string, error) {
+	// Fallback: resolve relative to atmos.yaml dir (cliConfigPath).
+	if cliConfigPath != "" {
+		if path == "" {
+			absPath, err := filepath.Abs(cliConfigPath)
+			if err != nil {
+				return "", fmt.Errorf("resolving config path %q: %w", cliConfigPath, err)
+			}
+			return absPath, nil
+		}
+		basePath := filepath.Join(cliConfigPath, path)
+		absPath, err := filepath.Abs(basePath)
+		if err != nil {
+			return "", fmt.Errorf("resolving path %q relative to config %q: %w", path, cliConfigPath, err)
+		}
+		return absPath, nil
+	}
+
+	// Last resort (3rd fallback): resolve relative to CWD.
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return "", fmt.Errorf("resolving path %q: %w", path, err)
 	}
 	return absPath, nil
+}
+
+// getGitRootOrEmpty returns the git repository root path, or empty string if not in a git repo.
+// This is used for base path resolution to anchor simple relative paths to the repo root.
+func getGitRootOrEmpty() string {
+	// Check if git root discovery is disabled.
+	//nolint:forbidigo // ATMOS_GIT_ROOT_BASEPATH is bootstrap config, not application configuration.
+	if os.Getenv("ATMOS_GIT_ROOT_BASEPATH") == "false" {
+		return ""
+	}
+
+	gitRoot, err := u.ProcessTagGitRoot("!repo-root")
+	if err != nil {
+		log.Trace("Git root detection failed", "error", err)
+		return ""
+	}
+
+	// ProcessTagGitRoot returns "." when called with just "!repo-root" and no default.
+	// We need to convert it to an absolute path.
+	if gitRoot == "" || gitRoot == "." {
+		// Get absolute path of current directory as fallback.
+		cwd, err := os.Getwd()
+		if err != nil {
+			return ""
+		}
+		// Check if we're at git root by looking for .git.
+		if _, err := os.Stat(filepath.Join(cwd, ".git")); err == nil {
+			return cwd
+		}
+		return ""
+	}
+
+	return gitRoot
 }
 
 func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {

@@ -29,6 +29,7 @@ const (
 	AtmosYamlFuncInclude                 = "!include"
 	AtmosYamlFuncIncludeRaw              = "!include.raw"
 	AtmosYamlFuncGitRoot                 = "!repo-root"
+	AtmosYamlFuncCwd                     = "!cwd"
 	AtmosYamlFuncRandom                  = "!random"
 	AtmosYamlFuncAwsAccountID            = "!aws.account_id"
 	AtmosYamlFuncAwsCallerIdentityArn    = "!aws.caller_identity_arn"
@@ -51,6 +52,7 @@ var (
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncCwd,
 		AtmosYamlFuncRandom,
 		AtmosYamlFuncAwsAccountID,
 		AtmosYamlFuncAwsCallerIdentityArn,
@@ -69,6 +71,7 @@ var (
 		AtmosYamlFuncTerraformOutput:         true,
 		AtmosYamlFuncTerraformState:          true,
 		AtmosYamlFuncEnv:                     true,
+		AtmosYamlFuncCwd:                     true,
 		AtmosYamlFuncRandom:                  true,
 		AtmosYamlFuncAwsAccountID:            true,
 		AtmosYamlFuncAwsCallerIdentityArn:    true,
