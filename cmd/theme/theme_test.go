@@ -922,6 +922,79 @@ func TestThemeListResultError(t *testing.T) {
 	})
 }
 
+func TestThemesArgCompletion(t *testing.T) {
+	t.Run("returns list of theme names", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		args := []string{}
+
+		themes, directive := ThemesArgCompletion(cmd, args, "")
+
+		// Should return some themes.
+		assert.NotEmpty(t, themes, "should return at least one theme")
+
+		// Should disable file completion.
+		assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	})
+
+	t.Run("returns expected built-in themes", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		args := []string{}
+
+		themes, _ := ThemesArgCompletion(cmd, args, "")
+
+		// Check for some expected built-in themes.
+		assert.Contains(t, themes, "atmos", "should contain 'atmos' theme")
+		assert.Contains(t, themes, "Dracula", "should contain 'Dracula' theme")
+	})
+
+	t.Run("ignores toComplete parameter", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		args := []string{}
+
+		// The function returns all themes regardless of toComplete.
+		themes1, _ := ThemesArgCompletion(cmd, args, "")
+		themes2, _ := ThemesArgCompletion(cmd, args, "dra")
+
+		// Both should return the same list.
+		assert.Equal(t, themes1, themes2, "should return same themes regardless of toComplete")
+	})
+
+	t.Run("ignores args parameter", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+
+		themes1, _ := ThemesArgCompletion(cmd, []string{}, "")
+		themes2, _ := ThemesArgCompletion(cmd, []string{"arg1", "arg2"}, "")
+
+		// Both should return the same list.
+		assert.Equal(t, themes1, themes2, "should return same themes regardless of args")
+	})
+}
+
+func TestExecuteThemeShowMissingArgs(t *testing.T) {
+	// Initialize I/O context and formatter for testing.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err, "Failed to create I/O context")
+	ui.InitFormatter(ioCtx)
+
+	t.Run("returns error when no positional args provided", func(t *testing.T) {
+		// Setup
+		oldAtmosConfig := atmosConfigPtr
+		defer func() { atmosConfigPtr = oldAtmosConfig }()
+		atmosConfigPtr = nil
+
+		// Disable interactive mode to prevent prompting.
+		viper.Set("interactive", false)
+		defer viper.Reset()
+
+		// Execute with empty args.
+		err := executeThemeShow(themeShowCmd, []string{})
+
+		// Should return an error for missing theme name.
+		require.Error(t, err, "executeThemeShow should return an error when no args provided")
+		assert.ErrorIs(t, err, errUtils.ErrInvalidPositionalArgs, "should be invalid positional args error")
+	})
+}
+
 func TestExecuteThemeShow(t *testing.T) {
 	// Initialize I/O context and formatter for testing (required for ui.Markdown).
 	ioCtx, err := iolib.NewContext()
