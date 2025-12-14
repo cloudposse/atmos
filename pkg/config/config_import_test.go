@@ -14,6 +14,9 @@ func TestMergeConfig_ImportOverrideBehavior(t *testing.T) {
 	// Test that the main config file's settings override imported settings.
 	tempDir := t.TempDir()
 
+	// Isolate from real git root's .atmos.d to prevent interference.
+	t.Setenv("TEST_GIT_ROOT", tempDir)
+
 	// Create an import file with a command.
 	importDir := filepath.Join(tempDir, "imports")
 	err := os.Mkdir(importDir, 0o755)

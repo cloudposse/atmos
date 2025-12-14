@@ -54,6 +54,8 @@ tests:
     expect:
       diff:
         - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+        - 'TRCE.*Checking for atmos.yaml in system config'
+        - 'TRCE.*Checking for atmos.yaml in home directory'
       stdout:
         - '^\n👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9_]+\n\n$'
       exit_code: 0
