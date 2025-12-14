@@ -123,6 +123,20 @@ func matchesPrefix(input, prefix string, skip []string) bool {
 	return strings.HasPrefix(input, prefix) && !skipFunc(skip, prefix)
 }
 
+// matchesPrefixOrSkipped checks if input matches a tag prefix.
+// Returns (shouldProcess, isHandled) - if isHandled is true, no further processing needed.
+// This prevents skipped tags like !store.get from falling through to match !store.
+func matchesPrefixOrSkipped(input, prefix string, skip []string) (shouldProcess, isHandled bool) {
+	if !strings.HasPrefix(input, prefix) {
+		return false, false // Not this tag, continue checking other tags.
+	}
+	// Input matches this prefix. Check if it should be skipped.
+	if skipFunc(skip, prefix) {
+		return false, true // Tag is skipped, return input unchanged.
+	}
+	return true, true // Tag should be processed.
+}
+
 // processContextAwareTags processes tags that support cycle detection.
 // Returns (result, handled, error) where handled indicates if a matching tag was found.
 func processContextAwareTags(
@@ -133,13 +147,21 @@ func processContextAwareTags(
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, bool, error) {
-	if matchesPrefix(input, u.AtmosYamlFuncTerraformOutput, skip) {
-		result, err := processTagTerraformOutputWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo)
-		return result, true, err
+	// Check !terraform.output.
+	if shouldProcess, handled := matchesPrefixOrSkipped(input, u.AtmosYamlFuncTerraformOutput, skip); handled {
+		if shouldProcess {
+			result, err := processTagTerraformOutputWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo)
+			return result, true, err
+		}
+		return input, true, nil
 	}
-	if matchesPrefix(input, u.AtmosYamlFuncTerraformState, skip) {
-		result, err := processTagTerraformStateWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo)
-		return result, true, err
+	// Check !terraform.state.
+	if shouldProcess, handled := matchesPrefixOrSkipped(input, u.AtmosYamlFuncTerraformState, skip); handled {
+		if shouldProcess {
+			result, err := processTagTerraformStateWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo)
+			return result, true, err
+		}
+		return input, true, nil
 	}
 	return nil, false, nil
 }
@@ -153,28 +175,45 @@ func processSimpleTags(
 	skip []string,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, bool, error) {
-	if matchesPrefix(input, u.AtmosYamlFuncTemplate, skip) {
-		return processTagTemplate(input), true, nil
-	}
-	if matchesPrefix(input, u.AtmosYamlFuncExec, skip) {
-		res, err := u.ProcessTagExec(input)
-		if err != nil {
-			return nil, true, err
+	// Check tags in order of specificity (more specific first).
+	if shouldProcess, handled := matchesPrefixOrSkipped(input, u.AtmosYamlFuncTemplate, skip); handled {
+		if shouldProcess {
+			return processTagTemplate(input), true, nil
 		}
-		return res, true, nil
+		return input, true, nil
 	}
-	if matchesPrefix(input, u.AtmosYamlFuncStoreGet, skip) {
-		return processTagStoreGet(atmosConfig, input, currentStack), true, nil
-	}
-	if matchesPrefix(input, u.AtmosYamlFuncStore, skip) {
-		return processTagStore(atmosConfig, input, currentStack), true, nil
-	}
-	if matchesPrefix(input, u.AtmosYamlFuncEnv, skip) {
-		res, err := u.ProcessTagEnv(input, stackInfo)
-		if err != nil {
-			return nil, true, err
+	if shouldProcess, handled := matchesPrefixOrSkipped(input, u.AtmosYamlFuncExec, skip); handled {
+		if shouldProcess {
+			res, err := u.ProcessTagExec(input)
+			if err != nil {
+				return nil, true, err
+			}
+			return res, true, nil
 		}
-		return res, true, nil
+		return input, true, nil
+	}
+	// Check !store.get before !store (more specific first).
+	if shouldProcess, handled := matchesPrefixOrSkipped(input, u.AtmosYamlFuncStoreGet, skip); handled {
+		if shouldProcess {
+			return processTagStoreGet(atmosConfig, input, currentStack), true, nil
+		}
+		return input, true, nil
+	}
+	if shouldProcess, handled := matchesPrefixOrSkipped(input, u.AtmosYamlFuncStore, skip); handled {
+		if shouldProcess {
+			return processTagStore(atmosConfig, input, currentStack), true, nil
+		}
+		return input, true, nil
+	}
+	if shouldProcess, handled := matchesPrefixOrSkipped(input, u.AtmosYamlFuncEnv, skip); handled {
+		if shouldProcess {
+			res, err := u.ProcessTagEnv(input, stackInfo)
+			if err != nil {
+				return nil, true, err
+			}
+			return res, true, nil
+		}
+		return input, true, nil
 	}
 	// AWS YAML functions - note these check for exact match since they take no arguments.
 	if input == u.AtmosYamlFuncAwsAccountID && !skipFunc(skip, u.AtmosYamlFuncAwsAccountID) {

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
@@ -12,6 +13,7 @@ import (
 
 	yaml "gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -99,6 +101,20 @@ var (
 	}{
 		uniqueFiles:  make(map[string]int),
 		uniqueHashes: make(map[string]int),
+	}
+
+	// AllSupportedYamlTags contains all YAML tags that Atmos supports.
+	AllSupportedYamlTags = []string{
+		AtmosYamlFuncExec,
+		AtmosYamlFuncStore,
+		AtmosYamlFuncStoreGet,
+		AtmosYamlFuncTemplate,
+		AtmosYamlFuncTerraformOutput,
+		AtmosYamlFuncTerraformState,
+		AtmosYamlFuncEnv,
+		AtmosYamlFuncInclude,
+		AtmosYamlFuncIncludeRaw,
+		AtmosYamlFuncGitRoot,
 	}
 
 	ErrIncludeYamlFunctionInvalidArguments    = errors.New("invalid number of arguments in the !include function")
@@ -605,6 +621,16 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 		tag := strings.TrimSpace(n.Tag)
 		val := strings.TrimSpace(n.Value)
 
+		// Check if a tag is present and if it's unsupported.
+		// Standard YAML tags (!!str, !!int, etc.) are allowed.
+		if tag != "" && !strings.HasPrefix(tag, "!!") {
+			if !SliceContainsString(AllSupportedYamlTags, tag) {
+				supportedTags := strings.Join(AllSupportedYamlTags, ", ")
+				return fmt.Errorf("%w: '%s' found in file '%s'. Supported tags are: %s",
+					errUtils.ErrUnsupportedYamlTag, tag, file, supportedTags)
+			}
+		}
+
 		// Use O(1) map lookup instead of O(n) slice search for performance.
 		// This optimization reduces 75M+ linear searches to constant-time lookups.
 		if atmosYamlTagsMap[tag] {
@@ -646,17 +672,18 @@ func getValueWithTag(n *yaml.Node) string {
 	return strings.TrimSpace(tag + " " + val)
 }
 
-// hasCustomTags performs a fast scan to check if a node or any of its children contain custom Atmos tags.
-// This enables early exit optimization in processCustomTags, avoiding expensive recursive processing
-// for YAML subtrees that don't use custom tags (which is the majority of YAML content).
+// hasCustomTags performs a fast scan to check if a node or any of its children contain custom tags.
+// This includes both supported Atmos tags and potentially unsupported tags that need validation.
+// This enables the processCustomTags function to perform unsupported tag detection.
 func hasCustomTags(node *yaml.Node) bool {
 	if node == nil {
 		return false
 	}
 
-	// Check if this node has a custom tag.
+	// Check if this node has a custom tag (any non-standard tag starting with !).
+	// Standard YAML tags start with !! (e.g., !!str, !!int).
 	tag := strings.TrimSpace(node.Tag)
-	if atmosYamlTagsMap[tag] || tag == AtmosYamlFuncInclude || tag == AtmosYamlFuncIncludeRaw {
+	if tag != "" && !strings.HasPrefix(tag, "!!") {
 		return true
 	}
 
