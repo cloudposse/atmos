@@ -128,6 +128,13 @@ func TestPromptForOptionalValue(t *testing.T) {
 		assert.NoError(t, err, "should not return error when not interactive")
 		assert.Empty(t, result, "should return empty when not interactive")
 	})
+
+	t.Run("returns error when context is nil", func(t *testing.T) {
+		result, err := PromptForOptionalValue(nil)
+		assert.Error(t, err, "should return error when context is nil")
+		assert.Empty(t, result, "should return empty result when context is nil")
+		assert.Contains(t, err.Error(), "nil", "error should mention nil input")
+	})
 }
 
 // TestPromptForPositionalArg tests the PromptForPositionalArg function.

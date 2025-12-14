@@ -77,7 +77,7 @@ func PromptForValue(name, title string, options []string) (string, error) {
 }
 
 // PromptForMissingRequired prompts for a required flag that is missing.
-// This is Use Case 1: Missing Required Flags
+// This is Use Case 1: Missing Required Flags.
 //
 // Example:
 //
@@ -112,7 +112,7 @@ type OptionalValuePromptContext struct {
 }
 
 // PromptForOptionalValue prompts for a flag that was used without a value.
-// This is Use Case 2: Optional Value Flags (like --identity pattern).
+// This is Use Case 2: Optional Value Flags (like the --identity pattern).
 //
 // The flag must have NoOptDefVal set to cfg.IdentityFlagSelectValue ("__SELECT__").
 // When user provides --flag without value, Cobra sets it to the sentinel value,
@@ -127,6 +127,10 @@ type OptionalValuePromptContext struct {
 //	  table
 func PromptForOptionalValue(ctx *OptionalValuePromptContext) (string, error) {
 	defer perf.Track(nil, "flags.PromptForOptionalValue")()
+
+	if ctx == nil {
+		return "", fmt.Errorf("%w: optional value prompt context", errUtils.ErrNilInput)
+	}
 
 	// Check if flag value matches the sentinel (indicating user wants interactive selection).
 	if ctx.FlagValue != cfg.IdentityFlagSelectValue {
@@ -147,7 +151,7 @@ func PromptForOptionalValue(ctx *OptionalValuePromptContext) (string, error) {
 }
 
 // PromptForPositionalArg prompts for a required positional argument that is missing.
-// This is Use Case 3: Missing Required Positional Arguments
+// This is Use Case 3: Missing Required Positional Arguments.
 //
 // Example:
 //

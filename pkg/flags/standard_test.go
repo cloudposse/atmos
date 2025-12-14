@@ -342,7 +342,7 @@ func TestStandardFlagParser_RegisterPositionalArgsValidator(t *testing.T) {
 		assert.NotNil(t, cmd.Args, "should set Args validator")
 	})
 
-	t.Run("sets validator without prompts when no prompts configured", func(t *testing.T) {
+	t.Run("does not override cmd.Args when no prompts configured", func(t *testing.T) {
 		builder := NewPositionalArgsBuilder()
 		builder.AddArg(&PositionalArgSpec{
 			Name:        "component",
@@ -358,8 +358,30 @@ func TestStandardFlagParser_RegisterPositionalArgsValidator(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		parser.RegisterFlags(cmd)
 
-		// Args should be set (the builder generates one).
-		assert.NotNil(t, cmd.Args, "should set Args validator even without prompts")
+		// Args should NOT be set when no prompts are configured.
+		// This avoids overriding any pre-existing cmd.Args validator.
+		assert.Nil(t, cmd.Args, "should not set Args validator when no prompts configured")
+	})
+
+	t.Run("preserves existing cmd.Args when no prompts configured", func(t *testing.T) {
+		builder := NewPositionalArgsBuilder()
+		builder.AddArg(&PositionalArgSpec{
+			Name:        "component",
+			Description: "Component name",
+			Required:    true,
+		})
+		specs, validator, usage := builder.Build()
+
+		parser := NewStandardFlagParser()
+		parser.SetPositionalArgs(specs, validator, usage)
+
+		// Set a pre-existing validator.
+		existingValidator := cobra.ExactArgs(1)
+		cmd := &cobra.Command{Use: "test", Args: existingValidator}
+		parser.RegisterFlags(cmd)
+
+		// Pre-existing validator should be preserved.
+		assert.NotNil(t, cmd.Args, "should preserve existing Args validator")
 	})
 }
 
@@ -473,12 +495,10 @@ func TestStandardFlagParser_ParseWithPositionalArgs(t *testing.T) {
 }
 
 // TestStandardFlagParser_ValidatePositionalArgs tests positional arg validation.
+// Note: Validation now runs AFTER prompts have filled in values (in Parse flow).
+// This tests the validatePositionalArgs method directly, which always validates.
 func TestStandardFlagParser_ValidatePositionalArgs(t *testing.T) {
-	t.Run("skips validation when prompts configured", func(t *testing.T) {
-		completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-			return []string{"option1"}, cobra.ShellCompDirectiveNoFileComp
-		}
-
+	t.Run("validates required args after prompts fill values", func(t *testing.T) {
 		builder := NewPositionalArgsBuilder()
 		builder.AddArg(&PositionalArgSpec{
 			Name:        "theme-name",
@@ -487,17 +507,15 @@ func TestStandardFlagParser_ValidatePositionalArgs(t *testing.T) {
 		})
 		specs, validator, usage := builder.Build()
 
-		parser := NewStandardFlagParser(
-			WithPositionalArgPrompt("theme-name", "Choose theme", completionFunc),
-		)
+		parser := NewStandardFlagParser()
 		parser.SetPositionalArgs(specs, validator, usage)
 
-		// Should not error even with empty args because prompts are configured.
-		err := parser.validatePositionalArgs([]string{})
+		// Simulates the case after prompts have filled in the value.
+		err := parser.validatePositionalArgs([]string{"selected-theme"})
 		assert.NoError(t, err)
 	})
 
-	t.Run("validates when no prompts configured", func(t *testing.T) {
+	t.Run("errors when required arg missing", func(t *testing.T) {
 		builder := NewPositionalArgsBuilder()
 		builder.AddArg(&PositionalArgSpec{
 			Name:        "required-arg",
@@ -509,9 +527,17 @@ func TestStandardFlagParser_ValidatePositionalArgs(t *testing.T) {
 		parser := NewStandardFlagParser()
 		parser.SetPositionalArgs(specs, validator, usage)
 
-		// Should error because required arg is missing and no prompts configured.
+		// Should error because required arg is missing (prompts didn't fill it).
 		err := parser.validatePositionalArgs([]string{})
 		assert.Error(t, err)
+	})
+
+	t.Run("passes with no positional args configured", func(t *testing.T) {
+		parser := NewStandardFlagParser()
+
+		// No positional args configured, should pass.
+		err := parser.validatePositionalArgs([]string{})
+		assert.NoError(t, err)
 	})
 }
 

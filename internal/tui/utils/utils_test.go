@@ -457,6 +457,7 @@ func TestNewAtmosHuhTheme(t *testing.T) {
 
 		// Get the current Atmos styles to verify the theme uses them.
 		styles := theme.GetCurrentStyles()
+		require.NotNil(t, styles, "theme.GetCurrentStyles should return non-nil styles for this test")
 
 		// Extract expected colors from Atmos theme.
 		expectedPrimary := styles.Selected.GetForeground()

@@ -168,7 +168,7 @@ func (p *StandardFlagParser) registerPositionalArgsValidator(cmd *cobra.Command)
 		return
 	}
 
-	// Check if any prompts are configured for positional args
+	// Check if any prompts are configured for positional args.
 	hasPrompts := false
 	for _, spec := range p.positionalArgs.specs {
 		if _, exists := p.positionalPrompts[spec.Name]; exists {
@@ -177,15 +177,16 @@ func (p *StandardFlagParser) registerPositionalArgsValidator(cmd *cobra.Command)
 		}
 	}
 
-	// Create a builder to generate the prompt-aware validator
-	builder := NewPositionalArgsBuilder()
-	for _, spec := range p.positionalArgs.specs {
-		builder.AddArg(spec)
+	// Only set prompt-aware validator when prompts are configured.
+	// This avoids overriding any pre-existing cmd.Args validator when not needed.
+	if hasPrompts {
+		builder := NewPositionalArgsBuilder()
+		for _, spec := range p.positionalArgs.specs {
+			builder.AddArg(spec)
+		}
+		validator := builder.GeneratePromptAwareValidator(true)
+		cmd.Args = validator
 	}
-
-	// Generate and set the prompt-aware validator
-	validator := builder.GeneratePromptAwareValidator(hasPrompts)
-	cmd.Args = validator
 }
 
 // GetActualArgs extracts the actual arguments when DisableFlagParsing=true.
@@ -548,28 +549,14 @@ func (p *StandardFlagParser) bindChangedFlagsToViper(combinedFlags *pflag.FlagSe
 }
 
 // validatePositionalArgs validates positional args using the configured validator.
+// This is called after interactive prompts have had a chance to fill in missing values.
 func (p *StandardFlagParser) validatePositionalArgs(positionalArgs []string) error {
 	defer perf.Track(nil, "flags.StandardFlagParser.validatePositionalArgs")()
 
 	if p.positionalArgs != nil && p.positionalArgs.validator != nil {
-		// Skip validation if prompts are configured - they will handle missing args.
-		// The prompt-aware validator on cmd.Args already passed, allowing execution
-		// to reach Parse(), so we should allow prompts to fill in missing values.
-		hasPrompts := false
-		for _, spec := range p.positionalArgs.specs {
-			if _, exists := p.positionalPrompts[spec.Name]; exists {
-				hasPrompts = true
-				break
-			}
+		if err := p.positionalArgs.validator(p.cmd, positionalArgs); err != nil {
+			return err
 		}
-
-		if !hasPrompts {
-			// No prompts configured, use standard validation
-			if err := p.positionalArgs.validator(p.cmd, positionalArgs); err != nil {
-				return err
-			}
-		}
-		// If prompts configured, skip validation - prompts will handle it
 	}
 	return nil
 }
@@ -638,20 +625,21 @@ func (p *StandardFlagParser) Parse(ctx context.Context, args []string) (*ParsedC
 		return nil, err
 	}
 
-	// Step 2: Validate positional args if configured.
-	if err := p.validatePositionalArgs(result.PositionalArgs); err != nil {
-		return nil, err
-	}
-
-	// Step 3: Populate Flags map from Viper with precedence applied.
+	// Step 2: Populate Flags map from Viper with precedence applied.
 	p.populateFlagsFromViper(result, combinedFlags)
 
-	// Step 3.5: Handle interactive prompts (all 3 use cases).
+	// Step 3: Handle interactive prompts (all 3 use cases).
+	// This must happen before positional arg validation because prompts may fill in missing args.
 	if err := p.handleInteractivePrompts(result, combinedFlags); err != nil {
 		return nil, err
 	}
 
-	// Step 4: Validate flag values against valid values constraints.
+	// Step 4: Validate positional args (after prompts have filled in missing values).
+	if err := p.validatePositionalArgs(result.PositionalArgs); err != nil {
+		return nil, err
+	}
+
+	// Step 5: Validate flag values against valid values constraints.
 	if combinedFlags != nil {
 		if err := p.validateFlagValues(result.Flags, combinedFlags); err != nil {
 			return nil, err
