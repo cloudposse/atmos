@@ -50,7 +50,7 @@ func init() {
 		flags.WithBoolFlag("upload-status", "", false, "If set atmos will upload the plan result to the pro API"),
 		flags.WithBoolFlag("affected", "", false, "Plan the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Plan all components in all stacks"),
-		flags.WithBoolFlag("skip-planfile", "", false, "Skip writing the plan to a file by not passing the `-out` flag to Terraform"),
+		flags.WithBoolFlag("skip-planfile", "", false, "Skip writing the plan to a file by not passing the `-out` flag to Terraform when executing the command. Set it to true when using Terraform Cloud since the `-out` flag is not supported. Terraform Cloud automatically stores plans in its backend"),
 		flags.WithEnvVars("upload-status", "ATMOS_TERRAFORM_PLAN_UPLOAD_STATUS"),
 		flags.WithEnvVars("skip-planfile", "ATMOS_TERRAFORM_PLAN_SKIP_PLANFILE"),
 	)
