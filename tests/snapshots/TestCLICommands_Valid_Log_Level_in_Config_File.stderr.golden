@@ -18,6 +18,10 @@
  TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  DEBU  Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
+ TRCE  No auth providers configured, skipping provisioned identity injection
+ TRCE  Re-applying user config for precedence file=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.yaml
+ TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found"
+ TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found"
  TRCE  Git root base path disabled via ATMOS_GIT_ROOT_BASEPATH=false
  DEBU  Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
  TRCE  Checking for atmos.yaml in system config path=/usr/local/etc/atmos
@@ -39,6 +43,10 @@
  TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  DEBU  Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
+ TRCE  No auth providers configured, skipping provisioned identity injection
+ TRCE  Re-applying user config for precedence file=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.yaml
+ TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found"
+ TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found"
  TRCE  Git root base path disabled via ATMOS_GIT_ROOT_BASEPATH=false
  DEBU  Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
  TRCE  Checking for atmos.yaml in system config path=/usr/local/etc/atmos
@@ -60,6 +68,10 @@
  TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found" path=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
  DEBU  Found config ENV ATMOS_CLI_CONFIG_PATH=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level
+ TRCE  No auth providers configured, skipping provisioned identity injection
+ TRCE  Re-applying user config for precedence file=/absolute/path/to/repo/tests/fixtures/scenarios/valid-log-level/atmos.yaml
+ TRCE  Failed to load atmos.d configs error="failed to parse file: failed to search for configuration files in atmos.d: failed to find matching files: no files matching patterns found"
+ TRCE  Failed to load .atmos.d configs error="failed to parse file: failed to search for configuration files in .atmos.d: failed to find matching files: no files matching patterns found"
  TRCE  Git root base path disabled via ATMOS_GIT_ROOT_BASEPATH=false
  DEBU  Found ENV variable ATMOS_VERSION_CHECK_ENABLED=false
  DEBU  Telemetry event enqueued
