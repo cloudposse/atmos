@@ -618,6 +618,22 @@ var (
 	ErrProviderNotInConfig                  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
 
+	// Stack loader errors.
+	ErrUnsupportedFormat = errors.New("unsupported file format")
+	ErrLoaderParseFailed = errors.New("failed to parse file")
+	ErrEncodeFailed      = errors.New("failed to encode data")
+	ErrLoaderNotFound    = errors.New("no loader found for extension")
+	ErrDuplicateLoader   = errors.New("loader already registered for extension")
+
+	// Stack processor errors.
+	ErrProcessingFailed          = errors.New("processing failed")
+	ErrProcessorFunctionNotFound = errors.New("function not found")
+	ErrProcessorInvalidData      = errors.New("invalid data structure")
+	ErrSkippedFunction           = errors.New("function skipped")
+	ErrProcessorCycleDetected    = errors.New("dependency cycle detected")
+	ErrNilProcessor              = errors.New("nil processor")
+	ErrProcessorNilContext       = errors.New("nil context")
+
 	// Backend provisioning errors.
 	ErrBucketRequired       = errors.New("backend.bucket is required")
 	ErrRegionRequired       = errors.New("backend.region is required")

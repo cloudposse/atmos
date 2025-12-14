@@ -1,0 +1,30 @@
+# This file contains multiple stack definitions using YAML multi-document format.
+# Each document (separated by ---) defines a separate stack.
+
+name: yaml-dev-stack
+import:
+  - catalog/base
+
+vars:
+  environment: dev
+  stage: yaml-development
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.30.0.0/16"
+---
+name: yaml-staging-stack
+import:
+  - catalog/base
+
+vars:
+  environment: staging
+  stage: yaml-staging
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.40.0.0/16"

@@ -73,6 +73,7 @@ var excludedReceivers = []string{
 	"DescribeConfigFormatError", // Error types.
 	"DefaultStacksProcessor",    // Processor implementations.
 	"AtmosFuncs",                // Template function wrappers (high-frequency).
+	"Phase",                     // Trivial enum String() accessor called in hot paths.
 }
 
 // Functions to exclude from perf.Track() checks (by name).
