@@ -3,6 +3,7 @@ package downloader
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -50,7 +51,7 @@ func TestFileDownloader_FetchData(t *testing.T) {
 	mockFactory.EXPECT().NewClient(gomock.Any(), "src", gomock.Any(), ClientModeFile).Return(mockClient, nil)
 	mockClient.EXPECT().Get().Return(nil)
 	fakeData := []byte(`{"some":"json"}`)
-	tempFile := "/tmp/testfile.json"
+	tempFile := filepath.Join(t.TempDir(), "testfile.json")
 	fd := &fileDownloader{
 		clientFactory: mockFactory,
 		tempPathGenerator: func() string {
@@ -96,7 +97,7 @@ test:
 		t.Run(testCase.name, func(t *testing.T) {
 			mockClient := NewMockDownloadClient(ctrl)
 			mockFactory := NewMockClientFactory(ctrl)
-			tempFile := "/tmp/testfile.json"
+			tempFile := filepath.Join(t.TempDir(), "testfile.json")
 			mockFactory.EXPECT().NewClient(gomock.Any(), "src", tempFile, ClientModeFile).Return(mockClient, nil)
 			mockClient.EXPECT().Get().Return(nil)
 
@@ -112,7 +113,7 @@ test:
 
 			result, err := fd.FetchAndAutoParse("src")
 			assert.NoError(t, err)
-			assert.NotNil(t, result) // This assumes that the file content is valid JSON
+			assert.NotNil(t, result) // This assumes that the file content is valid JSON.
 		})
 	}
 }
@@ -163,7 +164,7 @@ func TestFileDownloader_FetchAndParseByExtension(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mockClient := NewMockDownloadClient(ctrl)
 			mockFactory := NewMockClientFactory(ctrl)
-			tempFile := "/tmp/testfile"
+			tempFile := filepath.Join(t.TempDir(), "testfile")
 
 			mockFactory.EXPECT().NewClient(gomock.Any(), tc.srcURL, tempFile, ClientModeFile).Return(mockClient, nil)
 			mockClient.EXPECT().Get().Return(nil)
@@ -207,7 +208,7 @@ func TestFileDownloader_FetchAndParseRaw(t *testing.T) {
 
 	mockClient := NewMockDownloadClient(ctrl)
 	mockFactory := NewMockClientFactory(ctrl)
-	tempFile := "/tmp/testfile"
+	tempFile := filepath.Join(t.TempDir(), "testfile")
 	fileContent := "raw text content"
 
 	mockFactory.EXPECT().NewClient(gomock.Any(), "src", tempFile, ClientModeFile).Return(mockClient, nil)
@@ -266,7 +267,7 @@ func TestFileDownloader_FetchData_ReadError(t *testing.T) {
 
 	mockClient := NewMockDownloadClient(ctrl)
 	mockFactory := NewMockClientFactory(ctrl)
-	tempFile := "/tmp/testfile"
+	tempFile := filepath.Join(t.TempDir(), "testfile")
 	readErr := errors.New("file read error")
 
 	mockFactory.EXPECT().NewClient(gomock.Any(), "src", tempFile, ClientModeFile).Return(mockClient, nil)
@@ -311,7 +312,7 @@ func TestFileDownloader_FetchAtomic_Success(t *testing.T) {
 
 	mockClient := NewMockDownloadClient(ctrl)
 	mockFactory := NewMockClientFactory(ctrl)
-	tempFile := "/tmp/testfile"
+	tempFile := filepath.Join(t.TempDir(), "testfile")
 	fileContent := []byte("downloaded content")
 
 	mockFactory.EXPECT().NewClient(gomock.Any(), "src", tempFile, ClientModeFile).Return(mockClient, nil)
@@ -361,7 +362,7 @@ func TestFileDownloader_FetchAtomic_GetError(t *testing.T) {
 
 	mockClient := NewMockDownloadClient(ctrl)
 	mockFactory := NewMockClientFactory(ctrl)
-	tempFile := "/tmp/testfile"
+	tempFile := filepath.Join(t.TempDir(), "testfile")
 	expectedErr := errors.New("network error")
 
 	mockFactory.EXPECT().NewClient(gomock.Any(), "src", tempFile, ClientModeFile).Return(mockClient, nil)
@@ -385,7 +386,7 @@ func TestFileDownloader_FetchAtomic_ReadError(t *testing.T) {
 
 	mockClient := NewMockDownloadClient(ctrl)
 	mockFactory := NewMockClientFactory(ctrl)
-	tempFile := "/tmp/testfile"
+	tempFile := filepath.Join(t.TempDir(), "testfile")
 	readErr := errors.New("file read error")
 
 	mockFactory.EXPECT().NewClient(gomock.Any(), "src", tempFile, ClientModeFile).Return(mockClient, nil)
@@ -414,7 +415,7 @@ func TestFileDownloader_FetchAtomic_WriteError(t *testing.T) {
 
 	mockClient := NewMockDownloadClient(ctrl)
 	mockFactory := NewMockClientFactory(ctrl)
-	tempFile := "/tmp/testfile"
+	tempFile := filepath.Join(t.TempDir(), "testfile")
 	fileContent := []byte("downloaded content")
 	writeErr := errors.New("disk full")
 
@@ -446,9 +447,10 @@ func TestFileDownloader_FetchAtomic_InvalidClientMode(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockFactory := NewMockClientFactory(ctrl)
+	tempFile := filepath.Join(t.TempDir(), "testfile")
 	fd := &fileDownloader{
 		clientFactory:     mockFactory,
-		tempPathGenerator: func() string { return "/tmp/testfile" },
+		tempPathGenerator: func() string { return tempFile },
 		fileReader:        os.ReadFile,
 		atomicWriter:      writeFileAtomicDefault,
 	}

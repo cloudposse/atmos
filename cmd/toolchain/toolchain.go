@@ -39,7 +39,7 @@ func SetAtmosConfig(config *schema.AtmosConfiguration) {
 // toolchainCmd represents the toolchain command.
 var toolchainCmd = &cobra.Command{
 	Use:   "toolchain",
-	Short: "Toolchain CLI",
+	Short: "Manage tool versions and installations",
 	Long:  `A standalone tool to install CLI binaries using registry metadata.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Initialize I/O context and global formatter (required for ui.* functions).
