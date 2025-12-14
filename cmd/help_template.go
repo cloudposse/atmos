@@ -668,7 +668,7 @@ func printCompatibilityFlags(w io.Writer, cmd *cobra.Command, styles *helpStyles
 	fmt.Fprintln(w, "  These flags are passed through to the underlying terraform/tofu command.")
 	fmt.Fprintln(w)
 
-	renderCompatFlags(w, flags, &styles.commandName, &styles.flagName, &styles.flagDesc)
+	renderCompatFlags(w, flags, &styles.flagName, &styles.flagName, &styles.flagDesc)
 	fmt.Fprintln(w)
 }
 
