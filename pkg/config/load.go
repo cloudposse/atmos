@@ -41,6 +41,8 @@ var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 const (
 	profileKey       = "profile"
 	profileDelimiter = ","
+	// AtmosCliConfigPathEnvVar is the environment variable name for CLI config path.
+	AtmosCliConfigPathEnvVar = "ATMOS_CLI_CONFIG_PATH"
 )
 
 // parseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
@@ -493,7 +495,7 @@ func readWorkDirConfigOnly(v *viper.Viper) error {
 		}
 		return err
 	}
-	log.Debug("Found atmos.yaml in current directory", "path", wd)
+	log.Trace("Found atmos.yaml in current directory", "path", wd)
 	return nil
 }
 
@@ -508,7 +510,7 @@ func readGitRootConfig(v *viper.Viper) error {
 	// If ATMOS_CLI_CONFIG_PATH is set, skip git root discovery.
 	// The env var is an explicit override.
 	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself.
-	if os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
+	if os.Getenv(AtmosCliConfigPathEnvVar) != "" {
 		return nil
 	}
 
@@ -540,7 +542,7 @@ func readGitRootConfig(v *viper.Viper) error {
 		}
 		return err
 	}
-	log.Debug("Found atmos.yaml at git root", "path", gitRoot)
+	log.Trace("Found atmos.yaml at git root", "path", gitRoot)
 	return nil
 }
 
@@ -549,7 +551,7 @@ func readParentDirConfig(v *viper.Viper) error {
 	// If ATMOS_CLI_CONFIG_PATH is set, don't search parent directories.
 	// This allows tests and users to explicitly control config discovery.
 	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself.
-	if os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
+	if os.Getenv(AtmosCliConfigPathEnvVar) != "" {
 		return nil
 	}
 
@@ -575,7 +577,7 @@ func readParentDirConfig(v *viper.Viper) error {
 		return err
 	}
 
-	log.Debug("Found atmos.yaml in parent directory", "path", configDir)
+	log.Trace("Found atmos.yaml in parent directory", "path", configDir)
 	return nil
 }
 
@@ -620,7 +622,8 @@ func findAtmosConfigInParentDirs(startDir string) string {
 }
 
 func readEnvAmosConfigPath(v *viper.Viper) error {
-	atmosPath := os.Getenv("ATMOS_CLI_CONFIG_PATH")
+	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself.
+	atmosPath := os.Getenv(AtmosCliConfigPathEnvVar)
 	if atmosPath == "" {
 		return nil
 	}
@@ -628,13 +631,13 @@ func readEnvAmosConfigPath(v *viper.Viper) error {
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
-			log.Debug("config not found ENV var ATMOS_CLI_CONFIG_PATH", "file", atmosPath)
+			log.Debug("config not found ENV var "+AtmosCliConfigPathEnvVar, "file", atmosPath)
 			return nil
 		default:
 			return err
 		}
 	}
-	log.Debug("Found config ENV", "ATMOS_CLI_CONFIG_PATH", atmosPath)
+	log.Trace("Found config ENV", AtmosCliConfigPathEnvVar, atmosPath)
 
 	return nil
 }
