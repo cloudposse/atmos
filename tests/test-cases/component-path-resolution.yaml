@@ -278,6 +278,8 @@ tests:
       - "tenant1-ue2-dev"
     expect:
       diff: []
+      sanitize:
+        "provisioned_by_user: [^\\s]+": "provisioned_by_user: user"
       exit_code: 0
 
   # Validate component tests

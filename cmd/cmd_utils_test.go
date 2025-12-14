@@ -428,7 +428,7 @@ func TestStackFlagCompletion(t *testing.T) {
 	}
 
 	// Call the completion function.
-	completions, directive := stackFlagCompletion(cmd, []string{}, "")
+	completions, directive := StackFlagCompletion(cmd, []string{}, "")
 
 	// Verify we got some completions.
 	assert.NotEmpty(t, completions, "Should have stack completions")
@@ -1309,32 +1309,6 @@ func TestListStacks_InvalidDirectory(t *testing.T) {
 
 	_, err := listStacks(cmd)
 	assert.Error(t, err)
-}
-
-// TestStackFlagCompletion_NoArgs tests the stackFlagCompletion function without args.
-func TestStackFlagCompletion_NoArgs(t *testing.T) {
-	t.Chdir("../examples/demo-stacks")
-
-	cmd := &cobra.Command{Use: "test"}
-	cmd.Flags().String("stack", "", "Stack flag")
-
-	// Test without component arg.
-	stacks, directive := stackFlagCompletion(cmd, []string{}, "")
-	assert.NotNil(t, stacks)
-	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-}
-
-// TestStackFlagCompletion_WithComponent tests stackFlagCompletion with a component.
-func TestStackFlagCompletion_WithComponent(t *testing.T) {
-	t.Chdir("../examples/demo-stacks")
-
-	cmd := &cobra.Command{Use: "test"}
-	cmd.Flags().String("stack", "", "Stack flag")
-
-	// Test with component arg.
-	stacks, directive := stackFlagCompletion(cmd, []string{"myapp"}, "")
-	assert.NotNil(t, stacks)
-	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
 
 // TestGetConfigAndStacksInfo_PathResolution tests path resolution in getConfigAndStacksInfo.

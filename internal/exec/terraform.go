@@ -36,6 +36,7 @@ const (
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
 	forceFlag                 = "--force"
+	everythingFlag            = "--everything"
 	detailedExitCodeFlag      = "-detailed-exitcode"
 	logFieldComponent         = "component"
 )
@@ -44,6 +45,7 @@ const (
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
 
+	log.Debug("ExecuteTerraform entry", "SubCommand", info.SubCommand, "ComponentFromArg", info.ComponentFromArg, "FinalComponent", info.FinalComponent, "Stack", info.Stack, "StackFromArg", info.StackFromArg)
 	info.CliArgs = []string{"terraform", info.SubCommand, info.SubCommand2}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
@@ -75,15 +77,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.RedirectStdErr)
 	}
 
-	// Skip stack processing when cleaning with the `--force` flag to allow cleaning without requiring stack configuration.
-	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
-
 	// Get component-specific auth config and merge with global auth config.
 	// This allows components to define their own auth identities and defaults in stack configurations.
 	// Start with global config.
 	mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
 
 	// If stack and component are specified, get component config and merge auth section.
+	log.Debug("Checking if should call ExecuteDescribeComponent", "Stack", info.Stack, "ComponentFromArg", info.ComponentFromArg, "SubCommand", info.SubCommand)
 	if info.Stack != "" && info.ComponentFromArg != "" {
 		// Get component configuration from stack.
 		// Use nil AuthManager and disable functions to avoid circular dependency.
@@ -142,18 +142,22 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// to access the same authenticated session without re-prompting for credentials.
 	info.AuthManager = authManager
 
-	if shouldProcessStacks {
+	// Determine whether to process stacks and check stack configuration.
+	shouldProcess, shouldCheckStack := shouldProcessStacks(&info)
+
+	if shouldProcess {
 		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
 		if err != nil {
 			return err
 		}
-
-		if len(info.Stack) < 1 && shouldCheckStack {
-			return errUtils.ErrMissingStack
-		}
 	}
 
-	if !info.ComponentIsEnabled && info.SubCommand != "clean" {
+	// Only enforce stack requirement if shouldCheckStack is true.
+	if shouldCheckStack && len(info.Stack) < 1 {
+		return errUtils.ErrMissingStack
+	}
+
+	if !info.ComponentIsEnabled {
 		log.Info("Component is not enabled and skipped", logFieldComponent, info.ComponentFromArg)
 		return nil
 	}
@@ -207,15 +211,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return errUtils.ErrHTTPBackendWorkspaces
 	}
 
-	if info.SubCommand == "clean" {
-		err = handleCleanSubCommand(info, componentPath, &atmosConfig)
-		if err != nil {
-			log.Debug("Error executing 'terraform clean'", logFieldComponent, componentPath, "error", err)
-			return err
-		}
-		return nil
-	}
-
 	varFile := constructTerraformComponentVarfileName(&info)
 	planFile := constructTerraformComponentPlanfileName(&info)
 
@@ -232,23 +227,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 		// Write variables to a file (only if we are not using the previously generated terraform plan)
 		if !info.UseTerraformPlan {
-			var varFilePath, varFileNameFromArg string
-
-			// Handle `terraform varfile` and `terraform write varfile` legacy commands
-			if info.SubCommand == "varfile" || (info.SubCommand == "write" && info.SubCommand2 == "varfile") {
-				if len(info.AdditionalArgsAndFlags) == 2 {
-					fileFlag := info.AdditionalArgsAndFlags[0]
-					if fileFlag == "-f" || fileFlag == "--file" {
-						varFileNameFromArg = info.AdditionalArgsAndFlags[1]
-					}
-				}
-			}
-
-			if len(varFileNameFromArg) > 0 {
-				varFilePath = varFileNameFromArg
-			} else {
-				varFilePath = constructTerraformComponentVarfilePath(&atmosConfig, &info)
-			}
+			varFilePath := constructTerraformComponentVarfilePath(&atmosConfig, &info)
 
 			log.Debug("Writing the variables", "file", varFilePath)
 
@@ -278,11 +257,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				}
 			}
 		}
-	}
-
-	// Handle `terraform varfile` and `terraform write varfile` legacy commands
-	if info.SubCommand == "varfile" || (info.SubCommand == "write" && info.SubCommand2 == "varfile") {
-		return nil
 	}
 
 	// Check if the component 'settings.validation' section is specified and validate the component
@@ -393,9 +367,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Run `terraform init` before running other commands.
+	// Note: 'clean' is no longer checked here since it doesn't route through ExecuteTerraform.
 	runTerraformInit := true
 	if info.SubCommand == "init" ||
-		info.SubCommand == "clean" ||
 		(info.SubCommand == "deploy" && !atmosConfig.Components.Terraform.DeployRunInit) {
 		runTerraformInit = false
 	}
@@ -562,11 +536,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 	}
 
-	// Handle the plan-diff command.
-	if info.SubCommand == "plan-diff" {
-		return TerraformPlanDiff(&atmosConfig, &info)
-	}
-
 	// Run `terraform workspace` before executing other terraform commands
 	// only if the `TF_WORKSPACE` environment variable is not set by the caller.
 	if info.SubCommand != "init" && !(info.SubCommand == "workspace" && info.SubCommand2 != "") {
@@ -630,24 +599,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if region, regionExist := info.ComponentVarsSection["region"].(string); regionExist {
 			info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_REGION=%s", region))
 		}
-	}
-
-	// Execute `terraform shell` command.
-	if info.SubCommand == "shell" {
-		err = execTerraformShellCommand(
-			&atmosConfig,
-			info.ComponentFromArg,
-			info.Stack,
-			info.ComponentEnvList,
-			varFile,
-			workingDir,
-			info.TerraformWorkspace,
-			componentPath,
-		)
-		if err != nil {
-			return err
-		}
-		return nil
 	}
 
 	// Execute the provided command (except for `terraform workspace` which was executed above).

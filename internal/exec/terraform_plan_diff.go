@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -150,10 +151,10 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 
 	// Print the diff
 	if hasDiff {
-		fmt.Fprintln(os.Stdout, "\nDiff Output")
-		fmt.Fprintln(os.Stdout, "===========")
-		fmt.Fprintln(os.Stdout, "")
-		fmt.Fprintln(os.Stdout, diff)
+		_ = data.Writeln("\nDiff Output")
+		_ = data.Writeln("===========")
+		_ = data.Writeln("")
+		_ = data.Writeln(diff)
 
 		// Print the error message
 		errUtils.CheckErrorAndPrint(errUtils.ErrPlanHasDiff, "", "")
@@ -163,7 +164,7 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 		return nil // This line will never be reached
 	}
 
-	fmt.Fprintln(os.Stdout, "The planfiles are identical")
+	_ = data.Writeln("The planfiles are identical")
 	return nil
 }
 
