@@ -449,32 +449,24 @@ func TestRenderMarkdown_EdgeCases(t *testing.T) {
 
 // TestNewAtmosHuhTheme tests the NewAtmosHuhTheme function.
 func TestNewAtmosHuhTheme(t *testing.T) {
-	t.Run("returns a valid Huh theme", func(t *testing.T) {
-		theme := NewAtmosHuhTheme()
+	// Create theme once and run table-driven assertions.
+	theme := NewAtmosHuhTheme()
+	require.NotNil(t, theme, "NewAtmosHuhTheme should return a non-nil theme")
 
-		assert.NotNil(t, theme, "should return a non-nil theme")
-		assert.NotNil(t, theme.Focused, "should have Focused styles")
-		assert.NotNil(t, theme.Blurred, "should have Blurred styles")
-	})
+	tests := []struct {
+		name  string
+		check func() interface{}
+	}{
+		{"Focused styles", func() interface{} { return theme.Focused }},
+		{"Blurred styles", func() interface{} { return theme.Blurred }},
+		{"Focused.SelectSelector", func() interface{} { return theme.Focused.SelectSelector }},
+		{"Blurred.Title", func() interface{} { return theme.Blurred.Title }},
+		{"Focused.FocusedButton", func() interface{} { return theme.Focused.FocusedButton }},
+	}
 
-	t.Run("theme has styled select selector", func(t *testing.T) {
-		theme := NewAtmosHuhTheme()
-
-		// The SelectSelector should be styled.
-		assert.NotNil(t, theme.Focused.SelectSelector, "should have SelectSelector style")
-	})
-
-	t.Run("theme has styled title", func(t *testing.T) {
-		theme := NewAtmosHuhTheme()
-
-		// The Blurred Title should be styled.
-		assert.NotNil(t, theme.Blurred.Title, "should have Title style")
-	})
-
-	t.Run("theme has styled focused button", func(t *testing.T) {
-		theme := NewAtmosHuhTheme()
-
-		// The FocusedButton should be styled.
-		assert.NotNil(t, theme.Focused.FocusedButton, "should have FocusedButton style")
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.NotNil(t, tt.check(), "theme should have %s", tt.name)
+		})
+	}
 }
