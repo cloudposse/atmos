@@ -365,7 +365,7 @@ func isShallowPattern(pattern string) bool {
 	return strings.HasSuffix(pattern, shallowCopySuffix) && !strings.HasSuffix(pattern, "/**")
 }
 
-// processMatch handles a single file/directory match for copyToTargetWithPatterns.
+// processMatch handles a single file/directory match for CopyToTargetWithPatterns.
 func processMatch(sourceDir, targetPath, file string, shallow bool, excluded []string) error {
 	info, err := os.Stat(file)
 	if err != nil {
@@ -454,12 +454,14 @@ func handleLocalFileSource(sourceDir, finalTarget string) error {
 	return ComponentOrMixinsCopy(sourceDir, finalTarget)
 }
 
-// copyToTargetWithPatterns copies the contents from sourceDir to targetPath, applying inclusion and exclusion patterns.
-func copyToTargetWithPatterns(
+// CopyToTargetWithPatterns copies the contents from sourceDir to targetPath, applying inclusion and exclusion patterns.
+func CopyToTargetWithPatterns(
 	sourceDir, targetPath string,
 	s *schema.AtmosVendorSource,
 	sourceIsLocalFile bool,
 ) error {
+	defer perf.Track(nil, "exec.CopyToTargetWithPatterns")()
+
 	finalTarget, err := initFinalTarget(sourceDir, targetPath, sourceIsLocalFile)
 	if err != nil {
 		return err
