@@ -505,7 +505,13 @@ func loadDryRunValues(selectedConfig *templates.Configuration, templateVars map[
 
 	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load scaffold configuration: %w", err)
+		return nil, errUtils.Build(errUtils.ErrScaffoldParseYAML).
+			WithCause(err).
+			WithExplanation("Failed to load scaffold configuration for dry-run preview").
+			WithHint("Check the `scaffold.yaml` syntax in your template").
+			WithHint("Run `atmos scaffold validate` to check for errors").
+			WithExitCode(2).
+			Err()
 	}
 
 	// Merge with defaults from scaffold config
