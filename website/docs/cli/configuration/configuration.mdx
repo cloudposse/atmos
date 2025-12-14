@@ -31,9 +31,11 @@ Atmos discovers configuration from multiple sources in the following precedence 
 
 1. **Command-line flags** (`--config`, `--config-path`)
 2. **Environment variable** (`ATMOS_CLI_CONFIG_PATH`)
-3. **Current directory** (`./atmos.yaml`)
-4. **Home directory** (`~/.atmos/atmos.yaml`)
-5. **System directory** (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+3. **Current directory** (`./atmos.yaml`) - CWD only, no parent search
+4. **Git repository root** (`repo-root/atmos.yaml`) - if in a git repository
+5. **Parent directory search** - walks up from CWD looking for `atmos.yaml`
+6. **Home directory** (`~/.atmos/atmos.yaml`)
+7. **System directory** (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
 
 Each configuration file discovered is deep-merged with the preceding configurations.
 
@@ -114,6 +116,19 @@ Atmos extends standard YAML with custom functions that provide powerful tools fo
 
     See the [`!repo-root` documentation](/functions/yaml/repo-root) for more details.
   </dd>
+
+  <dt>`!cwd`</dt>
+  <dd>
+    Retrieve the current working directory. Useful when you need paths relative to where Atmos is executed from rather than relative to the configuration file.
+
+    ```yaml
+    base_path: !cwd
+    # or with a relative path
+    base_path: !cwd ./relative/path
+    ```
+
+    See the [`!cwd` documentation](/functions/yaml/cwd) for more details.
+  </dd>
 </dl>
 
 ## Base Path
@@ -130,7 +145,43 @@ It can also be set using:
 
 It supports both absolute and relative paths.
 
-### Path Resolution
+### Path Resolution Semantics
+
+The `base_path` value determines where Atmos looks for stacks and components. Here's how different values are resolved:
+
+| `base_path` value | Resolves to | Description |
+|-------------------|-------------|-------------|
+| `""`, `~`, `null`, or unset | Git root, fallback to config directory | Smart default with git root discovery |
+| `"."` | Config file directory | Relative to where `atmos.yaml` is located |
+| `".."` | Parent of config file directory | Relative to where `atmos.yaml` is located |
+| `"./foo"` | Config file directory + `foo` | Relative to where `atmos.yaml` is located |
+| `"../foo"` | Parent of config directory + `foo` | Relative to where `atmos.yaml` is located |
+| `"foo"` | Git root + `foo`, fallback to config directory + `foo` | Simple relative path with search |
+| `"/absolute/path"` | `/absolute/path` | Explicit absolute path |
+| `!repo-root` | Git repository root | Explicit git root tag |
+| `!cwd` | Current working directory | Explicit CWD tag |
+
+**Why `.` and `..` are config-file-relative:**
+
+Paths in configuration files are relative to where the config file is located, not where you run from. This follows the convention established by other configuration files like `tsconfig.json`, `package.json`, and `.eslintrc`.
+
+For example, if your `atmos.yaml` is in `/repo/config/atmos.yaml` and contains:
+```yaml
+base_path: ".."  # Resolves to /repo (parent of config directory)
+```
+
+This means you can run `atmos` from anywhere, and the paths will always resolve correctly relative to where the configuration file is defined.
+
+**Need CWD-relative behavior?**
+
+If you need paths relative to where Atmos is executed (the current working directory), use the `!cwd` YAML function:
+```yaml
+base_path: !cwd
+# or with a relative path
+base_path: !cwd ./my/path
+```
+
+### Subpath Configuration
 
 If `base_path` is not provided or is an empty string, the following paths are independent settings (supporting both absolute and relative paths):
 - `components.terraform.base_path`

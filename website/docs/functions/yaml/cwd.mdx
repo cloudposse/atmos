@@ -1,0 +1,84 @@
+---
+title: "!cwd"
+sidebar_position: 11
+sidebar_label: "!cwd"
+sidebar_class_name: command
+description: Get the current working directory
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `!cwd` Atmos YAML function retrieves the current working directory where Atmos is executed from.
+</Intro>
+
+## Usage
+
+The `!cwd` function can be called with or without a relative path:
+
+```yaml
+# Get the current working directory
+base_path: !cwd
+
+# Get CWD joined with a relative path
+base_path: !cwd ./relative/path
+```
+
+## Why Use `!cwd`
+
+By default, relative paths in `atmos.yaml` (like `.` and `..`) are resolved relative to the config file location, not where you run the command. This follows the convention of other config files like `tsconfig.json` and `package.json`.
+
+Use `!cwd` when you need paths relative to where Atmos is executed, such as:
+
+- Running Atmos from within a component directory with a shared config
+- Dynamic path resolution based on the current directory
+- Scripts that change directories before running Atmos
+
+## Examples
+
+### Basic Usage
+
+```yaml
+# atmos.yaml
+# base_path will be set to the current working directory
+base_path: !cwd
+```
+
+### With Relative Path
+
+```yaml
+# atmos.yaml
+# base_path will be CWD + ./components
+base_path: !cwd ./components
+```
+
+### Component-Relative Execution
+
+A common use case is running Atmos from within a component directory while pointing to a shared configuration:
+
+```bash
+# Repository structure:
+# /repo/
+#   atmos.yaml          # shared config with base_path: !cwd
+#   components/terraform/vpc/
+#     main.tf
+
+# When running from within a component:
+cd /repo/components/terraform/vpc
+ATMOS_CLI_CONFIG_PATH=/repo atmos terraform plan vpc -s prod
+
+# base_path resolves to /repo/components/terraform/vpc (the CWD)
+```
+
+## Comparison with Other Path Options
+
+| Configuration | Resolves to | Use when |
+|---------------|-------------|----------|
+| `base_path: "."` | Config file directory | Paths should be relative to atmos.yaml |
+| `base_path: !cwd` | Current working directory | Paths should be relative to where you run from |
+| `base_path: !repo-root` | Git repository root | Paths should be relative to repo root |
+| `base_path: ""` | Git root with fallback to config dir | Smart default behavior |
+
+## See Also
+
+- [`!repo-root`](/functions/yaml/repo-root) - Get the Git repository root
+- [Path Resolution Semantics](/cli/configuration#path-resolution-semantics) - How Atmos resolves paths

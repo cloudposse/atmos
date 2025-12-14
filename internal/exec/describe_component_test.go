@@ -333,22 +333,16 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 }
 
 func TestDescribeComponent_Packer(t *testing.T) {
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
-	}
-
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
-	}
-
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	// Define the working directory
+	// Define the working directory.
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	atmosConfig := schema.AtmosConfiguration{
 		Logs: schema.Logs{

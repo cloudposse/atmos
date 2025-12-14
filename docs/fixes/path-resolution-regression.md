@@ -2,8 +2,8 @@
 
 ## Summary
 
-Fixed a regression introduced in v1.201.0 where relative paths in `atmos.yaml` (like `stacks` or `components/terraform`)
-were incorrectly resolved relative to the `ATMOS_CLI_CONFIG_PATH` directory instead of the current working directory.
+Fixed a regression introduced in v1.201.0 where relative paths in `atmos.yaml` were resolved incorrectly. The fix
+implements correct base path resolution semantics that allow users to run `atmos` from anywhere inside a repository.
 
 ## Issue Description
 
@@ -31,9 +31,6 @@ components:
     base_path: "components/terraform"
 ```
 
-**Before v1.201.0**: Relative paths resolved relative to CWD (working correctly)
-**After v1.201.0**: Relative paths resolved relative to atmos.yaml location (breaking change)
-
 ## Root Cause
 
 Commit `2aad133f6` ("fix: resolve ATMOS_BASE_PATH relative to CLI config directory") introduced a new
@@ -46,60 +43,66 @@ explicitly referencing the config directory.
 
 ## Solution
 
-Modified `resolveAbsolutePath()` to only resolve paths relative to `cliConfigPath` when they explicitly reference the
-config directory location:
+Implemented correct base path resolution semantics as defined in the PRD (`docs/prd/base-path-resolution-semantics.md`):
 
-1. **Exactly `.` or `..`** (current or parent directory) → Resolve relative to atmos.yaml location
-2. **Paths starting with `./` or `../`** (Unix-style explicit relative) → Resolve relative to atmos.yaml location
-3. **Paths starting with `.\` or `..\`** (Windows-style explicit relative) → Resolve relative to atmos.yaml location
-4. **All other relative paths** (like `stacks`, `components/terraform`, `.hidden`, `..foo`, empty string) → Resolve
-   relative to CWD for backward compatibility
+### Base Path Resolution Rules
 
-Note: The detection is strict to avoid misclassifying paths like `.hidden` or `..foo` as explicit relative paths.
+| `base_path` value    | Resolves to                                            | Rationale                                          |
+| -------------------- | ------------------------------------------------------ | -------------------------------------------------- |
+| `""` (empty/unset)   | Git repo root, fallback to dirname(atmos.yaml)         | Smart default - most users want repo root          |
+| `"."`                | CWD                                                    | Explicit "where I'm standing"                      |
+| `"./foo"`            | CWD/foo                                                | Explicit CWD-relative path                         |
+| `"foo"` or `"foo/bar"` | Git repo root/foo, fallback to dirname(atmos.yaml)/foo | Simple relative paths anchor to repo root          |
+| `"../foo"`           | dirname(atmos.yaml)/../foo                             | Parent traversal navigates from config location    |
+| `"/absolute/path"`   | /absolute/path (unchanged)                             | Absolute paths are explicit                        |
 
-### Why `.` Resolves to Config Directory
+### Key Semantic Distinctions
 
-The single dot `.` is treated as an explicit relative path (resolving to config dir) rather than a simple path
-(resolving to CWD) because:
+1. **`.` vs `""`**: These are NOT the same
+   - `"."` = explicit CWD (user wants current working directory)
+   - `""` = smart default (repo root with fallback)
 
-- When a user sets `ATMOS_BASE_PATH="."` along with `ATMOS_CLI_CONFIG_PATH` pointing to a different directory, they're
-  explicitly saying "use the directory where atmos.yaml is located as the base path"
-- This is essential for **path-based component resolution**, where users run commands like `atmos terraform plan .` from
-  within a component directory while `ATMOS_CLI_CONFIG_PATH` points back to the repo root
-- An empty string `""` is the correct way to indicate "use CWD as the base path" when backward compatibility is needed
+2. **`./foo` vs `foo`**: These are NOT the same
+   - `"./foo"` = CWD/foo (explicit CWD-relative)
+   - `"foo"` = repo root/foo (anchored to repo root)
+
+3. **`../foo`**: Always relative to atmos.yaml location
+   - Used for navigating from config location to elsewhere in repo
+   - Common pattern: config in subdirectory, `base_path: "../.."` to reach repo root
 
 ### Code Change
 
 ```go
-// Before (v1.201.0):
-func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
+func resolveBasePath(path string, cliConfigPath string) (string, error) {
+    // Absolute paths unchanged.
     if filepath.IsAbs(path) {
         return path, nil
     }
-    // PROBLEM: ALL relative paths resolved relative to cliConfigPath
-    if cliConfigPath != "" {
-        basePath := filepath.Join(cliConfigPath, path)
-        absPath, err := filepath.Abs(basePath)
-        // ...
-    }
-}
 
-// After (fix):
-func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
-    if filepath.IsAbs(path) {
-        return path, nil
+    // Explicit CWD: "." or "./...".
+    if path == "." || strings.HasPrefix(path, "./") {
+        return filepath.Abs(path)
     }
-    // Only resolve relative to config dir for explicit relative paths.
-    // Strict detection avoids misclassifying ".hidden" or "..foo".
-    sep := string(filepath.Separator)
-    isExplicitRelativePath := path == "." || path == ".." ||
-        strings.HasPrefix(path, "."+sep) || strings.HasPrefix(path, ".."+sep) ||
-        strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../")
-    if isExplicitRelativePath && cliConfigPath != "" {
-        basePath := filepath.Join(cliConfigPath, path)
-        // ...
+
+    // Parent traversal: "../..." - relative to atmos.yaml dir.
+    if strings.HasPrefix(path, "../") {
+        return filepath.Abs(filepath.Join(cliConfigPath, path))
     }
-    // Otherwise, resolve relative to CWD for backward compatibility
+
+    // Empty or simple relative: try git root, fallback to atmos.yaml dir.
+    gitRoot, err := getGitRoot()
+    if err == nil && gitRoot != "" {
+        if path == "" {
+            return gitRoot, nil
+        }
+        return filepath.Join(gitRoot, path), nil
+    }
+
+    // Fallback: relative to atmos.yaml dir.
+    if path == "" {
+        return filepath.Abs(cliConfigPath)
+    }
+    return filepath.Abs(filepath.Join(cliConfigPath, path))
 }
 ```
 
@@ -107,36 +110,26 @@ func resolveAbsolutePath(path string, cliConfigPath string) (string, error) {
 
 Added comprehensive tests in `pkg/config/config_test.go`:
 
-1. **`TestResolveAbsolutePath`**: Unit tests for the path resolution logic covering:
+1. **`TestResolveBasePath`**: Unit tests for the path resolution logic covering:
 
 - Absolute paths remain unchanged
-- Simple relative paths resolve to CWD
-- Empty path resolves to CWD
-- Dot path (`.`) resolves to config dir (explicit current directory reference)
-- Path with `..` resolves to config dir
-- Path starting with `../` resolves to config dir
-- Path starting with `./` resolves to config dir
-- Complex relative paths without `./` prefix resolve to CWD
+- Empty path resolves to git repo root (or atmos.yaml dir if not in git repo)
+- Dot path (`.`) resolves to CWD
+- Paths starting with `./` resolve to CWD
+- Paths starting with `../` resolve relative to atmos.yaml dir
+- Simple relative paths resolve to git repo root (or atmos.yaml dir if not in git repo)
 
 2. **`TestCliConfigPathRegression`**: Integration tests for issue #1858 scenario:
 
 - Config in subdirectory with `base_path: ..`
-- Empty `base_path` with nested config should resolve paths relative to CWD
+- Empty `base_path` with nested config should resolve paths relative to git repo root
 
 ## Test Fixtures
 
 Added test fixture in `tests/fixtures/scenarios/`:
 
-- **`cli-config-path/`**: Tests the `base_path: ..` scenario where atmos.yaml is in a subdirectory and uses parent directory traversal to reference the repo root
-
-## Backward Compatibility
-
-This fix maintains backward compatibility with v1.200.0 behavior:
-
-- Simple relative paths like `stacks` and `components/terraform` resolve relative to CWD
-- Empty `base_path` (`""`) resolves relative to CWD
-- Paths that explicitly use `..`, `./`, or `.` to reference the config directory location resolve relative to atmos.yaml
-  as intended by PR #1774
+- **`cli-config-path/`**: Tests the `base_path: ..` scenario where atmos.yaml is in a subdirectory and uses parent
+  directory traversal to reference the repo root
 
 ## Manual Testing
 
@@ -157,7 +150,7 @@ tests/fixtures/scenarios/cli-config-path/
 ```
 
 The `config/atmos.yaml` uses `base_path: ".."` to reference the parent directory (repo root), while `stacks` and
-`components/terraform` are simple relative paths that should resolve relative to CWD.
+`components/terraform` are simple relative paths that should resolve relative to the git repo root.
 
 ### Test Commands
 
@@ -193,13 +186,15 @@ atmos describe config | grep -E "(base_path|stacks_base_absolute|terraform_dir_a
 
 ### Expected vs. Broken Behavior
 
-| Command                 | v1.200.0 (Working) | v1.201.0 (Broken)                   | This Fix          |
-|-------------------------|--------------------|-------------------------------------|-------------------|
-| `atmos validate stacks` | ✅ Success          | ❌ "stacks directory does not exist" | ✅ Success         |
-| `atmos list stacks`     | ✅ Shows "dev"      | ❌ Error                             | ✅ Shows "dev"     |
-| `atmos list components` | ✅ Shows component  | ❌ Error                             | ✅ Shows component |
+| Command                 | v1.200.0 (Working) | v1.201.0 (Broken)                    | This Fix           |
+| ----------------------- | ------------------ | ------------------------------------ | ------------------ |
+| `atmos validate stacks` | ✅ Success          | ❌ "stacks directory does not exist" | ✅ Success          |
+| `atmos list stacks`     | ✅ Shows "dev"      | ❌ Error                              | ✅ Shows "dev"      |
+| `atmos list components` | ✅ Shows component  | ❌ Error                              | ✅ Shows component  |
 
 ## Related PRs/Commits
 
 - **Commit `2aad133f6`**: "fix: resolve ATMOS_BASE_PATH relative to CLI config directory" (introduced the regression)
 - **PR #1774**: "Path-based component resolution for all commands" (contained the breaking commit)
+- **PR #1868**: Initial fix attempt (reverted to inconsistent CWD behavior)
+- **PRD**: `docs/prd/base-path-resolution-semantics.md` (defines correct semantics)

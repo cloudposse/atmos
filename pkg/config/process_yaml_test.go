@@ -261,6 +261,11 @@ func TestHasCustomTag(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "cwd tag",
+			tag:      "!cwd",
+			expected: true,
+		},
+		{
 			name:     "random tag",
 			tag:      "!random",
 			expected: true,
@@ -575,6 +580,52 @@ func TestProcessScalarNodeValue(t *testing.T) {
 
 			if !tt.wantErr && tt.checkFunc != nil {
 				tt.checkFunc(t, result)
+			}
+		})
+	}
+}
+
+func TestProcessCwdTag(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		yamlStr  string
+		expected string
+	}{
+		{
+			name:     "cwd tag without path",
+			yamlStr:  "key: !cwd",
+			expected: cwd,
+		},
+		{
+			name:     "cwd tag with relative path",
+			yamlStr:  "key: !cwd ./subdir",
+			expected: strings.ReplaceAll(cwd+"/subdir", "/", string(os.PathSeparator)),
+		},
+		{
+			name:     "cwd tag with nested path",
+			yamlStr:  "key: !cwd ./a/b/c",
+			expected: strings.ReplaceAll(cwd+"/a/b/c", "/", string(os.PathSeparator)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			err := preprocessAtmosYamlFunc([]byte(tt.yamlStr), v)
+			if err != nil {
+				t.Fatalf("preprocessAtmosYamlFunc() error = %v", err)
+			}
+
+			result := v.GetString("key")
+			// Normalize path separators for comparison.
+			expected := strings.ReplaceAll(tt.expected, "/", string(os.PathSeparator))
+			if result != expected {
+				t.Errorf("Expected %q, got %q", expected, result)
 			}
 		})
 	}
