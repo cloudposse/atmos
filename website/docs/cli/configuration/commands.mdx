@@ -454,6 +454,60 @@ commands:
             {{ end }}
 ```
 
+## Working Directory
+
+Custom commands can specify a `working_directory` field to control where the command steps execute. This is useful when commands need to run from a specific location, regardless of where `atmos` was invoked.
+
+### Path Resolution
+
+- **Absolute paths** are used as-is (e.g., `/tmp`, `/home/user/scripts`)
+- **Relative paths** are resolved against the Atmos `base_path`
+- The `!repo-root` YAML function can be used to reference the git repository root
+
+### Example: Run from Repository Root
+
+```yaml
+commands:
+  - name: build
+    description: Build the project from repository root
+    working_directory: !repo-root .
+    steps:
+      - make build
+      - make test
+```
+
+This ensures the build commands run from the repository root, even if you invoke `atmos build` from a subdirectory.
+
+### Example: Run in Temp Directory
+
+```yaml
+commands:
+  - name: download-tools
+    description: Download and extract tools in /tmp
+    working_directory: /tmp
+    steps:
+      - wget https://example.com/tools.tar.gz
+      - tar -xzf tools.tar.gz
+```
+
+### Example: Run in Component Directory
+
+```yaml
+commands:
+  - name: component-init
+    description: Initialize a component
+    working_directory: components/terraform/vpc
+    steps:
+      - terraform init
+      - terraform validate
+```
+
+Since `components/terraform/vpc` is a relative path, it will be resolved against `base_path`.
+
+:::tip
+Use `working_directory: !repo-root .` when defining commands in `.atmos.d/` at the repository root. This ensures commands work correctly when invoked from any subdirectory in your project.
+:::
+
 ## Using Authentication with Custom Commands
 
 Custom commands can specify an `identity` field to authenticate before execution. This is useful when commands need to interact with cloud resources that require specific credentials or elevated permissions.
