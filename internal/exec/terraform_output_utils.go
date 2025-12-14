@@ -3,7 +3,6 @@ package exec
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -17,6 +16,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	auth_types "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -752,14 +752,5 @@ func GetStaticRemoteStateOutput(
 // environToMap converts all the environment variables (excluding the variables prohibited by terraform-exec/tfexec) in the environment into a map of strings.
 // TODO: review this (find another way to execute `terraform output` not using `terraform-exec/tfexec`).
 func environToMap() map[string]string {
-	envMap := make(map[string]string)
-	for _, env := range os.Environ() {
-		pair := u.SplitStringAtFirstOccurrence(env, "=")
-		k := pair[0]
-		v := pair[1]
-		if !u.SliceContainsString(prohibitedEnvVars, k) && !u.SliceContainsStringStartsWith(prohibitedEnvVarPrefixes, k) {
-			envMap[k] = v
-		}
-	}
-	return envMap
+	return envpkg.EnvironToMapFiltered(prohibitedEnvVars, prohibitedEnvVarPrefixes)
 }

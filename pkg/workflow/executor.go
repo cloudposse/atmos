@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -162,7 +164,8 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 	}
 
 	// Prepare environment with authentication if needed.
-	stepEnv, err := e.prepareStepEnvironment(params.Ctx, stepIdentity, step.Name)
+	// Global env from atmos.yaml is merged with system env as base.
+	stepEnv, err := e.prepareStepEnvironment(params.Ctx, stepIdentity, step.Name, params.AtmosConfig.Env)
 	if err != nil {
 		return stepResultInternal{
 			StepResult: StepResult{
@@ -205,11 +208,16 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 }
 
 // prepareStepEnvironment prepares the environment for a step, handling authentication if needed.
-func (e *Executor) prepareStepEnvironment(ctx context.Context, stepIdentity, stepName string) ([]string, error) {
+// Global env vars from atmos.yaml are merged with system env (global env has lowest priority).
+func (e *Executor) prepareStepEnvironment(ctx context.Context, stepIdentity, stepName string, globalEnv map[string]string) ([]string, error) {
+	// Start with system env + global env from atmos.yaml.
+	// Global env has lowest priority and can be overridden by identity auth env vars.
+	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), globalEnv)
+
 	if stepIdentity == "" || e.authProvider == nil {
-		return []string{}, nil
+		return baseEnv, nil
 	}
-	return e.prepareAuthenticatedEnvironment(ctx, stepIdentity, stepName)
+	return e.prepareAuthenticatedEnvironment(ctx, stepIdentity, stepName, baseEnv)
 }
 
 // runCommandParams holds parameters for command execution.
@@ -299,7 +307,8 @@ func (e *Executor) handleStepError(params *WorkflowParams, stepName string, cmdP
 }
 
 // prepareAuthenticatedEnvironment prepares environment variables with authentication.
-func (e *Executor) prepareAuthenticatedEnvironment(ctx context.Context, identity, stepName string) ([]string, error) {
+// BaseEnv should include system env merged with global env from atmos.yaml.
+func (e *Executor) prepareAuthenticatedEnvironment(ctx context.Context, identity, stepName string, baseEnv []string) ([]string, error) {
 	if e.authProvider == nil {
 		return nil, fmt.Errorf("%w: identity %q specified for step %q", errUtils.ErrAuthProviderNotAvailable, identity, stepName)
 	}
@@ -317,8 +326,9 @@ func (e *Executor) prepareAuthenticatedEnvironment(ctx context.Context, identity
 		}
 	}
 
-	// Prepare environment.
-	stepEnv, err := e.authProvider.PrepareEnvironment(ctx, identity, nil)
+	// Prepare environment with base env (system + global env).
+	// Auth credentials will be added on top.
+	stepEnv, err := e.authProvider.PrepareEnvironment(ctx, identity, baseEnv)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to prepare shell environment for identity %q in step %q: %w", errUtils.ErrAuthenticationFailed, identity, stepName, err)
 	}

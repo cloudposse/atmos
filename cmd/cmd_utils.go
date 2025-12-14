@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -546,8 +547,8 @@ func executeCustomCommand(
 
 		// Prepare ENV vars
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		// Start with current environment to inherit PATH and other variables.
-		env := os.Environ()
+		// Start with current environment + global env from atmos.yaml to inherit PATH and other variables.
+		env := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
 			value := v.Value
@@ -573,7 +574,7 @@ func executeCustomCommand(
 			}
 
 			// Add or update the environment variable in the env slice
-			env = u.UpdateEnvVar(env, key, value)
+			env = envpkg.UpdateEnvVar(env, key, value)
 		}
 
 		if len(commandConfig.Env) > 0 && commandConfig.Verbose {

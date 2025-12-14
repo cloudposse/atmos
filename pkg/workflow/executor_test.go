@@ -37,8 +37,9 @@ func TestExecutor_Execute_BasicShellWorkflow(t *testing.T) {
 	mockUI := NewMockUIProvider(ctrl)
 
 	// Expect shell command to be called.
+	// Use gomock.Any() for env since system env + global env is now passed.
 	mockRunner.EXPECT().
-		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{}, false).
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", gomock.Any(), false).
 		Return(nil)
 
 	// Create executor.
@@ -114,9 +115,9 @@ func TestExecutor_Execute_MultipleSteps(t *testing.T) {
 
 	// Expect commands in order.
 	gomock.InOrder(
-		mockRunner.EXPECT().RunShell("echo 'step 1'", "test-workflow-step-0", ".", []string{}, false).Return(nil),
-		mockRunner.EXPECT().RunShell("echo 'step 2'", "test-workflow-step-1", ".", []string{}, false).Return(nil),
-		mockRunner.EXPECT().RunShell("echo 'step 3'", "test-workflow-step-2", ".", []string{}, false).Return(nil),
+		mockRunner.EXPECT().RunShell("echo 'step 1'", "test-workflow-step-0", ".", gomock.Any(), false).Return(nil),
+		mockRunner.EXPECT().RunShell("echo 'step 2'", "test-workflow-step-1", ".", gomock.Any(), false).Return(nil),
+		mockRunner.EXPECT().RunShell("echo 'step 3'", "test-workflow-step-2", ".", gomock.Any(), false).Return(nil),
 	)
 
 	executor := NewExecutor(mockRunner, nil, mockUI)
@@ -210,8 +211,8 @@ func TestExecutor_Execute_StepFailure(t *testing.T) {
 
 	// First step succeeds, second fails.
 	gomock.InOrder(
-		mockRunner.EXPECT().RunShell("echo 'step 1'", "test-workflow-step-0", ".", []string{}, false).Return(nil),
-		mockRunner.EXPECT().RunShell("exit 1", "test-workflow-step-1", ".", []string{}, false).Return(stepError),
+		mockRunner.EXPECT().RunShell("echo 'step 1'", "test-workflow-step-0", ".", gomock.Any(), false).Return(nil),
+		mockRunner.EXPECT().RunShell("exit 1", "test-workflow-step-1", ".", gomock.Any(), false).Return(stepError),
 	)
 
 	// Expect error to be printed for failed step.
@@ -249,8 +250,8 @@ func TestExecutor_Execute_FromStep(t *testing.T) {
 	// Only step2 and step3 should be executed.
 	// Note: step indices are 0-based from the filtered list (after --from-step).
 	gomock.InOrder(
-		mockRunner.EXPECT().RunShell("echo 'step 2'", "test-workflow-step-0", ".", []string{}, false).Return(nil),
-		mockRunner.EXPECT().RunShell("echo 'step 3'", "test-workflow-step-1", ".", []string{}, false).Return(nil),
+		mockRunner.EXPECT().RunShell("echo 'step 2'", "test-workflow-step-0", ".", gomock.Any(), false).Return(nil),
+		mockRunner.EXPECT().RunShell("echo 'step 3'", "test-workflow-step-1", ".", gomock.Any(), false).Return(nil),
 	)
 
 	executor := NewExecutor(mockRunner, nil, mockUI)
@@ -314,7 +315,7 @@ func TestExecutor_Execute_DryRun(t *testing.T) {
 
 	// Expect shell command with dryRun=true.
 	mockRunner.EXPECT().
-		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{}, true).
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", gomock.Any(), true).
 		Return(nil)
 
 	executor := NewExecutor(mockRunner, nil, mockUI)
@@ -412,13 +413,14 @@ func TestExecutor_Execute_WithIdentity(t *testing.T) {
 	mockUI := NewMockUIProvider(ctrl)
 
 	// Setup auth expectations.
+	// PrepareEnvironment now receives baseEnv (system + global env), so use gomock.Any().
 	mockAuth.EXPECT().GetCachedCredentials(gomock.Any(), "test-identity").Return(nil, errors.New("no cache"))
 	mockAuth.EXPECT().Authenticate(gomock.Any(), "test-identity").Return(nil)
-	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "test-identity", nil).Return([]string{"AWS_PROFILE=test"}, nil)
+	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "test-identity", gomock.Any()).Return([]string{"AWS_PROFILE=test"}, nil)
 
 	// Expect shell command with auth env.
 	mockRunner.EXPECT().
-		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{"AWS_PROFILE=test"}, false).
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", gomock.Any(), false).
 		Return(nil)
 
 	executor := NewExecutor(mockRunner, mockAuth, mockUI)
@@ -503,13 +505,13 @@ func TestExecutor_Execute_CommandLineIdentity(t *testing.T) {
 	// Both steps should use the command-line identity.
 	mockAuth.EXPECT().GetCachedCredentials(gomock.Any(), "cli-identity").Return(nil, errors.New("no cache")).Times(2)
 	mockAuth.EXPECT().Authenticate(gomock.Any(), "cli-identity").Return(nil).Times(2)
-	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "cli-identity", nil).Return([]string{"IDENTITY=cli"}, nil).Times(2)
+	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "cli-identity", gomock.Any()).Return([]string{"IDENTITY=cli"}, nil).Times(2)
 
 	mockRunner.EXPECT().
-		RunShell("echo 'step 1'", "test-workflow-step-0", ".", []string{"IDENTITY=cli"}, false).
+		RunShell("echo 'step 1'", "test-workflow-step-0", ".", gomock.Any(), false).
 		Return(nil)
 	mockRunner.EXPECT().
-		RunShell("echo 'step 2'", "test-workflow-step-1", ".", []string{"IDENTITY=cli"}, false).
+		RunShell("echo 'step 2'", "test-workflow-step-1", ".", gomock.Any(), false).
 		Return(nil)
 
 	executor := NewExecutor(mockRunner, mockAuth, mockUI)
@@ -611,8 +613,8 @@ func TestExecutor_Execute_AutoGenerateStepNames(t *testing.T) {
 	mockUI := NewMockUIProvider(ctrl)
 
 	// Steps without names should get auto-generated names.
-	mockRunner.EXPECT().RunShell("echo '1'", "test-workflow-step-0", ".", []string{}, false).Return(nil)
-	mockRunner.EXPECT().RunShell("echo '2'", "test-workflow-step-1", ".", []string{}, false).Return(nil)
+	mockRunner.EXPECT().RunShell("echo '1'", "test-workflow-step-0", ".", gomock.Any(), false).Return(nil)
+	mockRunner.EXPECT().RunShell("echo '2'", "test-workflow-step-1", ".", gomock.Any(), false).Return(nil)
 
 	executor := NewExecutor(mockRunner, nil, mockUI)
 
@@ -705,7 +707,7 @@ func TestExecutor_Execute_NilUIProvider(t *testing.T) {
 
 	// Expect shell command to be called.
 	mockRunner.EXPECT().
-		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{}, false).
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", gomock.Any(), false).
 		Return(nil)
 
 	// Create executor with nil UI provider.
@@ -787,10 +789,10 @@ func TestExecutor_Execute_CachedCredentialsSuccess(t *testing.T) {
 
 	// Cached credentials are valid - no need to authenticate.
 	mockAuth.EXPECT().GetCachedCredentials(gomock.Any(), "cached-identity").Return("cached-creds", nil)
-	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "cached-identity", nil).Return([]string{"CACHED=true"}, nil)
+	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "cached-identity", gomock.Any()).Return([]string{"CACHED=true"}, nil)
 
 	mockRunner.EXPECT().
-		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{"CACHED=true"}, false).
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", gomock.Any(), false).
 		Return(nil)
 
 	executor := NewExecutor(mockRunner, mockAuth, mockUI)
@@ -817,9 +819,10 @@ func TestExecutor_Execute_PrepareEnvironmentFailure(t *testing.T) {
 	mockUI := NewMockUIProvider(ctrl)
 
 	// Auth succeeds but PrepareEnvironment fails.
+	// PrepareEnvironment now receives baseEnv (system + global env), so use gomock.Any().
 	mockAuth.EXPECT().GetCachedCredentials(gomock.Any(), "test-identity").Return(nil, errors.New("no cache"))
 	mockAuth.EXPECT().Authenticate(gomock.Any(), "test-identity").Return(nil)
-	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "test-identity", nil).Return(nil, errors.New("prepare failed"))
+	mockAuth.EXPECT().PrepareEnvironment(gomock.Any(), "test-identity", gomock.Any()).Return(nil, errors.New("prepare failed"))
 
 	executor := NewExecutor(mockRunner, mockAuth, mockUI)
 
@@ -876,9 +879,9 @@ func TestExecutor_Execute_IdentityWithNoAuthProvider(t *testing.T) {
 	mockUI := NewMockUIProvider(ctrl)
 
 	// No auth provider, but step has identity - should still execute without auth.
-	// Since authProvider is nil, prepareStepEnvironment returns empty env.
+	// Since authProvider is nil, prepareStepEnvironment returns system + global env.
 	mockRunner.EXPECT().
-		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{}, false).
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", gomock.Any(), false).
 		Return(nil)
 
 	executor := NewExecutor(mockRunner, nil, mockUI)
