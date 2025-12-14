@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -364,7 +365,7 @@ func TestLockFileManager_RemoveTool_VersionMismatch(t *testing.T) {
 	// Try to remove with wrong version.
 	err = mgr.RemoveTool(ctx, "hashicorp/terraform", "1.10.0")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "lockfile version")
+	assert.ErrorIs(t, err, errUtils.ErrLockfileVersionMismatch)
 }
 
 func TestLockFileManager_RemoveTool_EmptyVersion(t *testing.T) {

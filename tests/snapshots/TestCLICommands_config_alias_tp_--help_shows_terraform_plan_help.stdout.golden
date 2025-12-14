@@ -1,8 +1,8 @@
 
 👽 test linux/amd64
 
-Generate an execution plan, which shows what actions Terraform will take to     
-reach the desired state of the configuration.                                   
+Generate an execution plan, which shows what actions Terraform will take to
+reach the desired state of the configuration.
 
 USAGE
 

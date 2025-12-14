@@ -74,23 +74,23 @@ func TestEnsureTools(t *testing.T) {
 	tests := []struct {
 		name         string
 		dependencies map[string]string
-		setupMock    func() (*mockResolver, InstallFunc, func(string) bool)
+		setupMock    func() (*mockResolver, InstallFunc, func(string) bool, func() bool)
 		wantErr      bool
 		errIs        error
 	}{
 		{
 			name:         "empty dependencies returns nil",
 			dependencies: map[string]string{},
-			setupMock: func() (*mockResolver, InstallFunc, func(string) bool) {
-				return &mockResolver{}, nil, nil
+			setupMock: func() (*mockResolver, InstallFunc, func(string) bool, func() bool) {
+				return &mockResolver{}, nil, nil, nil
 			},
 			wantErr: false,
 		},
 		{
 			name:         "nil dependencies returns nil",
 			dependencies: nil,
-			setupMock: func() (*mockResolver, InstallFunc, func(string) bool) {
-				return &mockResolver{}, nil, nil
+			setupMock: func() (*mockResolver, InstallFunc, func(string) bool, func() bool) {
+				return &mockResolver{}, nil, nil, nil
 			},
 			wantErr: false,
 		},
@@ -99,7 +99,7 @@ func TestEnsureTools(t *testing.T) {
 			dependencies: map[string]string{
 				"hashicorp/terraform": "1.10.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, func(string) bool) {
+			setupMock: func() (*mockResolver, InstallFunc, func(string) bool, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						return "hashicorp", "terraform", nil
@@ -113,9 +113,9 @@ func TestEnsureTools(t *testing.T) {
 				fileExists := func(path string) bool {
 					return true // Tool exists.
 				}
-				// Use closure to verify install was not called.
-				_ = installCalled
-				return resolver, installFunc, fileExists
+				// Verifier returns true if install was NOT called (expected behavior).
+				verifier := func() bool { return !installCalled }
+				return resolver, installFunc, fileExists, verifier
 			},
 			wantErr: false,
 		},
@@ -124,7 +124,7 @@ func TestEnsureTools(t *testing.T) {
 			dependencies: map[string]string{
 				"hashicorp/terraform": "1.10.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, func(string) bool) {
+			setupMock: func() (*mockResolver, InstallFunc, func(string) bool, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						return "hashicorp", "terraform", nil
@@ -139,7 +139,7 @@ func TestEnsureTools(t *testing.T) {
 				fileExists := func(path string) bool {
 					return false // Tool does not exist.
 				}
-				return resolver, installFunc, fileExists
+				return resolver, installFunc, fileExists, nil
 			},
 			wantErr: false,
 		},
@@ -148,7 +148,7 @@ func TestEnsureTools(t *testing.T) {
 			dependencies: map[string]string{
 				"hashicorp/terraform": "1.10.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, func(string) bool) {
+			setupMock: func() (*mockResolver, InstallFunc, func(string) bool, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						return "hashicorp", "terraform", nil
@@ -160,7 +160,7 @@ func TestEnsureTools(t *testing.T) {
 				fileExists := func(path string) bool {
 					return false
 				}
-				return resolver, installFunc, fileExists
+				return resolver, installFunc, fileExists, nil
 			},
 			wantErr: true,
 			errIs:   errUtils.ErrToolInstall,
@@ -171,7 +171,7 @@ func TestEnsureTools(t *testing.T) {
 				"hashicorp/terraform": "1.10.0",
 				"cloudposse/atmos":    "1.0.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, func(string) bool) {
+			setupMock: func() (*mockResolver, InstallFunc, func(string) bool, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						parts := strings.Split(toolName, "/")
@@ -189,8 +189,9 @@ func TestEnsureTools(t *testing.T) {
 				fileExists := func(path string) bool {
 					return false // All tools need install.
 				}
-				_ = installCount
-				return resolver, installFunc, fileExists
+				// Verifier returns true if install was called exactly twice (once per tool).
+				verifier := func() bool { return installCount == 2 }
+				return resolver, installFunc, fileExists, verifier
 			},
 			wantErr: false,
 		},
@@ -200,7 +201,7 @@ func TestEnsureTools(t *testing.T) {
 				"hashicorp/terraform": "1.10.0",
 				"cloudposse/atmos":    "1.0.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, func(string) bool) {
+			setupMock: func() (*mockResolver, InstallFunc, func(string) bool, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						parts := strings.Split(toolName, "/")
@@ -216,7 +217,7 @@ func TestEnsureTools(t *testing.T) {
 				fileExists := func(path string) bool {
 					return false
 				}
-				return resolver, installFunc, fileExists
+				return resolver, installFunc, fileExists, nil
 			},
 			wantErr: true,
 			errIs:   errUtils.ErrToolInstall,
@@ -225,7 +226,7 @@ func TestEnsureTools(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolver, installFunc, fileExists := tt.setupMock()
+			resolver, installFunc, fileExists, verifier := tt.setupMock()
 
 			opts := []InstallerOption{WithResolver(resolver)}
 			if installFunc != nil {
@@ -245,6 +246,11 @@ func TestEnsureTools(t *testing.T) {
 				}
 			} else {
 				require.NoError(t, err)
+			}
+
+			// Run verifier if provided to check mock behavior.
+			if verifier != nil {
+				assert.True(t, verifier(), "verifier failed: mock behavior did not match expected")
 			}
 		})
 	}

@@ -1,4 +1,3 @@
-
 # Incorrect Usage
 
 **Error:** Unknown command non-existent for atmos
@@ -33,5 +32,3 @@ Valid subcommands are:
 ## Hints
 
 💡 Run atmos --help for usage
-
-

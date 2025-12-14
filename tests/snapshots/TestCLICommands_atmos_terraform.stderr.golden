@@ -1,4 +1,3 @@
-
 # Incorrect Usage
 
 **Error:** The command atmos terraform requires a subcommand
@@ -49,5 +48,3 @@ Valid subcommands are:
 ## Hints
 
 💡 https://atmos.tools/cli/commands/terraform/usage
-
-
