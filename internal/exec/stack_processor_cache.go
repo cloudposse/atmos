@@ -51,6 +51,11 @@ func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error
 	if dst.BaseComponentProviders, err = m.DeepCopyMap(src.BaseComponentProviders); err != nil {
 		return err
 	}
+	// DEV-3124: Copy required_providers and required_version.
+	if dst.BaseComponentRequiredProviders, err = m.DeepCopyMap(src.BaseComponentRequiredProviders); err != nil {
+		return err
+	}
+	dst.BaseComponentRequiredVersion = src.BaseComponentRequiredVersion
 	if dst.BaseComponentHooks, err = m.DeepCopyMap(src.BaseComponentHooks); err != nil {
 		return err
 	}
