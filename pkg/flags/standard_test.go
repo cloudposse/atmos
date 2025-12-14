@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 )
 
@@ -530,6 +531,8 @@ func TestStandardFlagParser_ValidatePositionalArgs(t *testing.T) {
 		// Should error because required arg is missing (prompts didn't fill it).
 		err := parser.validatePositionalArgs([]string{})
 		assert.Error(t, err)
+		// Error should wrap ErrInvalidPositionalArgs for consistent error handling.
+		assert.ErrorIs(t, err, errUtils.ErrInvalidPositionalArgs)
 	})
 
 	t.Run("passes with no positional args configured", func(t *testing.T) {

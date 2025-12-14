@@ -550,12 +550,14 @@ func (p *StandardFlagParser) bindChangedFlagsToViper(combinedFlags *pflag.FlagSe
 
 // validatePositionalArgs validates positional args using the configured validator.
 // This is called after interactive prompts have had a chance to fill in missing values.
+// Wraps validator errors with ErrInvalidPositionalArgs for consistent error handling.
 func (p *StandardFlagParser) validatePositionalArgs(positionalArgs []string) error {
 	defer perf.Track(nil, "flags.StandardFlagParser.validatePositionalArgs")()
 
 	if p.positionalArgs != nil && p.positionalArgs.validator != nil {
 		if err := p.positionalArgs.validator(p.cmd, positionalArgs); err != nil {
-			return err
+			// Wrap both errors for consistent error handling - allows errors.Is() to match either.
+			return fmt.Errorf("%w: %w", errUtils.ErrInvalidPositionalArgs, err)
 		}
 	}
 	return nil
