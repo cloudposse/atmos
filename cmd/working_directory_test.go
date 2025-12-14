@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -229,5 +230,50 @@ func TestResolveWorkingDirectory_EdgeCases(t *testing.T) {
 
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrWorkingDirNotDirectory)
+	})
+}
+
+// TestResolveWorkingDirectory_AccessFailed tests the ErrWorkingDirAccessFailed error path.
+// This test creates a directory with no permissions on Unix-like systems.
+func TestResolveWorkingDirectory_AccessFailed(t *testing.T) {
+	// Skip on Windows where permission model differs significantly.
+	if os.Getenv("GOOS") == "windows" || filepath.Separator == '\\' {
+		t.Skip("Skipping permission test on Windows")
+	}
+
+	// Skip if running as root (root can access anything).
+	if os.Geteuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+
+	t.Run("directory with no permissions triggers access error", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		noAccessDir := filepath.Join(tmpDir, "noaccess")
+
+		// Create directory with no permissions.
+		err := os.Mkdir(noAccessDir, 0o000)
+		require.NoError(t, err)
+
+		// Ensure cleanup even if test fails - restore permissions first.
+		t.Cleanup(func() {
+			_ = os.Chmod(noAccessDir, 0o755)
+		})
+
+		// Try to access the directory - should fail with permission denied.
+		// Note: os.Stat on the directory itself may succeed (just returns metadata),
+		// but accessing contents would fail. We test a subdirectory inside it
+		// which should fail to stat.
+		inaccessibleSubdir := filepath.Join(noAccessDir, "subdir")
+
+		_, err = resolveWorkingDirectory(inaccessibleSubdir, "/base", "/default")
+
+		require.Error(t, err)
+		// The error could be ErrWorkingDirNotFound (if stat fails with permission denied
+		// disguised as not exist) or ErrWorkingDirAccessFailed depending on OS behavior.
+		// We check that we get one of our sentinel errors.
+		isNotFound := errors.Is(err, errUtils.ErrWorkingDirNotFound)
+		isAccessFailed := errors.Is(err, errUtils.ErrWorkingDirAccessFailed)
+		assert.True(t, isNotFound || isAccessFailed,
+			"Expected ErrWorkingDirNotFound or ErrWorkingDirAccessFailed, got: %v", err)
 	})
 }

@@ -38,9 +38,9 @@ Atmos discovers configuration from multiple sources in the following precedence 
 7. **Home directory** (`~/.atmos/atmos.yaml`)
 8. **System directory** (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
 
-Each configuration file discovered is deep-merged with the preceding configurations. The git repository root is special: even when `atmos.yaml` is found elsewhere, Atmos always checks for `.atmos.d/` at the repo root to load shared configuration fragments like custom commands.
+Each configuration file discovered is deep-merged with the preceding configurations. Separately, Atmos may also auto-import configuration fragments from `.atmos.d/`. The git repository root is special: even when `atmos.yaml` is found elsewhere, Atmos always checks for `.atmos.d/` at the repo root to load shared fragments like custom commands.
 
-Profiles are a first-class concept that allow environment-specific configuration overrides. When activated via `--profile` flag or `ATMOS_PROFILE` environment variable, profile settings are merged on top of the base configuration. Multiple profiles can be activated and merged together (left-to-right). See [Profiles](/cli/configuration/profiles) for complete documentation.
+Profiles are a first-class concept that allow environment-specific configuration overrides. When activated via `--profile` flag or `ATMOS_PROFILE` environment variable, profile settings are merged on top of the base configuration. Multiple profiles can be activated and merged left-to-right. See [Profiles](/cli/configuration/profiles) for complete documentation.
 
 ### Parent Directory Search
 

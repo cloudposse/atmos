@@ -859,25 +859,46 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 
 	// Search git/worktree root FIRST (lower priority - gets overridden by config dir).
 	// This enables .atmos.d to be discovered at the repo root even when running from subdirectories.
-	gitRoot, err := u.ProcessTagGitRoot("!repo-root .")
-	if err == nil && gitRoot != "" && gitRoot != "." {
-		absGitRoot, absErr := filepath.Abs(gitRoot)
-		absDirPath, dirErr := filepath.Abs(dirPath)
-
-		// Only search git root if it's different from the config directory.
-		if absErr == nil && dirErr == nil && absGitRoot != absDirPath {
-			if !shouldExcludePathForTesting(absGitRoot) {
-				log.Trace("Checking for .atmos.d in git root", "path", absGitRoot)
-				loadAtmosDFromDirectory(absGitRoot, dst)
-			}
-		}
-	}
+	loadAtmosDFromGitRoot(dirPath, dst)
 
 	// Search the config directory (higher priority - loaded second, overrides git root).
 	log.Trace("Checking for .atmos.d in config directory", "path", dirPath)
 	loadAtmosDFromDirectory(dirPath, dst)
 
 	return nil
+}
+
+// loadAtmosDFromGitRoot searches for .atmos.d/ at the git repository root
+// and loads its configuration if different from the config directory.
+func loadAtmosDFromGitRoot(dirPath string, dst *viper.Viper) {
+	gitRoot, err := u.ProcessTagGitRoot("!repo-root .")
+	if err != nil || gitRoot == "" || gitRoot == "." {
+		return
+	}
+
+	absGitRoot, absErr := filepath.Abs(gitRoot)
+	absDirPath, dirErr := filepath.Abs(dirPath)
+	if absErr != nil || dirErr != nil {
+		return
+	}
+
+	// Check if git root is the same as config directory.
+	// Use case-insensitive comparison on Windows where paths may differ only in casing.
+	pathsEqual := absGitRoot == absDirPath
+	if runtime.GOOS == "windows" {
+		pathsEqual = strings.EqualFold(absGitRoot, absDirPath)
+	}
+	if pathsEqual {
+		return
+	}
+
+	// Skip if excluded for testing.
+	if shouldExcludePathForTesting(absGitRoot) {
+		return
+	}
+
+	log.Trace("Checking for .atmos.d in git root", "path", absGitRoot)
+	loadAtmosDFromDirectory(absGitRoot, dst)
 }
 
 // loadAtmosDFromDirectory searches for atmos.d/ and .atmos.d/ in the given directory

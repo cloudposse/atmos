@@ -15,8 +15,9 @@ func resolveWorkingDirectory(workDir, basePath, defaultDir string) (string, erro
 		return defaultDir, nil
 	}
 
-	// Resolve relative paths against base_path.
-	resolvedDir := workDir
+	// Clean and resolve paths. filepath.Clean normalizes paths like /tmp/foo/.. to /tmp.
+	// For relative paths, filepath.Join already cleans the result.
+	resolvedDir := filepath.Clean(workDir)
 	if !filepath.IsAbs(workDir) {
 		resolvedDir = filepath.Join(basePath, workDir)
 	}
@@ -25,6 +26,7 @@ func resolveWorkingDirectory(workDir, basePath, defaultDir string) (string, erro
 	info, err := os.Stat(resolvedDir)
 	if os.IsNotExist(err) {
 		return "", errUtils.Build(errUtils.ErrWorkingDirNotFound).
+			WithCause(err).
 			WithContext("path", resolvedDir).
 			WithHint("Check that the working_directory path exists").
 			Err()

@@ -476,7 +476,7 @@ func executeCustomCommand(
 	// Determine working directory for command execution.
 	workDir, err := resolveWorkingDirectory(commandConfig.WorkingDirectory, atmosConfig.BasePath, currentDirPath)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(err, "Invalid working_directory", "https://atmos.tools/cli/configuration/commands#working-directory")
 	}
 	if commandConfig.WorkingDirectory != "" {
 		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
