@@ -513,7 +513,7 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	// These appear in trace logs as path=/var/folders/.../mock-git-root or path=/absolute/path/to/repo/mock-git-root.
 	// Replace with a stable placeholder since these are test-specific paths.
 	// Matches both raw paths and already-sanitized repo paths.
-	tempGitRootRegex := regexp.MustCompile(`path=(/var/folders/[^\s]+/mock-git-root|/tmp/[^\s]+/mock-git-root|/Users/[^\s]+/mock-git-root|/home/[^\s]+/mock-git-root|[A-Z]:/[^\s]+/mock-git-root|/absolute/path/to/repo/mock-git-root)`)
+	tempGitRootRegex := regexp.MustCompile(`path=(/var/folders/[^\s]+/mock-git-root|/tmp/[^\s]+/mock-git-root|/Users/[^\s]+/mock-git-root|/home/[^\s]+/mock-git-root|[A-Z]:/[^\s]+/mock-git-root|/absolute/path/to/repo/mock-git-root|/absolute/path/to/external/mock-git-root)`)
 	result = tempGitRootRegex.ReplaceAllString(result, "path=/mock-git-root")
 
 	// 15b. Normalize temp home directory paths in trace logs (e.g., path=/var/folders/.../T/TestCLI.../.atmos).
@@ -528,19 +528,13 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	externalPathRegex2 := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^\s":]+|/home/[^/]+/[^/]+/[^/]+/[^\s":]+|C:/Users/[^/]+/[^/]+/[^/]+/[^\s":]+)`)
 	result = externalPathRegex2.ReplaceAllString(result, "/absolute/path/to/external")
 
-	// 16. Normalize basePathAbsolute values in config output.
-	// This field shows the absolute path to the repo, which varies by environment.
-	// Replace with the normalized path placeholder for consistency.
-	basePathAbsoluteRegex := regexp.MustCompile(`(?m)^basePathAbsolute: /absolute/path/to/repo.*$`)
-	result = basePathAbsoluteRegex.ReplaceAllString(result, "basePathAbsolute: /absolute/path/to/repo")
-
-	// 17. Normalize provisioned_by_user values in component output.
+	// 16. Normalize provisioned_by_user values in component output.
 	// This field shows the current username, which varies by environment (erik, runner, etc.).
 	// Replace with a generic placeholder.
 	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
 	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
 
-	// 18. Join hint messages where the sanitized path ended up on the next line.
+	// 17. Join hint messages where the sanitized path ended up on the next line.
 	// This must run AFTER path sanitization because it matches the sanitized path pattern.
 	// E.g., "💡 Stacks directory not found:\n/absolute/path" vs "💡 Stacks directory not found: /absolute/path"
 	// Also handles plain labels like "Stacks directory:\n/path"
