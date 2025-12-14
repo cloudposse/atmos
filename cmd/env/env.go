@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -134,14 +135,12 @@ func outputEnvAsJSON(atmosConfig *schema.AtmosConfiguration, envVars map[string]
 
 // outputEnvAsBash outputs environment variables as shell export statements.
 func outputEnvAsBash(envVars map[string]string) error {
-	fmt.Print(formatBash(envVars))
-	return nil
+	return data.Write(formatBash(envVars))
 }
 
 // outputEnvAsDotenv outputs environment variables in .env format.
 func outputEnvAsDotenv(envVars map[string]string) error {
-	fmt.Print(formatDotenv(envVars))
-	return nil
+	return data.Write(formatDotenv(envVars))
 }
 
 // formatBash formats environment variables as shell export statements.
