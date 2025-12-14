@@ -1,0 +1,25 @@
+# This atmos.yaml is in a subdirectory (config/) while stacks/ and components/
+# are at the root level. This tests the scenario where:
+# - ATMOS_CLI_CONFIG_PATH=./config
+# - base_path uses ".." to reference the parent directory (repo root)
+# - stacks/ and components/ directories are at the repo root
+#
+# This validates that paths starting with ".." or "./" resolve relative to the
+# atmos.yaml location, while simple relative paths resolve relative to CWD.
+
+base_path: ".."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  level: Info
