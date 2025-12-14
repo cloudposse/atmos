@@ -295,6 +295,10 @@ func TestComponentPathResolution_CurrentDirectory(t *testing.T) {
 	componentDir := filepath.Join(fixturePath, "components", "terraform", "simple-component")
 	t.Chdir(componentDir)
 
+	// Set ATMOS_CLI_CONFIG_PATH to the fixture root to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", fixturePath)
+
 	// Initialize config from component directory.
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
@@ -313,6 +317,10 @@ func TestComponentPathResolution_RelativePath(t *testing.T) {
 	// Change to the components/terraform directory using t.Chdir for automatic cleanup.
 	terraformDir := filepath.Join(fixturePath, "components", "terraform")
 	t.Chdir(terraformDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to the fixture root to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", fixturePath)
 
 	// Initialize config from terraform base directory.
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
