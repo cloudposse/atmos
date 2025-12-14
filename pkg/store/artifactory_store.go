@@ -293,13 +293,9 @@ func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
 		return nil, ErrEmptyKey
 	}
 
-	// Use the key directly as the file path
+	// Use the key directly as the file path without any prefix transformation.
+	// This allows !store.get to access arbitrary keys as-is, per documentation.
 	filePath := key
-
-	// If prefix is set, prepend it to the key
-	if s.prefix != "" {
-		filePath = s.prefix + "/" + key
-	}
 
 	// Ensure the file path has the correct extension
 	if !strings.HasSuffix(filePath, ".json") {
