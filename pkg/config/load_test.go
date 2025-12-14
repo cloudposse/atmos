@@ -1035,3 +1035,155 @@ base_path: /test/parent-should-not-find
 		})
 	}
 }
+
+// TestLoadConfig_DefaultConfigWithGitRootAtmosD tests that .atmos.d at git root is loaded
+// even when no atmos.yaml config file is found (using default config).
+func TestLoadConfig_DefaultConfigWithGitRootAtmosD(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create .atmos.d at "git root" with custom commands.
+	atmosDDir := filepath.Join(tempDir, ".atmos.d")
+	require.NoError(t, os.MkdirAll(atmosDDir, 0o755))
+
+	commandsContent := `commands:
+  - name: test-default-cmd
+    description: Test command from git root with default config
+    steps:
+      - echo "hello from git root default config"
+`
+	require.NoError(t, os.WriteFile(
+		filepath.Join(atmosDDir, "commands.yaml"),
+		[]byte(commandsContent),
+		0o644,
+	))
+
+	// Create a subdirectory with NO atmos.yaml - this will force default config.
+	subDir := filepath.Join(tempDir, "no-config-subdir")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+	// Mock git root to be tempDir.
+	t.Setenv("TEST_GIT_ROOT", tempDir)
+
+	// Change to subdirectory.
+	t.Chdir(subDir)
+
+	// Load config - should use default config but still find .atmos.d from git root.
+	config, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+
+	// Verify that the custom command from .atmos.d was loaded.
+	require.NotNil(t, config.Commands, "Commands should be loaded from .atmos.d at git root")
+	require.Len(t, config.Commands, 1, "Should have one custom command")
+	assert.Equal(t, "test-default-cmd", config.Commands[0].Name)
+}
+
+// TestMergeDefaultImports_GitRoot tests that .atmos.d at git root is discovered
+// even when running from a subdirectory.
+func TestMergeDefaultImports_GitRoot(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupDirs     func(t *testing.T, tempDir string) string
+		expectedKey   string
+		expectedValue string
+		description   string
+	}{
+		{
+			name: "loads_atmos_d_from_git_root_when_in_subdirectory",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create .atmos.d at "git root" (tempDir).
+				atmosDDir := filepath.Join(tempDir, ".atmos.d")
+				require.NoError(t, os.MkdirAll(atmosDDir, 0o755))
+
+				commandsContent := `commands:
+  - name: test-cmd
+    description: Test command from git root
+    steps:
+      - echo "hello from git root"
+`
+				require.NoError(t, os.WriteFile(
+					filepath.Join(atmosDDir, "commands.yaml"),
+					[]byte(commandsContent),
+					0o644,
+				))
+
+				// Create a subdirectory to run from.
+				subDir := filepath.Join(tempDir, "test")
+				require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+				return subDir
+			},
+			expectedKey:   "commands",
+			expectedValue: "", // Just check that commands key exists
+			description:   "Should load .atmos.d from git root when running from subdirectory",
+		},
+		{
+			name: "git_root_atmos_d_has_lower_priority_than_config_dir",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create .atmos.d at "git root" (tempDir) with lower priority setting.
+				gitRootAtmosDDir := filepath.Join(tempDir, ".atmos.d")
+				require.NoError(t, os.MkdirAll(gitRootAtmosDDir, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(gitRootAtmosDDir, "settings.yaml"),
+					[]byte(`settings:
+  test_priority: from_git_root
+`),
+					0o644,
+				))
+
+				// Create config directory with atmos.yaml.
+				configDir := filepath.Join(tempDir, "config")
+				require.NoError(t, os.MkdirAll(configDir, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(configDir, "atmos.yaml"),
+					[]byte(`base_path: ./`),
+					0o644,
+				))
+
+				// Create .atmos.d in config dir with higher priority setting.
+				configAtmosDDir := filepath.Join(configDir, ".atmos.d")
+				require.NoError(t, os.MkdirAll(configAtmosDDir, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(configAtmosDDir, "settings.yaml"),
+					[]byte(`settings:
+  test_priority: from_config_dir
+`),
+					0o644,
+				))
+
+				return configDir
+			},
+			expectedKey:   "settings.test_priority",
+			expectedValue: "from_config_dir",
+			description:   "Config dir .atmos.d should override git root .atmos.d",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			workDir := tt.setupDirs(t, tempDir)
+
+			// Mock git root to be tempDir.
+			t.Setenv("TEST_GIT_ROOT", tempDir)
+
+			// Change to working directory.
+			t.Chdir(workDir)
+
+			v := viper.New()
+			v.SetConfigType("yaml")
+
+			// Call mergeDefaultImports with the working directory.
+			err := mergeDefaultImports(workDir, v)
+			require.NoError(t, err, tt.description)
+
+			// Verify the expected key is set.
+			assert.True(t, v.IsSet(tt.expectedKey),
+				"Expected key %q to be set. %s", tt.expectedKey, tt.description)
+
+			if tt.expectedValue != "" {
+				assert.Equal(t, tt.expectedValue, v.GetString(tt.expectedKey),
+					"Expected value mismatch. %s", tt.description)
+			}
+		})
+	}
+}
