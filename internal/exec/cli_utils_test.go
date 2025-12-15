@@ -73,12 +73,12 @@ func Test_processArgsAndFlags2(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:              "help for single command",
+			name:              "single subcommand allows interactive prompts",
 			componentType:     "terraform",
 			inputArgsAndFlags: []string{"plan"},
 			want: schema.ArgsAndFlagsInfo{
 				SubCommand: "plan",
-				NeedHelp:   true,
+				NeedHelp:   false, // Don't auto-show help; allow interactive prompts.
 			},
 			wantErr: false,
 		},
