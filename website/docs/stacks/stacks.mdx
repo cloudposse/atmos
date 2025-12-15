@@ -45,7 +45,7 @@ components:
 
 ## Multi-Stack Files
 
-YAML files can contain multiple stacks separated by `---`. Each stack can have an explicit `name` field to identify it:
+A single configuration file can define multiple stacks, allowing you to group related environments or configurations together. Each stack should have an explicit `name` field to identify it:
 
 ```yaml title="stacks/environments.yaml" stack-example
 name: dev

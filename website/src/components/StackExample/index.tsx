@@ -47,7 +47,7 @@ const StackExample: React.FC<StackExampleProps> = ({ yaml, json, hcl, title }) =
   return (
     <div className="stack-example">
       {title && <div className="stack-example__title">{title}</div>}
-      <Tabs groupId="stack-format" defaultValue="yaml">
+      <Tabs queryString="stack-format" defaultValue="yaml">
         <TabItem value="yaml" label="YAML">
           <div className="stack-example__code">
             <CodeBlock language="yaml">{yaml}</CodeBlock>

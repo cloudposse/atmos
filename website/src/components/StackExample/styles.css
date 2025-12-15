@@ -26,6 +26,25 @@ html[data-theme='dark'] .stack-example__title {
   margin: 0;
 }
 
+/* Prevent layout shift when switching tabs by using CSS grid. */
+/* All tab panels occupy the same grid cell, so the container height */
+/* equals the tallest panel. Hidden panels are invisible but still */
+/* contribute to the layout. */
+.stack-example .tabs-container > div:last-child {
+  display: grid;
+}
+
+.stack-example [role='tabpanel'] {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+/* Override the hidden attribute so panels still contribute to grid height. */
+.stack-example [role='tabpanel'][hidden] {
+  display: block !important;
+  visibility: hidden;
+}
+
 /* Ensure code blocks inside tabs have no extra margin. */
 .stack-example__code > div {
   margin: 0 !important;
