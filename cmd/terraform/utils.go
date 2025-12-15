@@ -14,6 +14,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -181,34 +182,27 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 }
 
 // terraformRunWithOptions is the shared execution logic for terraform subcommands.
-// Commands with their own parsers (plan, apply, deploy) should bind their parsers
-// in their RunE and call this function with the parsed options.
+// Commands with their own parsers (plan, apply, deploy) bind their parsers in RunE.
 func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string, opts *TerraformRunOptions) error {
 	subCommand := actualCmd.Name()
 	log.Debug("terraformRunWithOptions entry", "subCommand", subCommand, "args", args)
 
 	// Validate Atmos config first to provide specific error messages.
-	// This check ensures the stacks directory exists before attempting to process,
-	// preventing generic "failed to find import" errors in favor of actionable ones.
 	if err := internal.ValidateAtmosConfig(); err != nil {
 		return err
 	}
 
-	// Get separated args (terraform pass-through flags like -out, -var, etc.).
+	// Build info from args. SeparatedArgs are terraform pass-through flags.
 	separatedArgs := compat.GetSeparated()
-
-	// Build info from args. SeparatedArgs are passed as additionalArgsAndFlags.
 	argsWithSubCommand := append([]string{subCommand}, args...)
 	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, parentCmd, argsWithSubCommand, separatedArgs)
 	if err != nil {
 		return err
 	}
 
-	// Resolve path-based component arguments (e.g., ".", "./vpc", absolute paths).
-	if info.NeedsPathResolution && info.ComponentFromArg != "" {
-		if err := resolveComponentPath(&info, cfg.TerraformComponentType); err != nil {
-			return err
-		}
+	// Resolve paths and prompt for missing component/stack interactively.
+	if err := resolveAndPromptForArgs(&info, actualCmd); err != nil {
+		return err
 	}
 
 	if info.NeedHelp {
@@ -319,6 +313,95 @@ func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
 	}
 
 	info.Identity = selectedIdentity
+}
+
+// resolveAndPromptForArgs handles path resolution and interactive prompts for component/stack.
+func resolveAndPromptForArgs(info *schema.ConfigAndStacksInfo, cmd *cobra.Command) error {
+	// Resolve path-based component arguments (e.g., ".", "./vpc", absolute paths).
+	if info.NeedsPathResolution && info.ComponentFromArg != "" {
+		if err := resolveComponentPath(info, cfg.TerraformComponentType); err != nil {
+			return err
+		}
+	}
+	// Handle interactive component/stack selection (skipped for multi-component ops).
+	return handleInteractiveComponentStackSelection(info, cmd)
+}
+
+// handleInteractiveComponentStackSelection prompts for missing component and stack
+// when running in interactive mode. Skipped for multi-component operations.
+func handleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, cmd *cobra.Command) error {
+	// Skip if multi-component mode or help requested.
+	if hasMultiComponentFlags(info) || info.NeedHelp {
+		return nil
+	}
+
+	// Both provided - nothing to do.
+	if info.ComponentFromArg != "" && info.Stack != "" {
+		return nil
+	}
+
+	// Prompt for component if missing.
+	if info.ComponentFromArg == "" {
+		component, err := promptForComponent(cmd)
+		if err = handlePromptError(err, "component"); err != nil {
+			return err
+		}
+		info.ComponentFromArg = component
+	}
+
+	// Prompt for stack if missing.
+	if info.Stack == "" {
+		stack, err := promptForStack(cmd, info.ComponentFromArg)
+		if err = handlePromptError(err, "stack"); err != nil {
+			return err
+		}
+		info.Stack = stack
+	}
+
+	return nil
+}
+
+// handlePromptError processes errors from interactive prompts.
+// Returns nil if the error should be ignored, or the error if it should propagate.
+func handlePromptError(err error, name string) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, errUtils.ErrUserAborted) {
+		log.Debug("User aborted selection, exiting with SIGINT code", "prompt", name)
+		errUtils.Exit(errUtils.ExitCodeSIGINT)
+	}
+	if errors.Is(err, errUtils.ErrInteractiveModeNotAvailable) {
+		return nil // Fall through to validation.
+	}
+	return err
+}
+
+// promptForComponent shows an interactive selector for component selection.
+func promptForComponent(cmd *cobra.Command) (string, error) {
+	return flags.PromptForPositionalArg(
+		"component",
+		"Choose a component",
+		componentsArgCompletion,
+		cmd,
+		nil,
+	)
+}
+
+// promptForStack shows an interactive selector for stack selection.
+// If component is provided, filters stacks to only those containing the component.
+func promptForStack(cmd *cobra.Command, component string) (string, error) {
+	var args []string
+	if component != "" {
+		args = []string{component}
+	}
+	return flags.PromptForMissingRequired(
+		"stack",
+		"Choose a stack",
+		stackFlagCompletion,
+		cmd,
+		args,
+	)
 }
 
 // enableHeatmapIfRequested checks os.Args for --heatmap flag and enables performance tracking.
