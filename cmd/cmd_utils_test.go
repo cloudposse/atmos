@@ -1436,3 +1436,167 @@ func TestGetConfigAndStacksInfo_PathResolutionWithValidPath(t *testing.T) {
 	// If we got here, verify the path was resolved.
 	assert.Equal(t, "top-level-component1", info.ComponentFromArg, "Path should be resolved to component name")
 }
+
+// TestProcessCommandAliases tests the processCommandAliases function.
+// NOTE: We use unique alias names (e.g., "test-alias-tp") to avoid conflicts
+// with existing RootCmd commands, since processCommandAliases internally checks
+// getTopLevelCommands() which reads from the global RootCmd.
+func TestProcessCommandAliases(t *testing.T) {
+	tests := []struct {
+		name            string
+		aliases         schema.CommandAliases
+		topLevel        bool
+		expectedAliases []string
+	}{
+		{
+			name: "single alias",
+			aliases: schema.CommandAliases{
+				"test-alias-tp": "terraform plan",
+			},
+			topLevel:        true,
+			expectedAliases: []string{"test-alias-tp"},
+		},
+		{
+			name: "multiple aliases",
+			aliases: schema.CommandAliases{
+				"test-alias-tp": "terraform plan",
+				"test-alias-ta": "terraform apply",
+				"test-alias-td": "terraform destroy",
+			},
+			topLevel:        true,
+			expectedAliases: []string{"test-alias-tp", "test-alias-ta", "test-alias-td"},
+		},
+		{
+			name:            "empty aliases",
+			aliases:         schema.CommandAliases{},
+			topLevel:        true,
+			expectedAliases: []string{},
+		},
+		{
+			name: "alias with whitespace",
+			aliases: schema.CommandAliases{
+				"  test-alias-ws  ": "  terraform plan  ",
+			},
+			topLevel:        true,
+			expectedAliases: []string{"test-alias-ws"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use test kit to reset RootCmd state.
+			_ = NewTestKit(t)
+
+			// Create a parent command.
+			parentCmd := &cobra.Command{
+				Use:   "atmos",
+				Short: "Test parent command",
+			}
+
+			// Process aliases.
+			err := processCommandAliases(schema.AtmosConfiguration{}, tt.aliases, parentCmd, tt.topLevel)
+			require.NoError(t, err)
+
+			// Verify the expected aliases were added.
+			for _, expectedAlias := range tt.expectedAliases {
+				found := false
+				for _, cmd := range parentCmd.Commands() {
+					if cmd.Name() != expectedAlias {
+						continue
+					}
+					found = true
+
+					// Verify the command has the configAlias annotation.
+					assert.NotNil(t, cmd.Annotations, "Alias command should have annotations")
+					_, hasConfigAlias := cmd.Annotations["configAlias"]
+					assert.True(t, hasConfigAlias, "Alias command should have configAlias annotation")
+
+					// Verify the Short description contains "alias for".
+					assert.Contains(t, cmd.Short, "alias for", "Alias command should have 'alias for' in Short")
+
+					// Verify DisableFlagParsing is true.
+					assert.True(t, cmd.DisableFlagParsing, "Alias command should have DisableFlagParsing=true")
+
+					break
+				}
+				assert.True(t, found, "Expected alias %q to be added to parent command", expectedAlias)
+			}
+		})
+	}
+}
+
+// TestProcessCommandAliases_DoesNotOverrideExistingCommands tests that aliases don't override existing RootCmd commands.
+// NOTE: The processCommandAliases function checks getTopLevelCommands() which reads from global RootCmd,
+// so we test that it doesn't add aliases that conflict with existing RootCmd commands like "version".
+func TestProcessCommandAliases_DoesNotOverrideExistingCommands(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Create a parent command to receive aliases.
+	parentCmd := &cobra.Command{
+		Use:   "atmos",
+		Short: "Test parent command",
+	}
+
+	// Try to add aliases - "version" should be skipped (exists in RootCmd),
+	// but "test-alias-new" should be added (unique name).
+	aliases := schema.CommandAliases{
+		"version":         "terraform version", // Should NOT be added (exists in RootCmd).
+		"test-alias-new2": "terraform plan",    // Should be added (unique name).
+	}
+
+	err := processCommandAliases(schema.AtmosConfiguration{}, aliases, parentCmd, true)
+	require.NoError(t, err)
+
+	// Verify "version" alias was NOT added to parentCmd (because it exists in RootCmd).
+	var versionFound bool
+	for _, cmd := range parentCmd.Commands() {
+		if cmd.Name() == "version" {
+			versionFound = true
+			break
+		}
+	}
+	assert.False(t, versionFound, "version alias should not be added because it conflicts with existing RootCmd command")
+
+	// Verify "test-alias-new2" alias was added.
+	var newAliasFound bool
+	for _, cmd := range parentCmd.Commands() {
+		if cmd.Name() == "test-alias-new2" {
+			newAliasFound = true
+			assert.Contains(t, cmd.Short, "alias for")
+			break
+		}
+	}
+	assert.True(t, newAliasFound, "test-alias-new2 should be added")
+}
+
+// TestProcessCommandAliases_NonTopLevel tests that non-top-level aliases are NOT added.
+// The processCommandAliases function only adds aliases when topLevel=true.
+func TestProcessCommandAliases_NonTopLevel(t *testing.T) {
+	_ = NewTestKit(t)
+
+	parentCmd := &cobra.Command{
+		Use:   "terraform",
+		Short: "Terraform commands",
+	}
+
+	aliases := schema.CommandAliases{
+		"p": "plan",
+		"a": "apply",
+	}
+
+	// Process as non-top-level (topLevel=false).
+	err := processCommandAliases(schema.AtmosConfiguration{}, aliases, parentCmd, false)
+	require.NoError(t, err)
+
+	// Verify aliases were NOT added (because topLevel=false).
+	// The condition `!exist && topLevel` prevents alias creation when topLevel=false.
+	// Check directly in Commands() list since Find() returns parent on not found.
+	hasAliases := false
+	for _, cmd := range parentCmd.Commands() {
+		if cmd.Name() == "p" || cmd.Name() == "a" {
+			hasAliases = true
+			break
+		}
+	}
+	assert.False(t, hasAliases, "Non-top-level aliases should not be added")
+}

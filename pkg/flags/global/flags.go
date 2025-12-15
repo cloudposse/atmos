@@ -40,9 +40,10 @@ type Flags struct {
 	NoColor   bool
 
 	// Terminal and I/O configuration.
-	ForceColor bool // Force color output even when not a TTY (--force-color).
-	ForceTTY   bool // Force TTY mode with sane defaults (--force-tty).
-	Mask       bool // Enable automatic masking of sensitive data (--mask).
+	ForceColor  bool // Force color output even when not a TTY (--force-color).
+	ForceTTY    bool // Force TTY mode with sane defaults (--force-tty).
+	Mask        bool // Enable automatic masking of sensitive data (--mask).
+	Interactive bool // Enable interactive prompts for missing required flags, optional value flags using the sentinel pattern, and missing positional arguments (--interactive).
 
 	// Output configuration.
 	Pager PagerSelector
@@ -81,6 +82,7 @@ func NewFlags() Flags {
 		ForceColor:   false,
 		ForceTTY:     false,
 		Mask:         true,       // Enabled by default for security.
+		Interactive:  true,       // Enabled by default for better UX.
 		Profile:      []string{}, // No profiles active by default.
 		ProfilerPort: DefaultProfilerPort,
 		ProfilerHost: "localhost",

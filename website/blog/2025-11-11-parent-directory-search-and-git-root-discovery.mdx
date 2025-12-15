@@ -1,0 +1,38 @@
+---
+slug: parent-directory-search-and-git-root-discovery
+title: "Parent Directory Search and Git Root Discovery"
+authors: [aknysh]
+tags: [feature, dx]
+date: 2025-11-11
+release: v1.198.0
+---
+
+Atmos now searches parent directories for `atmos.yaml` and discovers `.atmos.d/` at the git repository root, making it easier to run commands from anywhere in your project.
+
+<!--truncate-->
+
+## Parent Directory Search
+
+Atmos now automatically searches parent directories for `atmos.yaml` when not found in the current directory. Run Atmos from any subdirectory without specifying `--config-path`:
+
+```bash
+cd /repo/components/terraform/vpc
+atmos terraform plan vpc -s prod  # Finds /repo/atmos.yaml automatically
+```
+
+## Git Root Discovery for `.atmos.d/`
+
+Atmos automatically discovers `.atmos.d/` at your git repository root, even when running from subdirectories. Define shared custom commands once at the repo root and use them from anywhere.
+
+```
+repo/
+├── .atmos.d/
+│   └── commands.yaml    # Available repo-wide
+├── atmos.yaml
+└── components/terraform/vpc/
+    └── main.tf          # Run atmos from here
+```
+
+## Documentation
+
+- [CLI Configuration](/cli/configuration) — Parent directory search, git root discovery, and `.atmos.d/` auto-imports

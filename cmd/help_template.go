@@ -480,6 +480,15 @@ func isCommandAvailable(cmd *cobra.Command) bool {
 	return cmd.IsAvailableCommand() || cmd.Name() == "help"
 }
 
+// isConfigAlias checks if a command is a CLI config alias.
+func isConfigAlias(cmd *cobra.Command) bool {
+	if cmd.Annotations == nil {
+		return false
+	}
+	_, ok := cmd.Annotations["configAlias"]
+	return ok
+}
+
 // calculateCommandWidth calculates the display width of a command name including type suffix.
 func calculateCommandWidth(cmd *cobra.Command) int {
 	width := len(cmd.Name())
@@ -490,10 +499,11 @@ func calculateCommandWidth(cmd *cobra.Command) int {
 }
 
 // calculateMaxCommandWidth finds the maximum command name width for alignment.
+// Config aliases are excluded from this calculation since they're shown in a separate section.
 func calculateMaxCommandWidth(commands []*cobra.Command) int {
 	maxWidth := 0
 	for _, c := range commands {
-		if !isCommandAvailable(c) {
+		if !isCommandAvailable(c) || isConfigAlias(c) {
 			continue
 		}
 		width := calculateCommandWidth(c)
@@ -564,10 +574,50 @@ func printAvailableCommands(ctx *helpRenderContext, cmd *cobra.Command) {
 	maxCmdWidth := calculateMaxCommandWidth(cmd.Commands())
 
 	for _, c := range cmd.Commands() {
-		if !isCommandAvailable(c) {
+		if !isCommandAvailable(c) || isConfigAlias(c) {
 			continue
 		}
 		formatCommandLine(ctx, c, maxCmdWidth)
+	}
+	fmt.Fprintln(ctx.writer)
+}
+
+// getConfigAliases returns all available config alias commands.
+func getConfigAliases(cmd *cobra.Command) []*cobra.Command {
+	var aliases []*cobra.Command
+	for _, c := range cmd.Commands() {
+		if c.IsAvailableCommand() && isConfigAlias(c) {
+			aliases = append(aliases, c)
+		}
+	}
+	return aliases
+}
+
+// printConfigAliases prints CLI config aliases in a dedicated section.
+func printConfigAliases(ctx *helpRenderContext, cmd *cobra.Command) {
+	defer perf.Track(nil, "cmd.printConfigAliases")()
+
+	aliases := getConfigAliases(cmd)
+	if len(aliases) == 0 {
+		return
+	}
+
+	fmt.Fprintln(ctx.writer, ctx.styles.heading.Render("ALIASES"))
+	fmt.Fprintln(ctx.writer)
+
+	// Calculate max width for alignment.
+	maxWidth := 0
+	for _, c := range aliases {
+		if len(c.Name()) > maxWidth {
+			maxWidth = len(c.Name())
+		}
+	}
+
+	for _, c := range aliases {
+		name := ctx.styles.commandName.Render(fmt.Sprintf("%-*s", maxWidth, c.Name()))
+		// c.Short contains "alias for `command`".
+		desc := renderMarkdownDescription(c.Short)
+		fmt.Fprintf(ctx.writer, "      %s  %s\n", name, desc)
 	}
 	fmt.Fprintln(ctx.writer)
 }
@@ -642,6 +692,7 @@ func applyColoredHelpTemplate(cmd *cobra.Command) {
 		printSubcommandAliases(ctx, c)
 		printExamples(ctx.writer, c, ctx.renderer, ctx.styles)
 		printAvailableCommands(ctx, c)
+		printConfigAliases(ctx, c)
 		printFlags(ctx.writer, c, ctx.atmosConfig, ctx.styles)
 		printFooter(ctx.writer, c, ctx.styles)
 	})

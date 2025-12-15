@@ -214,12 +214,24 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	}
 	// If no config file is used, fall back to the default CLI config.
 	if v.ConfigFileUsed() == "" {
-		log.Debug("'atmos.yaml' CLI config was not found", "paths", "system dir, home dir, current dir, ENV vars")
+		log.Debug("'atmos.yaml' CLI config was not found", "paths", "system dir, home dir, current dir, parent dirs, ENV vars")
 		log.Debug("Refer to https://atmos.tools/cli/configuration for details on how to configure 'atmos.yaml'")
 		log.Debug("Using the default CLI config")
 
 		if err := mergeDefaultConfig(v); err != nil {
 			return atmosConfig, err
+		}
+
+		// Also search git root for .atmos.d even with default config.
+		// This enables custom commands defined in .atmos.d at the repo root
+		// to work when running from any subdirectory.
+		gitRoot, err := u.ProcessTagGitRoot("!repo-root .")
+		if err == nil && gitRoot != "" && gitRoot != "." {
+			log.Debug("Loading .atmos.d from git root", "path", gitRoot)
+			if err := mergeDefaultImports(gitRoot, v); err != nil {
+				log.Trace("Failed to load .atmos.d from git root", "path", gitRoot, "error", err)
+				// Non-fatal: continue with default config.
+			}
 		}
 	}
 	if v.ConfigFileUsed() != "" {
@@ -444,6 +456,7 @@ func readSystemConfig(v *viper.Viper) error {
 	}
 
 	if len(configFilePath) > 0 {
+		log.Trace("Checking for atmos.yaml in system config", "path", configFilePath)
 		err := mergeConfig(v, configFilePath, CliConfigFileName, false)
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
@@ -467,6 +480,7 @@ func readHomeConfigWithProvider(v *viper.Viper, homeProvider filesystem.HomeDirP
 		return err
 	}
 	configFilePath := filepath.Join(home, ".atmos")
+	log.Trace("Checking for atmos.yaml in home directory", "path", configFilePath)
 	err = mergeConfig(v, configFilePath, CliConfigFileName, true)
 	if err != nil {
 		switch err.(type) {
@@ -487,6 +501,8 @@ func readWorkDirConfigOnly(v *viper.Viper) error {
 		return err
 	}
 
+	// First try the current directory.
+	log.Trace("Checking for atmos.yaml in working directory", "path", wd)
 	err = mergeConfig(v, wd, CliConfigFileName, true)
 	if err != nil {
 		var configFileNotFoundError viper.ConfigFileNotFoundError
@@ -610,6 +626,7 @@ func findAtmosConfigInParentDirs(startDir string) string {
 		}
 
 		dir = parent
+		log.Trace("Checking for atmos.yaml in parent directory", "path", dir)
 
 		// Check for atmos.yaml or .atmos.yaml in this directory.
 		for _, configName := range []string{AtmosConfigFileName, DotAtmosConfigFileName} {
@@ -627,6 +644,7 @@ func readEnvAmosConfigPath(v *viper.Viper) error {
 	if atmosPath == "" {
 		return nil
 	}
+	log.Trace("Checking for atmos.yaml from ATMOS_CLI_CONFIG_PATH", "path", atmosPath)
 	err := mergeConfig(v, atmosPath, CliConfigFileName, true)
 	if err != nil {
 		switch err.(type) {
@@ -913,6 +931,7 @@ func loadAtmosConfigsFromDirectory(searchPattern string, dst *viper.Viper, sourc
 
 // mergeDefaultImports merges default imports (`atmos.d/`,`.atmos.d/`)
 // from a specified directory into the destination configuration.
+// It also searches the git/worktree root for .atmos.d with lower priority.
 func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	isDir := false
 	if stat, err := os.Stat(dirPath); err == nil && stat.IsDir() {
@@ -928,10 +947,57 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 		return nil
 	}
 
+	// Search git/worktree root FIRST (lower priority - gets overridden by config dir).
+	// This enables .atmos.d to be discovered at the repo root even when running from subdirectories.
+	loadAtmosDFromGitRoot(dirPath, dst)
+
+	// Search the config directory (higher priority - loaded second, overrides git root).
+	log.Trace("Checking for .atmos.d in config directory", "path", dirPath)
+	loadAtmosDFromDirectory(dirPath, dst)
+
+	return nil
+}
+
+// loadAtmosDFromGitRoot searches for .atmos.d/ at the git repository root
+// and loads its configuration if different from the config directory.
+func loadAtmosDFromGitRoot(dirPath string, dst *viper.Viper) {
+	gitRoot, err := u.ProcessTagGitRoot("!repo-root .")
+	if err != nil || gitRoot == "" || gitRoot == "." {
+		return
+	}
+
+	absGitRoot, absErr := filepath.Abs(gitRoot)
+	absDirPath, dirErr := filepath.Abs(dirPath)
+	if absErr != nil || dirErr != nil {
+		return
+	}
+
+	// Check if git root is the same as config directory.
+	// Use case-insensitive comparison on Windows where paths may differ only in casing.
+	pathsEqual := absGitRoot == absDirPath
+	if runtime.GOOS == "windows" {
+		pathsEqual = strings.EqualFold(absGitRoot, absDirPath)
+	}
+	if pathsEqual {
+		return
+	}
+
+	// Skip if excluded for testing.
+	if shouldExcludePathForTesting(absGitRoot) {
+		return
+	}
+
+	log.Trace("Checking for .atmos.d in git root", "path", absGitRoot)
+	loadAtmosDFromDirectory(absGitRoot, dst)
+}
+
+// loadAtmosDFromDirectory searches for atmos.d/ and .atmos.d/ in the given directory
+// and loads their configurations into the destination viper instance.
+func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) {
 	// Search for `atmos.d/` configurations.
 	searchPattern := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
 	if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
-		log.Trace("Failed to load atmos.d configs", "error", err)
+		log.Trace("Failed to load atmos.d configs", "error", err, "path", dirPath)
 		// Don't return error - just log and continue.
 		// This maintains existing behavior where .atmos.d loading is optional.
 	}
@@ -939,12 +1005,10 @@ func mergeDefaultImports(dirPath string, dst *viper.Viper) error {
 	// Search for `.atmos.d` configurations.
 	searchPattern = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
 	if err := loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d"); err != nil {
-		log.Trace("Failed to load .atmos.d configs", "error", err)
+		log.Trace("Failed to load .atmos.d configs", "error", err, "path", dirPath)
 		// Don't return error - just log and continue.
 		// This maintains existing behavior where .atmos.d loading is optional.
 	}
-
-	return nil
 }
 
 // mergeImports processes imports from the atmos configuration and merges them into the destination configuration.

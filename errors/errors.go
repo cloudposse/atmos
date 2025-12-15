@@ -437,6 +437,9 @@ var (
 	ErrWorkflowNoWorkflow            = errors.New("no workflow found")
 	ErrWorkflowFileNotFound          = errors.New("workflow file not found")
 	ErrInvalidWorkflowManifest       = errors.New("invalid workflow manifest")
+	ErrWorkingDirNotFound            = errors.New("working directory does not exist")
+	ErrWorkingDirNotDirectory        = errors.New("working directory path is not a directory")
+	ErrWorkingDirAccessFailed        = errors.New("failed to access working directory")
 	ErrAuthProviderNotAvailable      = errors.New("auth provider is not available")
 	ErrInvalidComponentArgument      = errors.New("invalid arguments. The command requires one argument 'componentName'")
 	ErrValidation                    = errors.New("validation failed")
@@ -644,6 +647,10 @@ var (
 	ErrPathResolutionFailed   = errors.New("failed to resolve component from path")
 	ErrPathIsComponentBase    = errors.New("must specify a component directory, not the base directory")
 	ErrAmbiguousComponentPath = errors.New("ambiguous component path")
+
+	// Interactive prompt errors.
+	ErrInteractiveModeNotAvailable = errors.New("interactive mode not available")
+	ErrNoOptionsAvailable          = errors.New("no options available")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

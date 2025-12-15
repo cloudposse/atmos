@@ -72,6 +72,75 @@ workflows:
 ```
 </File>
 
+## Working Directory
+
+Workflows support a `working_directory` setting that controls where steps execute. This can be set at both the workflow level (applies to all steps) and individual step level (overrides workflow setting).
+
+### Path Resolution
+
+- **Absolute paths** are used as-is (e.g., `/tmp`)
+- **Relative paths** are resolved against the Atmos `base_path`
+- The `!repo-root` YAML function can dynamically resolve to the git repository root
+
+### Example: Workflow-Level Working Directory
+
+<File title="stacks/workflows/build.yaml">
+```yaml
+workflows:
+  build-all:
+    description: Build from repository root
+    working_directory: !repo-root
+    steps:
+      - command: make build
+        type: shell
+      - command: make test
+        type: shell
+```
+</File>
+
+All steps inherit the workflow's `working_directory` setting.
+
+### Example: Step-Level Override
+
+<File title="stacks/workflows/download.yaml">
+```yaml
+workflows:
+  download-and-install:
+    description: Download files to /tmp, then install from repo root
+    working_directory: !repo-root
+    steps:
+      - command: wget https://example.com/archive.tar.gz
+        working_directory: /tmp
+        type: shell
+      - command: tar -xzf /tmp/archive.tar.gz
+        type: shell
+      - command: make install
+        type: shell
+```
+</File>
+
+The first step overrides the workflow setting to run in `/tmp`, while subsequent steps use the workflow-level `working_directory` (repo root).
+
+### Example: Mixed Atmos and Shell Commands
+
+<File title="stacks/workflows/mixed.yaml">
+```yaml
+workflows:
+  deploy-and-verify:
+    description: Deploy infrastructure and run verification scripts
+    steps:
+      - command: terraform apply vpc
+        stack: plat-ue2-dev
+      - command: ./scripts/verify-vpc.sh
+        working_directory: !repo-root
+        type: shell
+```
+</File>
+
+:::tip
+Use `working_directory` when your workflow includes shell commands that depend on relative file paths, or when you need to run commands like `terraform import` directly in a component directory.
+:::
+
 ## Environment Variables
 
 <dl>

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -237,6 +238,9 @@ func processCommandAliases(
 				Short:              aliasFor,
 				Long:               aliasFor,
 				FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+				Annotations: map[string]string{
+					"configAlias": aliasCmd, // marks as CLI config alias, stores target command
+				},
 				Run: func(cmd *cobra.Command, args []string) {
 					err := cmd.ParseFlags(args)
 					errUtils.CheckErrorPrintAndExit(err, "", "")
@@ -257,9 +261,28 @@ func processCommandAliases(
 					// from re-applying the parent's chdir directive.
 					filteredEnv := filterChdirEnv(os.Environ())
 
-					commandToRun := fmt.Sprintf("%s %s %s", execPath, aliasCmd, strings.Join(filteredArgs, " "))
-					err = e.ExecuteShell(commandToRun, commandToRun, currentDirPath, filteredEnv, false)
-					errUtils.CheckErrorPrintAndExit(err, "", "")
+					// Build command arguments: split aliasCmd into parts and append filteredArgs.
+					// Use direct process execution instead of shell to avoid path escaping
+					// issues on Windows where backslashes in paths are misinterpreted.
+					cmdArgs := strings.Fields(aliasCmd)
+					cmdArgs = append(cmdArgs, filteredArgs...)
+
+					execCmd := exec.Command(execPath, cmdArgs...)
+					execCmd.Dir = currentDirPath
+					execCmd.Env = filteredEnv
+					execCmd.Stdin = os.Stdin
+					execCmd.Stdout = os.Stdout
+					execCmd.Stderr = os.Stderr
+
+					err = execCmd.Run()
+					if err != nil {
+						var exitErr *exec.ExitError
+						if errors.As(err, &exitErr) {
+							// Preserve the subprocess exit code.
+							err = errUtils.WithExitCode(err, exitErr.ExitCode())
+						}
+						errUtils.CheckErrorPrintAndExit(err, "", "")
+					}
 				},
 			}
 
@@ -450,6 +473,15 @@ func executeCustomCommand(
 		log.Debug("Authenticated with identity for custom command", "identity", commandIdentity, "command", commandConfig.Name)
 	}
 
+	// Determine working directory for command execution.
+	workDir, err := resolveWorkingDirectory(commandConfig.WorkingDirectory, atmosConfig.BasePath, currentDirPath)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "Invalid working_directory", "https://atmos.tools/cli/configuration/commands#working-directory")
+	}
+	if commandConfig.WorkingDirectory != "" {
+		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
+	}
+
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
 		// Prepare template data for arguments
@@ -531,7 +563,7 @@ func executeCustomCommand(
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
-				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, env, false)
+				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, workDir, env, false)
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 				value = strings.TrimRight(res, "\r\n")
 			} else {
@@ -572,7 +604,7 @@ func executeCustomCommand(
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
 
 		// Pass the prepared environment with custom variables to the subprocess
-		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, env, false)
+		err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
