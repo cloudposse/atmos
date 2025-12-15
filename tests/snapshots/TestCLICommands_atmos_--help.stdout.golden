@@ -27,6 +27,7 @@ AVAILABLE COMMANDS
       describe [command]      Show details about Atmos configurations and components
       devcontainer [command]  Manage development containers
       docs [command]          Open Atmos documentation or display component-specific docs
+      env                     Output environment variables configured in atmos.yaml
       helmfile [command]      Manage Helmfile-based Kubernetes deployments
       help                    Help about any command
       list [command]          List available stacks and components
