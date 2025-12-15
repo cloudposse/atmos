@@ -2,21 +2,32 @@ package flags
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	atmosterm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
-// maxSelectorHeight is the maximum number of rows for the interactive selector.
-const maxSelectorHeight = 20
+// Selector height constants.
+const (
+	// MaxSelectorHeight is the maximum number of rows for the interactive selector.
+	maxSelectorHeight = 20
+	// MinSelectorHeight is the minimum number of rows to show in the selector.
+	minSelectorHeight = 3
+	// SelectorPadding accounts for title and borders in the selector.
+	selectorPadding = 2
+	// TerminalReservedRows reserves space for prompt line and some buffer.
+	terminalReservedRows = 5
+)
 
 // isInteractive checks if interactive prompts should be shown.
 // Interactive mode requires:
@@ -35,7 +46,7 @@ func isInteractive() bool {
 	}
 
 	// Check if stdin is a TTY and not in CI.
-	return term.IsTTYSupportForStdin() && !telemetry.IsCI()
+	return atmosterm.IsTTYSupportForStdin() && !telemetry.IsCI()
 }
 
 // PromptForValue shows an interactive Huh selector with the given options.
@@ -58,11 +69,8 @@ func PromptForValue(name, title string, options []string) (string, error) {
 
 	var choice string
 
-	// Calculate dynamic height: options + 2 for title/padding, capped at max.
-	height := len(options) + 2
-	if height > maxSelectorHeight {
-		height = maxSelectorHeight
-	}
+	// Calculate dynamic height based on options and terminal size.
+	height := calculateSelectorHeight(len(options))
 
 	// Create Huh selector with Atmos theme.
 	// Note: Huh v0.8.0 has case-sensitive filtering (by design).
@@ -82,6 +90,36 @@ func PromptForValue(name, title string, options []string) (string, error) {
 	}
 
 	return choice, nil
+}
+
+// calculateSelectorHeight determines the optimal height for the selector.
+// It considers: number of options, terminal height, and min/max bounds.
+func calculateSelectorHeight(optionCount int) int {
+	// Start with options + padding for title/borders.
+	height := optionCount + selectorPadding
+
+	// Try to get terminal height for smarter sizing.
+	if _, termHeight, err := term.GetSize(int(os.Stdout.Fd())); err == nil && termHeight > 0 {
+		// Calculate available space (terminal height minus reserved rows).
+		available := termHeight - terminalReservedRows
+		if available < minSelectorHeight {
+			available = minSelectorHeight
+		}
+		// Use the smaller of calculated height and available space.
+		if height > available {
+			height = available
+		}
+	}
+
+	// Apply min/max bounds.
+	if height < minSelectorHeight {
+		height = minSelectorHeight
+	}
+	if height > maxSelectorHeight {
+		height = maxSelectorHeight
+	}
+
+	return height
 }
 
 // PromptForMissingRequired prompts for a required flag that is missing.
