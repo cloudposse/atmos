@@ -1,6 +1,7 @@
 package flags
 
 import (
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -21,6 +22,17 @@ type Option func(*parserConfig)
 type parserConfig struct {
 	registry    *FlagRegistry
 	viperPrefix string // Prefix for Viper keys (optional)
+
+	// Interactive prompt configuration.
+	flagPrompts          map[string]*flagPromptConfig // Flag name -> prompt config for required flags
+	optionalValuePrompts map[string]*flagPromptConfig // Flag name -> prompt config for optional value flags
+	positionalPrompts    map[string]*flagPromptConfig // Arg name -> prompt config for positional args
+}
+
+// flagPromptConfig holds the configuration for an interactive prompt.
+type flagPromptConfig struct {
+	PromptTitle    string         // Title for the interactive selector
+	CompletionFunc CompletionFunc // Function to get available options
 }
 
 // WithStringFlag adds a string flag to the parser configuration.
@@ -308,5 +320,98 @@ func WithRegistry(registry *FlagRegistry) Option {
 
 	return func(cfg *parserConfig) {
 		cfg.registry = registry
+	}
+}
+
+// WithCompletionPrompt enables interactive prompts for a required flag when the flag is missing.
+// This is Use Case 1: Missing Required Flags.
+//
+// When the flag is required but not provided, and the terminal is interactive,
+// the user will be shown a selector with options from the completion function.
+//
+// Example:
+//
+//	WithRequiredStringFlag("stack", "s", "Stack name"),
+//	WithCompletionPrompt("stack", "Choose a stack", stackFlagCompletion),
+func WithCompletionPrompt(flagName, promptTitle string, completionFunc CompletionFunc) Option {
+	defer perf.Track(nil, "flags.WithCompletionPrompt")()
+
+	return func(cfg *parserConfig) {
+		if cfg.flagPrompts == nil {
+			cfg.flagPrompts = make(map[string]*flagPromptConfig)
+		}
+		cfg.flagPrompts[flagName] = &flagPromptConfig{
+			PromptTitle:    promptTitle,
+			CompletionFunc: completionFunc,
+		}
+	}
+}
+
+// WithOptionalValuePrompt enables interactive prompts for a flag when used without a value.
+// This is Use Case 2: Optional Value Flags (like --identity pattern).
+//
+// The flag's NoOptDefVal will be set to cfg.IdentityFlagSelectValue ("__SELECT__").
+// When the user provides --flag without a value, Cobra sets it to the sentinel value,
+// and we detect this to show the interactive prompt.
+//
+// Example:
+//
+//	WithStringFlag("format", "", "yaml", "Output format"),
+//	WithOptionalValuePrompt("format", "Choose output format", formatCompletionFunc),
+//
+// Result:
+//   - `--format` → shows interactive selector
+//   - `--format=json` → uses "json" (no prompt)
+//   - no flag → uses default "yaml" (no prompt)
+func WithOptionalValuePrompt(flagName, promptTitle string, completionFunc CompletionFunc) Option {
+	defer perf.Track(nil, "flags.WithOptionalValuePrompt")()
+
+	return func(c *parserConfig) {
+		// Set NoOptDefVal to sentinel value.
+		flag := c.registry.Get(flagName)
+		if strFlag, ok := flag.(*StringFlag); ok {
+			strFlag.NoOptDefVal = cfg.IdentityFlagSelectValue
+		}
+
+		// Store prompt config.
+		if c.optionalValuePrompts == nil {
+			c.optionalValuePrompts = make(map[string]*flagPromptConfig)
+		}
+		c.optionalValuePrompts[flagName] = &flagPromptConfig{
+			PromptTitle:    promptTitle,
+			CompletionFunc: completionFunc,
+		}
+	}
+}
+
+// WithPositionalArgPrompt enables interactive prompts for a positional argument when missing.
+// This is Use Case 3: Missing Required Positional Arguments.
+//
+// When the positional argument is required but not provided, and the terminal is interactive,
+// the user will be shown a selector with options from the completion function.
+//
+// Note: This requires the positional argument to be configured via PositionalArgSpec
+// with CompletionFunc and PromptTitle fields set.
+//
+// Example:
+//
+//	argsBuilder := flags.NewPositionalArgsBuilder()
+//	argsBuilder.AddArg(&flags.PositionalArgSpec{
+//	    Name:           "theme-name",
+//	    Required:       true,
+//	    CompletionFunc: themeNameCompletion,
+//	    PromptTitle:    "Choose a theme to preview",
+//	})
+func WithPositionalArgPrompt(argName, promptTitle string, completionFunc CompletionFunc) Option {
+	defer perf.Track(nil, "flags.WithPositionalArgPrompt")()
+
+	return func(cfg *parserConfig) {
+		if cfg.positionalPrompts == nil {
+			cfg.positionalPrompts = make(map[string]*flagPromptConfig)
+		}
+		cfg.positionalPrompts[argName] = &flagPromptConfig{
+			PromptTitle:    promptTitle,
+			CompletionFunc: completionFunc,
+		}
 	}
 }

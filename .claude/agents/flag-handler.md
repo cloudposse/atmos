@@ -383,6 +383,166 @@ RunE: func(cmd *cobra.Command, args []string) error {
 }
 ```
 
+## Interactive Prompts (NEW)
+
+Atmos supports interactive prompts for missing required values when running in an interactive terminal.
+
+### Three Use Cases
+
+**Use Case 1: Missing Required Flags**
+When a required flag is not provided, show an interactive selector:
+```bash
+$ atmos describe component vpc
+? Choose a stack:
+  ue2-dev
+> ue2-prod
+```
+
+**Use Case 2: Optional Value Flags (Sentinel Pattern)**
+When a flag is used without a value (like `--identity`), trigger interactive selection:
+```bash
+$ atmos list stacks --format
+? Choose output format:
+  yaml
+> json
+  table
+```
+
+**Use Case 3: Missing Required Positional Arguments**
+When a required positional argument is missing, show a selector:
+```bash
+$ atmos theme show
+? Choose a theme to preview:
+  Dracula
+  Tokyo Night
+> Nord
+```
+
+### Enabling Interactive Prompts
+
+Interactive prompts are enabled by default and require:
+1. `--interactive` flag is `true` (default: true)
+2. stdin is a TTY
+3. Not running in CI environment
+
+Users can disable with `--interactive=false` or `ATMOS_INTERACTIVE=false`.
+
+### Implementation
+
+#### Use Case 1: Missing Required Flags
+
+```go
+// In init():
+parser := flags.NewStandardParser(
+    flags.WithStringFlag("stack", "s", "", "Stack name"),
+    flags.WithCompletionPrompt("stack", "Choose a stack", stackFlagCompletion),
+)
+```
+
+The flag must be marked as required in Cobra:
+```go
+cmd.MarkFlagRequired("stack")
+```
+
+#### Use Case 2: Optional Value Flags
+
+```go
+// In init():
+parser := flags.NewStandardParser(
+    flags.WithStringFlag("identity", "i", "", "Identity to use"),
+    flags.WithOptionalValuePrompt("identity", "Choose identity", identityCompletion),
+)
+
+// Set NoOptDefVal to sentinel value
+cmd.Flags().Lookup("identity").NoOptDefVal = "__SELECT__"
+```
+
+#### Use Case 3: Missing Required Positional Arguments
+
+```go
+// In init():
+builder := flags.NewPositionalArgsBuilder()
+builder.AddArg(&flags.PositionalArgSpec{
+    Name:           "theme-name",
+    Description:    "Theme name to preview",
+    Required:       true,
+    CompletionFunc: ThemesArgCompletion,
+    PromptTitle:    "Choose a theme to preview",
+})
+specs, validator, usage := builder.Build()
+
+parser := flags.NewStandardParser(
+    flags.WithPositionalArgPrompt("theme-name", "Choose a theme to preview", ThemesArgCompletion),
+)
+parser.SetPositionalArgs(specs, validator, usage)
+
+// Update command Use and Args
+cmd.Use = "show " + usage  // "show <theme-name>"
+cmd.Args = validator
+```
+
+#### Completion Functions
+
+Completion functions provide the list of options for the interactive selector:
+
+```go
+func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+    // Return list of stack names
+    return []string{"ue2-dev", "ue2-prod", "uw2-staging"}, cobra.ShellCompDirectiveNoFileComp
+}
+```
+
+#### Graceful Degradation
+
+Prompts automatically degrade when not interactive:
+- Returns empty string (lets Cobra validation handle the error)
+- No panic or crash
+- Works seamlessly in CI/non-TTY environments
+
+### Example: atmos theme show
+
+Complete working example in `cmd/theme/show.go`:
+
+```go
+func init() {
+    builder := flags.NewPositionalArgsBuilder()
+    builder.AddArg(&flags.PositionalArgSpec{
+        Name:           "theme-name",
+        Description:    "Theme name to preview",
+        Required:       true,
+        CompletionFunc: ThemesArgCompletion,
+        PromptTitle:    "Choose a theme to preview",
+    })
+    specs, validator, usage := builder.Build()
+
+    themeShowParser = flags.NewStandardParser(
+        flags.WithPositionalArgPrompt("theme-name", "Choose a theme to preview", ThemesArgCompletion),
+    )
+    themeShowParser.SetPositionalArgs(specs, validator, usage)
+
+    themeShowCmd.Use = "show " + usage
+    themeShowCmd.Args = validator
+    themeShowParser.RegisterFlags(themeShowCmd)
+}
+
+func executeThemeShow(cmd *cobra.Command, args []string) error {
+    // Parse handles interactive prompts automatically
+    parsed, err := themeShowParser.Parse(cmd.Context(), args)
+    if err != nil {
+        return err
+    }
+
+    if len(parsed.PositionalArgs) == 0 {
+        return errUtils.Build(errUtils.ErrInvalidPositionalArgs).
+            WithHintf("Theme name is required").
+            Err()
+    }
+
+    themeName := parsed.PositionalArgs[0]
+    // ... execute command
+}
+```
+
 ## Global Flags
 
 All commands inherit global flags automatically:
@@ -398,6 +558,7 @@ type global.Flags struct {
     ForceColor  bool
     ForceTTY    bool
     Mask        bool
+    Interactive bool  // Enable interactive prompts (default: true)
     Pager       string
 }
 ```
