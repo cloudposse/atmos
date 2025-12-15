@@ -497,6 +497,20 @@ func (m *manager) ListProviders() []string {
 	return names
 }
 
+// GetIdentityDisplayName returns the display name for an identity, preserving original case.
+// The lowercaseKey parameter is the internal key (lowercase due to Viper).
+// Returns the original case name from IdentityCaseMap if available, otherwise returns lowercaseKey.
+func (m *manager) GetIdentityDisplayName(lowercaseKey string) string {
+	defer perf.Track(nil, "auth.Manager.GetIdentityDisplayName")()
+
+	if m.config.IdentityCaseMap != nil {
+		if originalName, exists := m.config.IdentityCaseMap[lowercaseKey]; exists {
+			return originalName
+		}
+	}
+	return lowercaseKey
+}
+
 // initializeProviders creates provider instances from configuration.
 func (m *manager) initializeProviders() error {
 	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
