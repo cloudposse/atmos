@@ -52,6 +52,10 @@ func TestDescribeAffectedAuthManagerArgument(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)
 
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	require.NoError(t, err, "Should load Atmos config")
@@ -98,6 +102,10 @@ func TestDescribeAffectedAuthManagerArgument(t *testing.T) {
 func TestDescribeAffectedNilAuthManagerHandling(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)

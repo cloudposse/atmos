@@ -39,6 +39,10 @@ func initAtmosConfigForFixture(t *testing.T, fixturePath string) schema.AtmosCon
 	// Change to fixture directory using t.Chdir for automatic cleanup.
 	t.Chdir(fixturePath)
 
+	// Set ATMOS_CLI_CONFIG_PATH to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
 	// Initialize config with processStacks=true to enable stack loading.
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err, "Failed to initialize atmos config for fixture")

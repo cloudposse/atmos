@@ -48,6 +48,10 @@ func TestExecuteDescribeComponentWithAuthManager(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)
 
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
 	// Load atmos config.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	_, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -82,6 +86,10 @@ func TestExecuteDescribeComponentWithAuthManager(t *testing.T) {
 func TestExecuteDescribeComponentWithoutAuthManager(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	_, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -120,6 +128,10 @@ func TestExecuteDescribeComponentAuthManagerWithNilStackInfo(t *testing.T) {
 
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	_, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -163,6 +175,10 @@ func TestExecuteDescribeComponentAuthManagerWithNilAuthContext(t *testing.T) {
 
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	_, err := cfg.InitCliConfig(configAndStacksInfo, true)

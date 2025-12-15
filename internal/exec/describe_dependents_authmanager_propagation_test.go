@@ -48,6 +48,10 @@ func TestAuthManagerPropagationToDescribeDependents(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)
 
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
 	// Load atmos config.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -81,6 +85,10 @@ func TestAuthManagerPropagationToDescribeDependents(t *testing.T) {
 func TestDescribeDependentsAuthManagerNilHandling(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -119,6 +127,10 @@ func TestDescribeDependentsAuthManagerWithNilStackInfo(t *testing.T) {
 
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -162,6 +174,10 @@ func TestDescribeDependentsAuthManagerWithNilAuthContext(t *testing.T) {
 
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)

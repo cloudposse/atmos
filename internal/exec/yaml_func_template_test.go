@@ -308,6 +308,10 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/atmos-template-yaml-function"
 	t.Chdir(workDir)
 
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
 	info := schema.ConfigAndStacksInfo{
 		StackFromArg:     "",
 		Stack:            stack,

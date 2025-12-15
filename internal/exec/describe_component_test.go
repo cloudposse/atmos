@@ -199,9 +199,13 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 		assert.NoError(t, err)
 	}()
 
-	// Define the working directory
+	// Define the working directory.
 	workDir := "../../tests/fixtures/scenarios/atmos-overrides-section"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	component := "c1"
 
@@ -395,9 +399,13 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	// Define the working directory - using quick-start-advanced as it has a good mix of configs
+	// Define the working directory - using quick-start-advanced as it has a good mix of configs.
 	workDir := "../../examples/quick-start-advanced"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	component := "vpc-flow-logs-bucket"
 	stack := "plat-ue2-dev"

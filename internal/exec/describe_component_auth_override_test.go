@@ -52,6 +52,10 @@ func TestComponentLevelAuthOverride(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-nested-propagation"
 	t.Chdir(workDir)
 
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
 	// Test that ExecuteDescribeComponent works with AuthManager.
 	// The resolver will check if component has auth config and either:
 	// - Create component-specific AuthManager (if auth config exists)
@@ -102,6 +106,10 @@ func TestResolveAuthManagerForNestedComponent(t *testing.T) {
 
 	workDir := "../../tests/fixtures/scenarios/authmanager-nested-propagation"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	// Get Atmos configuration.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
@@ -178,6 +186,10 @@ func TestAuthOverrideInNestedChain(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-nested-propagation"
 	t.Chdir(workDir)
 
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
 	// Process Level 1 component which references Level 2.
 	// Since Level 1 has no auth config, it should use global AuthManager.
 	level1Section, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
@@ -206,6 +218,10 @@ func TestAuthOverrideErrorHandling(t *testing.T) {
 
 	workDir := "../../tests/fixtures/scenarios/authmanager-nested-propagation"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	// (this also disables parent directory search and git root discovery).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	// Get Atmos configuration.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
