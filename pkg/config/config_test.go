@@ -1145,11 +1145,9 @@ func TestResolveAbsolutePath(t *testing.T) {
 // directories at the parent level.
 // See: https://github.com/cloudposse/atmos/issues/1858
 func TestParentTraversalResolvesRelativeToConfigDir(t *testing.T) {
-	// Clear environment variables that might interfere.
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	require.NoError(t, err)
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	require.NoError(t, err)
+	// Clear environment variables that might interfere (empty value effectively unsets).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	t.Run("config in subdirectory with base_path pointing to parent", func(t *testing.T) {
 		// Change to the fixture directory.

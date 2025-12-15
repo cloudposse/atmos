@@ -597,8 +597,8 @@ func readParentDirConfig(v *viper.Viper) error {
 	return nil
 }
 
-// readWorkDirConfig is kept for backward compatibility but now just calls the new functions.
-// Deprecated: Use readWorkDirConfigOnly, readGitRootConfig, and readParentDirConfig instead.
+// Deprecated: readWorkDirConfig is kept for backward compatibility.
+// Use readWorkDirConfigOnly, readGitRootConfig, and readParentDirConfig instead.
 func readWorkDirConfig(v *viper.Viper) error {
 	if err := readWorkDirConfigOnly(v); err != nil {
 		return err
