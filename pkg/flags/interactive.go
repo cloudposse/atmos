@@ -1,13 +1,13 @@
 package flags
 
 import (
+	"errors"
 	"fmt"
-	"os"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	atmosterm "github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -16,18 +16,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
-)
-
-// Selector height constants.
-const (
-	// MaxSelectorHeight is the maximum number of rows for the interactive selector.
-	maxSelectorHeight = 20
-	// MinSelectorHeight is the minimum number of rows to show in the selector.
-	minSelectorHeight = 3
-	// SelectorPadding accounts for title and borders in the selector.
-	selectorPadding = 2
-	// TerminalReservedRows reserves space for prompt line and some buffer.
-	terminalReservedRows = 5
 )
 
 // isInteractive checks if interactive prompts should be shown.
@@ -70,23 +58,31 @@ func PromptForValue(name, title string, options []string) (string, error) {
 
 	var choice string
 
-	// Calculate dynamic height based on options and terminal size.
-	height := calculateSelectorHeight(len(options))
+	// Create custom keymap that adds ESC to quit keys.
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c", "esc"),
+		key.WithHelp("ctrl+c/esc", "quit"),
+	)
 
-	// Create Huh selector with Atmos theme.
-	// Note: Huh v0.8.0 has case-sensitive filtering (by design).
-	// Users can filter by typing "/" followed by search text, but it only matches exact case.
-	// Example: typing "dark" matches "neobones_dark" but not "Builtin Dark".
-	// TODO: Consider filing upstream feature request for case-insensitive filtering option.
-	selector := huh.NewSelect[string]().
-		Value(&choice).
-		Options(huh.NewOptions(options...)...).
-		Title(title).
-		Height(height).
-		WithTheme(uiutils.NewAtmosHuhTheme())
+	// Use Form with Group (like auth identity selector) for better cursor behavior.
+	// This approach lets the cursor move through the list instead of scrolling the list.
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(title).
+				Description("Press ctrl+c or esc to cancel").
+				Options(huh.NewOptions(options...)...).
+				Value(&choice),
+		),
+	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
 
-	// Run selector.
-	if err := selector.Run(); err != nil {
+	// Run form.
+	if err := form.Run(); err != nil {
+		// Check if user aborted (Ctrl+C, ESC, etc.).
+		if errors.Is(err, huh.ErrUserAborted) {
+			return "", errUtils.ErrUserAborted
+		}
 		return "", fmt.Errorf("prompt failed: %w", err)
 	}
 
@@ -94,36 +90,6 @@ func PromptForValue(name, title string, options []string) (string, error) {
 	_ = ui.Infof("Selected %s: %s", name, choice)
 
 	return choice, nil
-}
-
-// calculateSelectorHeight determines the optimal height for the selector.
-// It considers: number of options, terminal height, and min/max bounds.
-func calculateSelectorHeight(optionCount int) int {
-	// Start with options + padding for title/borders.
-	height := optionCount + selectorPadding
-
-	// Try to get terminal height for smarter sizing.
-	if _, termHeight, err := term.GetSize(int(os.Stdout.Fd())); err == nil && termHeight > 0 {
-		// Calculate available space (terminal height minus reserved rows).
-		available := termHeight - terminalReservedRows
-		if available < minSelectorHeight {
-			available = minSelectorHeight
-		}
-		// Use the smaller of calculated height and available space.
-		if height > available {
-			height = available
-		}
-	}
-
-	// Apply min/max bounds.
-	if height < minSelectorHeight {
-		height = minSelectorHeight
-	}
-	if height > maxSelectorHeight {
-		height = maxSelectorHeight
-	}
-
-	return height
 }
 
 // PromptForMissingRequired prompts for a required flag that is missing.
