@@ -27,33 +27,45 @@ Common use cases:
 - Preparing the environment for a fresh deployment.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get component from args (optional - if empty, cleans all components)
+		// Get component from args (optional - if empty, cleans all components).
 		var component string
 		if len(args) > 0 {
 			component = args[0]
 		}
 
-		// Use Viper to respect precedence (flag > env > config > default)
+		// Use Viper to respect precedence (flag > env > config > default).
 		v := viper.GetViper()
 
-		// Bind terraform flags (--stack, etc.) to Viper
+		// Bind terraform flags (--stack, etc.) to Viper.
 		if err := terraformParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
 
-		// Bind clean-specific flags to Viper
+		// Bind clean-specific flags to Viper.
 		if err := cleanParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
 
-		// Get flag values from Viper
+		// Get flag values from Viper.
 		stack := v.GetString("stack")
 		force := v.GetBool("force")
 		everything := v.GetBool("everything")
 		skipLockFile := v.GetBool("skip-lock-file")
 		dryRun := v.GetBool("dry-run")
 
-		// Initialize Atmos configuration
+		// Prompt for component/stack if neither is provided.
+		if component == "" && stack == "" {
+			prompted, err := promptForComponent(cmd)
+			if err == nil && prompted != "" {
+				component = prompted
+			}
+			prompted, err = promptForStack(cmd, component)
+			if err == nil && prompted != "" {
+				stack = prompted
+			}
+		}
+
+		// Initialize Atmos configuration.
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 		if err != nil {
 			return err

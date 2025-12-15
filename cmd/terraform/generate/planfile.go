@@ -4,6 +4,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -15,23 +17,40 @@ var planfileParser *flags.StandardParser
 
 // planfileCmd generates planfile for a terraform component.
 var planfileCmd = &cobra.Command{
-	Use:                "planfile <component>",
+	Use:                "planfile [component]",
 	Short:              "Generate a planfile for a Terraform component",
 	Long:               "This command generates a `planfile` for a specified Atmos Terraform component.",
-	Args:               cobra.ExactArgs(1),
+	Args:               cobra.MaximumNArgs(1),
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		component := args[0]
+		var component string
+		if len(args) > 0 {
+			component = args[0]
+		}
 
 		// Use Viper to respect precedence (flag > env > config > default)
 		v := viper.GetViper()
 
-		// Bind planfile-specific flags to Viper
+		// Bind planfile-specific flags to Viper.
 		if err := planfileParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
 
-		// Get flag values from Viper
+		// Prompt for component if missing.
+		if component == "" {
+			prompted, err := shared.PromptForComponent(cmd)
+			if err = shared.HandlePromptError(err, "component"); err != nil {
+				return err
+			}
+			component = prompted
+		}
+
+		// Validate component after prompting.
+		if component == "" {
+			return errUtils.ErrMissingComponent
+		}
+
+		// Get flag values from Viper.
 		stack := v.GetString("stack")
 		file := v.GetString("file")
 		format := v.GetString("format")
@@ -39,7 +58,19 @@ var planfileCmd = &cobra.Command{
 		processFunctions := v.GetBool("process-functions")
 		skip := v.GetStringSlice("skip")
 
-		// Note: Stack is validated by Cobra's MarkFlagRequired in init().
+		// Prompt for stack if missing.
+		if stack == "" {
+			prompted, err := shared.PromptForStack(cmd, component)
+			if err = shared.HandlePromptError(err, "stack"); err != nil {
+				return err
+			}
+			stack = prompted
+		}
+
+		// Validate stack after prompting.
+		if stack == "" {
+			return errUtils.ErrMissingStack
+		}
 
 		// Initialize Atmos configuration
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
@@ -85,10 +116,8 @@ func init() {
 		panic(err)
 	}
 
-	// Mark stack as required.
-	if err := planfileCmd.MarkFlagRequired("stack"); err != nil {
-		panic(err)
-	}
+	// Register shell completion for component.
+	planfileCmd.ValidArgsFunction = shared.ComponentsArgCompletion
 
 	GenerateCmd.AddCommand(planfileCmd)
 }

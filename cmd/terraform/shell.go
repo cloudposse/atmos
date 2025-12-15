@@ -16,17 +16,20 @@ var shellParser *flags.StandardParser
 
 // shellCmd represents the terraform shell command (custom Atmos command).
 var shellCmd = &cobra.Command{
-	Use:   "shell <component>",
+	Use:   "shell [component]",
 	Short: "Configure an environment for an Atmos component and start a new shell",
 	Long: `Configure an environment for a specific Atmos component in a stack and then start a new shell.
 
 In this shell, you can execute all native Terraform commands directly without the need
 to use Atmos-specific arguments and flags. This allows you to interact with Terraform
 as you would in a typical setup, but within the configured Atmos environment.`,
-	Args:               cobra.ExactArgs(1),
+	Args:               cobra.MaximumNArgs(1),
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		component := args[0]
+		var component string
+		if len(args) > 0 {
+			component = args[0]
+		}
 
 		// Use Viper to respect precedence (flag > env > config > default)
 		v := viper.GetViper()
@@ -41,6 +44,20 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 			return err
 		}
 
+		// Prompt for component if missing.
+		if component == "" {
+			prompted, err := promptForComponent(cmd)
+			if err = handlePromptError(err, "component"); err != nil {
+				return err
+			}
+			component = prompted
+		}
+
+		// Validate component after prompting.
+		if component == "" {
+			return errUtils.ErrMissingComponent
+		}
+
 		// Get flag values from Viper
 		stack := v.GetString("stack")
 		processTemplates := v.GetBool("process-templates")
@@ -48,7 +65,16 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 		skip := v.GetStringSlice("skip")
 		dryRun := v.GetBool("dry-run")
 
-		// Validate required flags
+		// Prompt for stack if missing.
+		if stack == "" {
+			prompted, err := promptForStack(cmd, component)
+			if err = handlePromptError(err, "stack"); err != nil {
+				return err
+			}
+			stack = prompted
+		}
+
+		// Validate stack after prompting.
 		if stack == "" {
 			return errUtils.ErrMissingStack
 		}

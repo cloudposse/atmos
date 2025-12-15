@@ -10,11 +10,11 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -361,47 +361,19 @@ func handleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, 
 	return nil
 }
 
-// handlePromptError processes errors from interactive prompts.
-// Returns nil if the error should be ignored, or the error if it should propagate.
+// handlePromptError delegates to shared.HandlePromptError.
 func handlePromptError(err error, name string) error {
-	if err == nil {
-		return nil
-	}
-	if errors.Is(err, errUtils.ErrUserAborted) {
-		log.Debug("User aborted selection, exiting with SIGINT code", "prompt", name)
-		errUtils.Exit(errUtils.ExitCodeSIGINT)
-	}
-	if errors.Is(err, errUtils.ErrInteractiveModeNotAvailable) {
-		return nil // Fall through to validation.
-	}
-	return err
+	return shared.HandlePromptError(err, name)
 }
 
-// promptForComponent shows an interactive selector for component selection.
+// promptForComponent delegates to shared.PromptForComponent.
 func promptForComponent(cmd *cobra.Command) (string, error) {
-	return flags.PromptForPositionalArg(
-		"component",
-		"Choose a component",
-		componentsArgCompletion,
-		cmd,
-		nil,
-	)
+	return shared.PromptForComponent(cmd)
 }
 
-// promptForStack shows an interactive selector for stack selection.
-// If component is provided, filters stacks to only those containing the component.
+// promptForStack delegates to shared.PromptForStack.
 func promptForStack(cmd *cobra.Command, component string) (string, error) {
-	var args []string
-	if component != "" {
-		args = []string{component}
-	}
-	return flags.PromptForMissingRequired(
-		"stack",
-		"Choose a stack",
-		stackFlagCompletion,
-		cmd,
-		args,
-	)
+	return shared.PromptForStack(cmd, component)
 }
 
 // enableHeatmapIfRequested checks os.Args for --heatmap flag and enables performance tracking.
@@ -451,133 +423,12 @@ func addIdentityCompletion(cmd *cobra.Command) {
 	}
 }
 
-// componentsArgCompletion provides shell completion for component positional arguments.
+// componentsArgCompletion delegates to shared.ComponentsArgCompletion.
 func componentsArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	if len(args) == 0 {
-		output, err := listTerraformComponents(cmd)
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveNoFileComp
-		}
-		return output, cobra.ShellCompDirectiveNoFileComp
-	}
-	return nil, cobra.ShellCompDirectiveNoFileComp
+	return shared.ComponentsArgCompletion(cmd, args, toComplete)
 }
 
-// stackFlagCompletion provides shell completion for the --stack flag.
-// If a component was provided as the first positional argument, it filters stacks
-// to only those containing that component.
+// stackFlagCompletion delegates to shared.StackFlagCompletion.
 func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	// If a component was provided as the first argument, filter stacks by that component.
-	if len(args) > 0 && args[0] != "" {
-		output, err := listStacksForComponent(args[0])
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveNoFileComp
-		}
-		return output, cobra.ShellCompDirectiveNoFileComp
-	}
-
-	// Otherwise, list all stacks.
-	output, err := listAllStacks()
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-	return output, cobra.ShellCompDirectiveNoFileComp
-}
-
-// listTerraformComponents lists all terraform components.
-func listTerraformComponents(_ *cobra.Command) ([]string, error) {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
-	if err != nil {
-		return nil, fmt.Errorf("error initializing CLI config: %w", err)
-	}
-
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("error describing stacks: %w", err)
-	}
-
-	// Collect unique component names from all stacks.
-	componentSet := make(map[string]struct{})
-	for _, stackData := range stacksMap {
-		if stackMap, ok := stackData.(map[string]any); ok {
-			if components, ok := stackMap["components"].(map[string]any); ok {
-				if terraform, ok := components["terraform"].(map[string]any); ok {
-					for componentName := range terraform {
-						componentSet[componentName] = struct{}{}
-					}
-				}
-			}
-		}
-	}
-
-	components := make([]string, 0, len(componentSet))
-	for name := range componentSet {
-		components = append(components, name)
-	}
-	sort.Strings(components)
-	return components, nil
-}
-
-// listStacksForComponent returns stacks that contain the specified component.
-func listStacksForComponent(component string) ([]string, error) {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
-	if err != nil {
-		return nil, fmt.Errorf("error initializing CLI config: %w", err)
-	}
-
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("error describing stacks: %w", err)
-	}
-
-	// Filter stacks that contain the specified component.
-	var stacks []string
-	for stackName, stackData := range stacksMap {
-		if stackContainsComponent(stackData, component) {
-			stacks = append(stacks, stackName)
-		}
-	}
-	sort.Strings(stacks)
-	return stacks, nil
-}
-
-// stackContainsComponent checks if a stack contains the specified terraform component.
-func stackContainsComponent(stackData any, component string) bool {
-	stackMap, ok := stackData.(map[string]any)
-	if !ok {
-		return false
-	}
-	components, ok := stackMap["components"].(map[string]any)
-	if !ok {
-		return false
-	}
-	terraform, ok := components["terraform"].(map[string]any)
-	if !ok {
-		return false
-	}
-	_, hasComponent := terraform[component]
-	return hasComponent
-}
-
-// listAllStacks returns all stacks.
-func listAllStacks() ([]string, error) {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
-	if err != nil {
-		return nil, fmt.Errorf("error initializing CLI config: %w", err)
-	}
-
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
-	if err != nil {
-		return nil, fmt.Errorf("error describing stacks: %w", err)
-	}
-
-	stacks := make([]string, 0, len(stacksMap))
-	for stackName := range stacksMap {
-		stacks = append(stacks, stackName)
-	}
-	sort.Strings(stacks)
-	return stacks, nil
+	return shared.StackFlagCompletion(cmd, args, toComplete)
 }
