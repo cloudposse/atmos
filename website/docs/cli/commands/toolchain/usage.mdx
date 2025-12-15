@@ -102,6 +102,79 @@ We support the core Aqua registry features needed for infrastructure tooling whi
 - Local tool aliases
 - GitHub token authentication
 
+### Unsupported Aqua Features
+
+Atmos provides focused Aqua registry support optimized for infrastructure tooling. Some Aqua features are intentionally not supported, either because Atmos offers alternative approaches or because they're outside our scope.
+
+#### Package Types Not Supported
+
+| Type | Description | Alternative |
+|------|-------------|-------------|
+| `github_content` | Downloads raw files from repository source | Use `http` type with raw GitHub URL |
+| `github_archive` | Downloads repository archive (tarball) | Use `http` type with archive URL |
+| `go_build` | Compiles Go source with custom build flags | Use `go_install` or pre-built releases |
+| `cargo` | Installs Rust crates via cargo | Use `github_release` for pre-built binaries |
+
+#### Configuration Fields Not Supported
+
+**Version Management:**
+- `version_filter` / `version_prefix` - Version string manipulation
+- `version_expr` / `version_expr_prefix` - CEL expressions for version resolution
+- `go_version_file` - Go version file detection
+
+**Package Features:**
+- `import` - Package-level imports (use multiple registries instead)
+- `command_aliases` - Per-package command aliases (use `toolchain.aliases` in atmos.yaml)
+- `tags` - Package tagging for organization
+- `vars` - Template variables (basic templating supported)
+
+**Security Verification:**
+- `cosign` - Sigstore signature verification
+- `minisign` - Minisign signature verification
+- `slsa_provenance` - SLSA attestation checking
+- `github_artifact_attestations` - GitHub attestation verification
+
+:::note
+Checksum fields are parsed but validation is not currently enforced during installation.
+:::
+
+#### Atmos Alternatives
+
+| Aqua Feature | Atmos Alternative |
+|--------------|-------------------|
+| `import` (package imports) | Multiple registries with priority ordering |
+| `command_aliases` | `toolchain.aliases` in atmos.yaml |
+| `supported_envs` filtering | Atmos profiles for environment-specific configs |
+| Private registries | `ATMOS_GITHUB_TOKEN` / `GITHUB_TOKEN` authentication |
+
+#### Registry Configuration Differences
+
+Atmos uses a different registry model than Aqua:
+
+**Aqua registries:**
+```yaml
+registries:
+  - name: standard
+    type: standard
+    ref: v4.0.0  # Pin to specific version
+```
+
+**Atmos registries:**
+```yaml
+toolchain:
+  registries:
+    - name: aqua
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry
+      priority: 10
+```
+
+Key differences:
+- No `ref` pinning to specific registry versions
+- Uses `source` URL instead of `repo_owner`/`repo_name`
+- Priority-based ordering instead of implicit ordering
+- Supports inline `atmos` type for custom tool definitions
+
 ## Quick Start
 
 ### Discover Tools

@@ -1,8 +1,8 @@
 
 👽 test linux/amd64
 
-Generate the repository configuration file required for Atlantis to manage      
-Terraform repositories.                                                         
+Generate the repository configuration file required for Atlantis to manage
+Terraform repositories.
 
 USAGE
 
@@ -59,7 +59,7 @@ EXAMPLES
     - Git commit SHA with which to compare the current branch                                                             
                                                                                                                           
                                                                                                                           
-     $ atmos atlantis generate repo-config --affected-only --sha ***MASKED***                 
+     $ atmos atlantis generate repo-config --affected-only --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073                 
                                                                                                                           
                                                                                                                           
     - Print more detailed output when cloning and checking out the Git repository                                         

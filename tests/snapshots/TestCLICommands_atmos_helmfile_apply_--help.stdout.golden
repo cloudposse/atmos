@@ -1,13 +1,13 @@
 
 👽 test linux/amd64
 
-This command reconciles the actual state of Helm releases in the cluster with   
-the desired state defined in your configurations by applying the necessary      
-changes.                                                                        
-                                                                                
-Example usage: atmos helmfile apply echo-server -s tenant1-ue2-dev atmos        
-helmfile                                                                        
-apply echo-server -s tenant1-ue2-dev --redirect-stderr /dev/stdout              
+This command reconciles the actual state of Helm releases in the cluster with
+the desired state defined in your configurations by applying the necessary
+changes.
+
+Example usage: atmos helmfile apply echo-server -s tenant1-ue2-dev atmos
+helmfile
+apply echo-server -s tenant1-ue2-dev --redirect-stderr /dev/stdout
 
 USAGE
 

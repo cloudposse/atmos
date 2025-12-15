@@ -1,8 +1,8 @@
 
 👽 test linux/amd64
 
-This command runs Helmfile commands to manage Kubernetes deployments using      
-Helmfile.                                                                       
+This command runs Helmfile commands to manage Kubernetes deployments using
+Helmfile.
 
 USAGE
 
