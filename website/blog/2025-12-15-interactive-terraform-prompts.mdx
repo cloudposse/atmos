@@ -1,0 +1,148 @@
+---
+slug: interactive-terraform-prompts
+title: "Interactive Component and Stack Selection for Terraform Commands"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Terraform commands now feature interactive prompts for component and stack selection. Run `atmos terraform plan` without arguments and get an intuitive selector instead of an error message.
+
+<!--truncate-->
+
+## What Changed
+
+All 22 terraform commands that require component and stack arguments now support interactive selection when these values are missing. This brings the [interactive prompts feature](/blog/interactive-flag-prompts) to the most frequently used Atmos commands.
+
+```bash
+$ atmos terraform plan
+? Choose a component
+  > vpc
+    eks-cluster
+    rds-aurora
+? Choose a stack
+  > ue2-dev
+    ue2-prod
+    uw2-staging
+```
+
+Previously, running `atmos terraform plan` without arguments resulted in an unhelpful error message requiring you to already know your component and stack names.
+
+## Why This Matters
+
+### For Newcomers
+
+When you join a new company or start working with an unfamiliar codebase, the hardest part is often discovering what's available. What components exist? What stacks are configured? Interactive prompts eliminate the need to dig through documentation or ask colleagues for component names.
+
+```bash
+# Day 1 at a new job? Just run the command
+$ atmos terraform plan
+# See all available components, pick one, then see matching stacks
+```
+
+### For Experienced Users
+
+Even for veterans, interactive selection reduces friction:
+
+- **No more typos** - Select from a list instead of typing `infrastructure/vpc` from memory
+- **Context-aware filtering** - After selecting a component, the stack list shows only stacks containing that component
+- **Terminal history visibility** - Selections are displayed after choosing, so your shell history shows what you ran
+
+### For Onboarding
+
+Interactive prompts serve as built-in documentation. New team members can explore what infrastructure exists without any prior knowledge. This significantly reduces onboarding time and the burden on senior engineers to answer "what components do we have?" questions.
+
+## How It Works
+
+Interactive prompts appear when all conditions are met:
+
+1. **Missing component or stack** - You didn't provide required arguments
+2. **Interactive terminal** - Running in a TTY (not piped or in CI)
+3. **`--interactive` enabled** - On by default, disable with `--interactive=false`
+
+### Smart Stack Filtering
+
+When you select a component first, the stack selector automatically filters to show only stacks that contain that component:
+
+```bash
+$ atmos terraform plan
+? Choose a component
+  > vpc              # Select vpc
+? Choose a stack     # Only shows stacks with vpc configured
+  > ue2-dev
+    ue2-prod
+```
+
+### Selection Feedback
+
+After making a selection, Atmos displays what you chose:
+
+```bash
+$ atmos terraform plan
+? Choose a component
+  > vpc
+i Selected component `vpc`
+? Choose a stack
+  > ue2-dev
+i Selected stack `ue2-dev`
+
+# Terraform plan runs...
+```
+
+This ensures your terminal history captures exactly what was executed.
+
+### Cancel with ESC
+
+Changed your mind? Press ESC or Ctrl+C to cancel at any point:
+
+```bash
+$ atmos terraform plan
+? Choose a component
+  > vpc
+# Press ESC
+! Selection cancelled
+```
+
+## Supported Commands
+
+All terraform commands that route through the standard execution path now support interactive prompts:
+
+| Command | Description |
+|---------|-------------|
+| `plan` | Show execution plan |
+| `apply` | Apply changes |
+| `deploy` | Plan and apply |
+| `destroy` | Destroy infrastructure |
+| `init` | Initialize working directory |
+| `validate` | Validate configuration |
+| `output` | Show outputs |
+| `refresh` | Update state |
+| `show` | Inspect state |
+| `console` | Interactive console |
+| `state` | State management |
+| `import` | Import resources |
+| And 10 more... | |
+
+Custom commands like `shell`, `clean`, and `generate varfile/backend/planfile` also support interactive prompts.
+
+## Disabling Interactive Prompts
+
+For scripts and automation, disable prompts:
+
+```bash
+# Via flag
+atmos terraform plan --interactive=false
+
+# Via environment variable
+export ATMOS_INTERACTIVE=false
+
+# Via atmos.yaml
+settings:
+  interactive: false
+```
+
+Interactive prompts are automatically disabled in CI environments (detected via `CI` environment variable) and when output is piped.
+
+## Get Involved
+
+- Share your feedback in the [Atmos Community Slack](https://cloudposse.com/slack)
+- [Report issues](https://github.com/cloudposse/atmos/issues) on GitHub
