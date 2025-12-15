@@ -671,6 +671,10 @@ func (m *mockAuthManagerForProvider) AuthenticateProvider(ctx context.Context, p
 	return nil, errUtils.ErrNotImplemented
 }
 
+func (m *mockAuthManagerForProvider) GetIdentityDisplayName(name string) string {
+	return name
+}
+
 // mockAuthManagerForIdentity implements minimal AuthManager for testing resolveIdentityName.
 // Only GetDefaultIdentity is implemented - other methods return ErrNotImplemented
 // because they are not needed by TestResolveIdentityName.
@@ -764,6 +768,10 @@ func (m *mockAuthManagerForIdentity) PrepareShellEnvironment(ctx context.Context
 
 func (m *mockAuthManagerForIdentity) AuthenticateProvider(ctx context.Context, providerName string) (*types.WhoamiInfo, error) {
 	return nil, errUtils.ErrNotImplemented
+}
+
+func (m *mockAuthManagerForIdentity) GetIdentityDisplayName(name string) string {
+	return name
 }
 
 func TestResolveConsoleDuration(t *testing.T) {

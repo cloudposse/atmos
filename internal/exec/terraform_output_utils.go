@@ -193,6 +193,13 @@ func (a *authContextWrapper) PrepareShellEnvironment(ctx context.Context, identi
 	panic("authContextWrapper.PrepareShellEnvironment should not be called")
 }
 
+func (a *authContextWrapper) GetIdentityDisplayName(lowercaseKey string) string {
+	defer perf.Track(nil, "exec.authContextWrapper.GetIdentityDisplayName")()
+
+	// Return as-is - this wrapper doesn't have access to the case map.
+	return lowercaseKey
+}
+
 // newAuthContextWrapper creates an AuthManager wrapper that returns the given AuthContext.
 func newAuthContextWrapper(authContext *schema.AuthContext) *authContextWrapper {
 	if authContext == nil {
