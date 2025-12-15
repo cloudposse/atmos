@@ -23,12 +23,12 @@ const yamlKeyIdentities = "identities"
 // preserveProvisionedIdentityCase extracts original case identity names from provisioned identity cache files.
 // Provisioned identities are stored in cache files with original case (e.g., "core-artifacts/AdministratorAccess"),
 // but when loaded via Viper, the keys are lowercased. This function reads the raw YAML to preserve the original case.
+//
+// This function scans the cache directory for all provider subdirectories that have cache files,
+// rather than relying on config flags. This ensures case is preserved regardless of whether
+// auto_provision_identities is set in the current config. The identities themselves are loaded
+// separately via imports - this only affects the display case mapping.
 func preserveProvisionedIdentityCase(atmosConfig *schema.AtmosConfiguration) error {
-	// Check if there are any auth providers configured.
-	if len(atmosConfig.Auth.Providers) == 0 {
-		return nil
-	}
-
 	// Get XDG cache directory for provisioned identities.
 	const authSubDir = "auth"
 	const authDirPerms = 0o700
@@ -42,14 +42,21 @@ func preserveProvisionedIdentityCase(atmosConfig *schema.AtmosConfiguration) err
 		atmosConfig.Auth.IdentityCaseMap = make(map[string]string)
 	}
 
-	// For each provider, check for and read provisioned identities cache file.
-	for providerName := range atmosConfig.Auth.Providers {
-		provider := atmosConfig.Auth.Providers[providerName]
-		// Only process providers with auto_provision_identities enabled.
-		if provider.AutoProvisionIdentities == nil || !*provider.AutoProvisionIdentities {
+	// Scan cache directory for all provider subdirectories that have cache files.
+	// This reads case mappings regardless of config flags - the identities themselves
+	// are loaded separately via imports, this only affects display case.
+	entries, err := os.ReadDir(baseProvisioningDir)
+	if err != nil {
+		// No cache directory or can't read it - nothing to preserve.
+		log.Debug("Cannot read provisioning cache directory", "path", baseProvisioningDir, "error", err)
+		return nil
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
 			continue
 		}
-
+		providerName := entry.Name()
 		cacheFile := filepath.Join(baseProvisioningDir, providerName, provisioning.ProvisionedFileName)
 		preserveProviderIdentityCase(atmosConfig, providerName, cacheFile)
 	}
