@@ -119,8 +119,8 @@ type ComponentAuthConfig struct {
 // Integration defines a client-only credential materialization (e.g., ECR, EKS).
 // Integrations derive credentials from identities for service-specific access.
 type Integration struct {
-	Kind     string                 `yaml:"kind" json:"kind" mapstructure:"kind"`         // Integration type (e.g., "aws/ecr", "aws/eks").
-	Identity string                 `yaml:"identity" json:"identity" mapstructure:"identity"` // Identity providing AWS credentials.
+	Kind     string                 `yaml:"kind" json:"kind" mapstructure:"kind"`                     // Integration type (e.g., "aws/ecr", "aws/eks").
+	Identity string                 `yaml:"identity" json:"identity" mapstructure:"identity"`         // Identity providing AWS credentials.
 	Spec     map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"` // Integration-specific configuration.
 }
 

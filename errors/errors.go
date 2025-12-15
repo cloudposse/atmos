@@ -660,10 +660,10 @@ var (
 	ErrNoOptionsAvailable          = errors.New("no options available")
 
 	// Integration errors.
-	ErrIntegrationNotFound     = errors.New("integration not found")
-	ErrUnknownIntegrationKind  = errors.New("unknown integration kind")
-	ErrIntegrationFailed       = errors.New("integration execution failed")
-	ErrNoLinkedIntegrations    = errors.New("identity has no linked integrations")
+	ErrIntegrationNotFound    = errors.New("integration not found")
+	ErrUnknownIntegrationKind = errors.New("unknown integration kind")
+	ErrIntegrationFailed      = errors.New("integration execution failed")
+	ErrNoLinkedIntegrations   = errors.New("identity has no linked integrations")
 
 	// ECR authentication errors.
 	ErrECRAuthFailed       = errors.New("ECR authentication failed")
