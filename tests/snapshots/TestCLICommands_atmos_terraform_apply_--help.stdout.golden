@@ -113,7 +113,7 @@ GLOBAL FLAGS
 
       --profiler-port int         Port for pprof profiling server (default 6060)
 
-  -q, --query string              Execute on components filtered by a YQ expression
+  -q, --query string              Execute atmos terraform command on components filtered by a YQ expression
 
       --redirect-stderr string    File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                   standard file descriptor (including '/dev/null')
