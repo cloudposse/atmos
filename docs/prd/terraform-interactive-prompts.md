@@ -44,7 +44,7 @@ Atmos already has a fully-implemented interactive prompt system:
 
 Add a single handler function in `terraformRunWithOptions()` that intercepts missing arguments before validation:
 
-```
+```text
 User runs: atmos terraform plan
     │
     ▼

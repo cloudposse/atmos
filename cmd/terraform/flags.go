@@ -95,7 +95,7 @@ func registerFilterFlags(registry *flags.FlagRegistry) {
 		Name:        "query",
 		Shorthand:   "q",
 		Default:     "",
-		Description: "Execute atmos terraform <command> on components filtered by a YQ expression",
+		Description: "Execute on components filtered by a YQ expression",
 		EnvVars:     []string{"ATMOS_QUERY"},
 	})
 	registry.Register(&flags.StringSliceFlag{

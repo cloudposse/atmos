@@ -86,7 +86,7 @@ FLAGS
 
       --process-templates         Enable/disable Go template processing in Atmos stack manifests (default true)
 
-  -q, --query string              Execute atmos terraform  on components filtered by a YQ expression
+  -q, --query string              Execute on components filtered by a YQ expression
 
       --ref string                Git reference with which to compare the current branch
 
