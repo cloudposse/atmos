@@ -16,6 +16,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
+	"github.com/cloudposse/atmos/pkg/auth/integrations"
+	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws" // Register aws/ecr integration.
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -215,6 +217,9 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 			errUtils.CheckErrorAndPrint(wrappedErr, "Post Authenticate", "")
 			return nil, wrappedErr
 		}
+
+		// Trigger linked integrations (non-fatal).
+		m.triggerIntegrations(ctx, identityName, finalCreds)
 	}
 
 	return m.buildWhoamiInfo(identityName, finalCreds), nil
@@ -1295,4 +1300,152 @@ func mapToEnvironList(envMap map[string]string) []string {
 		envList = append(envList, fmt.Sprintf("%s=%s", key, value))
 	}
 	return envList
+}
+
+// triggerIntegrations executes linked integrations for an identity.
+// This is a non-fatal operation - integration failures don't block authentication.
+func (m *manager) triggerIntegrations(ctx context.Context, identityName string, creds types.ICredentials) {
+	defer perf.Track(nil, "auth.Manager.triggerIntegrations")()
+
+	// Get the identity config to find linked integrations.
+	identityConfig, exists := m.config.Identities[identityName]
+	if !exists || len(identityConfig.Integrations) == 0 {
+		return
+	}
+
+	log.Debug("Triggering linked integrations", logKeyIdentity, identityName, "count", len(identityConfig.Integrations))
+
+	// Execute each linked integration.
+	for _, integrationName := range identityConfig.Integrations {
+		if err := m.executeIntegration(ctx, integrationName, creds); err != nil {
+			// Non-fatal: log warning and continue.
+			log.Warn("Integration failed", "integration", integrationName, "error", err)
+		}
+	}
+}
+
+// executeIntegration executes a single integration by name.
+func (m *manager) executeIntegration(ctx context.Context, integrationName string, creds types.ICredentials) error {
+	defer perf.Track(nil, "auth.Manager.executeIntegration")()
+
+	// Look up integration config.
+	if m.config.Integrations == nil {
+		return fmt.Errorf("%w: no integrations configured", errUtils.ErrIntegrationNotFound)
+	}
+
+	integrationConfig, exists := m.config.Integrations[integrationName]
+	if !exists {
+		return fmt.Errorf("%w: %s", errUtils.ErrIntegrationNotFound, integrationName)
+	}
+
+	// Create integration instance.
+	integration, err := integrations.Create(&integrations.IntegrationConfig{
+		Name:   integrationName,
+		Config: &integrationConfig,
+	})
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrIntegrationFailed, err)
+	}
+
+	// Execute the integration.
+	if err := integration.Execute(ctx, creds); err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrIntegrationFailed, err)
+	}
+
+	log.Debug("Integration executed successfully", "integration", integrationName)
+	return nil
+}
+
+// ExecuteIntegration exposes integration execution for the standalone ecr-login command.
+// This authenticates the integration's linked identity first, then executes the integration.
+func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string) error {
+	defer perf.Track(nil, "auth.Manager.ExecuteIntegration")()
+
+	// Look up integration config.
+	if m.config.Integrations == nil {
+		return fmt.Errorf("%w: no integrations configured", errUtils.ErrIntegrationNotFound)
+	}
+
+	integrationConfig, exists := m.config.Integrations[integrationName]
+	if !exists {
+		return fmt.Errorf("%w: %s", errUtils.ErrIntegrationNotFound, integrationName)
+	}
+
+	// Authenticate the linked identity.
+	whoami, err := m.Authenticate(ctx, integrationConfig.Identity)
+	if err != nil {
+		return fmt.Errorf("failed to authenticate identity '%s': %w", integrationConfig.Identity, err)
+	}
+
+	// Load credentials for the integration.
+	creds, err := m.loadCredentialsWithFallback(ctx, integrationConfig.Identity)
+	if err != nil {
+		return fmt.Errorf("failed to load credentials for identity '%s': %w", integrationConfig.Identity, err)
+	}
+
+	log.Debug("Authenticated identity for integration", "identity", integrationConfig.Identity, "whoami", whoami.Identity)
+
+	// Create and execute the integration.
+	integration, err := integrations.Create(&integrations.IntegrationConfig{
+		Name:   integrationName,
+		Config: &integrationConfig,
+	})
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrIntegrationFailed, err)
+	}
+
+	return integration.Execute(ctx, creds)
+}
+
+// ExecuteIdentityIntegrations executes all linked integrations for an identity.
+// This authenticates the identity first, then executes all its linked integrations.
+func (m *manager) ExecuteIdentityIntegrations(ctx context.Context, identityName string) error {
+	defer perf.Track(nil, "auth.Manager.ExecuteIdentityIntegrations")()
+
+	// Get the identity config.
+	identityConfig, exists := m.config.Identities[identityName]
+	if !exists {
+		return fmt.Errorf("%w: %s", errUtils.ErrIdentityNotFound, identityName)
+	}
+
+	if len(identityConfig.Integrations) == 0 {
+		return fmt.Errorf("%w: %s", errUtils.ErrNoLinkedIntegrations, identityName)
+	}
+
+	// Authenticate the identity.
+	whoami, err := m.Authenticate(ctx, identityName)
+	if err != nil {
+		return fmt.Errorf("failed to authenticate identity '%s': %w", identityName, err)
+	}
+
+	// Load credentials.
+	creds, err := m.loadCredentialsWithFallback(ctx, identityName)
+	if err != nil {
+		return fmt.Errorf("failed to load credentials for identity '%s': %w", identityName, err)
+	}
+
+	log.Debug("Authenticated identity for integrations", "identity", identityName, "whoami", whoami.Identity)
+
+	// Execute each linked integration.
+	for _, integrationName := range identityConfig.Integrations {
+		if err := m.executeIntegration(ctx, integrationName, creds); err != nil {
+			return fmt.Errorf("integration '%s' failed: %w", integrationName, err)
+		}
+	}
+
+	return nil
+}
+
+// GetIntegration returns the integration config by name.
+func (m *manager) GetIntegration(integrationName string) (*schema.Integration, error) {
+	if m.config.Integrations == nil {
+		return nil, fmt.Errorf("%w: no integrations configured", errUtils.ErrIntegrationNotFound)
+	}
+
+	integrationConfig, exists := m.config.Integrations[integrationName]
+	if !exists {
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrIntegrationNotFound, integrationName)
+	}
+
+	return &integrationConfig, nil
 }
