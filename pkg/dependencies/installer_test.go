@@ -14,6 +14,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Sentinel errors for test mocks.
+var (
+	errToolNotFound       = errors.New("tool not found")
+	errInstallFailed      = errors.New("install failed")
+	errUnexpectedToolSpec = errors.New("unexpected tool spec")
+	errInvalidTool        = errors.New("invalid tool")
+)
+
 // mockResolver is a mock implementation of toolchain.ToolResolver for testing.
 type mockResolver struct {
 	resolveFunc func(toolName string) (string, string, error)
@@ -30,7 +38,7 @@ func (m *mockResolver) Resolve(toolName string) (string, string, error) {
 			return parts[0], parts[1], nil
 		}
 	}
-	return "", "", errors.New("tool not found")
+	return "", "", errToolNotFound
 }
 
 func TestNewInstaller(t *testing.T) {
@@ -132,7 +140,7 @@ func TestEnsureTools(t *testing.T) {
 				}
 				installFunc := func(toolSpec string, _, _ bool) error {
 					if toolSpec != "hashicorp/terraform@1.10.0" {
-						return errors.New("unexpected tool spec")
+						return errUnexpectedToolSpec
 					}
 					return nil
 				}
@@ -155,7 +163,7 @@ func TestEnsureTools(t *testing.T) {
 					},
 				}
 				installFunc := func(string, bool, bool) error {
-					return errors.New("install failed")
+					return errInstallFailed
 				}
 				fileExists := func(path string) bool {
 					return false
@@ -178,7 +186,7 @@ func TestEnsureTools(t *testing.T) {
 						if len(parts) == 2 {
 							return parts[0], parts[1], nil
 						}
-						return "", "", errors.New("invalid tool")
+						return "", "", errInvalidTool
 					},
 				}
 				installCount := 0
@@ -208,11 +216,11 @@ func TestEnsureTools(t *testing.T) {
 						if len(parts) == 2 {
 							return parts[0], parts[1], nil
 						}
-						return "", "", errors.New("invalid tool")
+						return "", "", errInvalidTool
 					},
 				}
 				installFunc := func(string, bool, bool) error {
-					return errors.New("install failed")
+					return errInstallFailed
 				}
 				fileExists := func(path string) bool {
 					return false
@@ -310,7 +318,7 @@ func TestIsToolInstalled(t *testing.T) {
 			setupMock: func() (*mockResolver, func(string) bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
-						return "", "", errors.New("tool not found")
+						return "", "", errToolNotFound
 					},
 				}
 				fileExists := func(path string) bool {
@@ -484,13 +492,6 @@ func TestBuildToolchainPATH_CustomInstallPath(t *testing.T) {
 func TestUpdatePathForTools(t *testing.T) {
 	testPath := "/usr/bin:/bin"
 
-	// Note: We need to use os.Setenv inside defer/t.Cleanup blocks for manual restoration
-	// because the function under test (UpdatePathForTools) actually modifies PATH.
-	originalPath := os.Getenv("PATH")
-	t.Cleanup(func() {
-		os.Setenv("PATH", originalPath)
-	})
-
 	t.Run("empty dependencies does not modify PATH", func(t *testing.T) {
 		t.Setenv("PATH", testPath)
 		err := UpdatePathForTools(nil, map[string]string{})
@@ -521,7 +522,9 @@ func TestFileExists(t *testing.T) {
 	})
 
 	t.Run("returns false for non-existing file", func(t *testing.T) {
-		assert.False(t, fileExists("/nonexistent/path/to/file"))
+		tmpDir := t.TempDir()
+		nonExistent := filepath.Join(tmpDir, "does-not-exist")
+		assert.False(t, fileExists(nonExistent))
 	})
 
 	t.Run("returns true for existing directory", func(t *testing.T) {
@@ -603,13 +606,16 @@ func TestEnsureTool(t *testing.T) {
 	})
 
 	t.Run("returns error when install fails", func(t *testing.T) {
+		var calledSpec string
+
 		resolver := &mockResolver{
 			resolveFunc: func(toolName string) (string, string, error) {
 				return "hashicorp", "terraform", nil
 			},
 		}
-		installFunc := func(string, bool, bool) error {
-			return errors.New("network error")
+		installFunc := func(toolSpec string, _, _ bool) error {
+			calledSpec = toolSpec
+			return errInstallFailed
 		}
 		fileExists := func(path string) bool {
 			return false
@@ -624,6 +630,6 @@ func TestEnsureTool(t *testing.T) {
 		err := inst.ensureTool("terraform", "1.10.0")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrToolInstall)
-		assert.Contains(t, err.Error(), "terraform@1.10.0")
+		assert.Equal(t, "terraform@1.10.0", calledSpec, "install should be called with correct tool spec")
 	})
 }
