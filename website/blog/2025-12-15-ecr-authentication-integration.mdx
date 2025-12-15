@@ -1,0 +1,186 @@
+---
+slug: ecr-authentication-integration
+title: 'ECR Authentication Integration: Automatic Docker Login for AWS Container Registries'
+sidebar_label: ECR Authentication Integration
+authors:
+  - Benbentwo
+tags:
+  - feature
+date: 2025-12-15T00:00:00.000Z
+---
+
+We're introducing ECR authentication integration - automatic Docker login for AWS Elastic Container Registry as part of your Atmos authentication workflow. Configure once, authenticate everywhere.
+
+{/* truncate */}
+
+## The Problem
+
+Teams working with AWS ECR face repetitive authentication friction:
+
+```bash
+# The manual dance everyone knows too well
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 123456789012.dkr.ecr.us-east-1.amazonaws.com
+```
+
+This breaks down when you have:
+
+- Multiple AWS accounts with different ECR registries
+- Different identities for different environments
+- Team members who forget the exact incantation
+- CI/CD pipelines that need consistent authentication
+
+## The Solution: Integrations
+
+We've introduced a new `auth.integrations` section that handles **client-only credential materializations** - services like ECR and EKS that derive credentials from your AWS identity rather than being identities themselves.
+
+### Configuration
+
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start/
+
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: AdministratorAccess
+        account: dev
+      # Auto-trigger these integrations on login
+      integrations:
+        - dev/ecr
+
+  integrations:
+    dev/ecr:
+      kind: aws/ecr
+      identity: dev-admin
+      spec:
+        registries:
+          - account_id: "123456789012"
+            region: us-east-2
+          - account_id: "123456789012"
+            region: us-west-2
+```
+
+### Automatic Login
+
+When you authenticate with an identity that has linked integrations, ECR login happens automatically:
+
+```bash
+$ atmos auth login dev-admin
+Authenticating with identity: dev-admin
+Opening browser for SSO authentication...
+Successfully authenticated as dev-admin
+Logged into ECR registry: 123456789012.dkr.ecr.us-east-2.amazonaws.com
+Logged into ECR registry: 123456789012.dkr.ecr.us-west-2.amazonaws.com
+```
+
+### Standalone ECR Login
+
+You can also trigger ECR login independently:
+
+```bash
+# Using a named integration
+atmos auth ecr-login dev/ecr
+
+# Using an identity's linked integrations
+atmos auth ecr-login --identity dev-admin
+
+# Explicit registries (ad-hoc)
+atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com
+```
+
+## Design Decisions
+
+### Why Integrations, Not Identities?
+
+ECR login and EKS kubeconfig aren't really "identities" - they're derived credentials:
+
+| Concept                     | IAM User | Docker Login (ECR) | EKS kubeconfig |
+|-----------------------------|----------|---------------------|----------------|
+| Stored identity object      | Yes      | No                  | No             |
+| Policy attachment           | Yes      | No                  | No             |
+| Server-side lifecycle       | Yes      | No                  | No             |
+| Client-only materialization | No       | Yes                 | Yes            |
+
+Integrations are things that **use** an identity to materialize client-side credentials.
+
+### Isolated Docker Config
+
+ECR credentials are written to `~/.config/atmos/docker/config.json` (following XDG conventions), not your default Docker config. This keeps Atmos-managed credentials separate from manually configured registries.
+
+### Non-Blocking Errors
+
+Integration failures during `atmos auth login` are logged but don't block authentication. Your identity credentials succeed even if ECR login fails - you can retry the integration separately.
+
+## Use Cases
+
+### Multi-Account Container Workflows
+
+```yaml
+auth:
+  identities:
+    prod-deployer:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: ContainerDeploy
+        account: production
+      integrations:
+        - prod/ecr
+        - shared/ecr
+
+  integrations:
+    prod/ecr:
+      kind: aws/ecr
+      identity: prod-deployer
+      spec:
+        registries:
+          - account_id: "111111111111"
+            region: us-east-1
+
+    shared/ecr:
+      kind: aws/ecr
+      identity: prod-deployer
+      spec:
+        registries:
+          - account_id: "999999999999"
+            region: us-east-1
+```
+
+### CI/CD Pipelines
+
+```bash
+# Single command authenticates identity AND logs into ECR
+atmos auth login prod-deployer
+
+# Now docker pull/push works
+docker pull 111111111111.dkr.ecr.us-east-1.amazonaws.com/my-app:latest
+```
+
+## What's Next
+
+The integration pattern extends naturally to other client-only credential materializations:
+
+- **EKS**: `aws eks update-kubeconfig` integration
+- **CodeArtifact**: npm/pip repository authentication
+- **Other registries**: GCR, ACR support
+
+## Documentation
+
+- [ECR Authentication PRD](/docs/prd/ecr-authentication)
+- [Auth Login Command](/cli/commands/auth/login)
+- [Auth Configuration](/cli/configuration/auth)
+
+## Get Involved
+
+Have feedback on the integration pattern? Want to contribute EKS support?
+
+- Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues)
+- Share your use cases in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
