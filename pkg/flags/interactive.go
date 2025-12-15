@@ -15,6 +15,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
+// maxSelectorHeight is the maximum number of rows for the interactive selector.
+const maxSelectorHeight = 20
+
 // isInteractive checks if interactive prompts should be shown.
 // Interactive mode requires:
 // 1. --interactive flag is true (or ATMOS_INTERACTIVE env var).
@@ -55,8 +58,13 @@ func PromptForValue(name, title string, options []string) (string, error) {
 
 	var choice string
 
+	// Calculate dynamic height: options + 2 for title/padding, capped at max.
+	height := len(options) + 2
+	if height > maxSelectorHeight {
+		height = maxSelectorHeight
+	}
+
 	// Create Huh selector with Atmos theme.
-	// Limit height to 20 rows to prevent excessive scrolling and reduce terminal rendering artifacts.
 	// Note: Huh v0.8.0 has case-sensitive filtering (by design).
 	// Users can filter by typing "/" followed by search text, but it only matches exact case.
 	// Example: typing "dark" matches "neobones_dark" but not "Builtin Dark".
@@ -65,7 +73,7 @@ func PromptForValue(name, title string, options []string) (string, error) {
 		Value(&choice).
 		Options(huh.NewOptions(options...)...).
 		Title(title).
-		Height(20).
+		Height(height).
 		WithTheme(uiutils.NewAtmosHuhTheme())
 
 	// Run selector.
