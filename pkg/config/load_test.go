@@ -2046,8 +2046,8 @@ func TestPreserveProvisionedIdentityCase_EdgeCases(t *testing.T) {
       kind: aws/permission-set
 `,
 			autoProvision:      &autoProvisionFalse,
-			expectedCaseMapLen: 0,
-			description:        "provider has auto_provision disabled",
+			expectedCaseMapLen: 1, // Still reads cache file - case preservation is independent of provisioning flag.
+			description:        "provider has auto_provision disabled but cache file still read",
 		},
 		{
 			name: "invalid_yaml_structure",
@@ -2101,12 +2101,12 @@ func TestPreserveProvisionedIdentityCase_EdgeCases(t *testing.T) {
 			name: "auto_provision_nil",
 			cacheContent: `auth:
   identities:
-    ShouldNotAppear/BecauseNil:
+    ShouldAppear/CasePreserved:
       kind: aws/permission-set
 `,
 			autoProvision:      nil,
-			expectedCaseMapLen: 0,
-			description:        "AutoProvisionIdentities is nil (treated as disabled)",
+			expectedCaseMapLen: 1, // Still reads cache file - case preservation is independent of provisioning flag.
+			description:        "AutoProvisionIdentities is nil but cache file still read",
 		},
 		{
 			name: "malformed_yaml_syntax",
@@ -2181,6 +2181,7 @@ this is not: valid yaml: at: all
 }
 
 // TestPreserveProvisionedIdentityCase_MultipleProviders tests handling multiple providers.
+// With the directory-scanning approach, all cache files are read regardless of config flags.
 func TestPreserveProvisionedIdentityCase_MultipleProviders(t *testing.T) {
 	// Note: Cannot use t.Parallel() with t.Setenv() as they are incompatible.
 
@@ -2189,8 +2190,8 @@ func TestPreserveProvisionedIdentityCase_MultipleProviders(t *testing.T) {
 	// Create cache directories for both providers.
 	authDir := filepath.Join(tempDir, "atmos", "auth")
 
-	// Provider 1: enabled with identities.
-	provider1Dir := filepath.Join(authDir, "provider-enabled")
+	// Provider 1: with identities.
+	provider1Dir := filepath.Join(authDir, "provider-one")
 	err := os.MkdirAll(provider1Dir, 0o755)
 	require.NoError(t, err)
 	provider1Content := `auth:
@@ -2203,39 +2204,28 @@ func TestPreserveProvisionedIdentityCase_MultipleProviders(t *testing.T) {
 	err = os.WriteFile(filepath.Join(provider1Dir, "provisioned-identities.yaml"), []byte(provider1Content), 0o644)
 	require.NoError(t, err)
 
-	// Provider 2: disabled (should be skipped even though cache exists).
-	provider2Dir := filepath.Join(authDir, "provider-disabled")
+	// Provider 2: also has cache (should be read regardless of config flags).
+	provider2Dir := filepath.Join(authDir, "provider-two")
 	err = os.MkdirAll(provider2Dir, 0o755)
 	require.NoError(t, err)
 	provider2Content := `auth:
   identities:
-    Account2/ShouldNotAppear:
+    Account2/PowerUser:
       kind: aws/permission-set
 `
 	err = os.WriteFile(filepath.Join(provider2Dir, "provisioned-identities.yaml"), []byte(provider2Content), 0o644)
 	require.NoError(t, err)
 
-	// Provider 3: enabled but no cache file (should be skipped gracefully).
-	// No directory created for this provider.
+	// Provider 3: has directory but no cache file (should be skipped gracefully).
+	provider3Dir := filepath.Join(authDir, "provider-three")
+	err = os.MkdirAll(provider3Dir, 0o755)
+	require.NoError(t, err)
+	// No cache file created for provider-three.
 
-	autoProvisionEnabled := true
-	autoProvisionDisabled := false
+	// The atmosConfig doesn't need providers configured - we scan the cache directory directly.
 	atmosConfig := &schema.AtmosConfiguration{
 		Auth: schema.AuthConfig{
-			Providers: map[string]schema.Provider{
-				"provider-enabled": {
-					Kind:                    "aws/iam-identity-center",
-					AutoProvisionIdentities: &autoProvisionEnabled,
-				},
-				"provider-disabled": {
-					Kind:                    "aws/iam-identity-center",
-					AutoProvisionIdentities: &autoProvisionDisabled,
-				},
-				"provider-no-cache": {
-					Kind:                    "aws/iam-identity-center",
-					AutoProvisionIdentities: &autoProvisionEnabled,
-				},
-			},
+			Providers:       map[string]schema.Provider{},
 			IdentityCaseMap: make(map[string]string),
 		},
 	}
@@ -2246,14 +2236,11 @@ func TestPreserveProvisionedIdentityCase_MultipleProviders(t *testing.T) {
 	err = preserveProvisionedIdentityCase(atmosConfig)
 	assert.NoError(t, err)
 
-	// Should only have identities from provider-enabled.
-	assert.Len(t, atmosConfig.Auth.IdentityCaseMap, 2)
+	// Should have identities from both providers that have cache files.
+	assert.Len(t, atmosConfig.Auth.IdentityCaseMap, 3)
 	assert.Equal(t, "Account1/AdminRole", atmosConfig.Auth.IdentityCaseMap["account1/adminrole"])
 	assert.Equal(t, "Account1/DevRole", atmosConfig.Auth.IdentityCaseMap["account1/devrole"])
-
-	// Disabled provider's identities should NOT be present.
-	_, exists := atmosConfig.Auth.IdentityCaseMap["account2/shouldnotappear"]
-	assert.False(t, exists, "disabled provider's identities should not be loaded")
+	assert.Equal(t, "Account2/PowerUser", atmosConfig.Auth.IdentityCaseMap["account2/poweruser"])
 }
 
 // TestPreserveProvisionedIdentityCase_NilIdentityCaseMap tests that nil map is properly initialized.
@@ -2546,4 +2533,230 @@ func TestPreserveProviderIdentityCase(t *testing.T) {
 		// User-defined case should be preserved.
 		assert.Equal(t, "myaccount/ADMINROLE", atmosConfig.Auth.IdentityCaseMap["myaccount/adminrole"])
 	})
+}
+
+// TestLoadConfig_DefaultConfigWithGitRootAtmosD tests that .atmos.d at git root is loaded
+// even when no atmos.yaml config file is found (using default config).
+func TestLoadConfig_DefaultConfigWithGitRootAtmosD(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create .atmos.d at "git root" with custom commands.
+	atmosDDir := filepath.Join(tempDir, ".atmos.d")
+	require.NoError(t, os.MkdirAll(atmosDDir, 0o755))
+
+	commandsContent := `commands:
+  - name: test-default-cmd
+    description: Test command from git root with default config
+    steps:
+      - echo "hello from git root default config"
+`
+	require.NoError(t, os.WriteFile(
+		filepath.Join(atmosDDir, "commands.yaml"),
+		[]byte(commandsContent),
+		0o644,
+	))
+
+	// Create a subdirectory with NO atmos.yaml - this will force default config.
+	subDir := filepath.Join(tempDir, "no-config-subdir")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+	// Mock git root to be tempDir.
+	t.Setenv("TEST_GIT_ROOT", tempDir)
+
+	// Change to subdirectory.
+	t.Chdir(subDir)
+
+	// Load config - should use default config but still find .atmos.d from git root.
+	config, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+
+	// Verify that the custom command from .atmos.d was loaded.
+	require.NotNil(t, config.Commands, "Commands should be loaded from .atmos.d at git root")
+	require.Len(t, config.Commands, 1, "Should have one custom command")
+	assert.Equal(t, "test-default-cmd", config.Commands[0].Name)
+}
+
+// TestMergeDefaultImports_GitRoot tests that .atmos.d at git root is discovered
+// even when running from a subdirectory.
+func TestMergeDefaultImports_GitRoot(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupDirs     func(t *testing.T, tempDir string) string
+		expectedKey   string
+		expectedValue string
+		description   string
+	}{
+		{
+			name: "loads_atmos_d_from_git_root_when_in_subdirectory",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create .atmos.d at "git root" (tempDir).
+				atmosDDir := filepath.Join(tempDir, ".atmos.d")
+				require.NoError(t, os.MkdirAll(atmosDDir, 0o755))
+
+				commandsContent := `commands:
+  - name: test-cmd
+    description: Test command from git root
+    steps:
+      - echo "hello from git root"
+`
+				require.NoError(t, os.WriteFile(
+					filepath.Join(atmosDDir, "commands.yaml"),
+					[]byte(commandsContent),
+					0o644,
+				))
+
+				// Create a subdirectory to run from.
+				subDir := filepath.Join(tempDir, "test")
+				require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+				return subDir
+			},
+			expectedKey:   "commands",
+			expectedValue: "", // Just check that commands key exists.
+			description:   "Should load .atmos.d from git root when running from subdirectory",
+		},
+		{
+			name: "git_root_atmos_d_has_lower_priority_than_config_dir",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create .atmos.d at "git root" (tempDir) with lower priority setting.
+				gitRootAtmosDDir := filepath.Join(tempDir, ".atmos.d")
+				require.NoError(t, os.MkdirAll(gitRootAtmosDDir, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(gitRootAtmosDDir, "settings.yaml"),
+					[]byte(`settings:
+  test_priority: from_git_root
+`),
+					0o644,
+				))
+
+				// Create config directory with atmos.yaml.
+				configDir := filepath.Join(tempDir, "config")
+				require.NoError(t, os.MkdirAll(configDir, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(configDir, "atmos.yaml"),
+					[]byte(`base_path: ./`),
+					0o644,
+				))
+
+				// Create .atmos.d in config dir with higher priority setting.
+				configAtmosDDir := filepath.Join(configDir, ".atmos.d")
+				require.NoError(t, os.MkdirAll(configAtmosDDir, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(configAtmosDDir, "settings.yaml"),
+					[]byte(`settings:
+  test_priority: from_config_dir
+`),
+					0o644,
+				))
+
+				return configDir
+			},
+			expectedKey:   "settings.test_priority",
+			expectedValue: "from_config_dir",
+			description:   "Config dir .atmos.d should override git root .atmos.d",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			workDir := tt.setupDirs(t, tempDir)
+
+			// Mock git root to be tempDir.
+			t.Setenv("TEST_GIT_ROOT", tempDir)
+
+			// Change to working directory.
+			t.Chdir(workDir)
+
+			v := viper.New()
+			v.SetConfigType("yaml")
+
+			// Call mergeDefaultImports with the working directory.
+			err := mergeDefaultImports(workDir, v)
+			require.NoError(t, err, tt.description)
+
+			// Verify the expected key is set.
+			assert.True(t, v.IsSet(tt.expectedKey),
+				"Expected key %q to be set. %s", tt.expectedKey, tt.description)
+
+			if tt.expectedValue != "" {
+				assert.Equal(t, tt.expectedValue, v.GetString(tt.expectedKey),
+					"Expected value mismatch. %s", tt.description)
+			}
+		})
+	}
+}
+
+// TestPreserveProvisionedIdentityCase_CacheFileWithoutProviderConfig reproduces the bug where
+// auto-provisioned identities are displayed in lowercase instead of preserving original case.
+//
+// The bug: preserveProvisionedIdentityCase() only read cache files for providers with
+// auto_provision_identities: true set in the config. But the cache file already exists
+// (from a previous `auth login`), so case preservation should work regardless of config flags.
+//
+// Example: After `auth login`, cache has "core-artifacts/TerraformApplyAccess" but
+// `auth list` shows "core-artifacts/terraformapplyaccess" because the provider config
+// doesn't have auto_provision_identities: true explicitly set.
+func TestPreserveProvisionedIdentityCase_CacheFileWithoutProviderConfig(t *testing.T) {
+	// Note: Cannot use t.Parallel() with t.Setenv() as they are incompatible.
+
+	tempDir := t.TempDir()
+
+	// Simulate the real-world scenario: cache file exists with mixed-case identities
+	// (created by `auth login`), but no provider config is present.
+	authDir := filepath.Join(tempDir, "atmos", "auth")
+	providerCacheDir := filepath.Join(authDir, "ins-sso")
+	err := os.MkdirAll(providerCacheDir, 0o755)
+	require.NoError(t, err)
+
+	// This cache content matches the real-world file from the bug report.
+	cacheContent := `auth:
+  _metadata:
+    provider: ins-sso
+    provisioned_at: "2025-12-14T16:02:06-05:00"
+  identities:
+    core-artifacts/TerraformApplyAccess:
+      kind: aws/permission-set
+      provider: ins-sso
+      principal:
+        account:
+          id: "982674173972"
+          name: core-artifacts
+        name: TerraformApplyAccess
+    core-artifacts/AdministratorAccess:
+      kind: aws/permission-set
+      provider: ins-sso
+      principal:
+        account:
+          id: "982674173972"
+          name: core-artifacts
+        name: AdministratorAccess
+`
+	err = os.WriteFile(filepath.Join(providerCacheDir, "provisioned-identities.yaml"), []byte(cacheContent), 0o644)
+	require.NoError(t, err)
+
+	// The key part of the bug: NO provider config is present.
+	// In the old code, this meant preserveProvisionedIdentityCase() would skip reading the cache.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers:       map[string]schema.Provider{}, // Empty - no providers configured.
+			IdentityCaseMap: make(map[string]string),
+		},
+	}
+
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", "")
+
+	err = preserveProvisionedIdentityCase(atmosConfig)
+	assert.NoError(t, err)
+
+	// BUG VERIFICATION: The case map should contain the original-case identity names.
+	// With the bug, this map would be empty because no provider was configured.
+	assert.Len(t, atmosConfig.Auth.IdentityCaseMap, 2, "Expected 2 identities in case map")
+	assert.Equal(t, "core-artifacts/TerraformApplyAccess",
+		atmosConfig.Auth.IdentityCaseMap["core-artifacts/terraformapplyaccess"],
+		"TerraformApplyAccess should preserve original case")
+	assert.Equal(t, "core-artifacts/AdministratorAccess",
+		atmosConfig.Auth.IdentityCaseMap["core-artifacts/administratoraccess"],
+		"AdministratorAccess should preserve original case")
 }
