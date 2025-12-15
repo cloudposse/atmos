@@ -14,7 +14,7 @@ import (
 
 // mockIntegration is a test implementation of the Integration interface.
 type mockIntegration struct {
-	kind      string
+	kind       string
 	executeErr error
 }
 
