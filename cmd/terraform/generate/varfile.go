@@ -71,8 +71,19 @@ var varfileCmd = &cobra.Command{
 			return errUtils.ErrMissingStack
 		}
 
-		// Initialize Atmos configuration
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		// Get global flags from Viper (includes base-path, config, config-path, profile).
+		globalFlags := flags.ParseGlobalFlags(cmd, v)
+
+		// Build ConfigAndStacksInfo from global flags to honor config selection flags.
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			AtmosBasePath:           globalFlags.BasePath,
+			AtmosConfigFilesFromArg: globalFlags.Config,
+			AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+			ProfilesFromArg:         globalFlags.Profile,
+		}
+
+		// Initialize Atmos configuration.
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 		if err != nil {
 			return err
 		}
