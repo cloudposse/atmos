@@ -15,6 +15,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Selector height constants.
@@ -88,6 +89,9 @@ func PromptForValue(name, title string, options []string) (string, error) {
 	if err := selector.Run(); err != nil {
 		return "", fmt.Errorf("prompt failed: %w", err)
 	}
+
+	// Show what was selected for terminal history visibility.
+	_ = ui.Infof("Selected %s: %s", name, choice)
 
 	return choice, nil
 }
