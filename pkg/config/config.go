@@ -203,20 +203,23 @@ func processAtmosConfigs(configAndStacksInfo *schema.ConfigAndStacksInfo) (schem
 // Resolution semantics (see docs/prd/base-path-resolution-semantics.md):
 //
 //  1. Absolute paths → return as-is
-//  2. ".", "./foo", "..", "../foo" → resolve relative to cliConfigPath (config-file-relative)
+//  2. Explicit relative paths → resolve relative to cliConfigPath (config-file-relative):
+//     - Exactly "." or ".."
+//     - Starts with "./" or "../" (Unix)
+//     - Starts with ".\" or "..\" (Windows)
 //  3. "" (empty) or simple paths like "foo" → try git root, fallback to cliConfigPath
 //
 // Fallback order when primary resolution fails:
-//  1. Config directory (cliConfigPath / dirname(atmos.yaml))
-//  2. Git repository root
+//  1. Git repository root
+//  2. Config directory (cliConfigPath / dirname(atmos.yaml))
 //  3. CWD (last resort)
 //
 // Key semantic distinctions:
 //   - "." means dirname(atmos.yaml) (config-file-relative)
 //   - "" means git repo root with fallback to dirname(atmos.yaml) (smart default)
 //   - "./foo" means dirname(atmos.yaml)/foo (config-file-relative)
-//   - "foo" means git-root/foo with fallback to dirname(atmos.yaml) (search path)
-//   - "../foo" means dirname(atmos.yaml)/../foo (config-file-relative navigation)
+//   - "foo" means git-root/foo with fallback to dirname(atmos.yaml)/foo (search path)
+//   - ".." or "../foo" means dirname(atmos.yaml)/../foo (config-file-relative navigation)
 //
 // This follows the convention of tsconfig.json, package.json, .eslintrc - paths in
 // config files are relative to the config file location, not where you run from.

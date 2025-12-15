@@ -395,26 +395,25 @@ func setDefaultConfiguration(v *viper.Viper) {
 // loadConfigSources loads configuration from multiple sources in priority order,
 // delegating reading configs from each source and returning early if any step fails.
 //
-// Config search order (see docs/prd/base-path-resolution-semantics.md):
-//  1. ./atmos.yaml (CWD only, NO parent search)
-//  2. repo-root/atmos.yaml (git root)
-//  3. (parent dir search)/atmos.yaml (fallback for unusual structures)
-//  4. System dir (/usr/local/etc/atmos)
-//  5. Home dir (~/.atmos)
-//  6. Env var (ATMOS_CLI_CONFIG_PATH) - overrides all above
-//  7. CLI arg (--config-path) - overrides everything
+// Config loading order (lowest to highest priority, later wins):
+//  1. System dir (/usr/local/etc/atmos) - lowest priority
+//  2. Home dir (~/.atmos)
+//  3. Parent directory search (fallback for unusual structures)
+//  4. Git root (repo-root/atmos.yaml)
+//  5. CWD only (./atmos.yaml, NO parent search)
+//  6. Env var (ATMOS_CLI_CONFIG_PATH) - overrides discovery
+//  7. CLI arg (--config-path) - highest priority
 //
 // Note: Viper merges configs, so later sources override earlier ones.
-// The order here is from lowest to highest priority.
 func loadConfigSources(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
 	// Load in order from lowest to highest priority (Viper merges, later wins).
 
-	// 4. System dir (lowest priority for discovery).
+	// 1. System dir (lowest priority).
 	if err := readSystemConfig(v); err != nil {
 		return err
 	}
 
-	// 5. Home dir.
+	// 2. Home dir.
 	if err := readHomeConfig(v); err != nil {
 		return err
 	}
@@ -424,12 +423,12 @@ func loadConfigSources(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStac
 		return err
 	}
 
-	// 2. Git root.
+	// 4. Git root.
 	if err := readGitRootConfig(v); err != nil {
 		return err
 	}
 
-	// 1. CWD only (highest priority for discovery).
+	// 5. CWD only.
 	if err := readWorkDirConfigOnly(v); err != nil {
 		return err
 	}
@@ -439,7 +438,7 @@ func loadConfigSources(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStac
 		return err
 	}
 
-	// 7. CLI arg - overrides everything.
+	// 7. CLI arg (highest priority).
 	return readAtmosConfigCli(v, configAndStacksInfo.AtmosCliConfigPath)
 }
 
