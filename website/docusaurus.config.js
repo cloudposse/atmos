@@ -361,7 +361,7 @@ const config = {
                     editUrl: ({versionDocsDirPath, docPath, locale}) => {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
-                    exclude: ['README.md'],
+                    exclude: ['README.md', '**/_*/**', '**/_*'],
                     rehypePlugins: [rehypeDtIds],
                 },
                 blog: {
