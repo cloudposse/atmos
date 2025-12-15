@@ -87,7 +87,7 @@ func PromptForValue(name, title string, options []string) (string, error) {
 	}
 
 	// Show what was selected for terminal history visibility.
-	_ = ui.Infof("Selected %s: %s", name, choice)
+	_ = ui.Infof("Selected %s `%s`", name, choice)
 
 	return choice, nil
 }
