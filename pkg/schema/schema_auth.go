@@ -2,10 +2,11 @@ package schema
 
 // AuthConfig defines the authentication configuration structure.
 type AuthConfig struct {
-	Logs       Logs                `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
-	Keyring    KeyringConfig       `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`
-	Providers  map[string]Provider `yaml:"providers" json:"providers" mapstructure:"providers"`
-	Identities map[string]Identity `yaml:"identities" json:"identities" mapstructure:"identities"`
+	Logs         Logs                   `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
+	Keyring      KeyringConfig          `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`
+	Providers    map[string]Provider    `yaml:"providers" json:"providers" mapstructure:"providers"`
+	Identities   map[string]Identity    `yaml:"identities" json:"identities" mapstructure:"identities"`
+	Integrations map[string]Integration `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
 	// IdentityCaseMap maps lowercase identity names to their original case.
 	// This is populated during config loading to work around Viper's case-insensitive behavior.
 	IdentityCaseMap map[string]string `yaml:"-" json:"-" mapstructure:"-"`
@@ -47,15 +48,16 @@ type ConsoleConfig struct {
 
 // Identity defines an authentication identity configuration.
 type Identity struct {
-	Kind        string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
-	Default     bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
-	Provider    string                 `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"` // Provider name for direct provider association (for provisioned identities).
-	Via         *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
-	Principal   map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"` // Principal information (role name, account, etc.). For AWS permission sets: {name: string, account: {name: string, id: string}}.
-	Credentials map[string]interface{} `yaml:"credentials,omitempty" json:"credentials,omitempty" mapstructure:"credentials"`
-	Alias       string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
-	Env         []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
-	Session     *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+	Kind         string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
+	Default      bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	Provider     string                 `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"` // Provider name for direct provider association (for provisioned identities).
+	Via          *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
+	Principal    map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"` // Principal information (role name, account, etc.). For AWS permission sets: {name: string, account: {name: string, id: string}}.
+	Credentials  map[string]interface{} `yaml:"credentials,omitempty" json:"credentials,omitempty" mapstructure:"credentials"`
+	Alias        string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
+	Env          []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+	Session      *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+	Integrations []string               `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"` // List of integration names to trigger on login.
 }
 
 // IdentityVia defines how an identity connects to a provider or other identity.
@@ -112,4 +114,18 @@ type EnvironmentVariable struct {
 type ComponentAuthConfig struct {
 	Providers  map[string]Provider `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`
 	Identities map[string]Identity `yaml:"identities,omitempty" json:"identities,omitempty" mapstructure:"identities"`
+}
+
+// Integration defines a client-only credential materialization (e.g., ECR, EKS).
+// Integrations derive credentials from identities for service-specific access.
+type Integration struct {
+	Kind     string                 `yaml:"kind" json:"kind" mapstructure:"kind"`         // Integration type (e.g., "aws/ecr", "aws/eks").
+	Identity string                 `yaml:"identity" json:"identity" mapstructure:"identity"` // Identity providing AWS credentials.
+	Spec     map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"` // Integration-specific configuration.
+}
+
+// ECRRegistry represents an ECR registry configuration for aws/ecr integrations.
+type ECRRegistry struct {
+	AccountID string `yaml:"account_id" json:"account_id" mapstructure:"account_id"`
+	Region    string `yaml:"region" json:"region" mapstructure:"region"`
 }

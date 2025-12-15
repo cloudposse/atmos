@@ -677,6 +677,20 @@ var (
 	ErrWorkdirMetadata  = errors.New("failed to read/write workdir metadata")
 	ErrWorkdirProvision = errors.New("workdir provisioning failed")
 	ErrWorkdirClean     = errors.New("failed to clean working directory")
+
+	// Integration errors.
+	ErrIntegrationNotFound    = errors.New("integration not found")
+	ErrUnknownIntegrationKind = errors.New("unknown integration kind")
+	ErrIntegrationFailed      = errors.New("integration execution failed")
+	ErrNoLinkedIntegrations   = errors.New("identity has no linked integrations")
+
+	// ECR authentication errors.
+	ErrECRAuthFailed       = errors.New("ECR authentication failed")
+	ErrECRTokenExpired     = errors.New("ECR authorization token expired")
+	ErrECRRegistryNotFound = errors.New("ECR registry not found")
+	ErrECRInvalidRegistry  = errors.New("invalid ECR registry URL")
+	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
+	ErrDockerConfigRead    = errors.New("failed to read Docker config")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

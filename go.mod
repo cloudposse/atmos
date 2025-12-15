@@ -25,6 +25,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.6
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.6
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.17
+	github.com/aws/aws-sdk-go-v2/service/ecr v1.54.4
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.94.0
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.67.7
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.8
