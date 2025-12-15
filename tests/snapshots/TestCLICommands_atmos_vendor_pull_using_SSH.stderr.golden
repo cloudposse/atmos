@@ -4,7 +4,7 @@
  DEBU  ProcessCommandLineArgs input componentType=terraform args=[]
  DEBU  After ParseFlags identity.Value="" identity.Changed=false
  INFO  Vendoring from 'vendor.yaml'
- DEBU  Added /. to Git URL without subdirectory normalized="git::git@github.com:cloudposse/terraform-null-label.git//.?ref=0.25.0"
+ DEBU  Added //. to Git URL without subdirectory normalized="git::git@github.com:cloudposse/terraform-null-label.git//.?ref=0.25.0"
  DEBU  Added //. to Git URL without subdirectory normalized="git::ssh://git@github.com/cloudposse/terraform-null-label.git//.?ref=0.25.0"
  DEBU  No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.
  DEBU  Downloading and installing package package=terraform-null-label-cred
