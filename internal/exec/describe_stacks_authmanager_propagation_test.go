@@ -48,8 +48,8 @@ func TestAuthManagerPropagationToDescribeStacks(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)
 
-	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
-	// (this also disables parent directory search and git root discovery).
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	// Load atmos config.
@@ -83,8 +83,8 @@ func TestDescribeStacksAuthManagerNilHandling(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)
 
-	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
-	// (this also disables parent directory search and git root discovery).
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -126,8 +126,8 @@ func TestDescribeStacksAuthManagerWithNilStackInfo(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)
 
-	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
-	// (this also disables parent directory search and git root discovery).
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -173,8 +173,8 @@ func TestDescribeStacksAuthManagerWithNilAuthContext(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-propagation"
 	t.Chdir(workDir)
 
-	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
-	// (this also disables parent directory search and git root discovery).
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}

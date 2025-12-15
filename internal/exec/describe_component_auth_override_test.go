@@ -52,8 +52,8 @@ func TestComponentLevelAuthOverride(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-nested-propagation"
 	t.Chdir(workDir)
 
-	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
-	// (this also disables parent directory search and git root discovery).
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	// Test that ExecuteDescribeComponent works with AuthManager.
@@ -107,8 +107,8 @@ func TestResolveAuthManagerForNestedComponent(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-nested-propagation"
 	t.Chdir(workDir)
 
-	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
-	// (this also disables parent directory search and git root discovery).
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	// Get Atmos configuration.
@@ -186,8 +186,8 @@ func TestAuthOverrideInNestedChain(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-nested-propagation"
 	t.Chdir(workDir)
 
-	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
-	// (this also disables parent directory search and git root discovery).
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	// Process Level 1 component which references Level 2.
@@ -219,8 +219,8 @@ func TestAuthOverrideErrorHandling(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/authmanager-nested-propagation"
 	t.Chdir(workDir)
 
-	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
-	// (this also disables parent directory search and git root discovery).
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	// Get Atmos configuration.

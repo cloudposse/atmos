@@ -203,8 +203,8 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/atmos-overrides-section"
 	t.Chdir(workDir)
 
-	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
-	// (this also disables parent directory search and git root discovery).
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	component := "c1"
@@ -344,8 +344,8 @@ func TestDescribeComponent_Packer(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Chdir(workDir)
 
-	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
-	// (this also disables parent directory search and git root discovery).
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	atmosConfig := schema.AtmosConfiguration{
@@ -403,8 +403,8 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	workDir := "../../examples/quick-start-advanced"
 	t.Chdir(workDir)
 
-	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
-	// (this also disables parent directory search and git root discovery).
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	component := "vpc-flow-logs-bucket"

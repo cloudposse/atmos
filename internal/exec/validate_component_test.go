@@ -986,8 +986,8 @@ func TestExecuteValidateComponent_WithComponentValidationSettings(t *testing.T) 
 	fixturesDir := "../../tests/fixtures/scenarios/complete"
 	t.Chdir(fixturesDir)
 
-	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
-	// (this also disables parent directory search and git root discovery).
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	info := schema.ConfigAndStacksInfo{}
