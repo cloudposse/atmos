@@ -865,7 +865,12 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 }
 
 // TestResolveAbsolutePath tests the path resolution logic for different scenarios.
+// This tests the fallback behavior (when git root discovery is disabled).
+// See docs/prd/base-path-resolution-semantics.md for the full specification.
 func TestResolveAbsolutePath(t *testing.T) {
+	// Disable git root discovery so we test the fallback behavior.
+	t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
+
 	// Create a temp directory structure for testing.
 	tmpDir := t.TempDir()
 	configDir := filepath.Join(tmpDir, "config", "subdir")
@@ -896,61 +901,20 @@ func TestResolveAbsolutePath(t *testing.T) {
 			expectedBase:  "", // N/A - absolute paths don't need base
 		},
 
-		// Simple relative paths - should resolve to CWD for backward compatibility.
+		// "." and "./" paths - resolve to config dir (config-file-relative).
+		// This follows the convention of tsconfig.json, package.json, .eslintrc.
 		{
-			name:          "simple relative path resolves to CWD",
-			path:          "stacks",
-			cliConfigPath: configDir,
-			expectedBase:  "cwd",
-		},
-		{
-			name:          "complex relative path without ./ prefix resolves to CWD",
-			path:          "components/terraform",
-			cliConfigPath: configDir,
-			expectedBase:  "cwd",
-		},
-		{
-			name:          "deeply nested relative path resolves to CWD",
-			path:          "a/b/c/d/e",
-			cliConfigPath: configDir,
-			expectedBase:  "cwd",
-		},
-		{
-			name:          "simple relative path with empty config path resolves to CWD",
-			path:          "stacks",
-			cliConfigPath: "",
-			expectedBase:  "cwd",
-		},
-
-		// Empty path - should resolve to CWD for backward compatibility (issue #1858).
-		{
-			name:          "empty path resolves to CWD",
-			path:          "",
-			cliConfigPath: configDir,
-			expectedBase:  "cwd",
-		},
-		{
-			name:          "empty path with empty config path resolves to CWD",
-			path:          "",
-			cliConfigPath: "",
-			expectedBase:  "cwd",
-		},
-
-		// Single dot (.) - should resolve to config dir (explicit current directory reference).
-		{
-			name:          "dot path resolves to config dir (explicit current directory reference)",
+			name:          "dot path resolves to config dir (config-file-relative)",
 			path:          ".",
 			cliConfigPath: configDir,
 			expectedBase:  "config",
 		},
 		{
-			name:          "dot path with empty config path resolves to CWD",
+			name:          "dot path with empty config path resolves to CWD (3rd fallback, git root disabled)",
 			path:          ".",
 			cliConfigPath: "",
-			expectedBase:  "cwd",
+			expectedBase:  "cwd", // Git root is disabled in this test, so falls back to CWD
 		},
-
-		// Paths starting with "./" - should resolve to config dir.
 		{
 			name:          "path starting with ./ resolves to config dir",
 			path:          "./subpath",
@@ -970,13 +934,13 @@ func TestResolveAbsolutePath(t *testing.T) {
 			expectedBase:  "config",
 		},
 		{
-			name:          "path starting with ./ with empty config path resolves to CWD",
+			name:          "path starting with ./ with empty config path resolves to CWD (3rd fallback, git root disabled)",
 			path:          "./subpath",
 			cliConfigPath: "",
-			expectedBase:  "cwd",
+			expectedBase:  "cwd", // Git root is disabled in this test, so falls back to CWD
 		},
 
-		// Paths starting with ".." - should resolve to config dir.
+		// ".." and "../" paths - resolve to config dir (navigate from atmos.yaml location).
 		{
 			name:          "path with parent dir (..) resolves to config dir",
 			path:          "..",
@@ -996,44 +960,84 @@ func TestResolveAbsolutePath(t *testing.T) {
 			expectedBase:  "config",
 		},
 		{
-			name:          "path starting with .. with empty config path resolves to CWD",
+			name:          "path starting with .. with empty config path resolves to CWD (3rd fallback, git root disabled)",
 			path:          "../sibling",
+			cliConfigPath: "",
+			expectedBase:  "cwd", // Git root is disabled in this test, so falls back to CWD
+		},
+
+		// Empty path - fallback to config dir (git root disabled).
+		{
+			name:          "empty path resolves to config dir (git root disabled)",
+			path:          "",
+			cliConfigPath: configDir,
+			expectedBase:  "config",
+		},
+		{
+			name:          "empty path with empty config path resolves to CWD",
+			path:          "",
+			cliConfigPath: "",
+			expectedBase:  "cwd",
+		},
+
+		// Simple relative paths - fallback to config dir (git root disabled).
+		{
+			name:          "simple relative path resolves to config dir (git root disabled)",
+			path:          "stacks",
+			cliConfigPath: configDir,
+			expectedBase:  "config",
+		},
+		{
+			name:          "complex relative path without ./ prefix resolves to config dir",
+			path:          "components/terraform",
+			cliConfigPath: configDir,
+			expectedBase:  "config",
+		},
+		{
+			name:          "deeply nested relative path resolves to config dir",
+			path:          "a/b/c/d/e",
+			cliConfigPath: configDir,
+			expectedBase:  "config",
+		},
+		{
+			name:          "simple relative path with empty config path resolves to CWD",
+			path:          "stacks",
 			cliConfigPath: "",
 			expectedBase:  "cwd",
 		},
 
 		// Edge cases - paths that look like they might start with . or .. but don't.
 		{
-			name:          "path starting with dot but not ./ or .. resolves to CWD",
+			name:          "path starting with dot but not ./ or .. resolves to config dir",
 			path:          ".hidden",
 			cliConfigPath: configDir,
-			expectedBase:  "cwd",
+			expectedBase:  "config",
 		},
 		{
-			name:          "path starting with ..foo resolves to CWD (not parent traversal)",
+			name:          "path starting with ..foo resolves to config dir (not parent traversal)",
 			path:          "..foo",
 			cliConfigPath: configDir,
-			expectedBase:  "cwd", // "..foo" is NOT ".." or "../" so it resolves to CWD
+			expectedBase:  "config", // "..foo" is NOT ".." or "../" so it's a simple relative path
 		},
 		{
-			name:          "path with dots in middle resolves to CWD",
+			name:          "path with dots in middle resolves to config dir",
 			path:          "foo/bar/../baz",
 			cliConfigPath: configDir,
-			expectedBase:  "cwd",
+			expectedBase:  "config",
 		},
 		{
-			name:          "path starting with ... resolves to CWD (not parent traversal)",
+			name:          "path starting with ... resolves to config dir",
 			path:          ".../something",
 			cliConfigPath: configDir,
-			expectedBase:  "cwd", // ".../something" is NOT "../" so it resolves to CWD
+			expectedBase:  "config", // ".../something" is NOT "../" so it's a simple relative path
 		},
 	}
 
 	// Add platform-specific test cases for Windows-style paths.
 	// On Windows, backslash is the path separator so .\\ and ..\\ are explicit relative paths.
-	// On Unix, backslash is a literal character so .\\ paths are just regular paths (resolve to CWD).
+	// On Unix, backslash is a literal character so .\\ paths are just regular paths.
 	if filepath.Separator == '\\' {
-		// Windows: backslash paths should resolve to config dir.
+		// Windows: .\\ and ..\\ paths resolve to config dir (config-file-relative).
 		windowsTests := []struct {
 			name          string
 			path          string
@@ -1053,16 +1057,16 @@ func TestResolveAbsolutePath(t *testing.T) {
 				expectedBase:  "config",
 			},
 			{
-				name:          "Windows-style .\\subpath with empty config path resolves to CWD",
+				name:          "Windows-style .\\subpath with empty config path resolves to CWD (3rd fallback)",
 				path:          ".\\subpath",
 				cliConfigPath: "",
-				expectedBase:  "cwd",
+				expectedBase:  "cwd", // Git root is disabled in this test, so falls back to CWD
 			},
 			{
-				name:          "Windows-style ..\\sibling with empty config path resolves to CWD",
+				name:          "Windows-style ..\\sibling with empty config path resolves to CWD (3rd fallback)",
 				path:          "..\\sibling",
 				cliConfigPath: "",
-				expectedBase:  "cwd",
+				expectedBase:  "cwd", // Git root is disabled in this test, so falls back to CWD
 			},
 			{
 				name:          "Windows-style .\\nested\\path resolves to config dir",
@@ -1079,8 +1083,8 @@ func TestResolveAbsolutePath(t *testing.T) {
 		}
 		tests = append(tests, windowsTests...)
 	} else {
-		// Unix: backslash is a literal character, so these paths resolve to CWD.
-		// This tests that we don't incorrectly treat backslash as a path separator on Unix.
+		// Unix: backslash is a literal character, so these paths are simple relative paths.
+		// With git root disabled, they resolve to config dir.
 		unixBackslashTests := []struct {
 			name          string
 			path          string
@@ -1088,16 +1092,16 @@ func TestResolveAbsolutePath(t *testing.T) {
 			expectedBase  string
 		}{
 			{
-				name:          "Unix treats .\\subpath as literal (not path separator), resolves to CWD",
+				name:          "Unix treats .\\subpath as literal (not path separator), resolves to config dir",
 				path:          ".\\subpath",
 				cliConfigPath: configDir,
-				expectedBase:  "cwd",
+				expectedBase:  "config",
 			},
 			{
-				name:          "Unix treats ..\\sibling as literal (not path separator), resolves to CWD",
+				name:          "Unix treats ..\\sibling as literal (not path separator), resolves to config dir",
 				path:          "..\\sibling",
 				cliConfigPath: configDir,
-				expectedBase:  "cwd",
+				expectedBase:  "config",
 			},
 		}
 		tests = append(tests, unixBackslashTests...)
@@ -1136,11 +1140,11 @@ func TestResolveAbsolutePath(t *testing.T) {
 	}
 }
 
-// TestCliConfigPathRegression tests the scenario from GitHub issue #1858
-// where atmos.yaml is in a subdirectory but references directories at the repo root.
-// This was broken in v1.201.0 (PR #1774) when path resolution was changed to
-// resolve relative paths relative to the atmos.yaml location instead of CWD.
-func TestCliConfigPathRegression(t *testing.T) {
+// TestParentTraversalResolvesRelativeToConfigDir tests that ".." base_path resolves
+// relative to the atmos.yaml location, allowing config in a subdirectory to reference
+// directories at the parent level.
+// See: https://github.com/cloudposse/atmos/issues/1858
+func TestParentTraversalResolvesRelativeToConfigDir(t *testing.T) {
 	// Clear environment variables that might interfere.
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	require.NoError(t, err)
@@ -1194,58 +1198,110 @@ func TestCliConfigPathRegression(t *testing.T) {
 	})
 }
 
-// TestPathBasedComponentResolution tests the scenario for path-based component resolution
-// where users run atmos commands from within a component directory using ATMOS_BASE_PATH="."
-// with ATMOS_CLI_CONFIG_PATH pointing back to the repo root.
-func TestPathBasedComponentResolution(t *testing.T) {
+// TestEmptyBasePathWithNestedConfigResolvesToGitRoot tests that an empty base_path
+// triggers git root discovery even when atmos.yaml is in a deeply nested subdirectory.
+//
+// Scenario:
+// - ATMOS_CLI_CONFIG_PATH=./rootfs/usr/local/etc/atmos (config in deeply nested subdirectory)
+// - base_path: "" (empty - expects repo root)
+// - stacks/ and components/ are at the repo root
+//
+// The expected behavior is that empty base_path should resolve to git repo root,
+// NOT to the directory containing atmos.yaml.
+// See: https://github.com/cloudposse/atmos/issues/1858
+func TestEmptyBasePathWithNestedConfigResolvesToGitRoot(t *testing.T) {
 	// Clear environment variables that might interfere.
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	require.NoError(t, err)
 	err = os.Unsetenv("ATMOS_BASE_PATH")
 	require.NoError(t, err)
 
-	t.Run("ATMOS_BASE_PATH=. with ATMOS_CLI_CONFIG_PATH should resolve to config dir", func(t *testing.T) {
-		// This test verifies path-based component resolution:
-		// When running from a component directory with ATMOS_BASE_PATH="." and
-		// ATMOS_CLI_CONFIG_PATH pointing to the repo root, the base path should
-		// resolve to the repo root (where atmos.yaml is), not to CWD.
+	t.Run("empty base_path with nested config resolves to git root", func(t *testing.T) {
+		// Scenario:
+		// - atmos.yaml is in a deeply nested subdirectory
+		// - base_path: "" (empty) in that config
+		// - stacks/ and components/ are at repo root
+		// - Git root discovery should find the repo root
+		changeWorkingDir(t, "../../tests/fixtures/scenarios/nested-config-empty-base-path")
+
+		cwd, err := os.Getwd()
+		require.NoError(t, err)
+
+		// Mock the git root to be the fixture directory (simulates repo root).
+		// This isolates the test from the actual git repo structure.
+		t.Setenv("TEST_GIT_ROOT", cwd)
+
+		// Set ATMOS_CLI_CONFIG_PATH to the deeply nested config directory.
+		// This matches the user's setup: ATMOS_CLI_CONFIG_PATH=./rootfs/usr/local/etc/atmos
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", "./rootfs/usr/local/etc/atmos")
+
+		cfg, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		require.NoError(t, err, "InitCliConfig should succeed with empty base_path and nested config")
+
+		// The key assertion: empty base_path should resolve to git repo root (or CWD as fallback),
+		// NOT to the atmos.yaml directory.
+		// In v1.201.0, this incorrectly resolved to ./rootfs/usr/local/etc/atmos/
+		assert.Equal(t, cwd, cfg.BasePathAbsolute,
+			"Empty base_path should resolve to git repo root, not config directory")
+
+		// Stacks should be found at repo root, not inside the config directory.
+		expectedStacksPath := filepath.Join(cwd, "stacks")
+		assert.Equal(t, expectedStacksPath, cfg.StacksBaseAbsolutePath,
+			"Stacks path should be at repo root, not inside rootfs/usr/local/etc/atmos/")
+
+		// Components should be found at repo root, not inside the config directory.
+		expectedComponentsPath := filepath.Join(cwd, "components", "terraform")
+		assert.Equal(t, expectedComponentsPath, cfg.TerraformDirAbsolutePath,
+			"Components path should be at repo root, not inside rootfs/usr/local/etc/atmos/")
+	})
+}
+
+// TestDotPathResolvesRelativeToConfigDir tests that "." and "./" paths resolve
+// relative to the config directory (where atmos.yaml is located), following the
+// convention of tsconfig.json, package.json, and other config files.
+func TestDotPathResolvesRelativeToConfigDir(t *testing.T) {
+	// Clear environment variables that might interfere.
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	require.NoError(t, err)
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	require.NoError(t, err)
+
+	t.Run("ATMOS_BASE_PATH=. should resolve to config dir (config-file-relative)", func(t *testing.T) {
+		// This test verifies that "." resolves relative to where atmos.yaml is located,
+		// NOT relative to CWD. This follows the convention of other config files.
+		//
+		// Users who need CWD-relative behavior should use the !cwd YAML tag:
+		// - base_path: !cwd
 		changeWorkingDir(t, "../../tests/fixtures/scenarios/complete/components/terraform/top-level-component1")
 
 		// Point to the repo root where atmos.yaml is located.
-		t.Setenv("ATMOS_CLI_CONFIG_PATH", "../../..")
-		// Set base_path to "." - this should resolve relative to CLI config path.
+		configPath := "../../.."
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", configPath)
+		// Set base_path to "." - this should resolve to config dir (where atmos.yaml is).
 		t.Setenv("ATMOS_BASE_PATH", ".")
+		// Disable git root discovery for this test.
+		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
 
 		cfg, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		require.NoError(t, err, "InitCliConfig should succeed")
 
-		// Get the repo root (where atmos.yaml is).
-		cwd, err := os.Getwd()
+		// Get the absolute path of the config directory.
+		configDir, err := filepath.Abs(configPath)
 		require.NoError(t, err)
-		repoRoot := filepath.Clean(filepath.Join(cwd, "..", "..", ".."))
 
-		// BasePathAbsolute should be the repo root (where atmos.yaml is), not CWD.
-		assert.Equal(t, repoRoot, cfg.BasePathAbsolute,
-			"Base path with '.' should resolve to config dir (repo root), not CWD")
-
-		// Stacks should be found at repo_root/stacks.
-		expectedStacksPath := filepath.Join(repoRoot, "stacks")
-		assert.Equal(t, expectedStacksPath, cfg.StacksBaseAbsolutePath,
-			"Stacks path should be at repo root, not inside component dir")
-
-		// Components should be found at repo_root/components/terraform.
-		expectedComponentsPath := filepath.Join(repoRoot, "components", "terraform")
-		assert.Equal(t, expectedComponentsPath, cfg.TerraformDirAbsolutePath,
-			"Terraform components path should be at repo root, not inside component dir")
+		// BasePathAbsolute should be the config directory, not CWD.
+		assert.Equal(t, configDir, cfg.BasePathAbsolute,
+			"Base path with '.' should resolve to config directory (config-file-relative)")
 	})
 
-	t.Run("empty ATMOS_BASE_PATH should resolve to CWD for backward compatibility", func(t *testing.T) {
-		// This test verifies issue #1858 backward compatibility:
-		// When ATMOS_BASE_PATH is empty (or not set), paths should resolve relative to CWD.
+	t.Run("base_path=. when CWD equals config dir resolves to config dir", func(t *testing.T) {
+		// This test verifies that when running from the same directory as atmos.yaml,
+		// base_path: "." resolves to the config directory.
+		// Since CWD == config dir in this case, the result is the same.
 		changeWorkingDir(t, "../../tests/fixtures/scenarios/complete")
 
 		// Don't set ATMOS_CLI_CONFIG_PATH - use default discovery.
-		// Don't set ATMOS_BASE_PATH - should default to CWD.
+		// Don't set ATMOS_BASE_PATH - use the value from atmos.yaml (base_path: ".").
 
 		cfg, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		require.NoError(t, err, "InitCliConfig should succeed")
@@ -1253,10 +1309,9 @@ func TestPathBasedComponentResolution(t *testing.T) {
 		cwd, err := os.Getwd()
 		require.NoError(t, err)
 
-		// BasePathAbsolute should be CWD (since base_path: "." in atmos.yaml).
-		// Note: The fixture's atmos.yaml has base_path: "." which resolves to config dir.
-		// Since we're running from the same dir as atmos.yaml, config dir == CWD.
+		// BasePathAbsolute should be the config directory.
+		// Since CWD == config dir, the result equals CWD.
 		assert.Equal(t, cwd, cfg.BasePathAbsolute,
-			"Base path should resolve to CWD when running from repo root")
+			"Base path with '.' should resolve to config directory")
 	})
 }
