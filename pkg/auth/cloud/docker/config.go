@@ -17,9 +17,9 @@ import (
 
 const (
 	// dockerConfigPerm is the permission mode for Docker config directory.
-	dockerConfigPerm = 0700
+	dockerConfigPerm = 0o700
 	// dockerConfigFilePerm is the permission mode for Docker config.json file.
-	dockerConfigFilePerm = 0600
+	dockerConfigFilePerm = 0o600
 	// configFileName is the Docker config file name.
 	configFileName = "config.json"
 	// lockFileSuffix is the suffix for lock files.
