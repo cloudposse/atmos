@@ -145,3 +145,68 @@ func TestResolveIdentityName_CaseSensitivity(t *testing.T) {
 		})
 	}
 }
+
+// TestGetIdentityDisplayName tests that identity display names preserve original case.
+// This test reproduces the bug where provisioned identities are displayed in lowercase
+// (e.g., "core-artifacts/terraformapplyaccess") instead of original case
+// (e.g., "core-artifacts/TerraformApplyAccess").
+func TestGetIdentityDisplayName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                string
+		identityCaseMap     map[string]string
+		lowercaseKey        string
+		expectedDisplayName string
+	}{
+		{
+			name: "provisioned identity - preserves original case",
+			identityCaseMap: map[string]string{
+				"core-artifacts/terraformapplyaccess": "core-artifacts/TerraformApplyAccess",
+			},
+			lowercaseKey:        "core-artifacts/terraformapplyaccess",
+			expectedDisplayName: "core-artifacts/TerraformApplyAccess",
+		},
+		{
+			name: "provisioned identity - multiple identities",
+			identityCaseMap: map[string]string{
+				"core-artifacts/administratoraccess": "core-artifacts/AdministratorAccess",
+				"core-artifacts/poweruseraccess":     "core-artifacts/PowerUserAccess",
+				"inspatial aws cp/rootaccess":        "InSpatial AWS CP/RootAccess",
+			},
+			lowercaseKey:        "inspatial aws cp/rootaccess",
+			expectedDisplayName: "InSpatial AWS CP/RootAccess",
+		},
+		{
+			name:                "no case map - returns lowercase as-is",
+			identityCaseMap:     nil,
+			lowercaseKey:        "admin",
+			expectedDisplayName: "admin",
+		},
+		{
+			name: "not in case map - returns lowercase as-is",
+			identityCaseMap: map[string]string{
+				"other": "Other",
+			},
+			lowercaseKey:        "admin",
+			expectedDisplayName: "admin",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			m := &manager{
+				config: &schema.AuthConfig{
+					IdentityCaseMap: tt.identityCaseMap,
+				},
+			}
+
+			displayName := m.GetIdentityDisplayName(tt.lowercaseKey)
+
+			assert.Equal(t, tt.expectedDisplayName, displayName,
+				"display name should preserve original case from IdentityCaseMap")
+		})
+	}
+}

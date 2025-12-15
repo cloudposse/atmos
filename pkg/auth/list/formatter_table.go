@@ -195,6 +195,13 @@ func createIdentitiesTable(authManager authTypes.AuthManager, identities map[str
 
 // buildIdentityTableRow builds a table row for a single identity.
 func buildIdentityTableRow(authManager authTypes.AuthManager, identity *schema.Identity, name string) table.Row {
+	// Get display name with original case from IdentityCaseMap.
+	// Viper lowercases map keys, but we want to display original case (e.g., "core-artifacts/TerraformApplyAccess").
+	displayName := name
+	if authManager != nil {
+		displayName = authManager.GetIdentityDisplayName(name)
+	}
+
 	// Get authentication status indicator.
 	status := getIdentityAuthStatus(authManager, name)
 	statusIndicator := getStatusIndicator(status)
@@ -239,7 +246,7 @@ func buildIdentityTableRow(authManager authTypes.AuthManager, identity *schema.I
 
 	return table.Row{
 		statusIndicator, // Status dot as first column.
-		name,
+		displayName,
 		identity.Kind,
 		viaProvider,
 		viaIdentity,
