@@ -569,7 +569,12 @@ func TestToolchainPersistentPreRunPreservesConfig(t *testing.T) {
 	}
 
 	// Set the config in the toolchain package (simulating root.go Execute()).
+	prevAtmosConfig := toolchainpkg.GetAtmosConfig()
 	toolchainpkg.SetAtmosConfig(fullConfig)
+	t.Cleanup(func() {
+		toolchainpkg.SetAtmosConfig(prevAtmosConfig)
+		viper.Reset()
+	})
 
 	// Set up viper with flag values.
 	v := viper.GetViper()
