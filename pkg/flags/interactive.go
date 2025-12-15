@@ -81,6 +81,7 @@ func PromptForValue(name, title string, options []string) (string, error) {
 	if err := form.Run(); err != nil {
 		// Check if user aborted (Ctrl+C, ESC, etc.).
 		if errors.Is(err, huh.ErrUserAborted) {
+			_ = ui.Warning("Selection cancelled")
 			return "", errUtils.ErrUserAborted
 		}
 		return "", fmt.Errorf("prompt failed: %w", err)
