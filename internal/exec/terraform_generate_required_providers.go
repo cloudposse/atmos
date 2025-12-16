@@ -106,6 +106,15 @@ func ExecuteTerraformGenerateRequiredProvidersCmd(cmd *cobra.Command, args []str
 	// Create generator context and generate.
 	genCtx := generator.NewGeneratorContext(&atmosConfig, &info, workingDir)
 
-	// Use a custom writer that writes to the specified file path.
+	// If custom file path was specified, extract just the filename for the generator.
+	// The generator writes to WorkingDir + filename.
+	if len(fileFromArg) > 0 {
+		genCtx.CustomFilename = filepath.Base(fileFromArg)
+		// If the user specified a full path, update working dir to match.
+		if dir := filepath.Dir(fileFromArg); dir != "." && dir != "" {
+			genCtx.WorkingDir = dir
+		}
+	}
+
 	return generator.Generate(context.Background(), rp.Name, genCtx, generator.NewFileWriter())
 }

@@ -82,6 +82,9 @@ type GeneratorContext struct {
 
 	// Format specifies the output format (JSON or HCL).
 	Format Format
+
+	// CustomFilename overrides the default filename when set.
+	CustomFilename string
 }
 
 // NewGeneratorContext creates a GeneratorContext from ConfigAndStacksInfo.

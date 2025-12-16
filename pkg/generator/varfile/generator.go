@@ -41,6 +41,9 @@ func (g *Generator) DefaultFilename() string {
 
 // ShouldGenerate returns true if the VarsSection has data.
 func (g *Generator) ShouldGenerate(genCtx *generator.GeneratorContext) bool {
+	if genCtx == nil {
+		return false
+	}
 	return len(genCtx.VarsSection) > 0
 }
 
@@ -82,6 +85,9 @@ func (g *Generator) Generate(ctx context.Context, genCtx *generator.GeneratorCon
 // This follows the pattern: {context}-{component}.terraform.tfvars.json
 // or: {context}-{folder}-{component}.terraform.tfvars.json if folder prefix exists.
 func ConstructFilename(genCtx *generator.GeneratorContext) string {
+	if genCtx == nil {
+		return "terraform.tfvars.json"
+	}
 	if genCtx.StackInfo == nil {
 		return "terraform.tfvars.json"
 	}

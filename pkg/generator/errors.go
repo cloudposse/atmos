@@ -1,33 +1,38 @@
+// Package generator provides sentinel error aliases from the central errors package.
+// These are re-exported for backward compatibility and convenience.
 package generator
 
-import "errors"
+import (
+	errUtils "github.com/cloudposse/atmos/errors"
+)
 
-// Static errors for the generator package.
+// Re-exported errors from the central errors package.
+// These provide the generator-specific errors for use within this package.
 var (
 	// ErrGeneratorNotFound is returned when a requested generator is not in the registry.
-	ErrGeneratorNotFound = errors.New("generator not found")
+	ErrGeneratorNotFound = errUtils.ErrGeneratorNotFound
 
 	// ErrInvalidContext is returned when the generator context is missing required data.
-	ErrInvalidContext = errors.New("invalid generator context")
+	ErrInvalidContext = errUtils.ErrInvalidGeneratorCtx
 
 	// ErrValidationFailed is returned when generator validation fails.
-	ErrValidationFailed = errors.New("generator validation failed")
+	ErrValidationFailed = errUtils.ErrGeneratorValidation
 
 	// ErrGenerationFailed is returned when generation fails.
-	ErrGenerationFailed = errors.New("generation failed")
+	ErrGenerationFailed = errUtils.ErrGenerationFailed
 
 	// ErrWriteFailed is returned when writing the generated file fails.
-	ErrWriteFailed = errors.New("failed to write generated file")
+	ErrWriteFailed = errUtils.ErrGeneratorWriteFailed
 
 	// ErrMissingWorkingDir is returned when WorkingDir is not set.
-	ErrMissingWorkingDir = errors.New("working directory is required")
+	ErrMissingWorkingDir = errUtils.ErrMissingWorkingDir
 
 	// ErrMissingComponent is returned when Component is not set.
-	ErrMissingComponent = errors.New("component is required")
+	ErrMissingComponent = errUtils.ErrComponentEmpty
 
 	// ErrMissingStack is returned when Stack is not set.
-	ErrMissingStack = errors.New("stack is required")
+	ErrMissingStack = errUtils.ErrStackEmpty
 
 	// ErrMissingProviderSource is returned when a required_provider is missing the source field.
-	ErrMissingProviderSource = errors.New("required_provider missing 'source' field")
+	ErrMissingProviderSource = errUtils.ErrMissingProviderSource
 )

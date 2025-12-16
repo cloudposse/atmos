@@ -38,6 +38,9 @@ func (g *Generator) DefaultFilename() string {
 
 // ShouldGenerate returns true if the ProvidersSection has data.
 func (g *Generator) ShouldGenerate(genCtx *generator.GeneratorContext) bool {
+	if genCtx == nil {
+		return false
+	}
 	return len(genCtx.ProvidersSection) > 0
 }
 

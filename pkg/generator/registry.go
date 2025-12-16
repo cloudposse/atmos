@@ -135,7 +135,11 @@ func Generate(ctx context.Context, name string, genCtx *GeneratorContext, writer
 	}
 
 	if !genCtx.DryRun {
-		filename := gen.DefaultFilename()
+		// Use custom filename if provided, otherwise use the generator's default.
+		filename := genCtx.CustomFilename
+		if filename == "" {
+			filename = gen.DefaultFilename()
+		}
 		if err := writer.WriteJSON(genCtx.WorkingDir, filename, content); err != nil {
 			return fmt.Errorf("%w: %v", ErrWriteFailed, err)
 		}

@@ -47,6 +47,9 @@ func (g *Generator) DefaultFilename() string {
 
 // ShouldGenerate returns true if RequiredVersion or RequiredProviders has data.
 func (g *Generator) ShouldGenerate(genCtx *generator.GeneratorContext) bool {
+	if genCtx == nil {
+		return false
+	}
 	return genCtx.RequiredVersion != "" || len(genCtx.RequiredProviders) > 0
 }
 
