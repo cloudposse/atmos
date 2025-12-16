@@ -160,14 +160,15 @@ func TestIntegrationConfig_Fields(t *testing.T) {
 	config := &IntegrationConfig{
 		Name: "my-integration",
 		Config: &schema.Integration{
-			Kind:     "aws/ecr",
-			Identity: "dev-admin",
-			Spec: map[string]interface{}{
-				"registries": []interface{}{
-					map[string]interface{}{
-						"account_id": "123456789012",
-						"region":     "us-east-1",
-					},
+			Kind: "aws/ecr",
+			Via: &schema.IntegrationVia{
+				Identity: "dev-admin",
+			},
+			Spec: &schema.IntegrationSpec{
+				AutoProvision: true,
+				Registry: &schema.ECRRegistry{
+					AccountID: "123456789012",
+					Region:    "us-east-1",
 				},
 			},
 		},
@@ -175,6 +176,7 @@ func TestIntegrationConfig_Fields(t *testing.T) {
 
 	assert.Equal(t, "my-integration", config.Name)
 	assert.Equal(t, "aws/ecr", config.Config.Kind)
-	assert.Equal(t, "dev-admin", config.Config.Identity)
+	assert.Equal(t, "dev-admin", config.Config.Via.Identity)
 	assert.NotNil(t, config.Config.Spec)
+	assert.Equal(t, "123456789012", config.Config.Spec.Registry.AccountID)
 }

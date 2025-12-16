@@ -111,27 +111,38 @@ auth:
         name: AdministratorAccess
         account:
           name: dev
-      # Optional: auto-trigger these integrations on login
-      integrations:
-        - dev/ecr
 
   # Integrations define DERIVED credentials (client-only materialization)
+  # Each integration specifies which identity it uses via "via.identity"
   integrations:
-    dev/ecr:
+    dev/ecr/main:
       kind: aws/ecr
-      identity: dev-admin              # Which identity provides AWS creds
-      registries:
-        - account_id: "123456789012"
+      via:
+        identity: dev-admin           # Which identity provides AWS creds
+      spec:
+        auto_provision: true          # Auto-trigger on identity login
+        registry:
+          account_id: "123456789012"
           region: us-east-2
-        - account_id: "987654321098"
+
+    dev/ecr/secondary:
+      kind: aws/ecr
+      via:
+        identity: dev-admin
+      spec:
+        auto_provision: true
+        registry:
+          account_id: "987654321098"
           region: us-west-2
 
     # Future: EKS integration (not implemented in this PRD)
     # dev/kubecfg:
     #   kind: aws/eks
-    #   identity: dev-admin
-    #   clusters:
-    #     - name: dev-cluster
+    #   via:
+    #     identity: dev-admin
+    #   spec:
+    #     cluster:
+    #       name: dev-cluster
     #       region: us-east-2
 ```
 
@@ -140,18 +151,20 @@ auth:
 | Field | Required | Description |
 |-------|----------|-------------|
 | `kind` | Yes | Integration type (e.g., `aws/ecr`, future: `aws/eks`) |
-| `identity` | Yes | Name of identity providing AWS credentials |
-| `registries` | Yes | List of ECR registries to authenticate |
-| `registries[].account_id` | Yes | AWS account ID for registry |
-| `registries[].region` | Yes | AWS region for registry |
+| `via.identity` | Yes | Name of identity providing AWS credentials |
+| `spec.auto_provision` | No | Auto-trigger on identity login (default: false) |
+| `spec.registry` | Yes | ECR registry configuration |
+| `spec.registry.account_id` | Yes | AWS account ID for registry |
+| `spec.registry.region` | Yes | AWS region for registry |
 
-#### Identity Integration Reference
+#### Design Rationale: One Registry Per Integration
 
-Identities can optionally list integrations to auto-trigger on login:
+Each integration defines a single registry rather than a list. This approach:
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `integrations` | No | List of integration names to trigger on login |
+1. **Better Deep Merging**: Works with Atmos stack inheritance and merging
+2. **Clearer Naming**: Integration name reflects its purpose (e.g., `dev/ecr/main`)
+3. **Consistent Pattern**: Matches how identities and providers are defined
+4. **Easier Override**: Individual registries can be overridden in stack configs
 
 ### 2. Commands
 
@@ -722,15 +735,16 @@ auth:
         name: AdministratorAccess
         account:
           name: dev
-      integrations:
-        - dev/ecr
 
   integrations:
     dev/ecr:
       kind: aws/ecr
-      identity: dev-admin
-      registries:
-        - account_id: "123456789012"
+      via:
+        identity: dev-admin
+      spec:
+        auto_provision: true
+        registry:
+          account_id: "123456789012"
           region: us-east-2
 ```
 
@@ -774,26 +788,42 @@ $ atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
 ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 ```
 
-### Multi-Registry Integration
+### Multi-Registry with Multiple Integrations
 
 ```yaml
 # atmos.yaml
 auth:
   integrations:
-    all-envs/ecr:
+    all-envs/ecr/primary:
       kind: aws/ecr
-      identity: devops-admin
-      registries:
-        - account_id: "123456789012"
+      via:
+        identity: devops-admin
+      spec:
+        auto_provision: true
+        registry:
+          account_id: "123456789012"
           region: us-east-2
-        - account_id: "987654321098"
+
+    all-envs/ecr/secondary:
+      kind: aws/ecr
+      via:
+        identity: devops-admin
+      spec:
+        auto_provision: true
+        registry:
+          account_id: "987654321098"
           region: us-west-2
 ```
 
 ```bash
-$ atmos auth ecr-login all-envs/ecr
+# All integrations with auto_provision=true for devops-admin are triggered
+$ atmos auth login devops-admin
 ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 ✓ ECR login: 987654321098.dkr.ecr.us-west-2.amazonaws.com (expires in 12h)
+
+# Or explicitly trigger specific integration
+$ atmos auth ecr-login all-envs/ecr/primary
+✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 ```
 
 ### GitHub Actions Integration
@@ -888,9 +918,12 @@ auth:
   integrations:
     dev/kubecfg:
       kind: aws/eks
-      identity: dev-admin
-      clusters:
-        - name: dev-cluster
+      via:
+        identity: dev-admin
+      spec:
+        auto_provision: true
+        cluster:
+          name: dev-cluster
           region: us-east-2
           alias: dev           # Optional: kubeconfig context name
 ```
@@ -902,9 +935,12 @@ auth:
   integrations:
     dev/gcr:
       kind: gcp/artifact-registry
-      identity: gcp-dev
-      registries:
-        - project: my-project
+      via:
+        identity: gcp-dev
+      spec:
+        auto_provision: true
+        registry:
+          project: my-project
           location: us-central1
 ```
 
