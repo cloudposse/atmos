@@ -223,126 +223,155 @@ type searchRow struct {
 func displaySearchResults(tools []*toolchainregistry.Tool) {
 	defer perf.Track(nil, "registry.displaySearchResults")()
 
-	// Load tool versions to check installation status.
+	toolVersions, installer := loadSearchToolVersions()
+	rows, widths := buildSearchRows(tools, toolVersions, installer)
+	styled := renderSearchTable(rows, widths)
+	_ = ui.Writeln(styled)
+}
+
+// loadSearchToolVersions loads tool versions and creates an installer for search.
+func loadSearchToolVersions() (*toolchain.ToolVersions, *toolchain.Installer) {
 	installer := toolchain.NewInstaller()
 	toolVersionsFile := toolchain.GetToolVersionsFilePath()
 	toolVersions, err := toolchain.LoadToolVersions(toolVersionsFile)
 	if err != nil && !os.IsNotExist(err) {
-		// If there's an error other than file not found, log it but continue.
 		_ = ui.Warningf("Could not load .tool-versions: %v", err)
 	}
+	return toolVersions, installer
+}
 
-	// Build row data with installation status.
-	var rows []searchRow
-	statusWidth := 1 // For single dot character.
-	toolNameWidth := len("TOOL")
-	typeWidth := len("TYPE")
-	registryWidth := len("REGISTRY")
+// searchColumnWidths holds the calculated widths for search table columns.
+type searchColumnWidths struct {
+	status   int
+	toolName int
+	toolType int
+	registry int
+}
 
-	// Check each tool's installation and configuration status.
+// buildSearchRows processes tools and returns search rows with column widths.
+func buildSearchRows(tools []*toolchainregistry.Tool, toolVersions *toolchain.ToolVersions, installer *toolchain.Installer) ([]searchRow, searchColumnWidths) {
+	widths := searchColumnWidths{
+		status:   1,
+		toolName: len("TOOL"),
+		toolType: len("TYPE"),
+		registry: len("REGISTRY"),
+	}
+
+	rows := make([]searchRow, 0, len(tools))
 	for _, tool := range tools {
-		toolName := fmt.Sprintf("%s/%s", tool.RepoOwner, tool.RepoName)
-		row := searchRow{
-			toolName: toolName,
-			toolType: tool.Type,
-			registry: tool.Registry,
-		}
-
-		// Check if tool is in configuration.
-		if toolVersions != nil && toolVersions.Tools != nil {
-			// Check both full name and repo name as alias.
-			fullName := tool.RepoOwner + "/" + tool.RepoName
-			_, foundFull := toolVersions.Tools[fullName]
-			_, foundRepo := toolVersions.Tools[tool.RepoName]
-			row.isInConfig = foundFull || foundRepo
-
-			// Check if installed (only if in config).
-			if row.isInConfig {
-				// Get the version from tool-versions.
-				var version string
-				if foundFull {
-					versions := toolVersions.Tools[fullName]
-					if len(versions) > 0 {
-						version = versions[0]
-					}
-				} else if foundRepo {
-					versions := toolVersions.Tools[tool.RepoName]
-					if len(versions) > 0 {
-						version = versions[0]
-					}
-				}
-
-				// Check if binary exists.
-				if version != "" {
-					_, err := installer.FindBinaryPath(tool.RepoOwner, tool.RepoName, version, tool.BinaryName)
-					row.isInstalled = err == nil
-				}
-			}
-		}
-
-		// Set status indicator.
-		switch {
-		case row.isInstalled:
-			row.status = statusIndicator // Green dot (will be colored later).
-		case row.isInConfig:
-			row.status = statusIndicator // Gray dot (will be colored later).
-		default:
-			row.status = " " // No indicator.
-		}
-
-		// Update column widths.
-		if len(toolName) > toolNameWidth {
-			toolNameWidth = len(toolName)
-		}
-		if len(tool.Type) > typeWidth {
-			typeWidth = len(tool.Type)
-		}
-		if len(tool.Registry) > registryWidth {
-			registryWidth = len(tool.Registry)
-		}
-
+		row := buildSingleSearchRow(tool, toolVersions, installer)
+		widths = updateSearchColumnWidths(widths, tool, row.toolName)
 		rows = append(rows, row)
 	}
+	return rows, widths
+}
 
-	// Add padding.
+// buildSingleSearchRow creates a searchRow for a single tool.
+func buildSingleSearchRow(tool *toolchainregistry.Tool, toolVersions *toolchain.ToolVersions, installer *toolchain.Installer) searchRow {
+	toolName := fmt.Sprintf("%s/%s", tool.RepoOwner, tool.RepoName)
+	row := searchRow{
+		toolName: toolName,
+		toolType: tool.Type,
+		registry: tool.Registry,
+	}
+
+	if toolVersions != nil && toolVersions.Tools != nil {
+		row.isInConfig, row.isInstalled = checkSearchToolStatus(tool, toolVersions, installer)
+	}
+
+	row.status = getSearchStatusIndicator(row.isInstalled, row.isInConfig)
+	return row
+}
+
+// checkSearchToolStatus checks if a tool is in config and installed.
+func checkSearchToolStatus(tool *toolchainregistry.Tool, toolVersions *toolchain.ToolVersions, installer *toolchain.Installer) (inConfig, installed bool) {
+	fullName := tool.RepoOwner + "/" + tool.RepoName
+	_, foundFull := toolVersions.Tools[fullName]
+	_, foundRepo := toolVersions.Tools[tool.RepoName]
+	inConfig = foundFull || foundRepo
+
+	if !inConfig {
+		return inConfig, false
+	}
+
+	version := getSearchToolVersion(fullName, tool.RepoName, toolVersions, foundFull, foundRepo)
+	if version == "" {
+		return inConfig, false
+	}
+
+	_, err := installer.FindBinaryPath(tool.RepoOwner, tool.RepoName, version, tool.BinaryName)
+	return inConfig, err == nil
+}
+
+// getSearchToolVersion gets the version string for a tool from tool-versions.
+func getSearchToolVersion(fullName, repoName string, toolVersions *toolchain.ToolVersions, foundFull, foundRepo bool) string {
+	if foundFull {
+		if versions := toolVersions.Tools[fullName]; len(versions) > 0 {
+			return versions[0]
+		}
+	} else if foundRepo {
+		if versions := toolVersions.Tools[repoName]; len(versions) > 0 {
+			return versions[0]
+		}
+	}
+	return ""
+}
+
+// getSearchStatusIndicator returns the status indicator character based on tool state.
+func getSearchStatusIndicator(isInstalled, isInConfig bool) string {
+	switch {
+	case isInstalled:
+		return statusIndicator
+	case isInConfig:
+		return statusIndicator
+	default:
+		return " "
+	}
+}
+
+// updateSearchColumnWidths updates widths based on a tool's field lengths.
+func updateSearchColumnWidths(widths searchColumnWidths, tool *toolchainregistry.Tool, toolName string) searchColumnWidths {
+	if len(toolName) > widths.toolName {
+		widths.toolName = len(toolName)
+	}
+	if len(tool.Type) > widths.toolType {
+		widths.toolType = len(tool.Type)
+	}
+	if len(tool.Registry) > widths.registry {
+		widths.registry = len(tool.Registry)
+	}
+	return widths
+}
+
+// renderSearchTable creates and renders the search results table with styling.
+func renderSearchTable(rows []searchRow, widths searchColumnWidths) string {
 	const columnPaddingPerSide = 2
 	const totalColumnPadding = columnPaddingPerSide * 2
-	const statusPadding = 2 // Minimal padding for status column (1 char + 1 space on right).
-	statusWidth += statusPadding
-	toolNameWidth += totalColumnPadding
-	typeWidth += totalColumnPadding
-	registryWidth += totalColumnPadding
+	const statusPadding = 2
+	widths.status += statusPadding
+	widths.toolName += totalColumnPadding
+	widths.toolType += totalColumnPadding
+	widths.registry += totalColumnPadding
 
-	// Create table columns with calculated widths.
 	columns := []table.Column{
-		{Title: " ", Width: statusWidth}, // Status column.
-		{Title: "TOOL", Width: toolNameWidth},
-		{Title: "TYPE", Width: typeWidth},
-		{Title: "REGISTRY", Width: registryWidth},
+		{Title: " ", Width: widths.status},
+		{Title: "TOOL", Width: widths.toolName},
+		{Title: "TYPE", Width: widths.toolType},
+		{Title: "REGISTRY", Width: widths.registry},
 	}
 
-	// Convert rows to table format.
-	var tableRows []table.Row
+	tableRows := make([]table.Row, 0, len(rows))
 	for _, row := range rows {
-		tableRows = append(tableRows, table.Row{
-			row.status,
-			row.toolName,
-			row.toolType,
-			row.registry,
-		})
+		tableRows = append(tableRows, table.Row{row.status, row.toolName, row.toolType, row.registry})
 	}
 
-	// Create and configure table.
-	// Height = number of data rows + 1 for header row.
-	tableHeight := len(tableRows) + 1
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(tableRows),
 		table.WithFocused(false),
-		table.WithHeight(tableHeight),
+		table.WithHeight(len(tableRows)+1),
 	)
 
-	// Apply theme styles.
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
@@ -351,12 +380,9 @@ func displaySearchResults(tools []*toolchainregistry.Tool) {
 		Bold(true)
 	s.Cell = s.Cell.PaddingLeft(1).PaddingRight(1)
 	s.Selected = s.Cell
-
 	t.SetStyles(s)
 
-	// Render table and apply conditional styling.
-	styled := renderTableWithConditionalStyling(t.View(), rows)
-	_ = ui.Writeln(styled)
+	return renderTableWithConditionalStyling(t.View(), rows)
 }
 
 // SearchCommandProvider implements the CommandProvider interface for the 'toolchain registry search' command, wiring the search subcommand into the CLI framework with its associated flags and behaviors.

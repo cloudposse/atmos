@@ -15,6 +15,7 @@ import (
 const (
 	errDownloadFileFormat = "%w: '%s': %v"
 	errWrapFormat         = "%w: %v"
+	defaultFileMode       = 0o644
 )
 
 // fileDownloader handles downloading files and directories from various sources
@@ -168,7 +169,7 @@ func (fd *fileDownloader) FetchAtomic(src, dest string, mode ClientMode, timeout
 	}
 
 	// Write atomically to final destination using injected writer.
-	if writeErr := fd.atomicWriter(dest, data, 0o644); writeErr != nil {
+	if writeErr := fd.atomicWriter(dest, data, defaultFileMode); writeErr != nil {
 		return errUtils.Build(errUtils.ErrDownloadFile).
 			WithCause(writeErr).
 			WithExplanation("failed to write file atomically").

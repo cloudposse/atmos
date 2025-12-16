@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	installedIndicator      = "✓"       // Checkmark character for installed status.
-	uninstalledIndicator    = "✗"       // X mark character for uninstalled status.
+	activeIndicatorChar     = "●"       // Green dot for active/default installed version.
+	installedIndicatorChar  = "●"       // Gray dot for installed non-default version.
 	notAvailablePlaceholder = "N/A"     // Placeholder for unavailable information.
 	versionLogKey           = "version" // Log key for version information.
 	sizeLogKey              = "size"    // Log key for size information.
@@ -210,35 +210,6 @@ func printAtmosVersionTable(rows []atmosVersionRow) {
 			widths[3], row.size)
 		_ = ui.Writeln(line)
 	}
-}
-
-// buildAtmosVersionRows creates toolRow entries for installed Atmos versions.
-// Deprecated: Use buildAtmosVersionRowsSimple instead for atmos version list --installed.
-func buildAtmosVersionRows(installer *Installer, versions []string) []toolRow {
-	var rows []toolRow
-
-	for _, version := range versions {
-		// Check installation status and get binary path.
-		binaryPath, err := installer.FindBinaryPath("cloudposse", "atmos", version)
-		isInstalled := err == nil
-
-		// Get installation metadata.
-		status, installDate, size := getInstallationMetadata(binaryPath, isInstalled)
-
-		rows = append(rows, toolRow{
-			alias:       "",
-			registry:    "cloudposse/atmos",
-			binary:      "atmos",
-			version:     version,
-			status:      status,
-			installDate: installDate,
-			size:        size,
-			isDefault:   false,
-			isInstalled: isInstalled,
-		})
-	}
-
-	return rows
 }
 
 // RunList prints a table of tools from .tool-versions, marking installed/default versions.

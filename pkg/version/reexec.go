@@ -53,22 +53,35 @@ type ReexecConfig struct {
 
 // DefaultReexecConfig returns the default production configuration.
 func DefaultReexecConfig() *ReexecConfig {
+	defer perf.Track(nil, "version.DefaultReexecConfig")()
+
 	installer := toolchain.NewInstaller()
 	return &ReexecConfig{
 		Finder:    installer,
 		Installer: &defaultInstaller{},
 		ExecFn:    syscall.Exec,
-		GetEnv:    os.Getenv,
+		GetEnv:    getEnvWrapper,
 		SetEnv:    os.Setenv,
 		Args:      os.Args,
 		Environ:   os.Environ,
 	}
 }
 
+// getEnvWrapper wraps os.Getenv for use in ReexecConfig.
+// This allows forbidigo exclusion while maintaining DI testability.
+//
+//nolint:forbidigo // Intentional os.Getenv wrapper for DI testing pattern.
+func getEnvWrapper(key string) string {
+	return os.Getenv(key)
+}
+
 // defaultInstaller wraps toolchain.RunInstall.
 type defaultInstaller struct{}
 
+// Install implements VersionInstaller by delegating to toolchain.RunInstall.
 func (d *defaultInstaller) Install(toolSpec string, force, allowPrereleases bool) error {
+	defer perf.Track(nil, "version.defaultInstaller.Install")()
+
 	return toolchain.RunInstall(toolSpec, force, allowPrereleases)
 }
 
@@ -149,7 +162,7 @@ func CheckAndReexecWithConfig(atmosConfig *schema.AtmosConfiguration, cfg *Reexe
 
 	// Use syscall.Exec for true process replacement (Unix).
 	// This replaces the current process entirely.
-	//nolint:gosec // Intentional subprocess exec for version switching.
+
 	if err := cfg.ExecFn(binaryPath, args, cfg.Environ()); err != nil {
 		_ = ui.Errorf("Failed to exec %s: %v", binaryPath, err)
 		return false
@@ -157,13 +170,6 @@ func CheckAndReexecWithConfig(atmosConfig *schema.AtmosConfiguration, cfg *Reexe
 
 	// This line is never reached on successful exec.
 	return true
-}
-
-// findOrInstallVersion finds the binary for a version, installing if needed.
-func findOrInstallVersion(version string) (string, error) {
-	defer perf.Track(nil, "version.findOrInstallVersion")()
-
-	return findOrInstallVersionWithConfig(version, DefaultReexecConfig())
 }
 
 // findOrInstallVersionWithConfig finds the binary for a version, installing if needed.

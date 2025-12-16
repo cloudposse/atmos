@@ -247,146 +247,175 @@ func listRegistryTools(ctx context.Context, registryName string, opts *ListOptio
 func buildToolsTable(tools []*toolchainregistry.Tool) string {
 	defer perf.Track(nil, "registry.buildToolsTable")()
 
-	// Get terminal width.
+	width := getTerminalWidthOrDefault()
+	toolVersions, installer := loadToolVersionsAndInstaller()
+	rows, widths := buildToolRows(tools, toolVersions, installer)
+	widths = applyColumnPaddingAndTruncation(widths, width)
+
+	return renderToolsTable(rows, widths)
+}
+
+// getTerminalWidthOrDefault returns the terminal width or a default value.
+func getTerminalWidthOrDefault() int {
 	width, _, err := term.GetSize(int(os.Stdout.Fd()))
 	if err != nil || width == 0 {
-		width = defaultTerminalWidth
+		return defaultTerminalWidth
 	}
+	return width
+}
 
-	// Load tool versions to check installation status.
+// loadToolVersionsAndInstaller loads tool versions and creates an installer.
+func loadToolVersionsAndInstaller() (*toolchain.ToolVersions, *toolchain.Installer) {
 	installer := toolchain.NewInstaller()
 	toolVersionsFile := toolchain.GetToolVersionsFilePath()
 	toolVersions, err := toolchain.LoadToolVersions(toolVersionsFile)
 	if err != nil && !os.IsNotExist(err) {
-		// If there's an error other than file not found, log it but continue.
 		_ = ui.Warningf("Could not load .tool-versions: %v", err)
 	}
+	return toolVersions, installer
+}
 
-	// Build row data with installation status.
-	var rows []toolRow
-	statusWidth := 1 // For single dot character.
-	ownerWidth := len("OWNER")
-	repoWidth := len("REPO")
-	typeWidth := len("TYPE")
+// columnWidths holds the calculated widths for each table column.
+type columnWidths struct {
+	status int
+	owner  int
+	repo   int
+	tType  int
+}
 
-	// Check each tool's installation and configuration status.
+// buildToolRows processes tools and returns rows with column widths.
+func buildToolRows(tools []*toolchainregistry.Tool, toolVersions *toolchain.ToolVersions, installer *toolchain.Installer) ([]toolRow, columnWidths) {
+	widths := columnWidths{
+		status: 1, // For single dot character.
+		owner:  len("OWNER"),
+		repo:   len("REPO"),
+		tType:  len("TYPE"),
+	}
+
+	rows := make([]toolRow, 0, len(tools))
 	for _, tool := range tools {
-		row := toolRow{
-			owner:    tool.RepoOwner,
-			repo:     tool.RepoName,
-			toolType: tool.Type,
-		}
-
-		// Check if tool is in configuration.
-		if toolVersions != nil && toolVersions.Tools != nil {
-			// Check both full name and repo name as alias.
-			fullName := tool.RepoOwner + "/" + tool.RepoName
-			_, foundFull := toolVersions.Tools[fullName]
-			_, foundRepo := toolVersions.Tools[tool.RepoName]
-			row.isInConfig = foundFull || foundRepo
-
-			// Check if installed (only if in config).
-			if row.isInConfig {
-				// Get the version from tool-versions.
-				var version string
-				if foundFull {
-					versions := toolVersions.Tools[fullName]
-					if len(versions) > 0 {
-						version = versions[0]
-					}
-				} else if foundRepo {
-					versions := toolVersions.Tools[tool.RepoName]
-					if len(versions) > 0 {
-						version = versions[0]
-					}
-				}
-
-				// Check if binary exists.
-				if version != "" {
-					_, err := installer.FindBinaryPath(tool.RepoOwner, tool.RepoName, version, tool.BinaryName)
-					row.isInstalled = err == nil
-				}
-			}
-		}
-
-		// Set status indicator.
-		switch {
-		case row.isInstalled:
-			row.status = statusIndicator // Green dot (will be colored later).
-		case row.isInConfig:
-			row.status = statusIndicator // Gray dot (will be colored later).
-		default:
-			row.status = " " // No indicator.
-		}
-
-		// Update column widths.
-		if len(tool.RepoOwner) > ownerWidth {
-			ownerWidth = len(tool.RepoOwner)
-		}
-		if len(tool.RepoName) > repoWidth {
-			repoWidth = len(tool.RepoName)
-		}
-		if len(tool.Type) > typeWidth {
-			typeWidth = len(tool.Type)
-		}
-
+		row := buildSingleToolRow(tool, toolVersions, installer)
+		widths = updateColumnWidths(widths, tool)
 		rows = append(rows, row)
 	}
+	return rows, widths
+}
 
-	// Add padding.
-	const statusPadding = 2 // Minimal padding for status column (1 char + 1 space on right)
-	ownerWidth += totalColumnPadding
-	repoWidth += totalColumnPadding
-	typeWidth += totalColumnPadding
-	statusWidth += statusPadding
-
-	// Calculate total width needed.
-	totalNeededWidth := statusWidth + ownerWidth + repoWidth + typeWidth
-
-	// If screen is narrow, truncate columns proportionally.
-	if totalNeededWidth > width {
-		excess := totalNeededWidth - width
-
-		// Truncate proportionally, but keep minimums.
-		ownerReduce := min(excess*3/10, ownerWidth-minColumnWidthOwner)
-		repoReduce := min(excess*5/10, repoWidth-minColumnWidthRepo)
-		typeReduce := min(excess*2/10, typeWidth-minColumnWidthType)
-
-		ownerWidth -= ownerReduce
-		repoWidth -= repoReduce
-		typeWidth -= typeReduce
+// buildSingleToolRow creates a toolRow for a single tool.
+func buildSingleToolRow(tool *toolchainregistry.Tool, toolVersions *toolchain.ToolVersions, installer *toolchain.Installer) toolRow {
+	row := toolRow{
+		owner:    tool.RepoOwner,
+		repo:     tool.RepoName,
+		toolType: tool.Type,
 	}
 
-	// Create table columns with calculated widths.
+	if toolVersions != nil && toolVersions.Tools != nil {
+		row.isInConfig, row.isInstalled = checkToolStatus(tool, toolVersions, installer)
+	}
+
+	row.status = getStatusIndicator(row.isInstalled, row.isInConfig)
+	return row
+}
+
+// checkToolStatus checks if a tool is in config and installed.
+func checkToolStatus(tool *toolchainregistry.Tool, toolVersions *toolchain.ToolVersions, installer *toolchain.Installer) (inConfig, installed bool) {
+	fullName := tool.RepoOwner + "/" + tool.RepoName
+	_, foundFull := toolVersions.Tools[fullName]
+	_, foundRepo := toolVersions.Tools[tool.RepoName]
+	inConfig = foundFull || foundRepo
+
+	if !inConfig {
+		return inConfig, false
+	}
+
+	version := getToolVersion(fullName, tool.RepoName, toolVersions, foundFull, foundRepo)
+	if version == "" {
+		return inConfig, false
+	}
+
+	_, err := installer.FindBinaryPath(tool.RepoOwner, tool.RepoName, version, tool.BinaryName)
+	return inConfig, err == nil
+}
+
+// getToolVersion gets the version string for a tool from tool-versions.
+func getToolVersion(fullName, repoName string, toolVersions *toolchain.ToolVersions, foundFull, foundRepo bool) string {
+	if foundFull {
+		if versions := toolVersions.Tools[fullName]; len(versions) > 0 {
+			return versions[0]
+		}
+	} else if foundRepo {
+		if versions := toolVersions.Tools[repoName]; len(versions) > 0 {
+			return versions[0]
+		}
+	}
+	return ""
+}
+
+// getStatusIndicator returns the status indicator character based on tool state.
+func getStatusIndicator(isInstalled, isInConfig bool) string {
+	switch {
+	case isInstalled:
+		return statusIndicator
+	case isInConfig:
+		return statusIndicator
+	default:
+		return " "
+	}
+}
+
+// updateColumnWidths updates widths based on a tool's field lengths.
+func updateColumnWidths(widths columnWidths, tool *toolchainregistry.Tool) columnWidths {
+	if len(tool.RepoOwner) > widths.owner {
+		widths.owner = len(tool.RepoOwner)
+	}
+	if len(tool.RepoName) > widths.repo {
+		widths.repo = len(tool.RepoName)
+	}
+	if len(tool.Type) > widths.tType {
+		widths.tType = len(tool.Type)
+	}
+	return widths
+}
+
+// applyColumnPaddingAndTruncation adds padding and truncates if needed.
+func applyColumnPaddingAndTruncation(widths columnWidths, termWidth int) columnWidths {
+	const statusPadding = 2
+	widths.owner += totalColumnPadding
+	widths.repo += totalColumnPadding
+	widths.tType += totalColumnPadding
+	widths.status += statusPadding
+
+	totalNeeded := widths.status + widths.owner + widths.repo + widths.tType
+	if totalNeeded > termWidth {
+		excess := totalNeeded - termWidth
+		widths.owner -= min(excess*3/10, widths.owner-minColumnWidthOwner)
+		widths.repo -= min(excess*5/10, widths.repo-minColumnWidthRepo)
+		widths.tType -= min(excess*2/10, widths.tType-minColumnWidthType)
+	}
+	return widths
+}
+
+// renderToolsTable creates and renders the table with styling.
+func renderToolsTable(rows []toolRow, widths columnWidths) string {
 	columns := []table.Column{
-		{Title: " ", Width: statusWidth}, // Status column.
-		{Title: "OWNER", Width: ownerWidth},
-		{Title: "REPO", Width: repoWidth},
-		{Title: "TYPE", Width: typeWidth},
+		{Title: " ", Width: widths.status},
+		{Title: "OWNER", Width: widths.owner},
+		{Title: "REPO", Width: widths.repo},
+		{Title: "TYPE", Width: widths.tType},
 	}
 
-	// Convert rows to table format.
-	var tableRows []table.Row
+	tableRows := make([]table.Row, 0, len(rows))
 	for _, row := range rows {
-		tableRows = append(tableRows, table.Row{
-			row.status,
-			row.owner,
-			row.repo,
-			row.toolType,
-		})
+		tableRows = append(tableRows, table.Row{row.status, row.owner, row.repo, row.toolType})
 	}
 
-	// Create and configure table.
-	// Height = number of data rows + 1 for header row.
-	tableHeight := len(tableRows) + 1
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows(tableRows),
 		table.WithFocused(false),
-		table.WithHeight(tableHeight),
+		table.WithHeight(len(tableRows)+1),
 	)
 
-	// Apply theme styles.
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
@@ -395,10 +424,8 @@ func buildToolsTable(tools []*toolchainregistry.Tool) string {
 		Bold(true)
 	s.Cell = s.Cell.PaddingLeft(1).PaddingRight(1)
 	s.Selected = s.Cell
-
 	t.SetStyles(s)
 
-	// Render table and apply conditional styling.
 	return renderTableWithConditionalStyling(t.View(), rows)
 }
 

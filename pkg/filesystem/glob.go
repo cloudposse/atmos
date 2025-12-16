@@ -45,7 +45,8 @@ func GetGlobMatches(pattern string) ([]string, error) {
 		if !ok {
 			// If assertion fails, invalidate cache and fall through to recompute.
 			getGlobMatchesSyncMap.Delete(normalizedPattern)
-		} else {
+		}
+		if ok {
 			// Return a clone to prevent callers from mutating the cached slice.
 			result := make([]string, len(cached))
 			copy(result, cached)

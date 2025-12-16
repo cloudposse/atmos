@@ -61,7 +61,7 @@ func calculateColumnWidths(rows []toolRow, terminalWidth int) columnWidths {
 // calculateContentWidths finds the maximum width needed for each column based on row content.
 func calculateContentWidths(rows []toolRow) columnWidths {
 	widths := columnWidths{
-		status: 2, // Just enough for ✓/✗ symbols.
+		status: 2, // Just enough for dot indicator.
 	}
 
 	for _, row := range rows {
@@ -101,7 +101,7 @@ func ensureMinimumHeaderWidths(widths columnWidths) columnWidths {
 		headerRegistryWidth    = len("REGISTRY")
 		headerBinaryWidth      = len("BINARY")
 		headerVersionWidth     = len("VERSION")
-		headerStatusWidth      = len("INSTALLED")
+		headerStatusWidth      = 2 // Empty header, just need space for dot.
 		headerInstallDateWidth = len("INSTALL DATE")
 		headerSizeWidth        = len("SIZE")
 	)
@@ -182,11 +182,11 @@ func truncateColumnsProportionally(widths columnWidths, excess int) columnWidths
 // createTableColumns creates Bubble Tea table columns from calculated widths.
 func createTableColumns(widths columnWidths) []table.Column {
 	return []table.Column{
+		{Title: "", Width: widths.status}, // Status indicator column (dots).
 		{Title: "ALIAS", Width: widths.alias},
 		{Title: "REGISTRY", Width: widths.registry},
 		{Title: "BINARY", Width: widths.binary},
 		{Title: "VERSION", Width: widths.version},
-		{Title: "INSTALLED", Width: widths.status},
 		{Title: "INSTALL DATE", Width: widths.installDate},
 		{Title: "SIZE", Width: widths.size},
 	}
@@ -195,6 +195,10 @@ func createTableColumns(widths columnWidths) []table.Column {
 // convertRowsToTableFormat converts toolRow structs to Bubble Tea table.Row format.
 func convertRowsToTableFormat(rows []toolRow) []table.Row {
 	var tableRows []table.Row
+
+	// Styles for status indicators.
+	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))   // Green for active/default.
+	installedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")) // Gray for installed non-default.
 
 	for i, row := range rows {
 		// Debug: log the row data.
@@ -214,12 +218,23 @@ func convertRowsToTableFormat(rows []toolRow) []table.Row {
 			log.Debug("WARNING: Empty size for row", "index", i, "tool", row.alias)
 		}
 
+		// Style the status indicator based on install state and default status.
+		styledStatus := row.status
+		if row.isInstalled {
+			if row.isDefault {
+				styledStatus = activeStyle.Render(row.status) // Green dot for active/default.
+			} else {
+				styledStatus = installedStyle.Render(row.status) // Gray dot for installed non-default.
+			}
+		}
+		// If not installed, status is empty string (no dot).
+
 		tableRows = append(tableRows, table.Row{
+			styledStatus, // Status indicator first.
 			row.alias,
 			row.registry,
 			row.binary,
 			row.version,
-			row.status,
 			row.installDate,
 			row.size,
 		})

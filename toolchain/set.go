@@ -80,123 +80,135 @@ func (m *versionListModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch keypress := msg.String(); keypress {
-		case "ctrl+c", "q":
-			return m, tea.Quit
-		case "tab":
-			// Toggle focus between list and viewport
-			if m.focused == focusList {
-				m.focused = focusViewport
-			} else {
-				m.focused = focusList
-			}
-			return m, nil
-		case "enter":
-			// Enter should work regardless of focus - select the current item
-			if m.list.SelectedItem() != nil {
-				selectedItem := m.list.SelectedItem().(versionItem)
-				m.selected = selectedItem.version
-				return m, tea.Quit
-			}
+		if model, cmd, handled := m.handleKeyMsg(msg); handled {
+			return model, cmd
 		}
 	case tea.WindowSizeMsg:
-		// Calculate split layout - make version column narrower
-		leftWidth := msg.Width / 4              // Version column takes 1/4 of width (smaller)
-		rightWidth := msg.Width - leftWidth - 2 // Account for separator only
-
-		// Calculate height accounting for page title and borders - ensure it fits on screen
-		contentHeight := msg.Height - versionListUIReservedHeight // Subtract for title, borders, and status bar
-
-		// Update list size with more height to show more items, but ensure it fits
-		m.list.SetSize(leftWidth-2, contentHeight)
-
-		// Update viewport size to use full available width and fit on screen
-		m.viewport.Width = rightWidth - 2 // Account for border
-		m.viewport.Height = contentHeight
-
-		// Update release notes for currently selected item
-		if m.list.SelectedItem() != nil {
-			selectedItem := m.list.SelectedItem().(versionItem)
-			currentIndex := m.list.Index()
-
-			// Only update content if the selection actually changed
-			if currentIndex != m.currentItemIndex {
-				renderedNotes := renderMarkdown(selectedItem.releaseNotes, m.viewport.Width)
-				// Set content without width styling to use full available width
-				m.viewport.SetContent(renderedNotes)
-				m.currentItemIndex = currentIndex
-			}
-		}
+		m.handleWindowSizeMsg(msg)
 	}
 
+	cmd := m.updateListComponent(msg)
+	m.updateViewportContent()
+	vpCmd := m.updateViewportComponent(msg)
+
+	return m, tea.Batch(cmd, vpCmd)
+}
+
+// handleKeyMsg handles keyboard input and returns (model, cmd, handled).
+func (m *versionListModel) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
+	switch msg.String() {
+	case "ctrl+c", "q":
+		return m, tea.Quit, true
+	case "tab":
+		m.toggleFocus()
+		return m, nil, true
+	case "enter":
+		if m.list.SelectedItem() != nil {
+			selectedItem := m.list.SelectedItem().(versionItem)
+			m.selected = selectedItem.version
+			return m, tea.Quit, true
+		}
+	}
+	return m, nil, false
+}
+
+// toggleFocus switches focus between list and viewport.
+func (m *versionListModel) toggleFocus() {
+	if m.focused == focusList {
+		m.focused = focusViewport
+	} else {
+		m.focused = focusList
+	}
+}
+
+// handleWindowSizeMsg handles window resize events.
+func (m *versionListModel) handleWindowSizeMsg(msg tea.WindowSizeMsg) {
+	leftWidth := msg.Width / 4
+	rightWidth := msg.Width - leftWidth - 2
+	contentHeight := msg.Height - versionListUIReservedHeight
+
+	m.list.SetSize(leftWidth-2, contentHeight)
+	m.viewport.Width = rightWidth - 2
+	m.viewport.Height = contentHeight
+	m.updateViewportContent()
+}
+
+// updateListComponent updates the list component based on focus.
+func (m *versionListModel) updateListComponent(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
-	// Update list only if it has focus, or for window size changes
 	if m.focused == focusList {
 		m.list, cmd = m.list.Update(msg)
 	} else {
-		// Still handle window size for layout, but don't process navigation keys
 		m.list, cmd = m.list.Update(tea.WindowSizeMsg{})
 	}
+	return cmd
+}
 
-	// Update viewport when list selection changes (regardless of focus)
-	if m.list.SelectedItem() != nil {
-		selectedItem := m.list.SelectedItem().(versionItem)
-		currentIndex := m.list.Index()
+// updateViewportContent updates viewport content when selection changes.
+func (m *versionListModel) updateViewportContent() {
+	if m.list.SelectedItem() == nil {
+		return
+	}
+	selectedItem := m.list.SelectedItem().(versionItem)
+	currentIndex := m.list.Index()
+	if currentIndex != m.currentItemIndex {
+		renderedNotes := renderMarkdown(selectedItem.releaseNotes, m.viewport.Width)
+		m.viewport.SetContent(renderedNotes)
+		m.currentItemIndex = currentIndex
+	}
+}
 
-		// Only update content if the selection actually changed
-		if currentIndex != m.currentItemIndex {
-			renderedNotes := renderMarkdown(selectedItem.releaseNotes, m.viewport.Width)
-			// Set content without width styling to use full available width
-			m.viewport.SetContent(renderedNotes)
-			m.currentItemIndex = currentIndex
+// updateViewportComponent handles viewport scrolling and updates.
+func (m *versionListModel) updateViewportComponent(msg tea.Msg) tea.Cmd {
+	if m.focused != "viewport" {
+		var vpCmd tea.Cmd
+		m.viewport, vpCmd = m.viewport.Update(tea.WindowSizeMsg{})
+		return vpCmd
+	}
+
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if m.handleViewportKeyMsg(keyMsg) {
+			return nil
 		}
 	}
 
-	// Handle viewport scrolling - only if viewport has focus
 	var vpCmd tea.Cmd
-	if m.focused == "viewport" {
-		// Apply custom scroll speed for arrow keys and page up/down
-		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			switch keyMsg.String() {
-			case "up", "k":
-				// Scroll up by scroll speed amount
-				for i := 0; i < m.scrollSpeed; i++ {
-					m.viewport.ScrollUp(1)
-				}
-				return m, nil
-			case "down", "j":
-				// Scroll down by scroll speed amount
-				for i := 0; i < m.scrollSpeed; i++ {
-					m.viewport.ScrollDown(1)
-				}
-				return m, nil
-			case "pgup":
-				// Page up by scroll speed amount
-				for i := 0; i < m.scrollSpeed; i++ {
-					m.viewport.PageUp()
-				}
-				return m, nil
-			case "pgdown":
-				// Page down by scroll speed amount
-				for i := 0; i < m.scrollSpeed; i++ {
-					m.viewport.PageDown()
-				}
-				return m, nil
-			case "home", "g":
-				m.viewport.GotoTop()
-				return m, nil
-			case "end", "G":
-				m.viewport.GotoBottom()
-				return m, nil
-			}
-		}
-		// For mouse wheel and other events, use normal viewport behavior
-		m.viewport, vpCmd = m.viewport.Update(msg)
-	} else {
-		m.viewport, vpCmd = m.viewport.Update(tea.WindowSizeMsg{}) // Still handle window size for layout
-	}
+	m.viewport, vpCmd = m.viewport.Update(msg)
+	return vpCmd
+}
 
-	return m, tea.Batch(cmd, vpCmd)
+// handleViewportKeyMsg handles keyboard input for viewport scrolling.
+// Returns true if the key was handled.
+func (m *versionListModel) handleViewportKeyMsg(msg tea.KeyMsg) bool {
+	switch msg.String() {
+	case "up", "k":
+		for i := 0; i < m.scrollSpeed; i++ {
+			m.viewport.ScrollUp(1)
+		}
+		return true
+	case "down", "j":
+		for i := 0; i < m.scrollSpeed; i++ {
+			m.viewport.ScrollDown(1)
+		}
+		return true
+	case "pgup":
+		for i := 0; i < m.scrollSpeed; i++ {
+			m.viewport.PageUp()
+		}
+		return true
+	case "pgdown":
+		for i := 0; i < m.scrollSpeed; i++ {
+			m.viewport.PageDown()
+		}
+		return true
+	case "home", "g":
+		m.viewport.GotoTop()
+		return true
+	case "end", "G":
+		m.viewport.GotoBottom()
+		return true
+	}
+	return false
 }
 
 func (m *versionListModel) View() string {

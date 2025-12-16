@@ -23,6 +23,9 @@ const (
 	// MaxErrorBodySize limits how much of an HTTP error response body to include in error messages.
 	// This prevents log pollution and potential exposure of large sensitive payloads.
 	maxErrorBodySize = 64 * 1024 // 64 KB
+
+	// defaultTimeoutSeconds is the default HTTP client timeout.
+	defaultTimeoutSeconds = 30
 )
 
 // Client defines the interface for making HTTP requests.
@@ -84,7 +87,7 @@ func NewDefaultClient(opts ...ClientOption) *DefaultClient {
 
 	client := &DefaultClient{
 		client: &http.Client{
-			Timeout: 30 * time.Second, // Default timeout
+			Timeout: defaultTimeoutSeconds * time.Second,
 		},
 	}
 

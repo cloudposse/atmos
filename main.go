@@ -31,6 +31,13 @@ func main() {
 	// Disable timestamp in logs so snapshots work. We will address this in a future PR updating styles, etc.
 	log.Default().SetReportTimestamp(false)
 
+	// Run the application and exit with the appropriate code.
+	os.Exit(run())
+}
+
+// run executes the main application logic and returns an exit code.
+// This separation allows proper cleanup via defer before os.Exit in main().
+func run() int {
 	// Ensure cleanup happens on normal exit.
 	defer cmd.Cleanup()
 
@@ -47,13 +54,13 @@ func main() {
 			os.Stderr.WriteString("Hints:\n")
 			os.Stderr.WriteString("  - Use --version to display the current Atmos version\n")
 			os.Stderr.WriteString("  - Use --use-version to run a command with a specific Atmos version\n\n")
-			os.Exit(1)
+			return 1
 		}
 		err := cmd.ExecuteVersion()
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
-		return // Exit normally after printing version
+		return 0 // Exit normally after printing version
 	}
 
 	err := cmd.Execute()
@@ -65,8 +72,10 @@ func main() {
 		// Extract and use the correct exit code.
 		exitCode := errUtils.GetExitCode(err)
 		log.Debug("Exiting with exit code", "code", exitCode)
-		errUtils.Exit(exitCode)
+		return exitCode
 	}
+
+	return 0
 }
 
 // hasVersionFlag checks if --version flag is present in args.

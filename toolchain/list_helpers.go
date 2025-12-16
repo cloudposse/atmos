@@ -148,21 +148,22 @@ func buildToolRow(installer *Installer, info toolRowInfo) toolRow {
 }
 
 // getInstallationMetadata retrieves status, install date, and size for a binary.
+// Status is empty string for not installed (no indicator shown).
 func getInstallationMetadata(binaryPath string, isInstalled bool) (status, installDate, size string) {
-	status = uninstalledIndicator
+	status = "" // Empty for not installed - no dot shown.
 	installDate = notAvailablePlaceholder
 	size = notAvailablePlaceholder
 
 	if !isInstalled {
-		return
+		return status, installDate, size
 	}
 
-	status = installedIndicator
+	status = installedIndicatorChar // Will be styled later based on isDefault.
 	fileInfo, err := os.Stat(binaryPath)
 	if err != nil {
 		// Debug: log the error.
 		log.Debug("Failed to get file info", "path", binaryPath, "error", err)
-		return
+		return status, installDate, size
 	}
 
 	size = formatFileSize(fileInfo.Size())
@@ -171,7 +172,7 @@ func getInstallationMetadata(binaryPath string, isInstalled bool) (status, insta
 	// Debug: log the file size.
 	log.Debug("File size calculated", "path", binaryPath, sizeLogKey, size, "raw_size", fileInfo.Size())
 
-	return
+	return status, installDate, size
 }
 
 // sortToolRows sorts rows by registry, then by semantic version (newest first).
