@@ -135,7 +135,7 @@ func (s *Service) Provision(
 	}
 
 	// 4. Store workdir path for terraform execution.
-	componentConfig["_workdir_path"] = workdirPath
+	componentConfig[WorkdirPathKey] = workdirPath
 
 	_ = ui.Success(fmt.Sprintf("Workdir provisioned: %s", workdirPath))
 	return nil

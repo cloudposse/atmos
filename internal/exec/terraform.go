@@ -24,7 +24,7 @@ import (
 	// Import backend provisioner to register S3 provisioner.
 	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
 	// Import workdir provisioner to register workdir provisioner.
-	_ "github.com/cloudposse/atmos/pkg/provisioner/workdir"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 )
 
 const (
@@ -406,7 +406,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 
 		// Check if workdir provisioner set a workdir path - if so, use it instead of the component path.
-		if workdirPath, ok := info.ComponentSection["_workdir_path"].(string); ok && workdirPath != "" {
+		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
 			componentPath = workdirPath
 		}
 
@@ -513,7 +513,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 
 		// Check if workdir provisioner set a workdir path - if so, use it instead of the component path.
-		if workdirPath, ok := info.ComponentSection["_workdir_path"].(string); ok && workdirPath != "" {
+		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
 			componentPath = workdirPath
 		}
 

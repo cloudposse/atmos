@@ -51,7 +51,7 @@ func TestProvisionWorkdir_NoActivation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify no workdir path was set.
-	_, ok := componentConfig["_workdir_path"]
+	_, ok := componentConfig[WorkdirPathKey]
 	assert.False(t, ok, "workdir path should not be set when not activated")
 }
 
@@ -92,7 +92,7 @@ func TestProvisionWorkdir_WithMetadataWorkdir(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify workdir path was set.
-	workdirPath, ok := componentConfig["_workdir_path"].(string)
+	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	assert.True(t, ok, "workdir path should be set")
 	assert.Contains(t, workdirPath, ".workdir")
 	assert.Contains(t, workdirPath, "test-component")
@@ -154,7 +154,7 @@ func TestService_Provision_WithMockFileSystem(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify workdir path was set.
-	workdirPath, ok := componentConfig["_workdir_path"].(string)
+	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	assert.True(t, ok)
 	assert.Equal(t, expectedWorkdir, workdirPath)
 }
@@ -212,7 +212,7 @@ func TestService_Provision_WithRemoteSource(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify workdir path was set.
-	workdirPath, ok := componentConfig["_workdir_path"].(string)
+	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	assert.True(t, ok)
 	assert.Equal(t, expectedWorkdir, workdirPath)
 }
@@ -275,7 +275,7 @@ func TestService_Provision_DownloadsWhenNotCached(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify workdir path was set.
-	workdirPath, ok := componentConfig["_workdir_path"].(string)
+	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	assert.True(t, ok)
 	assert.Equal(t, expectedWorkdir, workdirPath)
 }
@@ -332,19 +332,19 @@ func TestCleanAllWorkdirs(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "all workdirs should be removed")
 }
 
-// TestWorkdirPathOverride tests that the _workdir_path is correctly used
+// TestWorkdirPathOverride tests that the WorkdirPathKey is correctly used
 // to override the component path in terraform execution.
 func TestWorkdirPathOverride(t *testing.T) {
-	// This test verifies the logic that checks for _workdir_path.
+	// This test verifies the logic that checks for WorkdirPathKey.
 	componentConfig := map[string]any{
-		"component":     "vpc",
-		"_workdir_path": "/path/to/workdir/terraform/vpc",
+		"component":    "vpc",
+		WorkdirPathKey: "/path/to/workdir/terraform/vpc",
 	}
 
 	// Simulate the check from terraform.go.
 	componentPath := "/original/components/terraform/vpc"
 
-	if workdirPath, ok := componentConfig["_workdir_path"].(string); ok && workdirPath != "" {
+	if workdirPath, ok := componentConfig[WorkdirPathKey].(string); ok && workdirPath != "" {
 		componentPath = workdirPath
 	}
 
@@ -352,7 +352,7 @@ func TestWorkdirPathOverride(t *testing.T) {
 }
 
 // TestWorkdirPathOverride_NotSet verifies the original path is used when
-// _workdir_path is not set.
+// WorkdirPathKey is not set.
 func TestWorkdirPathOverride_NotSet(t *testing.T) {
 	componentConfig := map[string]any{
 		"component": "vpc",
@@ -361,7 +361,7 @@ func TestWorkdirPathOverride_NotSet(t *testing.T) {
 	// Simulate the check from terraform.go.
 	componentPath := "/original/components/terraform/vpc"
 
-	if workdirPath, ok := componentConfig["_workdir_path"].(string); ok && workdirPath != "" {
+	if workdirPath, ok := componentConfig[WorkdirPathKey].(string); ok && workdirPath != "" {
 		componentPath = workdirPath
 	}
 
@@ -369,17 +369,17 @@ func TestWorkdirPathOverride_NotSet(t *testing.T) {
 }
 
 // TestWorkdirPathOverride_EmptyString verifies the original path is used when
-// _workdir_path is an empty string.
+// WorkdirPathKey is an empty string.
 func TestWorkdirPathOverride_EmptyString(t *testing.T) {
 	componentConfig := map[string]any{
-		"component":     "vpc",
-		"_workdir_path": "",
+		"component":    "vpc",
+		WorkdirPathKey: "",
 	}
 
 	// Simulate the check from terraform.go.
 	componentPath := "/original/components/terraform/vpc"
 
-	if workdirPath, ok := componentConfig["_workdir_path"].(string); ok && workdirPath != "" {
+	if workdirPath, ok := componentConfig[WorkdirPathKey].(string); ok && workdirPath != "" {
 		componentPath = workdirPath
 	}
 

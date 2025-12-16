@@ -153,4 +153,9 @@ const (
 const (
 	// ComponentKey is the key used to access component name in configuration.
 	ComponentKey = "component"
+
+	// WorkdirPathKey is the key used to store/retrieve the workdir path in component configuration.
+	// This is set by the workdir provisioner and checked by terraform execution to override
+	// the component path with the workdir path.
+	WorkdirPathKey = "_workdir_path"
 )
