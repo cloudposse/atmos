@@ -38,6 +38,8 @@ atmos terraform generate planfile component1 -s plat-ue2-prod --format=yaml
 atmos terraform generate planfile <component> -s <stack> --file=planfile.json
 atmos terraform generate planfile <component> -s <stack> --format=yaml --file=planfiles/planfile.yaml
 atmos terraform generate planfile <component> -s <stack> --file=/Users/me/Documents/atmos/infra/planfile.json
+atmos terraform generate planfile <component> -s <stack> --output-path=planfiles
+atmos terraform generate planfile <component> -s <stack> -o /tmp/planfiles
 ```
 
 ## Arguments
@@ -87,6 +89,26 @@ atmos terraform generate planfile <component> -s <stack> --file=/Users/me/Docume
         ```shell
         atmos terraform generate planfile <component> -s <stack> --file=planfile.json
         atmos terraform generate planfile <component> -s <stack> --format=yaml --file=planfiles/planfile.yaml
+        ```
+    </dd>
+
+    <dt>`--output-path` <em>(alias `-o`)</em> <em>(optional)</em></dt>
+    <dd>
+        Output path where the planfile will be generated using the default naming convention
+        (`{stack}-{component}.planfile.{format}`).
+
+        This flag is mutually exclusive with `--file`. Use `--output-path` when you want to specify
+        a custom output location but keep the default filename.
+
+        Supports absolute and relative paths. Relative paths are resolved from the component directory.
+        Directories are created automatically if they don't exist.
+
+        ```shell
+        # Generate in a relative subdirectory
+        atmos terraform generate planfile <component> -s <stack> --output-path=planfiles
+
+        # Generate in an absolute directory
+        atmos terraform generate planfile <component> -s <stack> --output-path=/tmp/planfiles
         ```
     </dd>
 
