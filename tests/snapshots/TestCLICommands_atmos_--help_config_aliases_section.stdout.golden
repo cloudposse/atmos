@@ -27,6 +27,7 @@ AVAILABLE COMMANDS
       describe [command]      Show details about Atmos configurations and components
       devcontainer [command]  Manage development containers
       docs [command]          Open Atmos documentation or display component-specific docs
+      env                     Output environment variables configured in atmos.yaml
       helmfile [command]      Manage Helmfile-based Kubernetes deployments
       help                    Help about any command
       list [command]          List available stacks and components
@@ -34,7 +35,7 @@ AVAILABLE COMMANDS
       pro [command]           Access premium features integrated with atmos-pro.com
       profile [command]       Manage configuration profiles
       support                 Show Atmos support options
-      terraform [command]     Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations
+      terraform [command]     Execute Terraform commands using Atmos stack configurations
       theme [command]         Manage terminal themes for Atmos CLI
       validate [command]      Validate configurations against OPA policies and JSON schemas
       vendor [command]        Manage external dependencies for components or stacks

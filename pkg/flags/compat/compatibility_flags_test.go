@@ -726,6 +726,84 @@ func buildTestCompatibilityTranslator() *CompatibilityFlagTranslator {
 	})
 }
 
+// TestCompatibilityFlagTranslator_TerraformGlobalFlags tests that global terraform flags
+// (-version, -help, -chdir) are correctly identified and separated.
+func TestCompatibilityFlagTranslator_TerraformGlobalFlags(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected translationResult
+	}{
+		{
+			name:  "terraform -version → separated args",
+			input: []string{"-version"},
+			expected: translationResult{
+				atmosArgs:     []string{},
+				separatedArgs: []string{"-version"},
+			},
+		},
+		{
+			name:  "terraform -help → separated args",
+			input: []string{"-help"},
+			expected: translationResult{
+				atmosArgs:     []string{},
+				separatedArgs: []string{"-help"},
+			},
+		},
+		{
+			name:  "terraform -chdir=/tmp → separated args",
+			input: []string{"-chdir=/tmp"},
+			expected: translationResult{
+				atmosArgs:     []string{},
+				separatedArgs: []string{"-chdir=/tmp"},
+			},
+		},
+		{
+			name:  "terraform -chdir /tmp → separated args",
+			input: []string{"-chdir", "/tmp"},
+			expected: translationResult{
+				atmosArgs:     []string{},
+				separatedArgs: []string{"-chdir", "/tmp"},
+			},
+		},
+		{
+			name:  "terraform -chdir=/tmp -version → separated args (multiple global flags)",
+			input: []string{"-chdir=/tmp", "-version"},
+			expected: translationResult{
+				atmosArgs:     []string{},
+				separatedArgs: []string{"-chdir=/tmp", "-version"},
+			},
+		},
+		{
+			name:  "terraform command with global flag",
+			input: []string{"terraform", "-version"},
+			expected: translationResult{
+				atmosArgs:     []string{"terraform"},
+				separatedArgs: []string{"-version"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			translator := buildGlobalFlagsTranslator()
+			atmosArgs, separatedArgs := translator.Translate(tt.input)
+
+			assert.Equal(t, tt.expected.atmosArgs, atmosArgs, "atmosArgs mismatch")
+			assert.Equal(t, tt.expected.separatedArgs, separatedArgs, "separatedArgs mismatch")
+		})
+	}
+}
+
+// buildGlobalFlagsTranslator creates a translator with global terraform flags.
+func buildGlobalFlagsTranslator() *CompatibilityFlagTranslator {
+	return NewCompatibilityFlagTranslator(map[string]CompatibilityFlag{
+		"-chdir":   {Behavior: AppendToSeparated, Description: "Switch to a different working directory"},
+		"-help":    {Behavior: AppendToSeparated, Description: "Show terraform help output"},
+		"-version": {Behavior: AppendToSeparated, Description: "Show terraform version"},
+	})
+}
+
 // TestCompatibilityFlagTranslator_ShorthandNormalization tests that shorthand flags
 // with = syntax are normalized to longhand format BEFORE Cobra sees them.
 // This ensures -i=value behaves the same as --identity=value.

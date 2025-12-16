@@ -51,7 +51,7 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	}
 
 	if matches == nil {
-		return nil, fmt.Errorf("%w: '%s' ('%s' + '%s')", errUtils.ErrFailedToFindImport, pattern, base, cleanPattern)
+		return nil, fmt.Errorf("%w: '%s'\n('%s' + '%s')", errUtils.ErrFailedToFindImport, pattern, base, cleanPattern)
 	}
 
 	var fullMatches []string

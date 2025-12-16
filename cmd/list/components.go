@@ -45,13 +45,15 @@ var componentsCmd = &cobra.Command{
 	Long:  `List Atmos components with support for filtering by stack, type, enabled/locked status, custom column selection, sorting, and multiple output formats.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration.
-		if err := checkAtmosConfig(); err != nil {
+		// Get Viper instance for flag/env precedence.
+		v := viper.GetViper()
+
+		// Check Atmos configuration (honors --base-path, --config, --config-path, --profile).
+		if err := checkAtmosConfig(cmd, v); err != nil {
 			return err
 		}
 
 		// Parse flags using StandardParser with Viper precedence.
-		v := viper.GetViper()
 		if err := componentsParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}

@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -43,6 +44,9 @@ var missingConfigFoundMarkdown string
 
 // Define a constant for the dot string that appears multiple times.
 const currentDirPath = "."
+
+// FlagStack is the name of the stack flag used across commands.
+const FlagStack = "stack"
 
 // ValidateConfig holds configuration options for Atmos validation.
 // CheckStack determines whether stack configuration validation should be performed.
@@ -546,8 +550,8 @@ func executeCustomCommand(
 
 		// Prepare ENV vars
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		// Start with current environment to inherit PATH and other variables.
-		env := os.Environ()
+		// Start with current environment + global env from atmos.yaml to inherit PATH and other variables.
+		env := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
 			value := v.Value
@@ -573,7 +577,7 @@ func executeCustomCommand(
 			}
 
 			// Add or update the environment variable in the env slice
-			env = u.UpdateEnvVar(env, key, value)
+			env = envpkg.UpdateEnvVar(env, key, value)
 		}
 
 		if len(commandConfig.Env) > 0 && commandConfig.Verbose {
@@ -836,6 +840,12 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	return errUtils.WithExitCode(err, 1)
 }
 
+// GetConfigAndStacksInfo processes the CLI config and stacks.
+// Exported for use by command packages (e.g., terraform package).
+func GetConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
+	return getConfigAndStacksInfo(commandName, cmd, args)
+}
+
 // getConfigAndStacksInfo processes the CLI config and stacks.
 // Returns error instead of calling os.Exit for better testability.
 func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
@@ -1008,7 +1018,10 @@ func showUsageExample(cmd *cobra.Command, details string) {
 	errUtils.CheckErrorPrintAndExit(errors.New(details), "Incorrect Usage", suggestion)
 }
 
-func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+// StackFlagCompletion provides shell completion for the --stack flag.
+// If a component was provided as the first positional argument, it filters stacks
+// to only those containing that component.
+func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// If a component was provided as the first argument, filter stacks by that component.
 	if len(args) > 0 && args[0] != "" {
 		component := args[0]
@@ -1147,10 +1160,10 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 }
 
 func AddStackCompletion(cmd *cobra.Command) {
-	if cmd.Flag("stack") == nil {
-		cmd.PersistentFlags().StringP("stack", "s", "", stackHint)
+	if cmd.Flag(FlagStack) == nil {
+		cmd.PersistentFlags().StringP(FlagStack, "s", "", stackHint)
 	}
-	cmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
+	_ = cmd.RegisterFlagCompletionFunc(FlagStack, StackFlagCompletion)
 }
 
 // identityFlagCompletion provides shell completion for identity flags by fetching

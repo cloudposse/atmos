@@ -1,0 +1,117 @@
+package generate
+
+import (
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
+	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// backendParser handles flag parsing for backend command.
+var backendParser *flags.StandardParser
+
+// backendCmd generates backend config for a terraform component.
+var backendCmd = &cobra.Command{
+	Use:                "backend [component]",
+	Short:              "Generate backend configuration for a Terraform component",
+	Long:               `This command generates the backend configuration for a Terraform component using the specified stack`,
+	Args:               cobra.MaximumNArgs(1),
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var component string
+		if len(args) > 0 {
+			component = args[0]
+		}
+
+		// Use Viper to respect precedence (flag > env > config > default)
+		v := viper.GetViper()
+
+		// Bind backend-specific flags to Viper.
+		if err := backendParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		// Prompt for component if missing.
+		if component == "" {
+			prompted, err := shared.PromptForComponent(cmd)
+			if err = shared.HandlePromptError(err, "component"); err != nil {
+				return err
+			}
+			component = prompted
+		}
+
+		// Validate component after prompting.
+		if component == "" {
+			return errUtils.ErrMissingComponent
+		}
+
+		// Get flag values from Viper.
+		stack := v.GetString("stack")
+		processTemplates := v.GetBool("process-templates")
+		processFunctions := v.GetBool("process-functions")
+		skip := v.GetStringSlice("skip")
+
+		// Prompt for stack if missing.
+		if stack == "" {
+			prompted, err := shared.PromptForStack(cmd, component)
+			if err = shared.HandlePromptError(err, "stack"); err != nil {
+				return err
+			}
+			stack = prompted
+		}
+
+		// Validate stack after prompting.
+		if stack == "" {
+			return errUtils.ErrMissingStack
+		}
+
+		// Initialize Atmos configuration
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		if err != nil {
+			return err
+		}
+
+		opts := &e.GenerateBackendOptions{
+			Component: component,
+			Stack:     stack,
+			ProcessingOptions: e.ProcessingOptions{
+				ProcessTemplates: processTemplates,
+				ProcessFunctions: processFunctions,
+				Skip:             skip,
+			},
+		}
+		return e.ExecuteGenerateBackend(opts, &atmosConfig)
+	},
+}
+
+func init() {
+	// Create parser with backend-specific flags using functional options.
+	backendParser = flags.NewStandardParser(
+		flags.WithStringFlag("stack", "s", "", "Atmos stack (required)"),
+		flags.WithBoolFlag("process-templates", "", true, "Enable Go template processing in Atmos stack manifests"),
+		flags.WithBoolFlag("process-functions", "", true, "Enable YAML functions processing in Atmos stack manifests"),
+		flags.WithStringSliceFlag("skip", "", []string{}, "Skip processing specific Atmos YAML functions"),
+		flags.WithEnvVars("stack", "ATMOS_STACK"),
+		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
+		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
+		flags.WithEnvVars("skip", "ATMOS_SKIP"),
+	)
+
+	// Register flags with the command.
+	backendParser.RegisterFlags(backendCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := backendParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Register shell completion for component.
+	backendCmd.ValidArgsFunction = shared.ComponentsArgCompletion
+
+	GenerateCmd.AddCommand(backendCmd)
+}
