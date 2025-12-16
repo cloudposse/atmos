@@ -352,15 +352,16 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*registry.Tool, error) {
 	var aquaRegistry registry.AquaRegistryFile
 	if err := yaml.Unmarshal(data, &aquaRegistry); err == nil && len(aquaRegistry.Packages) > 0 {
 		pkg := aquaRegistry.Packages[0]
-		// Convert AquaPackage to Tool
+		// Convert AquaPackage to Tool.
 		tool := &registry.Tool{
-			Name:       pkg.BinaryName,
-			RepoOwner:  pkg.RepoOwner,
-			RepoName:   pkg.RepoName,
-			Asset:      pkg.URL,
-			Format:     pkg.Format,
-			Type:       pkg.Type,
-			BinaryName: pkg.BinaryName,
+			Name:          pkg.BinaryName,
+			RepoOwner:     pkg.RepoOwner,
+			RepoName:      pkg.RepoName,
+			Asset:         pkg.URL,
+			Format:        pkg.Format,
+			Type:          pkg.Type,
+			BinaryName:    pkg.BinaryName,
+			VersionPrefix: pkg.VersionPrefix,
 		}
 		if pkg.BinaryName == "" {
 			tool.Name = pkg.RepoName
@@ -385,15 +386,34 @@ func (ar *AquaRegistry) BuildAssetURL(tool *registry.Tool, version string) (stri
 		return "", fmt.Errorf("%w: no asset template defined for tool", registry.ErrNoAssetTemplate)
 	}
 
-	// Determine format - use tool format or default to zip
+	// Determine format - use tool format or default to zip.
 	format := "zip"
 	if tool.Format != "" {
 		format = tool.Format
 	}
 
-	// Create template data
+	// Determine the version prefix from tool config (defaults to "v").
+	// This matches Aqua's version_prefix behavior where tools like kustomize
+	// use "kustomize/" prefix while most tools use "v".
+	prefix := tool.VersionPrefix
+	if prefix == "" {
+		prefix = versionPrefix // Default to "v".
+	}
+
+	// Build full version tag for GitHub release URL.
+	// If version doesn't have the expected prefix, add it.
+	releaseVersion := version
+	if !strings.HasPrefix(releaseVersion, prefix) {
+		releaseVersion = prefix + releaseVersion
+	}
+
+	// SemVer is the version with prefix stripped (for asset filenames).
+	semVer := strings.TrimPrefix(releaseVersion, prefix)
+
+	// Create template data with both Version (full tag) and SemVer (without prefix).
 	data := map[string]string{
-		"Version":   version,
+		"Version":   releaseVersion, // Full tag (e.g., "v1.199.0" or "kustomize/4.5.4").
+		"SemVer":    semVer,         // Without prefix (e.g., "1.199.0" or "4.5.4").
 		"OS":        getOS(),
 		"Arch":      getArch(),
 		"RepoOwner": tool.RepoOwner,
@@ -401,7 +421,7 @@ func (ar *AquaRegistry) BuildAssetURL(tool *registry.Tool, version string) (stri
 		"Format":    format,
 	}
 
-	// Create template with custom functions
+	// Create template with custom functions.
 	funcMap := template.FuncMap{
 		"trimV": func(s string) string {
 			return strings.TrimPrefix(s, versionPrefix)
@@ -417,7 +437,7 @@ func (ar *AquaRegistry) BuildAssetURL(tool *registry.Tool, version string) (stri
 		},
 	}
 
-	// Parse and execute template
+	// Parse and execute template.
 	tmpl, err := template.New("asset").Funcs(funcMap).Parse(tool.Asset)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to parse asset template: %w", registry.ErrNoAssetTemplate, err)
@@ -428,18 +448,12 @@ func (ar *AquaRegistry) BuildAssetURL(tool *registry.Tool, version string) (stri
 		return "", fmt.Errorf("%w: failed to execute asset template: %w", registry.ErrNoAssetTemplate, err)
 	}
 
-	// For http type tools, the URL is already complete
+	// For http type tools, the URL is already complete.
 	if tool.Type == "http" {
 		return assetName.String(), nil
 	}
 
-	// For github_release type, construct GitHub release URL
-	// Ensure version has v prefix for GitHub releases
-	releaseVersion := version
-	if !strings.HasPrefix(releaseVersion, versionPrefix) {
-		releaseVersion = versionPrefix + releaseVersion
-	}
-
+	// For github_release type, construct GitHub release URL using the full tag.
 	url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
 		tool.RepoOwner, tool.RepoName, releaseVersion, assetName.String())
 

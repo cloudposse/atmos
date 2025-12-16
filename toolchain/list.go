@@ -30,6 +30,85 @@ type toolRow struct {
 	isInstalled bool
 }
 
+// RunListAtmosVersions lists all installed versions of Atmos (returns version strings).
+func RunListAtmosVersions() ([]string, error) {
+	defer perf.Track(nil, "toolchain.RunListAtmosVersions")()
+
+	installer := NewInstaller()
+	return installer.ListInstalledVersions("cloudposse", "atmos")
+}
+
+// RunListInstalledAtmosVersions prints a formatted table of installed Atmos versions.
+func RunListInstalledAtmosVersions() error {
+	defer perf.Track(nil, "toolchain.RunListInstalledAtmosVersions")()
+
+	installer := NewInstaller()
+	versions, err := installer.ListInstalledVersions("cloudposse", "atmos")
+	if err != nil {
+		return err
+	}
+
+	if len(versions) == 0 {
+		message := "# No Atmos Versions Installed\n\n" +
+			"No versions of Atmos are currently installed.\n\n" +
+			"## To install a version:\n\n" +
+			"```shell\n" +
+			"atmos version install 1.199.0\n" +
+			"```\n\n" +
+			"Or see available versions:\n\n" +
+			"```shell\n" +
+			"atmos version list\n" +
+			"```\n"
+		_ = ui.MarkdownMessage(message)
+		return nil
+	}
+
+	// Build rows for installed Atmos versions.
+	rows := buildAtmosVersionRows(installer, versions)
+	sortToolRows(rows)
+
+	// Calculate column widths and create table.
+	terminalWidth := getTerminalWidth()
+	widths := calculateColumnWidths(rows, terminalWidth)
+
+	columns := createTableColumns(widths)
+	tableRows := convertRowsToTableFormat(rows)
+	t := createAndConfigureTable(columns, tableRows)
+
+	// Print the table with conditional styling.
+	_ = ui.Writeln(renderTableWithConditionalStyling(&t, rows))
+
+	return nil
+}
+
+// buildAtmosVersionRows creates toolRow entries for installed Atmos versions.
+func buildAtmosVersionRows(installer *Installer, versions []string) []toolRow {
+	var rows []toolRow
+
+	for _, version := range versions {
+		// Check installation status and get binary path.
+		binaryPath, err := installer.FindBinaryPath("cloudposse", "atmos", version)
+		isInstalled := err == nil
+
+		// Get installation metadata.
+		status, installDate, size := getInstallationMetadata(binaryPath, isInstalled)
+
+		rows = append(rows, toolRow{
+			alias:       "",
+			registry:    "cloudposse/atmos",
+			binary:      "atmos",
+			version:     version,
+			status:      status,
+			installDate: installDate,
+			size:        size,
+			isDefault:   false,
+			isInstalled: isInstalled,
+		})
+	}
+
+	return rows
+}
+
 // RunList prints a table of tools from .tool-versions, marking installed/default versions.
 func RunList() error {
 	defer perf.Track(nil, "toolchain.RunList")()

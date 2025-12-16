@@ -178,7 +178,11 @@ func (b *GlobalOptionsBuilder) registerSystemFlags(defaults *global.Flags) {
 	b.WithVerbose()
 
 	b.options = append(b.options, WithBoolFlag("version", "", defaults.Version, "Display the Atmos CLI version"))
-	b.options = append(b.options, WithEnvVars("version", "ATMOS_VERSION"))
+
+	// Version management flag - specify which version of Atmos to use.
+	// Note: ATMOS_VERSION and ATMOS_VERSION_USE env vars are also checked in reexec.go.
+	b.options = append(b.options, WithStringFlag("use-version", "", defaults.UseVersion, "Use a specific version of Atmos (e.g., --use-version=1.160.0)"))
+	b.options = append(b.options, WithEnvVars("use-version", "ATMOS_USE_VERSION"))
 }
 
 // Build creates a StandardParser with all global flags configured.

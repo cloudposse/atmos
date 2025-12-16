@@ -827,6 +827,29 @@ func isVersionCommand() bool {
 	return len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version")
 }
 
+// isVersionManagementCommand checks if the current command is a version management command.
+// These commands should not trigger re-exec to avoid infinite loops.
+func isVersionManagementCommand(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+
+	// Check the command hierarchy.
+	cmdName := cmd.Name()
+
+	// Direct version subcommands (install, uninstall, list).
+	if cmd.Parent() != nil && cmd.Parent().Name() == "version" {
+		return cmdName == "install" || cmdName == "uninstall" || cmdName == "list"
+	}
+
+	// The version command itself.
+	if cmdName == "version" {
+		return true
+	}
+
+	return false
+}
+
 // handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h".
 func handleHelpRequest(cmd *cobra.Command, args []string) {
 	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {

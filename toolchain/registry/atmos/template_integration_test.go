@@ -19,7 +19,9 @@ func TestAtmosRegistry_TemplateRendering(t *testing.T) {
 		},
 		"mikefarah/yq": map[string]any{
 			"type": "github_release",
-			"url":  "yq_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz",
+			// Use .SemVer for version without prefix (Aqua-compatible).
+			// .Version contains the full tag (e.g., v4.44.1), .SemVer is without prefix (4.44.1).
+			"url": "yq_{{.SemVer}}_{{.OS}}_{{.Arch}}.tar.gz",
 		},
 		"example/custom-tool": map[string]any{
 			"type": "http",
@@ -59,8 +61,9 @@ func TestAtmosRegistry_TemplateRendering(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify version template was rendered.
+		// .SemVer (4.44.1) should appear in the asset name.
 		assert.Contains(t, url, "yq_4.44.1_")
-		assert.NotContains(t, url, "{{.Version}}")
+		assert.NotContains(t, url, "{{.SemVer}}")
 	})
 
 	t.Run("http type with trimV template function", func(t *testing.T) {

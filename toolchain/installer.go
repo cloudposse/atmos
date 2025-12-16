@@ -53,6 +53,12 @@ type ToolResolver interface {
 	Resolve(toolName string) (owner, repo string, err error)
 }
 
+// BuiltinAliases are always available and can be overridden in atmos.yaml.
+// These provide convenient shortcuts for common tools.
+var BuiltinAliases = map[string]string{
+	"atmos": "cloudposse/atmos",
+}
+
 // DefaultToolResolver implements ToolResolver using configured aliases and registry search.
 type DefaultToolResolver struct {
 	atmosConfig *schema.AtmosConfiguration
@@ -61,12 +67,17 @@ type DefaultToolResolver struct {
 func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 	defer perf.Track(nil, "toolchain.DefaultToolResolver.Resolve")()
 
-	// Step 1: Check if this is an alias in atmos.yaml.
+	// Step 1: Check if this is an alias in atmos.yaml (user-defined aliases take precedence).
 	// If atmosConfig is available and has aliases configured, resolve the alias first.
 	if d.atmosConfig != nil && len(d.atmosConfig.Toolchain.Aliases) > 0 {
 		if aliasedName, found := d.atmosConfig.Toolchain.Aliases[toolName]; found {
 			toolName = aliasedName
 		}
+	}
+
+	// Step 1b: Check built-in aliases (if not already resolved by user config).
+	if aliasedName, found := BuiltinAliases[toolName]; found {
+		toolName = aliasedName
 	}
 
 	// Step 2: If already in owner/repo format, parse and return.
@@ -277,27 +288,38 @@ func (i *Installer) buildAssetURL(tool *registry.Tool, version string) (string, 
 	// Handle different tool types
 	switch tool.Type {
 	case "http":
-		// For HTTP type, the Asset field contains the full URL template
+		// For HTTP type, the Asset field contains the full URL template.
 		if tool.Asset == "" {
 			return "", fmt.Errorf("%w: Asset URL template is required for HTTP type tools", ErrInvalidToolSpec)
 		}
 
-		// Remove 'v' prefix from version for asset naming
-		versionForAsset := version
-		if strings.HasPrefix(versionForAsset, versionPrefix) {
-			versionForAsset = versionForAsset[1:]
+		// Determine version prefix from tool config (defaults to "v").
+		prefix := tool.VersionPrefix
+		if prefix == "" {
+			prefix = versionPrefix // Default to "v".
 		}
 
-		// Create template data
+		// Build full version tag.
+		releaseVersion := version
+		if !strings.HasPrefix(releaseVersion, prefix) {
+			releaseVersion = prefix + releaseVersion
+		}
+
+		// SemVer is the version with prefix stripped.
+		semVer := strings.TrimPrefix(releaseVersion, prefix)
+
+		// Create template data with both Version (full tag) and SemVer (without prefix).
 		data := struct {
 			Version   string
+			SemVer    string
 			OS        string
 			Arch      string
 			RepoOwner string
 			RepoName  string
 			Format    string
 		}{
-			Version:   versionForAsset,
+			Version:   releaseVersion,
+			SemVer:    semVer,
 			OS:        runtime.GOOS,
 			Arch:      runtime.GOARCH,
 			RepoOwner: tool.RepoOwner,
@@ -305,13 +327,13 @@ func (i *Installer) buildAssetURL(tool *registry.Tool, version string) (string, 
 			Format:    tool.Format,
 		}
 
-		// Register custom template functions
+		// Register custom template functions.
 		funcMap := template.FuncMap{
 			"trimV": func(s string) string {
 				return strings.TrimPrefix(s, versionPrefix)
 			},
-			"trimPrefix": func(prefix, s string) string {
-				return strings.TrimPrefix(s, prefix)
+			"trimPrefix": func(pfx, s string) string {
+				return strings.TrimPrefix(s, pfx)
 			},
 			"trimSuffix": func(suffix, s string) string {
 				return strings.TrimSuffix(s, suffix)
@@ -327,7 +349,7 @@ func (i *Installer) buildAssetURL(tool *registry.Tool, version string) (string, 
 				WithExplanationf("Asset template for `%s/%s` contains invalid Go template syntax", tool.RepoOwner, tool.RepoName).
 				WithExample("# Valid asset template:\nasset: \"https://releases.example.com/{{.RepoName}}/v{{.Version}}/{{.RepoName}}_{{.OS}}_{{.Arch}}.tar.gz\"").
 				WithHint("Check the tool definition in the registry for syntax errors").
-				WithHint("Verify template variables: {{.Version}}, {{.OS}}, {{.Arch}}, {{.RepoOwner}}, {{.RepoName}}").
+				WithHint("Verify template variables: {{.Version}}, {{.SemVer}}, {{.OS}}, {{.Arch}}, {{.RepoOwner}}, {{.RepoName}}").
 				WithContext("tool", fmt.Sprintf("%s/%s", tool.RepoOwner, tool.RepoName)).
 				WithContext("template", tool.Asset).
 				WithContext("parse_error", err.Error()).
@@ -351,32 +373,48 @@ func (i *Installer) buildAssetURL(tool *registry.Tool, version string) (string, 
 		return url.String(), nil
 
 	case "github_release":
-		// For GitHub releases, validate that RepoOwner and RepoName are set
+		// For GitHub releases, validate that RepoOwner and RepoName are set.
 		if tool.RepoOwner == "" || tool.RepoName == "" {
 			return "", fmt.Errorf("%w: RepoOwner and RepoName must be set for github_release type (got RepoOwner=%q, RepoName=%q)", ErrInvalidToolSpec, tool.RepoOwner, tool.RepoName)
 		}
 
-		// Use the asset template from the tool
+		// Use the asset template from the tool.
 		assetTemplate := tool.Asset
 		if assetTemplate == "" {
-			// Fallback to a common pattern
+			// Fallback to a common pattern.
 			assetTemplate = "{{.RepoName}}_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
 		}
 
-		// Remove 'v' prefix from version for asset naming
-		versionForAsset := version
-		versionForAsset = strings.TrimPrefix(versionForAsset, versionPrefix)
+		// Determine version prefix from tool config (defaults to "v").
+		// This matches Aqua's version_prefix behavior where tools like kustomize
+		// use "kustomize/" prefix while most tools use "v".
+		prefix := tool.VersionPrefix
+		if prefix == "" {
+			prefix = versionPrefix // Default to "v".
+		}
 
-		// Create template data
+		// Build full version tag for GitHub release URL.
+		// If version doesn't have the expected prefix, add it.
+		releaseVersion := version
+		if !strings.HasPrefix(releaseVersion, prefix) {
+			releaseVersion = prefix + releaseVersion
+		}
+
+		// SemVer is the version with prefix stripped (for asset filenames).
+		semVer := strings.TrimPrefix(releaseVersion, prefix)
+
+		// Create template data with both Version (full tag) and SemVer (without prefix).
 		data := struct {
 			Version   string
+			SemVer    string
 			OS        string
 			Arch      string
 			RepoOwner string
 			RepoName  string
 			Format    string
 		}{
-			Version:   versionForAsset,
+			Version:   releaseVersion, // Full tag (e.g., "v1.199.0" or "kustomize/4.5.4").
+			SemVer:    semVer,         // Without prefix (e.g., "1.199.0" or "4.5.4").
 			OS:        runtime.GOOS,
 			Arch:      runtime.GOARCH,
 			RepoOwner: tool.RepoOwner,
@@ -384,13 +422,13 @@ func (i *Installer) buildAssetURL(tool *registry.Tool, version string) (string, 
 			Format:    tool.Format,
 		}
 
-		// Register custom template functions
+		// Register custom template functions.
 		funcMap := template.FuncMap{
 			"trimV": func(s string) string {
 				return strings.TrimPrefix(s, versionPrefix)
 			},
-			"trimPrefix": func(prefix, s string) string {
-				return strings.TrimPrefix(s, prefix)
+			"trimPrefix": func(pfx, s string) string {
+				return strings.TrimPrefix(s, pfx)
 			},
 			"trimSuffix": func(suffix, s string) string {
 				return strings.TrimSuffix(s, suffix)
@@ -425,9 +463,9 @@ func (i *Installer) buildAssetURL(tool *registry.Tool, version string) (string, 
 				Err()
 		}
 
-		// Construct the full GitHub release URL
+		// Construct the full GitHub release URL using the full version tag.
 		url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
-			tool.RepoOwner, tool.RepoName, version, assetName.String())
+			tool.RepoOwner, tool.RepoName, releaseVersion, assetName.String())
 
 		return url, nil
 
@@ -1217,4 +1255,30 @@ func (i *Installer) GetResolver() ToolResolver {
 	defer perf.Track(nil, "toolchain.GetResolver")()
 
 	return i.resolver
+}
+
+// ListInstalledVersions returns a list of installed versions for a specific tool.
+func (i *Installer) ListInstalledVersions(owner, repo string) ([]string, error) {
+	defer perf.Track(nil, "toolchain.ListInstalledVersions")()
+
+	toolDir := filepath.Join(i.binDir, owner, repo)
+
+	// Check if the tool directory exists.
+	if _, err := os.Stat(toolDir); os.IsNotExist(err) {
+		return []string{}, nil
+	}
+
+	entries, err := os.ReadDir(toolDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read tool directory %s: %w", toolDir, err)
+	}
+
+	var versions []string
+	for _, entry := range entries {
+		// Only include directories that are not "latest" (which is a file pointer).
+		if entry.IsDir() {
+			versions = append(versions, entry.Name())
+		}
+	}
+	return versions, nil
 }

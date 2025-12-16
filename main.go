@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -38,7 +39,16 @@ func main() {
 	// Check os.Args directly since we're in main() (tests call cmd.Execute() directly).
 	// Note: Only intercept --version flag here. The "version" subcommand should go through
 	// normal Cobra flow to ensure PersistentPreRun executes (needed for proper logging setup).
-	if len(os.Args) > 1 && os.Args[1] == "--version" {
+	if hasVersionFlag(os.Args) {
+		// Check for conflicting flags: --version and --use-version cannot be used together.
+		if hasUseVersionFlag(os.Args) {
+			// Print error directly since config/formatters aren't initialized yet.
+			os.Stderr.WriteString("\nError: --version and --use-version cannot be used together\n\n")
+			os.Stderr.WriteString("Hints:\n")
+			os.Stderr.WriteString("  - Use --version to display the current Atmos version\n")
+			os.Stderr.WriteString("  - Use --use-version to run a command with a specific Atmos version\n\n")
+			os.Exit(1)
+		}
 		err := cmd.ExecuteVersion()
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
@@ -57,4 +67,20 @@ func main() {
 		log.Debug("Exiting with exit code", "code", exitCode)
 		errUtils.Exit(exitCode)
 	}
+}
+
+// hasVersionFlag checks if --version flag is present in args.
+// Only checks for --version as the first argument after the program name.
+func hasVersionFlag(args []string) bool {
+	return len(args) > 1 && args[1] == "--version"
+}
+
+// hasUseVersionFlag checks if --use-version flag is present in args.
+func hasUseVersionFlag(args []string) bool {
+	for _, arg := range args {
+		if arg == "--use-version" || strings.HasPrefix(arg, "--use-version=") {
+			return true
+		}
+	}
+	return false
 }

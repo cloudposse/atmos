@@ -70,6 +70,9 @@ type Flags struct {
 	// System configuration.
 	RedirectStderr string
 	Version        bool
+
+	// Version management.
+	UseVersion string // Specify which version of Atmos to use (--use-version).
 }
 
 // NewFlags creates a Flags with default values.

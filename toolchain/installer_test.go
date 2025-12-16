@@ -134,11 +134,13 @@ func TestBuildAssetURL(t *testing.T) {
 	}
 	installer := NewInstallerWithResolver(mockResolver)
 
+	// Test with SemVer template variable (version without prefix).
+	// This matches Aqua's behavior where .Version = full tag, .SemVer = without prefix.
 	tool := &Tool{
 		Type:      "github_release",
 		RepoOwner: "suzuki-shunsuke",
 		RepoName:  "github-comment",
-		Asset:     "github-comment_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz",
+		Asset:     "github-comment_{{.SemVer}}_{{.OS}}_{{.Arch}}.tar.gz",
 	}
 
 	url, err := installer.buildAssetURL(tool, "v6.3.4")
@@ -146,6 +148,7 @@ func TestBuildAssetURL(t *testing.T) {
 		t.Fatalf("buildAssetURL() error: %v", err)
 	}
 
+	// URL should use full version tag (v6.3.4) and asset should use SemVer (6.3.4).
 	expected := "https://github.com/suzuki-shunsuke/github-comment/releases/download/v6.3.4/github-comment_6.3.4"
 	if !strings.Contains(url, expected) {
 		t.Errorf("buildAssetURL() = %v, want %v", url, expected)
@@ -161,11 +164,13 @@ func TestBuildAssetURL_CustomFuncs(t *testing.T) {
 	SetAtmosConfig(&schema.AtmosConfiguration{})
 	installer := NewInstallerWithResolver(mockResolver)
 
+	// Test template functions on both .Version (full tag) and .SemVer (without prefix).
+	// .Version = v1.2.8, .SemVer = 1.2.8
 	tool := &Tool{
 		Type:      "github_release",
 		RepoOwner: "hashicorp",
 		RepoName:  "terraform",
-		Asset:     "terraform_{{trimV .Version}}_{{trimPrefix \"1.\" .Version}}_{{trimSuffix \".8\" .Version}}_{{replace \".\" \"-\" .Version}}_{{.OS}}_{{.Arch}}.zip",
+		Asset:     "terraform_{{trimV .Version}}_{{trimPrefix \"1.\" .SemVer}}_{{trimSuffix \".8\" .SemVer}}_{{replace \".\" \"-\" .SemVer}}_{{.OS}}_{{.Arch}}.zip",
 	}
 
 	url, err := installer.buildAssetURL(tool, "v1.2.8")
@@ -173,7 +178,11 @@ func TestBuildAssetURL_CustomFuncs(t *testing.T) {
 		t.Fatalf("buildAssetURL() error: %v", err)
 	}
 
-	// Check that all functions are applied as expected
+	// Check that all functions are applied as expected:
+	// - trimV .Version: v1.2.8 → 1.2.8
+	// - trimPrefix "1." .SemVer: 1.2.8 → 2.8
+	// - trimSuffix ".8" .SemVer: 1.2.8 → 1.2
+	// - replace "." "-" .SemVer: 1.2.8 → 1-2-8
 	if !strings.Contains(url, "terraform_1.2.8_2.8_1.2_1-2-8") {
 		t.Errorf("buildAssetURL() custom funcs not applied correctly, got: %v", url)
 	}

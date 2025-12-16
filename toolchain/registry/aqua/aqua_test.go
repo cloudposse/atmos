@@ -323,12 +323,14 @@ func TestAquaRegistry_parseRegistryFile_Invalid(t *testing.T) {
 func TestAquaRegistry_BuildAssetURL_HTTP(t *testing.T) {
 	ar := NewAquaRegistry()
 
+	// Use .SemVer for version without prefix in asset URL.
+	// .Version = v1.0.0 (full tag), .SemVer = 1.0.0 (without prefix).
 	tool := &registry.Tool{
 		Name:      "test-tool",
 		Type:      "http",
 		RepoOwner: "test",
 		RepoName:  "tool",
-		Asset:     "https://example.com/tool-{{.Version}}.zip",
+		Asset:     "https://example.com/tool-{{.SemVer}}.zip",
 		Format:    "zip",
 	}
 
@@ -340,17 +342,20 @@ func TestAquaRegistry_BuildAssetURL_HTTP(t *testing.T) {
 func TestAquaRegistry_BuildAssetURL_GitHubRelease(t *testing.T) {
 	ar := NewAquaRegistry()
 
+	// Use .SemVer for version without prefix in asset filename.
+	// .Version = v1.0.0 (full tag for URL), .SemVer = 1.0.0 (for filename).
 	tool := &registry.Tool{
 		Name:      "test-tool",
 		Type:      "github_release",
 		RepoOwner: "test",
 		RepoName:  "tool",
-		Asset:     "tool-{{.Version}}-{{.OS}}-{{.Arch}}.zip",
+		Asset:     "tool-{{.SemVer}}-{{.OS}}-{{.Arch}}.zip",
 		Format:    "zip",
 	}
 
 	url, err := ar.BuildAssetURL(tool, "1.0.0")
 	assert.NoError(t, err)
+	// URL should have v1.0.0 tag and asset should have 1.0.0 semver.
 	assert.Contains(t, url, "https://github.com/test/tool/releases/download/v1.0.0/tool-1.0.0-")
 }
 

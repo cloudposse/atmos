@@ -196,6 +196,7 @@ type Tool struct {
 	SupportedIf      *SupportedIf      `yaml:"supported_if"`
 	Replacements     map[string]string `yaml:"replacements"`
 	BinaryName       string            `yaml:"binary_name"`
+	VersionPrefix    string            `yaml:"version_prefix"` // GitHub tag prefix (e.g., "v", "kustomize/"). Defaults to "v".
 }
 
 // File represents a file to be extracted from the archive.
@@ -235,12 +236,13 @@ type AquaPackage struct {
 	URL        string `yaml:"url"`
 	Format     string `yaml:"format"`
 	BinaryName string `yaml:"binary_name"`
-	// Add other Aqua fields as needed
+	// Add other Aqua fields as needed.
 	Description       string            `yaml:"description"`
 	SupportedEnvs     []string          `yaml:"supported_envs"`
 	Checksum          ChecksumConfig    `yaml:"checksum"`
 	VersionConstraint string            `yaml:"version_constraint"`
 	VersionOverrides  []VersionOverride `yaml:"version_overrides"`
+	VersionPrefix     string            `yaml:"version_prefix"` // GitHub tag prefix (e.g., "v", "kustomize/").
 }
 
 // ChecksumConfig represents checksum configuration for Aqua packages.
