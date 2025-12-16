@@ -32,8 +32,8 @@ packages:
 	}))
 	defer server.Close()
 
-	// Create URLRegistry pointing to the index file.
-	reg := NewURLRegistry(server.URL + "/registry.yaml")
+	// Create URLRegistry pointing to the index file (no ref).
+	reg := NewURLRegistry(server.URL+"/registry.yaml", "")
 
 	// Verify it's detected as an index file.
 	if !reg.isIndexURL {
@@ -96,8 +96,8 @@ packages:
 	}))
 	defer server.Close()
 
-	// Create URLRegistry pointing to directory (no .yaml extension).
-	reg := NewURLRegistry(server.URL + "/pkgs")
+	// Create URLRegistry pointing to directory (no .yaml extension, no ref).
+	reg := NewURLRegistry(server.URL+"/pkgs", "")
 
 	// Verify it's NOT detected as an index file.
 	if reg.isIndexURL {
@@ -184,7 +184,7 @@ func TestURLRegistry_GetMetadata(t *testing.T) {
 	}))
 	defer server.Close()
 
-	reg := NewURLRegistry(server.URL + "/registry.yaml")
+	reg := NewURLRegistry(server.URL+"/registry.yaml", "")
 
 	ctx := context.Background()
 	metadata, err := reg.GetMetadata(ctx)
@@ -208,7 +208,7 @@ func TestURLRegistry_LoadIndexError(t *testing.T) {
 	defer server.Close()
 
 	// Create URLRegistry with .yaml extension (should try to load index).
-	reg := NewURLRegistry(server.URL + "/missing.yaml")
+	reg := NewURLRegistry(server.URL+"/missing.yaml", "")
 
 	// loadIndex should have failed, so isIndexURL should be false.
 	if reg.isIndexURL {
@@ -219,4 +219,113 @@ func TestURLRegistry_LoadIndexError(t *testing.T) {
 // Helper function to check YAML extension.
 func hasYAMLExtension(url string) bool {
 	return len(url) > 5 && (url[len(url)-5:] == ".yaml" || url[len(url)-4:] == ".yml")
+}
+
+// TestApplyGitHubRef tests the ref substitution logic for GitHub URLs.
+func TestApplyGitHubRef(t *testing.T) {
+	tests := []struct {
+		name     string
+		baseURL  string
+		ref      string
+		expected string
+	}{
+		{
+			name:     "empty ref returns original URL",
+			baseURL:  "https://github.com/owner/repo",
+			ref:      "",
+			expected: "https://github.com/owner/repo",
+		},
+		{
+			name:     "github URL with ref converts to raw URL",
+			baseURL:  "https://github.com/owner/repo",
+			ref:      "v1.2.3",
+			expected: "https://raw.githubusercontent.com/owner/repo/v1.2.3/registry.yaml",
+		},
+		{
+			name:     "github URL with path and ref",
+			baseURL:  "https://github.com/myorg/registries/pkgs/registry.yaml",
+			ref:      "abc123def",
+			expected: "https://raw.githubusercontent.com/myorg/registries/abc123def/pkgs/registry.yaml",
+		},
+		{
+			name:     "github URL with nested path and ref",
+			baseURL:  "https://github.com/org/repo/path/to/registry.yaml",
+			ref:      "v2.0.0",
+			expected: "https://raw.githubusercontent.com/org/repo/v2.0.0/path/to/registry.yaml",
+		},
+		{
+			name:     "non-GitHub URL unchanged",
+			baseURL:  "https://example.com/registry.yaml",
+			ref:      "v1.0.0",
+			expected: "https://example.com/registry.yaml",
+		},
+		{
+			name:     "raw.githubusercontent.com URL unchanged (already has ref)",
+			baseURL:  "https://raw.githubusercontent.com/owner/repo/main/registry.yaml",
+			ref:      "v1.0.0",
+			expected: "https://raw.githubusercontent.com/owner/repo/main/registry.yaml",
+		},
+		{
+			name:     "malformed github URL too short",
+			baseURL:  "https://github.com/short",
+			ref:      "v1.0.0",
+			expected: "https://github.com/short",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := applyGitHubRef(tt.baseURL, tt.ref)
+			if result != tt.expected {
+				t.Errorf("applyGitHubRef(%q, %q) = %q, want %q", tt.baseURL, tt.ref, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestURLRegistry_WithRef tests that ref is properly applied when creating a URLRegistry.
+func TestURLRegistry_WithRef(t *testing.T) {
+	// Track which URL was requested.
+	var requestedURL string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedURL = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`
+packages:
+  - type: github_release
+    repo_owner: test
+    repo_name: tool
+    url: "tool-{{.OS}}-{{.Arch}}"
+`))
+	}))
+	defer server.Close()
+
+	// Simulate a GitHub raw URL structure (the server URL replaces raw.githubusercontent.com).
+	// Since we can't actually use raw.githubusercontent.com in tests, we verify the ref field is stored.
+	reg := NewURLRegistry(server.URL+"/registry.yaml", "v1.0.0")
+
+	// Verify ref is stored.
+	if reg.ref != "v1.0.0" {
+		t.Errorf("Expected ref to be 'v1.0.0', got %q", reg.ref)
+	}
+
+	// The URL should still work (it's not a GitHub raw URL, so no transformation).
+	if reg.baseURL != server.URL+"/registry.yaml" {
+		t.Errorf("Expected baseURL to be unchanged for non-GitHub URL, got %q", reg.baseURL)
+	}
+
+	// Verify we can fetch tools.
+	tool, err := reg.GetTool("test", "tool")
+	if err != nil {
+		t.Fatalf("Failed to get tool: %v", err)
+	}
+	if tool.RepoName != "tool" {
+		t.Errorf("Expected tool name 'tool', got %q", tool.RepoName)
+	}
+
+	// Verify the request was made (index was loaded).
+	if requestedURL != "/registry.yaml" {
+		t.Errorf("Expected request to /registry.yaml, got %q", requestedURL)
+	}
 }

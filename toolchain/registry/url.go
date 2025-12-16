@@ -26,6 +26,7 @@ const (
 // 2. Directory structure (source ends with / or no extension) - per-tool registry files.
 type URLRegistry struct {
 	baseURL    string
+	ref        string // Git ref (tag, branch, commit) for pinning registry version.
 	client     httpClient.Client
 	cache      map[string]*Tool // Simple in-memory cache for per-tool lookups.
 	indexCache map[string]*Tool // Cache for index-based lookups.
@@ -33,14 +34,20 @@ type URLRegistry struct {
 }
 
 // NewURLRegistry creates a new URL-based registry.
-func NewURLRegistry(baseURL string) *URLRegistry {
+// If ref is provided and the URL is a GitHub raw content URL, the ref will be
+// substituted into the URL path to fetch from that specific Git ref.
+func NewURLRegistry(baseURL string, ref string) *URLRegistry {
 	defer perf.Track(nil, "registry.NewURLRegistry")()
 
+	// Apply ref to GitHub raw URLs if provided.
+	resolvedURL := applyGitHubRef(baseURL, ref)
+
 	// Detect if source is a single index file or directory.
-	isIndexFile := strings.HasSuffix(baseURL, ".yaml") || strings.HasSuffix(baseURL, ".yml")
+	isIndexFile := strings.HasSuffix(resolvedURL, ".yaml") || strings.HasSuffix(resolvedURL, ".yml")
 
 	reg := &URLRegistry{
-		baseURL:    baseURL,
+		baseURL:    resolvedURL,
+		ref:        ref,
 		client:     httpClient.NewDefaultClient(httpClient.WithGitHubToken(httpClient.GetGitHubTokenFromEnv())),
 		cache:      make(map[string]*Tool),
 		indexCache: make(map[string]*Tool),
@@ -57,6 +64,55 @@ func NewURLRegistry(baseURL string) *URLRegistry {
 	}
 
 	return reg
+}
+
+// applyGitHubRef transforms a GitHub URL to a raw content URL at a specific Git ref.
+// Converts: https://github.com/{owner}/{repo} with ref and path
+// To: https://raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}
+// If ref is empty or the URL is not a GitHub URL, returns the original URL.
+func applyGitHubRef(baseURL string, ref string) string {
+	if ref == "" {
+		return baseURL
+	}
+
+	// Only transform github.com URLs (not raw.githubusercontent.com which already has ref in path).
+	if !strings.Contains(baseURL, "github.com") || strings.Contains(baseURL, "raw.githubusercontent.com") {
+		return baseURL
+	}
+
+	// Parse the URL to extract owner, repo, and optional path.
+	// Format: https://github.com/owner/repo or https://github.com/owner/repo/path/to/file.yaml
+	parts := strings.Split(baseURL, "/")
+
+	// Find github.com position.
+	githubIdx := -1
+	for i, part := range parts {
+		if part == "github.com" {
+			githubIdx = i
+			break
+		}
+	}
+
+	if githubIdx == -1 || githubIdx+2 >= len(parts) {
+		// URL doesn't have owner/repo after github.com.
+		return baseURL
+	}
+
+	owner := parts[githubIdx+1]
+	repo := parts[githubIdx+2]
+
+	// Get the path after owner/repo (if any).
+	var path string
+	if githubIdx+3 < len(parts) {
+		path = strings.Join(parts[githubIdx+3:], "/")
+	}
+
+	// Construct raw.githubusercontent.com URL.
+	if path != "" {
+		return fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo, ref, path)
+	}
+	// If no path specified, assume registry.yaml at root.
+	return fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/registry.yaml", owner, repo, ref)
 }
 
 // GetTool fetches tool metadata from the custom URL.

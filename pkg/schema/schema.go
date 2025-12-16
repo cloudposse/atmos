@@ -276,6 +276,7 @@ type ToolchainRegistry struct {
 	Name     string         `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 	Type     string         `yaml:"type" json:"type" mapstructure:"type"` // aqua, atmos, url
 	Source   string         `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	Ref      string         `yaml:"ref,omitempty" json:"ref,omitempty" mapstructure:"ref"` // Git ref (tag, branch, or commit) to pin registry version.
 	Priority int            `yaml:"priority,omitempty" json:"priority,omitempty" mapstructure:"priority"`
 	Tools    map[string]any `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"` // For inline atmos-type registries
 }

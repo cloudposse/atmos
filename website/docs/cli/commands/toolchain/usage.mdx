@@ -8,6 +8,8 @@ import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 <Intro>
 Manage toolchain dependencies for your Atmos components, commands, and workflows with native version control and seamless Aqua registry integration.
@@ -115,7 +117,8 @@ Atmos provides focused Aqua registry support optimized for infrastructure toolin
 | `go_build` | Compiles Go source with custom build flags | Use `go_install` or pre-built releases |
 | `cargo` | Installs Rust crates via cargo | Use `github_release` for pre-built binaries |
 
-#### Configuration Fields Not Supported
+<details>
+<summary>Configuration Fields Not Supported</summary>
 
 **Version Management:**
 - `version_filter` / `version_prefix` - Version string manipulation
@@ -138,6 +141,8 @@ Atmos provides focused Aqua registry support optimized for infrastructure toolin
 Checksum fields are parsed but validation is not currently enforced during installation.
 :::
 
+</details>
+
 #### Atmos Alternatives
 
 | Aqua Feature | Atmos Alternative |
@@ -151,26 +156,30 @@ Checksum fields are parsed but validation is not currently enforced during insta
 
 Atmos uses a different registry model than Aqua:
 
-**Aqua registries:**
+<Tabs>
+<TabItem value="aqua" label="Aqua">
 ```yaml
 registries:
   - name: standard
     type: standard
     ref: v4.0.0  # Pin to specific version
 ```
-
-**Atmos registries:**
+</TabItem>
+<TabItem value="atmos" label="Atmos">
 ```yaml
 toolchain:
   registries:
     - name: aqua
       type: aqua
-      source: https://github.com/aquaproj/aqua-registry
+      source: https://github.com/myorg/registries
+      ref: v1.2.3  # Pin to specific version (tag, branch, or commit)
       priority: 10
 ```
+</TabItem>
+</Tabs>
 
 Key differences:
-- No `ref` pinning to specific registry versions
+- Uses `ref` field to pin registry versions (transforms GitHub URLs to raw content URLs at the specified ref)
 - Uses `source` URL instead of `repo_owner`/`repo_name`
 - Priority-based ordering instead of implicit ordering
 - Supports inline `atmos` type for custom tool definitions

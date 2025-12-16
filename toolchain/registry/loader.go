@@ -2,6 +2,7 @@ package registry
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -58,7 +59,8 @@ func LoadFromConfig(atmosConfig *schema.AtmosConfiguration) (ToolRegistry, error
 	// Build list of prioritized registries.
 	var registries []PrioritizedRegistry
 
-	for _, regConfig := range atmosConfig.Toolchain.Registries {
+	for i := range atmosConfig.Toolchain.Registries {
+		regConfig := &atmosConfig.Toolchain.Registries[i]
 		reg, err := createRegistry(regConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create registry %q: %w", regConfig.Name, err)
@@ -75,35 +77,57 @@ func LoadFromConfig(atmosConfig *schema.AtmosConfiguration) (ToolRegistry, error
 }
 
 // createRegistry creates a registry instance based on the configuration.
-func createRegistry(config schema.ToolchainRegistry) (ToolRegistry, error) {
+func createRegistry(config *schema.ToolchainRegistry) (ToolRegistry, error) {
 	defer perf.Track(nil, "registry.createRegistry")()
 
 	switch config.Type {
 	case "aqua":
-		// Aqua registry format/schema.
-		// Source is optional - defaults to official Aqua registry if not specified.
-		if config.Source == "" {
-			// Official Aqua registry (default).
-			if defaultRegistryFactory == nil {
-				return nil, fmt.Errorf("%w: no default registry factory registered", ErrRegistryNotRegistered)
-			}
-			return defaultRegistryFactory(), nil
-		}
-		// Custom Aqua-format registry at specified URL (e.g., corporate registry, mirror).
-		return NewURLRegistry(config.Source), nil
-
+		return createAquaRegistry(config)
 	case "atmos":
-		// Inline Atmos-format registry (tools defined directly in config).
-		if config.Tools == nil {
-			return nil, fmt.Errorf("%w: registry type 'atmos' requires 'tools' field", ErrRegistryConfiguration)
-		}
-		// Create AtmosRegistry from inline tools config using registered factory.
-		if atmosRegistryConstructor == nil {
-			return nil, fmt.Errorf("%w: atmos registry constructor not registered", ErrRegistryNotRegistered)
-		}
-		return atmosRegistryConstructor(config.Tools)
-
+		return createAtmosRegistry(config)
 	default:
 		return nil, fmt.Errorf("%w: %s (supported types: 'aqua', 'atmos')", ErrUnknownRegistry, config.Type)
 	}
+}
+
+// createAquaRegistry creates an Aqua-format registry from the configuration.
+func createAquaRegistry(config *schema.ToolchainRegistry) (ToolRegistry, error) {
+	// Source is optional - defaults to official Aqua registry if not specified.
+	if config.Source == "" {
+		return createDefaultAquaRegistry(config.Ref)
+	}
+	// Validate ref is only used with GitHub URLs.
+	if config.Ref != "" && !isGitHubURL(config.Source) {
+		return nil, fmt.Errorf("%w: 'ref' is only supported for github.com URLs, got %q", ErrRegistryConfiguration, config.Source)
+	}
+	// Custom Aqua-format registry at specified URL (e.g., corporate registry, mirror).
+	// If ref is provided, it will be used to pin the registry to a specific Git ref.
+	return NewURLRegistry(config.Source, config.Ref), nil
+}
+
+// createDefaultAquaRegistry creates the official Aqua registry (default).
+func createDefaultAquaRegistry(ref string) (ToolRegistry, error) {
+	if ref != "" {
+		return nil, fmt.Errorf("%w: 'ref' requires 'source' to be set", ErrRegistryConfiguration)
+	}
+	if defaultRegistryFactory == nil {
+		return nil, fmt.Errorf("%w: no default registry factory registered", ErrRegistryNotRegistered)
+	}
+	return defaultRegistryFactory(), nil
+}
+
+// createAtmosRegistry creates an inline Atmos-format registry from the configuration.
+func createAtmosRegistry(config *schema.ToolchainRegistry) (ToolRegistry, error) {
+	if config.Tools == nil {
+		return nil, fmt.Errorf("%w: registry type 'atmos' requires 'tools' field", ErrRegistryConfiguration)
+	}
+	if atmosRegistryConstructor == nil {
+		return nil, fmt.Errorf("%w: atmos registry constructor not registered", ErrRegistryNotRegistered)
+	}
+	return atmosRegistryConstructor(config.Tools)
+}
+
+// isGitHubURL checks if the URL is a github.com URL (not raw.githubusercontent.com).
+func isGitHubURL(url string) bool {
+	return strings.Contains(url, "github.com") && !strings.Contains(url, "raw.githubusercontent.com")
 }
