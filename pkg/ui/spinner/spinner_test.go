@@ -518,13 +518,13 @@ func TestSpinner_SuccessError_NonTTY(t *testing.T) {
 	t.Run("success is idempotent", func(t *testing.T) {
 		s := New("Testing")
 		s.Success("Done!")
-		s.Success("Done again!") // Should not panic
+		s.Success("Done again!") // Should not panic.
 	})
 
 	t.Run("error is idempotent", func(t *testing.T) {
 		s := New("Testing")
 		s.Error("Failed!")
-		s.Error("Failed again!") // Should not panic
+		s.Error("Failed again!") // Should not panic.
 	})
 }
 

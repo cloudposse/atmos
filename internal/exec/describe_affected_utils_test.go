@@ -436,6 +436,40 @@ func TestFindAffectedWithExcludeLocked(t *testing.T) {
 			excludeLocked: false,
 			expectedLen:   1,
 		},
+		{
+			name: "excludeLocked true excludes locked components",
+			currentStacks: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"metadata": map[string]any{
+									"component": "terraform-vpc",
+									"locked":    true,
+								},
+							},
+						},
+					},
+				},
+			},
+			remoteStacks: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{},
+					},
+				},
+			},
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: "components/terraform",
+					},
+				},
+			},
+			changedFiles:  []string{"components/terraform/vpc/main.tf"},
+			excludeLocked: true,
+			expectedLen:   0,
+		},
 	}
 
 	for _, tt := range tests {
