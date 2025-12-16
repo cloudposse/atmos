@@ -118,39 +118,63 @@ func parseToolConfig(owner, repo string, config map[string]any) (*registry.Tool,
 	tool.Type = toolType
 
 	// Parse URL/asset template (required) - depends on type.
-	switch toolType {
-	case "http":
-		u, ok := config["url"].(string)
-		if !ok || u == "" {
-			return nil, fmt.Errorf("%w: 'url' is required for type=http", ErrMissingRequiredField)
-		}
-		tool.URL = u
-		tool.Asset = u
-	case "github_release":
-		// For github_release, prefer 'asset' field, but fall back to 'url' for backward compatibility
-		if a, ok := config["asset"].(string); ok && a != "" {
-			tool.Asset = a
-		} else if u, ok := config["url"].(string); ok && u != "" {
-			tool.URL = u
-			tool.Asset = u
-		} else {
-			return nil, fmt.Errorf("%w: 'asset' or 'url' is required for type=github_release", ErrMissingRequiredField)
-		}
-	default:
-		return nil, fmt.Errorf("%w: unsupported type %q", ErrInvalidToolConfig, toolType)
+	if err := parseToolAsset(tool, toolType, config); err != nil {
+		return nil, err
 	}
 
 	// Parse optional fields.
+	parseOptionalFields(tool, config)
+
+	return tool, nil
+}
+
+// parseToolAsset parses the URL/asset fields based on tool type.
+func parseToolAsset(tool *registry.Tool, toolType string, config map[string]any) error {
+	switch toolType {
+	case "http":
+		return parseHTTPAsset(tool, config)
+	case "github_release":
+		return parseGitHubReleaseAsset(tool, config)
+	default:
+		return fmt.Errorf("%w: unsupported type %q", ErrInvalidToolConfig, toolType)
+	}
+}
+
+// parseHTTPAsset parses the URL field for HTTP type tools.
+func parseHTTPAsset(tool *registry.Tool, config map[string]any) error {
+	u, ok := config["url"].(string)
+	if !ok || u == "" {
+		return fmt.Errorf("%w: 'url' is required for type=http", ErrMissingRequiredField)
+	}
+	tool.URL = u
+	tool.Asset = u
+	return nil
+}
+
+// parseGitHubReleaseAsset parses the asset/url fields for GitHub release type tools.
+func parseGitHubReleaseAsset(tool *registry.Tool, config map[string]any) error {
+	// Prefer 'asset' field, but fall back to 'url' for backward compatibility.
+	if a, ok := config["asset"].(string); ok && a != "" {
+		tool.Asset = a
+		return nil
+	}
+	if u, ok := config["url"].(string); ok && u != "" {
+		tool.URL = u
+		tool.Asset = u
+		return nil
+	}
+	return fmt.Errorf("%w: 'asset' or 'url' is required for type=github_release", ErrMissingRequiredField)
+}
+
+// parseOptionalFields parses optional tool configuration fields.
+func parseOptionalFields(tool *registry.Tool, config map[string]any) {
 	if format, ok := config["format"].(string); ok {
 		tool.Format = format
 	}
-
 	if binaryName, ok := config["binary_name"].(string); ok {
 		tool.BinaryName = binaryName
 		tool.Name = binaryName
 	}
-
-	return tool, nil
 }
 
 // GetTool fetches tool metadata from inline definitions.

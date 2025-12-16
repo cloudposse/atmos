@@ -29,23 +29,50 @@ func (i *Installer) simpleExtract(assetPath, binaryPath string, tool *registry.T
 
 	log.Debug("Detected file type", "mime", mime.String(), "extension", mime.Extension())
 
+	return i.extractByMimeType(assetPath, binaryPath, tool, mime)
+}
+
+// extractByMimeType dispatches extraction based on detected MIME type.
+func (i *Installer) extractByMimeType(assetPath, binaryPath string, tool *registry.Tool, mime *mimetype.MIME) error {
 	switch {
 	case mime.Is("application/zip"):
 		return i.extractZip(assetPath, binaryPath, tool)
-	case mime.Is("application/x-gzip") || mime.Is("application/gzip"):
-		// Check if it's a tar.gz (by extension or by magic).
-		if strings.HasSuffix(assetPath, ".tar.gz") || strings.HasSuffix(assetPath, ".tgz") || mime.Is("application/x-tar") {
-			return i.extractTarGz(assetPath, binaryPath, tool)
-		}
-		// Otherwise, treat as a single gzip-compressed binary.
-		return i.extractGzip(assetPath, binaryPath)
+	case isGzipMime(mime):
+		return i.extractGzipOrTarGz(assetPath, binaryPath, tool, mime)
 	case mime.Is("application/x-tar"):
 		return i.extractTarGz(assetPath, binaryPath, tool)
-	case mime.Is("application/octet-stream") || mime.Is("application/x-executable"):
+	case isBinaryMime(mime):
 		return i.copyFile(assetPath, binaryPath)
 	default:
 		return i.extractByExtension(assetPath, binaryPath, tool)
 	}
+}
+
+// isGzipMime checks if the MIME type is a gzip variant.
+func isGzipMime(mime *mimetype.MIME) bool {
+	return mime.Is("application/x-gzip") || mime.Is("application/gzip")
+}
+
+// isBinaryMime checks if the MIME type indicates a binary executable.
+func isBinaryMime(mime *mimetype.MIME) bool {
+	return mime.Is("application/octet-stream") || mime.Is("application/x-executable")
+}
+
+// extractGzipOrTarGz handles gzip files, determining if they are tar.gz archives.
+func (i *Installer) extractGzipOrTarGz(assetPath, binaryPath string, tool *registry.Tool, mime *mimetype.MIME) error {
+	// Check if it's a tar.gz (by extension or by magic).
+	if isTarGzFile(assetPath, mime) {
+		return i.extractTarGz(assetPath, binaryPath, tool)
+	}
+	// Otherwise, treat as a single gzip-compressed binary.
+	return i.extractGzip(assetPath, binaryPath)
+}
+
+// isTarGzFile checks if a gzip file is a tar.gz archive.
+func isTarGzFile(assetPath string, mime *mimetype.MIME) bool {
+	return strings.HasSuffix(assetPath, ".tar.gz") ||
+		strings.HasSuffix(assetPath, ".tgz") ||
+		mime.Is("application/x-tar")
 }
 
 // extractByExtension handles fallback extraction based on file extension.

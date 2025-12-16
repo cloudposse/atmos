@@ -201,7 +201,7 @@ func Verify(filePath string) error {
 		return err
 	}
 
-	// Basic validation
+	// Basic validation.
 	if lockFile.Version == 0 {
 		return fmt.Errorf("%w: version is 0", ErrInvalidLockFile)
 	}
@@ -210,34 +210,51 @@ func Verify(filePath string) error {
 		return fmt.Errorf("%w: metadata version is 0", ErrInvalidLockFile)
 	}
 
-	// Validate each tool entry
+	// Validate each tool entry.
 	for toolName, tool := range lockFile.Tools {
-		// Guard against nil entries.
-		if tool == nil {
-			return fmt.Errorf("%w: %s", ErrToolEntryNil, toolName)
-		}
-
-		if tool.Version == "" {
-			return fmt.Errorf("%w: %s", ErrToolMissingVersion, toolName)
-		}
-
-		if len(tool.Platforms) == 0 {
-			return fmt.Errorf("%w: %s", ErrToolNoPlatforms, toolName)
-		}
-
-		for platform, entry := range tool.Platforms {
-			// Guard against nil platform entries.
-			if entry == nil {
-				return fmt.Errorf("%w: %s/%s", ErrPlatformEntryNil, toolName, platform)
-			}
-			if entry.URL == "" {
-				return fmt.Errorf("%w: %s/%s", ErrPlatformNoURL, toolName, platform)
-			}
-			if entry.Checksum == "" {
-				return fmt.Errorf("%w: %s/%s", ErrPlatformNoChecksum, toolName, platform)
-			}
+		if err := validateToolEntry(toolName, tool); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+// validateToolEntry validates a single tool entry in the lock file.
+func validateToolEntry(toolName string, tool *Tool) error {
+	// Guard against nil entries.
+	if tool == nil {
+		return fmt.Errorf("%w: %s", ErrToolEntryNil, toolName)
+	}
+
+	if tool.Version == "" {
+		return fmt.Errorf("%w: %s", ErrToolMissingVersion, toolName)
+	}
+
+	if len(tool.Platforms) == 0 {
+		return fmt.Errorf("%w: %s", ErrToolNoPlatforms, toolName)
+	}
+
+	for platform, entry := range tool.Platforms {
+		if err := validatePlatformEntry(toolName, platform, entry); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// validatePlatformEntry validates a single platform entry for a tool.
+func validatePlatformEntry(toolName, platform string, entry *PlatformEntry) error {
+	// Guard against nil platform entries.
+	if entry == nil {
+		return fmt.Errorf("%w: %s/%s", ErrPlatformEntryNil, toolName, platform)
+	}
+	if entry.URL == "" {
+		return fmt.Errorf("%w: %s/%s", ErrPlatformNoURL, toolName, platform)
+	}
+	if entry.Checksum == "" {
+		return fmt.Errorf("%w: %s/%s", ErrPlatformNoChecksum, toolName, platform)
+	}
 	return nil
 }

@@ -180,35 +180,75 @@ func (m *versionListModel) updateViewportComponent(msg tea.Msg) tea.Cmd {
 // handleViewportKeyMsg handles keyboard input for viewport scrolling.
 // Returns true if the key was handled.
 func (m *versionListModel) handleViewportKeyMsg(msg tea.KeyMsg) bool {
-	switch msg.String() {
+	key := msg.String()
+
+	if m.handleScrollKey(key) {
+		return true
+	}
+
+	return m.handleJumpKey(key)
+}
+
+// handleScrollKey handles scroll-based navigation keys.
+func (m *versionListModel) handleScrollKey(key string) bool {
+	switch key {
 	case "up", "k":
-		for i := 0; i < m.scrollSpeed; i++ {
-			m.viewport.ScrollUp(1)
-		}
+		m.scrollUp()
 		return true
 	case "down", "j":
-		for i := 0; i < m.scrollSpeed; i++ {
-			m.viewport.ScrollDown(1)
-		}
+		m.scrollDown()
 		return true
 	case "pgup":
-		for i := 0; i < m.scrollSpeed; i++ {
-			m.viewport.PageUp()
-		}
+		m.pageUp()
 		return true
 	case "pgdown":
-		for i := 0; i < m.scrollSpeed; i++ {
-			m.viewport.PageDown()
-		}
+		m.pageDown()
 		return true
+	default:
+		return false
+	}
+}
+
+// handleJumpKey handles jump-to-position navigation keys.
+func (m *versionListModel) handleJumpKey(key string) bool {
+	switch key {
 	case "home", "g":
 		m.viewport.GotoTop()
 		return true
 	case "end", "G":
 		m.viewport.GotoBottom()
 		return true
+	default:
+		return false
 	}
-	return false
+}
+
+// scrollUp scrolls up by the configured scroll speed.
+func (m *versionListModel) scrollUp() {
+	for i := 0; i < m.scrollSpeed; i++ {
+		m.viewport.ScrollUp(1)
+	}
+}
+
+// scrollDown scrolls down by the configured scroll speed.
+func (m *versionListModel) scrollDown() {
+	for i := 0; i < m.scrollSpeed; i++ {
+		m.viewport.ScrollDown(1)
+	}
+}
+
+// pageUp scrolls up by page, repeated by scroll speed.
+func (m *versionListModel) pageUp() {
+	for i := 0; i < m.scrollSpeed; i++ {
+		m.viewport.PageUp()
+	}
+}
+
+// pageDown scrolls down by page, repeated by scroll speed.
+func (m *versionListModel) pageDown() {
+	for i := 0; i < m.scrollSpeed; i++ {
+		m.viewport.PageDown()
+	}
 }
 
 func (m *versionListModel) View() string {

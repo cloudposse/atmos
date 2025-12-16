@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	// errFmtNamedError formats an error with a name prefix.
+	// ErrFmtNamedError formats an error with a name prefix.
 	errFmtNamedError = "%s: %w"
-	// errFmtWrappedError formats an error wrapping another error.
+	// ErrFmtWrappedError formats an error wrapping another error.
 	errFmtWrappedError = "%w: %w"
 )
 

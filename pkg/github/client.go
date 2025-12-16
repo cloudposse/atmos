@@ -95,61 +95,72 @@ func handleGitHubAPIError(err error, resp *github.Response) error {
 func ConvertToRawURL(githubURL string) (string, error) {
 	defer perf.Track(nil, "github.ConvertToRawURL")()
 
-	// Handle github:// scheme
+	// Handle github:// scheme.
 	if strings.HasPrefix(githubURL, "github://") {
 		return convertGitHubSchemeToRaw(githubURL)
 	}
 
-	// Parse the URL
+	// Parse the URL.
 	u, err := url.Parse(githubURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid GitHub URL: %w", err)
 	}
 
-	// Already a raw URL
+	// Already a raw URL.
 	if u.Host == "raw.githubusercontent.com" {
 		return githubURL, nil
 	}
 
-	// Must be github.com
+	// Must be github.com.
 	if u.Host != "github.com" {
 		return "", fmt.Errorf("%w: %s (expected github.com)", ErrUnsupportedGitHubHost, u.Host)
 	}
 
-	// Parse path components: /owner/repo/blob|tree/ref/path...
-	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	return parseGitHubDotComURL(u.Path)
+}
+
+// parseGitHubDotComURL parses a github.com URL path and converts it to raw URL.
+func parseGitHubDotComURL(path string) (string, error) {
+	parts := strings.Split(strings.Trim(path, "/"), "/")
 	if len(parts) < 2 {
-		return "", fmt.Errorf("%w: path %s (expected at least owner/repo)", ErrInvalidGitHubURL, u.Path)
+		return "", fmt.Errorf("%w: path %s (expected at least owner/repo)", ErrInvalidGitHubURL, path)
 	}
 
 	owner := parts[0]
 	repo := parts[1]
 
-	// Default to main branch if no additional parts
+	// Default to main branch if no additional parts.
 	if len(parts) == 2 {
 		return fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/main", owner, repo), nil
 	}
 
-	// Check for blob/tree indicator
-	if len(parts) < 4 {
-		return "", fmt.Errorf("%w: path %s (expected owner/repo/blob|tree/ref)", ErrInvalidGitHubURL, u.Path)
+	return parseGitHubPathWithRef(owner, repo, parts[2:], path)
+}
+
+// parseGitHubPathWithRef parses a GitHub path with blob/tree and ref components.
+func parseGitHubPathWithRef(owner, repo string, pathParts []string, originalPath string) (string, error) {
+	if len(pathParts) < 2 {
+		return "", fmt.Errorf("%w: path %s (expected owner/repo/blob|tree/ref)", ErrInvalidGitHubURL, originalPath)
 	}
 
-	urlType := parts[2] // blob or tree
+	urlType := pathParts[0] // blob or tree
 	if urlType != "blob" && urlType != "tree" {
 		return "", fmt.Errorf("%w: type %s (expected blob or tree)", ErrInvalidGitHubURL, urlType)
 	}
 
-	ref := parts[3]
-	pathParts := parts[4:]
+	ref := pathParts[1]
+	fileParts := pathParts[2:]
 
-	// Construct raw URL
+	return buildRawURL(owner, repo, ref, fileParts), nil
+}
+
+// buildRawURL constructs a raw.githubusercontent.com URL.
+func buildRawURL(owner, repo, ref string, pathParts []string) string {
 	rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s", owner, repo, ref)
 	if len(pathParts) > 0 {
 		rawURL = fmt.Sprintf("%s/%s", rawURL, strings.Join(pathParts, "/"))
 	}
-
-	return rawURL, nil
+	return rawURL
 }
 
 // convertGitHubSchemeToRaw converts github:// scheme URLs to raw content URLs.
