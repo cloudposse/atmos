@@ -53,6 +53,7 @@ AVAILABLE COMMANDS
       refresh             Update the state to match remote systems
       shell               Configure an environment for an Atmos component and start a new shell
       show                Show the current state or a saved plan
+      source [command]    Manage terraform component sources (JIT vendoring)
       state               Advanced state management
       taint               Mark a resource instance as not fully functional
       test                Execute integration tests for Terraform modules
