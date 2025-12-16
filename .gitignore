@@ -93,6 +93,7 @@ tools/gomodcheck/.gomodcheck
 # Claude Code and Hive Mind development tools
 .claude-flow/
 .hive-mind/
+.claude/plans/
 
 performance-optimization/
 node_modules

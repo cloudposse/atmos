@@ -2,7 +2,10 @@ package toolchain
 
 import (
 	"fmt"
+	"sort"
 
+	"github.com/Masterminds/semver/v3"
+	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -39,7 +42,7 @@ func RunListAtmosVersions() ([]string, error) {
 }
 
 // RunListInstalledAtmosVersions prints a formatted table of installed Atmos versions.
-func RunListInstalledAtmosVersions() error {
+func RunListInstalledAtmosVersions(currentVersion string) error {
 	defer perf.Track(nil, "toolchain.RunListInstalledAtmosVersions")()
 
 	installer := NewInstaller()
@@ -63,25 +66,138 @@ func RunListInstalledAtmosVersions() error {
 		return nil
 	}
 
-	// Build rows for installed Atmos versions.
-	rows := buildAtmosVersionRows(installer, versions)
-	sortToolRows(rows)
-
-	// Calculate column widths and create table.
-	terminalWidth := getTerminalWidth()
-	widths := calculateColumnWidths(rows, terminalWidth)
-
-	columns := createTableColumns(widths)
-	tableRows := convertRowsToTableFormat(rows)
-	t := createAndConfigureTable(columns, tableRows)
-
-	// Print the table with conditional styling.
-	_ = ui.Writeln(renderTableWithConditionalStyling(&t, rows))
+	// Build and render a simple table for Atmos versions.
+	renderAtmosVersionTable(installer, versions, currentVersion)
 
 	return nil
 }
 
+// atmosVersionRow holds data for a single Atmos version in the simplified table.
+type atmosVersionRow struct {
+	version     string
+	installDate string
+	size        string
+	isActive    bool
+}
+
+// renderAtmosVersionTable renders a simplified table for installed Atmos versions.
+func renderAtmosVersionTable(installer *Installer, versions []string, currentVersion string) {
+	defer perf.Track(nil, "toolchain.renderAtmosVersionTable")()
+
+	// Build rows with metadata.
+	rows := buildAtmosVersionRowsSimple(installer, versions, currentVersion)
+
+	// Sort by version (newest first).
+	sortAtmosVersionRows(rows)
+
+	// Render the table.
+	printAtmosVersionTable(rows)
+}
+
+// buildAtmosVersionRowsSimple creates simplified row entries for installed Atmos versions.
+func buildAtmosVersionRowsSimple(installer *Installer, versions []string, currentVersion string) []atmosVersionRow {
+	defer perf.Track(nil, "toolchain.buildAtmosVersionRowsSimple")()
+
+	var rows []atmosVersionRow
+
+	for _, version := range versions {
+		binaryPath, err := installer.FindBinaryPath("cloudposse", "atmos", version)
+		if err != nil {
+			continue // Skip versions we can't find.
+		}
+
+		_, installDate, size := getInstallationMetadata(binaryPath, true)
+
+		// Check if this version is the currently running one.
+		isActive := normalizeVersion(version) == normalizeVersion(currentVersion)
+
+		rows = append(rows, atmosVersionRow{
+			version:     version,
+			installDate: installDate,
+			size:        size,
+			isActive:    isActive,
+		})
+	}
+
+	return rows
+}
+
+// normalizeVersion strips the 'v' prefix for comparison.
+func normalizeVersion(v string) string {
+	if len(v) > 0 && v[0] == 'v' {
+		return v[1:]
+	}
+	return v
+}
+
+// sortAtmosVersionRows sorts rows by semantic version (newest first).
+func sortAtmosVersionRows(rows []atmosVersionRow) {
+	defer perf.Track(nil, "toolchain.sortAtmosVersionRows")()
+
+	sort.Slice(rows, func(i, j int) bool {
+		vi, errI := semver.NewVersion(rows[i].version)
+		vj, errJ := semver.NewVersion(rows[j].version)
+		if errI != nil || errJ != nil {
+			return rows[i].version > rows[j].version
+		}
+		return vi.GreaterThan(vj)
+	})
+}
+
+// printAtmosVersionTable prints the Atmos version table to stdout.
+func printAtmosVersionTable(rows []atmosVersionRow) {
+	defer perf.Track(nil, "toolchain.printAtmosVersionTable")()
+
+	// Define column headers.
+	headers := []string{"", "VERSION", "INSTALL DATE", "SIZE"}
+
+	// Calculate column widths.
+	widths := []int{2, len(headers[1]), len(headers[2]), len(headers[3])}
+	for _, row := range rows {
+		if len(row.version) > widths[1] {
+			widths[1] = len(row.version)
+		}
+		if len(row.installDate) > widths[2] {
+			widths[2] = len(row.installDate)
+		}
+		if len(row.size) > widths[3] {
+			widths[3] = len(row.size)
+		}
+	}
+
+	// Add padding.
+	for i := range widths {
+		widths[i] += 2
+	}
+
+	// Print header.
+	headerStyle := lipgloss.NewStyle().Bold(true)
+	headerLine := fmt.Sprintf("%-*s %-*s %-*s %-*s",
+		widths[0], headers[0],
+		widths[1], headers[1],
+		widths[2], headers[2],
+		widths[3], headers[3])
+	_ = ui.Writeln(headerStyle.Render(headerLine))
+
+	// Print rows.
+	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	for _, row := range rows {
+		activeIndicator := "  "
+		if row.isActive {
+			activeIndicator = activeStyle.Render("● ")
+		}
+
+		line := fmt.Sprintf("%s%-*s %-*s %-*s",
+			activeIndicator,
+			widths[1], row.version,
+			widths[2], row.installDate,
+			widths[3], row.size)
+		_ = ui.Writeln(line)
+	}
+}
+
 // buildAtmosVersionRows creates toolRow entries for installed Atmos versions.
+// Deprecated: Use buildAtmosVersionRowsSimple instead for atmos version list --installed.
 func buildAtmosVersionRows(installer *Installer, versions []string) []toolRow {
 	var rows []toolRow
 

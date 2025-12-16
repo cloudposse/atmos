@@ -16,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	pkgversion "github.com/cloudposse/atmos/pkg/version"
 	"github.com/cloudposse/atmos/toolchain"
 )
 
@@ -208,7 +209,7 @@ var listCmd = &cobra.Command{
 func listInstalledVersions() error {
 	defer perf.Track(atmosConfigPtr, "version.listInstalledVersions")()
 
-	return toolchain.RunListInstalledAtmosVersions()
+	return toolchain.RunListInstalledAtmosVersions(pkgversion.Version)
 }
 
 func init() {
