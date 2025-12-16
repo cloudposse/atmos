@@ -122,6 +122,8 @@ func ParseRegistryURL(registryURL string) (accountID, region string, err error) 
 
 // IsECRRegistry checks if a URL is an ECR registry URL.
 func IsECRRegistry(url string) bool {
+	defer perf.Track(nil, "aws.IsECRRegistry")()
+
 	url = strings.TrimPrefix(url, "https://")
 	return ecrRegistryPattern.MatchString(url)
 }
