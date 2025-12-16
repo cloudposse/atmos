@@ -1,8 +1,8 @@
 
 👽 test linux/amd64
 
-Atmos is a universal tool for DevOps and cloud automation used for provisioning,
-managing and orchestrating workflows across various toolchains                  
+Atmos is a framework for orchestrating and operating infrastructure workflows   
+across multiple cloud and DevOps toolchains.                                    
 
 USAGE
 
