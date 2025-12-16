@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/spf13/cobra"
@@ -58,7 +59,7 @@ func executeAuthECRLoginCommand(cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 
-	// Get flag values.
+	// Get flag values (errors are ignored as flags are guaranteed to exist by Cobra).
 	identityName, _ := cmd.Flags().GetString("identity")
 	registries, _ := cmd.Flags().GetStringArray("registry")
 
@@ -139,7 +140,9 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 			return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
 		}
 
-		_ = ui.Success(fmt.Sprintf("ECR login: %s (expires in 12h)", registry))
+		// Log success with actual expiration time from ECR token.
+		expiresIn := time.Until(result.ExpiresAt).Round(time.Minute)
+		_ = ui.Success(fmt.Sprintf("ECR login: %s (expires in %s)", registry, expiresIn))
 	}
 
 	// Set DOCKER_CONFIG environment variable.
