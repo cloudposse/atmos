@@ -2,6 +2,8 @@ package function
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -56,4 +58,40 @@ func (f *BaseFunction) Phase() Phase {
 	defer perf.Track(nil, "function.BaseFunction.Phase")()
 
 	return f.FunctionPhase
+}
+
+// PlaceholderFunction is a base for PostMerge functions that return a placeholder.
+// These functions defer actual execution to post-merge processing.
+type PlaceholderFunction struct {
+	BaseFunction
+	Tag      string // The tag to prefix the placeholder (e.g., "!store").
+	ArgsHelp string // Help text for required arguments (e.g., "store_name key").
+}
+
+// NewPlaceholderFunction creates a new PlaceholderFunction.
+func NewPlaceholderFunction(name, tag, argsHelp string) PlaceholderFunction {
+	defer perf.Track(nil, "function.NewPlaceholderFunction")()
+
+	return PlaceholderFunction{
+		BaseFunction: BaseFunction{
+			FunctionName:    name,
+			FunctionAliases: nil,
+			FunctionPhase:   PostMerge,
+		},
+		Tag:      tag,
+		ArgsHelp: argsHelp,
+	}
+}
+
+// Execute returns a placeholder for post-merge resolution.
+func (f *PlaceholderFunction) Execute(_ context.Context, args string, _ *ExecutionContext) (any, error) {
+	defer perf.Track(nil, "function.PlaceholderFunction.Execute")()
+
+	args = strings.TrimSpace(args)
+	if args == "" {
+		return nil, fmt.Errorf("%w: %s requires arguments: %s", ErrInvalidArguments, f.Tag, f.ArgsHelp)
+	}
+
+	// Return placeholder with the original arguments for post-merge resolution.
+	return fmt.Sprintf("%s %s", f.Tag, args), nil
 }

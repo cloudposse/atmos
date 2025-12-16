@@ -3,17 +3,20 @@ package function
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	atmoshttp "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Include function tags are defined in tags.go.
 // Use YAMLTag(TagInclude) and YAMLTag(TagIncludeRaw) to get the YAML tag format.
+
+// Default HTTP timeout for URL fetches.
+const defaultHTTPTimeout = 30 * time.Second
 
 // IncludeFunction implements the !include YAML function.
 // It includes content from local files or remote URLs.
@@ -45,7 +48,7 @@ func (f *IncludeFunction) Execute(ctx context.Context, args string, execCtx *Exe
 		return nil, fmt.Errorf("%w: !include requires a file path or URL", ErrInvalidArguments)
 	}
 
-	return loadIncludeContent(args, execCtx, false)
+	return loadIncludeContent(ctx, args, execCtx, false)
 }
 
 // IncludeRawFunction implements the !include.raw YAML function.
@@ -78,18 +81,18 @@ func (f *IncludeRawFunction) Execute(ctx context.Context, args string, execCtx *
 		return nil, fmt.Errorf("%w: !include.raw requires a file path or URL", ErrInvalidArguments)
 	}
 
-	return loadIncludeContent(args, execCtx, true)
+	return loadIncludeContent(ctx, args, execCtx, true)
 }
 
 // loadIncludeContent loads content from a file path or URL.
-func loadIncludeContent(path string, execCtx *ExecutionContext, raw bool) (any, error) {
+func loadIncludeContent(ctx context.Context, path string, execCtx *ExecutionContext, raw bool) (any, error) {
 	defer perf.Track(nil, "function.loadIncludeContent")()
 
 	var content []byte
 	var err error
 
 	if isURL(path) {
-		content, err = fetchURL(path)
+		content, err = fetchURL(ctx, path)
 	} else {
 		content, err = readLocalFile(path, execCtx)
 	}
@@ -113,24 +116,14 @@ func isURL(path string) bool {
 	return strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://")
 }
 
-// fetchURL fetches content from a URL.
-func fetchURL(url string) ([]byte, error) {
+// fetchURL fetches content from a URL using the atmos HTTP client.
+func fetchURL(ctx context.Context, url string) ([]byte, error) {
 	defer perf.Track(nil, "function.fetchURL")()
 
-	client := &http.Client{}
-	resp, err := client.Get(url)
+	client := atmoshttp.NewDefaultClient(defaultHTTPTimeout)
+	content, err := atmoshttp.Get(ctx, url, client)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to fetch URL %s: %w", ErrInvalidArguments, url, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: failed to fetch URL %s: status %d", ErrInvalidArguments, url, resp.StatusCode)
-	}
-
-	content, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read response from %s: %w", ErrInvalidArguments, url, err)
 	}
 
 	return content, nil

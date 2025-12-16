@@ -15,10 +15,13 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"go.yaml.in/yaml/v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/function"
 )
 
-var ErrFailedToProcessHclFile = errors.New("failed to process HCL file")
+// ErrFailedToProcessHclFile is an alias for the central error sentinel.
+// Deprecated: Use errUtils.ErrFailedToProcessHCL directly.
+var ErrFailedToProcessHclFile = errUtils.ErrFailedToProcessHCL
 
 const (
 	errFmtProcessHCLFile = "%w, file: %s, error: %s"
