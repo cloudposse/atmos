@@ -38,13 +38,15 @@ var workflowsCmd = &cobra.Command{
 	Long:  `List Atmos workflows with support for filtering by file, custom column selection, sorting, and multiple output formats.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Skip stack validation for workflows.
-		if err := checkAtmosConfig(true); err != nil {
+		// Get Viper instance for flag/env precedence.
+		v := viper.GetViper()
+
+		// Skip stack validation for workflows (honors --base-path, --config, --config-path, --profile).
+		if err := checkAtmosConfig(cmd, v, true); err != nil {
 			return err
 		}
 
 		// Parse flags using StandardParser with Viper precedence.
-		v := viper.GetViper()
 		if err := workflowsParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}

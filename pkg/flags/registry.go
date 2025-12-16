@@ -78,6 +78,24 @@ func (r *FlagRegistry) Count() int {
 	return len(r.flags)
 }
 
+// SetCompletionFunc sets a custom completion function for a flag.
+// This is used to set completion functions after flag registration to avoid import cycles.
+// For example, cmd/terraform can set the stack completion function without pkg/flags needing
+// to import internal/exec.
+func (r *FlagRegistry) SetCompletionFunc(name string, fn func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective)) {
+	defer perf.Track(nil, "flags.FlagRegistry.SetCompletionFunc")()
+
+	flag := r.flags[name]
+	if flag == nil {
+		return
+	}
+
+	// Only StringFlag supports completion functions currently.
+	if stringFlag, ok := flag.(*StringFlag); ok {
+		stringFlag.CompletionFunc = fn
+	}
+}
+
 // CommonFlags returns a registry pre-populated with common Atmos flags.
 // This includes:
 //   - All global flags from GlobalFlagsRegistry() (logs-level, chdir, base-path, identity, etc.)
@@ -101,6 +119,7 @@ func CommonFlags() *FlagRegistry {
 	registry := NewFlagRegistry()
 
 	// Stack flag
+	// Note: CompletionFunc is set by cmd/terraform package to avoid import cycle.
 	registry.Register(&StringFlag{
 		Name:        "stack",
 		Shorthand:   "s",
@@ -117,46 +136,6 @@ func CommonFlags() *FlagRegistry {
 		Default:     false,
 		Description: "Perform dry run without making actual changes",
 		EnvVars:     []string{"ATMOS_DRY_RUN"},
-	})
-
-	return registry
-}
-
-// TerraformFlags returns a registry with flags specific to Terraform commands.
-// Includes common flags plus Terraform-specific flags like:
-//   - upload-status: Upload plan status to Atmos Pro
-//   - skip-init: Skip terraform init
-//   - from-plan: Apply from previously generated plan
-func TerraformFlags() *FlagRegistry {
-	defer perf.Track(nil, "flags.TerraformFlags")()
-
-	registry := CommonFlags()
-
-	// Upload status flag (optional bool - can be --upload-status or --upload-status=false)
-	registry.Register(&BoolFlag{
-		Name:        "upload-status",
-		Shorthand:   "",
-		Default:     false,
-		Description: "Upload plan status to Atmos Pro",
-		EnvVars:     []string{"ATMOS_UPLOAD_STATUS"},
-	})
-
-	// Skip init flag
-	registry.Register(&BoolFlag{
-		Name:        "skip-init",
-		Shorthand:   "",
-		Default:     false,
-		Description: "Skip terraform init before running command",
-		EnvVars:     []string{"ATMOS_SKIP_INIT"},
-	})
-
-	// From plan flag
-	registry.Register(&StringFlag{
-		Name:        "from-plan",
-		Shorthand:   "",
-		Default:     "",
-		Description: "Apply from previously generated plan file",
-		EnvVars:     []string{"ATMOS_FROM_PLAN"},
 	})
 
 	return registry

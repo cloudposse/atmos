@@ -32,6 +32,23 @@ Atmos enhances the destroy command with:
 - Backend configuration
 - Component validation and locking support
 :::
+
+## Configuration
+
+Configure default behavior for `terraform destroy` in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    # Auto-generate backend configuration
+    auto_generate_backend_file: true
+```
+
+These settings can also be controlled via environment variables:
+```shell
+export ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=true
+```
+
 ## Examples
 
 ### Basic Destroy

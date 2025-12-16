@@ -186,7 +186,7 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
     </dd>
 </dl>
 
-:::note
+## Native Terraform Flags
 
 The `atmos terraform deploy` command supports all native `terraform apply` options described
 in [Terraform apply options](https://developer.hashicorp.com/terraform/cli/commands/apply#apply-options), with the exception that a planfile argument
@@ -194,4 +194,8 @@ can't be provided on the command line. To use a previously generated planfile, u
 
 See [Terraform Planfiles](/components/terraform/planfiles) for a comprehensive guide on working with planfiles in Atmos.
 
-:::
+## Related Commands
+
+- [terraform plan](/cli/commands/terraform/plan) - Generate an execution plan
+- [terraform apply](/cli/commands/terraform/apply) - Apply changes with confirmation
+- [terraform destroy](/cli/commands/terraform/destroy) - Destroy infrastructure
