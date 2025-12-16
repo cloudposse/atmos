@@ -130,7 +130,7 @@ type IntegrationVia struct {
 
 // IntegrationSpec defines the spec configuration for integrations.
 type IntegrationSpec struct {
-	AutoProvision bool         `yaml:"auto_provision,omitempty" json:"auto_provision,omitempty" mapstructure:"auto_provision"` // Whether to auto-provision on identity login.
+	AutoProvision *bool        `yaml:"auto_provision,omitempty" json:"auto_provision,omitempty" mapstructure:"auto_provision"` // Whether to auto-provision on identity login. Defaults to true.
 	Registry      *ECRRegistry `yaml:"registry,omitempty" json:"registry,omitempty" mapstructure:"registry"`                   // Single ECR registry for aws/ecr integrations.
 }
 

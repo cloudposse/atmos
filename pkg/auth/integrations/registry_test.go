@@ -157,6 +157,7 @@ func TestCreate_FactoryError(t *testing.T) {
 }
 
 func TestIntegrationConfig_Fields(t *testing.T) {
+	autoProvision := true
 	config := &IntegrationConfig{
 		Name: "my-integration",
 		Config: &schema.Integration{
@@ -165,7 +166,7 @@ func TestIntegrationConfig_Fields(t *testing.T) {
 				Identity: "dev-admin",
 			},
 			Spec: &schema.IntegrationSpec{
-				AutoProvision: true,
+				AutoProvision: &autoProvision,
 				Registry: &schema.ECRRegistry{
 					AccountID: "123456789012",
 					Region:    "us-east-1",

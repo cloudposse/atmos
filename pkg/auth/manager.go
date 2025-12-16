@@ -1325,7 +1325,7 @@ func (m *manager) triggerIntegrations(ctx context.Context, identityName string, 
 }
 
 // findIntegrationsForIdentity returns integration names that reference the given identity.
-// If autoProvisionOnly is true, only returns integrations with auto_provision enabled.
+// If autoProvisionOnly is true, only returns integrations with auto_provision enabled (defaults to true).
 func (m *manager) findIntegrationsForIdentity(identityName string, autoProvisionOnly bool) []string {
 	if m.config.Integrations == nil {
 		return nil
@@ -1338,9 +1338,13 @@ func (m *manager) findIntegrationsForIdentity(identityName string, autoProvision
 			continue
 		}
 
-		// If autoProvisionOnly, check if auto_provision is enabled.
+		// If autoProvisionOnly, check if auto_provision is enabled (defaults to true).
 		if autoProvisionOnly {
-			if integration.Spec == nil || !integration.Spec.AutoProvision {
+			autoProvision := true // Default to true when not specified.
+			if integration.Spec != nil && integration.Spec.AutoProvision != nil {
+				autoProvision = *integration.Spec.AutoProvision
+			}
+			if !autoProvision {
 				continue
 			}
 		}
