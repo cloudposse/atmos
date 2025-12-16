@@ -26,7 +26,12 @@ type ECRAuthResult struct {
 	ExpiresAt time.Time // Token expiration time.
 }
 
-// ecrRegistryPattern matches ECR registry URLs.
+// ecrRegistryPattern matches ECR private registry URLs.
+// Format: {account_id}.dkr.ecr.{region}.amazonaws.com
+// Note: This pattern does not support:
+// - ECR Public (public.ecr.aws)
+// - China regions (dkr.ecr.cn-*)
+// - GovCloud regions with different suffixes
 var ecrRegistryPattern = regexp.MustCompile(`^(\d{12})\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com$`)
 
 // GetAuthorizationToken retrieves ECR credentials using AWS credentials.

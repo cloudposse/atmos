@@ -1413,10 +1413,9 @@ func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string
 		return fmt.Errorf("failed to authenticate identity '%s': %w", identityName, err)
 	}
 
-	// Load credentials for the integration.
-	creds, err := m.loadCredentialsWithFallback(ctx, identityName)
-	if err != nil {
-		return fmt.Errorf("failed to load credentials for identity '%s': %w", identityName, err)
+	// Use credentials from authentication result.
+	if whoami.Credentials == nil {
+		return fmt.Errorf("failed to get credentials for identity '%s': credentials not available", identityName)
 	}
 
 	log.Debug("Authenticated identity for integration", "identity", identityName, "whoami", whoami.Identity)
@@ -1430,7 +1429,7 @@ func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string
 		return fmt.Errorf("%w: %w", errUtils.ErrIntegrationFailed, err)
 	}
 
-	return integration.Execute(ctx, creds)
+	return integration.Execute(ctx, whoami.Credentials)
 }
 
 // ExecuteIdentityIntegrations executes all integrations that reference this identity.
@@ -1456,17 +1455,16 @@ func (m *manager) ExecuteIdentityIntegrations(ctx context.Context, identityName 
 		return fmt.Errorf("failed to authenticate identity '%s': %w", identityName, err)
 	}
 
-	// Load credentials.
-	creds, err := m.loadCredentialsWithFallback(ctx, identityName)
-	if err != nil {
-		return fmt.Errorf("failed to load credentials for identity '%s': %w", identityName, err)
+	// Use credentials from authentication result.
+	if whoami.Credentials == nil {
+		return fmt.Errorf("failed to get credentials for identity '%s': credentials not available", identityName)
 	}
 
 	log.Debug("Authenticated identity for integrations", "identity", identityName, "whoami", whoami.Identity)
 
 	// Execute each linked integration.
 	for _, integrationName := range linkedIntegrations {
-		if err := m.executeIntegration(ctx, integrationName, creds); err != nil {
+		if err := m.executeIntegration(ctx, integrationName, whoami.Credentials); err != nil {
 			return fmt.Errorf("integration '%s' failed: %w", integrationName, err)
 		}
 	}

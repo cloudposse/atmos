@@ -42,10 +42,22 @@ func NewECRIntegration(config *integrations.IntegrationConfig) (integrations.Int
 		identity = config.Config.Via.Identity
 	}
 
-	// Extract registry from spec.registry.
+	// Extract registry from spec.registry - required for aws/ecr integrations.
 	var registry *schema.ECRRegistry
 	if config.Config.Spec != nil && config.Config.Spec.Registry != nil {
 		registry = config.Config.Spec.Registry
+	}
+
+	if registry == nil {
+		return nil, fmt.Errorf("%w: integration '%s' has no registry configured (spec.registry is required for aws/ecr)", errUtils.ErrIntegrationFailed, config.Name)
+	}
+
+	if registry.AccountID == "" {
+		return nil, fmt.Errorf("%w: integration '%s' has no account_id configured", errUtils.ErrIntegrationFailed, config.Name)
+	}
+
+	if registry.Region == "" {
+		return nil, fmt.Errorf("%w: integration '%s' has no region configured", errUtils.ErrIntegrationFailed, config.Name)
 	}
 
 	return &ECRIntegration{
@@ -63,11 +75,6 @@ func (e *ECRIntegration) Kind() string {
 // Execute performs ECR login for the configured registry.
 func (e *ECRIntegration) Execute(ctx context.Context, creds types.ICredentials) error {
 	defer perf.Track(nil, "aws.ECRIntegration.Execute")()
-
-	if e.registry == nil {
-		log.Warn("ECR integration has no registry configured", "integration", e.name)
-		return nil
-	}
 
 	// Create Docker config manager.
 	dockerConfig, err := docker.NewConfigManager()
