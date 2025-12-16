@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -25,12 +26,13 @@ const (
 
 // VendorSource vendors a component source to the target directory.
 // It uses go-getter via the existing downloader infrastructure.
+// Note: Authentication is not yet supported - credentials must be configured
+// via environment variables or cloud provider credential chains.
 func VendorSource(
-	ctx context.Context,
+	_ context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	sourceSpec *schema.VendorComponentSource,
 	targetDir string,
-	authContext *schema.AuthContext,
 ) error {
 	defer perf.Track(atmosConfig, "source.VendorSource")()
 
@@ -141,7 +143,7 @@ func copyToTarget(srcDir, dstDir string, sourceSpec *schema.VendorComponentSourc
 	return cp.Copy(srcDir, dstDir, opts)
 }
 
-func createSkipFunc(srcDir string, sourceSpec *schema.VendorComponentSource) func(os.FileInfo, string, string) (bool, error) { //nolint:gocognit,revive,cyclop // Complex pattern matching requires nested conditions
+func createSkipFunc(srcDir string, sourceSpec *schema.VendorComponentSource) func(os.FileInfo, string, string) (bool, error) {
 	return func(info os.FileInfo, src, dest string) (bool, error) {
 		// Always skip .git directories.
 		if info.IsDir() && info.Name() == ".git" {
@@ -160,49 +162,19 @@ func createSkipFunc(srcDir string, sourceSpec *schema.VendorComponentSource) fun
 		}
 
 		// Check excluded paths first.
-		for _, pattern := range sourceSpec.ExcludedPaths {
-			matched, err := filepath.Match(pattern, relPath)
-			if err != nil {
-				continue
-			}
-			if matched {
-				return true, nil
-			}
-			// Also check if pattern matches any parent directory.
-			matched, err = filepath.Match(pattern, filepath.Base(relPath))
-			if err != nil {
-				continue
-			}
-			if matched {
-				return true, nil
-			}
+		if matchesPatterns(relPath, sourceSpec.ExcludedPaths, "excluded_paths") {
+			return true, nil
 		}
 
 		// If included paths specified, only include matching files.
-		//nolint:nestif // Nested if for pattern matching logic
 		if len(sourceSpec.IncludedPaths) > 0 {
 			// For directories, don't skip (we need to traverse them).
 			if info.IsDir() {
 				return false, nil
 			}
-
 			// For files, check if they match any included pattern.
-			for _, pattern := range sourceSpec.IncludedPaths {
-				matched, err := filepath.Match(pattern, relPath)
-				if err != nil {
-					continue
-				}
-				if matched {
-					return false, nil
-				}
-				// Also check just the filename.
-				matched, err = filepath.Match(pattern, filepath.Base(relPath))
-				if err != nil {
-					continue
-				}
-				if matched {
-					return false, nil
-				}
+			if matchesPatterns(relPath, sourceSpec.IncludedPaths, "included_paths") {
+				return false, nil
 			}
 			// File doesn't match any included pattern, skip it.
 			return true, nil
@@ -210,4 +182,29 @@ func createSkipFunc(srcDir string, sourceSpec *schema.VendorComponentSource) fun
 
 		return false, nil
 	}
+}
+
+// matchesPatterns checks if relPath matches any of the given patterns.
+// Logs warnings for invalid patterns.
+func matchesPatterns(relPath string, patterns []string, patternType string) bool {
+	for _, pattern := range patterns {
+		matched, err := filepath.Match(pattern, relPath)
+		if err != nil {
+			_ = ui.Warningf("invalid glob pattern in %s: %q: %v", patternType, pattern, err)
+			continue
+		}
+		if matched {
+			return true
+		}
+		// Also check just the filename.
+		matched, err = filepath.Match(pattern, filepath.Base(relPath))
+		if err != nil {
+			_ = ui.Warningf("invalid glob pattern in %s: %q: %v", patternType, pattern, err)
+			continue
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
 }

@@ -1,16 +1,14 @@
 package source
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var describeParser *flags.StandardParser
@@ -82,21 +80,12 @@ func executeDescribeCommand(cmd *cobra.Command, args []string) error {
 			Err()
 	}
 
-	// Output as YAML.
+	// Output as YAML using data channel (stdout with masking).
 	output := map[string]any{
 		"component": component,
 		"stack":     stack,
 		"source":    sourceSpec,
 	}
 
-	yamlOutput, err := u.ConvertToYAML(output)
-	if err != nil {
-		return errUtils.Build(errUtils.ErrOutputFormat).
-			WithCause(err).
-			WithExplanation("Failed to convert output to YAML").
-			Err()
-	}
-
-	fmt.Print(yamlOutput)
-	return nil
+	return data.WriteYAML(output)
 }

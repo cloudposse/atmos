@@ -54,8 +54,8 @@ func executeUpdateCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Initialize config and auth.
-	atmosConfig, authContext, err := InitConfigAndAuth(component, opts.Stack, opts.Identity)
+	// Initialize config and auth with global flags.
+	atmosConfig, authContext, err := InitConfigAndAuth(component, opts.Stack, opts.Identity, &opts.Flags)
 	if err != nil {
 		return err
 	}

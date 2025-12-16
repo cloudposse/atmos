@@ -41,7 +41,16 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 	// Extract metadata.source from component config.
 	sourceSpec, err := ExtractMetadataSource(params.ComponentConfig)
 	if err != nil {
-		// No source configured - this is not an error, just skip.
+		// An actual error occurred (e.g., invalid source spec).
+		return errUtils.Build(errUtils.ErrSourceProvision).
+			WithCause(err).
+			WithExplanation("Failed to extract metadata.source").
+			WithContext("component", params.Component).
+			Err()
+	}
+
+	// No source configured - this is not an error, just skip.
+	if sourceSpec == nil {
 		return nil
 	}
 
@@ -66,7 +75,7 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 	progressMsg := fmt.Sprintf("Vendoring %s from %s", params.Component, sourceSpec.Uri)
 	completedMsg := fmt.Sprintf("Vendored %s to %s", params.Component, targetDir)
 	err = spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
-		return VendorSource(ctx, params.AtmosConfig, sourceSpec, targetDir, params.AuthContext)
+		return VendorSource(ctx, params.AtmosConfig, sourceSpec, targetDir)
 	})
 	if err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).

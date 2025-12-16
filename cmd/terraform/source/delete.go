@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -57,8 +58,8 @@ func executeDeleteCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Initialize config and get component info.
-	atmosConfig, componentConfig, err := initDeleteContext(component, deleteOpts.Stack)
+	// Initialize config and get component info with global flags.
+	atmosConfig, componentConfig, err := initDeleteContext(component, deleteOpts.Stack, &deleteOpts.GlobalFlags)
 	if err != nil {
 		return err
 	}
@@ -74,9 +75,12 @@ func parseDeleteFlags(cmd *cobra.Command) (*deleteOptions, error) {
 		return nil, err
 	}
 
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
 	stack := v.GetString("stack")
 	if stack == "" {
-		return nil, errUtils.ErrRequiredFlagNotProvided
+		return nil, errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+			WithExplanation("--stack flag is required").
+			Err()
 	}
 
 	force := v.GetBool("force")
@@ -87,15 +91,26 @@ func parseDeleteFlags(cmd *cobra.Command) (*deleteOptions, error) {
 			Err()
 	}
 
-	return &deleteOptions{Stack: stack}, nil
+	return &deleteOptions{Stack: stack, GlobalFlags: globalFlags}, nil
 }
 
 // initDeleteContext initializes config and retrieves component configuration.
-func initDeleteContext(component, stack string) (*schema.AtmosConfiguration, map[string]any, error) {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+func initDeleteContext(component, stack string, globalFlags *global.Flags) (*schema.AtmosConfiguration, map[string]any, error) {
+	// Build config info with global flag values.
+	configInfo := schema.ConfigAndStacksInfo{
 		ComponentFromArg: component,
 		Stack:            stack,
-	}, false)
+	}
+
+	// Wire global flags to config info if provided.
+	if globalFlags != nil {
+		configInfo.AtmosBasePath = globalFlags.BasePath
+		configInfo.AtmosConfigFilesFromArg = globalFlags.Config
+		configInfo.AtmosConfigDirsFromArg = globalFlags.ConfigPath
+		configInfo.ProfilesFromArg = globalFlags.Profile
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
 	if err != nil {
 		return nil, nil, errUtils.Build(errUtils.ErrFailedToInitConfig).WithCause(err).Err()
 	}
@@ -149,5 +164,6 @@ func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, component str
 
 // deleteOptions holds parsed delete command options.
 type deleteOptions struct {
-	Stack string
+	Stack       string
+	GlobalFlags global.Flags
 }

@@ -41,7 +41,9 @@ func ParseCommonFlags(cmd *cobra.Command, parser *flags.StandardParser) (*Common
 	}
 
 	if opts.Stack == "" {
-		return nil, errUtils.ErrRequiredFlagNotProvided
+		return nil, errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+			WithExplanation("--stack flag is required").
+			Err()
 	}
 
 	return opts, nil
@@ -49,12 +51,25 @@ func ParseCommonFlags(cmd *cobra.Command, parser *flags.StandardParser) (*Common
 
 // InitConfigAndAuth initializes Atmos configuration and optional authentication.
 // Returns atmosConfig, authContext, and error.
-func InitConfigAndAuth(component, stack, identity string) (*schema.AtmosConfiguration, *schema.AuthContext, error) {
-	// Load atmos configuration.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+// The globalFlags parameter wires CLI global flags (--base-path, --config, --config-path, --profile)
+// to the configuration loader.
+func InitConfigAndAuth(component, stack, identity string, globalFlags *global.Flags) (*schema.AtmosConfiguration, *schema.AuthContext, error) {
+	// Build config info with global flag values.
+	configInfo := schema.ConfigAndStacksInfo{
 		ComponentFromArg: component,
 		Stack:            stack,
-	}, false)
+	}
+
+	// Wire global flags to config info if provided.
+	if globalFlags != nil {
+		configInfo.AtmosBasePath = globalFlags.BasePath
+		configInfo.AtmosConfigFilesFromArg = globalFlags.Config
+		configInfo.AtmosConfigDirsFromArg = globalFlags.ConfigPath
+		configInfo.ProfilesFromArg = globalFlags.Profile
+	}
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
 	if err != nil {
 		return nil, nil, errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
