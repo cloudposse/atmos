@@ -518,7 +518,7 @@ func calculateMaxCommandWidth(commands []*cobra.Command) int {
 }
 
 // formatCommandLine formats a single command line with proper padding and styling.
-func formatCommandLine(ctx *helpRenderContext, cmd *cobra.Command, maxWidth int) {
+func formatCommandLine(ctx *helpRenderContext, cmd *cobra.Command, maxWidth int, mdRenderer *markdown.Renderer) {
 	cmdName := cmd.Name()
 	cmdTypePlain := ""
 	cmdTypeStyled := ""
@@ -545,20 +545,29 @@ func formatCommandLine(ctx *helpRenderContext, cmd *cobra.Command, maxWidth int)
 	fmt.Fprint(ctx.writer, strings.Repeat(spaceChar, padding))
 	fmt.Fprint(ctx.writer, strings.Repeat(spaceChar, commandDescriptionSpacing))
 
-	// Wrap and render description with proper indentation for continuation lines
+	// Wrap plain text first, then render markdown without additional wrapping.
+	// This matches the approach used by flag description rendering.
 	wrapped := wordwrap.String(cmd.Short, descWidth)
+
+	if mdRenderer != nil {
+		rendered, err := mdRenderer.RenderWithoutWordWrap(wrapped)
+		if err == nil {
+			wrapped = strings.TrimSpace(rendered)
+		}
+	}
+
 	lines := strings.Split(wrapped, "\n")
 
 	// Print first line (already positioned)
 	if len(lines) > 0 {
-		fmt.Fprintf(ctx.writer, "%s\n", ctx.styles.commandName.Render(lines[0]))
+		fmt.Fprintf(ctx.writer, "%s\n", ctx.styles.commandDesc.Render(lines[0]))
 	}
 
 	// Print continuation lines with proper indentation
 	if len(lines) > 1 {
 		indentStr := strings.Repeat(spaceChar, descColStart)
 		for i := 1; i < len(lines); i++ {
-			fmt.Fprintf(ctx.writer, "%s%s\n", indentStr, ctx.styles.commandName.Render(lines[i]))
+			fmt.Fprintf(ctx.writer, "%s%s\n", indentStr, ctx.styles.commandDesc.Render(lines[i]))
 		}
 	}
 }
@@ -576,11 +585,17 @@ func printAvailableCommands(ctx *helpRenderContext, cmd *cobra.Command) {
 
 	maxCmdWidth := calculateMaxCommandWidth(cmd.Commands())
 
+	// Create markdown renderer for command descriptions (same approach as flag rendering).
+	var mdRenderer *markdown.Renderer
+	if ctx.atmosConfig != nil {
+		mdRenderer, _ = markdown.NewTerminalMarkdownRenderer(*ctx.atmosConfig)
+	}
+
 	for _, c := range cmd.Commands() {
 		if !isCommandAvailable(c) || isConfigAlias(c) {
 			continue
 		}
-		formatCommandLine(ctx, c, maxCmdWidth)
+		formatCommandLine(ctx, c, maxCmdWidth, mdRenderer)
 	}
 	fmt.Fprintln(ctx.writer)
 }
