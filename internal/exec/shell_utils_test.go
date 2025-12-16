@@ -480,6 +480,10 @@ func TestExecAuthShellCommand_ExitCodePropagation(t *testing.T) {
 }
 
 func TestExecuteShellCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix commands (echo) and paths (/dev/stderr, /dev/stdout)")
+	}
+
 	atmosConfig := schema.AtmosConfiguration{}
 
 	t.Run("dry run mode", func(t *testing.T) {
@@ -586,6 +590,10 @@ func TestExecuteShellCommand(t *testing.T) {
 }
 
 func TestExecuteShell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix commands (echo, ls, env, grep)")
+	}
+
 	t.Run("simple echo command", func(t *testing.T) {
 		err := ExecuteShell(
 			"echo 'test'",
