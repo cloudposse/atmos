@@ -1,0 +1,112 @@
+---
+title: atmos terraform source create
+sidebar_label: source create
+sidebar_class_name: command
+id: terraform-source-create
+description: Vendor component source from metadata.source configuration
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to vendor a Terraform component source based on its `metadata.source` configuration. This downloads the component from the specified URI and places it in the appropriate component directory.
+</Intro>
+
+<Screengrab title="atmos terraform source create --help" slug="atmos-terraform-source-create--help" />
+
+## Usage
+
+```shell
+atmos terraform source create <component> --stack <stack> [flags]
+```
+
+## Description
+
+The `create` command vendors a Terraform component source by:
+
+1. Reading the `metadata.source` configuration from the component's stack manifest
+2. Downloading the source from the specified URI using go-getter
+3. Applying any `included_paths` and `excluded_paths` filters
+4. Copying the filtered content to the component directory
+
+If the component directory already exists, use `--force` to overwrite it.
+
+## Examples
+
+### Basic Usage
+
+Vendor a component source for a specific stack:
+
+```shell
+atmos terraform source create vpc --stack dev
+```
+
+### Force Re-vendor
+
+Overwrite an existing component directory:
+
+```shell
+atmos terraform source create vpc --stack dev --force
+```
+
+### With Identity Override
+
+Use a specific identity for authentication:
+
+```shell
+atmos terraform source create vpc --stack dev --identity admin
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>**Required.** The name of the Atmos component to vendor.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>**Required.** The Atmos stack name. Can also be set via `ATMOS_STACK` environment variable.</dd>
+
+  <dt>`--force` / `-f`</dt>
+  <dd>Force re-vendor even if the component directory already exists. Without this flag, the command fails if the directory exists.</dd>
+
+  <dt>`--identity` / `-i`</dt>
+  <dd>Identity to use for authentication when downloading from protected sources. Overrides the component's default identity.</dd>
+</dl>
+
+## Configuration
+
+The component must have `metadata.source` configured in its stack manifest:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        source:
+          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+          version: 1.450.0
+          included_paths:
+            - "*.tf"
+          excluded_paths:
+            - "*.md"
+            - "tests/**"
+```
+
+## Output
+
+On success:
+```
+Vendoring component 'vpc' from metadata.source...
+Downloading from github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0
+✓ Successfully vendored component to components/terraform/vpc
+```
+
+## Related Commands
+
+- [`atmos terraform source`](/cli/commands/terraform/terraform-source) - Parent command overview
+- [`atmos terraform source update`](/cli/commands/terraform/terraform-source-update) - Re-vendor with force
+- [`atmos terraform source describe`](/cli/commands/terraform/terraform-source-describe) - View source configuration

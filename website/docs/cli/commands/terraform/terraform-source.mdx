@@ -1,0 +1,399 @@
+---
+title: atmos terraform source
+sidebar_label: source
+sidebar_class_name: command
+id: terraform-source
+description: Manage terraform component sources with JIT vendoring
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use these commands to manage Terraform component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using `metadata.source` without requiring a separate `component.yaml` file.
+</Intro>
+
+<Screengrab title="atmos terraform source --help" slug="atmos-terraform-source--help" />
+
+## Usage
+
+```shell
+atmos terraform source <subcommand> [options]
+```
+
+## Available Subcommands
+
+<dl>
+  <dt>`create <component>`</dt>
+  <dd>Vendor component source from metadata.source configuration</dd>
+
+  <dt>`update <component>`</dt>
+  <dd>Re-vendor component source (force refresh)</dd>
+
+  <dt>`list`</dt>
+  <dd>List components with metadata.source in a stack</dd>
+
+  <dt>`describe <component>`</dt>
+  <dd>Show source configuration for a component</dd>
+
+  <dt>`delete <component>`</dt>
+  <dd>Remove vendored source directory (requires --force)</dd>
+</dl>
+
+## How It Works
+
+The source provisioner enables just-in-time vendoring of Terraform components directly from stack configuration. Instead of pre-vendoring components or maintaining separate `component.yaml` files, you can declare the source inline:
+
+```yaml
+# stacks/dev.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        source:
+          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+          version: 1.450.0
+          included_paths:
+            - "*.tf"
+            - "modules/**"
+          excluded_paths:
+            - "*.md"
+            - "tests/**"
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+
+When you run `atmos terraform source create vpc --stack dev`, Atmos:
+
+1. **Reads Configuration** - Extracts `metadata.source` from the component's stack manifest
+2. **Resolves Source** - Parses the go-getter compatible URI with optional version
+3. **Downloads Content** - Fetches the source using go-getter (supports git, s3, http, oci, etc.)
+4. **Filters Files** - Applies `included_paths` and `excluded_paths` patterns
+5. **Copies to Target** - Places files in the component directory
+
+## Source Specification
+
+The `metadata.source` field supports two formats:
+
+### String Format (Simple)
+
+For simple cases, use a go-getter URI string:
+
+```yaml
+metadata:
+  source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0"
+```
+
+### Map Format (Full Control)
+
+For more control, use a map with explicit fields:
+
+```yaml
+metadata:
+  source:
+    uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+    version: 1.450.0
+    included_paths:
+      - "*.tf"
+      - "*.tfvars"
+      - "modules/**"
+    excluded_paths:
+      - "*.md"
+      - "tests/**"
+      - "examples/**"
+```
+
+### Source Fields
+
+<dl>
+  <dt>`uri`</dt>
+  <dd>Go-getter compatible source URI. Supports git, s3, http, gcs, oci, and other protocols.</dd>
+
+  <dt>`version`</dt>
+  <dd>Version tag, branch, or commit. Appended as `?ref=<version>` for git sources.</dd>
+
+  <dt>`included_paths`</dt>
+  <dd>Glob patterns for files to include. If specified, only matching files are copied.</dd>
+
+  <dt>`excluded_paths`</dt>
+  <dd>Glob patterns for files to exclude. Applied after included_paths filtering.</dd>
+</dl>
+
+## Examples
+
+### Vendor a Component
+
+Download and vendor a component source:
+
+```shell
+atmos terraform source create vpc --stack dev
+```
+
+Output:
+```
+Vendoring component 'vpc' from metadata.source...
+Downloading from github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0
+✓ Successfully vendored component to components/terraform/vpc
+```
+
+### Force Re-vendor
+
+Force re-download even if the component directory exists:
+
+```shell
+atmos terraform source update vpc --stack dev
+```
+
+This is equivalent to `atmos terraform source create vpc --stack dev --force`.
+
+### View Source Configuration
+
+Display the metadata.source configuration for a component:
+
+```shell
+atmos terraform source describe vpc --stack dev
+```
+
+Output:
+```yaml
+component: vpc
+stack: dev
+source:
+  uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+  version: 1.450.0
+  included_paths:
+    - "*.tf"
+    - "modules/**"
+  excluded_paths:
+    - "*.md"
+    - "tests/**"
+```
+
+### List Components with Sources
+
+List all components that have metadata.source configured:
+
+```shell
+atmos terraform source list --stack dev
+```
+
+### Delete Vendored Source
+
+Remove the vendored component directory (requires --force for safety):
+
+```shell
+atmos terraform source delete vpc --stack dev --force
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>The Atmos component name (required for create, update, describe, delete)</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Atmos stack name (required). Can also be set via `ATMOS_STACK` environment variable.</dd>
+
+  <dt>`--identity` / `-i`</dt>
+  <dd>Identity to use for authentication when downloading from protected sources.</dd>
+
+  <dt>`--force` / `-f`</dt>
+  <dd>Force re-vendor even if component directory exists (create command), or confirm deletion (delete command).</dd>
+</dl>
+
+## Authentication
+
+Source commands support authentication for accessing private repositories or cloud storage.
+
+### Component-Level Identity
+
+Components can specify their own authentication identity:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        source:
+          uri: github.com/my-org/private-components//modules/vpc
+          version: v1.0.0
+      auth:
+        identities:
+          github-deployer:
+            default: true
+            kind: github/app
+            via:
+              provider: github-app
+```
+
+### Identity Flag Override
+
+Override the component's default identity:
+
+```shell
+atmos terraform source create vpc --stack dev --identity admin
+```
+
+## Configuration Patterns
+
+### Inheritance with metadata.source
+
+Use stack inheritance to share source configurations:
+
+```yaml
+# stacks/catalog/vpc/defaults.yaml
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        source:
+          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+          version: 1.450.0
+
+# stacks/dev.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+        # Inherits source configuration
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+
+### Version Override per Environment
+
+Override the version per environment:
+
+```yaml
+# stacks/dev.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+        source:
+          version: 1.451.0  # Override version for dev
+
+# stacks/prod.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+        source:
+          version: 1.450.0  # Pin to stable version for prod
+```
+
+## Supported Source Types
+
+The source provisioner uses go-getter and supports multiple protocols:
+
+### Git Sources
+
+```yaml
+metadata:
+  source:
+    uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+    version: 1.450.0
+
+# Also supports:
+# - git::https://github.com/org/repo.git//path
+# - git::ssh://git@github.com/org/repo.git//path
+```
+
+### S3 Sources
+
+```yaml
+metadata:
+  source:
+    uri: s3::https://s3-us-east-1.amazonaws.com/my-bucket/components/vpc.tar.gz
+```
+
+### HTTP/HTTPS Sources
+
+```yaml
+metadata:
+  source:
+    uri: https://releases.example.com/components/vpc-1.0.0.tar.gz
+```
+
+### OCI Registry Sources
+
+```yaml
+metadata:
+  source:
+    uri: oci::registry.example.com/components/vpc:v1.0.0
+```
+
+## Error Handling
+
+### Missing metadata.source
+
+```
+Error: metadata.source not configured
+
+Hint: Add metadata.source to the component configuration in your stack manifest
+
+Example:
+  components:
+    terraform:
+      vpc:
+        metadata:
+          source:
+            uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+            version: 1.450.0
+```
+
+### Component Directory Exists
+
+```
+Error: component directory already exists
+
+Hint: Use --force to overwrite the existing directory
+```
+
+### Download Failed
+
+```
+Error: failed to download source
+
+Cause: failed to clone repository: authentication required
+
+Hint: Check credentials or use --identity to specify authentication
+```
+
+## Comparison with Vendoring
+
+| Feature | metadata.source | component.yaml |
+|---------|-----------------|----------------|
+| Configuration location | Inline in stack | Separate file |
+| Version per environment | Yes | Single version |
+| JIT download | Yes | Pre-vendored |
+| Path filtering | Yes | Yes |
+| Mixins support | No | Yes |
+
+Use `metadata.source` when:
+- You want version control per environment
+- You prefer configuration colocation in stacks
+- You need just-in-time vendoring
+
+Use `component.yaml` when:
+- You need mixin support
+- You want pre-vendored components
+- You have complex vendoring requirements
+
+## Related Commands
+
+- [`atmos vendor pull`](/cli/commands/vendor/pull) - Traditional component vendoring
+- [`atmos terraform plan`](/cli/commands/terraform/usage) - Plan Terraform changes
+- [`atmos terraform apply`](/cli/commands/terraform/usage) - Apply Terraform changes
+
+## Related Concepts
+
+- [Stack Configuration](/learn/stacks)
+- [Core Concepts](/learn/concepts-overview)
+- [Vendoring](/cheatsheets/vendoring)

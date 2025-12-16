@@ -1,0 +1,99 @@
+---
+title: atmos terraform source update
+sidebar_label: source update
+sidebar_class_name: command
+id: terraform-source-update
+description: Re-vendor component source with force refresh
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to re-vendor a Terraform component source, forcing a fresh download. This is equivalent to running `atmos terraform source create --force`.
+</Intro>
+
+<Screengrab title="atmos terraform source update --help" slug="atmos-terraform-source-update--help" />
+
+## Usage
+
+```shell
+atmos terraform source update <component> --stack <stack> [flags]
+```
+
+## Description
+
+The `update` command re-vendors a Terraform component source by:
+
+1. Reading the `metadata.source` configuration from the component's stack manifest
+2. Downloading a fresh copy of the source from the specified URI
+3. Applying any `included_paths` and `excluded_paths` filters
+4. Replacing the existing component directory with the new content
+
+This command always forces a re-download, making it useful for:
+- Updating to a new version after changing `metadata.source.version`
+- Refreshing the local copy when upstream changes are made
+- Recovering from a corrupted component directory
+
+## Examples
+
+### Re-vendor Component
+
+Update a component to the latest version specified in stack config:
+
+```shell
+atmos terraform source update vpc --stack dev
+```
+
+### With Identity Override
+
+Use a specific identity for authentication:
+
+```shell
+atmos terraform source update vpc --stack dev --identity admin
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>**Required.** The name of the Atmos component to update.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>**Required.** The Atmos stack name. Can also be set via `ATMOS_STACK` environment variable.</dd>
+
+  <dt>`--identity` / `-i`</dt>
+  <dd>Identity to use for authentication when downloading from protected sources. Overrides the component's default identity.</dd>
+</dl>
+
+## Configuration
+
+The component must have `metadata.source` configured in its stack manifest:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        source:
+          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+          version: 1.451.0  # Updated version
+```
+
+## Output
+
+On success:
+```
+Re-vendoring component 'vpc' from metadata.source...
+Downloading from github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.451.0
+✓ Successfully re-vendored component to components/terraform/vpc
+```
+
+## Related Commands
+
+- [`atmos terraform source`](/cli/commands/terraform/terraform-source) - Parent command overview
+- [`atmos terraform source create`](/cli/commands/terraform/terraform-source-create) - Initial vendor
+- [`atmos terraform source describe`](/cli/commands/terraform/terraform-source-describe) - View source configuration

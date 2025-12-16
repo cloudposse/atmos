@@ -1,0 +1,123 @@
+---
+slug: terraform-source-provisioner
+title: "Just-in-Time Component Vendoring with metadata.source"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports just-in-time (JIT) vendoring of Terraform components directly from stack configuration using `metadata.source`. This enables you to declare component sources inline without requiring separate `component.yaml` files.
+
+<!--truncate-->
+
+## What Changed
+
+We've added a new `atmos terraform source` command group that enables JIT vendoring based on `metadata.source` configuration in your stack manifests:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        source:
+          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+          version: 1.450.0
+          included_paths:
+            - "*.tf"
+          excluded_paths:
+            - "*.md"
+            - "tests/**"
+```
+
+The new commands include:
+- `atmos terraform source create` - Vendor a component from metadata.source
+- `atmos terraform source update` - Re-vendor with force refresh
+- `atmos terraform source describe` - View source configuration
+- `atmos terraform source delete` - Remove vendored source directory
+- `atmos terraform source list` - List components with metadata.source (coming soon)
+
+## Why This Matters
+
+Previously, vendoring components required maintaining separate `component.yaml` files alongside your stack configuration. This created maintenance overhead and made it harder to:
+
+1. **Version per environment** - Different environments often need different component versions
+2. **Keep configuration colocated** - Source information was separated from component configuration
+3. **Vendor on demand** - Components had to be pre-vendored before use
+
+With `metadata.source`, you can now:
+
+- **Declare sources inline** in your stack manifests
+- **Override versions per environment** using stack inheritance
+- **Vendor just-in-time** when you need the component
+- **Filter files** with `included_paths` and `excluded_paths`
+
+## How to Use It
+
+### Basic Usage
+
+Add `metadata.source` to your component configuration:
+
+```yaml
+# stacks/dev.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        source:
+          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+          version: 1.450.0
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+
+Then vendor the component:
+
+```shell
+atmos terraform source create vpc --stack dev
+```
+
+### Version Per Environment
+
+Use stack inheritance to set different versions per environment:
+
+```yaml
+# stacks/catalog/vpc/defaults.yaml
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        source:
+          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+          version: 1.450.0
+
+# stacks/dev.yaml - use latest
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+        source:
+          version: 1.451.0  # Override for dev
+
+# stacks/prod.yaml - pin to stable
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+        # Uses inherited version 1.450.0
+```
+
+### Supported Source Types
+
+The source provisioner uses go-getter and supports:
+- Git repositories (GitHub, GitLab, Bitbucket)
+- S3 buckets
+- GCS buckets
+- HTTP/HTTPS URLs
+- OCI registries
+
+## Get Involved
+
+We'd love to hear your feedback on this feature! Please [open an issue](https://github.com/cloudposse/atmos/issues) if you have questions or suggestions.
+
+For more details, see the [terraform source documentation](/cli/commands/terraform/terraform-source).

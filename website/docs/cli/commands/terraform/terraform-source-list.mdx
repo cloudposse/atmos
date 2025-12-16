@@ -1,0 +1,66 @@
+---
+title: atmos terraform source list
+sidebar_label: source list
+sidebar_class_name: command
+id: terraform-source-list
+description: List components with metadata.source in a stack
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to list all Terraform components that have `metadata.source` configured in a stack. This shows which components can be vendored using the source provisioner.
+</Intro>
+
+<Screengrab title="atmos terraform source list --help" slug="atmos-terraform-source-list--help" />
+
+## Usage
+
+```shell
+atmos terraform source list --stack <stack>
+```
+
+## Description
+
+The `list` command scans a stack's component configurations and displays all components that have `metadata.source` defined. This helps identify:
+
+- Which components are configured for JIT vendoring
+- The source URIs and versions for each component
+- Components that may need to be vendored before use
+
+:::note
+This command is planned for a future release. Currently it returns a "not implemented" message.
+:::
+
+## Examples
+
+### List Components with Sources
+
+```shell
+atmos terraform source list --stack dev
+```
+
+Expected output (when implemented):
+```
+COMPONENT    URI                                                           VERSION
+vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+eks          github.com/cloudposse/terraform-aws-components//modules/eks   1.450.0
+rds          github.com/cloudposse/terraform-aws-components//modules/rds   1.449.0
+```
+
+## Arguments
+
+This command takes no positional arguments.
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>**Required.** The Atmos stack name. Can also be set via `ATMOS_STACK` environment variable.</dd>
+</dl>
+
+## Related Commands
+
+- [`atmos terraform source`](/cli/commands/terraform/terraform-source) - Parent command overview
+- [`atmos terraform source describe`](/cli/commands/terraform/terraform-source-describe) - View source configuration for a specific component
+- [`atmos terraform source create`](/cli/commands/terraform/terraform-source-create) - Vendor a specific component
