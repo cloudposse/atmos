@@ -1187,3 +1187,97 @@ func TestMergeDefaultImports_GitRoot(t *testing.T) {
 		})
 	}
 }
+
+func TestPreserveCaseSensitiveMaps(t *testing.T) {
+	t.Run("returns nil when no config file used", func(t *testing.T) {
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		err := preserveCaseSensitiveMaps(v, atmosConfig)
+		assert.NoError(t, err)
+		assert.Nil(t, atmosConfig.CaseMaps)
+	})
+
+	t.Run("preserves env variable case", func(t *testing.T) {
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "atmos.yaml")
+
+		// Create config with env section using mixed case.
+		configContent := `
+base_path: "."
+env:
+  GITHUB_TOKEN: "secret123"
+  AWS_REGION: "us-east-1"
+stacks:
+  base_path: "stacks"
+components:
+  terraform:
+    base_path: "components/terraform"
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0o644)
+		require.NoError(t, err)
+
+		v := viper.New()
+		v.SetConfigFile(configPath)
+		err = v.ReadInConfig()
+		require.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		err = preserveCaseSensitiveMaps(v, atmosConfig)
+		assert.NoError(t, err)
+		assert.NotNil(t, atmosConfig.CaseMaps)
+
+		// Check that case map was created for env.
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "GITHUB_TOKEN", envCaseMap["github_token"])
+		assert.Equal(t, "AWS_REGION", envCaseMap["aws_region"])
+	})
+
+	t.Run("preserves auth identity case", func(t *testing.T) {
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "atmos.yaml")
+
+		// Create config with auth.identities section using mixed case.
+		configContent := `
+base_path: "."
+auth:
+  identities:
+    SuperAdmin:
+      aws:
+        profile: admin
+    DevUser:
+      aws:
+        profile: dev
+stacks:
+  base_path: "stacks"
+components:
+  terraform:
+    base_path: "components/terraform"
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0o644)
+		require.NoError(t, err)
+
+		v := viper.New()
+		v.SetConfigFile(configPath)
+		err = v.ReadInConfig()
+		require.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		err = preserveCaseSensitiveMaps(v, atmosConfig)
+		assert.NoError(t, err)
+		assert.NotNil(t, atmosConfig.CaseMaps)
+
+		// Check that case map was created for auth.identities.
+		identityCaseMap := atmosConfig.CaseMaps.Get("auth.identities")
+		assert.NotNil(t, identityCaseMap)
+		assert.Equal(t, "SuperAdmin", identityCaseMap["superadmin"])
+		assert.Equal(t, "DevUser", identityCaseMap["devuser"])
+
+		// Check backward compatibility with IdentityCaseMap.
+		assert.Equal(t, "SuperAdmin", atmosConfig.Auth.IdentityCaseMap["superadmin"])
+		assert.Equal(t, "DevUser", atmosConfig.Auth.IdentityCaseMap["devuser"])
+	})
+}

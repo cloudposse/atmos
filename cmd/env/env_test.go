@@ -241,3 +241,68 @@ func TestSupportedFormats(t *testing.T) {
 	expected := []string{"bash", "json", "dotenv", "github"}
 	assert.Equal(t, expected, SupportedFormats)
 }
+
+func TestEnvCommandProvider(t *testing.T) {
+	provider := &EnvCommandProvider{}
+
+	t.Run("GetName returns env", func(t *testing.T) {
+		assert.Equal(t, "env", provider.GetName())
+	})
+
+	t.Run("GetGroup returns Configuration Management", func(t *testing.T) {
+		assert.Equal(t, "Configuration Management", provider.GetGroup())
+	})
+
+	t.Run("GetCommand returns non-nil command", func(t *testing.T) {
+		cmd := provider.GetCommand()
+		require.NotNil(t, cmd)
+		assert.Equal(t, "env", cmd.Use)
+	})
+
+	t.Run("GetFlagsBuilder returns parser", func(t *testing.T) {
+		builder := provider.GetFlagsBuilder()
+		assert.NotNil(t, builder)
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		builder := provider.GetPositionalArgsBuilder()
+		assert.Nil(t, builder)
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		flags := provider.GetCompatibilityFlags()
+		assert.Nil(t, flags)
+	})
+
+	t.Run("GetAliases returns nil", func(t *testing.T) {
+		aliases := provider.GetAliases()
+		assert.Nil(t, aliases)
+	})
+}
+
+func TestWriteEnvToFile_ErrorCases(t *testing.T) {
+	t.Run("fails with invalid path", func(t *testing.T) {
+		// Try to write to a path that doesn't exist and can't be created.
+		envVars := map[string]string{"FOO": "bar"}
+		err := writeEnvToFile(envVars, "/nonexistent/directory/file.env", formatBash)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to open file")
+	})
+
+	t.Run("fails with read-only directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		readOnlyDir := filepath.Join(tmpDir, "readonly")
+		err := os.Mkdir(readOnlyDir, 0o555)
+		require.NoError(t, err)
+
+		// Ensure cleanup even if test fails.
+		defer func() {
+			_ = os.Chmod(readOnlyDir, 0o755)
+		}()
+
+		envVars := map[string]string{"FOO": "bar"}
+		err = writeEnvToFile(envVars, filepath.Join(readOnlyDir, "test.env"), formatBash)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to open file")
+	})
+}
