@@ -51,33 +51,41 @@ auth:
       principal:
         name: AdministratorAccess
         account: dev
-      # Auto-trigger these integrations on login
-      integrations:
-        - dev/ecr
 
+  # Integrations specify which identity they use via "via.identity"
   integrations:
-    dev/ecr:
+    dev/ecr/primary:
       kind: aws/ecr
-      identity: dev-admin
+      via:
+        identity: dev-admin
       spec:
-        registries:
-          - account_id: "123456789012"
-            region: us-east-2
-          - account_id: "123456789012"
-            region: us-west-2
+        auto_provision: true    # Auto-trigger on identity login
+        registry:
+          account_id: "123456789012"
+          region: us-east-2
+
+    dev/ecr/secondary:
+      kind: aws/ecr
+      via:
+        identity: dev-admin
+      spec:
+        auto_provision: true
+        registry:
+          account_id: "123456789012"
+          region: us-west-2
 ```
 
 ### Automatic Login
 
-When you authenticate with an identity that has linked integrations, ECR login happens automatically:
+When you authenticate with an identity, any integrations with `auto_provision: true` that reference that identity are triggered automatically:
 
 ```bash
 $ atmos auth login dev-admin
 Authenticating with identity: dev-admin
 Opening browser for SSO authentication...
 Successfully authenticated as dev-admin
-Logged into ECR registry: 123456789012.dkr.ecr.us-east-2.amazonaws.com
-Logged into ECR registry: 123456789012.dkr.ecr.us-west-2.amazonaws.com
+✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
+✓ ECR login: 123456789012.dkr.ecr.us-west-2.amazonaws.com (expires in 12h)
 ```
 
 ### Standalone ECR Login
@@ -86,9 +94,9 @@ You can also trigger ECR login independently:
 
 ```bash
 # Using a named integration
-atmos auth ecr-login dev/ecr
+atmos auth ecr-login dev/ecr/primary
 
-# Using an identity's linked integrations
+# Using an identity's linked integrations (all integrations referencing that identity)
 atmos auth ecr-login --identity dev-admin
 
 # Explicit registries (ad-hoc)
@@ -132,26 +140,27 @@ auth:
       principal:
         name: ContainerDeploy
         account: production
-      integrations:
-        - prod/ecr
-        - shared/ecr
 
   integrations:
     prod/ecr:
       kind: aws/ecr
-      identity: prod-deployer
+      via:
+        identity: prod-deployer
       spec:
-        registries:
-          - account_id: "111111111111"
-            region: us-east-1
+        auto_provision: true
+        registry:
+          account_id: "111111111111"
+          region: us-east-1
 
     shared/ecr:
       kind: aws/ecr
-      identity: prod-deployer
+      via:
+        identity: prod-deployer
       spec:
-        registries:
-          - account_id: "999999999999"
-            region: us-east-1
+        auto_provision: true
+        registry:
+          account_id: "999999999999"
+          region: us-east-1
 ```
 
 ### CI/CD Pipelines

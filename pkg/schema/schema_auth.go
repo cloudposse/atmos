@@ -48,16 +48,15 @@ type ConsoleConfig struct {
 
 // Identity defines an authentication identity configuration.
 type Identity struct {
-	Kind         string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
-	Default      bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
-	Provider     string                 `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"` // Provider name for direct provider association (for provisioned identities).
-	Via          *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
-	Principal    map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"` // Principal information (role name, account, etc.). For AWS permission sets: {name: string, account: {name: string, id: string}}.
-	Credentials  map[string]interface{} `yaml:"credentials,omitempty" json:"credentials,omitempty" mapstructure:"credentials"`
-	Alias        string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
-	Env          []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
-	Session      *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
-	Integrations []string               `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"` // List of integration names to trigger on login.
+	Kind        string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
+	Default     bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
+	Provider    string                 `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"` // Provider name for direct provider association (for provisioned identities).
+	Via         *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
+	Principal   map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"` // Principal information (role name, account, etc.). For AWS permission sets: {name: string, account: {name: string, id: string}}.
+	Credentials map[string]interface{} `yaml:"credentials,omitempty" json:"credentials,omitempty" mapstructure:"credentials"`
+	Alias       string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
+	Env         []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+	Session     *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
 }
 
 // IdentityVia defines how an identity connects to a provider or other identity.
@@ -119,9 +118,20 @@ type ComponentAuthConfig struct {
 // Integration defines a client-only credential materialization (e.g., ECR, EKS).
 // Integrations derive credentials from identities for service-specific access.
 type Integration struct {
-	Kind     string                 `yaml:"kind" json:"kind" mapstructure:"kind"`                     // Integration type (e.g., "aws/ecr", "aws/eks").
-	Identity string                 `yaml:"identity" json:"identity" mapstructure:"identity"`         // Identity providing AWS credentials.
-	Spec     map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"` // Integration-specific configuration.
+	Kind string          `yaml:"kind" json:"kind" mapstructure:"kind"` // Integration type (e.g., "aws/ecr", "aws/eks").
+	Via  *IntegrationVia `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
+	Spec *IntegrationSpec `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"` // Integration-specific configuration.
+}
+
+// IntegrationVia defines how an integration connects to an identity.
+type IntegrationVia struct {
+	Identity string `yaml:"identity" json:"identity" mapstructure:"identity"` // Identity providing credentials.
+}
+
+// IntegrationSpec defines the spec configuration for integrations.
+type IntegrationSpec struct {
+	AutoProvision bool        `yaml:"auto_provision,omitempty" json:"auto_provision,omitempty" mapstructure:"auto_provision"` // Whether to auto-provision on identity login.
+	Registry      *ECRRegistry `yaml:"registry,omitempty" json:"registry,omitempty" mapstructure:"registry"`                   // Single ECR registry for aws/ecr integrations.
 }
 
 // ECRRegistry represents an ECR registry configuration for aws/ecr integrations.

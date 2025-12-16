@@ -1302,26 +1302,52 @@ func mapToEnvironList(envMap map[string]string) []string {
 	return envList
 }
 
-// triggerIntegrations executes linked integrations for an identity.
+// triggerIntegrations executes integrations that reference this identity with auto_provision enabled.
 // This is a non-fatal operation - integration failures don't block authentication.
 func (m *manager) triggerIntegrations(ctx context.Context, identityName string, creds types.ICredentials) {
 	defer perf.Track(nil, "auth.Manager.triggerIntegrations")()
 
-	// Get the identity config to find linked integrations.
-	identityConfig, exists := m.config.Identities[identityName]
-	if !exists || len(identityConfig.Integrations) == 0 {
+	// Find integrations that reference this identity and have auto_provision enabled.
+	linkedIntegrations := m.findIntegrationsForIdentity(identityName, true)
+	if len(linkedIntegrations) == 0 {
 		return
 	}
 
-	log.Debug("Triggering linked integrations", logKeyIdentity, identityName, "count", len(identityConfig.Integrations))
+	log.Debug("Triggering linked integrations", logKeyIdentity, identityName, "count", len(linkedIntegrations))
 
 	// Execute each linked integration.
-	for _, integrationName := range identityConfig.Integrations {
+	for _, integrationName := range linkedIntegrations {
 		if err := m.executeIntegration(ctx, integrationName, creds); err != nil {
 			// Non-fatal: log warning and continue.
 			log.Warn("Integration failed", "integration", integrationName, "error", err)
 		}
 	}
+}
+
+// findIntegrationsForIdentity returns integration names that reference the given identity.
+// If autoProvisionOnly is true, only returns integrations with auto_provision enabled.
+func (m *manager) findIntegrationsForIdentity(identityName string, autoProvisionOnly bool) []string {
+	if m.config.Integrations == nil {
+		return nil
+	}
+
+	var result []string
+	for name, integration := range m.config.Integrations {
+		// Check if this integration references the given identity.
+		if integration.Via == nil || integration.Via.Identity != identityName {
+			continue
+		}
+
+		// If autoProvisionOnly, check if auto_provision is enabled.
+		if autoProvisionOnly {
+			if integration.Spec == nil || !integration.Spec.AutoProvision {
+				continue
+			}
+		}
+
+		result = append(result, name)
+	}
+	return result
 }
 
 // executeIntegration executes a single integration by name.
@@ -1371,19 +1397,25 @@ func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string
 		return fmt.Errorf("%w: %s", errUtils.ErrIntegrationNotFound, integrationName)
 	}
 
+	// Get the identity from via.identity.
+	if integrationConfig.Via == nil || integrationConfig.Via.Identity == "" {
+		return fmt.Errorf("%w: integration '%s' has no identity configured", errUtils.ErrIntegrationFailed, integrationName)
+	}
+	identityName := integrationConfig.Via.Identity
+
 	// Authenticate the linked identity.
-	whoami, err := m.Authenticate(ctx, integrationConfig.Identity)
+	whoami, err := m.Authenticate(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf("failed to authenticate identity '%s': %w", integrationConfig.Identity, err)
+		return fmt.Errorf("failed to authenticate identity '%s': %w", identityName, err)
 	}
 
 	// Load credentials for the integration.
-	creds, err := m.loadCredentialsWithFallback(ctx, integrationConfig.Identity)
+	creds, err := m.loadCredentialsWithFallback(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf("failed to load credentials for identity '%s': %w", integrationConfig.Identity, err)
+		return fmt.Errorf("failed to load credentials for identity '%s': %w", identityName, err)
 	}
 
-	log.Debug("Authenticated identity for integration", "identity", integrationConfig.Identity, "whoami", whoami.Identity)
+	log.Debug("Authenticated identity for integration", "identity", identityName, "whoami", whoami.Identity)
 
 	// Create and execute the integration.
 	integration, err := integrations.Create(&integrations.IntegrationConfig{
@@ -1397,18 +1429,20 @@ func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string
 	return integration.Execute(ctx, creds)
 }
 
-// ExecuteIdentityIntegrations executes all linked integrations for an identity.
-// This authenticates the identity first, then executes all its linked integrations.
+// ExecuteIdentityIntegrations executes all integrations that reference this identity.
+// This authenticates the identity first, then executes all integrations linked to it.
 func (m *manager) ExecuteIdentityIntegrations(ctx context.Context, identityName string) error {
 	defer perf.Track(nil, "auth.Manager.ExecuteIdentityIntegrations")()
 
-	// Get the identity config.
-	identityConfig, exists := m.config.Identities[identityName]
+	// Verify the identity exists.
+	_, exists := m.config.Identities[identityName]
 	if !exists {
 		return fmt.Errorf("%w: %s", errUtils.ErrIdentityNotFound, identityName)
 	}
 
-	if len(identityConfig.Integrations) == 0 {
+	// Find all integrations that reference this identity (not just auto_provision ones).
+	linkedIntegrations := m.findIntegrationsForIdentity(identityName, false)
+	if len(linkedIntegrations) == 0 {
 		return fmt.Errorf("%w: %s", errUtils.ErrNoLinkedIntegrations, identityName)
 	}
 
@@ -1427,7 +1461,7 @@ func (m *manager) ExecuteIdentityIntegrations(ctx context.Context, identityName 
 	log.Debug("Authenticated identity for integrations", "identity", identityName, "whoami", whoami.Identity)
 
 	// Execute each linked integration.
-	for _, integrationName := range identityConfig.Integrations {
+	for _, integrationName := range linkedIntegrations {
 		if err := m.executeIntegration(ctx, integrationName, creds); err != nil {
 			return fmt.Errorf("integration '%s' failed: %w", integrationName, err)
 		}
