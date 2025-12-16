@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/utils"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 )
 
 const (
@@ -163,7 +163,7 @@ func (r *AtmosRunner) prepareEnvironment() []string {
 	env := os.Environ()
 
 	// Ensure test binary is in PATH using testable utility functions
-	updatedEnv := utils.EnsureBinaryInPath(env, r.binaryPath)
+	updatedEnv := envpkg.EnsureBinaryInPath(env, r.binaryPath)
 
 	// Handle GOCOVERDIR based on coverage settings
 	// First filter out any existing GOCOVERDIR entries
