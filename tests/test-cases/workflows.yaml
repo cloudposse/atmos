@@ -25,6 +25,9 @@ tests:
       - "shell-pass"
       - "--file"
       - "test"
+    skip:
+      # echo is a shell built-in on Windows, not an executable in PATH.
+      os: !not windows
     expect:
       diff: []
       stdout:
@@ -42,6 +45,9 @@ tests:
       - "shell-command-not-found"
       - "--file"
       - "test"
+    skip:
+      # Exit code 127 is Unix/POSIX specific. Windows returns different codes.
+      os: !not windows
     expect:
       diff: []
       stderr:
@@ -86,6 +92,9 @@ tests:
       - "shell-failure"
       - "--file"
       - "test"
+    skip:
+      # Uses echo which is a shell built-in on Windows, not an executable in PATH.
+      os: !not windows
     expect:
       diff: []
       stderr:
@@ -285,6 +294,9 @@ tests:
       - "shell-with-path"
       - "--file"
       - "test"
+    skip:
+      # Uses env and grep which are not available on Windows.
+      os: !not windows
     expect:
       diff: []
       stdout:
