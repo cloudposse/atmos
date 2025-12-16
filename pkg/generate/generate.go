@@ -192,7 +192,11 @@ func renderTemplate(name, templateStr string, context map[string]any) ([]byte, e
 	return buf.Bytes(), nil
 }
 
+// yamlIndent is the number of spaces to use for YAML indentation.
+const yamlIndent = 2
+
 // serializeByExtension serializes a map to the appropriate format based on file extension.
+// All formats are pretty-printed with proper indentation for readability.
 func serializeByExtension(filename string, content map[string]any, templateContext map[string]any) ([]byte, error) {
 	ext := strings.ToLower(filepath.Ext(filename))
 
@@ -206,13 +210,30 @@ func serializeByExtension(filename string, content map[string]any, templateConte
 	case ".json":
 		return json.MarshalIndent(rendered, "", "  ")
 	case ".yaml", ".yml":
-		return yaml.Marshal(rendered)
+		return serializeToYAML(rendered)
 	case ".hcl", ".tf":
 		return serializeToHCL(rendered)
 	default:
 		// Default to JSON for unknown extensions.
 		return json.MarshalIndent(rendered, "", "  ")
 	}
+}
+
+// serializeToYAML converts a map to pretty-printed YAML format.
+func serializeToYAML(content map[string]any) ([]byte, error) {
+	var buf bytes.Buffer
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(yamlIndent)
+
+	if err := encoder.Encode(content); err != nil {
+		return nil, fmt.Errorf("YAML encoding error: %w", err)
+	}
+
+	if err := encoder.Close(); err != nil {
+		return nil, fmt.Errorf("YAML encoder close error: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }
 
 // renderMapTemplates recursively renders template strings in a map.

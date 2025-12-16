@@ -270,3 +270,76 @@ func TestGenerateFiles_HCLContent(t *testing.T) {
 	assert.Contains(t, contentStr, "environment")
 	assert.Contains(t, contentStr, "prod")
 }
+
+func TestGenerateFiles_YAMLPrettyPrinted(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create nested content to verify proper indentation.
+	generateSection := map[string]any{
+		"config.yaml": map[string]any{
+			"database": map[string]any{
+				"host": "localhost",
+				"port": 5432,
+				"credentials": map[string]any{
+					"username": "admin",
+					"password": "secret",
+				},
+			},
+			"features": []any{"auth", "logging", "metrics"},
+		},
+	}
+
+	templateContext := map[string]any{}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, templateContext, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	content, err := os.ReadFile(filepath.Join(tempDir, "config.yaml"))
+	require.NoError(t, err)
+	contentStr := string(content)
+
+	// Verify YAML is properly indented (2 spaces per level).
+	assert.Contains(t, contentStr, "database:")
+	assert.Contains(t, contentStr, "  host: localhost")
+	assert.Contains(t, contentStr, "  credentials:")
+	assert.Contains(t, contentStr, "    username: admin")
+}
+
+func TestGenerateFiles_JSONPrettyPrinted(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create nested content to verify proper indentation.
+	generateSection := map[string]any{
+		"config.json": map[string]any{
+			"server": map[string]any{
+				"host": "0.0.0.0",
+				"port": 8080,
+			},
+		},
+	}
+
+	templateContext := map[string]any{}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, templateContext, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	content, err := os.ReadFile(filepath.Join(tempDir, "config.json"))
+	require.NoError(t, err)
+	contentStr := string(content)
+
+	// Verify JSON is properly indented (2 spaces per level).
+	assert.Contains(t, contentStr, "\"server\": {")
+	assert.Contains(t, contentStr, "  \"host\": \"0.0.0.0\"")
+}
