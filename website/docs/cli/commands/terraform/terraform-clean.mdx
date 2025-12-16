@@ -66,18 +66,18 @@ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 ## Arguments
 
 <dl>
-    <dt>`component` <em>(required)</em></dt>
+    <dt>`component` <em>(optional)</em></dt>
     <dd>
-        Atmos terraform component.
+        Atmos terraform component. If not specified along with `--force`, cleans all components.
     </dd>
 </dl>
 
 ## Flags
 
 <dl>
-    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(optional)</em></dt>
     <dd>
-        Atmos stack.
+        Atmos stack. Required when specifying a component.
     </dd>
 
     <dt>`--dry-run` <em>(optional)</em></dt>
@@ -112,3 +112,9 @@ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
         Skip deleting the `.terraform.lock.hcl` file.
     </dd>
 </dl>
+
+## Related Commands
+
+- [terraform init](/cli/commands/terraform/init) - Initialize a Terraform working directory
+- [terraform plan](/cli/commands/terraform/plan) - Generate an execution plan
+- [terraform apply](/cli/commands/terraform/apply) - Apply changes to infrastructure

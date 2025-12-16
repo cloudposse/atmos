@@ -160,10 +160,16 @@ func terraformGlobalFlagsHandler(cmd *cobra.Command, args []string) error {
 				return err
 			}
 
+			// Get the terraform command, with fallback to default.
+			command := atmosConfig.Components.Terraform.Command
+			if command == "" {
+				command = cfg.TerraformComponentType // Default to "terraform".
+			}
+
 			// Execute terraform with the separated args (global flags).
 			return e.ExecuteShellCommand(
 				atmosConfig,
-				atmosConfig.Components.Terraform.Command, // "terraform" or "tofu"
+				command,
 				separated,
 				"",    // dir (current dir)
 				nil,   // env
