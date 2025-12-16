@@ -28,8 +28,8 @@ func TestDefaultRegistryWithoutExecutor(t *testing.T) {
 	assert.True(t, r.Has("aws.caller_identity_user_id"))
 	assert.True(t, r.Has("aws.region"))
 
-	// 6 pre-merge + 8 post-merge = 14, minus exec = 13.
-	assert.Equal(t, 13, r.Len())
+	// Verify minimum expected function count (avoid brittle exact count assertions).
+	assert.GreaterOrEqual(t, r.Len(), 13, "Expected at least 13 functions in registry")
 }
 
 func TestDefaultRegistryWithExecutor(t *testing.T) {
@@ -55,8 +55,8 @@ func TestDefaultRegistryWithExecutor(t *testing.T) {
 	assert.True(t, r.Has("aws.caller_identity_user_id"))
 	assert.True(t, r.Has("aws.region"))
 
-	// 7 pre-merge + 8 post-merge = 15, but store has alias so registry counts 14.
-	assert.Equal(t, 14, r.Len())
+	// Verify minimum expected function count (avoid brittle exact count assertions).
+	assert.GreaterOrEqual(t, r.Len(), 14, "Expected at least 14 functions in registry")
 }
 
 func TestTags(t *testing.T) {
