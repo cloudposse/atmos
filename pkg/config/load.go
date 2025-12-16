@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/spf13/pflag"
@@ -38,6 +39,23 @@ const (
 )
 
 var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
+
+// mergedConfigFiles tracks all config files merged during a LoadConfig call.
+// This is used to extract case-sensitive map keys from all sources, not just the main config.
+// The slice is reset at the start of each LoadConfig call.
+var mergedConfigFiles []string
+
+// resetMergedConfigFiles clears the tracked config files. Call at start of LoadConfig.
+func resetMergedConfigFiles() {
+	mergedConfigFiles = nil
+}
+
+// trackMergedConfigFile records a config file path for case-sensitive key extraction.
+func trackMergedConfigFile(path string) {
+	if path != "" {
+		mergedConfigFiles = append(mergedConfigFiles, path)
+	}
+}
 
 const (
 	profileKey       = "profile"
@@ -190,6 +208,9 @@ func getProfilesFromFlagsOrEnv() ([]string, string) {
 // NOTE: Global flags (like --profile) must be synced to Viper before calling this function.
 // This is done by syncGlobalFlagsToViper() in cmd/root.go PersistentPreRun.
 func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosConfiguration, error) {
+	// Reset merged config file tracker at start of each LoadConfig call.
+	resetMergedConfigFiles()
+
 	v := viper.New()
 	var atmosConfig schema.AtmosConfiguration
 	v.SetConfigType("yaml")
@@ -307,10 +328,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// Post-process to preserve case-sensitive map keys.
 	// Viper lowercases all YAML map keys, but we need to preserve original case
 	// for identity names and environment variables.
-	if err := preserveCaseSensitiveMaps(v, &atmosConfig); err != nil {
-		log.Debug("Failed to preserve case-sensitive maps", "error", err)
-		// Don't fail config loading if this step fails, just log it.
-	}
+	preserveCaseSensitiveMaps(v, &atmosConfig)
 
 	// Apply git root discovery for default base path.
 	// This enables running Atmos from any subdirectory, similar to Git.
@@ -1007,6 +1025,9 @@ func mergeConfigFile(
 		return err
 	}
 
+	// Track this file for case-sensitive key extraction.
+	trackMergedConfigFile(path)
+
 	// Save existing commands before merge.
 	existingCommands := v.Get(commandsKey)
 
@@ -1118,39 +1139,82 @@ var caseSensitivePaths = []string{
 	"auth.identities", // Auth identity names (e.g., SuperAdmin)
 }
 
-// preserveCaseSensitiveMaps extracts original case for registered paths from the raw YAML.
-// This creates a mapping that can be used to restore original case when accessing these maps.
-func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) error {
-	configFile := v.ConfigFileUsed()
-	if configFile == "" {
-		// No config file loaded, nothing to preserve.
-		return nil
+// collectConfigFilesForCasePreservation gathers all config files to process for case preservation.
+// It combines tracked merged files with the main config file (if not already tracked).
+func collectConfigFilesForCasePreservation(mainConfig string) []string {
+	filesToProcess := make([]string, 0, len(mergedConfigFiles)+1)
+	filesToProcess = append(filesToProcess, mergedConfigFiles...)
+
+	// Include the main config file if it wasn't already tracked.
+	if mainConfig != "" && !slices.Contains(filesToProcess, mainConfig) {
+		filesToProcess = append(filesToProcess, mainConfig)
 	}
 
+	return filesToProcess
+}
+
+// mergeCaseMapsFromFile reads a config file and merges its case mappings into the accumulated result.
+// Later files override earlier ones (same precedence as config merging).
+func mergeCaseMapsFromFile(configFile string, mergedCaseMaps *casemap.CaseMaps) {
 	rawYAML, err := os.ReadFile(configFile)
 	if err != nil {
-		return fmt.Errorf("failed to read config file: %w", err)
+		log.Trace("Skipping case map extraction for unreadable file", "file", configFile, "error", err)
+		return
 	}
 
-	caseMaps, err := casemap.ExtractFromYAML(rawYAML, caseSensitivePaths)
+	fileCaseMaps, err := casemap.ExtractFromYAML(rawYAML, caseSensitivePaths)
 	if err != nil {
-		return fmt.Errorf("failed to extract case mappings: %w", err)
+		log.Trace("Failed to extract case mappings", "file", configFile, "error", err)
+		return
 	}
 
-	atmosConfig.CaseMaps = caseMaps
+	for _, path := range caseSensitivePaths {
+		fileMap := fileCaseMaps.Get(path)
+		if fileMap == nil {
+			continue
+		}
+		existingMap := mergedCaseMaps.Get(path)
+		if existingMap == nil {
+			existingMap = make(casemap.CaseMap)
+		}
+		for k, v := range fileMap {
+			existingMap[k] = v
+		}
+		mergedCaseMaps.Set(path, existingMap)
+	}
+}
 
-	// Also populate the legacy IdentityCaseMap for backward compatibility with auth.
+// populateLegacyIdentityCaseMap copies auth.identities case mappings to the legacy IdentityCaseMap field.
+func populateLegacyIdentityCaseMap(caseMaps *casemap.CaseMaps, atmosConfig *schema.AtmosConfiguration) {
 	identityCaseMap := caseMaps.Get("auth.identities")
-	if identityCaseMap != nil {
-		if atmosConfig.Auth.IdentityCaseMap == nil {
-			atmosConfig.Auth.IdentityCaseMap = make(map[string]string)
-		}
-		for k, v := range identityCaseMap {
-			atmosConfig.Auth.IdentityCaseMap[k] = v
-		}
+	if identityCaseMap == nil {
+		return
+	}
+	if atmosConfig.Auth.IdentityCaseMap == nil {
+		atmosConfig.Auth.IdentityCaseMap = make(map[string]string)
+	}
+	for k, v := range identityCaseMap {
+		atmosConfig.Auth.IdentityCaseMap[k] = v
+	}
+}
+
+// preserveCaseSensitiveMaps extracts original case for registered paths from raw YAML files.
+// This creates a mapping that can be used to restore original case when accessing these maps.
+// It processes all merged config files (main config + imports) with later files taking precedence.
+// This function operates on a best-effort basis - errors are logged but don't fail config loading.
+func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) {
+	filesToProcess := collectConfigFilesForCasePreservation(v.ConfigFileUsed())
+	if len(filesToProcess) == 0 {
+		return
 	}
 
-	log.Trace("Preserved case-sensitive map keys", "paths", caseSensitivePaths)
+	mergedCaseMaps := casemap.New()
+	for _, configFile := range filesToProcess {
+		mergeCaseMapsFromFile(configFile, mergedCaseMaps)
+	}
 
-	return nil
+	atmosConfig.CaseMaps = mergedCaseMaps
+	populateLegacyIdentityCaseMap(mergedCaseMaps, atmosConfig)
+
+	log.Trace("Preserved case-sensitive map keys", "paths", caseSensitivePaths, "files_processed", len(filesToProcess))
 }

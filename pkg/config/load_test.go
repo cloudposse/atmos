@@ -1189,16 +1189,20 @@ func TestMergeDefaultImports_GitRoot(t *testing.T) {
 }
 
 func TestPreserveCaseSensitiveMaps(t *testing.T) {
-	t.Run("returns nil when no config file used", func(t *testing.T) {
+	// Clear any previously tracked files at start of each test.
+	resetMergedConfigFiles()
+
+	t.Run("does nothing when no config file used", func(t *testing.T) {
+		resetMergedConfigFiles()
 		v := viper.New()
 		atmosConfig := &schema.AtmosConfiguration{}
 
-		err := preserveCaseSensitiveMaps(v, atmosConfig)
-		assert.NoError(t, err)
+		preserveCaseSensitiveMaps(v, atmosConfig)
 		assert.Nil(t, atmosConfig.CaseMaps)
 	})
 
 	t.Run("preserves env variable case", func(t *testing.T) {
+		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 		configPath := filepath.Join(tempDir, "atmos.yaml")
 
@@ -1224,8 +1228,7 @@ components:
 
 		atmosConfig := &schema.AtmosConfiguration{}
 
-		err = preserveCaseSensitiveMaps(v, atmosConfig)
-		assert.NoError(t, err)
+		preserveCaseSensitiveMaps(v, atmosConfig)
 		assert.NotNil(t, atmosConfig.CaseMaps)
 
 		// Check that case map was created for env.
@@ -1236,6 +1239,7 @@ components:
 	})
 
 	t.Run("preserves auth identity case", func(t *testing.T) {
+		resetMergedConfigFiles()
 		tempDir := t.TempDir()
 		configPath := filepath.Join(tempDir, "atmos.yaml")
 
@@ -1266,8 +1270,7 @@ components:
 
 		atmosConfig := &schema.AtmosConfiguration{}
 
-		err = preserveCaseSensitiveMaps(v, atmosConfig)
-		assert.NoError(t, err)
+		preserveCaseSensitiveMaps(v, atmosConfig)
 		assert.NotNil(t, atmosConfig.CaseMaps)
 
 		// Check that case map was created for auth.identities.
@@ -1279,5 +1282,181 @@ components:
 		// Check backward compatibility with IdentityCaseMap.
 		assert.Equal(t, "SuperAdmin", atmosConfig.Auth.IdentityCaseMap["superadmin"])
 		assert.Equal(t, "DevUser", atmosConfig.Auth.IdentityCaseMap["devuser"])
+	})
+
+	t.Run("merges case mappings from tracked imported files", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+
+		// Create first import file with some env vars.
+		importFile1 := filepath.Join(tempDir, "import1.yaml")
+		import1Content := `
+env:
+  AWS_ACCESS_KEY_ID: "key1"
+  AWS_SECRET_KEY: "secret1"
+`
+		err := os.WriteFile(importFile1, []byte(import1Content), 0o644)
+		require.NoError(t, err)
+
+		// Create second import file with additional env vars.
+		importFile2 := filepath.Join(tempDir, "import2.yaml")
+		import2Content := `
+env:
+  GITHUB_TOKEN: "token123"
+  AWS_REGION: "us-east-1"
+`
+		err = os.WriteFile(importFile2, []byte(import2Content), 0o644)
+		require.NoError(t, err)
+
+		// Track both files as if they were merged during import processing.
+		trackMergedConfigFile(importFile1)
+		trackMergedConfigFile(importFile2)
+
+		// Viper has no config file set, but we have tracked files.
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+		assert.NotNil(t, atmosConfig.CaseMaps)
+
+		// Check that case mappings from both files were merged.
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "AWS_ACCESS_KEY_ID", envCaseMap["aws_access_key_id"])
+		assert.Equal(t, "AWS_SECRET_KEY", envCaseMap["aws_secret_key"])
+		assert.Equal(t, "GITHUB_TOKEN", envCaseMap["github_token"])
+		assert.Equal(t, "AWS_REGION", envCaseMap["aws_region"])
+	})
+
+	t.Run("later imports override earlier imports for overlapping keys", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+
+		// Create first import file with an env var using one case.
+		importFile1 := filepath.Join(tempDir, "import1.yaml")
+		import1Content := `
+env:
+  my_token: "value1"
+`
+		err := os.WriteFile(importFile1, []byte(import1Content), 0o644)
+		require.NoError(t, err)
+
+		// Create second import file with the same key but different case.
+		importFile2 := filepath.Join(tempDir, "import2.yaml")
+		import2Content := `
+env:
+  MY_TOKEN: "value2"
+`
+		err = os.WriteFile(importFile2, []byte(import2Content), 0o644)
+		require.NoError(t, err)
+
+		// Track both files in order.
+		trackMergedConfigFile(importFile1)
+		trackMergedConfigFile(importFile2)
+
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+
+		// The second file's case should win.
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "MY_TOKEN", envCaseMap["my_token"])
+	})
+
+	t.Run("main config file is included when not tracked", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "atmos.yaml")
+
+		// Create main config with env section.
+		configContent := `
+base_path: "."
+env:
+  MAIN_CONFIG_VAR: "main_value"
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0o644)
+		require.NoError(t, err)
+
+		v := viper.New()
+		v.SetConfigFile(configPath)
+		err = v.ReadInConfig()
+		require.NoError(t, err)
+
+		// Don't track the main config file - it should still be included.
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "MAIN_CONFIG_VAR", envCaseMap["main_config_var"])
+	})
+
+	t.Run("skips unreadable files gracefully", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+
+		// Create a valid import file.
+		validFile := filepath.Join(tempDir, "valid.yaml")
+		validContent := `
+env:
+  VALID_VAR: "valid_value"
+`
+		err := os.WriteFile(validFile, []byte(validContent), 0o644)
+		require.NoError(t, err)
+
+		// Track a non-existent file and the valid file.
+		trackMergedConfigFile(filepath.Join(tempDir, "nonexistent.yaml"))
+		trackMergedConfigFile(validFile)
+
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		// Should skip the unreadable file gracefully.
+		preserveCaseSensitiveMaps(v, atmosConfig)
+
+		// The valid file's mappings should still be preserved.
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "VALID_VAR", envCaseMap["valid_var"])
+	})
+
+	t.Run("preserves auth identities from imported files", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+
+		// Create import file with auth identities.
+		importFile := filepath.Join(tempDir, "auth-import.yaml")
+		importContent := `
+auth:
+  identities:
+    ImportedAdmin:
+      aws:
+        profile: imported-admin
+    ImportedDev:
+      aws:
+        profile: imported-dev
+`
+		err := os.WriteFile(importFile, []byte(importContent), 0o644)
+		require.NoError(t, err)
+
+		trackMergedConfigFile(importFile)
+
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+
+		// Check that auth.identities case map was created.
+		identityCaseMap := atmosConfig.CaseMaps.Get("auth.identities")
+		assert.NotNil(t, identityCaseMap)
+		assert.Equal(t, "ImportedAdmin", identityCaseMap["importedadmin"])
+		assert.Equal(t, "ImportedDev", identityCaseMap["importeddev"])
+
+		// Check backward compatibility.
+		assert.Equal(t, "ImportedAdmin", atmosConfig.Auth.IdentityCaseMap["importedadmin"])
+		assert.Equal(t, "ImportedDev", atmosConfig.Auth.IdentityCaseMap["importeddev"])
 	})
 }
