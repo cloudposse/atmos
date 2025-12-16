@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -255,7 +256,7 @@ func validateComponentInternal(
 	var ok bool
 
 	// Add the process environment variables to the component section.
-	componentSection[cfg.ProcessEnvSectionName] = u.EnvironToMap()
+	componentSection[cfg.ProcessEnvSectionName] = env.EnvironToMap()
 
 	switch schemaType {
 	case "jsonschema":

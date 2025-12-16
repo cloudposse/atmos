@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: test
+
+# Stack-level env vars override global env from atmos.yaml.
+env:
+  STACK_ENV_VAR: "stack-value"
+  OVERRIDE_ME: "stack-value"
+
+components:
+  terraform:
+    env-example:
+      metadata:
+        component: env-example
+      # Component-level env vars have highest priority.
+      env:
+        COMPONENT_ENV_VAR: "component-value"
+      vars: {}
