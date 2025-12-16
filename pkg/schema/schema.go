@@ -397,6 +397,13 @@ type Terraform struct {
 	Shell                   ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
 	Init                    TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
 	Plan                    TerraformPlan `yaml:"plan" json:"plan" mapstructure:"plan"`
+	// PluginCache enables automatic Terraform provider plugin caching.
+	// When true, Atmos sets TF_PLUGIN_CACHE_DIR to XDG cache or PluginCacheDir.
+	// Default: true.
+	PluginCache bool `yaml:"plugin_cache" json:"plugin_cache" mapstructure:"plugin_cache"`
+	// PluginCacheDir is an optional custom path for the plugin cache.
+	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
+	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
 }
 
 type TerraformInit struct {

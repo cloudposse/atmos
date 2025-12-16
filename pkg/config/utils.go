@@ -395,6 +395,22 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Components.Terraform.AppendUserAgent = tfAppendUserAgent
 	}
 
+	tfPluginCache := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE") //nolint:forbidigo // Required for consistency with other ATMOS_ env vars in processEnvVars.
+	if len(tfPluginCache) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE", tfPluginCache)
+		enabled, err := strconv.ParseBool(tfPluginCache)
+		if err != nil {
+			return err
+		}
+		atmosConfig.Components.Terraform.PluginCache = enabled
+	}
+
+	tfPluginCacheDir := os.Getenv("ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR") //nolint:forbidigo // Required for consistency with other ATMOS_ env vars in processEnvVars.
+	if len(tfPluginCacheDir) > 0 {
+		log.Debug(foundEnvVarMessage, "ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR", tfPluginCacheDir)
+		atmosConfig.Components.Terraform.PluginCacheDir = tfPluginCacheDir
+	}
+
 	listMergeStrategy := os.Getenv("ATMOS_SETTINGS_LIST_MERGE_STRATEGY")
 	if len(listMergeStrategy) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_SETTINGS_LIST_MERGE_STRATEGY", listMergeStrategy)

@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 // EnvTFDataDir is the environment variable name for TF_DATA_DIR.
@@ -442,7 +443,15 @@ func ExecuteClean(opts *CleanOptions, atmosConfig *schema.AtmosConfiguration) er
 		"everything", opts.Everything,
 		"skipLockFile", opts.SkipLockFile,
 		"dryRun", opts.DryRun,
+		"cache", opts.Cache,
 	)
+
+	// Handle plugin cache cleanup if --cache flag is set.
+	if opts.Cache {
+		if err := cleanPluginCache(opts.Force, opts.DryRun); err != nil {
+			return err
+		}
+	}
 
 	// Build ConfigAndStacksInfo for HandleCleanSubCommand.
 	info := schema.ConfigAndStacksInfo{
@@ -702,5 +711,49 @@ func HandleCleanSubCommand(info *schema.ConfigAndStacksInfo, componentPath strin
 	}
 
 	executeCleanDeletion(folders, tfDataDirFolders, relativePath, atmosConfig)
+	return nil
+}
+
+// cleanPluginCache cleans the Terraform plugin cache directory.
+func cleanPluginCache(force, dryRun bool) error {
+	defer perf.Track(nil, "exec.cleanPluginCache")()
+
+	// Get XDG cache directory for terraform plugins.
+	cacheDir, err := xdg.GetXDGCacheDir("terraform/plugins", xdg.DefaultCacheDirPerm)
+	if err != nil {
+		log.Warn("Failed to determine plugin cache directory", "error", err)
+		return nil
+	}
+
+	// Check if cache directory exists.
+	if _, err := os.Stat(cacheDir); os.IsNotExist(err) {
+		_ = ui.Success("Plugin cache directory does not exist, nothing to clean")
+		return nil
+	}
+
+	if dryRun {
+		_ = ui.Writef("Dry run mode: would delete plugin cache directory: %s\n", cacheDir)
+		return nil
+	}
+
+	// Prompt for confirmation unless --force is set.
+	if !force {
+		_ = ui.Writef("This will delete the plugin cache directory: %s\n", cacheDir)
+		confirmed, err := confirmDeletion()
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			return nil
+		}
+	}
+
+	// Remove the cache directory.
+	if err := os.RemoveAll(cacheDir); err != nil {
+		log.Warn("Failed to clean plugin cache", "path", cacheDir, "error", err)
+		return err
+	}
+
+	_ = ui.Successf("Cleaned plugin cache: %s", cacheDir)
 	return nil
 }
