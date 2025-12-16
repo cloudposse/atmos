@@ -108,7 +108,8 @@ func generateRandomNumber(min, max int) (int, error) {
 	}
 
 	// Generate cryptographically secure random number in range [min, max].
-	rangeSize := int64(max - min + 1)
+	// Cast to int64 before arithmetic to prevent overflow with large ranges.
+	rangeSize := int64(max) - int64(min) + 1
 	n, err := rand.Int(rand.Reader, big.NewInt(rangeSize))
 	if err != nil {
 		return 0, fmt.Errorf("failed to generate random number: %w", err)
