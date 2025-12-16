@@ -390,3 +390,27 @@ func TestMergeSystemEnvSimple(t *testing.T) {
 
 	assert.Equal(t, "override", testValue, "Simple merge should override system value")
 }
+
+func TestMergeSystemEnvInternal_InvalidEnvFormat(t *testing.T) {
+	// Test that invalid env var format (no = sign) is skipped.
+	t.Setenv("VALID_VAR", "value")
+
+	// Pass invalid format (no equals sign) in envList - should be skipped.
+	result := MergeSystemEnvSimple([]string{"INVALID_NO_EQUALS", "VALID_NEW=new-value"})
+
+	// INVALID_NO_EQUALS should not appear in result.
+	foundInvalid := false
+	foundValidNew := false
+	for _, envVar := range result {
+		pair := splitStringAtFirstOccurrence(envVar, "=")
+		if pair[0] == "INVALID_NO_EQUALS" {
+			foundInvalid = true
+		}
+		if pair[0] == "VALID_NEW" {
+			foundValidNew = true
+		}
+	}
+
+	assert.False(t, foundInvalid, "Invalid env var format should be skipped")
+	assert.True(t, foundValidNew, "Valid env var should be present")
+}

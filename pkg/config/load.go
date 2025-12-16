@@ -43,6 +43,10 @@ var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 // mergedConfigFiles tracks all config files merged during a LoadConfig call.
 // This is used to extract case-sensitive map keys from all sources, not just the main config.
 // The slice is reset at the start of each LoadConfig call.
+//
+// NOTE: This package-level state assumes sequential (non-concurrent) calls to LoadConfig.
+// LoadConfig is NOT safe for concurrent use. If concurrent config loading becomes necessary,
+// this should be refactored to pass state through a context or options struct.
 var mergedConfigFiles []string
 
 // resetMergedConfigFiles clears the tracked config files. Call at start of LoadConfig.

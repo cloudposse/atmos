@@ -3,10 +3,15 @@ package env
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestFormatBash(t *testing.T) {
@@ -280,6 +285,124 @@ func TestEnvCommandProvider(t *testing.T) {
 	})
 }
 
+func TestOutputEnvAsBash(t *testing.T) {
+	// Initialize I/O context for data package.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+
+	tests := []struct {
+		name    string
+		envVars map[string]string
+	}{
+		{
+			name:    "empty map",
+			envVars: map[string]string{},
+		},
+		{
+			name: "single variable",
+			envVars: map[string]string{
+				"FOO": "bar",
+			},
+		},
+		{
+			name: "multiple variables",
+			envVars: map[string]string{
+				"FOO": "bar",
+				"BAZ": "qux",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// outputEnvAsBash writes to stdout via data.Write.
+			// We just verify it doesn't error.
+			err := outputEnvAsBash(tt.envVars)
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestOutputEnvAsDotenv(t *testing.T) {
+	// Initialize I/O context for data package.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+
+	tests := []struct {
+		name    string
+		envVars map[string]string
+	}{
+		{
+			name:    "empty map",
+			envVars: map[string]string{},
+		},
+		{
+			name: "single variable",
+			envVars: map[string]string{
+				"FOO": "bar",
+			},
+		},
+		{
+			name: "multiple variables",
+			envVars: map[string]string{
+				"FOO": "bar",
+				"BAZ": "qux",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// outputEnvAsDotenv writes to stdout via data.Write.
+			// We just verify it doesn't error.
+			err := outputEnvAsDotenv(tt.envVars)
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestOutputEnvAsJSON(t *testing.T) {
+	// Initialize I/O context for data package.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+
+	tests := []struct {
+		name    string
+		envVars map[string]string
+	}{
+		{
+			name:    "empty map",
+			envVars: map[string]string{},
+		},
+		{
+			name: "single variable",
+			envVars: map[string]string{
+				"FOO": "bar",
+			},
+		},
+		{
+			name: "multiple variables with special chars",
+			envVars: map[string]string{
+				"FOO":     "bar",
+				"SPECIAL": "value with spaces",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// outputEnvAsJSON writes to stdout via u.PrintAsJSON.
+			// We just verify it doesn't error.
+			atmosConfig := &schema.AtmosConfiguration{}
+			err := outputEnvAsJSON(atmosConfig, tt.envVars)
+			assert.NoError(t, err)
+		})
+	}
+}
+
 func TestWriteEnvToFile_ErrorCases(t *testing.T) {
 	t.Run("fails with invalid path", func(t *testing.T) {
 		// Try to write to a path that doesn't exist and can't be created.
@@ -290,6 +413,12 @@ func TestWriteEnvToFile_ErrorCases(t *testing.T) {
 	})
 
 	t.Run("fails with read-only directory", func(t *testing.T) {
+		// Skip on Windows: Windows uses ACLs instead of Unix-style permissions,
+		// so directory mode 0o555 doesn't prevent file creation.
+		if runtime.GOOS == "windows" {
+			t.Skip("skipping on Windows: directory permissions work differently")
+		}
+
 		tmpDir := t.TempDir()
 		readOnlyDir := filepath.Join(tmpDir, "readonly")
 		err := os.Mkdir(readOnlyDir, 0o555)
