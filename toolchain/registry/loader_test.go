@@ -104,4 +104,3 @@ func TestIsGitHubURL(t *testing.T) {
 		})
 	}
 }
-
