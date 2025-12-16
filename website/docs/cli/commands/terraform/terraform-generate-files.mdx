@@ -1,0 +1,171 @@
+---
+title: atmos terraform generate files
+sidebar_label: generate files
+sidebar_class_name: command
+id: generate-files
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to generate auxiliary configuration files for Terraform components based on the `generate` section in stack configuration.
+</Intro>
+
+## Usage
+
+Execute the `terraform generate files` command like this:
+
+```shell
+# Generate files for a single component
+atmos terraform generate files <component> -s <stack>
+
+# Generate files for all components
+atmos terraform generate files --all
+```
+
+This command generates files from the `generate` section of component configurations. Files are created in the component directory with content serialized based on file extension or processed as Go templates.
+
+:::tip
+Run `atmos terraform generate files --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+# Generate files for a single component in a stack
+atmos terraform generate files vpc -s prod-ue2
+
+# Generate files for all components across all stacks
+atmos terraform generate files --all
+
+# Preview what would be generated without writing files
+atmos terraform generate files vpc -s prod-ue2 --dry-run
+
+# Generate files for specific stacks only
+atmos terraform generate files --all --stacks="prod-*"
+
+# Generate files for specific components only
+atmos terraform generate files --all --components="vpc,eks"
+
+# Delete generated files
+atmos terraform generate files --all --clean
+```
+
+## Configuration
+
+The `generate` section is defined at the component level in stack configuration:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        environment: prod
+      generate:
+        # Map values are serialized based on file extension
+        locals.tf:
+          locals:
+            environment: "{{ .vars.environment }}"
+
+        # String values are treated as Go templates
+        README.md: |
+          # VPC Component
+          Environment: {{ .vars.environment }}
+```
+
+### Extension-Aware Serialization
+
+- `.json` files are serialized as JSON with 2-space indentation
+- `.yaml` and `.yml` files are serialized as YAML with 2-space indentation
+- `.tf` and `.hcl` files generate valid HCL
+- Other extensions default to JSON
+
+### Template Context
+
+String values and map string values are processed as Go templates with access to:
+
+- `.vars` - Component variables
+- `.settings` - Component settings
+- `.env` - Component environment variables
+- `.backend` - Backend configuration
+- `.backend_type` - Backend type
+- `.providers` - Provider configurations
+- `.metadata` - Component metadata
+- `.namespace`, `.tenant`, `.environment`, `.stage`, `.region` - Context variables
+- `.atmos_component` - Atmos component name
+- `.atmos_stack` - Atmos stack name
+- `.component` - Final component name
+- `.workspace` - Terraform workspace
+
+### Auto-Generation
+
+Enable automatic file generation during terraform commands:
+
+```yaml
+# atmos.yaml
+components:
+  terraform:
+    auto_generate_files: true
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(optional)</em></dt>
+    <dd>
+        Atmos terraform component. Required when not using `--all`.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em></dt>
+    <dd>
+        Atmos stack. Required when specifying a component.
+    </dd>
+
+    <dt>`--all`</dt>
+    <dd>
+        Process all components in all stacks. Cannot be used with a component argument.
+
+        ```shell
+        atmos terraform generate files --all
+        ```
+    </dd>
+
+    <dt>`--stacks`</dt>
+    <dd>
+        Filter stacks by glob pattern. Only used with `--all`.
+
+        ```shell
+        atmos terraform generate files --all --stacks="prod-*"
+        ```
+    </dd>
+
+    <dt>`--components`</dt>
+    <dd>
+        Filter components by comma-separated list. Only used with `--all`.
+
+        ```shell
+        atmos terraform generate files --all --components="vpc,eks"
+        ```
+    </dd>
+
+    <dt>`--dry-run`</dt>
+    <dd>
+        Show what would be generated without writing files.
+
+        ```shell
+        atmos terraform generate files vpc -s prod-ue2 --dry-run
+        ```
+    </dd>
+
+    <dt>`--clean`</dt>
+    <dd>
+        Delete generated files instead of creating them.
+
+        ```shell
+        atmos terraform generate files --all --clean
+        ```
+    </dd>
+</dl>

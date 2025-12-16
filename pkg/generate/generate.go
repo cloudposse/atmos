@@ -339,6 +339,7 @@ func writeHCLBlock(body *hclwrite.Body, content map[string]any) error {
 }
 
 // toCtyValue converts a Go value to a cty.Value for HCL serialization.
+// Uses TupleVal for slices and ObjectVal for maps to support mixed types.
 func toCtyValue(value any) (cty.Value, error) {
 	switch v := value.(type) {
 	case string:
@@ -352,9 +353,9 @@ func toCtyValue(value any) (cty.Value, error) {
 	case float64:
 		return cty.NumberFloatVal(v), nil
 	case []any:
-		return sliceToCtyList(v)
+		return sliceToCtyTuple(v)
 	case map[string]any:
-		return mapToCtyMap(v)
+		return mapToCtyObject(v)
 	case nil:
 		return cty.NullVal(cty.DynamicPseudoType), nil
 	default:
@@ -362,10 +363,11 @@ func toCtyValue(value any) (cty.Value, error) {
 	}
 }
 
-// sliceToCtyList converts a Go slice to a cty.ListVal.
-func sliceToCtyList(v []any) (cty.Value, error) {
+// sliceToCtyTuple converts a Go slice to a cty.TupleVal.
+// Using TupleVal instead of ListVal allows mixed element types.
+func sliceToCtyTuple(v []any) (cty.Value, error) {
 	if len(v) == 0 {
-		return cty.ListValEmpty(cty.String), nil
+		return cty.EmptyTupleVal, nil
 	}
 	vals := make([]cty.Value, len(v))
 	for i, item := range v {
@@ -375,13 +377,14 @@ func sliceToCtyList(v []any) (cty.Value, error) {
 		}
 		vals[i] = val
 	}
-	return cty.ListVal(vals), nil
+	return cty.TupleVal(vals), nil
 }
 
-// mapToCtyMap converts a Go map to a cty.MapVal.
-func mapToCtyMap(v map[string]any) (cty.Value, error) {
+// mapToCtyObject converts a Go map to a cty.ObjectVal.
+// Using ObjectVal instead of MapVal allows mixed value types.
+func mapToCtyObject(v map[string]any) (cty.Value, error) {
 	if len(v) == 0 {
-		return cty.MapValEmpty(cty.String), nil
+		return cty.EmptyObjectVal, nil
 	}
 	vals := make(map[string]cty.Value)
 	for key, item := range v {
@@ -391,5 +394,5 @@ func mapToCtyMap(v map[string]any) (cty.Value, error) {
 		}
 		vals[key] = val
 	}
-	return cty.MapVal(vals), nil
+	return cty.ObjectVal(vals), nil
 }
