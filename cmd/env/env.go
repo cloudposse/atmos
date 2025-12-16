@@ -72,7 +72,11 @@ var envCmd = &cobra.Command{
 		// Load atmos configuration (processStacks=false since env command doesn't require stack manifests).
 		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
-			return fmt.Errorf("failed to load atmos config: %w", err)
+			return errUtils.Build(errUtils.ErrMissingAtmosConfig).
+				WithCause(err).
+				WithExplanation("Failed to load atmos configuration.").
+				WithHint("Ensure atmos.yaml exists and is properly formatted.").
+				Err()
 		}
 
 		// Get env vars with original case preserved (Viper lowercases all YAML map keys).
