@@ -1,0 +1,102 @@
+package source
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner/source"
+	u "github.com/cloudposse/atmos/pkg/utils"
+)
+
+var describeParser *flags.StandardParser
+
+var describeCmd = &cobra.Command{
+	Use:   "describe <component>",
+	Short: "Show source configuration for a component",
+	Long: `Display the metadata.source configuration for a terraform component.
+
+This command shows the source URI, version, and any path filters configured
+for the component.`,
+	Example: `  # Describe source configuration
+  atmos terraform source describe vpc --stack dev`,
+	Args: cobra.ExactArgs(1),
+	RunE: executeDescribeCommand,
+}
+
+func init() {
+	describeCmd.DisableFlagParsing = false
+
+	describeParser = flags.NewStandardParser(
+		flags.WithStackFlag(),
+	)
+
+	describeParser.RegisterFlags(describeCmd)
+
+	if err := describeParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+}
+
+func executeDescribeCommand(cmd *cobra.Command, args []string) error {
+	defer perf.Track(atmosConfigPtr, "source.describe.RunE")()
+
+	component := args[0]
+
+	// Parse flags.
+	v := viper.GetViper()
+	if err := describeParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
+	stack := v.GetString("stack")
+	if stack == "" {
+		return errUtils.ErrRequiredFlagNotProvided
+	}
+
+	// Get component configuration.
+	componentConfig, err := DescribeComponent(component, stack)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrDescribeComponent).
+			WithCause(err).
+			WithContext("component", component).
+			WithContext("stack", stack).
+			Err()
+	}
+
+	// Extract metadata.source.
+	sourceSpec, err := source.ExtractMetadataSource(componentConfig)
+	if err != nil {
+		return err
+	}
+
+	if sourceSpec == nil {
+		return errUtils.Build(errUtils.ErrMetadataSourceMissing).
+			WithContext("component", component).
+			WithContext("stack", stack).
+			WithHint("Add metadata.source to the component configuration in your stack manifest").
+			Err()
+	}
+
+	// Output as YAML.
+	output := map[string]any{
+		"component": component,
+		"stack":     stack,
+		"source":    sourceSpec,
+	}
+
+	yamlOutput, err := u.ConvertToYAML(output)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrOutputFormat).
+			WithCause(err).
+			WithExplanation("Failed to convert output to YAML").
+			Err()
+	}
+
+	fmt.Print(yamlOutput)
+	return nil
+}
