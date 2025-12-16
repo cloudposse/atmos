@@ -122,4 +122,3 @@ func TestParseRegistryURL(t *testing.T) {
 		})
 	}
 }
-
