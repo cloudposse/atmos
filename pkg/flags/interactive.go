@@ -1,18 +1,21 @@
 package flags
 
 import (
+	"errors"
 	"fmt"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	atmosterm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // isInteractive checks if interactive prompts should be shown.
@@ -32,7 +35,7 @@ func isInteractive() bool {
 	}
 
 	// Check if stdin is a TTY and not in CI.
-	return term.IsTTYSupportForStdin() && !telemetry.IsCI()
+	return atmosterm.IsTTYSupportForStdin() && !telemetry.IsCI()
 }
 
 // PromptForValue shows an interactive Huh selector with the given options.
@@ -55,23 +58,37 @@ func PromptForValue(name, title string, options []string) (string, error) {
 
 	var choice string
 
-	// Create Huh selector with Atmos theme.
-	// Limit height to 20 rows to prevent excessive scrolling and reduce terminal rendering artifacts.
-	// Note: Huh v0.8.0 has case-sensitive filtering (by design).
-	// Users can filter by typing "/" followed by search text, but it only matches exact case.
-	// Example: typing "dark" matches "neobones_dark" but not "Builtin Dark".
-	// TODO: Consider filing upstream feature request for case-insensitive filtering option.
-	selector := huh.NewSelect[string]().
-		Value(&choice).
-		Options(huh.NewOptions(options...)...).
-		Title(title).
-		Height(20).
-		WithTheme(uiutils.NewAtmosHuhTheme())
+	// Create custom keymap that adds ESC to quit keys.
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c", "esc"),
+		key.WithHelp("ctrl+c/esc", "quit"),
+	)
 
-	// Run selector.
-	if err := selector.Run(); err != nil {
+	// Use Form with Group (like auth identity selector) for better cursor behavior.
+	// This approach lets the cursor move through the list instead of scrolling the list.
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(title).
+				Description("Press ctrl+c or esc to cancel").
+				Options(huh.NewOptions(options...)...).
+				Value(&choice),
+		),
+	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
+
+	// Run form.
+	if err := form.Run(); err != nil {
+		// Check if user aborted (Ctrl+C, ESC, etc.).
+		if errors.Is(err, huh.ErrUserAborted) {
+			_ = ui.Warning("Selection cancelled")
+			return "", errUtils.ErrUserAborted
+		}
 		return "", fmt.Errorf("prompt failed: %w", err)
 	}
+
+	// Show what was selected for terminal history visibility.
+	_ = ui.Infof("Selected %s `%s`", name, choice)
 
 	return choice, nil
 }

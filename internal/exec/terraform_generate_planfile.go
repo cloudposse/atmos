@@ -6,13 +6,14 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tf "github.com/cloudposse/atmos/pkg/terraform"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -25,19 +26,46 @@ var (
 	ErrNoComponent                        = errors.New("no component specified")
 )
 
-// PlanfileOptions holds the options for generating a Terraform planfile.
-type PlanfileOptions struct {
-	Component            string
-	Stack                string
-	Format               string
-	File                 string
-	ProcessTemplates     bool
-	ProcessYamlFunctions bool
-	Skip                 []string
+// PlanfileOptions is an alias to pkg/terraform.PlanfileOptions for backwards compatibility.
+type PlanfileOptions = tf.PlanfileOptions
+
+// ExecuteGeneratePlanfile generates a planfile for a terraform component.
+func ExecuteGeneratePlanfile(opts *PlanfileOptions, atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteGeneratePlanfile")()
+
+	log.Debug("ExecuteGeneratePlanfile called",
+		"component", opts.Component,
+		"stack", opts.Stack,
+		"file", opts.File,
+		"format", opts.Format,
+		"processTemplates", opts.ProcessTemplates,
+		"processFunctions", opts.ProcessYamlFunctions,
+		"skip", opts.Skip,
+	)
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: opts.Component,
+		Stack:            opts.Stack,
+		StackFromArg:     opts.Stack,
+		ComponentType:    "terraform",
+		CliArgs:          []string{"terraform", "generate", "planfile"},
+	}
+
+	return ExecuteTerraformGeneratePlanfile(opts, info)
 }
 
 // ExecuteTerraformGeneratePlanfileCmd executes `terraform generate planfile` command.
-func ExecuteTerraformGeneratePlanfileCmd(cmd *cobra.Command, args []string) error {
+//
+// Deprecated: Use ExecuteGeneratePlanfile with typed parameters instead.
+// This function will be removed in a future release.
+func ExecuteTerraformGeneratePlanfileCmd(_ interface{}, _ []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGeneratePlanfileCmd")()
+
+	return errUtils.ErrDeprecatedCmdNotCallable
+}
+
+// ExecuteTerraformGeneratePlanfileOld executes `terraform generate planfile` command.
+func ExecuteTerraformGeneratePlanfileOld(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGeneratePlanfileCmd")()
 
 	if len(args) == 0 {

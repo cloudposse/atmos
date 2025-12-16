@@ -84,6 +84,18 @@ func NewStandardFlagParser(opts ...Option) *StandardFlagParser {
 	}
 }
 
+// Registry returns the underlying flag registry.
+// This allows access to the registry for operations like SetCompletionFunc()
+// that need to modify flags after parser creation. Any mutations to the
+// returned registry must be made before calling RegisterFlags or
+// RegisterPersistentFlags; changes made afterward will not affect
+// already-registered flags.
+func (p *StandardFlagParser) Registry() *FlagRegistry {
+	defer perf.Track(nil, "flags.StandardFlagParser.Registry")()
+
+	return p.registry
+}
+
 // SetPositionalArgs configures positional argument extraction and validation.
 //
 // Parameters:
@@ -352,12 +364,9 @@ func (p *StandardFlagParser) registerCompletions(cmd *cobra.Command) {
 }
 
 // registerPersistentCompletions automatically registers shell completion functions
-// for persistent flags that have valid values configured.
+// for persistent flags that have valid values OR custom completion functions configured.
 func (p *StandardFlagParser) registerPersistentCompletions(cmd *cobra.Command) {
-	if len(p.validValues) == 0 {
-		return
-	}
-
+	// Register static completions (valid values).
 	for flagName, validValues := range p.validValues {
 		// Only register if the flag actually exists.
 		if cmd.PersistentFlags().Lookup(flagName) == nil {
@@ -369,6 +378,41 @@ func (p *StandardFlagParser) registerPersistentCompletions(cmd *cobra.Command) {
 		_ = cmd.RegisterFlagCompletionFunc(flagName, func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 			return values, cobra.ShellCompDirectiveNoFileComp
 		})
+	}
+
+	// Register custom completion functions.
+	// For persistent flags, we need to register completion on both the parent command
+	// and recursively on all child commands because Cobra doesn't automatically
+	// propagate completion functions from parent to children.
+	for _, flag := range p.registry.All() {
+		flagName := flag.GetName()
+
+		// Only register if the flag actually exists.
+		if cmd.PersistentFlags().Lookup(flagName) == nil {
+			continue
+		}
+
+		// Only register if the flag has a custom completion function.
+		if completionFunc := flag.GetCompletionFunc(); completionFunc != nil {
+			_ = cmd.RegisterFlagCompletionFunc(flagName, completionFunc)
+
+			// Recursively register on all descendant commands.
+			registerCompletionRecursive(cmd, flagName, completionFunc)
+		}
+	}
+}
+
+// registerCompletionRecursive registers a flag completion function on all descendant commands.
+// This is necessary because Cobra doesn't automatically propagate completion functions
+// from parent to children for persistent flags.
+func registerCompletionRecursive(cmd *cobra.Command, flagName string, completionFunc func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective)) {
+	for _, child := range cmd.Commands() {
+		// Only register if the flag is accessible on this child command.
+		if child.Flags().Lookup(flagName) != nil || child.PersistentFlags().Lookup(flagName) != nil {
+			_ = child.RegisterFlagCompletionFunc(flagName, completionFunc)
+		}
+		// Recurse into grandchildren.
+		registerCompletionRecursive(child, flagName, completionFunc)
 	}
 }
 
