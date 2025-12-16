@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestBuildRegistryURL(t *testing.T) {
@@ -111,7 +113,7 @@ func TestParseRegistryURL(t *testing.T) {
 			accountID, region, err := ParseRegistryURL(tt.registryURL)
 
 			if tt.expectError {
-				assert.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrECRInvalidRegistry)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedAccountID, accountID)
@@ -121,14 +123,3 @@ func TestParseRegistryURL(t *testing.T) {
 	}
 }
 
-func TestECRAuthResult_Fields(t *testing.T) {
-	result := &ECRAuthResult{
-		Username: "AWS",
-		Password: "test-token",
-		Registry: "123456789012.dkr.ecr.us-east-1.amazonaws.com",
-	}
-
-	assert.Equal(t, "AWS", result.Username)
-	assert.Equal(t, "test-token", result.Password)
-	assert.Equal(t, "123456789012.dkr.ecr.us-east-1.amazonaws.com", result.Registry)
-}

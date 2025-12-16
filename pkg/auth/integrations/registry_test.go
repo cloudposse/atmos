@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -117,8 +118,8 @@ func TestCreate_UnknownKind(t *testing.T) {
 	}
 
 	_, err := Create(config)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown/kind")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnknownIntegrationKind)
 }
 
 func TestCreate_FactoryError(t *testing.T) {
