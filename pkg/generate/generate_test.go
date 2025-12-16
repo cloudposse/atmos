@@ -343,3 +343,44 @@ func TestGenerateFiles_JSONPrettyPrinted(t *testing.T) {
 	assert.Contains(t, contentStr, "\"server\": {")
 	assert.Contains(t, contentStr, "  \"host\": \"0.0.0.0\"")
 }
+
+func TestGenerateFiles_HCLMixedTypes(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create content with mixed types in lists and maps to verify no panic.
+	generateSection := map[string]any{
+		"mixed.tf": map[string]any{
+			"locals": map[string]any{
+				"mixed_list": []any{1, "two", true, 4.5},
+				"mixed_map": map[string]any{
+					"string_val": "hello",
+					"int_val":    42,
+					"bool_val":   false,
+				},
+			},
+		},
+	}
+
+	templateContext := map[string]any{}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	// Should not panic with mixed types.
+	results, err := GenerateFiles(generateSection, tempDir, templateContext, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.NoError(t, results[0].Error)
+
+	// Verify file was created with content.
+	content, err := os.ReadFile(filepath.Join(tempDir, "mixed.tf"))
+	require.NoError(t, err)
+	contentStr := string(content)
+
+	// Verify content contains expected values.
+	assert.Contains(t, contentStr, "locals")
+	assert.Contains(t, contentStr, "mixed_list")
+	assert.Contains(t, contentStr, "mixed_map")
+}
