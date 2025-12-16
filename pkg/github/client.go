@@ -103,7 +103,7 @@ func ConvertToRawURL(githubURL string) (string, error) {
 	// Parse the URL.
 	u, err := url.Parse(githubURL)
 	if err != nil {
-		return "", fmt.Errorf("invalid GitHub URL: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrInvalidGitHubURL, err)
 	}
 
 	// Already a raw URL.

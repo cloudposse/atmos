@@ -207,7 +207,7 @@ var listCmd = &cobra.Command{
 
 // listInstalledVersions lists locally installed versions of Atmos using the toolchain table renderer.
 func listInstalledVersions() error {
-	defer perf.Track(atmosConfigPtr, "version.listInstalledVersions")()
+	defer perf.Track(nil, "version.listInstalledVersions")()
 
 	return toolchain.RunListInstalledAtmosVersions(pkgversion.Version)
 }
