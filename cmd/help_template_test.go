@@ -1059,7 +1059,7 @@ func TestFormatCommandLine(t *testing.T) {
 				styles: &styles,
 			}
 
-			formatCommandLine(ctx, tt.cmd, tt.maxWidth)
+			formatCommandLine(ctx, tt.cmd, tt.maxWidth, nil)
 
 			output := buf.String()
 			for _, expected := range tt.contains {

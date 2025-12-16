@@ -293,8 +293,8 @@ func processChdirFlag(cmd *cobra.Command) error {
 // RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
 	Use:   "atmos",
-	Short: "Universal Tool for DevOps and Cloud Automation",
-	Long:  `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
+	Short: "Framework for Infrastructure Orchestration",
+	Long:  `Atmos is a framework for orchestrating and operating infrastructure workflows across multiple cloud and DevOps toolchains.`,
 	// Note: FParseErrWhitelist is NOT set on RootCmd to allow proper flag validation.
 	// Individual commands that need to pass through flags (terraform, helmfile, packer)
 	// set FParseErrWhitelist{UnknownFlags: true} explicitly.
