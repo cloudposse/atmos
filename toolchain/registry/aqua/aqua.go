@@ -1,24 +1,17 @@
 package aqua
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
-	"sort"
 	"strings"
 	"text/template"
-	"time"
 
-	"github.com/Masterminds/semver/v3"
 	log "github.com/charmbracelet/log"
 	"gopkg.in/yaml.v3"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/xdg"
@@ -189,11 +182,68 @@ func (ar *AquaRegistry) GetToolWithVersion(owner, repo, version string) (*regist
 	return tool, nil
 }
 
+// versionOverride holds version override data from Aqua registry.
+type versionOverride struct {
+	VersionConstraint string `yaml:"version_constraint"`
+	Asset             string `yaml:"asset"`
+	Format            string `yaml:"format"`
+	Files             []struct {
+		Name string `yaml:"name"`
+	} `yaml:"files"`
+}
+
+// applyVersionOverride applies a version override to the tool.
+func applyVersionOverride(tool *registry.Tool, override versionOverride, version string) {
+	if override.Asset != "" {
+		tool.Asset = override.Asset
+	}
+	if override.Format != "" {
+		tool.Format = override.Format
+	}
+	if len(override.Files) > 0 {
+		tool.Name = override.Files[0].Name
+	}
+	log.Debug("Applied version override", "version", version, "constraint", override.VersionConstraint, "asset", tool.Asset, "format", tool.Format)
+}
+
+// registryPackage holds package data from Aqua registry file.
+type registryPackage struct {
+	Type             string            `yaml:"type"`
+	RepoOwner        string            `yaml:"repo_owner"`
+	RepoName         string            `yaml:"repo_name"`
+	URL              string            `yaml:"url"`
+	Description      string            `yaml:"description"`
+	VersionOverrides []versionOverride `yaml:"version_overrides"`
+}
+
 // resolveVersionOverrides fetches the full registry file and resolves version-specific overrides.
 func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*registry.Tool, error) {
-	// Fetch the registry file again to get version overrides
 	registryURL := fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/%s/%s/registry.yaml", owner, repo)
 
+	pkgDef, err := ar.fetchRegistryPackage(registryURL)
+	if err != nil {
+		return nil, err
+	}
+
+	tool := &registry.Tool{
+		Name:      repo,
+		Type:      pkgDef.Type,
+		RepoOwner: pkgDef.RepoOwner,
+		RepoName:  pkgDef.RepoName,
+	}
+
+	selectedIdx := findMatchingOverride(pkgDef.VersionOverrides, version)
+	if selectedIdx == -1 {
+		log.Debug("No matching version override", "version", version, "overrides_count", len(pkgDef.VersionOverrides))
+		return tool, nil
+	}
+
+	applyVersionOverride(tool, pkgDef.VersionOverrides[selectedIdx], version)
+	return tool, nil
+}
+
+// fetchRegistryPackage fetches and parses a registry file, returning the first package.
+func (ar *AquaRegistry) fetchRegistryPackage(registryURL string) (*registryPackage, error) {
 	resp, err := ar.get(registryURL)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to fetch registry file: %w", registry.ErrHTTPRequest, err)
@@ -209,23 +259,8 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*r
 		return nil, fmt.Errorf("%w: failed to read registry file: %w", registry.ErrHTTPRequest, err)
 	}
 
-	// Parse the full registry file with version overrides
 	var registryFile struct {
-		Packages []struct {
-			Type             string `yaml:"type"`
-			RepoOwner        string `yaml:"repo_owner"`
-			RepoName         string `yaml:"repo_name"`
-			URL              string `yaml:"url"`
-			Description      string `yaml:"description"`
-			VersionOverrides []struct {
-				VersionConstraint string `yaml:"version_constraint"`
-				Asset             string `yaml:"asset"`
-				Format            string `yaml:"format"`
-				Files             []struct {
-					Name string `yaml:"name"`
-				} `yaml:"files"`
-			} `yaml:"version_overrides"`
-		} `yaml:"packages"`
+		Packages []registryPackage `yaml:"packages"`
 	}
 
 	if err := yaml.Unmarshal(data, &registryFile); err != nil {
@@ -236,51 +271,22 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*r
 		return nil, fmt.Errorf("%w: no packages found in registry file", registry.ErrNoPackagesInRegistry)
 	}
 
-	pkgDef := registryFile.Packages[0]
+	return &registryFile.Packages[0], nil
+}
 
-	// Create base tool
-	tool := &registry.Tool{
-		Name:      repo,
-		Type:      pkgDef.Type,
-		RepoOwner: pkgDef.RepoOwner,
-		RepoName:  pkgDef.RepoName,
-	}
-
-	// Find the appropriate version override using Aqua constraint evaluation.
-	// Aqua supports complex constraints like:
-	// - Version == "v1.2.3"
-	// - semver(">= 1.2.3")
-	// - "true" (catch-all)
-	selectedIdx := -1
-	for i, override := range pkgDef.VersionOverrides {
+// findMatchingOverride finds the first version override that matches the given version.
+func findMatchingOverride(overrides []versionOverride, version string) int {
+	for i, override := range overrides {
 		matches, err := evaluateVersionConstraint(override.VersionConstraint, version)
 		if err != nil {
 			log.Debug("Failed to evaluate version constraint", "constraint", override.VersionConstraint, "version", version, "error", err)
-			continue // skip invalid constraints
+			continue
 		}
 		if matches {
-			selectedIdx = i
-			break // use the first matching override
+			return i
 		}
 	}
-
-	if selectedIdx != -1 {
-		override := pkgDef.VersionOverrides[selectedIdx]
-		if override.Asset != "" {
-			tool.Asset = override.Asset
-		}
-		if override.Format != "" {
-			tool.Format = override.Format
-		}
-		if len(override.Files) > 0 {
-			tool.Name = override.Files[0].Name
-		}
-		log.Debug("Applied version override", "version", version, "constraint", pkgDef.VersionOverrides[selectedIdx].VersionConstraint, "asset", tool.Asset, "format", tool.Format)
-	} else {
-		log.Debug("No matching version override", "version", version, "overrides_count", len(pkgDef.VersionOverrides))
-	}
-
-	return tool, nil
+	return -1
 }
 
 // defaultMkdirPermissions moved to constants block
@@ -386,43 +392,61 @@ func (ar *AquaRegistry) BuildAssetURL(tool *registry.Tool, version string) (stri
 		return "", fmt.Errorf("%w: no asset template defined for tool", registry.ErrNoAssetTemplate)
 	}
 
-	// Determine format - use tool format or default to zip.
+	releaseVersion, semVer := resolveVersionStrings(tool, version)
+	data := buildAssetTemplateData(tool, releaseVersion, semVer)
+
+	assetName, err := executeAssetTemplate(tool.Asset, data)
+	if err != nil {
+		return "", err
+	}
+
+	// For http type tools, the URL is already complete.
+	if tool.Type == "http" {
+		return assetName, nil
+	}
+
+	// For github_release type, construct GitHub release URL using the full tag.
+	return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
+		tool.RepoOwner, tool.RepoName, releaseVersion, assetName), nil
+}
+
+// resolveVersionStrings determines the release version and semver based on tool config.
+func resolveVersionStrings(tool *registry.Tool, version string) (releaseVersion, semVer string) {
+	prefix := tool.VersionPrefix
+	if prefix == "" {
+		prefix = versionPrefix
+	}
+
+	releaseVersion = version
+	if !strings.HasPrefix(releaseVersion, prefix) {
+		releaseVersion = prefix + releaseVersion
+	}
+
+	semVer = strings.TrimPrefix(releaseVersion, prefix)
+	return releaseVersion, semVer
+}
+
+// buildAssetTemplateData creates the template data map for asset URL rendering.
+func buildAssetTemplateData(tool *registry.Tool, releaseVersion, semVer string) map[string]string {
 	format := "zip"
 	if tool.Format != "" {
 		format = tool.Format
 	}
 
-	// Determine the version prefix from tool config (defaults to "v").
-	// This matches Aqua's version_prefix behavior where tools like kustomize
-	// use "kustomize/" prefix while most tools use "v".
-	prefix := tool.VersionPrefix
-	if prefix == "" {
-		prefix = versionPrefix // Default to "v".
-	}
-
-	// Build full version tag for GitHub release URL.
-	// If version doesn't have the expected prefix, add it.
-	releaseVersion := version
-	if !strings.HasPrefix(releaseVersion, prefix) {
-		releaseVersion = prefix + releaseVersion
-	}
-
-	// SemVer is the version with prefix stripped (for asset filenames).
-	semVer := strings.TrimPrefix(releaseVersion, prefix)
-
-	// Create template data with both Version (full tag) and SemVer (without prefix).
-	data := map[string]string{
-		"Version":   releaseVersion, // Full tag (e.g., "v1.199.0" or "kustomize/4.5.4").
-		"SemVer":    semVer,         // Without prefix (e.g., "1.199.0" or "4.5.4").
+	return map[string]string{
+		"Version":   releaseVersion,
+		"SemVer":    semVer,
 		"OS":        getOS(),
 		"Arch":      getArch(),
 		"RepoOwner": tool.RepoOwner,
 		"RepoName":  tool.RepoName,
 		"Format":    format,
 	}
+}
 
-	// Create template with custom functions.
-	funcMap := template.FuncMap{
+// assetTemplateFuncs returns the template function map for asset URL templates.
+func assetTemplateFuncs() template.FuncMap {
+	return template.FuncMap{
 		"trimV": func(s string) string {
 			return strings.TrimPrefix(s, versionPrefix)
 		},
@@ -436,9 +460,11 @@ func (ar *AquaRegistry) BuildAssetURL(tool *registry.Tool, version string) (stri
 			return strings.ReplaceAll(s, old, new)
 		},
 	}
+}
 
-	// Parse and execute template.
-	tmpl, err := template.New("asset").Funcs(funcMap).Parse(tool.Asset)
+// executeAssetTemplate parses and executes the asset template.
+func executeAssetTemplate(assetTemplate string, data map[string]string) (string, error) {
+	tmpl, err := template.New("asset").Funcs(assetTemplateFuncs()).Parse(assetTemplate)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to parse asset template: %w", registry.ErrNoAssetTemplate, err)
 	}
@@ -448,556 +474,5 @@ func (ar *AquaRegistry) BuildAssetURL(tool *registry.Tool, version string) (stri
 		return "", fmt.Errorf("%w: failed to execute asset template: %w", registry.ErrNoAssetTemplate, err)
 	}
 
-	// For http type tools, the URL is already complete.
-	if tool.Type == "http" {
-		return assetName.String(), nil
-	}
-
-	// For github_release type, construct GitHub release URL using the full tag.
-	url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
-		tool.RepoOwner, tool.RepoName, releaseVersion, assetName.String())
-
-	return url, nil
-}
-
-// GetLatestVersion fetches the latest non-prerelease, non-draft version from GitHub releases.
-// Implements pagination to handle repos with many releases.
-func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
-	defer perf.Track(nil, "aqua.AquaRegistry.GetLatestVersion")()
-
-	// GitHub API endpoint for releases with pagination.
-	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d", ar.githubBaseURL, owner, repo, githubPerPage)
-
-	// Iterate through pages until we find a non-prerelease, non-draft release.
-	for apiURL != "" {
-		resp, err := ar.get(apiURL)
-		if err != nil {
-			return "", fmt.Errorf("%w: failed to fetch releases from GitHub: %w", registry.ErrHTTPRequest, err)
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			return "", fmt.Errorf("%w: GitHub API returned status %d", registry.ErrHTTPRequest, resp.StatusCode)
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			return "", fmt.Errorf("%w: failed to read response body: %w", registry.ErrHTTPRequest, err)
-		}
-
-		// Parse the JSON response to find the latest non-prerelease, non-draft version.
-		var releases []struct {
-			TagName    string `json:"tag_name"`
-			Prerelease bool   `json:"prerelease"`
-			Draft      bool   `json:"draft"`
-		}
-
-		if err := json.Unmarshal(body, &releases); err != nil {
-			return "", fmt.Errorf("%w: failed to parse releases JSON: %w", registry.ErrRegistryParse, err)
-		}
-
-		// Find the first non-prerelease, non-draft release in this page.
-		for _, release := range releases {
-			if !release.Prerelease && !release.Draft {
-				// Remove 'v' prefix if present.
-				version := strings.TrimPrefix(release.TagName, versionPrefix)
-				return version, nil
-			}
-		}
-
-		// Check if there's a next page.
-		linkHeader := resp.Header.Get("Link")
-		apiURL = parseNextLink(linkHeader)
-	}
-
-	return "", fmt.Errorf("%w: no non-prerelease, non-draft versions found for %s/%s", registry.ErrNoVersionsFound, owner, repo)
-}
-
-// GetAvailableVersions fetches all available non-prerelease, non-draft versions from GitHub releases.
-// Implements pagination to handle repos with many releases.
-func (ar *AquaRegistry) GetAvailableVersions(owner, repo string) ([]string, error) {
-	defer perf.Track(nil, "aqua.AquaRegistry.GetAvailableVersions")()
-
-	// GitHub API endpoint for releases with pagination.
-	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d", ar.githubBaseURL, owner, repo, githubPerPage)
-
-	var versions []string
-
-	// Iterate through all pages to collect all releases.
-	for apiURL != "" {
-		resp, err := ar.get(apiURL)
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to fetch releases from GitHub: %w", registry.ErrHTTPRequest, err)
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			return nil, fmt.Errorf("%w: GitHub API returned status %d", registry.ErrHTTPRequest, resp.StatusCode)
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		linkHeader := resp.Header.Get("Link")
-		resp.Body.Close()
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to read response body: %w", registry.ErrHTTPRequest, err)
-		}
-
-		// Parse the JSON response.
-		var releases []struct {
-			TagName    string `json:"tag_name"`
-			Prerelease bool   `json:"prerelease"`
-			Draft      bool   `json:"draft"`
-		}
-
-		if err := json.Unmarshal(body, &releases); err != nil {
-			return nil, fmt.Errorf("%w: failed to parse releases JSON: %w", registry.ErrRegistryParse, err)
-		}
-
-		// Extract all non-prerelease, non-draft versions from this page.
-		for _, release := range releases {
-			if !release.Prerelease && !release.Draft {
-				// Remove 'v' prefix if present.
-				version := strings.TrimPrefix(release.TagName, versionPrefix)
-				versions = append(versions, version)
-			}
-		}
-
-		// Check if there's a next page.
-		apiURL = parseNextLink(linkHeader)
-	}
-
-	if len(versions) == 0 {
-		return nil, fmt.Errorf("%w: no non-prerelease, non-draft versions found for %s/%s", registry.ErrNoVersionsFound, owner, repo)
-	}
-
-	return versions, nil
-}
-
-// getOS returns the current operating system.
-func getOS() string {
-	switch runtime.GOOS {
-	case "darwin":
-		return "darwin"
-	case "linux":
-		return "linux"
-	case "windows":
-		return "windows"
-	default:
-		return "linux"
-	}
-}
-
-// getArch returns the current architecture.
-func getArch() string {
-	switch runtime.GOARCH {
-	case "amd64":
-		return "amd64"
-	case "arm64":
-		return "arm64"
-	case "386":
-		return "386"
-	default:
-		return "amd64"
-	}
-}
-
-// parseNextLink extracts the next page URL from GitHub API Link header.
-// Example Link header: <https://api.github.com/repos/foo/bar/releases?page=2>; rel="next", <https://api.github.com/repos/foo/bar/releases?page=5>; rel="last".
-func parseNextLink(linkHeader string) string {
-	// Split by comma to get individual links.
-	links := strings.Split(linkHeader, ",")
-	for _, link := range links {
-		// Check if this is the "next" rel.
-		if strings.Contains(link, `rel="next"`) {
-			// Extract URL from <URL>
-			start := strings.Index(link, "<")
-			end := strings.Index(link, ">")
-			if start >= 0 && end > start {
-				return link[start+1 : end]
-			}
-		}
-	}
-	return ""
-}
-
-// Search searches for tools matching the query string.
-// The query is matched against tool owner, repo, and description.
-func (ar *AquaRegistry) Search(ctx context.Context, query string, opts ...registry.SearchOption) ([]*registry.Tool, error) {
-	defer perf.Track(nil, "aqua.AquaRegistry.Search")()
-
-	// Apply search options.
-	config := &registry.SearchConfig{
-		Limit: defaultSearchLimit,
-	}
-	for _, opt := range opts {
-		opt(config)
-	}
-
-	// Get all tools from registry.
-	listStart := time.Now()
-	allTools, err := ar.ListAll(ctx, registry.WithListLimit(0)) // 0 = no limit
-	if err != nil {
-		return nil, err
-	}
-	log.Debug("ListAll took", durationMetricKey, time.Since(listStart), "tools", len(allTools))
-
-	// Filter and score results.
-	var results []scoredTool
-	queryLower := strings.ToLower(query)
-
-	scoreStart := time.Now()
-	for _, tool := range allTools {
-		score := ar.calculateRelevanceScore(tool, queryLower)
-		if score > 0 {
-			results = append(results, scoredTool{tool: tool, score: score})
-		}
-	}
-	log.Debug("Scoring took", durationMetricKey, time.Since(scoreStart), "matches", len(results))
-
-	// Sort by score (highest first), then alphabetically.
-	sortStart := time.Now()
-	sortResults(results)
-	log.Debug("Sort took", durationMetricKey, time.Since(sortStart))
-
-	// Store total count in metadata for pagination display.
-	ar.lastSearchTotal = len(results)
-
-	// Apply offset and limit.
-	start := config.Offset
-	if start > len(results) {
-		start = len(results)
-	}
-
-	end := start + config.Limit
-	if config.Limit == 0 || end > len(results) {
-		end = len(results)
-	}
-
-	filtered := make([]*registry.Tool, 0, end-start)
-	for i := start; i < end; i++ {
-		filtered = append(filtered, results[i].tool)
-	}
-
-	return filtered, nil
-}
-
-// calculateRelevanceScore scores a tool based on query match.
-// Scoring algorithm:
-// - Exact match on repo name: 100
-// - Prefix match on repo name: 70
-// - Contains match on repo name: 50
-// - Prefix match on owner: 40
-// - Contains match on owner: 20.
-func (ar *AquaRegistry) calculateRelevanceScore(tool *registry.Tool, queryLower string) int {
-	repoLower := strings.ToLower(tool.RepoName)
-	ownerLower := strings.ToLower(tool.RepoOwner)
-
-	// Exact repo match.
-	if repoLower == queryLower {
-		return scoreExactRepoMatch
-	}
-
-	score := 0
-
-	// Prefix match on repo.
-	if strings.HasPrefix(repoLower, queryLower) {
-		score += scoreRepoPrefixMatch
-	} else if strings.Contains(repoLower, queryLower) {
-		// Contains match on repo.
-		score += scoreRepoContainsMatch
-	}
-
-	// Prefix match on owner.
-	if strings.HasPrefix(ownerLower, queryLower) {
-		score += scoreOwnerPrefixMatch
-	} else if strings.Contains(ownerLower, queryLower) {
-		// Contains match on owner.
-		score += scoreOwnerContainsMatch
-	}
-
-	return score
-}
-
-// sortResults sorts scored tools by score (descending) then alphabetically.
-func sortResults(results []scoredTool) {
-	sort.Slice(results, func(i, j int) bool {
-		// Sort by score descending.
-		if results[i].score != results[j].score {
-			return results[i].score > results[j].score
-		}
-		// For equal scores, sort alphabetically by repo name.
-		return results[i].tool.RepoName < results[j].tool.RepoName
-	})
-}
-
-// GetLastSearchTotal returns the total number of search results before pagination.
-// This is set by the most recent Search() call.
-func (ar *AquaRegistry) GetLastSearchTotal() int {
-	defer perf.Track(nil, "aqua.AquaRegistry.GetLastSearchTotal")()
-
-	return ar.lastSearchTotal
-}
-
-// ListAll returns all tools available in the Aqua registry.
-func (ar *AquaRegistry) ListAll(ctx context.Context, opts ...registry.ListOption) ([]*registry.Tool, error) {
-	defer perf.Track(nil, "aqua.AquaRegistry.ListAll")()
-
-	// Apply list options.
-	config := &registry.ListConfig{
-		Limit: defaultListLimit,
-		Sort:  "name", // default
-	}
-	for _, opt := range opts {
-		opt(config)
-	}
-
-	// Fetch the main registry index.
-	// For now, we'll fetch a known list of popular tools.
-	// In V2, we should fetch the complete registry index.
-	tools, err := ar.fetchRegistryIndex(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Sort results.
-	if config.Sort == "name" {
-		sortToolsByName(tools)
-	}
-
-	// Apply pagination.
-	start := config.Offset
-	if start > len(tools) {
-		start = len(tools)
-	}
-
-	end := start + config.Limit
-	if config.Limit == 0 || end > len(tools) {
-		end = len(tools)
-	}
-
-	return tools[start:end], nil
-}
-
-// fetchRegistryIndex fetches the complete registry index from aqua-registry.
-func (ar *AquaRegistry) fetchRegistryIndex(ctx context.Context) ([]*registry.Tool, error) {
-	defer perf.Track(nil, "aqua.AquaRegistry.fetchRegistryIndex")()
-
-	const cacheKey = "aqua-registry-index"
-	const cacheTTL = 24 * time.Hour
-
-	// Try to get from cache first.
-	start := time.Now()
-	if cachedData, err := ar.cacheStore.Get(ctx, cacheKey); err == nil {
-		log.Debug("Cache read took", durationMetricKey, time.Since(start))
-		// Cache hit - parse and return.
-		parseStart := time.Now()
-		tools, err := ar.parseIndexYAML(cachedData)
-		log.Debug("Parse took", durationMetricKey, time.Since(parseStart), "tools", len(tools))
-		if err == nil {
-			log.Debug("Using cached registry index", "tool_count", len(tools))
-			return tools, nil
-		}
-		// If parse fails, continue to fetch fresh data.
-		log.Debug("Failed to parse cached index, fetching fresh", "error", err)
-	}
-
-	// Cache miss or expired - fetch from GitHub.
-	indexURL := "https://raw.githubusercontent.com/aquaproj/aqua-registry/main/registry.yaml"
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, indexURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create request: %w", registry.ErrHTTPRequest, err)
-	}
-
-	resp, err := ar.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to fetch registry index: %w", registry.ErrHTTPRequest, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: failed to fetch registry index (HTTP %d)", registry.ErrHTTPRequest, resp.StatusCode)
-	}
-
-	// Read response body.
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read registry index: %w", registry.ErrHTTPRequest, err)
-	}
-
-	// Parse the index.
-	tools, err := ar.parseIndexYAML(data)
-	if err != nil {
-		return nil, err
-	}
-
-	// Store in cache for next time.
-	if err := ar.cacheStore.Set(ctx, cacheKey, data, cacheTTL); err != nil {
-		log.Debug("Failed to cache registry index", "error", err)
-		// Non-fatal - continue with fetched data.
-	}
-
-	log.Debug("Fetched registry index", "tool_count", len(tools))
-	return tools, nil
-}
-
-// parseIndexYAML parses the aqua-registry registry.yaml format.
-func (ar *AquaRegistry) parseIndexYAML(data []byte) ([]*registry.Tool, error) {
-	defer perf.Track(nil, "aqua.AquaRegistry.parseIndexYAML")()
-
-	var index struct {
-		Packages []struct {
-			Type      string `yaml:"type"`
-			RepoOwner string `yaml:"repo_owner"`
-			RepoName  string `yaml:"repo_name"`
-			Name      string `yaml:"name"` // Used by http and some go_install types.
-			Path      string `yaml:"path"` // Used by go_install types (Go module path).
-		} `yaml:"packages"`
-	}
-
-	if err := yaml.Unmarshal(data, &index); err != nil {
-		return nil, fmt.Errorf("%w: failed to parse registry index: %w", registry.ErrRegistryParse, err)
-	}
-
-	// Convert to Tool objects.
-	tools := make([]*registry.Tool, 0, len(index.Packages))
-	for _, pkg := range index.Packages {
-		// Skip entries without a type - these are invalid package definitions.
-		// In Aqua registry YAML, some entries may start with "- name:" followed by
-		// "type:", which YAML parsers may treat as separate entries.
-		if pkg.Type == "" {
-			continue
-		}
-
-		owner := pkg.RepoOwner
-		repo := pkg.RepoName
-
-		// For packages with name field but no repo_owner/repo_name, parse the name field.
-		// Format is usually "owner/repo" or "owner/repo/binary" (for http and some go_install types).
-		if pkg.Name != "" && owner == "" && repo == "" {
-			parts := strings.SplitN(pkg.Name, "/", 3)
-			if len(parts) >= 2 {
-				owner = parts[0]
-				repo = parts[1]
-				// For go_install with multiple binaries (e.g., "owner/repo/binary"),
-				// we still use owner/repo as the identifier.
-			} else if len(parts) == 1 {
-				// If name doesn't contain '/', use it as repo name.
-				repo = pkg.Name
-			}
-		}
-
-		// For go_install packages with only a path field (e.g., "golang.org/x/perf/cmd/benchstat"),
-		// extract owner/repo from the Go module path.
-		if pkg.Type == "go_install" && pkg.Path != "" && owner == "" && repo == "" {
-			// Parse Go module path: "golang.org/x/perf/cmd/benchstat" -> owner: "golang", repo: "x"
-			// Or "github.com/owner/repo/..." -> owner: "owner", repo: "repo"
-			parts := strings.Split(pkg.Path, "/")
-			if len(parts) >= 3 {
-				// Handle special cases like golang.org/x/...
-				switch {
-				case parts[0] == "golang.org" && len(parts) >= 2:
-					owner = "golang"
-					repo = parts[1] // e.g., "x" from "golang.org/x/..."
-				case parts[0] == "github.com" && len(parts) >= 3:
-					owner = parts[1]
-					repo = parts[2]
-				default:
-					// For other paths, use first part as owner, second as repo.
-					owner = parts[0]
-					if len(parts) > 1 {
-						repo = parts[1]
-					}
-				}
-			}
-		}
-
-		tools = append(tools, &registry.Tool{
-			RepoOwner: owner,
-			RepoName:  repo,
-			Type:      pkg.Type,
-			Registry:  "aqua-public",
-		})
-	}
-
-	return tools, nil
-}
-
-// sortToolsByName sorts tools alphabetically by repo name.
-func sortToolsByName(tools []*registry.Tool) {
-	sort.Slice(tools, func(i, j int) bool {
-		return tools[i].RepoName < tools[j].RepoName
-	})
-}
-
-// GetMetadata returns metadata about the Aqua registry.
-func (ar *AquaRegistry) GetMetadata(ctx context.Context) (*registry.RegistryMetadata, error) {
-	defer perf.Track(nil, "aqua.AquaRegistry.GetMetadata")()
-
-	// Get tool count by listing all tools.
-	tools, err := ar.ListAll(ctx, registry.WithListLimit(0))
-	if err != nil {
-		return nil, err
-	}
-
-	return &registry.RegistryMetadata{
-		Name:        "aqua-public",
-		Type:        "aqua",
-		Source:      "https://github.com/aquaproj/aqua-registry",
-		Priority:    defaultRegistryPriority,
-		ToolCount:   len(tools),
-		LastUpdated: time.Now(), // TODO: Fetch actual last updated from GitHub API
-	}, nil
-}
-
-// evaluateVersionConstraint evaluates an Aqua version constraint expression.
-// Supports:
-//   - `"true"` - Always matches
-//   - `"false"` - Never matches
-//   - `Version == "v1.2.3"` - Exact version match
-//   - `semver(">= 1.2.3")` - Semver constraint
-func evaluateVersionConstraint(constraint, version string) (bool, error) {
-	defer perf.Track(nil, "aqua.evaluateVersionConstraint")()
-
-	// Trim whitespace.
-	constraint = strings.TrimSpace(constraint)
-
-	// Handle literal true/false.
-	if constraint == "true" || constraint == `"true"` {
-		return true, nil
-	}
-	if constraint == "false" || constraint == `"false"` {
-		return false, nil
-	}
-
-	// Handle exact version match: Version == "v1.2.3"
-	if strings.HasPrefix(constraint, "Version ==") {
-		expectedVersion := strings.TrimSpace(strings.TrimPrefix(constraint, "Version =="))
-		expectedVersion = strings.Trim(expectedVersion, `"`)
-		return version == expectedVersion, nil
-	}
-
-	// Handle semver constraint: semver(">= 1.2.3")
-	if strings.HasPrefix(constraint, "semver(") && strings.HasSuffix(constraint, ")") {
-		semverConstraint := strings.TrimPrefix(constraint, "semver(")
-		semverConstraint = strings.TrimSuffix(semverConstraint, ")")
-		semverConstraint = strings.Trim(semverConstraint, `"`)
-
-		// Parse the version (handle both "v1.2.3" and "1.2.3").
-		v, err := semver.NewVersion(version)
-		if err != nil {
-			return false, fmt.Errorf("invalid version %q: %w", version, err)
-		}
-
-		// Parse the constraint.
-		c, err := semver.NewConstraint(semverConstraint)
-		if err != nil {
-			return false, fmt.Errorf("invalid semver constraint %q: %w", semverConstraint, err)
-		}
-
-		return c.Check(v), nil
-	}
-
-	return false, fmt.Errorf("%w: %q", errUtils.ErrUnsupportedVersionConstraint, constraint)
+	return assetName.String(), nil
 }

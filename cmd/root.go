@@ -441,11 +441,10 @@ var RootCmd = &cobra.Command{
 					_ = os.Setenv(pkgversion.VersionUseEnvVar, useVersion)
 				}
 			}
-			if pkgversion.CheckAndReexec(&tmpConfig) {
-				// Re-exec was triggered via syscall.Exec, so this line is never reached.
-				// If we somehow get here, exit cleanly.
-				os.Exit(0)
-			}
+			// CheckAndReexec returns true only on successful syscall.Exec, which replaces
+			// the current process entirely. This means true is never returned in practice
+			// since exec doesn't return. We call it for its side effects.
+			_ = pkgversion.CheckAndReexec(&tmpConfig)
 		}
 
 		// Setup profiler before command execution (but skip for help commands).

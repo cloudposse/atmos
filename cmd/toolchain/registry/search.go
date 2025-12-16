@@ -122,6 +122,15 @@ func displaySearchTable(results []*toolchainregistry.Tool, query string, searchL
 	_ = ui.Hintf("Use `atmos toolchain install <tool>@<version>` to install")
 }
 
+// searchFlags holds parsed search command flags.
+type searchFlags struct {
+	limit         int
+	registry      string
+	installedOnly bool
+	availableOnly bool
+	format        string
+}
+
 func executeSearchCommand(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "registry.executeSearchCommand")()
 
@@ -131,53 +140,75 @@ func executeSearchCommand(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	query := args[0]
-	ctx := context.Background()
-
-	// Get flag values from Viper.
-	searchLimit := v.GetInt("limit")
-	searchRegistry := v.GetString("registry")
-	searchInstalledOnly := v.GetBool("installed-only")
-	searchAvailableOnly := v.GetBool("available-only")
-	searchFormat := strings.ToLower(v.GetString("format"))
-
-	// Validate format flag.
-	if err := validateSearchFormat(searchFormat); err != nil {
+	flags := parseSearchFlags(v)
+	if err := validateSearchFlags(flags); err != nil {
 		return err
 	}
 
-	// Validate limit flag.
-	if searchLimit < 0 {
-		return fmt.Errorf("%w: limit must be non-negative", errUtils.ErrInvalidFlag)
-	}
-
-	// Validate conflicting filter flags.
-	if searchInstalledOnly && searchAvailableOnly {
-		return fmt.Errorf("%w: cannot use both --installed-only and --available-only", errUtils.ErrInvalidFlag)
-	}
+	query := args[0]
+	ctx := context.Background()
 
 	// Create registry based on flag or use default.
-	reg, err := createSearchRegistry(searchRegistry)
+	reg, err := createSearchRegistry(flags.registry)
 	if err != nil {
 		return err
 	}
 
-	// Search for all matching tools (no limit on search itself).
-	opts := []toolchainregistry.SearchOption{
-		toolchainregistry.WithLimit(0), // 0 = no limit, get all matches
+	// Execute search.
+	results, err := performSearch(ctx, reg, query, flags)
+	if err != nil {
+		return err
 	}
-	if searchInstalledOnly {
+
+	return outputSearchResults(results, query, flags)
+}
+
+// parseSearchFlags extracts search flags from Viper.
+func parseSearchFlags(v *viper.Viper) searchFlags {
+	return searchFlags{
+		limit:         v.GetInt("limit"),
+		registry:      v.GetString("registry"),
+		installedOnly: v.GetBool("installed-only"),
+		availableOnly: v.GetBool("available-only"),
+		format:        strings.ToLower(v.GetString("format")),
+	}
+}
+
+// validateSearchFlags validates all search flags.
+func validateSearchFlags(flags searchFlags) error {
+	if err := validateSearchFormat(flags.format); err != nil {
+		return err
+	}
+	if flags.limit < 0 {
+		return fmt.Errorf("%w: limit must be non-negative", errUtils.ErrInvalidFlag)
+	}
+	if flags.installedOnly && flags.availableOnly {
+		return fmt.Errorf("%w: cannot use both --installed-only and --available-only", errUtils.ErrInvalidFlag)
+	}
+	return nil
+}
+
+// performSearch executes the search and returns results.
+func performSearch(ctx context.Context, reg toolchainregistry.ToolRegistry, query string, flags searchFlags) ([]*toolchainregistry.Tool, error) {
+	opts := []toolchainregistry.SearchOption{
+		toolchainregistry.WithLimit(0), // 0 = no limit, get all matches.
+	}
+	if flags.installedOnly {
 		opts = append(opts, toolchainregistry.WithInstalledOnly(true))
 	}
-	if searchAvailableOnly {
+	if flags.availableOnly {
 		opts = append(opts, toolchainregistry.WithAvailableOnly(true))
 	}
 
 	results, err := reg.Search(ctx, query, opts...)
 	if err != nil {
-		return fmt.Errorf("search failed: %w", err)
+		return nil, fmt.Errorf("search failed: %w", err)
 	}
+	return results, nil
+}
 
+// outputSearchResults outputs search results in the specified format.
+func outputSearchResults(results []*toolchainregistry.Tool, query string, flags searchFlags) error {
 	if len(results) == 0 {
 		message := fmt.Sprintf(`No tools found matching '%s'
 
@@ -191,22 +222,20 @@ Try:
 
 	// Apply display limit for JSON/YAML (0 means no limit).
 	displayResults := results
-	if searchLimit > 0 && len(results) > searchLimit {
-		displayResults = results[:searchLimit]
+	if flags.limit > 0 && len(results) > flags.limit {
+		displayResults = results[:flags.limit]
 	}
 
-	// Output based on format.
-	switch searchFormat {
+	switch flags.format {
 	case "json":
 		return data.WriteJSON(displayResults)
 	case "yaml":
 		return data.WriteYAML(displayResults)
 	case "table":
-		displaySearchTable(results, query, searchLimit)
+		displaySearchTable(results, query, flags.limit)
 		return nil
 	default:
-		// Should never reach here due to validation above.
-		return fmt.Errorf("%w: unsupported format: %s", errUtils.ErrInvalidFlag, searchFormat)
+		return fmt.Errorf("%w: unsupported format: %s", errUtils.ErrInvalidFlag, flags.format)
 	}
 }
 

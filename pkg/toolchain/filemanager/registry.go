@@ -10,6 +10,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	// errFmtNamedError formats an error with a name prefix.
+	errFmtNamedError = "%s: %w"
+	// errFmtWrappedError formats an error wrapping another error.
+	errFmtWrappedError = "%w: %w"
+)
+
 // Registry coordinates updates across multiple file managers.
 type Registry struct {
 	managers []FileManager
@@ -36,14 +43,14 @@ func (r *Registry) AddTool(ctx context.Context, tool, version string, opts ...Ad
 		}
 
 		if err := mgr.AddTool(ctx, tool, version, opts...); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", mgr.Name(), err))
+			errs = append(errs, fmt.Errorf(errFmtNamedError, mgr.Name(), err))
 		} else {
 			log.Debug("Updated file", "manager", mgr.Name(), "tool", tool, "version", version)
 		}
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("%w: %w", ErrUpdateFailed, errors.Join(errs...))
+		return fmt.Errorf(errFmtWrappedError, ErrUpdateFailed, errors.Join(errs...))
 	}
 
 	return nil
@@ -61,14 +68,14 @@ func (r *Registry) RemoveTool(ctx context.Context, tool, version string) error {
 		}
 
 		if err := mgr.RemoveTool(ctx, tool, version); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", mgr.Name(), err))
+			errs = append(errs, fmt.Errorf(errFmtNamedError, mgr.Name(), err))
 		} else {
 			log.Debug("Removed from file", "manager", mgr.Name(), "tool", tool, "version", version)
 		}
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("%w: %w", ErrUpdateFailed, errors.Join(errs...))
+		return fmt.Errorf(errFmtWrappedError, ErrUpdateFailed, errors.Join(errs...))
 	}
 
 	return nil
@@ -86,14 +93,14 @@ func (r *Registry) SetDefault(ctx context.Context, tool, version string) error {
 		}
 
 		if err := mgr.SetDefault(ctx, tool, version); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", mgr.Name(), err))
+			errs = append(errs, fmt.Errorf(errFmtNamedError, mgr.Name(), err))
 		} else {
 			log.Debug("Set default in file", "manager", mgr.Name(), "tool", tool, "version", version)
 		}
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("%w: %w", ErrUpdateFailed, errors.Join(errs...))
+		return fmt.Errorf(errFmtWrappedError, ErrUpdateFailed, errors.Join(errs...))
 	}
 
 	return nil
@@ -111,12 +118,12 @@ func (r *Registry) VerifyAll(ctx context.Context) error {
 		}
 
 		if err := mgr.Verify(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", mgr.Name(), err))
+			errs = append(errs, fmt.Errorf(errFmtNamedError, mgr.Name(), err))
 		}
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("%w: %w", ErrVerificationFailed, errors.Join(errs...))
+		return fmt.Errorf(errFmtWrappedError, ErrVerificationFailed, errors.Join(errs...))
 	}
 
 	return nil

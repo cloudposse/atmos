@@ -158,8 +158,24 @@ Use 'atmos toolchain registry list aqua' to see tools in the Aqua registry.
 	return nil
 }
 
+// displayTableParams holds parameters for displaying the tools table.
+type displayTableParams struct {
+	ctx          context.Context
+	reg          toolchainregistry.ToolRegistry
+	tools        []*toolchainregistry.Tool
+	registryName string
+	opts         *ListOptions
+	pagerEnabled bool
+}
+
 // displayToolsTable displays tools in table format with paging support.
-func displayToolsTable(ctx context.Context, reg toolchainregistry.ToolRegistry, tools []*toolchainregistry.Tool, registryName string, opts *ListOptions, pagerEnabled bool) error {
+func displayToolsTable(params *displayTableParams) error {
+	ctx := params.ctx
+	reg := params.reg
+	tools := params.tools
+	registryName := params.registryName
+	opts := params.opts
+	pagerEnabled := params.pagerEnabled
 	// Get metadata for total count.
 	meta, err := reg.GetMetadata(ctx)
 	if err != nil {
@@ -237,7 +253,14 @@ func listRegistryTools(ctx context.Context, registryName string, opts *ListOptio
 	case "yaml":
 		return data.WriteYAML(tools)
 	case "table":
-		return displayToolsTable(ctx, reg, tools, registryName, opts, pagerEnabled)
+		return displayToolsTable(&displayTableParams{
+			ctx:          ctx,
+			reg:          reg,
+			tools:        tools,
+			registryName: registryName,
+			opts:         opts,
+			pagerEnabled: pagerEnabled,
+		})
 	default:
 		// Should never reach here due to validation in parseListOptions.
 		return fmt.Errorf("%w: unsupported format: %s", errUtils.ErrInvalidFlag, opts.Format)

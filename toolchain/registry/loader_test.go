@@ -1,8 +1,10 @@
 package registry
 
 import (
-	"errors"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -66,19 +68,15 @@ func TestCreateRegistry_RefValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := createRegistry(&tt.config)
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("createRegistry() expected error, got nil")
-					return
-				}
-				if !errors.Is(err, ErrRegistryConfiguration) {
-					t.Errorf("createRegistry() error = %v, want ErrRegistryConfiguration", err)
-				}
-				if tt.errContains != "" && !containsString(err.Error(), tt.errContains) {
-					t.Errorf("createRegistry() error = %q, want to contain %q", err.Error(), tt.errContains)
-				}
-			} else if err != nil {
-				t.Errorf("createRegistry() unexpected error = %v", err)
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+
+			require.Error(t, err)
+			assert.ErrorIs(t, err, ErrRegistryConfiguration)
+			if tt.errContains != "" {
+				assert.Contains(t, err.Error(), tt.errContains)
 			}
 		})
 	}
@@ -107,17 +105,3 @@ func TestIsGitHubURL(t *testing.T) {
 	}
 }
 
-// containsString checks if s contains substr.
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}

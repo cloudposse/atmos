@@ -293,9 +293,14 @@ func (ur *URLRegistry) loadIndex() error {
 		return fmt.Errorf("%w: no packages found in index file", ErrNoPackagesInRegistry)
 	}
 
-	// Cache all packages from the index.
-	for i := range indexFile.Packages {
-		pkg := &indexFile.Packages[i]
+	ur.cachePackages(indexFile.Packages)
+	return nil
+}
+
+// cachePackages caches all packages from the index file.
+func (ur *URLRegistry) cachePackages(packages []AquaPackage) {
+	for i := range packages {
+		pkg := &packages[i]
 		tool := &Tool{
 			Name:             pkg.RepoName,
 			Type:             pkg.Type,
@@ -320,8 +325,6 @@ func (ur *URLRegistry) loadIndex() error {
 		cacheKey := fmt.Sprintf("%s/%s", pkg.RepoOwner, pkg.RepoName)
 		ur.indexCache[cacheKey] = tool
 	}
-
-	return nil
 }
 
 // Search searches tools in the URL registry.
@@ -372,29 +375,35 @@ func applyVersionOverride(tool *Tool, version string) error {
 			continue
 		}
 
-		if matches {
-			// Apply the override fields to the tool.
-			if override.Asset != "" {
-				tool.Asset = override.Asset
-			}
-			if override.Format != "" {
-				tool.Format = override.Format
-			}
-			if len(override.Files) > 0 {
-				tool.Files = override.Files
-			}
-			if len(override.Replacements) > 0 {
-				tool.Replacements = override.Replacements
-			}
-
-			log.Debug("Applied version override", versionLogKey, version, "constraint", override.VersionConstraint, "asset", tool.Asset, "format", tool.Format)
-			return nil
+		if !matches {
+			continue
 		}
+
+		// Apply the override fields to the tool.
+		applyOverrideFields(tool, override, version)
+		return nil
 	}
 
 	// No matching override found - this is not an error.
 	log.Debug("No matching version override", versionLogKey, version, "overrides_count", len(tool.VersionOverrides))
 	return nil
+}
+
+// applyOverrideFields applies version override fields to the tool.
+func applyOverrideFields(tool *Tool, override *VersionOverride, version string) {
+	if override.Asset != "" {
+		tool.Asset = override.Asset
+	}
+	if override.Format != "" {
+		tool.Format = override.Format
+	}
+	if len(override.Files) > 0 {
+		tool.Files = override.Files
+	}
+	if len(override.Replacements) > 0 {
+		tool.Replacements = override.Replacements
+	}
+	log.Debug("Applied version override", versionLogKey, version, "constraint", override.VersionConstraint, "asset", tool.Asset, "format", tool.Format)
 }
 
 // evaluateVersionConstraint evaluates an Aqua version constraint expression.

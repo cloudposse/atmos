@@ -14,6 +14,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
+const (
+	// DirPermissions is the default permission for directories.
+	dirPermissions = 0o755
+	// FilePermissions is the default permission for files.
+	filePermissions = 0o644
+)
+
 // Error definitions for the lockfile package.
 var (
 	// ErrInvalidLockFile indicates the lock file is malformed or missing required fields.
@@ -134,7 +141,7 @@ func Save(filePath string, lockFile *LockFile) error {
 
 	// Ensure directory exists
 	dir := filepath.Dir(filePath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, dirPermissions); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
@@ -146,8 +153,7 @@ func Save(filePath string, lockFile *LockFile) error {
 `
 	content := header + string(data)
 
-	//nolint:gosec // G306: Lock file needs to be readable by other processes/users
-	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte(content), filePermissions); err != nil {
 		return fmt.Errorf("failed to write lock file: %w", err)
 	}
 

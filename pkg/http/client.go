@@ -24,7 +24,7 @@ const (
 	// This prevents log pollution and potential exposure of large sensitive payloads.
 	maxErrorBodySize = 64 * 1024 // 64 KB
 
-	// defaultTimeoutSeconds is the default HTTP client timeout.
+	// DefaultTimeoutSeconds is the default HTTP client timeout.
 	defaultTimeoutSeconds = 30
 )
 

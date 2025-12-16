@@ -44,6 +44,40 @@ const (
 	logFieldComponent         = "component"
 )
 
+// resolveAndInstallToolchainDeps resolves and installs toolchain dependencies for a terraform component.
+func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(atmosConfig, "exec.resolveAndInstallToolchainDeps")()
+
+	// Initialize toolchain with atmosConfig so it uses the configured install path.
+	toolchain.SetAtmosConfig(atmosConfig)
+	resolver := dependencies.NewResolver(atmosConfig)
+	deps, err := resolver.ResolveComponentDependencies("terraform", info.StackSection, info.ComponentSection)
+	if err != nil {
+		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+	}
+
+	if len(deps) == 0 {
+		return nil
+	}
+
+	log.Debug("Installing component dependencies", logFieldComponent, info.ComponentFromArg, "stack", info.Stack, "tools", deps)
+	installer := dependencies.NewInstaller(atmosConfig)
+	if err := installer.EnsureTools(deps); err != nil {
+		return fmt.Errorf("failed to install component dependencies: %w", err)
+	}
+
+	// Build PATH with toolchain binaries and add to component environment.
+	// This does NOT modify the global process environment - only the subprocess environment.
+	toolchainPATH, err := dependencies.BuildToolchainPATH(atmosConfig, deps)
+	if err != nil {
+		return fmt.Errorf("failed to build toolchain PATH: %w", err)
+	}
+
+	// Propagate toolchain PATH into environment for subprocess.
+	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
+	return nil
+}
+
 // ExecuteTerraform executes terraform commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
@@ -214,32 +248,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return errUtils.ErrHTTPBackendWorkspaces
 	}
 
-// Resolve and install component dependencies.
+	// Resolve and install component dependencies.
 	if shouldProcess {
-		// Initialize toolchain with atmosConfig so it uses the configured install path.
-		toolchain.SetAtmosConfig(&atmosConfig)
-		resolver := dependencies.NewResolver(&atmosConfig)
-		deps, err := resolver.ResolveComponentDependencies("terraform", info.StackSection, info.ComponentSection)
-		if err != nil {
-			return fmt.Errorf("failed to resolve component dependencies: %w", err)
-		}
-
-		if len(deps) > 0 {
-			log.Debug("Installing component dependencies", logFieldComponent, info.ComponentFromArg, "stack", info.Stack, "tools", deps)
-			installer := dependencies.NewInstaller(&atmosConfig)
-			if err := installer.EnsureTools(deps); err != nil {
-				return fmt.Errorf("failed to install component dependencies: %w", err)
-			}
-
-			// Build PATH with toolchain binaries and add to component environment.
-			// This does NOT modify the global process environment - only the subprocess environment.
-			toolchainPATH, err := dependencies.BuildToolchainPATH(&atmosConfig, deps)
-			if err != nil {
-				return fmt.Errorf("failed to build toolchain PATH: %w", err)
-			}
-
-			// Propagate toolchain PATH into environment for subprocess.
-			info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
+		if err := resolveAndInstallToolchainDeps(&atmosConfig, &info); err != nil {
+			return err
 		}
 	}
 

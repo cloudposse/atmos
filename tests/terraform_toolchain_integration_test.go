@@ -200,21 +200,33 @@ func TestTerraformToolchain_WithoutDependencies(t *testing.T) {
 	// - If system terraform exists: command succeeds using system terraform
 	// - If system terraform does NOT exist: command fails
 	if err != nil {
-		t.Logf("Command failed (expected if system terraform not available): %v", err)
-		// Verify error message indicates terraform not found
-		errMsg := err.Error()
-		if strings.Contains(errMsg, "terraform") || strings.Contains(errMsg, "not found") || strings.Contains(errMsg, "executable") {
-			t.Logf("✓ Error indicates terraform binary not found (expected behavior)")
-		}
+		logCommandFailed(t, err)
 	} else {
-		t.Logf("Command succeeded (system terraform is available)")
-		// If command succeeded, verify it's using system terraform, not toolchain
-		pathAfter := os.Getenv("PATH")
-		if !strings.Contains(pathAfter, ".tools") {
-			t.Logf("✓ PATH does NOT contain toolchain directory (expected)")
-		} else {
-			t.Logf("✗ PATH contains toolchain directory (unexpected for component without dependencies)")
-		}
+		logCommandSucceeded(t)
+	}
+}
+
+// logCommandFailed logs information when command failed.
+func logCommandFailed(t *testing.T, err error) {
+	t.Helper()
+	t.Logf("Command failed (expected if system terraform not available): %v", err)
+	// Verify error message indicates terraform not found.
+	errMsg := err.Error()
+	if strings.Contains(errMsg, "terraform") || strings.Contains(errMsg, "not found") || strings.Contains(errMsg, "executable") {
+		t.Logf("✓ Error indicates terraform binary not found (expected behavior)")
+	}
+}
+
+// logCommandSucceeded logs information when command succeeded.
+func logCommandSucceeded(t *testing.T) {
+	t.Helper()
+	t.Logf("Command succeeded (system terraform is available)")
+	// If command succeeded, verify it's using system terraform, not toolchain.
+	pathAfter := os.Getenv("PATH")
+	if !strings.Contains(pathAfter, ".tools") {
+		t.Logf("✓ PATH does NOT contain toolchain directory (expected)")
+	} else {
+		t.Logf("✗ PATH contains toolchain directory (unexpected for component without dependencies)")
 	}
 }
 

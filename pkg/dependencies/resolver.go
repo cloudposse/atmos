@@ -83,14 +83,10 @@ func (r *Resolver) ResolveComponentDependencies(
 
 	// Scope 2: Component type dependencies (terraform.dependencies in stack config).
 	if componentType != "" {
-		if typeConfig, hasType := stackConfig[componentType].(map[string]any); hasType {
-			if typeDeps := extractDependenciesFromConfig(typeConfig); typeDeps != nil {
-				var err error
-				merged, err = MergeDependencies(merged, typeDeps)
-				if err != nil {
-					return nil, fmt.Errorf("%w: failed to merge %s component type dependencies: %w", errUtils.ErrDependencyResolution, componentType, err)
-				}
-			}
+		var err error
+		merged, err = mergeComponentTypeDeps(merged, stackConfig, componentType)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -104,6 +100,25 @@ func (r *Resolver) ResolveComponentDependencies(
 	}
 
 	return merged, nil
+}
+
+// mergeComponentTypeDeps merges component type dependencies from the stack config.
+func mergeComponentTypeDeps(merged map[string]string, stackConfig map[string]any, componentType string) (map[string]string, error) {
+	typeConfig, hasType := stackConfig[componentType].(map[string]any)
+	if !hasType {
+		return merged, nil
+	}
+
+	typeDeps := extractDependenciesFromConfig(typeConfig)
+	if typeDeps == nil {
+		return merged, nil
+	}
+
+	result, err := MergeDependencies(merged, typeDeps)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to merge %s component type dependencies: %w", errUtils.ErrDependencyResolution, componentType, err)
+	}
+	return result, nil
 }
 
 // extractDependenciesFromConfig extracts dependencies.tools from a config map.

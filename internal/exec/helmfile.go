@@ -18,9 +18,14 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const (
+	// ComponentTypeHelmfile is the component type identifier for helmfile.
+	componentTypeHelmfile = "helmfile"
+)
+
 // ExecuteHelmfileCmd parses the provided arguments and flags and executes helmfile commands.
 func ExecuteHelmfileCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
-	info, err := ProcessCommandLineArgs("helmfile", cmd, args, additionalArgsAndFlags)
+	info, err := ProcessCommandLineArgs(componentTypeHelmfile, cmd, args, additionalArgsAndFlags)
 	if err != nil {
 		return err
 	}
@@ -74,7 +79,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Check if the component exists as a helmfile component.
-	componentPath, err := u.GetComponentPath(&atmosConfig, "helmfile", info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath, err := u.GetComponentPath(&atmosConfig, componentTypeHelmfile, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component path: %w", err)
 	}
@@ -82,7 +87,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		// Get the base path for the error message, respecting the user's actual config.
-		basePath, _ := u.GetComponentBasePath(&atmosConfig, "helmfile")
+		basePath, _ := u.GetComponentBasePath(&atmosConfig, componentTypeHelmfile)
 		return fmt.Errorf("'%s' points to the Helmfile component '%s', but it does not exist in '%s'",
 			info.ComponentFromArg,
 			info.FinalComponent,
@@ -108,7 +113,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 
 	// Resolve and install component dependencies.
 	resolver := dependencies.NewResolver(&atmosConfig)
-	deps, err := resolver.ResolveComponentDependencies("helmfile", info.StackSection, info.ComponentSection)
+	deps, err := resolver.ResolveComponentDependencies(componentTypeHelmfile, info.StackSection, info.ComponentSection)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component dependencies: %w", err)
 	}

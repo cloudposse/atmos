@@ -99,25 +99,38 @@ func CheckAndReexec(atmosConfig *schema.AtmosConfiguration) bool {
 func CheckAndReexecWithConfig(atmosConfig *schema.AtmosConfiguration, cfg *ReexecConfig) bool {
 	defer perf.Track(atmosConfig, "version.CheckAndReexecWithConfig")()
 
-	// Check for version specification with precedence:
-	// ATMOS_VERSION_USE (set by --use-version flag or env) > ATMOS_VERSION > version.use in config.
-	requestedVersion := cfg.GetEnv(VersionUseEnvVar)
-	if requestedVersion == "" {
-		requestedVersion = cfg.GetEnv(VersionEnvVar)
-	}
-	if requestedVersion == "" {
-		requestedVersion = atmosConfig.Version.Use
-	}
+	requestedVersion := resolveRequestedVersion(atmosConfig, cfg)
 	if requestedVersion == "" {
 		return false
 	}
 
+	if shouldSkipReexec(requestedVersion, cfg) {
+		return false
+	}
+
+	return executeVersionSwitch(requestedVersion, cfg)
+}
+
+// resolveRequestedVersion determines the version to use with precedence:
+// ATMOS_VERSION_USE > ATMOS_VERSION > version.use in config.
+func resolveRequestedVersion(atmosConfig *schema.AtmosConfiguration, cfg *ReexecConfig) string {
+	if v := cfg.GetEnv(VersionUseEnvVar); v != "" {
+		return v
+	}
+	if v := cfg.GetEnv(VersionEnvVar); v != "" {
+		return v
+	}
+	return atmosConfig.Version.Use
+}
+
+// shouldSkipReexec checks if re-exec should be skipped due to guard or version match.
+func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 	// Check re-exec guard to prevent infinite loops.
 	if cfg.GetEnv(ReexecGuardEnvVar) == requestedVersion {
 		log.Debug("Re-exec guard active, skipping version switch",
 			"requested_version", requestedVersion,
 			"guard_value", cfg.GetEnv(ReexecGuardEnvVar))
-		return false
+		return true
 	}
 
 	// Normalize versions for comparison (strip 'v' prefix).
@@ -129,17 +142,22 @@ func CheckAndReexecWithConfig(atmosConfig *schema.AtmosConfiguration, cfg *Reexe
 		log.Debug("Current version matches requested version",
 			"current", currentVersion,
 			"requested", targetVersion)
-		return false
+		return true
 	}
 
 	log.Debug("Version mismatch, will re-exec",
 		"current", currentVersion,
 		"requested", targetVersion)
+	return false
+}
+
+// executeVersionSwitch performs the actual version switch.
+func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
+	targetVersion := strings.TrimPrefix(requestedVersion, "v")
 
 	// Find or install the requested version.
 	binaryPath, err := findOrInstallVersionWithConfig(targetVersion, cfg)
 	if err != nil {
-		// Log error but don't fail - allow current version to run.
 		_ = ui.Warningf("Failed to switch to Atmos version %s: %v", requestedVersion, err)
 		_ = ui.Warningf("Continuing with current version %s", Version)
 		return false
@@ -154,14 +172,9 @@ func CheckAndReexecWithConfig(atmosConfig *schema.AtmosConfiguration, cfg *Reexe
 	// Re-exec with the new binary.
 	_ = ui.Successf("Switching to Atmos version `%s`", requestedVersion)
 
-	// Strip flags that shouldn't be passed to the target version:
-	// - --chdir/-C: directory has already been changed, passing again would cause double change
-	// - --use-version: older versions don't understand this flag
+	// Strip flags that shouldn't be passed to the target version.
 	args := stripChdirFlags(cfg.Args)
 	args = stripUseVersionFlags(args)
-
-	// Use syscall.Exec for true process replacement (Unix).
-	// This replaces the current process entirely.
 
 	if err := cfg.ExecFn(binaryPath, args, cfg.Environ()); err != nil {
 		_ = ui.Errorf("Failed to exec %s: %v", binaryPath, err)

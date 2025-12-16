@@ -394,84 +394,65 @@ func TestCheckAndReexecWithConfig_GuardIsSet(t *testing.T) {
 	assert.Equal(t, "1.160.0", guardValue, "Guard should be set to requested version")
 }
 
-func TestCheckAndReexecWithConfig_EnvVarATMOS_VERSION(t *testing.T) {
-	// Save original version and restore after test.
-	originalVersion := Version
-	Version = "1.150.0"
-	defer func() { Version = originalVersion }()
-
-	finder := &mockVersionFinder{
-		findBinaryPathFunc: func(owner, repo, version string) (string, error) {
-			assert.Equal(t, "1.165.0", version, "Should use version from ATMOS_VERSION env var")
-			return "/path/to/atmos", nil
+func TestCheckAndReexecWithConfig_EnvVarVersions(t *testing.T) {
+	tests := []struct {
+		name       string
+		envVarKey  string
+		envVarName string
+	}{
+		{
+			name:       "ATMOS_VERSION env var",
+			envVarKey:  VersionEnvVar,
+			envVarName: "ATMOS_VERSION",
 		},
-	}
-	installer := &mockVersionInstaller{}
-
-	envVars := map[string]string{
-		VersionEnvVar: "1.165.0", // ATMOS_VERSION takes precedence.
-	}
-
-	cfg := &ReexecConfig{
-		Finder:    finder,
-		Installer: installer,
-		ExecFn:    func(argv0 string, argv []string, envv []string) error { return nil },
-		GetEnv:    func(key string) string { return envVars[key] },
-		SetEnv:    func(key, value string) error { envVars[key] = value; return nil },
-		Args:      []string{"atmos", "version"},
-		Environ:   func() []string { return []string{} },
-	}
-
-	atmosConfig := &schema.AtmosConfiguration{
-		Version: schema.Version{
-			Use: "1.160.0", // Config file value should be ignored.
+		{
+			name:       "ATMOS_VERSION_USE env var",
+			envVarKey:  VersionUseEnvVar,
+			envVarName: "ATMOS_VERSION_USE",
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Save original version and restore after test.
+			originalVersion := Version
+			Version = "1.150.0"
+			defer func() { Version = originalVersion }()
 
-	assert.True(t, result, "Should return true when re-exec is triggered")
-	assert.Equal(t, 1, finder.callCount, "Should call FindBinaryPath")
-}
+			finder := &mockVersionFinder{
+				findBinaryPathFunc: func(owner, repo, version string) (string, error) {
+					assert.Equal(t, "1.165.0", version, "Should use version from %s env var", tt.envVarName)
+					return "/path/to/atmos", nil
+				},
+			}
+			installer := &mockVersionInstaller{}
 
-func TestCheckAndReexecWithConfig_EnvVarATMOS_VERSION_USE(t *testing.T) {
-	// Save original version and restore after test.
-	originalVersion := Version
-	Version = "1.150.0"
-	defer func() { Version = originalVersion }()
+			envVars := map[string]string{
+				tt.envVarKey: "1.165.0",
+			}
 
-	finder := &mockVersionFinder{
-		findBinaryPathFunc: func(owner, repo, version string) (string, error) {
-			assert.Equal(t, "1.165.0", version, "Should use version from ATMOS_VERSION_USE env var")
-			return "/path/to/atmos", nil
-		},
+			cfg := &ReexecConfig{
+				Finder:    finder,
+				Installer: installer,
+				ExecFn:    func(argv0 string, argv []string, envv []string) error { return nil },
+				GetEnv:    func(key string) string { return envVars[key] },
+				SetEnv:    func(key, value string) error { envVars[key] = value; return nil },
+				Args:      []string{"atmos", "version"},
+				Environ:   func() []string { return []string{} },
+			}
+
+			atmosConfig := &schema.AtmosConfiguration{
+				Version: schema.Version{
+					Use: "1.160.0", // Config file value should be ignored.
+				},
+			}
+
+			result := CheckAndReexecWithConfig(atmosConfig, cfg)
+
+			assert.True(t, result, "Should return true when re-exec is triggered")
+			assert.Equal(t, 1, finder.callCount, "Should call FindBinaryPath")
+		})
 	}
-	installer := &mockVersionInstaller{}
-
-	envVars := map[string]string{
-		VersionUseEnvVar: "1.165.0", // ATMOS_VERSION_USE takes precedence over config.
-	}
-
-	cfg := &ReexecConfig{
-		Finder:    finder,
-		Installer: installer,
-		ExecFn:    func(argv0 string, argv []string, envv []string) error { return nil },
-		GetEnv:    func(key string) string { return envVars[key] },
-		SetEnv:    func(key, value string) error { envVars[key] = value; return nil },
-		Args:      []string{"atmos", "version"},
-		Environ:   func() []string { return []string{} },
-	}
-
-	atmosConfig := &schema.AtmosConfiguration{
-		Version: schema.Version{
-			Use: "1.160.0", // Config file value should be ignored.
-		},
-	}
-
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
-
-	assert.True(t, result, "Should return true when re-exec is triggered")
-	assert.Equal(t, 1, finder.callCount, "Should call FindBinaryPath")
 }
 
 func TestCheckAndReexecWithConfig_EnvVarPrecedence(t *testing.T) {
