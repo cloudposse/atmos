@@ -12,6 +12,7 @@ import (
 
 	yaml "gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -561,6 +562,40 @@ func WrapLongStrings(data any, maxLength int) any {
 	default:
 		// For all other types (int, bool, etc.), return as-is
 		return data
+	}
+}
+
+// GetUserHomeDir returns the current user's home directory or empty string if unavailable.
+func GetUserHomeDir() string {
+	hd, err := homedir.Dir()
+	if err != nil {
+		return ""
+	}
+	return hd
+}
+
+// ObfuscateSensitivePaths walks any data structure (maps, slices, etc), and in any string which starts with the specified homeDir, replaces it with "~".
+func ObfuscateSensitivePaths(data any, homeDir string) any {
+	switch v := data.(type) {
+	case map[string]any:
+		res := make(map[string]any, len(v))
+		for k, val := range v {
+			res[k] = ObfuscateSensitivePaths(val, homeDir)
+		}
+		return res
+	case []any:
+		res := make([]any, len(v))
+		for i, val := range v {
+			res[i] = ObfuscateSensitivePaths(val, homeDir)
+		}
+		return res
+	case string:
+		if homeDir != "" && strings.HasPrefix(v, homeDir) {
+			return "~" + v[len(homeDir):]
+		}
+		return v
+	default:
+		return v
 	}
 }
 
