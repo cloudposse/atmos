@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -19,9 +20,11 @@ import (
 // DefaultCache is the default implementation of the Cache interface.
 // It uses XDG cache directories for storing downloaded component sources.
 type DefaultCache struct {
-	basePath string
-	mu       sync.RWMutex
-	index    *cacheIndex
+	basePath     string
+	basePathOnce sync.Once
+	basePathErr  error
+	mu           sync.RWMutex
+	index        *cacheIndex
 }
 
 // cacheIndex tracks all cache entries.
@@ -41,27 +44,27 @@ func NewDefaultCache() *DefaultCache {
 }
 
 // ensureBasePath initializes the cache base path if not already set.
+// Uses sync.Once to ensure thread-safe initialization.
 func (c *DefaultCache) ensureBasePath() error {
-	if c.basePath != "" {
-		return nil
-	}
+	c.basePathOnce.Do(func() {
+		path, err := xdg.GetXDGCacheDir(CacheDir, DirPermissions)
+		if err != nil {
+			c.basePathErr = errUtils.Build(errUtils.ErrSourceCacheRead).
+				WithCause(err).
+				WithExplanation("failed to get XDG cache directory").
+				Err()
+			return
+		}
+		c.basePath = path
 
-	path, err := xdg.GetXDGCacheDir(CacheDir, DirPermissions)
-	if err != nil {
-		return errUtils.Build(errUtils.ErrSourceCacheRead).
-			WithCause(err).
-			WithExplanation("failed to get XDG cache directory").
-			Err()
-	}
-	c.basePath = path
+		// Load existing index if present.
+		if err := c.loadIndex(); err != nil {
+			// Not an error if index doesn't exist - start fresh.
+			c.index = &cacheIndex{Entries: make(map[string]*CacheEntry)}
+		}
+	})
 
-	// Load existing index if present.
-	if err := c.loadIndex(); err != nil {
-		// Not an error if index doesn't exist - start fresh.
-		c.index = &cacheIndex{Entries: make(map[string]*CacheEntry)}
-	}
-
-	return nil
+	return c.basePathErr
 }
 
 // loadIndex loads the cache index from disk.
@@ -100,8 +103,9 @@ func (c *DefaultCache) Get(key string) (*CacheEntry, error) {
 		return nil, err
 	}
 
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	// Use write lock since we update LastAccessedAt.
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	entry, ok := c.index.Entries[key]
 	if !ok {
@@ -230,15 +234,25 @@ func (c *DefaultCache) Clear() error {
 	return nil
 }
 
+// BasePath returns the cache base directory path.
+// This is used for creating temp directories during downloads.
+func (c *DefaultCache) BasePath() (string, error) {
+	defer perf.Track(nil, "workdir.DefaultCache.BasePath")()
+
+	if err := c.ensureBasePath(); err != nil {
+		return "", err
+	}
+
+	return c.basePath, nil
+}
+
 // Path returns the filesystem path for a cache key.
 // Returns empty string if the entry doesn't exist.
 func (c *DefaultCache) Path(key string) string {
 	defer perf.Track(nil, "workdir.DefaultCache.Path")()
 
-	if c.basePath == "" {
-		if err := c.ensureBasePath(); err != nil {
-			return ""
-		}
+	if err := c.ensureBasePath(); err != nil {
+		return ""
 	}
 
 	entry, err := c.Get(key)
@@ -370,6 +384,14 @@ func copyDir(src, dst string) error {
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
 
+		// Check if entry is a symlink.
+		if entry.Type()&os.ModeSymlink != 0 {
+			if err := copySymlink(srcPath, dstPath); err != nil {
+				return err
+			}
+			continue
+		}
+
 		if entry.IsDir() {
 			if err := copyDir(srcPath, dstPath); err != nil {
 				return err
@@ -382,6 +404,20 @@ func copyDir(src, dst string) error {
 	}
 
 	return nil
+}
+
+// copySymlink recreates a symlink at the destination.
+func copySymlink(src, dst string) error {
+	defer perf.Track(nil, "workdir.copySymlink")()
+
+	// Read the symlink target.
+	target, err := os.Readlink(src)
+	if err != nil {
+		return err
+	}
+
+	// Create the symlink at the destination.
+	return os.Symlink(target, dst)
 }
 
 // copyFile copies a single file.
@@ -414,7 +450,7 @@ func copyFile(src, dst string) error {
 			}
 		}
 		if err != nil {
-			if err.Error() == "EOF" {
+			if err == io.EOF {
 				break
 			}
 			return err

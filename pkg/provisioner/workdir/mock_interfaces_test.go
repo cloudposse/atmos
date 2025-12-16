@@ -217,6 +217,21 @@ func (m *MockCache) EXPECT() *MockCacheMockRecorder {
 	return m.recorder
 }
 
+// BasePath mocks base method.
+func (m *MockCache) BasePath() (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BasePath")
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BasePath indicates an expected call of BasePath.
+func (mr *MockCacheMockRecorder) BasePath() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BasePath", reflect.TypeOf((*MockCache)(nil).BasePath))
+}
+
 // Clear mocks base method.
 func (m *MockCache) Clear() error {
 	m.ctrl.T.Helper()

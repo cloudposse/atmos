@@ -1,6 +1,7 @@
 package workdir
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -131,6 +132,7 @@ func Clean(atmosConfig *schema.AtmosConfiguration, opts CleanOptions) error {
 
 	if len(errs) > 0 {
 		return errUtils.Build(errUtils.ErrWorkdirClean).
+			WithCause(errors.Join(errs...)).
 			WithExplanation(fmt.Sprintf("%d error(s) occurred during cleanup", len(errs))).
 			Err()
 	}

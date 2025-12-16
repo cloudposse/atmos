@@ -57,6 +57,10 @@ type Cache interface {
 	// Clear removes all cache entries.
 	Clear() error
 
+	// BasePath returns the cache base directory path.
+	// This is used for creating temp directories during downloads.
+	BasePath() (string, error)
+
 	// Path returns the filesystem path for a cache key.
 	// Returns empty string if the entry doesn't exist.
 	Path(key string) string

@@ -201,7 +201,10 @@ func (s *Service) downloadAndCopyToWorkdir(
 	}
 
 	// Compute content hash.
-	contentHash, _ := s.hasher.HashDir(workdirPath)
+	contentHash, err := s.hasher.HashDir(workdirPath)
+	if err != nil {
+		_ = ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
+	}
 
 	now := time.Now()
 	return &WorkdirMetadata{
@@ -220,8 +223,17 @@ func (s *Service) downloadAndCopyToWorkdir(
 func (s *Service) downloadToCache(ctx context.Context, sourceConfig *SourceConfig, cacheKey string) error {
 	defer perf.Track(nil, "workdir.Service.downloadToCache")()
 
+	// Get cache base path for temp directory.
+	cacheBasePath, err := s.cache.BasePath()
+	if err != nil {
+		return errUtils.Build(errUtils.ErrSourceDownload).
+			WithCause(err).
+			WithExplanation("failed to get cache base path").
+			Err()
+	}
+
 	// Create temp directory for download.
-	tempDir := filepath.Join(s.cache.Path(""), ".tmp", cacheKey)
+	tempDir := filepath.Join(cacheBasePath, ".tmp", cacheKey)
 	if err := s.fs.MkdirAll(tempDir, DirPermissions); err != nil {
 		return errUtils.Build(errUtils.ErrSourceDownload).
 			WithCause(err).
@@ -309,7 +321,10 @@ func (s *Service) copyLocalToWorkdir(
 	}
 
 	// Compute content hash.
-	contentHash, _ := s.hasher.HashDir(workdirPath)
+	contentHash, err := s.hasher.HashDir(workdirPath)
+	if err != nil {
+		_ = ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
+	}
 
 	now := time.Now()
 	return &WorkdirMetadata{

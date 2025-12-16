@@ -252,7 +252,7 @@ func TestService_Provision_DownloadsWhenNotCached(t *testing.T) {
 	mockCache.EXPECT().Path(cacheKey).Return("") // Not cached.
 
 	// Expect download flow.
-	mockCache.EXPECT().Path("").Return(tempDir) // Base cache path for temp dir.
+	mockCache.EXPECT().BasePath().Return(tempDir, nil) // Base cache path for temp dir.
 	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
 	mockDownloader.EXPECT().Download(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	mockCache.EXPECT().GetPolicy(gomock.Any()).Return(CachePolicyPermanent)

@@ -13,7 +13,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -42,8 +41,9 @@ The output is formatted for human readability, similar to 'kubectl describe'.`,
 				Err()
 		}
 
-		// Initialize config.
-		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+		// Initialize config with global flags (--base-path, --config, etc.).
+		configInfo := buildConfigAndStacksInfo(cmd, v)
+		atmosConfig, err := cfg.InitCliConfig(configInfo, false)
 		if err != nil {
 			return errUtils.Build(errUtils.ErrWorkdirMetadata).
 				WithCause(err).
