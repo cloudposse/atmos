@@ -23,11 +23,11 @@ import (
 
 // Supported formats for stack conversion.
 const (
-	FormatYAML      = "yaml"
-	FormatJSON      = "json"
-	FormatHCL       = "hcl"
-	filePermissions = 0o600
-	nameSectionName = "name"
+	FormatYAML            = "yaml"
+	FormatJSON            = "json"
+	FormatHCL             = "hcl"
+	stackConvertFilePerms = 0o600
+	nameSectionName       = "name"
 )
 
 // ExecuteStackConvert converts a stack configuration file between formats.
@@ -87,7 +87,7 @@ func ExecuteStackConvert(
 	}
 
 	// Write to file.
-	if err := os.WriteFile(outputPath, []byte(output), filePermissions); err != nil {
+	if err := os.WriteFile(outputPath, []byte(output), stackConvertFilePerms); err != nil {
 		return errUtils.Build(errUtils.ErrWriteToStream).
 			WithCause(err).
 			WithExplanation("Failed to write output file").
