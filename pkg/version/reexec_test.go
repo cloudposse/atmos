@@ -777,6 +777,87 @@ func TestCheckAndReexecWithConfig_StripsChdirFlags(t *testing.T) {
 	result := CheckAndReexecWithConfig(atmosConfig, cfg)
 
 	assert.True(t, result, "Should return true when re-exec is triggered")
-	// Verify --chdir flag was stripped from args.
-	assert.Equal(t, []string{"atmos", "terraform", "plan", "--use-version", "1.160.0"}, execCalledWithArgs)
+	// Verify both --chdir and --use-version flags were stripped from args.
+	assert.Equal(t, []string{"atmos", "terraform", "plan"}, execCalledWithArgs)
+}
+
+func TestStripUseVersionFlags(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected []string
+	}{
+		{
+			name:     "no use-version flags",
+			args:     []string{"atmos", "terraform", "plan", "--stack", "dev"},
+			expected: []string{"atmos", "terraform", "plan", "--stack", "dev"},
+		},
+		{
+			name:     "long form with separate value",
+			args:     []string{"atmos", "--use-version", "1.199.0", "terraform", "plan"},
+			expected: []string{"atmos", "terraform", "plan"},
+		},
+		{
+			name:     "long form with equals",
+			args:     []string{"atmos", "--use-version=1.199.0", "terraform", "plan"},
+			expected: []string{"atmos", "terraform", "plan"},
+		},
+		{
+			name:     "use-version at end with separate value",
+			args:     []string{"atmos", "terraform", "plan", "--use-version", "1.199.0"},
+			expected: []string{"atmos", "terraform", "plan"},
+		},
+		{
+			name:     "use-version at end with equals",
+			args:     []string{"atmos", "terraform", "plan", "--use-version=1.199.0"},
+			expected: []string{"atmos", "terraform", "plan"},
+		},
+		{
+			name:     "with other flags",
+			args:     []string{"atmos", "--use-version", "1.199.0", "version", "list", "--installed"},
+			expected: []string{"atmos", "version", "list", "--installed"},
+		},
+		{
+			name:     "empty args",
+			args:     []string{},
+			expected: []string{},
+		},
+		{
+			name:     "only program name",
+			args:     []string{"atmos"},
+			expected: []string{"atmos"},
+		},
+		{
+			name:     "use-version without value at end",
+			args:     []string{"atmos", "terraform", "plan", "--use-version"},
+			expected: []string{"atmos", "terraform", "plan"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stripUseVersionFlags(tt.args)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestStripBothChdirAndUseVersionFlags(t *testing.T) {
+	// Test that both flag types are stripped when used together.
+	args := []string{"atmos", "--chdir", "examples/demo-stacks", "--use-version", "1.199.0", "terraform", "plan"}
+	result := stripChdirFlags(args)
+	result = stripUseVersionFlags(result)
+	assert.Equal(t, []string{"atmos", "terraform", "plan"}, result)
+
+	// Test with equals form.
+	args = []string{"atmos", "--chdir=examples/demo-stacks", "--use-version=1.199.0", "terraform", "plan"}
+	result = stripChdirFlags(args)
+	result = stripUseVersionFlags(result)
+	assert.Equal(t, []string{"atmos", "terraform", "plan"}, result)
+
+	// Test with mixed forms.
+	args = []string{"atmos", "-C", "examples/demo-stacks", "--use-version=1.199.0", "terraform", "plan"}
+	result = stripChdirFlags(args)
+	result = stripUseVersionFlags(result)
+	assert.Equal(t, []string{"atmos", "terraform", "plan"}, result)
 }

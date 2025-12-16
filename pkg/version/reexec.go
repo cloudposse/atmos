@@ -141,9 +141,11 @@ func CheckAndReexecWithConfig(atmosConfig *schema.AtmosConfiguration, cfg *Reexe
 	// Re-exec with the new binary.
 	_ = ui.Successf("Switching to Atmos version `%s`", requestedVersion)
 
-	// Strip --chdir/-C flags from args since the directory has already been changed.
-	// Passing them again would cause double directory change (e.g., "dir/dir").
+	// Strip flags that shouldn't be passed to the target version:
+	// - --chdir/-C: directory has already been changed, passing again would cause double change
+	// - --use-version: older versions don't understand this flag
 	args := stripChdirFlags(cfg.Args)
+	args = stripUseVersionFlags(args)
 
 	// Use syscall.Exec for true process replacement (Unix).
 	// This replaces the current process entirely.
@@ -214,6 +216,40 @@ func stripChdirFlags(args []string) []string {
 
 		// Handle --chdir value or -C value (separate form).
 		if arg == "--chdir" || arg == "-C" {
+			// Skip this arg and the next one (the value).
+			if i+1 < len(args) {
+				skipNext = true
+			}
+			continue
+		}
+
+		result = append(result, arg)
+	}
+
+	return result
+}
+
+// stripUseVersionFlags removes --use-version flags and their values from args.
+// This prevents passing the flag to older versions that don't understand it.
+func stripUseVersionFlags(args []string) []string {
+	defer perf.Track(nil, "version.stripUseVersionFlags")()
+
+	result := make([]string, 0, len(args))
+	skipNext := false
+
+	for i, arg := range args {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+
+		// Handle --use-version=value (combined form).
+		if strings.HasPrefix(arg, "--use-version=") {
+			continue
+		}
+
+		// Handle --use-version value (separate form).
+		if arg == "--use-version" {
 			// Skip this arg and the next one (the value).
 			if i+1 < len(args) {
 				skipNext = true

@@ -837,13 +837,15 @@ func isVersionManagementCommand(cmd *cobra.Command) bool {
 	// Check the command hierarchy.
 	cmdName := cmd.Name()
 
-	// Direct version subcommands (install, uninstall, list).
+	// Direct version subcommands that manage local installations (install, uninstall).
+	// Note: "list" is excluded because it can reasonably work with --use-version
+	// to list releases using a different Atmos version.
 	if cmd.Parent() != nil && cmd.Parent().Name() == "version" {
-		return cmdName == "install" || cmdName == "uninstall" || cmdName == "list"
+		return cmdName == "install" || cmdName == "uninstall"
 	}
 
-	// The version command itself.
-	if cmdName == "version" {
+	// The version command itself (shows current version).
+	if cmdName == "version" && cmd.Parent() != nil && cmd.Parent().Name() == "atmos" {
 		return true
 	}
 
