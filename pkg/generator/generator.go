@@ -5,6 +5,7 @@ package generator
 import (
 	"context"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -93,6 +94,8 @@ func NewGeneratorContext(
 	info *schema.ConfigAndStacksInfo,
 	workingDir string,
 ) *GeneratorContext {
+	defer perf.Track(atmosConfig, "pkg.generator.NewGeneratorContext")()
+
 	return &GeneratorContext{
 		AtmosConfig:       atmosConfig,
 		StackInfo:         info,
@@ -118,6 +121,8 @@ func NewGeneratorContextWithOptions(
 	workingDir string,
 	opts ...Option,
 ) *GeneratorContext {
+	defer perf.Track(atmosConfig, "pkg.generator.NewGeneratorContextWithOptions")()
+
 	ctx := NewGeneratorContext(atmosConfig, info, workingDir)
 	ApplyOptions(ctx, opts...)
 	return ctx
