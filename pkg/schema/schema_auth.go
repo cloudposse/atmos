@@ -118,8 +118,8 @@ type ComponentAuthConfig struct {
 // Integration defines a client-only credential materialization (e.g., ECR, EKS).
 // Integrations derive credentials from identities for service-specific access.
 type Integration struct {
-	Kind string          `yaml:"kind" json:"kind" mapstructure:"kind"` // Integration type (e.g., "aws/ecr", "aws/eks").
-	Via  *IntegrationVia `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
+	Kind string           `yaml:"kind" json:"kind" mapstructure:"kind"` // Integration type (e.g., "aws/ecr", "aws/eks").
+	Via  *IntegrationVia  `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
 	Spec *IntegrationSpec `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"` // Integration-specific configuration.
 }
 
@@ -130,7 +130,7 @@ type IntegrationVia struct {
 
 // IntegrationSpec defines the spec configuration for integrations.
 type IntegrationSpec struct {
-	AutoProvision bool        `yaml:"auto_provision,omitempty" json:"auto_provision,omitempty" mapstructure:"auto_provision"` // Whether to auto-provision on identity login.
+	AutoProvision bool         `yaml:"auto_provision,omitempty" json:"auto_provision,omitempty" mapstructure:"auto_provision"` // Whether to auto-provision on identity login.
 	Registry      *ECRRegistry `yaml:"registry,omitempty" json:"registry,omitempty" mapstructure:"registry"`                   // Single ECR registry for aws/ecr integrations.
 }
 
