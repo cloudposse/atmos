@@ -99,6 +99,8 @@ func buildAtmosVersionRowsSimple(installer *Installer, versions []string, curren
 	defer perf.Track(nil, "toolchain.buildAtmosVersionRowsSimple")()
 
 	var rows []atmosVersionRow
+	currentVersionNormalized := normalizeVersion(currentVersion)
+	foundCurrentVersion := false
 
 	for _, version := range versions {
 		binaryPath, err := installer.FindBinaryPath("cloudposse", "atmos", version)
@@ -109,13 +111,27 @@ func buildAtmosVersionRowsSimple(installer *Installer, versions []string, curren
 		_, installDate, size := getInstallationMetadata(binaryPath, true)
 
 		// Check if this version is the currently running one.
-		isActive := normalizeVersion(version) == normalizeVersion(currentVersion)
+		isActive := normalizeVersion(version) == currentVersionNormalized
+		if isActive {
+			foundCurrentVersion = true
+		}
 
 		rows = append(rows, atmosVersionRow{
 			version:     version,
 			installDate: installDate,
 			size:        size,
 			isActive:    isActive,
+		})
+	}
+
+	// If current version wasn't found in installed versions (e.g., running from source/dev build),
+	// add it to the list marked as active.
+	if !foundCurrentVersion && currentVersion != "" {
+		rows = append(rows, atmosVersionRow{
+			version:     currentVersion + " (current)",
+			installDate: notAvailablePlaceholder,
+			size:        notAvailablePlaceholder,
+			isActive:    true,
 		})
 	}
 
