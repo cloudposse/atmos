@@ -398,6 +398,12 @@ func initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig *schema
 		files = append(files, "backend.tf.json")
 	}
 
+	// Include auto-generated files from the generate section.
+	if atmosConfig.Components.Terraform.AutoGenerateFiles {
+		generateFiles := GetGenerateFilenamesForComponent(info.ComponentSection)
+		files = append(files, generateFiles...)
+	}
+
 	return files
 }
 
