@@ -1,0 +1,225 @@
+---
+title: atmos list affected
+sidebar_label: affected
+sidebar_class_name: command
+id: affected
+description: Use this command to list affected components and stacks between Git commits in a table format
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to list affected Atmos components and stacks between Git commits. View results in multiple formats including tables, JSON, YAML, CSV, or hierarchical trees with custom column selection, filtering, and sorting.
+</Intro>
+
+<Screengrab title="atmos list affected --help" slug="atmos-list-affected--help" />
+
+## Usage
+
+Execute the `list affected` command like this:
+
+```shell
+atmos list affected
+```
+
+To compare against a specific Git reference:
+
+```shell
+atmos list affected --ref refs/heads/main
+```
+
+:::tip
+Run `atmos list affected --help` to see all the available options
+:::
+
+## Examples
+
+List all affected components:
+```shell
+atmos list affected
+```
+
+Compare against specific branch or commit:
+```shell
+# Compare against main branch
+atmos list affected --ref refs/heads/main
+
+# Compare against specific commit
+atmos list affected --sha abc123def456
+```
+
+Output in different formats:
+```shell
+# JSON format
+atmos list affected --format json
+
+# YAML format
+atmos list affected --format yaml
+
+# CSV format for scripting
+atmos list affected --format csv
+```
+
+Filter and sort results:
+```shell
+# Filter by specific stack
+atmos list affected --stack prod-us-east-1
+
+# Sort by component name
+atmos list affected --sort component:asc
+
+# Sort by multiple columns
+atmos list affected --sort "stack:asc,component:desc"
+```
+
+Include dependent components:
+```shell
+# Show components that depend on affected components
+atmos list affected --include-dependents
+```
+
+Custom columns:
+```shell
+# Simple field names
+atmos list affected --columns component,stack,affected
+
+# Named columns with templates
+atmos list affected --columns "Component={{ .component }},Stack={{ .stack }}"
+```
+
+Working with private repositories:
+```shell
+# Use SSH key for cloning
+atmos list affected --ssh-key ~/.ssh/id_rsa --clone-target-ref
+
+# Use pre-cloned repository (for CI/CD)
+atmos list affected --repo-path /tmp/target-repo
+```
+
+## Flags
+
+<dl>
+  <dt>`--ref`</dt>
+  <dd>Git reference to compare against (e.g., `refs/heads/main`). Defaults to `refs/remotes/origin/HEAD`.<br/>Environment variable: `ATMOS_AFFECTED_REF`</dd>
+
+  <dt>`--sha`</dt>
+  <dd>Git commit SHA to compare against. Takes precedence over `--ref`.<br/>Environment variable: `ATMOS_AFFECTED_SHA`</dd>
+
+  <dt>`--format` / `-f`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree` (default: `table`).<br/>Environment variable: `ATMOS_LIST_FORMAT`</dd>
+
+  <dt>`--columns`</dt>
+  <dd>Columns to display. Supports simple field names (e.g., `component,stack`), named columns with templates (e.g., `"Name={{ .component }}"`), or field references (e.g., `"MyStack=stack"`).<br/>Environment variable: `ATMOS_LIST_COLUMNS`</dd>
+
+  <dt>`--sort`</dt>
+  <dd>Sort by column:order (e.g., `stack:asc,component:desc`). Multiple sort columns separated by comma.<br/>Environment variable: `ATMOS_LIST_SORT`</dd>
+
+  <dt>`--delimiter`</dt>
+  <dd>Delimiter for CSV/TSV output (default: `,` for CSV, `\t` for TSV).<br/>Environment variable: `ATMOS_LIST_DELIMITER`</dd>
+
+  <dt>`--stack`</dt>
+  <dd>Filter results to a specific stack.<br/>Environment variable: `ATMOS_STACK`</dd>
+
+  <dt>`--include-dependents`</dt>
+  <dd>Include dependent components as separate rows with depth indicators.<br/>Environment variable: `ATMOS_AFFECTED_INCLUDE_DEPENDENTS`</dd>
+
+  <dt>`--exclude-locked`</dt>
+  <dd>Exclude components with `metadata.locked: true` from results.<br/>Environment variable: `ATMOS_AFFECTED_EXCLUDE_LOCKED`</dd>
+
+  <dt>`--repo-path`</dt>
+  <dd>Path to already-cloned target repository. Conflicts with `--ref`, `--sha`, `--ssh-key`, and `--ssh-key-password`.<br/>Environment variable: `ATMOS_AFFECTED_REPO_PATH`</dd>
+
+  <dt>`--ssh-key`</dt>
+  <dd>Path to PEM-encoded private key for SSH cloning.<br/>Environment variable: `ATMOS_AFFECTED_SSH_KEY`</dd>
+
+  <dt>`--ssh-key-password`</dt>
+  <dd>Password for encrypted PEM key.<br/>Environment variable: `ATMOS_AFFECTED_SSH_KEY_PASSWORD`</dd>
+
+  <dt>`--clone-target-ref`</dt>
+  <dd>Clone target reference instead of checking it out locally (default: `false`). Required for private repositories when SSH credentials are provided.<br/>Environment variable: `ATMOS_AFFECTED_CLONE_TARGET_REF`</dd>
+
+  <dt>`--process-templates`</dt>
+  <dd>Enable/disable Go template processing (default: `true`).<br/>Environment variable: `ATMOS_AFFECTED_PROCESS_TEMPLATES`</dd>
+
+  <dt>`--process-functions`</dt>
+  <dd>Enable/disable YAML function processing (default: `true`).<br/>Environment variable: `ATMOS_AFFECTED_PROCESS_FUNCTIONS`</dd>
+
+  <dt>`--skip`</dt>
+  <dd>Skip specific YAML functions. Use multiple `--skip` flags or comma-separated values.<br/>Environment variable: `ATMOS_AFFECTED_SKIP`</dd>
+
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before listing affected components. Required when YAML functions need credentials.<br/>Environment variable: `ATMOS_IDENTITY`</dd>
+</dl>
+
+## Default Columns
+
+The default table output shows:
+
+| Column | Description |
+|--------|-------------|
+| Status | Visual indicator: `●` (enabled), `◐` (locked), `○` (disabled) |
+| Component | Affected component name |
+| Stack | Affected stack name |
+| Type | Component type (`terraform`, `helmfile`, etc.) |
+| Affected | Reason for being affected (`component`, `file`, `folder`, `stack.vars`, etc.) |
+| File | External file that changed (if applicable) |
+
+## Available Fields
+
+All fields from [`atmos describe affected`](/cli/commands/describe/affected) are available for custom columns:
+
+- `component` - Component name
+- `component_type` - Component type (terraform/helmfile/packer)
+- `component_path` - Filesystem path to component
+- `stack` - Stack name
+- `stack_slug` - Stack-component concatenation
+- `namespace`, `tenant`, `environment`, `stage` - Stack naming parts
+- `affected` - Primary reason for being affected
+- `affected_all` - All reasons (comma-separated)
+- `file` - External file that changed
+- `folder` - External folder that changed
+- `spacelift_stack` - Spacelift stack name
+- `atlantis_project` - Atlantis project name
+- `enabled` - Component enabled status
+- `locked` - Component locked status
+- `status` - Visual status indicator
+- `is_dependent` - Whether component is a dependent
+- `depth` - Dependency nesting depth
+- `dependents_count` - Number of dependent components
+
+## Comparison with `atmos describe affected`
+
+| Feature | `list affected` | `describe affected` |
+|---------|-----------------|---------------------|
+| **Default format** | Table | JSON |
+| **Formats supported** | table, json, yaml, csv, tsv, tree | json, yaml |
+| **Custom columns** | Yes | No |
+| **Sorting** | Yes (multi-column) | No |
+| **Status indicator** | Yes (●/◐/○) | No |
+| **Dependencies** | Flattened rows | Nested structure |
+| **Use case** | Quick overview, human-readable | Full details, machine processing |
+
+Use `list affected` when you want a quick, scannable view of what changed. Use `describe affected` when you need the complete data structure for automation or detailed analysis.
+
+## Example Output
+
+<Terminal title="atmos list affected">
+```
+┌────────┬─────────────────────┬──────────────────┬──────────┬──────────┬────────────────────────────────────────┐
+│ Status │ Component           │ Stack            │ Type     │ Affected │ File                                   │
+├────────┼─────────────────────┼──────────────────┼──────────┼──────────┼────────────────────────────────────────┤
+│ ●      │ vpc                 │ plat-ue2-dev     │ terraform│ component│                                        │
+│ ●      │ vpc                 │ plat-ue2-prod    │ terraform│ component│                                        │
+│ ●      │ eks                 │ plat-ue2-dev     │ terraform│ stack.vars│                                       │
+│ ◐      │ rds                 │ plat-ue2-staging │ terraform│ file     │ modules/rds/main.tf                    │
+└────────┴─────────────────────┴──────────────────┴──────────┴──────────┴────────────────────────────────────────┘
+```
+</Terminal>
+
+## Related Commands
+
+- [`atmos describe affected`](/cli/commands/describe/affected) - Get detailed affected components in JSON/YAML format
+- [`atmos list stacks`](/cli/commands/list/stacks) - List all stacks
+- [`atmos list components`](/cli/commands/list/components) - List all components
+- [`atmos list instances`](/cli/commands/list/list-instances) - List all component instances

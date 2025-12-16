@@ -289,11 +289,22 @@ func TestExecuteDescribeAffected(t *testing.T) {
 		expectedErr           string
 	}{
 		{
-			atmosConfig: &schema.AtmosConfiguration{},
-			name:        "fails when repo operations fails",
-			localRepo:   createMockRepoWithHead(t),
-			remoteRepo:  createMockRepoWithHead(t),
-			expectedErr: "not implemented",
+			atmosConfig: &schema.AtmosConfiguration{
+				// Provide valid paths so filepath.Rel can succeed.
+				StacksBaseAbsolutePath:        "/test/stacks",
+				TerraformDirAbsolutePath:      "/test/components/terraform",
+				HelmfileDirAbsolutePath:       "/test/components/helmfile",
+				PackerDirAbsolutePath:         "/test/components/packer",
+				StackConfigFilesAbsolutePaths: []string{"/test/stacks/catalog"},
+			},
+			localRepoPath:  "/test",
+			remoteRepoPath: "/tmp/remote",
+			name:           "fails when repo operations fails",
+			localRepo:      createMockRepoWithHead(t),
+			remoteRepo:     createMockRepoWithHead(t),
+			// ExecuteDescribeStacks fails before reaching mock repo operations
+			// because the test paths don't exist on the filesystem.
+			expectedErr: "no such file or directory",
 		},
 	}
 

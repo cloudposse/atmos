@@ -31,6 +31,7 @@ func init() {
 	listCmd.PersistentFlags().StringP("identity", "i", "", "Specify the identity to authenticate with")
 
 	// Attach all subcommands
+	listCmd.AddCommand(affectedCmd)
 	listCmd.AddCommand(componentsCmd)
 	listCmd.AddCommand(stacksCmd)
 	listCmd.AddCommand(themesCmd)
