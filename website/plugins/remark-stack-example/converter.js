@@ -87,9 +87,14 @@ function parseYamlWithFunctions(yamlStr) {
 
   // Match YAML function syntax: !funcname args
   // Handle both simple (!env VAR) and quoted (!env 'VAR "default"') forms.
+  // Escape all regex special characters in function names for safety.
+  const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
   atmosFunctions.forEach((funcName) => {
+    const escapedName = escapeRegex(funcName);
+
     // Functions without arguments (like !repo-root, !random).
-    const noArgRegex = new RegExp(`!${funcName.replace(/\./g, '\\.')}(?=\\s*$|\\s*\\n)`, 'gm');
+    const noArgRegex = new RegExp(`!${escapedName}(?=\\s*$|\\s*\\n)`, 'gm');
     processedYaml = processedYaml.replace(noArgRegex, () => {
       const marker = `__ATMOS_FN_${functionMarkers.length}__`;
       functionMarkers.push({
@@ -101,7 +106,7 @@ function parseYamlWithFunctions(yamlStr) {
     });
 
     // Functions with arguments.
-    const regex = new RegExp(`!${funcName.replace(/\./g, '\\.')}\\s+(.+?)(?=\\n|$)`, 'g');
+    const regex = new RegExp(`!${escapedName}\\s+(.+?)(?=\\n|$)`, 'g');
     processedYaml = processedYaml.replace(regex, (match, args) => {
       const marker = `__ATMOS_FN_${functionMarkers.length}__`;
       functionMarkers.push({

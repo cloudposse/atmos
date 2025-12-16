@@ -44,6 +44,11 @@ type StackDocument struct {
 
 // hclEvalContext returns an HCL evaluation context with Atmos functions available.
 // Functions like env(), exec(), template(), and repo_root() can be used in HCL expressions.
+//
+// NOTE: PreMerge functions (env, random, include, etc.) are evaluated during parsing.
+// This means stack convert output may vary between runs if these functions are used.
+// For deterministic conversion, avoid PreMerge functions in the source file or use
+// PostMerge functions (terraform.output, store, etc.) which return placeholders.
 func hclEvalContext() *hcl.EvalContext {
 	registry := function.DefaultRegistry(nil)
 	return function.HCLEvalContextWithFunctions(registry, nil)
@@ -198,8 +203,9 @@ func parseHCLBody(body hcl.Body, filename string) (map[string]any, error) {
 }
 
 // parseHCLBodyWithBlocks handles HCL bodies that contain blocks using hclsyntax direct access.
+// Complexity is inherent to recursive HCL structure traversal - refactoring deferred.
 //
-//nolint:cyclop,funlen,gocognit,nestif,nolintlint,revive
+//nolint:cyclop,funlen,gocognit,nestif,revive
 func parseHCLBodyWithBlocks(body hcl.Body, filename string) (map[string]any, error) {
 	result := make(map[string]any)
 	evalCtx := hclEvalContext()
@@ -323,8 +329,9 @@ func ParseHCLStacks(data []byte, filename string) ([]StackDocument, error) {
 
 // parseHCLBodyForStacks parses an HCL body looking for stack blocks.
 // Returns multiple StackDocuments if stack blocks are found.
+// Complexity is inherent to recursive HCL structure traversal - refactoring deferred.
 //
-//nolint:cyclop,funlen,gocognit,nestif,nolintlint,revive
+//nolint:cyclop,funlen,gocognit,nestif,revive
 func parseHCLBodyForStacks(body hcl.Body, filename string) ([]StackDocument, error) {
 	evalCtx := hclEvalContext()
 
