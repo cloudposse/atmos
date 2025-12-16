@@ -608,6 +608,8 @@ tests:
         "Terraform v[0-9]+\\.[0-9]+\\.[0-9]+": "Terraform vX.X.X"
         "on (darwin|linux|windows)_(arm64|amd64|386)": "on linux_amd64"
         "is [0-9]+\\.[0-9]+\\.[0-9]+": "is X.X.X"
+        # Normalize download URL which varies between terraform versions
+        "https://www\\.terraform\\.io/downloads\\.html": "https://developer.hashicorp.com/terraform/install"
   - name: atmos terraform -help passthrough
     enabled: true
     snapshot: true
@@ -627,6 +629,8 @@ tests:
       # Filter out lines that vary between terraform versions
       diff:
         - "^\\s+test\\s+"  # Test command description varies between versions
+        - "^\\s+modules\\s+"  # modules subcommand only in newer terraform versions
+        - "^\\s+stacks\\s+"  # stacks subcommand only in newer terraform versions (HCP Terraform)
   - name: atmos --help config aliases section
     enabled: true
     snapshot: true
