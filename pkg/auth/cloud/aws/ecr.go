@@ -99,6 +99,8 @@ func GetAuthorizationToken(ctx context.Context, creds types.ICredentials, accoun
 
 // BuildRegistryURL constructs ECR registry URL from account ID and region.
 func BuildRegistryURL(accountID, region string) string {
+	defer perf.Track(nil, "aws.BuildRegistryURL")()
+
 	return fmt.Sprintf("%s.dkr.ecr.%s.amazonaws.com", accountID, region)
 }
 

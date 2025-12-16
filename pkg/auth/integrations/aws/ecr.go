@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -95,8 +96,9 @@ func (e *ECRIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 		log.Warn("Failed to set DOCKER_CONFIG environment variable", "error", err)
 	}
 
-	// Log success.
-	_ = ui.Success(fmt.Sprintf("ECR login: %s (expires in 12h)", registryURL))
+	// Log success with actual expiration time.
+	expiresIn := time.Until(result.ExpiresAt).Round(time.Minute)
+	_ = ui.Success(fmt.Sprintf("ECR login: %s (expires in %s)", registryURL, expiresIn))
 	log.Debug("ECR login successful", "registry", registryURL, "expires_at", result.ExpiresAt)
 
 	return nil
