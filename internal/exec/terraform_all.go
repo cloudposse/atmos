@@ -14,7 +14,7 @@ import (
 
 // ExecuteTerraformAll executes terraform commands for all components in dependency order.
 func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
-	// Validate inputs for --all flag usage
+	// Validate inputs for --all flag usage.
 	if info.Stack == "" {
 		return errUtils.ErrStackRequiredWithAllFlag
 	}
