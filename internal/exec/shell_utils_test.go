@@ -17,12 +17,16 @@ import (
 )
 
 func TestMergeEnvVars(t *testing.T) {
-	// Set up test environment variables
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: PATH case-sensitivity and HOME behavior differ")
+	}
+
+	// Set up test environment variables.
 	t.Setenv("PATH", "/usr/bin")
 	t.Setenv("TF_CLI_ARGS_plan", "-lock=false")
 	t.Setenv("HOME", "/home/test")
 
-	// Atmos environment variables to merge
+	// Atmos environment variables to merge.
 	componentEnv := []string{
 		"TF_CLI_ARGS_plan=-compact-warnings",
 		"ATMOS_VAR=value",
@@ -32,7 +36,7 @@ func TestMergeEnvVars(t *testing.T) {
 
 	merged := mergeEnvVars(componentEnv)
 
-	// Convert the merged list back to a map for easier assertions
+	// Convert the merged list back to a map for easier assertions.
 	mergedMap := make(map[string]string)
 	for _, env := range merged {
 		parts := strings.SplitN(env, "=", 2)
