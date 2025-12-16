@@ -78,6 +78,10 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!random`__](/functions/yaml/random) YAML function generates a cryptographically secure random integer
    within a specified range, useful for generating random port numbers or IDs
 
+ - The [__`!literal`__](/functions/yaml/literal) YAML function preserves values exactly as written,
+   bypassing all template processing. Use it to pass template-like syntax (e.g., `{{...}}` or `${...}`)
+   to downstream tools like Terraform, Helm, or ArgoCD without Atmos attempting to evaluate them
+
  - The [__`!aws.account_id`__](/functions/yaml/aws.account-id) YAML function retrieves the AWS account ID
    of the current caller identity using STS GetCallerIdentity
 
@@ -178,6 +182,11 @@ components:
 
         # Get the current AWS region
         aws_region: !aws.region
+
+        # Preserve template syntax for downstream tools (Terraform, Helm, ArgoCD)
+        helm_annotation: !literal "{{ .Values.ingress.class }}"
+        terraform_var: !literal "${var.hostname}"
+        db_users: [!literal "{{external.email}}", !literal "{{external.admin}}"]
 ```
 </File>
 

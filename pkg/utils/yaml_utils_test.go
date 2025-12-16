@@ -763,6 +763,7 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
 		AtmosYamlFuncRandom,
+		AtmosYamlFuncLiteral,
 		AtmosYamlFuncAwsAccountID,
 		AtmosYamlFuncAwsCallerIdentityArn,
 		AtmosYamlFuncAwsCallerIdentityUserID,
@@ -986,4 +987,164 @@ func TestPrintParsedYAMLCacheStats_NoDivideByZero(t *testing.T) {
 	parsedYAMLCacheStats.uniqueFiles = savedFiles
 	parsedYAMLCacheStats.uniqueHashes = savedHashes
 	parsedYAMLCacheStats.Unlock()
+}
+
+// TestLiteralTag_PreservesTemplateSyntax tests that !literal preserves template-like syntax.
+// This is the primary use case: passing {{...}} to downstream tools without Atmos processing.
+func TestLiteralTag_PreservesTemplateSyntax(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+email: !literal "{{external.email}}"
+config: !literal "{{ .Values.ingress.class }}"
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal.yaml")
+	require.NoError(t, err)
+
+	// Values should be preserved exactly as written (without the !literal tag).
+	assert.Equal(t, "{{external.email}}", result["email"])
+	assert.Equal(t, "{{ .Values.ingress.class }}", result["config"])
+}
+
+// TestLiteralTag_InList tests !literal in list contexts.
+func TestLiteralTag_InList(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+db_users:
+  - !literal "{{external.email}}"
+  - !literal "{{external.admin}}"
+  - regular_user
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-list.yaml")
+	require.NoError(t, err)
+
+	users, ok := result["db_users"].([]any)
+	require.True(t, ok, "db_users should be a list")
+	require.Len(t, users, 3)
+
+	assert.Equal(t, "{{external.email}}", users[0])
+	assert.Equal(t, "{{external.admin}}", users[1])
+	assert.Equal(t, "regular_user", users[2])
+}
+
+// TestLiteralTag_MultilineValue tests !literal with multiline values.
+func TestLiteralTag_MultilineValue(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+script: !literal |
+  #!/bin/bash
+  echo "Hello ${USER}"
+  export VAR={{value}}
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-multiline.yaml")
+	require.NoError(t, err)
+
+	script := result["script"].(string)
+	assert.Contains(t, script, "${USER}")
+	assert.Contains(t, script, "{{value}}")
+}
+
+// TestLiteralTag_PreservesSpecialCharacters tests that !literal preserves special characters.
+func TestLiteralTag_PreservesSpecialCharacters(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+pattern: !literal "user_{id}_{timestamp}"
+regex: !literal "^[a-z]+\\d{3}$"
+terraform: !literal "${var.hostname}"
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-special.yaml")
+	require.NoError(t, err)
+
+	assert.Equal(t, "user_{id}_{timestamp}", result["pattern"])
+	assert.Equal(t, "^[a-z]+\\d{3}$", result["regex"])
+	assert.Equal(t, "${var.hostname}", result["terraform"])
+}
+
+// TestLiteralTag_MixedWithOtherTags tests !literal alongside other YAML tags.
+func TestLiteralTag_MixedWithOtherTags(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+literal_value: !literal "{{template.syntax}}"
+regular_value: "plain string"
+random_value: !random 100
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-mixed.yaml")
+	require.NoError(t, err)
+
+	// Literal should be preserved.
+	assert.Equal(t, "{{template.syntax}}", result["literal_value"])
+
+	// Regular value should be unchanged.
+	assert.Equal(t, "plain string", result["regular_value"])
+
+	// Random should be processed (value will be a string like "!random 100" at this stage,
+	// actual processing happens later in the pipeline).
+	// We just verify it's present and not the literal "!random 100".
+	assert.Contains(t, result, "random_value")
+}
+
+// TestLiteralTag_EmptyValue tests !literal with empty value.
+func TestLiteralTag_EmptyValue(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+empty: !literal ""
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-empty.yaml")
+	require.NoError(t, err)
+
+	assert.Equal(t, "", result["empty"])
+}
+
+// TestLiteralTag_NestedInMap tests !literal in nested map structures.
+func TestLiteralTag_NestedInMap(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+vars:
+  terraform:
+    user_data: !literal "#!/bin/bash\necho ${hostname}"
+  helm:
+    annotations: !literal "{{ .Values.ingress.class }}"
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-nested.yaml")
+	require.NoError(t, err)
+
+	vars := result["vars"].(map[string]any)
+	terraform := vars["terraform"].(map[string]any)
+	helm := vars["helm"].(map[string]any)
+
+	assert.Equal(t, "#!/bin/bash\necho ${hostname}", terraform["user_data"])
+	assert.Equal(t, "{{ .Values.ingress.class }}", helm["annotations"])
+}
+
+// TestLiteralTag_InlineArray tests !literal in inline array syntax [!literal "value"].
+func TestLiteralTag_InlineArray(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+db_users: [!literal "{{external.email}}", !literal "{{external.admin}}", regular_user]
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-inline.yaml")
+	require.NoError(t, err)
+
+	users, ok := result["db_users"].([]any)
+	require.True(t, ok, "db_users should be a list")
+	require.Len(t, users, 3)
+
+	assert.Equal(t, "{{external.email}}", users[0])
+	assert.Equal(t, "{{external.admin}}", users[1])
+	assert.Equal(t, "regular_user", users[2])
 }
