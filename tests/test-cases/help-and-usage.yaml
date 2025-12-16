@@ -631,6 +631,9 @@ tests:
         - "^\\s+test\\s+"  # Test command description varies between versions
         - "^\\s+modules\\s+"  # modules subcommand only in newer terraform versions
         - "^\\s+stacks\\s+"  # stacks subcommand only in newer terraform versions (HCP Terraform)
+      # Normalize minor punctuation differences between terraform versions
+      sanitize:
+        "output, or the help": "output or the help"
   - name: atmos --help config aliases section
     enabled: true
     snapshot: true
