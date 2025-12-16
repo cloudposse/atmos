@@ -569,11 +569,14 @@ var (
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
 
 	// Stack loader errors.
-	ErrUnsupportedFormat = errors.New("unsupported file format")
-	ErrLoaderParseFailed = errors.New("failed to parse file")
-	ErrEncodeFailed      = errors.New("failed to encode data")
-	ErrLoaderNotFound    = errors.New("no loader found for extension")
-	ErrDuplicateLoader   = errors.New("loader already registered for extension")
+	ErrUnsupportedFormat     = errors.New("unsupported file format")
+	ErrLoaderParseFailed     = errors.New("failed to parse file")
+	ErrEncodeFailed          = errors.New("failed to encode data")
+	ErrLoaderNotFound        = errors.New("no loader found for extension")
+	ErrDuplicateLoader       = errors.New("loader already registered for extension")
+	ErrStackConversionFailed = errors.New("stack conversion failed")
+	ErrUnknownSourceFormat   = errors.New("unknown source format")
+	ErrFailedToProcessHCL    = errors.New("failed to process HCL file")
 
 	// Stack processor errors.
 	ErrProcessingFailed          = errors.New("processing failed")

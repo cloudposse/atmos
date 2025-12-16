@@ -100,7 +100,7 @@ func wrapAtmosFunction(registry *Registry, name string, execCtx *ExecutionContex
 
 // toCtyValue converts a Go value to a cty.Value.
 //
-//nolint:cyclop,funlen,gocognit,nolintlint,revive
+//nolint:cyclop,funlen,gocognit,nolintlint,revive // Type conversion requires exhaustive switch with explicit handling for each Go→cty type mapping.
 func toCtyValue(v any) cty.Value {
 	switch val := v.(type) {
 	case string:

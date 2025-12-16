@@ -2,7 +2,6 @@ package exec
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +12,7 @@ import (
 	"github.com/zclconf/go-cty/cty"
 	"go.yaml.in/yaml/v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -30,12 +30,6 @@ const (
 	nameSectionName = "name"
 )
 
-var (
-	ErrUnsupportedFormat   = errors.New("unsupported format")
-	ErrConversionFailed    = errors.New("conversion failed")
-	ErrUnknownSourceFormat = errors.New("unknown source format")
-)
-
 // ExecuteStackConvert converts a stack configuration file between formats.
 // Supports multi-document YAML files and multi-stack HCL files.
 func ExecuteStackConvert(
@@ -50,7 +44,11 @@ func ExecuteStackConvert(
 	// Validate target format.
 	targetFormat = strings.ToLower(targetFormat)
 	if !isValidFormat(targetFormat) {
-		return fmt.Errorf("%w: %s (must be yaml, json, or hcl)", ErrUnsupportedFormat, targetFormat)
+		return errUtils.Build(errUtils.ErrUnsupportedFormat).
+			WithExplanation(fmt.Sprintf("Format '%s' is not supported", targetFormat)).
+			WithHint("Use yaml, json, or hcl").
+			WithContext("format", targetFormat).
+			Err()
 	}
 
 	// Read and parse input file (supports multi-document).
@@ -67,7 +65,12 @@ func ExecuteStackConvert(
 	// Convert to target format.
 	output, err := convertStacksToFormat(stacks, targetFormat)
 	if err != nil {
-		return fmt.Errorf("%w: %w", ErrConversionFailed, err)
+		return errUtils.Build(errUtils.ErrStackConversionFailed).
+			WithCause(err).
+			WithExplanation("Failed to convert stack configuration").
+			WithContext("source_format", sourceFormat).
+			WithContext("target_format", targetFormat).
+			Err()
 	}
 
 	// Handle output.
@@ -85,7 +88,11 @@ func ExecuteStackConvert(
 
 	// Write to file.
 	if err := os.WriteFile(outputPath, []byte(output), filePermissions); err != nil {
-		return fmt.Errorf("failed to write output file: %w", err)
+		return errUtils.Build(errUtils.ErrWriteToStream).
+			WithCause(err).
+			WithExplanation("Failed to write output file").
+			WithContext("output_path", outputPath).
+			Err()
 	}
 
 	_ = ui.Success(fmt.Sprintf("Converted %s to %s", inputPath, outputPath))
@@ -107,7 +114,11 @@ func isValidFormat(format string) bool {
 func readAndParseMultiDocFile(path string) ([]filetype.StackDocument, string, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to read file: %w", err)
+		return nil, "", errUtils.Build(errUtils.ErrReadFile).
+			WithCause(err).
+			WithExplanation("Failed to read input file").
+			WithContext("path", path).
+			Err()
 	}
 
 	dataStr := string(content)
@@ -116,7 +127,12 @@ func readAndParseMultiDocFile(path string) ([]filetype.StackDocument, string, er
 	// Detect format.
 	format := detectFormat(dataStr, ext)
 	if format == "" {
-		return nil, "", fmt.Errorf("%w: could not detect format for %s", ErrUnknownSourceFormat, path)
+		return nil, "", errUtils.Build(errUtils.ErrUnknownSourceFormat).
+			WithExplanation("Could not detect file format from content or extension").
+			WithHint("Ensure the file has a valid extension (.yaml, .yml, .json, .hcl) or valid content").
+			WithContext("path", path).
+			WithContext("extension", ext).
+			Err()
 	}
 
 	// Parse based on format.
@@ -158,34 +174,76 @@ func parseByFormat(content []byte, path, format string) ([]filetype.StackDocumen
 	case FormatYAML:
 		stacks, err := filetype.ParseYAMLStacks(content)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse YAML: %w", err)
+			return nil, errUtils.Build(errUtils.ErrLoaderParseFailed).
+				WithCause(err).
+				WithExplanation("Failed to parse YAML content").
+				WithContext("path", path).
+				Err()
 		}
 		return stacks, nil
 	case FormatHCL:
 		stacks, err := filetype.ParseHCLStacks(content, path)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse HCL: %w", err)
+			return nil, errUtils.Build(errUtils.ErrLoaderParseFailed).
+				WithCause(err).
+				WithExplanation("Failed to parse HCL content").
+				WithContext("path", path).
+				Err()
 		}
 		return stacks, nil
 	case FormatJSON:
 		return parseJSONStack(content)
 	default:
-		return nil, fmt.Errorf("%w: %s", ErrUnsupportedFormat, format)
+		return nil, errUtils.Build(errUtils.ErrUnsupportedFormat).
+			WithExplanation(fmt.Sprintf("Format '%s' is not supported for parsing", format)).
+			WithContext("format", format).
+			Err()
 	}
 }
 
-// parseJSONStack parses JSON content as a single stack document.
+// parseJSONStack parses JSON content as a single stack document or array of stacks.
 func parseJSONStack(content []byte) ([]filetype.StackDocument, error) {
-	var parsed map[string]any
+	// First, try to parse as an array (multi-stack).
+	var parsed any
 	if err := json.Unmarshal(content, &parsed); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+		return nil, errUtils.Build(errUtils.ErrLoaderParseFailed).
+			WithCause(err).
+			WithExplanation("Failed to parse JSON content").
+			Err()
 	}
-	// Extract name if present.
-	name := ""
-	if n, ok := parsed[nameSectionName].(string); ok {
-		name = n
+
+	switch v := parsed.(type) {
+	case map[string]any:
+		// Single stack object.
+		name := ""
+		if n, ok := v[nameSectionName].(string); ok {
+			name = n
+		}
+		return []filetype.StackDocument{{Name: name, Config: v}}, nil
+
+	case []any:
+		// Array of stacks.
+		out := make([]filetype.StackDocument, 0, len(v))
+		for i, item := range v {
+			m, ok := item.(map[string]any)
+			if !ok {
+				return nil, errUtils.Build(errUtils.ErrLoaderParseFailed).
+					WithExplanation(fmt.Sprintf("Array element %d is not an object", i)).
+					Err()
+			}
+			name := ""
+			if n, ok := m[nameSectionName].(string); ok {
+				name = n
+			}
+			out = append(out, filetype.StackDocument{Name: name, Config: m})
+		}
+		return out, nil
+
+	default:
+		return nil, errUtils.Build(errUtils.ErrLoaderParseFailed).
+			WithExplanation("JSON must be an object or array of objects").
+			Err()
 	}
-	return []filetype.StackDocument{{Name: name, Config: parsed}}, nil
 }
 
 // convertStacksToFormat converts multiple stacks to the specified format.
@@ -198,7 +256,10 @@ func convertStacksToFormat(stacks []filetype.StackDocument, format string) (stri
 	case FormatHCL:
 		return convertStacksToHCL(stacks)
 	default:
-		return "", fmt.Errorf("%w: %s", ErrUnsupportedFormat, format)
+		return "", errUtils.Build(errUtils.ErrUnsupportedFormat).
+			WithExplanation(fmt.Sprintf("Format '%s' is not supported for output", format)).
+			WithContext("format", format).
+			Err()
 	}
 }
 
@@ -415,7 +476,7 @@ func writeValue(body *hclwrite.Body, key string, value any) {
 
 // goToCtyForHCL converts Go types to cty.Value, handling special cases for HCL.
 //
-//nolint:cyclop,funlen,gocognit,nolintlint,revive
+//nolint:cyclop,funlen,gocognit,nolintlint,revive // Type conversion requires exhaustive switch with explicit handling for each Go→cty type mapping.
 func goToCtyForHCL(value any) cty.Value {
 	if value == nil {
 		return cty.NullVal(cty.DynamicPseudoType)

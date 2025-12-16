@@ -333,8 +333,15 @@ function formatHclValue(value, indent) {
     if (value.startsWith('atmos::') || value.startsWith('atmos_')) {
       return value;
     }
-    // Escape special characters in strings.
-    const escaped = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    // Escape special characters in HCL strings.
+    // Order matters: escape backslashes first, then other sequences.
+    const escaped = value
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\t/g, '\\t')
+      .replace(/\${/g, '$${'); // Escape HCL interpolation sequences.
     return `"${escaped}"`;
   }
 
