@@ -152,7 +152,7 @@ auth:
 |-------|----------|-------------|
 | `kind` | Yes | Integration type (e.g., `aws/ecr`, future: `aws/eks`) |
 | `via.identity` | Yes | Name of identity providing AWS credentials |
-| `spec.auto_provision` | No | Auto-trigger on identity login (default: false) |
+| `spec.auto_provision` | No | Auto-trigger on identity login (default: true) |
 | `spec.registry` | Yes | ECR registry configuration |
 | `spec.registry.account_id` | Yes | AWS account ID for registry |
 | `spec.registry.region` | Yes | AWS region for registry |
