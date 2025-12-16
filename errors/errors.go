@@ -310,13 +310,13 @@ var (
 	ErrUnsupportedComponentType           = errors.New("unsupported component type")
 
 	// Generator errors.
-	ErrGeneratorNotFound      = errors.New("generator not found")
-	ErrInvalidGeneratorCtx    = errors.New("invalid generator context")
-	ErrGeneratorValidation    = errors.New("generator validation failed")
-	ErrGenerationFailed       = errors.New("generation failed")
-	ErrGeneratorWriteFailed   = errors.New("failed to write generated file")
-	ErrMissingWorkingDir      = errors.New("working directory is required")
-	ErrMissingProviderSource  = errors.New("required_provider missing 'source' field")
+	ErrGeneratorNotFound     = errors.New("generator not found")
+	ErrInvalidGeneratorCtx   = errors.New("invalid generator context")
+	ErrGeneratorValidation   = errors.New("generator validation failed")
+	ErrGenerationFailed      = errors.New("generation failed")
+	ErrGeneratorWriteFailed  = errors.New("failed to write generated file")
+	ErrMissingWorkingDir     = errors.New("working directory is required")
+	ErrMissingProviderSource = errors.New("required_provider missing 'source' field")
 
 	// List command errors.
 	ErrInvalidStackPattern         = errors.New("invalid stack pattern")
