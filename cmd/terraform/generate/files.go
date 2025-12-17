@@ -12,6 +12,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 )
 
 // filesParser handles flag parsing for files command.
@@ -101,13 +102,17 @@ Examples:
 			return err
 		}
 
+		// Create adapter and service.
+		adapter := tfgenerate.NewExecAdapter(e.ProcessStacksForGenerate, e.FindStacksMapForGenerate)
+		service := tfgenerate.NewService(adapter)
+
 		// Execute based on mode.
 		if all {
-			return e.ExecuteTerraformGenerateFilesAll(&atmosConfig, stacks, components, dryRun, clean)
+			return service.ExecuteForAll(&atmosConfig, stacks, components, dryRun, clean)
 		}
 
 		component := args[0]
-		return e.ExecuteTerraformGenerateFiles(&atmosConfig, component, stack, dryRun, clean)
+		return service.ExecuteForComponent(&atmosConfig, component, stack, dryRun, clean)
 	},
 }
 

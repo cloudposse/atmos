@@ -8,11 +8,33 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	tfclean "github.com/cloudposse/atmos/pkg/terraform/clean"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 )
 
 var ErrRelPath = errors.New("error determining relative path")
+
+// Type aliases from pkg/terraform/clean for use in internal/exec.
+type (
+	ObjectInfo = tfclean.ObjectInfo
+	Directory  = tfclean.Directory
+)
+
+// Error aliases from pkg/terraform/clean.
+var (
+	ErrParseTerraformComponents  = tfclean.ErrParseTerraformComponents
+	ErrParseComponentsAttributes = tfclean.ErrParseComponentsAttributes
+	ErrEmptyPath                 = tfclean.ErrEmptyPath
+	ErrPathNotExist              = tfclean.ErrPathNotExist
+	ErrFileStat                  = tfclean.ErrFileStat
+	ErrMatchPattern              = tfclean.ErrMatchPattern
+	ErrRootPath                  = tfclean.ErrRootPath
+	ErrReadDir                   = tfclean.ErrReadDir
+	ErrFailedFoundStack          = tfclean.ErrFailedFoundStack
+	ErrEmptyEnvDir               = tfclean.ErrEmptyEnvDir
+	ErrRefusingToDeleteDir       = tfclean.ErrRefusingToDeleteDir
+)
 
 // getAllStacksComponentsPaths retrieves all components relatives paths to base Terraform directory from the stacks map.
 func getAllStacksComponentsPaths(stacksMap map[string]any) []string {

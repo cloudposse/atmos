@@ -9,6 +9,7 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfclean "github.com/cloudposse/atmos/pkg/terraform/clean"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
@@ -80,9 +81,9 @@ func TestCLITerraformClean(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Call ExecuteClean directly with typed parameters (no component, no stack, force=true, dryRun=false)
+	// Call clean service directly with typed parameters (no component, no stack, force=true, dryRun=false)
 	// This cleans ALL components since component="" and stack=""
-	opts := &CleanOptions{
+	opts := &tfclean.Options{
 		Component:    "",
 		Stack:        "",
 		Force:        true,
@@ -90,7 +91,18 @@ func TestCLITerraformClean(t *testing.T) {
 		SkipLockFile: false,
 		DryRun:       false,
 	}
-	err = ExecuteClean(opts, &atmosConfig)
+	// Create adapter and service.
+	adapter := tfclean.NewExecAdapter(
+		ProcessStacksForClean,
+		ExecuteDescribeStacksForClean,
+		GetGenerateFilenamesForComponent,
+		CollectComponentsDirectoryObjectsForClean,
+		ConstructTerraformComponentVarfileNameForClean,
+		ConstructTerraformComponentPlanfileNameForClean,
+		GetAllStacksComponentsPathsForClean,
+	)
+	service := tfclean.NewService(adapter)
+	err = service.Execute(opts, &atmosConfig)
 	require.NoError(t, err)
 	// Verify that files were deleted after clean
 	deleted, existingFile := verifyFileDeleted(t, files)
@@ -122,7 +134,7 @@ func TestFindFoldersNamesWithPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := findFoldersNamesWithPrefix(tt.root, tt.prefix)
+			_, err := tfclean.FindFoldersNamesWithPrefix(tt.root, tt.prefix)
 			if tt.expectedError != nil {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.expectedError.Error())
@@ -156,7 +168,7 @@ func TestCollectDirectoryObjects(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := CollectDirectoryObjects(tt.basePath, tt.patterns)
+			_, err := tfclean.CollectDirectoryObjects(tt.basePath, tt.patterns)
 			if tt.expectedError != nil {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.expectedError.Error())
@@ -184,7 +196,7 @@ func TestGetStackTerraformStateFolder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := getStackTerraformStateFolder(tt.componentPath, tt.stack)
+			_, err := tfclean.GetStackTerraformStateFolder(tt.componentPath, tt.stack)
 			if tt.expectedError != nil {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.expectedError.Error())
@@ -220,7 +232,7 @@ func TestIsValidDataDir(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := IsValidDataDir(tt.tfDataDir)
+			err := tfclean.IsValidDataDir(tt.tfDataDir)
 			if tt.expectedError != nil {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tt.expectedError.Error())

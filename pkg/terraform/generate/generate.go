@@ -1,10 +1,12 @@
-package exec
+// Package generate provides functionality to generate files for Terraform components
+// from the generate section in Atmos stack configuration.
+package generate
 
 import (
 	"path/filepath"
 
+	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/generate"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -18,19 +20,53 @@ const (
 	contextKeyComponent  = "component"
 	contextKeyAtmosComp  = "atmos_component"
 	contextKeyAtmosStack = "atmos_stack"
+	logKeyComponent      = "component"
+	logKeyStack          = "stack"
 )
 
-// ExecuteTerraformGenerateFiles generates files for a single terraform component.
-func ExecuteTerraformGenerateFiles(
+// StackProcessor defines the interface for processing stacks.
+// This allows for dependency injection and easier testing.
+type StackProcessor interface {
+	// ProcessStacks processes stacks and returns component configuration.
+	ProcessStacks(
+		atmosConfig *schema.AtmosConfiguration,
+		info schema.ConfigAndStacksInfo,
+		checkStack bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		skip []string,
+		authManager auth.AuthManager,
+	) (schema.ConfigAndStacksInfo, error)
+
+	// FindStacksMap discovers all stacks in the configuration.
+	FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error)
+}
+
+// Service provides file generation operations for Terraform components.
+type Service struct {
+	stackProcessor StackProcessor
+}
+
+// NewService creates a new generate service with the given stack processor.
+func NewService(processor StackProcessor) *Service {
+	defer perf.Track(nil, "generate.NewService")()
+
+	return &Service{
+		stackProcessor: processor,
+	}
+}
+
+// ExecuteForComponent generates files for a single terraform component.
+func (s *Service) ExecuteForComponent(
 	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	stack string,
 	dryRun bool,
 	clean bool,
 ) error {
-	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateFiles")()
+	defer perf.Track(atmosConfig, "terraform.generate.ExecuteForComponent")()
 
-	log.Debug("ExecuteTerraformGenerateFiles called",
+	log.Debug("ExecuteForComponent called",
 		logKeyComponent, component,
 		logKeyStack, stack,
 		"dryRun", dryRun,
@@ -46,20 +82,20 @@ func ExecuteTerraformGenerateFiles(
 	}
 
 	// Process stacks to get component configuration.
-	info, err := ProcessStacks(atmosConfig, info, true, true, true, nil, nil)
+	info, err := s.stackProcessor.ProcessStacks(atmosConfig, info, true, true, true, nil, nil)
 	if err != nil {
 		return err
 	}
 
 	// Get generate section from component.
-	generateSection := getGenerateSectionFromComponent(info.ComponentSection)
+	generateSection := GetGenerateSectionFromComponent(info.ComponentSection)
 	if generateSection == nil {
 		log.Info("No generate section found for component", logKeyComponent, component, logKeyStack, stack)
 		return nil
 	}
 
 	// Build template context.
-	templateContext := buildTemplateContext(&info)
+	templateContext := BuildTemplateContext(&info)
 
 	// Get component directory.
 	componentDir := filepath.Join(
@@ -70,44 +106,44 @@ func ExecuteTerraformGenerateFiles(
 	)
 
 	// Generate files.
-	config := generate.GenerateConfig{
+	config := GenerateConfig{
 		DryRun: dryRun,
 		Clean:  clean,
 	}
 
-	_, err = generate.GenerateFiles(generateSection, componentDir, templateContext, config)
+	_, err = GenerateFiles(generateSection, componentDir, templateContext, config)
 	return err
 }
 
-// ExecuteTerraformGenerateFilesAll generates files for all terraform components.
-func ExecuteTerraformGenerateFilesAll(
+// ExecuteForAll generates files for all terraform components.
+func (s *Service) ExecuteForAll(
 	atmosConfig *schema.AtmosConfiguration,
 	stacks []string,
 	components []string,
 	dryRun bool,
 	clean bool,
 ) error {
-	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateFilesAll")()
+	defer perf.Track(atmosConfig, "terraform.generate.ExecuteForAll")()
 
-	log.Debug("ExecuteTerraformGenerateFilesAll called",
+	log.Debug("ExecuteForAll called",
 		"stacks", stacks,
 		"components", components,
 		"dryRun", dryRun,
 		"clean", clean,
 	)
 
-	stacksMap, _, err := FindStacksMap(atmosConfig, false)
+	stacksMap, _, err := s.stackProcessor.FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}
 
-	config := generate.GenerateConfig{
+	config := GenerateConfig{
 		DryRun: dryRun,
 		Clean:  clean,
 	}
 
 	for stackFileName, stackSection := range stacksMap {
-		if len(stacks) > 0 && !matchesStackFilter(stackFileName, stacks) {
+		if len(stacks) > 0 && !MatchesStackFilter(stackFileName, stacks) {
 			continue
 		}
 
@@ -117,15 +153,44 @@ func ExecuteTerraformGenerateFilesAll(
 	return nil
 }
 
+// GenerateFilesForComponent generates files from the generate section during terraform execution.
+// This is called automatically when auto_generate_files is enabled.
+func (s *Service) GenerateFilesForComponent(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	defer perf.Track(atmosConfig, "terraform.generate.GenerateFilesForComponent")()
+
+	if !atmosConfig.Components.Terraform.AutoGenerateFiles {
+		return nil
+	}
+
+	generateSection := GetGenerateSectionFromComponent(info.ComponentSection)
+	if generateSection == nil {
+		return nil
+	}
+
+	log.Debug("Auto-generating files for component",
+		logKeyComponent, info.ComponentFromArg,
+		logKeyStack, info.Stack,
+	)
+
+	templateContext := BuildTemplateContext(info)
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	_, err := GenerateFiles(generateSection, workingDir, templateContext, config)
+	return err
+}
+
 // processStackForGenerate processes a single stack for file generation.
 func processStackForGenerate(
 	atmosConfig *schema.AtmosConfiguration,
 	stackFileName string,
 	stackSection any,
 	components []string,
-	config generate.GenerateConfig,
+	config GenerateConfig,
 ) {
-	terraformSection := extractTerraformSection(stackSection)
+	terraformSection := ExtractTerraformSection(stackSection)
 	if terraformSection == nil {
 		return
 	}
@@ -139,50 +204,30 @@ func processStackForGenerate(
 	}
 }
 
-// extractTerraformSection extracts the terraform section from a stack.
-func extractTerraformSection(stackSection any) map[string]any {
-	stackMap, ok := stackSection.(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	componentsSection, ok := stackMap["components"].(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	terraformSection, ok := componentsSection[cfg.TerraformSectionName].(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	return terraformSection
-}
-
 // processComponentForGenerate processes a single component for file generation.
 func processComponentForGenerate(
 	atmosConfig *schema.AtmosConfiguration,
 	componentName string,
 	stackFileName string,
 	compSection any,
-	config generate.GenerateConfig,
+	config GenerateConfig,
 ) {
 	componentSection, ok := compSection.(map[string]any)
 	if !ok {
 		return
 	}
 
-	if isAbstractComponent(componentSection) {
+	if IsAbstractComponent(componentSection) {
 		return
 	}
 
-	generateSection := getGenerateSectionFromComponent(componentSection)
+	generateSection := GetGenerateSectionFromComponent(componentSection)
 	if generateSection == nil {
 		return
 	}
 
-	templateContext := buildTemplateContextFromSection(componentSection, componentName, stackFileName)
-	componentPath := getComponentPath(componentSection, componentName)
+	templateContext := BuildTemplateContextFromSection(componentSection, componentName, stackFileName)
+	componentPath := GetComponentPath(componentSection, componentName)
 	componentDir := filepath.Join(
 		atmosConfig.BasePath,
 		atmosConfig.Components.Terraform.BasePath,
@@ -194,43 +239,16 @@ func processComponentForGenerate(
 		logKeyStack, stackFileName,
 	)
 
-	_, genErr := generate.GenerateFiles(generateSection, componentDir, templateContext, config)
+	_, genErr := GenerateFiles(generateSection, componentDir, templateContext, config)
 	if genErr != nil {
 		log.Error("Error generating files", logKeyComponent, componentName, logKeyStack, stackFileName, "error", genErr)
 	}
 }
 
-// generateFilesForComponent generates files from the generate section during terraform execution.
-// This is called automatically when auto_generate_files is enabled.
-func generateFilesForComponent(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
-	defer perf.Track(atmosConfig, "exec.generateFilesForComponent")()
+// GetGenerateSectionFromComponent extracts the generate section from a component.
+func GetGenerateSectionFromComponent(componentSection map[string]any) map[string]any {
+	defer perf.Track(nil, "generate.GetGenerateSectionFromComponent")()
 
-	if !atmosConfig.Components.Terraform.AutoGenerateFiles {
-		return nil
-	}
-
-	generateSection := getGenerateSectionFromComponent(info.ComponentSection)
-	if generateSection == nil {
-		return nil
-	}
-
-	log.Debug("Auto-generating files for component",
-		logKeyComponent, info.ComponentFromArg,
-		logKeyStack, info.Stack,
-	)
-
-	templateContext := buildTemplateContext(info)
-	config := generate.GenerateConfig{
-		DryRun: false,
-		Clean:  false,
-	}
-
-	_, err := generate.GenerateFiles(generateSection, workingDir, templateContext, config)
-	return err
-}
-
-// getGenerateSectionFromComponent extracts the generate section from a component.
-func getGenerateSectionFromComponent(componentSection map[string]any) map[string]any {
 	if componentSection == nil {
 		return nil
 	}
@@ -243,8 +261,22 @@ func getGenerateSectionFromComponent(componentSection map[string]any) map[string
 	return generateSection
 }
 
-// buildTemplateContext builds the template context from ConfigAndStacksInfo.
-func buildTemplateContext(info *schema.ConfigAndStacksInfo) map[string]any {
+// GetFilenamesForComponent returns the list of filenames from the generate section.
+// This is used by terraform clean to know which files to delete.
+func GetFilenamesForComponent(componentSection map[string]any) []string {
+	defer perf.Track(nil, "terraform.generate.GetFilenamesForComponent")()
+
+	generateSection := GetGenerateSectionFromComponent(componentSection)
+	if generateSection == nil {
+		return nil
+	}
+	return GetGenerateFilenames(generateSection)
+}
+
+// BuildTemplateContext builds the template context from ConfigAndStacksInfo.
+func BuildTemplateContext(info *schema.ConfigAndStacksInfo) map[string]any {
+	defer perf.Track(nil, "generate.BuildTemplateContext")()
+
 	context := make(map[string]any)
 
 	// Add component info.
@@ -276,9 +308,11 @@ func buildTemplateContext(info *schema.ConfigAndStacksInfo) map[string]any {
 	return context
 }
 
-// buildTemplateContextFromSection builds template context from a component section map.
+// BuildTemplateContextFromSection builds template context from a component section map.
 // Used when processing all components without full ProcessStacks.
-func buildTemplateContextFromSection(componentSection map[string]any, componentName, stackName string) map[string]any {
+func BuildTemplateContextFromSection(componentSection map[string]any, componentName, stackName string) map[string]any {
+	defer perf.Track(nil, "generate.BuildTemplateContextFromSection")()
+
 	context := make(map[string]any)
 
 	context[contextKeyAtmosComp] = componentName
@@ -331,8 +365,10 @@ func extractSectionAsString(componentSection, context map[string]any, key string
 	}
 }
 
-// isAbstractComponent checks if a component is abstract.
-func isAbstractComponent(componentSection map[string]any) bool {
+// IsAbstractComponent checks if a component is abstract.
+func IsAbstractComponent(componentSection map[string]any) bool {
+	defer perf.Track(nil, "generate.IsAbstractComponent")()
+
 	metadata, ok := componentSection[sectionKeyMetadata].(map[string]any)
 	if !ok {
 		return false
@@ -342,8 +378,10 @@ func isAbstractComponent(componentSection map[string]any) bool {
 	return ok && componentType == "abstract"
 }
 
-// getComponentPath gets the component path from component section.
-func getComponentPath(componentSection map[string]any, componentName string) string {
+// GetComponentPath gets the component path from component section.
+func GetComponentPath(componentSection map[string]any, componentName string) string {
+	defer perf.Track(nil, "generate.GetComponentPath")()
+
 	metadata, ok := componentSection[sectionKeyMetadata].(map[string]any)
 	if ok {
 		if component, ok := metadata[sectionKeyComponent].(string); ok {
@@ -353,8 +391,10 @@ func getComponentPath(componentSection map[string]any, componentName string) str
 	return componentName
 }
 
-// matchesStackFilter checks if a stack matches the filter patterns.
-func matchesStackFilter(stackName string, filters []string) bool {
+// MatchesStackFilter checks if a stack matches the filter patterns.
+func MatchesStackFilter(stackName string, filters []string) bool {
+	defer perf.Track(nil, "generate.MatchesStackFilter")()
+
 	for _, filter := range filters {
 		matched, err := filepath.Match(filter, stackName)
 		if err == nil && matched {
@@ -371,14 +411,24 @@ func matchesStackFilter(stackName string, filters []string) bool {
 	return false
 }
 
-// GetGenerateFilenamesForComponent returns the list of filenames from the generate section.
-// This is used by terraform clean to know which files to delete.
-func GetGenerateFilenamesForComponent(componentSection map[string]any) []string {
-	defer perf.Track(nil, "exec.GetGenerateFilenamesForComponent")()
+// ExtractTerraformSection extracts the terraform section from a stack.
+func ExtractTerraformSection(stackSection any) map[string]any {
+	defer perf.Track(nil, "generate.ExtractTerraformSection")()
 
-	generateSection := getGenerateSectionFromComponent(componentSection)
-	if generateSection == nil {
+	stackMap, ok := stackSection.(map[string]any)
+	if !ok {
 		return nil
 	}
-	return generate.GetGenerateFilenames(generateSection)
+
+	componentsSection, ok := stackMap["components"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	terraformSection, ok := componentsSection[cfg.TerraformSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	return terraformSection
 }
