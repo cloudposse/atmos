@@ -318,12 +318,10 @@ vars:
   name: "{{ .locals.project }}-{{ .locals.env }}"
 ```
 
-For complete documentation, see [Locals in Stack Configuration](/core-concepts/stacks/locals).
-
 ## Related Features
 
-- [Stack Templates](/core-concepts/stacks/templates) - Go templating in stack manifests
+- [Stack Templates](/templates) - Go templating in stack manifests
 - [Configuration Provenance](/cli/commands/describe/component) - Track where values come from
-- [YAML Functions](/core-concepts/stacks/yaml-functions) - Dynamic configuration with `!terraform.output`, `!env`, etc.
+- [YAML Functions](/functions/yaml) - Dynamic configuration with `!terraform.output`, `!env`, etc.
 
 We'd love to hear how you're using locals in your configurations. Share your patterns in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions) or open an issue if you encounter any problems.
