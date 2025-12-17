@@ -307,3 +307,128 @@ func TestHasTemplateActions_InvalidTemplate(t *testing.T) {
 	_, err := HasTemplateActions("{{ .foo }")
 	assert.Error(t, err)
 }
+
+func TestExtractFieldRefs_NilTreeRoot(t *testing.T) {
+	// Test with a template that parses but has no meaningful content.
+	refs, err := ExtractFieldRefs("plain text without any template")
+	require.NoError(t, err)
+	assert.Nil(t, refs)
+}
+
+func TestExtractFieldRefs_TemplateNode(t *testing.T) {
+	// Test template that invokes another template with a pipe argument.
+	// The .config field reference should be captured from the template invocation.
+	refs, err := ExtractFieldRefs(`{{ template "inner" .config }}`)
+	require.NoError(t, err)
+	// The field reference in the template invocation is captured.
+	assert.NotNil(t, refs)
+	assert.Len(t, refs, 1)
+	assert.Equal(t, []string{"config"}, refs[0].Path)
+}
+
+func TestExtractAllFieldRefsByPrefix_NoMatch(t *testing.T) {
+	// Test when no refs match the prefix.
+	result, err := ExtractAllFieldRefsByPrefix("{{ .vars.foo }}", "locals")
+	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestExtractAllFieldRefsByPrefix_InvalidTemplate(t *testing.T) {
+	// Invalid template should return an error.
+	_, err := ExtractAllFieldRefsByPrefix("{{ .locals.foo }", "locals")
+	assert.Error(t, err)
+}
+
+func TestExtractAllFieldRefsByPrefix_NoTemplateDelimiters(t *testing.T) {
+	// No template delimiters means no refs.
+	result, err := ExtractAllFieldRefsByPrefix("plain text", "locals")
+	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestExtractFieldRefs_PipeWithDeclarations(t *testing.T) {
+	// Test pipe node with variable declarations.
+	refs, err := ExtractFieldRefs(`{{ $x := .foo }}{{ $x }}`)
+	require.NoError(t, err)
+	assert.Len(t, refs, 1)
+	assert.Equal(t, []string{"foo"}, refs[0].Path)
+}
+
+func TestExtractFieldRefs_RangeWithElse(t *testing.T) {
+	// Test range block with else clause.
+	refs, err := ExtractFieldRefs(`{{ range .items }}{{ .name }}{{ else }}{{ .empty }}{{ end }}`)
+	require.NoError(t, err)
+	// Should capture .items, .name (within range context), .empty
+	assert.NotEmpty(t, refs)
+}
+
+func TestExtractFieldRefs_WithBlock(t *testing.T) {
+	// Test with block that changes context.
+	refs, err := ExtractFieldRefs(`{{ with .config }}{{ .value }}{{ end }}`)
+	require.NoError(t, err)
+	// Should capture both .config and .value
+	foundConfig := false
+	foundValue := false
+	for _, ref := range refs {
+		if len(ref.Path) == 1 && ref.Path[0] == "config" {
+			foundConfig = true
+		}
+		if len(ref.Path) == 1 && ref.Path[0] == "value" {
+			foundValue = true
+		}
+	}
+	assert.True(t, foundConfig, "should capture .config")
+	assert.True(t, foundValue, "should capture .value")
+}
+
+func TestExtractFieldRefs_NestedRangeAndIf(t *testing.T) {
+	// Test deeply nested control structures.
+	refs, err := ExtractFieldRefs(`{{ range .items }}{{ if .active }}{{ .name }}{{ end }}{{ end }}`)
+	require.NoError(t, err)
+	assert.NotEmpty(t, refs)
+}
+
+func TestExtractFieldRefs_CommandWithMultipleArgs(t *testing.T) {
+	// Test command node with multiple arguments.
+	refs, err := ExtractFieldRefs(`{{ printf "%s %s" .first .second }}`)
+	require.NoError(t, err)
+	assert.Len(t, refs, 2)
+}
+
+func TestHasTemplateActions_RangeAction(t *testing.T) {
+	// Test that range is detected as an action.
+	result, err := HasTemplateActions(`{{ range .items }}{{ . }}{{ end }}`)
+	require.NoError(t, err)
+	assert.True(t, result)
+}
+
+func TestHasTemplateActions_WithAction(t *testing.T) {
+	// Test that with is detected as an action.
+	result, err := HasTemplateActions(`{{ with .config }}{{ .value }}{{ end }}`)
+	require.NoError(t, err)
+	assert.True(t, result)
+}
+
+func TestHasTemplateActions_NoActionsJustText(t *testing.T) {
+	// Test that text nodes without actions return false.
+	result, err := HasTemplateActions(`{{ "literal text" }}`)
+	require.NoError(t, err)
+	// This is actually an action (ActionNode), so it returns true.
+	assert.True(t, result)
+}
+
+func TestExtractFieldRefsByPrefix_SinglePathElement(t *testing.T) {
+	// When path has only one element, it doesn't match prefix.second pattern.
+	result, err := ExtractFieldRefsByPrefix("{{ .foo }}", "foo")
+	require.NoError(t, err)
+	// .foo doesn't match the pattern .foo.X
+	assert.Nil(t, result)
+}
+
+func TestExtractFieldRefs_ElseIfChain(t *testing.T) {
+	// Test else-if chain parsing.
+	refs, err := ExtractFieldRefs(`{{ if .a }}1{{ else if .b }}2{{ else if .c }}3{{ else }}{{ .d }}{{ end }}`)
+	require.NoError(t, err)
+	// Should find a, b, c, d
+	assert.GreaterOrEqual(t, len(refs), 4)
+}

@@ -373,3 +373,239 @@ func TestResolver_ComplexChain(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "myapp-prod-us-east-1-assets", result["bucket_name"])
 }
+
+func TestResolver_UndefinedLocalShowsAvailableLocals(t *testing.T) {
+	// Test that when a local references an undefined local,
+	// the error message includes the list of available locals.
+	// Note: "aaa" and "aab" are alphabetically before "zzz", so they resolve first.
+	locals := map[string]any{
+		"aaa": "value1",
+		"aab": "value2",
+		"zzz": "{{ .locals.undefined }}",
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	_, err := resolver.Resolve(nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Available locals")
+	assert.Contains(t, err.Error(), "aaa")
+	assert.Contains(t, err.Error(), "aab")
+}
+
+func TestResolver_UndefinedLocalNoAvailableLocals(t *testing.T) {
+	// Test error message when no locals are available (shows "(none)").
+	locals := map[string]any{
+		"bad": "{{ .locals.undefined }}",
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	_, err := resolver.Resolve(nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "Available locals")
+	assert.Contains(t, err.Error(), "(none)")
+}
+
+func TestResolver_ComplexCycleDetection(t *testing.T) {
+	// Test a more complex cycle: a → b → c → d → b (not back to a).
+	locals := map[string]any{
+		"a": "{{ .locals.b }}",
+		"b": "{{ .locals.c }}",
+		"c": "{{ .locals.d }}",
+		"d": "{{ .locals.b }}", // Creates cycle b → c → d → b
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	_, err := resolver.Resolve(nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "circular dependency")
+	assert.Contains(t, err.Error(), "→")
+}
+
+func TestResolver_CycleWithParentLocalReference(t *testing.T) {
+	// Cycle should still be detected even with parent local references.
+	parentLocals := map[string]any{
+		"parent": "parent-value",
+	}
+	locals := map[string]any{
+		"a": "{{ .locals.parent }}-{{ .locals.b }}",
+		"b": "{{ .locals.a }}",
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	_, err := resolver.Resolve(parentLocals)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "circular dependency")
+}
+
+func TestResolver_MapWithNestedDependencies(t *testing.T) {
+	// Test dependency extraction from deeply nested maps.
+	locals := map[string]any{
+		"base": "root",
+		"config": map[string]any{
+			"level1": map[string]any{
+				"level2": "{{ .locals.base }}-nested",
+			},
+		},
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	result, err := resolver.Resolve(nil)
+
+	require.NoError(t, err)
+	config := result["config"].(map[string]any)
+	level1 := config["level1"].(map[string]any)
+	assert.Equal(t, "root-nested", level1["level2"])
+}
+
+func TestResolver_SliceWithMixedTypes(t *testing.T) {
+	// Test slice with mixed types including templates.
+	locals := map[string]any{
+		"prefix": "item",
+		"items": []any{
+			"{{ .locals.prefix }}-1",
+			42,
+			true,
+			map[string]any{"name": "{{ .locals.prefix }}-nested"},
+		},
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	result, err := resolver.Resolve(nil)
+
+	require.NoError(t, err)
+	items := result["items"].([]any)
+	assert.Equal(t, "item-1", items[0])
+	assert.Equal(t, 42, items[1])
+	assert.Equal(t, true, items[2])
+	nested := items[3].(map[string]any)
+	assert.Equal(t, "item-nested", nested["name"])
+}
+
+func TestResolver_MapWithMultipleDependencies(t *testing.T) {
+	// Test map value with multiple local references for dependency extraction.
+	locals := map[string]any{
+		"a": "first",
+		"b": "second",
+		"c": "third",
+		"combined": map[string]any{
+			"all": "{{ .locals.a }}-{{ .locals.b }}-{{ .locals.c }}",
+		},
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	result, err := resolver.Resolve(nil)
+
+	require.NoError(t, err)
+	combined := result["combined"].(map[string]any)
+	assert.Equal(t, "first-second-third", combined["all"])
+}
+
+func TestResolver_SliceWithDependencyChain(t *testing.T) {
+	// Test slice elements that form a dependency chain.
+	locals := map[string]any{
+		"base": "root",
+		"mid":  "{{ .locals.base }}-mid",
+		"items": []any{
+			"{{ .locals.mid }}-item1",
+			"{{ .locals.base }}-item2",
+		},
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	result, err := resolver.Resolve(nil)
+
+	require.NoError(t, err)
+	items := result["items"].([]any)
+	assert.Equal(t, "root-mid-item1", items[0])
+	assert.Equal(t, "root-item2", items[1])
+}
+
+func TestResolver_FloatAndNilValues(t *testing.T) {
+	// Test that float and nil values pass through unchanged.
+	locals := map[string]any{
+		"float_val": 3.14159,
+		"nil_val":   nil,
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	result, err := resolver.Resolve(nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, 3.14159, result["float_val"])
+	assert.Nil(t, result["nil_val"])
+}
+
+func TestResolver_EmptyMapAndSlice(t *testing.T) {
+	// Test empty map and slice values.
+	locals := map[string]any{
+		"empty_map":   map[string]any{},
+		"empty_slice": []any{},
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	result, err := resolver.Resolve(nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{}, result["empty_map"])
+	assert.Equal(t, []any{}, result["empty_slice"])
+}
+
+func TestResolver_LargeCycle(t *testing.T) {
+	// Test cycle detection with a larger cycle.
+	locals := map[string]any{
+		"a": "{{ .locals.b }}",
+		"b": "{{ .locals.c }}",
+		"c": "{{ .locals.d }}",
+		"d": "{{ .locals.e }}",
+		"e": "{{ .locals.a }}", // Creates cycle a → b → c → d → e → a
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	_, err := resolver.Resolve(nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "circular dependency")
+}
+
+func TestResolver_MultipleSelfReferences(t *testing.T) {
+	// Test multiple self-referencing locals.
+	locals := map[string]any{
+		"a": "{{ .locals.a }}",
+		"b": "{{ .locals.b }}",
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	_, err := resolver.Resolve(nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "circular dependency")
+}
+
+func TestResolver_DependencyGraphWithParentRefs(t *testing.T) {
+	// Test that parent local references don't appear in the dependency graph.
+	parentLocals := map[string]any{
+		"parent1": "p1",
+		"parent2": "p2",
+	}
+	locals := map[string]any{
+		"child": "{{ .locals.parent1 }}-{{ .locals.parent2 }}",
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	err := resolver.buildDependencyGraph()
+	require.NoError(t, err)
+
+	deps := resolver.GetDependencies()
+	// Dependencies include parent refs, but they're not in the local scope.
+	assert.Contains(t, deps["child"], "parent1")
+	assert.Contains(t, deps["child"], "parent2")
+
+	// Resolve should work because parent locals are provided.
+	result, err := resolver.Resolve(parentLocals)
+	require.NoError(t, err)
+	assert.Equal(t, "p1-p2", result["child"])
+}

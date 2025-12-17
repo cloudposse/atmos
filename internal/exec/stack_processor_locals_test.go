@@ -248,3 +248,284 @@ func TestStripLocalsFromSection_Nil(t *testing.T) {
 	result := StripLocalsFromSection(nil)
 	assert.Nil(t, result)
 }
+
+func TestExtractAndResolveLocals_EmptyLocalsWithParent(t *testing.T) {
+	// Test that empty locals section with parent returns parent locals copy.
+	atmosConfig := &schema.AtmosConfiguration{}
+	parentLocals := map[string]any{
+		"parent_key": "parent_value",
+	}
+	section := map[string]any{
+		"locals": map[string]any{},
+	}
+
+	result, err := ExtractAndResolveLocals(atmosConfig, section, parentLocals, "test.yaml")
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, "parent_value", result["parent_key"])
+}
+
+func TestExtractAndResolveLocals_NilSection(t *testing.T) {
+	// Test with nil section.
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	result, err := ExtractAndResolveLocals(atmosConfig, nil, nil, "test.yaml")
+
+	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+func TestProcessStackLocals_GlobalError(t *testing.T) {
+	// Test error handling when global locals have a cycle.
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackConfig := map[string]any{
+		"locals": map[string]any{
+			"a": "{{ .locals.b }}",
+			"b": "{{ .locals.a }}",
+		},
+	}
+
+	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to resolve global locals")
+}
+
+func TestProcessStackLocals_TerraformError(t *testing.T) {
+	// Test error handling when terraform locals have a cycle.
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackConfig := map[string]any{
+		"locals": map[string]any{
+			"global_var": "value",
+		},
+		"terraform": map[string]any{
+			"locals": map[string]any{
+				"a": "{{ .locals.b }}",
+				"b": "{{ .locals.a }}",
+			},
+		},
+	}
+
+	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to resolve terraform locals")
+}
+
+func TestProcessStackLocals_HelmfileError(t *testing.T) {
+	// Test error handling when helmfile locals have a cycle.
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackConfig := map[string]any{
+		"locals": map[string]any{
+			"global_var": "value",
+		},
+		"helmfile": map[string]any{
+			"locals": map[string]any{
+				"a": "{{ .locals.b }}",
+				"b": "{{ .locals.a }}",
+			},
+		},
+	}
+
+	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to resolve helmfile locals")
+}
+
+func TestProcessStackLocals_PackerError(t *testing.T) {
+	// Test error handling when packer locals have a cycle.
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackConfig := map[string]any{
+		"locals": map[string]any{
+			"global_var": "value",
+		},
+		"packer": map[string]any{
+			"locals": map[string]any{
+				"a": "{{ .locals.b }}",
+				"b": "{{ .locals.a }}",
+			},
+		},
+	}
+
+	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to resolve packer locals")
+}
+
+func TestProcessStackLocals_OnlyTerraformSection(t *testing.T) {
+	// Test with only terraform section, no helmfile or packer.
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackConfig := map[string]any{
+		"locals": map[string]any{
+			"global_var": "global-value",
+		},
+		"terraform": map[string]any{
+			"locals": map[string]any{
+				"tf_var": "{{ .locals.global_var }}-terraform",
+			},
+		},
+	}
+
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, ctx)
+
+	// Global locals.
+	assert.Equal(t, "global-value", ctx.Global["global_var"])
+
+	// Terraform locals.
+	assert.Equal(t, "global-value-terraform", ctx.Terraform["tf_var"])
+
+	// Helmfile and Packer should inherit from global.
+	assert.Equal(t, ctx.Global, ctx.Helmfile)
+	assert.Equal(t, ctx.Global, ctx.Packer)
+}
+
+func TestProcessStackLocals_OnlyHelmfileSection(t *testing.T) {
+	// Test with only helmfile section.
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackConfig := map[string]any{
+		"locals": map[string]any{
+			"global_var": "global-value",
+		},
+		"helmfile": map[string]any{
+			"locals": map[string]any{
+				"hf_var": "{{ .locals.global_var }}-helmfile",
+			},
+		},
+	}
+
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, ctx)
+
+	// Helmfile locals.
+	assert.Equal(t, "global-value-helmfile", ctx.Helmfile["hf_var"])
+
+	// Terraform and Packer should inherit from global.
+	assert.Equal(t, ctx.Global, ctx.Terraform)
+	assert.Equal(t, ctx.Global, ctx.Packer)
+}
+
+func TestProcessStackLocals_OnlyPackerSection(t *testing.T) {
+	// Test with only packer section.
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackConfig := map[string]any{
+		"locals": map[string]any{
+			"global_var": "global-value",
+		},
+		"packer": map[string]any{
+			"locals": map[string]any{
+				"pk_var": "{{ .locals.global_var }}-packer",
+			},
+		},
+	}
+
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, ctx)
+
+	// Packer locals.
+	assert.Equal(t, "global-value-packer", ctx.Packer["pk_var"])
+
+	// Terraform and Helmfile should inherit from global.
+	assert.Equal(t, ctx.Global, ctx.Terraform)
+	assert.Equal(t, ctx.Global, ctx.Helmfile)
+}
+
+func TestProcessStackLocals_NonMapSections(t *testing.T) {
+	// Test with non-map sections (should be ignored).
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackConfig := map[string]any{
+		"locals": map[string]any{
+			"global_var": "global-value",
+		},
+		"terraform": "not a map",
+		"helmfile":  123,
+		"packer":    []string{"not", "a", "map"},
+	}
+
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, ctx)
+
+	// All should inherit from global since sections are not maps.
+	assert.Equal(t, ctx.Global, ctx.Terraform)
+	assert.Equal(t, ctx.Global, ctx.Helmfile)
+	assert.Equal(t, ctx.Global, ctx.Packer)
+}
+
+func TestResolveComponentLocals_NoLocalsSection(t *testing.T) {
+	// Test component without locals section.
+	atmosConfig := &schema.AtmosConfiguration{}
+	parentLocals := map[string]any{
+		"parent": "value",
+	}
+	componentConfig := map[string]any{
+		"vars": map[string]any{
+			"foo": "bar",
+		},
+	}
+
+	result, err := ResolveComponentLocals(atmosConfig, componentConfig, parentLocals, "test.yaml")
+
+	require.NoError(t, err)
+	assert.Equal(t, "value", result["parent"])
+}
+
+func TestResolveComponentLocals_Error(t *testing.T) {
+	// Test component locals with cycle.
+	atmosConfig := &schema.AtmosConfiguration{}
+	componentConfig := map[string]any{
+		"locals": map[string]any{
+			"a": "{{ .locals.b }}",
+			"b": "{{ .locals.a }}",
+		},
+	}
+
+	_, err := ResolveComponentLocals(atmosConfig, componentConfig, nil, "test.yaml")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "circular dependency")
+}
+
+func TestCopyParentLocals_EmptyMap(t *testing.T) {
+	// Test with empty parent locals map.
+	result := copyParentLocals(map[string]any{})
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
+}
+
+func TestCopyOrCreateParentLocals_EmptyMap(t *testing.T) {
+	// Test with empty parent locals map.
+	result := copyOrCreateParentLocals(map[string]any{})
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
+}
+
+func TestCopyOrCreateParentLocals_Nil(t *testing.T) {
+	// Test with nil parent locals.
+	result := copyOrCreateParentLocals(nil)
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
+}
+
+func TestCopyOrCreateParentLocals_WithData(t *testing.T) {
+	// Test with data.
+	parentLocals := map[string]any{
+		"key1": "value1",
+		"key2": "value2",
+	}
+	result := copyOrCreateParentLocals(parentLocals)
+	assert.Equal(t, parentLocals, result)
+	// Verify it's a copy.
+	result["key1"] = "modified"
+	assert.Equal(t, "value1", parentLocals["key1"])
+}

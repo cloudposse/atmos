@@ -77,7 +77,7 @@ The **Configuration Catalog** pattern prescribes the following:
   For example, the `stacks/catalog/vpc` folder should mirror the `components/terraform/vpc` folder.
 
 - In the component's catalog folder, create `defaults.yaml` manifest with all the default values for the component (the defaults that can be reused
-  across multiple environments). Define all the required Atmos sections, e.g. `metadata`, `settings`, `vars`, `env`.
+  across multiple environments). Define all the required Atmos sections, e.g. `metadata`, `settings`, `vars`, `locals`, `env`.
 
 - In the component's catalog folder, add other manifests for different combinations of component configurations.
   We refer to them as archetype manifests. Each archetype can import the `defaults.yaml` file to reuse the default values and make the entire config
