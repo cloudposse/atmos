@@ -50,6 +50,9 @@ type contextKey string
 const (
 	// SkipProviderLogoutKey is the context key for skipping provider.Logout calls.
 	skipProviderLogoutKey contextKey = "skipProviderLogout"
+	// skipIntegrationsKey is the context key for skipping auto-triggered integrations.
+	// Used when ExecuteIntegration explicitly runs an integration to avoid duplicate execution.
+	skipIntegrationsKey contextKey = "skipIntegrations"
 )
 
 // isInteractive checks if we're running in an interactive terminal.
@@ -1304,8 +1307,15 @@ func mapToEnvironList(envMap map[string]string) []string {
 
 // triggerIntegrations executes integrations that reference this identity with auto_provision enabled.
 // This is a non-fatal operation - integration failures don't block authentication.
+// Skipped when context contains skipIntegrationsKey (used by ExecuteIntegration to avoid duplicate execution).
 func (m *manager) triggerIntegrations(ctx context.Context, identityName string, creds types.ICredentials) {
 	defer perf.Track(nil, "auth.Manager.triggerIntegrations")()
+
+	// Check if integrations should be skipped (when called from ExecuteIntegration).
+	if ctx.Value(skipIntegrationsKey) != nil {
+		log.Debug("Skipping auto-triggered integrations (explicit execution)", logKeyIdentity, identityName)
+		return
+	}
 
 	// Find integrations that reference this identity and have auto_provision enabled.
 	linkedIntegrations := m.findIntegrationsForIdentity(identityName, true)
@@ -1388,6 +1398,7 @@ func (m *manager) executeIntegration(ctx context.Context, integrationName string
 
 // ExecuteIntegration exposes integration execution for the standalone ecr-login command.
 // This authenticates the integration's linked identity first, then executes the integration.
+// Auto-triggered integrations are skipped during authentication to avoid duplicate execution.
 func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string) error {
 	defer perf.Track(nil, "auth.Manager.ExecuteIntegration")()
 
@@ -1407,8 +1418,11 @@ func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string
 	}
 	identityName := integrationConfig.Via.Identity
 
-	// Authenticate the linked identity.
-	whoami, err := m.Authenticate(ctx, identityName)
+	// Authenticate the linked identity with integrations skipped.
+	// We skip auto-triggered integrations because we'll execute this specific integration explicitly below.
+	// This prevents duplicate execution when the requested integration is also auto-provisioned.
+	ctxSkipIntegrations := context.WithValue(ctx, skipIntegrationsKey, true)
+	whoami, err := m.Authenticate(ctxSkipIntegrations, identityName)
 	if err != nil {
 		return fmt.Errorf("failed to authenticate identity '%s': %w", identityName, err)
 	}
@@ -1434,6 +1448,7 @@ func (m *manager) ExecuteIntegration(ctx context.Context, integrationName string
 
 // ExecuteIdentityIntegrations executes all integrations that reference this identity.
 // This authenticates the identity first, then executes all integrations linked to it.
+// Auto-triggered integrations are skipped during authentication to avoid duplicate execution.
 func (m *manager) ExecuteIdentityIntegrations(ctx context.Context, identityName string) error {
 	defer perf.Track(nil, "auth.Manager.ExecuteIdentityIntegrations")()
 
@@ -1449,8 +1464,11 @@ func (m *manager) ExecuteIdentityIntegrations(ctx context.Context, identityName 
 		return fmt.Errorf("%w: %s", errUtils.ErrNoLinkedIntegrations, identityName)
 	}
 
-	// Authenticate the identity.
-	whoami, err := m.Authenticate(ctx, identityName)
+	// Authenticate the identity with integrations skipped.
+	// We skip auto-triggered integrations because we'll execute all linked integrations explicitly below.
+	// This prevents duplicate execution for integrations that are also auto-provisioned.
+	ctxSkipIntegrations := context.WithValue(ctx, skipIntegrationsKey, true)
+	whoami, err := m.Authenticate(ctxSkipIntegrations, identityName)
 	if err != nil {
 		return fmt.Errorf("failed to authenticate identity '%s': %w", identityName, err)
 	}
