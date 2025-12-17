@@ -101,6 +101,18 @@ var (
 	// These errors indicate the data is not available but do not represent API failures.
 	ErrTerraformStateNotProvisioned = errors.New("terraform state not provisioned")
 	ErrTerraformOutputNotFound      = errors.New("terraform output not found")
+	ErrTerraformOutputFailed        = errors.New("failed to retrieve terraform outputs")
+
+	// Terraform output component configuration errors.
+	ErrMissingExecutable      = errors.New("component does not have 'command' (executable) defined")
+	ErrMissingWorkspace       = errors.New("component does not have terraform workspace defined")
+	ErrMissingComponentInfo   = errors.New("component does not have 'component_info' defined")
+	ErrInvalidComponentInfoS  = errors.New("component has invalid 'component_info' section")
+	ErrMissingComponentPath   = errors.New("component has invalid 'component_info.component_path'")
+	ErrBackendFileGeneration  = errors.New("failed to generate backend file")
+	ErrProviderFileGeneration = errors.New("failed to generate provider override file")
+	ErrTerraformInit          = errors.New("terraform init failed")
+	ErrTerraformWorkspaceOp   = errors.New("terraform workspace operation failed")
 
 	// API/infrastructure errors - should cause non-zero exit.
 	// These errors indicate backend API failures that should not use YQ defaults.
