@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	"github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
@@ -118,16 +119,22 @@ func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
 }
 
 // prepareStepEnvironment prepares environment variables for a workflow step.
-// If identity is specified, it authenticates and prepares credentials.
+// Starts with system env + global env from atmos.yaml.
+// If identity is specified, it authenticates and adds credentials to the environment.
 // Returns the environment variables to use for the step.
 func prepareStepEnvironment(
 	stepIdentity string,
 	stepName string,
 	authManager auth.AuthManager,
+	globalEnv map[string]string,
 ) ([]string, error) {
-	// No identity specified, use empty environment (subprocess inherits from parent).
+	// Prepare base environment: system env + global env from atmos.yaml.
+	// Global env has lowest priority and can be overridden by identity auth env vars.
+	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), globalEnv)
+
+	// No identity specified, use base environment (system + global env).
 	if stepIdentity == "" {
-		return []string{}, nil
+		return baseEnv, nil
 	}
 
 	if authManager == nil {
@@ -155,8 +162,8 @@ func prepareStepEnvironment(
 	}
 
 	// Prepare shell environment with authentication credentials.
-	// Start with current OS environment and let PrepareShellEnvironment configure auth.
-	stepEnv, err := authManager.PrepareShellEnvironment(ctx, stepIdentity, os.Environ())
+	// Start with base environment (system + global) and let PrepareShellEnvironment configure auth.
+	stepEnv, err := authManager.PrepareShellEnvironment(ctx, stepIdentity, baseEnv)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare shell environment for identity %q in step %q: %w", stepIdentity, stepName, err)
 	}
@@ -314,8 +321,9 @@ func ExecuteWorkflow(
 			commandType = "atmos"
 		}
 
-		// Prepare environment variables if identity is specified for this step.
-		stepEnv, err := prepareStepEnvironment(stepIdentity, step.Name, authManager)
+		// Prepare environment variables: start with system env + global env from atmos.yaml.
+		// If identity is specified, also authenticate and add credentials.
+		stepEnv, err := prepareStepEnvironment(stepIdentity, step.Name, authManager, atmosConfig.Env)
 		if err != nil {
 			return err
 		}

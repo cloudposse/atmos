@@ -1,0 +1,197 @@
+---
+title: "!literal"
+sidebar_position: 11
+sidebar_label: "!literal"
+sidebar_class_name: command
+description: Preserve values exactly as written, bypassing all template processing
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `!literal` Atmos YAML function preserves values exactly as written, bypassing all template processing.
+    Use it to pass template-like syntax (e.g., `{{...}}` or `${...}`) to downstream tools like Terraform, Helm, or ArgoCD without Atmos attempting to evaluate them.
+</Intro>
+
+## Usage
+
+```yaml
+# Preserve template syntax for downstream tools
+value: !literal "{{external.email}}"
+
+# In lists
+db_users:
+  - !literal "{{external.email}}"
+  - !literal "{{external.admin}}"
+
+# Inline array syntax
+users: [!literal "{{user1}}", !literal "{{user2}}"]
+
+# Multiline values
+script: !literal |
+  #!/bin/bash
+  echo "Hello ${USER}"
+  export VAR={{value}}
+```
+
+## Arguments
+
+<dl>
+    <dt>`value` (required)</dt>
+    <dd>
+        The string value to preserve. Can be quoted, unquoted, or use YAML multiline syntax.
+        The value is passed through exactly as written, without any template processing.
+    </dd>
+</dl>
+
+## Examples
+
+### Terraform templatefile() Variables
+
+Pass variables to Terraform templates without Atmos processing them:
+
+```yaml
+components:
+  terraform:
+    ec2-instance:
+      vars:
+        user_data_template: !literal "#!/bin/bash\necho ${hostname}"
+        config_template: !literal "${var.environment}-config.json"
+```
+
+### Helm Values
+
+Pass Helm template expressions that should be processed by Helm, not Atmos:
+
+```yaml
+components:
+  terraform:
+    helm-release:
+      vars:
+        ingress_annotations: !literal "{{ .Values.ingress.class }}"
+        service_name: !literal "{{ .Release.Name }}-api"
+```
+
+### ArgoCD and External Templating Systems
+
+Preserve template syntax for external tools like ArgoCD, Jsonnet, or Kustomize:
+
+```yaml
+components:
+  terraform:
+    argocd-app:
+      vars:
+        config_url: !literal "{{external.config_url}}"
+        sync_policy: !literal "{{argocd.sync.policy}}"
+```
+
+### Documentation and Examples
+
+Include template examples in your configuration without evaluation:
+
+```yaml
+metadata:
+  example_usage: !literal "Use {{component}} to reference components"
+  template_syntax: !literal "Variables use ${var.name} syntax"
+```
+
+### Regex Patterns
+
+Preserve patterns containing brace-like syntax:
+
+```yaml
+vars:
+  filename_pattern: !literal "user_{id}_{timestamp}.log"
+  validation_regex: !literal "^[a-z]+\\d{3}$"
+```
+
+### Inline Arrays
+
+Use `!literal` in inline array syntax for compact configuration:
+
+```yaml
+vars:
+  db_users: [!literal "{{external.email}}", !literal "{{external.admin}}", regular_user]
+  allowed_patterns: [!literal "${prefix}*", !literal "*${suffix}"]
+```
+
+### Nested Structures
+
+Use `!literal` within deeply nested configurations:
+
+```yaml
+components:
+  terraform:
+    application:
+      vars:
+        templates:
+          helm:
+            annotations: !literal "{{ .Values.ingress.class }}"
+          terraform:
+            user_data: !literal "#!/bin/bash\necho ${hostname}"
+          argocd:
+            config: !literal "{{external.config}}"
+```
+
+## Why `!literal` is Needed
+
+Atmos processes Go templates and Gomplate expressions in stack configurations. When your configuration contains `{{...}}` or `${...}` syntax intended for downstream tools, Atmos attempts to evaluate these expressions, causing errors or unexpected behavior.
+
+### The Problem
+
+Without `!literal`, these configurations fail or produce incorrect results:
+
+```yaml
+# This fails - Atmos tries to evaluate {{external.email}}
+db_users:
+  - "{{external.email}}"
+
+# This fails - Atmos tries to evaluate ${hostname}
+user_data: "echo ${hostname}"
+```
+
+### Previous Workarounds
+
+Before `!literal`, users had to use awkward escaping:
+
+```yaml
+# Workaround 1: Double braces (fragile, hard to read)
+db_users:
+  - "{{'{{external.email}}'}}"
+
+# Workaround 2: Template escaping (verbose)
+db_users:
+  - "{{ `{{external.email}}` }}"
+```
+
+### The Solution
+
+`!literal` provides a clean, self-documenting solution:
+
+```yaml
+# Clear intent, preserves value exactly
+db_users:
+  - !literal "{{external.email}}"
+```
+
+## Comparison with Other Functions
+
+| Function | Purpose | Template Processing |
+|----------|---------|---------------------|
+| `!literal` | Preserve value exactly | Bypassed |
+| `!template` | Evaluate Go templates and convert JSON to YAML types | Enabled |
+| `!exec` | Execute shell commands | Command may contain templates |
+| `!env` | Read environment variables | No template processing |
+
+## Common Use Cases
+
+- **Terraform**: Pass `${var.name}` or `templatefile()` syntax
+- **Helm**: Pass `{{ .Values.* }}` template expressions
+- **ArgoCD**: Pass `{{external.*}}` application set parameters
+- **Kustomize**: Pass patch placeholders
+- **Documentation**: Include template syntax examples
+- **Regex/Patterns**: Preserve brace patterns in strings
+
+:::tip When to Use `!literal`
+Use `!literal` whenever you need to pass `{{...}}`, `${...}`, or similar template syntax to a downstream tool. If Atmos is trying to evaluate something it shouldn't, `!literal` is the solution.
+:::
