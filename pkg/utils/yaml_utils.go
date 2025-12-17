@@ -567,6 +567,8 @@ func WrapLongStrings(data any, maxLength int) any {
 
 // GetUserHomeDir returns the current user's home directory or empty string if unavailable.
 func GetUserHomeDir() string {
+	defer perf.Track(nil, "utils.GetUserHomeDir")()
+
 	hd, err := homedir.Dir()
 	if err != nil {
 		return ""
@@ -576,6 +578,8 @@ func GetUserHomeDir() string {
 
 // ObfuscateSensitivePaths walks any data structure (maps, slices, etc), and in any string which starts with the specified homeDir, replaces it with "~".
 func ObfuscateSensitivePaths(data any, homeDir string) any {
+	defer perf.Track(nil, "utils.ObfuscateSensitivePaths")()
+
 	switch v := data.(type) {
 	case map[string]any:
 		res := make(map[string]any, len(v))
