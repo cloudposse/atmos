@@ -1,0 +1,207 @@
+---
+title: atmos auth ecr-login
+sidebar_label: ecr-login
+sidebar_class_name: command
+sidebar_position: 4
+id: ecr-login
+description: Login to AWS ECR registries using Atmos integrations or explicit registry URLs.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Login to AWS Elastic Container Registry (ECR) using a named integration, an identity's linked integrations, or explicit registry URLs. This command writes Docker credentials to an isolated Atmos-managed config file.
+</Intro>
+
+<Screengrab title="atmos auth ecr-login --help" slug="atmos-auth-ecr-login--help" />
+
+## Usage
+
+```shell
+atmos auth ecr-login [integration] [flags]
+```
+
+## Examples
+
+```shell
+# Login using a named integration
+atmos auth ecr-login dev/ecr/primary
+
+# Login using an identity's linked integrations
+atmos auth ecr-login --identity dev-admin
+
+# Login with explicit registry URL (uses current AWS credentials)
+atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com
+
+# Login to multiple explicit registries
+atmos auth ecr-login \
+  --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com \
+  --registry 987654321098.dkr.ecr.us-west-2.amazonaws.com
+```
+
+## Arguments
+
+<dl>
+  <dt>`integration`</dt>
+  <dd>
+    Name of the integration to use for ECR login. The integration must be configured in `auth.integrations` with `kind: aws/ecr`. When provided, Atmos authenticates the integration's linked identity and logs into the configured registry.
+  </dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--identity` <em>(alias `-i`)</em></dt>
+  <dd>
+    Identity name whose linked integrations should be executed. All `aws/ecr` integrations that reference this identity will be triggered. This authenticates the identity first, then executes all its linked integrations.
+  </dd>
+
+  <dt>`--registry` <em>(alias `-r`)</em></dt>
+  <dd>
+    Explicit ECR registry URL(s) for ad-hoc login. This mode uses the current AWS credentials from the environment (not Atmos identities). Can be specified multiple times for multiple registries.
+
+    Format: `{account_id}.dkr.ecr.{region}.amazonaws.com`
+  </dd>
+</dl>
+
+## Configuration
+
+ECR integrations are configured in `atmos.yaml` under `auth.integrations`:
+
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start/
+
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      via:
+        provider: company-sso
+      principal:
+        name: AdministratorAccess
+        account: dev
+
+  # Integrations derive credentials from identities
+  integrations:
+    dev/ecr/primary:
+      kind: aws/ecr
+      via:
+        identity: dev-admin           # Which identity provides AWS credentials
+      spec:
+        auto_provision: true          # Auto-trigger on identity login (default: true)
+        registry:
+          account_id: "123456789012"
+          region: us-east-2
+
+    dev/ecr/secondary:
+      kind: aws/ecr
+      via:
+        identity: dev-admin
+      spec:
+        registry:
+          account_id: "123456789012"
+          region: us-west-2
+```
+
+### Integration Configuration Options
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `kind` | Yes | - | Must be `aws/ecr` for ECR integrations |
+| `via.identity` | Yes | - | Name of identity providing AWS credentials |
+| `spec.auto_provision` | No | `true` | Auto-trigger on identity login |
+| `spec.registry.account_id` | Yes | - | AWS account ID for the ECR registry |
+| `spec.registry.region` | Yes | - | AWS region for the ECR registry |
+
+## How It Works
+
+### Named Integration Mode
+
+When you specify an integration name:
+
+1. Atmos looks up the integration config from `auth.integrations`
+2. Authenticates the linked identity (via `via.identity`)
+3. Calls `ecr:GetAuthorizationToken` using the identity's credentials
+4. Writes credentials to Atmos Docker config
+5. Sets `DOCKER_CONFIG` environment variable
+
+### Identity Mode
+
+When you use `--identity`:
+
+1. Atmos finds all integrations that reference the specified identity
+2. Authenticates the identity
+3. Executes each linked integration
+4. Each integration writes its credentials to Docker config
+
+### Explicit Registry Mode
+
+When you use `--registry`:
+
+1. Atmos uses the current AWS credentials from the environment
+2. Parses the registry URL to extract account ID and region
+3. Calls `ecr:GetAuthorizationToken`
+4. Writes credentials to Atmos Docker config
+
+## Credential Storage
+
+ECR credentials are written to `~/.config/atmos/docker/config.json` (following XDG conventions), **not** your default `~/.docker/config.json`. This isolation:
+
+- Keeps Atmos-managed credentials separate from manually configured registries
+- Prevents conflicts with other Docker credential helpers
+- Allows easy cleanup by removing the Atmos config directory
+
+The `DOCKER_CONFIG` environment variable is set to point Docker to this config file.
+
+## Auto-Provisioning
+
+When `auto_provision` is `true` (the default), ECR integrations are automatically triggered when you authenticate with their linked identity:
+
+```shell
+$ atmos auth login dev-admin
+Authenticating with identity: dev-admin
+Opening browser for SSO authentication...
+Successfully authenticated as dev-admin
+✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 11h59m)
+✓ ECR login: 123456789012.dkr.ecr.us-west-2.amazonaws.com (expires in 11h59m)
+```
+
+To disable auto-provisioning for an integration, set `auto_provision: false`:
+
+```yaml
+integrations:
+  dev/ecr/optional:
+    kind: aws/ecr
+    via:
+      identity: dev-admin
+    spec:
+      auto_provision: false  # Only triggered via explicit ecr-login command
+      registry:
+        account_id: "123456789012"
+        region: eu-west-1
+```
+
+## Error Handling
+
+- **Named integration failures**: Return error to user (fatal)
+- **Auto-provisioned integration failures**: Log warning and continue (non-fatal)
+- **Invalid registry URL**: Return error with supported format
+
+ECR integration failures during `atmos auth login` are logged but don't block authentication. Your identity credentials succeed even if ECR login fails.
+
+## Notes
+
+- ECR tokens expire after approximately 12 hours (AWS-enforced)
+- The actual expiration time is displayed when login succeeds
+- Only private ECR registries are supported (not ECR Public or China/GovCloud regions)
+- Required IAM permission: `ecr:GetAuthorizationToken`
+
+## See Also
+
+- [Auth Login Command](/cli/commands/auth/login) - Authenticate with identities (triggers auto-provisioned integrations)
+- [ECR Authentication Tutorial](/tutorials/ecr-authentication) - Step-by-step guide
+- [Auth Configuration](/cli/configuration/auth) - Configure providers, identities, and integrations
