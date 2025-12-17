@@ -9,14 +9,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestProcessEnvVars_PluginCache(t *testing.T) {
+// TestViperBindEnv_PluginCache tests that plugin cache env vars are properly bound
+// via Viper's bindEnv in setEnv() and populated during Unmarshal.
+// This is the correct pattern per pkg/flags guidelines - not direct os.Getenv.
+func TestViperBindEnv_PluginCache(t *testing.T) {
 	tests := []struct {
 		name                   string
 		envPluginCache         string
 		envPluginCacheDir      string
 		expectedPluginCache    bool
 		expectedPluginCacheDir string
-		expectError            bool
 	}{
 		{
 			name:                   "plugin cache enabled via env var",
@@ -24,7 +26,6 @@ func TestProcessEnvVars_PluginCache(t *testing.T) {
 			envPluginCacheDir:      "",
 			expectedPluginCache:    true,
 			expectedPluginCacheDir: "",
-			expectError:            false,
 		},
 		{
 			name:                   "plugin cache disabled via env var",
@@ -32,7 +33,6 @@ func TestProcessEnvVars_PluginCache(t *testing.T) {
 			envPluginCacheDir:      "",
 			expectedPluginCache:    false,
 			expectedPluginCacheDir: "",
-			expectError:            false,
 		},
 		{
 			name:                   "plugin cache with custom dir",
@@ -40,15 +40,13 @@ func TestProcessEnvVars_PluginCache(t *testing.T) {
 			envPluginCacheDir:      "/custom/cache/path",
 			expectedPluginCache:    true, // Default is true.
 			expectedPluginCacheDir: "/custom/cache/path",
-			expectError:            false,
 		},
 		{
-			name:                   "invalid boolean for plugin cache",
-			envPluginCache:         "not-a-boolean",
-			envPluginCacheDir:      "",
-			expectedPluginCache:    true, // Won't be set due to error.
-			expectedPluginCacheDir: "",
-			expectError:            true,
+			name:                   "both env vars set",
+			envPluginCache:         "true",
+			envPluginCacheDir:      "/my/cache",
+			expectedPluginCache:    true,
+			expectedPluginCacheDir: "/my/cache",
 		},
 	}
 
@@ -62,27 +60,14 @@ func TestProcessEnvVars_PluginCache(t *testing.T) {
 				t.Setenv("ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR", tt.envPluginCacheDir)
 			}
 
-			// Create default config.
-			config := &schema.AtmosConfiguration{
-				Components: schema.Components{
-					Terraform: schema.Terraform{
-						PluginCache:    true, // Default value.
-						PluginCacheDir: "",
-					},
-				},
-			}
-
-			// Call processEnvVars.
-			err := processEnvVars(config)
-
-			if tt.expectError {
-				require.Error(t, err)
-				return
-			}
-
+			// Use LoadConfig which handles Viper env bindings properly.
+			config, err := LoadConfig(&schema.ConfigAndStacksInfo{})
 			require.NoError(t, err)
-			assert.Equal(t, tt.expectedPluginCache, config.Components.Terraform.PluginCache)
-			assert.Equal(t, tt.expectedPluginCacheDir, config.Components.Terraform.PluginCacheDir)
+
+			assert.Equal(t, tt.expectedPluginCache, config.Components.Terraform.PluginCache,
+				"PluginCache mismatch")
+			assert.Equal(t, tt.expectedPluginCacheDir, config.Components.Terraform.PluginCacheDir,
+				"PluginCacheDir mismatch")
 		})
 	}
 }
