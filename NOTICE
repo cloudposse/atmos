@@ -43,7 +43,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - cloud.google.com/go/monitoring
     License: Apache-2.0
-    URL: https://github.com/googleapis/google-cloud-go/blob/monitoring/v1.24.2/monitoring/LICENSE
+    URL: https://github.com/googleapis/google-cloud-go/blob/monitoring/v1.24.3/monitoring/LICENSE
 
   - cloud.google.com/go/secretmanager
     License: Apache-2.0
@@ -119,11 +119,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/feature/s3/manager
     License: Apache-2.0
-<<<<<<< HEAD
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/s3/manager/v1.20.15/feature/s3/manager/LICENSE.txt
-=======
     URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/s3/manager/v1.20.17/feature/s3/manager/LICENSE.txt
->>>>>>> origin/main
 
   - github.com/aws/aws-sdk-go-v2/internal/configsources
     License: Apache-2.0
@@ -159,11 +155,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/service/s3
     License: Apache-2.0
-<<<<<<< HEAD
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/s3/v1.93.2/service/s3/LICENSE.txt
-=======
     URL: https://github.com/aws/aws-sdk-go-v2/blob/service/s3/v1.94.0/service/s3/LICENSE.txt
->>>>>>> origin/main
 
   - github.com/aws/aws-sdk-go-v2/service/secretsmanager
     License: Apache-2.0
@@ -503,11 +495,11 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - google.golang.org/genproto/googleapis
     License: Apache-2.0
-    URL: https://github.com/googleapis/go-genproto/blob/9219d122eba9/LICENSE
+    URL: https://github.com/googleapis/go-genproto/blob/ff82c1b0f217/LICENSE
 
   - google.golang.org/genproto/googleapis/api
     License: Apache-2.0
-    URL: https://github.com/googleapis/go-genproto/blob/95abcf5c77ba/googleapis/api/LICENSE
+    URL: https://github.com/googleapis/go-genproto/blob/ff82c1b0f217/googleapis/api/LICENSE
 
   - google.golang.org/genproto/googleapis/rpc
     License: Apache-2.0
@@ -660,7 +652,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/googleapis/gax-go/v2
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/gax-go/blob/v2.15.0/v2/LICENSE
+    URL: https://github.com/googleapis/gax-go/blob/v2.16.0/v2/LICENSE
 
   - github.com/gorilla/css/scanner
     License: BSD-3-Clause
@@ -1258,7 +1250,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/goccy/go-yaml
     License: MIT
-    URL: https://github.com/goccy/go-yaml/blob/v1.19.0/LICENSE
+    URL: https://github.com/goccy/go-yaml/blob/v1.19.1/LICENSE
 
   - github.com/golang-jwt/jwt/v4
     License: MIT
