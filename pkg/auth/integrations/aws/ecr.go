@@ -3,7 +3,6 @@ package aws
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -96,11 +95,6 @@ func (e *ECRIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 	// Write credentials to Docker config.
 	if err := dockerConfig.WriteAuth(registryURL, result.Username, result.Password); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
-	}
-
-	// Set DOCKER_CONFIG environment variable.
-	if err := os.Setenv("DOCKER_CONFIG", dockerConfig.GetConfigDir()); err != nil {
-		log.Warn("Failed to set DOCKER_CONFIG environment variable", "error", err)
 	}
 
 	// Log success with actual expiration time.
