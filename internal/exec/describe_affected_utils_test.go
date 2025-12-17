@@ -407,11 +407,7 @@ func TestFindAffectedWithExcludeLocked(t *testing.T) {
 							"vpc": map[string]any{
 								"metadata": map[string]any{
 									"component": "terraform-vpc",
-								},
-								"settings": map[string]any{
-									"metadata": map[string]any{
-										"locked": true,
-									},
+									"locked":    true,
 								},
 							},
 						},
