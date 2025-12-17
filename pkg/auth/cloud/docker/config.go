@@ -12,7 +12,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 const (
@@ -44,21 +43,40 @@ type authEntry struct {
 	Auth string `json:"auth,omitempty"`
 }
 
-// NewConfigManager creates a new Docker config manager using XDG paths.
-// The config is stored in ~/.config/atmos/docker/config.json by default,
-// respecting ATMOS_XDG_CONFIG_HOME and XDG_CONFIG_HOME environment variables.
+// NewConfigManager creates a new Docker config manager using the default Docker config path.
+// The config is stored in ~/.docker/config.json by default (or $DOCKER_CONFIG/config.json
+// if DOCKER_CONFIG is set). This ensures compatibility with Docker CLI without requiring
+// additional environment variable configuration.
 func NewConfigManager() (*ConfigManager, error) {
 	defer perf.Track(nil, "docker.NewConfigManager")()
 
-	configDir, err := xdg.GetXDGConfigDir("docker", dockerConfigPerm)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrDockerConfigWrite, err)
+	configDir := getDockerConfigDir()
+
+	// Ensure directory exists with secure permissions.
+	if err := os.MkdirAll(configDir, dockerConfigPerm); err != nil {
+		return nil, fmt.Errorf("%w: failed to create docker config directory: %w", errUtils.ErrDockerConfigWrite, err)
 	}
 
 	return &ConfigManager{
 		configDir:  configDir,
 		configPath: filepath.Join(configDir, configFileName),
 	}, nil
+}
+
+// getDockerConfigDir returns the Docker config directory.
+// Uses DOCKER_CONFIG environment variable if set, otherwise defaults to ~/.docker.
+func getDockerConfigDir() string {
+	if dockerConfig := os.Getenv("DOCKER_CONFIG"); dockerConfig != "" {
+		return dockerConfig
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		// Fall back to current directory if home cannot be determined.
+		return ".docker"
+	}
+
+	return filepath.Join(homeDir, ".docker")
 }
 
 // WriteAuth writes ECR authorization to Docker config.

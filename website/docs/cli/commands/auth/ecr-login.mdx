@@ -126,8 +126,7 @@ When you specify an integration name:
 1. Atmos looks up the integration config from `auth.integrations`
 2. Authenticates the linked identity (via `via.identity`)
 3. Calls `ecr:GetAuthorizationToken` using the identity's credentials
-4. Writes credentials to Atmos Docker config
-5. Sets `DOCKER_CONFIG` environment variable
+4. Writes credentials to Docker config (`~/.docker/config.json`)
 
 ### Identity Mode
 
@@ -145,17 +144,22 @@ When you use `--registry`:
 1. Atmos uses the current AWS credentials from the environment
 2. Parses the registry URL to extract account ID and region
 3. Calls `ecr:GetAuthorizationToken`
-4. Writes credentials to Atmos Docker config
+4. Writes credentials to Docker config (`~/.docker/config.json`)
 
 ## Credential Storage
 
-ECR credentials are written to `~/.config/atmos/docker/config.json` (following XDG conventions), **not** your default `~/.docker/config.json`. This isolation:
+ECR credentials are written to `~/.docker/config.json` by default, the standard Docker config location. This means:
 
-- Keeps Atmos-managed credentials separate from manually configured registries
-- Prevents conflicts with other Docker credential helpers
-- Allows easy cleanup by removing the Atmos config directory
+- Docker commands work immediately after login without additional configuration
+- Credentials are merged with existing entries in your Docker config
+- Respects `DOCKER_CONFIG` environment variable if set
 
-The `DOCKER_CONFIG` environment variable is set to point Docker to this config file.
+If you need isolated credentials, set `DOCKER_CONFIG` before running the command:
+
+```bash
+export DOCKER_CONFIG=~/.config/atmos/docker
+atmos auth ecr-login dev/ecr
+```
 
 ## Auto-Provisioning
 

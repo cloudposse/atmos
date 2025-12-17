@@ -117,9 +117,9 @@ ECR login and EKS kubeconfig aren't really "identities" - they're derived creden
 
 Integrations are things that **use** an identity to materialize client-side credentials.
 
-### Isolated Docker Config
+### Zero Configuration
 
-ECR credentials are written to `~/.config/atmos/docker/config.json` (following XDG conventions), not your default Docker config. This keeps Atmos-managed credentials separate from manually configured registries.
+ECR credentials are written to `~/.docker/config.json`, the standard Docker config location. This means Docker commands work immediately after login—no additional environment variables or configuration required.
 
 ### Non-Blocking Errors
 
@@ -181,9 +181,9 @@ The integration pattern extends naturally to other client-only credential materi
 
 ## Documentation
 
-- [ECR Authentication PRD](/docs/prd/ecr-authentication)
+- [ECR Authentication Tutorial](/tutorials/ecr-authentication)
 - [Auth Login Command](/cli/commands/auth/login)
-- [Auth Configuration](/cli/configuration/auth)
+- [ECR Login Command](/cli/commands/auth/ecr-login)
 
 ## Get Involved
 

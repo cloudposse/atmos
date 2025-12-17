@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -143,11 +142,6 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 		// Log success with actual expiration time from ECR token.
 		expiresIn := time.Until(result.ExpiresAt).Round(time.Minute)
 		_ = ui.Success(fmt.Sprintf("ECR login: %s (expires in %s)", registry, expiresIn))
-	}
-
-	// Set DOCKER_CONFIG environment variable.
-	if err := os.Setenv("DOCKER_CONFIG", dockerConfig.GetConfigDir()); err != nil {
-		_ = ui.Warning(fmt.Sprintf("Failed to set DOCKER_CONFIG environment variable: %v", err))
 	}
 
 	return nil

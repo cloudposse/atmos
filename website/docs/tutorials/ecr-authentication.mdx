@@ -15,7 +15,7 @@ Atmos provides native ECR authentication through the **integrations** system. In
 **Key benefits:**
 - **Automatic login**: ECR credentials are provisioned when you authenticate with an identity
 - **Multi-registry support**: Configure multiple ECR registries across accounts and regions
-- **Isolated credentials**: Docker config stored separately from your default `~/.docker/config.json`
+- **Zero configuration**: Credentials are written to `~/.docker/config.json` and work immediately with Docker
 - **CI/CD ready**: Works seamlessly in GitHub Actions, GitLab CI, and other pipelines
 
 ## Quick Start
@@ -392,20 +392,18 @@ The identity used for ECR login needs the `ecr:GetAuthorizationToken` permission
 
 ### Location
 
-ECR credentials are stored in `~/.config/atmos/docker/config.json` (following XDG conventions). This location:
+ECR credentials are stored in `~/.docker/config.json` by default. This is the standard Docker config location, which means:
 
-- Respects `XDG_CONFIG_HOME` and `ATMOS_XDG_CONFIG_HOME` environment variables
-- Is isolated from your default `~/.docker/config.json`
+- No additional environment variables required
+- Docker commands work immediately after login
+- Credentials are merged with existing Docker config entries
 - Has restricted permissions (0600)
 
-### Docker Integration
-
-Atmos sets the `DOCKER_CONFIG` environment variable to point Docker to the Atmos-managed config:
+If you need to use a custom location, set the `DOCKER_CONFIG` environment variable before running `atmos auth ecr-login`:
 
 ```bash
-# After ECR login
-echo $DOCKER_CONFIG
-# /home/user/.config/atmos/docker
+export DOCKER_CONFIG=/custom/path
+atmos auth ecr-login dev/ecr
 ```
 
 ## Troubleshooting
@@ -431,11 +429,16 @@ aws ecr get-authorization-token --region us-east-2
 
 ### Wrong Credentials Used
 
-Verify `DOCKER_CONFIG` points to Atmos config:
+Check that `~/.docker/config.json` contains the ECR registry:
+
+```bash
+cat ~/.docker/config.json | jq '.auths | keys'
+```
+
+If using a custom `DOCKER_CONFIG`, verify it's set correctly:
 
 ```bash
 echo $DOCKER_CONFIG
-cat $DOCKER_CONFIG/config.json
 ```
 
 ### Registry Not Found
