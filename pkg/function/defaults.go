@@ -26,6 +26,7 @@ func RegisterDefaults() {
 		mustRegister(registry, NewGitRootFunction())
 		mustRegister(registry, NewIncludeFunction())
 		mustRegister(registry, NewIncludeRawFunction())
+		mustRegister(registry, NewLiteralFunction())
 
 		// PostMerge functions.
 		mustRegister(registry, NewStoreFunction())

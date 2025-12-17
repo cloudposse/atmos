@@ -41,6 +41,9 @@ const (
 	// TagRandom generates a random number.
 	TagRandom = "random"
 
+	// TagLiteral preserves values exactly as written, bypassing template processing.
+	TagLiteral = "literal"
+
 	// TagAwsAccountID returns the AWS account ID.
 	TagAwsAccountID = "aws.account_id"
 
@@ -73,6 +76,7 @@ func AllTags() []string {
 		TagIncludeRaw,
 		TagRepoRoot,
 		TagRandom,
+		TagLiteral,
 		TagAwsAccountID,
 		TagAwsCallerIdentityArn,
 		TagAwsCallerIdentityUserID,
@@ -93,6 +97,7 @@ var TagsMap = map[string]bool{
 	TagIncludeRaw:              true,
 	TagRepoRoot:                true,
 	TagRandom:                  true,
+	TagLiteral:                 true,
 	TagAwsAccountID:            true,
 	TagAwsCallerIdentityArn:    true,
 	TagAwsCallerIdentityUserID: true,
