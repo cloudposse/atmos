@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/colorprofile"
@@ -14,8 +15,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -515,7 +518,7 @@ func calculateMaxCommandWidth(commands []*cobra.Command) int {
 }
 
 // formatCommandLine formats a single command line with proper padding and styling.
-func formatCommandLine(ctx *helpRenderContext, cmd *cobra.Command, maxWidth int) {
+func formatCommandLine(ctx *helpRenderContext, cmd *cobra.Command, maxWidth int, mdRenderer *markdown.Renderer) {
 	cmdName := cmd.Name()
 	cmdTypePlain := ""
 	cmdTypeStyled := ""
@@ -542,20 +545,29 @@ func formatCommandLine(ctx *helpRenderContext, cmd *cobra.Command, maxWidth int)
 	fmt.Fprint(ctx.writer, strings.Repeat(spaceChar, padding))
 	fmt.Fprint(ctx.writer, strings.Repeat(spaceChar, commandDescriptionSpacing))
 
-	// Wrap and render description with proper indentation for continuation lines
+	// Wrap plain text first, then render markdown without additional wrapping.
+	// This matches the approach used by flag description rendering.
 	wrapped := wordwrap.String(cmd.Short, descWidth)
+
+	if mdRenderer != nil {
+		rendered, err := mdRenderer.RenderWithoutWordWrap(wrapped)
+		if err == nil {
+			wrapped = strings.TrimSpace(rendered)
+		}
+	}
+
 	lines := strings.Split(wrapped, "\n")
 
 	// Print first line (already positioned)
 	if len(lines) > 0 {
-		fmt.Fprintf(ctx.writer, "%s\n", ctx.styles.commandName.Render(lines[0]))
+		fmt.Fprintf(ctx.writer, "%s\n", ctx.styles.commandDesc.Render(lines[0]))
 	}
 
 	// Print continuation lines with proper indentation
 	if len(lines) > 1 {
 		indentStr := strings.Repeat(spaceChar, descColStart)
 		for i := 1; i < len(lines); i++ {
-			fmt.Fprintf(ctx.writer, "%s%s\n", indentStr, ctx.styles.commandName.Render(lines[i]))
+			fmt.Fprintf(ctx.writer, "%s%s\n", indentStr, ctx.styles.commandDesc.Render(lines[i]))
 		}
 	}
 }
@@ -573,11 +585,17 @@ func printAvailableCommands(ctx *helpRenderContext, cmd *cobra.Command) {
 
 	maxCmdWidth := calculateMaxCommandWidth(cmd.Commands())
 
+	// Create markdown renderer for command descriptions (same approach as flag rendering).
+	var mdRenderer *markdown.Renderer
+	if ctx.atmosConfig != nil {
+		mdRenderer, _ = markdown.NewTerminalMarkdownRenderer(*ctx.atmosConfig)
+	}
+
 	for _, c := range cmd.Commands() {
 		if !isCommandAvailable(c) || isConfigAlias(c) {
 			continue
 		}
-		formatCommandLine(ctx, c, maxCmdWidth)
+		formatCommandLine(ctx, c, maxCmdWidth, mdRenderer)
 	}
 	fmt.Fprintln(ctx.writer)
 }
@@ -643,6 +661,110 @@ func printFlags(w io.Writer, cmd *cobra.Command, atmosConfig *schema.AtmosConfig
 	}
 }
 
+// printCompatibilityFlags prints terraform compatibility flags if applicable.
+// These are pass-through flags that are forwarded to the underlying terraform/tofu command.
+func printCompatibilityFlags(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
+	defer perf.Track(nil, "cmd.printCompatibilityFlags")()
+
+	// Find the top-level command (e.g., "terraform") to determine if this command has compat flags.
+	providerName := findProviderName(cmd)
+	if providerName == "" {
+		return
+	}
+
+	// Get subcommand-specific compatibility flags.
+	flags := internal.GetSubcommandCompatFlags(providerName, cmd.Name())
+	if len(flags) == 0 {
+		return
+	}
+
+	fmt.Fprintln(w, styles.heading.Render("COMPATIBILITY FLAGS"))
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  These flags are passed through to the underlying terraform/tofu command.")
+	fmt.Fprintln(w)
+
+	renderCompatFlags(w, flags, &styles.flagName, &styles.flagName, &styles.flagDesc)
+	fmt.Fprintln(w)
+}
+
+// findProviderName walks up the command tree to find the top-level command name.
+// For example, for "atmos terraform apply", this returns "terraform".
+func findProviderName(cmd *cobra.Command) string {
+	defer perf.Track(nil, "cmd.findProviderName")()
+
+	// Walk up to find the first non-root parent.
+	for c := cmd; c != nil; c = c.Parent() {
+		parent := c.Parent()
+		if parent != nil && parent.Parent() == nil {
+			// c's parent is root, so c is the top-level command.
+			return c.Name()
+		}
+	}
+	return ""
+}
+
+// renderCompatFlags renders compatibility flags with proper styling and alignment.
+// FlagStyle is used for the flag name (cyan), argTypeStyle for any type annotations, descStyle for descriptions.
+func renderCompatFlags(w io.Writer, flags map[string]compat.CompatibilityFlag, flagStyle, argTypeStyle, descStyle *lipgloss.Style) {
+	defer perf.Track(nil, "cmd.renderCompatFlags")()
+
+	// Collect and sort flag names for consistent output.
+	type flagEntry struct {
+		name        string
+		description string
+	}
+	entries := make([]flagEntry, 0, len(flags))
+	for name, flag := range flags {
+		entries = append(entries, flagEntry{name: name, description: flag.Description})
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].name < entries[j].name
+	})
+
+	// Calculate max flag name length for alignment.
+	maxLen := 0
+	for _, entry := range entries {
+		if len(entry.name) > maxLen {
+			maxLen = len(entry.name)
+		}
+	}
+
+	// Calculate available width for description.
+	termWidth := getTerminalWidth()
+	// Layout: commandListLeftPad padding + flag name + commandDescriptionSpacing + description
+	descColStart := commandListLeftPad + maxLen + commandDescriptionSpacing
+	descWidth := termWidth - descColStart
+	if descWidth < minDescriptionWidth {
+		descWidth = minDescriptionWidth
+	}
+
+	// Render each flag.
+	// Note: argTypeStyle is available but not currently used since compat flags don't have type annotations.
+	_ = argTypeStyle
+
+	for _, entry := range entries {
+		padding := maxLen - len(entry.name) + 2
+
+		// Style the flag name (cyan, like FLAGS section).
+		styledName := flagStyle.Render(entry.name)
+
+		// Wrap and render description.
+		wrapped := wordwrap.String(entry.description, descWidth)
+		lines := strings.Split(wrapped, "\n")
+
+		// Print first line.
+		fmt.Fprintf(w, "      %s%s%s\n", styledName, strings.Repeat(" ", padding), descStyle.Render(lines[0]))
+
+		// Print continuation lines with proper indentation.
+		if len(lines) > 1 {
+			indentStr := strings.Repeat(" ", descColStart)
+			for i := 1; i < len(lines); i++ {
+				fmt.Fprintf(w, "%s%s\n", indentStr, descStyle.Render(lines[i]))
+			}
+		}
+	}
+}
+
 // applyColoredHelpTemplate applies a colored help template to the command.
 // This approach ensures colors work in both interactive terminals and redirected output (screengrabs).
 // Colors are automatically enabled when ATMOS_FORCE_COLOR, CLICOLOR_FORCE, or FORCE_COLOR is set.
@@ -694,6 +816,7 @@ func applyColoredHelpTemplate(cmd *cobra.Command) {
 		printAvailableCommands(ctx, c)
 		printConfigAliases(ctx, c)
 		printFlags(ctx.writer, c, ctx.atmosConfig, ctx.styles)
+		printCompatibilityFlags(ctx.writer, c, ctx.styles)
 		printFooter(ctx.writer, c, ctx.styles)
 	})
 }

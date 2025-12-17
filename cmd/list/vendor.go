@@ -42,13 +42,15 @@ var vendorCmd = &cobra.Command{
 	Long:  `List Atmos vendor configurations including component and vendor manifests with support for filtering, custom column selection, sorting, and multiple output formats.`,
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Skip stack validation for vendor.
-		if err := checkAtmosConfig(true); err != nil {
+		// Get Viper instance for flag/env precedence.
+		v := viper.GetViper()
+
+		// Skip stack validation for vendor (honors --base-path, --config, --config-path, --profile).
+		if err := checkAtmosConfig(cmd, v, true); err != nil {
 			return err
 		}
 
 		// Parse flags using StandardParser with Viper precedence.
-		v := viper.GetViper()
 		if err := vendorParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}

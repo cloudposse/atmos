@@ -189,18 +189,6 @@ func WithCommonFlags() Option {
 	}
 }
 
-// WithTerraformFlags adds all Terraform-specific flags.
-// Global flags (identity, chdir, etc.) are inherited from RootCmd persistent flags, not registered here.
-func WithTerraformFlags() Option {
-	defer perf.Track(nil, "flags.WithTerraformFlags")()
-
-	return func(cfg *parserConfig) {
-		for _, flag := range TerraformFlags().All() {
-			cfg.registry.Register(flag)
-		}
-	}
-}
-
 // WithHelmfileFlags adds all Helmfile-specific flags.
 func WithHelmfileFlags() Option {
 	defer perf.Track(nil, "flags.WithHelmfileFlags")()
@@ -320,6 +308,24 @@ func WithRegistry(registry *FlagRegistry) Option {
 
 	return func(cfg *parserConfig) {
 		cfg.registry = registry
+	}
+}
+
+// WithFlagRegistry adds all flags from a FlagRegistry to the parser's registry.
+// Unlike WithRegistry which replaces the registry, this merges flags into the existing registry.
+// This is useful for adding domain-specific flags from cmd packages.
+//
+// Usage:
+//
+//	terraformRegistry := terraform.TerraformFlags()
+//	parser := flags.NewStandardParser(flags.WithFlagRegistry(terraformRegistry))
+func WithFlagRegistry(registry *FlagRegistry) Option {
+	defer perf.Track(nil, "flags.WithFlagRegistry")()
+
+	return func(cfg *parserConfig) {
+		for _, flag := range registry.All() {
+			cfg.registry.Register(flag)
+		}
 	}
 }
 

@@ -40,13 +40,15 @@ var instancesCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration
-		if err := checkAtmosConfig(); err != nil {
+		// Get Viper instance for flag/env precedence.
+		v := viper.GetViper()
+
+		// Check Atmos configuration (honors --base-path, --config, --config-path, --profile).
+		if err := checkAtmosConfig(cmd, v); err != nil {
 			return err
 		}
 
-		// Parse flags using StandardParser with Viper precedence
-		v := viper.GetViper()
+		// Parse flags using StandardParser with Viper precedence.
 		if err := instancesParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}

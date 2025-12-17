@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -25,7 +26,6 @@ import (
 
 const (
 	atmosShellLevelEnvVar = "ATMOS_SHLVL"
-	envVarSeparator       = "="
 	logFieldCommand       = "command"
 	osWindows             = "windows"
 )
@@ -46,10 +46,14 @@ func ExecuteShellCommand(
 	if err != nil {
 		return err
 	}
-	updatedEnv := append(env, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
 	cmd := exec.Command(command, args...)
-	cmd.Env = append(os.Environ(), updatedEnv...)
+	// Build environment: os.Environ() + global env (atmos.yaml) + command-specific env.
+	// Global env has lowest priority after system env, command-specific env overrides both.
+	cmdEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+	cmdEnv = append(cmdEnv, env...)
+	cmdEnv = append(cmdEnv, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
+	cmd.Env = cmdEnv
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -110,7 +114,7 @@ func ExecuteShell(
 	command string,
 	name string,
 	dir string,
-	env []string,
+	envVars []string,
 	dryRun bool,
 ) error {
 	defer perf.Track(nil, "exec.ExecuteShell")()
@@ -126,8 +130,8 @@ func ExecuteShell(
 	// This matches the behavior before commit 9fd7d156a where the environment
 	// was merged rather than replaced.
 	mergedEnv := os.Environ()
-	for _, envVar := range env {
-		mergedEnv = u.UpdateEnvVar(mergedEnv, parseEnvVarKey(envVar), parseEnvVarValue(envVar))
+	for _, envVar := range envVars {
+		mergedEnv = envpkg.UpdateEnvVar(mergedEnv, parseEnvVarKey(envVar), parseEnvVarValue(envVar))
 	}
 
 	mergedEnv = append(mergedEnv, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
@@ -243,8 +247,9 @@ func execTerraformShellCommand(
 
 	log.Debug("Setting the ENV vars in the shell")
 
-	// Merge env vars, ensuring componentEnvList takes precedence
-	mergedEnv := mergeEnvVars(componentEnvList)
+	// Merge env vars, ensuring componentEnvList takes precedence.
+	// Include global env from atmos.yaml (lowest priority after system env).
+	mergedEnv := envpkg.MergeSystemEnvWithGlobal(componentEnvList, atmosConfig.Env)
 
 	// Transfer stdin, stdout, and stderr to the new process and also set the target directory for the shell to start in
 	pa := os.ProcAttr{
@@ -327,7 +332,7 @@ func ExecAuthShellCommand(
 	defer decrementAtmosShellLevel()
 
 	// Convert auth env vars map to slice format.
-	authEnvList := convertEnvMapToSlice(authEnvVars)
+	authEnvList := envpkg.ConvertMapToSlice(authEnvVars)
 
 	// Set environment variables to indicate the details of the Atmos auth shell configuration.
 	authEnvList = append(authEnvList, fmt.Sprintf("ATMOS_IDENTITY=%s", identityName))
@@ -348,7 +353,8 @@ func ExecAuthShellCommand(
 	printShellEnterMessage(identityName, providerName)
 
 	// Merge env vars, ensuring authEnvList takes precedence.
-	mergedEnv := mergeEnvVarsSimple(authEnvList)
+	// Include global env from atmos.yaml (lowest priority after system env).
+	mergedEnv := envpkg.MergeSystemEnvSimpleWithGlobal(authEnvList, atmosConfig.Env)
 
 	// Determine shell command and args.
 	shellCommand, shellCommandArgs := determineShell(shellOverride, shellArgs)
@@ -442,15 +448,6 @@ func decrementAtmosShellLevel() {
 	}
 }
 
-// convertEnvMapToSlice converts environment variable map to slice format.
-func convertEnvMapToSlice(envMap map[string]string) []string {
-	envList := make([]string, 0, len(envMap))
-	for key, value := range envMap {
-		envList = append(envList, fmt.Sprintf("%s%s%s", key, envVarSeparator, value))
-	}
-	return envList
-}
-
 // determineShell determines which shell to use and what arguments to pass.
 func determineShell(shellOverride string, shellArgs []string) (string, []string) {
 	// Determine shell command from override, environment, or fallback.
@@ -489,78 +486,6 @@ func findAvailableShell() string {
 
 	// If nothing found, return empty (will cause error later).
 	return ""
-}
-
-// mergeEnvVars adds a list of environment variables to the system environment variables.
-//
-// This is necessary because:
-//  1. We need to preserve existing system environment variables (PATH, HOME, etc.)
-//  2. Atmos-specific variables (TF_CLI_ARGS, ATMOS_* vars) must take precedence
-//  3. For conflicts, such as TF_CLI_ARGS_*, we need special handling to ensure proper merging rather than simple overwriting
-func mergeEnvVars(componentEnvList []string) []string {
-	envMap := make(map[string]string)
-
-	// Parse system environment variables.
-	for _, env := range os.Environ() {
-		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
-		}
-	}
-
-	// Merge with new, Atmos defined environment variables.
-	for _, env := range componentEnvList {
-		if parts := strings.SplitN(env, "=", 2); len(parts) == 2 {
-			// Special handling for Terraform CLI arguments environment variables.
-			if strings.HasPrefix(parts[0], "TF_CLI_ARGS_") {
-				// For TF_CLI_ARGS_* variables, we need to append new values to any existing values.
-				if existing, exists := envMap[parts[0]]; exists {
-					// Put the new, Atmos defined value first so it takes precedence.
-					envMap[parts[0]] = parts[1] + " " + existing
-				} else {
-					// No existing value, just set the new value.
-					envMap[parts[0]] = parts[1]
-				}
-			} else {
-				// For all other environment variables, just override any existing value.
-				envMap[parts[0]] = parts[1]
-			}
-		}
-	}
-
-	// Convert back to slice.
-	merged := make([]string, 0, len(envMap))
-	for k, v := range envMap {
-		log.Trace("Setting ENV var", "key", k, "value", v)
-		merged = append(merged, k+"="+v)
-	}
-	return merged
-}
-
-// mergeEnvVarsSimple adds a list of environment variables to the system environment variables without special handling.
-func mergeEnvVarsSimple(newEnvList []string) []string {
-	envMap := make(map[string]string)
-
-	// Parse system environment variables.
-	for _, env := range os.Environ() {
-		if parts := strings.SplitN(env, envVarSeparator, 2); len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
-		}
-	}
-
-	// Merge with new environment variables (override any existing).
-	for _, env := range newEnvList {
-		if parts := strings.SplitN(env, envVarSeparator, 2); len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
-		}
-	}
-
-	// Convert back to slice.
-	merged := make([]string, 0, len(envMap))
-	for k, v := range envMap {
-		log.Trace("Setting ENV var", "key", k, "value", v)
-		merged = append(merged, k+envVarSeparator+v)
-	}
-	return merged
 }
 
 // printShellEnterMessage prints a user-facing message when entering an Atmos-managed shell.
