@@ -80,7 +80,7 @@ YAML supports three types of data: core, defined, and user-defined.
 
  - The [__`!literal`__](/functions/yaml/literal) YAML function preserves values exactly as written,
    bypassing all template processing. Use it to pass template-like syntax (e.g., `{{...}}` or `${...}`)
-   to downstream tools like Terraform, Helm, or ArgoCD without Atmos attempting to evaluate them
+   to downstream tools like Terraform, Helm, or ArgoCD without Atmos attempting to evaluate them.
 
  - The [__`!aws.account_id`__](/functions/yaml/aws.account-id) YAML function retrieves the AWS account ID
    of the current caller identity using STS GetCallerIdentity

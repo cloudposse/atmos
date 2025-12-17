@@ -1086,9 +1086,8 @@ random_value: !random 100
 	// Regular value should be unchanged.
 	assert.Equal(t, "plain string", result["regular_value"])
 
-	// Random should be processed (value will be a string like "!random 100" at this stage,
-	// actual processing happens later in the pipeline).
-	// We just verify it's present and not the literal "!random 100".
+	// Random tag is preserved for later processing (at this stage it's stored as "!random 100").
+	// We just verify the key is present in the result.
 	assert.Contains(t, result, "random_value")
 }
 
