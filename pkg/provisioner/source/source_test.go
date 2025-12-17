@@ -1,6 +1,7 @@
 package source
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -131,7 +132,7 @@ func TestDetermineTargetDirectory(t *testing.T) {
 			componentType:   "terraform",
 			component:       "vpc",
 			componentConfig: map[string]any{},
-			expectedDir:     "components/terraform/vpc",
+			expectedDir:     filepath.Join("components", "terraform", "vpc"),
 			expectError:     nil,
 		},
 		{
@@ -146,7 +147,7 @@ func TestDetermineTargetDirectory(t *testing.T) {
 			componentType:   "helmfile",
 			component:       "nginx",
 			componentConfig: map[string]any{},
-			expectedDir:     "components/helmfile/nginx",
+			expectedDir:     filepath.Join("components", "helmfile", "nginx"),
 			expectError:     nil,
 		},
 		{
@@ -262,4 +263,137 @@ func TestGetComponentBasePath(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestProvision_NilParams tests that Provision returns an error when params is nil.
+func TestProvision_NilParams(t *testing.T) {
+	ctx := context.Background()
+
+	err := Provision(ctx, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNilParam)
+}
+
+// TestProvision_NoMetadataSource tests that Provision returns nil when no source is configured.
+func TestProvision_NoMetadataSource(t *testing.T) {
+	ctx := context.Background()
+
+	params := &ProvisionParams{
+		AtmosConfig: &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+			},
+		},
+		ComponentType:   "terraform",
+		Component:       "vpc",
+		Stack:           "dev",
+		ComponentConfig: map[string]any{}, // No metadata.source.
+		Force:           false,
+	}
+
+	err := Provision(ctx, params)
+	assert.NoError(t, err, "Provision should return nil when no source is configured")
+}
+
+// TestProvision_InvalidMetadataSource tests that Provision returns an error for invalid source spec.
+func TestProvision_InvalidMetadataSource(t *testing.T) {
+	ctx := context.Background()
+
+	params := &ProvisionParams{
+		AtmosConfig: &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "components/terraform",
+				},
+			},
+		},
+		ComponentType: "terraform",
+		Component:     "vpc",
+		Stack:         "dev",
+		ComponentConfig: map[string]any{
+			"metadata": map[string]any{
+				"source": "invalid-not-a-map", // Invalid: should be a map.
+			},
+		},
+		Force: false,
+	}
+
+	err := Provision(ctx, params)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrSourceProvision)
+}
+
+// TestProvision_TargetDirectoryError tests that Provision returns an error when target directory cannot be determined.
+func TestProvision_TargetDirectoryError(t *testing.T) {
+	ctx := context.Background()
+
+	params := &ProvisionParams{
+		AtmosConfig: &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: "", // Empty base path should cause error.
+				},
+			},
+		},
+		ComponentType: "terraform",
+		Component:     "vpc",
+		Stack:         "dev",
+		ComponentConfig: map[string]any{
+			"metadata": map[string]any{
+				"source": map[string]any{
+					"uri": "github.com/cloudposse/terraform-aws-vpc",
+				},
+			},
+		},
+		Force: false,
+	}
+
+	err := Provision(ctx, params)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrSourceProvision)
+}
+
+// TestProvision_AlreadyExists tests that Provision skips when target already exists and force=false.
+func TestProvision_AlreadyExists(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a temp directory with content.
+	tempDir := t.TempDir()
+	targetDir := filepath.Join(tempDir, "vpc")
+	err := os.MkdirAll(targetDir, 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(targetDir, "main.tf"), []byte("# existing"), 0o644)
+	require.NoError(t, err)
+
+	params := &ProvisionParams{
+		AtmosConfig: &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: tempDir,
+				},
+			},
+		},
+		ComponentType: "terraform",
+		Component:     "vpc",
+		Stack:         "dev",
+		ComponentConfig: map[string]any{
+			"metadata": map[string]any{
+				"source": map[string]any{
+					"uri": "github.com/cloudposse/terraform-aws-vpc",
+				},
+			},
+		},
+		Force: false, // Not forcing re-vendor.
+	}
+
+	// Should not error - just skip.
+	err = Provision(ctx, params)
+	assert.NoError(t, err, "Provision should skip when target exists and force=false")
+
+	// Verify the existing file was not modified.
+	content, err := os.ReadFile(filepath.Join(targetDir, "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# existing", string(content), "Existing file should not be modified")
 }
