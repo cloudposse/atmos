@@ -28,8 +28,10 @@ If the filtering options built-in to Atmos are not sufficient, redirect the outp
 
 Since the output of a Stack might be overwhelming, and we're only interested in some particular section of the configuration, the output can be
 filtered using flags to narrow the output by `stack`, `component-types`, `components`, and `sections`. The component sections can be further filtered
-by `atmos_component`, `atmos_stack`, `atmos_stack_file`, `backend`, `backend_type`, `command`, `component`, `env`, `inheritance`, `metadata`,
+by `atmos_component`, `atmos_stack`, `atmos_stack_file`, `backend`, `backend_type`, `command`, `component`, `env`, `inheritance`, `locals`, `metadata`,
 `overrides`, `remote_state_backend`, `remote_state_backend_type`, `settings`, `vars`, `workspace`.
+
+Note: While `locals` can be defined at various scopes in stack manifests for DRY configuration (see [locals](/stacks/locals)), they are file-scoped and evaluated during processing. The resolved values from locals are used within the manifest but are not displayed in describe output—only the final computed values of `vars`, `env`, and `settings` are shown.
 
 For example:
 

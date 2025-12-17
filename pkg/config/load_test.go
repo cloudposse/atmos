@@ -1035,3 +1035,428 @@ base_path: /test/parent-should-not-find
 		})
 	}
 }
+
+// TestLoadConfig_DefaultConfigWithGitRootAtmosD tests that .atmos.d at git root is loaded
+// even when no atmos.yaml config file is found (using default config).
+func TestLoadConfig_DefaultConfigWithGitRootAtmosD(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create .atmos.d at "git root" with custom commands.
+	atmosDDir := filepath.Join(tempDir, ".atmos.d")
+	require.NoError(t, os.MkdirAll(atmosDDir, 0o755))
+
+	commandsContent := `commands:
+  - name: test-default-cmd
+    description: Test command from git root with default config
+    steps:
+      - echo "hello from git root default config"
+`
+	require.NoError(t, os.WriteFile(
+		filepath.Join(atmosDDir, "commands.yaml"),
+		[]byte(commandsContent),
+		0o644,
+	))
+
+	// Create a subdirectory with NO atmos.yaml - this will force default config.
+	subDir := filepath.Join(tempDir, "no-config-subdir")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+	// Mock git root to be tempDir.
+	t.Setenv("TEST_GIT_ROOT", tempDir)
+
+	// Change to subdirectory.
+	t.Chdir(subDir)
+
+	// Load config - should use default config but still find .atmos.d from git root.
+	config, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+
+	// Verify that the custom command from .atmos.d was loaded.
+	require.NotNil(t, config.Commands, "Commands should be loaded from .atmos.d at git root")
+	require.Len(t, config.Commands, 1, "Should have one custom command")
+	assert.Equal(t, "test-default-cmd", config.Commands[0].Name)
+}
+
+// TestMergeDefaultImports_GitRoot tests that .atmos.d at git root is discovered
+// even when running from a subdirectory.
+func TestMergeDefaultImports_GitRoot(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupDirs     func(t *testing.T, tempDir string) string
+		expectedKey   string
+		expectedValue string
+		description   string
+	}{
+		{
+			name: "loads_atmos_d_from_git_root_when_in_subdirectory",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create .atmos.d at "git root" (tempDir).
+				atmosDDir := filepath.Join(tempDir, ".atmos.d")
+				require.NoError(t, os.MkdirAll(atmosDDir, 0o755))
+
+				commandsContent := `commands:
+  - name: test-cmd
+    description: Test command from git root
+    steps:
+      - echo "hello from git root"
+`
+				require.NoError(t, os.WriteFile(
+					filepath.Join(atmosDDir, "commands.yaml"),
+					[]byte(commandsContent),
+					0o644,
+				))
+
+				// Create a subdirectory to run from.
+				subDir := filepath.Join(tempDir, "test")
+				require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+				return subDir
+			},
+			expectedKey:   "commands",
+			expectedValue: "", // Just check that commands key exists
+			description:   "Should load .atmos.d from git root when running from subdirectory",
+		},
+		{
+			name: "git_root_atmos_d_has_lower_priority_than_config_dir",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create .atmos.d at "git root" (tempDir) with lower priority setting.
+				gitRootAtmosDDir := filepath.Join(tempDir, ".atmos.d")
+				require.NoError(t, os.MkdirAll(gitRootAtmosDDir, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(gitRootAtmosDDir, "settings.yaml"),
+					[]byte(`settings:
+  test_priority: from_git_root
+`),
+					0o644,
+				))
+
+				// Create config directory with atmos.yaml.
+				configDir := filepath.Join(tempDir, "config")
+				require.NoError(t, os.MkdirAll(configDir, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(configDir, "atmos.yaml"),
+					[]byte(`base_path: ./`),
+					0o644,
+				))
+
+				// Create .atmos.d in config dir with higher priority setting.
+				configAtmosDDir := filepath.Join(configDir, ".atmos.d")
+				require.NoError(t, os.MkdirAll(configAtmosDDir, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(configAtmosDDir, "settings.yaml"),
+					[]byte(`settings:
+  test_priority: from_config_dir
+`),
+					0o644,
+				))
+
+				return configDir
+			},
+			expectedKey:   "settings.test_priority",
+			expectedValue: "from_config_dir",
+			description:   "Config dir .atmos.d should override git root .atmos.d",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			workDir := tt.setupDirs(t, tempDir)
+
+			// Mock git root to be tempDir.
+			t.Setenv("TEST_GIT_ROOT", tempDir)
+
+			// Change to working directory.
+			t.Chdir(workDir)
+
+			v := viper.New()
+			v.SetConfigType("yaml")
+
+			// Call mergeDefaultImports with the working directory.
+			err := mergeDefaultImports(workDir, v)
+			require.NoError(t, err, tt.description)
+
+			// Verify the expected key is set.
+			assert.True(t, v.IsSet(tt.expectedKey),
+				"Expected key %q to be set. %s", tt.expectedKey, tt.description)
+
+			if tt.expectedValue != "" {
+				assert.Equal(t, tt.expectedValue, v.GetString(tt.expectedKey),
+					"Expected value mismatch. %s", tt.description)
+			}
+		})
+	}
+}
+
+func TestPreserveCaseSensitiveMaps(t *testing.T) {
+	// Clear any previously tracked files at start of each test.
+	resetMergedConfigFiles()
+
+	t.Run("does nothing when no config file used", func(t *testing.T) {
+		resetMergedConfigFiles()
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+		assert.Nil(t, atmosConfig.CaseMaps)
+	})
+
+	t.Run("preserves env variable case", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "atmos.yaml")
+
+		// Create config with env section using mixed case.
+		configContent := `
+base_path: "."
+env:
+  GITHUB_TOKEN: "secret123"
+  AWS_REGION: "us-east-1"
+stacks:
+  base_path: "stacks"
+components:
+  terraform:
+    base_path: "components/terraform"
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0o644)
+		require.NoError(t, err)
+
+		v := viper.New()
+		v.SetConfigFile(configPath)
+		err = v.ReadInConfig()
+		require.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+		assert.NotNil(t, atmosConfig.CaseMaps)
+
+		// Check that case map was created for env.
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "GITHUB_TOKEN", envCaseMap["github_token"])
+		assert.Equal(t, "AWS_REGION", envCaseMap["aws_region"])
+	})
+
+	t.Run("preserves auth identity case", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "atmos.yaml")
+
+		// Create config with auth.identities section using mixed case.
+		configContent := `
+base_path: "."
+auth:
+  identities:
+    SuperAdmin:
+      aws:
+        profile: admin
+    DevUser:
+      aws:
+        profile: dev
+stacks:
+  base_path: "stacks"
+components:
+  terraform:
+    base_path: "components/terraform"
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0o644)
+		require.NoError(t, err)
+
+		v := viper.New()
+		v.SetConfigFile(configPath)
+		err = v.ReadInConfig()
+		require.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+		assert.NotNil(t, atmosConfig.CaseMaps)
+
+		// Check that case map was created for auth.identities.
+		identityCaseMap := atmosConfig.CaseMaps.Get("auth.identities")
+		assert.NotNil(t, identityCaseMap)
+		assert.Equal(t, "SuperAdmin", identityCaseMap["superadmin"])
+		assert.Equal(t, "DevUser", identityCaseMap["devuser"])
+
+		// Check backward compatibility with IdentityCaseMap.
+		assert.Equal(t, "SuperAdmin", atmosConfig.Auth.IdentityCaseMap["superadmin"])
+		assert.Equal(t, "DevUser", atmosConfig.Auth.IdentityCaseMap["devuser"])
+	})
+
+	t.Run("merges case mappings from tracked imported files", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+
+		// Create first import file with some env vars.
+		importFile1 := filepath.Join(tempDir, "import1.yaml")
+		import1Content := `
+env:
+  AWS_ACCESS_KEY_ID: "key1"
+  AWS_SECRET_KEY: "secret1"
+`
+		err := os.WriteFile(importFile1, []byte(import1Content), 0o644)
+		require.NoError(t, err)
+
+		// Create second import file with additional env vars.
+		importFile2 := filepath.Join(tempDir, "import2.yaml")
+		import2Content := `
+env:
+  GITHUB_TOKEN: "token123"
+  AWS_REGION: "us-east-1"
+`
+		err = os.WriteFile(importFile2, []byte(import2Content), 0o644)
+		require.NoError(t, err)
+
+		// Track both files as if they were merged during import processing.
+		trackMergedConfigFile(importFile1)
+		trackMergedConfigFile(importFile2)
+
+		// Viper has no config file set, but we have tracked files.
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+		assert.NotNil(t, atmosConfig.CaseMaps)
+
+		// Check that case mappings from both files were merged.
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "AWS_ACCESS_KEY_ID", envCaseMap["aws_access_key_id"])
+		assert.Equal(t, "AWS_SECRET_KEY", envCaseMap["aws_secret_key"])
+		assert.Equal(t, "GITHUB_TOKEN", envCaseMap["github_token"])
+		assert.Equal(t, "AWS_REGION", envCaseMap["aws_region"])
+	})
+
+	t.Run("later imports override earlier imports for overlapping keys", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+
+		// Create first import file with an env var using one case.
+		importFile1 := filepath.Join(tempDir, "import1.yaml")
+		import1Content := `
+env:
+  my_token: "value1"
+`
+		err := os.WriteFile(importFile1, []byte(import1Content), 0o644)
+		require.NoError(t, err)
+
+		// Create second import file with the same key but different case.
+		importFile2 := filepath.Join(tempDir, "import2.yaml")
+		import2Content := `
+env:
+  MY_TOKEN: "value2"
+`
+		err = os.WriteFile(importFile2, []byte(import2Content), 0o644)
+		require.NoError(t, err)
+
+		// Track both files in order.
+		trackMergedConfigFile(importFile1)
+		trackMergedConfigFile(importFile2)
+
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+
+		// The second file's case should win.
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "MY_TOKEN", envCaseMap["my_token"])
+	})
+
+	t.Run("main config file is included when not tracked", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "atmos.yaml")
+
+		// Create main config with env section.
+		configContent := `
+base_path: "."
+env:
+  MAIN_CONFIG_VAR: "main_value"
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0o644)
+		require.NoError(t, err)
+
+		v := viper.New()
+		v.SetConfigFile(configPath)
+		err = v.ReadInConfig()
+		require.NoError(t, err)
+
+		// Don't track the main config file - it should still be included.
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "MAIN_CONFIG_VAR", envCaseMap["main_config_var"])
+	})
+
+	t.Run("skips unreadable files gracefully", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+
+		// Create a valid import file.
+		validFile := filepath.Join(tempDir, "valid.yaml")
+		validContent := `
+env:
+  VALID_VAR: "valid_value"
+`
+		err := os.WriteFile(validFile, []byte(validContent), 0o644)
+		require.NoError(t, err)
+
+		// Track a non-existent file and the valid file.
+		trackMergedConfigFile(filepath.Join(tempDir, "nonexistent.yaml"))
+		trackMergedConfigFile(validFile)
+
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		// Should skip the unreadable file gracefully.
+		preserveCaseSensitiveMaps(v, atmosConfig)
+
+		// The valid file's mappings should still be preserved.
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "VALID_VAR", envCaseMap["valid_var"])
+	})
+
+	t.Run("preserves auth identities from imported files", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+
+		// Create import file with auth identities.
+		importFile := filepath.Join(tempDir, "auth-import.yaml")
+		importContent := `
+auth:
+  identities:
+    ImportedAdmin:
+      aws:
+        profile: imported-admin
+    ImportedDev:
+      aws:
+        profile: imported-dev
+`
+		err := os.WriteFile(importFile, []byte(importContent), 0o644)
+		require.NoError(t, err)
+
+		trackMergedConfigFile(importFile)
+
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+
+		// Check that auth.identities case map was created.
+		identityCaseMap := atmosConfig.CaseMaps.Get("auth.identities")
+		assert.NotNil(t, identityCaseMap)
+		assert.Equal(t, "ImportedAdmin", identityCaseMap["importedadmin"])
+		assert.Equal(t, "ImportedDev", identityCaseMap["importeddev"])
+
+		// Check backward compatibility.
+		assert.Equal(t, "ImportedAdmin", atmosConfig.Auth.IdentityCaseMap["importedadmin"])
+		assert.Equal(t, "ImportedDev", atmosConfig.Auth.IdentityCaseMap["importeddev"])
+	})
+}

@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	f "github.com/cloudposse/atmos/pkg/list/format"
@@ -23,13 +24,18 @@ import (
 
 // checkAtmosConfig verifies that Atmos is properly configured.
 // Returns an error instead of calling Exit to allow proper error handling in tests.
-func checkAtmosConfig(skipStackCheck ...bool) error {
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+// The cmd and v parameters allow honoring config selection flags (--base-path, --config, --config-path, --profile).
+func checkAtmosConfig(cmd *cobra.Command, v *viper.Viper, skipStackCheck ...bool) error {
+	// Parse global flags and build ConfigAndStacksInfo to honor config selection flags.
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	configAndStacksInfo := buildConfigAndStacksInfo(&globalFlags)
+
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return err
 	}
 
-	// Allow skipping stack validation for commands that don't need it (e.g., workflows)
+	// Allow skipping stack validation for commands that don't need it (e.g., workflows).
 	if len(skipStackCheck) > 0 && skipStackCheck[0] {
 		return nil
 	}
@@ -40,6 +46,21 @@ func checkAtmosConfig(skipStackCheck ...bool) error {
 	}
 
 	return nil
+}
+
+// buildConfigAndStacksInfo creates a ConfigAndStacksInfo struct from global flags.
+// This ensures that config selection flags (--base-path, --config, --config-path, --profile)
+// are properly honored when initializing CLI config.
+func buildConfigAndStacksInfo(globalFlags *global.Flags) schema.ConfigAndStacksInfo {
+	if globalFlags == nil {
+		return schema.ConfigAndStacksInfo{}
+	}
+	return schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
+	}
 }
 
 // addStackCompletion adds the --stack flag with shell completion to a command.
@@ -201,8 +222,11 @@ func getComponentFilter(args []string) string {
 }
 
 // initConfigAndAuth initializes CLI config and creates an auth manager.
-func initConfigAndAuth(cmd *cobra.Command) (schema.AtmosConfiguration, auth.AuthManager, error) {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+// The cmd and v parameters allow honoring config selection flags (--base-path, --config, --config-path, --profile).
+func initConfigAndAuth(cmd *cobra.Command, v *viper.Viper) (schema.AtmosConfiguration, auth.AuthManager, error) {
+	// Parse global flags and build ConfigAndStacksInfo to honor config selection flags.
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	configAndStacksInfo := buildConfigAndStacksInfo(&globalFlags)
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return schema.AtmosConfiguration{}, nil, &listerrors.InitConfigError{Cause: err}

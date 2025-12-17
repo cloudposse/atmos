@@ -1,0 +1,97 @@
+---
+slug: literal-yaml-function
+title: "New !literal YAML Function for Template Passthrough"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports the `!literal` YAML function, which preserves values exactly as written without any template processing. This solves a common pain point when passing template syntax to downstream tools like Terraform, Helm, or ArgoCD.
+
+<!--truncate-->
+
+## The Problem
+
+When working with multi-tool pipelines, you often need to pass template-like syntax through Atmos to downstream tools. For example, you might want to pass Helm template expressions or Terraform `templatefile()` variables. Previously, Atmos would attempt to evaluate these expressions, causing errors or unexpected behavior.
+
+```yaml
+# This would fail - Atmos tries to evaluate {{external.email}}
+db_users:
+  - "{{external.email}}"
+
+# This would also fail - Atmos tries to evaluate ${hostname}
+user_data: "echo ${hostname}"
+```
+
+The workarounds were awkward and error-prone:
+
+```yaml
+# Double braces - fragile and hard to read
+db_users:
+  - "{{'{{external.email}}'}}"
+
+# Template escaping - verbose
+db_users:
+  - "{{ `{{external.email}}` }}"
+```
+
+## The Solution
+
+The new `!literal` function provides a clean, self-documenting way to bypass template processing:
+
+```yaml
+# Clear intent, preserves value exactly
+db_users:
+  - !literal "{{external.email}}"
+  - !literal "{{external.admin}}"
+
+# Works with inline arrays too
+users: [!literal "{{user1}}", !literal "{{user2}}"]
+```
+
+## Use Cases
+
+### Terraform Variables
+
+Pass `${var.name}` syntax to Terraform templates:
+
+```yaml
+vars:
+  user_data_template: !literal "#!/bin/bash\necho ${hostname}"
+  config_file: !literal "${var.environment}-config.json"
+```
+
+### Helm Values
+
+Pass Helm template expressions:
+
+```yaml
+vars:
+  ingress_annotations: !literal "{{ .Values.ingress.class }}"
+  service_name: !literal "{{ .Release.Name }}-api"
+```
+
+### ArgoCD ApplicationSets
+
+Pass ArgoCD generator expressions:
+
+```yaml
+vars:
+  config_url: !literal "{{external.config_url}}"
+  cluster_name: !literal "{{name}}"
+```
+
+### Multiline Scripts
+
+Works with YAML multiline syntax:
+
+```yaml
+vars:
+  startup_script: !literal |
+    #!/bin/bash
+    echo "Hello ${USER}"
+    export CONFIG={{config_path}}
+```
+
+## Get Started
+
+The `!literal` function is available now. Check out the [documentation](/functions/yaml/literal) for more examples and details.

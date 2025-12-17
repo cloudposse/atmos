@@ -1,0 +1,137 @@
+package terraform
+
+import (
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// shellParser handles flag parsing for shell command.
+var shellParser *flags.StandardParser
+
+// shellCmd represents the terraform shell command (custom Atmos command).
+var shellCmd = &cobra.Command{
+	Use:   "shell [component]",
+	Short: "Configure an environment for an Atmos component and start a new shell",
+	Long: `Configure an environment for a specific Atmos component in a stack and then start a new shell.
+
+In this shell, you can execute all native Terraform commands directly without the need
+to use Atmos-specific arguments and flags. This allows you to interact with Terraform
+as you would in a typical setup, but within the configured Atmos environment.`,
+	Args:               cobra.MaximumNArgs(1),
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var component string
+		if len(args) > 0 {
+			component = args[0]
+		}
+
+		// Use Viper to respect precedence (flag > env > config > default)
+		v := viper.GetViper()
+
+		// Bind terraform flags (--stack, etc.) to Viper
+		if err := terraformParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		// Bind shell-specific flags to Viper
+		if err := shellParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		// Prompt for component if missing.
+		if component == "" {
+			prompted, err := promptForComponent(cmd)
+			if err = handlePromptError(err, "component"); err != nil {
+				return err
+			}
+			component = prompted
+		}
+
+		// Validate component after prompting.
+		if component == "" {
+			return errUtils.ErrMissingComponent
+		}
+
+		// Get flag values from Viper
+		stack := v.GetString("stack")
+		processTemplates := v.GetBool("process-templates")
+		processFunctions := v.GetBool("process-functions")
+		skip := v.GetStringSlice("skip")
+		dryRun := v.GetBool("dry-run")
+
+		// Prompt for stack if missing.
+		if stack == "" {
+			prompted, err := promptForStack(cmd, component)
+			if err = handlePromptError(err, "stack"); err != nil {
+				return err
+			}
+			stack = prompted
+		}
+
+		// Validate stack after prompting.
+		if stack == "" {
+			return errUtils.ErrMissingStack
+		}
+
+		// Get global flags from Viper (includes base-path, config, config-path, profile).
+		globalFlags := flags.ParseGlobalFlags(cmd, v)
+
+		// Build ConfigAndStacksInfo from global flags to honor config selection flags.
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			AtmosBasePath:           globalFlags.BasePath,
+			AtmosConfigFilesFromArg: globalFlags.Config,
+			AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+			ProfilesFromArg:         globalFlags.Profile,
+		}
+
+		// Initialize Atmos configuration.
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		if err != nil {
+			return err
+		}
+
+		opts := &e.ShellOptions{
+			Component: component,
+			Stack:     stack,
+			DryRun:    dryRun,
+			ProcessingOptions: e.ProcessingOptions{
+				ProcessTemplates: processTemplates,
+				ProcessFunctions: processFunctions,
+				Skip:             skip,
+			},
+		}
+		return e.ExecuteTerraformShell(opts, &atmosConfig)
+	},
+}
+
+func init() {
+	// Create parser with shell-specific flags using functional options.
+	shellParser = flags.NewStandardParser(
+		flags.WithBoolFlag("process-templates", "", true, "Enable Go template processing in Atmos stack manifests"),
+		flags.WithBoolFlag("process-functions", "", true, "Enable YAML functions processing in Atmos stack manifests"),
+		flags.WithStringSliceFlag("skip", "", []string{}, "Skip processing specific Atmos YAML functions"),
+		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
+		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
+		flags.WithEnvVars("skip", "ATMOS_SKIP"),
+	)
+
+	// Register flags with the command.
+	shellParser.RegisterFlags(shellCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := shellParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Register completions for shellCmd.
+	RegisterTerraformCompletions(shellCmd)
+
+	// Attach to parent terraform command.
+	terraformCmd.AddCommand(shellCmd)
+}

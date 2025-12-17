@@ -26,7 +26,7 @@ tests:
       - "terraform"
       - "plan"
       - "myapp"
-      - "--stack"
+      - "--stack="
     expect:
       diff: []
       stdout:
@@ -43,7 +43,7 @@ tests:
       - "terraform"
       - "plan"
       - "vpc"
-      - "--stack"
+      - "--stack="
     expect:
       diff: []
       stdout:
@@ -68,7 +68,7 @@ tests:
     expect:
       diff: []
       stdout:
-        - ":16"  # ShellCompDirectiveFilterDirs = 16
+        - ":4"  # ShellCompDirectiveNoFileComp = 4 (returns component names, disables file completion)
       exit_code: 0
 
   - name: completion for current directory path
@@ -87,5 +87,5 @@ tests:
     expect:
       diff: []
       stdout:
-        - ":16"  # ShellCompDirectiveFilterDirs = 16
+        - ":4"  # ShellCompDirectiveNoFileComp = 4 (returns component names, disables file completion)
       exit_code: 0

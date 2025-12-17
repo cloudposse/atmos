@@ -792,9 +792,188 @@ See these commands for reference:
 
 ---
 
+## Interactive Prompts (Recommended)
+
+**We recommend using interactive prompts** to make commands more user-friendly. Similar to shell autocomplete, prompts help users discover available options without memorizing values or checking documentation.
+
+Atmos provides built-in interactive selection menus for missing required flags and positional arguments using the Charmbracelet Huh library. This creates a better user experience by:
+
+- **Reducing cognitive load** - Users don't need to remember exact names
+- **Preventing typos** - Selection from a list eliminates spelling errors
+- **Improving discoverability** - Users see what options are available
+- **Graceful degradation** - Automatically disabled in CI/non-TTY environments
+
+Prompts automatically appear when:
+
+1. **TTY is available** (stdin is a terminal)
+2. **Not running in CI** (detected automatically)
+3. **`--interactive` flag is true** (default: `true`, can be disabled with `--interactive=false` or `ATMOS_INTERACTIVE=false`)
+
+When disabled or unavailable, commands fall back to standard validation errors with helpful hints.
+
+### Use Case 1: Missing Required Positional Arguments
+
+When a command has a required positional argument with completion options, you can configure an interactive prompt:
+
+```go
+// cmd/theme/show.go
+func init() {
+    // Build positional args with prompt
+    builder := flags.NewPositionalArgsBuilder()
+    builder.AddArg(&flags.PositionalArgSpec{
+        Name:           "theme-name",
+        Description:    "Theme name to preview",
+        Required:       true,
+        TargetField:    "ThemeName",
+        CompletionFunc: ThemesArgCompletion,  // Provides options
+    })
+    specs, validator, usage := builder.Build()
+
+    // Create parser with interactive prompt
+    themeShowParser = flags.NewStandardFlagParser(
+        flags.WithPositionalArgPrompt(
+            "theme-name",                      // Arg name
+            "Choose a theme to preview",       // Prompt title
+            ThemesArgCompletion,               // Completion function
+        ),
+    )
+
+    // Set positional args
+    themeShowParser.SetPositionalArgs(specs, validator, usage)
+    themeShowCmd.Use = "show " + usage
+
+    // Register flags (sets prompt-aware validator)
+    themeShowParser.RegisterFlags(themeShowCmd)
+}
+```
+
+**Behavior:**
+- `atmos theme show` → Shows interactive selector
+- `atmos theme show dracula` → Uses provided value directly
+- `atmos theme show --interactive=false` → Shows error if missing
+
+### Use Case 2: Optional Value Flags (Sentinel Pattern)
+
+For flags like `--identity` that can be provided with or without a value:
+
+```go
+parser := flags.NewStandardFlagParser(
+    flags.WithStringFlag("identity", "i", "", "Identity name (use --identity to select interactively)"),
+    flags.WithNoOptDefVal("identity", cfg.IdentityFlagSelectValue),  // Sentinel value
+    flags.WithOptionalValuePrompt(
+        "identity",
+        "Choose an identity",
+        IdentitiesCompletion,  // Function that returns available identities
+    ),
+)
+```
+
+**Behavior:**
+- `atmos cmd --identity` → Shows interactive selector (flag set to sentinel)
+- `atmos cmd --identity=admin` → Uses "admin" directly
+- `atmos cmd` → Uses empty/default value
+
+### Use Case 3: Missing Required Flags
+
+For required flags with completion options:
+
+```go
+parser := flags.NewStandardFlagParser(
+    flags.WithStackFlag(true),  // Required
+    flags.WithCompletionPrompt(
+        "stack",
+        "Choose a stack",
+        StacksCompletion,  // Function that returns available stacks
+    ),
+)
+```
+
+**Behavior:**
+- `atmos cmd` → Shows interactive selector if no stack provided
+- `atmos cmd --stack=prod` → Uses provided value directly
+- `ATMOS_STACK=prod atmos cmd` → Uses environment variable
+
+### Completion Functions
+
+Completion functions must match the `CompletionFunc` signature:
+
+```go
+type CompletionFunc func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
+```
+
+**Example:**
+```go
+func ThemesArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+    themes := theme.GetRegisteredThemeNames()
+    return themes, cobra.ShellCompDirectiveNoFileComp
+}
+```
+
+### Disabling Interactive Mode
+
+Users can disable interactive prompts:
+
+**Via flag:**
+```bash
+atmos theme show --interactive=false
+```
+
+**Via environment variable:**
+```bash
+ATMOS_INTERACTIVE=false atmos theme show
+```
+
+**In configuration:**
+```yaml
+# atmos.yaml
+interactive: false
+```
+
+### Error Handling
+
+When users abort a prompt (Ctrl-C), the error is propagated:
+
+```bash
+$ atmos theme show
+? Choose a theme to preview
+^C
+# Error: prompt failed: user aborted
+```
+
+When not interactive (CI, piped, disabled), standard validation errors appear:
+
+```bash
+$ echo "" | atmos theme show
+# Error: invalid positional arguments
+## Explanation
+Theme name is required
+## Hints
+💡 Run `atmos list themes` to see all available themes
+💡 Browse themes at https://atmos.tools/cli/commands/theme/browse
+```
+
+### Best Practices
+
+1. **Always provide completion functions** - Prompts need options to display
+2. **Use descriptive prompt titles** - "Choose a theme to preview" not "Select theme"
+3. **Handle empty results gracefully** - If completion returns no options, prompt is skipped
+4. **Test non-interactive scenarios** - Ensure commands work in CI/pipelines
+5. **Document the feature** - Update command help text to mention interactive selection
+
+### Example Commands
+
+See these commands for reference implementations:
+
+- **Positional args**: `cmd/theme/show.go` - Interactive theme selection
+- **Optional value flags**: Auth commands with `--identity` flag
+- **Required flags**: Commands using `WithCompletionPrompt`
+
+---
+
 ## Further Reading
 
 - [I/O and UI Output Guide](io-and-ui-output.md) - **How to handle output in commands**
+- [Flag Handler Documentation](../.claude/agents/flag-handler.md) - **Complete flag handler guide**
 - [Command Registry Pattern PRD](prd/command-registry-pattern.md)
 - [Cobra Documentation](https://github.com/spf13/cobra)
 - [Atmos Custom Commands](/core-concepts/custom-commands)
