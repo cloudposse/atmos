@@ -1,8 +1,8 @@
 
 👽 test linux/amd64
 
-Atmos is a universal tool for DevOps and cloud automation used for provisioning,
-managing and orchestrating workflows across various toolchains                  
+Atmos is a framework for orchestrating and operating infrastructure workflows   
+across multiple cloud and DevOps toolchains.                                    
 
 USAGE
 
@@ -27,6 +27,7 @@ AVAILABLE COMMANDS
       describe [command]      Show details about Atmos configurations and components
       devcontainer [command]  Manage development containers
       docs [command]          Open Atmos documentation or display component-specific docs
+      env                     Output environment variables configured in atmos.yaml
       helmfile [command]      Manage Helmfile-based Kubernetes deployments
       help                    Help about any command
       list [command]          List available stacks and components

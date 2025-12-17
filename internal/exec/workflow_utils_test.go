@@ -830,16 +830,17 @@ func TestCheckAndGenerateWorkflowStepNames_Coverage(t *testing.T) {
 
 // TestPrepareStepEnvironment tests the prepareStepEnvironment function.
 func TestPrepareStepEnvironment_NoIdentity(t *testing.T) {
-	// When no identity is specified, should return empty slice.
-	env, err := prepareStepEnvironment("", "step1", nil)
+	// When no identity is specified, should return base environment (system + global env).
+	env, err := prepareStepEnvironment("", "step1", nil, nil)
 
 	assert.NoError(t, err)
-	assert.Empty(t, env)
+	// Should return at least the system environment variables.
+	assert.NotEmpty(t, env)
 }
 
 // TestPrepareStepEnvironment_NilAuthManager tests prepareStepEnvironment with nil auth manager.
 func TestPrepareStepEnvironment_NilAuthManager(t *testing.T) {
-	env, err := prepareStepEnvironment("some-identity", "step1", nil)
+	env, err := prepareStepEnvironment("some-identity", "step1", nil, nil)
 
 	assert.ErrorIs(t, err, errUtils.ErrAuthManager)
 	assert.Nil(t, env)
