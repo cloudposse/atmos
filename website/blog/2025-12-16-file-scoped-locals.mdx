@@ -1,0 +1,329 @@
+---
+slug: file-scoped-locals
+title: "File-Scoped Locals: Simplify Stack Configuration with Temporary Variables"
+authors:
+  - osterman
+tags:
+  - feature
+  - dx
+date: 2025-12-16T00:00:00.000Z
+---
+
+import Terminal from '@site/src/components/Terminal'
+
+We're introducing **file-scoped locals** to Atmos stack configurations. Inspired by Terraform and Terragrunt, locals let you define temporary variables within a single file, reducing repetition and making your configurations more readable and maintainable.
+
+<!--truncate-->
+
+## The Problem: Repetition in Stack Configurations
+
+Complex stack configurations often contain repeated values. You might have a naming convention that combines namespace, environment, and stage across multiple components:
+
+```yaml
+# Before: Repetitive and error-prone
+components:
+  terraform:
+    vpc:
+      vars:
+        name: acme-prod-us-east-1-vpc
+        tags:
+          Environment: prod
+          Namespace: acme
+    eks:
+      vars:
+        cluster_name: acme-prod-us-east-1-eks
+        tags:
+          Environment: prod
+          Namespace: acme
+    rds:
+      vars:
+        identifier: acme-prod-us-east-1-rds
+        tags:
+          Environment: prod
+          Namespace: acme
+```
+
+This approach has several problems:
+- **Repetition** - Same values copied everywhere
+- **Inconsistency risk** - Easy to mistype or forget to update all occurrences
+- **Hard to refactor** - Changing a naming convention requires updates in many places
+
+## The Solution: File-Scoped Locals
+
+Locals let you define variables once and reference them throughout the file:
+
+```yaml
+# After: Clean and DRY
+locals:
+  namespace: acme
+  environment: prod
+  stage: us-east-1
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}-{{ .locals.stage }}"
+  tags:
+    Environment: "{{ .locals.environment }}"
+    Namespace: "{{ .locals.namespace }}"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        name: "{{ .locals.name_prefix }}-vpc"
+        tags: "{{ .locals.tags }}"
+    eks:
+      vars:
+        cluster_name: "{{ .locals.name_prefix }}-eks"
+        tags: "{{ .locals.tags }}"
+    rds:
+      vars:
+        identifier: "{{ .locals.name_prefix }}-rds"
+        tags: "{{ .locals.tags }}"
+```
+
+## Key Features
+
+### Locals Can Reference Other Locals
+
+Locals are resolved in dependency order using topological sorting. You can build complex values from simpler ones:
+
+```yaml
+locals:
+  namespace: acme
+  environment: prod
+  stage: us-east-1
+  # References other locals - resolved in correct order
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+  full_name: "{{ .locals.name_prefix }}-{{ .locals.stage }}"
+```
+
+### Circular Dependency Detection
+
+Atmos automatically detects circular dependencies and provides clear error messages:
+
+```yaml
+# This will error with a clear message
+locals:
+  a: "{{ .locals.b }}"
+  b: "{{ .locals.c }}"
+  c: "{{ .locals.a }}"  # Circular!
+```
+
+<Terminal title="atmos describe component vpc -s prod">
+```
+Error: circular dependency in locals at stacks/prod.yaml
+
+Dependency cycle detected:
+  a → b → c → a
+```
+</Terminal>
+
+### File-Scoped Isolation
+
+Unlike `vars`, locals do **not** inherit across file boundaries via `import`. This is intentional:
+
+```yaml
+# mixins/region.yaml
+locals:
+  region_prefix: "us-west-2"  # Only available in this file
+
+vars:
+  region: us-west-2  # Inherited by importing files
+```
+
+```yaml
+# stacks/prod.yaml
+import:
+  - mixins/region
+
+# The 'region_prefix' local is NOT available here
+# Only 'vars.region' is inherited
+locals:
+  my_prefix: "prod"  # This file's own locals
+```
+
+This keeps locals truly local, preventing unexpected interactions between files.
+
+### Multi-Level Scopes
+
+Locals can be defined at three levels, each inheriting from its parent:
+
+1. **Global** (stack file root) - Available throughout the file
+2. **Component-type** (`terraform`, `helmfile`, `packer` sections) - Inherits from global
+3. **Component** (individual component) - Inherits from component-type
+
+```yaml
+# Global locals
+locals:
+  namespace: acme
+  environment: prod
+
+terraform:
+  # Terraform-scope locals (inherit from global)
+  locals:
+    backend_bucket: "{{ .locals.namespace }}-{{ .locals.environment }}-tfstate"
+
+  components:
+    terraform:
+      vpc:
+        # Component-level locals (inherit from terraform scope)
+        locals:
+          component_name: vpc
+          full_name: "{{ .locals.namespace }}-{{ .locals.component_name }}"
+        vars:
+          name: "{{ .locals.full_name }}"
+```
+
+## Inspecting Locals with `atmos describe locals`
+
+To see the resolved locals for any component, use the new `describe locals` command:
+
+```bash
+atmos describe locals vpc -s prod-ue2
+```
+
+<Terminal title="atmos describe locals vpc -s prod-ue2">
+```yaml
+namespace: acme
+environment: prod
+stage: us-east-1
+name_prefix: acme-prod
+full_name: acme-prod-us-east-1
+backend_bucket: acme-prod-tfstate
+component_name: vpc
+tags:
+  Environment: prod
+  Namespace: acme
+```
+</Terminal>
+
+### Provenance Tracking
+
+Add `--provenance` to see exactly where each local was defined:
+
+```bash
+atmos describe locals vpc -s prod-ue2 --provenance
+```
+
+<Terminal title="atmos describe locals vpc -s prod-ue2 --provenance">
+```yaml
+namespace: acme           # ● [1] stacks/prod/us-east-1.yaml:4
+environment: prod         # ● [1] stacks/prod/us-east-1.yaml:5
+stage: us-east-1         # ● [1] stacks/prod/us-east-1.yaml:6
+name_prefix: acme-prod   # ● [1] stacks/prod/us-east-1.yaml:7 (computed)
+full_name: acme-prod-us-east-1  # ● [1] stacks/prod/us-east-1.yaml:8 (computed)
+backend_bucket: acme-prod-tfstate  # ○ [2] terraform section:12 (computed)
+component_name: vpc      # ○ [3] component section:18
+tags:                    # ● [1] stacks/prod/us-east-1.yaml:9
+  Environment: prod      # ● [1] stacks/prod/us-east-1.yaml:10 (computed)
+  Namespace: acme        # ● [1] stacks/prod/us-east-1.yaml:11 (computed)
+```
+</Terminal>
+
+### JSON Output for Automation
+
+For scripting and automation, use JSON format:
+
+```bash
+atmos describe locals vpc -s prod-ue2 --format json
+```
+
+```json
+{
+  "locals": {
+    "namespace": "acme",
+    "environment": "prod",
+    "name_prefix": "acme-prod"
+  },
+  "metadata": {
+    "component": "vpc",
+    "stack": "prod-ue2",
+    "component_type": "terraform"
+  }
+}
+```
+
+## Why File-Scoped?
+
+You might wonder why locals don't inherit across imports like `vars` do. The design is intentional:
+
+1. **Predictability** - You know exactly what locals are available by looking at the current file
+2. **No hidden dependencies** - Locals won't mysteriously change based on import order
+3. **Safer refactoring** - Renaming a local in one file won't break other files
+4. **Clear separation** - Use `vars` for values that should propagate; use `locals` for file-internal convenience
+
+## Best Practices
+
+### Use locals for DRY configuration within a file
+
+```yaml
+locals:
+  common_tags:
+    Team: platform
+    CostCenter: infrastructure
+
+components:
+  terraform:
+    vpc:
+      vars:
+        tags: "{{ .locals.common_tags }}"
+    eks:
+      vars:
+        tags: "{{ .locals.common_tags }}"
+```
+
+### Build complex values from simple ones
+
+```yaml
+locals:
+  namespace: acme
+  environment: prod
+  region: us-east-1
+  # Compose complex values
+  resource_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}-{{ .locals.region }}"
+  s3_bucket: "{{ .locals.resource_prefix }}-artifacts"
+  dynamodb_table: "{{ .locals.resource_prefix }}-state-lock"
+```
+
+### Keep locals close to their usage
+
+Define locals at the appropriate scope level - don't put everything at the global level:
+
+```yaml
+# Global - used everywhere
+locals:
+  namespace: acme
+
+terraform:
+  # Terraform-specific - only used by terraform components
+  locals:
+    state_bucket: "{{ .locals.namespace }}-tfstate"
+
+  components:
+    terraform:
+      vpc:
+        # Component-specific - only used by this component
+        locals:
+          vpc_name: "{{ .locals.namespace }}-vpc"
+```
+
+## Get Started
+
+File-scoped locals are available now. Try them in your stack configurations:
+
+```yaml
+locals:
+  project: myproject
+  env: dev
+
+vars:
+  name: "{{ .locals.project }}-{{ .locals.env }}"
+```
+
+For complete documentation, see [Locals in Stack Configuration](/core-concepts/stacks/locals).
+
+## Related Features
+
+- [Stack Templates](/core-concepts/stacks/templates) - Go templating in stack manifests
+- [Configuration Provenance](/cli/commands/describe/component) - Track where values come from
+- [YAML Functions](/core-concepts/stacks/yaml-functions) - Dynamic configuration with `!terraform.output`, `!env`, etc.
+
+We'd love to hear how you're using locals in your configurations. Share your patterns in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions) or open an issue if you encounter any problems.

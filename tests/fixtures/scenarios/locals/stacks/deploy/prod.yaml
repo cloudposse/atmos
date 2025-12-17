@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+import:
+  - mixins/region
+
+# Global locals for prod environment.
+locals:
+  namespace: "acme"
+  environment: "prod"
+  stage: "us-east-1"
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+  full_name: "{{ .locals.name_prefix }}-{{ .locals.stage }}"
+  tags:
+    Environment: "{{ .locals.environment }}"
+    Namespace: "{{ .locals.namespace }}"
+
+vars:
+  environment: "{{ .locals.environment }}"
+  stage: "{{ .locals.stage }}"
+
+terraform:
+  locals:
+    tf_specific: "terraform-only"
+    backend_bucket: "{{ .locals.namespace }}-{{ .locals.environment }}-tfstate"
+  backend_type: s3
+  backend:
+    s3:
+      encrypt: true
+      bucket: "{{ .locals.backend_bucket }}"
+      key: "terraform.tfstate"
+      region: "us-east-1"
+
+components:
+  terraform:
+    mock/primary:
+      metadata:
+        component: mock
+      locals:
+        instance_id: "primary"
+        app_name: "{{ .locals.name_prefix }}-mock-{{ .locals.instance_id }}"
+      vars:
+        foo: "{{ .locals.app_name }}"
+        bar: "{{ .locals.environment }}"
+        baz: "{{ .locals.instance_id }}"
+        tags: "{{ .locals.tags }}"
