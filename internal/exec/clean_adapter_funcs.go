@@ -32,35 +32,11 @@ func ExecuteDescribeStacksForClean(
 		nil, nil, false, false, false, false, nil, nil)
 }
 
-// CollectComponentsDirectoryObjectsForClean wraps CollectComponentsDirectoryObjects.
+// CollectComponentsDirectoryObjectsForClean delegates to pkg/terraform/clean.CollectComponentsDirectoryObjects.
 func CollectComponentsDirectoryObjectsForClean(basePath string, componentPaths []string, patterns []string) ([]tfclean.Directory, error) {
 	defer perf.Track(nil, "exec.CollectComponentsDirectoryObjectsForClean")()
 
-	// Convert between the types.
-	dirs, err := CollectComponentsDirectoryObjects(basePath, componentPaths, patterns)
-	if err != nil {
-		return nil, err
-	}
-	// Convert Directory to tfclean.Directory.
-	result := make([]tfclean.Directory, len(dirs))
-	for i, d := range dirs {
-		files := make([]tfclean.ObjectInfo, len(d.Files))
-		for j, f := range d.Files {
-			files[j] = tfclean.ObjectInfo{
-				FullPath:     f.FullPath,
-				RelativePath: f.RelativePath,
-				Name:         f.Name,
-				IsDir:        f.IsDir,
-			}
-		}
-		result[i] = tfclean.Directory{
-			Name:         d.Name,
-			FullPath:     d.FullPath,
-			RelativePath: d.RelativePath,
-			Files:        files,
-		}
-	}
-	return result, nil
+	return tfclean.CollectComponentsDirectoryObjects(basePath, componentPaths, patterns)
 }
 
 // ConstructTerraformComponentVarfileNameForClean exports the varfile name constructor for clean.
@@ -77,9 +53,9 @@ func ConstructTerraformComponentPlanfileNameForClean(info *schema.ConfigAndStack
 	return constructTerraformComponentPlanfileName(info)
 }
 
-// GetAllStacksComponentsPathsForClean exports the stacks component paths getter for clean.
+// GetAllStacksComponentsPathsForClean delegates to pkg/terraform/clean.GetAllStacksComponentsPaths.
 func GetAllStacksComponentsPathsForClean(stacksMap map[string]any) []string {
 	defer perf.Track(nil, "exec.GetAllStacksComponentsPathsForClean")()
 
-	return getAllStacksComponentsPaths(stacksMap)
+	return tfclean.GetAllStacksComponentsPaths(stacksMap)
 }
