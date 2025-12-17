@@ -4,8 +4,10 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestListAffectedCommand tests the affected command structure.
@@ -433,4 +435,143 @@ func TestAffectedOptions_ContentFlags(t *testing.T) {
 			assert.Equal(t, tc.expectedExcludeLocked, tc.opts.ExcludeLocked)
 		})
 	}
+}
+
+// TestAffectedOptions_FullOptions tests that AffectedOptions can be fully populated.
+func TestAffectedOptions_FullOptions(t *testing.T) {
+	t.Run("all fields populated", func(t *testing.T) {
+		opts := &AffectedOptions{
+			Format:            "json",
+			Columns:           []string{"Component", "Stack", "Type"},
+			Delimiter:         "|",
+			Sort:              "Stack:asc,Component:desc",
+			Ref:               "refs/heads/develop",
+			SHA:               "deadbeef",
+			RepoPath:          "/custom/repo/path",
+			SSHKeyPath:        "/home/user/.ssh/id_rsa",
+			SSHKeyPassword:    "password123",
+			CloneTargetRef:    true,
+			IncludeDependents: true,
+			Stack:             "us-east-*",
+			ExcludeLocked:     true,
+			ProcessTemplates:  true,
+			ProcessFunctions:  true,
+			Skip:              []string{"component1", "component2", "component3"},
+		}
+
+		// Verify all fields.
+		assert.Equal(t, "json", opts.Format)
+		assert.Len(t, opts.Columns, 3)
+		assert.Equal(t, "|", opts.Delimiter)
+		assert.Equal(t, "Stack:asc,Component:desc", opts.Sort)
+		assert.Equal(t, "refs/heads/develop", opts.Ref)
+		assert.Equal(t, "deadbeef", opts.SHA)
+		assert.Equal(t, "/custom/repo/path", opts.RepoPath)
+		assert.Equal(t, "/home/user/.ssh/id_rsa", opts.SSHKeyPath)
+		assert.Equal(t, "password123", opts.SSHKeyPassword)
+		assert.True(t, opts.CloneTargetRef)
+		assert.True(t, opts.IncludeDependents)
+		assert.Equal(t, "us-east-*", opts.Stack)
+		assert.True(t, opts.ExcludeLocked)
+		assert.True(t, opts.ProcessTemplates)
+		assert.True(t, opts.ProcessFunctions)
+		assert.Len(t, opts.Skip, 3)
+	})
+}
+
+// TestAffectedCommandSubcommand tests that the affected command is properly configured.
+func TestAffectedCommandSubcommand(t *testing.T) {
+	t.Run("command is subcommand of list", func(t *testing.T) {
+		// Check that affectedCmd exists and can be used.
+		assert.NotNil(t, affectedCmd)
+		assert.Equal(t, "affected", affectedCmd.Use)
+	})
+
+	t.Run("command has expected flags count", func(t *testing.T) {
+		// Count the number of flags registered.
+		flagCount := 0
+		affectedCmd.Flags().VisitAll(func(f *pflag.Flag) {
+			flagCount++
+		})
+		// Should have all the flags registered.
+		assert.Greater(t, flagCount, 10, "Should have many flags registered")
+	})
+}
+
+// TestAffectedFlagDefaults tests the default values of flags.
+func TestAffectedFlagDefaults(t *testing.T) {
+	t.Run("format default is empty", func(t *testing.T) {
+		flag := affectedCmd.Flags().Lookup("format")
+		require.NotNil(t, flag)
+		assert.Equal(t, "", flag.DefValue)
+	})
+
+	t.Run("delimiter default is empty", func(t *testing.T) {
+		flag := affectedCmd.Flags().Lookup("delimiter")
+		require.NotNil(t, flag)
+		assert.Equal(t, "", flag.DefValue)
+	})
+
+	t.Run("clone-target-ref default is false", func(t *testing.T) {
+		flag := affectedCmd.Flags().Lookup("clone-target-ref")
+		require.NotNil(t, flag)
+		assert.Equal(t, "false", flag.DefValue)
+	})
+
+	t.Run("include-dependents default is false", func(t *testing.T) {
+		flag := affectedCmd.Flags().Lookup("include-dependents")
+		require.NotNil(t, flag)
+		assert.Equal(t, "false", flag.DefValue)
+	})
+
+	t.Run("exclude-locked default is false", func(t *testing.T) {
+		flag := affectedCmd.Flags().Lookup("exclude-locked")
+		require.NotNil(t, flag)
+		assert.Equal(t, "false", flag.DefValue)
+	})
+
+	t.Run("process-templates default is true", func(t *testing.T) {
+		flag := affectedCmd.Flags().Lookup("process-templates")
+		require.NotNil(t, flag)
+		assert.Equal(t, "true", flag.DefValue)
+	})
+
+	t.Run("process-functions default is true", func(t *testing.T) {
+		flag := affectedCmd.Flags().Lookup("process-functions")
+		require.NotNil(t, flag)
+		assert.Equal(t, "true", flag.DefValue)
+	})
+}
+
+// TestAffectedFlagShorthands tests flag shorthand configurations.
+func TestAffectedFlagShorthands(t *testing.T) {
+	flagsWithShorthands := map[string]string{
+		"format": "f",
+		"stack":  "s",
+	}
+
+	for flagName, expectedShorthand := range flagsWithShorthands {
+		t.Run(flagName+" has shorthand "+expectedShorthand, func(t *testing.T) {
+			flag := affectedCmd.Flags().Lookup(flagName)
+			require.NotNil(t, flag, "Flag %s should exist", flagName)
+			assert.Equal(t, expectedShorthand, flag.Shorthand, "Flag %s shorthand should be %s", flagName, expectedShorthand)
+		})
+	}
+
+	t.Run("delimiter has no shorthand", func(t *testing.T) {
+		flag := affectedCmd.Flags().Lookup("delimiter")
+		require.NotNil(t, flag)
+		assert.Empty(t, flag.Shorthand, "delimiter should not have a shorthand")
+	})
+}
+
+// TestAffectedCommandLong tests that the command has a proper long description.
+func TestAffectedCommandLong(t *testing.T) {
+	t.Run("long description mentions Git", func(t *testing.T) {
+		assert.Contains(t, affectedCmd.Long, "Git")
+	})
+
+	t.Run("short description is not empty", func(t *testing.T) {
+		assert.NotEmpty(t, affectedCmd.Short)
+	})
 }

@@ -469,6 +469,176 @@ func TestTableAndDataAffectedColumns(t *testing.T) {
 	})
 }
 
+func TestBuildAffectedFilters_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name       string
+		filterSpec string
+		expectNil  bool
+		expectLen  int
+	}{
+		{
+			name:       "filter with multiple colons uses first",
+			filterSpec: "component:vpc:extra",
+			expectNil:  false,
+			expectLen:  1,
+		},
+		{
+			name:       "filter with spaces",
+			filterSpec: "stack:dev stack",
+			expectNil:  false,
+			expectLen:  1,
+		},
+		{
+			name:       "filter with special characters",
+			filterSpec: "component:vpc-*",
+			expectNil:  false,
+			expectLen:  1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := buildAffectedFilters(tt.filterSpec)
+			require.NoError(t, err)
+
+			if tt.expectNil {
+				assert.Nil(t, result)
+			} else {
+				assert.Len(t, result, tt.expectLen)
+			}
+		})
+	}
+}
+
+func TestBuildAffectedSorters_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		sortSpec  string
+		columns   []column.Config
+		expectNil bool
+		expectLen int
+	}{
+		{
+			name:      "descending sort",
+			sortSpec:  "Stack:desc",
+			columns:   []column.Config{{Name: "Stack", Value: "{{ .stack }}"}},
+			expectNil: false,
+			expectLen: 1,
+		},
+		{
+			name:      "multiple sort columns",
+			sortSpec:  "Stack:asc,Component:desc",
+			columns:   []column.Config{{Name: "Stack", Value: "{{ .stack }}"}, {Name: "Component", Value: "{{ .component }}"}},
+			expectNil: false,
+			expectLen: 2,
+		},
+		{
+			name:      "empty columns list",
+			sortSpec:  "",
+			columns:   []column.Config{},
+			expectNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := buildAffectedSorters(tt.sortSpec, tt.columns)
+			require.NoError(t, err)
+
+			if tt.expectNil {
+				assert.Nil(t, result)
+			} else {
+				assert.Len(t, result, tt.expectLen)
+			}
+		})
+	}
+}
+
+func TestParseAffectedColumnsFlag_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		columnsFlag []string
+		expectedLen int
+	}{
+		{
+			name:        "column with complex template",
+			columnsFlag: []string{"Status={{ if .enabled }}enabled{{ else }}disabled{{ end }}"},
+			expectedLen: 1,
+		},
+		{
+			name:        "column with dots in value",
+			columnsFlag: []string{"Info={{ .component }}.{{ .stack }}"},
+			expectedLen: 1,
+		},
+		{
+			name:        "column with unicode",
+			columnsFlag: []string{"状态={{ .status }}"},
+			expectedLen: 1,
+		},
+		{
+			name:        "all invalid columns return defaults",
+			columnsFlag: []string{"invalid1", "invalid2", "invalid3"},
+			expectedLen: len(tableAffectedColumns),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseAffectedColumnsFlag(tt.columnsFlag)
+			require.NoError(t, err)
+			assert.Len(t, result, tt.expectedLen)
+		})
+	}
+}
+
+func TestSelectRemoteRef_Precedence(t *testing.T) {
+	// Test that SHA always takes precedence, then ref, then default.
+	t.Run("SHA precedence is absolute", func(t *testing.T) {
+		result := selectRemoteRef("sha123", "refs/heads/main")
+		assert.Equal(t, "sha123", result)
+	})
+
+	t.Run("ref used when no SHA", func(t *testing.T) {
+		result := selectRemoteRef("", "refs/heads/feature")
+		assert.Equal(t, "refs/heads/feature", result)
+	})
+
+	t.Run("default when nothing provided", func(t *testing.T) {
+		result := selectRemoteRef("", "")
+		assert.Equal(t, "refs/remotes/origin/HEAD", result)
+	})
+}
+
+func TestSetRefNames_Combinations(t *testing.T) {
+	t.Run("RepoPath always overrides other settings", func(t *testing.T) {
+		result := &affectedResult{}
+		head := plumbing.NewReferenceFromStrings("refs/heads/feature", "abc123")
+		opts := &AffectedCommandOptions{
+			RepoPath: "/some/path",
+			SHA:      "sha123",
+			Ref:      "refs/heads/main",
+		}
+
+		setRefNames(result, opts, head)
+
+		assert.Equal(t, "HEAD", result.LocalRef)
+		assert.Equal(t, "/some/path", result.RemoteRef)
+	})
+
+	t.Run("SHA takes precedence over ref in remote", func(t *testing.T) {
+		result := &affectedResult{}
+		opts := &AffectedCommandOptions{
+			SHA: "sha456",
+			Ref: "refs/heads/main",
+		}
+
+		setRefNames(result, opts, nil)
+
+		assert.Equal(t, "", result.LocalRef)
+		assert.Equal(t, "sha456", result.RemoteRef)
+	})
+}
+
 func TestAffectedCommandOptions(t *testing.T) {
 	t.Run("AffectedCommandOptions struct initialization", func(t *testing.T) {
 		opts := &AffectedCommandOptions{
