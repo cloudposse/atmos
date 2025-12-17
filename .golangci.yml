@@ -67,6 +67,7 @@ linters:
             - "!**/pkg/auth/types/aws_credentials.go"
             - "!**/pkg/auth/types/github_oidc_credentials.go"
             - "!**/internal/aws_utils/**"
+            - "!**/pkg/aws/identity/**"
             - "!**/pkg/provisioner/backend/**"
             - "$test"
           deny:
