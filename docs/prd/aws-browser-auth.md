@@ -97,8 +97,8 @@ Two new events are logged:
 
 | ID | Requirement | Priority |
 |----|-------------|----------|
-| NFR-1 | No new Go dependencies (use AWS CLI wrapper) | P0 |
-| NFR-2 | Unit tests with mocked CLI executor | P0 |
+| NFR-1 | Native SDK implementation (no AWS CLI dependency) | P0 |
+| NFR-2 | Unit tests with mocked HTTP server and OAuth flow | P0 |
 | NFR-3 | Documentation in Docusaurus | P0 |
 | NFR-4 | Error messages include actionable hints | P1 |
 
@@ -207,8 +207,7 @@ Authorization code: █
 
 ### User Requirements
 
-1. **AWS CLI 2.32.0+** must be installed
-2. **IAM Permissions**: Principal must have `SignInLocalDevelopmentAccess` managed policy or equivalent:
+1. **IAM Permissions**: Principal must have `SignInLocalDevelopmentAccess` managed policy or equivalent:
    ```json
    {
      "Version": "2012-10-17",
@@ -224,7 +223,8 @@ Authorization code: █
      ]
    }
    ```
-3. **Console Access**: IAM user must have console sign-in enabled
+2. **Console Access**: IAM user must have console sign-in enabled
+3. **Browser Access**: Default browser must be available (or use remote mode for headless)
 
 ### Organizational Controls
 
@@ -233,35 +233,42 @@ Authorization code: █
 
 ## Implementation Approach
 
-### Recommended: AWS CLI Wrapper
+### Recommended: Native AWS SDK Integration
 
-Wrap the AWS CLI `aws login` command rather than implementing OAuth2 natively:
+Implement the OAuth2 Authorization Code flow with PKCE directly using the AWS SDK for Go. The AWS SDK supports this authentication flow natively.
+
+**Technical Implementation:**
+1. Start local HTTP server on `http://127.0.0.1:<port>/oauth/callback`
+2. Generate PKCE code verifier (random 32-byte string, base64url encoded)
+3. Generate code challenge (SHA-256 hash of verifier, base64url encoded)
+4. Open browser to authorization URL:
+   ```
+   https://{region}.signin.aws.amazon.com/authorize?
+     client_id=arn:aws:signin:::devtools/same-device
+     &redirect_uri=http://127.0.0.1:{port}/oauth/callback
+     &response_type=code
+     &code_challenge={challenge}
+     &code_challenge_method=S256
+     &scope=openid
+   ```
+5. Receive authorization code via callback
+6. Exchange code for tokens via AWS signin service
+7. Use tokens to obtain temporary AWS credentials
 
 **Advantages:**
-- AWS CLI handles credential refresh (15-minute rotation)
-- Maintains compatibility as AWS evolves the protocol
-- Credential caching follows AWS conventions
-- Simpler implementation and maintenance
+- No external AWS CLI dependency
+- Full control over UX and error handling
+- Follows existing atmos auth patterns (similar to SSO device flow)
+- SDK handles token refresh and credential management
 
 **Disadvantages:**
-- Requires AWS CLI 2.32.0+ as external dependency
-- Less control over the authentication UX
+- More code to implement and maintain
+- Must handle PKCE flow ourselves
 
-### Alternative: Native OAuth2 Implementation
-
-Implement the OAuth2 + PKCE flow directly in Go:
-
-**Advantages:**
-- No external dependency
-- Full control over UX
-- Could potentially work without AWS CLI
-
-**Disadvantages:**
-- Must implement credential refresh mechanism
-- Token endpoint details not fully documented
-- Higher maintenance burden
-
-**Recommendation:** Start with AWS CLI wrapper approach. Consider native implementation if CLI dependency becomes problematic.
+**Note:** The AWS CLI wrapper approach was considered but rejected because:
+- Adds external dependency (AWS CLI 2.32.0+)
+- Less control over authentication UX
+- SDK already supports this flow
 
 ## Security Considerations
 
