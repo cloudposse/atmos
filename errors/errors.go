@@ -658,6 +658,12 @@ var (
 	// Interactive prompt errors.
 	ErrInteractiveModeNotAvailable = errors.New("interactive mode not available")
 	ErrNoOptionsAvailable          = errors.New("no options available")
+
+	// Locals-related errors.
+	ErrLocalsInvalidType       = errors.New("locals must be a map")
+	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
+	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
+	ErrLocalsResolution        = errors.New("failed to resolve local")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
