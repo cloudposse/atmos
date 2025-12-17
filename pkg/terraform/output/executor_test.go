@@ -454,7 +454,7 @@ func TestWrapErrorWithStderr(t *testing.T) {
 func TestSummarizeValue(t *testing.T) {
 	// Create a string that's exactly 101 characters to test truncation at 100.
 	longString := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" // 100 a's
-	longString += "b"                                                                                                // 101 chars total
+	longString += "b"                                                                                                    // 101 chars total
 
 	tests := []struct {
 		name     string
