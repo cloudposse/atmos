@@ -672,6 +672,12 @@ var (
 	ErrECRInvalidRegistry  = errors.New("invalid ECR registry URL")
 	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
 	ErrDockerConfigRead    = errors.New("failed to read Docker config")
+
+	// Locals-related errors.
+	ErrLocalsInvalidType       = errors.New("locals must be a map")
+	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
+	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
+	ErrLocalsResolution        = errors.New("failed to resolve local")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

@@ -68,6 +68,7 @@ const (
 	HooksSectionName                  = "hooks"
 	VarsSectionName                   = "vars"
 	SettingsSectionName               = "settings"
+	LocalsSectionName                 = "locals"
 	EnvSectionName                    = "env"
 	BackendSectionName                = "backend"
 	BackendTypeSectionName            = "backend_type"
