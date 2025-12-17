@@ -28,7 +28,7 @@ terraform:
       encrypt: true
       bucket: "{{ .locals.backend_bucket }}"
       key: "terraform.tfstate"
-      region: "us-east-1"
+      region: "{{ .locals.stage }}"
 
 components:
   terraform:

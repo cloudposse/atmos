@@ -1,11 +1,14 @@
 package locals
 
 import (
+	"errors"
 	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestResolver_SimpleResolution(t *testing.T) {
@@ -82,6 +85,7 @@ func TestResolver_CycleDetection(t *testing.T) {
 	_, err := resolver.Resolve(nil)
 
 	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrLocalsCircularDep), "error should be ErrLocalsCircularDep sentinel")
 	assert.Contains(t, err.Error(), "circular dependency")
 	// The cycle should be detected (order may vary due to map iteration).
 	assert.Contains(t, err.Error(), "→")

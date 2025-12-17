@@ -204,7 +204,7 @@ components:
 ### Error Handling
 
 1. **Reference to undefined local**: Clear error message indicating the local doesn't exist
-   ```
+   ```text
    Error: undefined local "foo" referenced in stacks/deploy/prod.yaml
 
    Available locals in this file:
@@ -215,7 +215,7 @@ components:
    ```
 
 2. **Reference to local from imported file**: Clear error explaining locals don't inherit
-   ```
+   ```text
    Error: undefined local "shared_value" referenced in stacks/deploy/prod.yaml
 
    Hint: "shared_value" is defined in stacks/_defaults.yaml but locals do not
@@ -224,7 +224,7 @@ components:
    ```
 
 3. **Circular reference**: Detected and reported with clear dependency chain
-   ```
+   ```text
    Error: circular dependency in locals at stacks/deploy/prod.yaml
 
    Dependency cycle detected:
@@ -811,25 +811,9 @@ func (r *LocalsResolver) buildDependencyGraph() error {
 
 // topologicalSort returns locals in resolution order, detecting cycles.
 func (r *LocalsResolver) topologicalSort() ([]string, error) {
-    // Kahn's algorithm with cycle detection
+    // Kahn's algorithm with cycle detection.
+    // inDegree[x] = number of locals that x depends on (within this scope).
     inDegree := make(map[string]int)
-    for name := range r.locals {
-        inDegree[name] = 0
-    }
-
-    // Count incoming edges
-    for _, deps := range r.dependencies {
-        for _, dep := range deps {
-            // Only count if dep is in current scope (not parent)
-            if _, exists := r.locals[dep]; exists {
-                inDegree[dep]++ // Note: reversed - dep needs to come before dependent
-            }
-        }
-    }
-
-    // Actually, let's use standard topological sort
-    // inDegree[x] = number of locals that x depends on (within this scope)
-    inDegree = make(map[string]int)
     for name, deps := range r.dependencies {
         count := 0
         for _, dep := range deps {

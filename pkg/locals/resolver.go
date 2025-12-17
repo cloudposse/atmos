@@ -238,16 +238,21 @@ func (r *Resolver) processTopologicalOrder(queue []string, inDegree map[string]i
 
 // updateDependents reduces in-degree of nodes that depend on the given node.
 func (r *Resolver) updateDependents(name string, queue []string, inDegree map[string]int) []string {
+	// Collect all newly available nodes first, then sort once.
+	var newlyAvailable []string
 	for dependent, deps := range r.dependencies {
 		for _, dep := range deps {
 			if dep == name {
 				inDegree[dependent]--
 				if inDegree[dependent] == 0 {
-					queue = append(queue, dependent)
-					sort.Strings(queue)
+					newlyAvailable = append(newlyAvailable, dependent)
 				}
 			}
 		}
+	}
+	if len(newlyAvailable) > 0 {
+		queue = append(queue, newlyAvailable...)
+		sort.Strings(queue) // Sort once after all additions.
 	}
 	return queue
 }

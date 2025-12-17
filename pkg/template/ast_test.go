@@ -360,6 +360,14 @@ func TestExtractFieldRefs_RangeWithElse(t *testing.T) {
 	require.NoError(t, err)
 	// Should capture .items, .name (within range context), .empty
 	assert.NotEmpty(t, refs)
+	// Verify specific expected references.
+	refPaths := make(map[string]bool)
+	for _, ref := range refs {
+		refPaths[ref.String()] = true
+	}
+	assert.True(t, refPaths["items"], "should contain reference to .items")
+	assert.True(t, refPaths["name"], "should contain reference to .name")
+	assert.True(t, refPaths["empty"], "should contain reference to .empty")
 }
 
 func TestExtractFieldRefs_WithBlock(t *testing.T) {
@@ -429,6 +437,6 @@ func TestExtractFieldRefs_ElseIfChain(t *testing.T) {
 	// Test else-if chain parsing.
 	refs, err := ExtractFieldRefs(`{{ if .a }}1{{ else if .b }}2{{ else if .c }}3{{ else }}{{ .d }}{{ end }}`)
 	require.NoError(t, err)
-	// Should find a, b, c, d
-	assert.GreaterOrEqual(t, len(refs), 4)
+	// Should find exactly a, b, c, d.
+	assert.Len(t, refs, 4, "else-if chain should have exactly 4 references")
 }
