@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	tfclean "github.com/cloudposse/atmos/pkg/terraform/clean"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -136,7 +137,7 @@ func TestTerraformClean_EndToEnd_NoDuplicateDeletions(t *testing.T) {
 	errorCount := 0
 	for _, folder := range folders {
 		for _, file := range folder.Files {
-			err := DeletePathTerraform(file.FullPath, file.Name)
+			err := tfclean.DeletePath(file.FullPath, file.Name)
 			if err != nil {
 				if !os.IsNotExist(err) {
 					t.Logf("Error deleting %s: %v", file.Name, err)

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	tfclean "github.com/cloudposse/atmos/pkg/terraform/clean"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -77,7 +78,7 @@ func TestDeletePathTerraform_HandlesNonExistentFiles(t *testing.T) {
 	nonExistentPath := filepath.Join(tempDir, "non-existent-file.txt")
 
 	// Should return an error for non-existent file.
-	err := DeletePathTerraform(nonExistentPath, "test/non-existent-file.txt")
+	err := tfclean.DeletePath(nonExistentPath, "test/non-existent-file.txt")
 	assert.Error(t, err)
 	assert.True(t, os.IsNotExist(err))
 }
@@ -95,7 +96,7 @@ func TestDeletePathTerraform_DeletesExistingFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Delete the file.
-	err = DeletePathTerraform(testFile, "test/test-file.txt")
+	err = tfclean.DeletePath(testFile, "test/test-file.txt")
 	assert.NoError(t, err)
 
 	// Verify file no longer exists.
@@ -119,7 +120,7 @@ func TestDeletePathTerraform_DeletesDirectory(t *testing.T) {
 	assert.True(t, info.IsDir())
 
 	// Delete the directory.
-	err = DeletePathTerraform(testDir, "test/test-dir")
+	err = tfclean.DeletePath(testDir, "test/test-dir")
 	assert.NoError(t, err)
 
 	// Verify directory no longer exists.
@@ -143,7 +144,7 @@ func TestDeletePathTerraform_RefusesSymlinks(t *testing.T) {
 	}
 
 	// Try to delete the symlink - should be refused.
-	err = DeletePathTerraform(symlinkPath, "test/symlink.txt")
+	err = tfclean.DeletePath(symlinkPath, "test/symlink.txt")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "refusing to delete symbolic link")
 
