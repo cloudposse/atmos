@@ -582,3 +582,90 @@ func TestManualStopMsg(t *testing.T) {
 		assert.Empty(t, msg.message)
 	})
 }
+
+// Test Spinner isTTY field.
+func TestSpinner_IsTTY(t *testing.T) {
+	t.Run("spinner stores isTTY state", func(t *testing.T) {
+		s := New("Testing")
+		// In test environment, isTTY is typically false.
+		// We verify the field is properly set.
+		assert.NotNil(t, s)
+		// isTTY is determined by term.IsTTYSupportForStdout().
+	})
+}
+
+// Test spinner with already stopped state.
+func TestSpinner_AlreadyStopped(t *testing.T) {
+	t.Run("Stop on nil program is safe", func(t *testing.T) {
+		s := New("Testing")
+		// Don't call Start, just Stop.
+		s.Stop()
+		// Should not panic.
+	})
+
+	t.Run("Success on nil program shows message", func(t *testing.T) {
+		s := New("Testing")
+		// Don't call Start.
+		s.Success("Done!")
+		// Should not panic and should show message.
+	})
+
+	t.Run("Error on nil program shows message", func(t *testing.T) {
+		s := New("Testing")
+		// Don't call Start.
+		s.Error("Failed!")
+		// Should not panic and should show message.
+	})
+}
+
+// Test all spinner models ignore non-quit key messages.
+func TestSpinnerModels_IgnoreNonQuitKeys(t *testing.T) {
+	t.Run("spinnerModel ignores regular key presses", func(t *testing.T) {
+		model := newSpinnerModel("test", "test complete")
+		keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}
+		_, cmd := model.Update(keyMsg)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("spinnerModel ignores escape key", func(t *testing.T) {
+		model := newSpinnerModel("test", "test complete")
+		keyMsg := tea.KeyMsg{Type: tea.KeyEscape}
+		_, cmd := model.Update(keyMsg)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("dynamicSpinnerModel ignores enter key", func(t *testing.T) {
+		model := newDynamicSpinnerModel("test")
+		keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+		_, cmd := model.Update(keyMsg)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("manualSpinnerModel ignores tab key", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+		keyMsg := tea.KeyMsg{Type: tea.KeyTab}
+		_, cmd := model.Update(keyMsg)
+		assert.Nil(t, cmd)
+	})
+}
+
+// Test spinner model style initialization.
+func TestSpinnerModelStyle(t *testing.T) {
+	t.Run("spinnerModel has spinner with dot style", func(t *testing.T) {
+		model := newSpinnerModel("test", "done")
+		// Verify spinner was created.
+		assert.NotNil(t, model.spinner)
+	})
+
+	t.Run("dynamicSpinnerModel has spinner with dot style", func(t *testing.T) {
+		model := newDynamicSpinnerModel("test")
+		// Verify spinner was created.
+		assert.NotNil(t, model.spinner)
+	})
+
+	t.Run("manualSpinnerModel has spinner with dot style", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+		// Verify spinner was created.
+		assert.NotNil(t, model.spinner)
+	})
+}

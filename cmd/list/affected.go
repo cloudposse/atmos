@@ -48,13 +48,13 @@ var affectedCmd = &cobra.Command{
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration.
-		if err := checkAtmosConfig(); err != nil {
-			return err
-		}
-
 		// Parse flags using StandardParser with Viper precedence.
 		v := viper.GetViper()
+
+		// Check Atmos configuration.
+		if err := checkAtmosConfig(cmd, v); err != nil {
+			return err
+		}
 		if err := affectedParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}

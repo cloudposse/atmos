@@ -14,6 +14,46 @@ import (
 
 // Test the functions of validate_component.go.
 
+func TestGetBasePathToUse(t *testing.T) {
+	tests := []struct {
+		name         string
+		atmosConfig  *schema.AtmosConfiguration
+		expectedPath string
+	}{
+		{
+			name: "returns BasePathAbsolute when set",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePathAbsolute: "/absolute/path",
+				BasePath:         "/relative/path",
+			},
+			expectedPath: "/absolute/path",
+		},
+		{
+			name: "returns BasePath when BasePathAbsolute is empty",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePathAbsolute: "",
+				BasePath:         "/relative/path",
+			},
+			expectedPath: "/relative/path",
+		},
+		{
+			name: "returns empty when both are empty",
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePathAbsolute: "",
+				BasePath:         "",
+			},
+			expectedPath: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getBasePathToUse(tt.atmosConfig)
+			assert.Equal(t, tt.expectedPath, result)
+		})
+	}
+}
+
 func TestFindValidationSection(t *testing.T) {
 	tests := []struct {
 		name             string
