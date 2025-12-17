@@ -83,6 +83,38 @@ The interactive selector displays all configured identities with arrow key navig
 - Configure a default identity in your `atmos.yaml`
 - Explicitly specify the identity using `--identity <name>` or environment variable
 
+## Integrations (ECR, EKS)
+
+When you authenticate with an identity, Atmos automatically triggers any **integrations** linked to that identity (when `auto_provision` is enabled, which is the default). Integrations provide client-only credential materializations for services like ECR and EKS.
+
+```yaml
+auth:
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      # ... identity config ...
+
+  integrations:
+    dev/ecr:
+      kind: aws/ecr
+      via:
+        identity: dev-admin    # Links to the identity above
+      spec:
+        registry:
+          account_id: "123456789012"
+          region: us-east-2
+```
+
+```bash
+$ atmos auth login dev-admin
+Successfully authenticated as dev-admin
+✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 11h59m)
+```
+
+Integration failures are non-blocking - your identity authentication succeeds even if an integration fails. You can retry integrations separately using [`atmos auth ecr-login`](/cli/commands/auth/ecr-login).
+
+See [ECR Authentication Tutorial](/tutorials/ecr-authentication) for detailed configuration examples.
+
 ## Notes
 
 - Prints provider, identity, account, region, and expiration when successful.
@@ -116,4 +148,6 @@ See [Azure Authentication](/tutorials/azure-authentication) for detailed Azure c
 
 ## See Also
 
+- [Auth ECR Login Command](/cli/commands/auth/ecr-login) — Login to AWS ECR registries
+- [ECR Authentication Tutorial](/tutorials/ecr-authentication) — Step-by-step ECR setup guide
 - [Auth Providers Configuration](/cli/configuration/auth/providers) — Configure AWS SSO, SAML, and OIDC providers (including IAM permissions for identity provisioning)
