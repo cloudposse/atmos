@@ -28,6 +28,10 @@ import (
 const (
 	progressBarWidth = 30
 	maxWidth         = 120
+
+	// Log field keys.
+	logKeyURI       = "uri"
+	logKeyComponent = "component"
 )
 
 var (
@@ -363,7 +367,7 @@ func handleDryRunInstall(p *pkgAtmosVendor, atmosConfig *schema.AtmosConfigurati
 	log.Debug("Entering dry-run flow for generic (non component/mixin) vendoring ", "package", p.name)
 
 	if needsCustomDetection(p.uri) {
-		log.Debug("Custom detection required for URI", "uri", p.uri)
+		log.Debug("Custom detection required for URI", logKeyURI, p.uri)
 		detector := downloader.NewCustomGitDetector(atmosConfig, "")
 		_, _, err := detector.Detect(p.uri, "")
 		if err != nil {
@@ -373,7 +377,7 @@ func handleDryRunInstall(p *pkgAtmosVendor, atmosConfig *schema.AtmosConfigurati
 			}
 		}
 	} else {
-		log.Debug("Skipping custom detection; URI already supported by go getter", "uri", p.uri)
+		log.Debug("Skipping custom detection; URI already supported by go getter", logKeyURI, p.uri)
 	}
 
 	time.Sleep(500 * time.Millisecond)
@@ -457,28 +461,33 @@ func executeInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosC
 	}
 }
 
+// handleComponentDryRunInstall handles dry-run mode for component installation.
+func handleComponentDryRunInstall(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration) installedPkgMsg {
+	if needsCustomDetection(p.uri) {
+		log.Debug("Dry-run mode: custom detection required for component (or mixin) URI", logKeyComponent, p.name, logKeyURI, p.uri)
+		detector := downloader.NewCustomGitDetector(atmosConfig, "")
+		_, _, err := detector.Detect(p.uri, "")
+		if err != nil {
+			return installedPkgMsg{
+				err:  fmt.Errorf("dry-run: detection failed for component %s: %w", p.name, err),
+				name: p.name,
+			}
+		}
+	} else {
+		log.Debug("Dry-run mode: skipping custom detection; URI already supported by go-getter", logKeyComponent, p.name, logKeyURI, p.uri)
+	}
+	time.Sleep(100 * time.Millisecond)
+	return installedPkgMsg{
+		err:  nil,
+		name: p.name,
+	}
+}
+
 // downloadComponentAndInstall downloads and installs a component package.
 func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
-			if needsCustomDetection(p.uri) {
-				log.Debug("Dry-run mode: custom detection required for component (or mixin) URI", "component", p.name, "uri", p.uri)
-				detector := downloader.NewCustomGitDetector(atmosConfig, "")
-				_, _, err := detector.Detect(p.uri, "")
-				if err != nil {
-					return installedPkgMsg{
-						err:  fmt.Errorf("dry-run: detection failed for component %s: %w", p.name, err),
-						name: p.name,
-					}
-				}
-			} else {
-				log.Debug("Dry-run mode: skipping custom detection; URI already supported by go-getter", "component", p.name, "uri", p.uri)
-			}
-			time.Sleep(100 * time.Millisecond)
-			return installedPkgMsg{
-				err:  nil,
-				name: p.name,
-			}
+			return handleComponentDryRunInstall(p, atmosConfig)
 		}
 
 		if p.IsComponent {

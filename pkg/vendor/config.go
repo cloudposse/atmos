@@ -18,35 +18,43 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// VendorConfigResult holds the result of reading a vendor config file.
+type VendorConfigResult struct {
+	Config   schema.AtmosVendorConfig
+	Found    bool
+	FilePath string
+}
+
 // ReadAndProcessVendorConfigFile reads and processes the Atmos vendoring config file `vendor.yaml`.
 func ReadAndProcessVendorConfigFile(
 	atmosConfig *schema.AtmosConfiguration,
 	vendorConfigFile string,
 	checkGlobalConfig bool,
-) (schema.AtmosVendorConfig, bool, string, error) {
-	var vendorConfig schema.AtmosVendorConfig
-	vendorConfig.Spec.Sources = []schema.AtmosVendorSource{} // Initialize empty sources slice
+) (VendorConfigResult, error) {
+	result := VendorConfigResult{}
+	result.Config.Spec.Sources = []schema.AtmosVendorSource{} // Initialize empty sources slice.
 
-	// Determine the vendor config file path
-	foundVendorConfigFile := resolveVendorConfigFilePath(atmosConfig, vendorConfigFile, checkGlobalConfig)
-	if foundVendorConfigFile == "" {
+	// Determine the vendor config file path.
+	result.FilePath = resolveVendorConfigFilePath(atmosConfig, vendorConfigFile, checkGlobalConfig)
+	if result.FilePath == "" {
 		log.Debug("Vendor config file not found", "file", vendorConfigFile)
-		return vendorConfig, false, "", nil
+		return result, nil
 	}
 
-	// Validate and process the vendor config file or directory
-	configFiles, err := getConfigFiles(foundVendorConfigFile)
+	// Validate and process the vendor config file or directory.
+	configFiles, err := getConfigFiles(result.FilePath)
 	if err != nil {
-		return vendorConfig, false, "", err
+		return result, err
 	}
 
-	// Merge all config files into a single vendor configuration
-	vendorConfig, err = mergeVendorConfigFiles(configFiles)
+	// Merge all config files into a single vendor configuration.
+	result.Config, err = mergeVendorConfigFiles(configFiles)
 	if err != nil {
-		return vendorConfig, false, "", err
+		return result, err
 	}
 
-	return vendorConfig, true, foundVendorConfigFile, nil
+	result.Found = true
+	return result, nil
 }
 
 // resolveVendorConfigFilePath resolves the vendor config file path.
@@ -163,29 +171,29 @@ func processVendorImports(
 
 		allImports = append(allImports, imp)
 
-		vendorConfig, _, _, err := ReadAndProcessVendorConfigFile(atmosConfig, imp, false)
+		vendorResult, err := ReadAndProcessVendorConfigFile(atmosConfig, imp, false)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		if u.SliceContainsString(vendorConfig.Spec.Imports, imp) {
+		if u.SliceContainsString(vendorResult.Config.Spec.Imports, imp) {
 			return nil, nil, fmt.Errorf("%w file '%s'", ErrVendorConfigSelfImport, imp)
 		}
 
-		if len(vendorConfig.Spec.Sources) == 0 && len(vendorConfig.Spec.Imports) == 0 {
+		if len(vendorResult.Config.Spec.Sources) == 0 && len(vendorResult.Config.Spec.Imports) == 0 {
 			return nil, nil, fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, imp)
 		}
 
-		mergedSources, allImports, err = processVendorImports(atmosConfig, imp, vendorConfig.Spec.Imports, mergedSources, allImports)
+		mergedSources, allImports, err = processVendorImports(atmosConfig, imp, vendorResult.Config.Spec.Imports, mergedSources, allImports)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		for i := range vendorConfig.Spec.Sources {
-			vendorConfig.Spec.Sources[i].File = imp
+		for i := range vendorResult.Config.Spec.Sources {
+			vendorResult.Config.Spec.Sources[i].File = imp
 		}
 
-		mergedSources = append(mergedSources, vendorConfig.Spec.Sources...)
+		mergedSources = append(mergedSources, vendorResult.Config.Spec.Sources...)
 	}
 
 	return append(mergedSources, sources...), allImports, nil
@@ -258,33 +266,55 @@ func validateTagsAndComponents(
 	return nil
 }
 
+// resolveComponentBasePath returns the base path for a component type.
+func resolveComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentType string) (string, error) {
+	switch componentType {
+	case cfg.TerraformComponentType:
+		return atmosConfig.Components.Terraform.BasePath, nil
+	case cfg.HelmfileComponentType:
+		return atmosConfig.Components.Helmfile.BasePath, nil
+	case cfg.PackerComponentType:
+		return atmosConfig.Components.Packer.BasePath, nil
+	default:
+		return "", fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
+	}
+}
+
+// loadComponentConfig reads and unmarshals the component config file.
+func loadComponentConfig(componentConfigFile string) (schema.VendorComponentConfig, error) {
+	var componentConfig schema.VendorComponentConfig
+	componentConfigFileContent, err := os.ReadFile(componentConfigFile)
+	if err != nil {
+		return componentConfig, err
+	}
+	componentConfig, err = u.UnmarshalYAML[schema.VendorComponentConfig](string(componentConfigFileContent))
+	if err != nil {
+		return componentConfig, err
+	}
+	if componentConfig.Kind != "ComponentVendorConfig" {
+		return componentConfig, fmt.Errorf("%w: '%s' in file '%s'", ErrInvalidComponentKind, componentConfig.Kind, cfg.ComponentVendorConfigFileName)
+	}
+	return componentConfig, nil
+}
+
 // ReadAndProcessComponentVendorConfigFile reads and processes the component vendoring config file `component.yaml`.
 func ReadAndProcessComponentVendorConfigFile(
 	atmosConfig *schema.AtmosConfiguration,
 	component string,
 	componentType string,
 ) (schema.VendorComponentConfig, string, error) {
-	var componentBasePath string
 	var componentConfig schema.VendorComponentConfig
 
-	switch componentType {
-	case cfg.TerraformComponentType:
-		componentBasePath = atmosConfig.Components.Terraform.BasePath
-	case cfg.HelmfileComponentType:
-		componentBasePath = atmosConfig.Components.Helmfile.BasePath
-	case cfg.PackerComponentType:
-		componentBasePath = atmosConfig.Components.Packer.BasePath
-	default:
-		return componentConfig, "", fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
-	}
-
-	componentPath := filepath.Join(atmosConfig.BasePath, componentBasePath, component)
-
-	dirExists, err := u.IsDirectory(componentPath)
+	componentBasePath, err := resolveComponentBasePath(atmosConfig, componentType)
 	if err != nil {
 		return componentConfig, "", err
 	}
 
+	componentPath := filepath.Join(atmosConfig.BasePath, componentBasePath, component)
+	dirExists, err := u.IsDirectory(componentPath)
+	if err != nil {
+		return componentConfig, "", err
+	}
 	if !dirExists {
 		return componentConfig, "", fmt.Errorf("%w: %s", ErrFolderNotFound, componentPath)
 	}
@@ -294,18 +324,9 @@ func ReadAndProcessComponentVendorConfigFile(
 		return componentConfig, "", err
 	}
 
-	componentConfigFileContent, err := os.ReadFile(componentConfigFile)
+	componentConfig, err = loadComponentConfig(componentConfigFile)
 	if err != nil {
 		return componentConfig, "", err
-	}
-
-	componentConfig, err = u.UnmarshalYAML[schema.VendorComponentConfig](string(componentConfigFileContent))
-	if err != nil {
-		return componentConfig, "", err
-	}
-
-	if componentConfig.Kind != "ComponentVendorConfig" {
-		return componentConfig, "", fmt.Errorf("%w: '%s' in file '%s'", ErrInvalidComponentKind, componentConfig.Kind, cfg.ComponentVendorConfigFileName)
 	}
 
 	return componentConfig, componentPath, nil
