@@ -77,6 +77,7 @@ func (s *Store) fullKey(key string) string {
 	if s.prefix == "" {
 		return key
 	}
+	//nolint:forbidigo // S3 keys use forward slashes regardless of OS, path.Join is correct here.
 	return path.Join(s.prefix, key)
 }
 
@@ -89,7 +90,7 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 	// Read data into buffer (S3 requires knowing content length or using multipart).
 	buf, err := io.ReadAll(data)
 	if err != nil {
-		return fmt.Errorf("%w: failed to read planfile data: %v", errUtils.ErrPlanfileUploadFailed, err)
+		return fmt.Errorf("%w: failed to read planfile data: %w", errUtils.ErrPlanfileUploadFailed, err)
 	}
 
 	// Upload the planfile.
@@ -100,7 +101,7 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 		ContentLength: aws.Int64(int64(len(buf))),
 	})
 	if err != nil {
-		return fmt.Errorf("%w: failed to upload planfile to S3: %v", errUtils.ErrPlanfileUploadFailed, err)
+		return fmt.Errorf("%w: failed to upload planfile to S3: %w", errUtils.ErrPlanfileUploadFailed, err)
 	}
 
 	// Upload metadata if provided.
@@ -108,7 +109,7 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 		metadataKey := fullKey + metadataSuffix
 		metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
 		if err != nil {
-			return fmt.Errorf("%w: failed to marshal metadata: %v", errUtils.ErrPlanfileUploadFailed, err)
+			return fmt.Errorf("%w: failed to marshal metadata: %w", errUtils.ErrPlanfileUploadFailed, err)
 		}
 
 		_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
@@ -119,7 +120,7 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 			ContentType:   aws.String("application/json"),
 		})
 		if err != nil {
-			return fmt.Errorf("%w: failed to upload metadata to S3: %v", errUtils.ErrPlanfileUploadFailed, err)
+			return fmt.Errorf("%w: failed to upload metadata to S3: %w", errUtils.ErrPlanfileUploadFailed, err)
 		}
 	}
 
@@ -142,7 +143,7 @@ func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *planf
 		if isNoSuchKeyError(err, noSuchKey) {
 			return nil, nil, fmt.Errorf("%w: %s", errUtils.ErrPlanfileNotFound, key)
 		}
-		return nil, nil, fmt.Errorf("%w: failed to download planfile from S3: %v", errUtils.ErrPlanfileDownloadFailed, err)
+		return nil, nil, fmt.Errorf("%w: failed to download planfile from S3: %w", errUtils.ErrPlanfileDownloadFailed, err)
 	}
 
 	// Try to load metadata.
@@ -163,7 +164,7 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 		Key:    aws.String(fullKey),
 	})
 	if err != nil {
-		return fmt.Errorf("%w: failed to delete planfile from S3: %v", errUtils.ErrPlanfileDeleteFailed, err)
+		return fmt.Errorf("%w: failed to delete planfile from S3: %w", errUtils.ErrPlanfileDeleteFailed, err)
 	}
 
 	// Try to delete metadata (ignore errors).
@@ -190,7 +191,7 @@ func (s *Store) List(ctx context.Context, prefix string) ([]planfile.PlanfileInf
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("%w: failed to list planfiles in S3: %v", errUtils.ErrPlanfileListFailed, err)
+			return nil, fmt.Errorf("%w: failed to list planfiles in S3: %w", errUtils.ErrPlanfileListFailed, err)
 		}
 
 		for _, obj := range page.Contents {

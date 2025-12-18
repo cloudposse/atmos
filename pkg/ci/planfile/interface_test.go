@@ -15,13 +15,13 @@ func TestKeyPatternGenerateKey(t *testing.T) {
 	tests := []struct {
 		name     string
 		pattern  string
-		ctx      KeyContext
+		ctx      *KeyContext
 		expected string
 	}{
 		{
 			name:    "default pattern",
 			pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan",
-			ctx: KeyContext{
+			ctx: &KeyContext{
 				Stack:     "plat-ue2-dev",
 				Component: "vpc",
 				SHA:       "abc123",
@@ -31,7 +31,7 @@ func TestKeyPatternGenerateKey(t *testing.T) {
 		{
 			name:    "pattern with branch",
 			pattern: "{{ .Branch }}/{{ .Stack }}/{{ .Component }}.tfplan",
-			ctx: KeyContext{
+			ctx: &KeyContext{
 				Stack:     "plat-ue2-dev",
 				Component: "vpc",
 				Branch:    "feature-branch",
@@ -41,7 +41,7 @@ func TestKeyPatternGenerateKey(t *testing.T) {
 		{
 			name:    "empty values stay as placeholders",
 			pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan",
-			ctx: KeyContext{
+			ctx: &KeyContext{
 				Stack:     "plat-ue2-dev",
 				Component: "vpc",
 				// SHA is empty
@@ -51,7 +51,7 @@ func TestKeyPatternGenerateKey(t *testing.T) {
 		{
 			name:    "component path",
 			pattern: "{{ .ComponentPath }}/{{ .SHA }}.tfplan",
-			ctx: KeyContext{
+			ctx: &KeyContext{
 				ComponentPath: "components/terraform/vpc",
 				SHA:           "abc123",
 			},

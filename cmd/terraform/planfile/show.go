@@ -62,38 +62,46 @@ func runShow(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Output based on format.
-	switch showFormat {
-	case "json":
+	return formatShowOutput(key, store.Name(), metadata, showFormat)
+}
+
+// formatShowOutput formats and outputs the planfile metadata in the specified format.
+func formatShowOutput(key, storeName string, metadata *planfile.Metadata, format string) error {
+	if format == "json" {
 		output, err := json.MarshalIndent(metadata, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to marshal output: %w", err)
 		}
-		data.Writeln(string(output))
-
-	default: // yaml format.
-		data.Writef("key: %s\n", key)
-		data.Writef("store: %s\n", store.Name())
-		data.Writeln("metadata:")
-		data.Writef("  stack: %s\n", metadata.Stack)
-		data.Writef("  component: %s\n", metadata.Component)
-		data.Writef("  component_path: %s\n", metadata.ComponentPath)
-		data.Writef("  sha: %s\n", metadata.SHA)
-		data.Writef("  base_sha: %s\n", metadata.BaseSHA)
-		data.Writef("  branch: %s\n", metadata.Branch)
-		data.Writef("  pr_number: %d\n", metadata.PRNumber)
-		data.Writef("  run_id: %s\n", metadata.RunID)
-		data.Writef("  repository: %s\n", metadata.Repository)
-		data.Writef("  created_at: %s\n", metadata.CreatedAt.Format("2006-01-02T15:04:05Z07:00"))
-		if metadata.ExpiresAt != nil {
-			data.Writef("  expires_at: %s\n", metadata.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"))
-		}
-		data.Writef("  plan_summary: %s\n", metadata.PlanSummary)
-		data.Writef("  has_changes: %t\n", metadata.HasChanges)
-		data.Writef("  additions: %d\n", metadata.Additions)
-		data.Writef("  changes: %d\n", metadata.Changes)
-		data.Writef("  destructions: %d\n", metadata.Destructions)
+		_ = data.Writeln(string(output))
+		return nil
 	}
 
+	// Default: yaml format.
+	formatShowYAML(key, storeName, metadata)
 	return nil
+}
+
+// formatShowYAML outputs the planfile metadata as YAML.
+func formatShowYAML(key, storeName string, metadata *planfile.Metadata) {
+	_ = data.Writef("key: %s\n", key)
+	_ = data.Writef("store: %s\n", storeName)
+	_ = data.Writeln("metadata:")
+	_ = data.Writef("  stack: %s\n", metadata.Stack)
+	_ = data.Writef("  component: %s\n", metadata.Component)
+	_ = data.Writef("  component_path: %s\n", metadata.ComponentPath)
+	_ = data.Writef("  sha: %s\n", metadata.SHA)
+	_ = data.Writef("  base_sha: %s\n", metadata.BaseSHA)
+	_ = data.Writef("  branch: %s\n", metadata.Branch)
+	_ = data.Writef("  pr_number: %d\n", metadata.PRNumber)
+	_ = data.Writef("  run_id: %s\n", metadata.RunID)
+	_ = data.Writef("  repository: %s\n", metadata.Repository)
+	_ = data.Writef("  created_at: %s\n", metadata.CreatedAt.Format("2006-01-02T15:04:05Z07:00"))
+	if metadata.ExpiresAt != nil {
+		_ = data.Writef("  expires_at: %s\n", metadata.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"))
+	}
+	_ = data.Writef("  plan_summary: %s\n", metadata.PlanSummary)
+	_ = data.Writef("  has_changes: %t\n", metadata.HasChanges)
+	_ = data.Writef("  additions: %d\n", metadata.Additions)
+	_ = data.Writef("  changes: %d\n", metadata.Changes)
+	_ = data.Writef("  destructions: %d\n", metadata.Destructions)
 }

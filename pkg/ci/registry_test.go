@@ -35,11 +35,11 @@ func (m *mockProvider) GetStatus(_ context.Context, _ StatusOptions) (*Status, e
 	return &Status{}, nil
 }
 
-func (m *mockProvider) CreateCheckRun(_ context.Context, _ CreateCheckRunOptions) (*CheckRun, error) {
+func (m *mockProvider) CreateCheckRun(_ context.Context, _ *CreateCheckRunOptions) (*CheckRun, error) {
 	return &CheckRun{ID: 1}, nil
 }
 
-func (m *mockProvider) UpdateCheckRun(_ context.Context, _ UpdateCheckRunOptions) (*CheckRun, error) {
+func (m *mockProvider) UpdateCheckRun(_ context.Context, _ *UpdateCheckRunOptions) (*CheckRun, error) {
 	return &CheckRun{ID: 1}, nil
 }
 

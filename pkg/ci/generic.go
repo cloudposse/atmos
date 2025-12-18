@@ -13,6 +13,9 @@ import (
 const (
 	// GenericProviderName is the name of the generic CI provider.
 	GenericProviderName = "generic"
+
+	// DefaultFilePermissions is the file permission mode for CI output files.
+	defaultFilePermissions = 0o644
 )
 
 // GenericProvider is a fallback CI provider for when --ci flag is used
@@ -84,7 +87,7 @@ func (p *GenericProvider) GetStatus(_ context.Context, _ StatusOptions) (*Status
 }
 
 // CreateCheckRun is not supported by the generic provider.
-func (p *GenericProvider) CreateCheckRun(_ context.Context, _ CreateCheckRunOptions) (*CheckRun, error) {
+func (p *GenericProvider) CreateCheckRun(_ context.Context, _ *CreateCheckRunOptions) (*CheckRun, error) {
 	defer perf.Track(nil, "ci.GenericProvider.CreateCheckRun")()
 
 	log.Debug("CreateCheckRun not supported by generic CI provider")
@@ -92,7 +95,7 @@ func (p *GenericProvider) CreateCheckRun(_ context.Context, _ CreateCheckRunOpti
 }
 
 // UpdateCheckRun is not supported by the generic provider.
-func (p *GenericProvider) UpdateCheckRun(_ context.Context, _ UpdateCheckRunOptions) (*CheckRun, error) {
+func (p *GenericProvider) UpdateCheckRun(_ context.Context, _ *UpdateCheckRunOptions) (*CheckRun, error) {
 	defer perf.Track(nil, "ci.GenericProvider.UpdateCheckRun")()
 
 	log.Debug("UpdateCheckRun not supported by generic CI provider")
@@ -121,7 +124,7 @@ func (w *GenericOutputWriter) WriteOutput(key, value string) error {
 
 	if w.outputFile != "" {
 		// Write to file in KEY=VALUE format (like GitHub Actions).
-		f, err := os.OpenFile(w.outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		f, err := os.OpenFile(w.outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFilePermissions)
 		if err != nil {
 			return err
 		}
@@ -147,7 +150,7 @@ func (w *GenericOutputWriter) WriteSummary(content string) error {
 
 	if w.summaryFile != "" {
 		// Write to file.
-		f, err := os.OpenFile(w.summaryFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		f, err := os.OpenFile(w.summaryFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFilePermissions)
 		if err != nil {
 			return err
 		}

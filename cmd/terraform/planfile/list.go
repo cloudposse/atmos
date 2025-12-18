@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -12,6 +13,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+const (
+	// TableHeaderWidth is the width for the table header separator line.
+	tableHeaderWidth = 100
 )
 
 var listCmd = &cobra.Command{
@@ -67,53 +73,59 @@ func runList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Output based on format.
-	switch listFormat {
+	return formatListOutput(files, listFormat)
+}
+
+// formatListOutput formats and outputs the planfile list in the specified format.
+func formatListOutput(files []planfile.PlanfileInfo, format string) error {
+	switch format {
 	case "json":
-		output, err := json.MarshalIndent(files, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal output: %w", err)
-		}
-		data.Writeln(string(output))
-
+		return formatListJSON(files)
 	case "yaml":
-		// Simple YAML output.
-		for _, f := range files {
-			data.Writef("- key: %s\n", f.Key)
-			data.Writef("  size: %d\n", f.Size)
-			data.Writef("  last_modified: %s\n", f.LastModified.Format("2006-01-02T15:04:05Z07:00"))
-			if f.Metadata != nil {
-				data.Writef("  stack: %s\n", f.Metadata.Stack)
-				data.Writef("  component: %s\n", f.Metadata.Component)
-				data.Writef("  sha: %s\n", f.Metadata.SHA)
-			}
-		}
-
-	default: // table format.
-		if len(files) == 0 {
-			data.Writeln("No planfiles found.")
-			return nil
-		}
-
-		// Print header.
-		data.Writef("%-60s %10s %s\n", "KEY", "SIZE", "LAST MODIFIED")
-		data.Writeln(repeatStr("-", 100))
-
-		for _, f := range files {
-			data.Writef("%-60s %10d %s\n", f.Key, f.Size, f.LastModified.Format("2006-01-02 15:04"))
-		}
-
-		data.Writef("\nTotal: %d planfile(s)\n", len(files))
+		formatListYAML(files)
+	default:
+		formatListTable(files)
 	}
-
 	return nil
 }
 
-// repeatStr repeats a string n times.
-func repeatStr(s string, n int) string {
-	result := make([]byte, 0, len(s)*n)
-	for i := 0; i < n; i++ {
-		result = append(result, s...)
+// formatListJSON outputs the planfile list as JSON.
+func formatListJSON(files []planfile.PlanfileInfo) error {
+	output, err := json.MarshalIndent(files, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal output: %w", err)
 	}
-	return string(result)
+	_ = data.Writeln(string(output))
+	return nil
+}
+
+// formatListYAML outputs the planfile list as YAML.
+func formatListYAML(files []planfile.PlanfileInfo) {
+	for _, f := range files {
+		_ = data.Writef("- key: %s\n", f.Key)
+		_ = data.Writef("  size: %d\n", f.Size)
+		_ = data.Writef("  last_modified: %s\n", f.LastModified.Format("2006-01-02T15:04:05Z07:00"))
+		if f.Metadata != nil {
+			_ = data.Writef("  stack: %s\n", f.Metadata.Stack)
+			_ = data.Writef("  component: %s\n", f.Metadata.Component)
+			_ = data.Writef("  sha: %s\n", f.Metadata.SHA)
+		}
+	}
+}
+
+// formatListTable outputs the planfile list as a table.
+func formatListTable(files []planfile.PlanfileInfo) {
+	if len(files) == 0 {
+		_ = data.Writeln("No planfiles found.")
+		return
+	}
+
+	_ = data.Writef("%-60s %10s %s\n", "KEY", "SIZE", "LAST MODIFIED")
+	_ = data.Writeln(strings.Repeat("-", tableHeaderWidth))
+
+	for _, f := range files {
+		_ = data.Writef("%-60s %10d %s\n", f.Key, f.Size, f.LastModified.Format("2006-01-02 15:04"))
+	}
+
+	_ = data.Writef("\nTotal: %d planfile(s)\n", len(files))
 }

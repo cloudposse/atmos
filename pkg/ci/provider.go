@@ -18,10 +18,10 @@ type Provider interface {
 	GetStatus(ctx context.Context, opts StatusOptions) (*Status, error)
 
 	// CreateCheckRun creates a new check run on a commit (like Atlantis status checks).
-	CreateCheckRun(ctx context.Context, opts CreateCheckRunOptions) (*CheckRun, error)
+	CreateCheckRun(ctx context.Context, opts *CreateCheckRunOptions) (*CheckRun, error)
 
 	// UpdateCheckRun updates an existing check run.
-	UpdateCheckRun(ctx context.Context, opts UpdateCheckRunOptions) (*CheckRun, error)
+	UpdateCheckRun(ctx context.Context, opts *UpdateCheckRunOptions) (*CheckRun, error)
 
 	// OutputWriter returns a writer for CI outputs ($GITHUB_OUTPUT, etc.).
 	OutputWriter() OutputWriter
