@@ -1,0 +1,181 @@
+---
+slug: native-ci-integration
+title: "Native CI Integration: Rich Plan Summaries Without Extra Actions"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now has built-in CI integration that generates rich, tfcmt-style job summaries directly from `terraform plan` and `terraform apply`. No additional GitHub Actions required—just add `--ci` to your commands.
+
+<!--truncate-->
+
+## Why This Matters
+
+Previously, getting beautiful plan summaries in GitHub Actions required using separate actions like `github-action-atmos-terraform-plan` and `github-action-atmos-terraform-apply`. These worked well but added complexity to your workflows.
+
+Now, Atmos handles everything natively. The same rich output you're used to—resource badges, collapsible diffs, terraform outputs—is generated directly by Atmos when running in CI mode.
+
+## Enabling CI Mode
+
+CI mode activates automatically in GitHub Actions (when `GITHUB_ACTIONS=true`), or you can force it with the `--ci` flag:
+
+```bash
+# Auto-detected in GitHub Actions
+atmos terraform plan mycomponent -s dev-us-east-1
+
+# Force CI mode anywhere
+atmos terraform plan mycomponent -s dev-us-east-1 --ci
+```
+
+You can also enable it via environment variable:
+
+```bash
+export CI=true
+atmos terraform plan mycomponent -s dev-us-east-1
+```
+
+## Simple GitHub Actions Workflow
+
+Here's a minimal workflow that generates rich plan summaries:
+
+```yaml
+name: Terraform Plan
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Atmos
+        uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Terraform Plan
+        run: atmos terraform plan mycomponent -s dev-us-east-1
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+```
+
+That's it. Atmos detects GitHub Actions automatically and writes the plan summary to `$GITHUB_STEP_SUMMARY`.
+
+## What You Get
+
+The job summary includes:
+
+- **Status badges** - CREATE, CHANGE, REPLACE, DESTROY indicators at a glance
+- **Resource lists** - Collapsible sections showing exactly what will change
+- **Destroy warnings** - Prominent caution callouts when resources will be deleted
+- **Terraform outputs** - Table of output values after apply
+- **Reproduction command** - Easy copy-paste to run locally
+
+Example plan summary:
+
+```
+## Changes Found for `vpc` in `dev-us-east-1`
+
+[![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#)
+[![destroy](https://shields.io/badge/PLAN-DESTROY-critical?style=for-the-badge)](#)
+
+> [!CAUTION]
+> **Terraform will delete resources!**
+
+<details><summary>Plan: 3 to add, 0 to change, 1 to destroy</summary>
+
+### Create
++ aws_vpc.main
++ aws_subnet.public[0]
++ aws_subnet.public[1]
+
+### Destroy
+- aws_security_group.deprecated
+
+</details>
+```
+
+## Apply Workflow
+
+For apply, the workflow is just as simple:
+
+```yaml
+name: Terraform Apply
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Atmos
+        uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Terraform Apply
+        run: atmos terraform apply mycomponent -s dev-us-east-1 -auto-approve
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+```
+
+## Matrix Strategy for Multiple Components
+
+Plan multiple components in parallel:
+
+```yaml
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - component: vpc
+            stack: dev-us-east-1
+          - component: eks
+            stack: dev-us-east-1
+          - component: rds
+            stack: dev-us-east-1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+      - run: atmos terraform plan ${{ matrix.component }} -s ${{ matrix.stack }}
+```
+
+Each job gets its own summary section in the GitHub Actions UI.
+
+## Local Testing
+
+Test CI output locally by setting environment variables:
+
+```bash
+# Write summary to a file
+export ATMOS_CI_SUMMARY=/tmp/summary.md
+atmos terraform plan mycomponent -s dev --ci
+cat /tmp/summary.md
+
+# Or just view in terminal (writes to stderr)
+atmos terraform plan mycomponent -s dev --ci
+```
+
+## Configuration
+
+Enable or disable CI integration globally in `atmos.yaml`:
+
+```yaml
+ci:
+  enabled: true  # Default when CI env var is detected
+```
+
+The `--ci` flag overrides this setting, so you can always force CI mode when needed.
+
+## Get Started
+
+Native CI integration is available now. Simply upgrade Atmos and start using `--ci` or let it auto-detect your CI environment.
+
+For more details, see the [CI Integration documentation](/ci).
