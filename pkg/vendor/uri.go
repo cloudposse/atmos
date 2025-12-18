@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/hashicorp/go-getter"
 )
 
@@ -296,6 +297,7 @@ func normalizeVendorURI(uri string) string {
 	// Add //. to Git URLs without subdirectory
 	if needsDoubleSlashDot(uri) {
 		uri = appendDoubleSlashDot(uri)
+		log.Debug("Added //. to Git URL without subdirectory", "normalized", uri)
 	}
 
 	return uri
@@ -320,9 +322,13 @@ func normalizeTripleSlash(uri string) string {
 	if subdir == "" {
 		// Root of repository case: convert /// to //.
 		normalized = source + "//." + queryParams
+		log.Debug("Normalized triple-slash to double-slash-dot for repository root",
+			"original", uri, "normalized", normalized)
 	} else {
 		// Path specified after triple slash: convert /// to //
 		normalized = source + "//" + subdir + queryParams
+		log.Debug("Normalized triple-slash to double-slash with path",
+			"original", uri, "normalized", normalized)
 	}
 
 	return normalized
