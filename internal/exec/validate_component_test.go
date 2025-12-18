@@ -3,6 +3,7 @@ package exec
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -285,6 +286,9 @@ errors["process_env section is empty"] {
 }
 
 func TestValidateComponentInternal_ProcessEnvSectionContent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows: uses Unix-specific shell commands")
+	}
 	// Test specifically that the process environment section contains expected content.
 
 	// Create a temporary directory for testing.
@@ -985,6 +989,10 @@ func TestExecuteValidateComponent_WithComponentValidationSettings(t *testing.T) 
 	// Change to the test fixtures directory.
 	fixturesDir := "../../tests/fixtures/scenarios/complete"
 	t.Chdir(fixturesDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	info := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(info, true)
