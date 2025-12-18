@@ -65,7 +65,7 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	// Initialize model based on package type
 	model, err := newModelVendor(packages, dryRun, atmosConfig)
 	if err != nil {
-		return fmt.Errorf("%w: %v (verify terminal capabilities and permissions)", errUtils.ErrTUIModel, err)
+		return fmt.Errorf("%w: %w (verify terminal capabilities and permissions)", errUtils.ErrTUIModel, err)
 	}
 
 	var opts []tea.ProgramOption
@@ -152,8 +152,6 @@ func (m *modelVendor) Init() tea.Cmd {
 }
 
 // Update handles TUI events.
-//
-//nolint:gocritic // bubbletea models must be passed by value
 func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -548,17 +546,33 @@ func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.F
 		src = filepath.ToSlash(src)
 		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
 
-		// Check if the file should be excluded
-		if len(s.ExcludedPaths) > 0 {
-			return shouldExcludeFile(src, s.ExcludedPaths, trimmedSrc)
-		}
-
-		// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
+		// First, check if the file matches any included_paths pattern (if specified).
+		// Files that don't match any included pattern should be skipped.
+		// For directories, we need to check if any pattern COULD match files under this directory.
+		// We pass both the full path (src) for glob matching and the relative path (trimmedSrc)
+		// for directory traversal logic.
 		if len(s.IncludedPaths) > 0 {
-			return shouldIncludeFile(src, s.IncludedPaths, trimmedSrc)
+			shouldSkip, err := shouldSkipBasedOnIncludedPaths(srcInfo.IsDir(), src, trimmedSrc, s.IncludedPaths)
+			if err != nil {
+				return true, err
+			}
+			if shouldSkip {
+				return true, nil
+			}
 		}
 
-		// If 'included_paths' is not provided, include all files that were not excluded
+		// Then, check if the file should be excluded (excluded_paths takes precedence).
+		if len(s.ExcludedPaths) > 0 {
+			shouldSkip, err := shouldExcludeFile(src, s.ExcludedPaths, trimmedSrc)
+			if err != nil {
+				return true, err
+			}
+			if shouldSkip {
+				return true, nil
+			}
+		}
+
+		// If 'included_paths' is not provided or file passed all checks, include the file.
 		log.Debug("Including", "path", u.TrimBasePathFromPath(tempDir+"/", src))
 		return false, nil
 	}
@@ -577,27 +591,4 @@ func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (b
 		}
 	}
 	return false, nil
-}
-
-// shouldIncludeFile checks if a file should be included based on patterns.
-func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (bool, error) {
-	anyMatches := false
-	for _, includePath := range includedPaths {
-		includeMatch, err := u.PathMatch(includePath, src)
-		if err != nil {
-			return true, err
-		} else if includeMatch {
-			// If the file matches ANY of the 'included_paths' patterns, include the file
-			log.Debug("Including path since it matches the '%s' pattern from 'included_paths'", "included_paths", includePath, "path", trimmedSrc)
-
-			anyMatches = true
-			break
-		}
-	}
-
-	if anyMatches {
-		return false, nil
-	}
-	log.Debug("Excluding path since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
-	return true, nil
 }
