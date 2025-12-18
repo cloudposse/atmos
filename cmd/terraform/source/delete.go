@@ -24,7 +24,7 @@ var deleteCmd = &cobra.Command{
 	Short: "Remove vendored source directory",
 	Long: `Delete the vendored source directory for a terraform component.
 
-This command removes the component directory that was created by 'atmos terraform source create'.
+This command removes the component directory that was created by 'atmos terraform source pull'.
 Requires --force flag for safety.`,
 	Example: `  # Delete vendored source
   atmos terraform source delete vpc --stack dev --force`,

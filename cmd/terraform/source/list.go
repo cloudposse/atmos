@@ -50,7 +50,9 @@ func executeListCommand(cmd *cobra.Command) error {
 
 	stack := v.GetString("stack")
 	if stack == "" {
-		return errUtils.ErrRequiredFlagNotProvided
+		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+			WithExplanation("--stack flag is required").
+			Err()
 	}
 
 	// TODO: Implement list functionality.
