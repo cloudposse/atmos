@@ -62,7 +62,10 @@ func TestExecWithPTY_BasicExecution(t *testing.T) {
 
 	var stdout bytes.Buffer
 
-	cmd := exec.Command("echo", "hello world")
+	// Use sh -c with printf and a small sleep to ensure the PTY has time to read
+	// all buffered output before the subprocess exits and triggers EIO.
+	// This avoids the race condition described in https://go.dev/issue/57141
+	cmd := exec.Command("sh", "-c", "printf '%s\\n' 'hello world'; sleep 0.1")
 	opts := &Options{
 		Stdin:         strings.NewReader(""), // Provide empty stdin for CI environments.
 		Stdout:        &stdout,
@@ -234,7 +237,10 @@ func TestExecWithPTY_DefaultOptions(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	cmd := exec.Command("echo", "test")
+	// Use sh -c with printf and a small sleep to ensure the PTY has time to read
+	// all buffered output before the subprocess exits and triggers EIO.
+	// This avoids the race condition described in https://go.dev/issue/57141
+	cmd := exec.Command("sh", "-c", "printf '%s\\n' 'test'; sleep 0.1")
 
 	// Pass nil options - should use defaults.
 	err := ExecWithPTY(ctx, cmd, nil)
