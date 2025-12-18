@@ -1,39 +1,38 @@
 ---
 slug: terraform-source-provisioner
-title: "Just-in-Time Component Vendoring with metadata.source"
+title: "Just-in-Time Component Vendoring with source"
 authors: [osterman]
 tags: [feature]
 ---
 
-Atmos now supports just-in-time (JIT) vendoring of Terraform components directly from stack configuration using `metadata.source`. This enables you to declare component sources inline without requiring separate `component.yaml` files.
+Atmos now supports just-in-time (JIT) vendoring of Terraform components directly from stack configuration using the top-level `source` field. This enables you to declare component sources inline without requiring separate `component.yaml` files.
 
 <!--truncate-->
 
 ## What Changed
 
-We've added a new `atmos terraform source` command group that enables JIT vendoring based on `metadata.source` configuration in your stack manifests:
+We've added a new `atmos terraform source` command group that enables JIT vendoring based on `source` configuration in your stack manifests:
 
 ```yaml
 components:
   terraform:
     vpc:
-      metadata:
-        source:
-          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-          version: 1.450.0
-          included_paths:
-            - "*.tf"
-          excluded_paths:
-            - "*.md"
-            - "tests/**"
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0
+        included_paths:
+          - "*.tf"
+        excluded_paths:
+          - "*.md"
+          - "tests/**"
 ```
 
 The new commands include:
-- `atmos terraform source create` - Vendor a component from metadata.source
+- `atmos terraform source create` - Vendor a component from source configuration
 - `atmos terraform source update` - Re-vendor with force refresh
 - `atmos terraform source describe` - View source configuration
 - `atmos terraform source delete` - Remove vendored source directory
-- `atmos terraform source list` - List components with metadata.source (coming soon)
+- `atmos terraform source list` - List components with source (coming soon)
 
 ## Why This Matters
 
@@ -43,7 +42,7 @@ Previously, vendoring components required maintaining separate `component.yaml` 
 2. **Keep configuration colocated** - Source information was separated from component configuration
 3. **Vendor on demand** - Components had to be pre-vendored before use
 
-With `metadata.source`, you can now:
+With `source`, you can now:
 
 - **Declare sources inline** in your stack manifests
 - **Override versions per environment** using stack inheritance
@@ -54,17 +53,16 @@ With `metadata.source`, you can now:
 
 ### Basic Usage
 
-Add `metadata.source` to your component configuration:
+Add `source` to your component configuration:
 
 ```yaml
 # stacks/dev.yaml
 components:
   terraform:
     vpc:
-      metadata:
-        source:
-          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-          version: 1.450.0
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0
       vars:
         cidr_block: "10.0.0.0/16"
 ```
@@ -84,10 +82,9 @@ Use stack inheritance to set different versions per environment:
 components:
   terraform:
     vpc/defaults:
-      metadata:
-        source:
-          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-          version: 1.450.0
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0
 
 # stacks/dev.yaml - use latest
 components:
@@ -95,8 +92,8 @@ components:
     vpc:
       metadata:
         inherits: [vpc/defaults]
-        source:
-          version: 1.451.0  # Override for dev
+      source:
+        version: 1.451.0  # Override for dev
 
 # stacks/prod.yaml - pin to stable
 components:
@@ -104,7 +101,7 @@ components:
     vpc:
       metadata:
         inherits: [vpc/defaults]
-        # Uses inherited version 1.450.0
+      # Uses inherited version 1.450.0
 ```
 
 ### Supported Source Types

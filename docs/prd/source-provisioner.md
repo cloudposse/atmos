@@ -9,9 +9,9 @@
 
 ## Executive Summary
 
-The Source Provisioner enables just-in-time (JIT) vendoring of component sources directly from stack configuration via `metadata.source`. This allows components to declare their source location inline without requiring a separate `component.yaml` or `vendor.yaml` file, streamlining component reuse and reducing configuration overhead.
+The Source Provisioner enables just-in-time (JIT) vendoring of component sources directly from stack configuration via the top-level `source` field. This allows components to declare their source location inline without requiring a separate `component.yaml` or `vendor.yaml` file, streamlining component reuse and reducing configuration overhead.
 
-**Key Principle:** Components should be self-describing - the source location is metadata about the component, just like `metadata.component` defines the base component path.
+**Key Principle:** Components should be self-describing - the source location is a first-class configuration field at the same level as `backend`, following Atmos's consistent configuration hierarchy.
 
 ---
 
@@ -31,34 +31,32 @@ This creates friction for:
 
 ### Solution
 
-Add `metadata.source` to component configuration, enabling inline source declaration:
+Add a top-level `source` field to component configuration, enabling inline source declaration:
 
 ```yaml
 # Simple form - go-getter compatible string
 components:
   terraform:
     vpc:
-      metadata:
-        source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.2.3"
+      source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.2.3"
 
 # Map form - full vendor spec
 components:
   terraform:
     vpc:
-      metadata:
-        source:
-          uri: "github.com/cloudposse/terraform-aws-components//modules/vpc"
-          version: "1.2.3"
-          included_paths:
-            - "**/*.tf"
-          excluded_paths:
-            - "**/*_test.go"
+      source:
+        uri: "github.com/cloudposse/terraform-aws-components//modules/vpc"
+        version: "1.2.3"
+        included_paths:
+          - "**/*.tf"
+        excluded_paths:
+          - "**/*_test.go"
 ```
 
 ### How It Works
 
 1. **Source Provisioner** registers for `before.terraform.init` hook event
-2. When triggered, checks if `metadata.source` is defined
+2. When triggered, checks if `source` is defined
 3. If source exists and component directory is missing (or outdated), vendors the component
 4. Vendors to component directory (or `workdir` when that feature merges)
 5. Terraform execution proceeds with vendored component
@@ -73,7 +71,7 @@ After the workdir PR (#1852) merges:
 **Precedence (highest to lowest):**
 1. `working_directory` (explicit execution location)
 2. Local component directory (if exists)
-3. `metadata.source` (JIT vendor if component missing)
+3. `source` (JIT vendor if component missing)
 
 ---
 
@@ -153,13 +151,13 @@ The source provisioner is implemented as an **optional interface** in the compon
 // Component providers that do NOT implement this interface will not have
 // source commands available (e.g., `atmos <type> source create` will not exist).
 type SourceProvider interface {
-    // SourceCreate vendors a component from metadata.source.
+    // SourceCreate vendors a component from source configuration.
     SourceCreate(ctx context.Context, atmosConfig *schema.AtmosConfiguration, component, stack string, force bool) error
 
     // SourceUpdate re-vendors a component (force refresh).
     SourceUpdate(ctx context.Context, atmosConfig *schema.AtmosConfiguration, component, stack string) error
 
-    // SourceList returns all components with metadata.source in a stack.
+    // SourceList returns all components with source in a stack.
     SourceList(ctx context.Context, atmosConfig *schema.AtmosConfiguration, stack string) ([]SourceInfo, error)
 
     // SourceDescribe returns source configuration for a component.
@@ -254,7 +252,7 @@ func init() {
 var sourceCmd = &cobra.Command{
     Use:   "source",
     Short: "Manage terraform component sources (JIT vendoring)",
-    Long: `Manage terraform component sources defined in metadata.source.
+    Long: `Manage terraform component sources defined in the source field.
 
 Commands:
   create    Vendor component source
@@ -330,10 +328,10 @@ func (p *TerraformProvider) GetType() string {
 
 **Automatic (via hooks):**
 ```bash
-# Source vendored automatically if metadata.source defined and component missing
+# Source vendored automatically if source defined and component missing
 atmos terraform apply vpc --stack dev
 # → BeforeTerraformInit hook triggers
-# → Source provisioner checks metadata.source
+# → Source provisioner checks source configuration
 # → Vendors if component directory missing
 # → Terraform runs
 ```
@@ -405,28 +403,26 @@ func ProvisionSource(
 
 ## Schema Design
 
-### metadata.source - String Form
+### source - String Form
 
-When `metadata.source` is a string, it's interpreted as a go-getter compatible URI:
+When `source` is a string, it's interpreted as a go-getter compatible URI:
 
 ```yaml
-metadata:
-  source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.2.3"
+source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.2.3"
 ```
 
 Equivalent to:
 ```yaml
-metadata:
-  source:
-    uri: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.2.3"
+source:
+  uri: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.2.3"
 ```
 
-### metadata.source - Map Form
+### source - Map Form
 
-When `metadata.source` is a map, it follows the existing `VendorComponentSource` schema exactly. **No new type is needed** - we reuse the existing schema:
+When `source` is a map, it follows the existing `VendorComponentSource` schema exactly. **No new type is needed** - we reuse the existing schema:
 
 ```go
-// pkg/schema/vendor_component.go (EXISTING - reused for metadata.source)
+// pkg/schema/vendor_component.go (EXISTING - reused for source)
 
 type VendorComponentSource struct {
     // Type is the source type (git, http, s3, oci, etc.)
@@ -460,48 +456,43 @@ components:
   terraform:
     # Example 1: String form (most common)
     vpc:
-      metadata:
-        source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.2.3"
+      source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.2.3"
       vars:
         vpc_cidr: "10.0.0.0/16"
 
     # Example 2: Map form with version
     eks:
-      metadata:
-        source:
-          uri: "github.com/cloudposse/terraform-aws-components//modules/eks-cluster"
-          version: "2.0.0"
+      source:
+        uri: "github.com/cloudposse/terraform-aws-components//modules/eks-cluster"
+        version: "2.0.0"
       vars:
         cluster_name: "my-cluster"
 
     # Example 3: Map form with path filters
     rds:
-      metadata:
-        source:
-          uri: "github.com/acme/internal-modules//databases/rds"
-          version: "main"
-          included_paths:
-            - "**/*.tf"
-            - "**/*.tfvars"
-          excluded_paths:
-            - "**/tests/**"
-            - "**/*.md"
+      source:
+        uri: "github.com/acme/internal-modules//databases/rds"
+        version: "main"
+        included_paths:
+          - "**/*.tf"
+          - "**/*.tfvars"
+        excluded_paths:
+          - "**/tests/**"
+          - "**/*.md"
       vars:
         engine: "postgres"
 
     # Example 4: OCI registry
     app:
-      metadata:
-        source:
-          type: "oci"
-          uri: "oci://public.ecr.aws/cloudposse/components/terraform-aws-lambda"
-          version: "1.5.0"
+      source:
+        type: "oci"
+        uri: "oci://public.ecr.aws/cloudposse/components/terraform-aws-lambda"
+        version: "1.5.0"
 
   helmfile:
-    # Helmfile components also support metadata.source
+    # Helmfile components also support source
     nginx:
-      metadata:
-        source: "github.com/cloudposse/helmfile-components//charts/nginx?ref=1.0.0"
+      source: "github.com/cloudposse/helmfile-components//charts/nginx?ref=1.0.0"
 ```
 
 ---
@@ -553,7 +544,7 @@ ExecuteProvisioners() called
   ↓
 Source Provisioner triggered
   ↓
-Check metadata.source exists?
+Check source exists?
   ├─ No → Skip (return nil)
   └─ Yes → Continue
       ↓
@@ -586,8 +577,8 @@ func ProvisionSource(
 ) error {
     defer perf.Track(atmosConfig, "provisioner.ProvisionSource")()
 
-    // 1. Extract metadata.source
-    source, err := extractMetadataSource(componentConfig)
+    // 1. Extract source configuration
+    source, err := extractSource(componentConfig)
     if err != nil {
         return nil // No source configured - skip silently
     }
@@ -601,7 +592,7 @@ func ProvisionSource(
         return errUtils.Build(errUtils.ErrSourceProvision).
             WithCause(err).
             WithExplanation("Failed to resolve source specification").
-            WithHint("Check metadata.source format").
+            WithHint("Check source configuration format").
             Err()
     }
 
@@ -687,17 +678,16 @@ When determining component location:
 
 ### Configuration Inheritance
 
-`metadata.source` follows standard Atmos deep-merge:
+`source` follows standard Atmos three-level deep-merge (global → base → component):
 
 ```yaml
 # stacks/catalog/vpc/defaults.yaml
 components:
   terraform:
     vpc/defaults:
-      metadata:
-        source:
-          uri: "github.com/cloudposse/terraform-aws-components//modules/vpc"
-          version: "1.0.0"
+      source:
+        uri: "github.com/cloudposse/terraform-aws-components//modules/vpc"
+        version: "1.0.0"
 
 # stacks/prod.yaml
 components:
@@ -705,8 +695,8 @@ components:
     vpc:
       metadata:
         inherits: [vpc/defaults]
-        source:
-          version: "1.2.0"  # Override version only
+      source:
+        version: "1.2.0"  # Override version only
 ```
 
 ---
@@ -805,9 +795,9 @@ components:
 ```go
 // pkg/provisioner/source/source_test.go
 
-func TestExtractMetadataSource_StringForm(t *testing.T)
-func TestExtractMetadataSource_MapForm(t *testing.T)
-func TestExtractMetadataSource_NotPresent(t *testing.T)
+func TestExtractSource_StringForm(t *testing.T)
+func TestExtractSource_MapForm(t *testing.T)
+func TestExtractSource_NotPresent(t *testing.T)
 func TestResolveSourceSpec_StringToMap(t *testing.T)
 func TestResolveSourceSpec_MapPassthrough(t *testing.T)
 func TestDetermineTargetDirectory_WithWorkdir(t *testing.T)
@@ -925,9 +915,9 @@ func init() {
 
 ### Phase 1: Core Implementation
 1. Add `SourceProvider` optional interface to component registry
-2. Add `MetadataSource` schema type
+2. Add top-level `source` schema field
 3. Implement source provisioner registration
-4. Implement metadata.source extraction (string and map forms)
+4. Implement source extraction (string and map forms)
 5. Implement target directory resolution
 6. Wire up existing vendor utilities
 
@@ -983,7 +973,7 @@ func init() {
 
 16. **`pkg/provisioner/source/source.go`** - Main provisioner implementation
 17. **`pkg/provisioner/source/source_test.go`** - Unit tests
-18. **`pkg/provisioner/source/extract.go`** - metadata.source extraction
+18. **`pkg/provisioner/source/extract.go`** - source extraction
 19. **`pkg/provisioner/source/resolve.go`** - Source spec resolution (string→map)
 20. **`pkg/provisioner/source/vendor.go`** - Vendor integration (go-getter fallback)
 21. **`pkg/provisioner/source/target.go`** - Target directory logic
@@ -1320,7 +1310,7 @@ func vendorSource(source *VendorComponentSource) error {
 
 ### Component Provisioner Relationship
 
-The source provisioner handles `metadata.source`. A future component provisioner might:
+The source provisioner handles the top-level `source` field. A future component provisioner might:
 - Handle `component.yaml` based vendoring
 - Support more complex dependency resolution
 - Cache vendored components
@@ -1357,7 +1347,7 @@ provision:
 - Source provisioner invocations per day
 - Average vendor time (p50, p95)
 - Error rate by source type
-- Adoption rate (components using metadata.source)
+- Adoption rate (components using source)
 
 ---
 

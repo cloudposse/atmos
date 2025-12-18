@@ -1,6 +1,7 @@
 package source
 
 import (
+	"context"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -472,4 +474,31 @@ func TestCreateSkipFunc_ExcludedPaths(t *testing.T) {
 	skip, err = skipFunc(info, "/tmp/src/notes.txt", "/tmp/dst/notes.txt")
 	assert.NoError(t, err)
 	assert.True(t, skip, "*.txt files should be skipped")
+}
+
+// TestVendorSource_NilSourceSpec tests that VendorSource returns an error when sourceSpec is nil.
+func TestVendorSource_NilSourceSpec(t *testing.T) {
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+	targetDir := t.TempDir()
+
+	err := VendorSource(ctx, atmosConfig, nil, targetDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNilParam)
+}
+
+// TestVendorSource_EmptyURI tests that VendorSource returns an error when URI is empty.
+func TestVendorSource_EmptyURI(t *testing.T) {
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+	targetDir := t.TempDir()
+	sourceSpec := &schema.VendorComponentSource{
+		Uri: "",
+	}
+
+	err := VendorSource(ctx, atmosConfig, sourceSpec, targetDir)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrSourceInvalidSpec)
 }

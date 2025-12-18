@@ -478,6 +478,10 @@ type StacksInherit struct {
 	// When true (default), all metadata fields except 'inherits' are inherited.
 	// When false, metadata is per-component only (legacy behavior).
 	Metadata *bool `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+	// Source controls whether source configuration is inherited from base components.
+	// When true (default), source configuration is inherited and deep merged.
+	// When false, source is per-component only.
+	Source *bool `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 }
 
 // IsMetadataInheritanceEnabled returns whether metadata inheritance is enabled.
@@ -487,6 +491,15 @@ func (s *StacksInherit) IsMetadataInheritanceEnabled() bool {
 		return true // Default to true.
 	}
 	return *s.Metadata
+}
+
+// IsSourceInheritanceEnabled returns whether source inheritance is enabled.
+// Defaults to true if not explicitly set.
+func (s *StacksInherit) IsSourceInheritanceEnabled() bool {
+	if s.Source == nil {
+		return true // Default to true.
+	}
+	return *s.Source
 }
 
 type Workflows struct {
@@ -890,6 +903,7 @@ type BaseComponentConfig struct {
 	BaseComponentBackendSection            AtmosSectionMapType
 	BaseComponentRemoteStateBackendType    string
 	BaseComponentRemoteStateBackendSection AtmosSectionMapType
+	BaseComponentSourceSection             AtmosSectionMapType
 	ComponentInheritanceChain              []string
 }
 

@@ -9,7 +9,7 @@ import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 
 <Intro>
-Use this command to display the `metadata.source` configuration for a Terraform component. This shows the source URI, version, and any path filters configured for vendoring.
+Use this command to display the `source` configuration for a Terraform component. This shows the source URI, version, and any path filters configured for vendoring.
 </Intro>
 
 <Screengrab title="atmos terraform source describe --help" slug="atmos-terraform-source-describe--help" />
@@ -22,7 +22,7 @@ atmos terraform source describe <component> --stack <stack>
 
 ## Description
 
-The `describe` command extracts and displays the `metadata.source` configuration from a component's stack manifest. This is useful for:
+The `describe` command extracts and displays the `source` configuration from a component's stack manifest. This is useful for:
 
 - Verifying source configuration before vendoring
 - Checking the version configured for a component

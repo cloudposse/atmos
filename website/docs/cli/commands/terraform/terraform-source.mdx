@@ -9,7 +9,7 @@ import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 
 <Intro>
-Use these commands to manage Terraform component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using `metadata.source` without requiring a separate `component.yaml` file.
+Use these commands to manage Terraform component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using the top-level `source` field without requiring a separate `component.yaml` file.
 </Intro>
 
 <Screengrab title="atmos terraform source --help" slug="atmos-terraform-source--help" />
@@ -24,13 +24,13 @@ atmos terraform source <subcommand> [options]
 
 <dl>
   <dt>`create <component>`</dt>
-  <dd>Vendor component source from metadata.source configuration</dd>
+  <dd>Vendor component source from source configuration</dd>
 
   <dt>`update <component>`</dt>
   <dd>Re-vendor component source (force refresh)</dd>
 
   <dt>`list`</dt>
-  <dd>List components with metadata.source in a stack</dd>
+  <dd>List components with source in a stack</dd>
 
   <dt>`describe <component>`</dt>
   <dd>Show source configuration for a component</dd>
@@ -48,23 +48,22 @@ The source provisioner enables just-in-time vendoring of Terraform components di
 components:
   terraform:
     vpc:
-      metadata:
-        source:
-          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-          version: 1.450.0
-          included_paths:
-            - "*.tf"
-            - "modules/**"
-          excluded_paths:
-            - "*.md"
-            - "tests/**"
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0
+        included_paths:
+          - "*.tf"
+          - "modules/**"
+        excluded_paths:
+          - "*.md"
+          - "tests/**"
       vars:
         cidr_block: "10.0.0.0/16"
 ```
 
 When you run `atmos terraform source create vpc --stack dev`, Atmos:
 
-1. **Reads Configuration** - Extracts `metadata.source` from the component's stack manifest
+1. **Reads Configuration** - Extracts `source` from the component's stack manifest
 2. **Resolves Source** - Parses the go-getter compatible URI with optional version
 3. **Downloads Content** - Fetches the source using go-getter (supports git, s3, http, oci, etc.)
 4. **Filters Files** - Applies `included_paths` and `excluded_paths` patterns
@@ -72,15 +71,14 @@ When you run `atmos terraform source create vpc --stack dev`, Atmos:
 
 ## Source Specification
 
-The `metadata.source` field supports two formats:
+The `source` field supports two formats:
 
 ### String Format (Simple)
 
 For simple cases, use a go-getter URI string:
 
 ```yaml
-metadata:
-  source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0"
+source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0"
 ```
 
 ### Map Format (Full Control)
@@ -88,18 +86,17 @@ metadata:
 For more control, use a map with explicit fields:
 
 ```yaml
-metadata:
-  source:
-    uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-    version: 1.450.0
-    included_paths:
-      - "*.tf"
-      - "*.tfvars"
-      - "modules/**"
-    excluded_paths:
-      - "*.md"
-      - "tests/**"
-      - "examples/**"
+source:
+  uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+  version: 1.450.0
+  included_paths:
+    - "*.tf"
+    - "*.tfvars"
+    - "modules/**"
+  excluded_paths:
+    - "*.md"
+    - "tests/**"
+    - "examples/**"
 ```
 
 ### Source Fields
@@ -130,7 +127,7 @@ atmos terraform source create vpc --stack dev
 
 Output:
 ```
-Vendoring component 'vpc' from metadata.source...
+Vendoring component 'vpc' from source...
 Downloading from github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0
 ✓ Successfully vendored component to components/terraform/vpc
 ```
@@ -147,7 +144,7 @@ This is equivalent to `atmos terraform source create vpc --stack dev --force`.
 
 ### View Source Configuration
 
-Display the metadata.source configuration for a component:
+Display the source configuration for a component:
 
 ```shell
 atmos terraform source describe vpc --stack dev
@@ -170,7 +167,7 @@ source:
 
 ### List Components with Sources
 
-List all components that have metadata.source configured:
+List all components that have source configured:
 
 ```shell
 atmos terraform source list --stack dev
@@ -216,10 +213,9 @@ Components can specify their own authentication identity:
 components:
   terraform:
     vpc:
-      metadata:
-        source:
-          uri: github.com/my-org/private-components//modules/vpc
-          version: v1.0.0
+      source:
+        uri: github.com/my-org/private-components//modules/vpc
+        version: v1.0.0
       auth:
         identities:
           github-deployer:
@@ -239,7 +235,7 @@ atmos terraform source create vpc --stack dev --identity admin
 
 ## Configuration Patterns
 
-### Inheritance with metadata.source
+### Inheritance with source
 
 Use stack inheritance to share source configurations:
 
@@ -248,10 +244,9 @@ Use stack inheritance to share source configurations:
 components:
   terraform:
     vpc/defaults:
-      metadata:
-        source:
-          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-          version: 1.450.0
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0
 
 # stacks/dev.yaml
 components:
@@ -259,7 +254,7 @@ components:
     vpc:
       metadata:
         inherits: [vpc/defaults]
-        # Inherits source configuration
+      # Inherits source configuration
       vars:
         cidr_block: "10.0.0.0/16"
 ```
@@ -275,8 +270,8 @@ components:
     vpc:
       metadata:
         inherits: [vpc/defaults]
-        source:
-          version: 1.451.0  # Override version for dev
+      source:
+        version: 1.451.0  # Override version for dev
 
 # stacks/prod.yaml
 components:
@@ -284,8 +279,8 @@ components:
     vpc:
       metadata:
         inherits: [vpc/defaults]
-        source:
-          version: 1.450.0  # Pin to stable version for prod
+      source:
+        version: 1.450.0  # Pin to stable version for prod
 ```
 
 ## Supported Source Types
@@ -295,10 +290,9 @@ The source provisioner uses go-getter and supports multiple protocols:
 ### Git Sources
 
 ```yaml
-metadata:
-  source:
-    uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-    version: 1.450.0
+source:
+  uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+  version: 1.450.0
 
 # Also supports:
 # - git::https://github.com/org/repo.git//path
@@ -308,44 +302,40 @@ metadata:
 ### S3 Sources
 
 ```yaml
-metadata:
-  source:
-    uri: s3::https://s3-us-east-1.amazonaws.com/my-bucket/components/vpc.tar.gz
+source:
+  uri: s3::https://s3-us-east-1.amazonaws.com/my-bucket/components/vpc.tar.gz
 ```
 
 ### HTTP/HTTPS Sources
 
 ```yaml
-metadata:
-  source:
-    uri: https://releases.example.com/components/vpc-1.0.0.tar.gz
+source:
+  uri: https://releases.example.com/components/vpc-1.0.0.tar.gz
 ```
 
 ### OCI Registry Sources
 
 ```yaml
-metadata:
-  source:
-    uri: oci::registry.example.com/components/vpc:v1.0.0
+source:
+  uri: oci::registry.example.com/components/vpc:v1.0.0
 ```
 
 ## Error Handling
 
-### Missing metadata.source
+### Missing source
 
 ```
-Error: metadata.source not configured
+Error: source not configured
 
-Hint: Add metadata.source to the component configuration in your stack manifest
+Hint: Add source to the component configuration in your stack manifest
 
 Example:
   components:
     terraform:
       vpc:
-        metadata:
-          source:
-            uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-            version: 1.450.0
+        source:
+          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+          version: 1.450.0
 ```
 
 ### Component Directory Exists
@@ -368,15 +358,15 @@ Hint: Check credentials or use --identity to specify authentication
 
 ## Comparison with Vendoring
 
-| Feature | metadata.source | component.yaml |
-|---------|-----------------|----------------|
+| Feature | source | component.yaml |
+|---------|--------|----------------|
 | Configuration location | Inline in stack | Separate file |
 | Version per environment | Yes | Single version |
 | JIT download | Yes | Pre-vendored |
 | Path filtering | Yes | Yes |
 | Mixins support | No | Yes |
 
-Use `metadata.source` when:
+Use `source` when:
 - You want version control per environment
 - You prefer configuration colocation in stacks
 - You need just-in-time vendoring

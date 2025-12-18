@@ -3,13 +3,13 @@ title: atmos terraform source list
 sidebar_label: source list
 sidebar_class_name: command
 id: terraform-source-list
-description: List components with metadata.source in a stack
+description: List components with source in a stack
 ---
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 
 <Intro>
-Use this command to list all Terraform components that have `metadata.source` configured in a stack. This shows which components can be vendored using the source provisioner.
+Use this command to list all Terraform components that have `source` configured in a stack. This shows which components can be vendored using the source provisioner.
 </Intro>
 
 <Screengrab title="atmos terraform source list --help" slug="atmos-terraform-source-list--help" />
@@ -22,7 +22,7 @@ atmos terraform source list --stack <stack>
 
 ## Description
 
-The `list` command scans a stack's component configurations and displays all components that have `metadata.source` defined. This helps identify:
+The `list` command scans a stack's component configurations and displays all components that have `source` defined. This helps identify:
 
 - Which components are configured for JIT vendoring
 - The source URIs and versions for each component

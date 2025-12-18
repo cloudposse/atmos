@@ -3,13 +3,13 @@ title: atmos terraform source create
 sidebar_label: source create
 sidebar_class_name: command
 id: terraform-source-create
-description: Vendor component source from metadata.source configuration
+description: Vendor component source from source configuration
 ---
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 
 <Intro>
-Use this command to vendor a Terraform component source based on its `metadata.source` configuration. This downloads the component from the specified URI and places it in the appropriate component directory.
+Use this command to vendor a Terraform component source based on its `source` configuration. This downloads the component from the specified URI and places it in the appropriate component directory.
 </Intro>
 
 <Screengrab title="atmos terraform source create --help" slug="atmos-terraform-source-create--help" />
@@ -24,7 +24,7 @@ atmos terraform source create <component> --stack <stack> [flags]
 
 The `create` command vendors a Terraform component source by:
 
-1. Reading the `metadata.source` configuration from the component's stack manifest
+1. Reading the `source` configuration from the component's stack manifest
 2. Downloading the source from the specified URI using go-getter
 3. Applying any `included_paths` and `excluded_paths` filters
 4. Copying the filtered content to the component directory
@@ -79,28 +79,27 @@ atmos terraform source create vpc --stack dev --identity admin
 
 ## Configuration
 
-The component must have `metadata.source` configured in its stack manifest:
+The component must have `source` configured in its stack manifest:
 
 ```yaml
 components:
   terraform:
     vpc:
-      metadata:
-        source:
-          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-          version: 1.450.0
-          included_paths:
-            - "*.tf"
-          excluded_paths:
-            - "*.md"
-            - "tests/**"
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0
+        included_paths:
+          - "*.tf"
+        excluded_paths:
+          - "*.md"
+          - "tests/**"
 ```
 
 ## Output
 
 On success:
 ```
-Vendoring component 'vpc' from metadata.source...
+Vendoring component 'vpc' from source...
 Downloading from github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0
 ✓ Successfully vendored component to components/terraform/vpc
 ```

@@ -18,6 +18,26 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Package-level function variables for testing (can be replaced in tests).
+var (
+	initCliConfigFunc     = cfg.InitCliConfig
+	mergeAuthFunc         = auth.MergeComponentAuthFromConfig
+	createAuthFunc        = auth.CreateAndAuthenticateManager
+	describeComponentFunc = executeDescribeComponentDefault
+)
+
+// executeDescribeComponentDefault is the default implementation for describing components.
+func executeDescribeComponentDefault(component, stack string) (map[string]any, error) {
+	return e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false,
+		Skip:                 nil,
+		AuthManager:          nil,
+	})
+}
+
 // CommonOptions contains the standard flags shared by all source commands.
 type CommonOptions struct {
 	global.Flags
@@ -69,32 +89,25 @@ func InitConfigAndAuth(component, stack, identity string, globalFlags *global.Fl
 	}
 
 	// Load atmos configuration.
-	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	atmosConfig, err := initCliConfigFunc(configInfo, false)
 	if err != nil {
 		return nil, nil, errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
 
 	// Load component configuration to get component-level auth settings.
-	componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
-		Component:            component,
-		Stack:                stack,
-		ProcessTemplates:     false,
-		ProcessYamlFunctions: false,
-		Skip:                 nil,
-		AuthManager:          nil, // Don't need auth to describe component.
-	})
+	componentConfig, err := describeComponentFunc(component, stack)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load component config: %w", err)
 	}
 
 	// Merge component auth with global auth (component auth takes precedence).
-	mergedAuthConfig, err := auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, &atmosConfig, cfg.AuthSectionName)
+	mergedAuthConfig, err := mergeAuthFunc(&atmosConfig.Auth, componentConfig, &atmosConfig, cfg.AuthSectionName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to merge component auth: %w", err)
 	}
 
 	// Create AuthManager with merged config (auto-selects component's default identity if present).
-	authManager, err := auth.CreateAndAuthenticateManager(identity, mergedAuthConfig, cfg.IdentityFlagSelectValue)
+	authManager, err := createAuthFunc(identity, mergedAuthConfig, cfg.IdentityFlagSelectValue)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -113,14 +126,7 @@ func InitConfigAndAuth(component, stack, identity string, globalFlags *global.Fl
 
 // DescribeComponent returns the component configuration from stack.
 func DescribeComponent(component, stack string) (map[string]any, error) {
-	return e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
-		Component:            component,
-		Stack:                stack,
-		ProcessTemplates:     false,
-		ProcessYamlFunctions: false,
-		Skip:                 nil,
-		AuthManager:          nil,
-	})
+	return describeComponentFunc(component, stack)
 }
 
 // ProvisionSourceOptions holds parameters for provisioning a component source.

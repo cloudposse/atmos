@@ -368,6 +368,7 @@ var (
 	ErrInvalidTerraformRemoteStateType    = errors.New("invalid terraform remote_state_backend_type")
 	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
 	ErrInvalidTerraformAuth               = errors.New("invalid terraform auth section")
+	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
 
 	// Helmfile-specific subsection errors.
 	ErrInvalidHelmfileCommand  = errors.New("invalid helmfile command")

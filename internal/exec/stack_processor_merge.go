@@ -235,6 +235,18 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			return nil, err
 		}
 
+		// Process source configuration (merge global → base → component).
+		finalComponentSource, err := m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				opts.GlobalSourceSection,
+				result.BaseComponentSourceSection,
+				result.ComponentSourceSection,
+			})
+		if err != nil {
+			return nil, err
+		}
+
 		// Process auth configuration.
 		mergedAuth, err := processAuthConfig(atmosConfig, opts.AtmosGlobalAuthMap, finalComponentAuth)
 		if err != nil {
@@ -265,6 +277,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.BackendSectionName] = finalComponentBackend
 		comp[cfg.RemoteStateBackendTypeSectionName] = finalComponentRemoteStateBackendType
 		comp[cfg.RemoteStateBackendSectionName] = finalComponentRemoteStateBackend
+		comp[cfg.SourceSectionName] = finalComponentSource
 		comp[cfg.AuthSectionName] = mergedAuth
 	}
 

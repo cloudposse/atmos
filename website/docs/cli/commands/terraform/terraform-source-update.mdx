@@ -24,13 +24,13 @@ atmos terraform source update <component> --stack <stack> [flags]
 
 The `update` command re-vendors a Terraform component source by:
 
-1. Reading the `metadata.source` configuration from the component's stack manifest
+1. Reading the `source` configuration from the component's stack manifest
 2. Downloading a fresh copy of the source from the specified URI
 3. Applying any `included_paths` and `excluded_paths` filters
 4. Replacing the existing component directory with the new content
 
 This command always forces a re-download, making it useful for:
-- Updating to a new version after changing `metadata.source.version`
+- Updating to a new version after changing `source.version`
 - Refreshing the local copy when upstream changes are made
 - Recovering from a corrupted component directory
 
@@ -71,23 +71,22 @@ atmos terraform source update vpc --stack dev --identity admin
 
 ## Configuration
 
-The component must have `metadata.source` configured in its stack manifest:
+The component must have `source` configured in its stack manifest:
 
 ```yaml
 components:
   terraform:
     vpc:
-      metadata:
-        source:
-          uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-          version: 1.451.0  # Updated version
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.451.0  # Updated version
 ```
 
 ## Output
 
 On success:
 ```
-Re-vendoring component 'vpc' from metadata.source...
+Re-vendoring component 'vpc' from source...
 Downloading from github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.451.0
 ✓ Successfully re-vendored component to components/terraform/vpc
 ```

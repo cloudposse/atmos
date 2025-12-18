@@ -2,6 +2,7 @@ package source
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,7 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -147,3 +151,275 @@ func TestProvisionSource_TargetExists(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "# existing", string(content))
 }
+
+// TestProvisionSource_TopLevelSource tests that ProvisionSource works with top-level source.
+func TestProvisionSource_TopLevelSource(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a temp directory with existing component.
+	tempDir := t.TempDir()
+	componentDir := filepath.Join(tempDir, "vpc")
+	err := os.MkdirAll(componentDir, 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# existing"), 0o644)
+	require.NoError(t, err)
+
+	opts := &ProvisionSourceOptions{
+		AtmosConfig: &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: tempDir,
+				},
+			},
+		},
+		Component: "vpc",
+		Stack:     "dev",
+		ComponentConfig: map[string]any{
+			// Using top-level source instead of metadata.source.
+			"source": map[string]any{
+				"uri": "github.com/example/terraform-aws-vpc",
+			},
+		},
+		AuthContext: nil,
+		Force:       false, // Not forcing.
+	}
+
+	err = ProvisionSource(ctx, opts)
+	assert.NoError(t, err, "ProvisionSource should skip when target exists and force=false")
+
+	// Verify existing file was not modified.
+	content, err := os.ReadFile(filepath.Join(componentDir, "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# existing", string(content))
+}
+
+// TestInitConfigAndAuth_ConfigError tests that InitConfigAndAuth returns error when config init fails.
+func TestInitConfigAndAuth_ConfigError(t *testing.T) {
+	// Save original and restore after test.
+	origFunc := initCliConfigFunc
+	defer func() { initCliConfigFunc = origFunc }()
+
+	// Mock config init to fail.
+	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, errors.New("mock config error")
+	}
+
+	atmosConfig, authContext, err := InitConfigAndAuth("vpc", "dev", "", nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
+	assert.Nil(t, atmosConfig)
+	assert.Nil(t, authContext)
+}
+
+// TestInitConfigAndAuth_WithGlobalFlags tests that global flags are passed to config loader.
+func TestInitConfigAndAuth_WithGlobalFlags(t *testing.T) {
+	// Save original and restore after test.
+	origFunc := initCliConfigFunc
+	defer func() { initCliConfigFunc = origFunc }()
+
+	var capturedInfo schema.ConfigAndStacksInfo
+
+	// Mock config init to capture the config info.
+	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		capturedInfo = configInfo
+		// Return error to short-circuit the rest of the function.
+		return schema.AtmosConfiguration{}, errors.New("test stop")
+	}
+
+	globalFlags := &global.Flags{
+		BasePath:   "/custom/base",
+		Config:     []string{"/custom/config"},
+		ConfigPath: []string{"/custom/config/path"},
+		Profile:    []string{"test-profile"},
+	}
+
+	_, _, _ = InitConfigAndAuth("vpc", "dev", "", globalFlags)
+
+	// Verify global flags were passed.
+	assert.Equal(t, "/custom/base", capturedInfo.AtmosBasePath)
+	assert.Equal(t, []string{"/custom/config"}, capturedInfo.AtmosConfigFilesFromArg)
+	assert.Equal(t, []string{"/custom/config/path"}, capturedInfo.AtmosConfigDirsFromArg)
+	assert.Equal(t, []string{"test-profile"}, capturedInfo.ProfilesFromArg)
+	assert.Equal(t, "vpc", capturedInfo.ComponentFromArg)
+	assert.Equal(t, "dev", capturedInfo.Stack)
+}
+
+// TestInitConfigAndAuth_DescribeComponentError tests that InitConfigAndAuth handles describe component errors.
+func TestInitConfigAndAuth_DescribeComponentError(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigFunc
+	origDescribeFunc := describeComponentFunc
+	defer func() {
+		initCliConfigFunc = origInitFunc
+		describeComponentFunc = origDescribeFunc
+	}()
+
+	// Mock config init to succeed.
+	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+
+	// Mock describe component to fail.
+	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+		return nil, errors.New("mock describe error")
+	}
+
+	atmosConfig, authContext, err := InitConfigAndAuth("vpc", "dev", "", nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to load component config")
+	assert.Nil(t, atmosConfig)
+	assert.Nil(t, authContext)
+}
+
+// TestInitConfigAndAuth_AuthMergeError tests that InitConfigAndAuth handles auth merge errors.
+func TestInitConfigAndAuth_AuthMergeError(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigFunc
+	origDescribeFunc := describeComponentFunc
+	origMergeFunc := mergeAuthFunc
+	defer func() {
+		initCliConfigFunc = origInitFunc
+		describeComponentFunc = origDescribeFunc
+		mergeAuthFunc = origMergeFunc
+	}()
+
+	// Mock config init to succeed.
+	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+
+	// Mock describe component to succeed.
+	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+		return map[string]any{"component": "vpc"}, nil
+	}
+
+	// Mock auth merge to fail.
+	mergeAuthFunc = func(globalAuth *schema.AuthConfig, componentConfig map[string]any, atmosConfig *schema.AtmosConfiguration, sectionName string) (*schema.AuthConfig, error) {
+		return nil, errors.New("mock merge error")
+	}
+
+	atmosConfig, authContext, err := InitConfigAndAuth("vpc", "dev", "", nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to merge component auth")
+	assert.Nil(t, atmosConfig)
+	assert.Nil(t, authContext)
+}
+
+// TestInitConfigAndAuth_AuthCreateError tests that InitConfigAndAuth handles auth creation errors.
+func TestInitConfigAndAuth_AuthCreateError(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigFunc
+	origDescribeFunc := describeComponentFunc
+	origMergeFunc := mergeAuthFunc
+	origCreateFunc := createAuthFunc
+	defer func() {
+		initCliConfigFunc = origInitFunc
+		describeComponentFunc = origDescribeFunc
+		mergeAuthFunc = origMergeFunc
+		createAuthFunc = origCreateFunc
+	}()
+
+	// Mock config init to succeed.
+	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+
+	// Mock describe component to succeed.
+	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+		return map[string]any{"component": "vpc"}, nil
+	}
+
+	// Mock auth merge to succeed.
+	mergeAuthFunc = func(globalAuth *schema.AuthConfig, componentConfig map[string]any, atmosConfig *schema.AtmosConfiguration, sectionName string) (*schema.AuthConfig, error) {
+		return &schema.AuthConfig{}, nil
+	}
+
+	// Mock auth create to fail.
+	createAuthFunc = func(identity string, authConfig *schema.AuthConfig, flagValue string) (auth.AuthManager, error) {
+		return nil, errors.New("mock auth create error")
+	}
+
+	atmosConfig, authContext, err := InitConfigAndAuth("vpc", "dev", "", nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "mock auth create error")
+	assert.Nil(t, atmosConfig)
+	assert.Nil(t, authContext)
+}
+
+// TestInitConfigAndAuth_Success tests the successful path of InitConfigAndAuth.
+func TestInitConfigAndAuth_Success(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigFunc
+	origDescribeFunc := describeComponentFunc
+	origMergeFunc := mergeAuthFunc
+	origCreateFunc := createAuthFunc
+	defer func() {
+		initCliConfigFunc = origInitFunc
+		describeComponentFunc = origDescribeFunc
+		mergeAuthFunc = origMergeFunc
+		createAuthFunc = origCreateFunc
+	}()
+
+	// Mock config init to succeed.
+	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{BasePath: "components/terraform"},
+			},
+		}, nil
+	}
+
+	// Mock describe component to succeed.
+	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+		return map[string]any{"component": "vpc"}, nil
+	}
+
+	// Mock auth merge to succeed.
+	mergeAuthFunc = func(globalAuth *schema.AuthConfig, componentConfig map[string]any, atmosConfig *schema.AtmosConfiguration, sectionName string) (*schema.AuthConfig, error) {
+		return &schema.AuthConfig{}, nil
+	}
+
+	// Mock auth create to return nil (no auth manager).
+	createAuthFunc = func(identity string, authConfig *schema.AuthConfig, flagValue string) (auth.AuthManager, error) {
+		return nil, nil
+	}
+
+	atmosConfig, authContext, err := InitConfigAndAuth("vpc", "dev", "", nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, atmosConfig)
+	assert.Equal(t, "components/terraform", atmosConfig.Components.Terraform.BasePath)
+	assert.Nil(t, authContext) // No auth manager means no auth context.
+}
+
+// TestDescribeComponent tests the DescribeComponent wrapper function.
+func TestDescribeComponent(t *testing.T) {
+	// Save original and restore after test.
+	origDescribeFunc := describeComponentFunc
+	defer func() { describeComponentFunc = origDescribeFunc }()
+
+	// Mock describe component.
+	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+		return map[string]any{
+			"component": component,
+			"stack":     stack,
+			"vars":      map[string]any{"foo": "bar"},
+		}, nil
+	}
+
+	result, err := DescribeComponent("vpc", "dev")
+
+	require.NoError(t, err)
+	assert.Equal(t, "vpc", result["component"])
+	assert.Equal(t, "dev", result["stack"])
+}
+
+// Ensure package imports are used.
+var (
+	_ = cfg.InitCliConfig
+	_ = auth.CreateAndAuthenticateManager
+)
