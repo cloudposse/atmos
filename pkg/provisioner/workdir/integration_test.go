@@ -35,7 +35,7 @@ func TestWorkdirProvisionerRegistration(t *testing.T) {
 }
 
 // TestProvisionWorkdir_NoActivation verifies that the provisioner does nothing
-// when neither metadata.source nor metadata.workdir is set.
+// when neither metadata.source nor provision.workdir.enabled is set.
 func TestProvisionWorkdir_NoActivation(t *testing.T) {
 	ctx := context.Background()
 	atmosConfig := &schema.AtmosConfiguration{
@@ -44,7 +44,6 @@ func TestProvisionWorkdir_NoActivation(t *testing.T) {
 
 	componentConfig := map[string]any{
 		"component": "test-component",
-		"metadata":  map[string]any{},
 	}
 
 	err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil)
@@ -55,9 +54,9 @@ func TestProvisionWorkdir_NoActivation(t *testing.T) {
 	assert.False(t, ok, "workdir path should not be set when not activated")
 }
 
-// TestProvisionWorkdir_WithMetadataWorkdir verifies that the provisioner
-// activates when metadata.workdir is true.
-func TestProvisionWorkdir_WithMetadataWorkdir(t *testing.T) {
+// TestProvisionWorkdir_WithProvisionWorkdirEnabled verifies that the provisioner
+// activates when provision.workdir.enabled is true.
+func TestProvisionWorkdir_WithProvisionWorkdirEnabled(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -82,8 +81,10 @@ func TestProvisionWorkdir_WithMetadataWorkdir(t *testing.T) {
 
 	componentConfig := map[string]any{
 		"component": "test-component",
-		"metadata": map[string]any{
-			"workdir": true,
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
 		},
 	}
 
@@ -130,8 +131,10 @@ func TestService_Provision_WithMockFileSystem(t *testing.T) {
 
 	componentConfig := map[string]any{
 		"component": "vpc",
-		"metadata": map[string]any{
-			"workdir": true,
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
 		},
 	}
 

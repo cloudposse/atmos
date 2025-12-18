@@ -70,19 +70,20 @@ Each instance gets its own:
 
 ### Opt-In for Local Components
 
-For local components, enable workdir isolation with a simple metadata flag:
+For local components, enable workdir isolation with the provision config:
 
 ```yaml
 components:
   terraform:
     vpc:
-      metadata:
-        workdir: true  # Enable isolated workdir
+      provision:
+        workdir:
+          enabled: true  # Enable isolated workdir
       vars:
         cidr_block: "10.0.0.0/16"
 ```
 
-When `metadata.workdir: true` is set, Atmos:
+When `provision.workdir.enabled: true` is set, Atmos:
 
 1. Creates `.workdir/terraform/<component>/` before `terraform init`
 2. Copies the component files to the workdir
@@ -151,14 +152,15 @@ Component Workdir Isolation is the foundation for several exciting features on o
 
 ## Get Started
 
-Workdir isolation is available now. Simply add `metadata.workdir: true` to any component that needs isolation:
+Workdir isolation is available now. Simply add `provision.workdir.enabled: true` to any component that needs isolation:
 
 ```yaml
 components:
   terraform:
     my-component:
-      metadata:
-        workdir: true
+      provision:
+        workdir:
+          enabled: true
 ```
 
 For more details, see the [Component Configuration documentation](/cli/configuration/components).

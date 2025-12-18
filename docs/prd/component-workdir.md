@@ -58,7 +58,7 @@ The Workdir Provisioner is a self-registering provisioner that runs before `terr
 │     │           Workdir Provisioner                    │         │
 │     │                                                  │         │
 │     │  • Check activation (metadata.source OR         │         │
-│     │    metadata.workdir: true)                       │         │
+│     │    provision.workdir.enabled: true)              │         │
 │     │  • Create .workdir/terraform/<component>/        │         │
 │     │  • Download to XDG cache (if remote source)      │         │
 │     │  • Copy files to workdir                         │         │
@@ -88,7 +88,7 @@ The Workdir Provisioner is a self-registering provisioner that runs before `terr
 The workdir provisioner activates when **either**:
 
 1. `metadata.source` is present (JIT vendoring)
-2. `metadata.workdir: true` is set (explicit opt-in for local components)
+2. `provision.workdir.enabled: true` is set (explicit opt-in for local components)
 
 Otherwise, terraform runs directly in `components/terraform/<component>/` (default behavior).
 
@@ -266,7 +266,7 @@ func ProvisionWorkdir(
     componentConfig map[string]any,
     authContext *schema.AuthContext,
 ) error {
-    // 1. Check activation (metadata.source OR metadata.workdir: true)
+    // 1. Check activation (metadata.source OR provision.workdir.enabled: true)
     // 2. Create .workdir/terraform/<component>/
     // 3. Download to cache (if remote) or copy (if local)
     // 4. Copy from cache/local to workdir
@@ -366,7 +366,7 @@ terraform:
 
 - `TestWorkdirProvisionerRegistration` - Provisioner registration
 - `TestProvisionWorkdir_NoActivation` - No-op when not activated
-- `TestProvisionWorkdir_WithMetadataWorkdir` - Local component with workdir
+- `TestProvisionWorkdir_WithProvisionWorkdirEnabled` - Local component with workdir
 - `TestService_Provision_WithRemoteSource` - Remote source provisioning
 - `TestCleanWorkdir` / `TestCleanAllWorkdirs` - Clean operations
 

@@ -63,7 +63,7 @@ func NewServiceWithDeps(fs FileSystem, cache Cache, downloader Downloader, hashe
 //
 // Activation rules:
 // - Runs if metadata.source is present (JIT vendoring)
-// - Runs if metadata.workdir: true (explicit opt-in for local components)
+// - Runs if provision.workdir.enabled: true (explicit opt-in for local components)
 // - Does nothing otherwise (terraform runs in original component directory).
 func ProvisionWorkdir(
 	ctx context.Context,
@@ -443,17 +443,22 @@ func extractStringSlice(m map[string]any, key string) []string {
 	return result
 }
 
-// isWorkdirEnabled checks if metadata.workdir is set to true.
+// isWorkdirEnabled checks if provision.workdir.enabled is set to true.
 func isWorkdirEnabled(componentConfig map[string]any) bool {
 	defer perf.Track(nil, "workdir.isWorkdirEnabled")()
 
-	metadata, ok := componentConfig["metadata"].(map[string]any)
+	provisionConfig, ok := componentConfig["provision"].(map[string]any)
 	if !ok {
 		return false
 	}
 
-	workdir, ok := metadata["workdir"].(bool)
-	return ok && workdir
+	workdirConfig, ok := provisionConfig["workdir"].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	enabled, ok := workdirConfig["enabled"].(bool)
+	return ok && enabled
 }
 
 // extractComponentName extracts the component name from config.

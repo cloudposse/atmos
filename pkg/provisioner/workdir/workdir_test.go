@@ -109,40 +109,64 @@ func TestIsWorkdirEnabled(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "no metadata",
+			name:     "no provision",
 			config:   map[string]any{},
 			expected: false,
 		},
 		{
-			name: "metadata without workdir",
+			name: "provision without workdir",
 			config: map[string]any{
-				"metadata": map[string]any{},
+				"provision": map[string]any{},
 			},
 			expected: false,
 		},
 		{
-			name: "workdir false",
+			name: "workdir without enabled",
 			config: map[string]any{
-				"metadata": map[string]any{
-					"workdir": false,
+				"provision": map[string]any{
+					"workdir": map[string]any{},
 				},
 			},
 			expected: false,
 		},
 		{
-			name: "workdir true",
+			name: "enabled false",
 			config: map[string]any{
-				"metadata": map[string]any{
-					"workdir": true,
+				"provision": map[string]any{
+					"workdir": map[string]any{
+						"enabled": false,
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "enabled true",
+			config: map[string]any{
+				"provision": map[string]any{
+					"workdir": map[string]any{
+						"enabled": true,
+					},
 				},
 			},
 			expected: true,
 		},
 		{
-			name: "workdir as string (invalid)",
+			name: "enabled as string (invalid)",
 			config: map[string]any{
-				"metadata": map[string]any{
-					"workdir": "true",
+				"provision": map[string]any{
+					"workdir": map[string]any{
+						"enabled": "true",
+					},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "workdir as bool instead of map (invalid)",
+			config: map[string]any{
+				"provision": map[string]any{
+					"workdir": true,
 				},
 			},
 			expected: false,
