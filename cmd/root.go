@@ -57,6 +57,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
+	vendorCmd "github.com/cloudposse/atmos/cmd/vendor"
 	"github.com/cloudposse/atmos/cmd/version"
 	_ "github.com/cloudposse/atmos/cmd/workflow"
 )
@@ -1228,6 +1229,7 @@ func Execute() error {
 	devcontainer.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
 	backend.SetAtmosConfig(&atmosConfig)
+	vendorCmd.SetAtmosConfig(&atmosConfig)
 
 	if initErr != nil {
 		// Handle config initialization errors based on command context.
