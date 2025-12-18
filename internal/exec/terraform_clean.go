@@ -9,9 +9,9 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/huh"
-	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/internal/tui/utils"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -309,7 +309,7 @@ func DeletePathTerraform(fullPath string, objectName string) error {
 func confirmDeletion() (bool, error) {
 	// Check if stdin is a TTY
 	// In non-interactive environments (tests, CI/CD), we should require --force flag
-	if !term.IsTerminal(int(os.Stdin.Fd())) {
+	if !tuiTerm.IsTTYSupportForStdin() {
 		log.Debug("Not a TTY, skipping interactive confirmation (use --force to bypass)")
 		return false, errUtils.ErrInteractiveNotAvailable
 	}
