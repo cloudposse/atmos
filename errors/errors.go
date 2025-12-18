@@ -16,8 +16,8 @@ var (
 	// Vendor errors.
 	ErrVendoringNotConfigured = errors.New("Vendoring is not configured")
 
-	ErrDownloadPackage = errors.New("failed to download package")
-	ErrDownloadFile    = errors.New("failed to download file")
+	ErrDownloadPackage                       = errors.New("failed to download package")
+	ErrDownloadFile                          = errors.New("failed to download file")
 	ErrParseFile                             = errors.New("failed to parse file")
 	ErrParseURL                              = errors.New("failed to parse URL")
 	ErrInvalidURL                            = errors.New("invalid URL")
