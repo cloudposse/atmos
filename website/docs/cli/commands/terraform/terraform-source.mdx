@@ -152,17 +152,18 @@ atmos terraform source describe vpc --stack dev
 
 Output:
 ```yaml
-component: vpc
-stack: dev
-source:
-  uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-  version: 1.450.0
-  included_paths:
-    - "*.tf"
-    - "modules/**"
-  excluded_paths:
-    - "*.md"
-    - "tests/**"
+components:
+  terraform:
+    vpc:
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0
+        included_paths:
+          - "*.tf"
+          - "modules/**"
+        excluded_paths:
+          - "*.md"
+          - "tests/**"
 ```
 
 ### List Components with Sources

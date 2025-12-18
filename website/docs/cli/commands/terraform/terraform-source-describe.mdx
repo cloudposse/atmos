@@ -22,7 +22,7 @@ atmos terraform source describe <component> --stack <stack>
 
 ## Description
 
-The `describe` command extracts and displays the `source` configuration from a component's stack manifest. This is useful for:
+The `describe` command extracts and displays the `source` configuration from a component's stack manifest. The output matches the stack manifest schema format, making it easy to copy and paste into your configuration. This is useful for:
 
 - Verifying source configuration before vendoring
 - Checking the version configured for a component
@@ -41,17 +41,18 @@ atmos terraform source describe vpc --stack dev
 
 Output:
 ```yaml
-component: vpc
-stack: dev
-source:
-  uri: github.com/cloudposse/terraform-aws-components//modules/vpc
-  version: 1.450.0
-  included_paths:
-    - "*.tf"
-    - "modules/**"
-  excluded_paths:
-    - "*.md"
-    - "tests/**"
+components:
+  terraform:
+    vpc:
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0
+        included_paths:
+          - "*.tf"
+          - "modules/**"
+        excluded_paths:
+          - "*.md"
+          - "tests/**"
 ```
 
 ### String Format Source
@@ -64,11 +65,11 @@ atmos terraform source describe eks --stack dev
 
 Output:
 ```yaml
-component: eks
-stack: dev
-source:
-  uri: github.com/cloudposse/terraform-aws-components//modules/eks?ref=1.450.0
-  version: ""
+components:
+  terraform:
+    eks:
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/eks?ref=1.450.0
 ```
 
 ## Arguments
@@ -87,17 +88,11 @@ source:
 
 ## Output Format
 
-The command outputs YAML with the following structure:
+The command outputs YAML matching the stack manifest schema:
 
 <dl>
-  <dt>`component`</dt>
-  <dd>The component name provided as input.</dd>
-
-  <dt>`stack`</dt>
-  <dd>The stack name provided as input.</dd>
-
-  <dt>`source`</dt>
-  <dd>The parsed source specification.</dd>
+  <dt>`components.terraform.<component>.source`</dt>
+  <dd>The parsed source specification for the component.</dd>
 
   <dt>`source.uri`</dt>
   <dd>The go-getter compatible source URI.</dd>

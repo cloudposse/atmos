@@ -16,10 +16,10 @@ var describeParser *flags.StandardParser
 var describeCmd = &cobra.Command{
 	Use:   "describe <component>",
 	Short: "Show source configuration for a component",
-	Long: `Display the metadata.source configuration for a terraform component.
+	Long: `Display the source configuration for a terraform component.
 
 This command shows the source URI, version, and any path filters configured
-for the component.`,
+for the component. Output matches the stack manifest schema format.`,
 	Example: `  # Describe source configuration
   atmos terraform source describe vpc --stack dev`,
 	Args: cobra.ExactArgs(1),
@@ -66,8 +66,8 @@ func executeDescribeCommand(cmd *cobra.Command, args []string) error {
 			Err()
 	}
 
-	// Extract metadata.source.
-	sourceSpec, err := source.ExtractMetadataSource(componentConfig)
+	// Extract source configuration.
+	sourceSpec, err := source.ExtractSource(componentConfig)
 	if err != nil {
 		return err
 	}
@@ -76,15 +76,19 @@ func executeDescribeCommand(cmd *cobra.Command, args []string) error {
 		return errUtils.Build(errUtils.ErrMetadataSourceMissing).
 			WithContext("component", component).
 			WithContext("stack", stack).
-			WithHint("Add metadata.source to the component configuration in your stack manifest").
+			WithHint("Add source to the component configuration in your stack manifest").
 			Err()
 	}
 
-	// Output as YAML using data channel (stdout with masking).
+	// Output as YAML matching stack manifest schema format.
 	output := map[string]any{
-		"component": component,
-		"stack":     stack,
-		"source":    sourceSpec,
+		"components": map[string]any{
+			"terraform": map[string]any{
+				component: map[string]any{
+					"source": sourceSpec,
+				},
+			},
+		},
 	}
 
 	return data.WriteYAML(output)
