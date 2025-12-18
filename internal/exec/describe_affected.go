@@ -27,6 +27,9 @@ import (
 
 var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 
+// defaultFilePermissions is the default permission for output files.
+const defaultFilePermissions = 0o644
+
 type DescribeAffectedExecCreator func(atmosConfig *schema.AtmosConfiguration) DescribeAffectedExec
 
 type DescribeAffectedCmdArgs struct {
@@ -440,7 +443,8 @@ func convertAffectedToMatrix(affected []schema.Affected) MatrixOutput {
 	matrix := MatrixOutput{
 		Include: make([]MatrixEntry, 0, len(affected)),
 	}
-	for _, a := range affected {
+	for i := range affected {
+		a := &affected[i]
 		entry := MatrixEntry{
 			Stack:         a.Stack,
 			Component:     a.Component,
@@ -464,7 +468,7 @@ func writeMatrixOutput(affected []schema.Affected, outputFile string) error {
 
 	if outputFile != "" {
 		// Write to file in key=value format for $GITHUB_OUTPUT.
-		f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFilePermissions)
 		if err != nil {
 			return fmt.Errorf("failed to open output file %s: %w", outputFile, err)
 		}
@@ -483,6 +487,6 @@ func writeMatrixOutput(affected []schema.Affected, outputFile string) error {
 	}
 
 	// Write to stdout.
-	data.Writeln(string(matrixJSON))
+	_ = data.Writeln(string(matrixJSON))
 	return nil
 }

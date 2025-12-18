@@ -3,7 +3,6 @@
 *.tfstate
 *.tfstate.*
 **/*.tf.json
-**/planfile
 **/*.planfile
 **/*.kubeconfig
 **/terraform.tfvars.json
