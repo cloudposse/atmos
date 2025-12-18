@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var (
@@ -14,6 +15,8 @@ var (
 // Register registers a CI provider.
 // Providers should call this in their init() function.
 func Register(p Provider) {
+	defer perf.Track(nil, "ci.Register")()
+
 	providersMu.Lock()
 	defer providersMu.Unlock()
 	providers[p.Name()] = p
@@ -21,6 +24,8 @@ func Register(p Provider) {
 
 // Get returns a provider by name.
 func Get(name string) (Provider, error) {
+	defer perf.Track(nil, "ci.Get")()
+
 	providersMu.RLock()
 	defer providersMu.RUnlock()
 
@@ -34,6 +39,8 @@ func Get(name string) (Provider, error) {
 // Detect returns the first provider that detects it is active in the current environment.
 // Returns nil if no provider is detected.
 func Detect() Provider {
+	defer perf.Track(nil, "ci.Detect")()
+
 	providersMu.RLock()
 	defer providersMu.RUnlock()
 
@@ -47,6 +54,8 @@ func Detect() Provider {
 
 // DetectOrError returns the detected provider or an error if none is detected.
 func DetectOrError() (Provider, error) {
+	defer perf.Track(nil, "ci.DetectOrError")()
+
 	p := Detect()
 	if p == nil {
 		return nil, errUtils.ErrCIProviderNotDetected
@@ -56,6 +65,8 @@ func DetectOrError() (Provider, error) {
 
 // List returns all registered provider names.
 func List() []string {
+	defer perf.Track(nil, "ci.List")()
+
 	providersMu.RLock()
 	defer providersMu.RUnlock()
 
@@ -68,5 +79,7 @@ func List() []string {
 
 // IsCI returns true if any CI provider is detected.
 func IsCI() bool {
+	defer perf.Track(nil, "ci.IsCI")()
+
 	return Detect() != nil
 }

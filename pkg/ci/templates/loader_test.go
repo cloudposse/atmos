@@ -31,20 +31,20 @@ func TestLoaderLoad(t *testing.T) {
 	// Create custom template files.
 	customDir := filepath.Join(tmpDir, "custom")
 	terraformDir := filepath.Join(customDir, "terraform")
-	require.NoError(t, os.MkdirAll(terraformDir, 0755))
+	require.NoError(t, os.MkdirAll(terraformDir, 0o755))
 
 	// Create custom templates.
 	err := os.WriteFile(
 		filepath.Join(terraformDir, "plan.md"),
 		[]byte("# Custom Plan Template\n{{ .Component }}"),
-		0644,
+		0o644,
 	)
 	require.NoError(t, err)
 
 	err = os.WriteFile(
 		filepath.Join(customDir, "explicit-plan.md"),
 		[]byte("# Explicit Override\n{{ .Stack }}"),
-		0644,
+		0o644,
 	)
 	require.NoError(t, err)
 

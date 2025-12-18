@@ -4,9 +4,9 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/ci"
 	_ "github.com/cloudposse/atmos/pkg/ci/github" // Register GitHub provider.
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -151,7 +151,7 @@ func getRepoContext(provider ci.Provider) (owner, repo, branch, sha string, err 
 
 // renderStatus renders the CI status to the terminal.
 func renderStatus(status *ci.Status) {
-	ui.Writef("Relevant pull requests in %s\n\n", status.Repository)
+	_ = ui.Writef("Relevant pull requests in %s\n\n", status.Repository)
 
 	// Current branch.
 	if status.CurrentBranch != nil {

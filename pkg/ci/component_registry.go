@@ -89,6 +89,8 @@ func ListComponentProviders() []string {
 // ClearComponentProviders removes all registered component providers.
 // This is primarily for testing.
 func ClearComponentProviders() {
+	defer perf.Track(nil, "ci.ClearComponentProviders")()
+
 	componentProvidersMu.Lock()
 	defer componentProvidersMu.Unlock()
 	componentProviders = make(map[string]ComponentCIProvider)

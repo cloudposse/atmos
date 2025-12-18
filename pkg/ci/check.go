@@ -1,6 +1,10 @@
 package ci
 
-import "time"
+import (
+	"time"
+
+	"github.com/cloudposse/atmos/pkg/perf"
+)
 
 // CheckRunState represents the state of a check run.
 type CheckRunState string
@@ -115,5 +119,7 @@ type UpdateCheckRunOptions struct {
 // FormatCheckRunName creates a standardized check run name for Atmos.
 // Format: "atmos/<action>: <stack>/<component>".
 func FormatCheckRunName(action, stack, component string) string {
+	defer perf.Track(nil, "ci.FormatCheckRunName")()
+
 	return "atmos/" + action + ": " + stack + "/" + component
 }

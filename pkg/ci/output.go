@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // NoopOutputWriter is an OutputWriter that does nothing.
@@ -12,11 +14,15 @@ type NoopOutputWriter struct{}
 
 // WriteOutput implements OutputWriter.
 func (w *NoopOutputWriter) WriteOutput(_, _ string) error {
+	defer perf.Track(nil, "ci.NoopOutputWriter.WriteOutput")()
+
 	return nil
 }
 
 // WriteSummary implements OutputWriter.
 func (w *NoopOutputWriter) WriteSummary(_ string) error {
+	defer perf.Track(nil, "ci.NoopOutputWriter.WriteSummary")()
+
 	return nil
 }
 
@@ -28,6 +34,8 @@ type FileOutputWriter struct {
 
 // NewFileOutputWriter creates a new FileOutputWriter.
 func NewFileOutputWriter(outputPath, summaryPath string) *FileOutputWriter {
+	defer perf.Track(nil, "ci.NewFileOutputWriter")()
+
 	return &FileOutputWriter{
 		outputPath:  outputPath,
 		summaryPath: summaryPath,
@@ -37,6 +45,8 @@ func NewFileOutputWriter(outputPath, summaryPath string) *FileOutputWriter {
 // WriteOutput writes a key-value pair to the output file.
 // Format: key=value (single line) or key<<EOF\nvalue\nEOF (multiline).
 func (w *FileOutputWriter) WriteOutput(key, value string) error {
+	defer perf.Track(nil, "ci.FileOutputWriter.WriteOutput")()
+
 	if w.outputPath == "" {
 		return nil
 	}
@@ -64,6 +74,8 @@ func (w *FileOutputWriter) WriteOutput(key, value string) error {
 
 // WriteSummary appends content to the job summary file.
 func (w *FileOutputWriter) WriteSummary(content string) error {
+	defer perf.Track(nil, "ci.FileOutputWriter.WriteSummary")()
+
 	if w.summaryPath == "" {
 		return nil
 	}
@@ -85,11 +97,15 @@ type OutputHelpers struct {
 
 // NewOutputHelpers creates a new OutputHelpers.
 func NewOutputHelpers(writer OutputWriter) *OutputHelpers {
+	defer perf.Track(nil, "ci.NewOutputHelpers")()
+
 	return &OutputHelpers{Writer: writer}
 }
 
 // WritePlanOutputs writes standard plan output variables.
 func (h *OutputHelpers) WritePlanOutputs(opts PlanOutputOptions) error {
+	defer perf.Track(nil, "ci.OutputHelpers.WritePlanOutputs")()
+
 	if err := h.Writer.WriteOutput("has_changes", fmt.Sprintf("%t", opts.HasChanges)); err != nil {
 		return err
 	}
@@ -121,6 +137,8 @@ func (h *OutputHelpers) WritePlanOutputs(opts PlanOutputOptions) error {
 
 // WriteApplyOutputs writes standard apply output variables.
 func (h *OutputHelpers) WriteApplyOutputs(opts ApplyOutputOptions) error {
+	defer perf.Track(nil, "ci.OutputHelpers.WriteApplyOutputs")()
+
 	if err := h.Writer.WriteOutput("apply_exit_code", fmt.Sprintf("%d", opts.ExitCode)); err != nil {
 		return err
 	}
