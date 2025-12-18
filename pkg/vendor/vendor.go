@@ -31,13 +31,39 @@ func Pull(atmosConfig *schema.AtmosConfiguration, opts ...PullOption) error {
 	if options.Stack != "" {
 		return VendorStack(atmosConfig, options.Stack, WithStackDryRun(options.DryRun))
 	}
+
+	// First, check if vendor.yaml exists - it takes precedence
+	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(
+		atmosConfig,
+		cfg.AtmosVendorConfigFileName,
+		true,
+	)
+	if err != nil {
+		return err
+	}
+
+	// If vendor.yaml exists, use it (with optional component/tags filtering)
+	if vendorConfigExists {
+		return executeAtmosVendorInternal(&executeVendorOptions{
+			vendorConfigFileName: foundVendorConfigFile,
+			dryRun:               options.DryRun,
+			atmosConfig:          atmosConfig,
+			atmosVendorSpec:      vendorConfig.Spec,
+			component:            options.Component,
+			tags:                 options.Tags,
+		})
+	}
+
+	// No vendor.yaml - if component specified, try component.yaml
 	if options.Component != "" {
 		return VendorComponent(atmosConfig, options.Component,
 			WithComponentDryRun(options.DryRun),
 			WithComponentComponentType(options.ComponentType),
 		)
 	}
-	return vendorAll(atmosConfig, options)
+
+	// No vendor.yaml and no component specified - error
+	return fmt.Errorf("%w: %s", ErrVendorConfigNotExist, cfg.AtmosVendorConfigFileName)
 }
 
 // VendorComponent vendors a single component.
@@ -79,32 +105,6 @@ func VendorStack(atmosConfig *schema.AtmosConfiguration, stack string, opts ...S
 	}
 
 	return executeStackVendorInternal(atmosConfig, stack, options.DryRun)
-}
-
-// vendorAll vendors all dependencies from vendor config file.
-func vendorAll(atmosConfig *schema.AtmosConfiguration, options *PullOptions) error {
-	defer perf.Track(atmosConfig, "vendor.vendorAll")()
-
-	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(
-		atmosConfig,
-		cfg.AtmosVendorConfigFileName,
-		true,
-	)
-	if err != nil {
-		return err
-	}
-	if !vendorConfigExists {
-		return fmt.Errorf("%w: %s", ErrVendorConfigNotExist, cfg.AtmosVendorConfigFileName)
-	}
-
-	return executeAtmosVendorInternal(&executeVendorOptions{
-		vendorConfigFileName: foundVendorConfigFile,
-		dryRun:               options.DryRun,
-		atmosConfig:          atmosConfig,
-		atmosVendorSpec:      vendorConfig.Spec,
-		component:            options.Component,
-		tags:                 options.Tags,
-	})
 }
 
 // executeAtmosVendorInternal downloads the artifacts from the sources and writes them to the targets.
