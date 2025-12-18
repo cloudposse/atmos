@@ -71,6 +71,7 @@ linters:
             - "!**/pkg/provisioner/backend/**"
             - "!**/pkg/ci/github/**"
             - "!**/pkg/ci/planfile/github/**"
+            - "!**/pkg/ci/planfile/s3/**"
             - "!**/pkg/github/**"
             - "$test"
           deny:
