@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -40,6 +41,9 @@ const (
 
 	// GithubMaxRedirects is the max number of redirects for artifact downloads.
 	githubMaxRedirects = 10
+
+	// HTTPTimeout is the timeout for HTTP requests.
+	httpTimeout = 30 * time.Second
 )
 
 // Store implements the planfile.Store interface using GitHub Actions Artifacts.
@@ -244,7 +248,8 @@ func (s *Store) downloadArtifactContent(ctx context.Context, artifactID int64) (
 		return nil, fmt.Errorf("%w: failed to get artifact download URL: %w", errUtils.ErrPlanfileDownloadFailed, err)
 	}
 
-	resp, err := http.Get(url.String())
+	httpClient := &http.Client{Timeout: httpTimeout}
+	resp, err := httpClient.Get(url.String())
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to download artifact: %w", errUtils.ErrPlanfileDownloadFailed, err)
 	}
@@ -403,7 +408,7 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 		PerPage: 100,
 	})
 	if err != nil {
-		return false, fmt.Errorf("failed to list artifacts: %w", err)
+		return false, errors.Join(errUtils.ErrPlanfileListFailed, fmt.Errorf("failed to list artifacts: %w", err))
 	}
 
 	for _, artifact := range artifacts.Artifacts {
@@ -425,7 +430,7 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata
 		PerPage: 100,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list artifacts: %w", err)
+		return nil, errors.Join(errUtils.ErrPlanfileListFailed, fmt.Errorf("failed to list artifacts: %w", err))
 	}
 
 	for _, artifact := range artifacts.Artifacts {

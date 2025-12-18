@@ -56,7 +56,7 @@ var excludedPackages = []string{
 	"/pkg/spacelift", // Spacelift generation is one-shot per command.
 	"/pkg/validator", // Validation runs once per command.
 	"/internal/gcp",  // GCP utilities would create import cycle with pkg/perf (used by pkg/perf).
-	"/pkg/template",  // Template AST utilities - simple string operations, minimal overhead.
+	"/pkg/template",  // Template AST utilities - simple string operations where perf.Track overhead is disproportionate.
 }
 
 // Receiver types to exclude from perf.Track() checks.

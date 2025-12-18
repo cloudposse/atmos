@@ -2,9 +2,11 @@ package planfile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -94,12 +96,12 @@ func downloadToFile(store planfile.Store, key, outputPath string) (*planfile.Met
 func writeToFile(outputPath string, reader io.Reader) error {
 	f, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("%w: failed to create output file %s: %w", errUtils.ErrPlanfileDownloadFailed, outputPath, err)
+		return errors.Join(errUtils.ErrPlanfileDownloadFailed, fmt.Errorf("failed to create output file %s: %w", outputPath, err))
 	}
 	defer f.Close()
 
 	if _, err := io.Copy(f, reader); err != nil {
-		return fmt.Errorf("%w: failed to write planfile: %w", errUtils.ErrPlanfileDownloadFailed, err)
+		return errors.Join(errUtils.ErrPlanfileDownloadFailed, fmt.Errorf("failed to write planfile: %w", err))
 	}
 	return nil
 }
@@ -114,10 +116,5 @@ func printDownloadSuccess(storeName, key, outputPath string, metadata *planfile.
 
 // baseName extracts the basename from a path/key.
 func baseName(path string) string {
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i] == '/' {
-			return path[i+1:]
-		}
-	}
-	return path
+	return filepath.Base(path)
 }

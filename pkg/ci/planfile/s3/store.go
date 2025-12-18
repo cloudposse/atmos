@@ -139,8 +139,7 @@ func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *planf
 		Key:    aws.String(fullKey),
 	})
 	if err != nil {
-		var noSuchKey *types.NoSuchKey
-		if isNoSuchKeyError(err, noSuchKey) {
+		if isNoSuchKeyError(err) {
 			return nil, nil, fmt.Errorf("%w: %s", errUtils.ErrPlanfileNotFound, key)
 		}
 		return nil, nil, fmt.Errorf("%w: failed to download planfile from S3: %w", errUtils.ErrPlanfileDownloadFailed, err)
@@ -239,8 +238,7 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 		Key:    aws.String(fullKey),
 	})
 	if err != nil {
-		var notFound *types.NotFound
-		if isNotFoundError(err, notFound) {
+		if isNotFoundError(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to check if planfile exists: %w", err)
@@ -261,8 +259,7 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata
 		Key:    aws.String(fullKey),
 	})
 	if err != nil {
-		var notFound *types.NotFound
-		if isNotFoundError(err, notFound) {
+		if isNotFoundError(err) {
 			return nil, fmt.Errorf("%w: %s", errUtils.ErrPlanfileNotFound, key)
 		}
 		return nil, err
@@ -303,7 +300,7 @@ func (s *Store) loadMetadata(ctx context.Context, planfileKey string) (*planfile
 }
 
 // isNoSuchKeyError checks if the error is a NoSuchKey error.
-func isNoSuchKeyError(err error, _ *types.NoSuchKey) bool {
+func isNoSuchKeyError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -312,7 +309,7 @@ func isNoSuchKeyError(err error, _ *types.NoSuchKey) bool {
 }
 
 // isNotFoundError checks if the error is a NotFound error.
-func isNotFoundError(err error, _ *types.NotFound) bool {
+func isNotFoundError(err error) bool {
 	if err == nil {
 		return false
 	}

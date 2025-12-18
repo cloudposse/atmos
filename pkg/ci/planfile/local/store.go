@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/planfile"
@@ -155,7 +156,7 @@ func (s *Store) List(_ context.Context, prefix string) ([]planfile.PlanfileInfo,
 		}
 
 		// Skip directories and metadata files.
-		if d.IsDir() || filepath.Ext(path) == ".json" {
+		if d.IsDir() || strings.HasSuffix(path, metadataSuffix) {
 			return nil
 		}
 
