@@ -28,6 +28,7 @@ Valid subcommands are:
 • output
 • plan
 • plan-diff
+• planfile
 • providers
 • provision
 • refresh
