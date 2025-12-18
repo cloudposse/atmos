@@ -121,6 +121,9 @@ func (p *Provider) updateCheckRun(ctx context.Context, opts *ci.UpdateCheckRunOp
 }
 
 // mapGitHubStatusToCheckRunState maps GitHub API status to ci.CheckRunState.
+// Note: For completed status, this returns CheckRunStateSuccess as a fallback.
+// When a check run is completed, callers should also examine the conclusion
+// field to determine the actual outcome (success, failure, cancelled, etc.).
 func mapGitHubStatusToCheckRunState(status string) ci.CheckRunState {
 	switch status {
 	case statusQueued:
@@ -128,7 +131,10 @@ func mapGitHubStatusToCheckRunState(status string) ci.CheckRunState {
 	case statusInProgress:
 		return ci.CheckRunStateInProgress
 	case statusCompleted:
-		// Note: completed status requires conclusion to determine actual state.
+		// Completed status requires conclusion to determine actual state.
+		// This is a fallback; callers should check the Conclusion field.
+		// GitHub conclusions: success, failure, neutral, cancelled, skipped,
+		// timed_out, action_required.
 		return ci.CheckRunStateSuccess
 	default:
 		return ci.CheckRunStatePending

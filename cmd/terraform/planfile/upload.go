@@ -116,29 +116,39 @@ func getStoreOptions(atmosConfig *schema.AtmosConfiguration, storeName string) (
 
 	// For now, use defaults. In a full implementation, this would read from
 	// atmosConfig.Terraform.Planfiles configuration.
-	storeType := "local"
-	options := map[string]any{
-		"path": ".atmos/planfiles",
-	}
+	var storeType string
+	var options map[string]any
 
+	// If explicit store name provided, use it.
 	if storeName != "" {
 		storeType = storeName
+		options = map[string]any{}
 	}
 
-	// Check environment for S3 configuration.
-	if bucket := os.Getenv("ATMOS_PLANFILE_BUCKET"); bucket != "" {
-		storeType = "s3"
-		options = map[string]any{
-			"bucket": bucket,
-			"prefix": os.Getenv("ATMOS_PLANFILE_PREFIX"),
-			"region": os.Getenv("AWS_REGION"),
+	// Check environment for S3 configuration (only if not explicitly set).
+	if storeType == "" {
+		if bucket := os.Getenv("ATMOS_PLANFILE_BUCKET"); bucket != "" {
+			storeType = "s3"
+			options = map[string]any{
+				"bucket": bucket,
+				"prefix": os.Getenv("ATMOS_PLANFILE_PREFIX"),
+				"region": os.Getenv("AWS_REGION"),
+			}
 		}
 	}
 
-	// Check environment for GitHub configuration.
-	if os.Getenv("GITHUB_ACTIONS") == "true" && storeType == "" {
+	// Check environment for GitHub configuration (only if not explicitly set).
+	if storeType == "" && os.Getenv("GITHUB_ACTIONS") == "true" {
 		storeType = "github-artifacts"
 		options = map[string]any{}
+	}
+
+	// Default to local storage.
+	if storeType == "" {
+		storeType = "local"
+		options = map[string]any{
+			"path": ".atmos/planfiles",
+		}
 	}
 
 	return planfile.StoreOptions{
