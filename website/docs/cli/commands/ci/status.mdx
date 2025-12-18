@@ -1,0 +1,101 @@
+---
+title: atmos ci status
+sidebar_label: status
+sidebar_class_name: command
+sidebar_position: 2
+id: status
+description: Show CI status for current branch, similar to gh pr status.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Display CI status for the current branch, including status checks, pull request information, and related PRs. Similar to `gh pr status` but integrated with Atmos CI features.
+</Intro>
+
+## Usage
+
+```shell
+atmos ci status
+```
+
+## Examples
+
+```shell
+# Show status for current branch
+atmos ci status
+
+# Works in CI or locally (requires GITHUB_TOKEN)
+GITHUB_TOKEN=ghp_xxx atmos ci status
+```
+
+## Output
+
+When on a branch with an open pull request:
+
+```
+Relevant pull requests in cloudposse/infra-live
+
+Current branch
+  #123  Add VPC module [feature-branch]
+    - ✓ terraform-plan (success)
+    - ✓ terraform-validate (success)
+    - ○ terraform-apply (pending)
+    - ✗ security-scan (failure)
+
+Created by you
+  #120  Update EKS cluster [eks-upgrade]
+    - All checks passing
+
+Requesting a code review from you
+  #118  Refactor networking [net-refactor]
+    - All checks passing
+```
+
+When not on a PR branch:
+
+```
+Relevant pull requests in cloudposse/infra-live
+
+Current branch
+  Commit status for abc123d
+    - ✓ terraform-validate (success)
+    - ○ terraform-plan (pending)
+    - ✗ lint (failure)
+
+  No open pull request for current branch.
+```
+
+## Status Icons
+
+| Icon | State | Description |
+|------|-------|-------------|
+| ✓ | Success | Check passed |
+| ✗ | Failure | Check failed |
+| ○ | Pending | Check in progress |
+| ● | Cancelled | Check was cancelled |
+| − | Skipped | Check was skipped |
+
+## Requirements
+
+- **GITHUB_TOKEN** environment variable must be set (automatically available in GitHub Actions)
+- Must be in a git repository with a remote configured
+
+## Flags
+
+This command has no additional flags.
+
+## Environment Variables
+
+<dl>
+  <dt>`GITHUB_TOKEN`</dt>
+  <dd>
+    GitHub personal access token or GitHub Actions token. Required for API access.
+
+    In GitHub Actions, this is automatically available as `${{ secrets.GITHUB_TOKEN }}`.
+  </dd>
+</dl>
+
+## Related
+
+- [CI Configuration](/cli/configuration/ci) - Configure CI integration
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Run terraform plan with CI integration
