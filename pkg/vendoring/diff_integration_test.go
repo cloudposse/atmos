@@ -13,11 +13,28 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// setupTestIO initializes I/O context, data writer, and UI formatter for tests.
+// This ensures tests that trigger data.Write() or ui.Infof() operations don't panic.
+func setupTestIO(t *testing.T) {
+	t.Helper()
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		t.Fatalf("Failed to initialize I/O context: %v", err)
+	}
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+}
 
 func TestExecuteVendorDiffWithGitOps(t *testing.T) {
 	t.Parallel()
+	// Initialize I/O before subtests to avoid race conditions.
+	setupTestIO(t)
 
 	tests := []struct {
 		name        string
@@ -193,6 +210,9 @@ spec:
 }
 
 func TestExecuteVendorDiffWithGitOps_DefaultFromVersion(t *testing.T) {
+	// Initialize I/O for data.Write() and ui.Infof() operations.
+	setupTestIO(t)
+
 	// This test verifies that when --from is not specified, it defaults to current version.
 	vendorYAML := `apiVersion: atmos/v1
 kind: AtmosVendorConfig

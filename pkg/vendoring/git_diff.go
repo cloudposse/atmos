@@ -8,9 +8,9 @@ import (
 	"regexp"
 
 	"github.com/mattn/go-isatty"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -76,10 +76,9 @@ func shouldColorizeOutput(noColor bool, outputFile string) bool {
 		return false
 	}
 
-	// Check TERM environment variable
-	_ = viper.BindEnv("ATMOS_TERM", "ATMOS_TERM", "TERM")
-	term := viper.GetString("ATMOS_TERM")
-	if term == "dumb" || term == "" {
+	// Check TERM environment variable via lookup (not BindEnv since TERM is system-level).
+	term, exists := os.LookupEnv("TERM")
+	if !exists || term == "dumb" || term == "" {
 		return false
 	}
 
@@ -92,15 +91,14 @@ func shouldColorizeOutput(noColor bool, outputFile string) bool {
 }
 
 // writeOutput writes the diff output to stdout or a file.
-func writeOutput(data []byte, outputFile string) error {
+func writeOutput(diffData []byte, outputFile string) error {
 	if outputFile != "" {
-		// Write to file
-		return os.WriteFile(outputFile, data, 0o644) //nolint:gosec,revive // Standard file permissions for generated output
+		// Write to file.
+		return os.WriteFile(outputFile, diffData, 0o644) //nolint:gosec,revive // Standard file permissions for generated output
 	}
 
-	// Write to stdout
-	_, err := os.Stdout.Write(data)
-	return err
+	// Write to stdout using data channel.
+	return data.Write(string(diffData))
 }
 
 // getGitDiffBetweenRefs is a convenience function that generates a diff for a remote Git repository.

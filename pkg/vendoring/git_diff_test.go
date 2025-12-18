@@ -7,6 +7,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
 func TestBuildGitDiffArgs(t *testing.T) {
@@ -161,6 +164,11 @@ func TestShouldColorizeOutput(t *testing.T) {
 }
 
 func TestWriteOutput(t *testing.T) {
+	// Initialize I/O for data.Write() operations.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+
 	tests := []struct {
 		name       string
 		data       []byte

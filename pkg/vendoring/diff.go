@@ -2,13 +2,14 @@ package vendoring
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendoring/version"
 )
 
@@ -141,12 +142,11 @@ func executeVendorDiffWithGitOps(atmosConfig *schema.AtmosConfiguration, flags *
 
 	// Output the diff.
 	if len(diff) == 0 {
-		fmt.Fprintf(os.Stderr, "No differences between %s and %s\n", fromRef, toRef)
+		_ = ui.Infof("No differences between %s and %s", fromRef, toRef)
 		return nil
 	}
 
-	_, err = os.Stdout.Write(diff)
-	return err
+	return data.Write(string(diff))
 }
 
 // executeComponentVendorDiff handles vendor diff for component.yaml files.
@@ -158,7 +158,7 @@ func executeComponentVendorDiff(atmosConfig *schema.AtmosConfiguration, flags *d
 	// 1. Read component.yaml from components/{type}/{component}/component.yaml.
 	// 2. Extract version and source information.
 	// 3. Call git diff operations similar to vendor.yaml handling.
-	fmt.Fprintf(os.Stderr, "Component vendor diff for component.yaml is not yet implemented for component %s\n", flags.Component)
+	_ = ui.Warningf("Component vendor diff for component.yaml is not yet implemented for component %s", flags.Component)
 
 	return errUtils.ErrNotImplemented
 }

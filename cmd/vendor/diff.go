@@ -113,7 +113,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		File:          opts.File,
 		Context:       opts.Context,
 		Unified:       opts.Unified,
-		NoColor:       false, // This would come from global flags if needed.
+		NoColor:       opts.NoColor,
 	})
 }
 
@@ -125,7 +125,10 @@ func parseDiffOptions(cmd *cobra.Command) (*DiffOptions, error) {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrParseFlag, err)
 	}
 
-	return &DiffOptions{
+	// Get NoColor from global persistent flags.
+	noColor, _ := cmd.Flags().GetBool("no-color")
+
+	opts := &DiffOptions{
 		// global.Flags embedded - would be populated from root persistent flags.
 		Component:     v.GetString(flagComponent),
 		ComponentType: v.GetString(flagType),
@@ -134,5 +137,8 @@ func parseDiffOptions(cmd *cobra.Command) (*DiffOptions, error) {
 		File:          v.GetString("file"),
 		Context:       v.GetInt("context"),
 		Unified:       v.GetBool("unified"),
-	}, nil
+	}
+	opts.NoColor = noColor
+
+	return opts, nil
 }

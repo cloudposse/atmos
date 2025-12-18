@@ -8,10 +8,11 @@ description: Show Git diff between two versions of a vendored component
 
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
 
-:::note Purpose
+<Intro>
 Use this command to see what changed between two versions of a vendored component by showing a Git diff directly from the remote repository, without requiring a local clone.
-:::
+</Intro>
 
 <Screengrab title="atmos vendor diff --help" slug="atmos-vendor-diff--help" />
 
@@ -264,10 +265,10 @@ source: https://example.com/archive.zip
 
 - [`atmos vendor update`](/cli/commands/vendor/update) - Update vendored component versions
 - [`atmos vendor pull`](/cli/commands/vendor/pull) - Pull vendored components
-- [`atmos describe component`](/cli/commands/describe/describe-component) - Show component configuration
+- [`atmos describe component`](/cli/commands/describe/component) - Show component configuration
 
 ## See Also
 
-- [Vendor Configuration](/core-concepts/vendor) - Learn about vendor configuration format
+- [Vendor Configuration](/vendor/) - Learn about vendor configuration format
 - [Vendoring Cheatsheet](/cheatsheets/vendoring) - Component vendoring guide
 - [Git Diff Documentation](https://git-scm.com/docs/git-diff) - Understanding Git diffs
