@@ -343,21 +343,28 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	log.SetOutput(w)
 
+	// Read from pipe concurrently to avoid deadlock when output exceeds pipe buffer.
+	// The pipe buffer is limited (typically 64KB), and if ExecuteTerraform produces
+	// more output than the buffer can hold, it will block waiting for a reader.
+	var buf bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		_, _ = buf.ReadFrom(r)
+		close(done)
+	}()
+
 	err := ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-	// Restore stderr
+	// Restore stderr and close writer to signal EOF to the reader goroutine
 	err = w.Close()
 	assert.NoError(t, err)
 	os.Stderr = oldStderr
 
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
+	// Wait for the reader goroutine to finish
+	<-done
+
 	output := buf.String()
 
 	// Check the output
