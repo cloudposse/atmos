@@ -11,9 +11,9 @@ import (
 
 func TestParsePullOptions(t *testing.T) {
 	tests := []struct {
-		name           string
-		viperSetup     func(*viper.Viper)
-		expectedOpts   *PullOptions
+		name         string
+		viperSetup   func(*viper.Viper)
+		expectedOpts *PullOptions
 	}{
 		{
 			name: "default values",
