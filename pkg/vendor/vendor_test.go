@@ -194,53 +194,53 @@ func TestFilterByTags(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		sources        []schema.AtmosVendorSource
-		tags           []string
-		expectedCount  int
-		expectedComps  []string
+		name          string
+		sources       []schema.AtmosVendorSource
+		tags          []string
+		expectedCount int
+		expectedComps []string
 	}{
 		{
-			name:           "no tags returns all sources",
-			sources:        sources,
-			tags:           nil,
-			expectedCount:  4,
-			expectedComps:  []string{"vpc", "ecs", "rds", "s3"},
+			name:          "no tags returns all sources",
+			sources:       sources,
+			tags:          nil,
+			expectedCount: 4,
+			expectedComps: []string{"vpc", "ecs", "rds", "s3"},
 		},
 		{
-			name:           "empty tags returns all sources",
-			sources:        sources,
-			tags:           []string{},
-			expectedCount:  4,
-			expectedComps:  []string{"vpc", "ecs", "rds", "s3"},
+			name:          "empty tags returns all sources",
+			sources:       sources,
+			tags:          []string{},
+			expectedCount: 4,
+			expectedComps: []string{"vpc", "ecs", "rds", "s3"},
 		},
 		{
-			name:           "single tag filters correctly",
-			sources:        sources,
-			tags:           []string{"networking"},
-			expectedCount:  1,
-			expectedComps:  []string{"vpc"},
+			name:          "single tag filters correctly",
+			sources:       sources,
+			tags:          []string{"networking"},
+			expectedCount: 1,
+			expectedComps: []string{"vpc"},
 		},
 		{
-			name:           "multiple tags filters with OR logic",
-			sources:        sources,
-			tags:           []string{"networking", "database"},
-			expectedCount:  2,
-			expectedComps:  []string{"vpc", "rds"},
+			name:          "multiple tags filters with OR logic",
+			sources:       sources,
+			tags:          []string{"networking", "database"},
+			expectedCount: 2,
+			expectedComps: []string{"vpc", "rds"},
 		},
 		{
-			name:           "shared tag returns multiple",
-			sources:        sources,
-			tags:           []string{"core"},
-			expectedCount:  2,
-			expectedComps:  []string{"vpc", "ecs"},
+			name:          "shared tag returns multiple",
+			sources:       sources,
+			tags:          []string{"core"},
+			expectedCount: 2,
+			expectedComps: []string{"vpc", "ecs"},
 		},
 		{
-			name:           "non-existent tag returns empty",
-			sources:        sources,
-			tags:           []string{"nonexistent"},
-			expectedCount:  0,
-			expectedComps:  []string{},
+			name:          "non-existent tag returns empty",
+			sources:       sources,
+			tags:          []string{"nonexistent"},
+			expectedCount: 0,
+			expectedComps: []string{},
 		},
 	}
 
@@ -260,14 +260,14 @@ func TestFilterByTags(t *testing.T) {
 
 func TestDetermineSourceType(t *testing.T) {
 	tests := []struct {
-		name                   string
-		uri                    string
-		vendorConfigFilePath   string
-		expectedOCI            bool
-		expectedLocalFS        bool
-		expectedLocalFile      bool
-		expectedURIAfter       string
-		expectError            bool
+		name                 string
+		uri                  string
+		vendorConfigFilePath string
+		expectedOCI          bool
+		expectedLocalFS      bool
+		expectedLocalFile    bool
+		expectedURIAfter     string
+		expectError          bool
 	}{
 		{
 			name:                 "OCI scheme",
@@ -451,12 +451,12 @@ func TestDetermineSourceType_Extended(t *testing.T) {
 	assert.NoError(t, err)
 
 	tests := []struct {
-		name                string
-		uri                 string
-		vendorConfigPath    string
-		expectedOCI         bool
-		expectedLocalFS     bool
-		expectedLocalFile   bool
+		name              string
+		uri               string
+		vendorConfigPath  string
+		expectedOCI       bool
+		expectedLocalFS   bool
+		expectedLocalFile bool
 	}{
 		{
 			name:              "OCI with registry path",
