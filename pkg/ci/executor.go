@@ -33,32 +33,62 @@ type ExecuteOptions struct {
 	ForceCIMode bool
 }
 
+// actionContext holds all context needed to execute a CI action.
+type actionContext struct {
+	Opts     ExecuteOptions
+	Provider ComponentCIProvider
+	Platform Provider
+	CICtx    *Context
+	Binding  *HookBinding
+	Command  string
+	Result   *OutputResult
+}
+
 // Execute runs all CI actions for a hook event.
 // Returns nil if not in CI or if the event is not handled.
 func Execute(opts ExecuteOptions) error {
 	defer perf.Track(opts.AtmosConfig, "ci.Execute")()
 
-	// 1. Detect CI platform or use forced mode.
-	var platform Provider
-	var err error
-
-	if opts.ForceCIMode {
-		// Force CI mode - try to detect platform, fall back to generic if none detected.
-		platform = Detect()
-		if platform == nil {
-			log.Debug("CI mode forced but no platform detected, using generic provider")
-			platform = NewGenericProvider()
-		}
-	} else {
-		// Normal mode - require platform detection.
-		platform, err = DetectOrError()
-		if err != nil {
-			log.Debug("CI platform not detected, skipping CI hooks", "error", err)
-			return nil
-		}
+	// Detect CI platform.
+	platform := detectPlatform(opts.ForceCIMode)
+	if platform == nil {
+		return nil
 	}
 
-	// 2. Get component type from event if not provided.
+	// Get provider and binding for this event.
+	provider, binding := getProviderAndBinding(opts)
+	if provider == nil || binding == nil {
+		return nil
+	}
+
+	// Build and execute actions.
+	actCtx := buildActionContext(opts, platform, provider, binding)
+	executeActions(actCtx, binding.Actions)
+
+	return nil
+}
+
+// detectPlatform detects the CI platform based on environment.
+func detectPlatform(forceCIMode bool) Provider {
+	if forceCIMode {
+		platform := Detect()
+		if platform == nil {
+			log.Debug("CI mode forced but no platform detected, using generic provider")
+			return NewGenericProvider()
+		}
+		return platform
+	}
+
+	platform, err := DetectOrError()
+	if err != nil {
+		log.Debug("CI platform not detected, skipping CI hooks", "error", err)
+		return nil
+	}
+	return platform
+}
+
+// getProviderAndBinding gets the component provider and hook binding for an event.
+func getProviderAndBinding(opts ExecuteOptions) (ComponentCIProvider, *HookBinding) {
 	componentType := opts.ComponentType
 	if componentType == "" {
 		componentType = extractComponentType(opts.Event)
@@ -66,82 +96,80 @@ func Execute(opts ExecuteOptions) error {
 
 	if componentType == "" {
 		log.Debug("Could not determine component type from event", "event", opts.Event)
-		return nil
+		return nil, nil
 	}
 
-	// 3. Get the component CI provider.
 	provider, ok := GetComponentProvider(componentType)
 	if !ok {
 		log.Debug("No CI provider registered for component type", "component_type", componentType)
-		return nil
+		return nil, nil
 	}
 
-	// 4. Find matching hook binding.
 	bindings := HookBindings(provider.GetHookBindings())
 	binding := bindings.GetBindingForEvent(opts.Event)
 	if binding == nil {
 		log.Debug("Provider does not handle this event", "event", opts.Event, "component_type", componentType)
-		return nil
+		return nil, nil
 	}
 
-	// 5. Get CI context.
+	return provider, binding
+}
+
+// buildActionContext builds the action context for executing CI actions.
+func buildActionContext(opts ExecuteOptions, platform Provider, provider ComponentCIProvider, binding *HookBinding) *actionContext {
 	ciCtx, err := platform.Context()
 	if err != nil {
 		log.Warn("Failed to get CI context", "error", err)
-		// Continue with nil context - templates will handle missing data.
 		ciCtx = nil
 	}
 
-	// 6. Extract command from event.
 	command := extractCommand(opts.Event)
 
-	// 7. Parse output.
 	result, err := provider.ParseOutput(opts.Output, command)
 	if err != nil {
 		log.Warn("Failed to parse command output", "error", err)
-		// Continue with nil result.
 		result = &OutputResult{}
 	}
 
-	// 8. Execute each action in the binding.
-	for _, action := range binding.Actions {
-		if err := executeAction(action, opts, provider, platform, ciCtx, binding, command, result); err != nil {
-			// Log error but continue with other actions.
+	return &actionContext{
+		Opts:     opts,
+		Provider: provider,
+		Platform: platform,
+		CICtx:    ciCtx,
+		Binding:  binding,
+		Command:  command,
+		Result:   result,
+	}
+}
+
+// executeActions executes all actions in the binding.
+func executeActions(ctx *actionContext, actions []HookAction) {
+	for _, action := range actions {
+		if err := executeAction(action, ctx); err != nil {
 			log.Warn("CI action failed", "action", action, "error", err)
 		}
 	}
-
-	return nil
 }
 
 // executeAction executes a single CI action.
-func executeAction(
-	action HookAction,
-	opts ExecuteOptions,
-	provider ComponentCIProvider,
-	platform Provider,
-	ciCtx *Context,
-	binding *HookBinding,
-	command string,
-	result *OutputResult,
-) error {
-	defer perf.Track(opts.AtmosConfig, "ci.executeAction")()
+func executeAction(action HookAction, ctx *actionContext) error {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeAction")()
 
 	switch action {
 	case ActionSummary:
-		return executeSummaryAction(opts, provider, platform, ciCtx, binding, command, result)
+		return executeSummaryAction(ctx)
 
 	case ActionOutput:
-		return executeOutputAction(opts, provider, platform, result, command)
+		return executeOutputAction(ctx)
 
 	case ActionUpload:
-		return executeUploadAction(opts, provider, command)
+		return executeUploadAction(ctx)
 
 	case ActionDownload:
-		return executeDownloadAction(opts, provider, command)
+		return executeDownloadAction(ctx)
 
 	case ActionCheck:
-		return executeCheckAction(opts, provider, platform, ciCtx, result, command)
+		return executeCheckAction(ctx)
 
 	default:
 		log.Debug("Unknown CI action", "action", action)
@@ -150,23 +178,15 @@ func executeAction(
 }
 
 // executeSummaryAction writes to the CI job summary.
-func executeSummaryAction(
-	opts ExecuteOptions,
-	provider ComponentCIProvider,
-	platform Provider,
-	ciCtx *Context,
-	binding *HookBinding,
-	command string,
-	result *OutputResult,
-) error {
-	defer perf.Track(opts.AtmosConfig, "ci.executeSummaryAction")()
+func executeSummaryAction(ctx *actionContext) error {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeSummaryAction")()
 
-	if binding.Template == "" {
+	if ctx.Binding.Template == "" {
 		log.Debug("No template specified for summary action")
 		return nil
 	}
 
-	writer := platform.OutputWriter()
+	writer := ctx.Platform.OutputWriter()
 	if writer == nil {
 		log.Debug("CI platform does not support summaries")
 		return nil
@@ -174,7 +194,7 @@ func executeSummaryAction(
 
 	// Build template context.
 	// Provider returns an extended context type (e.g., *TerraformTemplateContext) that embeds *TemplateContext.
-	ctx, err := provider.BuildTemplateContext(opts.Info, ciCtx, opts.Output, command)
+	tmplCtx, err := ctx.Provider.BuildTemplateContext(ctx.Opts.Info, ctx.CICtx, ctx.Opts.Output, ctx.Command)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrTemplateEvaluation).
 			WithCause(err).
@@ -183,18 +203,18 @@ func executeSummaryAction(
 	}
 
 	// Load and render template.
-	loader := templates.NewLoader(opts.AtmosConfig)
+	loader := templates.NewLoader(ctx.Opts.AtmosConfig)
 	rendered, err := loader.LoadAndRender(
-		provider.GetType(),
-		binding.Template,
-		provider.GetDefaultTemplates(),
-		ctx,
+		ctx.Provider.GetType(),
+		ctx.Binding.Template,
+		ctx.Provider.GetDefaultTemplates(),
+		tmplCtx,
 	)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrTemplateEvaluation).
 			WithCause(err).
 			WithExplanation("Failed to render template").
-			WithContext("template", binding.Template).
+			WithContext("template", ctx.Binding.Template).
 			Err()
 	}
 
@@ -207,36 +227,30 @@ func executeSummaryAction(
 	}
 
 	log.Debug("Wrote CI summary",
-		"stack", opts.Info.Stack,
-		"component", opts.Info.ComponentFromArg,
-		"template", binding.Template,
+		"stack", ctx.Opts.Info.Stack,
+		"component", ctx.Opts.Info.ComponentFromArg,
+		"template", ctx.Binding.Template,
 	)
 	return nil
 }
 
 // executeOutputAction writes CI output variables.
-func executeOutputAction(
-	opts ExecuteOptions,
-	provider ComponentCIProvider,
-	platform Provider,
-	result *OutputResult,
-	command string,
-) error {
-	defer perf.Track(opts.AtmosConfig, "ci.executeOutputAction")()
+func executeOutputAction(ctx *actionContext) error {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeOutputAction")()
 
-	writer := platform.OutputWriter()
+	writer := ctx.Platform.OutputWriter()
 	if writer == nil {
 		log.Debug("CI platform does not support outputs")
 		return nil
 	}
 
 	// Get output variables from provider.
-	vars := provider.GetOutputVariables(result, command)
+	vars := ctx.Provider.GetOutputVariables(ctx.Result, ctx.Command)
 
 	// Add common variables.
-	vars["stack"] = opts.Info.Stack
-	vars["component"] = opts.Info.ComponentFromArg
-	vars["command"] = command
+	vars["stack"] = ctx.Opts.Info.Stack
+	vars["component"] = ctx.Opts.Info.ComponentFromArg
+	vars["command"] = ctx.Command
 
 	// Write each variable.
 	for key, value := range vars {
@@ -250,16 +264,12 @@ func executeOutputAction(
 }
 
 // executeUploadAction uploads an artifact.
-func executeUploadAction(
-	opts ExecuteOptions,
-	provider ComponentCIProvider,
-	command string,
-) error {
-	defer perf.Track(opts.AtmosConfig, "ci.executeUploadAction")()
+func executeUploadAction(ctx *actionContext) error {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeUploadAction")()
 
 	// Artifact upload is handled separately by the planfile store.
 	// This action is a marker that upload should occur.
-	key := provider.GetArtifactKey(opts.Info, command)
+	key := ctx.Provider.GetArtifactKey(ctx.Opts.Info, ctx.Command)
 	log.Debug("Artifact upload requested", "key", key)
 
 	// The actual upload is performed by the planfile system.
@@ -268,16 +278,12 @@ func executeUploadAction(
 }
 
 // executeDownloadAction downloads an artifact.
-func executeDownloadAction(
-	opts ExecuteOptions,
-	provider ComponentCIProvider,
-	command string,
-) error {
-	defer perf.Track(opts.AtmosConfig, "ci.executeDownloadAction")()
+func executeDownloadAction(ctx *actionContext) error {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeDownloadAction")()
 
 	// Artifact download is handled separately by the planfile store.
 	// This action is a marker that download should occur.
-	key := provider.GetArtifactKey(opts.Info, command)
+	key := ctx.Provider.GetArtifactKey(ctx.Opts.Info, ctx.Command)
 	log.Debug("Artifact download requested", "key", key)
 
 	// The actual download is performed by the planfile system.
@@ -286,15 +292,8 @@ func executeDownloadAction(
 }
 
 // executeCheckAction performs a validation/check.
-func executeCheckAction(
-	opts ExecuteOptions,
-	provider ComponentCIProvider,
-	platform Provider,
-	ciCtx *Context,
-	result *OutputResult,
-	command string,
-) error {
-	defer perf.Track(opts.AtmosConfig, "ci.executeCheckAction")()
+func executeCheckAction(ctx *actionContext) error {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeCheckAction")()
 
 	// Check actions are provider-specific.
 	// For now, this is a placeholder for future drift detection, etc.
@@ -303,7 +302,7 @@ func executeCheckAction(
 }
 
 // extractComponentType extracts the component type from a hook event.
-// e.g., "after.terraform.plan" -> "terraform".
+// Example: "after.terraform.plan" -> "terraform".
 func extractComponentType(event string) string {
 	parts := strings.Split(event, ".")
 	if len(parts) >= 2 {
@@ -313,7 +312,7 @@ func extractComponentType(event string) string {
 }
 
 // extractCommand extracts the command from a hook event.
-// e.g., "after.terraform.plan" -> "plan".
+// Example: "after.terraform.plan" -> "plan".
 func extractCommand(event string) string {
 	parts := strings.Split(event, ".")
 	if len(parts) >= 3 {
