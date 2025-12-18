@@ -11,7 +11,7 @@ import (
 	"github.com/samber/lo"
 	"go.yaml.in/yaml/v3"
 
-	"github.com/cloudposse/atmos/errors"
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -75,7 +75,9 @@ func getConfigFiles(path string) ([]string, error) {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, ErrVendoringNotConfigured
+			return nil, errUtils.Build(errUtils.ErrVendoringNotConfigured).
+				WithHint("To set up vendoring, please see https://atmos.tools/core-concepts/vendor/").
+				Err()
 		}
 		if os.IsPermission(err) {
 			return nil, fmt.Errorf("%w '%s'. Please check the file permissions", ErrPermissionDenied, path)
@@ -273,7 +275,7 @@ func ReadAndProcessComponentVendorConfigFile(
 	case cfg.PackerComponentType:
 		componentBasePath = atmosConfig.Components.Packer.BasePath
 	default:
-		return componentConfig, "", fmt.Errorf("%w: %s", errors.ErrUnsupportedComponentType, componentType)
+		return componentConfig, "", fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
 	}
 
 	componentPath := filepath.Join(atmosConfig.BasePath, componentBasePath, component)

@@ -20,7 +20,9 @@ var (
 	ErrTargetsMissing                = errors.New("'targets' must be specified for the source in the vendor config file")
 	ErrVendorConfigSelfImport        = errors.New("vendor config file imports itself in 'spec.imports'")
 	ErrMissingVendorConfigDefinition = errors.New("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file")
-	ErrVendoringNotConfigured        = errors.New("Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/")
+	// ErrVendoringNotConfigured is deprecated - use errUtils.ErrVendoringNotConfigured instead.
+	// Kept for backwards compatibility.
+	ErrVendoringNotConfigured = errors.New("Vendoring is not configured")
 	ErrPermissionDenied              = errors.New("permission denied when accessing")
 	ErrEmptySources                  = errors.New("'spec.sources' is empty in the vendor config file and the imports")
 	ErrNoComponentsWithTags          = errors.New("there are no components in the vendor config file")
