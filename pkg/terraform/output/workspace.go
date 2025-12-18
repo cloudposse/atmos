@@ -68,6 +68,9 @@ func (m *defaultWorkspaceManager) EnsureWorkspace(
 		return nil
 	}
 
+	// Log the creation failure before attempting select.
+	log.Debug("Workspace creation failed, attempting select", "workspace", workspace, "error", err)
+
 	// Workspace already exists, select it.
 	log.Debug("Selecting existing terraform workspace", "workspace", workspace, "component", component, "stack", stack)
 

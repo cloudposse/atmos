@@ -2,7 +2,6 @@ package output
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -11,6 +10,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -63,7 +63,7 @@ func NewSpinner(message string) *tea.Program {
 		// Workaround for non-TTY environments.
 		opts = []tea.ProgramOption{tea.WithoutRenderer(), tea.WithInput(nil)}
 		log.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
-		fmt.Fprintln(os.Stderr, message)
+		_ = ui.Writeln(message)
 	}
 
 	p := tea.NewProgram(modelSpinner{
@@ -81,8 +81,8 @@ func RunSpinner(p *tea.Program, spinnerChan chan struct{}, message string) {
 	go func() {
 		defer close(spinnerChan)
 		if _, err := p.Run(); err != nil {
-			// If there's any error running the spinner, print the message and the error.
-			fmt.Println(message)
+			// If there's any error running the spinner, output the message and log the error.
+			_ = ui.Writeln(message)
 			log.Error("Failed to run spinner:", "error", err)
 		}
 	}()
