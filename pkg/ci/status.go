@@ -1,5 +1,9 @@
 package ci
 
+import (
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
 // StatusOptions contains options for fetching CI status.
 type StatusOptions struct {
 	// Owner is the repository owner.
@@ -92,6 +96,8 @@ type CheckStatus struct {
 
 // CheckState returns the simplified state for display.
 func (c *CheckStatus) CheckState() CheckStatusState {
+	defer perf.Track(nil, "ci.CheckStatus.CheckState")()
+
 	switch c.Status {
 	case "queued", "in_progress", "pending":
 		return CheckStatusStatePending

@@ -614,9 +614,9 @@ func TestTemplateGolden(t *testing.T) {
 
 			if *regenerateGolden {
 				// Write golden file.
-				err := os.MkdirAll(goldenDir, 0755)
+				err := os.MkdirAll(goldenDir, 0o755)
 				require.NoError(t, err)
-				err = os.WriteFile(goldenPath, []byte(rendered), 0644)
+				err = os.WriteFile(goldenPath, []byte(rendered), 0o644)
 				require.NoError(t, err)
 				t.Logf("Regenerated golden file: %s", goldenPath)
 				return

@@ -10,6 +10,7 @@ import (
 	"golang.org/x/oauth2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Client wraps the GitHub API client.
@@ -20,6 +21,8 @@ type Client struct {
 // NewClient creates a new GitHub API client.
 // It uses the GITHUB_TOKEN environment variable for authentication.
 func NewClient() (*Client, error) {
+	defer perf.Track(nil, "github.NewClient")()
+
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
 		// Also check GH_TOKEN (used by gh CLI).
@@ -34,6 +37,8 @@ func NewClient() (*Client, error) {
 
 // NewClientWithToken creates a new GitHub API client with the given token.
 func NewClientWithToken(token string) *Client {
+	defer perf.Track(nil, "github.NewClientWithToken")()
+
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: token},
 	)
@@ -47,6 +52,8 @@ func NewClientWithToken(token string) *Client {
 // NewClientWithHTTPClient creates a new GitHub API client with a custom HTTP client.
 // Useful for testing.
 func NewClientWithHTTPClient(httpClient *http.Client) *Client {
+	defer perf.Track(nil, "github.NewClientWithHTTPClient")()
+
 	return &Client{
 		client: github.NewClient(httpClient),
 	}
@@ -54,5 +61,7 @@ func NewClientWithHTTPClient(httpClient *http.Client) *Client {
 
 // GitHub returns the underlying go-github client.
 func (c *Client) GitHub() *github.Client {
+	defer perf.Track(nil, "github.Client.GitHub")()
+
 	return c.client
 }
