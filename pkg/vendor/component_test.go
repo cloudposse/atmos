@@ -26,12 +26,12 @@ func TestHandleLocalFileScheme(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name                    string
-		componentPath           string
-		uri                     string
-		expectedUseLocalFS      bool
-		expectedSourceIsLocal   bool
-		checkURIContains        string
+		name                  string
+		componentPath         string
+		uri                   string
+		expectedUseLocalFS    bool
+		expectedSourceIsLocal bool
+		checkURIContains      string
 	}{
 		{
 			name:                  "relative path to existing file",
@@ -502,9 +502,9 @@ type mockFileInfo struct {
 	isDir bool
 }
 
-func (m mockFileInfo) Name() string            { return m.name }
-func (m mockFileInfo) Size() int64             { return 0 }
-func (m mockFileInfo) Mode() os.FileMode       { return 0 }
-func (m mockFileInfo) ModTime() (t time.Time)  { return time.Time{} }
-func (m mockFileInfo) IsDir() bool             { return m.isDir }
-func (m mockFileInfo) Sys() any                { return nil }
+func (m mockFileInfo) Name() string           { return m.name }
+func (m mockFileInfo) Size() int64            { return 0 }
+func (m mockFileInfo) Mode() os.FileMode      { return 0 }
+func (m mockFileInfo) ModTime() (t time.Time) { return time.Time{} }
+func (m mockFileInfo) IsDir() bool            { return m.isDir }
+func (m mockFileInfo) Sys() any               { return nil }

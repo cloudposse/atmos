@@ -508,13 +508,13 @@ func TestCreateComponentPackages(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		componentName  string
-		componentPath  string
-		spec           *schema.VendorComponentSpec
-		expectedCount  int
-		expectError    bool
-		checkFirstPkg  func(t *testing.T, pkg pkgComponentVendor)
+		name          string
+		componentName string
+		componentPath string
+		spec          *schema.VendorComponentSpec
+		expectedCount int
+		expectError   bool
+		checkFirstPkg func(t *testing.T, pkg pkgComponentVendor)
 	}{
 		{
 			name:          "empty URI returns nil",
