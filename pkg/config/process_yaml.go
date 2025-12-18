@@ -195,12 +195,13 @@ func processSequenceElement(child *yaml.Node, v *viper.Viper, elementPath string
 	}
 }
 
-// hasCustomTag reports whether the YAML tag starts with any Atmos custom function prefix (env, exec, include, repo-root, random).
+// hasCustomTag reports whether the YAML tag starts with any Atmos custom function prefix (env, exec, include, repo-root, cwd, random).
 func hasCustomTag(tag string) bool {
 	return strings.HasPrefix(tag, u.AtmosYamlFuncEnv) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncExec) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncInclude) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncGitRoot) ||
+		strings.HasPrefix(tag, u.AtmosYamlFuncCwd) ||
 		strings.HasPrefix(tag, u.AtmosYamlFuncRandom)
 }
 
@@ -271,6 +272,16 @@ func processGitRootTag(strFunc, nodeValue string) (any, error) {
 	return strings.TrimSpace(gitRootValue), nil
 }
 
+// processCwdTag processes the !cwd tag.
+func processCwdTag(strFunc, nodeValue string) (any, error) {
+	cwdValue, err := u.ProcessTagCwd(strFunc)
+	if err != nil {
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return nil, fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncCwd, nodeValue, err)
+	}
+	return strings.TrimSpace(cwdValue), nil
+}
+
 // processRandomTag processes the !random tag.
 func processRandomTag(strFunc, nodeValue string) (any, error) {
 	randomValue, err := u.ProcessTagRandom(strFunc)
@@ -282,7 +293,7 @@ func processRandomTag(strFunc, nodeValue string) (any, error) {
 }
 
 // processScalarNodeValue evaluates a YAML scalar node's custom Atmos tag and returns the resolved value.
-// It supports the !env, !exec, !include, !repo-root, and !random tags; failures during evaluation return an error wrapped with ErrExecuteYamlFunctions, and unknown/unsupported tags are decoded and returned as their YAML value.
+// It supports the !env, !exec, !include, !repo-root, !cwd, and !random tags; failures during evaluation return an error wrapped with ErrExecuteYamlFunctions, and unknown/unsupported tags are decoded and returned as their YAML value.
 func processScalarNodeValue(node *yaml.Node) (any, error) {
 	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
 
@@ -295,6 +306,8 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 		return processIncludeTag(node.Tag, node.Value, strFunc)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot):
 		return processGitRootTag(strFunc, node.Value)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncCwd):
+		return processCwdTag(strFunc, node.Value)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncRandom):
 		return processRandomTag(strFunc, node.Value)
 	default:
@@ -307,7 +320,7 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 }
 
 // processScalarNode processes a YAML scalar node tagged with an Atmos custom function and stores the resolved value in v.
-// It dispatches handling for !env, !exec, !include, !repo-root and !random tags to their respective handlers.
+// It dispatches handling for !env, !exec, !include, !repo-root, !cwd, and !random tags to their respective handlers.
 // If the node has no tag or the tag is not one of the recognized Atmos functions, the function is a no-op.
 // It returns any error produced by the invoked handler.
 func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) error {
@@ -324,6 +337,8 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 		return handleInclude(node, v, currentPath)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncGitRoot):
 		return handleGitRoot(node, v, currentPath)
+	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncCwd):
+		return handleCwd(node, v, currentPath)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncRandom):
 		return handleRandom(node, v, currentPath)
 	}
@@ -410,6 +425,26 @@ func handleGitRoot(node *yaml.Node, v *viper.Viper, currentPath string) error {
 	// Set the value in Viper .
 	v.Set(currentPath, gitRootValue)
 	node.Tag = "" // Avoid re-processing .
+	return nil
+}
+
+// handleCwd evaluates a `!cwd` YAML tag and stores the current working directory string into Viper at the given path.
+// If a path argument is provided, it is joined with CWD.
+// If evaluation fails, it returns an error wrapped with ErrExecuteYamlFunctions.
+func handleCwd(node *yaml.Node, v *viper.Viper, currentPath string) error {
+	strFunc := fmt.Sprintf(tagValueFormat, node.Tag, node.Value)
+	cwdValue, err := u.ProcessTagCwd(strFunc)
+	if err != nil {
+		log.Debug(failedToProcess, functionKey, strFunc, "error", err)
+		return fmt.Errorf(errorFormat, ErrExecuteYamlFunctions, u.AtmosYamlFuncCwd, node.Value, err)
+	}
+	cwdValue = strings.TrimSpace(cwdValue)
+	if cwdValue == "" {
+		log.Debug(emptyValueWarning, functionKey, strFunc)
+	}
+	// Set the value in Viper.
+	v.Set(currentPath, cwdValue)
+	node.Tag = "" // Avoid re-processing.
 	return nil
 }
 

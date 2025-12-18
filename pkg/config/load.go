@@ -64,6 +64,8 @@ func trackMergedConfigFile(path string) {
 const (
 	profileKey       = "profile"
 	profileDelimiter = ","
+	// AtmosCliConfigPathEnvVar is the environment variable name for CLI config path.
+	AtmosCliConfigPathEnvVar = "ATMOS_CLI_CONFIG_PATH"
 )
 
 // parseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
@@ -425,25 +427,53 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.pro.endpoint", AtmosProDefaultEndpoint)
 }
 
-// loadConfigSources delegates reading configs from each source,
-// returning early if any step in the chain fails.
+// loadConfigSources loads configuration from multiple sources in priority order,
+// delegating reading configs from each source and returning early if any step fails.
+//
+// Config loading order (lowest to highest priority, later wins):
+//  1. System dir (/usr/local/etc/atmos) - lowest priority
+//  2. Home dir (~/.atmos)
+//  3. Parent directory search (fallback for unusual structures)
+//  4. Git root (repo-root/atmos.yaml)
+//  5. CWD only (./atmos.yaml, NO parent search)
+//  6. Env var (ATMOS_CLI_CONFIG_PATH) - overrides discovery
+//  7. CLI arg (--config-path) - highest priority
+//
+// Note: Viper merges configs, so later sources override earlier ones.
 func loadConfigSources(v *viper.Viper, configAndStacksInfo *schema.ConfigAndStacksInfo) error {
+	// Load in order from lowest to highest priority (Viper merges, later wins).
+
+	// 1. System dir (lowest priority).
 	if err := readSystemConfig(v); err != nil {
 		return err
 	}
 
+	// 2. Home dir.
 	if err := readHomeConfig(v); err != nil {
 		return err
 	}
 
-	if err := readWorkDirConfig(v); err != nil {
+	// 3. Parent directory search (fallback).
+	if err := readParentDirConfig(v); err != nil {
 		return err
 	}
 
+	// 4. Git root.
+	if err := readGitRootConfig(v); err != nil {
+		return err
+	}
+
+	// 5. CWD only.
+	if err := readWorkDirConfigOnly(v); err != nil {
+		return err
+	}
+
+	// 6. Env var (ATMOS_CLI_CONFIG_PATH) - overrides discovery.
 	if err := readEnvAmosConfigPath(v); err != nil {
 		return err
 	}
 
+	// 7. CLI arg (highest priority).
 	return readAtmosConfigCli(v, configAndStacksInfo.AtmosCliConfigPath)
 }
 
@@ -498,13 +528,8 @@ func readHomeConfigWithProvider(v *viper.Viper, homeProvider filesystem.HomeDirP
 	return nil
 }
 
-// readWorkDirConfig loads config from current working directory or any parent directory.
-// It searches upward through the directory tree until it finds an atmos.yaml file
-// or reaches the filesystem root. This enables running atmos commands from any
-// subdirectory (e.g., component directories) without specifying --config-path.
-// Parent directory search can be disabled by setting ATMOS_CLI_CONFIG_PATH to "." or
-// any explicit path.
-func readWorkDirConfig(v *viper.Viper) error {
+// readWorkDirConfigOnly tries to load atmos.yaml from CWD only (no parent search).
+func readWorkDirConfigOnly(v *viper.Viper) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -513,24 +538,76 @@ func readWorkDirConfig(v *viper.Viper) error {
 	// First try the current directory.
 	log.Trace("Checking for atmos.yaml in working directory", "path", wd)
 	err = mergeConfig(v, wd, CliConfigFileName, true)
-	if err == nil {
-		return nil
-	}
-
-	// If not a ConfigFileNotFoundError, return the error.
-	var configFileNotFoundError viper.ConfigFileNotFoundError
-	if !errors.As(err, &configFileNotFoundError) {
+	if err != nil {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if errors.As(err, &configFileNotFoundError) {
+			return nil
+		}
 		return err
 	}
+	log.Trace("Found atmos.yaml in current directory", "path", wd)
+	return nil
+}
 
+// readGitRootConfig tries to load atmos.yaml from the git repository root.
+func readGitRootConfig(v *viper.Viper) error {
+	// Check if git root discovery is disabled.
+	//nolint:forbidigo // ATMOS_GIT_ROOT_BASEPATH is bootstrap config, not application configuration.
+	if os.Getenv("ATMOS_GIT_ROOT_BASEPATH") == "false" {
+		return nil
+	}
+
+	// If ATMOS_CLI_CONFIG_PATH is set, skip git root discovery.
+	// The env var is an explicit override.
+	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself.
+	if os.Getenv(AtmosCliConfigPathEnvVar) != "" {
+		return nil
+	}
+
+	gitRoot, err := u.ProcessTagGitRoot("!repo-root")
+	if err != nil {
+		log.Trace("Git root detection failed", "error", err)
+		return nil
+	}
+
+	// Skip if git root is empty or same as CWD (already handled by readWorkDirConfigOnly).
+	if gitRoot == "" || gitRoot == "." {
+		return nil
+	}
+
+	// Convert relative path to absolute.
+	if !filepath.IsAbs(gitRoot) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		gitRoot = filepath.Join(cwd, gitRoot)
+	}
+
+	err = mergeConfig(v, gitRoot, CliConfigFileName, true)
+	if err != nil {
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if errors.As(err, &configFileNotFoundError) {
+			return nil
+		}
+		return err
+	}
+	log.Trace("Found atmos.yaml at git root", "path", gitRoot)
+	return nil
+}
+
+// readParentDirConfig searches parent directories for atmos.yaml (fallback).
+func readParentDirConfig(v *viper.Viper) error {
 	// If ATMOS_CLI_CONFIG_PATH is set, don't search parent directories.
 	// This allows tests and users to explicitly control config discovery.
-	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself,
-	// it must be checked before viper loads config files. Using os.Getenv is necessary
-	// because this check happens during the config loading phase, before any viper
-	// bindings are established.
-	if os.Getenv("ATMOS_CLI_CONFIG_PATH") != "" {
+	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself.
+	if os.Getenv(AtmosCliConfigPathEnvVar) != "" {
 		return nil
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		return err
 	}
 
 	// Search parent directories for atmos.yaml.
@@ -543,16 +620,27 @@ func readWorkDirConfig(v *viper.Viper) error {
 	// Found config in a parent directory, merge it.
 	err = mergeConfig(v, configDir, CliConfigFileName, true)
 	if err != nil {
-		switch err.(type) {
-		case viper.ConfigFileNotFoundError:
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if errors.As(err, &configFileNotFoundError) {
 			return nil
-		default:
-			return err
 		}
+		return err
 	}
 
-	log.Debug("Found atmos.yaml in parent directory", "path", configDir)
+	log.Trace("Found atmos.yaml in parent directory", "path", configDir)
 	return nil
+}
+
+// Deprecated: readWorkDirConfig is kept for backward compatibility.
+// Use readWorkDirConfigOnly, readGitRootConfig, and readParentDirConfig instead.
+func readWorkDirConfig(v *viper.Viper) error {
+	if err := readWorkDirConfigOnly(v); err != nil {
+		return err
+	}
+	if err := readGitRootConfig(v); err != nil {
+		return err
+	}
+	return readParentDirConfig(v)
 }
 
 // findAtmosConfigInParentDirs searches for atmos.yaml in parent directories.
@@ -585,7 +673,8 @@ func findAtmosConfigInParentDirs(startDir string) string {
 }
 
 func readEnvAmosConfigPath(v *viper.Viper) error {
-	atmosPath := os.Getenv("ATMOS_CLI_CONFIG_PATH")
+	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself.
+	atmosPath := os.Getenv(AtmosCliConfigPathEnvVar)
 	if atmosPath == "" {
 		return nil
 	}
@@ -594,13 +683,13 @@ func readEnvAmosConfigPath(v *viper.Viper) error {
 	if err != nil {
 		switch err.(type) {
 		case viper.ConfigFileNotFoundError:
-			log.Debug("config not found ENV var ATMOS_CLI_CONFIG_PATH", "file", atmosPath)
+			log.Debug("config not found ENV var "+AtmosCliConfigPathEnvVar, "file", atmosPath)
 			return nil
 		default:
 			return err
 		}
 	}
-	log.Debug("Found config ENV", "ATMOS_CLI_CONFIG_PATH", atmosPath)
+	log.Trace("Found config ENV", AtmosCliConfigPathEnvVar, atmosPath)
 
 	return nil
 }

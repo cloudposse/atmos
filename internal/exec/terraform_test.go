@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -78,21 +79,26 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+
+	// Read from pipe concurrently to avoid deadlock when output exceeds pipe buffer.
+	var buf bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		_, _ = buf.ReadFrom(r)
+		close(done)
+	}()
+
 	err = ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-	// Restore stdout
+	// Restore stdout and close writer to signal EOF to the reader goroutine
 	err = w.Close()
 	assert.NoError(t, err)
 	os.Stdout = oldStdout
 
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
+	// Wait for the reader goroutine to finish
+	<-done
 	output := buf.String()
 
 	// Check the output ATMOS_CLI_CONFIG_PATH  ATMOS_BASE_PATH exists
@@ -158,21 +164,26 @@ func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+
+	// Read from pipe concurrently to avoid deadlock when output exceeds pipe buffer.
+	var buf bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		_, _ = buf.ReadFrom(r)
+		close(done)
+	}()
+
 	err := ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-	// Restore stdout
+	// Restore stdout and close writer to signal EOF to the reader goroutine
 	err = w.Close()
 	assert.NoError(t, err)
 	os.Stdout = oldStdout
 
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
+	// Wait for the reader goroutine to finish
+	<-done
 	output := buf.String()
 
 	// Check the output
@@ -210,21 +221,26 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+
+	// Read from pipe concurrently to avoid deadlock when output exceeds pipe buffer.
+	var buf bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		_, _ = buf.ReadFrom(r)
+		close(done)
+	}()
+
 	err := ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-	// Restore stdout
+	// Restore stdout and close writer to signal EOF to the reader goroutine
 	err = w.Close()
 	assert.NoError(t, err)
 	os.Stdout = oldStdout
 
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
+	// Wait for the reader goroutine to finish
+	<-done
 	output := buf.String()
 
 	t.Cleanup(func() {
@@ -343,21 +359,28 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 	log.SetLevel(log.DebugLevel)
 	log.SetOutput(w)
 
+	// Read from pipe concurrently to avoid deadlock when output exceeds pipe buffer.
+	// The pipe buffer is limited (typically 64KB), and if ExecuteTerraform produces
+	// more output than the buffer can hold, it will block waiting for a reader.
+	var buf bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		_, _ = buf.ReadFrom(r)
+		close(done)
+	}()
+
 	err := ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-	// Restore stderr
+	// Restore stderr and close writer to signal EOF to the reader goroutine
 	err = w.Close()
 	assert.NoError(t, err)
 	os.Stderr = oldStderr
 
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
+	// Wait for the reader goroutine to finish
+	<-done
+
 	output := buf.String()
 
 	// Check the output
@@ -369,6 +392,9 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 }
 
 func TestExecuteTerraform_OpaValidation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows: OPA validation uses Unix-specific commands")
+	}
 	// Skip if terraform is not installed
 	tests.RequireTerraform(t)
 
@@ -699,6 +725,9 @@ func extractKeyValuePairs(input string) map[string]string {
 
 // TestExecuteTerraform_OpaValidationFunctionality tests the OPA validation functionality by using validate component directly.
 func TestExecuteTerraform_OpaValidationFunctionality(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows: OPA validation uses Unix-specific commands")
+	}
 	// Define the working directory.
 	workDir := "../../tests/fixtures/scenarios/atmos-stacks-validation"
 	t.Chdir(workDir)

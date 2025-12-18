@@ -762,6 +762,7 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncCwd,
 		AtmosYamlFuncRandom,
 		AtmosYamlFuncLiteral,
 		AtmosYamlFuncAwsAccountID,
