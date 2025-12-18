@@ -69,6 +69,8 @@ linters:
             - "!**/internal/aws_utils/**"
             - "!**/pkg/aws/identity/**"
             - "!**/pkg/provisioner/backend/**"
+            - "!**/pkg/ci/github/**"
+            - "!**/pkg/ci/planfile/github/**"
             - "$test"
           deny:
             # AWS: Identity and auth-related SDKs

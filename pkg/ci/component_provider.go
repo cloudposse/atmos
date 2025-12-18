@@ -4,6 +4,7 @@ package ci
 import (
 	"embed"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -212,6 +213,8 @@ type TemplateContext struct {
 
 // GetBindingForEvent returns the hook binding for a specific event, or nil if not found.
 func (bindings HookBindings) GetBindingForEvent(event string) *HookBinding {
+	defer perf.Track(nil, "ci.HookBindings.GetBindingForEvent")()
+
 	for i := range bindings {
 		if bindings[i].Event == event {
 			return &bindings[i]
@@ -225,6 +228,8 @@ type HookBindings []HookBinding
 
 // HasAction returns true if the binding has the specified action.
 func (b *HookBinding) HasAction(action HookAction) bool {
+	defer perf.Track(nil, "ci.HookBinding.HasAction")()
+
 	for _, a := range b.Actions {
 		if a == action {
 			return true

@@ -122,9 +122,9 @@ type OutputJSON map[string]OutputValue
 
 // OutputValue represents a single output value from `terraform output -json`.
 type OutputValue struct {
-	Sensitive bool   `json:"sensitive"`
-	Type      any    `json:"type"`
-	Value     any    `json:"value"`
+	Sensitive bool `json:"sensitive"`
+	Type      any  `json:"type"`
+	Value     any  `json:"value"`
 }
 
 // ParseOutputJSON parses terraform output JSON from `terraform output -json`.

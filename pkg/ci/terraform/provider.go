@@ -29,11 +29,15 @@ func init() {
 
 // GetType returns the component type.
 func (p *Provider) GetType() string {
+	defer perf.Track(nil, "terraform.Provider.GetType")()
+
 	return "terraform"
 }
 
 // GetHookBindings returns the hook bindings for Terraform CI integration.
 func (p *Provider) GetHookBindings() []ci.HookBinding {
+	defer perf.Track(nil, "terraform.Provider.GetHookBindings")()
+
 	return []ci.HookBinding{
 		{
 			Event:    "after.terraform.plan",
@@ -55,6 +59,8 @@ func (p *Provider) GetHookBindings() []ci.HookBinding {
 
 // GetDefaultTemplates returns the embedded default templates.
 func (p *Provider) GetDefaultTemplates() embed.FS {
+	defer perf.Track(nil, "terraform.Provider.GetDefaultTemplates")()
+
 	return defaultTemplates
 }
 

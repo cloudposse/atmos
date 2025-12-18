@@ -168,6 +168,24 @@ func (p *Provider) getPRsCreatedByUser(ctx context.Context, owner, repo string) 
 
 	// Search for PRs created by this user.
 	query := fmt.Sprintf("repo:%s/%s is:pr is:open author:%s", owner, repo, user.GetLogin())
+	return p.searchPRsWithQuery(ctx, owner, repo, query)
+}
+
+// getPRsRequestingReview fetches PRs requesting review from the authenticated user.
+func (p *Provider) getPRsRequestingReview(ctx context.Context, owner, repo string) ([]*ci.PRStatus, error) {
+	// Get authenticated user.
+	user, _, err := p.client.GitHub().Users.Get(ctx, "")
+	if err != nil {
+		return nil, err
+	}
+
+	// Search for PRs requesting review from this user.
+	query := fmt.Sprintf("repo:%s/%s is:pr is:open review-requested:%s", owner, repo, user.GetLogin())
+	return p.searchPRsWithQuery(ctx, owner, repo, query)
+}
+
+// searchPRsWithQuery searches for PRs using the given GitHub search query.
+func (p *Provider) searchPRsWithQuery(ctx context.Context, owner, repo, query string) ([]*ci.PRStatus, error) {
 	result, _, err := p.client.GitHub().Search.Issues(ctx, query, &github.SearchOptions{
 		ListOptions: github.ListOptions{
 			PerPage: 10,
@@ -186,52 +204,6 @@ func (p *Provider) getPRsCreatedByUser(ctx context.Context, owner, repo string) 
 		}
 
 		// Get full PR details to get check status.
-		fullPR, _, err := p.client.GitHub().PullRequests.Get(ctx, owner, repo, issue.GetNumber())
-		if err == nil {
-			pr.Branch = fullPR.GetHead().GetRef()
-			pr.BaseBranch = fullPR.GetBase().GetRef()
-
-			if headSHA := fullPR.GetHead().GetSHA(); headSHA != "" {
-				checks, _ := p.getCheckRuns(ctx, owner, repo, headSHA)
-				pr.Checks = checks
-				pr.AllPassed = allChecksPassed(checks)
-			}
-		}
-
-		prs = append(prs, pr)
-	}
-
-	return prs, nil
-}
-
-// getPRsRequestingReview fetches PRs requesting review from the authenticated user.
-func (p *Provider) getPRsRequestingReview(ctx context.Context, owner, repo string) ([]*ci.PRStatus, error) {
-	// Get authenticated user.
-	user, _, err := p.client.GitHub().Users.Get(ctx, "")
-	if err != nil {
-		return nil, err
-	}
-
-	// Search for PRs requesting review from this user.
-	query := fmt.Sprintf("repo:%s/%s is:pr is:open review-requested:%s", owner, repo, user.GetLogin())
-	result, _, err := p.client.GitHub().Search.Issues(ctx, query, &github.SearchOptions{
-		ListOptions: github.ListOptions{
-			PerPage: 10,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	prs := make([]*ci.PRStatus, 0, len(result.Issues))
-	for _, issue := range result.Issues {
-		pr := &ci.PRStatus{
-			Number: issue.GetNumber(),
-			Title:  issue.GetTitle(),
-			URL:    issue.GetHTMLURL(),
-		}
-
-		// Get full PR details.
 		fullPR, _, err := p.client.GitHub().PullRequests.Get(ctx, owner, repo, issue.GetNumber())
 		if err == nil {
 			pr.Branch = fullPR.GetHead().GetRef()

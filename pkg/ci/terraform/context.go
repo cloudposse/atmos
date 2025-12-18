@@ -3,6 +3,7 @@ package terraform
 
 import (
 	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // TerraformTemplateContext extends the base TemplateContext with terraform-specific fields.
@@ -43,6 +44,8 @@ type TerraformTemplateContext struct {
 
 // NewTemplateContext creates a TerraformTemplateContext from a base context and parsed output.
 func NewTemplateContext(base *ci.TemplateContext, data *ci.TerraformOutputData) *TerraformTemplateContext {
+	defer perf.Track(nil, "terraform.NewTemplateContext")()
+
 	ctx := &TerraformTemplateContext{
 		TemplateContext: base,
 	}
@@ -65,6 +68,8 @@ func NewTemplateContext(base *ci.TemplateContext, data *ci.TerraformOutputData) 
 
 // Target returns the stack-component slug for anchor IDs.
 func (c *TerraformTemplateContext) Target() string {
+	defer perf.Track(nil, "terraform.TerraformTemplateContext.Target")()
+
 	if c.TemplateContext == nil {
 		return ""
 	}
@@ -73,6 +78,8 @@ func (c *TerraformTemplateContext) Target() string {
 
 // HasChanges returns true if there are any resource changes.
 func (c *TerraformTemplateContext) HasChanges() bool {
+	defer perf.Track(nil, "terraform.TerraformTemplateContext.HasChanges")()
+
 	return c.Resources.Create > 0 ||
 		c.Resources.Change > 0 ||
 		c.Resources.Replace > 0 ||
@@ -81,5 +88,7 @@ func (c *TerraformTemplateContext) HasChanges() bool {
 
 // TotalChanges returns the total number of resource changes.
 func (c *TerraformTemplateContext) TotalChanges() int {
+	defer perf.Track(nil, "terraform.TerraformTemplateContext.TotalChanges")()
+
 	return c.Resources.Create + c.Resources.Change + c.Resources.Replace + c.Resources.Destroy
 }
