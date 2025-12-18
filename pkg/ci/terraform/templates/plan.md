@@ -25,9 +25,9 @@
 {{- end }}
 
 {{- if .Result.HasErrors }}
-<details><summary><a id="result-{{$target}}" />:warning: Error summary</summary>
+<details><summary><a id="user-content-result-{{$target}}" />:warning: Error summary</summary>
 {{- else }}
-<details><summary><a id="result-{{$target}}" />{{if .ChangedResult}}{{ .ChangedResult }}{{else}}Plan details{{end}}</summary>
+<details><summary><a id="user-content-result-{{$target}}" />{{if .ChangedResult}}{{ .ChangedResult }}{{else}}Plan details{{end}}</summary>
 {{- end }}
 
 <br/>
@@ -49,7 +49,7 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 {{- if not .Result.HasErrors }}
 {{- if gt (len .CreatedResources) 0 }}
 ---
-### <a id="create-{{$target}}" />Create
+### <a id="user-content-create-{{$target}}" />Create
 ```diff
 {{- range .CreatedResources }}
 + {{ . }}
@@ -57,7 +57,7 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 ```
 {{- end }}
 {{- if gt (len .UpdatedResources) 0 }}
-### <a id="change-{{$target}}" />Change
+### <a id="user-content-change-{{$target}}" />Change
 ```diff
 {{- range .UpdatedResources }}
 ~ {{ . }}
@@ -65,7 +65,7 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 ```
 {{- end }}
 {{- if gt (len .ReplacedResources) 0 }}
-### <a id="replace-{{$target}}" />Replace
+### <a id="user-content-replace-{{$target}}" />Replace
 ```diff
 {{- range .ReplacedResources }}
 -/+ {{ . }}
@@ -73,7 +73,7 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 ```
 {{- end }}
 {{- if gt (len .DeletedResources) 0 }}
-### <a id="destroy-{{$target}}" />Destroy
+### <a id="user-content-destroy-{{$target}}" />Destroy
 ```diff
 {{- range .DeletedResources }}
 - {{ . }}
@@ -81,7 +81,7 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 ```
 {{- end }}
 {{- if gt (len .ImportedResources) 0 }}
-### <a id="import-{{$target}}" />Import
+### <a id="user-content-import-{{$target}}" />Import
 ```diff
 {{- range .ImportedResources }}
 <= {{ . }}

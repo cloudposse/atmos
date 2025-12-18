@@ -1,7 +1,7 @@
 
 ## Apply Succeeded for `bucket` in `prod`
 [![apply](https://shields.io/badge/APPLY-SUCCESS-success?style=for-the-badge)](#user-content-apply-prod-bucket)
-<details><summary><a id="result-prod-bucket" />Resources: 1 added, 0 changed, 0 destroyed</summary>
+<details><summary><a id="user-content-result-prod-bucket" />Resources: 1 added, 0 changed, 0 destroyed</summary>
 
 <br/>
 To reproduce this locally, run:<br/><br/>
@@ -11,7 +11,7 @@ atmos terraform apply bucket -s prod
 ```
 </details>
 
-<details><summary><a id="apply-prod-bucket" />Terraform <strong>Apply</strong> Summary</summary>
+<details><summary><a id="user-content-apply-prod-bucket" />Terraform <strong>Apply</strong> Summary</summary>
 
 ```hcl
 Apply complete! Resources: 1 added, 0 changed, 0 destroyed.
