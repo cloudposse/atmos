@@ -27,9 +27,6 @@ import (
 
 var ErrRepoPathConflict = errors.New("if the '--repo-path' flag is specified, the '--ref', '--sha', '--ssh-key' and '--ssh-key-password' flags can't be used")
 
-// defaultFilePermissions is the default permission for output files.
-const defaultFilePermissions = 0o644
-
 type DescribeAffectedExecCreator func(atmosConfig *schema.AtmosConfiguration) DescribeAffectedExec
 
 type DescribeAffectedCmdArgs struct {
