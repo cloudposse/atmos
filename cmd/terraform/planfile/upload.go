@@ -74,7 +74,7 @@ func runUpload(cmd *cobra.Command, args []string) error {
 	// Open the planfile.
 	f, err := os.Open(planfilePath)
 	if err != nil {
-		return fmt.Errorf("%w: failed to open planfile %s: %v", errUtils.ErrPlanfileUploadFailed, planfilePath, err)
+		return fmt.Errorf("%w: failed to open planfile %s: %w", errUtils.ErrPlanfileUploadFailed, planfilePath, err)
 	}
 	defer f.Close()
 
@@ -90,7 +90,7 @@ func runUpload(cmd *cobra.Command, args []string) error {
 	key := uploadKey
 	if key == "" {
 		keyPattern := planfile.DefaultKeyPattern()
-		key, err = keyPattern.GenerateKey(planfile.KeyContext{
+		key, err = keyPattern.GenerateKey(&planfile.KeyContext{
 			Stack:     uploadStack,
 			Component: uploadComponent,
 			SHA:       uploadSHA,

@@ -47,30 +47,59 @@ func (l *Loader) Load(componentType, command string, defaultTemplates fs.FS) (st
 	defer perf.Track(l.atmosConfig, "templates.Loader.Load")()
 
 	// 1. Check explicit override from config.
-	if l.atmosConfig != nil {
-		overrides := l.getComponentOverrides(componentType)
-		if overrides != nil {
-			if filename, ok := overrides[command]; ok && filename != "" {
-				path := l.resolvePath(filename)
-				content, err := os.ReadFile(path)
-				if err == nil {
-					return string(content), nil
-				}
-				// Log warning but continue to fallbacks.
-			}
-		}
+	if content := l.loadFromConfigOverride(componentType, command); content != "" {
+		return content, nil
 	}
 
 	// 2. Check base_path directory by convention.
-	if l.basePath != "" {
-		path := filepath.Join(l.basePath, componentType, command+".md")
-		content, err := os.ReadFile(path)
-		if err == nil {
-			return string(content), nil
-		}
+	if content := l.loadFromBasePath(componentType, command); content != "" {
+		return content, nil
 	}
 
 	// 3. Fall back to embedded default.
+	return l.loadFromEmbedded(componentType, command, defaultTemplates)
+}
+
+// loadFromConfigOverride attempts to load template from config overrides.
+func (l *Loader) loadFromConfigOverride(componentType, command string) string {
+	if l.atmosConfig == nil {
+		return ""
+	}
+
+	overrides := l.getComponentOverrides(componentType)
+	if overrides == nil {
+		return ""
+	}
+
+	filename, ok := overrides[command]
+	if !ok || filename == "" {
+		return ""
+	}
+
+	path := l.resolvePath(filename)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(content)
+}
+
+// loadFromBasePath attempts to load template from base path by convention.
+func (l *Loader) loadFromBasePath(componentType, command string) string {
+	if l.basePath == "" {
+		return ""
+	}
+
+	path := filepath.Join(l.basePath, componentType, command+".md")
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(content)
+}
+
+// loadFromEmbedded loads template from embedded filesystem.
+func (l *Loader) loadFromEmbedded(componentType, command string, defaultTemplates fs.FS) (string, error) {
 	content, err := fs.ReadFile(defaultTemplates, "templates/"+command+".md")
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrFileNotFound).
@@ -81,7 +110,6 @@ func (l *Loader) Load(componentType, command string, defaultTemplates fs.FS) (st
 			WithHint("Check that the template exists in the provider's embedded templates").
 			Err()
 	}
-
 	return string(content), nil
 }
 

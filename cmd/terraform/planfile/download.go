@@ -37,15 +37,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "planfile.runDownload")()
 
 	key := args[0]
-	outputPath := ""
-	if len(args) > 1 {
-		outputPath = args[1]
-	}
-
-	// Default output path to basename of key.
-	if outputPath == "" {
-		outputPath = baseName(key)
-	}
+	outputPath := getOutputPath(args)
 
 	// Load atmos configuration.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
@@ -65,30 +57,59 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Download.
-	ctx := context.Background()
-	reader, metadata, err := store.Download(ctx, key)
+	// Download and write to file.
+	metadata, err := downloadToFile(store, key, outputPath)
 	if err != nil {
 		return err
 	}
+
+	printDownloadSuccess(store.Name(), key, outputPath, metadata)
+	return nil
+}
+
+// getOutputPath extracts output path from args or defaults to key basename.
+func getOutputPath(args []string) string {
+	if len(args) > 1 {
+		return args[1]
+	}
+	return baseName(args[0])
+}
+
+// downloadToFile downloads the planfile and writes it to the output path.
+func downloadToFile(store planfile.Store, key, outputPath string) (*planfile.Metadata, error) {
+	ctx := context.Background()
+	reader, metadata, err := store.Download(ctx, key)
+	if err != nil {
+		return nil, err
+	}
 	defer reader.Close()
 
-	// Write to output file.
+	if err := writeToFile(outputPath, reader); err != nil {
+		return nil, err
+	}
+	return metadata, nil
+}
+
+// writeToFile writes the reader contents to the output path.
+func writeToFile(outputPath string, reader io.Reader) error {
 	f, err := os.Create(outputPath)
 	if err != nil {
-		return fmt.Errorf("%w: failed to create output file %s: %v", errUtils.ErrPlanfileDownloadFailed, outputPath, err)
+		return fmt.Errorf("%w: failed to create output file %s: %w", errUtils.ErrPlanfileDownloadFailed, outputPath, err)
 	}
 	defer f.Close()
 
 	if _, err := io.Copy(f, reader); err != nil {
-		return fmt.Errorf("%w: failed to write planfile: %v", errUtils.ErrPlanfileDownloadFailed, err)
+		return fmt.Errorf("%w: failed to write planfile: %w", errUtils.ErrPlanfileDownloadFailed, err)
 	}
+	return nil
+}
 
-	_ = ui.Success(fmt.Sprintf("Downloaded planfile from %s: %s -> %s", store.Name(), key, outputPath))
+// printDownloadSuccess prints the success message for a download.
+func printDownloadSuccess(storeName, key, outputPath string, metadata *planfile.Metadata) {
+	_ = ui.Success(fmt.Sprintf("Downloaded planfile from %s: %s -> %s", storeName, key, outputPath))
 	if metadata != nil && metadata.Stack != "" {
 		_ = ui.Info(fmt.Sprintf("Stack: %s, Component: %s, SHA: %s", metadata.Stack, metadata.Component, metadata.SHA))
 	}
-	return nil
 }
 
 // baseName extracts the basename from a path/key.

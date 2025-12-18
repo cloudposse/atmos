@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/planfile"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -37,7 +38,7 @@ func NewStore(opts planfile.StoreOptions) (planfile.Store, error) {
 
 	// Expand path if it starts with ~.
 	if len(path) > 0 && path[0] == '~' {
-		home, err := os.UserHomeDir()
+		home, err := homedir.Dir()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get home directory: %w", err)
 		}
@@ -67,18 +68,18 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 
 	// Create parent directories.
 	if err := os.MkdirAll(filepath.Dir(fullPath), defaultDirPerms); err != nil {
-		return fmt.Errorf("%w: failed to create directory for %s: %v", errUtils.ErrPlanfileUploadFailed, key, err)
+		return fmt.Errorf("%w: failed to create directory for %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 	}
 
 	// Write the planfile.
 	f, err := os.Create(fullPath)
 	if err != nil {
-		return fmt.Errorf("%w: failed to create file %s: %v", errUtils.ErrPlanfileUploadFailed, key, err)
+		return fmt.Errorf("%w: failed to create file %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 	}
 	defer f.Close()
 
 	if _, err := io.Copy(f, data); err != nil {
-		return fmt.Errorf("%w: failed to write file %s: %v", errUtils.ErrPlanfileUploadFailed, key, err)
+		return fmt.Errorf("%w: failed to write file %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 	}
 
 	// Write metadata if provided.
@@ -86,10 +87,10 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 		metadataPath := fullPath + metadataSuffix
 		metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
 		if err != nil {
-			return fmt.Errorf("%w: failed to marshal metadata for %s: %v", errUtils.ErrPlanfileUploadFailed, key, err)
+			return fmt.Errorf("%w: failed to marshal metadata for %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 		}
 		if err := os.WriteFile(metadataPath, metadataJSON, defaultFilePerms); err != nil {
-			return fmt.Errorf("%w: failed to write metadata for %s: %v", errUtils.ErrPlanfileUploadFailed, key, err)
+			return fmt.Errorf("%w: failed to write metadata for %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 		}
 	}
 
@@ -107,7 +108,7 @@ func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *planf
 		if os.IsNotExist(err) {
 			return nil, nil, fmt.Errorf("%w: %s", errUtils.ErrPlanfileNotFound, key)
 		}
-		return nil, nil, fmt.Errorf("%w: failed to open file %s: %v", errUtils.ErrPlanfileDownloadFailed, key, err)
+		return nil, nil, fmt.Errorf("%w: failed to open file %s: %w", errUtils.ErrPlanfileDownloadFailed, key, err)
 	}
 
 	// Try to load metadata.
@@ -127,7 +128,7 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 		if os.IsNotExist(err) {
 			return nil // Already deleted.
 		}
-		return fmt.Errorf("%w: failed to delete file %s: %v", errUtils.ErrPlanfileDeleteFailed, key, err)
+		return fmt.Errorf("%w: failed to delete file %s: %w", errUtils.ErrPlanfileDeleteFailed, key, err)
 	}
 
 	// Try to delete metadata (ignore errors if it doesn't exist).
@@ -140,47 +141,31 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 }
 
 // List lists planfiles matching the given prefix.
-func (s *Store) List(ctx context.Context, prefix string) ([]planfile.PlanfileInfo, error) {
+func (s *Store) List(_ context.Context, prefix string) ([]planfile.PlanfileInfo, error) {
 	defer perf.Track(nil, "local.List")()
 
 	searchPath := filepath.Join(s.basePath, prefix)
 	var files []planfile.PlanfileInfo
 
-	// Walk the directory tree.
-	err := filepath.Walk(s.basePath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil // Skip errors.
+	// Walk the directory tree using WalkDir for cleaner error handling.
+	err := filepath.WalkDir(s.basePath, func(path string, d os.DirEntry, walkErr error) error {
+		// On error, skip the entry and continue walking.
+		if walkErr != nil {
+			return filepath.SkipDir
 		}
 
 		// Skip directories and metadata files.
-		if info.IsDir() || filepath.Ext(path) == ".json" {
+		if d.IsDir() || filepath.Ext(path) == ".json" {
 			return nil
 		}
 
-		// Check if the path matches the prefix.
-		relPath, err := filepath.Rel(s.basePath, path)
-		if err != nil {
-			return nil
-		}
-
-		if prefix != "" && !hasPrefix(relPath, prefix) && !hasPrefix(path, searchPath) {
-			return nil
-		}
-
-		// Load metadata if available.
-		metadata, _ := s.loadMetadata(path)
-
-		files = append(files, planfile.PlanfileInfo{
-			Key:          relPath,
-			Size:         info.Size(),
-			LastModified: info.ModTime(),
-			Metadata:     metadata,
-		})
+		// Try to add the file to the list, ignoring any errors.
+		s.addFileToList(&files, path, d, prefix, searchPath)
 
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to list planfiles: %v", errUtils.ErrPlanfileListFailed, err)
+		return nil, fmt.Errorf("%w: failed to list planfiles: %w", errUtils.ErrPlanfileListFailed, err)
 	}
 
 	// Sort by last modified (newest first).
@@ -206,7 +191,37 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 	return true, nil
 }
 
-// GetMetadata retrieves metadata for a planfile without downloading the content.
+// addFileToList adds a file to the planfile list if it matches the criteria.
+// Errors are silently ignored to allow walking to continue.
+func (s *Store) addFileToList(files *[]planfile.PlanfileInfo, path string, d os.DirEntry, prefix, searchPath string) {
+	// Check if the path matches the prefix.
+	relPath, err := filepath.Rel(s.basePath, path)
+	if err != nil {
+		return
+	}
+
+	if prefix != "" && !hasPrefix(relPath, prefix) && !hasPrefix(path, searchPath) {
+		return
+	}
+
+	// Get file info for size and modification time.
+	info, err := d.Info()
+	if err != nil {
+		return
+	}
+
+	// Load metadata if available.
+	metadata, _ := s.loadMetadata(path)
+
+	*files = append(*files, planfile.PlanfileInfo{
+		Key:          relPath,
+		Size:         info.Size(),
+		LastModified: info.ModTime(),
+		Metadata:     metadata,
+	})
+}
+
+// GetMetadata retrieves metadata for a planfile.
 func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata, error) {
 	defer perf.Track(nil, "local.GetMetadata")()
 

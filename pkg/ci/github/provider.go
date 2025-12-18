@@ -144,14 +144,14 @@ func (p *Provider) GetStatus(ctx context.Context, opts ci.StatusOptions) (*ci.St
 }
 
 // CreateCheckRun creates a new check run on a commit.
-func (p *Provider) CreateCheckRun(ctx context.Context, opts ci.CreateCheckRunOptions) (*ci.CheckRun, error) {
+func (p *Provider) CreateCheckRun(ctx context.Context, opts *ci.CreateCheckRunOptions) (*ci.CheckRun, error) {
 	defer perf.Track(nil, "github.Provider.CreateCheckRun")()
 
 	return p.createCheckRun(ctx, opts)
 }
 
 // UpdateCheckRun updates an existing check run.
-func (p *Provider) UpdateCheckRun(ctx context.Context, opts ci.UpdateCheckRunOptions) (*ci.CheckRun, error) {
+func (p *Provider) UpdateCheckRun(ctx context.Context, opts *ci.UpdateCheckRunOptions) (*ci.CheckRun, error) {
 	defer perf.Track(nil, "github.Provider.UpdateCheckRun")()
 
 	return p.updateCheckRun(ctx, opts)

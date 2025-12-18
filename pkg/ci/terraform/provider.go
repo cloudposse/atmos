@@ -4,6 +4,7 @@ package terraform
 import (
 	"embed"
 	"fmt"
+	"strconv"
 
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -113,16 +114,16 @@ func (p *Provider) GetOutputVariables(result *ci.OutputResult, command string) m
 	vars := make(map[string]string)
 
 	// Common outputs.
-	vars["has_changes"] = fmt.Sprintf("%t", result.HasChanges)
-	vars["has_errors"] = fmt.Sprintf("%t", result.HasErrors)
-	vars["exit_code"] = fmt.Sprintf("%d", result.ExitCode)
+	vars["has_changes"] = strconv.FormatBool(result.HasChanges)
+	vars["has_errors"] = strconv.FormatBool(result.HasErrors)
+	vars["exit_code"] = strconv.Itoa(result.ExitCode)
 
 	// Terraform-specific outputs.
 	if data, ok := result.Data.(*ci.TerraformOutputData); ok {
-		vars["resources_to_create"] = fmt.Sprintf("%d", data.ResourceCounts.Create)
-		vars["resources_to_change"] = fmt.Sprintf("%d", data.ResourceCounts.Change)
-		vars["resources_to_replace"] = fmt.Sprintf("%d", data.ResourceCounts.Replace)
-		vars["resources_to_destroy"] = fmt.Sprintf("%d", data.ResourceCounts.Destroy)
+		vars["resources_to_create"] = strconv.Itoa(data.ResourceCounts.Create)
+		vars["resources_to_change"] = strconv.Itoa(data.ResourceCounts.Change)
+		vars["resources_to_replace"] = strconv.Itoa(data.ResourceCounts.Replace)
+		vars["resources_to_destroy"] = strconv.Itoa(data.ResourceCounts.Destroy)
 	}
 
 	return vars

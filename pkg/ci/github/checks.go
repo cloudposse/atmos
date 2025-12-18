@@ -11,8 +11,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 )
 
+// GitHub API status values.
+const (
+	statusQueued     = "queued"
+	statusInProgress = "in_progress"
+	statusCompleted  = "completed"
+)
+
 // createCheckRun creates a new check run on a commit.
-func (p *Provider) createCheckRun(ctx context.Context, opts ci.CreateCheckRunOptions) (*ci.CheckRun, error) {
+func (p *Provider) createCheckRun(ctx context.Context, opts *ci.CreateCheckRunOptions) (*ci.CheckRun, error) {
 	ghOpts := github.CreateCheckRunOptions{
 		Name:    opts.Name,
 		HeadSHA: opts.SHA,
@@ -21,11 +28,11 @@ func (p *Provider) createCheckRun(ctx context.Context, opts ci.CreateCheckRunOpt
 	// Map status to GitHub API values.
 	switch opts.Status {
 	case ci.CheckRunStatePending:
-		ghOpts.Status = github.String("queued")
+		ghOpts.Status = github.String(statusQueued)
 	case ci.CheckRunStateInProgress:
-		ghOpts.Status = github.String("in_progress")
+		ghOpts.Status = github.String(statusInProgress)
 	default:
-		ghOpts.Status = github.String("queued")
+		ghOpts.Status = github.String(statusQueued)
 	}
 
 	// Add output if title or summary is provided.
@@ -62,7 +69,7 @@ func (p *Provider) createCheckRun(ctx context.Context, opts ci.CreateCheckRunOpt
 }
 
 // updateCheckRun updates an existing check run.
-func (p *Provider) updateCheckRun(ctx context.Context, opts ci.UpdateCheckRunOptions) (*ci.CheckRun, error) {
+func (p *Provider) updateCheckRun(ctx context.Context, opts *ci.UpdateCheckRunOptions) (*ci.CheckRun, error) {
 	ghOpts := github.UpdateCheckRunOptions{
 		Name: opts.Title, // Name is required for updates.
 	}
@@ -70,11 +77,11 @@ func (p *Provider) updateCheckRun(ctx context.Context, opts ci.UpdateCheckRunOpt
 	// Map status to GitHub API values.
 	switch opts.Status {
 	case ci.CheckRunStatePending:
-		ghOpts.Status = github.String("queued")
+		ghOpts.Status = github.String(statusQueued)
 	case ci.CheckRunStateInProgress:
-		ghOpts.Status = github.String("in_progress")
+		ghOpts.Status = github.String(statusInProgress)
 	case ci.CheckRunStateSuccess, ci.CheckRunStateFailure, ci.CheckRunStateError, ci.CheckRunStateCancelled:
-		ghOpts.Status = github.String("completed")
+		ghOpts.Status = github.String(statusCompleted)
 		ghOpts.Conclusion = github.String(mapCheckRunStateToConclusion(opts.Status, opts.Conclusion))
 	}
 
@@ -116,11 +123,11 @@ func (p *Provider) updateCheckRun(ctx context.Context, opts ci.UpdateCheckRunOpt
 // mapGitHubStatusToCheckRunState maps GitHub API status to ci.CheckRunState.
 func mapGitHubStatusToCheckRunState(status string) ci.CheckRunState {
 	switch status {
-	case "queued":
+	case statusQueued:
 		return ci.CheckRunStatePending
-	case "in_progress":
+	case statusInProgress:
 		return ci.CheckRunStateInProgress
-	case "completed":
+	case statusCompleted:
 		// Note: completed status requires conclusion to determine actual state.
 		return ci.CheckRunStateSuccess
 	default:

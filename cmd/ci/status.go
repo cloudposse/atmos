@@ -13,6 +13,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+const (
+	// ShortSHALength is the standard length for displaying abbreviated git SHAs.
+	shortSHALength = 7
+)
+
 // statusCmd represents the ci status command.
 var statusCmd = &cobra.Command{
 	Use:   "status",
@@ -56,17 +61,17 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Get repository info using provider interface.
-	owner, repo, branch, sha, err := getRepoContext(provider)
+	repoCtx, err := getRepoContext(provider)
 	if err != nil {
 		return err
 	}
 
 	// Fetch status.
 	status, err := provider.GetStatus(ctx, ci.StatusOptions{
-		Owner:                 owner,
-		Repo:                  repo,
-		Branch:                branch,
-		SHA:                   sha,
+		Owner:                 repoCtx.Owner,
+		Repo:                  repoCtx.Repo,
+		Branch:                repoCtx.Branch,
+		SHA:                   repoCtx.SHA,
 		IncludeUserPRs:        true,
 		IncludeReviewRequests: true,
 	})
@@ -93,60 +98,97 @@ func getDefaultProvider() (ci.Provider, error) {
 	return nil, errUtils.ErrCIProviderNotFound
 }
 
+// repoContext holds repository context information.
+type repoContext struct {
+	Owner  string
+	Repo   string
+	Branch string
+	SHA    string
+}
+
 // getRepoContext extracts repository context using the provider interface with git fallback.
-func getRepoContext(provider ci.Provider) (owner, repo, branch, sha string, err error) {
-	// Try to get context from provider first (uses provider interface).
-	ciCtx, ctxErr := provider.Context()
-	if ctxErr == nil && ciCtx != nil {
-		owner = ciCtx.RepoOwner
-		repo = ciCtx.RepoName
-		sha = ciCtx.SHA
-		branch = ciCtx.Branch
+func getRepoContext(provider ci.Provider) (*repoContext, error) {
+	ctx := getContextFromProvider(provider)
+
+	if err := fillMissingRepoInfo(ctx); err != nil {
+		return nil, err
 	}
 
-	// Fall back to local git for any missing values.
-	if owner == "" || repo == "" {
-		gitRepo := git.NewDefaultGitRepo()
-		info, gitErr := gitRepo.GetLocalRepoInfo()
-		if gitErr != nil {
-			return "", "", "", "", errUtils.Build(errUtils.ErrFailedToGetRepoInfo).
-				WithCause(gitErr).
-				WithExplanation("Could not determine repository from CI context or git").
-				Err()
-		}
-		if owner == "" {
-			owner = info.RepoOwner
-		}
-		if repo == "" {
-			repo = info.RepoName
-		}
-	}
+	fillMissingBranch(ctx)
+	fillMissingSHA(ctx)
 
-	// Get current branch from git if not set.
-	if branch == "" {
-		localRepo, gitErr := git.GetLocalRepo()
-		if gitErr == nil {
-			head, refErr := localRepo.Head()
-			if refErr == nil {
-				branch = head.Name().Short()
-			}
-		}
-	}
-
-	// Get current SHA from git if not set.
-	if sha == "" {
-		gitRepo := git.NewDefaultGitRepo()
-		sha, _ = gitRepo.GetCurrentCommitSHA()
-	}
-
-	if owner == "" || repo == "" {
-		return "", "", "", "", errUtils.Build(errUtils.ErrFailedToGetRepoInfo).
+	if ctx.Owner == "" || ctx.Repo == "" {
+		return nil, errUtils.Build(errUtils.ErrFailedToGetRepoInfo).
 			WithExplanation("Could not determine repository owner and name").
 			WithHint("Ensure you're in a git repository with a remote configured").
 			Err()
 	}
 
-	return owner, repo, branch, sha, nil
+	return ctx, nil
+}
+
+// getContextFromProvider extracts context from the CI provider.
+func getContextFromProvider(provider ci.Provider) *repoContext {
+	ctx := &repoContext{}
+	ciCtx, ctxErr := provider.Context()
+	if ctxErr == nil && ciCtx != nil {
+		ctx.Owner = ciCtx.RepoOwner
+		ctx.Repo = ciCtx.RepoName
+		ctx.SHA = ciCtx.SHA
+		ctx.Branch = ciCtx.Branch
+	}
+	return ctx
+}
+
+// fillMissingRepoInfo fills in missing owner/repo from local git.
+func fillMissingRepoInfo(ctx *repoContext) error {
+	if ctx.Owner != "" && ctx.Repo != "" {
+		return nil
+	}
+
+	gitRepo := git.NewDefaultGitRepo()
+	info, gitErr := gitRepo.GetLocalRepoInfo()
+	if gitErr != nil {
+		return errUtils.Build(errUtils.ErrFailedToGetRepoInfo).
+			WithCause(gitErr).
+			WithExplanation("Could not determine repository from CI context or git").
+			Err()
+	}
+
+	if ctx.Owner == "" {
+		ctx.Owner = info.RepoOwner
+	}
+	if ctx.Repo == "" {
+		ctx.Repo = info.RepoName
+	}
+	return nil
+}
+
+// fillMissingBranch fills in missing branch from local git.
+func fillMissingBranch(ctx *repoContext) {
+	if ctx.Branch != "" {
+		return
+	}
+
+	localRepo, gitErr := git.GetLocalRepo()
+	if gitErr != nil {
+		return
+	}
+
+	head, refErr := localRepo.Head()
+	if refErr != nil {
+		return
+	}
+	ctx.Branch = head.Name().Short()
+}
+
+// fillMissingSHA fills in missing SHA from local git.
+func fillMissingSHA(ctx *repoContext) {
+	if ctx.SHA != "" {
+		return
+	}
+	gitRepo := git.NewDefaultGitRepo()
+	ctx.SHA, _ = gitRepo.GetCurrentCommitSHA()
 }
 
 // renderStatus renders the CI status to the terminal.
@@ -160,7 +202,7 @@ func renderStatus(status *ci.Status) {
 
 	// PRs created by user.
 	if len(status.CreatedByUser) > 0 {
-		ui.Writeln("\nCreated by you")
+		_ = ui.Writeln("\nCreated by you")
 		for _, pr := range status.CreatedByUser {
 			renderPRStatus(pr)
 		}
@@ -168,7 +210,7 @@ func renderStatus(status *ci.Status) {
 
 	// PRs requesting review.
 	if len(status.ReviewRequests) > 0 {
-		ui.Writeln("\nRequesting a code review from you")
+		_ = ui.Writeln("\nRequesting a code review from you")
 		for _, pr := range status.ReviewRequests {
 			renderPRStatus(pr)
 		}
@@ -177,23 +219,23 @@ func renderStatus(status *ci.Status) {
 
 // renderBranchStatus renders status for a branch.
 func renderBranchStatus(bs *ci.BranchStatus) {
-	ui.Writeln("Current branch")
+	_ = ui.Writeln("Current branch")
 
 	if bs.PullRequest != nil {
 		renderPRStatus(bs.PullRequest)
 	} else {
-		ui.Writef("  Commit status for %s\n", truncateSHA(bs.CommitSHA))
+		_ = ui.Writef("  Commit status for %s\n", truncateSHA(bs.CommitSHA))
 		renderChecks(bs.Checks, "  ")
-		ui.Writeln("\n  No open pull request for current branch.")
+		_ = ui.Writeln("\n  No open pull request for current branch.")
 	}
 }
 
 // renderPRStatus renders status for a pull request.
 func renderPRStatus(pr *ci.PRStatus) {
-	ui.Writef("  #%d  %s [%s]\n", pr.Number, pr.Title, pr.Branch)
+	_ = ui.Writef("  #%d  %s [%s]\n", pr.Number, pr.Title, pr.Branch)
 
 	if pr.AllPassed && len(pr.Checks) > 0 {
-		ui.Writeln("    - All checks passing")
+		_ = ui.Writeln("    - All checks passing")
 	} else {
 		renderChecks(pr.Checks, "    ")
 	}
@@ -203,7 +245,7 @@ func renderPRStatus(pr *ci.PRStatus) {
 func renderChecks(checks []*ci.CheckStatus, indent string) {
 	for _, check := range checks {
 		icon := getCheckIcon(check.CheckState())
-		ui.Writef("%s- %s %s (%s)\n", indent, icon, check.Name, check.Conclusion)
+		_ = ui.Writef("%s- %s %s (%s)\n", indent, icon, check.Name, check.Conclusion)
 	}
 }
 
@@ -227,8 +269,8 @@ func getCheckIcon(state ci.CheckStatusState) string {
 
 // truncateSHA truncates a SHA to 7 characters.
 func truncateSHA(sha string) string {
-	if len(sha) > 7 {
-		return sha[:7]
+	if len(sha) > shortSHALength {
+		return sha[:shortSHALength]
 	}
 	return sha
 }

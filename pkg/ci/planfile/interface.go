@@ -145,7 +145,7 @@ type KeyContext struct {
 }
 
 // GenerateKey generates a planfile key from the context using the pattern.
-func (p KeyPattern) GenerateKey(ctx KeyContext) (string, error) {
+func (p KeyPattern) GenerateKey(ctx *KeyContext) (string, error) {
 	defer perf.Track(nil, "planfile.GenerateKey")()
 
 	// Simple template replacement for now.

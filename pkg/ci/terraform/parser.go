@@ -29,7 +29,7 @@ var (
 	// Used as fallback when JSON is not available.
 	planSummaryRe = regexp.MustCompile(`Plan:\s*(\d+)\s+to add,\s*(\d+)\s+to change,\s*(\d+)\s+to destroy`)
 
-	// Matches "No changes. Your infrastructure matches the configuration."
+	// NoChangesRe matches "No changes. Your infrastructure matches the configuration.".
 	noChangesRe = regexp.MustCompile(`No changes\.|Your infrastructure matches the configuration`)
 )
 
@@ -43,7 +43,23 @@ func ParsePlanJSON(jsonData []byte) (*ci.OutputResult, error) {
 		return nil, err
 	}
 
-	result := &ci.OutputResult{
+	result := newEmptyResult()
+	data := result.Data.(*ci.TerraformOutputData)
+
+	processResourceChanges(plan.ResourceChanges, data)
+	processOutputChanges(plan.OutputChanges, data)
+
+	result.HasChanges = hasResourceChanges(data.ResourceCounts)
+	if result.HasChanges {
+		data.ChangedResult = buildChangeSummary(data.ResourceCounts)
+	}
+
+	return result, nil
+}
+
+// newEmptyResult creates an empty OutputResult with initialized data.
+func newEmptyResult() *ci.OutputResult {
+	return &ci.OutputResult{
 		ExitCode:   0,
 		HasChanges: false,
 		HasErrors:  false,
@@ -59,41 +75,46 @@ func ParsePlanJSON(jsonData []byte) (*ci.OutputResult, error) {
 			Outputs:           make(map[string]ci.TerraformOutput),
 		},
 	}
+}
 
-	data := result.Data.(*ci.TerraformOutputData)
-
-	// Process resource changes.
-	for _, rc := range plan.ResourceChanges {
+// processResourceChanges processes plan resource changes and updates the data.
+func processResourceChanges(changes []*tfjson.ResourceChange, data *ci.TerraformOutputData) {
+	for _, rc := range changes {
 		if rc == nil || rc.Change == nil {
 			continue
 		}
+		processResourceChange(rc, data)
+	}
+}
 
-		addr := rc.Address
-		actions := rc.Change.Actions
+// processResourceChange processes a single resource change.
+func processResourceChange(rc *tfjson.ResourceChange, data *ci.TerraformOutputData) {
+	addr := rc.Address
+	actions := rc.Change.Actions
 
-		switch {
-		case actions.Create():
-			data.ResourceCounts.Create++
-			data.CreatedResources = append(data.CreatedResources, addr)
-		case actions.Delete():
-			data.ResourceCounts.Destroy++
-			data.DeletedResources = append(data.DeletedResources, addr)
-		case actions.Update():
-			data.ResourceCounts.Change++
-			data.UpdatedResources = append(data.UpdatedResources, addr)
-		case actions.Replace():
-			data.ResourceCounts.Replace++
-			data.ReplacedResources = append(data.ReplacedResources, addr)
-		}
-
-		// Check for imports.
-		if rc.Change.Importing != nil {
-			data.ImportedResources = append(data.ImportedResources, addr)
-		}
+	switch {
+	case actions.Create():
+		data.ResourceCounts.Create++
+		data.CreatedResources = append(data.CreatedResources, addr)
+	case actions.Delete():
+		data.ResourceCounts.Destroy++
+		data.DeletedResources = append(data.DeletedResources, addr)
+	case actions.Update():
+		data.ResourceCounts.Change++
+		data.UpdatedResources = append(data.UpdatedResources, addr)
+	case actions.Replace():
+		data.ResourceCounts.Replace++
+		data.ReplacedResources = append(data.ReplacedResources, addr)
 	}
 
-	// Process output changes from plan.
-	for name, output := range plan.OutputChanges {
+	if rc.Change.Importing != nil {
+		data.ImportedResources = append(data.ImportedResources, addr)
+	}
+}
+
+// processOutputChanges processes plan output changes.
+func processOutputChanges(changes map[string]*tfjson.Change, data *ci.TerraformOutputData) {
+	for name, output := range changes {
 		if output == nil {
 			continue
 		}
@@ -102,19 +123,11 @@ func ParsePlanJSON(jsonData []byte) (*ci.OutputResult, error) {
 			Sensitive: output.AfterSensitive != nil,
 		}
 	}
+}
 
-	// Set HasChanges based on resource counts.
-	result.HasChanges = data.ResourceCounts.Create > 0 ||
-		data.ResourceCounts.Change > 0 ||
-		data.ResourceCounts.Replace > 0 ||
-		data.ResourceCounts.Destroy > 0
-
-	// Build changed result summary.
-	if result.HasChanges {
-		data.ChangedResult = buildChangeSummary(data.ResourceCounts)
-	}
-
-	return result, nil
+// hasResourceChanges checks if there are any resource changes.
+func hasResourceChanges(counts ci.ResourceCounts) bool {
+	return counts.Create > 0 || counts.Change > 0 || counts.Replace > 0 || counts.Destroy > 0
 }
 
 // OutputJSON represents the structure of `terraform output -json`.
@@ -329,16 +342,16 @@ func ParseOutput(output string, command string) *ci.OutputResult {
 func buildChangeSummary(counts ci.ResourceCounts) string {
 	var parts []string
 	if counts.Create > 0 {
-		parts = append(parts, pluralize(counts.Create, "resource", "resources")+" to add")
+		parts = append(parts, resourceCount(counts.Create)+" to add")
 	}
 	if counts.Change > 0 {
-		parts = append(parts, pluralize(counts.Change, "resource", "resources")+" to change")
+		parts = append(parts, resourceCount(counts.Change)+" to change")
 	}
 	if counts.Replace > 0 {
-		parts = append(parts, pluralize(counts.Replace, "resource", "resources")+" to replace")
+		parts = append(parts, resourceCount(counts.Replace)+" to replace")
 	}
 	if counts.Destroy > 0 {
-		parts = append(parts, pluralize(counts.Destroy, "resource", "resources")+" to destroy")
+		parts = append(parts, resourceCount(counts.Destroy)+" to destroy")
 	}
 	if len(parts) == 0 {
 		return "No changes"
@@ -346,12 +359,12 @@ func buildChangeSummary(counts ci.ResourceCounts) string {
 	return strings.Join(parts, ", ")
 }
 
-// pluralize returns the singular or plural form based on count.
-func pluralize(count int, singular, plural string) string {
+// resourceCount formats a count of resources with proper pluralization.
+func resourceCount(count int) string {
 	if count == 1 {
-		return "1 " + singular
+		return "1 resource"
 	}
-	return strconv.Itoa(count) + " " + plural
+	return strconv.Itoa(count) + " resources"
 }
 
 // parseIntOrZero parses a string to int, returning 0 on error.

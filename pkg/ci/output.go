@@ -3,9 +3,15 @@ package ci
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+const (
+	// OutputFilePermissions is the file permission mode for CI output files.
+	outputFilePermissions = 0o644
 )
 
 // NoopOutputWriter is an OutputWriter that does nothing.
@@ -51,7 +57,7 @@ func (w *FileOutputWriter) WriteOutput(key, value string) error {
 		return nil
 	}
 
-	f, err := os.OpenFile(w.outputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(w.outputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, outputFilePermissions)
 	if err != nil {
 		return fmt.Errorf("failed to open output file: %w", err)
 	}
@@ -80,7 +86,7 @@ func (w *FileOutputWriter) WriteSummary(content string) error {
 		return nil
 	}
 
-	f, err := os.OpenFile(w.summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(w.summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, outputFilePermissions)
 	if err != nil {
 		return fmt.Errorf("failed to open summary file: %w", err)
 	}
@@ -106,25 +112,25 @@ func NewOutputHelpers(writer OutputWriter) *OutputHelpers {
 func (h *OutputHelpers) WritePlanOutputs(opts PlanOutputOptions) error {
 	defer perf.Track(nil, "ci.OutputHelpers.WritePlanOutputs")()
 
-	if err := h.Writer.WriteOutput("has_changes", fmt.Sprintf("%t", opts.HasChanges)); err != nil {
+	if err := h.Writer.WriteOutput("has_changes", strconv.FormatBool(opts.HasChanges)); err != nil {
 		return err
 	}
-	if err := h.Writer.WriteOutput("has_additions", fmt.Sprintf("%t", opts.HasAdditions)); err != nil {
+	if err := h.Writer.WriteOutput("has_additions", strconv.FormatBool(opts.HasAdditions)); err != nil {
 		return err
 	}
-	if err := h.Writer.WriteOutput("has_additions_count", fmt.Sprintf("%d", opts.AdditionsCount)); err != nil {
+	if err := h.Writer.WriteOutput("has_additions_count", strconv.Itoa(opts.AdditionsCount)); err != nil {
 		return err
 	}
-	if err := h.Writer.WriteOutput("has_changes_count", fmt.Sprintf("%d", opts.ChangesCount)); err != nil {
+	if err := h.Writer.WriteOutput("has_changes_count", strconv.Itoa(opts.ChangesCount)); err != nil {
 		return err
 	}
-	if err := h.Writer.WriteOutput("has_destructions", fmt.Sprintf("%t", opts.HasDestructions)); err != nil {
+	if err := h.Writer.WriteOutput("has_destructions", strconv.FormatBool(opts.HasDestructions)); err != nil {
 		return err
 	}
-	if err := h.Writer.WriteOutput("has_destructions_count", fmt.Sprintf("%d", opts.DestructionsCount)); err != nil {
+	if err := h.Writer.WriteOutput("has_destructions_count", strconv.Itoa(opts.DestructionsCount)); err != nil {
 		return err
 	}
-	if err := h.Writer.WriteOutput("plan_exit_code", fmt.Sprintf("%d", opts.ExitCode)); err != nil {
+	if err := h.Writer.WriteOutput("plan_exit_code", strconv.Itoa(opts.ExitCode)); err != nil {
 		return err
 	}
 	if opts.ArtifactKey != "" {
@@ -139,10 +145,10 @@ func (h *OutputHelpers) WritePlanOutputs(opts PlanOutputOptions) error {
 func (h *OutputHelpers) WriteApplyOutputs(opts ApplyOutputOptions) error {
 	defer perf.Track(nil, "ci.OutputHelpers.WriteApplyOutputs")()
 
-	if err := h.Writer.WriteOutput("apply_exit_code", fmt.Sprintf("%d", opts.ExitCode)); err != nil {
+	if err := h.Writer.WriteOutput("apply_exit_code", strconv.Itoa(opts.ExitCode)); err != nil {
 		return err
 	}
-	if err := h.Writer.WriteOutput("success", fmt.Sprintf("%t", opts.Success)); err != nil {
+	if err := h.Writer.WriteOutput("success", strconv.FormatBool(opts.Success)); err != nil {
 		return err
 	}
 	// Write terraform outputs with output_ prefix.
