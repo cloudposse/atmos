@@ -1,0 +1,259 @@
+---
+title: Source-Based Version Pinning
+sidebar_position: 4
+sidebar_label: Source-Based Version Pinning
+description: Source-Based Version Pinning - Native per-environment version control using the source field
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<PillBox>Atmos Design Pattern</PillBox>
+<Intro>
+**Source-Based Version Pinning** enables native per-environment version control directly in stack configuration using the top-level `source` field. Components declare their source location inline, and Atmos vendors them just-in-time during execution—no separate vendor manifests or pre-vendoring required.
+</Intro>
+
+This approach provides strict version pinning with minimal operational overhead. Each environment can pin to specific versions while inheriting common source configuration through Atmos's stack inheritance system.
+
+<KeyPoints>
+- Native version pinning per environment without vendor.yaml files
+- Just-in-time vendoring during terraform/helmfile execution
+- Version inheritance through Atmos stack inheritance
+- Simpler alternative to traditional vendoring for most use cases
+- Supports all go-getter protocols (git, s3, http, oci, etc.)
+</KeyPoints>
+
+## Use Cases
+
+Use **Source-Based Version Pinning** when:
+
+- You need **per-environment version control** without vendor file overhead
+- You want **versions defined alongside** other component configuration
+- You need **just-in-time vendoring** without pre-vendoring steps
+- You want to leverage **stack inheritance** for version defaults
+- You're **prototyping or iterating quickly** on component versions
+
+## Problem
+
+Traditional strict version pinning requires:
+
+1. Maintaining `vendor.yaml` with source definitions for each version
+2. Running `atmos vendor pull` before deployments
+3. Committing vendored code to the repository
+4. Coordinating version updates across vendor manifests and stack configs
+5. Managing disk space for multiple vendored versions
+
+This creates operational overhead, especially when different environments need different versions of many components.
+
+## Solution
+
+Use the `source` field directly in component configuration. The source provisioner handles just-in-time vendoring automatically.
+
+### String Form (Simple)
+
+For simple cases, specify a go-getter compatible URI:
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      source: "github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0"
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+### Map Form (Full Control)
+
+For more control, use a map with explicit fields:
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0
+        included_paths:
+          - "*.tf"
+          - "modules/**"
+        excluded_paths:
+          - "*.md"
+          - "tests/**"
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+### Version Inheritance
+
+Define source defaults in a catalog and override versions per environment:
+
+<Tabs>
+<TabItem value="catalog" label="Catalog Defaults" default>
+<File title="stacks/catalog/vpc/defaults.yaml">
+```yaml
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0  # Default version
+        included_paths:
+          - "*.tf"
+          - "modules/**"
+```
+</File>
+</TabItem>
+
+<TabItem value="dev" label="Development">
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+      source:
+        version: 1.451.0  # Latest version in dev
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+</TabItem>
+
+<TabItem value="prod" label="Production">
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+      source:
+        version: 1.450.0  # Stable version in prod
+      vars:
+        cidr_block: "10.2.0.0/16"
+```
+</File>
+</TabItem>
+</Tabs>
+
+## How It Works
+
+1. **Source Provisioner Hook**: Registers for `before.terraform.init` event
+2. **Configuration Check**: Extracts `source` from component configuration
+3. **Download**: Uses go-getter to fetch component at specified version
+4. **Path Filtering**: Applies `included_paths` and `excluded_paths` patterns
+5. **Target Directory**: Places component in the configured component path
+6. **Execution**: Terraform runs against the vendored component
+
+The source provisioner only downloads if the component directory doesn't exist or is outdated.
+
+## CLI Commands
+
+Explicit commands for managing sources:
+
+```bash
+# Vendor component source (downloads if missing or outdated)
+atmos terraform source pull vpc --stack prod-us-east-1
+
+# Force re-vendor even if up-to-date
+atmos terraform source pull vpc --stack prod-us-east-1 --force
+
+# List components with source configured
+atmos terraform source list --stack prod-us-east-1
+
+# Show source configuration
+atmos terraform source describe vpc --stack prod-us-east-1
+
+# Remove vendored source
+atmos terraform source delete vpc --stack prod-us-east-1 --force
+```
+
+See [atmos terraform source](/cli/commands/terraform/terraform-source) for complete CLI documentation.
+
+## Rollback Strategy
+
+Rolling back is simple—change the version in your stack configuration:
+
+```yaml
+# Before: problematic version
+source:
+  version: 1.451.0
+
+# After: rollback to stable version
+source:
+  version: 1.450.0
+```
+
+Then apply:
+
+```bash
+# Force re-vendor to get previous version
+atmos terraform source pull vpc --stack prod-us-east-1 --force
+
+# Apply rollback
+atmos terraform apply vpc --stack prod-us-east-1
+```
+
+## Benefits
+
+- **No vendor files to maintain**: Version control happens in stack config
+- **No components committed to repo**: Components don't bloat your repository if that's not adding value for your workflow
+- **Smaller repositories**: No vendored Terraform code means smaller git repos and faster clones
+- **Per-environment versions**: Each environment pins its own version natively
+- **Stack inheritance**: Define defaults once, override where needed
+- **Just-in-time**: No pre-vendor step in CI/CD pipelines
+- **Simple configuration**: Fewer files, less coordination overhead
+
+## Drawbacks
+
+- **No local immutable copy**: Components aren't committed, so you lose the audit trail in Git
+- **No pre-vendored code in repo**: Can't review component diffs before deploy
+- **AI coding assistants lack context**: Tools like Claude Code, Cursor, and GitHub Copilot work better with vendored code in the repo—they can't see components that haven't been downloaded yet
+- **Requires network access**: Components downloaded during execution
+- **No local modifications**: Can't patch vendored components
+- **Less suitable for air-gapped**: Needs external network access during deployment
+- **Harder to search codebase**: Can't grep component code without first downloading it
+
+## When to Use Source vs Vendoring
+
+| Requirement | Source | Vendoring |
+|------------|--------|-----------|
+| Per-environment versions | ✓ | ✓ |
+| No vendor manifest files | ✓ | ✗ |
+| Code review of dependencies | ✗ | ✓ |
+| Offline deployment | ✗ | ✓ |
+| Local modifications | ✗ | ✓ |
+| Audit trail in Git | ✗ | ✓ |
+| AI coding assistant context | ✗ | ✓ |
+| Minimal operational overhead | ✓ | ✗ |
+
+## Best Practices
+
+1. **Use catalog defaults**: Define base source config in catalogs
+2. **Override only version**: Inherit everything except version per environment
+3. **Use map form for filtering**: When you need to exclude files
+4. **Consider vendoring for production-critical**: When audit trails matter
+5. **Pre-vendor in CI**: Run `atmos terraform source pull` in CI for faster deploys
+
+## Related Patterns
+
+- [Strict Version Pinning](./strict-version-pinning) - Traditional approach using vendoring
+- [Vendoring Components](./vendoring-components) - Pre-vendor for audit trails and offline use
+- [Folder-Based Versioning](./folder-based-versioning) - Organize vendored versions in folders
+- [Release Tracks/Channels](./release-tracks-channels) - Moving version targets vs fixed pins

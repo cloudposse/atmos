@@ -17,17 +17,15 @@ directly from stack configuration. Components can declare their source location
 inline using the source field without requiring a separate component.yaml file.
 
 Commands:
-  create    Vendor component source from source configuration
-  update    Re-vendor component source (force refresh)
+  pull      Vendor component source (use --force to re-vendor)
   list      List components with source in a stack
   describe  Show source configuration for a component
   delete    Remove vendored source directory`,
 }
 
 func init() {
-	// Add CRUD subcommands.
-	sourceCmd.AddCommand(createCmd)
-	sourceCmd.AddCommand(updateCmd)
+	// Add subcommands.
+	sourceCmd.AddCommand(pullCmd)
 	sourceCmd.AddCommand(listCmd)
 	sourceCmd.AddCommand(describeCmd)
 	sourceCmd.AddCommand(deleteCmd)

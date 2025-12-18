@@ -7,10 +7,19 @@ description: Show source configuration for a component
 ---
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Use this command to display the `source` configuration for a Terraform component. This shows the source URI, version, and any path filters configured for vendoring.
 </Intro>
+
+<ActionCard title="Source-Based Version Pinning">
+    Learn how to configure the `source` field for per-environment version control.
+    <div>
+      <PrimaryCTA to="/design-patterns/version-management/source-based-versioning">Design Pattern</PrimaryCTA>
+    </div>
+</ActionCard>
 
 <Screengrab title="atmos terraform source describe --help" slug="atmos-terraform-source-describe--help" />
 
@@ -107,8 +116,9 @@ The command outputs YAML matching the stack manifest schema:
   <dd>List of glob patterns for files to exclude.</dd>
 </dl>
 
-## Related Commands
+## See Also
 
-- [`atmos terraform source`](/cli/commands/terraform/terraform-source) - Parent command overview
-- [`atmos terraform source create`](/cli/commands/terraform/terraform-source-create) - Vendor component source
-- [`atmos terraform source list`](/cli/commands/terraform/terraform-source-list) - List components with sources
+- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) — Design pattern for per-environment version control
+- [`atmos terraform source`](/cli/commands/terraform/terraform-source) — Parent command overview
+- [`atmos terraform source pull`](/cli/commands/terraform/terraform-source-pull) — Vendor component source
+- [`atmos terraform source list`](/cli/commands/terraform/terraform-source-list) — List components with sources

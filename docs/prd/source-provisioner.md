@@ -75,16 +75,16 @@ After the workdir PR (#1852) merges:
 
 ---
 
-## CLI Commands (CRUD Operations)
+## CLI Commands
 
-Following the backend provisioner pattern, the source provisioner provides explicit CLI commands for managing vendored sources. **All commands are scoped by component type** for consistency with the existing CLI hierarchy.
+Following the vendor pattern (`atmos vendor pull`), the source provisioner provides explicit CLI commands for managing vendored sources. **All commands are scoped by component type** for consistency with the existing CLI hierarchy.
 
 ### Terraform Source Commands
 
 ```bash
-# CRUD operations
-atmos terraform source create <component> --stack <stack>
-atmos terraform source update <component> --stack <stack>
+# Core operations
+atmos terraform source pull <component> --stack <stack>           # Vendor if missing or outdated
+atmos terraform source pull <component> --stack <stack> --force   # Force re-vendor
 atmos terraform source list --stack <stack>
 atmos terraform source describe <component> --stack <stack>
 atmos terraform source delete <component> --stack <stack> --force
@@ -99,9 +99,9 @@ atmos terraform source cache refresh <uri>
 ### Helmfile Source Commands
 
 ```bash
-# CRUD operations
-atmos helmfile source create <component> --stack <stack>
-atmos helmfile source update <component> --stack <stack>
+# Core operations
+atmos helmfile source pull <component> --stack <stack>
+atmos helmfile source pull <component> --stack <stack> --force
 atmos helmfile source list --stack <stack>
 atmos helmfile source describe <component> --stack <stack>
 atmos helmfile source delete <component> --stack <stack> --force
@@ -116,8 +116,7 @@ atmos helmfile source cache refresh <uri>
 ### Packer Source Commands (Future)
 
 ```bash
-atmos packer source create <component> --stack <stack>
-atmos packer source update <component> --stack <stack>
+atmos packer source pull <component> --stack <stack>
 # etc.
 ```
 
@@ -129,7 +128,7 @@ All Atmos commands follow the pattern `atmos <type> <command>`:
 - `atmos helmfile sync`
 
 Source commands follow the same pattern for consistency:
-- `atmos terraform source create`
+- `atmos terraform source pull`
 - `atmos helmfile source list`
 
 **Note:** While the cache is shared infrastructure under the hood (all component types share the same XDG cache directory), the CLI commands are scoped per-type for consistency. Each component type that wants source provisioning must implement the `SourceProvider` interface.
@@ -149,13 +148,11 @@ The source provisioner is implemented as an **optional interface** in the compon
 // to enable source provisioning (JIT vendoring) for their component type.
 //
 // Component providers that do NOT implement this interface will not have
-// source commands available (e.g., `atmos <type> source create` will not exist).
+// source commands available (e.g., `atmos <type> source pull` will not exist).
 type SourceProvider interface {
-    // SourceCreate vendors a component from source configuration.
-    SourceCreate(ctx context.Context, atmosConfig *schema.AtmosConfiguration, component, stack string, force bool) error
-
-    // SourceUpdate re-vendors a component (force refresh).
-    SourceUpdate(ctx context.Context, atmosConfig *schema.AtmosConfiguration, component, stack string) error
+    // SourcePull vendors a component from source configuration.
+    // If force is true, re-vendors even if already exists.
+    SourcePull(ctx context.Context, atmosConfig *schema.AtmosConfiguration, component, stack string, force bool) error
 
     // SourceList returns all components with source in a stack.
     SourceList(ctx context.Context, atmosConfig *schema.AtmosConfiguration, stack string) ([]SourceInfo, error)
@@ -255,8 +252,7 @@ var sourceCmd = &cobra.Command{
     Long: `Manage terraform component sources defined in the source field.
 
 Commands:
-  create    Vendor component source
-  update    Re-vendor component source (force refresh)
+  pull      Vendor component source (use --force to re-vendor)
   list      List sources in a stack
   describe  Show source configuration
   delete    Remove vendored source
@@ -286,9 +282,9 @@ func NewDefaultSourceProvider(componentType string, hookEvent hooks.HookEvent) *
     }
 }
 
-// SourceCreate implements SourceProvider.
-func (p *DefaultSourceProvider) SourceCreate(ctx context.Context, atmosConfig *schema.AtmosConfiguration, component, stack string, force bool) error {
-    return Create(ctx, atmosConfig, p.componentType, component, stack, force)
+// SourcePull implements SourceProvider.
+func (p *DefaultSourceProvider) SourcePull(ctx context.Context, atmosConfig *schema.AtmosConfiguration, component, stack string, force bool) error {
+    return Pull(ctx, atmosConfig, p.componentType, component, stack, force)
 }
 
 // ... other methods delegate to pkg/provisioner/source functions
@@ -338,11 +334,11 @@ atmos terraform apply vpc --stack dev
 
 **Manual (explicit commands):**
 ```bash
-# Pre-vendor sources in CI/CD
-atmos terraform source create vpc --stack dev
+# Vendor component source (downloads if missing or outdated)
+atmos terraform source pull vpc --stack dev
 
 # Force re-vendor to get latest
-atmos terraform source update vpc --stack dev
+atmos terraform source pull vpc --stack dev --force
 
 # Check what would be vendored
 atmos terraform source list --stack dev
@@ -836,11 +832,10 @@ cmd/terraform/
   │   ├── backend_create.go
   │   ├── backend_list.go
   │   └── ...
-  └── source/                # NEW: Source subpackage (follows backend pattern)
+  └── source/                # Source subpackage (follows backend pattern)
       ├── source.go          # GetSourceCommand(), sourceCmd parent
       ├── source_test.go     # Unit tests
-      ├── create.go          # atmos terraform source create
-      ├── update.go          # atmos terraform source update
+      ├── pull.go            # atmos terraform source pull
       ├── list.go            # atmos terraform source list
       ├── describe.go        # atmos terraform source describe
       ├── delete.go          # atmos terraform source delete
@@ -852,9 +847,9 @@ cmd/terraform/
           └── refresh.go     # atmos terraform source cache refresh
 
 cmd/helmfile/
-  └── source/                # NEW: Helmfile source subpackage (same structure)
+  └── source/                # Helmfile source subpackage (same structure)
       ├── source.go
-      ├── create.go
+      ├── pull.go
       └── ...
 
 pkg/component/
@@ -948,21 +943,20 @@ func init() {
 **CLI Commands (following backend subpackage pattern from PR #1813):**
 
 1. **`cmd/terraform/source/source.go`** - Source subcommand parent, GetSourceCommand()
-2. **`cmd/terraform/source/create.go`** - atmos terraform source create
-3. **`cmd/terraform/source/update.go`** - atmos terraform source update
-4. **`cmd/terraform/source/list.go`** - atmos terraform source list
-5. **`cmd/terraform/source/describe.go`** - atmos terraform source describe
-6. **`cmd/terraform/source/delete.go`** - atmos terraform source delete
-7. **`cmd/terraform/source/cache/cache.go`** - Cache subcommand parent, GetCacheCommand()
-8. **`cmd/terraform/source/cache/list.go`** - atmos terraform source cache list
-9. **`cmd/terraform/source/cache/prune.go`** - atmos terraform source cache prune
-10. **`cmd/terraform/source/cache/clear.go`** - atmos terraform source cache clear
-11. **`cmd/terraform/source/cache/refresh.go`** - atmos terraform source cache refresh
+2. **`cmd/terraform/source/pull.go`** - atmos terraform source pull
+3. **`cmd/terraform/source/list.go`** - atmos terraform source list
+4. **`cmd/terraform/source/describe.go`** - atmos terraform source describe
+5. **`cmd/terraform/source/delete.go`** - atmos terraform source delete
+6. **`cmd/terraform/source/cache/cache.go`** - Cache subcommand parent, GetCacheCommand()
+7. **`cmd/terraform/source/cache/list.go`** - atmos terraform source cache list
+8. **`cmd/terraform/source/cache/prune.go`** - atmos terraform source cache prune
+9. **`cmd/terraform/source/cache/clear.go`** - atmos terraform source cache clear
+10. **`cmd/terraform/source/cache/refresh.go`** - atmos terraform source cache refresh
 
 **Helmfile (same structure):**
 
-12. **`cmd/helmfile/source/source.go`** - Source subcommand for helmfile
-13. **`cmd/helmfile/source/...`** - Same structure as terraform
+11. **`cmd/helmfile/source/source.go`** - Source subcommand for helmfile
+12. **`cmd/helmfile/source/...`** - Same structure as terraform
 
 **Component Registry Interface:**
 

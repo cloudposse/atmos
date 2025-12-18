@@ -7,10 +7,20 @@ description: Manage terraform component sources with JIT vendoring
 ---
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
+import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Use these commands to manage Terraform component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using the top-level `source` field without requiring a separate `component.yaml` file.
 </Intro>
+
+<ActionCard title="Source-Based Version Pinning">
+    Learn how to use the source field for native per-environment version control directly in stack configuration.
+    <div>
+      <PrimaryCTA to="/design-patterns/version-management/source-based-versioning">Design Pattern</PrimaryCTA>
+    </div>
+</ActionCard>
 
 <Screengrab title="atmos terraform source --help" slug="atmos-terraform-source--help" />
 
@@ -20,24 +30,9 @@ Use these commands to manage Terraform component sources with just-in-time (JIT)
 atmos terraform source <subcommand> [options]
 ```
 
-## Available Subcommands
+## Subcommands
 
-<dl>
-  <dt>`create <component>`</dt>
-  <dd>Vendor component source from source configuration</dd>
-
-  <dt>`update <component>`</dt>
-  <dd>Re-vendor component source (force refresh)</dd>
-
-  <dt>`list`</dt>
-  <dd>List components with source in a stack</dd>
-
-  <dt>`describe <component>`</dt>
-  <dd>Show source configuration for a component</dd>
-
-  <dt>`delete <component>`</dt>
-  <dd>Remove vendored source directory (requires --force)</dd>
-</dl>
+<DocCardList />
 
 ## How It Works
 
@@ -61,7 +56,7 @@ components:
         cidr_block: "10.0.0.0/16"
 ```
 
-When you run `atmos terraform source create vpc --stack dev`, Atmos:
+When you run `atmos terraform source pull vpc --stack dev`, Atmos:
 
 1. **Reads Configuration** - Extracts `source` from the component's stack manifest
 2. **Resolves Source** - Parses the go-getter compatible URI with optional version
@@ -122,7 +117,7 @@ source:
 Download and vendor a component source:
 
 ```shell
-atmos terraform source create vpc --stack dev
+atmos terraform source pull vpc --stack dev
 ```
 
 Output:
@@ -137,10 +132,8 @@ Downloading from github.com/cloudposse/terraform-aws-components//modules/vpc?ref
 Force re-download even if the component directory exists:
 
 ```shell
-atmos terraform source update vpc --stack dev
+atmos terraform source pull vpc --stack dev --force
 ```
-
-This is equivalent to `atmos terraform source create vpc --stack dev --force`.
 
 ### View Source Configuration
 
@@ -186,7 +179,7 @@ atmos terraform source delete vpc --stack dev --force
 
 <dl>
   <dt>`component`</dt>
-  <dd>The Atmos component name (required for create, update, describe, delete)</dd>
+  <dd>The Atmos component name (required for pull, describe, delete)</dd>
 </dl>
 
 ## Flags
@@ -199,7 +192,7 @@ atmos terraform source delete vpc --stack dev --force
   <dd>Identity to use for authentication when downloading from protected sources.</dd>
 
   <dt>`--force` / `-f`</dt>
-  <dd>Force re-vendor even if component directory exists (create command), or confirm deletion (delete command).</dd>
+  <dd>Force re-vendor even if component directory exists (pull command), or confirm deletion (delete command).</dd>
 </dl>
 
 ## Authentication
@@ -231,7 +224,7 @@ components:
 Override the component's default identity:
 
 ```shell
-atmos terraform source create vpc --stack dev --identity admin
+atmos terraform source pull vpc --stack dev --identity admin
 ```
 
 ## Configuration Patterns
@@ -377,14 +370,10 @@ Use `component.yaml` when:
 - You want pre-vendored components
 - You have complex vendoring requirements
 
-## Related Commands
+## See Also
 
-- [`atmos vendor pull`](/cli/commands/vendor/pull) - Traditional component vendoring
-- [`atmos terraform plan`](/cli/commands/terraform/usage) - Plan Terraform changes
-- [`atmos terraform apply`](/cli/commands/terraform/usage) - Apply Terraform changes
-
-## Related Concepts
-
-- [Stack Configuration](/learn/stacks)
-- [Core Concepts](/learn/concepts-overview)
-- [Vendoring](/cheatsheets/vendoring)
+- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) — Design pattern for per-environment version management
+- [Stack Configuration](/learn/stacks) — Learn about Atmos stacks
+- [Vendoring](/vendor) — Pre-vendor components for immutability and audit trails
+- [Vendoring Design Pattern](/design-patterns/version-management/vendoring-components) — When explicit vendoring makes sense
+- [`atmos vendor pull`](/cli/commands/vendor/pull) — Traditional component vendoring

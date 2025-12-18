@@ -7,10 +7,19 @@ description: List components with source in a stack
 ---
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Use this command to list all Terraform components that have `source` configured in a stack. This shows which components can be vendored using the source provisioner.
 </Intro>
+
+<ActionCard title="Source-Based Version Pinning">
+    Learn how to configure the `source` field for per-environment version control.
+    <div>
+      <PrimaryCTA to="/design-patterns/version-management/source-based-versioning">Design Pattern</PrimaryCTA>
+    </div>
+</ActionCard>
 
 <Screengrab title="atmos terraform source list --help" slug="atmos-terraform-source-list--help" />
 
@@ -59,8 +68,9 @@ This command takes no positional arguments.
   <dd>**Required.** The Atmos stack name. Can also be set via `ATMOS_STACK` environment variable.</dd>
 </dl>
 
-## Related Commands
+## See Also
 
-- [`atmos terraform source`](/cli/commands/terraform/terraform-source) - Parent command overview
-- [`atmos terraform source describe`](/cli/commands/terraform/terraform-source-describe) - View source configuration for a specific component
-- [`atmos terraform source create`](/cli/commands/terraform/terraform-source-create) - Vendor a specific component
+- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) — Design pattern for per-environment version control
+- [`atmos terraform source`](/cli/commands/terraform/terraform-source) — Parent command overview
+- [`atmos terraform source describe`](/cli/commands/terraform/terraform-source-describe) — View source configuration for a specific component
+- [`atmos terraform source pull`](/cli/commands/terraform/terraform-source-pull) — Vendor a specific component

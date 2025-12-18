@@ -28,11 +28,10 @@ components:
 ```
 
 The new commands include:
-- `atmos terraform source create` - Vendor a component from source configuration
-- `atmos terraform source update` - Re-vendor with force refresh
+- `atmos terraform source pull` - Vendor a component from source configuration (use `--force` to re-vendor)
+- `atmos terraform source list` - List components with source configured
 - `atmos terraform source describe` - View source configuration
 - `atmos terraform source delete` - Remove vendored source directory
-- `atmos terraform source list` - List components with source (coming soon)
 
 ## Why This Matters
 
@@ -48,6 +47,23 @@ With `source`, you can now:
 - **Override versions per environment** using stack inheritance
 - **Vendor just-in-time** when you need the component
 - **Filter files** with `included_paths` and `excluded_paths`
+
+## No Vendored Components Committed to Git
+
+With source-based versioning, you no longer need to commit vendored component code to your Git repository if that's not adding value for your workflow. Components are downloaded just-in-time during execution instead of being pre-vendored and checked in. This means:
+
+**Benefits:**
+- **Smaller repositories** - No vendored Terraform code bloating your git history
+- **Faster clones** - Particularly helpful for large component libraries
+- **Simplified PRs** - Version changes are single-line config updates, not large diffs
+
+**Tradeoffs:**
+- **No local immutable copy** - Components aren't in your repo, so you lose the audit trail in Git
+- **No pre-deploy diff review** - Can't review component code changes before deployment
+- **AI coding assistants lack context** - Tools like Claude Code, Cursor, and GitHub Copilot work significantly better with vendored code—they have full context of your components for navigation, understanding dependencies, and accurate suggestions
+- **Network dependency** - Requires network access during execution
+
+For teams that value having vendored code committed for audit trails, code review, AI-assisted development, or offline deployments, traditional [vendoring](/vendor) remains the right choice. Source-based versioning is ideal when the operational overhead of vendoring outweighs its benefits.
 
 ## How to Use It
 
@@ -70,7 +86,7 @@ components:
 Then vendor the component:
 
 ```shell
-atmos terraform source create vpc --stack dev
+atmos terraform source pull vpc --stack dev
 ```
 
 ### Version Per Environment
@@ -117,4 +133,4 @@ The source provisioner uses go-getter and supports:
 
 We'd love to hear your feedback on this feature! Please [open an issue](https://github.com/cloudposse/atmos/issues) if you have questions or suggestions.
 
-For more details, see the [terraform source documentation](/cli/commands/terraform/terraform-source).
+For more details, see the [terraform source documentation](/cli/commands/terraform/terraform-source) and the [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) design pattern.

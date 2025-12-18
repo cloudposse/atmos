@@ -7,10 +7,19 @@ description: Remove vendored source directory
 ---
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Use this command to delete the vendored source directory for a Terraform component. This removes the component directory that was created by `atmos terraform source create`.
+Use this command to delete the vendored source directory for a Terraform component. This removes the component directory that was created by `atmos terraform source pull`.
 </Intro>
+
+<ActionCard title="Source-Based Version Pinning">
+    Learn how to configure the `source` field for per-environment version control.
+    <div>
+      <PrimaryCTA to="/design-patterns/version-management/source-based-versioning">Design Pattern</PrimaryCTA>
+    </div>
+</ActionCard>
 
 <Screengrab title="atmos terraform source delete --help" slug="atmos-terraform-source-delete--help" />
 
@@ -87,8 +96,9 @@ The `delete` command has several safety features:
 2. **Only deletes source-managed components** - Only works on components with `source` configured
 3. **Non-destructive on missing directories** - Shows a warning if the directory doesn't exist instead of failing
 
-## Related Commands
+## See Also
 
-- [`atmos terraform source`](/cli/commands/terraform/terraform-source) - Parent command overview
-- [`atmos terraform source create`](/cli/commands/terraform/terraform-source-create) - Vendor component source
-- [`atmos terraform source update`](/cli/commands/terraform/terraform-source-update) - Re-vendor component source
+- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) — Design pattern for per-environment version control
+- [`atmos terraform source`](/cli/commands/terraform/terraform-source) — Parent command overview
+- [`atmos terraform source pull`](/cli/commands/terraform/terraform-source-pull) — Vendor component source
+- [`atmos terraform source list`](/cli/commands/terraform/terraform-source-list) — List components with sources

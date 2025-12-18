@@ -10,13 +10,13 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-// TestCreateCommand_MissingComponent tests that create command requires a component argument.
-func TestCreateCommand_MissingComponent(t *testing.T) {
+// TestPullCommand_MissingComponent tests that pull command requires a component argument.
+func TestPullCommand_MissingComponent(t *testing.T) {
 	// Create a new command instance to avoid shared state.
 	cmd := &cobra.Command{
-		Use:  "create <component>",
+		Use:  "pull <component>",
 		Args: cobra.ExactArgs(1),
-		RunE: executeCreateCommand,
+		RunE: executePullCommand,
 	}
 
 	// Set up with no arguments.
@@ -26,15 +26,15 @@ func TestCreateCommand_MissingComponent(t *testing.T) {
 	require.Error(t, err, "Should error without component argument")
 }
 
-// TestCreateCommand_MissingStack tests that create command requires --stack flag.
-func TestCreateCommand_MissingStack(t *testing.T) {
+// TestPullCommand_MissingStack tests that pull command requires --stack flag.
+func TestPullCommand_MissingStack(t *testing.T) {
 	// Create a new command instance.
 	cmd := &cobra.Command{
-		Use:  "create <component>",
+		Use:  "pull <component>",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Parse common flags.
-			opts, err := ParseCommonFlags(cmd, createParser)
+			opts, err := ParseCommonFlags(cmd, pullParser)
 			if err != nil {
 				return err
 			}
@@ -44,7 +44,7 @@ func TestCreateCommand_MissingStack(t *testing.T) {
 	}
 
 	// Register flags.
-	createParser.RegisterFlags(cmd)
+	pullParser.RegisterFlags(cmd)
 
 	// Set component but no --stack.
 	cmd.SetArgs([]string{"vpc"})
@@ -54,17 +54,17 @@ func TestCreateCommand_MissingStack(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
 }
 
-// TestCreateCommand_FlagParsing tests that create command correctly parses flags.
-func TestCreateCommand_FlagParsing(t *testing.T) {
+// TestPullCommand_FlagParsing tests that pull command correctly parses flags.
+func TestPullCommand_FlagParsing(t *testing.T) {
 	var parsedStack string
 	var parsedForce bool
 
 	// Create a command that captures parsed values.
 	cmd := &cobra.Command{
-		Use:  "create <component>",
+		Use:  "pull <component>",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			opts, err := ParseCommonFlags(cmd, createParser)
+			opts, err := ParseCommonFlags(cmd, pullParser)
 			if err != nil {
 				return err
 			}
@@ -74,7 +74,7 @@ func TestCreateCommand_FlagParsing(t *testing.T) {
 		},
 	}
 
-	createParser.RegisterFlags(cmd)
+	pullParser.RegisterFlags(cmd)
 
 	cmd.SetArgs([]string{"vpc", "--stack", "dev-us-east-1", "--force"})
 	err := cmd.Execute()
@@ -84,12 +84,12 @@ func TestCreateCommand_FlagParsing(t *testing.T) {
 	assert.True(t, parsedForce)
 }
 
-// TestCreateCommand_UsesCorrectComponent tests that the component argument is parsed correctly.
-func TestCreateCommand_UsesCorrectComponent(t *testing.T) {
+// TestPullCommand_UsesCorrectComponent tests that the component argument is parsed correctly.
+func TestPullCommand_UsesCorrectComponent(t *testing.T) {
 	var parsedComponent string
 
 	cmd := &cobra.Command{
-		Use:  "create <component>",
+		Use:  "pull <component>",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			parsedComponent = args[0]
@@ -102,4 +102,37 @@ func TestCreateCommand_UsesCorrectComponent(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "my-vpc-component", parsedComponent)
+}
+
+// TestPullCommand_ForceFlag tests that the --force flag works correctly.
+func TestPullCommand_ForceFlag(t *testing.T) {
+	var parsedForce bool
+
+	cmd := &cobra.Command{
+		Use:  "pull <component>",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts, err := ParseCommonFlags(cmd, pullParser)
+			if err != nil {
+				return err
+			}
+			parsedForce = opts.Force
+			return nil
+		},
+	}
+
+	pullParser.RegisterFlags(cmd)
+
+	// Test without --force.
+	cmd.SetArgs([]string{"vpc", "--stack", "dev"})
+	err := cmd.Execute()
+	require.NoError(t, err)
+	assert.False(t, parsedForce, "Force should be false by default")
+
+	// Test with --force.
+	parsedForce = false // Reset.
+	cmd.SetArgs([]string{"vpc", "--stack", "dev", "--force"})
+	err = cmd.Execute()
+	require.NoError(t, err)
+	assert.True(t, parsedForce, "Force should be true when --force is specified")
 }

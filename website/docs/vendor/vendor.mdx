@@ -73,6 +73,12 @@ configurations.
 Use the `vendor.yaml` [Vendor Configuration](/vendor/vendor-config) approach for centralized dependency management. The component manifest approach is considered legacy and should only be used for specific use cases.
 :::
 
+:::tip Alternative: Stack-Native Source Configuration
+For just-in-time vendoring without managing separate vendor manifests, you can use the top-level `source` field directly in stack configuration. This approach vendors components on-demand during execution and supports per-environment version pinning.
+
+See [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) for the design pattern and [atmos terraform source](/cli/commands/terraform/terraform-source) for CLI usage.
+:::
+
 The `component.yaml` vendoring manifest is used to vendor components from remote repositories.
 A `component.yaml` file placed into a component's directory is used to describe the vendoring config for one component only.
 

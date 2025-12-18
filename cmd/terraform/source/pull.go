@@ -12,44 +12,50 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
 )
 
-var updateParser *flags.StandardParser
+var pullParser *flags.StandardParser
 
-var updateCmd = &cobra.Command{
-	Use:   "update <component>",
-	Short: "Re-vendor component source (force refresh)",
-	Long: `Re-vendor a terraform component source, forcing a fresh download.
+var pullCmd = &cobra.Command{
+	Use:   "pull <component>",
+	Short: "Vendor component source from source configuration",
+	Long: `Vendor a terraform component source based on source configuration.
 
-This command is equivalent to 'atmos terraform source create --force'. It downloads
-the component source from the URI specified in the source field, replacing any existing
-content in the component directory.`,
-	Example: `  # Re-vendor component source
-  atmos terraform source update vpc --stack dev`,
+This command downloads the component source from the URI specified in the source field
+and places it in the appropriate component directory. The source can be any go-getter
+compatible URI (git, s3, http, oci, etc.).
+
+If the component is already vendored, it will be skipped unless --force is specified.`,
+	Example: `  # Vendor component source (downloads if missing or outdated)
+  atmos terraform source pull vpc --stack dev
+
+  # Force re-vendor even if up-to-date
+  atmos terraform source pull vpc --stack dev --force`,
 	Args: cobra.ExactArgs(1),
-	RunE: executeUpdateCommand,
+	RunE: executePullCommand,
 }
 
 func init() {
-	updateCmd.DisableFlagParsing = false
+	pullCmd.DisableFlagParsing = false
 
-	updateParser = flags.NewStandardParser(
+	pullParser = flags.NewStandardParser(
 		flags.WithStackFlag(),
 		flags.WithIdentityFlag(),
+		flags.WithBoolFlag("force", "f", false, "Force re-vendor even if component directory exists"),
 	)
 
-	updateParser.RegisterFlags(updateCmd)
+	pullParser.RegisterFlags(pullCmd)
 
-	if err := updateParser.BindToViper(viper.GetViper()); err != nil {
+	if err := pullParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
 }
 
-func executeUpdateCommand(cmd *cobra.Command, args []string) error {
-	defer perf.Track(nil, "source.update.RunE")()
+func executePullCommand(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "source.pull.RunE")()
 
 	component := args[0]
 
 	// Parse common flags.
-	opts, err := ParseCommonFlags(cmd, updateParser)
+	opts, err := ParseCommonFlags(cmd, pullParser)
 	if err != nil {
 		return err
 	}
@@ -79,7 +85,7 @@ func executeUpdateCommand(cmd *cobra.Command, args []string) error {
 			Err()
 	}
 
-	// Provision the source with force=true.
+	// Provision the source.
 	ctx := context.Background()
 	return ProvisionSource(ctx, &ProvisionSourceOptions{
 		AtmosConfig:     atmosConfig,
@@ -87,6 +93,6 @@ func executeUpdateCommand(cmd *cobra.Command, args []string) error {
 		Stack:           opts.Stack,
 		ComponentConfig: componentConfig,
 		AuthContext:     authContext,
-		Force:           true,
+		Force:           opts.Force,
 	})
 }
