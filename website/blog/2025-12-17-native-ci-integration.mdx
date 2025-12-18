@@ -17,7 +17,11 @@ Now, Atmos handles everything natively. The same rich output you're used to—re
 
 ## Enabling CI Mode
 
-CI mode activates automatically in GitHub Actions (when `GITHUB_ACTIONS=true`), or you can force it with the `--ci` flag:
+CI mode activates when any of these conditions are met:
+
+1. **Config setting**: `ci.enabled: true` in `atmos.yaml`
+2. **Environment detection**: Running in GitHub Actions (`GITHUB_ACTIONS=true`) or other CI environments (`CI=true`)
+3. **Explicit flag**: Using `--ci` on the command line
 
 ```bash
 # Auto-detected in GitHub Actions
@@ -165,14 +169,19 @@ atmos terraform plan mycomponent -s dev --ci
 
 ## Configuration
 
-Enable or disable CI integration globally in `atmos.yaml`:
+Enable CI integration globally in `atmos.yaml`:
 
 ```yaml
 ci:
-  enabled: true  # Default when CI env var is detected
+  enabled: true  # Explicitly enable CI mode
 ```
 
-The `--ci` flag overrides this setting, so you can always force CI mode when needed.
+When `ci.enabled: true` is set, Atmos will generate rich summaries and write to `$GITHUB_STEP_SUMMARY` automatically—even without the `--ci` flag.
+
+The precedence order is:
+1. `--ci` flag (highest priority)
+2. `CI` or `GITHUB_ACTIONS` environment variables
+3. `ci.enabled` in `atmos.yaml`
 
 ## Get Started
 
