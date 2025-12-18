@@ -39,12 +39,12 @@ func TestVendorPull_TemplateTokenInjection(t *testing.T) {
 
 	// Load vendor config.
 	vendorConfigFile := filepath.Join(configPath, "vendor.yaml")
-	vendorConfig, _, _, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorConfigFile, true)
+	vendorResult, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorConfigFile, true)
 	require.NoError(t, err, "Failed to read vendor config")
 
 	// Verify vendor config was loaded.
-	require.NotNil(t, vendorConfig, "Vendor config should not be nil")
-	require.NotEmpty(t, vendorConfig.Spec.Sources, "Vendor config should have sources")
+	require.True(t, vendorResult.Found, "Vendor config should be found")
+	require.NotEmpty(t, vendorResult.Config.Spec.Sources, "Vendor config should have sources")
 
 	// Test each documented format.
 	tests := []struct {
@@ -102,9 +102,9 @@ func TestVendorPull_TemplateTokenInjection(t *testing.T) {
 		t.Run(tt.componentName, func(t *testing.T) {
 			// Find the source config for this component.
 			var sourceConfig *schema.AtmosVendorSource
-			for i := range vendorConfig.Spec.Sources {
-				if vendorConfig.Spec.Sources[i].Component == tt.componentName {
-					sourceConfig = &vendorConfig.Spec.Sources[i]
+			for i := range vendorResult.Config.Spec.Sources {
+				if vendorResult.Config.Spec.Sources[i].Component == tt.componentName {
+					sourceConfig = &vendorResult.Config.Spec.Sources[i]
 					break
 				}
 			}
@@ -227,16 +227,16 @@ base_path: "./"
 			}
 
 			// Read vendor config.
-			vendorConfig, _, _, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorFile, true)
+			vendorResult, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorFile, true)
 			require.NoError(t, err, "Vendor config should parse successfully")
 
 			// Process template (this is where errors should occur).
-			if len(vendorConfig.Spec.Sources) == 0 {
+			if len(vendorResult.Config.Spec.Sources) == 0 {
 				require.Fail(t, "No sources found in vendor config")
 				return
 			}
 
-			source := vendorConfig.Spec.Sources[0]
+			source := vendorResult.Config.Spec.Sources[0]
 			tmplData := struct {
 				Component string
 				Version   string
@@ -312,17 +312,17 @@ settings:
 		BasePath: tempDir,
 	}
 
-	vendorConfig, _, _, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorFile, true)
+	vendorResult, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorFile, true)
 	require.NoError(t, err)
 
 	// Verify template-based credentials are in the URL.
 	var templateSource, nativeSource *schema.AtmosVendorSource
-	for i := range vendorConfig.Spec.Sources {
-		if vendorConfig.Spec.Sources[i].Component == "template-creds" {
-			templateSource = &vendorConfig.Spec.Sources[i]
+	for i := range vendorResult.Config.Spec.Sources {
+		if vendorResult.Config.Spec.Sources[i].Component == "template-creds" {
+			templateSource = &vendorResult.Config.Spec.Sources[i]
 		}
-		if vendorConfig.Spec.Sources[i].Component == "native-creds" {
-			nativeSource = &vendorConfig.Spec.Sources[i]
+		if vendorResult.Config.Spec.Sources[i].Component == "native-creds" {
+			nativeSource = &vendorResult.Config.Spec.Sources[i]
 		}
 	}
 

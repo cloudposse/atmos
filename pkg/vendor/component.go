@@ -22,16 +22,19 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// tempDirPerms defines the file permissions for vendor temporary directories.
+const tempDirPerms = 0o700
+
 // createTempDir creates a temporary directory for vendor operations.
 func createTempDir() (string, error) {
-	// Create temp directory
+	// Create temp directory.
 	tempDir, err := os.MkdirTemp("", "atmos-vendor")
 	if err != nil {
 		return "", err
 	}
 
-	// Ensure directory permissions are restricted
-	if err := os.Chmod(tempDir, 0o700); err != nil {
+	// Ensure directory permissions are restricted.
+	if err := os.Chmod(tempDir, tempDirPerms); err != nil {
 		return "", err
 	}
 

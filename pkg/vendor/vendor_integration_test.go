@@ -22,7 +22,7 @@ func TestVendorPullConfigFileProcessing(t *testing.T) {
 		BasePath: basePath,
 	}
 
-	_, _, _, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorConfigFile, false)
+	_, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorConfigFile, false)
 	assert.NoError(t, err, "ReadAndProcessVendorConfigFile should execute without error")
 }
 
