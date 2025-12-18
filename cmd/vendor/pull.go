@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -54,11 +55,19 @@ By default, it vendors all components defined in vendor.yaml. Use flags to vendo
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "vendor.pull.RunE")()
 
+		// Debug log for command line args (matches legacy ProcessCommandLineArgs output).
+		log.Debug("ProcessCommandLineArgs input", "componentType", "terraform", "args", args)
+
 		// Parse flags using new options pattern.
 		// Reuse global Viper to preserve env/config precedence
 		v := viper.GetViper()
 		if err := pullParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
+		}
+
+		// Debug log for identity flag state (matches legacy ProcessCommandLineArgs output).
+		if identityFlag := cmd.Flag("identity"); identityFlag != nil {
+			log.Debug("After ParseFlags", "identity.Value", identityFlag.Value.String(), "identity.Changed", identityFlag.Changed)
 		}
 
 		opts, err := parsePullOptions(cmd, v, args)
