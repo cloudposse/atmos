@@ -34,32 +34,30 @@ Every `atmos` command will now use version 1.199.0, installing it automatically 
 
 ### Environment-Specific Versions with Profiles
 
-Use profiles to specify different versions per environment:
+Use profiles to specify different versions per environment. Create a directory for each profile:
 
-```yaml title=".atmos.d/dev.yaml"
+```yaml title="profiles/developer/atmos.yaml"
 version:
   use: "1.201.0"  # Latest version for development
 ```
 
-```yaml title=".atmos.d/staging.yaml"
-version:
-  use: "1.200.0"  # Release candidate for testing
-```
-
-```yaml title=".atmos.d/prod.yaml"
+```yaml title="profiles/stable/atmos.yaml"
 version:
   use: "1.199.0"  # Stable version for production
 ```
 
-Activate a profile:
+Activate a profile using the `--profile` flag or environment variable:
 
 ```bash
 # Use development version
-export ATMOS_PROFILE=dev
+atmos --profile developer terraform plan -s mystack
+
+# Or via environment variable
+export ATMOS_PROFILE=developer
 atmos terraform plan -s mystack
 
 # Or specify inline
-ATMOS_PROFILE=prod atmos terraform apply -s mystack
+ATMOS_PROFILE=stable atmos terraform apply -s mystack
 ```
 
 ## Command-Line Override
@@ -123,21 +121,16 @@ deploy:
 
 A safe approach to upgrading Atmos versions:
 
-1. **Update dev profile** with the new version
+1. **Update developer profile** with the new version
 2. **Test in development** environment
-3. **Update staging profile** after dev validation
-4. **Test in staging** environment
-5. **Update prod profile** after staging validation
+3. **Update stable profile** after validation
 
 ```bash
-# Step 1: Test new version in dev
-ATMOS_PROFILE=dev atmos terraform plan -s dev/mystack
+# Step 1: Test new version in development
+atmos --profile developer terraform plan -s mystack
 
-# Step 2: After validation, update staging
-ATMOS_PROFILE=staging atmos terraform plan -s staging/mystack
-
-# Step 3: Finally, update production
-ATMOS_PROFILE=prod atmos terraform apply -s prod/mystack
+# Step 2: After validation, update stable profile and deploy
+atmos --profile stable terraform apply -s mystack
 ```
 
 ## See Also

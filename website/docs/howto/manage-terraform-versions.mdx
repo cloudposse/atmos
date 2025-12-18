@@ -71,17 +71,73 @@ atmos toolchain list
 atmos toolchain registry search terraform
 ```
 
-## Version Constraints in atmos.yaml
+## Component-Level Versions in Stacks
 
-You can also specify version constraints in your `atmos.yaml`:
+Different Terraform components can use different versions. This is useful when:
+- Legacy components require older Terraform versions
+- New components need features from newer versions
+- Gradual upgrades without breaking existing infrastructure
 
-```yaml title="atmos.yaml"
-toolchain:
-  terraform:
-    version: ">=1.5.0, <2.0.0"
+### Global Tool Dependencies
+
+Define default versions at the root level of your stack:
+
+```yaml title="stacks/orgs/acme/_defaults.yaml"
+# Global tool dependencies - applies to all components
+dependencies:
+  tools:
+    terraform: "1.9.8"
+    kubectl: "1.28.0"
 ```
 
-This ensures all team members use a compatible Terraform version.
+### Component-Type Dependencies
+
+Override for all Terraform components:
+
+```yaml title="stacks/orgs/acme/plat/prod/_defaults.yaml"
+terraform:
+  dependencies:
+    tools:
+      terraform: "1.9.8"
+      tflint: "0.44.1"
+```
+
+### Per-Component Override
+
+Specify versions for individual components:
+
+```yaml title="stacks/orgs/acme/plat/prod/us-east-1.yaml"
+components:
+  terraform:
+    vpc:
+      dependencies:
+        tools:
+          terraform: "1.9.8"   # Use current version
+          aws-cli: "2.13.0"
+
+    legacy-app:
+      dependencies:
+        tools:
+          terraform: "1.5.0"   # Legacy component needs older version
+          aws-cli: "2.10.0"
+```
+
+### How It Works
+
+When you run a component, Atmos automatically:
+1. Resolves the tool version from the most specific level
+2. Installs the tool if not already cached
+3. Executes the command with that version
+
+```bash
+# Uses terraform 1.9.8 (from vpc component config)
+atmos terraform plan vpc -s prod/us-east-1
+
+# Uses terraform 1.5.0 (from legacy-app component config)
+atmos terraform plan legacy-app -s prod/us-east-1
+```
+
+For complete documentation on component dependencies, see [Configure Dependencies](/stacks/dependencies).
 
 ## Best Practices
 
@@ -92,5 +148,6 @@ This ensures all team members use a compatible Terraform version.
 
 ## See Also
 
+- [Configure Dependencies](/stacks/dependencies) - Component-level tool version configuration
 - [Toolchain Commands](/cli/commands/toolchain/usage)
-- [Toolchain Registry](/cli/commands/toolchain/registry/usage)
+- [Toolchain Configuration](/cli/configuration/toolchain/)
