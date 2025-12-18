@@ -3,6 +3,7 @@ package exec
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -285,6 +286,9 @@ errors["process_env section is empty"] {
 }
 
 func TestValidateComponentInternal_ProcessEnvSectionContent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows: uses Unix-specific shell commands")
+	}
 	// Test specifically that the process environment section contains expected content.
 
 	// Create a temporary directory for testing.

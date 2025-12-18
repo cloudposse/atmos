@@ -1313,3 +1313,93 @@ func TestDotPathResolvesRelativeToConfigDir(t *testing.T) {
 			"Base path with '.' should resolve to config directory")
 	})
 }
+
+func TestGetGitRootOrEmpty(t *testing.T) {
+	t.Run("returns empty when ATMOS_GIT_ROOT_BASEPATH=false", func(t *testing.T) {
+		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
+		result := getGitRootOrEmpty()
+		assert.Empty(t, result, "should return empty when git root discovery is disabled")
+	})
+
+	t.Run("returns git root when in a git repository", func(t *testing.T) {
+		// Ensure git root discovery is enabled.
+		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
+
+		result := getGitRootOrEmpty()
+		// We're running tests inside the atmos repo, so we should get a valid git root.
+		assert.NotEmpty(t, result, "should return git root when in a git repository")
+		// Verify it's an absolute path.
+		assert.True(t, filepath.IsAbs(result), "git root should be an absolute path")
+	})
+}
+
+func TestTryResolveWithGitRoot(t *testing.T) {
+	t.Run("returns git root when path is empty and git available", func(t *testing.T) {
+		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
+
+		result, err := tryResolveWithGitRoot("", false, "")
+		require.NoError(t, err)
+		// We're in a git repo, so should get the git root.
+		assert.NotEmpty(t, result)
+		assert.True(t, filepath.IsAbs(result))
+	})
+
+	t.Run("falls back to config path when git root unavailable", func(t *testing.T) {
+		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
+
+		configPath := "/tmp/test-config"
+		result, err := tryResolveWithGitRoot("", false, configPath)
+		require.NoError(t, err)
+		assert.Contains(t, result, "test-config")
+	})
+
+	t.Run("resolves explicit relative path with git root", func(t *testing.T) {
+		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
+
+		result, err := tryResolveWithGitRoot("./subdir", true, "")
+		require.NoError(t, err)
+		assert.True(t, filepath.IsAbs(result))
+		assert.Contains(t, result, "subdir")
+	})
+
+	t.Run("joins simple relative path with git root", func(t *testing.T) {
+		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
+
+		result, err := tryResolveWithGitRoot("stacks", false, "")
+		require.NoError(t, err)
+		assert.Contains(t, result, "stacks")
+	})
+}
+
+func TestTryResolveWithConfigPath(t *testing.T) {
+	t.Run("returns config path when path is empty", func(t *testing.T) {
+		configPath := "/tmp/test-config"
+		result, err := tryResolveWithConfigPath("", configPath)
+		require.NoError(t, err)
+		assert.Equal(t, configPath, result)
+	})
+
+	t.Run("joins path with config path", func(t *testing.T) {
+		configPath := "/tmp/test-config"
+		result, err := tryResolveWithConfigPath("subdir", configPath)
+		require.NoError(t, err)
+		assert.Equal(t, "/tmp/test-config/subdir", result)
+	})
+
+	t.Run("resolves relative to CWD when no config path", func(t *testing.T) {
+		result, err := tryResolveWithConfigPath("subdir", "")
+		require.NoError(t, err)
+
+		cwd, _ := os.Getwd()
+		expected := filepath.Join(cwd, "subdir")
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("handles empty path and empty config path", func(t *testing.T) {
+		result, err := tryResolveWithConfigPath("", "")
+		require.NoError(t, err)
+
+		cwd, _ := os.Getwd()
+		assert.Equal(t, cwd, result)
+	})
+}
