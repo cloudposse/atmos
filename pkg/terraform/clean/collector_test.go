@@ -43,6 +43,75 @@ func TestFindFoldersNamesWithPrefix(t *testing.T) {
 	}
 }
 
+// TestFindFoldersNamesWithPrefix_Success tests successful folder discovery with prefix matching.
+func TestFindFoldersNamesWithPrefix_Success(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create level 1 directories.
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "dev-stack"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "staging-stack"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "prod-stack"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "other"), 0o755))
+
+	// Create level 2 directories.
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "dev-stack", "dev-west"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "dev-stack", "dev-east"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "dev-stack", "other-region"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "staging-stack", "staging-us"), 0o755))
+
+	// Create a file (should be ignored).
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "dev-file.txt"), []byte("content"), 0o644))
+
+	tests := []struct {
+		name           string
+		prefix         string
+		expectedCount  int
+		mustContain    []string
+		mustNotContain []string
+	}{
+		{
+			name:           "Match dev prefix",
+			prefix:         "dev",
+			expectedCount:  3, // dev-stack, dev-stack/dev-west, dev-stack/dev-east
+			mustContain:    []string{"dev-stack", "dev-stack/dev-west", "dev-stack/dev-east"},
+			mustNotContain: []string{"staging-stack", "prod-stack", "other"},
+		},
+		{
+			name:          "Match staging prefix",
+			prefix:        "staging",
+			expectedCount: 2, // staging-stack, staging-stack/staging-us
+			mustContain:   []string{"staging-stack", "staging-stack/staging-us"},
+		},
+		{
+			name:           "Empty prefix matches all directories",
+			prefix:         "",
+			expectedCount:  8, // All dirs at level 1 and level 2.
+			mustContain:    []string{"dev-stack", "staging-stack", "prod-stack", "other"},
+			mustNotContain: []string{},
+		},
+		{
+			name:          "No matching prefix",
+			prefix:        "nonexistent",
+			expectedCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			folders, err := FindFoldersNamesWithPrefix(tempDir, tt.prefix)
+			require.NoError(t, err)
+			assert.Len(t, folders, tt.expectedCount)
+
+			for _, expected := range tt.mustContain {
+				assert.Contains(t, folders, expected)
+			}
+			for _, notExpected := range tt.mustNotContain {
+				assert.NotContains(t, folders, notExpected)
+			}
+		})
+	}
+}
+
 func TestCollectDirectoryObjects(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -77,6 +146,137 @@ func TestCollectDirectoryObjects(t *testing.T) {
 	}
 }
 
+// TestCollectDirectoryObjects_Success tests successful file collection with various patterns.
+func TestCollectDirectoryObjects_Success(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create base directory files.
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "main.tfstate"), []byte("state"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "backup.tfstate.backup"), []byte("backup"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".terraform.lock.hcl"), []byte("lock"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "vars.tfvars.json"), []byte("{}"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "unrelated.txt"), []byte("other"), 0o644))
+
+	// Create .terraform directory.
+	terraformDir := filepath.Join(tempDir, ".terraform")
+	require.NoError(t, os.MkdirAll(terraformDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(terraformDir, "terraform.tfstate"), []byte("state"), 0o644))
+
+	// Create subdirectory with files.
+	subDir := filepath.Join(tempDir, "workspace1")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(subDir, "workspace.tfstate"), []byte("state"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(subDir, "workspace.tfstate.backup"), []byte("backup"), 0o644))
+
+	tests := []struct {
+		name               string
+		patterns           []string
+		expectedFolders    int
+		expectedTotalFiles int
+		checkFiles         map[string][]string // folder -> file names
+	}{
+		{
+			name:               "Match tfstate files",
+			patterns:           []string{"*.tfstate"},
+			expectedFolders:    3, // base, .terraform subdir, and workspace1
+			expectedTotalFiles: 3, // main.tfstate, .terraform/terraform.tfstate, workspace.tfstate
+			checkFiles: map[string][]string{
+				filepath.Base(tempDir): {"main.tfstate"},
+				"workspace1":           {"workspace.tfstate"},
+				".terraform":           {"terraform.tfstate"},
+			},
+		},
+		{
+			name:               "Match multiple patterns",
+			patterns:           []string{"*.tfstate", "*.tfstate.backup"},
+			expectedFolders:    3, // base, .terraform, and workspace1
+			expectedTotalFiles: 5, // main.tfstate, backup.tfstate.backup, .terraform/terraform.tfstate, workspace.tfstate, workspace.tfstate.backup
+		},
+		{
+			name:               "Match .terraform directory",
+			patterns:           []string{".terraform"},
+			expectedFolders:    1,
+			expectedTotalFiles: 1, // The .terraform directory itself
+		},
+		{
+			name:               "Match lock file",
+			patterns:           []string{".terraform.lock.hcl"},
+			expectedFolders:    1,
+			expectedTotalFiles: 1,
+		},
+		{
+			name:               "No matches",
+			patterns:           []string{"*.nonexistent"},
+			expectedFolders:    0,
+			expectedTotalFiles: 0,
+		},
+		{
+			name:               "Match tfvars.json",
+			patterns:           []string{"*.tfvars.json"},
+			expectedFolders:    1,
+			expectedTotalFiles: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			folders, err := CollectDirectoryObjects(tempDir, tt.patterns)
+			require.NoError(t, err)
+			assert.Len(t, folders, tt.expectedFolders)
+
+			totalFiles := 0
+			for _, folder := range folders {
+				totalFiles += len(folder.Files)
+
+				// Verify folder structure.
+				assert.NotEmpty(t, folder.Name)
+				assert.NotEmpty(t, folder.FullPath)
+				assert.NotEmpty(t, folder.RelativePath)
+
+				// Verify file structure.
+				for _, file := range folder.Files {
+					assert.NotEmpty(t, file.Name)
+					assert.NotEmpty(t, file.FullPath)
+					assert.NotEmpty(t, file.RelativePath)
+					// Verify file exists.
+					_, err := os.Stat(file.FullPath)
+					assert.NoError(t, err)
+				}
+
+				// Check expected files if specified.
+				if expectedFiles, ok := tt.checkFiles[folder.Name]; ok {
+					var fileNames []string
+					for _, f := range folder.Files {
+						fileNames = append(fileNames, f.Name)
+					}
+					for _, expected := range expectedFiles {
+						assert.Contains(t, fileNames, expected)
+					}
+				}
+			}
+			assert.Equal(t, tt.expectedTotalFiles, totalFiles)
+		})
+	}
+}
+
+// TestCollectDirectoryObjects_DirectoryAsFile tests collecting directories as file entries.
+func TestCollectDirectoryObjects_DirectoryAsFile(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a .terraform directory.
+	terraformDir := filepath.Join(tempDir, ".terraform")
+	require.NoError(t, os.MkdirAll(terraformDir, 0o755))
+
+	folders, err := CollectDirectoryObjects(tempDir, []string{".terraform"})
+	require.NoError(t, err)
+	require.Len(t, folders, 1)
+	require.Len(t, folders[0].Files, 1)
+
+	// Verify the directory is marked as such.
+	assert.True(t, folders[0].Files[0].IsDir)
+	assert.Equal(t, ".terraform", folders[0].Files[0].Name)
+}
+
 func TestGetStackTerraformStateFolder(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -103,6 +303,106 @@ func TestGetStackTerraformStateFolder(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGetStackTerraformStateFolder_Success tests successful terraform state folder discovery.
+func TestGetStackTerraformStateFolder_Success(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create terraform.tfstate.d directory structure.
+	tfStateDDir := filepath.Join(tempDir, "terraform.tfstate.d")
+	require.NoError(t, os.MkdirAll(tfStateDDir, 0o755))
+
+	// Create stack-specific state folders.
+	devStack := filepath.Join(tfStateDDir, "dev-us-east-1")
+	stagingStack := filepath.Join(tfStateDDir, "staging-us-west-2")
+	prodStack := filepath.Join(tfStateDDir, "prod-eu-west-1")
+	require.NoError(t, os.MkdirAll(devStack, 0o755))
+	require.NoError(t, os.MkdirAll(stagingStack, 0o755))
+	require.NoError(t, os.MkdirAll(prodStack, 0o755))
+
+	// Create state files in each stack folder.
+	require.NoError(t, os.WriteFile(filepath.Join(devStack, "terraform.tfstate"), []byte("state"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(devStack, "terraform.tfstate.backup"), []byte("backup"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(stagingStack, "terraform.tfstate"), []byte("state"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(prodStack, "terraform.tfstate"), []byte("state"), 0o644))
+
+	tests := []struct {
+		name               string
+		stack              string
+		expectedFolders    int
+		expectedTotalFiles int
+	}{
+		{
+			name:               "Find dev stack state folder",
+			stack:              "dev",
+			expectedFolders:    1,
+			expectedTotalFiles: 2, // terraform.tfstate and terraform.tfstate.backup
+		},
+		{
+			name:               "Find staging stack state folder",
+			stack:              "staging",
+			expectedFolders:    1,
+			expectedTotalFiles: 1,
+		},
+		{
+			name:               "Find prod stack state folder",
+			stack:              "prod",
+			expectedFolders:    1,
+			expectedTotalFiles: 1,
+		},
+		{
+			name:               "No matching stack",
+			stack:              "nonexistent",
+			expectedFolders:    0,
+			expectedTotalFiles: 0,
+		},
+		{
+			name:               "Empty stack matches all",
+			stack:              "",
+			expectedFolders:    3,
+			expectedTotalFiles: 4, // 2 in dev + 1 in staging + 1 in prod
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			folders, err := GetStackTerraformStateFolder(tempDir, tt.stack)
+			require.NoError(t, err)
+			assert.Len(t, folders, tt.expectedFolders)
+
+			totalFiles := 0
+			for _, folder := range folders {
+				totalFiles += len(folder.Files)
+			}
+			assert.Equal(t, tt.expectedTotalFiles, totalFiles)
+		})
+	}
+}
+
+// TestGetStackTerraformStateFolder_NestedStacks tests state folder discovery with nested structure.
+func TestGetStackTerraformStateFolder_NestedStacks(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create terraform.tfstate.d directory structure with nested folders.
+	tfStateDDir := filepath.Join(tempDir, "terraform.tfstate.d")
+	require.NoError(t, os.MkdirAll(tfStateDDir, 0o755))
+
+	// Create level 1 directory.
+	regionDir := filepath.Join(tfStateDDir, "us-east-1")
+	require.NoError(t, os.MkdirAll(regionDir, 0o755))
+
+	// Create level 2 stack directory.
+	devStack := filepath.Join(regionDir, "dev")
+	require.NoError(t, os.MkdirAll(devStack, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(devStack, "terraform.tfstate"), []byte("state"), 0o644))
+
+	// Search with empty prefix to find nested folders.
+	folders, err := GetStackTerraformStateFolder(tempDir, "")
+	require.NoError(t, err)
+
+	// Should find both the region dir and the nested dev stack.
+	assert.GreaterOrEqual(t, len(folders), 1)
 }
 
 // TestCollectComponentsDirectoryObjects_NoDuplicateFiles verifies that when multiple stacks
@@ -314,4 +614,251 @@ func TestTerraformClean_EndToEnd_NoDuplicateDeletions(t *testing.T) {
 	assert.NoFileExists(t, vnetBackendFile)
 	assert.NoDirExists(t, dbTerraformDir)
 	assert.NoFileExists(t, dbLockFile)
+}
+
+// TestGetAllStacksComponentsPaths tests the GetAllStacksComponentsPaths function.
+func TestGetAllStacksComponentsPaths(t *testing.T) {
+	tests := []struct {
+		name          string
+		stacksMap     map[string]any
+		expectedPaths []string
+		expectedLen   int
+	}{
+		{
+			name:          "Empty stacks map",
+			stacksMap:     map[string]any{},
+			expectedPaths: nil,
+			expectedLen:   0,
+		},
+		{
+			name: "Single stack single component",
+			stacksMap: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"component": "vpc",
+							},
+						},
+					},
+				},
+			},
+			expectedPaths: []string{"vpc"},
+			expectedLen:   1,
+		},
+		{
+			name: "Multiple stacks same component",
+			stacksMap: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc-dev": map[string]any{
+								"component": "vpc",
+							},
+						},
+					},
+				},
+				"staging": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc-staging": map[string]any{
+								"component": "vpc",
+							},
+						},
+					},
+				},
+			},
+			expectedPaths: []string{"vpc"},
+			expectedLen:   1, // Deduplicated
+		},
+		{
+			name: "Multiple stacks different components",
+			stacksMap: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc-dev": map[string]any{
+								"component": "vpc",
+							},
+							"rds-dev": map[string]any{
+								"component": "rds",
+							},
+						},
+					},
+				},
+				"staging": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"s3-staging": map[string]any{
+								"component": "s3",
+							},
+						},
+					},
+				},
+			},
+			expectedPaths: []string{"vpc", "rds", "s3"},
+			expectedLen:   3,
+		},
+		{
+			name: "Invalid stack structure is skipped",
+			stacksMap: map[string]any{
+				"invalid": "not a map",
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"component": "vpc",
+							},
+						},
+					},
+				},
+			},
+			expectedPaths: []string{"vpc"},
+			expectedLen:   1,
+		},
+		{
+			name: "Missing components section is skipped",
+			stacksMap: map[string]any{
+				"dev": map[string]any{
+					"other": "data",
+				},
+				"staging": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"component": "vpc",
+							},
+						},
+					},
+				},
+			},
+			expectedPaths: []string{"vpc"},
+			expectedLen:   1,
+		},
+		{
+			name: "Missing terraform section is skipped",
+			stacksMap: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"helmfile": map[string]any{
+							"chart": map[string]any{
+								"component": "chart",
+							},
+						},
+					},
+				},
+			},
+			expectedPaths: nil,
+			expectedLen:   0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paths := GetAllStacksComponentsPaths(tt.stacksMap)
+			assert.Len(t, paths, tt.expectedLen)
+
+			for _, expected := range tt.expectedPaths {
+				assert.Contains(t, paths, expected)
+			}
+		})
+	}
+}
+
+// TestCollectComponentsDirectoryObjects tests the CollectComponentsDirectoryObjects function.
+func TestCollectComponentsDirectoryObjects(t *testing.T) {
+	t.Run("Empty base path returns error", func(t *testing.T) {
+		_, err := CollectComponentsDirectoryObjects("", []string{"vpc"}, []string{"*.tf"})
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrEmptyPath)
+	})
+
+	t.Run("Non-existent base path returns error", func(t *testing.T) {
+		_, err := CollectComponentsDirectoryObjects("/nonexistent/path", []string{"vpc"}, []string{"*.tf"})
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrPathNotExist)
+	})
+
+	t.Run("Empty component paths returns empty result", func(t *testing.T) {
+		tempDir := t.TempDir()
+		folders, err := CollectComponentsDirectoryObjects(tempDir, []string{}, []string{"*.tf"})
+		require.NoError(t, err)
+		assert.Len(t, folders, 0)
+	})
+
+	t.Run("Successful collection from multiple components", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		// Create component directories.
+		vpcDir := filepath.Join(tempDir, "vpc")
+		rdsDir := filepath.Join(tempDir, "rds")
+		require.NoError(t, os.MkdirAll(vpcDir, 0o755))
+		require.NoError(t, os.MkdirAll(rdsDir, 0o755))
+
+		// Create files in vpc.
+		require.NoError(t, os.WriteFile(filepath.Join(vpcDir, "main.tf"), []byte("resource"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(vpcDir, ".terraform.lock.hcl"), []byte("lock"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(vpcDir, "vars.tfvars.json"), []byte("{}"), 0o644))
+		require.NoError(t, os.MkdirAll(filepath.Join(vpcDir, ".terraform"), 0o755))
+
+		// Create files in rds.
+		require.NoError(t, os.WriteFile(filepath.Join(rdsDir, "main.tf"), []byte("resource"), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(rdsDir, ".terraform.lock.hcl"), []byte("lock"), 0o644))
+
+		componentPaths := []string{"vpc", "rds"}
+		patterns := []string{".terraform", ".terraform.lock.hcl", "*.tfvars.json"}
+
+		folders, err := CollectComponentsDirectoryObjects(tempDir, componentPaths, patterns)
+		require.NoError(t, err)
+		assert.Len(t, folders, 2)
+
+		// Count total files.
+		totalFiles := 0
+		for _, folder := range folders {
+			totalFiles += len(folder.Files)
+		}
+		assert.Equal(t, 4, totalFiles) // vpc: .terraform, .terraform.lock.hcl, vars.tfvars.json; rds: .terraform.lock.hcl
+	})
+}
+
+// TestCollectComponentsDirectoryObjects_Deduplication tests that duplicate paths are handled.
+func TestCollectComponentsDirectoryObjects_Deduplication(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create component directory.
+	vpcDir := filepath.Join(tempDir, "vpc")
+	require.NoError(t, os.MkdirAll(vpcDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(vpcDir, ".terraform.lock.hcl"), []byte("lock"), 0o644))
+
+	// Pass duplicate paths.
+	componentPaths := []string{"vpc", "vpc", "vpc"}
+	patterns := []string{".terraform.lock.hcl"}
+
+	folders, err := CollectComponentsDirectoryObjects(tempDir, componentPaths, patterns)
+	require.NoError(t, err)
+
+	// Should have only 1 folder despite 3 duplicate paths.
+	assert.Len(t, folders, 1)
+	assert.Len(t, folders[0].Files, 1)
+}
+
+// TestGetRelativePath tests the getRelativePath helper function through public APIs.
+func TestGetRelativePath_ThroughPublicAPI(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a nested component structure.
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, ".terraform.lock.hcl"), []byte("lock"), 0o644))
+
+	// Use CollectDirectoryObjects which internally uses relative path computation.
+	folders, err := CollectDirectoryObjects(componentDir, []string{".terraform.lock.hcl"})
+	require.NoError(t, err)
+	require.Len(t, folders, 1)
+
+	// Verify the relative path is computed correctly.
+	assert.Equal(t, ".", folders[0].RelativePath)
+	for _, file := range folders[0].Files {
+		assert.Equal(t, ".terraform.lock.hcl", file.RelativePath)
+	}
 }
