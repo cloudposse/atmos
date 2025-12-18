@@ -1,5 +1,5 @@
 // Package source provides CLI commands for managing terraform component sources.
-// This includes JIT (just-in-time) vendoring from metadata.source configuration.
+// This includes JIT (just-in-time) vendoring from source configuration.
 package source
 
 import (
@@ -21,16 +21,16 @@ func SetAtmosConfig(config *schema.AtmosConfiguration) {
 var sourceCmd = &cobra.Command{
 	Use:   "source",
 	Short: "Manage terraform component sources (JIT vendoring)",
-	Long: `Manage terraform component sources defined in metadata.source.
+	Long: `Manage terraform component sources defined in stack configuration.
 
 The source provisioner enables just-in-time (JIT) vendoring of component sources
 directly from stack configuration. Components can declare their source location
-inline using metadata.source without requiring a separate component.yaml file.
+inline using the source field without requiring a separate component.yaml file.
 
 Commands:
-  create    Vendor component source from metadata.source
+  create    Vendor component source from source configuration
   update    Re-vendor component source (force refresh)
-  list      List components with metadata.source in a stack
+  list      List components with source in a stack
   describe  Show source configuration for a component
   delete    Remove vendored source directory`,
 }

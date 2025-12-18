@@ -139,7 +139,7 @@ type ProvisionSourceOptions struct {
 	Force           bool
 }
 
-// ProvisionSource vendors a component source based on metadata.source.
+// ProvisionSource vendors a component source based on the source configuration.
 func ProvisionSource(ctx context.Context, opts *ProvisionSourceOptions) error {
 	return source.Provision(ctx, &source.ProvisionParams{
 		AtmosConfig:     opts.AtmosConfig,

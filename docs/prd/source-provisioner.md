@@ -673,7 +673,7 @@ When determining component location:
 
 1. **Local component exists** → Use local (no vendoring)
 2. **workdir specified** → Vendor to workdir
-3. **metadata.source defined** → Vendor to default path
+3. **source defined** → Vendor to default path
 4. **component.yaml exists** → Use existing vendor config (future: delegate to component provisioner)
 
 ### Configuration Inheritance
@@ -870,7 +870,7 @@ pkg/provisioner/
   └── source/                # NEW: Source provisioner business logic
       ├── source.go          # Main provisioner implementation
       ├── source_test.go     # Unit tests
-      ├── extract.go         # metadata.source extraction
+      ├── extract.go         # source extraction
       ├── resolve.go         # Source spec resolution
       ├── vendor.go          # Vendor integration (go-getter fallback)
       ├── target.go          # Target directory logic
@@ -986,7 +986,7 @@ func init() {
 1. **`cmd/terraform/terraform.go`** - Add `terraformCmd.AddCommand(source.GetSourceCommand())`
 2. **`cmd/helmfile/helmfile.go`** - Add `helmfileCmd.AddCommand(source.GetSourceCommand())`
 3. **`errors/errors.go`** - Add sentinel errors (ErrSourceProvision, ErrSourceNotFound, ErrSourceAccessDenied)
-4. **`pkg/datafetcher/schema/`** - Update JSON schemas for metadata.source
+4. **`pkg/datafetcher/schema/`** - Update JSON schemas for source
 
 **Note:** We reuse `VendorComponentSource` from `pkg/schema/vendor_component.go` - no schema changes needed.
 

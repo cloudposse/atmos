@@ -1,5 +1,5 @@
 // Package source provides just-in-time (JIT) vendoring of component sources
-// from metadata.source configuration in stack manifests.
+// from source configuration in stack manifests.
 package source
 
 import (
@@ -26,7 +26,7 @@ type ProvisionParams struct {
 	Force           bool // Force re-vendor even if already exists.
 }
 
-// Provision vendors a component source based on metadata.source configuration.
+// Provision vendors a component source based on source configuration.
 // It extracts the source spec from component config, resolves it, and vendors
 // to the appropriate target directory.
 func Provision(ctx context.Context, params *ProvisionParams) error {
@@ -38,13 +38,13 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 			Err()
 	}
 
-	// Extract metadata.source from component config.
-	sourceSpec, err := ExtractMetadataSource(params.ComponentConfig)
+	// Extract source from component config.
+	sourceSpec, err := ExtractSource(params.ComponentConfig)
 	if err != nil {
 		// An actual error occurred (e.g., invalid source spec).
 		return errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(err).
-			WithExplanation("Failed to extract metadata.source").
+			WithExplanation("Failed to extract source").
 			WithContext("component", params.Component).
 			Err()
 	}

@@ -13,11 +13,11 @@ var listParser *flags.StandardParser
 
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List components with metadata.source in a stack",
-	Long: `List all terraform components that have metadata.source configured in a stack.
+	Short: "List components with source in a stack",
+	Long: `List all terraform components that have source configured in a stack.
 
 This command shows which components can be vendored using the source provisioner.`,
-	Example: `  # List components with metadata.source
+	Example: `  # List components with source
   atmos terraform source list --stack dev`,
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -56,7 +56,7 @@ func executeListCommand(cmd *cobra.Command) error {
 	// TODO: Implement list functionality.
 	// This should:
 	// 1. Load all components in the stack
-	// 2. Filter to those with metadata.source
+	// 2. Filter to those with source configured
 	// 3. Display in a table format
 	return errUtils.Build(errUtils.ErrNotImplemented).
 		WithExplanation("List sources functionality is not yet implemented").

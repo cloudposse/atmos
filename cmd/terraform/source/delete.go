@@ -124,11 +124,11 @@ func initDeleteContext(component, stack string, globalFlags *global.Flags) (*sch
 			Err()
 	}
 
-	if !source.HasMetadataSource(componentConfig) {
+	if !source.HasSource(componentConfig) {
 		return nil, nil, errUtils.Build(errUtils.ErrMetadataSourceMissing).
 			WithContext("component", component).
 			WithContext("stack", stack).
-			WithHint("Only components with metadata.source can be deleted via this command").
+			WithHint("Only components with source can be deleted via this command").
 			Err()
 	}
 

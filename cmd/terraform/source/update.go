@@ -20,7 +20,7 @@ var updateCmd = &cobra.Command{
 	Long: `Re-vendor a terraform component source, forcing a fresh download.
 
 This command is equivalent to 'atmos terraform source create --force'. It downloads
-the component source from the URI specified in metadata.source, replacing any existing
+the component source from the URI specified in the source field, replacing any existing
 content in the component directory.`,
 	Example: `  # Re-vendor component source
   atmos terraform source update vpc --stack dev`,
@@ -70,12 +70,12 @@ func executeUpdateCommand(cmd *cobra.Command, args []string) error {
 			Err()
 	}
 
-	// Check if metadata.source is configured.
-	if !source.HasMetadataSource(componentConfig) {
+	// Check if source is configured.
+	if !source.HasSource(componentConfig) {
 		return errUtils.Build(errUtils.ErrMetadataSourceMissing).
 			WithContext("component", component).
 			WithContext("stack", opts.Stack).
-			WithHint("Add metadata.source to the component configuration in your stack manifest").
+			WithHint("Add source to the component configuration in your stack manifest").
 			Err()
 	}
 

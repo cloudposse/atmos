@@ -16,10 +16,10 @@ var createParser *flags.StandardParser
 
 var createCmd = &cobra.Command{
 	Use:   "create <component>",
-	Short: "Vendor component source from metadata.source",
-	Long: `Vendor a terraform component source based on metadata.source configuration.
+	Short: "Vendor component source from source configuration",
+	Long: `Vendor a terraform component source based on source configuration.
 
-This command downloads the component source from the URI specified in metadata.source
+This command downloads the component source from the URI specified in the source field
 and places it in the appropriate component directory. The source can be any go-getter
 compatible URI (git, s3, http, oci, etc.).
 
@@ -76,12 +76,12 @@ func executeCreateCommand(cmd *cobra.Command, args []string) error {
 			Err()
 	}
 
-	// Check if metadata.source is configured.
-	if !source.HasMetadataSource(componentConfig) {
+	// Check if source is configured.
+	if !source.HasSource(componentConfig) {
 		return errUtils.Build(errUtils.ErrMetadataSourceMissing).
 			WithContext("component", component).
 			WithContext("stack", opts.Stack).
-			WithHint("Add metadata.source to the component configuration in your stack manifest").
+			WithHint("Add source to the component configuration in your stack manifest").
 			Err()
 	}
 
