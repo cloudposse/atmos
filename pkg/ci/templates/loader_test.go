@@ -255,22 +255,22 @@ func TestLoaderResolvePath(t *testing.T) {
 	}{
 		{
 			name:     "absolute path unchanged",
-			basePath: "/custom",
-			filename: "/absolute/path/template.md",
-			want:     "/absolute/path/template.md",
+			basePath: filepath.FromSlash("/custom"),
+			filename: filepath.FromSlash("/absolute/path/template.md"),
+			want:     filepath.FromSlash("/absolute/path/template.md"),
 		},
 		{
 			name:     "relative resolved from basePath",
-			basePath: "/custom",
+			basePath: filepath.FromSlash("/custom"),
 			filename: "template.md",
-			want:     "/custom/template.md",
+			want:     filepath.FromSlash("/custom/template.md"),
 		},
 		{
 			name:      "relative resolved from atmosBase when no basePath",
 			basePath:  "",
-			atmosBase: "/atmos",
+			atmosBase: filepath.FromSlash("/atmos"),
 			filename:  "template.md",
-			want:      "/atmos/template.md",
+			want:      filepath.FromSlash("/atmos/template.md"),
 		},
 		{
 			name:     "relative unchanged when no bases",
