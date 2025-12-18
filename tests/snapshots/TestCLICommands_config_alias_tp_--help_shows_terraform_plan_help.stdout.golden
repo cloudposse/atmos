@@ -28,22 +28,19 @@ EXAMPLES
 
 FLAGS
 
-      --affected                           Plan the affected components in dependency order
+      --affected       Plan the affected components in dependency order
 
-      --all                                Plan all components in all stacks
+      --all            Plan all components in all stacks
 
-      --auto-generate-backend-file string  Override auto_generate_backend_file setting from atmos.yaml (true/false)
+      --ci             Enable CI mode for automated pipelines (writes job summary, outputs)
 
-  -h, --help                               help for plan
+  -h, --help           help for plan
 
-      --init-run-reconfigure string        Override init_run_reconfigure setting from atmos.yaml (true/false)
+      --skip-planfile  Skip writing the plan to a file by not passing the -out flag to Terraform when executing the
+                       command. Set it to true when using Terraform Cloud since the -out flag is not supported.
+                       Terraform Cloud automatically stores plans in its backend
 
-      --skip-planfile                      Skip writing the plan to a file by not passing the -out flag to Terraform
-                                           when executing the command. Set it to true when using Terraform Cloud since
-                                           the -out flag is not supported. Terraform Cloud automatically stores plans
-                                           in its backend
-
-      --upload-status                      If set atmos will upload the plan result to the pro API
+      --upload-status  If set atmos will upload the plan result to the pro API
 
 
 GLOBAL FLAGS
