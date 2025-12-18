@@ -14,6 +14,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -48,6 +49,8 @@ type CommonOptions struct {
 
 // ParseCommonFlags parses common flags (stack, identity, force) using StandardParser with Viper precedence.
 func ParseCommonFlags(cmd *cobra.Command, parser *flags.StandardParser) (*CommonOptions, error) {
+	defer perf.Track(nil, "source.ParseCommonFlags")()
+
 	v := viper.GetViper()
 	if err := parser.BindFlagsToViper(cmd, v); err != nil {
 		return nil, err
@@ -74,6 +77,8 @@ func ParseCommonFlags(cmd *cobra.Command, parser *flags.StandardParser) (*Common
 // The globalFlags parameter wires CLI global flags (--base-path, --config, --config-path, --profile)
 // to the configuration loader.
 func InitConfigAndAuth(component, stack, identity string, globalFlags *global.Flags) (*schema.AtmosConfiguration, *schema.AuthContext, error) {
+	defer perf.Track(nil, "source.InitConfigAndAuth")()
+
 	// Build config info with global flag values.
 	configInfo := schema.ConfigAndStacksInfo{
 		ComponentFromArg: component,
@@ -126,6 +131,8 @@ func InitConfigAndAuth(component, stack, identity string, globalFlags *global.Fl
 
 // DescribeComponent returns the component configuration from stack.
 func DescribeComponent(component, stack string) (map[string]any, error) {
+	defer perf.Track(nil, "source.DescribeComponent")()
+
 	return describeComponentFunc(component, stack)
 }
 
@@ -141,6 +148,8 @@ type ProvisionSourceOptions struct {
 
 // ProvisionSource vendors a component source based on the source configuration.
 func ProvisionSource(ctx context.Context, opts *ProvisionSourceOptions) error {
+	defer perf.Track(opts.AtmosConfig, "source.ProvisionSource")()
+
 	return source.Provision(ctx, &source.ProvisionParams{
 		AtmosConfig:     opts.AtmosConfig,
 		ComponentType:   "terraform",

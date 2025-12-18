@@ -48,7 +48,7 @@ func init() {
 }
 
 func executeDeleteCommand(cmd *cobra.Command, args []string) error {
-	defer perf.Track(atmosConfigPtr, "source.delete.RunE")()
+	defer perf.Track(nil, "source.delete.RunE")()
 
 	component := args[0]
 

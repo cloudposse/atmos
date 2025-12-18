@@ -4,18 +4,7 @@ package source
 
 import (
 	"github.com/spf13/cobra"
-
-	"github.com/cloudposse/atmos/pkg/schema"
 )
-
-// AtmosConfigPtr will be set by SetAtmosConfig before command execution.
-var atmosConfigPtr *schema.AtmosConfiguration
-
-// SetAtmosConfig sets the Atmos configuration for the source command.
-// This is called from root.go after atmosConfig is initialized.
-func SetAtmosConfig(config *schema.AtmosConfiguration) {
-	atmosConfigPtr = config
-}
 
 // sourceCmd represents the source command.
 var sourceCmd = &cobra.Command{

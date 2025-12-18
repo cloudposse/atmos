@@ -44,7 +44,7 @@ func init() {
 }
 
 func executeUpdateCommand(cmd *cobra.Command, args []string) error {
-	defer perf.Track(atmosConfigPtr, "source.update.RunE")()
+	defer perf.Track(nil, "source.update.RunE")()
 
 	component := args[0]
 

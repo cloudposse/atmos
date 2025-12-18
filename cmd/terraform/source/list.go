@@ -40,7 +40,7 @@ func init() {
 }
 
 func executeListCommand(cmd *cobra.Command) error {
-	defer perf.Track(atmosConfigPtr, "source.list.RunE")()
+	defer perf.Track(nil, "source.list.RunE")()
 
 	// Parse flags.
 	v := viper.GetViper()

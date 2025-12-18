@@ -50,7 +50,7 @@ func init() {
 }
 
 func executeCreateCommand(cmd *cobra.Command, args []string) error {
-	defer perf.Track(atmosConfigPtr, "source.create.RunE")()
+	defer perf.Track(nil, "source.create.RunE")()
 
 	component := args[0]
 
