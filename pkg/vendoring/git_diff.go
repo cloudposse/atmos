@@ -106,58 +106,72 @@ func writeOutput(diffData []byte, outputFile string) error {
 //
 //nolint:revive // Six parameters needed for Git diff configuration.
 func getGitDiffBetweenRefs(atmosConfig *schema.AtmosConfiguration, gitURI string, fromRef string, toRef string, contextLines int, noColor bool) ([]byte, error) {
-	defer perf.Track(atmosConfig, "exec.getGitDiffBetweenRefs")()
+	return getGitDiffBetweenRefsForFile(atmosConfig, gitURI, fromRef, toRef, "", contextLines, noColor)
+}
+
+// getGitDiffBetweenRefsForFile generates a diff between two Git refs, optionally limited to a single file path.
+// If filePath is empty, the entire repository is diffed.
+//
+//nolint:revive // Seven parameters needed for Git diff configuration with file filtering.
+func getGitDiffBetweenRefsForFile(atmosConfig *schema.AtmosConfiguration, gitURI string, fromRef string, toRef string, filePath string, contextLines int, noColor bool) ([]byte, error) {
+	defer perf.Track(atmosConfig, "exec.getGitDiffBetweenRefsForFile")()
 
 	// For remote diffs, we need to use a temporary shallow clone approach
-	// or use git archive + diff, since git diff doesn't work with remote refs directly
+	// or use git archive + diff, since git diff doesn't work with remote refs directly.
 
-	// We'll use the approach of fetching both refs and then diffing
+	// We'll use the approach of fetching both refs and then diffing.
 	tempDir, err := os.MkdirTemp("", "atmos-vendor-diff-*")
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrCreateTempDir, err)
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Initialize a bare repository
+	// Initialize a bare repository.
 	ctx := context.Background()
 	cmd := exec.CommandContext(ctx, "git", "init", "--bare", tempDir)
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrGitCommandFailed, err)
 	}
 
-	// Fetch the specific refs
+	// Fetch the specific refs.
 	cmd = exec.CommandContext(ctx, "git", "-C", tempDir, "fetch", "--depth=1", gitURI, fromRef+":"+fromRef, toRef+":"+toRef)
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("%w: failed to fetch refs: %s", errUtils.ErrGitCommandFailed, err)
 	}
 
-	// Now we can diff
+	// Now we can diff.
 	args := []string{"-C", tempDir, "diff"}
 
-	// Add color if appropriate
+	// Add color if appropriate.
 	if !noColor && isatty.IsTerminal(os.Stdout.Fd()) {
 		args = append(args, "--color=always")
 	} else {
 		args = append(args, "--color=never")
 	}
 
-	// Add context
+	// Add context.
 	args = append(args, fmt.Sprintf("-U%d", contextLines))
 
-	// Add refs
+	// Add refs.
 	args = append(args, fromRef, toRef)
+
+	// Optionally filter to a specific path.
+	if filePath != "" {
+		args = append(args, "--", filePath)
+	}
 
 	cmd = exec.CommandContext(ctx, "git", args...)
 	output, err := cmd.Output()
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			// Exit code 1 means differences found (expected)
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			// Exit code 1 means differences found (expected).
 			if exitErr.ExitCode() == 1 && len(output) > 0 {
 				return output, nil
 			}
 			return nil, fmt.Errorf("%w: %s", errUtils.ErrGitDiffFailed, string(exitErr.Stderr))
 		}
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrGitDiffFailed, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrGitDiffFailed, err)
 	}
 
 	return output, nil

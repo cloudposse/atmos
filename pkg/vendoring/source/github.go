@@ -89,8 +89,8 @@ func (g *GitHubProvider) GetDiff(
 	// Add GitHub API headers.
 	req.Header.Set("Accept", "application/vnd.github.v3.diff")
 
-	// Add authentication if available (from environment).
-	if token := GetGitHubToken(); token != "" {
+	// Add authentication if available (from atmosConfig.Settings, then environment).
+	if token := getGitHubTokenFromConfig(atmosConfig); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
@@ -169,6 +169,27 @@ func IsGitHubSource(source string) bool {
 	defer perf.Track(nil, "source.IsGitHubSource")()
 
 	return strings.Contains(source, "github.com")
+}
+
+// getGitHubTokenFromConfig retrieves the GitHub token from atmosConfig.Settings first,
+// then falls back to environment variables if not found.
+// This respects the Atmos configuration pattern where functions receiving atmosConfig
+// should read from atmosConfig.Settings before falling back to environment.
+func getGitHubTokenFromConfig(atmosConfig *schema.AtmosConfiguration) string {
+	defer perf.Track(nil, "source.getGitHubTokenFromConfig")()
+
+	// Try atmosConfig.Settings first (ATMOS_GITHUB_TOKEN takes precedence).
+	if atmosConfig != nil {
+		if atmosConfig.Settings.AtmosGithubToken != "" {
+			return atmosConfig.Settings.AtmosGithubToken
+		}
+		if atmosConfig.Settings.GithubToken != "" {
+			return atmosConfig.Settings.GithubToken
+		}
+	}
+
+	// Fall back to environment variables.
+	return GetGitHubToken()
 }
 
 // GetGitHubToken retrieves the GitHub token from environment.

@@ -282,7 +282,7 @@ jobs:
 
       - name: Install Atmos
         run: |
-          curl -L https://github.com/cloudposse/atmos/releases/download/vX.X.X/atmos -o /usr/local/bin/atmos
+          curl -L https://github.com/cloudposse/atmos/releases/latest/download/atmos_linux_amd64 -o /usr/local/bin/atmos
           chmod +x /usr/local/bin/atmos
 
       - name: Check for updates
@@ -375,7 +375,7 @@ See [docs/prd/vendor-update.md](https://github.com/cloudposse/atmos/blob/main/do
 
 ## Getting Started
 
-Available in Atmos vX.X.X and later:
+Available in Atmos v1.173.0 and later:
 
 ```bash
 # Install or upgrade Atmos
