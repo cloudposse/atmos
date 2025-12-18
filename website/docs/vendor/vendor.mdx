@@ -11,21 +11,52 @@ import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Atmos natively supports "vendoring," a practice that involves replicating 3rd-party components, stacks, and artifacts within your own repository. This feature is particularly beneficial for managing dependencies in software like Terraform, which do not support pulling root modules remotely by configuration.
+When your infrastructure depends on external modules, you're at the mercy of upstream changes, network availability, and release schedules you don't control. Vendoring brings that code in-house, giving you full control over when and how dependencies change.
 </Intro>
 
-Vendoring standardizes dependency management, encourages enterprise component reuse, and ensures compliance standards adherence. Furthermore, it allows teams to customize and independently manage their vendored components according to their specific requirements.
+With Atmos vendoring, you copy external components into your repository where you can review changes via `git diff`, maintain an immutable audit trail, and apply emergency patches without waiting for upstream releases. Your deployments become predictable—no surprises from unexpected upstream changes or network outages.
 
-## Use-cases
+## Why Vendor?
 
-Atmos vendoring streamlines component sharing and version control across an enterprise, enhancing efficiency and collaboration while offering the flexibility to customize and manage multiple versions of dependencies, ensuring best practices in DevOps environments.
+While Terraform [child modules](https://developer.hashicorp.com/terraform/language/modules/sources) can pull from remote sources, [root modules](/components/terraform/root-modules) have no such capability—they must exist locally. This means every Terraform project needs a way to get root module code onto disk. Most tools do "just-in-time vendoring" behind the scenes: cloning to a temp folder, running it, then cleaning up. Atmos makes this process explicit: you vendor once, commit the code, and control when updates happen.
 
-- **Sharing Components Across an Enterprise**: Utilize Atmos vendoring to access a centralized component library, promoting code reuse and
-  efficiency across teams (or business units) while enabling customization and independent version control post-vendoring. This approach enhances collaboration without sacrificing the flexibility for teams to tailor components to their specific needs or update them at their preferred pace.
-- **Managing Multiple Versions of Dependencies:** Use Atmos vendoring to manage multiple versions of remote dependencies,
-  effectively implementing version pinning through locally controlled artifacts. By configuring a stacks component directory (e.g., `vpc/v1` or `vpc/v2`), vendoring provides maximum flexibility while still aligning with best practices in DevOps environments.
-- **Reinforce Immutable Infrastructure**: Employ Atmos vendoring to store immutable infrastructure artifacts, guaranteeing that once a committed,
-  it remains unaltered throughout its lifecycle, ensuring stability and reliability in deployments.
+**This approach provides:**
+
+- **Visibility**: See actual code changes via `git diff`, not just version bumps
+- **Audit Trail**: Every update is a commit—complete, immutable compliance records
+- **Emergency Agility**: Patch vulnerabilities immediately without waiting for upstream
+- **Developer Experience**: IDE navigation, `grep` across all code, better onboarding
+
+:::tip Deep Dive
+For the full philosophy and detailed benefits, see [Vendoring Component Versions](/design-patterns/version-management/vendoring-components).
+:::
+
+### Vendoring and Version Management
+
+Vendoring is a foundational technique that works with any [version management strategy](/design-patterns/version-management). Whether you use folder-based versioning (`vpc/v1`, `vpc/v2`), release tracks (`alpha/vpc`, `beta/vpc`), or continuous deployment, vendoring gives you local control over when components update.
+
+Common patterns:
+- **Vendor + Folder Versioning**: Vendor upstream modules to versioned folders for explicit version control
+- **Vendor + Release Tracks**: Vendor to track folders (`prod/vpc`, `staging/vpc`) that environments subscribe to
+- **Vendor + Continuous Deployment**: Vendor to a single folder and let CI/CD control progressive rollout
+
+See [Version Management Patterns](/design-patterns/version-management) for strategies that build on vendoring.
+
+## Use Cases
+
+Use vendoring when you need to:
+
+- **Control Update Timing**: Your compliance process requires reviewing all code changes before deployment. Vendoring lets you update on your schedule, not when upstream pushes changes.
+
+- **Ensure Deployment Reliability**: Network issues or upstream outages shouldn't block your deployments. Vendored code is always available in your repository.
+
+- **Apply Custom Patches**: Security vulnerabilities can't wait for upstream PRs. Vendor the code, patch it immediately, deploy, then reconcile with upstream later.
+
+- **Manage Multiple Versions**: Different teams or environments need different versions. Vendor to `vpc/v1` and `vpc/v2` folders for maximum flexibility.
+
+- **Meet Compliance Requirements**: Auditors need to see exactly what code ran and when. Every vendor update is a git commit with full history.
+
+- **Share Components Across Teams**: Maintain a centralized component library that teams can vendor into their own repositories, enabling customization and independent version control.
 
 ## Types of Vendoring
 
