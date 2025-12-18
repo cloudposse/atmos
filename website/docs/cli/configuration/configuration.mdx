@@ -31,11 +31,37 @@ Atmos discovers configuration from multiple sources in the following precedence 
 
 1. **Command-line flags** (`--config`, `--config-path`)
 2. **Environment variable** (`ATMOS_CLI_CONFIG_PATH`)
-3. **Current directory** (`./atmos.yaml`)
-4. **Home directory** (`~/.atmos/atmos.yaml`)
-5. **System directory** (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
+3. **Profiles** (`--profile` or `ATMOS_PROFILE`) — Named configuration overrides applied on top of base config
+4. **Current directory** (`./atmos.yaml`) - CWD only, no parent search
+5. **Git repository root** (`repo-root/atmos.yaml`) - if in a git repository
+6. **Parent directory search** - walks up from CWD looking for `atmos.yaml`
+7. **Home directory** (`~/.atmos/atmos.yaml`)
+8. **System directory** (`/usr/local/etc/atmos/atmos.yaml` on Linux, `%LOCALAPPDATA%/atmos/atmos.yaml` on Windows)
 
-Each configuration file discovered is deep-merged with the preceding configurations.
+Each configuration file discovered is deep-merged with the preceding configurations. Separately, Atmos may also auto-import configuration fragments from `.atmos.d/`. The git repository root is special: even when `atmos.yaml` is found elsewhere, Atmos always checks for `.atmos.d/` at the repo root to load shared fragments like custom commands.
+
+Profiles are a first-class concept that allow environment-specific configuration overrides. When activated via `--profile` flag or `ATMOS_PROFILE` environment variable, profile settings are merged on top of the base configuration. Multiple profiles can be activated and merged left-to-right. See [Profiles](/cli/configuration/profiles) for complete documentation.
+
+### Parent Directory Search
+
+When no `atmos.yaml` is found in the current directory, Atmos automatically searches parent directories up to the filesystem root. This enables running Atmos from any subdirectory without specifying `--config-path`.
+
+```bash
+# Repository structure:
+# /repo/
+#   atmos.yaml          # ← Found via parent search
+#   components/
+#     terraform/
+#       vpc/            # ← Running from here
+#         main.tf
+
+cd /repo/components/terraform/vpc
+atmos terraform plan vpc -s prod  # Automatically finds /repo/atmos.yaml
+```
+
+**Disabling parent directory search:**
+
+Set `ATMOS_CLI_CONFIG_PATH` to any value (including `.`) to disable parent directory searching and use only the specified path.
 
 ### Loading Multiple Configurations
 
@@ -47,6 +73,32 @@ atmos --config /path/to/config1.yaml --config /path/to/config2.yaml \
 ```
 
 Configurations are deep-merged in the order provided, with later configurations overriding earlier ones.
+
+### Profiles
+
+Profiles provide named sets of configuration overrides that can be activated at runtime. This is the recommended way to manage environment-specific settings (development, CI/CD, production) without modifying your base configuration.
+
+```bash
+# Activate a profile via flag
+atmos --profile developer terraform plan vpc -s prod
+
+# Activate via environment variable
+export ATMOS_PROFILE=ci
+atmos terraform apply --auto-approve
+
+# Activate multiple profiles (merged left-to-right)
+atmos --profile base,developer,debug describe config
+```
+
+Profiles are discovered from multiple locations:
+1. Custom path configured in `profiles.base_path`
+2. `.atmos/profiles/` (project-local)
+3. `~/.config/atmos/profiles/` (XDG user profiles)
+4. `profiles/` (project-local)
+
+When multiple profiles are activated, they are merged in order. Later profiles override earlier ones.
+
+For complete documentation on creating and using profiles, see [Profiles](/cli/configuration/profiles).
 
 ### Glob Patterns
 
@@ -114,6 +166,19 @@ Atmos extends standard YAML with custom functions that provide powerful tools fo
 
     See the [`!repo-root` documentation](/functions/yaml/repo-root) for more details.
   </dd>
+
+  <dt>`!cwd`</dt>
+  <dd>
+    Retrieve the current working directory. Useful when you need paths relative to where Atmos is executed from rather than relative to the configuration file.
+
+    ```yaml
+    base_path: !cwd
+    # or with a relative path
+    base_path: !cwd ./relative/path
+    ```
+
+    See the [`!cwd` documentation](/functions/yaml/cwd) for more details.
+  </dd>
 </dl>
 
 ## Base Path
@@ -130,7 +195,43 @@ It can also be set using:
 
 It supports both absolute and relative paths.
 
-### Path Resolution
+### Path Resolution Semantics
+
+The `base_path` value determines where Atmos looks for stacks and components. Here's how different values are resolved:
+
+| `base_path` value | Resolves to | Description |
+|-------------------|-------------|-------------|
+| `""`, `~`, `null`, or unset | Git root, fallback to config directory | Smart default with git root discovery |
+| `"."` | Config file directory | Relative to where `atmos.yaml` is located |
+| `".."` | Parent of config file directory | Relative to where `atmos.yaml` is located |
+| `"./foo"` | Config file directory + `foo` | Relative to where `atmos.yaml` is located |
+| `"../foo"` | Parent of config directory + `foo` | Relative to where `atmos.yaml` is located |
+| `"foo"` | Git root + `foo`, fallback to config directory + `foo` | Simple relative path with search |
+| `"/absolute/path"` | `/absolute/path` | Explicit absolute path |
+| `!repo-root` | Git repository root | Explicit git root tag |
+| `!cwd` | Current working directory | Explicit CWD tag |
+
+**Why `.` and `..` are config-file-relative:**
+
+Paths in configuration files are relative to where the config file is located, not where you run from. This follows the convention established by other configuration files like `tsconfig.json`, `package.json`, and `.eslintrc`.
+
+For example, if your `atmos.yaml` is in `/repo/config/atmos.yaml` and contains:
+```yaml
+base_path: ".."  # Resolves to /repo (parent of config directory)
+```
+
+This means you can run `atmos` from anywhere, and the paths will always resolve correctly relative to where the configuration file is defined.
+
+**Need CWD-relative behavior?**
+
+If you need paths relative to where Atmos is executed (the current working directory), use the `!cwd` YAML function:
+```yaml
+base_path: !cwd
+# or with a relative path
+base_path: !cwd ./my/path
+```
+
+### Subpath Configuration
 
 If `base_path` is not provided or is an empty string, the following paths are independent settings (supporting both absolute and relative paths):
 - `components.terraform.base_path`
@@ -194,34 +295,43 @@ Atmos automatically imports configuration fragments from special directories, en
 - `.atmos.d/` (preferred)
 - `atmos.d/` (alternate)
 
+**Discovery locations (in precedence order, lowest to highest):**
+1. **Git repository root** — `.atmos.d/` at the repo root is always discovered, even when running from subdirectories
+2. **Configuration directory** — `.atmos.d/` next to `atmos.yaml` (overrides git root)
+
+This means you can place shared custom commands at the repository root and they'll be available from any subdirectory, while still allowing project-specific overrides.
+
 **How it works:**
 1. Atmos recursively discovers all `.yaml` and `.yml` files in these directories
 2. Files are sorted by directory depth (shallower first), then alphabetically
 3. Each file is automatically merged into the configuration
-4. Processing occurs after main config merges but before explicit `import:` entries
+4. Git root `.atmos.d` is loaded first (lower priority), then config directory `.atmos.d` (higher priority)
+5. Processing occurs after main config merges but before explicit `import:` entries
 
 **Example structure:**
 
 ```
-project/
-├── atmos.yaml           # Main configuration
-└── .atmos.d/
-    ├── commands/
-    │   └── custom.yaml  # Custom commands
-    ├── profiles/
-    │   └── ci.yaml      # CI profile
-    └── settings/
-        └── team.yaml    # Team-specific settings
+repo/                        # Git repository root
+├── .atmos.d/
+│   └── commands.yaml        # Shared commands available repo-wide
+├── atmos.yaml               # Main configuration
+├── components/
+│   └── terraform/
+│       └── vpc/
+│           └── main.tf      # ← Can run atmos from here
 ```
+
+Running from `repo/components/terraform/vpc/`:
+- Commands from `repo/.atmos.d/commands.yaml` are automatically discovered
+- No need to specify `--config-path` or change directories
 
 **Use cases:**
 - **Custom commands** — Drop in command definitions without modifying `atmos.yaml`
-- **Profiles** — Add environment-specific profiles for CI/CD
-- **Team settings** — Share team-specific defaults across projects
-- **Local overrides** — Git-ignored local configuration fragments
+- **Repo-wide commands** — Define commands at repo root, use from any subdirectory
+- **Local overrides** — Git-ignored local configuration fragments (add `.atmos.d/local/` to `.gitignore`)
 
 :::tip
-The `.atmos.d/` directory is ideal for configuration that shouldn't be in the main `atmos.yaml`, such as local developer settings (add `.atmos.d/local/` to `.gitignore`) or dynamically generated configuration.
+The `.atmos.d/` directory is ideal for configuration that shouldn't be in the main `atmos.yaml`, such as local developer settings or dynamically generated configuration. For environment-specific configuration overrides, use [Profiles](/cli/configuration/profiles) instead.
 :::
 
 ### Windows Path Handling

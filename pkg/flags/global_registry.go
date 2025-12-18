@@ -56,6 +56,9 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		// Authentication.
 		Identity: parseIdentityFlag(cmd, v),
 
+		// Profiles.
+		Profile: v.GetStringSlice("profile"),
+
 		// Profiling configuration.
 		ProfilerEnabled: v.GetBool("profiler-enabled"),
 		ProfilerPort:    v.GetInt("profiler-port"),

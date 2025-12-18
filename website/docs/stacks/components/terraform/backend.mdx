@@ -1,0 +1,66 @@
+---
+title: Terraform Backend Configuration
+sidebar_position: 5
+sidebar_label: backend
+slug: /stacks/components/terraform/backend
+description: Configure Terraform state backends for components.
+id: terraform-backend
+---
+import Intro from '@site/src/components/Intro'
+import BackendConfig from '../../_partials/_backend-config.mdx'
+
+<Intro>
+The `backend` section under `terraform:` or `components.terraform.<name>:` configures
+where Terraform stores state for your components. Settings defined here become defaults
+for all Terraform components in the stack.
+</Intro>
+
+## Setting Defaults for Terraform Components
+
+When you define backend configuration under the `terraform:` section, it applies to
+**all Terraform components** in that stack manifest:
+
+```yaml title="stacks/orgs/acme/_defaults.yaml"
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: acme-ue1-root-tfstate
+      region: us-east-1
+      encrypt: true
+      use_lockfile: true
+```
+
+Every Terraform component that imports this manifest inherits these backend settings.
+Individual components can override specific values as needed.
+
+## Component-Level Overrides
+
+Override backend settings for a specific component:
+
+```yaml title="stacks/orgs/acme/plat/prod/us-east-1.yaml"
+components:
+  terraform:
+    vpc:
+      # Inherits org defaults, overrides key prefix
+      backend:
+        s3:
+          workspace_key_prefix: networking/vpc
+
+    secrets-manager:
+      # Uses a separate, more restricted bucket
+      backend:
+        s3:
+          bucket: acme-ue1-prod-secrets-tfstate
+          kms_key_id: alias/secrets-state-key
+```
+
+<BackendConfig />
+
+## Related
+
+- [Generate Terraform Backend](/stacks/backend) - Stack-level backend configuration
+- [Terraform Backends](/components/terraform/backends) - Conceptual overview
+- [Backend Provisioning](/components/terraform/backend-provisioning) - Automatic backend creation
+- [Remote State](/stacks/remote-state) - Reading state from other components
+- [Terraform Workspaces](/components/terraform/workspaces)

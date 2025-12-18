@@ -2,8 +2,9 @@
 slug: geodesic-production-ready-devcontainer
 title: "Geodesic: A Production-Ready DevOps Toolbox for Development Containers"
 authors: [osterman]
-tags: [feature, geodesic, devcontainers, docker, developer-experience, devops]
-date: 2025-11-14
+tags: [feature]
+date: 2025-12-05
+release: v1.201.0
 ---
 
 While Atmos supports any devcontainer configuration, **Geodesic is a proven DevOps toolbox** that's been battle-tested for almost 10 years. If you're looking for a production-ready development container with all the tools you need for infrastructure work, Geodesic is your answer.
@@ -52,17 +53,16 @@ With [Atmos's native devcontainer support](/changelog/native-devcontainer-suppor
 
 ```yaml
 # atmos.yaml
-components:
-  devcontainer:
-    geodesic:
-      spec:
-        name: "Geodesic DevOps Toolbox"
-        image: "cloudposse/geodesic:latest"
-        workspaceFolder: "/workspace"
-        workspaceMount: "type=bind,source=${PWD},target=/workspace"
-        containerEnv:
-          ATMOS_BASE_PATH: "/workspace"
-        remoteUser: "root"
+devcontainer:
+  geodesic:
+    spec:
+      name: "Geodesic DevOps Toolbox"
+      image: "cloudposse/geodesic:latest"
+      workspaceFolder: "/workspace"
+      workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
+      containerEnv:
+        ATMOS_BASE_PATH: "/workspace"
+      remoteUser: "root"
 ```
 
 Then launch it:
@@ -145,9 +145,10 @@ This mirrors the classic Geodesic pattern where you'd type `./geodesic.sh` to la
 
 ### Use as a Base Image
 
-Create your own custom toolbox based on Geodesic:
+Create your own custom toolbox based on Geodesic. First, create a `Dockerfile`:
 
 ```dockerfile
+# .devcontainer/Dockerfile
 FROM cloudposse/geodesic:latest
 
 # Add your organization's tools
@@ -162,24 +163,60 @@ COPY scripts/ /usr/local/bin/
 ENV CUSTOM_VAR=value
 ```
 
+Then configure Atmos to build from your Dockerfile:
+
+```yaml
+# atmos.yaml
+devcontainer:
+  geodesic:
+    spec:
+      name: "Custom Geodesic Toolbox"
+      build:
+        dockerfile: ".devcontainer/Dockerfile"
+        context: "."
+        args:
+          GEODESIC_VERSION: "latest"
+      workspaceFolder: "/workspace"
+      workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
+      containerEnv:
+        ATMOS_BASE_PATH: "/workspace"
+      remoteUser: "root"
+```
+
+Launch it just like any other devcontainer:
+
+```bash
+# Build and launch
+atmos devcontainer shell geodesic
+
+# Force rebuild after changing Dockerfile
+atmos devcontainer shell geodesic --replace
+```
+
+Atmos will automatically build the image from your Dockerfile, tag it as `atmos-devcontainer-geodesic`, and create the container.
+
+:::tip Example Available
+Check out the complete example in [`examples/devcontainer-build`](https://github.com/cloudposse/atmos/tree/main/examples/devcontainer-build) which includes a working Dockerfile, devcontainer.json, and atmos.yaml for building custom Geodesic containers.
+:::
+
 ### Version Pinning for Consistency
 
 Pin specific Geodesic versions per project:
 
 ```yaml
 # project-a/atmos.yaml
-components:
-  devcontainer:
-    toolbox:
-      spec:
-        image: "cloudposse/geodesic:4.3.0"  # Pinned version
+devcontainer:
+  toolbox:
+    spec:
+      image: "cloudposse/geodesic:4.3.0"  # Pinned version
+```
 
+```yaml
 # project-b/atmos.yaml
-components:
-  devcontainer:
-    toolbox:
-      spec:
-        image: "cloudposse/geodesic:4.4.0"  # Different version
+devcontainer:
+  toolbox:
+    spec:
+      image: "cloudposse/geodesic:4.4.0"  # Different version
 ```
 
 Each project gets the right tool versions automatically.
@@ -290,17 +327,15 @@ brew install atmos
 
 ```yaml
 # atmos.yaml
-components:
-  devcontainer:
-    geodesic:
-      spec:
-        image: "cloudposse/geodesic:latest"
-        workspaceFolder: "/workspace"
-        workspaceMount: "type=bind,source=${PWD},target=/workspace"
+devcontainer:
+  geodesic:
+    spec:
+      image: "cloudposse/geodesic:latest"
+      workspaceFolder: "/workspace"
+      workspaceMount: "type=bind,source=${localWorkspaceFolder},target=/workspace"
 
-cli:
-  aliases:
-    shell: "devcontainer shell geodesic"
+aliases:
+  shell: "devcontainer shell geodesic"
 ```
 
 ### 3. Launch Your Environment

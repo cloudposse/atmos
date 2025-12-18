@@ -29,8 +29,10 @@ const (
 	AtmosYamlFuncInclude                 = "!include"
 	AtmosYamlFuncIncludeRaw              = "!include.raw"
 	AtmosYamlFuncGitRoot                 = "!repo-root"
+	AtmosYamlFuncCwd                     = "!cwd"
 	AtmosYamlFuncUnset                   = "!unset"
 	AtmosYamlFuncRandom                  = "!random"
+	AtmosYamlFuncLiteral                 = "!literal"
 	AtmosYamlFuncAwsAccountID            = "!aws.account_id"
 	AtmosYamlFuncAwsCallerIdentityArn    = "!aws.caller_identity_arn"
 	AtmosYamlFuncAwsCallerIdentityUserID = "!aws.caller_identity_user_id"
@@ -52,8 +54,10 @@ var (
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncCwd,
 		AtmosYamlFuncUnset,
 		AtmosYamlFuncRandom,
+		AtmosYamlFuncLiteral,
 		AtmosYamlFuncAwsAccountID,
 		AtmosYamlFuncAwsCallerIdentityArn,
 		AtmosYamlFuncAwsCallerIdentityUserID,
@@ -71,7 +75,10 @@ var (
 		AtmosYamlFuncTerraformOutput:         true,
 		AtmosYamlFuncTerraformState:          true,
 		AtmosYamlFuncEnv:                     true,
+		AtmosYamlFuncCwd:                     true,
+		AtmosYamlFuncUnset:                   true,
 		AtmosYamlFuncRandom:                  true,
+		AtmosYamlFuncLiteral:                 true,
 		AtmosYamlFuncAwsAccountID:            true,
 		AtmosYamlFuncAwsCallerIdentityArn:    true,
 		AtmosYamlFuncAwsCallerIdentityUserID: true,
@@ -612,6 +619,16 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 	for _, n := range node.Content {
 		tag := strings.TrimSpace(n.Tag)
 		val := strings.TrimSpace(n.Value)
+
+		// Handle !literal tag - preserve value exactly as-is, bypass all template processing.
+		// This is processed early (like !include) so the value is never sent through
+		// Go template or Gomplate evaluation.
+		if tag == AtmosYamlFuncLiteral {
+			// Just clear the tag and keep the value unchanged.
+			// The value will pass through without any template processing.
+			n.Tag = ""
+			continue
+		}
 
 		// Use O(1) map lookup instead of O(n) slice search for performance.
 		// This optimization reduces 75M+ linear searches to constant-time lookups.

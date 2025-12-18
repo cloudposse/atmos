@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/workflow"
@@ -34,7 +36,8 @@ func TestExecuteWorkflow(t *testing.T) {
 		commandLineStack string
 		fromStep         string
 		wantErr          bool
-		errMsg           string
+		wantSentinel     error
+		errContains      string
 	}{
 		{
 			name:         "valid workflow execution",
@@ -70,7 +73,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "workflow has no steps defined",
+			wantSentinel:     errUtils.ErrWorkflowNoSteps,
 		},
 		{
 			name:         "invalid step type",
@@ -89,7 +92,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "invalid workflow step type",
+			wantSentinel:     errUtils.ErrInvalidWorkflowStepType,
 		},
 		{
 			name:         "invalid from-step",
@@ -108,7 +111,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "nonexistent-step",
 			wantErr:          true,
-			errMsg:           "invalid from-step flag",
+			wantSentinel:     errUtils.ErrInvalidFromStep,
 		},
 		{
 			name:         "failing shell command",
@@ -127,7 +130,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "subcommand exited with code 1",
+			wantSentinel:     errUtils.ErrWorkflowStepFailed,
 		},
 		{
 			name:         "failing atmos command",
@@ -146,7 +149,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "subcommand exited with code",
+			wantSentinel:     errUtils.ErrWorkflowStepFailed,
 		},
 		{
 			name:         "workflow with stack override",
@@ -185,7 +188,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "subcommand exited with code",
+			wantSentinel:     errUtils.ErrWorkflowStepFailed,
 		},
 		{
 			name:         "failing atmos command with command line stack override",
@@ -205,7 +208,7 @@ func TestExecuteWorkflow(t *testing.T) {
 			commandLineStack: "dev",
 			fromStep:         "",
 			wantErr:          true,
-			errMsg:           "subcommand exited with code",
+			wantSentinel:     errUtils.ErrWorkflowStepFailed,
 		},
 	}
 
@@ -224,8 +227,11 @@ func TestExecuteWorkflow(t *testing.T) {
 
 			if tt.wantErr {
 				assert.Error(t, err)
-				if tt.errMsg != "" {
-					assert.Contains(t, err.Error(), tt.errMsg)
+				if tt.wantSentinel != nil {
+					assert.ErrorIs(t, err, tt.wantSentinel)
+				}
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
 				}
 			} else {
 				assert.NoError(t, err)
@@ -382,28 +388,39 @@ func TestExecuteWorkflowCmd(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("missing file flag", func(t *testing.T) {
+	t.Run("auto-discovery with no file flag - workflow not found", func(t *testing.T) {
 		stacksPath := "../../tests/fixtures/scenarios/workflows"
 
 		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 		t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
 		cmd := createWorkflowCmd()
-		// Don't set --file flag.
+		// Don't set --file flag - should auto-discover workflow.
 
-		args := []string{"shell-pass"}
+		// Use a workflow name that doesn't exist.
+		args := []string{"nonexistent-workflow"}
 		err := ExecuteWorkflowCmd(cmd, args)
 
-		// Should error with missing file flag message.
+		// Should error with "no workflow found" message.
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "'--file' flag is required")
+		assert.ErrorIs(t, err, errUtils.ErrWorkflowNoWorkflow)
 	})
 
 	t.Run("file not found", func(t *testing.T) {
-		// ExecuteWorkflowCmd calls CheckErrorPrintAndExit which exits the process.
-		// We can't test this directly without mocking. Skip for now or refactor.
-		// This test would require dependency injection to avoid the exit.
-		t.Skip("Requires refactoring to avoid CheckErrorPrintAndExit")
+		stacksPath := "../../tests/fixtures/scenarios/workflows"
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+		t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+		cmd := createWorkflowCmd()
+		err := cmd.ParseFlags([]string{"--file", "nonexistent-file.yaml"})
+		require.NoError(t, err)
+
+		args := []string{"some-workflow"}
+		err = ExecuteWorkflowCmd(cmd, args)
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrWorkflowFileNotFound)
 	})
 
 	t.Run("absolute file path", func(t *testing.T) {
@@ -514,14 +531,126 @@ func TestExecuteWorkflowCmd(t *testing.T) {
 	})
 
 	t.Run("invalid workflow manifest - no workflows key", func(t *testing.T) {
-		// This will call CheckErrorPrintAndExit which exits the process.
-		// Skip for now without dependency injection.
-		t.Skip("Requires refactoring to avoid CheckErrorPrintAndExit")
+		stacksPath := "../../tests/fixtures/scenarios/workflows"
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+		t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+		cmd := createWorkflowCmd()
+		// test-invalid.yaml exists but has no workflows: key.
+		err := cmd.ParseFlags([]string{"--file", "test-invalid.yaml"})
+		require.NoError(t, err)
+
+		args := []string{"any-workflow"}
+		err = ExecuteWorkflowCmd(cmd, args)
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidWorkflowManifest)
 	})
 
 	t.Run("workflow name not found in manifest", func(t *testing.T) {
-		// This will call CheckErrorPrintAndExit which exits the process.
-		// Skip for now without dependency injection.
-		t.Skip("Requires refactoring to avoid CheckErrorPrintAndExit")
+		stacksPath := "../../tests/fixtures/scenarios/workflows"
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+		t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+		cmd := createWorkflowCmd()
+		err := cmd.ParseFlags([]string{"--file", "test.yaml"})
+		require.NoError(t, err)
+
+		// Request a workflow name that doesn't exist in test.yaml.
+		args := []string{"nonexistent-workflow-name"}
+		err = ExecuteWorkflowCmd(cmd, args)
+
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrWorkflowNoWorkflow)
+	})
+
+	t.Run("auto-discovery single match", func(t *testing.T) {
+		stacksPath := "../../tests/fixtures/scenarios/workflows"
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+		t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+		cmd := createWorkflowCmd()
+		// Don't set --file flag - auto-discovery should find the single match.
+
+		// Use a workflow name that exists in only one file.
+		args := []string{"shell-pass"}
+		err := ExecuteWorkflowCmd(cmd, args)
+
+		// Should succeed with auto-discovery finding the single match.
+		assert.NoError(t, err)
+	})
+
+	t.Run("auto-discovery multiple matches in non-TTY", func(t *testing.T) {
+		// Create a temp directory with multiple workflow files containing the same workflow.
+		tmpDir := t.TempDir()
+		workflowsDir := filepath.Join(tmpDir, "stacks", "workflows")
+		stacksDir := filepath.Join(tmpDir, "stacks")
+		err := os.MkdirAll(workflowsDir, 0o755)
+		require.NoError(t, err)
+
+		// Create a dummy stack file to satisfy config validation.
+		dummyStack := `components: {}`
+		err = os.WriteFile(filepath.Join(stacksDir, "dummy.yaml"), []byte(dummyStack), 0o644)
+		require.NoError(t, err)
+
+		// Create atmos.yaml with complete config.
+		atmosConfig := `
+base_path: ""
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "workflows/**/*"
+  name_pattern: "{stack}"
+workflows:
+  base_path: "stacks/workflows"
+`
+		err = os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
+		require.NoError(t, err)
+
+		// Create two workflow files with the same workflow name.
+		workflow1 := `
+workflows:
+  duplicate-workflow:
+    steps:
+      - name: step1
+        type: shell
+        command: echo file1
+`
+		err = os.WriteFile(filepath.Join(workflowsDir, "file1.yaml"), []byte(workflow1), 0o644)
+		require.NoError(t, err)
+
+		workflow2 := `
+workflows:
+  duplicate-workflow:
+    steps:
+      - name: step1
+        type: shell
+        command: echo file2
+`
+		err = os.WriteFile(filepath.Join(workflowsDir, "file2.yaml"), []byte(workflow2), 0o644)
+		require.NoError(t, err)
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+		// CI env variable ensures non-TTY detection.
+		t.Setenv("CI", "true")
+
+		cmd := createWorkflowCmd()
+		// Don't set --file flag - auto-discovery will find multiple matches.
+
+		args := []string{"duplicate-workflow"}
+		err = ExecuteWorkflowCmd(cmd, args)
+
+		// Should error with multiple matches message since we're in CI.
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrWorkflowNoWorkflow)
+		// Use Format to get the full formatted error including hints.
+		formattedErr := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+		assert.Contains(t, formattedErr, "Multiple workflow files")
 	})
 }

@@ -4,21 +4,9 @@
 ARG GEODESIC_VERSION=latest
 FROM cloudposse/geodesic:${GEODESIC_VERSION}
 
-# Install Atmos
-ARG ATMOS_VERSION=latest
-ARG TARGETARCH
-ARG TARGETOS=linux
-
-# Download and install Atmos binary
-RUN set -eux; \
-    ATMOS_INSTALL_PATH=/usr/local/bin/atmos; \
-    if [ "${ATMOS_VERSION}" = "latest" ]; then \
-      DOWNLOAD_URL="https://github.com/cloudposse/atmos/releases/latest/download/atmos_${TARGETOS}_${TARGETARCH}"; \
-    else \
-      DOWNLOAD_URL="https://github.com/cloudposse/atmos/releases/download/${ATMOS_VERSION}/atmos_${TARGETOS}_${TARGETARCH}"; \
-    fi; \
-    curl -fsSL "${DOWNLOAD_URL}" -o "${ATMOS_INSTALL_PATH}"; \
-    chmod +x "${ATMOS_INSTALL_PATH}"; \
+# Install Atmos using the official install script
+# This handles version detection and platform detection automatically
+RUN curl -fsSL https://atmos.tools/install.sh | bash && \
     atmos version
 
 # Set working directory
