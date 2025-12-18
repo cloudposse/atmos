@@ -467,30 +467,43 @@ type ShellConfig struct {
 }
 
 // CIConfig contains CI/CD integration configuration.
+// Uses provider-agnostic naming to support GitHub Actions, GitLab CI, and other providers.
 type CIConfig struct {
-	Enabled      bool              `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
-	Outputs      CIOutputsConfig   `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
-	StatusChecks CIStatusConfig    `yaml:"status_checks,omitempty" json:"status_checks,omitempty" mapstructure:"status_checks"`
-	PRComment    CIPRCommentConfig `yaml:"pr_comment,omitempty" json:"pr_comment,omitempty" mapstructure:"pr_comment"`
-	Templates    CITemplatesConfig `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
+	Enabled   bool              `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Output    CIOutputConfig    `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`
+	Summary   CISummaryConfig   `yaml:"summary,omitempty" json:"summary,omitempty" mapstructure:"summary"`
+	Checks    CIChecksConfig    `yaml:"checks,omitempty" json:"checks,omitempty" mapstructure:"checks"`
+	Comments  CICommentsConfig  `yaml:"comments,omitempty" json:"comments,omitempty" mapstructure:"comments"`
+	Templates CITemplatesConfig `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
 }
 
-// CIOutputsConfig configures CI output integration.
-type CIOutputsConfig struct {
-	GithubOutput bool `yaml:"github_output,omitempty" json:"github_output,omitempty" mapstructure:"github_output"`
-	JobSummary   bool `yaml:"job_summary,omitempty" json:"job_summary,omitempty" mapstructure:"job_summary"`
+// CIOutputConfig configures CI output variables for downstream jobs.
+// GitHub: $GITHUB_OUTPUT, GitLab: dotenv artifacts.
+type CIOutputConfig struct {
+	Enabled   bool     `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Variables []string `yaml:"variables,omitempty" json:"variables,omitempty" mapstructure:"variables"`
 }
 
-// CIStatusConfig configures CI status check integration.
-type CIStatusConfig struct {
+// CISummaryConfig configures CI job summary output.
+// GitHub: $GITHUB_STEP_SUMMARY, GitLab: job artifacts.
+type CISummaryConfig struct {
+	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
+}
+
+// CIChecksConfig configures CI commit status checks.
+// GitHub: Check Runs API, GitLab: Commit Status API.
+type CIChecksConfig struct {
 	Enabled       bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	ContextPrefix string `yaml:"context_prefix,omitempty" json:"context_prefix,omitempty" mapstructure:"context_prefix"`
 }
 
-// CIPRCommentConfig configures PR comment integration.
-type CIPRCommentConfig struct {
+// CICommentsConfig configures PR/MR comment integration.
+// GitHub: PR comments, GitLab: MR notes.
+type CICommentsConfig struct {
 	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Behavior string `yaml:"behavior,omitempty" json:"behavior,omitempty" mapstructure:"behavior"` // create, update, upsert
+	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 }
 
 // CITemplatesConfig configures CI summary templates per component type.

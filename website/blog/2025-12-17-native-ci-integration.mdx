@@ -5,6 +5,9 @@ authors: [osterman]
 tags: [feature]
 ---
 
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
 Atmos now has built-in CI integration that generates rich, tfcmt-style job summaries directly from `terraform plan` and `terraform apply`. No additional GitHub Actions required—just add `--ci` to your commands.
 
 <!--truncate-->
@@ -15,32 +18,20 @@ Previously, getting beautiful plan summaries in GitHub Actions required using se
 
 Now, Atmos handles everything natively. The same rich output you're used to—resource badges, collapsible diffs, terraform outputs—is generated directly by Atmos when running in CI mode.
 
-## Enabling CI Mode
+## What You Get
 
-CI mode activates when any of these conditions are met:
+- **Rich job summaries** with resource badges and collapsible diffs
+- **Live status checks** showing "Plan in progress" / "Plan complete"
+- **PR comments** with plan summaries
+- **Terraform outputs** exported to `$GITHUB_OUTPUT`
+- **Same command** works locally and in CI
 
-1. **Config setting**: `ci.enabled: true` in `atmos.yaml`
-2. **Environment detection**: Running in GitHub Actions (`GITHUB_ACTIONS=true`) or other CI environments (`CI=true`)
-3. **Explicit flag**: Using `--ci` on the command line
+## Quick Start
 
-```bash
-# Auto-detected in GitHub Actions
-atmos terraform plan mycomponent -s dev-us-east-1
+Here's a minimal workflow using [profiles](/cli/configuration/profiles) and [auth](/stacks/auth) with OIDC:
 
-# Force CI mode anywhere
-atmos terraform plan mycomponent -s dev-us-east-1 --ci
-```
-
-You can also enable it via environment variable:
-
-```bash
-export CI=true
-atmos terraform plan mycomponent -s dev-us-east-1
-```
-
-## Simple GitHub Actions Workflow
-
-Here's a minimal workflow that generates rich plan summaries:
+<Tabs>
+<TabItem value="workflow" label="GitHub Actions Workflow" default>
 
 ```yaml
 name: Terraform Plan
@@ -52,38 +43,53 @@ on:
 jobs:
   plan:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Atmos
-        uses: cloudposse/github-action-setup-atmos@v2
+      - uses: cloudposse/github-action-setup-atmos@v2
 
       - name: Terraform Plan
         run: atmos terraform plan mycomponent -s dev-us-east-1
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          ATMOS_PROFILE: ci
+          ATMOS_IDENTITY: plat-dev/admin
 ```
+
+</TabItem>
+<TabItem value="profile" label="profiles/ci/auth.yaml">
+
+```yaml
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      region: us-east-2
+      spec:
+        audience: sts.amazonaws.com
+
+  identities:
+    plat-dev/admin:
+      kind: aws/assume-role
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/acme-plat-gbl-dev-terraform
+```
+
+</TabItem>
+</Tabs>
 
 That's it. Atmos detects GitHub Actions automatically and writes the plan summary to `$GITHUB_STEP_SUMMARY`.
 
-## What You Get
+## Example Output
 
-The job summary includes:
+```markdown
+## 🔄 Plan: `vpc` in `dev-us-east-1`
 
-- **Status badges** - CREATE, CHANGE, REPLACE, DESTROY indicators at a glance
-- **Resource lists** - Collapsible sections showing exactly what will change
-- **Destroy warnings** - Prominent caution callouts when resources will be deleted
-- **Terraform outputs** - Table of output values after apply
-- **Reproduction command** - Easy copy-paste to run locally
-
-Example plan summary:
-
-```
-## Changes Found for `vpc` in `dev-us-east-1`
-
-[![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#)
-[![destroy](https://shields.io/badge/PLAN-DESTROY-critical?style=for-the-badge)](#)
+[![create](https://shields.io/badge/CREATE-3-success?style=for-the-badge)](#)
+[![destroy](https://shields.io/badge/DESTROY-1-critical?style=for-the-badge)](#)
 
 > [!CAUTION]
 > **Terraform will delete resources!**
@@ -101,90 +107,6 @@ Example plan summary:
 </details>
 ```
 
-## Apply Workflow
+## Learn More
 
-For apply, the workflow is just as simple:
-
-```yaml
-name: Terraform Apply
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  apply:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Atmos
-        uses: cloudposse/github-action-setup-atmos@v2
-
-      - name: Terraform Apply
-        run: atmos terraform apply mycomponent -s dev-us-east-1 -auto-approve
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-```
-
-## Matrix Strategy for Multiple Components
-
-Plan multiple components in parallel:
-
-```yaml
-jobs:
-  plan:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - component: vpc
-            stack: dev-us-east-1
-          - component: eks
-            stack: dev-us-east-1
-          - component: rds
-            stack: dev-us-east-1
-    steps:
-      - uses: actions/checkout@v4
-      - uses: cloudposse/github-action-setup-atmos@v2
-      - run: atmos terraform plan ${{ matrix.component }} -s ${{ matrix.stack }}
-```
-
-Each job gets its own summary section in the GitHub Actions UI.
-
-## Local Testing
-
-Test CI output locally by setting environment variables:
-
-```bash
-# Write summary to a file
-export ATMOS_CI_SUMMARY=/tmp/summary.md
-atmos terraform plan mycomponent -s dev --ci
-cat /tmp/summary.md
-
-# Or just view in terminal (writes to stderr)
-atmos terraform plan mycomponent -s dev --ci
-```
-
-## Configuration
-
-Enable CI integration globally in `atmos.yaml`:
-
-```yaml
-ci:
-  enabled: true  # Explicitly enable CI mode
-```
-
-When `ci.enabled: true` is set, Atmos will generate rich summaries and write to `$GITHUB_STEP_SUMMARY` automatically—even without the `--ci` flag.
-
-The precedence order is:
-1. `--ci` flag (highest priority)
-2. `CI` or `GITHUB_ACTIONS` environment variables
-3. `ci.enabled` in `atmos.yaml`
-
-## Get Started
-
-Native CI integration is available now. Simply upgrade Atmos and start using `--ci` or let it auto-detect your CI environment.
-
-For more details, see the [`atmos terraform plan`](/cli/commands/terraform/plan) and [`atmos terraform apply`](/cli/commands/terraform/apply) command documentation.
+For complete configuration options, permissions reference, and advanced workflows, see the [CI Integration documentation](/cli/configuration/ci).
