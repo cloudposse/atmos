@@ -1026,7 +1026,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/alecthomas/chroma/v2
     License: MIT
-    URL: https://github.com/alecthomas/chroma/blob/v2.21.0/COPYING
+    URL: https://github.com/alecthomas/chroma/blob/v2.21.1/COPYING
 
   - github.com/alecthomas/participle/v2/lexer
     License: MIT
