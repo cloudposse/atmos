@@ -330,7 +330,7 @@ func (s *Service) copyLocalToWorkdir(
 	return &WorkdirMetadata{
 		Component:   component,
 		SourceType:  SourceTypeLocal,
-		LocalPath:   componentPath,
+		Source:      componentPath,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		ContentHash: contentHash,

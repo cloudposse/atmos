@@ -53,7 +53,7 @@ func createTestWorkdir(t *testing.T, basePath, component, stack string) {
 		Component:   component,
 		Stack:       stack,
 		SourceType:  provWorkdir.SourceTypeLocal,
-		LocalPath:   "components/terraform/" + component,
+		Source:      "components/terraform/" + component,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 		ContentHash: "test123",

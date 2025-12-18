@@ -46,8 +46,8 @@ type WorkdirMetadata struct {
 	// SourceVersion is the version/ref used (for remote sources).
 	SourceVersion string `json:"source_version,omitempty"`
 
-	// LocalPath is the original local component path (for local sources).
-	LocalPath string `json:"local_path,omitempty"`
+	// Source is the original component source path (for local sources).
+	Source string `json:"source,omitempty"`
 
 	// CacheKey is the content-addressable cache key (for remote sources).
 	CacheKey string `json:"cache_key,omitempty"`
