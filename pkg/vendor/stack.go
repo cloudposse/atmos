@@ -44,7 +44,7 @@ func executeStackVendorInternal(
 	}
 
 	if len(stacksMap) == 0 {
-		return fmt.Errorf("%w '%s' or has no components", errors.ErrStackNotFound, stack)
+		return fmt.Errorf("%w: stack '%s' not found or has no components", errors.ErrStackNotFound, stack)
 	}
 
 	// 2. Extract components with vendor configs

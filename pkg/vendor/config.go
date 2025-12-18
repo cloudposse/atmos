@@ -286,7 +286,7 @@ func ReadAndProcessComponentVendorConfigFile(
 	}
 
 	if !dirExists {
-		return componentConfig, "", fmt.Errorf("%w:%s", ErrFolderNotFound, componentPath)
+		return componentConfig, "", fmt.Errorf("%w: %s", ErrFolderNotFound, componentPath)
 	}
 
 	componentConfigFile, err := findComponentConfigFile(componentPath, strings.TrimSuffix(cfg.ComponentVendorConfigFileName, ".yaml"))
@@ -321,5 +321,5 @@ func findComponentConfigFile(basePath, fileName string) (string, error) {
 			return configFilePath, nil
 		}
 	}
-	return "", fmt.Errorf("%w:%s", ErrComponentConfigFileNotFound, basePath)
+	return "", fmt.Errorf("%w: %s", ErrComponentConfigFileNotFound, basePath)
 }
