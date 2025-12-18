@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/charmbracelet/log"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hashicorp/go-getter"
 )
 
