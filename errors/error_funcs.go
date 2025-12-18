@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/viper"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -76,6 +77,7 @@ func GetMarkdownRenderer() *markdown.Renderer {
 }
 
 // printPlainError writes a plain-text error to stderr without Markdown formatting.
+// This is used as a fallback when the markdown renderer is not available.
 func printPlainError(title string, err error, suggestion string) {
 	if title != "" {
 		title = cases.Title(language.English).String(title)
@@ -86,6 +88,100 @@ func printPlainError(title string, err error, suggestion string) {
 	if suggestion != "" {
 		fmt.Fprintf(os.Stderr, "%s\n", suggestion)
 	}
+}
+
+// printStructuredPlainError extracts ErrorBuilder enrichments and prints them
+// in a structured plain text format. This is used when the markdown renderer
+// is not available (e.g., during early startup errors before config is loaded).
+func printStructuredPlainError(err error, title string, suggestion string) {
+	if title == "" {
+		title = "Error"
+	}
+	title = cases.Title(language.English).String(title)
+
+	// Print title and base error message.
+	fmt.Fprintf(os.Stderr, "\n%s: %v\n", title, err)
+
+	// Extract and print explanations (from WithDetail/WithExplanation).
+	printErrorDetails(err)
+
+	// Extract and print hints (skip TITLE: and EXAMPLE: prefixes).
+	printErrorHints(err)
+
+	// Extract and print context (from WithContext).
+	printErrorContext(err)
+
+	// Legacy suggestion fallback.
+	if suggestion != "" {
+		fmt.Fprintf(os.Stderr, "\n%s\n", suggestion)
+	}
+}
+
+// printErrorDetails prints the explanation section from error details.
+func printErrorDetails(err error) {
+	details := errors.GetAllDetails(err)
+	if len(details) == 0 {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "\nExplanation:\n")
+	for _, d := range details {
+		fmt.Fprintf(os.Stderr, "  • %s\n", d)
+	}
+}
+
+// printErrorHints prints the hints section, filtering out internal prefixes.
+func printErrorHints(err error) {
+	allHints := errors.GetAllHints(err)
+	var userHints []string
+	for _, h := range allHints {
+		if !strings.HasPrefix(h, "TITLE:") && !strings.HasPrefix(h, "EXAMPLE:") {
+			userHints = append(userHints, h)
+		}
+	}
+	if len(userHints) == 0 {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "\nHints:\n")
+	for _, h := range userHints {
+		fmt.Fprintf(os.Stderr, "  • %s\n", h)
+	}
+}
+
+// printErrorContext prints the context section from safe details.
+func printErrorContext(err error) {
+	contextPairs := extractContextPairs(err)
+	if len(contextPairs) == 0 {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "\nContext:\n")
+	for _, pair := range contextPairs {
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) == 2 {
+			fmt.Fprintf(os.Stderr, "  %s: %s\n", parts[0], parts[1])
+		}
+	}
+}
+
+// extractContextPairs extracts key=value pairs from error safe details.
+func extractContextPairs(err error) []string {
+	safeDetails := errors.GetAllSafeDetails(err)
+	if len(safeDetails) == 0 {
+		return nil
+	}
+
+	var contextPairs []string
+	for _, payload := range safeDetails {
+		// SafeDetails is a slice of strings with "key=value key2=value2" format.
+		for _, detail := range payload.SafeDetails {
+			// Split by space to get individual key=value pairs.
+			for _, pair := range strings.Split(detail, " ") {
+				if strings.Contains(pair, "=") {
+					contextPairs = append(contextPairs, pair)
+				}
+			}
+		}
+	}
+	return contextPairs
 }
 
 // CheckErrorAndPrint prints an error message.
@@ -184,9 +280,11 @@ func printFormattedError(err error, title string, suggestion string) {
 
 // printMarkdownError renders an error using the Markdown renderer with fallback to plain text.
 func printMarkdownError(err error, title string, suggestion string) {
-	// If markdown renderer is not initialized, fall back to plain error output.
+	// If markdown renderer is not initialized, fall back to structured plain error output.
+	// This extracts ErrorBuilder enrichments (hints, explanations, context) and displays
+	// them in a readable format, even for early startup errors before config is loaded.
 	if render == nil {
-		printPlainError(title, err, suggestion)
+		printStructuredPlainError(err, title, suggestion)
 		return
 	}
 
@@ -196,8 +294,8 @@ func printMarkdownError(err error, title string, suggestion string) {
 	title = cases.Title(language.English).String(title)
 	errorMarkdown, renderErr := render.RenderError(title, err.Error(), suggestion)
 	if renderErr != nil {
-		// Rendering failed - fall back to plain error output.
-		printPlainError(title, err, suggestion)
+		// Rendering failed - fall back to structured plain error output.
+		printStructuredPlainError(err, title, suggestion)
 		return
 	}
 	_, printErr := os.Stderr.WriteString(errorMarkdown + "\n")
