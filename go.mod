@@ -17,7 +17,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/adrg/xdg v0.5.3
 	github.com/agiledragon/gomonkey/v2 v2.13.0
-	github.com/alecthomas/chroma/v2 v2.21.0
+	github.com/alecthomas/chroma/v2 v2.21.1
 	github.com/alicebob/miniredis/v2 v2.35.0
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
