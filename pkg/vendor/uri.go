@@ -272,11 +272,6 @@ func appendDoubleSlashDot(uri string) string {
 }
 
 // normalizeVendorURI normalizes vendor source URIs to handle all patterns consistently.
-// It uses go-getter syntax where the double-slash (//) is a delimiter between the repository URL and the subdirectory path within that repository.
-// Dot (.) indicates the current directory (root of the repository).
-// Converts triple-slash (///) to double-slash-dot (//.) for root directory.
-// Adds //. to Git URLs without subdirectory delimiter.
-// Preserves existing valid patterns unchanged.
 //
 // Examples:
 //   - "github.com/repo.git///?ref=v1.0.0" -> "github.com/repo.git//.?ref=v1.0.0"
