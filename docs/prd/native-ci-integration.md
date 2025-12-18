@@ -193,36 +193,39 @@ import (
 
 ```
 pkg/ci/
-  ├── ci.go                    # Core Service orchestration
-  ├── provider.go              # Provider interface definition
-  ├── context.go               # Context struct (run ID, PR, SHA, etc.)
-  ├── status.go                # Status, BranchStatus, PRStatus, CheckStatus structs
-  ├── errors.go                # Sentinel errors
-  ├── output.go                # OutputWriter interface
-  ├── registry.go              # Provider registry (detect and select provider)
+  ├── check.go                 # CheckRun types and constants (✅ implemented)
+  ├── component_provider.go    # ComponentCIProvider interface (✅ implemented)
+  ├── component_registry.go    # Component provider registry (✅ implemented)
+  ├── context.go               # Context struct (run ID, PR, SHA, etc.) (✅ implemented)
+  ├── executor.go              # Execute() - unified action executor (✅ implemented)
+  ├── generic.go               # Generic CI provider fallback (✅ implemented)
+  ├── output.go                # OutputWriter interface (✅ implemented)
+  ├── provider.go              # Provider interface definition (✅ implemented)
+  ├── registry.go              # Provider registry (detect and select provider) (✅ implemented)
+  ├── status.go                # Status, BranchStatus, PRStatus, CheckStatus structs (✅ implemented)
   ├── planfile/                # Planfile artifact storage
-  │   ├── interface.go         # PlanfileStore interface
-  │   ├── registry.go          # Storage backend registry
-  │   ├── metadata.go          # Metadata struct (stored with planfile)
+  │   ├── interface.go         # PlanfileStore interface (✅ implemented)
+  │   ├── registry.go          # Storage backend registry (✅ implemented)
   │   ├── s3/
-  │   │   └── store.go         # S3 store (metadata in S3, no DynamoDB)
-  │   ├── azure/
-  │   │   └── store.go         # Azure Blob store
-  │   ├── gcs/
-  │   │   └── store.go         # GCS store
+  │   │   └── store.go         # S3 store (metadata in S3, no DynamoDB) (✅ implemented)
   │   ├── github/
-  │   │   ├── client.go        # GitHub Artifacts API v4 client
-  │   │   └── store.go         # GitHub Artifacts store
+  │   │   └── store.go         # GitHub Artifacts store (✅ implemented)
   │   └── local/
-  │       └── store.go         # Local filesystem (dev/testing)
-  └── github/                  # Implements ci.Provider for GitHub Actions
-      ├── provider.go          # GitHub Actions Provider
-      ├── client.go            # GitHub API client wrapper (uses go-github v59)
-      ├── status.go            # GetStatus, GetCombinedStatus, GetCheckRuns
-      ├── pulls.go             # GetPullRequestsForBranch, etc.
-      ├── user.go              # GetAuthenticatedUser
-      ├── output.go            # $GITHUB_OUTPUT, $GITHUB_STEP_SUMMARY writer
-      └── comment.go           # PR comment templates (tfcmt-inspired)
+  │       └── store.go         # Local filesystem (dev/testing) (✅ implemented)
+  ├── github/                  # Implements ci.Provider for GitHub Actions
+  │   ├── provider.go          # GitHub Actions Provider (✅ implemented)
+  │   ├── client.go            # GitHub API client wrapper (✅ implemented)
+  │   ├── checks.go            # Check runs API (✅ implemented)
+  │   └── status.go            # GetStatus, GetCombinedStatus (✅ implemented)
+  ├── terraform/               # Terraform-specific CI provider
+  │   ├── provider.go          # Terraform CI provider (✅ implemented)
+  │   ├── parser.go            # Parse plan/apply output (✅ implemented)
+  │   ├── context.go           # Terraform template context (✅ implemented)
+  │   └── templates/
+  │       ├── plan.md          # Default plan template (✅ implemented)
+  │       └── apply.md         # Default apply template (✅ implemented)
+  └── templates/
+      └── loader.go            # Template loading with override support (✅ implemented)
 ```
 
 ### Core Interfaces
@@ -608,50 +611,60 @@ jobs:
 
 ## Files to Create
 
-| File | Purpose |
-|------|---------|
-| **pkg/ci/** | |
-| `pkg/ci/ci.go` | Core Service orchestration |
-| `pkg/ci/provider.go` | Provider interface definition |
-| `pkg/ci/context.go` | Context struct (run ID, PR, SHA, etc.) |
-| `pkg/ci/status.go` | Status, BranchStatus, PRStatus, CheckStatus structs |
-| `pkg/ci/errors.go` | Sentinel errors |
-| `pkg/ci/output.go` | OutputWriter interface |
-| `pkg/ci/registry.go` | Provider registry (detect and select provider) |
-| **pkg/ci/planfile/** | |
-| `pkg/ci/planfile/interface.go` | PlanfileStore interface |
-| `pkg/ci/planfile/metadata.go` | Metadata struct |
-| `pkg/ci/planfile/registry.go` | Store registry |
-| `pkg/ci/planfile/s3/store.go` | S3 implementation |
-| `pkg/ci/planfile/azure/store.go` | Azure Blob implementation |
-| `pkg/ci/planfile/gcs/store.go` | GCS implementation |
-| `pkg/ci/planfile/github/client.go` | GitHub Artifacts API client |
-| `pkg/ci/planfile/github/store.go` | GitHub Artifacts store |
-| `pkg/ci/planfile/local/store.go` | Local filesystem store |
-| **pkg/ci/github/** | Implements `ci.Provider` interface for GitHub Actions |
-| `pkg/ci/github/provider.go` | GitHub Actions Provider (implements ci.Provider) |
-| `pkg/ci/github/client.go` | GitHub API client wrapper (uses go-github v59) |
-| `pkg/ci/github/status.go` | GetStatus, GetCombinedStatus, GetCheckRuns |
-| `pkg/ci/github/pulls.go` | GetPullRequestsForBranch, GetPullRequestsCreatedByUser, etc. |
-| `pkg/ci/github/user.go` | GetAuthenticatedUser for current user info |
-| `pkg/ci/github/output.go` | $GITHUB_OUTPUT, $GITHUB_STEP_SUMMARY writer |
-| `pkg/ci/github/comment.go` | PR comment templates (tfcmt-inspired) |
-| **cmd/terraform/planfile/** | New subcommand group (added to existing terraform command) |
-| `cmd/terraform/planfile/planfile.go` | Planfile command group (exported for terraform.go to add) |
-| `cmd/terraform/planfile/upload.go` | `atmos terraform planfile upload` |
-| `cmd/terraform/planfile/download.go` | `atmos terraform planfile download` |
-| `cmd/terraform/planfile/list.go` | `atmos terraform planfile list` |
-| `cmd/terraform/planfile/delete.go` | `atmos terraform planfile delete` |
-| `cmd/terraform/planfile/show.go` | `atmos terraform planfile show` |
-| **cmd/ci/** | New command group (uses command registry pattern) |
-| `cmd/ci/ci.go` | CI command group + CICommandProvider (registers via init()) |
-| `cmd/ci/status.go` | `atmos ci status` - show PR/commit status |
-| **pkg/hooks/** | |
-| `pkg/hooks/ci_upload.go` | CI upload hook command |
-| `pkg/hooks/ci_download.go` | CI download hook command |
-| `pkg/hooks/ci_comment.go` | CI comment hook command |
-| `pkg/hooks/ci_summary.go` | CI summary hook command |
-| `pkg/hooks/ci_output.go` | CI output hook command |
+| File | Purpose | Status |
+|------|---------|--------|
+| **pkg/ci/** | | |
+| `pkg/ci/provider.go` | Provider interface definition | ✅ Done |
+| `pkg/ci/context.go` | Context struct (run ID, PR, SHA, etc.) | ✅ Done |
+| `pkg/ci/status.go` | Status, BranchStatus, PRStatus, CheckStatus structs | ✅ Done |
+| `pkg/ci/output.go` | OutputWriter interface | ✅ Done |
+| `pkg/ci/registry.go` | Provider registry (detect and select provider) | ✅ Done |
+| `pkg/ci/check.go` | CheckRun types and constants | ✅ Done |
+| `pkg/ci/executor.go` | Execute() - unified action executor | ✅ Done |
+| `pkg/ci/generic.go` | Generic CI provider fallback | ✅ Done |
+| `pkg/ci/component_provider.go` | ComponentCIProvider interface | ✅ Done |
+| `pkg/ci/component_registry.go` | Component provider registry | ✅ Done |
+| **pkg/ci/planfile/** | | |
+| `pkg/ci/planfile/interface.go` | PlanfileStore interface | ✅ Done |
+| `pkg/ci/planfile/registry.go` | Store registry | ✅ Done |
+| `pkg/ci/planfile/s3/store.go` | S3 implementation | ✅ Done |
+| `pkg/ci/planfile/github/store.go` | GitHub Artifacts store | ✅ Done |
+| `pkg/ci/planfile/local/store.go` | Local filesystem store | ✅ Done |
+| `pkg/ci/planfile/azure/store.go` | Azure Blob implementation | ⏳ Phase 2 |
+| `pkg/ci/planfile/gcs/store.go` | GCS implementation | ⏳ Phase 2 |
+| **pkg/ci/github/** | Implements `ci.Provider` interface for GitHub Actions | |
+| `pkg/ci/github/provider.go` | GitHub Actions Provider (implements ci.Provider) | ✅ Done |
+| `pkg/ci/github/client.go` | GitHub API client wrapper (uses go-github v59) | ✅ Done |
+| `pkg/ci/github/status.go` | GetStatus, GetCombinedStatus, GetCheckRuns | ✅ Done |
+| `pkg/ci/github/checks.go` | Check runs API | ✅ Done |
+| `pkg/ci/github/pulls.go` | GetPullRequestsForBranch, GetPullRequestsCreatedByUser, etc. | ⏳ Phase 4 |
+| `pkg/ci/github/user.go` | GetAuthenticatedUser for current user info | ⏳ Phase 4 |
+| `pkg/ci/github/output.go` | $GITHUB_OUTPUT, $GITHUB_STEP_SUMMARY writer | ⏳ Phase 4 |
+| `pkg/ci/github/comment.go` | PR comment templates (tfcmt-inspired) | ⏳ Phase 4 |
+| **pkg/ci/terraform/** | Terraform-specific CI provider | |
+| `pkg/ci/terraform/provider.go` | Terraform CI provider | ✅ Done |
+| `pkg/ci/terraform/parser.go` | Parse plan/apply output | ✅ Done |
+| `pkg/ci/terraform/context.go` | Terraform template context | ✅ Done |
+| `pkg/ci/terraform/templates/plan.md` | Default plan template | ✅ Done |
+| `pkg/ci/terraform/templates/apply.md` | Default apply template | ✅ Done |
+| **pkg/ci/templates/** | Template loading system | |
+| `pkg/ci/templates/loader.go` | Template loading with override support | ✅ Done |
+| **cmd/terraform/planfile/** | New subcommand group (added to existing terraform command) | |
+| `cmd/terraform/planfile/planfile.go` | Planfile command group (exported for terraform.go to add) | ✅ Done |
+| `cmd/terraform/planfile/upload.go` | `atmos terraform planfile upload` | ✅ Done |
+| `cmd/terraform/planfile/download.go` | `atmos terraform planfile download` | ✅ Done |
+| `cmd/terraform/planfile/list.go` | `atmos terraform planfile list` | ✅ Done |
+| `cmd/terraform/planfile/delete.go` | `atmos terraform planfile delete` | ✅ Done |
+| `cmd/terraform/planfile/show.go` | `atmos terraform planfile show` | ✅ Done |
+| **cmd/ci/** | New command group (uses command registry pattern) | |
+| `cmd/ci/ci.go` | CI command group + CICommandProvider (registers via init()) | ✅ Done |
+| `cmd/ci/status.go` | `atmos ci status` - show PR/commit status | ✅ Done |
+| **pkg/hooks/** | | |
+| `pkg/hooks/ci_upload.go` | CI upload hook command | ⏳ Phase 3 |
+| `pkg/hooks/ci_download.go` | CI download hook command | ⏳ Phase 3 |
+| `pkg/hooks/ci_comment.go` | CI comment hook command | ⏳ Phase 3 |
+| `pkg/hooks/ci_summary.go` | CI summary hook command | ⏳ Phase 3 |
+| `pkg/hooks/ci_output.go` | CI output hook command | ⏳ Phase 3 |
 
 ## Files to Modify
 
@@ -826,8 +839,59 @@ Users currently using the GitHub Actions can migrate incrementally:
 - [tfcmt](https://github.com/suzuki-shunsuke/tfcmt) - Inspiration for PR comments
 - [GitHub Artifacts API v4](https://docs.github.com/en/actions/using-workflows/storing-workflow-data-as-artifacts)
 
+## Implementation Status
+
+| Phase | Description | Status | Completion |
+|-------|-------------|--------|------------|
+| **Phase 1** | Core Infrastructure | ✅ Complete | 100% |
+| | pkg/ci/ package structure | ✅ Done | |
+| | Provider interface and GitHub provider | ✅ Done | |
+| | Context and detection | ✅ Done | |
+| | Schema types in pkg/schema/ci.go | ✅ Done | |
+| | `atmos ci status` command | ✅ Done | |
+| **Phase 2** | Planfile Storage | 🔄 In Progress | ~70% |
+| | PlanfileStore interface | ✅ Done | |
+| | S3 store | ✅ Done | |
+| | GitHub Artifacts store | ✅ Done | |
+| | Local filesystem store | ✅ Done | |
+| | Azure Blob store | ⏳ Not Started | |
+| | GCS store | ⏳ Not Started | |
+| | `atmos terraform planfile` commands | ✅ Done | |
+| **Phase 3** | Hook Integration | ⏳ Not Started | 0% |
+| | CI hook commands | ⏳ Not Started | |
+| | Register hooks in pkg/hooks/hooks.go | ⏳ Not Started | |
+| | Integrate into internal/exec/terraform.go | ⏳ Not Started | |
+| | `--verify-plan` using plan-diff | ⏳ Not Started | |
+| **Phase 4** | Outputs and Comments | ⏳ Not Started | 0% |
+| | $GITHUB_OUTPUT writer | ⏳ Not Started | |
+| | $GITHUB_STEP_SUMMARY writer | ⏳ Not Started | |
+| | PR comment templates | ⏳ Not Started | |
+| | Comment upsert behavior | ⏳ Not Started | |
+| | Terraform outputs export | ⏳ Not Started | |
+| **Phase 5** | Describe Affected Matrix | ⏳ Not Started | 0% |
+| | `--format=matrix` flag | ⏳ Not Started | |
+| | Matrix JSON output | ⏳ Not Started | |
+| **Phase 6** | Documentation | ⏳ Not Started | 0% |
+| | Archive old GitHub Actions docs | ⏳ Not Started | |
+| | Write new CI integration docs | ⏳ Not Started | |
+| | Update command reference docs | ⏳ Not Started | |
+
+### Additional Components Implemented (Beyond Original PRD)
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| Check types | `pkg/ci/check.go` | CheckRun types and constants |
+| Generic provider | `pkg/ci/generic.go` | Fallback CI provider for non-GitHub environments |
+| Component provider | `pkg/ci/component_provider.go` | ComponentCIProvider interface for terraform/helmfile |
+| Component registry | `pkg/ci/component_registry.go` | Registry for component-type providers |
+| Executor | `pkg/ci/executor.go` | Unified action executor |
+| Terraform provider | `pkg/ci/terraform/` | Terraform-specific CI behavior |
+| Template loader | `pkg/ci/templates/loader.go` | Template loading with override support |
+| GitHub checks | `pkg/ci/github/checks.go` | GitHub check runs API |
+
 ## Changelog
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.1 | 2025-12-18 | Updated PRD with implementation status, documented additional components |
 | 1.0 | 2025-12-17 | Initial PRD |
