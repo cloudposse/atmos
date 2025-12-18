@@ -46,8 +46,8 @@ $ kubectl get pods
 $ atmos auth login dev-admin
 # Kubeconfig automatically configured for all linked EKS clusters
 
-# Or explicit cluster setup
-$ atmos auth eks-kubeconfig dev/eks
+# Or explicit cluster setup using existing atmos aws command
+$ atmos aws eks update-kubeconfig dev/eks
 
 # Ready to use kubectl
 $ kubectl get pods
@@ -60,7 +60,7 @@ $ kubectl get pods
 3. **XDG compliance**: Store kubeconfig in XDG-compliant locations (`~/.config/atmos/kube/config`)
 4. **Merge support**: Append cluster configurations to existing kubeconfig without overwriting
 5. **Multiple clusters**: Support multiple EKS integrations linking to the same identity
-6. **Explicit command**: Provide `atmos auth eks-kubeconfig` for manual/ad-hoc kubeconfig setup
+6. **Enhance existing command**: Update `atmos aws eks update-kubeconfig` to use Go SDK and support integrations
 7. **Non-blocking failures**: Integration failures during login should warn, not fail authentication
 8. **Testability**: Design for unit testing with mocked AWS clients
 
@@ -132,11 +132,20 @@ type EKSCluster struct {
     // Alias is the context name in kubeconfig (optional, defaults to cluster ARN).
     Alias string `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
 
-    // KubeconfigPath is a custom kubeconfig file path (optional, defaults to XDG path).
-    KubeconfigPath string `yaml:"kubeconfig_path,omitempty" json:"kubeconfig_path,omitempty" mapstructure:"kubeconfig_path"`
+    // Kubeconfig contains kubeconfig file settings (optional).
+    Kubeconfig *KubeconfigSettings `yaml:"kubeconfig,omitempty" json:"kubeconfig,omitempty" mapstructure:"kubeconfig"`
+}
 
-    // Merge determines whether to merge into existing kubeconfig (default: true).
-    Merge *bool `yaml:"merge,omitempty" json:"merge,omitempty" mapstructure:"merge"`
+// KubeconfigSettings configures kubeconfig file behavior.
+type KubeconfigSettings struct {
+    // Path is a custom kubeconfig file path (optional, defaults to XDG path).
+    Path string `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`
+
+    // Mode is the file permission mode (optional, defaults to "0600").
+    Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+
+    // Update determines how to handle existing kubeconfig: "merge" (default), "replace", or "error".
+    Update string `yaml:"update,omitempty" json:"update,omitempty" mapstructure:"update"`
 }
 ```
 
@@ -182,7 +191,6 @@ auth:
           name: dev-cluster
           region: us-east-2
           alias: dev-eks
-          merge: true
 
     # Multiple clusters can link to the same identity
     staging/eks:
@@ -247,7 +255,7 @@ func DescribeCluster(ctx context.Context, creds *types.AWSCredentials, clusterNa
 
 #### Output Format
 
-The generated kubeconfig follows the standard format produced by `aws eks update-kubeconfig`:
+The generated kubeconfig follows the standard format produced by `aws eks update-kubeconfig`. This includes the exec credential plugin configuration that kubectl uses to obtain authentication tokens:
 
 ```yaml
 apiVersion: v1
@@ -277,6 +285,8 @@ users:
       - --region
       - us-east-2
 ```
+
+**Note:** The `exec` section in the users configuration is exactly what `aws eks update-kubeconfig` generates. This exec credential plugin allows kubectl to dynamically obtain short-lived tokens using AWS credentials.
 
 #### Exec Credential Plugin
 
@@ -309,53 +319,61 @@ func GetDefaultKubeconfigPath() (string, error) {
 
 #### Environment Variable Integration
 
-After writing kubeconfig, users can set `KUBECONFIG` to use it:
+The `KUBECONFIG` environment variable is automatically included in the auth environment. Users can export all auth environment variables at once:
 
 ```bash
-export KUBECONFIG=$(atmos auth env --format=value KUBECONFIG)
+eval $(atmos auth env --format=export)
 kubectl get pods
 ```
 
-Or Atmos can set it automatically during `atmos auth shell`:
+Or use `atmos auth shell` which sets all auth environment variables automatically:
 
 ```bash
 atmos auth shell
-# KUBECONFIG is set to Atmos-managed path
+# All auth environment variables set, including KUBECONFIG
 kubectl get pods
 ```
 
 ### CLI Command
 
-#### Command: `atmos auth eks-kubeconfig`
+#### Command: `atmos aws eks update-kubeconfig`
+
+The existing `atmos aws eks update-kubeconfig` command will be enhanced to:
+1. Use AWS Go SDK instead of shelling out to AWS CLI
+2. Support named integrations from `auth.integrations`
+3. Use Atmos-managed AWS credentials when available
 
 ```
-atmos auth eks-kubeconfig [integration] [flags]
+atmos aws eks update-kubeconfig [component] [flags]
 
-Generate kubeconfig for AWS EKS clusters using a named integration or identity.
+Generate or update kubeconfig for AWS EKS clusters.
 
 Usage:
-  atmos auth eks-kubeconfig [integration]     Use named integration
-  atmos auth eks-kubeconfig --identity <id>   Use identity's linked integrations
-  atmos auth eks-kubeconfig --cluster <name>  Explicit cluster (uses current AWS creds)
+  atmos aws eks update-kubeconfig [component]           Use component's EKS config
+  atmos aws eks update-kubeconfig --integration <name>  Use named integration
+  atmos aws eks update-kubeconfig --name <cluster>      Explicit cluster name
 
 Flags:
-  -i, --identity string      Identity whose linked EKS integrations to execute
-  -c, --cluster string       EKS cluster name (explicit mode)
-  -r, --region string        AWS region (explicit mode)
-  -a, --alias string         Context alias in kubeconfig
-  -k, --kubeconfig string    Custom kubeconfig path
-      --merge                Merge into existing kubeconfig (default true)
-      --no-merge             Replace existing kubeconfig
+  -s, --stack string         Stack name (with component)
+      --integration string   Named integration from auth.integrations
+      --name string          EKS cluster name (explicit mode)
+      --region string        AWS region
+      --profile string       AWS profile
+      --role-arn string      IAM role ARN to assume
+      --alias string         Context alias in kubeconfig
+      --kubeconfig string    Custom kubeconfig path
+      --dry-run              Print kubeconfig to stdout instead of writing
+      --verbose              Print detailed output
 
 Examples:
+  # Using a component (existing behavior, now with Go SDK)
+  atmos aws eks update-kubeconfig eks-cluster -s dev-use2
+
   # Using a named integration
-  atmos auth eks-kubeconfig dev/eks
+  atmos aws eks update-kubeconfig --integration dev/eks
 
-  # Using an identity's linked integrations
-  atmos auth eks-kubeconfig --identity dev-admin
-
-  # Explicit cluster (uses current AWS credentials)
-  atmos auth eks-kubeconfig --cluster dev-cluster --region us-east-2 --alias dev
+  # Explicit cluster
+  atmos aws eks update-kubeconfig --name dev-cluster --region us-east-2 --alias dev
 ```
 
 ### Error Handling
@@ -381,7 +399,7 @@ var (
 | Context | Behavior |
 |---------|----------|
 | `atmos auth login` (auto-provision) | Warn and continue; don't fail authentication |
-| `atmos auth eks-kubeconfig` (explicit) | Return error to user |
+| `atmos aws eks update-kubeconfig` (explicit) | Return error to user |
 | Invalid configuration | Validation error during config load |
 
 ## Implementation Details
@@ -392,7 +410,7 @@ var (
 pkg/auth/
   cloud/
     aws/
-      eks.go              # NEW: EKS SDK wrapper
+      eks.go              # NEW: EKS SDK wrapper (DescribeCluster)
       eks_test.go         # NEW: Unit tests
     kube/
       config.go           # NEW: Kubeconfig manager
@@ -405,7 +423,11 @@ pkg/auth/
       eks_test.go         # NEW: Unit tests
 
 cmd/
-  auth_eks_kubeconfig.go  # NEW: CLI command
+  aws_eks_update_kubeconfig.go       # MODIFY: Use Go SDK, add --integration flag
+  aws_eks_update_kubeconfig_test.go  # MODIFY: Update tests
+
+internal/exec/
+  aws_eks_update_kubeconfig.go       # MODIFY: Use Go SDK instead of shelling out
 ```
 
 ### Core Components
@@ -428,11 +450,13 @@ cmd/
 - `Execute()` - DescribeCluster + write kubeconfig
 - Validates configuration during construction
 
-#### 4. CLI Command (`cmd/auth_eks_kubeconfig.go`)
+#### 4. Enhanced CLI Command (`cmd/aws_eks_update_kubeconfig.go`)
 
-- Three modes: named integration, identity flag, explicit cluster
-- Flag handling for kubeconfig options
-- Output success message with context name
+- Existing component/stack mode (backward compatible)
+- New integration mode via `--integration` flag
+- Explicit cluster mode via `--name` flag
+- Uses Go SDK instead of shelling to AWS CLI
+- Leverages Atmos-managed credentials when available
 
 ## Testing Strategy
 
@@ -460,10 +484,11 @@ cmd/
 - Test missing via.identity
 - Test Execute with mock credentials
 
-**CLI Command (`cmd/auth_eks_kubeconfig_test.go`):**
+**CLI Command (`cmd/aws_eks_update_kubeconfig_test.go`):**
 - Use `cmd.NewTestKit(t)` for command isolation
-- Test flag parsing
-- Test argument validation
+- Test backward compatibility with component/stack mode
+- Test new `--integration` flag
+- Test flag parsing and argument validation
 - Test help output
 
 ### Integration Tests
@@ -575,8 +600,10 @@ auth:
         cluster:
           name: dev-cluster
           region: us-east-2
-          kubeconfig_path: /home/user/.kube/atmos-config
-          merge: false  # Replace, don't merge
+          kubeconfig:
+            path: /home/user/.kube/atmos-config
+            mode: "0600"
+            update: replace  # merge | replace | error
 ```
 
 ## Success Metrics
@@ -617,3 +644,4 @@ auth:
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2025-12-17 | AI Assistant | Initial PRD |
+| 1.1 | 2025-12-18 | AI Assistant | Updated based on review: CLI uses `atmos aws eks` namespace, improved kubeconfig schema structure, clarified exec plugin format |
