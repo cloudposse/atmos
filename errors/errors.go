@@ -812,6 +812,7 @@ var (
 	ErrPlanfileDeleteFailed   = errors.New("failed to delete planfile")
 	ErrPlanfileListFailed     = errors.New("failed to list planfiles")
 	ErrPlanfileStoreNotFound  = errors.New("planfile store not found")
+	ErrPlanfileKeyInvalid     = errors.New("planfile key generation failed: stack, component, and SHA are required")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

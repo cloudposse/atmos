@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestDefaultKeyPattern(t *testing.T) {
@@ -13,10 +15,11 @@ func TestDefaultKeyPattern(t *testing.T) {
 
 func TestKeyPatternGenerateKey(t *testing.T) {
 	tests := []struct {
-		name     string
-		pattern  string
-		ctx      *KeyContext
-		expected string
+		name        string
+		pattern     string
+		ctx         *KeyContext
+		expected    string
+		expectError bool
 	}{
 		{
 			name:    "default pattern",
@@ -39,17 +42,17 @@ func TestKeyPatternGenerateKey(t *testing.T) {
 			expected: "feature-branch/plat-ue2-dev/vpc.tfplan",
 		},
 		{
-			name:    "empty values stay as placeholders",
+			name:    "missing required SHA returns error",
 			pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan",
 			ctx: &KeyContext{
 				Stack:     "plat-ue2-dev",
 				Component: "vpc",
 				// SHA is empty
 			},
-			expected: "plat-ue2-dev/vpc/{{ .SHA }}.tfplan",
+			expectError: true,
 		},
 		{
-			name:    "component path",
+			name:    "component path without required fields",
 			pattern: "{{ .ComponentPath }}/{{ .SHA }}.tfplan",
 			ctx: &KeyContext{
 				ComponentPath: "components/terraform/vpc",
@@ -57,14 +60,29 @@ func TestKeyPatternGenerateKey(t *testing.T) {
 			},
 			expected: "components/terraform/vpc/abc123.tfplan",
 		},
+		{
+			name:    "optional fields can be empty",
+			pattern: "{{ .Stack }}/{{ .Component }}/{{ .BaseSHA }}.tfplan",
+			ctx: &KeyContext{
+				Stack:     "plat-ue2-dev",
+				Component: "vpc",
+				// BaseSHA is optional, can be empty
+			},
+			expected: "plat-ue2-dev/vpc/.tfplan",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pattern := KeyPattern{Pattern: tt.pattern}
 			key, err := pattern.GenerateKey(tt.ctx)
-			assert.NoError(t, err)
-			assert.Equal(t, tt.expected, key)
+			if tt.expectError {
+				assert.ErrorIs(t, err, errUtils.ErrPlanfileKeyInvalid)
+				assert.Empty(t, key)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, key)
+			}
 		})
 	}
 }

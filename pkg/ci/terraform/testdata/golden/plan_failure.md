@@ -1,7 +1,7 @@
 
 ## Plan Failed for `broken` in `dev`
 [![failed](https://shields.io/badge/PLAN-FAILED-ff0000?style=for-the-badge)](#user-content-result-dev-broken)
-<details><summary><a id="result-dev-broken" />:warning: Error summary</summary>
+<details><summary><a id="user-content-result-dev-broken" />:warning: Error summary</summary>
 
 <br/>
 To reproduce this locally, run:<br/><br/>

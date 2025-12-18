@@ -12,9 +12,9 @@
 {{- end }}
 
 {{- if .Result.HasErrors }}
-<details><summary><a id="result-{{$target}}" />:warning: Error summary</summary>
+<details><summary><a id="user-content-result-{{$target}}" />:warning: Error summary</summary>
 {{- else }}
-<details><summary><a id="result-{{$target}}" />{{if .HasChanges}}Resources: {{.Resources.Create}} added, {{.Resources.Change}} changed, {{.Resources.Destroy}} destroyed{{else}}No changes applied{{end}}</summary>
+<details><summary><a id="user-content-result-{{$target}}" />{{if .HasChanges}}Resources: {{.Resources.Create}} added, {{.Resources.Change}} changed, {{.Resources.Destroy}} destroyed{{else}}No changes applied{{end}}</summary>
 {{- end }}
 
 <br/>
@@ -35,7 +35,7 @@ atmos terraform apply {{.Component}} -s {{.Stack}}
 {{- end }}
 {{- end }}
 
-<details><summary><a id="apply-{{$target}}" />Terraform <strong>Apply</strong> Summary</summary>
+<details><summary><a id="user-content-apply-{{$target}}" />Terraform <strong>Apply</strong> Summary</summary>
 
 ```hcl
 {{ .Output }}

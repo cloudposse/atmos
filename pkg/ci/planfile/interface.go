@@ -3,8 +3,10 @@ package planfile
 import (
 	"context"
 	"io"
+	"strings"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -145,8 +147,15 @@ type KeyContext struct {
 }
 
 // GenerateKey generates a planfile key from the context using the pattern.
+// Returns an error if required fields (Stack, Component, SHA) are empty when
+// they are used in the pattern.
 func (p KeyPattern) GenerateKey(ctx *KeyContext) (string, error) {
 	defer perf.Track(nil, "planfile.GenerateKey")()
+
+	// Validate required fields based on pattern usage.
+	if err := validateKeyContext(p.Pattern, ctx); err != nil {
+		return "", err
+	}
 
 	// Simple template replacement for now.
 	// In a full implementation, we'd use text/template.
@@ -161,12 +170,26 @@ func (p KeyPattern) GenerateKey(ctx *KeyContext) (string, error) {
 	}
 
 	for placeholder, value := range replacements {
-		if value != "" {
-			key = replaceAll(key, placeholder, value)
-		}
+		// Replace all occurrences, even if value is empty (after validation).
+		key = replaceAll(key, placeholder, value)
 	}
 
 	return key, nil
+}
+
+// validateKeyContext validates that required fields are present for the pattern.
+func validateKeyContext(pattern string, ctx *KeyContext) error {
+	// Check required fields based on their presence in the pattern.
+	if strings.Contains(pattern, "{{ .Stack }}") && ctx.Stack == "" {
+		return errUtils.ErrPlanfileKeyInvalid
+	}
+	if strings.Contains(pattern, "{{ .Component }}") && ctx.Component == "" {
+		return errUtils.ErrPlanfileKeyInvalid
+	}
+	if strings.Contains(pattern, "{{ .SHA }}") && ctx.SHA == "" {
+		return errUtils.ErrPlanfileKeyInvalid
+	}
+	return nil
 }
 
 // replaceAll replaces all occurrences of old with new in s.

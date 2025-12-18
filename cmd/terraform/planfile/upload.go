@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/planfile"
@@ -16,6 +17,7 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/ci/planfile/local"
 	_ "github.com/cloudposse/atmos/pkg/ci/planfile/s3"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -53,20 +55,14 @@ func runUpload(cmd *cobra.Command, args []string) error {
 
 	planfilePath := args[0]
 
-	// Load atmos configuration.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	// Initialize configuration with global flags.
+	atmosConfig, err := initAtmosConfig(cmd)
 	if err != nil {
 		return err
 	}
 
-	// Get the storage configuration.
-	storeOpts, err := getStoreOptions(&atmosConfig, uploadStore)
-	if err != nil {
-		return err
-	}
-
-	// Create the store.
-	store, err := planfile.NewStore(storeOpts)
+	// Create planfile store.
+	store, err := createStore(&atmosConfig, uploadStore)
 	if err != nil {
 		return err
 	}
@@ -78,26 +74,11 @@ func runUpload(cmd *cobra.Command, args []string) error {
 	}
 	defer f.Close()
 
-	// Build metadata.
-	metadata := &planfile.Metadata{
-		Stack:     uploadStack,
-		Component: uploadComponent,
-		SHA:       uploadSHA,
-		CreatedAt: time.Now(),
-	}
-
-	// Generate key if not provided.
-	key := uploadKey
-	if key == "" {
-		keyPattern := planfile.DefaultKeyPattern()
-		key, err = keyPattern.GenerateKey(&planfile.KeyContext{
-			Stack:     uploadStack,
-			Component: uploadComponent,
-			SHA:       uploadSHA,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to generate planfile key: %w", err)
-		}
+	// Build metadata and generate key.
+	metadata := buildUploadMetadata()
+	key, err := resolveUploadKey()
+	if err != nil {
+		return err
 	}
 
 	// Upload.
@@ -108,6 +89,57 @@ func runUpload(cmd *cobra.Command, args []string) error {
 
 	_ = ui.Success(fmt.Sprintf("Uploaded planfile to %s: %s", store.Name(), key))
 	return nil
+}
+
+// initAtmosConfig initializes Atmos configuration with global flags.
+func initAtmosConfig(cmd *cobra.Command) (schema.AtmosConfiguration, error) {
+	v := viper.GetViper()
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
+	}
+
+	return cfg.InitCliConfig(configAndStacksInfo, true)
+}
+
+// createStore creates a planfile store from configuration.
+func createStore(atmosConfig *schema.AtmosConfiguration, storeName string) (planfile.Store, error) {
+	storeOpts, err := getStoreOptions(atmosConfig, storeName)
+	if err != nil {
+		return nil, err
+	}
+	return planfile.NewStore(storeOpts)
+}
+
+// buildUploadMetadata creates metadata for the planfile upload.
+func buildUploadMetadata() *planfile.Metadata {
+	return &planfile.Metadata{
+		Stack:     uploadStack,
+		Component: uploadComponent,
+		SHA:       uploadSHA,
+		CreatedAt: time.Now(),
+	}
+}
+
+// resolveUploadKey returns the upload key, generating one if not provided.
+func resolveUploadKey() (string, error) {
+	if uploadKey != "" {
+		return uploadKey, nil
+	}
+	keyPattern := planfile.DefaultKeyPattern()
+	key, err := keyPattern.GenerateKey(&planfile.KeyContext{
+		Stack:     uploadStack,
+		Component: uploadComponent,
+		SHA:       uploadSHA,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to generate planfile key: %w", err)
+	}
+	return key, nil
 }
 
 // getStoreOptions builds StoreOptions from atmos configuration.
