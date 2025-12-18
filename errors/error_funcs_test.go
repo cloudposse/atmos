@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -124,8 +125,13 @@ func TestCheckErrorPrintAndExit_ExitCodeError(t *testing.T) {
 
 func TestCheckErrorPrintAndExit_ExecExitError(t *testing.T) {
 	if os.Getenv("TEST_EXEC_EXIT") == "1" {
-		// Create an exec.ExitError
-		cmd := exec.Command("sh", "-c", "exit 3")
+		// Create an exec.ExitError using platform-appropriate command.
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command("cmd", "/C", "exit 3")
+		} else {
+			cmd = exec.Command("sh", "-c", "exit 3")
+		}
 		err := cmd.Run()
 		CheckErrorPrintAndExit(err, "Exec Error", "")
 		return
