@@ -26,6 +26,10 @@ import (
 const errWrapFormat = "%w: %w"
 
 func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
+	return runHooksWithOutput(event, cmd_, args, "")
+}
+
+func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, output string) error {
 	// Build args for ProcessCommandLineArgs.
 	// Note: Double-dash processing is handled by AtmosFlagParser in terraformRun (RunE).
 	// Hooks run in PostRunE after terraformRun has already parsed and executed.
@@ -37,12 +41,13 @@ func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Initialize the CLI config
+	// Initialize the CLI config.
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return errors.Join(errUtils.ErrInitializeCLIConfig, err)
 	}
 
+	// Run user-defined hooks from stack configuration.
 	hooks, err := h.GetHooks(&atmosConfig, &info)
 	if err != nil {
 		return errors.Join(errUtils.ErrGetHooks, err)
@@ -54,6 +59,17 @@ func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
+	}
+
+	// Check for --ci flag or CI environment variable.
+	// The flag is registered via TerraformFlags() which includes CI env var binding.
+	forceCIMode := viper.GetBool("ci")
+
+	// Run CI hooks based on component provider bindings.
+	// This is separate from user-defined hooks and runs automatically when CI is enabled.
+	if err := h.RunCIHooks(event, &atmosConfig, &info, output, forceCIMode); err != nil {
+		log.Warn("CI hook execution failed", "error", err)
+		// Don't fail the command on CI hook errors.
 	}
 
 	return nil

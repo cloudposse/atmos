@@ -793,6 +793,25 @@ var (
 	// Identity authentication errors.
 	ErrIdentityAuthFailed      = errors.New("failed to authenticate identity")
 	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
+
+	// CI-related errors.
+	ErrCIDisabled             = errors.New("CI integration is disabled")
+	ErrCIProviderNotDetected  = errors.New("CI provider not detected")
+	ErrCIProviderNotFound     = errors.New("CI provider not found")
+	ErrCICheckRunCreateFailed = errors.New("failed to create check run")
+	ErrCICheckRunUpdateFailed = errors.New("failed to update check run")
+	ErrCIStatusFetchFailed    = errors.New("failed to fetch CI status")
+	ErrCIOutputWriteFailed    = errors.New("failed to write CI output")
+	ErrCISummaryWriteFailed   = errors.New("failed to write CI summary")
+	ErrGitHubTokenNotFound    = errors.New("GitHub token not found")
+
+	// Planfile storage errors.
+	ErrPlanfileNotFound       = errors.New("planfile not found")
+	ErrPlanfileUploadFailed   = errors.New("failed to upload planfile")
+	ErrPlanfileDownloadFailed = errors.New("failed to download planfile")
+	ErrPlanfileDeleteFailed   = errors.New("failed to delete planfile")
+	ErrPlanfileListFailed     = errors.New("failed to list planfiles")
+	ErrPlanfileStoreNotFound  = errors.New("planfile store not found")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
