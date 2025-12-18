@@ -1,9 +1,8 @@
-package exec
+package vendor
 
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -12,103 +11,44 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hairyhenderson/gomplate/v3"
-	"github.com/jfrog/jfrog-client-go/utils/log"
 	cp "github.com/otiai10/copy"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// createTempDir creates a temporary directory for vendor operations.
+func createTempDir() (string, error) {
+	// Create temp directory
+	tempDir, err := os.MkdirTemp("", "atmos-vendor")
+	if err != nil {
+		return "", err
+	}
+
+	// Ensure directory permissions are restricted
+	if err := os.Chmod(tempDir, 0o700); err != nil {
+		return "", err
+	}
+
+	return tempDir, nil
+}
+
+// removeTempDir removes a temporary directory.
+func removeTempDir(path string) {
+	if err := os.RemoveAll(path); err != nil {
+		log.Warn(err.Error())
+	}
+}
+
 const ociScheme = "oci://"
 
-var (
-	ErrMissingMixinURI             = errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
-	ErrMissingMixinFilename        = errors.New("'filename' must be specified for each 'mixin' in the 'component.yaml' file")
-	ErrMixinEmpty                  = errors.New("mixin URI cannot be empty")
-	ErrMixinNotImplemented         = errors.New("local mixin installation not implemented")
-	ErrStackPullNotSupported       = errors.New("command 'atmos vendor pull --stack <stack>' is not supported yet")
-	ErrComponentConfigFileNotFound = errors.New("component vendoring config file does not exist in the folder")
-	ErrFolderNotFound              = errors.New("folder does not exist")
-	ErrInvalidComponentKind        = errors.New("invalid 'kind' in the component vendoring config file. Supported kinds: 'ComponentVendorConfig'")
-	ErrUriMustSpecified            = errors.New("'uri' must be specified in 'source.uri' in the component vendoring config file")
-)
-
+// ComponentSkipFunc is a function type for skipping files during copy operations.
 type ComponentSkipFunc func(os.FileInfo, string, string) (bool, error)
-
-// findComponentConfigFile identifies the component vendoring config file (`component.yaml` or `component.yml`).
-func findComponentConfigFile(basePath, fileName string) (string, error) {
-	componentConfigExtensions := []string{"yaml", "yml"}
-
-	for _, ext := range componentConfigExtensions {
-		configFilePath := filepath.Join(basePath, fmt.Sprintf("%s.%s", fileName, ext))
-		if u.FileExists(configFilePath) {
-			return configFilePath, nil
-		}
-	}
-	return "", fmt.Errorf("%w:%s", ErrComponentConfigFileNotFound, basePath)
-}
-
-// ReadAndProcessComponentVendorConfigFile reads and processes the component vendoring config file `component.yaml`.
-func ReadAndProcessComponentVendorConfigFile(
-	atmosConfig *schema.AtmosConfiguration,
-	component string,
-	componentType string,
-) (schema.VendorComponentConfig, string, error) {
-	defer perf.Track(atmosConfig, "exec.ReadAndProcessComponentVendorConfigFile")()
-
-	var componentBasePath string
-	var componentConfig schema.VendorComponentConfig
-
-	switch componentType {
-	case cfg.TerraformComponentType:
-		componentBasePath = atmosConfig.Components.Terraform.BasePath
-	case cfg.HelmfileComponentType:
-		componentBasePath = atmosConfig.Components.Helmfile.BasePath
-	case cfg.PackerComponentType:
-		componentBasePath = atmosConfig.Components.Packer.BasePath
-	default:
-		return componentConfig, "", fmt.Errorf("%s,%w", componentType, errUtils.ErrUnsupportedComponentType)
-	}
-
-	componentPath := filepath.Join(atmosConfig.BasePath, componentBasePath, component)
-
-	dirExists, err := u.IsDirectory(componentPath)
-	if err != nil {
-		return componentConfig, "", err
-	}
-
-	if !dirExists {
-		return componentConfig, "", fmt.Errorf("%w:%s", ErrFolderNotFound, componentPath)
-	}
-
-	componentConfigFile, err := findComponentConfigFile(componentPath, strings.TrimSuffix(cfg.ComponentVendorConfigFileName, ".yaml"))
-	if err != nil {
-		return componentConfig, "", err
-	}
-
-	componentConfigFileContent, err := os.ReadFile(componentConfigFile)
-	if err != nil {
-		return componentConfig, "", err
-	}
-
-	componentConfig, err = u.UnmarshalYAML[schema.VendorComponentConfig](string(componentConfigFileContent))
-	if err != nil {
-		return componentConfig, "", err
-	}
-
-	if componentConfig.Kind != "ComponentVendorConfig" {
-		return componentConfig, "", fmt.Errorf("%w: '%s' in file '%s'", ErrInvalidComponentKind, componentConfig.Kind, cfg.ComponentVendorConfigFileName)
-	}
-
-	return componentConfig, componentPath, nil
-}
 
 // ExecuteComponentVendorInternal executes the 'atmos vendor pull' command for a component.
 // Supports all protocols (local files, Git, Mercurial, HTTP, HTTPS, Amazon S3, Google GCP).
@@ -118,126 +58,6 @@ func ReadAndProcessComponentVendorConfigFile(
 // https://opencontainers.org/.
 // https://github.com/google/go-containerregistry.
 // https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html.
-
-// ExecuteStackVendorInternal executes the command to vendor an Atmos stack.
-// TODO: implement this.
-func ExecuteStackVendorInternal(
-	stack string,
-	dryRun bool,
-) error {
-	defer perf.Track(nil, "exec.ExecuteStackVendorInternal")()
-
-	return ErrStackPullNotSupported
-}
-
-func copyComponentToDestination(tempDir, componentPath string, vendorComponentSpec *schema.VendorComponentSpec, sourceIsLocalFile bool, uri string) error {
-	// Copy from the temp folder to the destination folder and skip the excluded files
-	copyOptions := cp.Options{
-		// Skip specifies which files should be skipped
-		Skip: createComponentSkipFunc(tempDir, vendorComponentSpec),
-
-		// Preserve the atime and the mtime of the entries
-		// On linux we can preserve only up to 1 millisecond accuracy
-		PreserveTimes: false,
-
-		// Preserve the uid and the gid of all entries
-		PreserveOwner: false,
-
-		// OnSymlink specifies what to do on symlink
-		// Override the destination file if it already exists
-		OnSymlink: func(src string) cp.SymlinkAction {
-			return cp.Deep
-		},
-
-		// OnDirExists handles existing directories at the destination.
-		// We skip .git directories from source, but if the destination already has a .git directory
-		// (from a previous vendor run), we need to leave it untouched to avoid permission errors
-		// on git packfiles which often have restrictive permissions.
-		OnDirExists: func(src, dest string) cp.DirExistsAction {
-			if filepath.Base(dest) == ".git" {
-				return cp.Untouchable
-			}
-			return cp.Merge
-		},
-	}
-
-	componentPath2 := componentPath
-	if sourceIsLocalFile {
-		if filepath.Ext(componentPath) == "" {
-			componentPath2 = filepath.Join(componentPath, SanitizeFileName(uri))
-		}
-	}
-
-	if err := cp.Copy(tempDir, componentPath2, copyOptions); err != nil {
-		return err
-	}
-	return nil
-}
-
-func createComponentSkipFunc(tempDir string, vendorComponentSpec *schema.VendorComponentSpec) ComponentSkipFunc {
-	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-		if filepath.Base(src) == ".git" {
-			return true, nil
-		}
-
-		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
-
-		// Exclude the files that match the 'excluded_paths' patterns
-		// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
-		// https://en.wikipedia.org/wiki/Glob_(programming)
-		// https://github.com/bmatcuk/doublestar#patterns
-		if len(vendorComponentSpec.Source.ExcludedPaths) > 0 {
-			return checkComponentExcludes(vendorComponentSpec.Source.ExcludedPaths, src, trimmedSrc)
-		}
-		// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
-		if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
-			return checkComponentIncludes(vendorComponentSpec.Source.IncludedPaths, src, trimmedSrc)
-		}
-
-		// If 'included_paths' is not provided, include all files that were not excluded
-		log.Debug("Including", u.TrimBasePathFromPath(tempDir+"/", src))
-		return false, nil
-	}
-}
-
-func checkComponentExcludes(excludePaths []string, src, trimmedSrc string) (bool, error) {
-	for _, excludePath := range excludePaths {
-		excludePath := filepath.Clean(excludePath)
-		excludeMatch, err := u.PathMatch(excludePath, src)
-		if err != nil {
-			return true, err
-		} else if excludeMatch {
-			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-			log.Debug("Excluding the file since it matches the '%s' pattern from 'excluded_paths'", "path", trimmedSrc, "excluded_paths", excludePath)
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func checkComponentIncludes(includePaths []string, src, trimmedSrc string) (bool, error) {
-	anyMatches := false
-	for _, includePath := range includePaths {
-		includePath := filepath.Clean(includePath)
-		includeMatch, err := u.PathMatch(includePath, src)
-		if err != nil {
-			return true, err
-		} else if includeMatch {
-			// If the file matches ANY of the 'included_paths' patterns, include the file
-			log.Debug("Including path since it matches the pattern from 'included_paths'\n", "path", trimmedSrc, "included_paths", includePath)
-			anyMatches = true
-			break
-		}
-	}
-
-	if anyMatches {
-		return false, nil
-	} else {
-		log.Debug("Excluding since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
-		return true, nil
-	}
-}
-
 func ExecuteComponentVendorInternal(
 	atmosConfig *schema.AtmosConfiguration,
 	vendorComponentSpec *schema.VendorComponentSpec,
@@ -245,15 +65,13 @@ func ExecuteComponentVendorInternal(
 	componentPath string,
 	dryRun bool,
 ) error {
-	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorInternal")()
-
 	if vendorComponentSpec.Source.Uri == "" {
-		return fmt.Errorf("%w:'%s'", ErrUriMustSpecified, cfg.ComponentVendorConfigFileName)
+		return fmt.Errorf("%w:'%s'", ErrUriMustSpecified, "component.yaml")
 	}
 	uri := vendorComponentSpec.Source.Uri
 	// Parse 'uri' template
 	if vendorComponentSpec.Source.Version != "" {
-		t, err := template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(getSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(vendorComponentSpec.Source.Uri)
+		t, err := template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(exec.GetSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(vendorComponentSpec.Source.Uri)
 		if err != nil {
 			return err
 		}
@@ -329,6 +147,7 @@ func handleLocalFileScheme(componentPath, uri string) (string, bool, bool) {
 	return uri, useLocalFileSystem, sourceIsLocalFile
 }
 
+// processComponentMixins processes mixins for a component.
 func processComponentMixins(vendorComponentSpec *schema.VendorComponentSpec, componentPath string) ([]pkgComponentVendor, error) {
 	var packages []pkgComponentVendor
 	for _, mixin := range vendorComponentSpec.Mixins {
@@ -362,7 +181,7 @@ func processComponentMixins(vendorComponentSpec *schema.VendorComponentSpec, com
 				uri = absPath
 			}
 		}
-		// Check if it's a local file .
+		// Check if it's a local file.
 		if absPath, err := u.JoinPathAndValidate(componentPath, uri); err == nil {
 			if u.FileExists(absPath) {
 				continue
@@ -386,12 +205,13 @@ func processComponentMixins(vendorComponentSpec *schema.VendorComponentSpec, com
 	return packages, nil
 }
 
+// parseMixinURI parses the mixin URI template.
 func parseMixinURI(mixin *schema.VendorComponentMixins) (string, error) {
 	if mixin.Version == "" {
 		return mixin.Uri, nil
 	}
 
-	tmpl, err := template.New("mixin-uri").Funcs(getSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(mixin.Uri)
+	tmpl, err := template.New("mixin-uri").Funcs(exec.GetSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(mixin.Uri)
 	if err != nil {
 		return "", err
 	}
@@ -404,62 +224,7 @@ func parseMixinURI(mixin *schema.VendorComponentMixins) (string, error) {
 	return tpl.String(), nil
 }
 
-func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
-	return func() tea.Msg {
-		if dryRun {
-			if needsCustomDetection(p.uri) {
-				log.Debug("Dry-run mode: custom detection required for component (or mixin) URI", "component", p.name, "uri", p.uri)
-				detector := downloader.NewCustomGitDetector(atmosConfig, "")
-				_, _, err := detector.Detect(p.uri, "")
-				if err != nil {
-					return installedPkgMsg{
-						err:  fmt.Errorf("dry-run: detection failed for component %s: %w", p.name, err),
-						name: p.name,
-					}
-				}
-			} else {
-				log.Debug("Dry-run mode: skipping custom detection; URI already supported by go-getter", "component", p.name, "uri", p.uri)
-			}
-			time.Sleep(100 * time.Millisecond)
-			return installedPkgMsg{
-				err:  nil,
-				name: p.name,
-			}
-		}
-
-		if p.IsComponent {
-			err := installComponent(p, atmosConfig)
-			if err != nil {
-				return installedPkgMsg{
-					err:  err,
-					name: p.name,
-				}
-			}
-			return installedPkgMsg{
-				err:  nil,
-				name: p.name,
-			}
-		}
-		if p.IsMixins {
-			err := installMixin(p, atmosConfig)
-			if err != nil {
-				return installedPkgMsg{
-					err:  err,
-					name: p.name,
-				}
-			}
-			return installedPkgMsg{
-				err:  nil,
-				name: p.name,
-			}
-		}
-		return installedPkgMsg{
-			err:  fmt.Errorf("%w %s for package %s", errUtils.ErrUnknownPackageType, p.pkgType.String(), p.name),
-			name: p.name,
-		}
-	}
-}
-
+// installComponent installs a component package.
 func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration) error {
 	// Create temp folder
 	// We are using a temp folder for the following reasons:
@@ -474,7 +239,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
+		tempDir = filepath.Join(tempDir, exec.SanitizeFileName(p.uri))
 
 		opts := []downloader.GoGetterOption{}
 		if p.vendorComponentSpec != nil && p.vendorComponentSpec.Source.Retry != nil {
@@ -486,7 +251,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		if err := processOciImage(atmosConfig, p.uri, tempDir); err != nil {
+		if err := exec.ProcessOciImage(atmosConfig, p.uri, tempDir); err != nil {
 			return fmt.Errorf("Failed to process OCI image %s error %w", p.name, err)
 		}
 
@@ -504,6 +269,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 	return nil
 }
 
+// handlePkgTypeLocalComponent handles local component package installation.
 func handlePkgTypeLocalComponent(tempDir string, p *pkgComponentVendor) error {
 	copyOptions := cp.Options{
 		PreserveTimes: false,
@@ -517,7 +283,7 @@ func handlePkgTypeLocalComponent(tempDir string, p *pkgComponentVendor) error {
 
 	tempDir2 := tempDir
 	if p.sourceIsLocalFile {
-		tempDir2 = filepath.Join(tempDir, SanitizeFileName(p.uri))
+		tempDir2 = filepath.Join(tempDir, exec.SanitizeFileName(p.uri))
 	}
 
 	if err := cp.Copy(p.uri, tempDir2, copyOptions); err != nil {
@@ -526,6 +292,7 @@ func handlePkgTypeLocalComponent(tempDir string, p *pkgComponentVendor) error {
 	return nil
 }
 
+// installMixin installs a mixin package.
 func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration) error {
 	tempDir, err := os.MkdirTemp("", "atmos-vendor-mixin")
 	if err != nil {
@@ -546,7 +313,7 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		err = processOciImage(atmosConfig, p.uri, tempDir)
+		err = exec.ProcessOciImage(atmosConfig, p.uri, tempDir)
 		if err != nil {
 			return fmt.Errorf("failed to process OCI image %s error %w", p.name, err)
 		}
@@ -595,4 +362,114 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 	}
 
 	return nil
+}
+
+// copyComponentToDestination copies component files to the destination.
+func copyComponentToDestination(tempDir, componentPath string, vendorComponentSpec *schema.VendorComponentSpec, sourceIsLocalFile bool, uri string) error {
+	// Copy from the temp folder to the destination folder and skip the excluded files
+	copyOptions := cp.Options{
+		// Skip specifies which files should be skipped
+		Skip: createComponentSkipFunc(tempDir, vendorComponentSpec),
+
+		// Preserve the atime and the mtime of the entries
+		// On linux we can preserve only up to 1 millisecond accuracy
+		PreserveTimes: false,
+
+		// Preserve the uid and the gid of all entries
+		PreserveOwner: false,
+
+		// OnSymlink specifies what to do on symlink
+		// Override the destination file if it already exists
+		OnSymlink: func(src string) cp.SymlinkAction {
+			return cp.Deep
+		},
+	}
+
+	componentPath2 := componentPath
+	if sourceIsLocalFile {
+		if filepath.Ext(componentPath) == "" {
+			componentPath2 = filepath.Join(componentPath, exec.SanitizeFileName(uri))
+		}
+	}
+
+	if err := cp.Copy(tempDir, componentPath2, copyOptions); err != nil {
+		return err
+	}
+	return nil
+}
+
+// createComponentSkipFunc creates a skip function for component copy operations.
+func createComponentSkipFunc(tempDir string, vendorComponentSpec *schema.VendorComponentSpec) ComponentSkipFunc {
+	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+		if filepath.Base(src) == ".git" {
+			return true, nil
+		}
+
+		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
+
+		// Exclude the files that match the 'excluded_paths' patterns
+		// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+		// https://en.wikipedia.org/wiki/Glob_(programming)
+		// https://github.com/bmatcuk/doublestar#patterns
+		if len(vendorComponentSpec.Source.ExcludedPaths) > 0 {
+			return checkComponentExcludes(vendorComponentSpec.Source.ExcludedPaths, src, trimmedSrc)
+		}
+		// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
+		if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
+			return checkComponentIncludes(vendorComponentSpec.Source.IncludedPaths, src, trimmedSrc)
+		}
+
+		// If 'included_paths' is not provided, include all files that were not excluded
+		log.Debug("Including", u.TrimBasePathFromPath(tempDir+"/", src))
+		return false, nil
+	}
+}
+
+// checkComponentExcludes checks if a file should be excluded.
+func checkComponentExcludes(excludePaths []string, src, trimmedSrc string) (bool, error) {
+	for _, excludePath := range excludePaths {
+		excludePath := filepath.Clean(excludePath)
+		excludeMatch, err := u.PathMatch(excludePath, src)
+		if err != nil {
+			return true, err
+		} else if excludeMatch {
+			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
+			log.Debug("Excluding the file since it matches the '%s' pattern from 'excluded_paths'", "path", trimmedSrc, "excluded_paths", excludePath)
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// checkComponentIncludes checks if a file should be included.
+func checkComponentIncludes(includePaths []string, src, trimmedSrc string) (bool, error) {
+	anyMatches := false
+	for _, includePath := range includePaths {
+		includePath := filepath.Clean(includePath)
+		includeMatch, err := u.PathMatch(includePath, src)
+		if err != nil {
+			return true, err
+		} else if includeMatch {
+			// If the file matches ANY of the 'included_paths' patterns, include the file
+			log.Debug("Including path since it matches the pattern from 'included_paths'\n", "path", trimmedSrc, "included_paths", includePath)
+			anyMatches = true
+			break
+		}
+	}
+
+	if anyMatches {
+		return false, nil
+	}
+	log.Debug("Excluding since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
+	return true, nil
+}
+
+// determinePackageType determines the package type based on URI scheme.
+func determinePackageType(useOciScheme, useLocalFileSystem bool) pkgType {
+	if useOciScheme {
+		return pkgTypeOci
+	} else if useLocalFileSystem {
+		return pkgTypeLocal
+	}
+	return pkgTypeRemote
 }

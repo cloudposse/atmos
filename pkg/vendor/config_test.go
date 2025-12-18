@@ -1,4 +1,4 @@
-package exec
+package vendor
 
 import (
 	"os"
@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -460,7 +461,7 @@ spec:
 		Version   string
 	}{source.Component, source.Version}
 
-	processedURI, err := ProcessTmpl(&atmosConfig, "test-source", source.Source, tmplData, false)
+	processedURI, err := exec.ProcessTmpl(&atmosConfig, "test-source", source.Source, tmplData, false)
 	require.NoError(t, err, "Template processing should succeed")
 
 	// Verify the template was processed correctly
@@ -522,7 +523,7 @@ spec:
 		Version   string
 	}{source.Component, source.Version}
 
-	processedURI, err := ProcessTmpl(&atmosConfig, "test-source", source.Source, tmplData, false)
+	processedURI, err := exec.ProcessTmpl(&atmosConfig, "test-source", source.Source, tmplData, false)
 	require.NoError(t, err, "Template processing should succeed")
 
 	// Verify version was substituted but no token in URL yet (automatic injection happens in go-getter)
@@ -626,7 +627,7 @@ spec:
 				Version   string
 			}{source.Component, source.Version}
 
-			processedURI, err := ProcessTmpl(&atmosConfig, "test-source", source.Source, tmplData, false)
+			processedURI, err := exec.ProcessTmpl(&atmosConfig, "test-source", source.Source, tmplData, false)
 			require.NoError(t, err, "Template processing should succeed")
 
 			// Verify the expected URI format

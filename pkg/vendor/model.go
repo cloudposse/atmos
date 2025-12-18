@@ -1,4 +1,4 @@
-package exec
+package vendor
 
 import (
 	"fmt"
@@ -8,33 +8,26 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-type pkgType int
-
 const (
-	tempDirPermissions         = 0o700
-	progressBarWidth           = 30
-	maxWidth                   = 120
-	pkgTypeRemote      pkgType = iota
-	pkgTypeOci
-	pkgTypeLocal
+	progressBarWidth = 30
+	maxWidth         = 120
 )
 
 var (
@@ -45,50 +38,7 @@ var (
 	grayColor           = theme.Styles.GrayText
 )
 
-type installedPkgMsg struct {
-	err  error
-	name string
-}
-
-func (p pkgType) String() string {
-	defer perf.Track(nil, "exec.String")()
-
-	names := [...]string{"remote", "oci", "local"}
-	if p < pkgTypeRemote || p > pkgTypeLocal {
-		return "unknown"
-	}
-	return names[p]
-}
-
-type pkgVendor struct {
-	name             string
-	version          string
-	atmosPackage     *pkgAtmosVendor
-	componentPackage *pkgComponentVendor
-}
-
-type pkgAtmosVendor struct {
-	uri               string
-	name              string
-	targetPath        string
-	sourceIsLocalFile bool
-	pkgType           pkgType
-	version           string
-	atmosVendorSource schema.AtmosVendorSource
-}
-type pkgComponentVendor struct {
-	uri                 string
-	name                string
-	sourceIsLocalFile   bool
-	pkgType             pkgType
-	version             string
-	vendorComponentSpec *schema.VendorComponentSpec
-	componentPath       string
-	IsComponent         bool
-	IsMixins            bool
-	mixinFilename       string
-}
-
+// modelVendor is the TUI model for vendor operations.
 type modelVendor struct {
 	packages    []pkgVendor
 	index       int
@@ -103,6 +53,7 @@ type modelVendor struct {
 	isTTY       bool
 }
 
+// executeVendorModel executes the vendor TUI model.
 func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	packages []T,
 	dryRun bool,
@@ -191,17 +142,19 @@ func newModelVendor[T pkgComponentVendor | pkgAtmosVendor](
 	}, nil
 }
 
+// Init initializes the TUI model.
 func (m *modelVendor) Init() tea.Cmd {
 	if len(m.packages) == 0 {
 		m.done = true
 		return nil
 	}
-	return tea.Batch(ExecuteInstall(m.packages[0], m.dryRun, m.atmosConfig), m.spinner.Tick)
+	return tea.Batch(executeInstall(m.packages[0], m.dryRun, m.atmosConfig), m.spinner.Tick)
 }
 
+// Update handles TUI events.
+//
+//nolint:gocritic // bubbletea models must be passed by value
 func (m *modelVendor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	defer perf.Track(nil, "exec.Update")()
-
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -280,7 +233,7 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 	return m, tea.Batch(
 		progressCmd,
 		tea.Printf("%s %s %s %s", mark, pkg.name, version, errMsg),   // print message above our program
-		ExecuteInstall(m.packages[m.index], m.dryRun, m.atmosConfig), // download the next package
+		executeInstall(m.packages[m.index], m.dryRun, m.atmosConfig), // download the next package
 	)
 }
 
@@ -306,9 +259,8 @@ func (m *modelVendor) logNonNTYFinalStatus(pkg pkgVendor, mark *lipgloss.Style) 
 	}
 }
 
+// View renders the TUI.
 func (m *modelVendor) View() string {
-	defer perf.Track(nil, "exec.View")()
-
 	n := len(m.packages)
 	w := lipgloss.Width(fmt.Sprintf("%d", n))
 	if m.done {
@@ -345,6 +297,7 @@ func max(a, b int) int {
 	return b
 }
 
+// downloadAndInstall downloads and installs an Atmos vendor package.
 func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
 	return func() tea.Msg {
 		log.Debug("Downloading and installing package", "package", p.name)
@@ -385,7 +338,7 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 
 	case pkgTypeOci:
 		// Process OCI images
-		if err := processOciImage(atmosConfig, p.uri, *tempDir); err != nil {
+		if err := exec.ProcessOciImage(atmosConfig, p.uri, *tempDir); err != nil {
 			return fmt.Errorf("failed to process OCI image: %w", err)
 		}
 
@@ -397,7 +350,7 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 			OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
 		}
 		if p.sourceIsLocalFile {
-			*tempDir = filepath.Join(*tempDir, SanitizeFileName(p.uri))
+			*tempDir = filepath.Join(*tempDir, exec.SanitizeFileName(p.uri))
 		}
 		if err := cp.Copy(p.uri, *tempDir, copyOptions); err != nil {
 			return fmt.Errorf("failed to copy package: %w", err)
@@ -479,21 +432,6 @@ func needsCustomDetection(src string) bool {
 	return true
 }
 
-func createTempDir() (string, error) {
-	// Create temp directory
-	tempDir, err := os.MkdirTemp("", "atmos-vendor")
-	if err != nil {
-		return "", err
-	}
-
-	// Ensure directory permissions are restricted
-	if err := os.Chmod(tempDir, tempDirPermissions); err != nil {
-		return "", err
-	}
-
-	return tempDir, nil
-}
-
 func newInstallError(err error, name string) installedPkgMsg {
 	return installedPkgMsg{
 		err:  fmt.Errorf("%s: %w", name, err),
@@ -501,9 +439,8 @@ func newInstallError(err error, name string) installedPkgMsg {
 	}
 }
 
-func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
-	defer perf.Track(atmosConfig, "exec.ExecuteInstall")()
-
+// executeInstall executes the installation of a vendor package.
+func executeInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
 	if installer.atmosPackage != nil {
 		return downloadAndInstall(installer.atmosPackage, dryRun, atmosConfig)
 	}
@@ -520,4 +457,147 @@ func ExecuteInstall(installer pkgVendor, dryRun bool, atmosConfig *schema.AtmosC
 			name: installer.name,
 		}
 	}
+}
+
+// downloadComponentAndInstall downloads and installs a component package.
+func downloadComponentAndInstall(p *pkgComponentVendor, dryRun bool, atmosConfig *schema.AtmosConfiguration) tea.Cmd {
+	return func() tea.Msg {
+		if dryRun {
+			if needsCustomDetection(p.uri) {
+				log.Debug("Dry-run mode: custom detection required for component (or mixin) URI", "component", p.name, "uri", p.uri)
+				detector := downloader.NewCustomGitDetector(atmosConfig, "")
+				_, _, err := detector.Detect(p.uri, "")
+				if err != nil {
+					return installedPkgMsg{
+						err:  fmt.Errorf("dry-run: detection failed for component %s: %w", p.name, err),
+						name: p.name,
+					}
+				}
+			} else {
+				log.Debug("Dry-run mode: skipping custom detection; URI already supported by go-getter", "component", p.name, "uri", p.uri)
+			}
+			time.Sleep(100 * time.Millisecond)
+			return installedPkgMsg{
+				err:  nil,
+				name: p.name,
+			}
+		}
+
+		if p.IsComponent {
+			err := installComponent(p, atmosConfig)
+			if err != nil {
+				return installedPkgMsg{
+					err:  err,
+					name: p.name,
+				}
+			}
+			return installedPkgMsg{
+				err:  nil,
+				name: p.name,
+			}
+		}
+		if p.IsMixins {
+			err := installMixin(p, atmosConfig)
+			if err != nil {
+				return installedPkgMsg{
+					err:  err,
+					name: p.name,
+				}
+			}
+			return installedPkgMsg{
+				err:  nil,
+				name: p.name,
+			}
+		}
+		return installedPkgMsg{
+			err:  fmt.Errorf("%w %s for package %s", errUtils.ErrUnknownPackageType, p.pkgType.String(), p.name),
+			name: p.name,
+		}
+	}
+}
+
+// copyToTargetWithPatterns copies files from source to target with patterns.
+func copyToTargetWithPatterns(tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool) error {
+	copyOptions := cp.Options{
+		Skip:          generateSkipFunction(tempDir, s),
+		PreserveTimes: false,
+		PreserveOwner: false,
+		OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
+	}
+
+	// Adjust the target path if it's a local file with no extension
+	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
+		// Sanitize the URI for safe filenames, especially on Windows
+		sanitizedBase := exec.SanitizeFileName(s.Source)
+		targetPath = filepath.Join(targetPath, sanitizedBase)
+	}
+
+	return cp.Copy(tempDir, targetPath, copyOptions)
+}
+
+// generateSkipFunction creates a function that determines whether to skip files during copying.
+func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
+	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+		// Skip .git directories
+		if filepath.Base(src) == ".git" {
+			return true, nil
+		}
+
+		// Normalize paths
+		tempDir = filepath.ToSlash(tempDir)
+		src = filepath.ToSlash(src)
+		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
+
+		// Check if the file should be excluded
+		if len(s.ExcludedPaths) > 0 {
+			return shouldExcludeFile(src, s.ExcludedPaths, trimmedSrc)
+		}
+
+		// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
+		if len(s.IncludedPaths) > 0 {
+			return shouldIncludeFile(src, s.IncludedPaths, trimmedSrc)
+		}
+
+		// If 'included_paths' is not provided, include all files that were not excluded
+		log.Debug("Including", "path", u.TrimBasePathFromPath(tempDir+"/", src))
+		return false, nil
+	}
+}
+
+// shouldExcludeFile checks if a file should be excluded based on patterns.
+func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (bool, error) {
+	for _, excludePath := range excludedPaths {
+		excludeMatch, err := u.PathMatch(excludePath, src)
+		if err != nil {
+			return true, err
+		} else if excludeMatch {
+			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
+			log.Debug("Excluding file since it match any pattern from 'excluded_paths'", "excluded_paths", excludePath, "source", trimmedSrc)
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// shouldIncludeFile checks if a file should be included based on patterns.
+func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (bool, error) {
+	anyMatches := false
+	for _, includePath := range includedPaths {
+		includeMatch, err := u.PathMatch(includePath, src)
+		if err != nil {
+			return true, err
+		} else if includeMatch {
+			// If the file matches ANY of the 'included_paths' patterns, include the file
+			log.Debug("Including path since it matches the '%s' pattern from 'included_paths'", "included_paths", includePath, "path", trimmedSrc)
+
+			anyMatches = true
+			break
+		}
+	}
+
+	if anyMatches {
+		return false, nil
+	}
+	log.Debug("Excluding path since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
+	return true, nil
 }

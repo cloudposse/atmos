@@ -59,7 +59,7 @@ func TestProcessOciImage_InvalidReference(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Test with invalid image reference.
-	err := processOciImage(atmosConfig, "invalid::image//name", "/tmp/dest")
+	err := ProcessOciImage(atmosConfig, "invalid::image//name", "/tmp/dest")
 
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidImageReference), "Expected ErrInvalidImageReference, got: %v", err)

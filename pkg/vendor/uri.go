@@ -1,4 +1,4 @@
-package exec
+package vendor
 
 import (
 	"net/url"
@@ -268,4 +268,62 @@ func appendDoubleSlashDot(uri string) string {
 
 	// Append //. and query parameters
 	return base + "//." + queryPart
+}
+
+// normalizeVendorURI normalizes vendor source URIs to handle all patterns consistently.
+// It uses go-getter syntax where the double-slash (//) is a delimiter between the repository URL and the subdirectory path within that repository.
+// Dot (.) indicates the current directory (root of the repository).
+// Converts triple-slash (///) to double-slash-dot (//.) for root directory.
+// Adds //. to Git URLs without subdirectory delimiter.
+// Preserves existing valid patterns unchanged.
+//
+// Examples:
+//   - "github.com/repo.git///?ref=v1.0.0" -> "github.com/repo.git//.?ref=v1.0.0"
+//   - "github.com/repo.git?ref=v1.0.0" -> "github.com/repo.git//.?ref=v1.0.0"
+//   - "github.com/repo.git///some/path?ref=v1.0.0" -> "github.com/repo.git//some/path?ref=v1.0.0"
+//   - "github.com/repo.git//some/path?ref=v1.0.0" -> unchanged
+func normalizeVendorURI(uri string) string {
+	// Skip normalization for special URI types
+	if isFileURI(uri) || isOCIURI(uri) || isS3URI(uri) || isLocalPath(uri) || isNonGitHTTPURI(uri) {
+		return uri
+	}
+
+	// Handle triple-slash pattern first
+	if containsTripleSlash(uri) {
+		uri = normalizeTripleSlash(uri)
+	}
+
+	// Add //. to Git URLs without subdirectory
+	if needsDoubleSlashDot(uri) {
+		uri = appendDoubleSlashDot(uri)
+	}
+
+	return uri
+}
+
+// normalizeTripleSlash converts triple-slash patterns to appropriate double-slash patterns.
+// Uses go-getter's SourceDirSubdir for robust parsing across all Git platforms.
+func normalizeTripleSlash(uri string) string {
+	// Use go-getter to parse the URI and extract subdirectory
+	// Note: source will include query parameters from the original URI
+	source, subdir := parseSubdirFromTripleSlash(uri)
+
+	// Separate query parameters from source if present
+	var queryParams string
+	if queryPos := strings.Index(source, "?"); queryPos != -1 {
+		queryParams = source[queryPos:]
+		source = source[:queryPos]
+	}
+
+	// Determine the normalized form based on subdirectory
+	var normalized string
+	if subdir == "" {
+		// Root of repository case: convert /// to //.
+		normalized = source + "//." + queryParams
+	} else {
+		// Path specified after triple slash: convert /// to //
+		normalized = source + "//" + subdir + queryParams
+	}
+
+	return normalized
 }
