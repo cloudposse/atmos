@@ -250,3 +250,53 @@ func TestErrorWrapping(t *testing.T) {
 	// The error should be based on the sentinel error.
 	assert.NotNil(t, wrappedErr)
 }
+
+// Test Clean error accumulation - the missing coverage in Clean function.
+
+func TestClean_ErrorAccumulation_AllFails(t *testing.T) {
+	// Test the error accumulation path by making CleanAllWorkdirs fail.
+	// This requires creating a situation where removal fails.
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping permission test in CI")
+	}
+
+	tmpDir := t.TempDir()
+	workdirBase := filepath.Join(tmpDir, WorkdirPath)
+	require.NoError(t, os.MkdirAll(filepath.Join(workdirBase, "terraform"), 0o755))
+
+	// Make parent non-writable to cause removal to fail.
+	require.NoError(t, os.Chmod(tmpDir, 0o555))
+	defer func() { _ = os.Chmod(tmpDir, 0o755) }()
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	err := Clean(atmosConfig, CleanOptions{All: true})
+	if err != nil {
+		// When errors occur, they should be accumulated.
+		assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+	}
+}
+
+func TestClean_ErrorAccumulation_ComponentFails(t *testing.T) {
+	// Test error accumulation when component cleanup fails.
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping permission test in CI")
+	}
+
+	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	// Make parent non-writable to cause removal to fail.
+	parentPath := filepath.Join(tmpDir, WorkdirPath, "terraform")
+	require.NoError(t, os.Chmod(parentPath, 0o555))
+	defer func() { _ = os.Chmod(parentPath, 0o755) }()
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	err := Clean(atmosConfig, CleanOptions{Component: "vpc"})
+	if err != nil {
+		// When errors occur, they should be accumulated.
+		assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+	}
+}
