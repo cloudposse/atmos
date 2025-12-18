@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -68,11 +69,23 @@ func (m *defaultWorkspaceManager) EnsureWorkspace(
 		return nil
 	}
 
-	// Log the creation failure before attempting select.
-	log.Debug("Workspace creation failed, attempting select", "workspace", workspace, "error", err)
+	// Check if this is a "workspace already exists" error.
+	// terraform-exec doesn't provide typed errors, so we check the error message.
+	// Terraform CLI outputs "Workspace X already exists" when trying to create an existing workspace.
+	if !isWorkspaceExistsError(err) {
+		// This is an unexpected error (network, permission, etc.) - fail fast.
+		log.Debug("Workspace creation failed with unexpected error", "workspace", workspace, "error", err)
+		return wrapErrorWithStderr(
+			errUtils.Build(errUtils.ErrTerraformWorkspaceOp).
+				WithCause(err).
+				WithExplanationf("Failed to create workspace '%s' for %s.", workspace, GetComponentInfo(component, stack)).
+				Err(),
+			stderrCapture,
+		)
+	}
 
 	// Workspace already exists, select it.
-	log.Debug("Selecting existing terraform workspace", "workspace", workspace, "component", component, "stack", stack)
+	log.Debug("Workspace already exists, selecting it", "workspace", workspace, "component", component, "stack", stack)
 
 	if err := runner.WorkspaceSelect(ctx, workspace); err != nil {
 		return wrapErrorWithStderr(
@@ -88,4 +101,15 @@ func (m *defaultWorkspaceManager) EnsureWorkspace(
 	// Add delay on Windows after workspace operations.
 	windowsFileDelay()
 	return nil
+}
+
+// isWorkspaceExistsError checks if the error indicates the workspace already exists.
+// Terraform-exec doesn't provide typed errors, so we check the error message.
+// Terraform CLI outputs "Workspace X already exists" when trying to create an existing workspace.
+func isWorkspaceExistsError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errMsg := strings.ToLower(err.Error())
+	return strings.Contains(errMsg, "already exists")
 }

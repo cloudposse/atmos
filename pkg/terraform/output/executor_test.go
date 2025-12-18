@@ -229,7 +229,7 @@ func TestExecutor_ExecuteWithSections_InitError(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrTerraformInit), "expected ErrTerraformInit")
 }
 
-func TestExecutor_ExecuteWithSections_WorkspaceNewError(t *testing.T) {
+func TestExecutor_ExecuteWithSections_WorkspaceNewError_AlreadyExists(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -244,15 +244,42 @@ func TestExecutor_ExecuteWithSections_WorkspaceNewError(t *testing.T) {
 	atmosConfig := validAtmosConfig()
 	sections := validSections()
 
-	// Setup expectations.
+	// Setup expectations - workspace already exists, so it falls back to select.
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
-	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(errors.New("workspace exists"))
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(errors.New("Workspace test-workspace already exists"))
 	mockRunner.EXPECT().WorkspaceSelect(gomock.Any(), "test-workspace").Return(errors.New("select failed"))
 
 	_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrTerraformWorkspaceOp), "expected ErrTerraformWorkspaceOp")
+}
+
+func TestExecutor_ExecuteWithSections_WorkspaceNewError_Unexpected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+	atmosConfig := validAtmosConfig()
+	sections := validSections()
+
+	// Setup expectations - unexpected error (network, permission, etc.) should fail fast.
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(errors.New("network timeout"))
+	// WorkspaceSelect should NOT be called for unexpected errors.
+
+	_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, nil)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrTerraformWorkspaceOp), "expected ErrTerraformWorkspaceOp")
+	assert.Contains(t, err.Error(), "network timeout")
 }
 
 func TestExecutor_ExecuteWithSections_OutputError(t *testing.T) {

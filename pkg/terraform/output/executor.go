@@ -12,6 +12,7 @@ import (
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -216,6 +217,13 @@ func (e *Executor) GetOutput(
 	authManager any,
 ) (any, bool, error) {
 	defer perf.Track(atmosConfig, "output.Executor.GetOutput")()
+
+	// Validate authManager type if provided.
+	if authManager != nil {
+		if _, ok := authManager.(auth.AuthManager); !ok {
+			return nil, false, fmt.Errorf("%w: expected auth.AuthManager", errUtils.ErrInvalidAuthManagerType)
+		}
+	}
 
 	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
