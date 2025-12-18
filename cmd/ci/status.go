@@ -1,0 +1,240 @@
+package ci
+
+import (
+	"github.com/spf13/cobra"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/ci"
+	_ "github.com/cloudposse/atmos/pkg/ci/github" // Register GitHub provider.
+	"github.com/cloudposse/atmos/pkg/git"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
+)
+
+// statusCmd represents the ci status command.
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Show CI status for current branch",
+	Long: `Display CI status for the current branch, similar to 'gh pr status'.
+
+Shows status checks, pull request information, and related PRs.`,
+	Args: cobra.NoArgs,
+	RunE: runStatus,
+}
+
+func runStatus(cmd *cobra.Command, _ []string) error {
+	ctx := cmd.Context()
+
+	// Load Atmos configuration (optional - CI status can work without it).
+	atmosConfig, configErr := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	configLoaded := configErr == nil
+	if configErr != nil {
+		log.Debug("Failed to load atmos config, continuing without CI enabled check", "error", configErr)
+	}
+
+	// Check if CI is enabled in config (only relevant when actually in CI).
+	if configLoaded && ci.IsCI() && !atmosConfig.CI.Enabled {
+		return errUtils.Build(errUtils.ErrCIDisabled).
+			WithExplanation("CI integration is disabled in atmos.yaml").
+			WithHint("Set ci.enabled: true in atmos.yaml to enable CI features").
+			Err()
+	}
+
+	// Get CI provider.
+	provider, err := ci.DetectOrError()
+	if err != nil {
+		// If not in CI, try to get a provider from the registry.
+		provider, err = getDefaultProvider()
+		if err != nil {
+			return errUtils.Build(errUtils.ErrCIProviderNotDetected).
+				WithExplanation("Not running in a CI environment and no CI provider configured").
+				WithHint("Ensure you have a CI provider token set (e.g., GITHUB_TOKEN for GitHub Actions)").
+				Err()
+		}
+	}
+
+	// Get repository info using provider interface.
+	owner, repo, branch, sha, err := getRepoContext(provider)
+	if err != nil {
+		return err
+	}
+
+	// Fetch status.
+	status, err := provider.GetStatus(ctx, ci.StatusOptions{
+		Owner:                 owner,
+		Repo:                  repo,
+		Branch:                branch,
+		SHA:                   sha,
+		IncludeUserPRs:        true,
+		IncludeReviewRequests: true,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Render output.
+	renderStatus(status)
+	return nil
+}
+
+// getDefaultProvider returns a provider from the registry.
+// This is used when not running in CI but a provider is still available.
+func getDefaultProvider() (ci.Provider, error) {
+	// Try to get any registered provider from the registry.
+	names := ci.List()
+	for _, name := range names {
+		p, err := ci.Get(name)
+		if err == nil {
+			return p, nil
+		}
+	}
+	return nil, errUtils.ErrCIProviderNotFound
+}
+
+// getRepoContext extracts repository context using the provider interface with git fallback.
+func getRepoContext(provider ci.Provider) (owner, repo, branch, sha string, err error) {
+	// Try to get context from provider first (uses provider interface).
+	ciCtx, ctxErr := provider.Context()
+	if ctxErr == nil && ciCtx != nil {
+		owner = ciCtx.RepoOwner
+		repo = ciCtx.RepoName
+		sha = ciCtx.SHA
+		branch = ciCtx.Branch
+	}
+
+	// Fall back to local git for any missing values.
+	if owner == "" || repo == "" {
+		gitRepo := git.NewDefaultGitRepo()
+		info, gitErr := gitRepo.GetLocalRepoInfo()
+		if gitErr != nil {
+			return "", "", "", "", errUtils.Build(errUtils.ErrFailedToGetRepoInfo).
+				WithCause(gitErr).
+				WithExplanation("Could not determine repository from CI context or git").
+				Err()
+		}
+		if owner == "" {
+			owner = info.RepoOwner
+		}
+		if repo == "" {
+			repo = info.RepoName
+		}
+	}
+
+	// Get current branch from git if not set.
+	if branch == "" {
+		localRepo, gitErr := git.GetLocalRepo()
+		if gitErr == nil {
+			head, refErr := localRepo.Head()
+			if refErr == nil {
+				branch = head.Name().Short()
+			}
+		}
+	}
+
+	// Get current SHA from git if not set.
+	if sha == "" {
+		gitRepo := git.NewDefaultGitRepo()
+		sha, _ = gitRepo.GetCurrentCommitSHA()
+	}
+
+	if owner == "" || repo == "" {
+		return "", "", "", "", errUtils.Build(errUtils.ErrFailedToGetRepoInfo).
+			WithExplanation("Could not determine repository owner and name").
+			WithHint("Ensure you're in a git repository with a remote configured").
+			Err()
+	}
+
+	return owner, repo, branch, sha, nil
+}
+
+// renderStatus renders the CI status to the terminal.
+func renderStatus(status *ci.Status) {
+	ui.Writef("Relevant pull requests in %s\n\n", status.Repository)
+
+	// Current branch.
+	if status.CurrentBranch != nil {
+		renderBranchStatus(status.CurrentBranch)
+	}
+
+	// PRs created by user.
+	if len(status.CreatedByUser) > 0 {
+		ui.Writeln("\nCreated by you")
+		for _, pr := range status.CreatedByUser {
+			renderPRStatus(pr)
+		}
+	}
+
+	// PRs requesting review.
+	if len(status.ReviewRequests) > 0 {
+		ui.Writeln("\nRequesting a code review from you")
+		for _, pr := range status.ReviewRequests {
+			renderPRStatus(pr)
+		}
+	}
+}
+
+// renderBranchStatus renders status for a branch.
+func renderBranchStatus(bs *ci.BranchStatus) {
+	ui.Writeln("Current branch")
+
+	if bs.PullRequest != nil {
+		renderPRStatus(bs.PullRequest)
+	} else {
+		ui.Writef("  Commit status for %s\n", truncateSHA(bs.CommitSHA))
+		renderChecks(bs.Checks, "  ")
+		ui.Writeln("\n  No open pull request for current branch.")
+	}
+}
+
+// renderPRStatus renders status for a pull request.
+func renderPRStatus(pr *ci.PRStatus) {
+	ui.Writef("  #%d  %s [%s]\n", pr.Number, pr.Title, pr.Branch)
+
+	if pr.AllPassed && len(pr.Checks) > 0 {
+		ui.Writeln("    - All checks passing")
+	} else {
+		renderChecks(pr.Checks, "    ")
+	}
+}
+
+// renderChecks renders a list of checks.
+func renderChecks(checks []*ci.CheckStatus, indent string) {
+	for _, check := range checks {
+		icon := getCheckIcon(check.CheckState())
+		ui.Writef("%s- %s %s (%s)\n", indent, icon, check.Name, check.Conclusion)
+	}
+}
+
+// getCheckIcon returns the icon for a check state.
+func getCheckIcon(state ci.CheckStatusState) string {
+	switch state {
+	case ci.CheckStatusStateSuccess:
+		return "\u2713" // Check mark.
+	case ci.CheckStatusStateFailure:
+		return "\u2717" // X mark.
+	case ci.CheckStatusStatePending:
+		return "\u25CB" // Open circle.
+	case ci.CheckStatusStateCancelled:
+		return "\u25CF" // Filled circle.
+	case ci.CheckStatusStateSkipped:
+		return "\u2212" // Minus.
+	default:
+		return "?"
+	}
+}
+
+// truncateSHA truncates a SHA to 7 characters.
+func truncateSHA(sha string) string {
+	if len(sha) > 7 {
+		return sha[:7]
+	}
+	return sha
+}
+
+// init is intentionally empty - statusCmd is added to ciCmd in ci.go's init().
+func init() {
+	// Ensure the GitHub provider is registered by importing the package.
+	// The import above handles this.
+}

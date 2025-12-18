@@ -1,0 +1,72 @@
+package ci
+
+import (
+	"sync"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+)
+
+var (
+	providersMu sync.RWMutex
+	providers   = make(map[string]Provider)
+)
+
+// Register registers a CI provider.
+// Providers should call this in their init() function.
+func Register(p Provider) {
+	providersMu.Lock()
+	defer providersMu.Unlock()
+	providers[p.Name()] = p
+}
+
+// Get returns a provider by name.
+func Get(name string) (Provider, error) {
+	providersMu.RLock()
+	defer providersMu.RUnlock()
+
+	p, ok := providers[name]
+	if !ok {
+		return nil, errUtils.ErrCIProviderNotFound
+	}
+	return p, nil
+}
+
+// Detect returns the first provider that detects it is active in the current environment.
+// Returns nil if no provider is detected.
+func Detect() Provider {
+	providersMu.RLock()
+	defer providersMu.RUnlock()
+
+	for _, p := range providers {
+		if p.Detect() {
+			return p
+		}
+	}
+	return nil
+}
+
+// DetectOrError returns the detected provider or an error if none is detected.
+func DetectOrError() (Provider, error) {
+	p := Detect()
+	if p == nil {
+		return nil, errUtils.ErrCIProviderNotDetected
+	}
+	return p, nil
+}
+
+// List returns all registered provider names.
+func List() []string {
+	providersMu.RLock()
+	defer providersMu.RUnlock()
+
+	names := make([]string, 0, len(providers))
+	for name := range providers {
+		names = append(names, name)
+	}
+	return names
+}
+
+// IsCI returns true if any CI provider is detected.
+func IsCI() bool {
+	return Detect() != nil
+}

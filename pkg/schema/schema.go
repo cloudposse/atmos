@@ -96,6 +96,7 @@ type AtmosConfiguration struct {
 	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
 	Profiles        ProfilesConfig      `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
 	Metadata        ConfigMetadata      `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+	CI              CIConfig            `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -386,17 +387,18 @@ type TemplatesSettingsGomplate struct {
 }
 
 type Terraform struct {
-	BasePath                string        `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	ApplyAutoApprove        bool          `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
-	AppendUserAgent         string        `yaml:"append_user_agent" json:"append_user_agent" mapstructure:"append_user_agent"`
-	DeployRunInit           bool          `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
-	InitRunReconfigure      bool          `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
-	AutoGenerateBackendFile bool          `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
-	WorkspacesEnabled       *bool         `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
-	Command                 string        `yaml:"command" json:"command" mapstructure:"command"`
-	Shell                   ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
-	Init                    TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
-	Plan                    TerraformPlan `yaml:"plan" json:"plan" mapstructure:"plan"`
+	BasePath                string          `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	ApplyAutoApprove        bool            `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
+	AppendUserAgent         string          `yaml:"append_user_agent" json:"append_user_agent" mapstructure:"append_user_agent"`
+	DeployRunInit           bool            `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
+	InitRunReconfigure      bool            `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
+	AutoGenerateBackendFile bool            `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
+	WorkspacesEnabled       *bool           `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
+	Command                 string          `yaml:"command" json:"command" mapstructure:"command"`
+	Shell                   ShellConfig     `yaml:"shell" json:"shell" mapstructure:"shell"`
+	Init                    TerraformInit   `yaml:"init" json:"init" mapstructure:"init"`
+	Plan                    TerraformPlan   `yaml:"plan" json:"plan" mapstructure:"plan"`
+	Planfiles               PlanfilesConfig `yaml:"planfiles,omitempty" json:"planfiles,omitempty" mapstructure:"planfiles"`
 }
 
 type TerraformInit struct {
@@ -407,8 +409,63 @@ type TerraformPlan struct {
 	SkipPlanfile bool `yaml:"skip_planfile" json:"skip_planfile" mapstructure:"skip_planfile"`
 }
 
+// PlanfilesConfig contains configuration for planfile storage backends.
+type PlanfilesConfig struct {
+	Default    string                       `yaml:"default" json:"default" mapstructure:"default"`
+	KeyPattern string                       `yaml:"key_pattern,omitempty" json:"key_pattern,omitempty" mapstructure:"key_pattern"`
+	Stores     map[string]PlanfileStoreSpec `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
+}
+
+// PlanfileStoreSpec defines a planfile storage backend.
+type PlanfileStoreSpec struct {
+	Type    string         `yaml:"type" json:"type" mapstructure:"type"`
+	Options map[string]any `yaml:"options,omitempty" json:"options,omitempty" mapstructure:"options"`
+}
+
 type ShellConfig struct {
 	Prompt string `yaml:"prompt" json:"prompt" mapstructure:"prompt"`
+}
+
+// CIConfig contains CI/CD integration configuration.
+type CIConfig struct {
+	Enabled      bool              `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Outputs      CIOutputsConfig   `yaml:"outputs,omitempty" json:"outputs,omitempty" mapstructure:"outputs"`
+	StatusChecks CIStatusConfig    `yaml:"status_checks,omitempty" json:"status_checks,omitempty" mapstructure:"status_checks"`
+	PRComment    CIPRCommentConfig `yaml:"pr_comment,omitempty" json:"pr_comment,omitempty" mapstructure:"pr_comment"`
+	Templates    CITemplatesConfig `yaml:"templates,omitempty" json:"templates,omitempty" mapstructure:"templates"`
+}
+
+// CIOutputsConfig configures CI output integration.
+type CIOutputsConfig struct {
+	GithubOutput bool `yaml:"github_output,omitempty" json:"github_output,omitempty" mapstructure:"github_output"`
+	JobSummary   bool `yaml:"job_summary,omitempty" json:"job_summary,omitempty" mapstructure:"job_summary"`
+}
+
+// CIStatusConfig configures CI status check integration.
+type CIStatusConfig struct {
+	Enabled       bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	ContextPrefix string `yaml:"context_prefix,omitempty" json:"context_prefix,omitempty" mapstructure:"context_prefix"`
+}
+
+// CIPRCommentConfig configures PR comment integration.
+type CIPRCommentConfig struct {
+	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Behavior string `yaml:"behavior,omitempty" json:"behavior,omitempty" mapstructure:"behavior"` // create, update, upsert
+}
+
+// CITemplatesConfig configures CI summary templates per component type.
+type CITemplatesConfig struct {
+	// BasePath is the base directory for custom templates.
+	// Relative paths are resolved from atmos.yaml location.
+	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+
+	// Terraform contains template overrides for terraform commands.
+	// Keys are command names (e.g., "plan", "apply"), values are template file paths.
+	Terraform map[string]string `yaml:"terraform,omitempty" json:"terraform,omitempty" mapstructure:"terraform"`
+
+	// Helmfile contains template overrides for helmfile commands.
+	// Keys are command names (e.g., "diff", "apply"), values are template file paths.
+	Helmfile map[string]string `yaml:"helmfile,omitempty" json:"helmfile,omitempty" mapstructure:"helmfile"`
 }
 
 type Helmfile struct {
