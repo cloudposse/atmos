@@ -10,26 +10,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestXDGDir(t *testing.T) string {
+func setupTestDockerConfigDir(t *testing.T) string {
 	t.Helper()
 	tmpDir := t.TempDir()
-	t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	// Set DOCKER_CONFIG to isolate tests from user's actual Docker config.
+	t.Setenv("DOCKER_CONFIG", tmpDir)
 	return tmpDir
 }
 
 func TestNewConfigManager(t *testing.T) {
-	tmpDir := setupTestXDGDir(t)
+	tmpDir := setupTestDockerConfigDir(t)
 
 	manager, err := NewConfigManager()
 	require.NoError(t, err)
 	assert.NotNil(t, manager)
-	assert.Contains(t, manager.GetConfigDir(), tmpDir)
+	assert.Equal(t, tmpDir, manager.GetConfigDir())
 	assert.Contains(t, manager.GetConfigPath(), "config.json")
 }
 
 func TestConfigManager_WriteAuth(t *testing.T) {
-	_ = setupTestXDGDir(t)
+	_ = setupTestDockerConfigDir(t)
 
 	manager, err := NewConfigManager()
 	require.NoError(t, err)
@@ -59,7 +59,7 @@ func TestConfigManager_WriteAuth(t *testing.T) {
 }
 
 func TestConfigManager_WriteAuth_MultipleRegistries(t *testing.T) {
-	_ = setupTestXDGDir(t)
+	_ = setupTestDockerConfigDir(t)
 
 	manager, err := NewConfigManager()
 	require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestConfigManager_WriteAuth_MultipleRegistries(t *testing.T) {
 }
 
 func TestConfigManager_WriteAuth_UpdateExisting(t *testing.T) {
-	_ = setupTestXDGDir(t)
+	_ = setupTestDockerConfigDir(t)
 
 	manager, err := NewConfigManager()
 	require.NoError(t, err)
@@ -118,7 +118,7 @@ func TestConfigManager_WriteAuth_UpdateExisting(t *testing.T) {
 }
 
 func TestConfigManager_RemoveAuth(t *testing.T) {
-	_ = setupTestXDGDir(t)
+	_ = setupTestDockerConfigDir(t)
 
 	manager, err := NewConfigManager()
 	require.NoError(t, err)
@@ -147,7 +147,7 @@ func TestConfigManager_RemoveAuth(t *testing.T) {
 }
 
 func TestConfigManager_RemoveAuth_NonExistent(t *testing.T) {
-	_ = setupTestXDGDir(t)
+	_ = setupTestDockerConfigDir(t)
 
 	manager, err := NewConfigManager()
 	require.NoError(t, err)
@@ -158,17 +158,16 @@ func TestConfigManager_RemoveAuth_NonExistent(t *testing.T) {
 }
 
 func TestConfigManager_GetConfigDir(t *testing.T) {
-	tmpDir := setupTestXDGDir(t)
+	tmpDir := setupTestDockerConfigDir(t)
 
 	manager, err := NewConfigManager()
 	require.NoError(t, err)
 
-	assert.Contains(t, manager.GetConfigDir(), tmpDir)
-	assert.Contains(t, manager.GetConfigDir(), "docker")
+	assert.Equal(t, tmpDir, manager.GetConfigDir())
 }
 
 func TestConfigManager_GetAuthenticatedRegistries(t *testing.T) {
-	_ = setupTestXDGDir(t)
+	_ = setupTestDockerConfigDir(t)
 
 	manager, err := NewConfigManager()
 	require.NoError(t, err)
@@ -192,7 +191,7 @@ func TestConfigManager_GetAuthenticatedRegistries(t *testing.T) {
 }
 
 func TestConfigManager_PreservesExistingConfig(t *testing.T) {
-	_ = setupTestXDGDir(t)
+	_ = setupTestDockerConfigDir(t)
 
 	// First create a manager to get the actual config path.
 	manager, err := NewConfigManager()
@@ -227,12 +226,11 @@ func TestConfigManager_PreservesExistingConfig(t *testing.T) {
 }
 
 func TestConfigManager_GetConfigPath(t *testing.T) {
-	_ = setupTestXDGDir(t)
+	tmpDir := setupTestDockerConfigDir(t)
 
 	manager, err := NewConfigManager()
 	require.NoError(t, err)
 
 	path := manager.GetConfigPath()
-	assert.Contains(t, path, "docker")
-	assert.Contains(t, path, "config.json")
+	assert.Equal(t, tmpDir+"/config.json", path)
 }
