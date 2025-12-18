@@ -57,8 +57,10 @@ func init() {
 		flags.WithStringFlag("planfile", "", "", "Set the plan file to use"),
 		flags.WithBoolFlag("affected", "", false, "Apply the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Apply all components in all stacks"),
+		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
 		flags.WithEnvVars("from-plan", "ATMOS_TERRAFORM_APPLY_FROM_PLAN"),
 		flags.WithEnvVars("planfile", "ATMOS_TERRAFORM_APPLY_PLANFILE"),
+		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 	)
 
 	// Register apply-specific flags with Cobra.

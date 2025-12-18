@@ -6,9 +6,13 @@ type Hook struct {
 	Events  []string `yaml:"events"`
 	Command string   `yaml:"command"`
 
-	// Dynamic command-specific properties
+	// Dynamic command-specific properties.
 
-	// store command
+	// store command.
 	Name    string            `yaml:"name,omitempty"`    // for store command
 	Outputs map[string]string `yaml:"outputs,omitempty"` // for store command
+
+	// CI commands.
+	PlanFile string `yaml:"plan_file,omitempty"` // for ci.upload/ci.download commands
+	Content  string `yaml:"content,omitempty"`   // for ci.summary command
 }
