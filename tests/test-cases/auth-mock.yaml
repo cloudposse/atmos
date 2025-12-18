@@ -240,6 +240,9 @@ tests:
       - "--"
       - "echo"
       - "test"
+    skip:
+      # echo is a shell built-in on Windows, not an executable in PATH.
+      os: !not windows
     expect:
       diff: []
       stderr: []

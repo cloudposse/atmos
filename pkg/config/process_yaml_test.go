@@ -3,11 +3,14 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -258,6 +261,11 @@ func TestHasCustomTag(t *testing.T) {
 		{
 			name:     "repo-root tag",
 			tag:      "!repo-root",
+			expected: true,
+		},
+		{
+			name:     "cwd tag",
+			tag:      "!cwd",
 			expected: true,
 		},
 		{
@@ -578,4 +586,335 @@ func TestProcessScalarNodeValue(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestProcessCwdTag(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		yamlStr  string
+		expected string
+	}{
+		{
+			name:     "cwd tag without path",
+			yamlStr:  "key: !cwd",
+			expected: cwd,
+		},
+		{
+			name:     "cwd tag with relative path",
+			yamlStr:  "key: !cwd ./subdir",
+			expected: strings.ReplaceAll(cwd+"/subdir", "/", string(os.PathSeparator)),
+		},
+		{
+			name:     "cwd tag with nested path",
+			yamlStr:  "key: !cwd ./a/b/c",
+			expected: strings.ReplaceAll(cwd+"/a/b/c", "/", string(os.PathSeparator)),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			err := preprocessAtmosYamlFunc([]byte(tt.yamlStr), v)
+			if err != nil {
+				t.Fatalf("preprocessAtmosYamlFunc() error = %v", err)
+			}
+
+			result := v.GetString("key")
+			// Normalize path separators for comparison.
+			expected := strings.ReplaceAll(tt.expected, "/", string(os.PathSeparator))
+			if result != expected {
+				t.Errorf("Expected %q, got %q", expected, result)
+			}
+		})
+	}
+}
+
+func TestHandleCwd(t *testing.T) {
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		nodeTag     string
+		nodeValue   string
+		expectedKey string
+		checkValue  func(t *testing.T, value string)
+	}{
+		{
+			name:        "cwd tag without path argument",
+			nodeTag:     "!cwd",
+			nodeValue:   "",
+			expectedKey: "test.path",
+			checkValue: func(t *testing.T, value string) {
+				assert.Equal(t, cwd, value)
+			},
+		},
+		{
+			name:        "cwd tag with relative path",
+			nodeTag:     "!cwd",
+			nodeValue:   "./subdir",
+			expectedKey: "test.path",
+			checkValue: func(t *testing.T, value string) {
+				expected := strings.ReplaceAll(filepath.Join(cwd, "subdir"), "/", string(os.PathSeparator))
+				assert.Equal(t, expected, value)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			node := &yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Tag:   tt.nodeTag,
+				Value: tt.nodeValue,
+			}
+
+			err := handleCwd(node, v, tt.expectedKey)
+			require.NoError(t, err)
+
+			result := v.GetString(tt.expectedKey)
+			tt.checkValue(t, result)
+
+			// Verify tag is cleared after processing.
+			assert.Empty(t, node.Tag, "tag should be cleared after processing")
+		})
+	}
+}
+
+func TestHandleGitRoot(t *testing.T) {
+	tests := []struct {
+		name        string
+		nodeTag     string
+		nodeValue   string
+		expectedKey string
+		checkValue  func(t *testing.T, value string)
+	}{
+		{
+			name:        "repo-root tag without default",
+			nodeTag:     "!repo-root",
+			nodeValue:   "",
+			expectedKey: "test.path",
+			checkValue: func(t *testing.T, value string) {
+				// We're in a git repo, so we should get a valid path.
+				assert.NotEmpty(t, value)
+				assert.True(t, filepath.IsAbs(value))
+			},
+		},
+		{
+			name:        "repo-root tag with default value",
+			nodeTag:     "!repo-root",
+			nodeValue:   "/default/path",
+			expectedKey: "test.path",
+			checkValue: func(t *testing.T, value string) {
+				// Should return the git root, not the default.
+				assert.NotEmpty(t, value)
+				assert.True(t, filepath.IsAbs(value))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			node := &yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Tag:   tt.nodeTag,
+				Value: tt.nodeValue,
+			}
+
+			err := handleGitRoot(node, v, tt.expectedKey)
+			require.NoError(t, err)
+
+			result := v.GetString(tt.expectedKey)
+			tt.checkValue(t, result)
+
+			// Verify tag is cleared after processing.
+			assert.Empty(t, node.Tag, "tag should be cleared after processing")
+		})
+	}
+}
+
+func TestProcessGitRootTag(t *testing.T) {
+	tests := []struct {
+		name      string
+		strFunc   string
+		nodeValue string
+		checkVal  func(t *testing.T, result any, err error)
+	}{
+		{
+			name:      "repo-root tag returns valid path",
+			strFunc:   "!repo-root",
+			nodeValue: "",
+			checkVal: func(t *testing.T, result any, err error) {
+				require.NoError(t, err)
+				path, ok := result.(string)
+				require.True(t, ok)
+				assert.NotEmpty(t, path)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := processGitRootTag(tt.strFunc, tt.nodeValue)
+			tt.checkVal(t, result, err)
+		})
+	}
+}
+
+func TestSequenceNeedsProcessing(t *testing.T) {
+	tests := []struct {
+		name     string
+		node     *yaml.Node
+		expected bool
+	}{
+		{
+			name: "sequence with custom tag needs processing",
+			node: &yaml.Node{
+				Kind: yaml.SequenceNode,
+				Content: []*yaml.Node{
+					{Kind: yaml.ScalarNode, Tag: "!env", Value: "MY_VAR"},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "sequence without custom tags",
+			node: &yaml.Node{
+				Kind: yaml.SequenceNode,
+				Content: []*yaml.Node{
+					{Kind: yaml.ScalarNode, Tag: "!!str", Value: "plain"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "sequence with nested mapping containing custom tag",
+			node: &yaml.Node{
+				Kind: yaml.SequenceNode,
+				Content: []*yaml.Node{
+					{
+						Kind: yaml.MappingNode,
+						Content: []*yaml.Node{
+							{Kind: yaml.ScalarNode, Value: "key"},
+							{Kind: yaml.ScalarNode, Tag: "!cwd", Value: ""},
+						},
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "empty sequence",
+			node: &yaml.Node{
+				Kind:    yaml.SequenceNode,
+				Content: []*yaml.Node{},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := sequenceNeedsProcessing(tt.node)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestProcessMappingNode(t *testing.T) {
+	t.Run("processes mapping node with custom tags", func(t *testing.T) {
+		cwd, err := os.Getwd()
+		require.NoError(t, err)
+
+		v := viper.New()
+		node := &yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Value: "path"},
+				{Kind: yaml.ScalarNode, Tag: "!cwd", Value: ""},
+			},
+		}
+
+		err = processMappingNode(node, v, "config")
+		require.NoError(t, err)
+
+		result := v.GetString("config.path")
+		assert.Equal(t, cwd, result)
+	})
+
+	t.Run("handles nested mapping nodes", func(t *testing.T) {
+		v := viper.New()
+		node := &yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Value: "outer"},
+				{
+					Kind: yaml.MappingNode,
+					Content: []*yaml.Node{
+						{Kind: yaml.ScalarNode, Value: "inner"},
+						{Kind: yaml.ScalarNode, Tag: "!!str", Value: "value"},
+					},
+				},
+			},
+		}
+
+		err := processMappingNode(node, v, "config")
+		require.NoError(t, err)
+		// The nested mapping is processed recursively.
+	})
+}
+
+func TestProcessSequenceElement(t *testing.T) {
+	t.Run("processes scalar element with custom tag", func(t *testing.T) {
+		cwd, err := os.Getwd()
+		require.NoError(t, err)
+
+		v := viper.New()
+		child := &yaml.Node{
+			Kind:  yaml.ScalarNode,
+			Tag:   "!cwd",
+			Value: "",
+		}
+
+		result, err := processSequenceElement(child, v, "items.0")
+		require.NoError(t, err)
+		assert.Equal(t, cwd, result)
+	})
+
+	t.Run("processes plain scalar element", func(t *testing.T) {
+		v := viper.New()
+		child := &yaml.Node{
+			Kind:  yaml.ScalarNode,
+			Tag:   "!!str",
+			Value: "plain-value",
+		}
+
+		result, err := processSequenceElement(child, v, "items.0")
+		require.NoError(t, err)
+		assert.Equal(t, "plain-value", result)
+	})
+
+	t.Run("processes mapping element", func(t *testing.T) {
+		v := viper.New()
+		child := &yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Value: "key"},
+				{Kind: yaml.ScalarNode, Value: "value"},
+			},
+		}
+
+		result, err := processSequenceElement(child, v, "items.0")
+		require.NoError(t, err)
+		resultMap, ok := result.(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "value", resultMap["key"])
+	})
 }

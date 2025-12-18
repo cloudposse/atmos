@@ -199,9 +199,13 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 		assert.NoError(t, err)
 	}()
 
-	// Define the working directory
+	// Define the working directory.
 	workDir := "../../tests/fixtures/scenarios/atmos-overrides-section"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	component := "c1"
 
@@ -333,22 +337,16 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 }
 
 func TestDescribeComponent_Packer(t *testing.T) {
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
-	}
-
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
-	}
-
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	// Define the working directory
+	// Define the working directory.
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	atmosConfig := schema.AtmosConfiguration{
 		Logs: schema.Logs{
@@ -401,9 +399,13 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
-	// Define the working directory - using quick-start-advanced as it has a good mix of configs
+	// Define the working directory - using quick-start-advanced as it has a good mix of configs.
 	workDir := "../../examples/quick-start-advanced"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	component := "vpc-flow-logs-bucket"
 	stack := "plat-ue2-dev"
