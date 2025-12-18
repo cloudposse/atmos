@@ -9,6 +9,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// errMsgAWSIdentityFailed is a constant for the AWS identity error message.
+const errMsgAWSIdentityFailed = "Failed to get AWS caller identity"
+
 // getAWSIdentity is a helper that retrieves the AWS caller identity from the execution context.
 func getAWSIdentity(ctx context.Context, execCtx *ExecutionContext) (*awsIdentity.CallerIdentity, error) {
 	defer perf.Track(nil, "function.getAWSIdentity")()
@@ -59,7 +62,7 @@ func (f *AwsAccountIDFunction) Execute(ctx context.Context, args string, execCtx
 
 	identity, err := getAWSIdentity(ctx, execCtx)
 	if err != nil {
-		log.Error("Failed to get AWS caller identity", "error", err)
+		log.Error(errMsgAWSIdentityFailed, "error", err)
 		return nil, err
 	}
 
@@ -96,7 +99,7 @@ func (f *AwsCallerIdentityArnFunction) Execute(ctx context.Context, args string,
 
 	identity, err := getAWSIdentity(ctx, execCtx)
 	if err != nil {
-		log.Error("Failed to get AWS caller identity", "error", err)
+		log.Error(errMsgAWSIdentityFailed, "error", err)
 		return nil, err
 	}
 
@@ -133,7 +136,7 @@ func (f *AwsCallerIdentityUserIDFunction) Execute(ctx context.Context, args stri
 
 	identity, err := getAWSIdentity(ctx, execCtx)
 	if err != nil {
-		log.Error("Failed to get AWS caller identity", "error", err)
+		log.Error(errMsgAWSIdentityFailed, "error", err)
 		return nil, err
 	}
 
@@ -170,7 +173,7 @@ func (f *AwsRegionFunction) Execute(ctx context.Context, args string, execCtx *E
 
 	identity, err := getAWSIdentity(ctx, execCtx)
 	if err != nil {
-		log.Error("Failed to get AWS caller identity", "error", err)
+		log.Error(errMsgAWSIdentityFailed, "error", err)
 		return nil, err
 	}
 

@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -168,4 +169,96 @@ func TestCallerIdentity(t *testing.T) {
 	assert.Equal(t, "arn:aws:iam::123456789012:user/test", identity.Arn)
 	assert.Equal(t, "AIDAEXAMPLE", identity.UserID)
 	assert.Equal(t, "us-east-1", identity.Region)
+}
+
+func TestGetCallerIdentityCached_Error(t *testing.T) {
+	// Clear cache before test.
+	ClearIdentityCache()
+
+	// Set up mock getter that returns an error.
+	expectedErr := assert.AnError
+	mock := &mockGetter{
+		identity: nil,
+		err:      expectedErr,
+	}
+
+	restore := SetGetter(mock)
+	defer restore()
+
+	ctx := context.Background()
+
+	// First call should hit the mock and return error.
+	_, err := GetCallerIdentityCached(ctx, nil, nil)
+	require.Error(t, err)
+	assert.Equal(t, expectedErr, err)
+	assert.Equal(t, 1, mock.calls)
+
+	// Second call should return cached error without calling mock again.
+	_, err = GetCallerIdentityCached(ctx, nil, nil)
+	require.Error(t, err)
+	assert.Equal(t, expectedErr, err)
+	assert.Equal(t, 1, mock.calls, "should use cached error")
+}
+
+func TestGetCallerIdentityCached_ConcurrentAccess(t *testing.T) {
+	// Clear cache before test.
+	ClearIdentityCache()
+
+	// Set up mock getter.
+	mock := &mockGetter{
+		identity: &CallerIdentity{
+			Account: "123456789012",
+			Arn:     "arn:aws:iam::123456789012:user/test",
+			UserID:  "AIDAEXAMPLE",
+			Region:  "us-west-2",
+		},
+	}
+
+	restore := SetGetter(mock)
+	defer restore()
+
+	ctx := context.Background()
+	numGoroutines := 10
+	var wg sync.WaitGroup
+	wg.Add(numGoroutines)
+
+	results := make([]*CallerIdentity, numGoroutines)
+	errors := make([]error, numGoroutines)
+
+	for i := 0; i < numGoroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			results[idx], errors[idx] = GetCallerIdentityCached(ctx, nil, nil)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// All results should be successful.
+	for i := 0; i < numGoroutines; i++ {
+		require.NoError(t, errors[i])
+		assert.Equal(t, "123456789012", results[i].Account)
+	}
+
+	// Mock should have been called only once due to caching.
+	assert.Equal(t, 1, mock.calls)
+}
+
+func TestGetCacheKey_AuthContextWithRegion(t *testing.T) {
+	authContext := &schema.AWSAuthContext{
+		Profile:         "dev",
+		CredentialsFile: "/path/to/creds",
+		ConfigFile:      "/path/to/config",
+		Region:          "eu-west-1", // Region is not included in cache key.
+	}
+
+	// Region should not affect the cache key since it's handled separately.
+	result := getCacheKey(authContext)
+	assert.Equal(t, "dev:/path/to/creds:/path/to/config", result)
+}
+
+func TestDefaultGetter_GetCallerIdentity(t *testing.T) {
+	// This test would require actual AWS credentials, so we skip in unit tests.
+	// It's here for documentation and can be run manually with credentials.
+	t.Skip("Requires actual AWS credentials - run manually for integration testing")
 }

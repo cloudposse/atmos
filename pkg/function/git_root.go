@@ -38,7 +38,6 @@ func (f *GitRootFunction) Execute(ctx context.Context, args string, execCtx *Exe
 
 	log.Debug("Executing repo-root function")
 
-	//nolint:gosec // intentional subprocess call for git
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel")
 
 	output, err := cmd.Output()
