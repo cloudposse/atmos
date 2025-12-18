@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -45,8 +46,12 @@ const (
 	maxGoroutineStackBufSize = 8192
 )
 
+// unknownIDCounter is used to generate unique fallback IDs when goroutine ID parsing fails.
+var unknownIDCounter uint64
+
 // getGoroutineID returns the current goroutine ID.
-// Returns "unknown" if parsing fails to prevent panics.
+// Returns a unique "unknown-N" identifier if parsing fails to prevent panics
+// and avoid metric collisions when multiple goroutines hit the fallback path.
 func getGoroutineID() string {
 	// Allocate buffer and grow it if needed to avoid truncation.
 	buf := make([]byte, goroutineStackBufSize)
@@ -59,8 +64,8 @@ func getGoroutineID() string {
 		}
 		// Buffer was too small, double it and try again.
 		if len(buf) >= maxGoroutineStackBufSize {
-			// Safety limit reached.
-			return "unknown"
+			// Safety limit reached, return unique fallback ID.
+			return fmt.Sprintf("unknown-%d", atomic.AddUint64(&unknownIDCounter, 1))
 		}
 		buf = make([]byte, len(buf)*2)
 	}
@@ -69,7 +74,7 @@ func getGoroutineID() string {
 	// Parse defensively to avoid panics.
 	fields := strings.Fields(string(buf))
 	if len(fields) < 2 {
-		return "unknown"
+		return fmt.Sprintf("unknown-%d", atomic.AddUint64(&unknownIDCounter, 1))
 	}
 
 	// Extract the number after "goroutine ".

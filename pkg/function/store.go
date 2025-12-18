@@ -244,7 +244,8 @@ func extractPipeOptions(parts []string) (*string, string, error) {
 	var query string
 
 	for _, p := range parts {
-		pipeParts := strings.Fields(strings.TrimSpace(p))
+		// Use SplitN to handle values containing spaces (e.g., query ".foo .bar").
+		pipeParts := strings.SplitN(strings.TrimSpace(p), " ", 2)
 		if len(pipeParts) != 2 {
 			return nil, "", fmt.Errorf("%w: invalid pipe parameters", ErrInvalidArguments)
 		}
