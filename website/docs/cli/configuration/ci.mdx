@@ -1,0 +1,356 @@
+---
+title: CI Integration
+sidebar_label: ci
+sidebar_class_name: command
+description: Configure native CI/CD integration for GitHub Actions and other CI providers
+---
+
+import Intro from '@site/src/components/Intro';
+import KeyPoints from '@site/src/components/KeyPoints';
+import Note from '@site/src/components/Note';
+import File from '@site/src/components/File';
+
+<Intro>
+Native CI integration brings first-class CI/CD support directly into the Atmos CLI. Run `atmos terraform plan` in GitHub Actions and get beautiful job summaries, status checks, and PR comments—no extra actions required.
+</Intro>
+
+<KeyPoints>
+- Rich job summaries with resource badges and collapsible diffs
+- Live status checks showing "Plan in progress" / "Plan complete"
+- PR comments with plan summaries
+- Terraform outputs exported to `$GITHUB_OUTPUT`
+- Same command works locally and in CI
+</KeyPoints>
+
+## Configuration
+
+Configure CI integration in your `atmos.yaml`. The configuration uses provider-agnostic naming to support GitHub Actions, GitLab CI, and other CI providers:
+
+```yaml
+ci:
+  # Auto-enabled when CI detected, or set explicitly
+  enabled: true
+
+  # Output variables for downstream jobs
+  # GitHub: $GITHUB_OUTPUT, GitLab: dotenv artifacts
+  output:
+    enabled: true
+    variables:
+      - has_changes
+      - has_additions
+      - has_destructions
+      - artifact_key
+      - plan_summary
+
+  # Job summary with plan/apply results
+  # GitHub: $GITHUB_STEP_SUMMARY, GitLab: job artifacts
+  summary:
+    enabled: true
+    # template: "custom-summary.md"
+
+  # Commit status checks
+  # GitHub: Check Runs API, GitLab: Commit Status API
+  checks:
+    enabled: false
+    context_prefix: "atmos"
+
+  # PR/MR comments
+  # GitHub: PR comments, GitLab: MR notes
+  comments:
+    enabled: true
+    behavior: upsert  # create, update, or upsert
+    # template: "custom-comment.md"
+
+  # Template overrides (shared across all features)
+  templates:
+    base_path: ".atmos/ci/templates"
+    terraform:
+      plan: "plan.md"
+      apply: "apply.md"
+```
+
+<dl>
+  <dt>`ci.enabled`</dt>
+  <dd>
+    Explicitly enable or disable CI mode. When not set, CI mode is auto-detected from environment variables (`CI=true` or `GITHUB_ACTIONS=true`).
+
+    **Default:** Auto-detected
+  </dd>
+
+  <dt>`ci.output.enabled`</dt>
+  <dd>
+    Write plan/apply results as key-value pairs for use in downstream jobs. On GitHub Actions, writes to `$GITHUB_OUTPUT`. On GitLab CI, creates dotenv artifacts.
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`ci.output.variables`</dt>
+  <dd>
+    List of variables to output. Available variables include `has_changes`, `has_additions`, `has_destructions`, `artifact_key`, and `plan_summary`.
+
+    **Default:** All available variables
+  </dd>
+
+  <dt>`ci.summary.enabled`</dt>
+  <dd>
+    Write rich summaries with resource badges, collapsible diffs, and terraform outputs. On GitHub Actions, writes to `$GITHUB_STEP_SUMMARY`. On GitLab CI, creates job artifacts.
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`ci.checks.enabled`</dt>
+  <dd>
+    Post commit status checks when operations start and complete. Shows "Plan in progress" while running and "Plan complete — 3 to add, 1 to change" when done.
+
+    **Requires:** `checks: write` permission (GitHub) or API token with commit status scope (GitLab)
+
+    **Default:** `false`
+  </dd>
+
+  <dt>`ci.checks.context_prefix`</dt>
+  <dd>
+    Prefix for status check names. For example, with prefix `atmos`, checks appear as `atmos/terraform/plan`.
+
+    **Default:** `atmos`
+  </dd>
+
+  <dt>`ci.comments.enabled`</dt>
+  <dd>
+    Post or update comments on PRs (GitHub) or MRs (GitLab) with plan summaries.
+
+    **Requires:** `pull-requests: write` permission (GitHub) or API token with MR notes scope (GitLab)
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`ci.comments.behavior`</dt>
+  <dd>
+    How to handle comments:
+    - `create` - Always create a new comment
+    - `update` - Update existing comment or fail if none exists
+    - `upsert` - Update existing comment or create new one
+
+    **Default:** `upsert`
+  </dd>
+
+  <dt>`ci.templates`</dt>
+  <dd>
+    Override default templates for summaries and comments. See [Template Customization](#template-customization) for details.
+  </dd>
+</dl>
+
+## GitHub Actions Permissions
+
+Different CI features require different GitHub Actions permissions. Add only what you need:
+
+```yaml
+permissions:
+  id-token: write       # Required: OIDC authentication
+  contents: read        # Required: Checkout repository
+  checks: write         # Optional: Status checks
+  pull-requests: write  # Optional: PR comments
+```
+
+| Permission | Required | Enables |
+|------------|----------|---------|
+| `id-token: write` | Yes | OIDC authentication via [atmos auth](/stacks/auth) for AWS, Azure, GCP |
+| `contents: read` | Yes | Checkout repository code |
+| `checks: write` | No | Status checks showing "Plan in progress" / "Plan complete" |
+| `pull-requests: write` | No | PR comments with plan summaries |
+
+### Minimal Workflow
+
+Job summaries only (no status checks or PR comments):
+
+```yaml
+name: Terraform Plan
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Terraform Plan
+        run: atmos terraform plan mycomponent -s dev-us-east-1
+        env:
+          ATMOS_PROFILE: ci
+          ATMOS_IDENTITY: plat-dev/admin
+```
+
+### Full-Featured Workflow
+
+Status checks + PR comments:
+
+```yaml
+name: Terraform Plan
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Terraform Plan
+        run: atmos terraform plan mycomponent -s dev-us-east-1
+        env:
+          ATMOS_PROFILE: ci
+          ATMOS_IDENTITY: plat-dev/admin
+```
+
+## Authentication
+
+Use [profiles](/cli/configuration/profiles) and [auth](/stacks/auth) with OIDC for secure, keyless authentication:
+
+<File title="profiles/ci/auth.yaml">
+```yaml
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      region: us-east-2
+      spec:
+        audience: sts.amazonaws.com
+
+  identities:
+    plat-dev/admin:
+      kind: aws/assume-role
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/acme-plat-gbl-dev-terraform
+```
+</File>
+
+Then set the profile and identity in your workflow:
+
+```yaml
+env:
+  ATMOS_PROFILE: ci
+  ATMOS_IDENTITY: plat-dev/admin
+```
+
+## Job Summary Output
+
+When CI mode is enabled, Atmos writes a detailed summary to `$GITHUB_STEP_SUMMARY`:
+
+```markdown
+## 🔄 Plan: `vpc` in `plat-ue2-dev`
+
+[![create](https://shields.io/badge/CREATE-3-success?style=for-the-badge)](#)
+[![change](https://shields.io/badge/CHANGE-1-warning?style=for-the-badge)](#)
+[![destroy](https://shields.io/badge/DESTROY-2-critical?style=for-the-badge)](#)
+
+> [!CAUTION]
+> **Terraform will delete resources!**
+
+<details>
+<summary>📋 Plan: 3 to add, 1 to change, 2 to destroy</summary>
+
+### ➕ Create
+- `aws_vpc.main`
+- `aws_subnet.public[0]`
+- `aws_subnet.public[1]`
+
+### ✏️ Change
+- `aws_security_group.web`
+
+### ➖ Destroy
+- `aws_security_group.deprecated`
+- `aws_route.legacy`
+
+</details>
+```
+
+## Status Checks
+
+When `ci.checks.enabled: true`, Atmos posts commit status checks:
+
+**While running:**
+```
+● Atmos  Plan in progress — vpc in plat-ue2-dev
+```
+
+**When complete:**
+```
+✓ Atmos  Plan complete — 3 to add, 1 to change, 2 to destroy
+```
+
+## Matrix Strategy
+
+Use `atmos describe affected` to dynamically plan all affected components:
+
+```yaml
+jobs:
+  affected:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.affected.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Get Affected Components
+        id: affected
+        run: echo "matrix=$(atmos describe affected --format=matrix)" >> $GITHUB_OUTPUT
+
+  plan:
+    needs: affected
+    if: ${{ needs.affected.outputs.matrix != '{"include":[]}' }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Terraform Plan
+        run: atmos terraform plan ${{ matrix.component }} -s ${{ matrix.stack }}
+        env:
+          ATMOS_PROFILE: ci
+          ATMOS_IDENTITY: plat-dev/admin
+```
+
+## Local Testing
+
+Test CI output locally:
+
+```bash
+# Write summary to a file
+export ATMOS_CI_SUMMARY=/tmp/summary.md
+atmos terraform plan mycomponent -s dev --ci
+cat /tmp/summary.md
+
+# Or force CI mode to see output in terminal
+atmos terraform plan mycomponent -s dev --ci
+```
+
+## CI Detection
+
+CI mode is auto-enabled when any of these environment variables are set:
+
+- `CI=true` (set by most CI providers)
+- `GITHUB_ACTIONS=true` (set by GitHub Actions)
+
+Override with the `--ci` flag or `ci.enabled` configuration.
