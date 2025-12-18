@@ -1347,10 +1347,11 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 	t.Run("falls back to config path when git root unavailable", func(t *testing.T) {
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
 
-		configPath := "/tmp/test-config"
+		// Use t.TempDir() for cross-platform compatibility.
+		configPath := t.TempDir()
 		result, err := tryResolveWithGitRoot("", false, configPath)
 		require.NoError(t, err)
-		assert.Contains(t, result, "test-config")
+		assert.Equal(t, configPath, result)
 	})
 
 	t.Run("resolves explicit relative path with git root", func(t *testing.T) {
@@ -1373,17 +1374,20 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 
 func TestTryResolveWithConfigPath(t *testing.T) {
 	t.Run("returns config path when path is empty", func(t *testing.T) {
-		configPath := "/tmp/test-config"
+		// Use t.TempDir() for cross-platform compatibility.
+		configPath := t.TempDir()
 		result, err := tryResolveWithConfigPath("", configPath)
 		require.NoError(t, err)
 		assert.Equal(t, configPath, result)
 	})
 
 	t.Run("joins path with config path", func(t *testing.T) {
-		configPath := "/tmp/test-config"
+		// Use t.TempDir() for cross-platform compatibility.
+		configPath := t.TempDir()
 		result, err := tryResolveWithConfigPath("subdir", configPath)
 		require.NoError(t, err)
-		assert.Equal(t, "/tmp/test-config/subdir", result)
+		expected := filepath.Join(configPath, "subdir")
+		assert.Equal(t, expected, result)
 	})
 
 	t.Run("resolves relative to CWD when no config path", func(t *testing.T) {
