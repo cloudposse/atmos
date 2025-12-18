@@ -245,8 +245,8 @@ func TestClean_ErrorAggregation(t *testing.T) {
 	}
 }
 
-func TestClean_ComponentPriority(t *testing.T) {
-	// When both Component and All are set, Component takes precedence
+func TestClean_AllTakesPrecedence(t *testing.T) {
+	// When both Component and All are set, All takes precedence
 	// based on the if/else structure in Clean().
 	tmpDir := t.TempDir()
 
