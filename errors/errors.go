@@ -14,7 +14,7 @@ const (
 
 var (
 	// Vendor errors.
-	ErrVendoringNotConfigured = errors.New("Vendoring is not configured")
+	ErrVendoringNotConfigured = errors.New("vendoring is not configured")
 
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrDownloadFile                          = errors.New("failed to download file")

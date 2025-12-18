@@ -394,7 +394,7 @@ spec:
 				BasePath: tempDir,
 			}
 
-			_, vendorConfigExists, _, err := ReadAndProcessVendorConfigFile(
+			result, err := ReadAndProcessVendorConfigFile(
 				atmosConfig,
 				vendorFile,
 				false,
@@ -402,13 +402,13 @@ spec:
 
 			if tt.shouldFail {
 				assert.Error(t, err, tt.description)
-				assert.False(t, vendorConfigExists)
+				assert.False(t, result.Found)
 				if err != nil {
 					assert.Contains(t, err.Error(), "yaml", "Error should mention YAML parsing issue")
 				}
 			} else {
 				assert.NoError(t, err, tt.description)
-				assert.True(t, vendorConfigExists)
+				assert.True(t, result.Found)
 			}
 		})
 	}
@@ -445,17 +445,17 @@ spec:
 	require.NoError(t, err)
 	atmosConfig.BasePath = tempDir
 
-	// Read vendor config
-	vendorConfig, vendorConfigExists, _, err := ReadAndProcessVendorConfigFile(
+	// Read vendor config.
+	vendorResult, err := ReadAndProcessVendorConfigFile(
 		&atmosConfig,
 		vendorFile,
 		false,
 	)
 	require.NoError(t, err)
-	require.True(t, vendorConfigExists)
+	require.True(t, vendorResult.Found)
 
-	// Process the template in the source field (simulates what happens during vendor pull)
-	source := vendorConfig.Spec.Sources[0]
+	// Process the template in the source field (simulates what happens during vendor pull).
+	source := vendorResult.Config.Spec.Sources[0]
 	tmplData := struct {
 		Component string
 		Version   string
@@ -507,17 +507,17 @@ spec:
 	require.NotEmpty(t, atmosConfig.Settings.GithubToken, "GitHub token should be loaded from environment")
 	assert.Equal(t, testToken, atmosConfig.Settings.GithubToken, "Token should match GITHUB_TOKEN env var")
 
-	// Read vendor config
-	vendorConfig, vendorConfigExists, _, err := ReadAndProcessVendorConfigFile(
+	// Read vendor config.
+	vendorResult, err := ReadAndProcessVendorConfigFile(
 		&atmosConfig,
 		vendorFile,
 		false,
 	)
 	require.NoError(t, err)
-	require.True(t, vendorConfigExists)
+	require.True(t, vendorResult.Found)
 
-	// Process the template in the source field
-	source := vendorConfig.Spec.Sources[0]
+	// Process the template in the source field.
+	source := vendorResult.Config.Spec.Sources[0]
 	tmplData := struct {
 		Component string
 		Version   string
@@ -536,6 +536,479 @@ spec:
 
 // TestVendorYAMLQuotingVariations tests different YAML quoting styles with template functions
 // to ensure they all parse correctly and produce the same result.
+func TestGetConfigFiles(t *testing.T) {
+	t.Run("file path returns single file", func(t *testing.T) {
+		tempDir := t.TempDir()
+		vendorFile := filepath.Join(tempDir, "vendor.yaml")
+		err := os.WriteFile(vendorFile, []byte("test: content"), 0o644)
+		require.NoError(t, err)
+
+		files, err := getConfigFiles(vendorFile)
+		require.NoError(t, err)
+		assert.Len(t, files, 1)
+		assert.Equal(t, vendorFile, files[0])
+	})
+
+	t.Run("directory with yaml files returns sorted files", func(t *testing.T) {
+		tempDir := t.TempDir()
+		// Create multiple yaml files.
+		fileNames := []string{"a-vendor.yaml", "b-vendor.yml", "c-vendor.yaml"}
+		for _, name := range fileNames {
+			filePath := filepath.Join(tempDir, name)
+			err := os.WriteFile(filePath, []byte("test: content"), 0o644)
+			require.NoError(t, err)
+		}
+
+		files, err := getConfigFiles(tempDir)
+		require.NoError(t, err)
+		assert.Len(t, files, 3)
+		// Files should be sorted alphabetically.
+		assert.Contains(t, files[0], "a-vendor.yaml")
+		assert.Contains(t, files[1], "b-vendor.yml")
+		assert.Contains(t, files[2], "c-vendor.yaml")
+	})
+
+	t.Run("directory with no yaml files returns error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		// Create a non-yaml file.
+		filePath := filepath.Join(tempDir, "readme.txt")
+		err := os.WriteFile(filePath, []byte("not yaml"), 0o644)
+		require.NoError(t, err)
+
+		_, err = getConfigFiles(tempDir)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrNoYAMLConfigFiles)
+	})
+
+	t.Run("non-existent path returns error", func(t *testing.T) {
+		_, err := getConfigFiles("/non/existent/path/vendor.yaml")
+		assert.Error(t, err)
+	})
+}
+
+func TestMergeVendorConfigFiles(t *testing.T) {
+	t.Run("merges multiple files successfully", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		// Create first config file.
+		config1 := `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: "vpc"
+      source: "github.com/example/repo.git//vpc"
+      targets:
+        - "./vpc"
+`
+		file1 := filepath.Join(tempDir, "vendor1.yaml")
+		err := os.WriteFile(file1, []byte(config1), 0o644)
+		require.NoError(t, err)
+
+		// Create second config file.
+		config2 := `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: "rds"
+      source: "github.com/example/repo.git//rds"
+      targets:
+        - "./rds"
+`
+		file2 := filepath.Join(tempDir, "vendor2.yaml")
+		err = os.WriteFile(file2, []byte(config2), 0o644)
+		require.NoError(t, err)
+
+		// Merge the config files.
+		result, err := mergeVendorConfigFiles([]string{file1, file2})
+		require.NoError(t, err)
+		assert.Len(t, result.Spec.Sources, 2)
+	})
+
+	t.Run("detects duplicate components", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		// Create first config file.
+		config1 := `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: "vpc"
+      source: "github.com/example/repo.git//vpc"
+      targets:
+        - "./vpc"
+`
+		file1 := filepath.Join(tempDir, "vendor1.yaml")
+		err := os.WriteFile(file1, []byte(config1), 0o644)
+		require.NoError(t, err)
+
+		// Create second config file with same component.
+		config2 := `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: "vpc"
+      source: "github.com/another/repo.git//vpc"
+      targets:
+        - "./vpc2"
+`
+		file2 := filepath.Join(tempDir, "vendor2.yaml")
+		err = os.WriteFile(file2, []byte(config2), 0o644)
+		require.NoError(t, err)
+
+		// Merge should fail due to duplicate.
+		_, err = mergeVendorConfigFiles([]string{file1, file2})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrDuplicateComponentsFound)
+	})
+
+	t.Run("merges imports without duplicates", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		// Create first config file with import.
+		config1 := `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  imports:
+    - vendor/common.yaml
+`
+		file1 := filepath.Join(tempDir, "vendor1.yaml")
+		err := os.WriteFile(file1, []byte(config1), 0o644)
+		require.NoError(t, err)
+
+		// Create second config file with same import.
+		config2 := `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  imports:
+    - vendor/common.yaml
+    - vendor/extra.yaml
+`
+		file2 := filepath.Join(tempDir, "vendor2.yaml")
+		err = os.WriteFile(file2, []byte(config2), 0o644)
+		require.NoError(t, err)
+
+		// Merge should dedupe imports.
+		result, err := mergeVendorConfigFiles([]string{file1, file2})
+		require.NoError(t, err)
+		assert.Len(t, result.Spec.Imports, 2) // Should be unique.
+	})
+}
+
+func TestValidateSourceFields(t *testing.T) {
+	tests := []struct {
+		name        string
+		source      schema.AtmosVendorSource
+		expectError error
+	}{
+		{
+			name: "valid source",
+			source: schema.AtmosVendorSource{
+				Source:  "github.com/example/repo.git//vpc",
+				Targets: []string{"./vpc"},
+			},
+			expectError: nil,
+		},
+		{
+			name: "missing source",
+			source: schema.AtmosVendorSource{
+				Source:  "",
+				Targets: []string{"./vpc"},
+			},
+			expectError: ErrSourceMissing,
+		},
+		{
+			name: "missing targets",
+			source: schema.AtmosVendorSource{
+				Source:  "github.com/example/repo.git//vpc",
+				Targets: []string{},
+			},
+			expectError: ErrTargetsMissing,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateSourceFields(&tt.source, "vendor.yaml")
+			if tt.expectError != nil {
+				assert.ErrorIs(t, err, tt.expectError)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestShouldSkipSource(t *testing.T) {
+	tests := []struct {
+		name       string
+		source     schema.AtmosVendorSource
+		component  string
+		tags       []string
+		shouldSkip bool
+	}{
+		{
+			name:       "no filter - include all",
+			source:     schema.AtmosVendorSource{Component: "vpc", Tags: []string{"network"}},
+			component:  "",
+			tags:       nil,
+			shouldSkip: false,
+		},
+		{
+			name:       "component matches",
+			source:     schema.AtmosVendorSource{Component: "vpc", Tags: []string{"network"}},
+			component:  "vpc",
+			tags:       nil,
+			shouldSkip: false,
+		},
+		{
+			name:       "component does not match",
+			source:     schema.AtmosVendorSource{Component: "rds", Tags: []string{"database"}},
+			component:  "vpc",
+			tags:       nil,
+			shouldSkip: true,
+		},
+		{
+			name:       "tag matches",
+			source:     schema.AtmosVendorSource{Component: "vpc", Tags: []string{"network", "core"}},
+			component:  "",
+			tags:       []string{"network"},
+			shouldSkip: false,
+		},
+		{
+			name:       "tag does not match",
+			source:     schema.AtmosVendorSource{Component: "vpc", Tags: []string{"network"}},
+			component:  "",
+			tags:       []string{"database"},
+			shouldSkip: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := shouldSkipSource(&tt.source, tt.component, tt.tags)
+			assert.Equal(t, tt.shouldSkip, result)
+		})
+	}
+}
+
+func TestValidateTagsAndComponents(t *testing.T) {
+	sources := []schema.AtmosVendorSource{
+		{Component: "vpc", Tags: []string{"network"}},
+		{Component: "rds", Tags: []string{"database"}},
+	}
+
+	tests := []struct {
+		name        string
+		component   string
+		tags        []string
+		expectError error
+	}{
+		{
+			name:        "no filter - valid",
+			component:   "",
+			tags:        nil,
+			expectError: nil,
+		},
+		{
+			name:        "existing component - valid",
+			component:   "vpc",
+			tags:        nil,
+			expectError: nil,
+		},
+		{
+			name:        "non-existing component - error",
+			component:   "ecs",
+			tags:        nil,
+			expectError: ErrComponentNotDefined,
+		},
+		{
+			name:        "matching tag - valid",
+			component:   "",
+			tags:        []string{"network"},
+			expectError: nil,
+		},
+		{
+			name:        "non-matching tag - error",
+			component:   "",
+			tags:        []string{"compute"},
+			expectError: ErrNoComponentsWithTags,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateTagsAndComponents(sources, "vendor.yaml", tt.component, tt.tags)
+			if tt.expectError != nil {
+				assert.ErrorIs(t, err, tt.expectError)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestFindComponentConfigFile(t *testing.T) {
+	t.Run("finds yaml extension", func(t *testing.T) {
+		tempDir := t.TempDir()
+		configFile := filepath.Join(tempDir, "component.yaml")
+		err := os.WriteFile(configFile, []byte("test"), 0o644)
+		require.NoError(t, err)
+
+		found, err := findComponentConfigFile(tempDir, "component")
+		require.NoError(t, err)
+		assert.Equal(t, configFile, found)
+	})
+
+	t.Run("finds yml extension", func(t *testing.T) {
+		tempDir := t.TempDir()
+		configFile := filepath.Join(tempDir, "component.yml")
+		err := os.WriteFile(configFile, []byte("test"), 0o644)
+		require.NoError(t, err)
+
+		found, err := findComponentConfigFile(tempDir, "component")
+		require.NoError(t, err)
+		assert.Equal(t, configFile, found)
+	})
+
+	t.Run("prefers yaml over yml", func(t *testing.T) {
+		tempDir := t.TempDir()
+		yamlFile := filepath.Join(tempDir, "component.yaml")
+		err := os.WriteFile(yamlFile, []byte("test"), 0o644)
+		require.NoError(t, err)
+		ymlFile := filepath.Join(tempDir, "component.yml")
+		err = os.WriteFile(ymlFile, []byte("test"), 0o644)
+		require.NoError(t, err)
+
+		found, err := findComponentConfigFile(tempDir, "component")
+		require.NoError(t, err)
+		assert.Equal(t, yamlFile, found) // .yaml should be preferred.
+	})
+
+	t.Run("returns error when not found", func(t *testing.T) {
+		tempDir := t.TempDir()
+		_, err := findComponentConfigFile(tempDir, "component")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrComponentConfigFileNotFound)
+	})
+}
+
+func TestProcessVendorImports(t *testing.T) {
+	t.Run("no imports returns sources unchanged", func(t *testing.T) {
+		sources := []schema.AtmosVendorSource{
+			{Component: "vpc", Source: "github.com/example/repo.git//vpc"},
+		}
+
+		result, allImports, err := processVendorImports(nil, "vendor.yaml", nil, sources, nil)
+		require.NoError(t, err)
+		assert.Len(t, result, 1)
+		assert.Equal(t, "vpc", result[0].Component)
+		assert.Empty(t, allImports)
+	})
+
+	t.Run("detects duplicate import", func(t *testing.T) {
+		// Create import file.
+		tempDir := t.TempDir()
+		importFile := filepath.Join(tempDir, "import.yaml")
+		importContent := `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: "imported"
+      source: "github.com/example/repo.git//imported"
+      targets:
+        - "./imported"
+`
+		err := os.WriteFile(importFile, []byte(importContent), 0o644)
+		require.NoError(t, err)
+
+		// Try to import the same file twice.
+		_, _, err = processVendorImports(nil, "vendor.yaml", []string{importFile}, nil, []string{importFile})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrDuplicateImport)
+	})
+
+	t.Run("processes valid import", func(t *testing.T) {
+		// Create import file.
+		tempDir := t.TempDir()
+		importFile := filepath.Join(tempDir, "import.yaml")
+		importContent := `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: "imported"
+      source: "github.com/example/repo.git//imported"
+      targets:
+        - "./imported"
+`
+		err := os.WriteFile(importFile, []byte(importContent), 0o644)
+		require.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+		}
+
+		result, allImports, err := processVendorImports(atmosConfig, "vendor.yaml", []string{importFile}, nil, nil)
+		require.NoError(t, err)
+		assert.Len(t, result, 1)
+		assert.Equal(t, "imported", result[0].Component)
+		assert.Contains(t, allImports, importFile)
+		assert.Equal(t, importFile, result[0].File)
+	})
+}
+
+func TestLogInitialMessage(t *testing.T) {
+	// This function just logs, so we verify it doesn't panic.
+	t.Run("without tags", func(t *testing.T) {
+		logInitialMessage("vendor.yaml", nil)
+	})
+
+	t.Run("with tags", func(t *testing.T) {
+		logInitialMessage("vendor.yaml", []string{"networking", "core"})
+	})
+}
+
+func TestResolveVendorConfigFilePath(t *testing.T) {
+	t.Run("uses vendor base path when set", func(t *testing.T) {
+		tempDir := t.TempDir()
+		vendorDir := filepath.Join(tempDir, "vendor")
+		err := os.MkdirAll(vendorDir, 0o755)
+		require.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+			Vendor: schema.Vendor{
+				BasePath: "vendor",
+			},
+		}
+
+		result := resolveVendorConfigFilePath(atmosConfig, "vendor.yaml", true)
+		assert.Contains(t, result, "vendor")
+	})
+
+	t.Run("searches for config file", func(t *testing.T) {
+		tempDir := t.TempDir()
+		vendorFile := filepath.Join(tempDir, "vendor.yaml")
+		err := os.WriteFile(vendorFile, []byte("test"), 0o644)
+		require.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+		}
+
+		result := resolveVendorConfigFilePath(atmosConfig, vendorFile, false)
+		assert.NotEmpty(t, result)
+	})
+
+	t.Run("returns empty when not found", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: "/non/existent",
+		}
+
+		result := resolveVendorConfigFilePath(atmosConfig, "vendor.yaml", false)
+		assert.Empty(t, result)
+	})
+}
+
 func TestVendorYAMLQuotingVariations(t *testing.T) {
 	testToken := "ghp_quoting_test_token_99999"
 	t.Setenv("GITHUB_TOKEN", testToken)
@@ -610,18 +1083,18 @@ spec:
 			require.NoError(t, err, "Should initialize config")
 			atmosConfig.BasePath = tempDir
 
-			// Read and parse vendor config
-			vendorConfig, vendorConfigExists, _, err := ReadAndProcessVendorConfigFile(
+			// Read and parse vendor config.
+			vendorResult, err := ReadAndProcessVendorConfigFile(
 				&atmosConfig,
 				vendorFile,
 				false,
 			)
 			require.NoError(t, err, "YAML should parse successfully: %s", tt.description)
-			require.True(t, vendorConfigExists, "Vendor config should exist")
-			require.Len(t, vendorConfig.Spec.Sources, 1, "Should have one source")
+			require.True(t, vendorResult.Found, "Vendor config should exist")
+			require.Len(t, vendorResult.Config.Spec.Sources, 1, "Should have one source")
 
-			// Process templates
-			source := vendorConfig.Spec.Sources[0]
+			// Process templates.
+			source := vendorResult.Config.Spec.Sources[0]
 			tmplData := struct {
 				Component string
 				Version   string
