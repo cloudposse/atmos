@@ -52,14 +52,14 @@ spec:
 		assert.Nil(t, err)
 
 		// Test vendoring with component flag.
-		vendorConfig, exists, configFile, err := vendor.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
+		vendorResult, err := vendor.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
 		assert.Nil(t, err)
-		assert.True(t, exists)
-		assert.NotEmpty(t, configFile)
+		assert.True(t, vendorResult.Found)
+		assert.NotEmpty(t, vendorResult.FilePath)
 
 		// Verify the component exists in vendor config.
 		var found bool
-		for _, source := range vendorConfig.Spec.Sources {
+		for _, source := range vendorResult.Config.Spec.Sources {
 			if source.Component == "mock" {
 				found = true
 				break
@@ -103,9 +103,9 @@ spec:
 	t.Run("no vendor.yaml or component.yaml", func(t *testing.T) {
 		// Test vendoring with component flag.
 		vendorYamlPath := filepath.Join(testDir, "vendor.yaml")
-		_, exists, _, err := vendor.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
+		vendorResult, err := vendor.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
 		assert.Nil(t, err)
-		assert.False(t, exists)
+		assert.False(t, vendorResult.Found)
 
 		// Test component vendoring.
 		_, _, err = vendor.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "mock", "terraform")
@@ -131,11 +131,11 @@ spec:
 		assert.Nil(t, err)
 
 		// Test vendoring without component flag.
-		vendorConfig, exists, configFile, err := vendor.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
+		vendorResult, err := vendor.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
 		assert.Nil(t, err)
-		assert.True(t, exists)
-		assert.NotEmpty(t, configFile)
-		assert.NotNil(t, vendorConfig.Spec.Sources)
+		assert.True(t, vendorResult.Found)
+		assert.NotEmpty(t, vendorResult.FilePath)
+		assert.NotNil(t, vendorResult.Config.Spec.Sources)
 
 		// Clean up.
 		err = os.Remove(vendorYamlPath)

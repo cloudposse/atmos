@@ -15,6 +15,9 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// metadataComponentKey is the key for the component in metadata.
+const metadataComponentKey = "component"
+
 // executeStackVendorInternal executes the command to vendor all components in an Atmos stack.
 func executeStackVendorInternal(
 	atmosConfig *schema.AtmosConfiguration,
@@ -120,6 +123,20 @@ func extractVendorableComponents(
 	return packages, skipped, nil
 }
 
+// getComponentBasePath returns the base path for a component type.
+func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentType string) string {
+	switch componentType {
+	case cfg.TerraformComponentType:
+		return atmosConfig.Components.Terraform.BasePath
+	case cfg.HelmfileComponentType:
+		return atmosConfig.Components.Helmfile.BasePath
+	case cfg.PackerComponentType:
+		return atmosConfig.Components.Packer.BasePath
+	default:
+		return atmosConfig.Components.Terraform.BasePath
+	}
+}
+
 // processStackComponents processes components from a stack and returns vendorable packages.
 func processStackComponents(
 	atmosConfig *schema.AtmosConfiguration,
@@ -130,69 +147,44 @@ func processStackComponents(
 ) ([]pkgComponentVendor, int, error) {
 	var packages []pkgComponentVendor
 	skipped := 0
+	componentBasePath := getComponentBasePath(atmosConfig, componentType)
 
 	for componentName, componentData := range components {
-		// Resolve the actual component path (may be different if metadata.component is set)
 		actualComponentPath := resolveComponentPath(componentName, componentData)
-
-		// Create a unique key for this component (type + path)
 		componentKey := fmt.Sprintf("%s/%s", componentType, actualComponentPath)
 		if processedComponents[componentKey] {
-			// Already processed this component, skip
 			continue
 		}
 
-		// Get the component's base path
-		var componentBasePath string
-		switch componentType {
-		case cfg.TerraformComponentType:
-			componentBasePath = atmosConfig.Components.Terraform.BasePath
-		case cfg.HelmfileComponentType:
-			componentBasePath = atmosConfig.Components.Helmfile.BasePath
-		case cfg.PackerComponentType:
-			componentBasePath = atmosConfig.Components.Packer.BasePath
-		default:
-			componentBasePath = atmosConfig.Components.Terraform.BasePath
-		}
-
 		componentPath := filepath.Join(atmosConfig.BasePath, componentBasePath, actualComponentPath)
-
-		// Check if component.yaml exists
 		componentConfigFile, err := findComponentConfigFile(componentPath, strings.TrimSuffix(cfg.ComponentVendorConfigFileName, ".yaml"))
 		if err != nil {
-			// No component.yaml, skip this component
-			log.Debug("Skipping component (no vendor config)", "component", componentName, "path", componentPath)
+			log.Debug("Skipping component (no vendor config)", metadataComponentKey, componentName, "path", componentPath)
 			skipped++
 			continue
 		}
 
-		// Read and process the component vendor config
 		componentConfigFileContent, err := os.ReadFile(componentConfigFile)
 		if err != nil {
 			return nil, skipped, err
 		}
-
 		componentConfig, err := u.UnmarshalYAML[schema.VendorComponentConfig](string(componentConfigFileContent))
 		if err != nil {
 			return nil, skipped, err
 		}
-
 		if componentConfig.Kind != "ComponentVendorConfig" {
-			log.Debug("Skipping component (invalid kind)", "component", componentName, "kind", componentConfig.Kind)
+			log.Debug("Skipping component (invalid kind)", metadataComponentKey, componentName, "kind", componentConfig.Kind)
 			skipped++
 			continue
 		}
 
-		// Create packages for the component
 		pkgs, err := createComponentPackages(atmosConfig, actualComponentPath, componentPath, &componentConfig.Spec, componentType)
 		if err != nil {
 			return nil, skipped, err
 		}
-
 		packages = append(packages, pkgs...)
 		processedComponents[componentKey] = true
-
-		log.Debug("Found vendorable component", "component", componentName, "stack", stackName, "path", actualComponentPath)
+		log.Debug("Found vendorable component", metadataComponentKey, componentName, "stack", stackName, "path", actualComponentPath)
 	}
 
 	return packages, skipped, nil
@@ -209,7 +201,7 @@ func resolveComponentPath(componentName string, componentData any) string {
 	// Check if metadata.component is set
 	if metadataRaw, ok := compMap["metadata"]; ok {
 		if metadata, ok := metadataRaw.(map[string]any); ok {
-			if component, ok := metadata["component"].(string); ok && component != "" {
+			if component, ok := metadata[metadataComponentKey].(string); ok && component != "" {
 				return component
 			}
 		}
@@ -220,11 +212,11 @@ func resolveComponentPath(componentName string, componentData any) string {
 
 // createComponentPackages creates vendor packages for a component.
 func createComponentPackages(
-	atmosConfig *schema.AtmosConfiguration,
+	_ *schema.AtmosConfiguration,
 	componentName string,
 	componentPath string,
 	vendorComponentSpec *schema.VendorComponentSpec,
-	componentType string,
+	_ string,
 ) ([]pkgComponentVendor, error) {
 	var packages []pkgComponentVendor
 

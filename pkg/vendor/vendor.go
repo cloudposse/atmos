@@ -32,8 +32,8 @@ func Pull(atmosConfig *schema.AtmosConfiguration, opts ...PullOption) error {
 		return VendorStack(atmosConfig, options.Stack, WithStackDryRun(options.DryRun))
 	}
 
-	// First, check if vendor.yaml exists - it takes precedence
-	vendorConfig, vendorConfigExists, foundVendorConfigFile, err := ReadAndProcessVendorConfigFile(
+	// First, check if vendor.yaml exists - it takes precedence.
+	vendorResult, err := ReadAndProcessVendorConfigFile(
 		atmosConfig,
 		cfg.AtmosVendorConfigFileName,
 		true,
@@ -42,13 +42,13 @@ func Pull(atmosConfig *schema.AtmosConfiguration, opts ...PullOption) error {
 		return err
 	}
 
-	// If vendor.yaml exists, use it (with optional component/tags filtering)
-	if vendorConfigExists {
+	// If vendor.yaml exists, use it (with optional component/tags filtering).
+	if vendorResult.Found {
 		return executeAtmosVendorInternal(&executeVendorOptions{
-			vendorConfigFileName: foundVendorConfigFile,
+			vendorConfigFileName: vendorResult.FilePath,
 			dryRun:               options.DryRun,
 			atmosConfig:          atmosConfig,
-			atmosVendorSpec:      vendorConfig.Spec,
+			atmosVendorSpec:      vendorResult.Config.Spec,
 			component:            options.Component,
 			tags:                 options.Tags,
 		})
@@ -156,6 +156,17 @@ func executeAtmosVendorInternal(params *executeVendorOptions) error {
 	return nil
 }
 
+// validateRemoteURI validates a non-local URI and returns a formatted error if invalid.
+func validateRemoteURI(uri, component string) error {
+	if err := u.ValidateURI(uri); err != nil {
+		if strings.Contains(uri, "..") {
+			return fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", component, err)
+		}
+		return fmt.Errorf("invalid URI for component %s: %w", component, err)
+	}
+	return nil
+}
+
 // processAtmosVendorSource processes vendor sources and returns packages.
 func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
@@ -163,45 +174,32 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 		if shouldSkipSource(&params.sources[indexSource], params.component, params.tags) {
 			continue
 		}
-
 		if err := validateSourceFields(&params.sources[indexSource], params.vendorConfigFileName); err != nil {
 			return nil, err
 		}
-
 		tmplData := struct {
 			Component string
 			Version   string
 		}{params.sources[indexSource].Component, params.sources[indexSource].Version}
 
-		// Parse 'source' template
+		// Parse 'source' template.
 		uri, err := exec.ProcessTmpl(params.atmosConfig, fmt.Sprintf("source-%d", indexSource), params.sources[indexSource].Source, tmplData, false)
 		if err != nil {
 			return nil, err
 		}
-
-		// Normalize the URI to handle triple-slash pattern (///), which indicates cloning from
-		// the root of the repository. This pattern broke in go-getter v1.7.9 due to CVE-2025-8959
-		// security fixes.
+		// Normalize the URI to handle triple-slash pattern (///).
 		uri = normalizeVendorURI(uri)
 
-		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, params.vendorConfigFilePath)
+		srcType, err := determineSourceType(&uri, params.vendorConfigFilePath)
 		if err != nil {
 			return nil, err
 		}
-		if !useLocalFileSystem {
-			err = u.ValidateURI(uri)
-			if err != nil {
-				if strings.Contains(uri, "..") {
-					return nil, fmt.Errorf("invalid URI for component %s: %w: Please ensure the source is a valid local path", params.sources[indexSource].Component, err)
-				}
-				return nil, fmt.Errorf("invalid URI for component %s: %w", params.sources[indexSource].Component, err)
+		if !srcType.useLocalFileSystem {
+			if err = validateRemoteURI(uri, params.sources[indexSource].Component); err != nil {
+				return nil, err
 			}
 		}
-
-		// Determine package type
-		pType := determinePackageType(useOciScheme, useLocalFileSystem)
-
-		// Process each target within the source
+		pType := determinePackageType(srcType.useOciScheme, srcType.useLocalFileSystem)
 		pkgs, err := processTargets(&processTargetsParams{
 			AtmosConfig:          params.atmosConfig,
 			IndexSource:          indexSource,
@@ -210,14 +208,13 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 			VendorConfigFilePath: params.vendorConfigFilePath,
 			URI:                  uri,
 			PkgType:              pType,
-			SourceIsLocalFile:    sourceIsLocalFile,
+			SourceIsLocalFile:    srcType.sourceIsLocalFile,
 		})
 		if err != nil {
 			return nil, err
 		}
 		packages = append(packages, pkgs...)
 	}
-
 	return packages, nil
 }
 
@@ -249,39 +246,41 @@ func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 	return packages, nil
 }
 
+// sourceTypeResult holds the result of determineSourceType.
+type sourceTypeResult struct {
+	useOciScheme       bool
+	useLocalFileSystem bool
+	sourceIsLocalFile  bool
+}
+
 // determineSourceType determines the source type from a URI.
-func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, error) {
-	// Determine if the URI is an OCI scheme, a local file, or remote
-	useLocalFileSystem := false
-	sourceIsLocalFile := false
-	useOciScheme := strings.HasPrefix(*uri, "oci://")
-	if useOciScheme {
+func determineSourceType(uri *string, vendorConfigFilePath string) (sourceTypeResult, error) {
+	result := sourceTypeResult{}
+	result.useOciScheme = strings.HasPrefix(*uri, "oci://")
+	if result.useOciScheme {
 		*uri = strings.TrimPrefix(*uri, "oci://")
-		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
+		return result, nil
 	}
 
 	absPath, err := u.JoinPathAndValidate(filepath.ToSlash(vendorConfigFilePath), *uri)
-	// if URI contain path traversal is path should be resolved
 	if err != nil && strings.Contains(*uri, "..") && !strings.HasPrefix(*uri, "file://") {
-		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
+		return result, fmt.Errorf("invalid source path '%s': %w", *uri, err)
 	}
 	if err == nil {
 		uri = &absPath
-		useLocalFileSystem = true
-		sourceIsLocalFile = u.FileExists(*uri)
+		result.useLocalFileSystem = true
+		result.sourceIsLocalFile = u.FileExists(*uri)
 	}
 
 	if parsedURL, parseErr := url.Parse(*uri); parseErr == nil {
-		if parsedURL.Scheme != "" {
-			if parsedURL.Scheme == "file" {
-				trimmedPath := strings.TrimPrefix(filepath.ToSlash(parsedURL.Path), "/")
-				*uri = filepath.Clean(trimmedPath)
-				useLocalFileSystem = true
-			}
+		if parsedURL.Scheme == "file" {
+			trimmedPath := strings.TrimPrefix(filepath.ToSlash(parsedURL.Path), "/")
+			*uri = filepath.Clean(trimmedPath)
+			result.useLocalFileSystem = true
 		}
 	}
 
-	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
+	return result, nil
 }
 
 // ValidateFlags validates vendor command flags.

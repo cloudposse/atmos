@@ -92,16 +92,16 @@ By default, it vendors all components defined in vendor.yaml. Use flags to vendo
 			// Build ConfigAndStacksInfo with CLI overrides (--config, --config-path, --base-path, --profile).
 			// These are persistent flags inherited from the root command.
 			configAndStacksInfo := schema.ConfigAndStacksInfo{
-				BasePath: opts.Flags.BasePath,
+				BasePath: opts.BasePath,
 			}
-			if len(opts.Flags.Config) > 0 {
-				configAndStacksInfo.AtmosConfigFilesFromArg = opts.Flags.Config
+			if len(opts.Config) > 0 {
+				configAndStacksInfo.AtmosConfigFilesFromArg = opts.Config
 			}
-			if len(opts.Flags.ConfigPath) > 0 {
-				configAndStacksInfo.AtmosConfigDirsFromArg = opts.Flags.ConfigPath
+			if len(opts.ConfigPath) > 0 {
+				configAndStacksInfo.AtmosConfigDirsFromArg = opts.ConfigPath
 			}
-			if len(opts.Flags.Profile) > 0 {
-				configAndStacksInfo.ProfilesFromArg = opts.Flags.Profile
+			if len(opts.Profile) > 0 {
+				configAndStacksInfo.ProfilesFromArg = opts.Profile
 			}
 			atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, processStacks)
 			if err != nil {
