@@ -1,20 +1,10 @@
 package workdir
 
 import (
-	"context"
 	"io/fs"
 )
 
 //go:generate go run go.uber.org/mock/mockgen@latest -source=interfaces.go -destination=mock_interfaces_test.go -package=workdir
-
-// Downloader downloads component sources from remote URIs.
-// It abstracts the go-getter library for testability.
-type Downloader interface {
-	// Download downloads the source from the given URI to the destination path.
-	// The URI should be a go-getter compatible URL.
-	// Returns an error if the download fails.
-	Download(ctx context.Context, uri, dest string) error
-}
 
 // FileSystem abstracts file system operations for testability.
 type FileSystem interface {
@@ -41,35 +31,6 @@ type FileSystem interface {
 
 	// Stat returns file info for the given path.
 	Stat(path string) (fs.FileInfo, error)
-}
-
-// Cache manages the XDG component source cache.
-type Cache interface {
-	// Get returns the cache entry for the given key, or nil if not found.
-	Get(key string) (*CacheEntry, error)
-
-	// Put stores the content from srcPath in the cache with the given key and metadata.
-	Put(key string, srcPath string, entry *CacheEntry) error
-
-	// Remove removes the cache entry for the given key.
-	Remove(key string) error
-
-	// Clear removes all cache entries.
-	Clear() error
-
-	// BasePath returns the cache base directory path.
-	// This is used for creating temp directories during downloads.
-	BasePath() (string, error)
-
-	// Path returns the filesystem path for a cache key.
-	// Returns empty string if the entry doesn't exist.
-	Path(key string) string
-
-	// GenerateKey generates a content-addressable cache key from a source config.
-	GenerateKey(source *SourceConfig) string
-
-	// GetPolicy determines the cache policy for a source config.
-	GetPolicy(source *SourceConfig) CachePolicy
 }
 
 // Hasher computes content hashes for change detection.

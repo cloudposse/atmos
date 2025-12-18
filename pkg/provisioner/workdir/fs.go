@@ -9,8 +9,15 @@ import (
 	"path/filepath"
 	"sort"
 
+	cp "github.com/otiai10/copy"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// copyDir recursively copies a directory from src to dst.
+func copyDir(src, dst string) error {
+	return cp.Copy(src, dst)
+}
 
 // DefaultFileSystem is the default implementation of the FileSystem interface.
 type DefaultFileSystem struct{}

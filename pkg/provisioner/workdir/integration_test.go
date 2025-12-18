@@ -35,7 +35,7 @@ func TestWorkdirProvisionerRegistration(t *testing.T) {
 }
 
 // TestProvisionWorkdir_NoActivation verifies that the provisioner does nothing
-// when neither metadata.source nor provision.workdir.enabled is set.
+// when provision.workdir.enabled is not set.
 func TestProvisionWorkdir_NoActivation(t *testing.T) {
 	ctx := context.Background()
 	atmosConfig := &schema.AtmosConfiguration{
@@ -113,11 +113,9 @@ func TestService_Provision_WithMockFileSystem(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockFS := NewMockFileSystem(ctrl)
-	mockCache := NewMockCache(ctrl)
-	mockDownloader := NewMockDownloader(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
-	service := NewServiceWithDeps(mockFS, mockCache, mockDownloader, mockHasher)
+	service := NewServiceWithDeps(mockFS, mockHasher)
 
 	tempDir := t.TempDir()
 	atmosConfig := &schema.AtmosConfiguration{
@@ -151,127 +149,6 @@ func TestService_Provision_WithMockFileSystem(t *testing.T) {
 		gomock.Any(),
 		gomock.Any(),
 	).Return(nil)
-
-	ctx := context.Background()
-	err := service.Provision(ctx, atmosConfig, componentConfig)
-	require.NoError(t, err)
-
-	// Verify workdir path was set.
-	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
-	assert.True(t, ok)
-	assert.Equal(t, expectedWorkdir, workdirPath)
-}
-
-// TestService_Provision_WithRemoteSource tests provisioning with a remote source.
-func TestService_Provision_WithRemoteSource(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockFS := NewMockFileSystem(ctrl)
-	mockCache := NewMockCache(ctrl)
-	mockDownloader := NewMockDownloader(ctrl)
-	mockHasher := NewMockHasher(ctrl)
-
-	service := NewServiceWithDeps(mockFS, mockCache, mockDownloader, mockHasher)
-
-	tempDir := t.TempDir()
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-	}
-
-	sourceConfig := &SourceConfig{
-		URI:     "github.com/cloudposse/terraform-aws-vpc",
-		Version: "v1.0.0",
-	}
-
-	componentConfig := map[string]any{
-		"component": "vpc",
-		"metadata": map[string]any{
-			"source": map[string]any{
-				"uri":     sourceConfig.URI,
-				"version": sourceConfig.Version,
-			},
-		},
-	}
-
-	expectedWorkdir := filepath.Join(tempDir, ".workdir", "terraform", "vpc")
-	cacheKey := "abc123def456"
-	cachedPath := filepath.Join(tempDir, "cache", cacheKey, "content")
-
-	// Set up mock expectations.
-	mockFS.EXPECT().MkdirAll(expectedWorkdir, gomock.Any()).Return(nil)
-	mockCache.EXPECT().GenerateKey(gomock.Any()).Return(cacheKey)
-	mockCache.EXPECT().Path(cacheKey).Return(cachedPath) // Already cached.
-	mockFS.EXPECT().CopyDir(cachedPath, expectedWorkdir).Return(nil)
-	mockHasher.EXPECT().HashDir(expectedWorkdir).Return("hash123", nil)
-	mockFS.EXPECT().WriteFile(
-		filepath.Join(expectedWorkdir, WorkdirMetadataFile),
-		gomock.Any(),
-		gomock.Any(),
-	).Return(nil)
-
-	ctx := context.Background()
-	err := service.Provision(ctx, atmosConfig, componentConfig)
-	require.NoError(t, err)
-
-	// Verify workdir path was set.
-	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
-	assert.True(t, ok)
-	assert.Equal(t, expectedWorkdir, workdirPath)
-}
-
-// TestService_Provision_DownloadsWhenNotCached tests that the service downloads
-// when the source is not cached.
-func TestService_Provision_DownloadsWhenNotCached(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockFS := NewMockFileSystem(ctrl)
-	mockCache := NewMockCache(ctrl)
-	mockDownloader := NewMockDownloader(ctrl)
-	mockHasher := NewMockHasher(ctrl)
-
-	service := NewServiceWithDeps(mockFS, mockCache, mockDownloader, mockHasher)
-
-	tempDir := t.TempDir()
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-	}
-
-	componentConfig := map[string]any{
-		"component": "vpc",
-		"metadata": map[string]any{
-			"source": "github.com/cloudposse/terraform-aws-vpc?ref=v1.0.0",
-		},
-	}
-
-	expectedWorkdir := filepath.Join(tempDir, ".workdir", "terraform", "vpc")
-	cacheKey := "abc123def456"
-	cachedPath := filepath.Join(tempDir, "cache", cacheKey, "content")
-
-	// Set up mock expectations.
-	mockFS.EXPECT().MkdirAll(expectedWorkdir, gomock.Any()).Return(nil)
-	mockCache.EXPECT().GenerateKey(gomock.Any()).Return(cacheKey)
-	mockCache.EXPECT().Path(cacheKey).Return("") // Not cached.
-
-	// Expect download flow.
-	mockCache.EXPECT().BasePath().Return(tempDir, nil) // Base cache path for temp dir.
-	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
-	mockDownloader.EXPECT().Download(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	mockCache.EXPECT().GetPolicy(gomock.Any()).Return(CachePolicyPermanent)
-	mockCache.EXPECT().Put(cacheKey, gomock.Any(), gomock.Any()).Return(nil)
-	mockCache.EXPECT().Path(cacheKey).Return(cachedPath)
-
-	mockFS.EXPECT().CopyDir(cachedPath, expectedWorkdir).Return(nil)
-	mockHasher.EXPECT().HashDir(expectedWorkdir).Return("hash123", nil)
-	mockFS.EXPECT().WriteFile(
-		filepath.Join(expectedWorkdir, WorkdirMetadataFile),
-		gomock.Any(),
-		gomock.Any(),
-	).Return(nil)
-
-	// Cleanup temp dir.
-	mockFS.EXPECT().RemoveAll(gomock.Any()).Return(nil)
 
 	ctx := context.Background()
 	err := service.Provision(ctx, atmosConfig, componentConfig)

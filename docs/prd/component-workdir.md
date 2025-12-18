@@ -1,21 +1,22 @@
 # PRD: Component Working Directory (Workdir) Provisioner
 
 **Status:** Implemented
-**Version:** 1.0
-**Last Updated:** 2025-12-12
+**Version:** 1.1
+**Last Updated:** 2025-12-17
 **Author:** Erik Osterman
 
 ---
 
 ## Executive Summary
 
-The Workdir Provisioner enables isolated working directories for Terraform component execution. It supports Just-In-Time (JIT) vendoring of remote component sources via `metadata.source` and enables concurrent terraform operations on the same component by isolating execution environments.
+The Workdir Provisioner enables isolated working directories for Terraform component execution. It copies local components to a `.workdir/` directory, enabling concurrent terraform operations on the same component by isolating execution environments.
 
 **Key Benefits:**
-- **JIT Vendoring:** Download components on-demand from remote sources (GitHub, S3, GCS, etc.)
 - **Concurrency:** Run multiple terraform operations on the same component simultaneously
 - **Isolation:** Each component instance runs in its own directory, preventing conflicts
-- **Caching:** Remote sources are cached in XDG-compliant directories for efficiency
+- **Clean Separation:** Terraform state and lock files are isolated per component
+
+> **Note:** Remote source downloading (JIT vendoring) is handled by the separate `source-provisioner`. This provisioner focuses exclusively on local component isolation.
 
 ---
 
@@ -23,19 +24,19 @@ The Workdir Provisioner enables isolated working directories for Terraform compo
 
 ### Current Limitations
 
-1. **No JIT Vendoring:** Components must be vendored upfront or stored locally. There's no way to reference a remote component source directly in stack configuration.
+1. **Concurrency Conflicts:** Running `terraform plan` on the same component in multiple terminals causes conflicts because they share the same `.terraform/` directory.
 
-2. **Concurrency Conflicts:** Running `terraform plan` on the same component in multiple terminals causes conflicts because they share the same `.terraform/` directory.
+2. **State File Conflicts:** Multiple terraform operations on the same component can corrupt state files or lock files.
 
-3. **Version Conflicts:** Different stacks may need different versions of the same component. If they share the same component directory, this is impossible.
+3. **CI/CD Parallelism:** Running terraform across multiple stacks in parallel is risky when they share component directories.
 
 ### User Stories
 
-1. **As a developer**, I want to reference a component directly from GitHub so I don't need to vendor it locally.
+1. **As a platform engineer**, I want to run terraform plan on multiple stacks concurrently without interference.
 
-2. **As a platform engineer**, I want different environments to use different versions of the same component without conflicts.
+2. **As a CI/CD pipeline**, I want to safely parallelize terraform operations across components.
 
-3. **As a CI/CD pipeline**, I want to run terraform plan on multiple stacks concurrently without interference.
+3. **As a developer**, I want to test changes in one terminal while running plan in another without conflicts.
 
 ---
 
@@ -57,11 +58,9 @@ The Workdir Provisioner is a self-registering provisioner that runs before `terr
 │     ┌─────────────────────────────────────────────────┐         │
 │     │           Workdir Provisioner                    │         │
 │     │                                                  │         │
-│     │  • Check activation (metadata.source OR         │         │
-│     │    provision.workdir.enabled: true)              │         │
+│     │  • Check activation (provision.workdir.enabled)  │         │
 │     │  • Create .workdir/terraform/<component>/        │         │
-│     │  • Download to XDG cache (if remote source)      │         │
-│     │  • Copy files to workdir                         │         │
+│     │  • Copy local component to workdir               │         │
 │     │  • Set _workdir_path in componentConfig          │         │
 │     └─────────────────────────────────────────────────┘         │
 │          ↓                                                       │
@@ -72,12 +71,11 @@ The Workdir Provisioner is a self-registering provisioner that runs before `terr
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Two-Layer Architecture
+### Directory Structure
 
-| Layer | Location | Purpose |
-|-------|----------|---------|
-| **XDG Cache** | `~/.cache/atmos/components/` | Shared cache for downloaded remote sources |
-| **Project Workdir** | `.workdir/terraform/<component>/` | Per-project execution directory |
+| Location | Purpose |
+|----------|---------|
+| `.workdir/terraform/<component>/` | Per-project isolated execution directory |
 
 ---
 
@@ -85,70 +83,34 @@ The Workdir Provisioner is a self-registering provisioner that runs before `terr
 
 ### Activation Rules
 
-The workdir provisioner activates when **either**:
-
-1. `metadata.source` is present (JIT vendoring)
-2. `provision.workdir.enabled: true` is set (explicit opt-in for local components)
+The workdir provisioner activates when `provision.workdir.enabled: true` is set in the component configuration.
 
 Otherwise, terraform runs directly in `components/terraform/<component>/` (default behavior).
 
 ### Configuration Schema
 
-#### Simple Form (URI only)
+#### Enable Workdir for a Component
 
 ```yaml
 components:
   terraform:
     vpc:
-      metadata:
-        source: "github.com/cloudposse/terraform-aws-vpc?ref=v1.0.0"
+      provision:
+        workdir:
+          enabled: true
       vars:
         cidr_block: "10.0.0.0/16"
 ```
 
-#### Structured Form (with options)
+#### Enable Workdir via Stack Defaults
 
 ```yaml
-components:
-  terraform:
-    vpc:
-      metadata:
-        source:
-          uri: "github.com/cloudposse/terraform-aws-vpc"
-          version: "1.0.0"
-          included_paths:
-            - "*.tf"
-            - "modules/**"
-          excluded_paths:
-            - "examples/**"
-            - "test/**"
-      vars:
-        cidr_block: "10.0.0.0/16"
+# stacks/_defaults.yaml
+terraform:
+  provision:
+    workdir:
+      enabled: true  # Enable for all components
 ```
-
-#### Local Component with Workdir (opt-in isolation)
-
-```yaml
-components:
-  terraform:
-    my-local-component:
-      metadata:
-        workdir: true  # Enable workdir for local component
-      vars:
-        name: "example"
-```
-
-### Source URI Formats
-
-The `metadata.source` field supports all go-getter protocols:
-
-| Protocol | Example |
-|----------|---------|
-| GitHub | `github.com/org/repo?ref=v1.0.0` |
-| Git | `git::https://example.com/repo.git?ref=main` |
-| HTTP/S | `https://example.com/module.zip` |
-| S3 | `s3::https://s3.amazonaws.com/bucket/path` |
-| GCS | `gcs::https://storage.googleapis.com/bucket/path` |
 
 ---
 
@@ -161,66 +123,16 @@ project/
 ├── atmos.yaml
 ├── components/
 │   └── terraform/
-│       └── local-component/       # Local component (no workdir by default)
+│       └── vpc/                    # Local component source
 │           └── main.tf
 ├── .workdir/                       # Workdir location (gitignored)
 │   └── terraform/
-│       ├── vpc/                    # Workdir for JIT-vendored component
-│       │   ├── main.tf             # Copied from source
-│       │   ├── .terraform/         # Terraform state
-│       │   └── .workdir-metadata.json
-│       └── local-component/        # Workdir for local component (if opted-in)
-│           ├── main.tf
+│       └── vpc/                    # Isolated copy of component
+│           ├── main.tf             # Copied from components/terraform/vpc/
+│           ├── .terraform/         # Isolated terraform directory
 │           └── .workdir-metadata.json
 └── stacks/
     └── dev.yaml
-```
-
-### XDG Cache Layout
-
-```
-~/.cache/atmos/components/
-├── blobs/
-│   ├── ab/                         # First 2 chars of hash (sharding)
-│   │   └── abcd1234.../
-│   │       └── content/            # Downloaded component files
-│   └── cd/
-│       └── cdef5678.../
-│           └── content/
-├── index.json                      # Cache manifest
-└── locks/                          # flock files for concurrent access
-```
-
----
-
-## Caching Strategy
-
-### Cache Key Generation
-
-Cache keys are content-addressable (SHA256):
-
-```
-key = SHA256(normalize(URI) + version)
-```
-
-### Cache Policies
-
-| Source Type | Policy | Rationale |
-|-------------|--------|-----------|
-| Tagged version (`ref=v1.2.3`) | Permanent | Tags are immutable |
-| Commit SHA (`ref=abc123...`) | Permanent | SHAs are immutable |
-| Branch ref (`ref=main`) | TTL (1 hour) | Branches change |
-| No version | TTL (1 hour) | May change |
-
-### TTL Configuration
-
-```yaml
-# stacks/_defaults.yaml
-terraform:
-  provision:
-    workdir:
-      cache:
-        ttl: 24h  # Override default 1 hour TTL
 ```
 
 ---
@@ -231,15 +143,13 @@ terraform:
 
 ```
 pkg/provisioner/workdir/
-├── types.go           # SourceConfig, WorkdirMetadata, CacheEntry
-├── interfaces.go      # Downloader, FileSystem, Cache, Hasher interfaces
-├── workdir.go         # Main provisioner with init() self-registration
-├── cache.go           # XDG content-addressable cache
-├── downloader.go      # go-getter integration
-├── fs.go              # FileSystem and Hasher implementations
-├── clean.go           # Clean operations for terraform clean command
-├── workdir_test.go    # Unit tests
-├── integration_test.go # Integration tests
+├── types.go               # WorkdirMetadata, WorkdirConfig
+├── interfaces.go          # FileSystem, Hasher, PathFilter interfaces
+├── workdir.go             # Main provisioner with init() self-registration
+├── fs.go                  # FileSystem and Hasher implementations
+├── clean.go               # Clean operations for terraform clean command
+├── workdir_test.go        # Unit tests
+├── integration_test.go    # Integration tests
 └── mock_interfaces_test.go # Generated mocks
 ```
 
@@ -266,11 +176,10 @@ func ProvisionWorkdir(
     componentConfig map[string]any,
     authContext *schema.AuthContext,
 ) error {
-    // 1. Check activation (metadata.source OR provision.workdir.enabled: true)
+    // 1. Check activation (provision.workdir.enabled: true)
     // 2. Create .workdir/terraform/<component>/
-    // 3. Download to cache (if remote) or copy (if local)
-    // 4. Copy from cache/local to workdir
-    // 5. Set componentConfig["_workdir_path"]
+    // 3. Copy local component to workdir
+    // 4. Set componentConfig["_workdir_path"]
 }
 ```
 
@@ -297,9 +206,6 @@ atmos terraform clean vpc -s dev
 
 # Clean all workdirs in project
 atmos terraform clean --all
-
-# Clean source cache (XDG)
-atmos terraform clean --cache
 ```
 
 ### Implementation
@@ -309,7 +215,6 @@ atmos terraform clean --cache
 
 func CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component string) error
 func CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error
-func CleanSourceCache() error
 ```
 
 ---
@@ -340,10 +245,6 @@ terraform:
 
 | Error | Description |
 |-------|-------------|
-| `ErrSourceDownload` | Failed to download component source |
-| `ErrSourceCacheRead` | Failed to read from source cache |
-| `ErrSourceCacheWrite` | Failed to write to source cache |
-| `ErrInvalidSource` | Invalid metadata.source configuration |
 | `ErrWorkdirCreation` | Failed to create working directory |
 | `ErrWorkdirSync` | Failed to sync files to working directory |
 | `ErrWorkdirMetadata` | Failed to read/write workdir metadata |
@@ -356,28 +257,25 @@ terraform:
 
 ### Unit Tests
 
-- `TestExtractSourceConfig` - Source config extraction
 - `TestIsWorkdirEnabled` - Activation detection
-- `TestBuildFullURI` - URI construction with version
-- `TestCacheGenerateKey` - Cache key generation
-- `TestCacheGetPolicy` - Cache policy determination
+- `TestCleanOptions_Structure` - Options struct validation
+- `TestClean_AllTakesPrecedence` - Precedence behavior
 
 ### Integration Tests
 
 - `TestWorkdirProvisionerRegistration` - Provisioner registration
 - `TestProvisionWorkdir_NoActivation` - No-op when not activated
 - `TestProvisionWorkdir_WithProvisionWorkdirEnabled` - Local component with workdir
-- `TestService_Provision_WithRemoteSource` - Remote source provisioning
+- `TestService_Provision_WithMockFileSystem` - Mock-based provisioning
 - `TestCleanWorkdir` / `TestCleanAllWorkdirs` - Clean operations
 
 ---
 
 ## Security Considerations
 
-1. **Source Validation:** go-getter handles source validation and supports checksums
-2. **Cache Isolation:** XDG cache uses content-addressable storage (no path traversal)
-3. **Workdir Isolation:** Each component gets its own isolated directory
-4. **Credential Handling:** Downloads use system credentials (AWS, GCS, etc.)
+1. **Workdir Isolation:** Each component gets its own isolated directory
+2. **Path Validation:** Component paths are validated before copying
+3. **Gitignore:** `.workdir/` should be added to `.gitignore` to prevent committing state
 
 ---
 
@@ -385,22 +283,19 @@ terraform:
 
 ### Planned
 
-- [ ] `--refresh-workdir` flag to force re-download
+- [ ] `--refresh-workdir` flag to force re-copy
 - [ ] Workdir lock files for concurrent access
-- [ ] Metadata inheritance for source configs
-- [ ] Source checksum verification
+- [ ] Content hash comparison to skip unchanged files
 
 ### Not Planned
 
-- Remote source authentication UI (use system credentials)
+- Remote source downloading (use `source-provisioner` instead)
+- Cross-project workdir sharing
 - Workdir versioning/history
-- Cross-project cache sharing
 
 ---
 
 ## References
 
-- [go-getter Documentation](https://github.com/hashicorp/go-getter)
-- [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
 - [Backend Provisioner PRD](backend-provisioner.md)
-- [Provisioner System Plan](../plans/tender-splashing-rossum.md)
+- [Source Provisioner](https://github.com/osterman/source-provisioner) (for remote source downloading)

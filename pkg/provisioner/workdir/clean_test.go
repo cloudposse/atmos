@@ -107,17 +107,6 @@ func TestCleanAllWorkdirs_EmptyBasePath(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCleanSourceCache_Success(t *testing.T) {
-	// CleanSourceCache uses the default cache which requires XDG setup.
-	// This test verifies it doesn't error on a fresh system.
-	err := CleanSourceCache()
-	// May or may not error depending on XDG availability.
-	// We just verify it doesn't panic and handles errors gracefully.
-	if err != nil {
-		assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
-	}
-}
-
 func TestClean_WithComponent(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -162,87 +151,14 @@ func TestClean_NoOptions(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestClean_CacheOnly(t *testing.T) {
-	tmpDir := t.TempDir()
-	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
-
-	// Clean cache only - may error if XDG not available.
-	err := Clean(atmosConfig, CleanOptions{Cache: true})
-	// Just verify it doesn't panic.
-	_ = err
-}
-
-func TestClean_CacheAndComponent(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create workdir.
-	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "vpc")
-	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
-
-	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
-
-	// Clean both cache and component.
-	err := Clean(atmosConfig, CleanOptions{
-		Cache:     true,
-		Component: "vpc",
-	})
-	// May have error from cache, but component should still be cleaned.
-	_ = err
-
-	// Verify workdir removed regardless of cache result.
-	_, statErr := os.Stat(workdirPath)
-	assert.True(t, os.IsNotExist(statErr), "workdir should be removed even if cache clean failed")
-}
-
-func TestClean_AllAndCache(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create workdirs.
-	workdirBase := filepath.Join(tmpDir, WorkdirPath)
-	require.NoError(t, os.MkdirAll(filepath.Join(workdirBase, "terraform", "vpc"), 0o755))
-
-	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
-
-	// Clean all and cache.
-	err := Clean(atmosConfig, CleanOptions{
-		Cache: true,
-		All:   true,
-	})
-	_ = err
-
-	// Verify workdir base removed.
-	_, statErr := os.Stat(workdirBase)
-	assert.True(t, os.IsNotExist(statErr))
-}
-
 func TestCleanOptions_Structure(t *testing.T) {
 	opts := CleanOptions{
 		Component: "vpc",
 		All:       true,
-		Cache:     true,
 	}
 
 	assert.Equal(t, "vpc", opts.Component)
 	assert.True(t, opts.All)
-	assert.True(t, opts.Cache)
-}
-
-func TestClean_ErrorAggregation(t *testing.T) {
-	// This test verifies error aggregation behavior.
-	// When multiple clean operations fail, errors should be joined.
-	tmpDir := t.TempDir()
-	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
-
-	// Both cache and all clean might produce errors.
-	// The function should aggregate them.
-	err := Clean(atmosConfig, CleanOptions{
-		Cache: true,
-		All:   true,
-	})
-	// If there was an error, it should be wrapped as ErrWorkdirClean.
-	if err != nil {
-		assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
-	}
 }
 
 func TestClean_AllTakesPrecedence(t *testing.T) {

@@ -75,25 +75,6 @@ func CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error {
 	return nil
 }
 
-// CleanSourceCache removes the XDG source cache.
-func CleanSourceCache() error {
-	defer perf.Track(nil, "workdir.CleanSourceCache")()
-
-	cache := NewDefaultCache()
-
-	_ = ui.Info("Cleaning source cache")
-
-	if err := cache.Clear(); err != nil {
-		return errUtils.Build(errUtils.ErrWorkdirClean).
-			WithCause(err).
-			WithExplanation("failed to clear source cache").
-			Err()
-	}
-
-	_ = ui.Success("Cleaned source cache")
-	return nil
-}
-
 // CleanOptions configures what to clean.
 type CleanOptions struct {
 	// Component is the specific component to clean (empty for all).
@@ -101,9 +82,6 @@ type CleanOptions struct {
 
 	// All cleans all workdirs in the project.
 	All bool
-
-	// Cache cleans the XDG source cache.
-	Cache bool
 }
 
 // Clean performs cleanup based on the provided options.
@@ -111,13 +89,6 @@ func Clean(atmosConfig *schema.AtmosConfiguration, opts CleanOptions) error {
 	defer perf.Track(atmosConfig, "workdir.Clean")()
 
 	var errs []error
-
-	// Clean cache if requested.
-	if opts.Cache {
-		if err := CleanSourceCache(); err != nil {
-			errs = append(errs, err)
-		}
-	}
 
 	// Clean workdirs.
 	if opts.All {
