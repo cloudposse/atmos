@@ -391,7 +391,7 @@ atmos vendor diff --component vpc
 
 - [`atmos vendor update` Documentation](/cli/commands/vendor/update)
 - [`atmos vendor diff` Documentation](/cli/commands/vendor/diff)
-- [Vendor Manifest Reference](/core-concepts/vendor/vendor-manifest)
+- [Vendor Configuration Reference](/vendor/vendor-config)
 - [Vendoring Cheatsheet](/cheatsheets/vendoring)
 - [GitHub Repository](https://github.com/cloudposse/atmos)
 

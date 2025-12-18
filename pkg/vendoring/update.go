@@ -71,15 +71,20 @@ func executeVendorUpdate(atmosConfig *schema.AtmosConfiguration, flags *updateFl
 		return fmt.Errorf("%w: %s", errUtils.ErrVendorConfigNotFound, vendorConfigFileName)
 	}
 
-	// TODO: Implement actual update logic.
-	// 1. Process imports and get sources.
-	// 2. Filter sources by component/tags.
-	// 3. Check for updates using Git.
-	// 4. Display results (TUI).
-	// 5. Update YAML files if not --check.
-	// 6. Execute vendor pull if --pull.
+	// NOTE: Vendor update functionality is planned for a future release.
+	// This PR establishes the foundation (command structure, provider interfaces, YAML updater)
+	// while vendor diff provides immediate value for reviewing changes before updating.
+	//
+	// TODO: Implement actual update logic:
+	// 1. Process imports and get sources from vendorConfig.
+	// 2. Filter sources by component/tags using flags.
+	// 3. Check for updates using Git provider (version comparison).
+	// 4. Display results via TUI (show current vs. available versions).
+	// 5. Update YAML files using updateYAMLVersion if not --check.
+	// 6. Execute vendor pull if --pull flag is set.
 
 	// Use vendorConfig and foundVendorConfigFile to avoid "declared and not used" error.
+	// These will be used once the update logic is implemented.
 	_ = vendorConfig
 	_ = foundVendorConfigFile
 
@@ -87,11 +92,15 @@ func executeVendorUpdate(atmosConfig *schema.AtmosConfiguration, flags *updateFl
 }
 
 // executeComponentVendorUpdate handles vendor update for component.yaml files.
+// NOTE: Component-level vendor update is planned for a future release.
 func executeComponentVendorUpdate(atmosConfig *schema.AtmosConfiguration, flags *updateFlags) error {
 	defer perf.Track(atmosConfig, "vendor.executeComponentVendorUpdate")()
 
-	// TODO: Implement component vendor update.
-	// Use flags.Component and flags.ComponentType (default: "terraform") to avoid unused variable warning.
+	// TODO: Implement component vendor update:
+	// 1. Read component.yaml from components/{flags.ComponentType}/{flags.Component}/component.yaml.
+	// 2. Extract version and source information.
+	// 3. Check for updates using Git provider.
+	// 4. Update component.yaml if newer version available.
 	_ = flags
 
 	return errUtils.ErrNotImplemented
