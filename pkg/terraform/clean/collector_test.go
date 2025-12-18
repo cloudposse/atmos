@@ -73,14 +73,14 @@ func TestFindFoldersNamesWithPrefix_Success(t *testing.T) {
 			name:           "Match dev prefix",
 			prefix:         "dev",
 			expectedCount:  3, // dev-stack, dev-stack/dev-west, dev-stack/dev-east
-			mustContain:    []string{"dev-stack", "dev-stack/dev-west", "dev-stack/dev-east"},
+			mustContain:    []string{"dev-stack", filepath.Join("dev-stack", "dev-west"), filepath.Join("dev-stack", "dev-east")},
 			mustNotContain: []string{"staging-stack", "prod-stack", "other"},
 		},
 		{
 			name:          "Match staging prefix",
 			prefix:        "staging",
 			expectedCount: 2, // staging-stack, staging-stack/staging-us
-			mustContain:   []string{"staging-stack", "staging-stack/staging-us"},
+			mustContain:   []string{"staging-stack", filepath.Join("staging-stack", "staging-us")},
 		},
 		{
 			name:           "Empty prefix matches all directories",
