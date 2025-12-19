@@ -1166,3 +1166,141 @@ func TestOIDCProvider_ReadFederatedToken_Priority(t *testing.T) {
 		})
 	}
 }
+
+func TestOIDCProvider_ExchangeToken_EdgeCases(t *testing.T) {
+	t.Run("empty access token in response", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			// Return response with empty access token.
+			_ = json.NewEncoder(w).Encode(tokenResponse{
+				AccessToken: "",
+				TokenType:   "Bearer",
+				ExpiresIn:   3600,
+			})
+		}))
+		defer server.Close()
+
+		provider := &oidcProvider{
+			name:          "test-oidc",
+			tenantID:      "tenant-123",
+			clientID:      "client-456",
+			tokenEndpoint: server.URL,
+		}
+
+		_, err := provider.exchangeToken(context.Background(), "test-federated-token")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+		assert.Contains(t, err.Error(), "empty access token")
+	})
+
+	t.Run("invalid JSON response", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			// Return invalid JSON.
+			_, _ = w.Write([]byte("not valid json"))
+		}))
+		defer server.Close()
+
+		provider := &oidcProvider{
+			name:          "test-oidc",
+			tenantID:      "tenant-123",
+			clientID:      "client-456",
+			tokenEndpoint: server.URL,
+		}
+
+		_, err := provider.exchangeToken(context.Background(), "test-federated-token")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+		assert.Contains(t, err.Error(), "failed to decode")
+	})
+}
+
+func TestOIDCProvider_PrepareEnvironment_EdgeCases(t *testing.T) {
+	t.Run("sets all environment variables correctly", func(t *testing.T) {
+		provider := &oidcProvider{
+			name:           "test-oidc",
+			tenantID:       "tenant-123",
+			clientID:       "client-456",
+			subscriptionID: "sub-789",
+			location:       "westus2",
+		}
+
+		// Create temporary token file.
+		tmpDir := t.TempDir()
+		tokenPath := filepath.Join(tmpDir, "token")
+		err := os.WriteFile(tokenPath, []byte("test-token"), 0o600)
+		require.NoError(t, err)
+		provider.tokenFilePath = tokenPath
+
+		env, err := provider.PrepareEnvironment(context.Background(), make(map[string]string))
+		require.NoError(t, err)
+		require.NotNil(t, env)
+
+		// Check that ARM_USE_OIDC is set.
+		assert.Equal(t, "true", env["ARM_USE_OIDC"], "ARM_USE_OIDC should be set to true")
+
+		// Check that ARM_CLIENT_ID is set.
+		assert.Equal(t, "client-456", env["ARM_CLIENT_ID"], "ARM_CLIENT_ID should be set")
+	})
+
+	t.Run("sets OIDC token path when token file exists", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		tokenPath := filepath.Join(tmpDir, "federated-token")
+		err := os.WriteFile(tokenPath, []byte("my-token"), 0o600)
+		require.NoError(t, err)
+
+		provider := &oidcProvider{
+			name:           "test-oidc",
+			tenantID:       "tenant-123",
+			clientID:       "client-456",
+			subscriptionID: "sub-789",
+			tokenFilePath:  tokenPath,
+		}
+
+		env, err := provider.PrepareEnvironment(context.Background(), make(map[string]string))
+		require.NoError(t, err)
+
+		// Check that AZURE_FEDERATED_TOKEN_FILE is set.
+		assert.Equal(t, tokenPath, env["AZURE_FEDERATED_TOKEN_FILE"], "AZURE_FEDERATED_TOKEN_FILE should be set to token path")
+	})
+
+	t.Run("uses env var for token file when config is empty", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		tokenPath := filepath.Join(tmpDir, "env-token")
+		err := os.WriteFile(tokenPath, []byte("env-token-content"), 0o600)
+		require.NoError(t, err)
+
+		t.Setenv("AZURE_FEDERATED_TOKEN_FILE", tokenPath)
+
+		provider := &oidcProvider{
+			name:           "test-oidc",
+			tenantID:       "tenant-123",
+			clientID:       "client-456",
+			subscriptionID: "sub-789",
+			tokenFilePath:  "", // Empty - should use env var.
+		}
+
+		env, err := provider.PrepareEnvironment(context.Background(), make(map[string]string))
+		require.NoError(t, err)
+
+		// Check that AZURE_FEDERATED_TOKEN_FILE is set from env var.
+		assert.Equal(t, tokenPath, env["AZURE_FEDERATED_TOKEN_FILE"], "AZURE_FEDERATED_TOKEN_FILE should be set from env var")
+	})
+}
+
+func TestOIDCProvider_Authenticate_EdgeCases(t *testing.T) {
+	t.Run("returns error when token file is missing", func(t *testing.T) {
+		provider := &oidcProvider{
+			name:          "test-oidc",
+			tenantID:      "tenant-123",
+			clientID:      "client-456",
+			tokenFilePath: "/nonexistent/path/to/token",
+		}
+
+		_, err := provider.Authenticate(context.Background())
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	})
+}
