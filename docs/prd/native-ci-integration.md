@@ -1,10 +1,81 @@
 # Native CI Integration
 
-## Overview
+## Executive Summary
 
-Native CI integration brings first-class CI/CD support directly into the Atmos CLI. Run `atmos terraform plan` in GitHub Actions and get beautiful job summaries, status checks, and PR comments—no extra actions required.
+When you see complex bash scripts and conditional logic in GitHub Actions workflows, that's a signal: the underlying tool wasn't designed for CI. Native CI integration fixes this by making Atmos work identically in CI and locally—no wrapper scripts, no special actions, no hidden complexity.
 
-## What You Get
+## Problem Statement
+
+### The Hidden Complexity Problem
+
+Look at any mature infrastructure repository's CI workflows. You'll find:
+
+- Bash scripts parsing terraform output with `grep` and `awk`
+- Conditional logic to handle plan files across jobs
+- Custom actions wrapping CLI tools with CI-specific behaviors
+- Environment variable gymnastics to pass data between steps
+
+This complexity isn't accidental—it's compensation. The underlying tools weren't designed for CI, so teams build layers of glue code to bridge the gap.
+
+**The cost is real:**
+- Workflows that work in CI fail locally (and vice versa)
+- Debugging requires reproducing the entire CI environment
+- Every CI provider needs different glue code
+- Tribal knowledge accumulates in workflow files
+
+### The Reproducibility Principle
+
+Infrastructure tools should follow a simple principle: **the same command should produce the same behavior everywhere.**
+
+```bash
+# This should work identically:
+atmos terraform plan vpc -s prod    # locally
+atmos terraform plan vpc -s prod    # in GitHub Actions
+atmos terraform plan vpc -s prod    # in GitLab CI
+```
+
+When a tool is truly CI-native, your workflow files become trivial:
+
+```yaml
+# Before: Complex workflow with hidden logic
+- name: Plan
+  run: |
+    output=$(atmos terraform plan vpc -s prod 2>&1)
+    echo "$output"
+    # Parse for changes...
+    # Upload artifacts...
+    # Post PR comment...
+
+# After: CI-native tool
+- name: Plan
+  run: atmos terraform plan vpc -s prod
+```
+
+### Current State
+
+Today, Atmos users rely on external GitHub Actions:
+- `github-action-atmos-terraform-plan` - Wraps CLI with CI behaviors
+- `github-action-atmos-terraform-apply` - Wraps CLI with CI behaviors
+
+This creates the exact hidden complexity we want to eliminate:
+1. **Different behavior** - Local runs differ from CI runs
+2. **Two codebases** - CLI and actions evolve separately
+3. **Platform lock-in** - Actions are GitHub-specific
+4. **Glue scripts** - Bash to connect artifacts, comments, outputs
+5. **Debugging friction** - Can't reproduce CI locally
+
+### Desired State
+
+Atmos becomes CI-native. The CLI detects when it's running in CI and automatically:
+- Writes rich summaries to `$GITHUB_STEP_SUMMARY`
+- Posts status checks ("Plan in progress" → "3 to add, 1 to destroy")
+- Exports outputs to `$GITHUB_OUTPUT`
+- Stores planfiles for later apply
+- Updates PR comments with results
+
+Locally, `--ci` produces identical output—same formatting, same behavior. Debug CI issues on your laptop.
+
+## What This Enables
 
 ### Rich Job Summaries
 
@@ -142,44 +213,6 @@ permissions:
   checks: write
   pull-requests: write
 ```
-
-## Problem Statement
-
-### Current State
-
-Users running Atmos in CI/CD pipelines rely on external GitHub Actions maintained separately from the core CLI:
-
-- **github-action-atmos-terraform-plan** - Wraps `atmos terraform plan` with CI-specific behaviors
-- **github-action-atmos-terraform-apply** - Wraps `atmos terraform apply` with CI-specific behaviors
-
-This creates several challenges:
-
-1. **Inconsistent behavior** - Local runs differ from CI runs
-2. **Maintenance burden** - Two codebases to maintain and keep in sync
-3. **Limited portability** - Actions are GitHub-specific
-4. **Complex scripting** - Users write bash to glue together plan files, PR comments, etc.
-5. **Feature gaps** - Actions lag behind CLI capabilities
-6. **Debugging difficulty** - Hard to reproduce CI behavior locally
-
-### Desired State
-
-Users can run `atmos terraform plan --ci` locally or in CI with **identical behavior**:
-
-```bash
-# Local development
-atmos terraform plan vpc -s plat-ue2-dev --ci
-
-# CI pipeline (same command)
-atmos terraform plan vpc -s plat-ue2-dev --ci
-```
-
-Both produce:
-- Plan output with consistent formatting
-- Planfile uploaded to configured storage
-- PR comments (when in PR context)
-- Job summaries (when in CI)
-- Status checks (when enabled)
-- Outputs written to `$GITHUB_OUTPUT` (when in GitHub Actions)
 
 ## Key Design Decisions
 
