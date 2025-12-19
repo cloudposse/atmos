@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -229,7 +228,7 @@ func (s *Store) findArtifact(ctx context.Context, key string) (*github.Artifact,
 		PerPage: githubPaginationLimit,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to list artifacts: %w", errUtils.ErrPlanfileDownloadFailed, err)
+		return nil, fmt.Errorf("%w: failed to list artifacts for download: %w", errUtils.ErrPlanfileDownloadFailed, err)
 	}
 
 	for _, artifact := range artifacts.Artifacts {
@@ -333,7 +332,7 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 		PerPage: 100,
 	})
 	if err != nil {
-		return fmt.Errorf("%w: failed to list artifacts: %w", errUtils.ErrPlanfileDeleteFailed, err)
+		return fmt.Errorf("%w: failed to list artifacts for deletion: %w", errUtils.ErrPlanfileDeleteFailed, err)
 	}
 
 	for _, artifact := range artifacts.Artifacts {
@@ -408,7 +407,7 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 		PerPage: 100,
 	})
 	if err != nil {
-		return false, errors.Join(errUtils.ErrPlanfileListFailed, fmt.Errorf("failed to list artifacts: %w", err))
+		return false, fmt.Errorf("%w: failed to check artifact existence: %w", errUtils.ErrPlanfileListFailed, err)
 	}
 
 	for _, artifact := range artifacts.Artifacts {
@@ -430,7 +429,7 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata
 		PerPage: 100,
 	})
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrPlanfileListFailed, fmt.Errorf("failed to list artifacts: %w", err))
+		return nil, fmt.Errorf("%w: failed to get artifact metadata: %w", errUtils.ErrPlanfileListFailed, err)
 	}
 
 	for _, artifact := range artifacts.Artifacts {
