@@ -2,6 +2,7 @@ package vendor
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -310,7 +311,8 @@ func TestDetermineSourceType(t *testing.T) {
 				assert.Equal(t, tt.expectedOCI, result.useOciScheme)
 				assert.Equal(t, tt.expectedLocalFS, result.useLocalFileSystem)
 				assert.Equal(t, tt.expectedLocalFile, result.sourceIsLocalFile)
-				assert.Equal(t, tt.expectedURIAfter, uri)
+				// Normalize path separators for cross-platform comparison.
+				assert.Equal(t, tt.expectedURIAfter, filepath.ToSlash(uri))
 			}
 		})
 	}
