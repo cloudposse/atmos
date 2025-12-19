@@ -440,6 +440,34 @@ type VendorComponentSource struct {
     // ExcludedPaths are glob patterns for files to exclude
     // Example: ["**/tests/**", "**/*.md"]
     ExcludedPaths []string `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
+
+    // Retry configures retry behavior for transient failures
+    // Optional - uses sensible defaults if not specified
+    Retry *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
+}
+
+// RetryConfig specifies retry behavior for download operations
+type RetryConfig struct {
+    // MaxAttempts is the maximum number of attempts (default: 3)
+    MaxAttempts int `yaml:"max_attempts,omitempty" json:"max_attempts,omitempty" mapstructure:"max_attempts"`
+
+    // InitialDelay is the initial delay before first retry (default: 2s)
+    InitialDelay time.Duration `yaml:"initial_delay,omitempty" json:"initial_delay,omitempty" mapstructure:"initial_delay"`
+
+    // MaxDelay is the maximum delay between retries (default: 30s)
+    MaxDelay time.Duration `yaml:"max_delay,omitempty" json:"max_delay,omitempty" mapstructure:"max_delay"`
+
+    // Multiplier is the backoff multiplier (default: 2.0)
+    Multiplier float64 `yaml:"multiplier,omitempty" json:"multiplier,omitempty" mapstructure:"multiplier"`
+
+    // BackoffStrategy is the backoff strategy: "constant", "linear", or "exponential" (default: "exponential")
+    BackoffStrategy string `yaml:"backoff_strategy,omitempty" json:"backoff_strategy,omitempty" mapstructure:"backoff_strategy"`
+
+    // RandomJitter adds randomness to delays to prevent thundering herd (default: 0.1 = 10%)
+    RandomJitter float64 `yaml:"random_jitter,omitempty" json:"random_jitter,omitempty" mapstructure:"random_jitter"`
+
+    // MaxElapsedTime is the maximum total time for all retries (default: 5m)
+    MaxElapsedTime time.Duration `yaml:"max_elapsed_time,omitempty" json:"max_elapsed_time,omitempty" mapstructure:"max_elapsed_time"`
 }
 ```
 
@@ -484,6 +512,20 @@ components:
         type: "oci"
         uri: "oci://public.ecr.aws/cloudposse/components/terraform-aws-lambda"
         version: "1.5.0"
+
+    # Example 5: Map form with retry configuration
+    lambda:
+      source:
+        uri: "github.com/acme/internal-modules//functions/lambda"
+        version: "2.0.0"
+        retry:
+          max_attempts: 5
+          initial_delay: "2s"
+          max_delay: "60s"
+          backoff_strategy: "exponential"
+          random_jitter: 0.1
+      vars:
+        runtime: "python3.11"
 
   helmfile:
     # Helmfile components also support source

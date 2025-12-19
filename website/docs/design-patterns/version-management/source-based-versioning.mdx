@@ -90,6 +90,41 @@ components:
 ```
 </File>
 
+### Map Form with Retry Configuration
+
+For unreliable networks or rate-limited sources, configure retry behavior:
+
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0
+        retry:
+          max_attempts: 5
+          initial_delay: 2s
+          max_delay: 60s
+          backoff_strategy: exponential
+          random_jitter: 0.1
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+
+**Retry options:**
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `max_attempts` | 3 | Maximum number of download attempts |
+| `initial_delay` | 2s | Initial delay before first retry |
+| `max_delay` | 30s | Maximum delay between retries |
+| `backoff_strategy` | exponential | Strategy: `constant`, `linear`, or `exponential` |
+| `multiplier` | 2.0 | Backoff multiplier for exponential/linear strategies |
+| `random_jitter` | 0.1 | Randomness added to delays (0.1 = 10%) |
+| `max_elapsed_time` | 5m | Maximum total time for all retries |
+
 ### Version Inheritance
 
 Define source defaults in a catalog and override versions per environment:
