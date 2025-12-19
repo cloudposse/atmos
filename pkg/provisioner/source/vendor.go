@@ -65,7 +65,11 @@ func VendorSource(
 	defer os.RemoveAll(tempDir)
 
 	// Download using go-getter.
-	dl := downloader.NewGoGetterDownloader(atmosConfig)
+	opts := []downloader.GoGetterOption{}
+	if sourceSpec.Retry != nil {
+		opts = append(opts, downloader.WithRetryConfig(sourceSpec.Retry))
+	}
+	dl := downloader.NewGoGetterDownloader(atmosConfig, opts...)
 	err = dl.Fetch(uri, tempDir, downloader.ClientModeDir, DefaultVendorTimeout)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).

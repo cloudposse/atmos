@@ -5,14 +5,37 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/github"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/google/uuid"
 )
 
-const errDownloadFileFormat = "%w: '%s': %v"
+const (
+	errDownloadFileFormat = "%w: '%s': %v"
+	// MinRateLimitRemaining is the minimum remaining rate limit before pre-check waits.
+	MinRateLimitRemaining = 5
+)
+
+// isGitHubHTTPURL checks if the given URL is a GitHub HTTP URL that uses rate-limited APIs.
+// This includes raw.githubusercontent.com for file downloads and github.com archive/release URLs.
+func isGitHubHTTPURL(src string) bool {
+	src = strings.ToLower(src)
+	// Raw GitHub content (used for mixins, imports, templates).
+	if strings.Contains(src, "raw.githubusercontent.com") {
+		return true
+	}
+	// GitHub archive downloads (tarballs, zipballs).
+	if strings.Contains(src, "github.com") &&
+		(strings.Contains(src, "/archive/") || strings.Contains(src, "/releases/")) {
+		return true
+	}
+	return false
+}
 
 // fileDownloader handles downloading files and directories from various sources
 // without exposing the underlying implementation.
@@ -35,6 +58,14 @@ func NewFileDownloader(factory ClientFactory) FileDownloader {
 func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	// Pre-check GitHub rate limits for GitHub HTTP URLs.
+	if isGitHubHTTPURL(src) {
+		if err := github.WaitForRateLimit(ctx, MinRateLimitRemaining); err != nil {
+			log.Warn("Rate limit wait interrupted", "error", err)
+			// Continue anyway - don't block on rate limit check failures.
+		}
+	}
 
 	client, err := fd.clientFactory.NewClient(ctx, src, dest, mode)
 	if err != nil {

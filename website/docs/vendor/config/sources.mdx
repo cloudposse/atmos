@@ -27,6 +27,10 @@ spec:
         - "**/test/**"
       tags:
         - networking
+      retry:
+        max_attempts: 5
+        initial_delay: 2s
+        backoff_strategy: exponential
 ```
 
 ## Attributes
@@ -84,6 +88,45 @@ spec:
   <dt>`tags`</dt>
   <dd>
   The `tags` in each source specifies a list of tags to apply to the component. This allows you to only vendor the components that have the specified tags by executing a command `atmos vendor pull --tags <tag1>,<tag2>`
+  </dd>
+
+  <dt>`retry`</dt>
+  <dd>
+  Optional retry configuration for handling transient network errors during download operations. This is useful for unreliable networks or when hitting rate limits.
+
+  ```yaml
+  retry:
+    max_attempts: 5
+    initial_delay: 2s
+    max_delay: 60s
+    backoff_strategy: exponential
+    multiplier: 2.0
+    random_jitter: 0.1
+    max_elapsed_time: 5m
+  ```
+
+  <dl>
+    <dt>`max_attempts`</dt>
+    <dd>Maximum number of retry attempts. Default: `3`</dd>
+
+    <dt>`initial_delay`</dt>
+    <dd>Initial delay before the first retry. Default: `2s`</dd>
+
+    <dt>`max_delay`</dt>
+    <dd>Maximum delay between retries. Default: `30s`</dd>
+
+    <dt>`backoff_strategy`</dt>
+    <dd>Strategy for increasing delay between retries. Values: `exponential`, `linear`, `constant`. Default: `exponential`</dd>
+
+    <dt>`multiplier`</dt>
+    <dd>Multiplier for exponential backoff. Default: `2.0`</dd>
+
+    <dt>`random_jitter`</dt>
+    <dd>Random jitter factor (0.0-1.0) to add randomness to delays. Default: `0.1`</dd>
+
+    <dt>`max_elapsed_time`</dt>
+    <dd>Maximum total time for all retry attempts. Default: `5m`</dd>
+  </dl>
   </dd>
 </dl>
 

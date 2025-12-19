@@ -6,12 +6,16 @@ import (
 	"path/filepath"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/hashicorp/go-getter"
 )
 
 // CustomGitGetter is a custom getter for git (git::) that removes symlinks.
+// It also supports retry configuration for transient errors.
 type CustomGitGetter struct {
 	getter.GitGetter
+	// RetryConfig specifies retry behavior for git operations.
+	RetryConfig *schema.RetryConfig
 }
 
 // Get implements the custom getter logic removing symlinks.

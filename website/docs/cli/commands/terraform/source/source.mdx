@@ -108,6 +108,21 @@ source:
 
   <dt>`excluded_paths`</dt>
   <dd>Glob patterns for files to exclude. Applied after included_paths filtering.</dd>
+
+  <dt>`retry`</dt>
+  <dd>
+  Optional retry configuration for handling transient network errors during download. Useful for unreliable networks or when hitting rate limits.
+
+  ```yaml
+  retry:
+    max_attempts: 5
+    initial_delay: 2s
+    max_delay: 60s
+    backoff_strategy: exponential
+  ```
+
+  Options: `max_attempts`, `initial_delay`, `max_delay`, `backoff_strategy` (`exponential`, `linear`, `constant`), `multiplier`, `random_jitter`, `max_elapsed_time`.
+  </dd>
 </dl>
 
 ## Examples

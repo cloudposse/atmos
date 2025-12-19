@@ -2,6 +2,7 @@ package source
 
 import (
 	"fmt"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -96,6 +97,11 @@ func parseSourceMap(sourceMap map[string]any, location string) (*schema.VendorCo
 		spec.ExcludedPaths = toStringSlice(paths)
 	}
 
+	// Optional: retry.
+	if retryMap, ok := sourceMap["retry"].(map[string]any); ok {
+		spec.Retry = parseRetryConfig(retryMap)
+	}
+
 	return spec, nil
 }
 
@@ -108,6 +114,40 @@ func toStringSlice(items []any) []string {
 		}
 	}
 	return result
+}
+
+// parseDuration parses a duration string from a map, returning zero duration if not found or invalid.
+func parseDuration(m map[string]any, key string) time.Duration {
+	if v, ok := m[key].(string); ok {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return 0
+}
+
+// parseRetryConfig parses a map into RetryConfig.
+func parseRetryConfig(m map[string]any) *schema.RetryConfig {
+	cfg := &schema.RetryConfig{
+		InitialDelay:   parseDuration(m, "initial_delay"),
+		MaxDelay:       parseDuration(m, "max_delay"),
+		MaxElapsedTime: parseDuration(m, "max_elapsed_time"),
+	}
+
+	if v, ok := m["max_attempts"].(int); ok {
+		cfg.MaxAttempts = v
+	}
+	if v, ok := m["backoff_strategy"].(string); ok {
+		cfg.BackoffStrategy = schema.BackoffStrategy(v)
+	}
+	if v, ok := m["random_jitter"].(float64); ok {
+		cfg.RandomJitter = v
+	}
+	if v, ok := m["multiplier"].(float64); ok {
+		cfg.Multiplier = v
+	}
+
+	return cfg
 }
 
 // HasSource checks if component config has source defined (either top-level or metadata.source).

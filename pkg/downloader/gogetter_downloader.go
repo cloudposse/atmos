@@ -22,6 +22,7 @@ func (c *goGetterClient) Get() error {
 
 type goGetterClientFactory struct {
 	atmosConfig *schema.AtmosConfiguration
+	retryConfig *schema.RetryConfig
 }
 
 // NewClient creates a new `go-getter` client.
@@ -45,7 +46,7 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		DisableSymlinks: false,
 		Getters: map[string]getter.Getter{
 			// Overriding 'git'
-			"git":   &CustomGitGetter{},
+			"git":   &CustomGitGetter{RetryConfig: f.retryConfig},
 			"file":  &getter.FileGetter{},
 			"hg":    &getter.HgGetter{},
 			"http":  &getter.HttpGetter{},
@@ -72,8 +73,23 @@ func registerCustomDetectors(atmosConfig *schema.AtmosConfiguration, src string)
 	)
 }
 
-func NewGoGetterDownloader(atmosConfig *schema.AtmosConfiguration) FileDownloader {
-	return NewFileDownloader(&goGetterClientFactory{
+// GoGetterOption configures the go-getter downloader.
+type GoGetterOption func(*goGetterClientFactory)
+
+// WithRetryConfig sets the retry configuration for git operations.
+func WithRetryConfig(retryConfig *schema.RetryConfig) GoGetterOption {
+	return func(f *goGetterClientFactory) {
+		f.retryConfig = retryConfig
+	}
+}
+
+// NewGoGetterDownloader creates a new go-getter based downloader.
+func NewGoGetterDownloader(atmosConfig *schema.AtmosConfiguration, opts ...GoGetterOption) FileDownloader {
+	factory := &goGetterClientFactory{
 		atmosConfig: atmosConfig,
-	})
+	}
+	for _, opt := range opts {
+		opt(factory)
+	}
+	return NewFileDownloader(factory)
 }
