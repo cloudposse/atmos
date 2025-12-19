@@ -861,10 +861,10 @@ func TestOIDCProvider_Authenticate(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name            string
-		serverResponse  interface{}
-		statusCode      int
-		expectError     bool
+		name             string
+		serverResponse   interface{}
+		statusCode       int
+		expectError      bool
 		checkCredentials func(*testing.T, *authTypes.AzureCredentials)
 	}{
 		{
