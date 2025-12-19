@@ -46,15 +46,15 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    env:
+      ATMOS_PROFILE: ci
+      ATMOS_IDENTITY: plat-dev/admin
     steps:
       - uses: actions/checkout@v4
       - uses: cloudposse/github-action-setup-atmos@v2
 
       - name: Terraform Plan
         run: atmos terraform plan mycomponent -s dev-us-east-1
-        env:
-          ATMOS_PROFILE: ci
-          ATMOS_IDENTITY: plat-dev/admin
 ```
 
 </TabItem>
