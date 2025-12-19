@@ -21,18 +21,20 @@ func main() {
 		// Clean up resources before exit.
 		cmd.Cleanup()
 		// Exit with correct POSIX exit code (128 + signal number).
+		// Use errUtils.OsExit to allow test interception (Go 1.25+ panics on os.Exit in tests).
 		if s, ok := sig.(syscall.Signal); ok {
-			os.Exit(128 + int(s))
+			errUtils.OsExit(128 + int(s))
 		}
 		// Fallback to SIGINT exit code if signal type assertion fails.
-		os.Exit(130)
+		errUtils.OsExit(130)
 	}()
 
 	// Disable timestamp in logs so snapshots work. We will address this in a future PR updating styles, etc.
 	log.Default().SetReportTimestamp(false)
 
 	// Run the application and exit with the appropriate code.
-	os.Exit(run())
+	// Use errUtils.OsExit to allow test interception (Go 1.25+ panics on os.Exit in tests).
+	errUtils.OsExit(run())
 }
 
 // run executes the main application logic and returns an exit code.
