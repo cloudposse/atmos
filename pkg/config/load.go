@@ -543,12 +543,11 @@ func readWorkDirConfig(v *viper.Viper) error {
 	// Found config in a parent directory, merge it.
 	err = mergeConfig(v, configDir, CliConfigFileName, true)
 	if err != nil {
-		switch err.(type) {
-		case viper.ConfigFileNotFoundError:
+		var configNotFound viper.ConfigFileNotFoundError
+		if errors.As(err, &configNotFound) {
 			return nil
-		default:
-			return err
 		}
+		return err
 	}
 
 	log.Debug("Found atmos.yaml in parent directory", "path", configDir)
@@ -585,20 +584,21 @@ func findAtmosConfigInParentDirs(startDir string) string {
 }
 
 func readEnvAmosConfigPath(v *viper.Viper) error {
-	atmosPath := os.Getenv("ATMOS_CLI_CONFIG_PATH")
+	// Note: os.Getenv is intentionally used here because this runs during early config
+	// loading before viper is fully initialized. This reads the bootstrap config path.
+	atmosPath := os.Getenv("ATMOS_CLI_CONFIG_PATH") //nolint:forbidigo // Bootstrap config path before viper init
 	if atmosPath == "" {
 		return nil
 	}
 	log.Trace("Checking for atmos.yaml from ATMOS_CLI_CONFIG_PATH", "path", atmosPath)
 	err := mergeConfig(v, atmosPath, CliConfigFileName, true)
 	if err != nil {
-		switch err.(type) {
-		case viper.ConfigFileNotFoundError:
+		var configNotFound viper.ConfigFileNotFoundError
+		if errors.As(err, &configNotFound) {
 			log.Debug("config not found ENV var ATMOS_CLI_CONFIG_PATH", "file", atmosPath)
 			return nil
-		default:
-			return err
 		}
+		return err
 	}
 	log.Debug("Found config ENV", "ATMOS_CLI_CONFIG_PATH", atmosPath)
 

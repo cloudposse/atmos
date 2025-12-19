@@ -110,6 +110,11 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 	_, w, _ := os.Pipe()
 	os.Stderr = w
 
+	// Ensure stderr is restored even if test fails.
+	defer func() {
+		os.Stderr = oldStd
+	}()
+
 	stack := "prod"
 
 	info := schema.ConfigAndStacksInfo{
@@ -133,30 +138,36 @@ func TestExecuteTerraformAffectedWithDependents(t *testing.T) {
 	}
 
 	err = ExecuteTerraformAffected(&a, &info)
+
+	// Restore stderr before checking error.
+	w.Close()
+	os.Stderr = oldStd
+
 	if err != nil {
 		// This test may fail in environments where Git operations or terraform execution
 		// encounter issues. Skip instead of failing to avoid blocking CI.
 		t.Skipf("Test failed (environment issue or missing preconditions): %v", err)
 	}
-
-	err = w.Close()
-	assert.NoError(t, err)
-	os.Stderr = oldStd
 }
 
 func TestExecuteTerraformQuery(t *testing.T) {
-	// Check if terraform is installed
+	// Check if terraform is installed.
 	tests.RequireExecutable(t, "terraform", "running Terraform query tests")
 	os.Unsetenv("ATMOS_BASE_PATH")
 	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
-	// Define the work directory and change to it
+	// Define the work directory and change to it.
 	workDir := "../../tests/fixtures/scenarios/terraform-apply-affected"
 	t.Chdir(workDir)
 
 	oldStd := os.Stderr
 	_, w, _ := os.Pipe()
 	os.Stderr = w
+
+	// Ensure stderr is restored even if test fails.
+	defer func() {
+		os.Stderr = oldStd
+	}()
 
 	stack := "prod"
 
@@ -169,13 +180,14 @@ func TestExecuteTerraformQuery(t *testing.T) {
 	}
 
 	err := ExecuteTerraformQuery(&info)
+
+	// Restore stderr before checking error.
+	w.Close()
+	os.Stderr = oldStd
+
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraformQuery': %v", err)
 	}
-
-	err = w.Close()
-	assert.NoError(t, err)
-	os.Stderr = oldStd
 }
 
 // TestWalkTerraformComponents verifies that walkTerraformComponents iterates over all components.

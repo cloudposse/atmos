@@ -55,6 +55,23 @@ func (f *TemplateFunction) Execute(ctx context.Context, args string, execCtx *Ex
 	return decoded, nil
 }
 
+// processTemplateString processes a string that may contain a !template tag.
+func processTemplateString(s string, templatePrefix string) any {
+	if !strings.HasPrefix(s, templatePrefix) {
+		return s
+	}
+	// Extract args after the tag.
+	args := strings.TrimPrefix(s, templatePrefix)
+	args = strings.TrimSpace(args)
+
+	// Parse as JSON if possible.
+	var decoded any
+	if err := json.Unmarshal([]byte(args), &decoded); err != nil {
+		return args
+	}
+	return decoded
+}
+
 // ProcessTemplateTagsOnly processes only !template tags in a data structure, recursively.
 // It is used before merging to ensure !template strings are decoded to their actual types.
 // This avoids type conflicts during merge (e.g., string vs list).
@@ -72,20 +89,7 @@ func ProcessTemplateTagsOnly(input map[string]any) map[string]any {
 	recurse = func(node any) any {
 		switch v := node.(type) {
 		case string:
-			// Only process !template tags, leave other tags as-is.
-			if strings.HasPrefix(v, templatePrefix) {
-				// Extract args after the tag.
-				args := strings.TrimPrefix(v, templatePrefix)
-				args = strings.TrimSpace(args)
-
-				// Parse as JSON if possible.
-				var decoded any
-				if err := json.Unmarshal([]byte(args), &decoded); err != nil {
-					return args
-				}
-				return decoded
-			}
-			return v
+			return processTemplateString(v, templatePrefix)
 
 		case map[string]any:
 			newMap := make(map[string]any, len(v))

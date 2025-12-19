@@ -7,6 +7,7 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -94,6 +95,24 @@ func NewStoreGetFunction() *StoreGetFunction {
 	}
 }
 
+// retrieveFromStore gets a value from the store and applies defaults if needed.
+func retrieveFromStore(s store.Store, params *storeGetParams) (any, error) {
+	value, err := s.GetKey(params.key)
+	if err != nil {
+		if params.defaultValue != nil {
+			return *params.defaultValue, nil
+		}
+		return nil, fmt.Errorf("%w: failed to get key '%s': %w", ErrExecutionFailed, params.key, err)
+	}
+
+	// Check if the retrieved value is nil and use default if provided.
+	if value == nil && params.defaultValue != nil {
+		return *params.defaultValue, nil
+	}
+
+	return value, nil
+}
+
 // Execute processes the store.get function.
 // Usage:
 //
@@ -121,26 +140,15 @@ func (f *StoreGetFunction) Execute(ctx context.Context, args string, execCtx *Ex
 		return nil, fmt.Errorf("%w: store '%s' not found", ErrExecutionFailed, params.storeName)
 	}
 
-	// Retrieve the value from the store using the arbitrary key.
-	value, err := store.GetKey(params.key)
+	// Retrieve the value from the store.
+	value, err := retrieveFromStore(store, params)
 	if err != nil {
-		if params.defaultValue != nil {
-			return *params.defaultValue, nil
-		}
-		return nil, fmt.Errorf("%w: failed to get key '%s': %w", ErrExecutionFailed, params.key, err)
-	}
-
-	// Check if the retrieved value is nil and use default if provided.
-	if value == nil && params.defaultValue != nil {
-		return *params.defaultValue, nil
+		return nil, err
 	}
 
 	// Execute the YQ expression if provided.
 	if params.query != "" {
-		value, err = utils.EvaluateYqExpression(execCtx.AtmosConfig, value, params.query)
-		if err != nil {
-			return nil, err
-		}
+		return utils.EvaluateYqExpression(execCtx.AtmosConfig, value, params.query)
 	}
 
 	return value, nil
