@@ -145,9 +145,46 @@ func buildActionContext(opts ExecuteOptions, platform Provider, provider Compone
 // executeActions executes all actions in the binding.
 func executeActions(ctx *actionContext, actions []HookAction) {
 	for _, action := range actions {
+		// Check if action is enabled in config.
+		if !isActionEnabled(ctx.Opts.AtmosConfig, action) {
+			log.Debug("CI action disabled by config", "action", action)
+			continue
+		}
 		if err := executeAction(action, ctx); err != nil {
 			log.Warn("CI action failed", "action", action, "error", err)
 		}
+	}
+}
+
+// isActionEnabled checks if a CI action is enabled in the configuration.
+// Returns true if the action should be executed, false if it should be skipped.
+// When config is nil or the feature is not explicitly configured, defaults are:
+// - Summary: enabled by default
+// - Output: enabled by default
+// - Checks: disabled by default (requires extra permissions)
+// - Upload/Download: always enabled (controlled by planfile config).
+func isActionEnabled(cfg *schema.AtmosConfiguration, action HookAction) bool {
+	// No config means use defaults (enabled for most actions).
+	if cfg == nil {
+		return action != ActionCheck // Checks disabled by default.
+	}
+
+	switch action {
+	case ActionSummary:
+		// Summary is enabled by default. Only skip if explicitly disabled.
+		// We check if the CI config exists and Summary is explicitly set.
+		return cfg.CI.Summary.Enabled
+	case ActionOutput:
+		// Output is enabled by default. Only skip if explicitly disabled.
+		return cfg.CI.Output.Enabled
+	case ActionCheck:
+		// Checks are disabled by default (require extra permissions).
+		return cfg.CI.Checks.Enabled
+	case ActionUpload, ActionDownload:
+		// Upload/Download are always enabled (controlled by planfile config).
+		return true
+	default:
+		return true
 	}
 }
 
@@ -181,7 +218,13 @@ func executeAction(action HookAction, ctx *actionContext) error {
 func executeSummaryAction(ctx *actionContext) error {
 	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeSummaryAction")()
 
-	if ctx.Binding.Template == "" {
+	// Get template name - prefer config override, fall back to binding.
+	templateName := ctx.Binding.Template
+	if cfg := ctx.Opts.AtmosConfig; cfg != nil && cfg.CI.Summary.Template != "" {
+		templateName = cfg.CI.Summary.Template
+	}
+
+	if templateName == "" {
 		log.Debug("No template specified for summary action")
 		return nil
 	}
@@ -206,7 +249,7 @@ func executeSummaryAction(ctx *actionContext) error {
 	loader := templates.NewLoader(ctx.Opts.AtmosConfig)
 	rendered, err := loader.LoadAndRender(
 		ctx.Provider.GetType(),
-		ctx.Binding.Template,
+		templateName,
 		ctx.Provider.GetDefaultTemplates(),
 		tmplCtx,
 	)
@@ -214,7 +257,7 @@ func executeSummaryAction(ctx *actionContext) error {
 		return errUtils.Build(errUtils.ErrTemplateEvaluation).
 			WithCause(err).
 			WithExplanation("Failed to render template").
-			WithContext("template", ctx.Binding.Template).
+			WithContext("template", templateName).
 			Err()
 	}
 
@@ -229,7 +272,7 @@ func executeSummaryAction(ctx *actionContext) error {
 	log.Debug("Wrote CI summary",
 		"stack", ctx.Opts.Info.Stack,
 		"component", ctx.Opts.Info.ComponentFromArg,
-		"template", ctx.Binding.Template,
+		"template", templateName,
 	)
 	return nil
 }
@@ -252,6 +295,11 @@ func executeOutputAction(ctx *actionContext) error {
 	vars["component"] = ctx.Opts.Info.ComponentFromArg
 	vars["command"] = ctx.Command
 
+	// Filter by configured variables if specified.
+	if cfg := ctx.Opts.AtmosConfig; cfg != nil && len(cfg.CI.Output.Variables) > 0 {
+		vars = filterVariables(vars, cfg.CI.Output.Variables)
+	}
+
 	// Write each variable.
 	for key, value := range vars {
 		if err := writer.WriteOutput(key, value); err != nil {
@@ -261,6 +309,24 @@ func executeOutputAction(ctx *actionContext) error {
 
 	log.Debug("Wrote CI outputs", "count", len(vars))
 	return nil
+}
+
+// filterVariables filters a map of variables to only include those in the allowed list.
+func filterVariables(vars map[string]string, allowed []string) map[string]string {
+	if len(allowed) == 0 {
+		return vars
+	}
+	allowedSet := make(map[string]bool)
+	for _, v := range allowed {
+		allowedSet[v] = true
+	}
+	filtered := make(map[string]string)
+	for k, v := range vars {
+		if allowedSet[k] {
+			filtered[k] = v
+		}
+	}
+	return filtered
 }
 
 // executeUploadAction uploads an artifact.
