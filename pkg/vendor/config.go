@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -31,6 +32,8 @@ func ReadAndProcessVendorConfigFile(
 	vendorConfigFile string,
 	checkGlobalConfig bool,
 ) (VendorConfigResult, error) {
+	defer perf.Track(atmosConfig, "vendor.ReadAndProcessVendorConfigFile")()
+
 	result := VendorConfigResult{}
 	result.Config.Spec.Sources = []schema.AtmosVendorSource{} // Initialize empty sources slice.
 
@@ -303,6 +306,8 @@ func ReadAndProcessComponentVendorConfigFile(
 	component string,
 	componentType string,
 ) (schema.VendorComponentConfig, string, error) {
+	defer perf.Track(atmosConfig, "vendor.ReadAndProcessComponentVendorConfigFile")()
+
 	var componentConfig schema.VendorComponentConfig
 
 	componentBasePath, err := resolveComponentBasePath(atmosConfig, componentType)
