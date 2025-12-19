@@ -25,6 +25,9 @@ tests:
     description: "Ensure tty is disabled."
     workdir: "../"
     command: "tty"
+    skip:
+      # tty command not available on Windows
+      os: !not windows
     expect:
       stdout:
         - "^not a tty"
