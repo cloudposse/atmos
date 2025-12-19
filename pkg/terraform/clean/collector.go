@@ -228,7 +228,7 @@ func getRelativePath(basePath, componentPath string) (string, error) {
 		return "", err
 	}
 
-	return filepath.Base(absBasePath) + "/" + relPath, nil
+	return filepath.Join(filepath.Base(absBasePath), relPath), nil
 }
 
 // collectTFDataDirFolders collects folders from TF_DATA_DIR environment variable.

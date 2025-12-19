@@ -30,17 +30,20 @@ func TestCleanCmd_FlagDefaults(t *testing.T) {
 	// Test flag default values.
 	registry := cleanParser.Registry()
 
-	// Get everything flag.
+	// Get everything flag and verify default is false.
 	everythingFlag := registry.Get("everything")
 	require.NotNil(t, everythingFlag)
+	assert.Equal(t, false, everythingFlag.GetDefault())
 
-	// Get force flag.
+	// Get force flag and verify default is false.
 	forceFlag := registry.Get("force")
 	require.NotNil(t, forceFlag)
+	assert.Equal(t, false, forceFlag.GetDefault())
 
-	// Get skip-lock-file flag.
+	// Get skip-lock-file flag and verify default is false.
 	skipLockFileFlag := registry.Get("skip-lock-file")
 	require.NotNil(t, skipLockFileFlag)
+	assert.Equal(t, false, skipLockFileFlag.GetDefault())
 }
 
 func TestCleanCmd_AttachedToTerraform(t *testing.T) {
@@ -57,5 +60,17 @@ func TestCleanCmd_AttachedToTerraform(t *testing.T) {
 
 func TestCleanCmd_Args(t *testing.T) {
 	// Test that cleanCmd accepts at most 1 argument.
-	assert.NotNil(t, cleanCmd.Args)
+	require.NotNil(t, cleanCmd.Args)
+
+	// Should accept 0 arguments.
+	err := cleanCmd.Args(cleanCmd, []string{})
+	assert.NoError(t, err)
+
+	// Should accept 1 argument.
+	err = cleanCmd.Args(cleanCmd, []string{"component"})
+	assert.NoError(t, err)
+
+	// Should reject 2 arguments.
+	err = cleanCmd.Args(cleanCmd, []string{"component", "extra"})
+	assert.Error(t, err)
 }
