@@ -69,7 +69,7 @@ func ExecuteComponentVendorInternal(
 	dryRun bool,
 ) error {
 	if vendorComponentSpec.Source.Uri == "" {
-		return fmt.Errorf("%w:'%s'", ErrUriMustSpecified, "component.yaml")
+		return fmt.Errorf("%w: '%s'", ErrUriMustSpecified, "component.yaml")
 	}
 	uri := vendorComponentSpec.Source.Uri
 	// Parse 'uri' template
@@ -255,7 +255,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
 		if err := exec.ProcessOciImage(atmosConfig, p.uri, tempDir); err != nil {
-			return fmt.Errorf("Failed to process OCI image %s error %w", p.name, err)
+			return fmt.Errorf("failed to process OCI image %s: %w", p.name, err)
 		}
 
 	case pkgTypeLocal:
@@ -316,9 +316,8 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		err = exec.ProcessOciImage(atmosConfig, p.uri, tempDir)
-		if err != nil {
-			return fmt.Errorf("failed to process OCI image %s error %w", p.name, err)
+		if err := exec.ProcessOciImage(atmosConfig, p.uri, tempDir); err != nil {
+			return fmt.Errorf("failed to process OCI image %s: %w", p.name, err)
 		}
 
 	case pkgTypeLocal:
@@ -437,7 +436,7 @@ func checkComponentExcludes(excludePaths []string, src, trimmedSrc string) (bool
 			return true, err
 		} else if excludeMatch {
 			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
-			log.Debug("Excluding the file since it matches the '%s' pattern from 'excluded_paths'", "path", trimmedSrc, "excluded_paths", excludePath)
+			log.Debug("Excluding file matching pattern from 'excluded_paths'", "path", trimmedSrc, "excluded_paths", excludePath)
 			return true, nil
 		}
 	}
@@ -454,7 +453,7 @@ func checkComponentIncludes(includePaths []string, src, trimmedSrc string) (bool
 			return true, err
 		} else if includeMatch {
 			// If the file matches ANY of the 'included_paths' patterns, include the file
-			log.Debug("Including path since it matches the pattern from 'included_paths'\n", "path", trimmedSrc, "included_paths", includePath)
+			log.Debug("Including path matching pattern from 'included_paths'", "path", trimmedSrc, "included_paths", includePath)
 			anyMatches = true
 			break
 		}

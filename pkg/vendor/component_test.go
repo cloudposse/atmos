@@ -3,6 +3,7 @@ package vendor
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -73,7 +74,9 @@ func TestHandleLocalFileScheme(t *testing.T) {
 
 			assert.Equal(t, tt.expectedUseLocalFS, useLocalFS, "useLocalFileSystem mismatch")
 			assert.Equal(t, tt.expectedSourceIsLocal, sourceIsLocal, "sourceIsLocalFile mismatch")
-			assert.Contains(t, resultURI, tt.checkURIContains, "URI should contain expected string")
+			// Normalize path separators for cross-platform comparison.
+			normalizedURI := filepath.ToSlash(resultURI)
+			assert.Contains(t, normalizedURI, tt.checkURIContains, "URI should contain expected string")
 		})
 	}
 }
@@ -348,8 +351,10 @@ func TestCreateTempDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
 
-	// Verify permissions are restricted.
-	assert.Equal(t, os.FileMode(0o700)|os.ModeDir, info.Mode())
+	// Verify permissions are restricted (Unix only - Windows has different permission model).
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0o700)|os.ModeDir, info.Mode())
+	}
 
 	// Clean up.
 	err = os.RemoveAll(tempDir)
