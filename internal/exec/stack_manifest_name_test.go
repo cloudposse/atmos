@@ -17,6 +17,10 @@ func TestStackManifestNameInStacksMap(t *testing.T) {
 	testDir := "../../tests/fixtures/scenarios/stack-manifest-name"
 	t.Chdir(testDir)
 
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
 	// Initialize the CLI config.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -103,6 +107,10 @@ func TestStackManifestName(t *testing.T) {
 	testDir := "../../tests/fixtures/scenarios/stack-manifest-name"
 	t.Chdir(testDir)
 
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
 	// Initialize the CLI config.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -129,6 +137,10 @@ func TestStackManifestNameWorkspace(t *testing.T) {
 	// Change to the test fixture directory.
 	testDir := "../../tests/fixtures/scenarios/stack-manifest-name"
 	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	// Initialize the CLI config.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -272,6 +284,10 @@ func TestDescribeStacks_NameTemplate(t *testing.T) {
 	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-template"
 	t.Chdir(testDir)
 
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
 	// Initialize the CLI config.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -305,6 +321,10 @@ func TestDescribeStacks_NameTemplateWorkspace(t *testing.T) {
 	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-template"
 	t.Chdir(testDir)
 
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
 	// Initialize the CLI config.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -327,6 +347,10 @@ func TestDescribeStacks_NamePattern(t *testing.T) {
 	// Change to the test fixture directory with name_pattern configured.
 	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-pattern"
 	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	// Initialize the CLI config.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -361,6 +385,10 @@ func TestDescribeStacks_NamePatternWorkspace(t *testing.T) {
 	// Change to the test fixture directory with name_pattern configured.
 	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-pattern"
 	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
 	// Initialize the CLI config.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}

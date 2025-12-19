@@ -1460,3 +1460,166 @@ auth:
 		assert.Equal(t, "ImportedDev", atmosConfig.Auth.IdentityCaseMap["importeddev"])
 	})
 }
+
+func TestParseProfilesFromOsArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected []string
+	}{
+		{
+			name:     "no profile flag",
+			args:     []string{"atmos", "describe", "stacks"},
+			expected: nil,
+		},
+		{
+			name:     "single profile with equals syntax",
+			args:     []string{"atmos", "--profile=dev", "describe", "stacks"},
+			expected: []string{"dev"},
+		},
+		{
+			name:     "single profile with space syntax",
+			args:     []string{"atmos", "--profile", "dev", "describe", "stacks"},
+			expected: []string{"dev"},
+		},
+		{
+			name:     "multiple profiles comma-separated",
+			args:     []string{"atmos", "--profile=dev,staging", "describe", "stacks"},
+			expected: []string{"dev", "staging"},
+		},
+		{
+			name:     "multiple profile flags",
+			args:     []string{"atmos", "--profile=dev", "--profile=staging", "describe", "stacks"},
+			expected: []string{"dev", "staging"},
+		},
+		{
+			name:     "profile with whitespace",
+			args:     []string{"atmos", "--profile=  dev  ", "describe", "stacks"},
+			expected: []string{"dev"},
+		},
+		{
+			name:     "empty profile value",
+			args:     []string{"atmos", "--profile=", "describe", "stacks"},
+			expected: nil,
+		},
+		{
+			name:     "profile with other flags",
+			args:     []string{"atmos", "--stack=mystack", "--profile=dev", "--format=json", "describe", "stacks"},
+			expected: []string{"dev"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseProfilesFromOsArgs(tt.args)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParseViperProfilesFromEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		profiles []string
+		expected []string
+	}{
+		{
+			name:     "empty slice",
+			profiles: []string{},
+			expected: nil,
+		},
+		{
+			name:     "single profile",
+			profiles: []string{"dev"},
+			expected: []string{"dev"},
+		},
+		{
+			name:     "comma-separated as single string (Viper quirk)",
+			profiles: []string{"dev,staging,prod"},
+			expected: []string{"dev", "staging", "prod"},
+		},
+		{
+			name:     "whitespace-separated by Viper",
+			profiles: []string{"dev", "staging", "prod"},
+			expected: []string{"dev", "staging", "prod"},
+		},
+		{
+			name:     "mixed comma and whitespace (Viper quirk)",
+			profiles: []string{"dev", ",", "staging"},
+			expected: []string{"dev", "staging"},
+		},
+		{
+			name:     "profiles with whitespace",
+			profiles: []string{"  dev  ", "  staging  "},
+			expected: []string{"dev", "staging"},
+		},
+		{
+			name:     "empty strings and commas",
+			profiles: []string{"", ",", "  ", "dev"},
+			expected: []string{"dev"},
+		},
+		{
+			name:     "nil input",
+			profiles: nil,
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseViperProfilesFromEnv(tt.profiles)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParseProfilesFromEnvString(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		expected []string
+	}{
+		{
+			name:     "empty string",
+			envValue: "",
+			expected: nil,
+		},
+		{
+			name:     "single profile",
+			envValue: "dev",
+			expected: []string{"dev"},
+		},
+		{
+			name:     "comma-separated profiles",
+			envValue: "dev,staging,prod",
+			expected: []string{"dev", "staging", "prod"},
+		},
+		{
+			name:     "profiles with whitespace",
+			envValue: "  dev  ,  staging  ,  prod  ",
+			expected: []string{"dev", "staging", "prod"},
+		},
+		{
+			name:     "empty entries filtered",
+			envValue: "dev,,staging,  ,prod",
+			expected: []string{"dev", "staging", "prod"},
+		},
+		{
+			name:     "only commas",
+			envValue: ",,,",
+			expected: nil,
+		},
+		{
+			name:     "only whitespace",
+			envValue: "   ",
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseProfilesFromEnvString(tt.envValue)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
