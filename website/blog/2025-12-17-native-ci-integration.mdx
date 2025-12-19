@@ -8,15 +8,49 @@ tags: [feature]
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-Atmos now has built-in CI integration that generates rich, tfcmt-style job summaries directly from `terraform plan` and `terraform apply`. No additional GitHub Actions required—just add `--ci` to your commands.
+When you see complex bash scripts and conditional logic in GitHub Actions workflows, that's a signal: the underlying tool wasn't designed for CI. Atmos now has built-in CI integration that makes the same command work identically locally and in CI—no wrapper scripts, no extra actions, no hidden complexity.
 
 <!--truncate-->
 
-## Why This Matters
+## The Problem with CI Glue Code
 
-Previously, getting beautiful plan summaries in GitHub Actions required using separate actions like `github-action-atmos-terraform-plan` and `github-action-atmos-terraform-apply`. These worked well but added complexity to your workflows.
+Look at any mature infrastructure repository's CI workflows. You'll find bash scripts parsing terraform output with `grep` and `awk`, conditional logic to handle plan files across jobs, and environment variable gymnastics to pass data between steps.
 
-Now, Atmos handles everything natively. The same rich output you're used to—resource badges, collapsible diffs, terraform outputs—is generated directly by Atmos when running in CI mode.
+This complexity isn't accidental—it's compensation. When tools aren't designed for CI, teams build layers of glue code to bridge the gap. The cost is real: workflows that work in CI fail locally (and vice versa), debugging requires reproducing the entire CI environment, and tribal knowledge accumulates in workflow files.
+
+## The Reproducibility Principle
+
+Infrastructure tools should follow a simple principle: **the same command should produce the same behavior everywhere.**
+
+```bash
+# This should work identically:
+atmos terraform plan vpc -s prod    # locally
+atmos terraform plan vpc -s prod    # in GitHub Actions
+atmos terraform plan vpc -s prod    # in GitLab CI
+```
+
+When a tool is truly CI-native, your workflow files become trivial:
+
+```yaml
+# Before: Complex workflow with hidden logic
+- name: Plan
+  run: |
+    output=$(atmos terraform plan vpc -s prod 2>&1)
+    echo "$output"
+    # Parse for changes...
+    # Upload artifacts...
+    # Post PR comment...
+
+# After: CI-native tool
+- name: Plan
+  run: atmos terraform plan vpc -s prod
+```
+
+## What This Enables
+
+Previously, getting beautiful plan summaries in GitHub Actions required using separate actions like `github-action-atmos-terraform-plan`. These wrapped the CLI with CI-specific behaviors, creating two codebases that evolved separately.
+
+Now, Atmos handles everything natively. The CLI detects when it's running in CI and automatically generates the same rich output you're used to—resource badges, collapsible diffs, terraform outputs.
 
 ## What You Get
 
