@@ -7,6 +7,7 @@ id: clean
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import ActionCard from '@site/src/components/ActionCard'
 
 <Intro>
 Use this command to clean up Terraform files for an Atmos component in a stack. This removes `.terraform` folder, `.terraform.lock.hcl` file, and Atmos-generated varfiles and planfiles.
@@ -134,3 +135,7 @@ atmos terraform clean --cache --force
 - [terraform init](/cli/commands/terraform/init) - Initialize a Terraform working directory
 - [terraform plan](/cli/commands/terraform/plan) - Generate an execution plan
 - [terraform apply](/cli/commands/terraform/apply) - Apply changes to infrastructure
+
+<ActionCard title="Configure Terraform" ctaText="Learn More" ctaLink="/cli/configuration/components/terraform">
+  Learn how to configure Terraform components in your `atmos.yaml`, including backends, auto-generation, and initialization options.
+</ActionCard>
