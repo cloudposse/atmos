@@ -405,9 +405,9 @@ func TestOIDCProvider_PrepareEnvironment(t *testing.T) {
 			},
 			inputEnv: map[string]string{},
 			expectedContains: map[string]string{
-				"ARM_USE_OIDC":                "true",
-				"ARM_CLIENT_ID":               "client-456",
-				"AZURE_FEDERATED_TOKEN_FILE":  "/custom/token/path",
+				"ARM_USE_OIDC":               "true",
+				"ARM_CLIENT_ID":              "client-456",
+				"AZURE_FEDERATED_TOKEN_FILE": "/custom/token/path",
 			},
 		},
 	}
@@ -695,13 +695,13 @@ func TestOIDCProvider_ExchangeToken(t *testing.T) {
 
 func TestExtractOIDCConfig(t *testing.T) {
 	tests := []struct {
-		name             string
-		spec             map[string]interface{}
-		expectedTenantID string
-		expectedClientID string
-		expectedSubID    string
-		expectedLocation string
-		expectedAudience string
+		name              string
+		spec              map[string]interface{}
+		expectedTenantID  string
+		expectedClientID  string
+		expectedSubID     string
+		expectedLocation  string
+		expectedAudience  string
 		expectedTokenPath string
 	}{
 		{
