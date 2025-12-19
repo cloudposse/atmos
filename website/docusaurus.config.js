@@ -66,6 +66,15 @@ const config = {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'
                     },
+                    // Backend documentation reorganization
+                    {
+                        from: '/core-concepts/components/terraform/state-backend',
+                        to: '/components/terraform/remote-state'
+                    },
+                    {
+                        from: '/core-concepts/components/terraform/remote-state',
+                        to: '/components/terraform/remote-state'
+                    },
                     // Component Catalog redirects for reorganization
                     {
                         from: '/design-patterns/component-catalog-with-mixins',
@@ -352,7 +361,7 @@ const config = {
                     editUrl: ({versionDocsDirPath, docPath, locale}) => {
                         return `https://github.com/cloudposse/atmos/edit/main/website/${versionDocsDirPath}/${docPath}`;
                     },
-                    exclude: ['README.md'],
+                    exclude: ['README.md', '**/_*/**', '**/_*'],
                     rehypePlugins: [rehypeDtIds],
                 },
                 blog: {

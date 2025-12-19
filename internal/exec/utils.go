@@ -18,6 +18,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -260,6 +261,16 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 // FindStacksMap processes stack config and returns a map of all stacks.
 // Results are cached to avoid re-processing the same YAML files multiple times
 // within the same command execution (e.g., when ValidateStacks is called before ExecuteDescribeStacks).
+// ClearFindStacksMapCache clears the FindStacksMap cache.
+func ClearFindStacksMapCache() {
+	defer perf.Track(nil, "exec.ClearFindStacksMapCache")()
+
+	log.Trace("ClearFindStacksMapCache called")
+	findStacksMapCacheMu.Lock()
+	findStacksMapCache = make(map[string]*findStacksMapCacheEntry)
+	findStacksMapCacheMu.Unlock()
+}
+
 func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (
 	map[string]any,
 	map[string]map[string]any,
@@ -699,7 +710,7 @@ func ProcessStacks(
 	}
 
 	// Process the ENV variables from the `env` section.
-	configAndStacksInfo.ComponentEnvList = u.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
+	configAndStacksInfo.ComponentEnvList = env.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
 
 	// Process component metadata.
 	_, baseComponentName, _, componentIsEnabled, componentIsLocked := ProcessComponentMetadata(configAndStacksInfo.ComponentFromArg, configAndStacksInfo.ComponentSection)
@@ -782,7 +793,37 @@ func ProcessStacks(
 					// For known OpenTofu features, skip validation. Otherwise, return the error.
 					if !IsOpenTofu(&effectiveConfig) || !isKnownOpenTofuFeature(diagErr) {
 						// For other errors (syntax errors, permission issues, etc.), return error.
-						return configAndStacksInfo, errors.Join(errUtils.ErrFailedToLoadTerraformModule, diagErr)
+						// Use ErrorBuilder to provide helpful context about the HCL parsing failure.
+						// This fixes https://github.com/cloudposse/atmos/issues/1864 by showing a clear error
+						// instead of the misleading "component not found" message.
+
+						// Extract file and line information from diagnostics if available.
+						var fileLocation string
+						for _, diag := range diags {
+							if diag.Pos != nil {
+								fileLocation = fmt.Sprintf("%s:%d", diag.Pos.Filename, diag.Pos.Line)
+								break // Only show the first location.
+							}
+						}
+
+						// Build explanation with file location if available.
+						var explanation string
+						if fileLocation != "" {
+							explanation = fmt.Sprintf("The Terraform component '%s' contains invalid HCL code at %s.",
+								configAndStacksInfo.ComponentFromArg, fileLocation)
+						} else {
+							explanation = fmt.Sprintf("The Terraform component '%s' contains invalid HCL code.",
+								configAndStacksInfo.ComponentFromArg)
+						}
+
+						err := errUtils.Build(errUtils.ErrFailedToLoadTerraformComponent).
+							WithCause(diagErr).
+							WithExplanation(explanation).
+							WithHintf("Run 'atmos terraform validate' to see more details:\n```\natmos terraform validate %s -s %s\n```",
+								configAndStacksInfo.ComponentFromArg, configAndStacksInfo.Stack).
+							Err()
+
+						return configAndStacksInfo, err
 					}
 
 					// Skip validation for known OpenTofu-specific features.

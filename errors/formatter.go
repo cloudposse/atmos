@@ -293,9 +293,19 @@ func addExampleAndHintsSection(md *strings.Builder, err error, maxLineLength int
 	if len(examples) > 0 {
 		md.WriteString(newline + newline + "## Example" + newline + newline)
 		for _, example := range examples {
+			// Wrap examples in code fences to prevent markdown interpretation.
+			// Only add fences when they do not already exist.
+			// This keeps backward compatibility with WithExampleFile, which may include pre-fenced markdown content.
+			hasFences := strings.HasPrefix(strings.TrimSpace(example), "```")
+			if !hasFences {
+				md.WriteString("```yaml" + newline)
+			}
 			md.WriteString(example)
 			if !strings.HasSuffix(example, newline) {
 				md.WriteString(newline)
+			}
+			if !hasFences {
+				md.WriteString("```" + newline)
 			}
 		}
 		md.WriteString(newline)

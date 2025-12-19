@@ -7,6 +7,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/cloudposse/atmos/pkg/config/casemap"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -88,6 +89,8 @@ type AtmosConfiguration struct {
 	Import          []string            `yaml:"import" json:"import" mapstructure:"import"`
 	Docs            Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Auth            AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	Env             map[string]string   `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
+	CaseMaps        *casemap.CaseMaps   `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
 	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
 	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
 	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
@@ -214,6 +217,24 @@ func (a *AtmosConfiguration) processResourceSchema(key string) {
 		return
 	}
 	a.Schemas[key] = resource
+}
+
+// GetCaseSensitiveMap returns the specified map with original key casing restored.
+// This compensates for Viper lowercasing all YAML map keys.
+// Supported paths: "env".
+func (a *AtmosConfiguration) GetCaseSensitiveMap(path string) map[string]string {
+	var source map[string]string
+	switch path {
+	case "env":
+		source = a.Env
+	default:
+		return nil
+	}
+
+	if a.CaseMaps == nil {
+		return source
+	}
+	return a.CaseMaps.ApplyCase(path, source)
 }
 
 type Validate struct {
@@ -346,7 +367,7 @@ type TemplatesSettings struct {
 	Gomplate    TemplatesSettingsGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
 	Delimiters  []string                  `yaml:"delimiters,omitempty" json:"delimiters,omitempty" mapstructure:"delimiters"`
 	Evaluations int                       `yaml:"evaluations,omitempty" json:"evaluations,omitempty" mapstructure:"evaluations"`
-	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
 }
 
 type TemplatesSettingsSprig struct {
@@ -410,6 +431,9 @@ type Components struct {
 	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
 	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
 
+	// List configuration for component listing.
+	List ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
+
 	// Dynamic plugin component types.
 	// Uses mapstructure:",remain" to capture all unmapped fields from the YAML/JSON.
 	// This allows new component types (like mock, pulumi, cdk) to be added without schema changes.
@@ -444,6 +468,7 @@ type Stacks struct {
 	ExcludedPaths []string      `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
 	NamePattern   string        `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
 	NameTemplate  string        `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
+	List          ListConfig    `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 	Inherit       StacksInherit `yaml:"inherit,omitempty" json:"inherit,omitempty" mapstructure:"inherit"`
 }
 
@@ -643,6 +668,7 @@ type ConfigAndStacksInfo struct {
 	StackFromArg                  string
 	Stack                         string
 	StackFile                     string
+	StackManifestName             string // Stack-level 'name' override from manifest (highest precedence).
 	ComponentType                 string
 	ComponentFromArg              string
 	Component                     string
@@ -974,4 +1000,5 @@ type ListConfig struct {
 type ListColumnConfig struct {
 	Name  string `yaml:"name" json:"name" mapstructure:"name"`
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
+	Width int    `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`
 }

@@ -1,0 +1,29 @@
+# Test fixture: Nested config with empty base_path
+#
+# Scenario:
+# - atmos.yaml is in a deeply nested subdirectory (rootfs/usr/local/etc/atmos/)
+# - base_path is empty ("") - expects git repo root
+# - stacks/ and components/ are at the repo root
+# - ATMOS_CLI_CONFIG_PATH=./rootfs/usr/local/etc/atmos
+#
+# Expected behavior: Empty base_path should trigger git root discovery,
+# resolving to the repo root, not the atmos.yaml directory.
+#
+# See: https://github.com/cloudposse/atmos/issues/1858
+
+base_path: ""
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  level: Info

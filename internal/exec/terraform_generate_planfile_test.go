@@ -14,7 +14,7 @@ import (
 	"github.com/cloudposse/atmos/tests"
 )
 
-func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
+func TestExecuteTerraformGeneratePlanfileOld(t *testing.T) {
 	// Skip if terraform is not installed
 	tests.RequireTerraform(t)
 	stacksPath := "../../tests/fixtures/scenarios/terraform-generate-planfile"
@@ -46,7 +46,7 @@ func TestExecuteTerraformGeneratePlanfileCmd(t *testing.T) {
 	cmd.Long = "This command generates a `planfile` for a specified Atmos Terraform component."
 	cmd.FParseErrWhitelist = struct{ UnknownFlags bool }{UnknownFlags: false}
 	cmd.Run = func(cmd *cobra.Command, args []string) {
-		err := ExecuteTerraformGeneratePlanfileCmd(cmd, args)
+		err := ExecuteTerraformGeneratePlanfileOld(cmd, args)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 

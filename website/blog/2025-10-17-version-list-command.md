@@ -7,7 +7,7 @@ authors:
 tags:
   - feature
 date: 2025-10-17T00:00:00.000Z
-release: v1.95.0
+release: v1.195.0
 ---
 
 We're introducing two new commands for exploring Atmos releases: `atmos version list` and `atmos version show`. Browse release history with date filtering, inspect artifacts, and keep your infrastructure tooling up-to-date—all from your terminal with beautiful formatted output.

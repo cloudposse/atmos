@@ -1,0 +1,13 @@
+# This stack has no explicit name - should use name_pattern: dev-uw2.
+import:
+  - catalog/base
+
+vars:
+  environment: dev
+  stage: uw2
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.1.0.0/16"

@@ -36,6 +36,8 @@ tests:
     args:
       - "list"
       - "instances"
+      - "--format"
+      - "csv"
     expect:
       exit_code: 0
       stdout:
@@ -45,3 +47,48 @@ tests:
         - "mock/nodrift,nonprod"
         - "mock/drift,prod"
         - "mock/nodrift,prod"
+
+  - name: atmos list instances with custom columns
+    snapshot: true
+    enabled: true
+    tty: false
+    description: "Ensure Atmos honors --columns flag for custom column output"
+    workdir: "fixtures/scenarios/atmos-pro"
+    command: "atmos"
+    args:
+      - "list"
+      - "instances"
+      - "--format"
+      - "csv"
+      - "--columns"
+      - "Stack={{ .stack }}"
+      - "--columns"
+      - "Comp={{ .component }}"
+      - "--columns"
+      - "Type={{ .component_type }}"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Stack,Comp,Type"
+        - "nonprod,mock/disabled,terraform"
+        - "nonprod,mock/drift,terraform"
+        - "nonprod,mock/nodrift,terraform"
+        - "prod,mock/drift,terraform"
+        - "prod,mock/nodrift,terraform"
+
+  - name: atmos list instances with invalid column spec
+    snapshot: false
+    enabled: true
+    tty: false
+    description: "Ensure Atmos returns error for invalid --columns format"
+    workdir: "fixtures/scenarios/atmos-pro"
+    command: "atmos"
+    args:
+      - "list"
+      - "instances"
+      - "--columns"
+      - "InvalidNoEquals"
+    expect:
+      exit_code: 1
+      stderr:
+        - "must be in format 'Name=Template'"

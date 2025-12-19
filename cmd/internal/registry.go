@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Context keys for passing values through cobra command context.
@@ -236,4 +238,62 @@ func Reset() {
 	defer registry.mu.Unlock()
 
 	registry.providers = make(map[string]CommandProvider)
+}
+
+// GetCompatFlagsForCommand returns compatibility flags for a command provider.
+// The providerName should match the top-level command (e.g., "terraform").
+// Returns nil if the provider is not found or has no compatibility flags.
+//
+// This is used during arg preprocessing in Execute() to separate Atmos flags
+// from pass-through flags before Cobra parses.
+func GetCompatFlagsForCommand(providerName string) map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "internal.GetCompatFlagsForCommand")()
+
+	provider, ok := GetProvider(providerName)
+	if !ok {
+		return nil
+	}
+	return provider.GetCompatibilityFlags()
+}
+
+// commandCompatFlagsRegistry stores compat flags per command (provider/subcommand).
+// This replaces the callback-based approach with direct registration.
+var commandCompatFlagsRegistry = struct {
+	mu    sync.RWMutex
+	flags map[string]map[string]map[string]compat.CompatibilityFlag // provider -> subcommand -> flags
+}{
+	flags: make(map[string]map[string]map[string]compat.CompatibilityFlag),
+}
+
+// RegisterCommandCompatFlags registers compat flags for a specific command.
+// The providerName is the top-level command (e.g., "terraform").
+// The subcommand is the specific command (e.g., "plan", "apply", or "terraform" for the parent).
+// Each subcommand registers its own flags in init(), eliminating the need for switch statements.
+func RegisterCommandCompatFlags(providerName, subcommand string, flags map[string]compat.CompatibilityFlag) {
+	defer perf.Track(nil, "internal.RegisterCommandCompatFlags")()
+
+	commandCompatFlagsRegistry.mu.Lock()
+	defer commandCompatFlagsRegistry.mu.Unlock()
+
+	if commandCompatFlagsRegistry.flags[providerName] == nil {
+		commandCompatFlagsRegistry.flags[providerName] = make(map[string]map[string]compat.CompatibilityFlag)
+	}
+	commandCompatFlagsRegistry.flags[providerName][subcommand] = flags
+}
+
+// GetSubcommandCompatFlags returns compatibility flags for a specific subcommand.
+// The providerName should match the top-level command (e.g., "terraform").
+// The subcommand is the name of the subcommand (e.g., "apply", "plan").
+// Returns nil if no flags are registered for the provider/subcommand combination.
+func GetSubcommandCompatFlags(providerName, subcommand string) map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "internal.GetSubcommandCompatFlags")()
+
+	commandCompatFlagsRegistry.mu.RLock()
+	defer commandCompatFlagsRegistry.mu.RUnlock()
+
+	providerFlags, ok := commandCompatFlagsRegistry.flags[providerName]
+	if !ok {
+		return nil
+	}
+	return providerFlags[subcommand]
 }

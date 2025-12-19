@@ -1,0 +1,8 @@
+vars:
+  stage: "test"
+
+components:
+  terraform:
+    testme:
+      vars:
+        enabled: true

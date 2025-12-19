@@ -396,6 +396,99 @@ func TestManager_Rebuild(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:     "rebuild with dockerfile build configuration",
+			devName:  "geodesic",
+			instance: "default",
+			noPull:   false,
+			setupMocks: func(loader *MockConfigLoader, identity *MockIdentityManager, detector *MockRuntimeDetector, runtime *MockRuntime) {
+				// Config has Build instead of Image (like user's geodesic example).
+				config := &Config{
+					Name:  "geodesic",
+					Image: "", // Empty - will be set by buildImageIfNeeded.
+					Build: &Build{
+						Context:    ".",
+						Dockerfile: "Dockerfile",
+						Args: map[string]string{
+							"ATMOS_VERSION": "1.202.0",
+						},
+					},
+				}
+				loader.EXPECT().
+					LoadConfig(gomock.Any(), "geodesic").
+					Return(config, &Settings{}, nil)
+				detector.EXPECT().
+					DetectRuntime("").
+					Return(runtime, nil)
+				// Container doesn't exist.
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "atmos-devcontainer.geodesic.default").
+					Return(nil, errors.New("not found"))
+				// Build should be called since config.Build is set.
+				runtime.EXPECT().
+					Build(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ interface{}, buildConfig *container.BuildConfig) error {
+						// Verify build config has correct values.
+						assert.Equal(t, ".", buildConfig.Context)
+						assert.Equal(t, "Dockerfile", buildConfig.Dockerfile)
+						assert.Equal(t, []string{"atmos-devcontainer-geodesic"}, buildConfig.Tags)
+						assert.Equal(t, map[string]string{"ATMOS_VERSION": "1.202.0"}, buildConfig.Args)
+						return nil
+					})
+				// Pull is NOT called for locally built images since they don't exist
+				// in remote registries and pulling would fail.
+				// Create new container.
+				runtime.EXPECT().
+					Create(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ interface{}, createConfig *container.CreateConfig) (string, error) {
+						// Verify the image is set to the built image name.
+						assert.Equal(t, "atmos-devcontainer-geodesic", createConfig.Image)
+						return "new-id", nil
+					})
+				// Start new container.
+				runtime.EXPECT().
+					Start(gomock.Any(), "new-id").
+					Return(nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "new-id").
+					Return(&container.Info{
+						ID:    "new-id",
+						Ports: []container.PortBinding{},
+					}, nil)
+			},
+			expectError: false,
+		},
+		{
+			name:     "rebuild with dockerfile build fails",
+			devName:  "geodesic",
+			instance: "default",
+			noPull:   false,
+			setupMocks: func(loader *MockConfigLoader, identity *MockIdentityManager, detector *MockRuntimeDetector, runtime *MockRuntime) {
+				config := &Config{
+					Name:  "geodesic",
+					Image: "",
+					Build: &Build{
+						Context:    ".",
+						Dockerfile: "Dockerfile",
+					},
+				}
+				loader.EXPECT().
+					LoadConfig(gomock.Any(), "geodesic").
+					Return(config, &Settings{}, nil)
+				detector.EXPECT().
+					DetectRuntime("").
+					Return(runtime, nil)
+				runtime.EXPECT().
+					Inspect(gomock.Any(), "atmos-devcontainer.geodesic.default").
+					Return(nil, errors.New("not found"))
+				// Build fails.
+				runtime.EXPECT().
+					Build(gomock.Any(), gomock.Any()).
+					Return(errors.New("build failed: Dockerfile not found"))
+			},
+			expectError: true,
+			errorIs:     errUtils.ErrContainerRuntimeOperation,
+		},
+		{
 			name:     "operations execute in correct order",
 			devName:  "test",
 			instance: "default",

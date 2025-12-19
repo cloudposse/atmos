@@ -889,6 +889,58 @@ In Atmos terminology, root modules are called **components**. Each component is 
 - [ ] Train team on new commands
 </TaskList>
 
+## Stack Naming for Migrations
+
+Every Atmos command requires a stack name—whether you're running `atmos terraform plan -s <stack>`, listing stacks with `atmos list stacks`, or referencing dependencies. You need to define how Atmos determines these names.
+
+Additionally, if you want Atmos to automatically determine Terraform workspaces, those workspace names should follow a consistent convention that Atmos can compute.
+
+You have two options:
+
+### Option 1: Use `name_template` (Recommended for Consistent Patterns)
+
+If you have consistent context variables across all your stacks, configure `name_template` in `atmos.yaml` to programmatically compute stack names:
+
+<File title="atmos.yaml">
+```yaml
+stacks:
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+```
+</File>
+
+This works well when:
+- You have consistent `vars` (like `environment`, `stage`, `tenant`) across all stacks
+- You want programmatic, convention-based naming
+- Your Terraform workspaces should follow the same naming pattern
+
+### Option 2: Use Explicit `name` Field (For Inconsistent or Legacy Naming)
+
+If your infrastructure doesn't follow a strict naming convention, use the `name` field in each stack manifest to explicitly specify the stack name:
+
+<File title="stacks/us-east-1/prod/vpc.yaml">
+```yaml
+name: "prod-us-east-1-vpc"
+
+import:
+  - catalog/vpc
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+```
+</File>
+
+This is the right choice when:
+- Your stacks don't have consistent context variables
+- You're migrating infrastructure from multiple sources with different naming conventions
+- Workspace names are ad-hoc or don't follow a pattern you can express as a template
+
+The `name` field takes precedence over `name_template`, so you can use both approaches—template for most stacks, explicit names for exceptions.
+
+For complete documentation on stack naming, see [Stack Names](/stacks/name).
+
 ## Why Migrate?
 
 ### Advantages of Atmos
