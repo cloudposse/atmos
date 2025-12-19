@@ -90,23 +90,10 @@ func TestGetCheckIcon(t *testing.T) {
 	}
 }
 
-func TestGetDefaultProvider(t *testing.T) {
-	// Note: This test depends on the CI registry state.
-	// In a real test environment, we would mock the registry.
-
-	t.Run("returns nil when no providers registered", func(t *testing.T) {
-		// This test may fail if GitHub provider auto-registers.
-		// We're testing the fallback behavior.
-		provider, err := getDefaultProvider()
-
-		// Either succeeds with a provider or fails with ErrCIProviderNotFound.
-		if err != nil {
-			assert.Nil(t, provider)
-		} else {
-			assert.NotNil(t, provider)
-		}
-	})
-}
+// Note: TestGetDefaultProvider was removed because it was non-deterministic.
+// The function depends on the global CI registry state which can vary based on
+// init() ordering and package imports. Testing would require mocking the registry,
+// which isn't possible from this package as the registry is internal to pkg/ci.
 
 func TestRepoContext(t *testing.T) {
 	t.Run("struct fields", func(t *testing.T) {

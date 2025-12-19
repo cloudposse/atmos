@@ -150,23 +150,10 @@ func TestFormatListYAML(t *testing.T) {
 	})
 }
 
-func TestTableHeaderWidth(t *testing.T) {
-	// Verify the constant is a reasonable value.
-	assert.Equal(t, 100, tableHeaderWidth)
-}
-
-func TestPlanfileInfoSorting(t *testing.T) {
-	now := time.Now()
-	files := []planfile.PlanfileInfo{
-		{Key: "old", LastModified: now.Add(-2 * time.Hour)},
-		{Key: "new", LastModified: now},
-		{Key: "middle", LastModified: now.Add(-1 * time.Hour)},
-	}
-
-	// Verify that List commands typically return sorted results.
-	// The actual sorting happens in the store implementations.
-	require.Len(t, files, 3)
-}
+// Note: TestTableHeaderWidth and TestPlanfileInfoSorting were removed as tautological.
+// - TestTableHeaderWidth asserted a constant equals a hardcoded value
+// - TestPlanfileInfoSorting only verified slice length, not actual sorting
+// Per coding guidelines: "Test behavior, not implementation; avoid tautological tests."
 
 // Note: Testing runList requires extensive mocking of:
 // - Atmos config loading

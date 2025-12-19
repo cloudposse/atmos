@@ -1,12 +1,14 @@
 package planfile
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/planfile"
 )
 
@@ -95,7 +97,7 @@ func TestResolveUploadKey(t *testing.T) {
 		uploadSHA = "sha123"
 
 		_, err := resolveUploadKey()
-		assert.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrPlanfileKeyInvalid))
 	})
 }
 

@@ -114,16 +114,16 @@ Different CI features require different GitHub Actions permissions. Add only wha
 permissions:
   id-token: write    # Required: OIDC authentication with AWS/cloud providers
   contents: read     # Required: Checkout repository
-  checks: write      # Optional: Post status checks (ci.status_checks.enabled: true)
-  pull-requests: write  # Optional: Post PR comments (ci.outputs.pr_comment.enabled: true)
+  checks: write      # Optional: Post status checks (ci.checks.enabled: true)
+  pull-requests: write  # Optional: Post PR comments (ci.comments.enabled: true)
 ```
 
 | Permission | Required | Enables |
 |------------|----------|---------|
 | `id-token: write` | Yes | OIDC authentication via `atmos auth` for AWS, Azure, GCP |
 | `contents: read` | Yes | Checkout repository code |
-| `checks: write` | No | Status checks showing "Plan in progress" / "Plan complete" |
-| `pull-requests: write` | No | PR comments with plan summaries |
+| `checks: write` | No | Status checks showing "Plan in progress" / "Plan complete" (`ci.checks.enabled: true`) |
+| `pull-requests: write` | No | PR comments with plan summaries (`ci.comments.enabled: true`) |
 
 **Minimal workflow** (job summaries only):
 

@@ -700,7 +700,7 @@ func TestStore_Upload(t *testing.T) {
 	// Upload currently returns an error indicating it requires the actions toolkit.
 	err := store.Upload(ctx, "test/key.tfplan", data, metadata)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrPlanfileUploadFailed)
+	assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
 }
 
 func TestStore_Download(t *testing.T) {

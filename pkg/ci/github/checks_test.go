@@ -161,7 +161,11 @@ func TestProvider_CreateCheckRun(t *testing.T) {
 		var capturedRequest map[string]any
 		mux := http.NewServeMux()
 		mux.HandleFunc("/repos/owner/repo/check-runs", func(w http.ResponseWriter, r *http.Request) {
-			json.NewDecoder(r.Body).Decode(&capturedRequest)
+			if err := json.NewDecoder(r.Body).Decode(&capturedRequest); err != nil {
+				t.Errorf("failed to decode request: %v", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			response := map[string]any{
 				"id":         12345,
@@ -175,7 +179,8 @@ func TestProvider_CreateCheckRun(t *testing.T) {
 		server := httptest.NewServer(mux)
 		defer server.Close()
 
-		serverURL, _ := url.Parse(server.URL + "/")
+		serverURL, err := url.Parse(server.URL + "/")
+		require.NoError(t, err)
 		ghClient := github.NewClient(nil)
 		ghClient.BaseURL = serverURL
 
@@ -201,7 +206,11 @@ func TestProvider_CreateCheckRun(t *testing.T) {
 		var capturedRequest map[string]any
 		mux := http.NewServeMux()
 		mux.HandleFunc("/repos/owner/repo/check-runs", func(w http.ResponseWriter, r *http.Request) {
-			json.NewDecoder(r.Body).Decode(&capturedRequest)
+			if err := json.NewDecoder(r.Body).Decode(&capturedRequest); err != nil {
+				t.Errorf("failed to decode request: %v", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			response := map[string]any{
 				"id":     12345,
@@ -218,7 +227,8 @@ func TestProvider_CreateCheckRun(t *testing.T) {
 		server := httptest.NewServer(mux)
 		defer server.Close()
 
-		serverURL, _ := url.Parse(server.URL + "/")
+		serverURL, err := url.Parse(server.URL + "/")
+		require.NoError(t, err)
 		ghClient := github.NewClient(nil)
 		ghClient.BaseURL = serverURL
 
@@ -251,7 +261,11 @@ func TestProvider_UpdateCheckRun(t *testing.T) {
 		var capturedRequest map[string]any
 		mux := http.NewServeMux()
 		mux.HandleFunc("/repos/owner/repo/check-runs/12345", func(w http.ResponseWriter, r *http.Request) {
-			json.NewDecoder(r.Body).Decode(&capturedRequest)
+			if err := json.NewDecoder(r.Body).Decode(&capturedRequest); err != nil {
+				t.Errorf("failed to decode request: %v", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			now := time.Now()
 			response := map[string]any{
@@ -267,7 +281,8 @@ func TestProvider_UpdateCheckRun(t *testing.T) {
 		server := httptest.NewServer(mux)
 		defer server.Close()
 
-		serverURL, _ := url.Parse(server.URL + "/")
+		serverURL, err := url.Parse(server.URL + "/")
+		require.NoError(t, err)
 		ghClient := github.NewClient(nil)
 		ghClient.BaseURL = serverURL
 
@@ -305,7 +320,8 @@ func TestProvider_UpdateCheckRun(t *testing.T) {
 		server := httptest.NewServer(mux)
 		defer server.Close()
 
-		serverURL, _ := url.Parse(server.URL + "/")
+		serverURL, err := url.Parse(server.URL + "/")
+		require.NoError(t, err)
 		ghClient := github.NewClient(nil)
 		ghClient.BaseURL = serverURL
 
@@ -330,7 +346,11 @@ func TestProvider_UpdateCheckRun(t *testing.T) {
 		var capturedRequest map[string]any
 		mux := http.NewServeMux()
 		mux.HandleFunc("/repos/owner/repo/check-runs/12345", func(w http.ResponseWriter, r *http.Request) {
-			json.NewDecoder(r.Body).Decode(&capturedRequest)
+			if err := json.NewDecoder(r.Body).Decode(&capturedRequest); err != nil {
+				t.Errorf("failed to decode request: %v", err)
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			response := map[string]any{
 				"id":     12345,
@@ -343,7 +363,8 @@ func TestProvider_UpdateCheckRun(t *testing.T) {
 		server := httptest.NewServer(mux)
 		defer server.Close()
 
-		serverURL, _ := url.Parse(server.URL + "/")
+		serverURL, err := url.Parse(server.URL + "/")
+		require.NoError(t, err)
 		ghClient := github.NewClient(nil)
 		ghClient.BaseURL = serverURL
 
