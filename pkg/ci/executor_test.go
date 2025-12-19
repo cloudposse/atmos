@@ -280,3 +280,205 @@ func TestTerraformOutputData(t *testing.T) {
 	assert.Len(t, data.Outputs, 1)
 	assert.Contains(t, data.ChangedResult, "5 to add")
 }
+
+func TestIsActionEnabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   *schema.AtmosConfiguration
+		action   HookAction
+		expected bool
+	}{
+		{
+			name:     "nil config - summary enabled by default",
+			config:   nil,
+			action:   ActionSummary,
+			expected: true,
+		},
+		{
+			name:     "nil config - output enabled by default",
+			config:   nil,
+			action:   ActionOutput,
+			expected: true,
+		},
+		{
+			name:     "nil config - check disabled by default",
+			config:   nil,
+			action:   ActionCheck,
+			expected: false,
+		},
+		{
+			name:     "nil config - upload always enabled",
+			config:   nil,
+			action:   ActionUpload,
+			expected: true,
+		},
+		{
+			name:     "nil config - download always enabled",
+			config:   nil,
+			action:   ActionDownload,
+			expected: true,
+		},
+		{
+			name: "summary explicitly enabled",
+			config: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Summary: schema.CISummaryConfig{Enabled: true},
+				},
+			},
+			action:   ActionSummary,
+			expected: true,
+		},
+		{
+			name: "summary explicitly disabled",
+			config: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Summary: schema.CISummaryConfig{Enabled: false},
+				},
+			},
+			action:   ActionSummary,
+			expected: false,
+		},
+		{
+			name: "output explicitly enabled",
+			config: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Output: schema.CIOutputConfig{Enabled: true},
+				},
+			},
+			action:   ActionOutput,
+			expected: true,
+		},
+		{
+			name: "output explicitly disabled",
+			config: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Output: schema.CIOutputConfig{Enabled: false},
+				},
+			},
+			action:   ActionOutput,
+			expected: false,
+		},
+		{
+			name: "check explicitly enabled",
+			config: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Checks: schema.CIChecksConfig{Enabled: true},
+				},
+			},
+			action:   ActionCheck,
+			expected: true,
+		},
+		{
+			name: "check explicitly disabled",
+			config: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{
+					Checks: schema.CIChecksConfig{Enabled: false},
+				},
+			},
+			action:   ActionCheck,
+			expected: false,
+		},
+		{
+			name: "upload always enabled regardless of config",
+			config: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{},
+			},
+			action:   ActionUpload,
+			expected: true,
+		},
+		{
+			name: "download always enabled regardless of config",
+			config: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{},
+			},
+			action:   ActionDownload,
+			expected: true,
+		},
+		{
+			name: "unknown action enabled by default",
+			config: &schema.AtmosConfiguration{
+				CI: schema.CIConfig{},
+			},
+			action:   HookAction("unknown"),
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isActionEnabled(tt.config, tt.action)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFilterVariables(t *testing.T) {
+	tests := []struct {
+		name     string
+		vars     map[string]string
+		allowed  []string
+		expected map[string]string
+	}{
+		{
+			name: "empty allowed list returns all vars",
+			vars: map[string]string{
+				"has_changes":  "true",
+				"artifact_key": "my-key",
+			},
+			allowed: []string{},
+			expected: map[string]string{
+				"has_changes":  "true",
+				"artifact_key": "my-key",
+			},
+		},
+		{
+			name: "nil allowed list returns all vars",
+			vars: map[string]string{
+				"has_changes":  "true",
+				"artifact_key": "my-key",
+			},
+			allowed: nil,
+			expected: map[string]string{
+				"has_changes":  "true",
+				"artifact_key": "my-key",
+			},
+		},
+		{
+			name: "filters to allowed variables only",
+			vars: map[string]string{
+				"has_changes":   "true",
+				"artifact_key":  "my-key",
+				"has_additions": "true",
+				"plan_summary":  "3 to add",
+			},
+			allowed: []string{"has_changes", "plan_summary"},
+			expected: map[string]string{
+				"has_changes":  "true",
+				"plan_summary": "3 to add",
+			},
+		},
+		{
+			name: "allowed variable not in vars is not added",
+			vars: map[string]string{
+				"has_changes": "true",
+			},
+			allowed: []string{"has_changes", "nonexistent"},
+			expected: map[string]string{
+				"has_changes": "true",
+			},
+		},
+		{
+			name:     "empty vars returns empty result",
+			vars:     map[string]string{},
+			allowed:  []string{"has_changes"},
+			expected: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterVariables(tt.vars, tt.allowed)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
