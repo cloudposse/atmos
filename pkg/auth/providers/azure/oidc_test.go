@@ -8,11 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -612,6 +614,7 @@ func TestOIDCProvider_ExchangeToken(t *testing.T) {
 		serverResponse interface{}
 		statusCode     int
 		expectError    bool
+		checkToken     func(*testing.T, *tokenResponse)
 	}{
 		{
 			name: "successful token exchange",
@@ -622,6 +625,11 @@ func TestOIDCProvider_ExchangeToken(t *testing.T) {
 			},
 			statusCode:  http.StatusOK,
 			expectError: false,
+			checkToken: func(t *testing.T, resp *tokenResponse) {
+				assert.Equal(t, "azure-access-token-123", resp.AccessToken)
+				assert.Equal(t, "Bearer", resp.TokenType)
+				assert.Equal(t, int64(3600), resp.ExpiresIn)
+			},
 		},
 		{
 			name:           "invalid JSON response",
@@ -682,15 +690,303 @@ func TestOIDCProvider_ExchangeToken(t *testing.T) {
 			}))
 			defer server.Close()
 
-			// Verify server is running (test infrastructure check).
-			assert.NotEmpty(t, server.URL, "test server should be running")
+			// Create provider with test server URL as token endpoint.
+			provider := &oidcProvider{
+				name:          "test-oidc",
+				tenantID:      "tenant-123",
+				clientID:      "client-456",
+				tokenEndpoint: server.URL,
+			}
 
-			// Note: Since the token endpoint URL is a constant, we can't easily mock
-			// the actual HTTP call without introducing an interface. This test validates
-			// the test server setup and request/response patterns. The actual exchangeToken
-			// function is tested via integration tests or by making the HTTP client injectable.
+			// Call exchangeToken.
+			ctx := context.Background()
+			resp, err := provider.exchangeToken(ctx, "test-federated-token")
+
+			if tt.expectError {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+
+			if tt.checkToken != nil {
+				tt.checkToken(t, resp)
+			}
 		})
 	}
+}
+
+func TestOIDCProvider_FetchGitHubActionsToken(t *testing.T) {
+	tests := []struct {
+		name           string
+		serverResponse interface{}
+		statusCode     int
+		audience       string
+		expectError    bool
+		expectedToken  string
+	}{
+		{
+			name: "successful token fetch",
+			serverResponse: map[string]string{
+				"value": "github-oidc-token-abc123",
+			},
+			statusCode:    http.StatusOK,
+			expectError:   false,
+			expectedToken: "github-oidc-token-abc123",
+		},
+		{
+			name: "successful token fetch with custom audience",
+			serverResponse: map[string]string{
+				"value": "github-oidc-token-custom",
+			},
+			statusCode:    http.StatusOK,
+			audience:      "custom-audience",
+			expectError:   false,
+			expectedToken: "github-oidc-token-custom",
+		},
+		{
+			name:           "empty token in response",
+			serverResponse: map[string]string{"value": ""},
+			statusCode:     http.StatusOK,
+			expectError:    true,
+		},
+		{
+			name:           "server error",
+			serverResponse: map[string]string{"error": "forbidden"},
+			statusCode:     http.StatusForbidden,
+			expectError:    true,
+		},
+		{
+			name:           "invalid JSON response",
+			serverResponse: "not json",
+			statusCode:     http.StatusOK,
+			expectError:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create test server.
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// Verify request.
+				assert.Equal(t, http.MethodGet, r.Method)
+				assert.Equal(t, "application/json", r.Header.Get("Accept"))
+				assert.Equal(t, "bearer test-request-token", r.Header.Get("Authorization"))
+
+				// Verify audience parameter.
+				expectedAudience := tt.audience
+				if expectedAudience == "" {
+					expectedAudience = "api://AzureADTokenExchange"
+				}
+				assert.Equal(t, expectedAudience, r.URL.Query().Get("audience"))
+
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.statusCode)
+
+				switch v := tt.serverResponse.(type) {
+				case string:
+					_, _ = w.Write([]byte(v))
+				default:
+					_ = json.NewEncoder(w).Encode(v)
+				}
+			}))
+			defer server.Close()
+
+			// Set up environment variables for GitHub Actions.
+			t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", server.URL)
+			t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
+
+			// Create provider.
+			provider := &oidcProvider{
+				name:     "test-oidc",
+				tenantID: "tenant-123",
+				clientID: "client-456",
+				audience: tt.audience,
+			}
+
+			// Call fetchGitHubActionsToken.
+			token, err := provider.fetchGitHubActionsToken()
+
+			if tt.expectError {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedToken, token)
+		})
+	}
+}
+
+func TestOIDCProvider_FetchGitHubActionsToken_MissingEnvVars(t *testing.T) {
+	provider := &oidcProvider{
+		name:     "test-oidc",
+		tenantID: "tenant-123",
+		clientID: "client-456",
+	}
+
+	// Test missing ACTIONS_ID_TOKEN_REQUEST_URL.
+	t.Run("missing request URL", func(t *testing.T) {
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "")
+		os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_URL")
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
+
+		_, err := provider.fetchGitHubActionsToken()
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+		assert.Contains(t, err.Error(), "ACTIONS_ID_TOKEN_REQUEST_URL")
+	})
+
+	// Test missing ACTIONS_ID_TOKEN_REQUEST_TOKEN.
+	t.Run("missing request token", func(t *testing.T) {
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://example.com")
+		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
+		os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+
+		_, err := provider.fetchGitHubActionsToken()
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+		assert.Contains(t, err.Error(), "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+	})
+}
+
+func TestOIDCProvider_Authenticate(t *testing.T) {
+	// Create a test token file.
+	tmpDir := t.TempDir()
+	tokenPath := filepath.Join(tmpDir, "token")
+	err := os.WriteFile(tokenPath, []byte("test-federated-token"), 0o600)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name            string
+		serverResponse  interface{}
+		statusCode      int
+		expectError     bool
+		checkCredentials func(*testing.T, *authTypes.AzureCredentials)
+	}{
+		{
+			name: "successful authentication",
+			serverResponse: tokenResponse{
+				AccessToken: "azure-access-token-xyz",
+				TokenType:   "Bearer",
+				ExpiresIn:   7200,
+			},
+			statusCode:  http.StatusOK,
+			expectError: false,
+			checkCredentials: func(t *testing.T, creds *authTypes.AzureCredentials) {
+				assert.Equal(t, "azure-access-token-xyz", creds.AccessToken)
+				assert.Equal(t, "Bearer", creds.TokenType)
+				assert.Equal(t, "tenant-123", creds.TenantID)
+				assert.Equal(t, "sub-789", creds.SubscriptionID)
+				assert.NotEmpty(t, creds.Expiration)
+			},
+		},
+		{
+			name:           "authentication failure - server error",
+			serverResponse: map[string]string{"error": "invalid_grant"},
+			statusCode:     http.StatusBadRequest,
+			expectError:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create test server.
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tt.statusCode)
+				_ = json.NewEncoder(w).Encode(tt.serverResponse)
+			}))
+			defer server.Close()
+
+			// Create provider with test server and token file.
+			provider := &oidcProvider{
+				name:           "test-oidc",
+				tenantID:       "tenant-123",
+				clientID:       "client-456",
+				subscriptionID: "sub-789",
+				location:       "eastus",
+				tokenFilePath:  tokenPath,
+				tokenEndpoint:  server.URL,
+			}
+
+			// Call Authenticate.
+			ctx := context.Background()
+			creds, err := provider.Authenticate(ctx)
+
+			if tt.expectError {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, creds)
+
+			azureCreds, ok := creds.(*authTypes.AzureCredentials)
+			require.True(t, ok, "expected AzureCredentials type")
+
+			if tt.checkCredentials != nil {
+				tt.checkCredentials(t, azureCreds)
+			}
+		})
+	}
+}
+
+func TestOIDCProvider_GetHTTPClient(t *testing.T) {
+	t.Run("returns default client when none injected", func(t *testing.T) {
+		provider := &oidcProvider{
+			name:       "test-oidc",
+			tenantID:   "tenant-123",
+			clientID:   "client-456",
+			httpClient: nil,
+		}
+
+		client := provider.getHTTPClient()
+		require.NotNil(t, client)
+	})
+
+	t.Run("returns injected client when provided", func(t *testing.T) {
+		mockClient := &http.Client{Timeout: 5 * time.Second}
+		provider := &oidcProvider{
+			name:       "test-oidc",
+			tenantID:   "tenant-123",
+			clientID:   "client-456",
+			httpClient: mockClient,
+		}
+
+		client := provider.getHTTPClient()
+		require.NotNil(t, client)
+		assert.Equal(t, mockClient, client)
+	})
+}
+
+func TestOIDCProvider_GetTokenEndpoint(t *testing.T) {
+	t.Run("returns default Azure AD endpoint when none set", func(t *testing.T) {
+		provider := &oidcProvider{
+			name:          "test-oidc",
+			tenantID:      "my-tenant-id",
+			clientID:      "client-456",
+			tokenEndpoint: "",
+		}
+
+		endpoint := provider.getTokenEndpoint()
+		assert.Equal(t, "https://login.microsoftonline.com/my-tenant-id/oauth2/v2.0/token", endpoint)
+	})
+
+	t.Run("returns custom endpoint when set", func(t *testing.T) {
+		provider := &oidcProvider{
+			name:          "test-oidc",
+			tenantID:      "tenant-123",
+			clientID:      "client-456",
+			tokenEndpoint: "https://custom.endpoint.com/token",
+		}
+
+		endpoint := provider.getTokenEndpoint()
+		assert.Equal(t, "https://custom.endpoint.com/token", endpoint)
+	})
 }
 
 func TestExtractOIDCConfig(t *testing.T) {

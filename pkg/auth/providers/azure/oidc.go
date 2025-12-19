@@ -36,6 +36,11 @@ const (
 	clientAssertionTypeJWT = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 )
 
+// HTTPDoer is an interface for HTTP clients that can execute requests.
+type HTTPDoer interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
 // oidcProvider implements Azure OIDC/Workload Identity Federation authentication.
 // This provider is designed for CI/CD environments (GitHub Actions, Azure DevOps, etc.)
 // where a federated identity token is exchanged for Azure credentials.
@@ -48,6 +53,11 @@ type oidcProvider struct {
 	location       string
 	audience       string
 	tokenFilePath  string
+
+	// httpClient is the HTTP client used for requests. If nil, a default client is used.
+	httpClient HTTPDoer
+	// tokenEndpoint can be overridden for testing. If empty, uses Azure AD endpoint.
+	tokenEndpoint string
 }
 
 // oidcConfig holds extracted Azure OIDC configuration from provider spec.
@@ -145,6 +155,22 @@ func (p *oidcProvider) Name() string {
 // PreAuthenticate is a no-op for Azure OIDC provider.
 func (p *oidcProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 	return nil
+}
+
+// getHTTPClient returns the HTTP client to use for requests.
+func (p *oidcProvider) getHTTPClient() HTTPDoer {
+	if p.httpClient != nil {
+		return p.httpClient
+	}
+	return &http.Client{Timeout: OIDCTimeout}
+}
+
+// getTokenEndpoint returns the token endpoint URL.
+func (p *oidcProvider) getTokenEndpoint() string {
+	if p.tokenEndpoint != "" {
+		return p.tokenEndpoint
+	}
+	return fmt.Sprintf(azureADTokenEndpoint, p.tenantID)
 }
 
 // Authenticate performs Azure OIDC authentication by exchanging a federated token
@@ -280,9 +306,8 @@ func (p *oidcProvider) fetchGitHubActionsToken() (string, error) {
 	req.Header.Set("Authorization", "bearer "+requestToken)
 	req.Header.Set("Accept", "application/json")
 
-	// Execute request.
-	client := &http.Client{Timeout: OIDCTimeout}
-	resp, err := client.Do(req)
+	// Execute request using the configured HTTP client.
+	resp, err := p.getHTTPClient().Do(req)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to fetch GitHub OIDC token: %w", errUtils.ErrAuthenticationFailed, err)
 	}
@@ -313,7 +338,7 @@ func (p *oidcProvider) fetchGitHubActionsToken() (string, error) {
 func (p *oidcProvider) exchangeToken(ctx context.Context, federatedToken string) (*tokenResponse, error) {
 	defer perf.Track(nil, "azure.oidcProvider.exchangeToken")()
 
-	tokenEndpoint := fmt.Sprintf(azureADTokenEndpoint, p.tenantID)
+	tokenEndpoint := p.getTokenEndpoint()
 
 	// Build request body.
 	data := url.Values{}
@@ -330,9 +355,8 @@ func (p *oidcProvider) exchangeToken(ctx context.Context, federatedToken string)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	// Execute request.
-	client := &http.Client{Timeout: OIDCTimeout}
-	resp, err := client.Do(req)
+	// Execute request using the configured HTTP client.
+	resp, err := p.getHTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to exchange federated token: %w", errUtils.ErrAuthenticationFailed, err)
 	}
