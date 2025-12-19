@@ -524,6 +524,8 @@ func TestServiceProvision_EmptyBasePath(t *testing.T) {
 // Tests for extractComponentPath.
 
 func TestExtractComponentPath(t *testing.T) {
+	// Use filepath.FromSlash for expected paths to ensure cross-platform compatibility.
+	// On Windows, paths use backslashes; on Unix, they use forward slashes.
 	tests := []struct {
 		name            string
 		atmosConfig     *schema.AtmosConfiguration
@@ -534,36 +536,36 @@ func TestExtractComponentPath(t *testing.T) {
 		{
 			name: "uses component_path from config",
 			atmosConfig: &schema.AtmosConfiguration{
-				BasePath: "/project",
+				BasePath: filepath.FromSlash("/project"),
 			},
 			componentConfig: map[string]any{
-				"component_path": "/custom/path",
+				"component_path": filepath.FromSlash("/custom/path"),
 			},
 			component: "vpc",
-			expected:  "/custom/path",
+			expected:  filepath.FromSlash("/custom/path"),
 		},
 		{
 			name: "builds default path with custom components base",
 			atmosConfig: &schema.AtmosConfiguration{
-				BasePath: "/project",
+				BasePath: filepath.FromSlash("/project"),
 				Components: schema.Components{
 					Terraform: schema.Terraform{
-						BasePath: "custom/components",
+						BasePath: filepath.FromSlash("custom/components"),
 					},
 				},
 			},
 			componentConfig: map[string]any{},
 			component:       "vpc",
-			expected:        "/project/custom/components/vpc",
+			expected:        filepath.FromSlash("/project/custom/components/vpc"),
 		},
 		{
 			name: "builds default path with default components base",
 			atmosConfig: &schema.AtmosConfiguration{
-				BasePath: "/project",
+				BasePath: filepath.FromSlash("/project"),
 			},
 			componentConfig: map[string]any{},
 			component:       "vpc",
-			expected:        "/project/components/terraform/vpc",
+			expected:        filepath.FromSlash("/project/components/terraform/vpc"),
 		},
 		{
 			name: "empty basepath uses dot",
@@ -572,18 +574,18 @@ func TestExtractComponentPath(t *testing.T) {
 			},
 			componentConfig: map[string]any{},
 			component:       "s3-bucket",
-			expected:        "components/terraform/s3-bucket",
+			expected:        filepath.FromSlash("components/terraform/s3-bucket"),
 		},
 		{
 			name: "empty component_path uses default",
 			atmosConfig: &schema.AtmosConfiguration{
-				BasePath: "/project",
+				BasePath: filepath.FromSlash("/project"),
 			},
 			componentConfig: map[string]any{
 				"component_path": "", // Empty string should fallback.
 			},
 			component: "vpc",
-			expected:  "/project/components/terraform/vpc",
+			expected:  filepath.FromSlash("/project/components/terraform/vpc"),
 		},
 	}
 
