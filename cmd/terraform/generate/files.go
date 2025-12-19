@@ -30,20 +30,7 @@ When called with --all, generates files for all components across stacks.
 
 The generate section in stack configuration supports:
 - Map values: serialized based on file extension (.json, .yaml, .hcl, .tf)
-- String values: written as literal templates with Go template support
-
-Examples:
-  # Generate files for a single component
-  atmos terraform generate files vpc -s prod-ue2
-
-  # Generate files for all components
-  atmos terraform generate files --all
-
-  # Dry run to see what would be generated
-  atmos terraform generate files vpc -s prod-ue2 --dry-run
-
-  # Delete generated files
-  atmos terraform generate files --clean --all`,
+- String values: written as literal templates with Go template support`,
 	Args:               cobra.MaximumNArgs(1),
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
