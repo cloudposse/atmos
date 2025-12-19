@@ -1,0 +1,60 @@
+---
+slug: azure-oidc-provider
+title: "Azure OIDC/Workload Identity Federation Provider"
+authors: [jamengual]
+tags: [feature]
+---
+
+Atmos now supports Azure OIDC/Workload Identity Federation for secure, secretless authentication in CI/CD pipelines.
+
+<!--truncate-->
+
+## What Changed
+
+We've added the `azure/oidc` provider to the Atmos auth system, enabling Azure Workload Identity Federation for CI/CD environments like GitHub Actions and Azure DevOps. This completes the Azure authentication story alongside the existing `azure/cli` and `azure/device-code` providers.
+
+## Why This Matters
+
+**Secretless Authentication**: No more storing Azure client secrets in CI/CD pipelines. The OIDC provider exchanges short-lived federated tokens for Azure credentials, following zero-trust security principles.
+
+**GitHub Actions Integration**: The provider automatically detects GitHub Actions environment and retrieves OIDC tokens using the `id-token: write` permission.
+
+**Terraform Compatibility**: Sets `ARM_USE_OIDC=true` for seamless integration with azurerm, azapi, and azuread Terraform providers.
+
+## How to Use It
+
+### Configuration
+
+```yaml
+auth:
+  providers:
+    azure-oidc:
+      kind: azure/oidc
+      spec:
+        tenant_id: "your-tenant-id"
+        client_id: "your-client-id"
+        subscription_id: "your-subscription-id"
+        # Optional: custom audience
+        audience: "api://AzureADTokenExchange"
+        # Optional: path to federated token file
+        token_file_path: "/path/to/token"
+```
+
+### GitHub Actions Workflow
+
+```yaml
+jobs:
+  deploy:
+    permissions:
+      id-token: write  # Required for OIDC
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy with Atmos
+        run: atmos terraform apply vpc -s prod
+```
+
+## Get Involved
+
+- Read the [Auth documentation](/core-concepts/auth)
+- Report issues on [GitHub](https://github.com/cloudposse/atmos/issues)
