@@ -14,7 +14,7 @@
 {{- if gt .Resources.Change 0 }} [![change](https://shields.io/badge/CHANGE-{{.Resources.Change}}-important?style=for-the-badge)](#user-content-change-{{$target}}){{ end }}
 {{- if gt .Resources.Replace 0 }} [![replace](https://shields.io/badge/REPLACE-{{.Resources.Replace}}-critical?style=for-the-badge)](#user-content-replace-{{$target}}){{ end }}
 {{- if gt .Resources.Destroy 0 }} [![destroy](https://shields.io/badge/DESTROY-{{.Resources.Destroy}}-critical?style=for-the-badge)](#user-content-destroy-{{$target}}){{ end }}
-{{- if not .HasChanges }} [![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#user-content-{{$target}}){{ end }}
+{{- if not .HasChanges }} [![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#user-content-result-{{$target}}){{ end }}
 {{- end }}
 
 {{- if .HasDestroy }}

@@ -201,7 +201,7 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 	_ = artifactName // Use artifact name (will be used with proper API)
 	_ = buf          // Use buffer (will be used with proper API)
 
-	return fmt.Errorf("%w: GitHub Artifacts upload requires running within GitHub Actions with proper toolkit", errUtils.ErrPlanfileUploadFailed)
+	return fmt.Errorf("%w: GitHub Artifacts upload requires running within GitHub Actions with @actions/artifact toolkit", errUtils.ErrNotImplemented)
 }
 
 // Download downloads a planfile from GitHub artifacts.
