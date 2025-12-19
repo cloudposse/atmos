@@ -1,0 +1,118 @@
+---
+slug: retry-support-vendoring
+title: "Retry Support for Vendoring and Source Operations"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports automatic retry with exponential backoff for vendoring and source operations. This makes component downloads more resilient to transient network failures, connection resets, and GitHub API rate limits.
+
+<!--truncate-->
+
+## What Changed
+
+We've added native retry support to git operations and HTTP downloads used by vendoring and the source provisioner. The retry behavior is configurable per-source using the new `retry` field:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0
+        retry:
+          max_attempts: 5
+          initial_delay: 2s
+          max_delay: 60s
+          backoff_strategy: exponential
+```
+
+## Why This Matters
+
+Network operations are inherently unreliable. Transient failures like connection resets, timeouts, and rate limits can cause vendoring to fail even when there's nothing wrong with your configuration.
+
+Previously, you'd have to manually retry `atmos vendor pull` or `atmos terraform source pull` when these failures occurred. Now Atmos handles this automatically with intelligent retry logic:
+
+- **Exponential backoff** prevents thundering herd problems
+- **Jitter** adds randomness to avoid synchronized retries across parallel operations
+- **Smart detection** only retries transient errors (not auth failures or missing repos)
+- **GitHub rate limit awareness** waits for rate limit reset when limits are hit
+
+## Configuration Options
+
+The `retry` field supports the following options:
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `max_attempts` | 3 | Maximum number of download attempts |
+| `initial_delay` | 2s | Initial delay before first retry |
+| `max_delay` | 30s | Maximum delay between retries |
+| `backoff_strategy` | exponential | Strategy: `constant`, `linear`, or `exponential` |
+| `multiplier` | 2.0 | Backoff multiplier for exponential/linear strategies |
+| `random_jitter` | 0.1 | Randomness added to delays (0.1 = 10%) |
+| `max_elapsed_time` | 5m | Maximum total time for all retries |
+
+## How to Use It
+
+### In Source Configuration
+
+Add `retry` to your component's source configuration:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0
+        retry:
+          max_attempts: 5
+          initial_delay: 2s
+          backoff_strategy: exponential
+```
+
+### In Vendor Configuration
+
+Add `retry` to your vendor source specifications:
+
+```yaml
+# vendor.yaml
+spec:
+  sources:
+    - component: vpc
+      source: github.com/cloudposse/terraform-aws-components//modules/vpc?ref=1.450.0
+      retry:
+        max_attempts: 5
+        initial_delay: 2s
+```
+
+### Global Defaults
+
+Set global retry defaults in `atmos.yaml`:
+
+```yaml
+vendor:
+  retry:
+    max_attempts: 5
+    initial_delay: 2s
+    max_delay: 60s
+    backoff_strategy: exponential
+```
+
+## Retryable Errors
+
+The retry logic automatically detects transient errors including:
+
+- Connection reset / connection refused
+- Timeouts and temporary failures
+- SSL/TLS handshake errors
+- GitHub rate limit exceeded (429 responses)
+- "Remote end hung up unexpectedly" during git operations
+
+Non-retryable errors (like authentication failures or repository not found) fail immediately without retry.
+
+## Get Involved
+
+We'd love to hear your feedback! Please [open an issue](https://github.com/cloudposse/atmos/issues) if you have questions or encounter edge cases.
+
+For more details, see the [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) design pattern and [vendor configuration](/cli/configuration/vendor).
