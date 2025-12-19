@@ -214,6 +214,220 @@ permissions:
   pull-requests: write
 ```
 
+## Functional Requirements
+
+### FR-1: CI Environment Detection
+
+**Requirement**: Atmos automatically detects CI environments without explicit flags.
+
+**Behavior**:
+- Detect GitHub Actions via `GITHUB_ACTIONS=true` environment variable
+- Detect other CI providers via standard `CI=true` environment variable
+- Allow explicit override via `--ci` flag for local testing
+- Gracefully degrade when CI features unavailable (e.g., missing `$GITHUB_STEP_SUMMARY`)
+
+**Validation**:
+- Running in GitHub Actions automatically enables CI mode
+- Running locally with `--ci` produces identical output format
+- Missing CI environment variables do not cause errors
+
+### FR-2: Job Summary Output
+
+**Requirement**: Write rich markdown summaries to CI job summary mechanism.
+
+**Behavior**:
+- Write to `$GITHUB_STEP_SUMMARY` in GitHub Actions
+- Include resource change badges (CREATE, CHANGE, REPLACE, DESTROY)
+- Show collapsible plan details with resource lists
+- Display warning callouts for destructive operations
+- Include metadata (component, stack, commit SHA)
+
+**Validation**:
+- Summary appears in GitHub Actions job summary panel
+- Badges link to corresponding resource sections
+- Destructive plans show CAUTION callout
+
+### FR-3: CI Output Variables
+
+**Requirement**: Export plan/apply results as CI output variables.
+
+**Behavior**:
+- Write to `$GITHUB_OUTPUT` in GitHub Actions
+- Export standard variables: `has_changes`, `has_additions`, `has_destructions`, `artifact_key`, `plan_summary`
+- Export terraform outputs after successful apply (prefixed with `output_`)
+- Support filtering via `ci.output.variables` configuration
+
+**Variables (plan)**:
+| Variable | Type | Description |
+|----------|------|-------------|
+| `has_changes` | bool | Whether plan has any changes |
+| `has_additions` | bool | Whether plan creates resources |
+| `has_destructions` | bool | Whether plan destroys resources |
+| `additions_count` | int | Number of resources to create |
+| `changes_count` | int | Number of resources to change |
+| `destructions_count` | int | Number of resources to destroy |
+| `artifact_key` | string | Planfile storage key |
+| `plan_summary` | string | Human-readable summary |
+
+**Variables (apply)**:
+| Variable | Type | Description |
+|----------|------|-------------|
+| `success` | bool | Whether apply succeeded |
+| `output_*` | varies | Terraform outputs (flattened) |
+
+### FR-4: Status Checks
+
+**Requirement**: Post commit status checks showing operation progress.
+
+**Behavior**:
+- Create check run when operation starts ("Plan in progress")
+- Update check run when operation completes with result summary
+- Include component and stack in check name
+- Support configuration via `ci.checks.enabled` (disabled by default)
+
+**Check States**:
+| State | Description |
+|-------|-------------|
+| `in_progress` | Operation started, not yet complete |
+| `success` | Operation completed successfully |
+| `failure` | Operation failed with errors |
+
+**Validation**:
+- Check runs appear in GitHub PR checks section
+- Check description shows resource change summary
+- Disabled by default (requires `checks: write` permission)
+
+### FR-5: Planfile Storage
+
+**Requirement**: Store and retrieve planfiles across CI jobs.
+
+**Behavior**:
+- Upload planfile after successful `terraform plan`
+- Download planfile before `terraform apply`
+- Support multiple storage backends (S3, GitHub Artifacts, Azure Blob, GCS, local)
+- Store metadata sidecar with plan details (no DynamoDB)
+- Key pattern configurable via `terraform.planfiles.key_pattern`
+
+**Storage Backends**:
+| Backend | Key | Description |
+|---------|-----|-------------|
+| `s3` | `s3://bucket/prefix/...` | AWS S3 with metadata sidecar |
+| `github-artifacts` | Artifact name | GitHub Actions artifacts API |
+| `azure-blob` | Container/blob path | Azure Blob Storage |
+| `gcs` | `gs://bucket/...` | Google Cloud Storage |
+| `local` | File path | Local filesystem (dev/testing) |
+
+### FR-6: Plan Verification
+
+**Requirement**: Verify downloaded planfile matches current state before apply.
+
+**Behavior**:
+- Compare downloaded plan against fresh plan output
+- Use semantic comparison (not byte-for-byte)
+- Fail apply if plan has drifted
+- Support configuration via `--verify-plan` flag
+
+**Validation**:
+- Detects resource changes between plan and apply
+- Provides clear error message on verification failure
+- Suggests re-running plan when drift detected
+
+### FR-7: Command Parity
+
+**Requirement**: Same command produces same behavior in CI and locally.
+
+**Behavior**:
+- `atmos terraform plan vpc -s prod` works identically everywhere
+- CI mode adds outputs (summary, variables) without changing core behavior
+- Local `--ci` flag enables CI output for testing
+- No CI-specific command variations
+
+**Validation**:
+- Plan output content identical in CI and local
+- Resource change detection identical
+- Exit codes identical
+
+### FR-8: Describe Affected Matrix Format
+
+**Requirement**: Output affected components in GitHub Actions matrix format.
+
+**Behavior**:
+- `atmos describe affected --format=matrix` outputs JSON matrix to stdout
+- `--output-file=$GITHUB_OUTPUT` writes `affected=<json>` for downstream jobs
+- Format directly consumable by GitHub Actions `matrix` strategy
+- Include component and stack for each affected item
+
+**Usage**:
+```bash
+# Output matrix JSON to stdout
+atmos describe affected --format=matrix
+
+# Write to $GITHUB_OUTPUT for use in subsequent jobs
+atmos describe affected --format=matrix --output-file="$GITHUB_OUTPUT"
+```
+
+**Output Format**:
+```json
+{"include":[{"component":"vpc","stack":"dev"},{"component":"eks","stack":"dev"}]}
+```
+
+### FR-9: CI Status Command
+
+**Requirement**: Show PR/commit status similar to `gh pr status`.
+
+**Behavior**:
+- Display current branch status with check results
+- Show PRs created by user
+- Show PRs requesting review from user
+- Use familiar status icons (✓ success, ✗ failure, ○ pending)
+
+**Validation**:
+- Works in CI and locally (with `GITHUB_TOKEN`)
+- Shows all check runs for current commit
+- Matches `gh pr status` UX patterns
+
+## Non-Functional Requirements
+
+### NFR-1: Performance
+
+**Requirement**: CI operations add minimal overhead.
+
+**Targets**:
+- Summary generation: < 100ms
+- Output variable writing: < 50ms per variable
+- Planfile upload (excluding transfer): < 200ms
+- CI detection: < 10ms
+
+### NFR-2: Reliability
+
+**Requirement**: CI feature failures do not block terraform operations.
+
+**Behavior**:
+- Summary write failure logs warning, does not fail command
+- Output variable write failure logs warning per variable
+- Planfile upload failure fails command (data integrity)
+- Status check failure logs warning, does not fail command
+
+### NFR-3: Security
+
+**Requirement**: CI integration respects security boundaries.
+
+**Behavior**:
+- Never log sensitive terraform outputs
+- Planfile storage inherits terraform state security model
+- GitHub token scoped to minimum required permissions
+- No secrets in job summaries or PR comments
+
+### NFR-4: Extensibility
+
+**Requirement**: CI behaviors are configurable and extensible.
+
+**Behavior**:
+- Template overrides for summary and comment formats
+- Per-feature enable/disable configuration
+- Storage backend registry pattern for new backends
+- Provider interface for new CI platforms
+
 ## Key Design Decisions
 
 ### 1. Use Atmos Lifecycle Hooks
@@ -745,6 +959,7 @@ flags.WithEnvVars("ci", "ATMOS_CI", "CI"),  // ATMOS_CI takes precedence over CI
 | Flag | Description |
 |------|-------------|
 | `--format=matrix` | Output GitHub Actions matrix format |
+| `--output-file` | Write output to file in key=value format (for `$GITHUB_OUTPUT`) |
 
 ## CI Output Variables
 
@@ -783,20 +998,41 @@ The terraform outputs use the format options from `pkg/terraform/output/`:
 ## Describe Affected Matrix Format
 
 ```bash
+# Output to stdout
 atmos describe affected --format=matrix
+
+# Write to $GITHUB_OUTPUT for downstream jobs
+atmos describe affected --format=matrix --output-file="$GITHUB_OUTPUT"
 ```
 
-Output:
+Output (stdout):
 
 ```json
 {"include":[{"component":"vpc","stack":"plat-ue2-dev"},{"component":"eks","stack":"plat-ue2-dev"}]}
+```
+
+Output ($GITHUB_OUTPUT):
+
+```
+affected={"include":[{"component":"vpc","stack":"plat-ue2-dev"},{"component":"eks","stack":"plat-ue2-dev"}]}
 ```
 
 This format is directly consumable by GitHub Actions matrix strategy:
 
 ```yaml
 jobs:
+  affected:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.affected.outputs.affected }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get affected components
+        id: affected
+        run: atmos describe affected --format=matrix --output-file="$GITHUB_OUTPUT"
+
   plan:
+    needs: affected
     strategy:
       matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
 ```
