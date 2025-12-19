@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
@@ -24,7 +25,7 @@ func TestNewAssumeRootIdentity(t *testing.T) {
 		identName   string
 		config      *schema.Identity
 		expectError bool
-		errorMsg    string
+		wantErr     error
 	}{
 		{
 			name:        "valid config",
@@ -37,21 +38,21 @@ func TestNewAssumeRootIdentity(t *testing.T) {
 			identName:   "root-access",
 			config:      &schema.Identity{Kind: "aws/assume-role"},
 			expectError: true,
-			errorMsg:    "invalid identity kind for assume root",
+			wantErr:     errUtils.ErrInvalidIdentityKind,
 		},
 		{
 			name:        "empty name",
 			identName:   "",
 			config:      &schema.Identity{Kind: "aws/assume-root"},
 			expectError: true,
-			errorMsg:    "identity name is empty",
+			wantErr:     errUtils.ErrInvalidIdentityConfig,
 		},
 		{
 			name:        "nil config",
 			identName:   "root-access",
 			config:      nil,
 			expectError: true,
-			errorMsg:    "identity config is nil",
+			wantErr:     errUtils.ErrInvalidIdentityConfig,
 		},
 	}
 
@@ -60,7 +61,7 @@ func TestNewAssumeRootIdentity(t *testing.T) {
 			id, err := NewAssumeRootIdentity(tt.identName, tt.config)
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorMsg)
+				assert.ErrorIs(t, err, tt.wantErr)
 				assert.Nil(t, id)
 			} else {
 				assert.NoError(t, err)
@@ -76,19 +77,19 @@ func TestAssumeRootIdentity_Validate(t *testing.T) {
 		name        string
 		principal   map[string]any
 		expectError bool
-		errorMsg    string
+		wantErr     error
 	}{
 		{
 			name:        "nil principal",
 			principal:   nil,
 			expectError: true,
-			errorMsg:    "principal is required",
+			wantErr:     errUtils.ErrMissingPrincipal,
 		},
 		{
 			name:        "empty principal",
 			principal:   map[string]any{},
 			expectError: true,
-			errorMsg:    "principal is required",
+			wantErr:     errUtils.ErrMissingPrincipal,
 		},
 		{
 			name: "missing task_policy_arn",
@@ -96,7 +97,7 @@ func TestAssumeRootIdentity_Validate(t *testing.T) {
 				"target_principal": "123456789012",
 			},
 			expectError: true,
-			errorMsg:    "principal is required",
+			wantErr:     errUtils.ErrMissingPrincipal,
 		},
 		{
 			name: "invalid account ID format (too short)",
@@ -105,7 +106,7 @@ func TestAssumeRootIdentity_Validate(t *testing.T) {
 				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
 			},
 			expectError: true,
-			errorMsg:    "invalid identity config",
+			wantErr:     errUtils.ErrInvalidIdentityConfig,
 		},
 		{
 			name: "invalid account ID format (too long)",
@@ -114,7 +115,7 @@ func TestAssumeRootIdentity_Validate(t *testing.T) {
 				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
 			},
 			expectError: true,
-			errorMsg:    "invalid identity config",
+			wantErr:     errUtils.ErrInvalidIdentityConfig,
 		},
 		{
 			name: "invalid account ID format (letters)",
@@ -123,7 +124,7 @@ func TestAssumeRootIdentity_Validate(t *testing.T) {
 				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
 			},
 			expectError: true,
-			errorMsg:    "invalid identity config",
+			wantErr:     errUtils.ErrInvalidIdentityConfig,
 		},
 		{
 			name: "invalid task policy ARN (wrong prefix)",
@@ -132,7 +133,7 @@ func TestAssumeRootIdentity_Validate(t *testing.T) {
 				"task_policy_arn":  "arn:aws:iam::123456789012:role/MyRole",
 			},
 			expectError: true,
-			errorMsg:    "invalid identity config",
+			wantErr:     errUtils.ErrInvalidIdentityConfig,
 		},
 		{
 			name: "valid minimal config",
@@ -173,7 +174,7 @@ func TestAssumeRootIdentity_Validate(t *testing.T) {
 			err := i.Validate()
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorMsg)
+				assert.ErrorIs(t, err, tt.wantErr)
 			} else {
 				assert.NoError(t, err)
 			}
@@ -487,13 +488,13 @@ func TestAssumeRootIdentity_PostAuthenticate_Errors(t *testing.T) {
 		name        string
 		params      *types.PostAuthenticateParams
 		expectError bool
-		errorMsg    string
+		wantErr     error
 	}{
 		{
 			name:        "nil params",
 			params:      nil,
 			expectError: true,
-			errorMsg:    "cannot be nil",
+			wantErr:     errUtils.ErrInvalidAuthConfig,
 		},
 		{
 			name: "nil credentials",
@@ -505,7 +506,7 @@ func TestAssumeRootIdentity_PostAuthenticate_Errors(t *testing.T) {
 				Credentials:  nil,
 			},
 			expectError: true,
-			errorMsg:    "credentials are required",
+			wantErr:     errUtils.ErrInvalidAuthConfig,
 		},
 	}
 
@@ -519,7 +520,7 @@ func TestAssumeRootIdentity_PostAuthenticate_Errors(t *testing.T) {
 			err := i.PostAuthenticate(context.Background(), tt.params)
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorMsg)
+				assert.ErrorIs(t, err, tt.wantErr)
 			} else {
 				assert.NoError(t, err)
 			}
@@ -533,7 +534,7 @@ func TestAssumeRootIdentity_Authenticate_ErrorCases(t *testing.T) {
 		identity    *assumeRootIdentity
 		inputCreds  types.ICredentials
 		expectError bool
-		errorMsg    string
+		wantErr     error
 	}{
 		{
 			name: "nil input credentials",
@@ -549,7 +550,7 @@ func TestAssumeRootIdentity_Authenticate_ErrorCases(t *testing.T) {
 			},
 			inputCreds:  nil,
 			expectError: true,
-			errorMsg:    "invalid identity config",
+			wantErr:     errUtils.ErrInvalidIdentityConfig,
 		},
 		{
 			name: "OIDC credentials not supported",
@@ -568,7 +569,7 @@ func TestAssumeRootIdentity_Authenticate_ErrorCases(t *testing.T) {
 				Provider: "github",
 			},
 			expectError: true,
-			errorMsg:    "invalid identity config",
+			wantErr:     errUtils.ErrInvalidIdentityConfig,
 		},
 	}
 
@@ -577,7 +578,7 @@ func TestAssumeRootIdentity_Authenticate_ErrorCases(t *testing.T) {
 			_, err := tt.identity.Authenticate(context.Background(), tt.inputCreds)
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorMsg)
+				assert.ErrorIs(t, err, tt.wantErr)
 			} else {
 				assert.NoError(t, err)
 			}
@@ -590,19 +591,19 @@ func TestAssumeRootIdentity_Authenticate_ValidationErrors(t *testing.T) {
 		name        string
 		principal   map[string]any
 		expectError bool
-		errorMsg    string
+		wantErr     error
 	}{
 		{
 			name:        "nil principal",
 			principal:   nil,
 			expectError: true,
-			errorMsg:    "invalid identity config",
+			wantErr:     errUtils.ErrInvalidIdentityConfig,
 		},
 		{
 			name:        "missing target_principal",
 			principal:   map[string]any{"task_policy_arn": "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials"},
 			expectError: true,
-			errorMsg:    "principal is required",
+			wantErr:     errUtils.ErrInvalidIdentityConfig,
 		},
 		{
 			name: "missing task_policy_arn",
@@ -610,7 +611,7 @@ func TestAssumeRootIdentity_Authenticate_ValidationErrors(t *testing.T) {
 				"target_principal": "123456789012",
 			},
 			expectError: true,
-			errorMsg:    "principal is required",
+			wantErr:     errUtils.ErrInvalidIdentityConfig,
 		},
 	}
 
@@ -634,7 +635,7 @@ func TestAssumeRootIdentity_Authenticate_ValidationErrors(t *testing.T) {
 			_, err := identity.Authenticate(context.Background(), inputCreds)
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorMsg)
+				assert.ErrorIs(t, err, tt.wantErr)
 			} else {
 				assert.NoError(t, err)
 			}
