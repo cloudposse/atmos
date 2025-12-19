@@ -176,6 +176,7 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	info.Skip = opts.Skip
 	info.Components = opts.Components
 	info.DryRun = opts.DryRun
+	info.SkipInit = opts.SkipInit
 	info.All = opts.All
 	info.Affected = opts.Affected
 	info.Query = opts.Query

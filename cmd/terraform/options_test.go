@@ -20,6 +20,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				v.Set("process-functions", false)
 				v.Set("skip", []string{"func1", "func2"})
 				v.Set("dry-run", true)
+				v.Set("skip-init", true)
 				v.Set("query", ".components.terraform.vpc")
 				v.Set("components", []string{"vpc", "eks"})
 				v.Set("all", true)
@@ -30,6 +31,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				ProcessFunctions: false,
 				Skip:             []string{"func1", "func2"},
 				DryRun:           true,
+				SkipInit:         true,
 				Query:            ".components.terraform.vpc",
 				Components:       []string{"vpc", "eks"},
 				All:              true,
@@ -44,6 +46,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				ProcessFunctions: false,
 				Skip:             nil,
 				DryRun:           false,
+				SkipInit:         false,
 				Query:            "",
 				Components:       nil,
 				All:              false,
@@ -61,6 +64,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				ProcessFunctions: true,
 				Skip:             nil,
 				DryRun:           false,
+				SkipInit:         false,
 				Query:            "",
 				Components:       nil,
 				All:              false,
@@ -79,6 +83,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				ProcessFunctions: false,
 				Skip:             nil,
 				DryRun:           false,
+				SkipInit:         false,
 				Query:            "",
 				Components:       []string{"comp1", "comp2", "comp3"},
 				All:              true,
@@ -95,6 +100,24 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				ProcessFunctions: false,
 				Skip:             nil,
 				DryRun:           true,
+				SkipInit:         false,
+				Query:            "",
+				Components:       nil,
+				All:              false,
+				Affected:         false,
+			},
+		},
+		{
+			name: "skip-init only",
+			setup: func(v *viper.Viper) {
+				v.Set("skip-init", true)
+			},
+			expected: &TerraformRunOptions{
+				ProcessTemplates: false,
+				ProcessFunctions: false,
+				Skip:             nil,
+				DryRun:           false,
+				SkipInit:         true,
 				Query:            "",
 				Components:       nil,
 				All:              false,
@@ -111,6 +134,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				ProcessFunctions: false,
 				Skip:             []string{"template_function"},
 				DryRun:           false,
+				SkipInit:         false,
 				Query:            "",
 				Components:       nil,
 				All:              false,
@@ -127,6 +151,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				ProcessFunctions: false,
 				Skip:             nil,
 				DryRun:           false,
+				SkipInit:         false,
 				Query:            ".components.terraform | keys",
 				Components:       nil,
 				All:              false,
@@ -146,6 +171,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.ProcessFunctions, result.ProcessFunctions, "ProcessFunctions should match")
 			assert.Equal(t, tt.expected.Skip, result.Skip, "Skip should match")
 			assert.Equal(t, tt.expected.DryRun, result.DryRun, "DryRun should match")
+			assert.Equal(t, tt.expected.SkipInit, result.SkipInit, "SkipInit should match")
 			assert.Equal(t, tt.expected.Query, result.Query, "Query should match")
 			assert.Equal(t, tt.expected.Components, result.Components, "Components should match")
 			assert.Equal(t, tt.expected.All, result.All, "All should match")
@@ -161,6 +187,7 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 		ProcessFunctions: true,
 		Skip:             []string{"skip1"},
 		DryRun:           true,
+		SkipInit:         true,
 		Query:            "query",
 		Components:       []string{"comp1"},
 		All:              true,
@@ -171,6 +198,7 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 	assert.True(t, opts.ProcessFunctions)
 	assert.Equal(t, []string{"skip1"}, opts.Skip)
 	assert.True(t, opts.DryRun)
+	assert.True(t, opts.SkipInit)
 	assert.Equal(t, "query", opts.Query)
 	assert.Equal(t, []string{"comp1"}, opts.Components)
 	assert.True(t, opts.All)

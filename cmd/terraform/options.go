@@ -15,7 +15,8 @@ type TerraformRunOptions struct {
 	Skip             []string
 
 	// Execution flags.
-	DryRun bool
+	DryRun   bool
+	SkipInit bool
 
 	// Multi-component flags.
 	Query      string
@@ -33,6 +34,7 @@ func ParseTerraformRunOptions(v *viper.Viper) *TerraformRunOptions {
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		DryRun:           v.GetBool("dry-run"),
+		SkipInit:         v.GetBool("skip-init"),
 		Query:            v.GetString("query"),
 		Components:       v.GetStringSlice("components"),
 		All:              v.GetBool("all"),
