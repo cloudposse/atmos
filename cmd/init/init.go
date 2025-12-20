@@ -132,7 +132,7 @@ func parseSetFlag(flag string) (string, string) {
 // executeInit initializes a new Atmos project from a template.
 // This logic was moved from internal/exec/init.go to keep command logic in cmd/.
 func executeInit(
-	ctx context.Context,
+	_ context.Context,
 	templateName string,
 	targetDir string,
 	interactive bool,
