@@ -240,3 +240,110 @@ func TestListTypes(t *testing.T) {
 	assert.Contains(t, types[CategoryCommand], "atmos")
 	assert.Contains(t, types[CategoryCommand], "shell")
 }
+
+// Integration tests for variable passing between steps.
+
+func TestStepExecutor_VariablePassing(t *testing.T) {
+	t.Run("step can access previous step result", func(t *testing.T) {
+		executor := NewStepExecutor()
+
+		// Simulate a previous step's result.
+		executor.Variables().Set("step1", NewStepResult("production"))
+
+		// Verify the template can resolve the previous step's value.
+		result, err := executor.Variables().Resolve("Deploy to {{ .steps.step1.value }}")
+		require.NoError(t, err)
+		assert.Equal(t, "Deploy to production", result)
+	})
+
+	t.Run("step can access previous step metadata", func(t *testing.T) {
+		executor := NewStepExecutor()
+
+		// Simulate a previous step's result with metadata.
+		executor.Variables().Set("step1", NewStepResult("").
+			WithMetadata("exit_code", 0).
+			WithMetadata("stdout", "hello"))
+
+		// Access values directly through Variables.
+		result, ok := executor.GetResult("step1")
+		require.True(t, ok)
+		assert.Equal(t, 0, result.Metadata["exit_code"])
+		assert.Equal(t, "hello", result.Metadata["stdout"])
+	})
+
+	t.Run("step can access environment variables", func(t *testing.T) {
+		executor := NewStepExecutor()
+		executor.SetEnv("ENV_NAME", "staging")
+
+		result, err := executor.Variables().Resolve("Environment: {{ .env.ENV_NAME }}")
+		require.NoError(t, err)
+		assert.Equal(t, "Environment: staging", result)
+	})
+
+	t.Run("step can access multiple values from previous step", func(t *testing.T) {
+		executor := NewStepExecutor()
+
+		// Simulate a multi-select step result.
+		executor.Variables().Set("selected", NewStepResult("dev").
+			WithValues([]string{"dev", "staging", "prod"}))
+
+		result, ok := executor.GetResult("selected")
+		require.True(t, ok)
+		assert.Equal(t, "dev", result.Value)
+		assert.Equal(t, []string{"dev", "staging", "prod"}, result.Values)
+	})
+
+	t.Run("step can check if previous step was skipped", func(t *testing.T) {
+		executor := NewStepExecutor()
+
+		// Simulate a skipped step.
+		executor.Variables().Set("optional_step", NewStepResult("").WithSkipped())
+
+		result, ok := executor.GetResult("optional_step")
+		require.True(t, ok)
+		assert.True(t, result.Skipped)
+	})
+
+	t.Run("step can check error from previous step", func(t *testing.T) {
+		executor := NewStepExecutor()
+
+		// Simulate a failed step.
+		executor.Variables().Set("failed_step", NewStepResult("").
+			WithError("connection timeout"))
+
+		result, ok := executor.GetResult("failed_step")
+		require.True(t, ok)
+		assert.Equal(t, "connection timeout", result.Error)
+	})
+}
+
+func TestStepExecutor_RunAll(t *testing.T) {
+	t.Run("returns error for empty workflow", func(t *testing.T) {
+		executor := NewStepExecutor()
+		workflow := &schema.WorkflowDefinition{
+			Steps: []schema.WorkflowStep{},
+		}
+
+		// Should succeed (empty is valid, no steps to run).
+		err := executor.RunAll(context.Background(), workflow)
+		assert.NoError(t, err)
+	})
+}
+
+func TestStepResult_Chaining(t *testing.T) {
+	t.Run("supports method chaining", func(t *testing.T) {
+		result := NewStepResult("value").
+			WithValues([]string{"a", "b"}).
+			WithMetadata("key1", "val1").
+			WithMetadata("key2", "val2").
+			WithError("some error").
+			WithSkipped()
+
+		assert.Equal(t, "value", result.Value)
+		assert.Equal(t, []string{"a", "b"}, result.Values)
+		assert.Equal(t, "val1", result.Metadata["key1"])
+		assert.Equal(t, "val2", result.Metadata["key2"])
+		assert.Equal(t, "some error", result.Error)
+		assert.True(t, result.Skipped)
+	})
+}

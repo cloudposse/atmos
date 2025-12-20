@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
-	"strings"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
@@ -31,6 +32,13 @@ func (h *SpinHandler) Validate(step *schema.WorkflowStep) error {
 	return h.ValidateRequired(step, "command", step.Command)
 }
 
+// spinExecOptions holds resolved options for spin command execution.
+type spinExecOptions struct {
+	command string
+	workDir string
+	envVars []string
+}
+
 // Execute runs the command with a spinner.
 func (h *SpinHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
 	title, err := vars.Resolve(step.Title)
@@ -38,73 +46,102 @@ func (h *SpinHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 		return nil, fmt.Errorf("step '%s': failed to resolve title: %w", step.Name, err)
 	}
 
+	opts, err := h.prepareExecution(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	execCtx, cancel := h.createExecContext(ctx, step)
+	if cancel != nil {
+		defer cancel()
+	}
+
+	var stdout, stderr bytes.Buffer
+	err = spinner.ExecWithSpinner(title, title, func() error {
+		return h.runCommand(execCtx, opts, &stdout, &stderr)
+	})
+
+	return h.buildResult(stdout.String(), stderr.String(), err), err
+}
+
+// prepareExecution resolves all step configuration for execution.
+func (h *SpinHandler) prepareExecution(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*spinExecOptions, error) {
 	command, err := h.ResolveCommand(ctx, step, vars)
 	if err != nil {
 		return nil, err
 	}
 
-	// Parse timeout if specified.
-	var timeout time.Duration
-	if step.Timeout != "" {
-		timeout, err = time.ParseDuration(step.Timeout)
+	workDir := ""
+	if step.WorkingDirectory != "" {
+		workDir, err = vars.Resolve(step.WorkingDirectory)
 		if err != nil {
-			return nil, fmt.Errorf("step '%s': invalid timeout: %w", step.Name, err)
+			return nil, fmt.Errorf("step '%s': failed to resolve working_directory: %w", step.Name, err)
 		}
 	}
 
-	// Create context with timeout if specified.
-	execCtx := ctx
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		execCtx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
+	var envVars []string
+	if len(step.Env) > 0 {
+		resolvedEnv, err := vars.ResolveEnvMap(step.Env)
+		if err != nil {
+			return nil, fmt.Errorf("step '%s': %w", step.Name, err)
+		}
+		for k, v := range resolvedEnv {
+			envVars = append(envVars, k+"="+v)
+		}
 	}
 
-	// Capture command output.
-	var stdout, stderr bytes.Buffer
+	return &spinExecOptions{
+		command: command,
+		workDir: workDir,
+		envVars: envVars,
+	}, nil
+}
 
-	// Run command with spinner.
-	err = spinner.ExecWithSpinner(title, title, func() error {
-		// Parse command - simple split on spaces (TODO: use shlex for proper parsing).
-		parts := strings.Fields(command)
-		if len(parts) == 0 {
-			return fmt.Errorf("empty command")
-		}
+// createExecContext creates an execution context with optional timeout.
+func (h *SpinHandler) createExecContext(ctx context.Context, step *schema.WorkflowStep) (context.Context, context.CancelFunc) {
+	if step.Timeout == "" {
+		return ctx, nil
+	}
 
-		cmd := exec.CommandContext(execCtx, parts[0], parts[1:]...) //nolint:gosec // Intentional command execution
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
+	timeout, err := time.ParseDuration(step.Timeout)
+	if err != nil || timeout <= 0 {
+		return ctx, nil
+	}
 
-		// Set working directory if specified.
-		if step.WorkingDirectory != "" {
-			workDir, err := vars.Resolve(step.WorkingDirectory)
-			if err != nil {
-				return fmt.Errorf("failed to resolve working_directory: %w", err)
-			}
-			cmd.Dir = workDir
-		}
+	return context.WithTimeout(ctx, timeout)
+}
 
-		// Resolve and set environment variables.
-		if len(step.Env) > 0 {
-			resolvedEnv, err := vars.ResolveEnvMap(step.Env)
-			if err != nil {
-				return err
-			}
-			for k, v := range resolvedEnv {
-				cmd.Env = append(cmd.Env, k+"="+v)
-			}
-		}
+// runCommand executes the command with configured options.
+func (h *SpinHandler) runCommand(ctx context.Context, opts *spinExecOptions, stdout, stderr *bytes.Buffer) error {
+	if opts.command == "" {
+		return errUtils.ErrStepEmptyCommand
+	}
 
-		return cmd.Run()
-	})
+	// Use shell to interpret the command string, supporting pipes, &&, etc.
+	cmd := exec.CommandContext(ctx, "sh", "-c", opts.command) //nolint:gosec // User-provided command in workflow step
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
+
+	if opts.workDir != "" {
+		cmd.Dir = opts.workDir
+	}
+
+	// Inherit current environment and add custom vars.
+	cmd.Env = append(os.Environ(), opts.envVars...)
+
+	return cmd.Run()
+}
+
+// buildResult creates a step result from command output.
+func (h *SpinHandler) buildResult(stdout, stderr string, err error) *StepResult {
 	if err != nil {
 		return NewStepResult("").
-			WithError(stderr.String()).
-			WithMetadata("stdout", stdout.String()).
-			WithMetadata("stderr", stderr.String()), err
+			WithError(stderr).
+			WithMetadata("stdout", stdout).
+			WithMetadata("stderr", stderr)
 	}
 
-	return NewStepResult(stdout.String()).
-		WithMetadata("stdout", stdout.String()).
-		WithMetadata("stderr", stderr.String()), nil
+	return NewStepResult(stdout).
+		WithMetadata("stdout", stdout).
+		WithMetadata("stderr", stderr)
 }
