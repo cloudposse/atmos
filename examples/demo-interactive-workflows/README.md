@@ -89,13 +89,12 @@ Complete pipeline combining:
 | `confirm` | Yes/No confirmation | Production safeguards |
 | `write` | Multi-line text editor | Notes, descriptions |
 | `file` | File picker | Config file selection |
-| `success` | Green success message | Completion notices |
-| `info` | Blue info message | Status updates |
-| `warn` | Yellow warning | Caution notices |
-| `error` | Red error message | Error display |
+| `toast` | Styled message with icon | Status updates, completion notices |
 | `spin` | Spinner with command | Long-running tasks |
 | `table` | Tabular data display | Environment lists |
 | `join` | Join array to string | Format selections |
+| `log` | Structured logging | Debugging, monitoring |
+| `style` | Styled text with borders | Summary boxes |
 
 ## Variable Passing
 
@@ -109,7 +108,8 @@ steps:
     options: [dev, staging, prod]
 
   - name: show_env
-    type: info
+    type: toast
+    level: info
     content: "You selected: {{ .steps.select_env.value }}"
 ```
 
