@@ -61,6 +61,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				Skip:                    nil,
 				DryRun:                  false,
 				SkipInit:                false,
+				InitPassVars:            false,
 				AutoGenerateBackendFile: "",
 				InitRunReconfigure:      "",
 				PlanFile:                "",
@@ -350,6 +351,15 @@ func TestApplyOptionsToInfo(t *testing.T) {
 			},
 			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
 				assert.Equal(t, "true", info.InitPassVars)
+			},
+		},
+		{
+			name: "skip-init sets SkipInit to true",
+			opts: &TerraformRunOptions{
+				SkipInit: true,
+			},
+			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
+				assert.True(t, info.SkipInit)
 			},
 		},
 		{

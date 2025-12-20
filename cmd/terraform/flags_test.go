@@ -349,6 +349,18 @@ func TestFlagsViperBinding(t *testing.T) {
 	})
 }
 
+// getEnvVarsFromFlag extracts EnvVars from a flag regardless of its type.
+func getEnvVarsFromFlag(flag flags.Flag) []string {
+	switch f := flag.(type) {
+	case *flags.BoolFlag:
+		return f.EnvVars
+	case *flags.StringFlag:
+		return f.EnvVars
+	default:
+		return nil
+	}
+}
+
 // TestFlagsEnvironmentVariables verifies that environment variables are properly configured.
 func TestFlagsEnvironmentVariables(t *testing.T) {
 	t.Run("shared terraform flags have correct env var bindings", func(t *testing.T) {
@@ -368,14 +380,7 @@ func TestFlagsEnvironmentVariables(t *testing.T) {
 			flag := registry.Get(tc.flagName)
 			require.NotNil(t, flag, "%s flag should exist", tc.flagName)
 
-			var envVars []string
-			switch f := flag.(type) {
-			case *flags.BoolFlag:
-				envVars = f.EnvVars
-			case *flags.StringFlag:
-				envVars = f.EnvVars
-			}
-
+			envVars := getEnvVarsFromFlag(flag)
 			assert.Contains(t, envVars, tc.envVar,
 				"%s flag should have %s env var", tc.flagName, tc.envVar)
 		}
@@ -396,9 +401,8 @@ func TestFlagsEnvironmentVariables(t *testing.T) {
 			flag := registry.Get(tc.flagName)
 			require.NotNil(t, flag, "%s flag should exist", tc.flagName)
 
-			strFlag, ok := flag.(*flags.StringFlag)
-			require.True(t, ok)
-			assert.Contains(t, strFlag.EnvVars, tc.envVar,
+			envVars := getEnvVarsFromFlag(flag)
+			assert.Contains(t, envVars, tc.envVar,
 				"%s flag should have %s env var", tc.flagName, tc.envVar)
 		}
 	})
@@ -423,14 +427,7 @@ func TestFlagsEnvironmentVariables(t *testing.T) {
 			flag := registry.Get(tc.flagName)
 			require.NotNil(t, flag, "%s flag should exist", tc.flagName)
 
-			var envVars []string
-			switch f := flag.(type) {
-			case *flags.BoolFlag:
-				envVars = f.EnvVars
-			case *flags.StringFlag:
-				envVars = f.EnvVars
-			}
-
+			envVars := getEnvVarsFromFlag(flag)
 			assert.Contains(t, envVars, tc.envVar,
 				"%s flag should have %s env var", tc.flagName, tc.envVar)
 		}
