@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -31,6 +32,8 @@ func (h *ShellHandler) Validate(step *schema.WorkflowStep) error {
 
 // Execute runs the shell command.
 func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
+	defer perf.Track(nil, "step.ShellHandler.Execute")()
+
 	command, err := h.ResolveCommand(ctx, step, vars)
 	if err != nil {
 		return nil, err
@@ -102,6 +105,8 @@ func getExitCode(err error) int {
 
 // ExecuteWithWorkflow runs the shell command with workflow context for output mode.
 func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) (*StepResult, error) {
+	defer perf.Track(nil, "step.ShellHandler.ExecuteWithWorkflow")()
+
 	command, err := h.ResolveCommand(ctx, step, vars)
 	if err != nil {
 		return nil, err

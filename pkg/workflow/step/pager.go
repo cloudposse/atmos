@@ -48,7 +48,7 @@ func (h *PagerHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		}
 	}
 
-	title, err := h.resolveTitle(step, vars)
+	title, err := h.resolveTitle(step, vars, resolvedPath)
 	if err != nil {
 		return nil, err
 	}
@@ -83,8 +83,13 @@ func (h *PagerHandler) loadContent(ctx context.Context, step *schema.WorkflowSte
 }
 
 // resolveTitle resolves the pager title from step config.
-func (h *PagerHandler) resolveTitle(step *schema.WorkflowStep, vars *Variables) (string, error) {
+// The resolvedPath parameter should be the path after template resolution,
+// so that the title correctly reflects the actual path being displayed.
+func (h *PagerHandler) resolveTitle(step *schema.WorkflowStep, vars *Variables, resolvedPath string) (string, error) {
 	if step.Title == "" {
+		if resolvedPath != "" {
+			return filepath.Base(resolvedPath), nil
+		}
 		if step.Path != "" {
 			return filepath.Base(step.Path), nil
 		}

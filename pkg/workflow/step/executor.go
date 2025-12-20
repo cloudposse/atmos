@@ -112,7 +112,7 @@ func (e *StepExecutor) RunAll(ctx context.Context, workflow *schema.WorkflowDefi
 
 		_, err := e.Execute(ctx, step)
 		if err != nil {
-			return fmt.Errorf("step '%s' failed: %w", step.Name, err)
+			return fmt.Errorf("step '%s': %w: %w", step.Name, errUtils.ErrWorkflowStepFailed, err)
 		}
 	}
 
