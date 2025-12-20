@@ -62,6 +62,41 @@ func registerExecutionFlags(registry *flags.FlagRegistry) {
 		Description: "Customize User-Agent string in Terraform provider requests (sets TF_APPEND_USER_AGENT)",
 		EnvVars:     []string{"ATMOS_APPEND_USER_AGENT"},
 	})
+	registry.Register(&flags.StringFlag{
+		Name:        "auto-generate-backend-file",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Override auto_generate_backend_file setting from atmos.yaml (true/false)",
+		EnvVars:     []string{"ATMOS_AUTO_GENERATE_BACKEND_FILE"},
+	})
+	registry.Register(&flags.StringFlag{
+		Name:        "deploy-run-init",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Override deploy_run_init setting from atmos.yaml (true/false)",
+		EnvVars:     []string{"ATMOS_DEPLOY_RUN_INIT"},
+	})
+	registry.Register(&flags.StringFlag{
+		Name:        "init-run-reconfigure",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Override init_run_reconfigure setting from atmos.yaml (true/false)",
+		EnvVars:     []string{"ATMOS_INIT_RUN_RECONFIGURE"},
+	})
+	registry.Register(&flags.StringFlag{
+		Name:        "planfile",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Path to a terraform plan file to use instead of generating a new plan",
+		EnvVars:     []string{"ATMOS_PLANFILE"},
+	})
+	registry.Register(&flags.StringFlag{
+		Name:        "skip-planfile",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Skip writing the plan to a planfile (true/false)",
+		EnvVars:     []string{"ATMOS_SKIP_PLANFILE"},
+	})
 }
 
 // registerProcessingFlags adds flags for template and function processing.
