@@ -512,14 +512,15 @@ var (
 	ErrWriteOutput           = errors.New("failed to write output")
 
 	// Import-related errors.
-	ErrBasePath             = errors.New("base path required to process imports")
-	ErrTempDir              = errors.New("temporary directory required to process imports")
-	ErrResolveLocal         = errors.New("failed to resolve local import path")
-	ErrSourceDestination    = errors.New("source and destination cannot be nil")
-	ErrImportPathRequired   = errors.New("import path required to process imports")
-	ErrNoFileMatchPattern   = errors.New("no files matching patterns found")
-	ErrMaxImportDepth       = errors.New("maximum import depth reached")
-	ErrNoValidAbsolutePaths = errors.New("no valid absolute paths found")
+	ErrBasePath              = errors.New("base path required to process imports")
+	ErrTempDir               = errors.New("temporary directory required to process imports")
+	ErrResolveLocal          = errors.New("failed to resolve local import path")
+	ErrSourceDestination     = errors.New("source and destination cannot be nil")
+	ErrImportPathRequired    = errors.New("import path required to process imports")
+	ErrNoFileMatchPattern    = errors.New("no files matching patterns found")
+	ErrMaxImportDepth        = errors.New("maximum import depth reached")
+	ErrNoValidAbsolutePaths  = errors.New("no valid absolute paths found")
+	ErrDownloadRemoteConfig  = errors.New("failed to download remote config")
 
 	// Profiler-related errors.
 	ErrProfilerStart           = errors.New("profiler start failed")

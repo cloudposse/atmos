@@ -54,9 +54,9 @@ func isRemoteImport(importPath string) bool {
 
 | ID | Requirement |
 |----|-------------|
-| FR-1.1 | The system SHALL provide an `ImportAdapter` interface with `Scheme()` and `Resolve()` methods |
-| FR-1.2 | The `Scheme()` method SHALL return the URL scheme the adapter handles (without "://") |
-| FR-1.3 | The `Resolve()` method SHALL accept context, import path, base path, and temp directory parameters |
+| FR-1.1 | The system SHALL provide an `ImportAdapter` interface with `Schemes()` and `Resolve()` methods |
+| FR-1.2 | The `Schemes()` method SHALL return URL schemes/prefixes the adapter handles (e.g., `["http://", "https://"]`) |
+| FR-1.3 | The `Resolve()` method SHALL accept context, import path, base path, temp directory, currentDepth, and maxDepth parameters |
 | FR-1.4 | The `Resolve()` method SHALL return a list of resolved file paths and any errors |
 | FR-1.5 | Import adapters SHALL be able to generate, transform, or fetch content in custom ways |
 
@@ -238,8 +238,10 @@ import (
 //   - mock:// - Generates synthetic YAML for testing
 //   - terragrunt:// - Transforms HCL to YAML (future)
 type ImportAdapter interface {
-    // Scheme returns the URL scheme this adapter handles (without "://").
-    Scheme() string
+    // Schemes returns URL schemes/prefixes this adapter handles.
+    // Return empty slice for default adapter (LocalAdapter).
+    // Examples: ["http://", "https://", "git::"] or ["mock://"]
+    Schemes() []string
 
     // Resolve processes an import path and returns YAML file paths.
     //
@@ -248,6 +250,8 @@ type ImportAdapter interface {
     //   - importPath: The full import path (e.g., "mock://component/vpc")
     //   - basePath: The base path for resolving relative references
     //   - tempDir: Temporary directory for generated files
+    //   - currentDepth: Current recursion depth for nested imports
+    //   - maxDepth: Maximum allowed recursion depth
     //
     // Returns:
     //   - []ResolvedPaths: List of YAML file paths to merge
@@ -257,6 +261,8 @@ type ImportAdapter interface {
         importPath string,
         basePath string,
         tempDir string,
+        currentDepth int,
+        maxDepth int,
     ) ([]ResolvedPaths, error)
 }
 ```

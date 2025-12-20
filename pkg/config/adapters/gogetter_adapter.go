@@ -9,6 +9,7 @@ import (
 	"github.com/hashicorp/go-getter"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -124,7 +125,7 @@ func downloadRemoteConfig(ctx context.Context, url string, tempDir string) (stri
 
 	err := client.Get()
 	if err != nil {
-		return "", fmt.Errorf("failed to download remote config: %w", err)
+		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrDownloadRemoteConfig, err)
 	}
 
 	return tempFile, nil
