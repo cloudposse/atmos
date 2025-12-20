@@ -249,6 +249,8 @@ func executeAffectedLogic(atmosConfig *schema.AtmosConfiguration, opts *Affected
 }
 
 // setRefNames sets the local and remote ref names in the result based on the option type and local repo head.
+// When localRepoHead is nil (e.g., detached HEAD state), LocalRef remains empty which is handled gracefully
+// by the caller - the spinner will display a generic "Compared branches" message instead.
 func setRefNames(result *affectedResult, opts *AffectedCommandOptions, localRepoHead *plumbing.Reference) {
 	if opts.RepoPath != "" {
 		result.LocalRef = "HEAD"
@@ -273,9 +275,6 @@ func getAffectedColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []st
 			return columns
 		}
 	}
-
-	// TODO: Check atmos.yaml for custom affected columns.
-	// atmosConfig.Affected.List.Columns
 
 	// Select columns based on output format.
 	switch format.Format(formatFlag) {

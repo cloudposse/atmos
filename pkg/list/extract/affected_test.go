@@ -241,3 +241,148 @@ func TestAffected_StatusIndicator_DefaultValues(t *testing.T) {
 	assert.Equal(t, true, result[0]["enabled"])
 	assert.Equal(t, false, result[0]["locked"])
 }
+
+func TestAffected_StatusText_AllStates(t *testing.T) {
+	tests := []struct {
+		name           string
+		enabled        bool
+		locked         bool
+		expectedStatus string
+	}{
+		{
+			name:           "enabled and not locked returns enabled",
+			enabled:        true,
+			locked:         false,
+			expectedStatus: "enabled",
+		},
+		{
+			name:           "locked returns locked regardless of enabled",
+			enabled:        true,
+			locked:         true,
+			expectedStatus: "locked",
+		},
+		{
+			name:           "disabled returns disabled",
+			enabled:        false,
+			locked:         false,
+			expectedStatus: "disabled",
+		},
+		{
+			name:           "disabled and locked returns locked (locked takes precedence)",
+			enabled:        false,
+			locked:         true,
+			expectedStatus: "locked",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			affected := []schema.Affected{
+				{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "plat-ue2-dev",
+					Affected:      "file",
+					Settings: map[string]any{
+						"metadata": map[string]any{
+							"enabled": tt.enabled,
+							"locked":  tt.locked,
+						},
+					},
+				},
+			}
+
+			result := Affected(affected, false)
+
+			assert.Len(t, result, 1)
+			assert.Equal(t, tt.expectedStatus, result[0]["status_text"])
+		})
+	}
+}
+
+func TestAffected_StatusText_DefaultsToEnabled(t *testing.T) {
+	// When no settings are provided, status_text should default to "enabled".
+	affected := []schema.Affected{
+		{
+			Component:     "vpc",
+			ComponentType: "terraform",
+			Stack:         "plat-ue2-dev",
+			Affected:      "file",
+		},
+	}
+
+	result := Affected(affected, false)
+
+	assert.Len(t, result, 1)
+	assert.Equal(t, "enabled", result[0]["status_text"])
+}
+
+func TestAffected_StatusText_WithDependents_Flattened(t *testing.T) {
+	// Verify that dependents also get proper status_text.
+	affected := []schema.Affected{
+		{
+			Component:     "vpc",
+			ComponentType: "terraform",
+			Stack:         "plat-ue2-dev",
+			Affected:      "file",
+			Settings: map[string]any{
+				"metadata": map[string]any{
+					"enabled": true,
+					"locked":  false,
+				},
+			},
+			Dependents: []schema.Dependent{
+				{
+					Component:     "eks",
+					ComponentType: "terraform",
+					Stack:         "plat-ue2-dev",
+				},
+			},
+		},
+	}
+
+	result := Affected(affected, true)
+
+	assert.Len(t, result, 2)
+	// Parent should have status_text "enabled".
+	assert.Equal(t, "enabled", result[0]["status_text"])
+	// Dependent should also have status_text "enabled" (default for dependents).
+	assert.Equal(t, "enabled", result[1]["status_text"])
+}
+
+func TestAffected_AllFieldsPresent(t *testing.T) {
+	// Verify that all expected fields are present in the result.
+	affected := []schema.Affected{
+		{
+			Component:     "vpc",
+			ComponentType: "terraform",
+			ComponentPath: "components/terraform/vpc",
+			Stack:         "plat-ue2-dev",
+			StackSlug:     "plat-ue2-dev-vpc",
+			Affected:      "file",
+			AffectedAll:   []string{"file", "config"},
+			File:          "main.tf",
+			Settings: map[string]any{
+				"metadata": map[string]any{
+					"enabled": true,
+					"locked":  false,
+				},
+			},
+		},
+	}
+
+	result := Affected(affected, false)
+
+	assert.Len(t, result, 1)
+
+	// Verify all expected fields are present.
+	expectedFields := []string{
+		"component", "component_type", "component_path", "stack", "stack_slug",
+		"affected", "affected_all", "file", "enabled", "locked", "status", "status_text",
+		"is_dependent", "depth", "dependents_count",
+	}
+
+	for _, field := range expectedFields {
+		assert.Contains(t, result[0], field, "Missing field: %s", field)
+	}
+}

@@ -107,7 +107,7 @@ atmos list affected --repo-path /tmp/target-repo
   <dd>Git commit SHA to compare against. Takes precedence over `--ref`.<br/>Environment variable: `ATMOS_AFFECTED_SHA`</dd>
 
   <dt>`--format` / `-f`</dt>
-  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree` (default: `table`).<br/>Environment variable: `ATMOS_LIST_FORMAT`</dd>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`).<br/>Environment variable: `ATMOS_LIST_FORMAT`</dd>
 
   <dt>`--columns`</dt>
   <dd>Columns to display. Supports simple field names (e.g., `component,stack`), named columns with templates (e.g., `"Name={{ .component }}"`), or field references (e.g., `"MyStack=stack"`).<br/>Environment variable: `ATMOS_LIST_COLUMNS`</dd>
@@ -193,7 +193,7 @@ All fields from [`atmos describe affected`](/cli/commands/describe/affected) are
 | Feature | `list affected` | `describe affected` |
 |---------|-----------------|---------------------|
 | **Default format** | Table | JSON |
-| **Formats supported** | table, json, yaml, csv, tsv, tree | json, yaml |
+| **Formats supported** | table, json, yaml, csv, tsv | json, yaml |
 | **Custom columns** | Yes | No |
 | **Sorting** | Yes (multi-column) | No |
 | **Status indicator** | Yes (●/◐/○) | No |
