@@ -1,0 +1,69 @@
+---
+slug: unified-task-runner
+title: "Unified Task Runner for Custom Commands"
+authors: [osterman]
+tags: [core]
+---
+
+Custom commands now support structured task syntax with per-step configuration including timeouts, retry logic, and working directories.
+
+<!--truncate-->
+
+## What Changed
+
+We've introduced a new `pkg/runner` package that provides a unified task execution layer for custom commands. This enables structured syntax alongside the existing simple string syntax:
+
+**Simple syntax (still works):**
+```yaml
+commands:
+  - name: hello
+    steps:
+      - "echo Hello world!"
+      - "echo Goodbye!"
+```
+
+**New structured syntax:**
+```yaml
+commands:
+  - name: deploy
+    steps:
+      - name: validate
+        command: terraform validate
+        timeout: 30s
+      - name: apply
+        command: terraform apply -auto-approve
+        timeout: 10m
+        working_directory: /app/infra
+```
+
+**Mixed syntax:**
+```yaml
+commands:
+  - name: build
+    steps:
+      - "echo Starting build..."
+      - name: compile
+        command: make build
+        timeout: 5m
+      - "echo Build complete!"
+```
+
+## Why This Matters
+
+This change lays the groundwork for unifying custom commands and workflows under a shared execution model. The new `Task` type supports:
+
+- **Timeouts** - Prevent runaway commands with per-step time limits
+- **Working directories** - Execute steps in specific directories
+- **Task types** - Support for both `shell` and `atmos` command types
+- **Retry configuration** - Built-in retry support for flaky operations
+
+## For Contributors
+
+The new `pkg/runner` package provides:
+
+- `Task` and `Tasks` types with flexible YAML unmarshaling
+- `CommandRunner` interface for testable command execution
+- `Run()` and `RunAll()` functions with context-based timeout enforcement
+- Full mapstructure decode hook support for Viper integration
+
+This is an internal architectural improvement with full backward compatibility for existing custom command configurations.
