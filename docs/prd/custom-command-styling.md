@@ -3,7 +3,6 @@
 **Status**: Draft
 **Created**: 2025-12-20
 **Updated**: 2025-12-20
-**Owner**: Engineering Team
 
 ## Executive Summary
 
@@ -352,7 +351,20 @@ All execution types share the same **completion format**: `✓ title` on success
 
 **On completion:** All types clear their execution output and display the uniform result. For `stream` and `tail`, the output is cleared and replaced with the success/failure line. For `spin`, the spinner is replaced in-place. For `quiet`, the result appears immediately.
 
-**Non-TTY behavior:** In non-TTY environments (CI, pipes), `tail` falls back to `stream` behavior since terminal escape codes don't work. All types still show the final `✓`/`✗` result.
+**Non-TTY behavior:** In non-TTY environments (CI, pipes), behavior degrades gracefully:
+
+| Type | Non-TTY During Execution | Non-TTY On Completion |
+|------|--------------------------|----------------------|
+| `stream` | All output (unchanged) | `✓ title` or `✗ title` |
+| `tail` | All output (falls back to stream) | `✓ title` or `✗ title` |
+| `spin` | `title...` (no animation) | `✓ title` or `✗ title` |
+| `quiet` | Nothing (unchanged) | `✓ title` or `✗ title` |
+
+Key differences in non-TTY:
+- **`stream`**: No clearing of output (escape codes don't work), so output remains visible followed by the completion result
+- **`tail`**: Falls back to `stream` behavior since the sliding window requires terminal escape codes
+- **`spin`**: Shows static `title...` instead of animated spinner, then completion result on new line
+- **`quiet`**: Unchanged behavior—nothing during execution, completion result only
 
 **Output capture:** The `tail`, `spin`, and `quiet` types all capture stdout and stderr together.
 
