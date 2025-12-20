@@ -30,7 +30,10 @@ func (h *FilterHandler) Validate(step *schema.WorkflowStep) error {
 		return err
 	}
 	if len(step.Options) == 0 {
-		return fmt.Errorf("step '%s' (filter): options is required", step.Name)
+		return errUtils.Build(errUtils.ErrStepOptionsRequired).
+			WithContext("step", step.Name).
+			WithContext("type", "filter").
+			Err()
 	}
 	return nil
 }
@@ -46,22 +49,10 @@ func (h *FilterHandler) Execute(ctx context.Context, step *schema.WorkflowStep, 
 		return nil, err
 	}
 
-	// Resolve options (they might contain templates).
-	options := make([]string, len(step.Options))
-	for i, opt := range step.Options {
-		resolved, err := vars.Resolve(opt)
-		if err != nil {
-			return nil, fmt.Errorf("step '%s': failed to resolve option %d: %w", step.Name, i, err)
-		}
-		options[i] = resolved
+	options, err := h.resolveOptions(step, vars)
+	if err != nil {
+		return nil, err
 	}
-
-	// Create custom keymap that adds ESC to quit keys.
-	keyMap := huh.NewDefaultKeyMap()
-	keyMap.Quit = key.NewBinding(
-		key.WithKeys("ctrl+c", "esc"),
-		key.WithHelp("ctrl+c/esc", "quit"),
-	)
 
 	// Check if multiple selection is allowed.
 	limit := step.Limit
@@ -70,36 +61,67 @@ func (h *FilterHandler) Execute(ctx context.Context, step *schema.WorkflowStep, 
 	}
 
 	if limit > 1 || step.Multiple {
-		// Multi-select mode.
-		var choices []string
-		form := huh.NewForm(
-			huh.NewGroup(
-				huh.NewMultiSelect[string]().
-					Title(prompt).
-					Description("Press ctrl+c or esc to cancel. Use space to select, enter to confirm.").
-					Options(huh.NewOptions(options...)...).
-					Limit(limit).
-					Filterable(true).
-					Value(&choices),
-			),
-		).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
-
-		if err := form.Run(); err != nil {
-			if errors.Is(err, huh.ErrUserAborted) {
-				return nil, errUtils.ErrUserAborted
-			}
-			return nil, fmt.Errorf("step '%s': filter selection failed: %w", step.Name, err)
-		}
-
-		// Return first value as primary, all values in Values.
-		value := ""
-		if len(choices) > 0 {
-			value = choices[0]
-		}
-		return NewStepResult(value).WithValues(choices), nil
+		return h.executeMultiSelect(step.Name, prompt, options, limit)
 	}
 
-	// Single-select mode with filtering.
+	return h.executeSingleSelect(step.Name, prompt, options)
+}
+
+// resolveOptions resolves template variables in options.
+func (h *FilterHandler) resolveOptions(step *schema.WorkflowStep, vars *Variables) ([]string, error) {
+	options := make([]string, len(step.Options))
+	for i, opt := range step.Options {
+		resolved, err := vars.Resolve(opt)
+		if err != nil {
+			return nil, fmt.Errorf("step '%s': failed to resolve option %d: %w", step.Name, i, err)
+		}
+		options[i] = resolved
+	}
+	return options, nil
+}
+
+// createFilterKeyMap creates a keymap with ESC added to quit keys.
+func (h *FilterHandler) createFilterKeyMap() *huh.KeyMap {
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c", "esc"),
+		key.WithHelp("ctrl+c/esc", "quit"),
+	)
+	return keyMap
+}
+
+// executeMultiSelect runs multi-select mode with filtering.
+func (h *FilterHandler) executeMultiSelect(stepName, prompt string, options []string, limit int) (*StepResult, error) {
+	var choices []string
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title(prompt).
+				Description("Press ctrl+c or esc to cancel. Use space to select, enter to confirm.").
+				Options(huh.NewOptions(options...)...).
+				Limit(limit).
+				Filterable(true).
+				Value(&choices),
+		),
+	).WithKeyMap(h.createFilterKeyMap()).WithTheme(uiutils.NewAtmosHuhTheme())
+
+	if err := form.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return nil, errUtils.ErrUserAborted
+		}
+		return nil, fmt.Errorf("step '%s': filter selection failed: %w", stepName, err)
+	}
+
+	// Return first value as primary, all values in Values.
+	value := ""
+	if len(choices) > 0 {
+		value = choices[0]
+	}
+	return NewStepResult(value).WithValues(choices), nil
+}
+
+// executeSingleSelect runs single-select mode with filtering.
+func (h *FilterHandler) executeSingleSelect(stepName, prompt string, options []string) (*StepResult, error) {
 	var choice string
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -110,13 +132,13 @@ func (h *FilterHandler) Execute(ctx context.Context, step *schema.WorkflowStep, 
 				Filtering(true).
 				Value(&choice),
 		),
-	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
+	).WithKeyMap(h.createFilterKeyMap()).WithTheme(uiutils.NewAtmosHuhTheme())
 
 	if err := form.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return nil, errUtils.ErrUserAborted
 		}
-		return nil, fmt.Errorf("step '%s': filter selection failed: %w", step.Name, err)
+		return nil, fmt.Errorf("step '%s': filter selection failed: %w", stepName, err)
 	}
 
 	return NewStepResult(choice), nil

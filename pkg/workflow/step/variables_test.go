@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -106,6 +107,7 @@ func TestVariablesResolveEnvMapError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to resolve env var BAD_VAR")
 }
 
+//nolint:dupl // Similar test patterns for different handler methods.
 func TestBaseHandlerResolveContent(t *testing.T) {
 	handler := NewBaseHandler("test", CategoryUI, false)
 	vars := NewVariables()
@@ -145,8 +147,7 @@ func TestBaseHandlerResolveContent(t *testing.T) {
 	})
 }
 
-// nolintlint: dupl - Similar test patterns for different handler methods.
-// nolint: dupl
+//nolint:dupl // Similar test patterns for different handler methods.
 func TestBaseHandlerResolvePrompt(t *testing.T) {
 	handler := NewBaseHandler("test", CategoryInteractive, true)
 	vars := NewVariables()
@@ -247,7 +248,7 @@ func TestBaseHandlerValidateRequired(t *testing.T) {
 
 		err := handler.ValidateRequired(step, "content", "")
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "content is required")
+		assert.ErrorIs(t, err, errUtils.ErrStepFieldRequired)
 	})
 }
 

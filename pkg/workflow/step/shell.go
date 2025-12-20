@@ -58,7 +58,7 @@ func (h *ShellHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	}
 
 	// Create command - use shell to interpret the command string.
-	cmd := exec.CommandContext(ctx, "sh", "-c", command) //nolint:gosec // Intentional shell execution
+	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 
 	// Set working directory.
 	if workDir != "" {
@@ -129,7 +129,7 @@ func (h *ShellHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 	}
 
 	// Create command.
-	cmd := exec.CommandContext(ctx, "sh", "-c", command) //nolint:gosec // Intentional shell execution
+	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 
 	// Set working directory.
 	if workDir != "" {

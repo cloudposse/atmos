@@ -268,7 +268,7 @@ Each workflow definition must confirm to the following schema:
   <dd>Step name (optional). It's used to find the first step from which to start executing the workflow when the command-line flag `--from-step` is specified. If the `name` is omitted, a friendly name will be generated for you consisting of a prefix of `step` and followed by the index of the step (the index starts with 1, so the first generated step name would be `step1`).</dd>
 
   <dt>`type`</dt>
-  <dd>The type of the command. Can be either `atmos` or `shell`. Type `atmos` is implicit, you don't have to specify it if the `command` is an Atmos [CLI command](/cli/commands). Type `shell` is required if the command is a shell script. When executing a step of type `atmos`, Atmos prepends the `atmos` binary name to the provided command before executing it</dd>
+  <dd>The type of the step. Can be `atmos`, `shell`, or any of the [interactive step types](#step-types) like `input`, `confirm`, `choose`, `filter`, `markdown`, `spin`, and more. Type `atmos` is implicit for command steps. Type `shell` is required for shell scripts. See the [Step Types](#step-types) section for all available types</dd>
 
   <dt>`stack`</dt>
   <dd>Step-level Atmos stack (optional). If specified, the `command` will be executed for this Atmos stack. It overrides the workflow-level `stack` attribute, and can itself be overridden on the command line by using the `--stack` flag (`-s` for shorthand)</dd>
@@ -283,6 +283,404 @@ A workflow command of type `shell` can be any simple or complex shell command or
 You can use [YAML Multiline Strings](https://yaml-multiline.info/) to create complex multi-line shell scripts.
 
 :::
+
+:::tip Interactive Workflows
+
+Atmos supports 20+ step types for building interactive CLI wizards. Use `input`, `confirm`, `choose`, and `filter` to collect user input, `markdown` and `success`/`info`/`warn`/`error` for rich output, and `spin` for progress spinners. See the [Step Types](#step-types) section below for complete documentation.
+
+:::
+
+## Step Types
+
+Atmos workflows support 20+ step types across four categories: Command, Interactive, UI Messages, and Output. These step types enable building sophisticated CLI wizards and interactive deployment pipelines.
+
+### Step Types Overview
+
+| Category | Step Types | Description |
+|----------|------------|-------------|
+| **Command** | `atmos`, `shell` | Execute Atmos or shell commands |
+| **Interactive** | `input`, `confirm`, `choose`, `filter`, `file`, `write` | Collect user input |
+| **UI Messages** | `success`, `info`, `warn`, `error`, `markdown` | Display formatted messages |
+| **Output** | `spin`, `table`, `pager`, `format`, `join`, `style` | Format and display output |
+
+### Interactive Step Types
+
+Interactive steps require a TTY (terminal) to run. In CI environments, use `--dry-run` to preview workflows or set default values.
+
+#### input
+
+Prompts for single-line text input.
+
+```yaml
+steps:
+  - name: message
+    type: input
+    prompt: "Enter deployment message"
+    placeholder: "e.g., Fix for ticket JIRA-123"
+    default: "Routine deployment"
+```
+
+<dl>
+  <dt>`prompt`</dt>
+  <dd>The prompt text to display</dd>
+
+  <dt>`default`</dt>
+  <dd>Default value if user presses enter</dd>
+
+  <dt>`placeholder`</dt>
+  <dd>Placeholder text shown in the input field</dd>
+
+  <dt>`password`</dt>
+  <dd>Set to `true` to mask input for sensitive values</dd>
+</dl>
+
+#### confirm
+
+Prompts for yes/no confirmation.
+
+```yaml
+steps:
+  - name: confirm_prod
+    type: confirm
+    prompt: "Deploy to production?"
+    default: false
+```
+
+<dl>
+  <dt>`prompt`</dt>
+  <dd>The confirmation question</dd>
+
+  <dt>`default`</dt>
+  <dd>Default value (`true` or `false`)</dd>
+</dl>
+
+#### choose
+
+Single selection from a list of options.
+
+```yaml
+steps:
+  - name: environment
+    type: choose
+    prompt: "Select target environment"
+    options:
+      - dev
+      - staging
+      - prod
+    default: dev
+```
+
+<dl>
+  <dt>`prompt`</dt>
+  <dd>The selection prompt</dd>
+
+  <dt>`options`</dt>
+  <dd>List of options to choose from</dd>
+
+  <dt>`default`</dt>
+  <dd>Default selected option</dd>
+</dl>
+
+#### filter
+
+Filterable selection with optional multi-select support.
+
+```yaml
+steps:
+  - name: components
+    type: filter
+    prompt: "Select components to deploy"
+    multiple: true
+    limit: 5
+    options:
+      - vpc
+      - eks
+      - rds
+      - s3
+      - lambda
+```
+
+<dl>
+  <dt>`prompt`</dt>
+  <dd>The selection prompt</dd>
+
+  <dt>`options`</dt>
+  <dd>List of options to filter/select from</dd>
+
+  <dt>`multiple`</dt>
+  <dd>Allow multiple selections (default: `false`)</dd>
+
+  <dt>`limit`</dt>
+  <dd>Maximum number of visible options</dd>
+</dl>
+
+:::tip
+Use `{{ .steps.NAME.values }}` to access the array of selected values when `multiple: true`.
+:::
+
+#### file
+
+File picker for selecting files from the filesystem.
+
+```yaml
+steps:
+  - name: config_file
+    type: file
+    prompt: "Select a configuration file"
+    path: "./configs"
+    extensions:
+      - yaml
+      - yml
+      - json
+```
+
+<dl>
+  <dt>`prompt`</dt>
+  <dd>The file selection prompt</dd>
+
+  <dt>`path`</dt>
+  <dd>Starting directory for file browsing</dd>
+
+  <dt>`extensions`</dt>
+  <dd>List of allowed file extensions</dd>
+</dl>
+
+#### write
+
+Multi-line text editor for longer input.
+
+```yaml
+steps:
+  - name: notes
+    type: write
+    prompt: "Enter deployment notes"
+    placeholder: |
+      Describe the changes being deployed...
+
+      - Change 1
+      - Change 2
+```
+
+<dl>
+  <dt>`prompt`</dt>
+  <dd>The editor prompt</dd>
+
+  <dt>`placeholder`</dt>
+  <dd>Placeholder text shown in the editor</dd>
+</dl>
+
+### UI Message Step Types
+
+These steps display formatted messages to the user. They use the Atmos UI theme for consistent styling.
+
+#### success
+
+Displays a success message with a green checkmark icon.
+
+```yaml
+steps:
+  - name: done
+    type: success
+    content: "Deployment completed successfully!"
+```
+
+#### info
+
+Displays an informational message with a blue info icon.
+
+```yaml
+steps:
+  - name: status
+    type: info
+    content: "Processing {{ .steps.count.value }} items..."
+```
+
+#### warn
+
+Displays a warning message with a yellow warning icon.
+
+```yaml
+steps:
+  - name: caution
+    type: warn
+    content: "This action cannot be undone!"
+```
+
+#### error
+
+Displays an error message with a red error icon.
+
+```yaml
+steps:
+  - name: failed
+    type: error
+    content: "Configuration validation failed"
+```
+
+#### markdown
+
+Renders markdown content with full formatting support.
+
+```yaml
+steps:
+  - name: intro
+    type: markdown
+    content: |
+      # Deployment Wizard
+
+      Welcome to the interactive deployment workflow!
+
+      This wizard will guide you through:
+      - **Environment selection**
+      - **Component configuration**
+      - **Deployment verification**
+```
+
+<dl>
+  <dt>`content`</dt>
+  <dd>Markdown content to render. Supports Go templates for dynamic content.</dd>
+</dl>
+
+### Output Step Types
+
+#### spin
+
+Displays a spinner while executing a command.
+
+```yaml
+steps:
+  - name: building
+    type: spin
+    title: "Building application..."
+    command: "npm run build"
+    timeout: 60s
+```
+
+<dl>
+  <dt>`title`</dt>
+  <dd>Text displayed next to the spinner</dd>
+
+  <dt>`command`</dt>
+  <dd>Shell command to execute</dd>
+
+  <dt>`timeout`</dt>
+  <dd>Maximum time for command execution (e.g., `30s`, `5m`)</dd>
+</dl>
+
+#### table
+
+Displays data in a formatted table.
+
+```yaml
+steps:
+  - name: environments
+    type: table
+    title: "Available Environments"
+    columns:
+      - name
+      - region
+      - status
+    data:
+      - name: dev
+        region: us-east-1
+        status: active
+      - name: staging
+        region: us-west-2
+        status: active
+```
+
+<dl>
+  <dt>`title`</dt>
+  <dd>Table title</dd>
+
+  <dt>`columns`</dt>
+  <dd>List of column names</dd>
+
+  <dt>`data`</dt>
+  <dd>Array of row objects with values for each column</dd>
+</dl>
+
+#### join
+
+Joins array values into a string with a separator.
+
+```yaml
+steps:
+  - name: formatted
+    type: join
+    separator: ", "
+    values: "{{ .steps.regions.values }}"
+```
+
+<dl>
+  <dt>`separator`</dt>
+  <dd>String to join values with</dd>
+
+  <dt>`values`</dt>
+  <dd>Array of values to join (use template to reference step output)</dd>
+</dl>
+
+### Variable Passing Between Steps
+
+Steps can access previous step results using Go templates. Each step result is stored in `.steps.<name>`.
+
+<dl>
+  <dt>`{{ .steps.<name>.value }}`</dt>
+  <dd>Primary value from the step (string)</dd>
+
+  <dt>`{{ .steps.<name>.values }}`</dt>
+  <dd>Array of values (for multi-select steps)</dd>
+
+  <dt>`{{ .steps.<name>.metadata.<key> }}`</dt>
+  <dd>Metadata like `exit_code`, `stdout`, `stderr`</dd>
+
+  <dt>`{{ .steps.<name>.skipped }}`</dt>
+  <dd>Whether the step was skipped</dd>
+
+  <dt>`{{ .steps.<name>.error }}`</dt>
+  <dd>Error message if the step failed</dd>
+
+  <dt>`{{ .env.<VAR> }}`</dt>
+  <dd>Environment variables</dd>
+</dl>
+
+### Output Modes
+
+Control how command output is displayed using the `output` field at the workflow or step level.
+
+```yaml
+workflows:
+  verbose-deploy:
+    output: log  # Workflow-level default
+    steps:
+      - name: plan
+        type: atmos
+        command: terraform plan vpc
+        output: viewport  # Step-level override
+```
+
+<dl>
+  <dt>`viewport`</dt>
+  <dd>Display output in a scrollable pager</dd>
+
+  <dt>`raw`</dt>
+  <dd>Direct passthrough to terminal (default)</dd>
+
+  <dt>`log`</dt>
+  <dd>Grouped output with step headers</dd>
+
+  <dt>`none`</dt>
+  <dd>Suppress output (check exit code only)</dd>
+</dl>
+
+### TTY Requirements
+
+Interactive steps require a terminal (TTY) to function. In non-interactive environments like CI/CD:
+
+- Use `--dry-run` to preview workflow steps without execution
+- Set default values in your workflow configuration
+- Use environment variables instead of interactive prompts
+- Consider using conditional logic to skip interactive steps in CI
 
 ## Executing Workflow from a Named Step
 

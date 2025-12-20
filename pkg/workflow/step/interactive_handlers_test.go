@@ -87,8 +87,7 @@ func TestInputHandlerValidation(t *testing.T) {
 	}
 }
 
-// nolintlint: dupl - Similar test patterns for different handlers.
-// nolint: dupl
+//nolint:dupl // Similar test patterns for different handlers.
 func TestConfirmHandlerValidation(t *testing.T) {
 	handler, ok := Get("confirm")
 	require.True(t, ok)
@@ -200,8 +199,7 @@ func TestChooseHandlerValidation(t *testing.T) {
 	}
 }
 
-// nolintlint: dupl - Similar test patterns for different handlers.
-// nolint: dupl
+//nolint:dupl // Similar test patterns for different handlers.
 func TestWriteHandlerValidation(t *testing.T) {
 	handler, ok := Get("write")
 	require.True(t, ok)

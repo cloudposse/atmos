@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -53,7 +54,10 @@ func (e *StepExecutor) Execute(ctx context.Context, step *schema.WorkflowStep) (
 	// Get handler from registry.
 	handler, ok := Get(step.Type)
 	if !ok {
-		return nil, fmt.Errorf("unknown step type: %s", step.Type)
+		return nil, errUtils.Build(errUtils.ErrUnknownStepType).
+			WithContext("step", step.Name).
+			WithContext("type", step.Type).
+			Err()
 	}
 
 	// Validate step configuration.
@@ -100,15 +104,15 @@ func (e *StepExecutor) executeWithWorkflowContext(ctx context.Context, handler S
 func (e *StepExecutor) RunAll(ctx context.Context, workflow *schema.WorkflowDefinition) error {
 	e.workflow = workflow
 
-	for i, s := range workflow.Steps {
-		stepCopy := s // Avoid closure issue.
-		if stepCopy.Name == "" {
-			stepCopy.Name = fmt.Sprintf("step_%d", i+1)
+	for i := range workflow.Steps {
+		step := &workflow.Steps[i]
+		if step.Name == "" {
+			step.Name = fmt.Sprintf("step_%d", i+1)
 		}
 
-		_, err := e.Execute(ctx, &stepCopy)
+		_, err := e.Execute(ctx, step)
 		if err != nil {
-			return fmt.Errorf("step '%s' failed: %w", stepCopy.Name, err)
+			return fmt.Errorf("step '%s' failed: %w", step.Name, err)
 		}
 	}
 
@@ -153,7 +157,10 @@ func ValidateStep(step *schema.WorkflowStep) error {
 
 	handler, ok := Get(stepType)
 	if !ok {
-		return fmt.Errorf("unknown step type: %s", stepType)
+		return errUtils.Build(errUtils.ErrUnknownStepType).
+			WithContext("step", step.Name).
+			WithContext("type", stepType).
+			Err()
 	}
 
 	return handler.Validate(step)
@@ -177,21 +184,21 @@ func ListTypes() map[StepCategory][]string {
 
 // ValidateWorkflow validates all steps in a workflow definition.
 func ValidateWorkflow(workflow *schema.WorkflowDefinition) []error {
-	var errors []error
+	var errs []error
 
-	for i, s := range workflow.Steps {
-		stepCopy := s
+	for i := range workflow.Steps {
+		step := &workflow.Steps[i]
 
 		// Default step name if not provided.
-		name := stepCopy.Name
+		name := step.Name
 		if name == "" {
 			name = fmt.Sprintf("step_%d", i+1)
 		}
 
-		if err := ValidateStep(&stepCopy); err != nil {
-			errors = append(errors, fmt.Errorf("step '%s': %w", name, err))
+		if err := ValidateStep(step); err != nil {
+			errs = append(errs, fmt.Errorf("step '%s': %w", name, err))
 		}
 	}
 
-	return errors
+	return errs
 }

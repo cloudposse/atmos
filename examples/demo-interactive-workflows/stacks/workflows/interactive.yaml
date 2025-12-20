@@ -1,0 +1,368 @@
+# Interactive Workflows Example
+#
+# This workflow demonstrates the power of Atmos's interactive step types.
+# Run with: atmos workflow deploy -f interactive
+#
+# Features demonstrated:
+# - User input collection (input, confirm, choose, filter)
+# - Variable passing between steps using Go templates
+# - UI feedback (success, info, warn, error, markdown)
+# - Conditional flow based on user choices
+
+workflows:
+
+  # Basic deployment workflow with interactive prompts
+  deploy:
+    description: Interactive deployment workflow with environment selection
+    steps:
+      # Step 1: Welcome message with markdown
+      - name: welcome
+        type: markdown
+        content: |
+          # Deployment Wizard
+
+          Welcome to the interactive deployment workflow!
+
+          This wizard will guide you through deploying infrastructure
+          to your selected environment.
+
+      # Step 2: Select environment
+      - name: select_environment
+        type: choose
+        prompt: "Select the target environment"
+        options:
+          - dev
+          - staging
+          - prod
+        default: dev
+
+      # Step 3: Show info about selection
+      - name: show_selection
+        type: info
+        content: "You selected: {{ .steps.select_environment.value }}"
+
+      # Step 4: Confirm if production
+      - name: confirm_prod
+        type: confirm
+        prompt: "You selected PRODUCTION. Are you absolutely sure?"
+        # This step only runs if prod was selected (future: conditional support)
+
+      # Step 5: Get deployment message
+      - name: deployment_message
+        type: input
+        prompt: "Enter a deployment message (optional)"
+        placeholder: "e.g., Fix for ticket JIRA-123"
+        default: "Routine deployment"
+
+      # Step 6: Show summary
+      - name: summary
+        type: success
+        content: |
+          Deployment configured:
+          - Environment: {{ .steps.select_environment.value }}
+          - Message: {{ .steps.deployment_message.value }}
+
+  # Multi-select workflow example
+  select-components:
+    description: Select multiple components to deploy
+    steps:
+      - name: intro
+        type: info
+        content: "Select the components you want to deploy"
+
+      - name: components
+        type: filter
+        prompt: "Choose components (use arrow keys to navigate, space to select)"
+        multiple: true
+        limit: 5
+        options:
+          - vpc
+          - eks
+          - rds
+          - s3
+          - lambda
+          - api-gateway
+          - cloudfront
+
+      - name: confirm
+        type: success
+        content: "Selected {{ len .steps.components.values }} component(s)"
+
+  # File selection workflow
+  select-config:
+    description: Select a configuration file to use
+    steps:
+      - name: select_file
+        type: file
+        prompt: "Select a configuration file"
+        path: "."
+        extensions:
+          - yaml
+          - yml
+          - json
+
+      - name: show_file
+        type: info
+        content: "You selected: {{ .steps.select_file.value }}"
+
+  # Password/secret input example
+  credentials:
+    description: Collect credentials securely
+    steps:
+      - name: intro
+        type: warn
+        content: "You are about to enter sensitive credentials"
+
+      - name: username
+        type: input
+        prompt: "Enter username"
+        placeholder: "admin"
+
+      - name: password
+        type: input
+        prompt: "Enter password"
+        password: true
+
+      - name: done
+        type: success
+        content: "Credentials collected for user: {{ .steps.username.value }}"
+
+  # Text editor workflow
+  write-notes:
+    description: Write deployment notes using the text editor
+    steps:
+      - name: notes
+        type: write
+        prompt: "Enter deployment notes"
+        placeholder: |
+          Describe the changes being deployed...
+
+          - Change 1
+          - Change 2
+
+      - name: show_notes
+        type: markdown
+        content: |
+          ## Deployment Notes
+
+          {{ .steps.notes.value }}
+
+  # Spinner with command execution
+  build:
+    description: Build with progress spinner
+    steps:
+      - name: building
+        type: spin
+        title: "Building application..."
+        command: "sleep 2 && echo 'Build complete!'"
+        timeout: 30s
+
+      - name: done
+        type: success
+        content: "Build completed successfully!"
+
+  # Table output example
+  show-environments:
+    description: Display environments in a table
+    steps:
+      - name: environments
+        type: table
+        title: "Available Environments"
+        columns:
+          - name
+          - region
+          - status
+        data:
+          - name: dev
+            region: us-east-1
+            status: active
+          - name: staging
+            region: us-west-2
+            status: active
+          - name: prod
+            region: us-east-1
+            status: active
+
+  # Format/join example
+  format-output:
+    description: Format and join output
+    steps:
+      - name: select_regions
+        type: filter
+        prompt: "Select regions"
+        multiple: true
+        options:
+          - us-east-1
+          - us-west-2
+          - eu-west-1
+          - ap-southeast-1
+
+      - name: formatted
+        type: join
+        separator: ", "
+        values: "{{ .steps.select_regions.values }}"
+
+      - name: show
+        type: info
+        content: "Selected regions: {{ .steps.formatted.value }}"
+
+  # Complete deployment pipeline
+  full-deploy:
+    description: Complete interactive deployment pipeline
+    output: log
+    steps:
+      # Introduction
+      - name: intro
+        type: markdown
+        content: |
+          # Full Deployment Pipeline
+
+          This workflow will:
+          1. Select target environment
+          2. Choose components to deploy
+          3. Collect deployment notes
+          4. Execute the deployment
+
+      # Environment selection
+      - name: environment
+        type: choose
+        prompt: "Select target environment"
+        options:
+          - dev
+          - staging
+          - prod
+
+      # Component selection
+      - name: components
+        type: filter
+        prompt: "Select components to deploy"
+        multiple: true
+        options:
+          - vpc
+          - eks
+          - rds
+          - monitoring
+
+      # Deployment notes
+      - name: notes
+        type: input
+        prompt: "Enter deployment notes"
+        placeholder: "Brief description of changes"
+
+      # Confirmation
+      - name: confirm
+        type: confirm
+        prompt: |
+          Deploy to {{ .steps.environment.value }}?
+          Components: {{ .steps.components.values }}
+          Notes: {{ .steps.notes.value }}
+
+      # Warning before deployment
+      - name: log_warning
+        type: log
+        level: warn
+        content: "This may blow you away"
+        fields:
+          environment: "{{ .steps.environment.value }}"
+
+      # Log start of deployment
+      - name: log_start
+        type: log
+        level: info
+        content: "Starting deployment"
+        fields:
+          environment: "{{ .steps.environment.value }}"
+          component_count: "{{ len .steps.components.values }}"
+          user: "{{ .env.USER }}"
+
+      # Simulate deployment with spinner
+      - name: deploying
+        type: spin
+        title: "Deploying to {{ .steps.environment.value }}..."
+        command: "sleep 3 && echo 'Deployment successful!'"
+        timeout: 60s
+
+      # Show completion message
+      - name: done
+        type: success
+        content: "Deployment complete!"
+
+      - name: spacer
+        type: linebreak
+
+      # Show summary in a styled box with markdown
+      - name: summary
+        type: style
+        border: rounded
+        padding: "1 2"
+        width: 50
+        markdown: true
+        content: |
+          **Deployment Summary**
+
+          - Environment: {{ .steps.environment.value }}
+          - Components: {{ len .steps.components.values }} selected
+          - Notes: {{ .steps.notes.value }}
+
+  # Display README in pager
+  readme:
+    description: Display the README file in a scrollable pager
+    steps:
+      - name: show_readme
+        type: pager
+        title: "Interactive Workflows README"
+        path: "README.md"
+
+  # Logging workflow example
+  logging:
+    description: Demonstrate structured logging with different levels
+    steps:
+      - name: intro
+        type: markdown
+        content: |
+          # Logging Demo
+
+          This workflow demonstrates the `log` step type with structured fields.
+
+      - name: trace_log
+        type: log
+        level: trace
+        content: "Trace level message"
+        fields:
+          detail: "verbose tracing info"
+
+      - name: debug_log
+        type: log
+        level: debug
+        content: "Debug level message"
+        fields:
+          function: "logging_demo"
+          step: "2"
+
+      - name: info_log
+        type: log
+        level: info
+        content: "Info level message"
+        fields:
+          workflow: "logging"
+          user: "{{ .env.USER }}"
+
+      - name: warn_log
+        type: log
+        level: warn
+        content: "Warning level message"
+        fields:
+          issue: "deprecated_feature"
+          action: "consider_upgrading"
+
+      - name: error_log
+        type: log
+        level: error
+        content: "Error level message (for demo purposes)"
+        fields:
+          error_code: "DEMO_ERROR"
+          recoverable: "true"
+
+      - name: done
+        type: success
+        content: "Logging demo complete! Check your log output."
