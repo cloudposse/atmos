@@ -16,10 +16,7 @@ func TestUIHandlersRegistration(t *testing.T) {
 		name     string
 		category StepCategory
 	}{
-		{"success", CategoryUI},
-		{"info", CategoryUI},
-		{"warn", CategoryUI},
-		{"error", CategoryUI},
+		{"toast", CategoryUI},
 		{"markdown", CategoryUI},
 	}
 
@@ -42,50 +39,14 @@ func TestUIHandlersValidation(t *testing.T) {
 		expectErr bool
 	}{
 		{
-			name:      "success with content",
-			stepType:  "success",
+			name:      "toast with content",
+			stepType:  "toast",
 			content:   "Deployment complete!",
 			expectErr: false,
 		},
 		{
-			name:      "success without content",
-			stepType:  "success",
-			content:   "",
-			expectErr: true,
-		},
-		{
-			name:      "info with content",
-			stepType:  "info",
-			content:   "Processing...",
-			expectErr: false,
-		},
-		{
-			name:      "info without content",
-			stepType:  "info",
-			content:   "",
-			expectErr: true,
-		},
-		{
-			name:      "warn with content",
-			stepType:  "warn",
-			content:   "This is deprecated",
-			expectErr: false,
-		},
-		{
-			name:      "warn without content",
-			stepType:  "warn",
-			content:   "",
-			expectErr: true,
-		},
-		{
-			name:      "error with content",
-			stepType:  "error",
-			content:   "Something went wrong",
-			expectErr: false,
-		},
-		{
-			name:      "error without content",
-			stepType:  "error",
+			name:      "toast without content",
+			stepType:  "toast",
 			content:   "",
 			expectErr: true,
 		},
@@ -132,30 +93,35 @@ func TestUIHandlersTemplateResolution(t *testing.T) {
 	tests := []struct {
 		name            string
 		stepType        string
+		level           string
 		content         string
 		expectedContent string
 	}{
 		{
-			name:            "success with template",
-			stepType:        "success",
+			name:            "toast success with template",
+			stepType:        "toast",
+			level:           "success",
 			content:         "Deployed {{ .steps.select_component.value }} to {{ .steps.select_env.value }}",
 			expectedContent: "Deployed vpc to production",
 		},
 		{
-			name:            "info with template",
-			stepType:        "info",
+			name:            "toast info with template",
+			stepType:        "toast",
+			level:           "info",
 			content:         "Component: {{ .steps.select_component.value }}",
 			expectedContent: "Component: vpc",
 		},
 		{
-			name:            "warn with template",
-			stepType:        "warn",
+			name:            "toast warning with template",
+			stepType:        "toast",
+			level:           "warning",
 			content:         "Warning for {{ .steps.select_env.value }}",
 			expectedContent: "Warning for production",
 		},
 		{
-			name:            "error with template",
-			stepType:        "error",
+			name:            "toast error with template",
+			stepType:        "toast",
+			level:           "error",
 			content:         "Failed in {{ .steps.select_env.value }}",
 			expectedContent: "Failed in production",
 		},
@@ -175,6 +141,7 @@ func TestUIHandlersTemplateResolution(t *testing.T) {
 			step := &schema.WorkflowStep{
 				Name:    "test_step",
 				Type:    tt.stepType,
+				Level:   tt.level,
 				Content: tt.content,
 			}
 
@@ -302,19 +269,19 @@ func TestStepResult(t *testing.T) {
 func TestRegistryOperations(t *testing.T) {
 	t.Run("list returns all handlers", func(t *testing.T) {
 		handlers := List()
-		// At minimum, we should have the 5 UI handlers.
-		assert.GreaterOrEqual(t, len(handlers), 5)
+		// At minimum, we should have the 2 UI handlers (toast, markdown).
+		assert.GreaterOrEqual(t, len(handlers), 2)
 	})
 
 	t.Run("list by category", func(t *testing.T) {
 		byCategory := ListByCategory()
 		uiHandlers := byCategory[CategoryUI]
-		assert.GreaterOrEqual(t, len(uiHandlers), 5, "should have at least 5 UI handlers")
+		assert.GreaterOrEqual(t, len(uiHandlers), 2, "should have at least 2 UI handlers")
 	})
 
 	t.Run("count returns handler count", func(t *testing.T) {
 		count := Count()
-		assert.GreaterOrEqual(t, count, 5)
+		assert.GreaterOrEqual(t, count, 2)
 	})
 
 	t.Run("get non-existent handler", func(t *testing.T) {
