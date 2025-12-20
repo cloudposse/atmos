@@ -2,11 +2,13 @@ package step
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -58,7 +60,7 @@ func TestStepExecutorExecute(t *testing.T) {
 
 		_, err := executor.Execute(context.Background(), step)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unknown step type")
+		assert.True(t, errors.Is(err, errUtils.ErrUnknownStepType))
 	})
 
 	t.Run("defaults to shell type when empty", func(t *testing.T) {
@@ -155,7 +157,7 @@ func TestValidateStep(t *testing.T) {
 
 		err := ValidateStep(step)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unknown step type")
+		assert.True(t, errors.Is(err, errUtils.ErrUnknownStepType))
 	})
 
 	t.Run("defaults to shell when type empty", func(t *testing.T) {
@@ -324,6 +326,46 @@ func TestStepExecutor_RunAll(t *testing.T) {
 		// Should succeed (empty is valid, no steps to run).
 		err := executor.RunAll(context.Background(), workflow)
 		assert.NoError(t, err)
+	})
+
+	t.Run("wraps step failure with ErrWorkflowStepFailed", func(t *testing.T) {
+		executor := NewStepExecutor()
+		workflow := &schema.WorkflowDefinition{
+			Steps: []schema.WorkflowStep{
+				{Name: "failing_step", Type: "unknown_type_xyz"},
+			},
+		}
+
+		err := executor.RunAll(context.Background(), workflow)
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrWorkflowStepFailed))
+		assert.True(t, errors.Is(err, errUtils.ErrUnknownStepType))
+	})
+
+	t.Run("generates step name when missing", func(t *testing.T) {
+		executor := NewStepExecutor()
+		workflow := &schema.WorkflowDefinition{
+			Steps: []schema.WorkflowStep{
+				{Type: "unknown_type_abc"}, // No name, should generate "step_1".
+			},
+		}
+
+		err := executor.RunAll(context.Background(), workflow)
+		assert.Error(t, err)
+		// Verify generated name is in error message.
+		assert.Contains(t, err.Error(), "step_1")
+	})
+
+	t.Run("sets workflow context on executor", func(t *testing.T) {
+		executor := NewStepExecutor()
+		workflow := &schema.WorkflowDefinition{
+			Output: "viewport",
+			Steps:  []schema.WorkflowStep{},
+		}
+
+		err := executor.RunAll(context.Background(), workflow)
+		assert.NoError(t, err)
+		// Verify executor has workflow set (indirectly by no panic and workflow was processed).
 	})
 }
 

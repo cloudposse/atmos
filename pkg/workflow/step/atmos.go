@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -28,6 +29,8 @@ func (h *AtmosHandler) Validate(step *schema.WorkflowStep) error {
 
 // Execute runs the atmos command.
 func (h *AtmosHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
+	defer perf.Track(nil, "step.AtmosHandler.Execute")()
+
 	opts, err := h.prepareExecution(ctx, step, vars)
 	if err != nil {
 		return nil, err
@@ -177,16 +180,12 @@ func (h *AtmosHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Wor
 
 // containsStackFlag checks if args already contain -s or --stack.
 func containsStackFlag(args []string) bool {
-	for i, arg := range args {
+	for _, arg := range args {
 		if arg == "-s" || arg == "--stack" {
 			return true
 		}
 		// Check for -s=value or --stack=value.
 		if strings.HasPrefix(arg, "-s=") || strings.HasPrefix(arg, "--stack=") {
-			return true
-		}
-		// Check if next arg would be stack value for -s.
-		if arg == "-s" && i+1 < len(args) {
 			return true
 		}
 	}
