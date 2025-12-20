@@ -847,6 +847,63 @@ func TestValidateTagsAndComponents(t *testing.T) {
 	}
 }
 
+func TestLoadComponentConfig(t *testing.T) {
+	t.Run("valid component config", func(t *testing.T) {
+		tempDir := t.TempDir()
+		configFile := filepath.Join(tempDir, "component.yaml")
+		content := `kind: ComponentVendorConfig
+apiVersion: atmos/v1
+metadata:
+  name: test-component
+spec:
+  source:
+    uri: github.com/example/repo.git//vpc
+`
+		err := os.WriteFile(configFile, []byte(content), 0o644)
+		require.NoError(t, err)
+
+		config, err := loadComponentConfig(configFile)
+		require.NoError(t, err)
+		assert.Equal(t, "ComponentVendorConfig", config.Kind)
+		assert.Equal(t, "test-component", config.Metadata.Name)
+	})
+
+	t.Run("invalid kind returns error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		configFile := filepath.Join(tempDir, "component.yaml")
+		content := `kind: InvalidKind
+apiVersion: atmos/v1
+metadata:
+  name: test-component
+spec:
+  source:
+    uri: github.com/example/repo.git//vpc
+`
+		err := os.WriteFile(configFile, []byte(content), 0o644)
+		require.NoError(t, err)
+
+		_, err = loadComponentConfig(configFile)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrInvalidComponentKind)
+	})
+
+	t.Run("invalid YAML returns error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		configFile := filepath.Join(tempDir, "component.yaml")
+		content := `invalid: yaml: content: [[[`
+		err := os.WriteFile(configFile, []byte(content), 0o644)
+		require.NoError(t, err)
+
+		_, err = loadComponentConfig(configFile)
+		assert.Error(t, err)
+	})
+
+	t.Run("non-existent file returns error", func(t *testing.T) {
+		_, err := loadComponentConfig("/non/existent/file.yaml")
+		assert.Error(t, err)
+	})
+}
+
 func TestFindComponentConfigFile(t *testing.T) {
 	t.Run("finds yaml extension", func(t *testing.T) {
 		tempDir := t.TempDir()
