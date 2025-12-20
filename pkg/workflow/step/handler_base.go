@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
 )
@@ -48,16 +49,14 @@ func (h BaseHandler) CheckTTY(step *schema.WorkflowStep) error {
 
 	term := terminal.New()
 	if !term.IsTTY(terminal.Stdout) {
-		return fmt.Errorf(
-			"step '%s' requires interactive terminal\n\n"+
-				"The step type '%s' requires a TTY for user input.\n"+
-				"This workflow cannot run in non-interactive mode (CI, piped output).\n\n"+
-				"Hints:\n"+
-				"  - Use --dry-run to preview workflow without interactive steps\n"+
-				"  - Set default values in workflow configuration\n"+
-				"  - Use environment variables instead of interactive prompts in CI",
-			step.Name, step.Type,
-		)
+		return errUtils.Build(errUtils.ErrStepTTYRequired).
+			WithContext("step", step.Name).
+			WithContext("type", step.Type).
+			WithExplanation(fmt.Sprintf("The step type '%s' requires a TTY for user input", step.Type)).
+			WithHint("Use --dry-run to preview workflow without interactive steps").
+			WithHint("Set default values in workflow configuration").
+			WithHint("Use environment variables instead of interactive prompts in CI").
+			Err()
 	}
 	return nil
 }
@@ -65,7 +64,11 @@ func (h BaseHandler) CheckTTY(step *schema.WorkflowStep) error {
 // ValidateRequired checks that a required field is not empty.
 func (h BaseHandler) ValidateRequired(step *schema.WorkflowStep, field, value string) error {
 	if value == "" {
-		return fmt.Errorf("step '%s' (%s): %s is required", step.Name, step.Type, field)
+		return errUtils.Build(errUtils.ErrStepFieldRequired).
+			WithContext("step", step.Name).
+			WithContext("type", step.Type).
+			WithContext("field", field).
+			Err()
 	}
 	return nil
 }

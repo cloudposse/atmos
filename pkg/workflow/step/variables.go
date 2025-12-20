@@ -3,6 +3,8 @@ package step
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"strings"
 	"text/template"
 )
 
@@ -14,11 +16,24 @@ type Variables struct {
 	Env map[string]string
 }
 
-// NewVariables creates a new Variables instance.
+// NewVariables creates a new Variables instance with OS environment pre-populated.
 func NewVariables() *Variables {
-	return &Variables{
+	v := &Variables{
 		Steps: make(map[string]*StepResult),
 		Env:   make(map[string]string),
+	}
+	// Pre-populate with OS environment variables.
+	v.LoadOSEnv()
+	return v
+}
+
+// LoadOSEnv populates the Env map with all OS environment variables.
+func (v *Variables) LoadOSEnv() {
+	for _, env := range os.Environ() {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			v.Env[parts[0]] = parts[1]
+		}
 	}
 }
 

@@ -32,6 +32,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	stepPkg "github.com/cloudposse/atmos/pkg/workflow/step"
 )
 
 // Workflow error title for formatted output.
@@ -103,13 +104,13 @@ func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
 	// This preserves both the error sentinel for errors.Is() checks and the underlying error's exit code.
 	wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrWorkflowStepFailed, err)
 
-	// Now build the error with hints using the wrapped error.
-	// This preserves the error chain while adding formatted hints.
+	// Now build the error with explanation and hints using the wrapped error.
+	// This preserves the error chain while adding formatted context.
 	// Commands are wrapped in code fences for proper formatting and copy-paste.
 	// Single quotes are used for shell safety (step names and stacks can contain spaces).
 	builder := errUtils.Build(wrappedErr).
 		WithTitle("Workflow Error").
-		WithHintf("The following command failed to execute:\n\n```shell\n%s\n```", failedCmd).
+		WithExplanationf("The following command failed to execute:\n\n```shell\n%s\n```", failedCmd).
 		WithHintf("To resume the workflow from this step, run:\n\n```shell\n%s\n```", resumeCommand)
 
 	// Extract exit code from the underlying error if available.
@@ -240,6 +241,9 @@ func ExecuteWorkflow(
 	commandLineIdentity string,
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflow")()
+
+	// Reset step executor state at the start of each workflow to ensure clean variable scope.
+	ResetStepExecutorState()
 
 	steps := workflowDefinition.Steps
 
@@ -389,12 +393,16 @@ func ExecuteWorkflow(
 				ExecuteShellCommand,
 				atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
 		default:
-			return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
-				WithTitle(WorkflowErrTitle).
-				WithHintf("Step type '%s' is not supported", commandType).
-				WithHint("Each step must specify a valid type: 'atmos' or 'shell'").
-				WithExitCode(1).
-				Err()
+			// Check if this is an extended step type (input, confirm, choose, etc.).
+			if !stepPkg.IsExtendedStepType(commandType) {
+				return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
+					WithTitle(WorkflowErrTitle).
+					WithHintf("Step type '%s' is not supported", commandType).
+					WithHint("Each step must specify a valid type: 'atmos', 'shell', or an interactive type like 'input', 'confirm', 'choose'").
+					WithExitCode(1).
+					Err()
+			}
+			err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv)
 		}
 
 		if err != nil {
@@ -411,6 +419,39 @@ func ExecuteWorkflow(
 	}
 
 	return nil
+}
+
+// stepExecutorState holds persistent state for extended step execution within a workflow.
+// This allows step results to be passed between steps for variable templating.
+var stepExecutorState *stepPkg.StepExecutor
+
+// executeExtendedStep runs an extended step type (input, confirm, choose, etc.).
+func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep, workflow *schema.WorkflowDefinition, envVars []string) error {
+	// Initialize or reuse step executor.
+	if stepExecutorState == nil {
+		stepExecutorState = stepPkg.NewStepExecutor()
+	}
+
+	// Set workflow context for output mode inheritance.
+	stepExecutorState.SetWorkflow(workflow)
+
+	// Add environment variables to the executor.
+	for _, env := range envVars {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			stepExecutorState.SetEnv(parts[0], parts[1])
+		}
+	}
+
+	// Execute the step.
+	_, err := stepExecutorState.Execute(ctx, workflowStep)
+	return err
+}
+
+// ResetStepExecutorState resets the step executor state.
+// This should be called at the start of a new workflow execution.
+func ResetStepExecutorState() {
+	stepExecutorState = nil
 }
 
 // ExecuteDescribeWorkflows executes `atmos describe workflows` command.

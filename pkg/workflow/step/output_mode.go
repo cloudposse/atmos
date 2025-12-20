@@ -105,7 +105,7 @@ func (w *OutputModeWriter) executeLog(cmd *exec.Cmd) (string, string, error) {
 
 	// Print step header.
 	styles := theme.GetCurrentStyles()
-	stepLabel := w.stepName
+	var stepLabel string
 	if styles != nil {
 		stepLabel = styles.Label.Render("[" + w.stepName + "]")
 	} else {
@@ -129,24 +129,35 @@ func (w *OutputModeWriter) fallbackToLog(stdout, stderr string, runErr error) (s
 	}
 
 	// Print step footer with status.
-	styles := theme.GetCurrentStyles()
-	var footer string
-	if runErr != nil {
-		if styles != nil {
-			footer = styles.XMark.String() + " " + w.stepName + " failed"
-		} else {
-			footer = "✗ " + w.stepName + " failed"
-		}
-	} else {
-		if styles != nil {
-			footer = styles.Checkmark.String() + " " + w.stepName + " completed"
-		} else {
-			footer = "✓ " + w.stepName + " completed"
-		}
-	}
+	footer := w.formatStepFooter(runErr)
 	_ = ui.Writeln(footer)
 
 	return stdout, stderr, runErr
+}
+
+// formatStepFooter creates the footer string based on step status.
+func (w *OutputModeWriter) formatStepFooter(runErr error) string {
+	styles := theme.GetCurrentStyles()
+	if runErr != nil {
+		return w.formatFailedFooter(styles)
+	}
+	return w.formatSuccessFooter(styles)
+}
+
+// formatFailedFooter creates the footer for a failed step.
+func (w *OutputModeWriter) formatFailedFooter(styles *theme.StyleSet) string {
+	if styles != nil {
+		return styles.XMark.String() + " " + w.stepName + " failed"
+	}
+	return "✗ " + w.stepName + " failed"
+}
+
+// formatSuccessFooter creates the footer for a successful step.
+func (w *OutputModeWriter) formatSuccessFooter(styles *theme.StyleSet) string {
+	if styles != nil {
+		return styles.Checkmark.String() + " " + w.stepName + " completed"
+	}
+	return "✓ " + w.stepName + " completed"
 }
 
 // executeNone runs command silently.

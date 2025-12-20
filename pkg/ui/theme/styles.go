@@ -7,6 +7,9 @@ import (
 	"github.com/spf13/viper"
 )
 
+// DefaultThemeName is the default theme used when no theme is configured.
+const DefaultThemeName = "atmos"
+
 // StyleSet provides pre-configured lipgloss styles for common UI elements.
 type StyleSet struct {
 	// Text styles
@@ -362,7 +365,7 @@ func GetCurrentStyles() *StyleSet {
 		// Fall back to atmos theme if there's an error
 		registry, _ := NewRegistry()
 		if registry != nil {
-			defaultTheme := registry.GetOrDefault("atmos")
+			defaultTheme := registry.GetOrDefault(DefaultThemeName)
 			tmpScheme := GenerateColorScheme(defaultTheme)
 			scheme = &tmpScheme
 		}
@@ -436,8 +439,8 @@ func getActiveThemeName() string {
 		return theme
 	}
 
-	// Default to "atmos" theme
-	return "atmos"
+	// Default to atmos theme.
+	return DefaultThemeName
 }
 
 // Helper functions for getting theme-aware colors and styles

@@ -30,7 +30,10 @@ func (h *ChooseHandler) Validate(step *schema.WorkflowStep) error {
 		return err
 	}
 	if len(step.Options) == 0 {
-		return fmt.Errorf("step '%s' (choose): options is required", step.Name)
+		return errUtils.Build(errUtils.ErrStepOptionsRequired).
+			WithContext("step", step.Name).
+			WithContext("type", "choose").
+			Err()
 	}
 	return nil
 }
@@ -46,7 +49,21 @@ func (h *ChooseHandler) Execute(ctx context.Context, step *schema.WorkflowStep, 
 		return nil, err
 	}
 
-	// Resolve options (they might contain templates).
+	options, err := h.resolveOptions(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	defaultVal, err := h.resolveDefault(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	return h.runSelectForm(step.Name, prompt, options, defaultVal)
+}
+
+// resolveOptions resolves template variables in options.
+func (h *ChooseHandler) resolveOptions(step *schema.WorkflowStep, vars *Variables) ([]string, error) {
 	options := make([]string, len(step.Options))
 	for i, opt := range step.Options {
 		resolved, err := vars.Resolve(opt)
@@ -55,19 +72,34 @@ func (h *ChooseHandler) Execute(ctx context.Context, step *schema.WorkflowStep, 
 		}
 		options[i] = resolved
 	}
+	return options, nil
+}
 
-	// Resolve default if present.
-	defaultVal := step.Default
-	if defaultVal != "" {
-		defaultVal, err = vars.Resolve(defaultVal)
-		if err != nil {
-			return nil, fmt.Errorf("step '%s': failed to resolve default: %w", step.Name, err)
-		}
+// resolveDefault resolves the default value if present.
+func (h *ChooseHandler) resolveDefault(step *schema.WorkflowStep, vars *Variables) (string, error) {
+	if step.Default == "" {
+		return "", nil
 	}
+	defaultVal, err := vars.Resolve(step.Default)
+	if err != nil {
+		return "", fmt.Errorf("step '%s': failed to resolve default: %w", step.Name, err)
+	}
+	return defaultVal, nil
+}
 
+// createChooseKeyMap creates a keymap with ESC added to quit keys.
+func (h *ChooseHandler) createChooseKeyMap() *huh.KeyMap {
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c", "esc"),
+		key.WithHelp("ctrl+c/esc", "quit"),
+	)
+	return keyMap
+}
+
+// runSelectForm displays the select form and returns the result.
+func (h *ChooseHandler) runSelectForm(stepName, prompt string, options []string, defaultVal string) (*StepResult, error) {
 	var choice string
-
-	// Find default option index if specified.
 	huhOptions := huh.NewOptions(options...)
 	for _, opt := range huhOptions {
 		if opt.Value == defaultVal {
@@ -75,13 +107,6 @@ func (h *ChooseHandler) Execute(ctx context.Context, step *schema.WorkflowStep, 
 			break
 		}
 	}
-
-	// Create custom keymap that adds ESC to quit keys.
-	keyMap := huh.NewDefaultKeyMap()
-	keyMap.Quit = key.NewBinding(
-		key.WithKeys("ctrl+c", "esc"),
-		key.WithHelp("ctrl+c/esc", "quit"),
-	)
 
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -91,13 +116,13 @@ func (h *ChooseHandler) Execute(ctx context.Context, step *schema.WorkflowStep, 
 				Options(huhOptions...).
 				Value(&choice),
 		),
-	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
+	).WithKeyMap(h.createChooseKeyMap()).WithTheme(uiutils.NewAtmosHuhTheme())
 
 	if err := form.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			return nil, errUtils.ErrUserAborted
 		}
-		return nil, fmt.Errorf("step '%s': selection failed: %w", step.Name, err)
+		return nil, fmt.Errorf("step '%s': selection failed: %w", stepName, err)
 	}
 
 	return NewStepResult(choice), nil
