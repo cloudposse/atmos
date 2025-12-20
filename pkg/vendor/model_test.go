@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -728,4 +730,236 @@ func TestModelVendor_Init_WithPackages(t *testing.T) {
 	cmd := model.Init()
 	// Should return a batch command.
 	assert.NotNil(t, cmd)
+}
+
+func TestNeedsCustomDetection_Extended(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a test file.
+	testFile := filepath.Join(tempDir, "test.tf")
+	err := os.WriteFile(testFile, []byte("# test"), 0o644)
+	require.NoError(t, err)
+
+	// Create a test directory.
+	testDir := filepath.Join(tempDir, "testdir")
+	err = os.MkdirAll(testDir, 0o755)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		src      string
+		expected bool
+	}{
+		{
+			name:     "local file path - no detection needed",
+			src:      testFile,
+			expected: false,
+		},
+		{
+			name:     "local directory path - no detection needed",
+			src:      testDir,
+			expected: false,
+		},
+		{
+			name:     "hg URL - no detection needed",
+			src:      "hg::https://bitbucket.org/example/repo",
+			expected: false,
+		},
+		{
+			name:     "git+ssh URL - no detection needed",
+			src:      "git+ssh://git@github.com/example/repo.git",
+			expected: false,
+		},
+		{
+			name:     "git+https URL - no detection needed",
+			src:      "git+https://github.com/example/repo.git",
+			expected: false,
+		},
+		{
+			name:     "oci URL - no detection needed",
+			src:      "oci://registry.example.com/repo",
+			expected: false,
+		},
+		{
+			name:     "ssh URL - no detection needed",
+			src:      "ssh://git@github.com/example/repo.git",
+			expected: false,
+		},
+		{
+			name:     "empty string - no detection needed (empty url parsed)",
+			src:      "",
+			expected: false,
+		},
+		{
+			name:     "with double colon and http",
+			src:      "git::http://example.com/repo.git",
+			expected: false,
+		},
+		{
+			name:     "with double colon and unsupported scheme",
+			src:      "custom::foobar://example.com",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := needsCustomDetection(tt.src)
+			assert.Equal(t, tt.expected, result, "needsCustomDetection result mismatch")
+		})
+	}
+}
+
+func TestExecuteInstall_NoValidPackage(t *testing.T) {
+	// Test the case where no valid package is provided.
+	installer := pkgVendor{
+		name:             "invalid-pkg",
+		atmosPackage:     nil,
+		componentPackage: nil,
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	cmd := executeInstall(installer, false, atmosConfig)
+	require.NotNil(t, cmd)
+
+	// Execute the command to get the message.
+	msg := cmd()
+	installMsg, ok := msg.(installedPkgMsg)
+	assert.True(t, ok, "Should return installedPkgMsg")
+	assert.Error(t, installMsg.err, "Should return error for invalid package")
+	assert.Equal(t, "invalid-pkg", installMsg.name)
+}
+
+func TestModelVendor_View_DryRunWithVersions(t *testing.T) {
+	model := &modelVendor{
+		packages: []pkgVendor{
+			{name: "pkg1", version: "v1.2.3"},
+			{name: "pkg2", version: ""},
+		},
+		done:   true,
+		dryRun: true,
+	}
+
+	view := model.View()
+	assert.Contains(t, view, "Dry run completed")
+	// In dry-run mode, the message is "No components vendored".
+}
+
+func TestCopyToTargetWithPatterns_TargetWithExtension(t *testing.T) {
+	srcDir := t.TempDir()
+	destDir := t.TempDir()
+
+	// Create source file.
+	srcFile := filepath.Join(srcDir, "main.tf")
+	err := os.WriteFile(srcFile, []byte("resource"), 0o644)
+	require.NoError(t, err)
+
+	// Create target path with specific extension.
+	targetFile := filepath.Join(destDir, "renamed.tf")
+	source := &schema.AtmosVendorSource{Source: "main.tf"}
+
+	err = copyToTargetWithPatterns(srcFile, targetFile, source, true)
+	require.NoError(t, err)
+
+	// Verify file was copied with correct name.
+	_, err = os.Stat(targetFile)
+	assert.NoError(t, err, "File should exist at target path")
+}
+
+func TestModelVendor_HandleInstalledPkgMsg_WithVersion(t *testing.T) {
+	model := &modelVendor{
+		packages: []pkgVendor{
+			{name: "pkg1", version: "v1.0.0"},
+			{name: "pkg2", version: "v2.0.0"},
+		},
+		index: 0,
+		isTTY: true,
+	}
+
+	msg := &installedPkgMsg{err: nil, name: "pkg1"}
+	result, _ := model.handleInstalledPkgMsg(msg)
+
+	resultModel := result.(*modelVendor)
+	assert.Equal(t, 1, resultModel.index)
+	assert.False(t, resultModel.done)
+}
+
+func TestModelVendor_Update_SpinnerTick(t *testing.T) {
+	model := &modelVendor{
+		packages: []pkgVendor{{name: "pkg1"}},
+		spinner:  spinner.New(),
+	}
+
+	msg := spinner.TickMsg{}
+	result, _ := model.Update(msg)
+	assert.NotNil(t, result)
+}
+
+func TestModelVendor_Update_ProgressFrame(t *testing.T) {
+	model := &modelVendor{
+		packages: []pkgVendor{{name: "pkg1"}},
+		progress: progress.New(),
+	}
+
+	msg := progress.FrameMsg{}
+	result, _ := model.Update(msg)
+	assert.NotNil(t, result)
+}
+
+func TestExecuteVendorModel_EmptyPackages(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	model := &modelVendor{
+		packages:    []pkgVendor{},
+		atmosConfig: atmosConfig,
+	}
+
+	// The Init function with empty packages should set done=true.
+	_ = model.Init()
+	assert.True(t, model.done)
+}
+
+func TestCopyToTargetWithPatterns_WithSubdir(t *testing.T) {
+	srcDir := t.TempDir()
+	destDir := t.TempDir()
+
+	// Create source with subdirectory.
+	subDir := filepath.Join(srcDir, "modules", "vpc")
+	err := os.MkdirAll(subDir, 0o755)
+	require.NoError(t, err)
+
+	srcFile := filepath.Join(subDir, "main.tf")
+	err = os.WriteFile(srcFile, []byte("resource"), 0o644)
+	require.NoError(t, err)
+
+	source := &schema.AtmosVendorSource{}
+
+	err = copyToTargetWithPatterns(srcDir, destDir, source, false)
+	require.NoError(t, err)
+
+	// Verify subdirectory structure was copied.
+	_, err = os.Stat(filepath.Join(destDir, "modules", "vpc", "main.tf"))
+	assert.NoError(t, err, "Subdirectory structure should be preserved")
+}
+
+func TestNewModelVendor_MixedPackages(t *testing.T) {
+	// Test with both atmos and component packages.
+	atmosPkgs := []pkgAtmosVendor{
+		{uri: "github.com/example/repo.git//vpc", name: "vpc", version: "1.0.0"},
+	}
+	componentPkgs := []pkgComponentVendor{
+		{uri: "github.com/example/repo.git//rds", name: "rds", version: "2.0.0"},
+	}
+
+	// Test with atmos packages.
+	model1, err := newModelVendor(atmosPkgs, false, nil)
+	assert.NoError(t, err)
+	assert.Len(t, model1.packages, 1)
+	assert.NotNil(t, model1.packages[0].atmosPackage)
+
+	// Test with component packages.
+	model2, err := newModelVendor(componentPkgs, false, nil)
+	assert.NoError(t, err)
+	assert.Len(t, model2.packages, 1)
+	assert.NotNil(t, model2.packages[0].componentPackage)
 }
