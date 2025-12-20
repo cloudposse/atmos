@@ -564,6 +564,76 @@ func ProcessStackConfig(
 	allComponents[cfg.HelmfileComponentType] = helmfileComponents
 	allComponents[cfg.PackerComponentType] = packerComponents
 
+	// Include custom component types (non-terraform, non-helmfile, non-packer).
+	// Custom components don't need the same processing as built-in types - they just
+	// pass through with global vars/settings merged. This enables custom commands to
+	// access component configuration via {{ .Component.* }} templates.
+	builtInTypes := map[string]bool{
+		cfg.TerraformComponentType: true,
+		cfg.HelmfileComponentType:  true,
+		cfg.PackerComponentType:    true,
+	}
+	for componentType, components := range globalComponentsSection {
+		if builtInTypes[componentType] {
+			continue // Already processed above.
+		}
+		componentsMap, ok := components.(map[string]any)
+		if !ok {
+			continue
+		}
+		// For each custom component, merge global vars/settings into component section.
+		processedComponents := make(map[string]any)
+		for componentName, componentConfig := range componentsMap {
+			componentMap, ok := componentConfig.(map[string]any)
+			if !ok {
+				processedComponents[componentName] = componentConfig
+				continue
+			}
+			// Merge global vars into component vars.
+			componentVars := map[string]any{}
+			for k, v := range globalVarsSection {
+				componentVars[k] = v
+			}
+			if vars, ok := componentMap[cfg.VarsSectionName].(map[string]any); ok {
+				for k, v := range vars {
+					componentVars[k] = v
+				}
+			}
+			componentMap[cfg.VarsSectionName] = componentVars
+			// Merge global settings into component settings.
+			componentSettings := map[string]any{}
+			for k, v := range globalSettingsSection {
+				componentSettings[k] = v
+			}
+			if settings, ok := componentMap[cfg.SettingsSectionName].(map[string]any); ok {
+				for k, v := range settings {
+					componentSettings[k] = v
+				}
+			}
+			if len(componentSettings) > 0 {
+				componentMap[cfg.SettingsSectionName] = componentSettings
+			}
+			// Merge global env into component env.
+			componentEnv := map[string]any{}
+			for k, v := range globalEnvSection {
+				componentEnv[k] = v
+			}
+			if envMap, ok := componentMap[cfg.EnvSectionName].(map[string]any); ok {
+				for k, v := range envMap {
+					componentEnv[k] = v
+				}
+			}
+			if len(componentEnv) > 0 {
+				componentMap[cfg.EnvSectionName] = componentEnv
+			}
+			// Add metadata fields expected by the template system.
+			componentMap["component"] = componentName
+			componentMap[cfg.ComponentTypeSectionName] = componentType
+			processedComponents[componentName] = componentMap
+		}
+		allComponents[componentType] = processedComponents
+	}
+
 	result := map[string]any{
 		cfg.ComponentsSectionName: allComponents,
 	}

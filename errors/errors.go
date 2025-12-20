@@ -364,6 +364,11 @@ var (
 	ErrInvalidTerraformRemoteStateBackend = errors.New("invalid terraform.remote_state_backend section")
 	ErrUnsupportedComponentType           = errors.New("unsupported component type")
 
+	// Custom component errors.
+	ErrCustomComponentTypeRegistration = errors.New("failed to register custom component type")
+	ErrComponentArgumentNotFound       = errors.New("no argument or flag with type 'component' found")
+	ErrStackArgumentNotFound           = errors.New("no argument or flag with type 'stack' found")
+
 	// List command errors.
 	ErrInvalidStackPattern         = errors.New("invalid stack pattern")
 	ErrEmptyTargetComponentName    = errors.New("target component name cannot be empty")
