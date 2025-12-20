@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -23,7 +24,10 @@ func init() {
 func (h *JoinHandler) Validate(step *schema.WorkflowStep) error {
 	// Join can use either content (single template) or options (array of strings).
 	if step.Content == "" && len(step.Options) == 0 {
-		return fmt.Errorf("step '%s' (join): either content or options is required", step.Name)
+		return errUtils.Build(errUtils.ErrStepContentOrOptionsRequired).
+			WithContext("step", step.Name).
+			WithContext("type", "join").
+			Err()
 	}
 	return nil
 }

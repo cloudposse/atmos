@@ -1,0 +1,6 @@
+vars:
+  stage: prod
+  environment: production
+
+components:
+  terraform: {}
