@@ -28,7 +28,8 @@ function getFileOriginCommit(filePath) {
       }
     ).trim().split('\n')[0];
     return sha || null;
-  } catch {
+  } catch (e) {
+    console.warn(`[blog-release-data] Failed to get origin commit for ${filePath}: ${e.message}`);
     return null;
   }
 }
@@ -50,8 +51,10 @@ function getFirstStableRelease(sha) {
     ).trim().split('\n').filter(Boolean);
 
     // Find the first stable release (matches vX.Y.Z exactly, no suffixes).
-    return tags.find((t) => /^v\d+\.\d+\.\d+$/.test(t)) || null;
-  } catch {
+    const stableRelease = tags.find((t) => /^v\d+\.\d+\.\d+$/.test(t)) || null;
+    return stableRelease;
+  } catch (e) {
+    console.warn(`[blog-release-data] Failed to find tags for commit ${sha}: ${e.message}`);
     return null;
   }
 }
@@ -135,6 +138,12 @@ module.exports = function blogReleaseDataPlugin(context, options) {
         const release = determineRelease(filePath, frontmatter);
         addToReleaseMap(releaseMap, file, frontmatter, release);
       }
+
+      // Log summary for debugging.
+      const entries = Object.entries(releaseMap);
+      const released = entries.filter(([, v]) => v !== 'unreleased').length;
+      const unreleased = entries.filter(([, v]) => v === 'unreleased').length;
+      console.log(`[blog-release-data] Processed ${files.length} blog posts: ${released} released, ${unreleased} unreleased`);
 
       return { releaseMap };
     },
