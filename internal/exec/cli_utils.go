@@ -66,6 +66,7 @@ var commonFlags = []string{
 	cfg.InitPassVars,
 	cfg.PlanSkipPlanfile,
 	cfg.IdentityFlag,
+	cfg.ClusterNameFlag,
 	cfg.ProfilerEnabledFlag,
 	cfg.ProfilerHostFlag,
 	cfg.ProfilerPortFlag,
@@ -175,6 +176,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
 	configAndStacksInfo.Identity = argsAndFlagsInfo.Identity
+	configAndStacksInfo.ClusterName = argsAndFlagsInfo.ClusterName
 	configAndStacksInfo.NeedsPathResolution = argsAndFlagsInfo.NeedsPathResolution
 
 	// Fallback to ATMOS_IDENTITY environment variable if identity not set via flag.
@@ -579,6 +581,20 @@ func processArgsAndFlags(
 			} else {
 				info.Identity = parts[1]
 			}
+		}
+
+		// Handle --cluster-name for EKS cluster name override.
+		if arg == cfg.ClusterNameFlag {
+			if len(inputArgsAndFlags) <= (i + 1) {
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
+			}
+			info.ClusterName = inputArgsAndFlags[i+1]
+		} else if strings.HasPrefix(arg+"=", cfg.ClusterNameFlag) {
+			parts := strings.Split(arg, "=")
+			if len(parts) != 2 {
+				return info, fmt.Errorf(errFlagFormat, errUtils.ErrInvalidFlag, arg)
+			}
+			info.ClusterName = parts[1]
 		}
 
 		// Handle --from-plan with optional planfile path.

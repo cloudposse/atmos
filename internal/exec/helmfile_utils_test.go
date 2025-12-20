@@ -28,7 +28,7 @@ func TestCheckHelmfileConfig(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name: "valid config with UseEKS",
+			name: "valid config with UseEKS and deprecated patterns",
 			atmosConfig: schema.AtmosConfiguration{
 				Components: schema.Components{
 					Helmfile: schema.Helmfile{
@@ -37,6 +37,34 @@ func TestCheckHelmfileConfig(t *testing.T) {
 						KubeconfigPath:        "/path/to/kubeconfig",
 						HelmAwsProfilePattern: "cp-{namespace}-{tenant}-gbl-{stage}-helm",
 						ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
+					},
+				},
+			},
+			expectedError: nil,
+		},
+		{
+			name: "valid config with UseEKS and new template",
+			atmosConfig: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Helmfile: schema.Helmfile{
+						BasePath:            "/path/to/helmfile/components",
+						UseEKS:              true,
+						KubeconfigPath:      "/path/to/kubeconfig",
+						ClusterNameTemplate: "{{ .vars.namespace }}-{{ .vars.stage }}-eks",
+					},
+				},
+			},
+			expectedError: nil,
+		},
+		{
+			name: "valid config with UseEKS and explicit cluster name",
+			atmosConfig: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Helmfile: schema.Helmfile{
+						BasePath:       "/path/to/helmfile/components",
+						UseEKS:         true,
+						KubeconfigPath: "/path/to/kubeconfig",
+						ClusterName:    "my-eks-cluster",
 					},
 				},
 			},
@@ -81,36 +109,6 @@ func TestCheckHelmfileConfig(t *testing.T) {
 			expectedError: errUtils.ErrMissingHelmfileKubeconfigPath,
 		},
 		{
-			name: "UseEKS true but missing HelmAwsProfilePattern",
-			atmosConfig: schema.AtmosConfiguration{
-				Components: schema.Components{
-					Helmfile: schema.Helmfile{
-						BasePath:              "/path/to/helmfile/components",
-						UseEKS:                true,
-						KubeconfigPath:        "/path/to/kubeconfig",
-						HelmAwsProfilePattern: "",
-						ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
-					},
-				},
-			},
-			expectedError: errUtils.ErrMissingHelmfileAwsProfilePattern,
-		},
-		{
-			name: "UseEKS true but missing ClusterNamePattern",
-			atmosConfig: schema.AtmosConfiguration{
-				Components: schema.Components{
-					Helmfile: schema.Helmfile{
-						BasePath:              "/path/to/helmfile/components",
-						UseEKS:                true,
-						KubeconfigPath:        "/path/to/kubeconfig",
-						HelmAwsProfilePattern: "cp-{namespace}-{tenant}-gbl-{stage}-helm",
-						ClusterNamePattern:    "",
-					},
-				},
-			},
-			expectedError: errUtils.ErrMissingHelmfileClusterNamePattern,
-		},
-		{
 			name: "UseEKS false with missing EKS-specific fields (should pass)",
 			atmosConfig: schema.AtmosConfiguration{
 				Components: schema.Components{
@@ -126,7 +124,7 @@ func TestCheckHelmfileConfig(t *testing.T) {
 			expectedError: nil,
 		},
 		{
-			name: "UseEKS true with all fields missing except BasePath",
+			name: "UseEKS true with all fields missing except BasePath - only KubeconfigPath validated at config time",
 			atmosConfig: schema.AtmosConfiguration{
 				Components: schema.Components{
 					Helmfile: schema.Helmfile{
@@ -139,6 +137,21 @@ func TestCheckHelmfileConfig(t *testing.T) {
 				},
 			},
 			expectedError: errUtils.ErrMissingHelmfileKubeconfigPath,
+		},
+		{
+			name: "UseEKS true without cluster name or AWS profile - passes config validation (runtime validates these)",
+			atmosConfig: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Helmfile: schema.Helmfile{
+						BasePath:       "/path/to/helmfile/components",
+						UseEKS:         true,
+						KubeconfigPath: "/path/to/kubeconfig",
+						// No ClusterName, ClusterNameTemplate, ClusterNamePattern, or HelmAwsProfilePattern.
+						// These are validated at runtime since they can be provided via CLI flags.
+					},
+				},
+			},
+			expectedError: nil,
 		},
 	}
 
@@ -160,11 +173,10 @@ func BenchmarkCheckHelmfileConfig(b *testing.B) {
 	atmosConfig := schema.AtmosConfiguration{
 		Components: schema.Components{
 			Helmfile: schema.Helmfile{
-				BasePath:              "/path/to/helmfile/components",
-				UseEKS:                true,
-				KubeconfigPath:        "/path/to/kubeconfig",
-				HelmAwsProfilePattern: "cp-{namespace}-{tenant}-gbl-{stage}-helm",
-				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
+				BasePath:            "/path/to/helmfile/components",
+				UseEKS:              true,
+				KubeconfigPath:      "/path/to/kubeconfig",
+				ClusterNameTemplate: "{{ .vars.namespace }}-{{ .vars.stage }}-eks",
 			},
 		},
 	}
