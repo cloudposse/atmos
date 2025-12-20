@@ -228,6 +228,47 @@ func TestParseMixinURI(t *testing.T) {
 	}
 }
 
+func TestParseMixinURI_Extended(t *testing.T) {
+	tests := []struct {
+		name        string
+		mixin       *schema.VendorComponentMixins
+		expectedURI string
+		expectError bool
+	}{
+		{
+			name: "invalid template syntax returns error",
+			mixin: &schema.VendorComponentMixins{
+				Uri:      "github.com/repo.git//file?ref={{.InvalidSyntax",
+				Filename: "context.tf",
+				Version:  "1.0.0",
+			},
+			expectError: true,
+		},
+		{
+			name: "template with multiple fields",
+			mixin: &schema.VendorComponentMixins{
+				Uri:      "github.com/{{.Filename}}?ref={{.Version}}",
+				Filename: "context.tf",
+				Version:  "1.0.0",
+			},
+			expectedURI: "github.com/context.tf?ref=1.0.0",
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseMixinURI(tt.mixin)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedURI, result)
+			}
+		})
+	}
+}
+
 func TestCheckComponentExcludes(t *testing.T) {
 	tests := []struct {
 		name         string
