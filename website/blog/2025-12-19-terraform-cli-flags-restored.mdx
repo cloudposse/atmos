@@ -38,6 +38,18 @@ The following flags are now properly registered and working:
 | `--planfile`                   | Path to a terraform plan file to use                        |
 | `--skip-planfile`              | Skip writing the plan to a planfile                         |
 
+## Flag Availability by Command
+
+Flags are now registered only on the commands that use them:
+
+| Command     | Available Flags                                                                             |
+|-------------|---------------------------------------------------------------------------------------------|
+| `init`      | `--auto-generate-backend-file`, `--init-run-reconfigure`                                    |
+| `workspace` | `--auto-generate-backend-file`, `--init-run-reconfigure`                                    |
+| `plan`      | `--auto-generate-backend-file`, `--init-run-reconfigure`, `--skip-planfile`                 |
+| `apply`     | `--auto-generate-backend-file`, `--init-run-reconfigure`, `--planfile`                      |
+| `deploy`    | `--auto-generate-backend-file`, `--init-run-reconfigure`, `--deploy-run-init`, `--planfile` |
+
 ## Example Usage
 
 ```bash
@@ -54,8 +66,8 @@ atmos terraform deploy mycomponent -s mystack --deploy-run-init=false
 ## Root Cause
 
 During the terraform command registry migration in version 1.202.0, these flags were registered in the old parsing
-code but not in the new flag registry. The flags needed to be explicitly registered in the shared terraform flag registry
-so Cobra would recognize them.
+code but not in the new flag registry. The fix registers these flags on the specific commands that use them,
+following the pattern established by other command-specific flags like `--from-plan` and `--affected`.
 
 ## Upgrade
 

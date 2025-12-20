@@ -63,61 +63,48 @@ AVAILABLE COMMANDS
 
 FLAGS
 
-      --append-user-agent string           Customize User-Agent string in Terraform provider requests (sets
-                                           TF_APPEND_USER_AGENT)
+      --append-user-agent string  Customize User-Agent string in Terraform provider requests (sets
+                                  TF_APPEND_USER_AGENT)
 
-      --auto-generate-backend-file string  Override auto_generate_backend_file setting from atmos.yaml (true/false)
+      --clone-target-ref          Clone the target reference with which to compare the current branch
 
-      --clone-target-ref                   Clone the target reference with which to compare the current branch
+      --components strings        Filter by specific components
 
-      --components strings                 Filter by specific components
+      --dry-run                   Perform dry run without making actual changes
 
-      --deploy-run-init string             Override deploy_run_init setting from atmos.yaml (true/false)
+  -i, --identity string           Specify the identity to authenticate to before running Terraform commands. Use
+                                  without value to interactively select.
 
-      --dry-run                            Perform dry run without making actual changes
+      --include-dependents        For each affected component, detect the dependent components and process them in the
+                                  dependency order
 
-  -i, --identity string                    Specify the identity to authenticate to before running Terraform commands.
-                                           Use without value to interactively select.
+      --init-pass-vars            Pass the generated varfile to terraform init using --var-file flag (OpenTofu feature)
 
-      --include-dependents                 For each affected component, detect the dependent components and process
-                                           them in the dependency order
+      --process-functions         Enable/disable YAML functions processing in Atmos stack manifests (default true)
 
-      --init-pass-vars                     Pass the generated varfile to terraform init using --var-file flag (OpenTofu
-                                           feature)
+      --process-templates         Enable/disable Go template processing in Atmos stack manifests (default true)
 
-      --init-run-reconfigure string        Override init_run_reconfigure setting from atmos.yaml (true/false)
+  -q, --query string              Execute atmos terraform command on components filtered by a YQ expression
 
-      --planfile string                    Path to a terraform plan file to use instead of generating a new plan
+      --ref string                Git reference with which to compare the current branch
 
-      --process-functions                  Enable/disable YAML functions processing in Atmos stack manifests (default
-                                           true)
+      --repo-path string          Filesystem path to the already cloned target repository with which to compare the
+                                  current branch
 
-      --process-templates                  Enable/disable Go template processing in Atmos stack manifests (default
-                                           true)
+      --sha string                Git commit SHA with which to compare the current branch
 
-  -q, --query string                       Execute atmos terraform command on components filtered by a YQ expression
+      --skip strings              Skip executing specific YAML functions in the Atmos stack manifests
 
-      --ref string                         Git reference with which to compare the current branch
+      --skip-init                 Skip terraform init before running command
 
-      --repo-path string                   Filesystem path to the already cloned target repository with which to
-                                           compare the current branch
+      --ssh-key string            Path to PEM-encoded private key to clone private repos using SSH
 
-      --sha string                         Git commit SHA with which to compare the current branch
+      --ssh-key-password string   Encryption password for the PEM-encoded private key if the key contains a password-
+                                  encrypted PEM block
 
-      --skip strings                       Skip executing specific YAML functions in the Atmos stack manifests
+  -s, --stack string              Stack name
 
-      --skip-init                          Skip terraform init before running command
-
-      --skip-planfile string               Skip writing the plan to a planfile (true/false)
-
-      --ssh-key string                     Path to PEM-encoded private key to clone private repos using SSH
-
-      --ssh-key-password string            Encryption password for the PEM-encoded private key if the key contains a
-                                           password-encrypted PEM block
-
-  -s, --stack string                       Stack name
-
-      --upload-status                      Upload plan status to Atmos Pro
+      --upload-status             Upload plan status to Atmos Pro
 
 
 GLOBAL FLAGS

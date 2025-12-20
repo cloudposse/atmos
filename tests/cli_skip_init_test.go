@@ -28,10 +28,9 @@ func TestSkipInitFlag(t *testing.T) {
 		t.Skipf("Skipping test: %s", skipReason)
 	}
 
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	assert.NoError(t, err)
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	assert.NoError(t, err)
+	// Use t.Setenv for automatic cleanup after test.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	// Use the basic fixture which has a simple terraform component.
 	workDir := "fixtures/scenarios/basic"

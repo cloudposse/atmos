@@ -15,8 +15,9 @@ func TestTerraformFlags(t *testing.T) {
 	registry := TerraformFlags()
 
 	// Should have common flags (stack, dry-run) + Terraform-specific flags including identity.
-	// Note: from-plan is defined in apply.go and deploy.go with NoOptDefVal, not here.
-	assert.GreaterOrEqual(t, registry.Count(), 17)
+	// Note: Backend execution flags (auto-generate-backend-file, init-run-reconfigure)
+	// are in BackendExecutionFlags() and registered per-command.
+	assert.GreaterOrEqual(t, registry.Count(), 12)
 
 	// Should include common flags.
 	assert.True(t, registry.Has("stack"))
@@ -37,20 +38,39 @@ func TestTerraformFlags(t *testing.T) {
 	assert.True(t, registry.Has("query"))
 	assert.True(t, registry.Has("components"))
 
-	// Should include execution flags for controlling terraform behavior.
-	// These flags override atmos.yaml settings and are used by various terraform subcommands.
-	assert.True(t, registry.Has("auto-generate-backend-file"), "auto-generate-backend-file should be in TerraformFlags")
-	assert.True(t, registry.Has("deploy-run-init"), "deploy-run-init should be in TerraformFlags")
-	assert.True(t, registry.Has("init-run-reconfigure"), "init-run-reconfigure should be in TerraformFlags")
-	assert.True(t, registry.Has("planfile"), "planfile should be in TerraformFlags")
-	assert.True(t, registry.Has("skip-planfile"), "skip-planfile should be in TerraformFlags")
-
 	// Check upload-status flag.
 	uploadFlag := registry.Get("upload-status")
 	require.NotNil(t, uploadFlag)
 	boolFlag, ok := uploadFlag.(*flags.BoolFlag)
 	require.True(t, ok)
 	assert.Equal(t, false, boolFlag.Default)
+}
+
+func TestBackendExecutionFlags(t *testing.T) {
+	registry := BackendExecutionFlags()
+
+	// Should have 2 backend execution flags.
+	assert.Equal(t, 2, registry.Count())
+
+	// Should include backend execution flags.
+	assert.True(t, registry.Has("auto-generate-backend-file"), "auto-generate-backend-file should be in BackendExecutionFlags")
+	assert.True(t, registry.Has("init-run-reconfigure"), "init-run-reconfigure should be in BackendExecutionFlags")
+
+	// Check auto-generate-backend-file flag.
+	autoGenFlag := registry.Get("auto-generate-backend-file")
+	require.NotNil(t, autoGenFlag)
+	strFlag, ok := autoGenFlag.(*flags.StringFlag)
+	require.True(t, ok)
+	assert.Equal(t, "", strFlag.Default)
+	assert.Equal(t, []string{"ATMOS_AUTO_GENERATE_BACKEND_FILE"}, strFlag.EnvVars)
+
+	// Check init-run-reconfigure flag.
+	initReconfFlag := registry.Get("init-run-reconfigure")
+	require.NotNil(t, initReconfFlag)
+	strFlag, ok = initReconfFlag.(*flags.StringFlag)
+	require.True(t, ok)
+	assert.Equal(t, "", strFlag.Default)
+	assert.Equal(t, []string{"ATMOS_INIT_RUN_RECONFIGURE"}, strFlag.EnvVars)
 }
 
 func TestTerraformAffectedFlags(t *testing.T) {
@@ -85,15 +105,24 @@ func TestWithTerraformFlags(t *testing.T) {
 
 	registry := parser.Registry()
 
-	// Should have all terraform flags.
-	assert.GreaterOrEqual(t, registry.Count(), 17)
+	// Should have all terraform flags (common + terraform-specific).
+	assert.GreaterOrEqual(t, registry.Count(), 12)
 	assert.True(t, registry.Has("stack"))
 	assert.True(t, registry.Has("upload-status"))
 	assert.True(t, registry.Has("identity"))
+}
 
-	// Verify execution flags are present.
+func TestWithBackendExecutionFlags(t *testing.T) {
+	// Create a standard parser with backend execution flags.
+	parser := flags.NewStandardParser(
+		WithBackendExecutionFlags(),
+	)
+
+	registry := parser.Registry()
+
+	// Should have backend execution flags.
+	assert.Equal(t, 2, registry.Count())
 	assert.True(t, registry.Has("auto-generate-backend-file"))
-	assert.True(t, registry.Has("deploy-run-init"))
 	assert.True(t, registry.Has("init-run-reconfigure"))
 }
 
@@ -113,16 +142,17 @@ func TestWithTerraformAffectedFlags(t *testing.T) {
 }
 
 func TestCombinedTerraformFlags(t *testing.T) {
-	// Create a standard parser with both terraform and affected flags.
+	// Create a standard parser with terraform, affected, and backend execution flags.
 	parser := flags.NewStandardParser(
 		WithTerraformFlags(),
 		WithTerraformAffectedFlags(),
+		WithBackendExecutionFlags(),
 	)
 
 	registry := parser.Registry()
 
-	// Should have all flags from both registries.
-	assert.GreaterOrEqual(t, registry.Count(), 24)
+	// Should have all flags from all registries.
+	assert.GreaterOrEqual(t, registry.Count(), 21)
 
 	// Should include terraform flags.
 	assert.True(t, registry.Has("stack"))
@@ -134,132 +164,110 @@ func TestCombinedTerraformFlags(t *testing.T) {
 	assert.True(t, registry.Has("ref"))
 	assert.True(t, registry.Has("include-dependents"))
 
-	// Should include execution flags for controlling terraform behavior.
+	// Should include backend execution flags.
 	assert.True(t, registry.Has("auto-generate-backend-file"))
-	assert.True(t, registry.Has("deploy-run-init"))
 	assert.True(t, registry.Has("init-run-reconfigure"))
-	assert.True(t, registry.Has("planfile"))
-	assert.True(t, registry.Has("skip-planfile"))
 }
 
-// TestExecutionFlagsProperties verifies that all execution flags have correct properties.
-// These flags control terraform execution behavior and override atmos.yaml settings.
+// TestExecutionFlagsProperties verifies that shared execution flags have correct properties.
+// These flags are in TerraformFlags() and shared across all terraform commands.
 func TestExecutionFlagsProperties(t *testing.T) {
 	registry := TerraformFlags()
 
-	// Test skip-init flag (bool flag).
-	t.Run("skip-init", func(t *testing.T) {
-		flag := registry.Get("skip-init")
-		require.NotNil(t, flag, "skip-init flag should be registered")
-		boolFlag, ok := flag.(*flags.BoolFlag)
-		require.True(t, ok, "skip-init should be a BoolFlag")
-		assert.Equal(t, false, boolFlag.Default, "skip-init default should be false")
-		assert.Equal(t, []string{"ATMOS_SKIP_INIT"}, boolFlag.EnvVars, "skip-init should have ATMOS_SKIP_INIT env var")
-	})
+	tests := []struct {
+		name         string
+		flagName     string
+		flagType     string // "bool" or "string"
+		defaultValue any
+		envVars      []string
+	}{
+		{
+			name:         "skip-init is a bool flag with correct defaults",
+			flagName:     "skip-init",
+			flagType:     "bool",
+			defaultValue: false,
+			envVars:      []string{"ATMOS_SKIP_INIT"},
+		},
+		{
+			name:         "init-pass-vars is a bool flag with correct defaults",
+			flagName:     "init-pass-vars",
+			flagType:     "bool",
+			defaultValue: false,
+			envVars:      []string{"ATMOS_INIT_PASS_VARS"},
+		},
+		{
+			name:         "append-user-agent is a string flag",
+			flagName:     "append-user-agent",
+			flagType:     "string",
+			defaultValue: "",
+			envVars:      []string{"ATMOS_APPEND_USER_AGENT"},
+		},
+		{
+			name:         "upload-status is a bool flag with correct defaults",
+			flagName:     "upload-status",
+			flagType:     "bool",
+			defaultValue: false,
+			envVars:      []string{"ATMOS_UPLOAD_STATUS"},
+		},
+	}
 
-	// Test auto-generate-backend-file flag (string flag for true/false override).
-	t.Run("auto-generate-backend-file", func(t *testing.T) {
-		flag := registry.Get("auto-generate-backend-file")
-		require.NotNil(t, flag, "auto-generate-backend-file flag should be registered")
-		strFlag, ok := flag.(*flags.StringFlag)
-		require.True(t, ok, "auto-generate-backend-file should be a StringFlag")
-		assert.Equal(t, "", strFlag.Default, "auto-generate-backend-file default should be empty")
-		assert.Equal(t, []string{"ATMOS_AUTO_GENERATE_BACKEND_FILE"}, strFlag.EnvVars)
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			flag := registry.Get(tc.flagName)
+			require.NotNil(t, flag, "%s flag should be registered", tc.flagName)
 
-	// Test deploy-run-init flag (string flag for true/false override).
-	t.Run("deploy-run-init", func(t *testing.T) {
-		flag := registry.Get("deploy-run-init")
-		require.NotNil(t, flag, "deploy-run-init flag should be registered")
-		strFlag, ok := flag.(*flags.StringFlag)
-		require.True(t, ok, "deploy-run-init should be a StringFlag")
-		assert.Equal(t, "", strFlag.Default, "deploy-run-init default should be empty")
-		assert.Equal(t, []string{"ATMOS_DEPLOY_RUN_INIT"}, strFlag.EnvVars)
-	})
-
-	// Test init-run-reconfigure flag (string flag for true/false override).
-	t.Run("init-run-reconfigure", func(t *testing.T) {
-		flag := registry.Get("init-run-reconfigure")
-		require.NotNil(t, flag, "init-run-reconfigure flag should be registered")
-		strFlag, ok := flag.(*flags.StringFlag)
-		require.True(t, ok, "init-run-reconfigure should be a StringFlag")
-		assert.Equal(t, "", strFlag.Default, "init-run-reconfigure default should be empty")
-		assert.Equal(t, []string{"ATMOS_INIT_RUN_RECONFIGURE"}, strFlag.EnvVars)
-	})
-
-	// Test init-pass-vars flag (bool flag).
-	t.Run("init-pass-vars", func(t *testing.T) {
-		flag := registry.Get("init-pass-vars")
-		require.NotNil(t, flag, "init-pass-vars flag should be registered")
-		boolFlag, ok := flag.(*flags.BoolFlag)
-		require.True(t, ok, "init-pass-vars should be a BoolFlag")
-		assert.Equal(t, false, boolFlag.Default, "init-pass-vars default should be false")
-		assert.Equal(t, []string{"ATMOS_INIT_PASS_VARS"}, boolFlag.EnvVars)
-	})
-
-	// Test planfile flag (string flag for path).
-	t.Run("planfile", func(t *testing.T) {
-		flag := registry.Get("planfile")
-		require.NotNil(t, flag, "planfile flag should be registered")
-		strFlag, ok := flag.(*flags.StringFlag)
-		require.True(t, ok, "planfile should be a StringFlag")
-		assert.Equal(t, "", strFlag.Default, "planfile default should be empty")
-		assert.Equal(t, []string{"ATMOS_PLANFILE"}, strFlag.EnvVars)
-	})
-
-	// Test skip-planfile flag (string flag for true/false override).
-	t.Run("skip-planfile", func(t *testing.T) {
-		flag := registry.Get("skip-planfile")
-		require.NotNil(t, flag, "skip-planfile flag should be registered")
-		strFlag, ok := flag.(*flags.StringFlag)
-		require.True(t, ok, "skip-planfile should be a StringFlag")
-		assert.Equal(t, "", strFlag.Default, "skip-planfile default should be empty")
-		assert.Equal(t, []string{"ATMOS_SKIP_PLANFILE"}, strFlag.EnvVars)
-	})
-
-	// Test append-user-agent flag (string flag).
-	t.Run("append-user-agent", func(t *testing.T) {
-		flag := registry.Get("append-user-agent")
-		require.NotNil(t, flag, "append-user-agent flag should be registered")
-		strFlag, ok := flag.(*flags.StringFlag)
-		require.True(t, ok, "append-user-agent should be a StringFlag")
-		assert.Equal(t, "", strFlag.Default, "append-user-agent default should be empty")
-		assert.Equal(t, []string{"ATMOS_APPEND_USER_AGENT"}, strFlag.EnvVars)
-	})
-
-	// Test upload-status flag (bool flag).
-	t.Run("upload-status", func(t *testing.T) {
-		flag := registry.Get("upload-status")
-		require.NotNil(t, flag, "upload-status flag should be registered")
-		boolFlag, ok := flag.(*flags.BoolFlag)
-		require.True(t, ok, "upload-status should be a BoolFlag")
-		assert.Equal(t, false, boolFlag.Default, "upload-status default should be false")
-		assert.Equal(t, []string{"ATMOS_UPLOAD_STATUS"}, boolFlag.EnvVars)
-	})
+			switch tc.flagType {
+			case "bool":
+				boolFlag, ok := flag.(*flags.BoolFlag)
+				require.True(t, ok, "%s should be a BoolFlag", tc.flagName)
+				assert.Equal(t, tc.defaultValue, boolFlag.Default, "%s default mismatch", tc.flagName)
+				assert.Equal(t, tc.envVars, boolFlag.EnvVars, "%s env vars mismatch", tc.flagName)
+			case "string":
+				strFlag, ok := flag.(*flags.StringFlag)
+				require.True(t, ok, "%s should be a StringFlag", tc.flagName)
+				assert.Equal(t, tc.defaultValue, strFlag.Default, "%s default mismatch", tc.flagName)
+				assert.Equal(t, tc.envVars, strFlag.EnvVars, "%s env vars mismatch", tc.flagName)
+			default:
+				t.Fatalf("unknown flag type: %s", tc.flagType)
+			}
+		})
+	}
 }
 
 // TestFlagsCobraRegistration verifies that flags are properly registered on Cobra commands.
 // This test ensures the full pipeline from flag definition to CLI availability works.
 func TestFlagsCobraRegistration(t *testing.T) {
-	t.Run("execution flags are visible on cobra command", func(t *testing.T) {
+	t.Run("shared terraform flags are visible on cobra command", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		parser := flags.NewStandardParser(WithTerraformFlags())
 		parser.RegisterFlags(cmd)
 
-		// Verify all execution flags are registered and visible.
-		executionFlags := []string{
+		// Verify shared execution flags are registered and visible.
+		sharedFlags := []string{
 			"skip-init",
-			"auto-generate-backend-file",
-			"deploy-run-init",
-			"init-run-reconfigure",
-			"planfile",
-			"skip-planfile",
 			"upload-status",
 			"init-pass-vars",
 			"append-user-agent",
 		}
 
-		for _, flagName := range executionFlags {
+		for _, flagName := range sharedFlags {
+			flag := cmd.Flags().Lookup(flagName)
+			assert.NotNil(t, flag, "%s flag should be registered on cobra command", flagName)
+		}
+	})
+
+	t.Run("backend execution flags are visible on cobra command", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		parser := flags.NewStandardParser(WithBackendExecutionFlags())
+		parser.RegisterFlags(cmd)
+
+		// Verify backend execution flags are registered.
+		backendFlags := []string{
+			"auto-generate-backend-file",
+			"init-run-reconfigure",
+		}
+
+		for _, flagName := range backendFlags {
 			flag := cmd.Flags().Lookup(flagName)
 			assert.NotNil(t, flag, "%s flag should be registered on cobra command", flagName)
 		}
@@ -290,7 +298,7 @@ func TestFlagsCobraRegistration(t *testing.T) {
 
 // TestFlagsViperBinding verifies that flags are properly bound to Viper for value retrieval.
 func TestFlagsViperBinding(t *testing.T) {
-	t.Run("execution flags bind to viper", func(t *testing.T) {
+	t.Run("shared terraform flags bind to viper", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		v := viper.New()
 		parser := flags.NewStandardParser(WithTerraformFlags())
@@ -300,12 +308,26 @@ func TestFlagsViperBinding(t *testing.T) {
 
 		// Set values via viper and verify they can be retrieved.
 		v.Set("skip-init", true)
-		v.Set("auto-generate-backend-file", "false")
-		v.Set("planfile", "/path/to/plan.tfplan")
+		v.Set("append-user-agent", "atmos/test")
 
 		assert.True(t, v.GetBool("skip-init"))
+		assert.Equal(t, "atmos/test", v.GetString("append-user-agent"))
+	})
+
+	t.Run("backend execution flags bind to viper", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := flags.NewStandardParser(WithBackendExecutionFlags())
+		parser.RegisterFlags(cmd)
+		err := parser.BindToViper(v)
+		require.NoError(t, err)
+
+		// Set values via viper and verify they can be retrieved.
+		v.Set("auto-generate-backend-file", "false")
+		v.Set("init-run-reconfigure", "true")
+
 		assert.Equal(t, "false", v.GetString("auto-generate-backend-file"))
-		assert.Equal(t, "/path/to/plan.tfplan", v.GetString("planfile"))
+		assert.Equal(t, "true", v.GetString("init-run-reconfigure"))
 	})
 
 	t.Run("affected flags bind to viper", func(t *testing.T) {
@@ -329,7 +351,7 @@ func TestFlagsViperBinding(t *testing.T) {
 
 // TestFlagsEnvironmentVariables verifies that environment variables are properly configured.
 func TestFlagsEnvironmentVariables(t *testing.T) {
-	t.Run("execution flags have correct env var bindings", func(t *testing.T) {
+	t.Run("shared terraform flags have correct env var bindings", func(t *testing.T) {
 		registry := TerraformFlags()
 
 		envVarTests := []struct {
@@ -337,11 +359,6 @@ func TestFlagsEnvironmentVariables(t *testing.T) {
 			envVar   string
 		}{
 			{"skip-init", "ATMOS_SKIP_INIT"},
-			{"auto-generate-backend-file", "ATMOS_AUTO_GENERATE_BACKEND_FILE"},
-			{"deploy-run-init", "ATMOS_DEPLOY_RUN_INIT"},
-			{"init-run-reconfigure", "ATMOS_INIT_RUN_RECONFIGURE"},
-			{"planfile", "ATMOS_PLANFILE"},
-			{"skip-planfile", "ATMOS_SKIP_PLANFILE"},
 			{"upload-status", "ATMOS_UPLOAD_STATUS"},
 			{"init-pass-vars", "ATMOS_INIT_PASS_VARS"},
 			{"append-user-agent", "ATMOS_APPEND_USER_AGENT"},
@@ -360,6 +377,28 @@ func TestFlagsEnvironmentVariables(t *testing.T) {
 			}
 
 			assert.Contains(t, envVars, tc.envVar,
+				"%s flag should have %s env var", tc.flagName, tc.envVar)
+		}
+	})
+
+	t.Run("backend execution flags have correct env var bindings", func(t *testing.T) {
+		registry := BackendExecutionFlags()
+
+		envVarTests := []struct {
+			flagName string
+			envVar   string
+		}{
+			{"auto-generate-backend-file", "ATMOS_AUTO_GENERATE_BACKEND_FILE"},
+			{"init-run-reconfigure", "ATMOS_INIT_RUN_RECONFIGURE"},
+		}
+
+		for _, tc := range envVarTests {
+			flag := registry.Get(tc.flagName)
+			require.NotNil(t, flag, "%s flag should exist", tc.flagName)
+
+			strFlag, ok := flag.(*flags.StringFlag)
+			require.True(t, ok)
+			assert.Contains(t, strFlag.EnvVars, tc.envVar,
 				"%s flag should have %s env var", tc.flagName, tc.envVar)
 		}
 	})
