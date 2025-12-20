@@ -141,6 +141,10 @@ const (
 	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
 	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).
 
+	// EKS/Helmfile flags.
+	ClusterNameFlagName = "cluster-name" // Flag name without prefix.
+	ClusterNameFlag     = "--cluster-name"
+
 	// Performance profiling flags.
 	ProfilerEnabledFlag = "--profiler-enabled"
 	ProfilerHostFlag    = "--profiler-host"

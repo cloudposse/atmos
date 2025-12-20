@@ -9,6 +9,7 @@ import (
 )
 
 // checkHelmfileConfig validates the helmfile configuration.
+// Note: AWS auth and cluster name validation moved to runtime since they can be provided via CLI flags.
 func checkHelmfileConfig(atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.checkHelmfileConfig")()
 
@@ -23,15 +24,12 @@ func checkHelmfileConfig(atmosConfig *schema.AtmosConfiguration) error {
 				errUtils.ErrMissingHelmfileKubeconfigPath)
 		}
 
-		if len(atmosConfig.Components.Helmfile.HelmAwsProfilePattern) < 1 {
-			return fmt.Errorf("%w: must be provided in 'components.helmfile.helm_aws_profile_pattern' config or 'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV variable",
-				errUtils.ErrMissingHelmfileAwsProfilePattern)
-		}
-
-		if len(atmosConfig.Components.Helmfile.ClusterNamePattern) < 1 {
-			return fmt.Errorf("%w: must be provided in 'components.helmfile.cluster_name_pattern' config or 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV variable",
-				errUtils.ErrMissingHelmfileClusterNamePattern)
-		}
+		// HelmAwsProfilePattern check removed - deprecated, uses --identity flag or falls back to deprecated pattern at runtime.
+		// ClusterNamePattern check removed - validation moved to runtime since it can come from:
+		// 1. --cluster-name flag
+		// 2. cluster_name config
+		// 3. cluster_name_template config (Go template syntax)
+		// 4. cluster_name_pattern config (deprecated, token replacement)
 	}
 
 	return nil

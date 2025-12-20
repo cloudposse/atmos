@@ -25,6 +25,9 @@ import (
 const (
 	// ComponentTypeHelmfile is the component type identifier for helmfile.
 	componentTypeHelmfile = "helmfile"
+
+	// Log key constants.
+	logKeyCluster = "cluster"
 )
 
 // ExecuteHelmfileCmd parses the provided arguments and flags and executes helmfile commands.
@@ -212,27 +215,82 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	envVarsEKS := []string{}
 
 	if atmosConfig.Components.Helmfile.UseEKS {
-		// Prepare AWS profile.
-		helmAwsProfile := cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.HelmAwsProfilePattern)
-		log.Debug("Using AWS_PROFILE", "profile", helmAwsProfile)
+		// Determine cluster name with precedence:
+		// 1. --cluster-name flag (highest - always overrides)
+		// 2. cluster_name in config
+		// 3. cluster_name_template expanded (Go template syntax)
+		// 4. cluster_name_pattern expanded (deprecated, logs warning)
+		var clusterName string
+		//nolint:gocritic // if-else chain is clearer than switch for checking different variables
+		if info.ClusterName != "" {
+			// From --cluster-name flag.
+			clusterName = info.ClusterName
+			log.Debug("Using cluster name from --cluster-name flag", logKeyCluster, clusterName)
+		} else if atmosConfig.Components.Helmfile.ClusterName != "" {
+			// From cluster_name config.
+			clusterName = atmosConfig.Components.Helmfile.ClusterName
+			log.Debug("Using cluster name from config", logKeyCluster, clusterName)
+		} else if atmosConfig.Components.Helmfile.ClusterNameTemplate != "" {
+			// From cluster_name_template config (Go template syntax).
+			clusterName, err = ProcessTmpl(&atmosConfig, "cluster_name_template", atmosConfig.Components.Helmfile.ClusterNameTemplate, info.ComponentSection, false)
+			if err != nil {
+				return fmt.Errorf("failed to process cluster_name_template: %w", err)
+			}
+			log.Debug("Using cluster name from cluster_name_template", logKeyCluster, clusterName)
+		} else if atmosConfig.Components.Helmfile.ClusterNamePattern != "" {
+			// From cluster_name_pattern config (deprecated, token replacement).
+			log.Warn("cluster_name_pattern is deprecated, use cluster_name_template with Go template syntax instead")
+			clusterName = cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.ClusterNamePattern)
+			log.Debug("Using cluster name from cluster_name_pattern (deprecated)", logKeyCluster, clusterName)
+		} else {
+			return fmt.Errorf("%w: use --cluster-name flag, or configure cluster_name, cluster_name_template, or cluster_name_pattern",
+				errUtils.ErrMissingHelmfileClusterName)
+		}
+
+		// Determine AWS profile with precedence:
+		// 1. --identity flag (uses identity system via info.ComponentEnvSection)
+		// 2. helm_aws_profile_pattern (deprecated, logs warning)
+		var helmAwsProfile string
+		var useIdentityAuth bool
+
+		//nolint:gocritic // if-else chain is clearer than switch for checking different variables
+		if info.Identity != "" {
+			// Identity-based authentication is handled by the auth system.
+			// AWS credentials are already set in info.ComponentEnvSection.
+			useIdentityAuth = true
+			log.Debug("Using identity-based authentication", "identity", info.Identity)
+		} else if atmosConfig.Components.Helmfile.HelmAwsProfilePattern != "" {
+			// Deprecated: use --identity flag instead.
+			log.Warn("helm_aws_profile_pattern is deprecated, use --identity flag instead")
+			helmAwsProfile = cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.HelmAwsProfilePattern)
+			log.Debug("Using AWS_PROFILE from helm_aws_profile_pattern (deprecated)", "profile", helmAwsProfile)
+		} else {
+			return fmt.Errorf("%w: use --identity flag or configure helm_aws_profile_pattern",
+				errUtils.ErrMissingHelmfileAuth)
+		}
 
 		// Download kubeconfig by running `aws eks update-kubeconfig`.
 		kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", atmosConfig.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
-		clusterName := cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.ClusterNamePattern)
-		log.Debug("Downloading and saving kubeconfig", "cluster", clusterName, "path", kubeconfigPath)
+		log.Debug("Downloading and saving kubeconfig", logKeyCluster, clusterName, "path", kubeconfigPath)
+
+		// Build aws eks update-kubeconfig command args.
+		awsArgs := []string{
+			"eks",
+			"update-kubeconfig",
+			fmt.Sprintf("--name=%s", clusterName),
+			fmt.Sprintf("--region=%s", context.Region),
+			fmt.Sprintf("--kubeconfig=%s", kubeconfigPath),
+		}
+
+		// Add profile flag if using deprecated profile pattern (not identity auth).
+		if !useIdentityAuth && helmAwsProfile != "" {
+			awsArgs = append([]string{"--profile", helmAwsProfile}, awsArgs...)
+		}
 
 		err = ExecuteShellCommand(
 			atmosConfig,
 			"aws",
-			[]string{
-				"--profile",
-				helmAwsProfile,
-				"eks",
-				"update-kubeconfig",
-				fmt.Sprintf("--name=%s", clusterName),
-				fmt.Sprintf("--region=%s", context.Region),
-				fmt.Sprintf("--kubeconfig=%s", kubeconfigPath),
-			},
+			awsArgs,
 			componentPath,
 			nil,
 			info.DryRun,
@@ -242,10 +300,11 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 			return err
 		}
 
-		envVarsEKS = append(envVarsEKS, []string{
-			fmt.Sprintf("AWS_PROFILE=%s", helmAwsProfile),
-			fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath),
-		}...)
+		// Set environment variables for helmfile execution.
+		if !useIdentityAuth && helmAwsProfile != "" {
+			envVarsEKS = append(envVarsEKS, fmt.Sprintf("AWS_PROFILE=%s", helmAwsProfile))
+		}
+		envVarsEKS = append(envVarsEKS, fmt.Sprintf("KUBECONFIG=%s", kubeconfigPath))
 	}
 
 	// Print command info.

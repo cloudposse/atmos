@@ -1,0 +1,109 @@
+---
+slug: helmfile-eks-modernization
+title: "Modernizing Helmfile EKS Integration"
+authors: [atmos]
+tags: [breaking-change, enhancement]
+---
+
+Atmos helmfile commands now use the identity system for AWS authentication and provide more flexible EKS cluster name configuration.
+
+<!--truncate-->
+
+## What Changed
+
+### EKS Integration is Now Opt-In
+
+The `use_eks` setting now defaults to `false`. If you use helmfile with EKS clusters, you must explicitly enable it:
+
+```yaml
+components:
+  helmfile:
+    use_eks: true  # was previously true by default
+    kubeconfig_path: /dev/shm
+```
+
+This change allows users to run helmfile with non-EKS Kubernetes clusters (k3s, GKE, AKS, etc.) using their existing kubeconfig without any EKS-specific configuration.
+
+### AWS Profile Pattern Replaced with Identity Flag
+
+The `helm_aws_profile_pattern` configuration is now deprecated. Use the `--identity` flag instead, which integrates with the Atmos identity system for AWS authentication:
+
+```bash
+# Before
+atmos helmfile apply my-component -s prod
+# (relied on helm_aws_profile_pattern in config)
+
+# After
+atmos helmfile apply my-component -s prod --identity=prod-admin
+```
+
+### Cluster Name Configuration Modernized
+
+Three new ways to configure EKS cluster names:
+
+1. **Explicit cluster name** (`cluster_name`): Simple, fixed cluster name
+2. **Go template** (`cluster_name_template`): Dynamic names using `{{ .vars.namespace }}` syntax
+3. **Override flag** (`--cluster-name`): Runtime override for any configured template
+
+The legacy `cluster_name_pattern` with token syntax (`{namespace}`) is deprecated but still works with a warning.
+
+## Migration Guide
+
+### Before (Legacy Configuration)
+
+```yaml
+components:
+  helmfile:
+    # use_eks was true by default
+    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
+    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+```
+
+### After (Recommended Configuration)
+
+```yaml
+components:
+  helmfile:
+    use_eks: true  # must be explicit now
+    kubeconfig_path: /dev/shm
+    cluster_name_template: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-eks-cluster"
+```
+
+### Command Changes
+
+```bash
+# Use identity for AWS auth (replaces helm_aws_profile_pattern)
+atmos helmfile apply my-component -s prod --identity=prod-admin
+
+# Override cluster name if needed
+atmos helmfile apply my-component -s prod --identity=prod-admin --cluster-name=my-cluster
+```
+
+## Why This Matters
+
+- **Non-EKS Kubernetes**: Use helmfile with GKE, AKS, k3s, or any cluster with existing kubeconfig
+- **Flexible Cluster Names**: No longer forced into specific naming conventions
+- **Unified Auth**: Identity system provides consistent AWS authentication across all Atmos commands
+- **Go Templates**: Use the same powerful template syntax as stack configurations
+
+## Cluster Name Precedence
+
+When `use_eks` is enabled, the cluster name is determined in this order:
+
+1. `--cluster-name` flag (highest priority)
+2. `cluster_name` configuration
+3. `cluster_name_template` expanded with Go templates
+4. `cluster_name_pattern` expanded with token replacement (deprecated)
+
+## Deprecation Notices
+
+The following options are deprecated and will log warnings when used:
+
+- `helm_aws_profile_pattern` - Use `--identity` flag instead
+- `cluster_name_pattern` - Use `cluster_name_template` with Go template syntax
+
+These options still work but will be removed in a future major release.
+
+## Get Involved
+
+Questions or feedback? Join us on [Slack](https://cloudposse.com/slack) or open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).
