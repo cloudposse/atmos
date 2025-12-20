@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -31,6 +32,8 @@ func (h *InputHandler) Validate(step *schema.WorkflowStep) error {
 
 // Execute prompts for user input and returns the result.
 func (h *InputHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
+	defer perf.Track(nil, "step.InputHandler.Execute")()
+
 	if err := h.CheckTTY(step); err != nil {
 		return nil, err
 	}

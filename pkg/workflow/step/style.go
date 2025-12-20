@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -31,6 +32,8 @@ func (h *StyleHandler) Validate(step *schema.WorkflowStep) error {
 
 // Execute applies styling and displays the content.
 func (h *StyleHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
+	defer perf.Track(nil, "step.StyleHandler.Execute")()
+
 	content, err := h.ResolveContent(ctx, step, vars)
 	if err != nil {
 		return nil, err

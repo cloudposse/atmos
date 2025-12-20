@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
@@ -41,6 +41,8 @@ type spinExecOptions struct {
 
 // Execute runs the command with a spinner.
 func (h *SpinHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
+	defer perf.Track(nil, "step.SpinHandler.Execute")()
+
 	title, err := vars.Resolve(step.Title)
 	if err != nil {
 		return nil, fmt.Errorf("step '%s': failed to resolve title: %w", step.Name, err)
@@ -79,7 +81,13 @@ func (h *SpinHandler) prepareExecution(ctx context.Context, step *schema.Workflo
 		}
 	}
 
-	var envVars []string
+	// Build environment from Variables.Env (which includes prepared merged environment).
+	envVars := make([]string, 0, len(vars.Env)+len(step.Env))
+	for k, v := range vars.Env {
+		envVars = append(envVars, k+"="+v)
+	}
+
+	// Apply step-specific environment variable overrides.
 	if len(step.Env) > 0 {
 		resolvedEnv, err := vars.ResolveEnvMap(step.Env)
 		if err != nil {
@@ -126,8 +134,8 @@ func (h *SpinHandler) runCommand(ctx context.Context, opts *spinExecOptions, std
 		cmd.Dir = opts.workDir
 	}
 
-	// Inherit current environment and add custom vars.
-	cmd.Env = append(os.Environ(), opts.envVars...)
+	// Use prepared environment from Variables.
+	cmd.Env = opts.envVars
 
 	return cmd.Run()
 }
