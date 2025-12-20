@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/epiclabs-io/diff3"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // TextMerger handles 3-way merging of text files using the diff3 algorithm.
@@ -15,6 +17,8 @@ type TextMerger struct {
 
 // NewTextMerger creates a new text merger with the specified percentage threshold.
 func NewTextMerger(thresholdPercent int) *TextMerger {
+	defer perf.Track(nil, "merge.NewTextMerger")()
+
 	return &TextMerger{
 		thresholdPercent: thresholdPercent,
 	}
@@ -35,6 +39,8 @@ type MergeResult struct {
 //
 // Returns the merged content or an error if conflicts exceed threshold.
 func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
+	defer perf.Track(nil, "merge.TextMerger.Merge")()
+
 	// Perform the 3-way merge using diff3
 	// Parameter order: (mine/ours, original/base, yours/theirs)
 	mergeResult, err := diff3.Merge(
@@ -132,6 +138,8 @@ func countDifferentLines(base, changed []string) int {
 
 // HasConflictMarkers checks if the content contains diff3 conflict markers.
 func HasConflictMarkers(content string) bool {
+	defer perf.Track(nil, "merge.HasConflictMarkers")()
+
 	return strings.Contains(content, "<<<<<<<") ||
 		strings.Contains(content, "=======") ||
 		strings.Contains(content, ">>>>>>>")

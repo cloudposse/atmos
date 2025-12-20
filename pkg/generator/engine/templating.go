@@ -217,6 +217,8 @@ func (p *Processor) Merge(base, ours, theirs, fileName string) (*merge.MergeResu
 //
 // Returns FileSkippedError if the file is intentionally skipped (not considered an error).
 func (p *Processor) ProcessFile(file File, targetPath string, force, update bool, scaffoldConfig interface{}, userValues map[string]interface{}) error {
+	defer perf.Track(nil, "engine.Processor.ProcessFile")()
+
 	// Extract delimiters from config
 	delimiters := extractDelimiters(scaffoldConfig)
 

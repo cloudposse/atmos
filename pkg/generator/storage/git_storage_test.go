@@ -16,12 +16,7 @@ func createTestRepo(t *testing.T) (*git.Repository, string) {
 	t.Helper()
 
 	// Create temporary directory
-	tmpDir, err := os.MkdirTemp("", "git-storage-test-*")
-	require.NoError(t, err)
-
-	t.Cleanup(func() {
-		os.RemoveAll(tmpDir)
-	})
+	tmpDir := t.TempDir()
 
 	// Initialize git repository
 	repo, err := git.PlainInit(tmpDir, false)

@@ -15,9 +15,7 @@ import (
 // TestProcessorWithGitStorage tests the full update workflow with git storage.
 func TestProcessorWithGitStorage(t *testing.T) {
 	// Create a temporary directory for our git repo
-	tmpDir, err := os.MkdirTemp("", "processor-git-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Initialize git repository
 	repo, err := git.PlainInit(tmpDir, false)
@@ -81,9 +79,7 @@ func TestProcessorWithGitStorage(t *testing.T) {
 // TestProcessorWithGitStorage_UserAddedFile tests that user-added files are not touched.
 func TestProcessorWithGitStorage_UserAddedFile(t *testing.T) {
 	// Create a temporary directory for our git repo
-	tmpDir, err := os.MkdirTemp("", "processor-git-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Initialize git repository
 	repo, err := git.PlainInit(tmpDir, false)
@@ -144,13 +140,11 @@ func TestProcessorWithGitStorage_UserAddedFile(t *testing.T) {
 // TestProcessorWithoutGitStorage tests fallback behavior when not in a git repo.
 func TestProcessorWithoutGitStorage(t *testing.T) {
 	// Create a temporary directory (NOT a git repo)
-	tmpDir, err := os.MkdirTemp("", "processor-nogit-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Create existing file
 	configPath := filepath.Join(tmpDir, "config.yaml")
-	err = os.WriteFile(configPath, []byte("version: 1.0\n"), 0o644)
+	err := os.WriteFile(configPath, []byte("version: 1.0\n"), 0o644)
 	require.NoError(t, err)
 
 	// Create processor (git storage setup will silently fail, that's OK)
@@ -182,9 +176,7 @@ func TestProcessorWithoutGitStorage(t *testing.T) {
 // TestProcessorWithGitStorage_TemplateFile tests merging with template processing (IsTemplate=true).
 func TestProcessorWithGitStorage_TemplateFile(t *testing.T) {
 	// Create a temporary directory for our git repo
-	tmpDir, err := os.MkdirTemp("", "processor-git-template-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Initialize git repository
 	repo, err := git.PlainInit(tmpDir, false)
@@ -248,9 +240,7 @@ func TestProcessorWithGitStorage_TemplateFile(t *testing.T) {
 // TestProcessorWithGitStorage_MergeConflict tests conflict detection.
 func TestProcessorWithGitStorage_MergeConflict(t *testing.T) {
 	// Create a temporary directory for our git repo
-	tmpDir, err := os.MkdirTemp("", "processor-git-conflict-test-*")
-	require.NoError(t, err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := t.TempDir()
 
 	// Initialize git repository
 	repo, err := git.PlainInit(tmpDir, false)
