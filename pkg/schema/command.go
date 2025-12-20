@@ -1,6 +1,6 @@
 package schema
 
-// Custom CLI commands
+// Custom CLI commands.
 
 type Command struct {
 	Name             string                 `yaml:"name" json:"name" mapstructure:"name"`
@@ -10,10 +10,14 @@ type Command struct {
 	Arguments        []CommandArgument      `yaml:"arguments" json:"arguments" mapstructure:"arguments"`
 	Flags            []CommandFlag          `yaml:"flags" json:"flags" mapstructure:"flags"`
 	ComponentConfig  CommandComponentConfig `yaml:"component_config" json:"component_config" mapstructure:"component_config"`
-	Steps            []string               `yaml:"steps" json:"steps" mapstructure:"steps"`
-	Commands         []Command              `yaml:"commands" json:"commands" mapstructure:"commands"`
-	Verbose          bool                   `yaml:"verbose" json:"verbose" mapstructure:"verbose"`
-	Identity         string                 `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
+	// Steps supports both simple string syntax and structured syntax.
+	// Simple: ["echo hello", "echo world"]
+	// Structured: [{name: step1, command: echo hello, timeout: 30s}]
+	// Mixed: Both formats can be used in the same list.
+	Steps    Tasks     `yaml:"steps" json:"steps" mapstructure:"steps"`
+	Commands []Command `yaml:"commands" json:"commands" mapstructure:"commands"`
+	Verbose  bool      `yaml:"verbose" json:"verbose" mapstructure:"verbose"`
+	Identity string    `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 }
 
 type CommandArgument struct {
