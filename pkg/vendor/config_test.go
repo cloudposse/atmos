@@ -1011,6 +1011,99 @@ spec:
 		assert.Contains(t, allImports, importFile)
 		assert.Equal(t, importFile, result[0].File)
 	})
+
+	t.Run("detects self import", func(t *testing.T) {
+		// Create import file that imports itself.
+		tempDir := t.TempDir()
+		importFile := filepath.Join(tempDir, "import.yaml")
+		importContent := `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  imports:
+    - ` + importFile + `
+  sources:
+    - component: "self"
+      source: "github.com/example/repo.git//self"
+      targets:
+        - "./self"
+`
+		err := os.WriteFile(importFile, []byte(importContent), 0o644)
+		require.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+		}
+
+		_, _, err = processVendorImports(atmosConfig, "vendor.yaml", []string{importFile}, nil, nil)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrVendorConfigSelfImport)
+	})
+
+	t.Run("detects empty import", func(t *testing.T) {
+		// Create import file with no sources or imports.
+		tempDir := t.TempDir()
+		importFile := filepath.Join(tempDir, "import.yaml")
+		importContent := `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources: []
+  imports: []
+`
+		err := os.WriteFile(importFile, []byte(importContent), 0o644)
+		require.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+		}
+
+		_, _, err = processVendorImports(atmosConfig, "vendor.yaml", []string{importFile}, nil, nil)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrMissingVendorConfigDefinition)
+	})
+
+	t.Run("handles nested imports", func(t *testing.T) {
+		// Create nested import files.
+		tempDir := t.TempDir()
+
+		// Create nested import file.
+		nestedImportFile := filepath.Join(tempDir, "nested.yaml")
+		nestedContent := `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  sources:
+    - component: "nested"
+      source: "github.com/example/repo.git//nested"
+      targets:
+        - "./nested"
+`
+		err := os.WriteFile(nestedImportFile, []byte(nestedContent), 0o644)
+		require.NoError(t, err)
+
+		// Create parent import file.
+		parentImportFile := filepath.Join(tempDir, "parent.yaml")
+		parentContent := `apiVersion: atmos/v1
+kind: AtmosVendorConfig
+spec:
+  imports:
+    - ` + nestedImportFile + `
+  sources:
+    - component: "parent"
+      source: "github.com/example/repo.git//parent"
+      targets:
+        - "./parent"
+`
+		err = os.WriteFile(parentImportFile, []byte(parentContent), 0o644)
+		require.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: tempDir,
+		}
+
+		result, allImports, err := processVendorImports(atmosConfig, "vendor.yaml", []string{parentImportFile}, nil, nil)
+		require.NoError(t, err)
+		assert.Len(t, result, 2)
+		assert.Len(t, allImports, 2)
+	})
 }
 
 func TestLogInitialMessage(t *testing.T) {

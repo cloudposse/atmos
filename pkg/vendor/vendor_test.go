@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -808,4 +809,333 @@ func TestDetermineSourceType_Extended(t *testing.T) {
 			assert.Equal(t, tt.expectedLocalFile, result.sourceIsLocalFile)
 		})
 	}
+}
+
+func TestDetermineSourceType_RelativeLocalPath(t *testing.T) {
+	// Test relative local paths and existing file detection.
+	tempDir := t.TempDir()
+
+	// Create an actual local file.
+	localFile := filepath.Join(tempDir, "local-component.tf")
+	err := os.WriteFile(localFile, []byte("# local component"), 0o644)
+	assert.NoError(t, err)
+
+	// Create a local directory.
+	localDir := filepath.Join(tempDir, "local-modules")
+	err = os.MkdirAll(localDir, 0o755)
+	assert.NoError(t, err)
+
+	tests := []struct {
+		name              string
+		uri               string
+		vendorConfigPath  string
+		expectedLocalFS   bool
+		expectedLocalFile bool
+	}{
+		{
+			name:              "relative path to existing file",
+			uri:               "local-component.tf",
+			vendorConfigPath:  tempDir,
+			expectedLocalFS:   true,
+			expectedLocalFile: true,
+		},
+		{
+			name:              "relative path to existing directory",
+			uri:               "local-modules",
+			vendorConfigPath:  tempDir,
+			expectedLocalFS:   true,
+			expectedLocalFile: false,
+		},
+		{
+			name:              "dot-prefixed relative path",
+			uri:               "./local-component.tf",
+			vendorConfigPath:  tempDir,
+			expectedLocalFS:   true,
+			expectedLocalFile: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			uri := tt.uri
+			result, err := determineSourceType(&uri, tt.vendorConfigPath)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedLocalFS, result.useLocalFileSystem, "useLocalFileSystem mismatch")
+			assert.Equal(t, tt.expectedLocalFile, result.sourceIsLocalFile, "sourceIsLocalFile mismatch")
+		})
+	}
+}
+
+func TestProcessTargets_TemplateError(t *testing.T) {
+	// Test error handling for invalid target template.
+	params := &processTargetsParams{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		IndexSource: 0,
+		Source: &schema.AtmosVendorSource{
+			Component: "vpc",
+			Targets:   []string{"./components/terraform/{{.InvalidSyntax"},
+		},
+		TemplateData:         struct{ Component, Version string }{Component: "vpc", Version: "1.0.0"},
+		VendorConfigFilePath: "/tmp",
+		URI:                  "github.com/example/repo.git//vpc",
+		PkgType:              pkgTypeRemote,
+		SourceIsLocalFile:    false,
+	}
+
+	_, err := processTargets(params)
+	assert.Error(t, err, "Should return error for invalid template")
+}
+
+func TestExecuteAtmosVendorInternal_SkippedSource(t *testing.T) {
+	// Test skipping sources based on component and tags filters.
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+	}
+
+	// Test with sources that should be skipped due to component filter.
+	params := &executeVendorOptions{
+		atmosConfig:          atmosConfig,
+		vendorConfigFileName: filepath.Join(tempDir, "vendor.yaml"),
+		atmosVendorSpec: schema.AtmosVendorSpec{
+			Sources: []schema.AtmosVendorSource{
+				{
+					Component: "vpc",
+					Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
+					Targets:   []string{"./components/terraform/vpc"},
+				},
+				{
+					Component: "rds",
+					Source:    "github.com/cloudposse/terraform-aws-components.git//modules/rds?ref=1.0.0",
+					Targets:   []string{"./components/terraform/rds"},
+				},
+			},
+		},
+		component: "vpc",
+	}
+
+	// This should work and only process vpc.
+	err := executeAtmosVendorInternal(params)
+	// Since the sources are valid, it should not return an error about component not defined.
+	// It may return other errors related to TUI or network, but not ErrComponentNotDefined.
+	if err != nil {
+		// Only fail if it's the wrong type of error.
+		assert.NotErrorIs(t, err, ErrComponentNotDefined)
+	}
+}
+
+func TestProcessTargets_MultipleTargets(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	params := &processTargetsParams{
+		AtmosConfig: atmosConfig,
+		IndexSource: 0,
+		Source: &schema.AtmosVendorSource{
+			Component: "vpc",
+			Version:   "1.0.0",
+			Targets:   []string{"./components/terraform/vpc", "./modules/vpc"},
+		},
+		TemplateData:         struct{ Component, Version string }{Component: "vpc", Version: "1.0.0"},
+		VendorConfigFilePath: tempDir,
+		URI:                  "github.com/example/repo.git//vpc",
+		PkgType:              pkgTypeRemote,
+		SourceIsLocalFile:    false,
+	}
+
+	packages, err := processTargets(params)
+	assert.NoError(t, err)
+	assert.Len(t, packages, 2)
+	assert.Equal(t, "vpc", packages[0].name)
+	assert.Equal(t, "1.0.0", packages[0].version)
+}
+
+func TestProcessTargets_NoComponent(t *testing.T) {
+	// When component is empty, URI should be used as name.
+	tempDir := t.TempDir()
+
+	params := &processTargetsParams{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		IndexSource: 0,
+		Source: &schema.AtmosVendorSource{
+			Component: "",
+			Targets:   []string{"./target"},
+		},
+		TemplateData:         struct{ Component, Version string }{Component: "", Version: ""},
+		VendorConfigFilePath: tempDir,
+		URI:                  "github.com/example/repo.git",
+		PkgType:              pkgTypeRemote,
+		SourceIsLocalFile:    false,
+	}
+
+	packages, err := processTargets(params)
+	assert.NoError(t, err)
+	assert.Len(t, packages, 1)
+	assert.Equal(t, "github.com/example/repo.git", packages[0].name)
+}
+
+func TestDeterminePackageType_All(t *testing.T) {
+	tests := []struct {
+		name         string
+		useOci       bool
+		useLocalFS   bool
+		expectedType pkgType
+	}{
+		{"remote", false, false, pkgTypeRemote},
+		{"OCI", true, false, pkgTypeOci},
+		{"local", false, true, pkgTypeLocal},
+		{"OCI takes precedence over local", true, true, pkgTypeOci},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := determinePackageType(tt.useOci, tt.useLocalFS)
+			assert.Equal(t, tt.expectedType, result)
+		})
+	}
+}
+
+func TestProcessAtmosVendorSource_EmptySources(t *testing.T) {
+	params := &vendorSourceParams{
+		atmosConfig:          &schema.AtmosConfiguration{},
+		sources:              []schema.AtmosVendorSource{},
+		component:            "",
+		tags:                 nil,
+		vendorConfigFileName: "vendor.yaml",
+		vendorConfigFilePath: "/tmp",
+	}
+
+	packages, err := processAtmosVendorSource(params)
+	assert.NoError(t, err)
+	assert.Empty(t, packages)
+}
+
+func TestProcessAtmosVendorSource_SkipsNonMatchingComponent(t *testing.T) {
+	tempDir := t.TempDir()
+
+	params := &vendorSourceParams{
+		atmosConfig: &schema.AtmosConfiguration{},
+		sources: []schema.AtmosVendorSource{
+			{
+				Component: "vpc",
+				Source:    "github.com/example/repo.git//vpc",
+				Targets:   []string{"./vpc"},
+			},
+			{
+				Component: "rds",
+				Source:    "github.com/example/repo.git//rds",
+				Targets:   []string{"./rds"},
+			},
+		},
+		component:            "vpc",
+		tags:                 nil,
+		vendorConfigFileName: "vendor.yaml",
+		vendorConfigFilePath: tempDir,
+	}
+
+	packages, err := processAtmosVendorSource(params)
+	assert.NoError(t, err)
+	assert.Len(t, packages, 1)
+	assert.Equal(t, "vpc", packages[0].name)
+}
+
+func TestPull_NoVendorConfig(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+	}
+
+	// Pull without vendor.yaml or component should return error.
+	err := Pull(atmosConfig)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrVendorConfigNotExist)
+}
+
+func TestPull_WithComponent(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create component directory with component.yaml.
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	err := os.MkdirAll(componentDir, 0o755)
+	require.NoError(t, err)
+
+	componentConfig := `kind: ComponentVendorConfig
+apiVersion: atmos/v1
+metadata:
+  name: vpc
+spec:
+  source:
+    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0
+`
+	err = os.WriteFile(filepath.Join(componentDir, "component.yaml"), []byte(componentConfig), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Pull with component should attempt to vendor the component.
+	err = Pull(atmosConfig, WithComponent("vpc"), WithDryRun(true))
+	// May fail due to network issues, but should not return ErrVendorConfigNotExist.
+	if err != nil {
+		assert.NotErrorIs(t, err, ErrVendorConfigNotExist)
+	}
+}
+
+func TestHandleVendorConfigNotExist_DefaultComponentType(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create component directory.
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	err := os.MkdirAll(componentDir, 0o755)
+	require.NoError(t, err)
+
+	componentConfig := `kind: ComponentVendorConfig
+apiVersion: atmos/v1
+metadata:
+  name: vpc
+spec:
+  source:
+    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0
+`
+	err = os.WriteFile(filepath.Join(componentDir, "component.yaml"), []byte(componentConfig), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Empty componentType should default to terraform.
+	err = HandleVendorConfigNotExist(atmosConfig, "vpc", "", true)
+	// May fail due to network issues, but should at least find the component.
+	if err != nil {
+		assert.NotErrorIs(t, err, ErrComponentConfigFileNotFound)
+	}
+}
+
+func TestHandleVendorConfigNotExist_NotFound(t *testing.T) {
+	tempDir := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Non-existent component should return error.
+	err := HandleVendorConfigNotExist(atmosConfig, "nonexistent", "terraform", true)
+	assert.Error(t, err)
 }
