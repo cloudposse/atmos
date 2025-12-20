@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -40,6 +41,8 @@ func (h *FilterHandler) Validate(step *schema.WorkflowStep) error {
 
 // Execute prompts for filtered selection and returns the chosen value(s).
 func (h *FilterHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
+	defer perf.Track(nil, "step.FilterHandler.Execute")()
+
 	if err := h.CheckTTY(step); err != nil {
 		return nil, err
 	}
