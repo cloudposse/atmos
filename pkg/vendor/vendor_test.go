@@ -443,6 +443,326 @@ func TestProcessTargets(t *testing.T) {
 	}
 }
 
+func TestPkgTypeString(t *testing.T) {
+	tests := []struct {
+		name     string
+		pkgType  pkgType
+		expected string
+	}{
+		{
+			name:     "remote type",
+			pkgType:  pkgTypeRemote,
+			expected: "remote",
+		},
+		{
+			name:     "oci type",
+			pkgType:  pkgTypeOci,
+			expected: "oci",
+		},
+		{
+			name:     "local type",
+			pkgType:  pkgTypeLocal,
+			expected: "local",
+		},
+		{
+			name:     "unknown type - negative",
+			pkgType:  pkgType(-1),
+			expected: "unknown",
+		},
+		{
+			name:     "unknown type - out of range",
+			pkgType:  pkgType(100),
+			expected: "unknown",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.pkgType.String()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestValidateRemoteURI(t *testing.T) {
+	tests := []struct {
+		name      string
+		uri       string
+		component string
+		expectErr bool
+		errMsg    string
+	}{
+		{
+			name:      "valid remote URI",
+			uri:       "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
+			component: "vpc",
+			expectErr: false,
+		},
+		{
+			name:      "valid HTTPS URI",
+			uri:       "https://github.com/cloudposse/components.git//vpc",
+			component: "vpc",
+			expectErr: false,
+		},
+		{
+			name:      "empty URI returns error",
+			uri:       "",
+			component: "vpc",
+			expectErr: true,
+			errMsg:    "invalid URI for component vpc",
+		},
+		{
+			name:      "path traversal returns specific error",
+			uri:       "../../../etc/passwd",
+			component: "malicious",
+			expectErr: true,
+			errMsg:    "Please ensure the source is a valid local path",
+		},
+		{
+			name:      "URI with spaces returns error",
+			uri:       "github.com/some path/repo",
+			component: "bad-component",
+			expectErr: true,
+			errMsg:    "invalid URI for component bad-component",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateRemoteURI(tt.uri, tt.component)
+			if tt.expectErr {
+				assert.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestExecuteAtmosVendorInternal(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+	}
+
+	tests := []struct {
+		name        string
+		params      *executeVendorOptions
+		expectError error
+	}{
+		{
+			name: "empty sources and imports returns error",
+			params: &executeVendorOptions{
+				atmosConfig:          atmosConfig,
+				vendorConfigFileName: filepath.Join(tempDir, "vendor.yaml"),
+				atmosVendorSpec: schema.AtmosVendorSpec{
+					Sources: []schema.AtmosVendorSource{},
+					Imports: []string{},
+				},
+			},
+			expectError: ErrMissingVendorConfigDefinition,
+		},
+		{
+			name: "non-existent import file returns error",
+			params: &executeVendorOptions{
+				atmosConfig:          atmosConfig,
+				vendorConfigFileName: filepath.Join(tempDir, "vendor.yaml"),
+				atmosVendorSpec: schema.AtmosVendorSpec{
+					Sources: []schema.AtmosVendorSource{},
+					Imports: []string{filepath.Join(tempDir, "non-existent-import.yaml")},
+				},
+			},
+			expectError: nil, // Error occurs but not a specific sentinel.
+		},
+		{
+			name: "non-existent component returns error",
+			params: &executeVendorOptions{
+				atmosConfig:          atmosConfig,
+				vendorConfigFileName: filepath.Join(tempDir, "vendor.yaml"),
+				atmosVendorSpec: schema.AtmosVendorSpec{
+					Sources: []schema.AtmosVendorSource{
+						{
+							Component: "vpc",
+							Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
+							Targets:   []string{"./components/terraform/vpc"},
+						},
+					},
+				},
+				component: "non-existent-component",
+			},
+			expectError: ErrComponentNotDefined,
+		},
+		{
+			name: "non-matching tag returns error",
+			params: &executeVendorOptions{
+				atmosConfig:          atmosConfig,
+				vendorConfigFileName: filepath.Join(tempDir, "vendor.yaml"),
+				atmosVendorSpec: schema.AtmosVendorSpec{
+					Sources: []schema.AtmosVendorSource{
+						{
+							Component: "vpc",
+							Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
+							Targets:   []string{"./components/terraform/vpc"},
+							Tags:      []string{"networking"},
+						},
+					},
+				},
+				tags: []string{"non-existent-tag"},
+			},
+			expectError: ErrNoComponentsWithTags,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := executeAtmosVendorInternal(tt.params)
+			if tt.expectError != nil {
+				assert.ErrorIs(t, err, tt.expectError)
+			} else if tt.name == "non-existent import file returns error" {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestProcessAtmosVendorSource(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+	}
+
+	tests := []struct {
+		name          string
+		params        *vendorSourceParams
+		expectedCount int
+		expectError   bool
+	}{
+		{
+			name: "single source with single target",
+			params: &vendorSourceParams{
+				atmosConfig: atmosConfig,
+				sources: []schema.AtmosVendorSource{
+					{
+						Component: "vpc",
+						Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
+						Targets:   []string{"./components/terraform/vpc"},
+					},
+				},
+				vendorConfigFileName: filepath.Join(tempDir, "vendor.yaml"),
+				vendorConfigFilePath: tempDir,
+			},
+			expectedCount: 1,
+			expectError:   false,
+		},
+		{
+			name: "source filtered by component",
+			params: &vendorSourceParams{
+				atmosConfig: atmosConfig,
+				sources: []schema.AtmosVendorSource{
+					{
+						Component: "vpc",
+						Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
+						Targets:   []string{"./components/terraform/vpc"},
+					},
+					{
+						Component: "rds",
+						Source:    "github.com/cloudposse/terraform-aws-components.git//modules/rds?ref=1.0.0",
+						Targets:   []string{"./components/terraform/rds"},
+					},
+				},
+				component:            "vpc",
+				vendorConfigFileName: filepath.Join(tempDir, "vendor.yaml"),
+				vendorConfigFilePath: tempDir,
+			},
+			expectedCount: 1, // Only vpc should be included.
+			expectError:   false,
+		},
+		{
+			name: "source filtered by tag",
+			params: &vendorSourceParams{
+				atmosConfig: atmosConfig,
+				sources: []schema.AtmosVendorSource{
+					{
+						Component: "vpc",
+						Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
+						Targets:   []string{"./components/terraform/vpc"},
+						Tags:      []string{"networking"},
+					},
+					{
+						Component: "rds",
+						Source:    "github.com/cloudposse/terraform-aws-components.git//modules/rds?ref=1.0.0",
+						Targets:   []string{"./components/terraform/rds"},
+						Tags:      []string{"database"},
+					},
+				},
+				tags:                 []string{"networking"},
+				vendorConfigFileName: filepath.Join(tempDir, "vendor.yaml"),
+				vendorConfigFilePath: tempDir,
+			},
+			expectedCount: 1, // Only vpc has networking tag.
+			expectError:   false,
+		},
+		{
+			name: "empty sources returns empty",
+			params: &vendorSourceParams{
+				atmosConfig:          atmosConfig,
+				sources:              []schema.AtmosVendorSource{},
+				vendorConfigFileName: filepath.Join(tempDir, "vendor.yaml"),
+				vendorConfigFilePath: tempDir,
+			},
+			expectedCount: 0,
+			expectError:   false,
+		},
+		{
+			name: "source with missing targets returns error",
+			params: &vendorSourceParams{
+				atmosConfig: atmosConfig,
+				sources: []schema.AtmosVendorSource{
+					{
+						Component: "vpc",
+						Source:    "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref=1.0.0",
+						Targets:   []string{}, // No targets.
+					},
+				},
+				vendorConfigFileName: filepath.Join(tempDir, "vendor.yaml"),
+				vendorConfigFilePath: tempDir,
+			},
+			expectError: true,
+		},
+		{
+			name: "source with missing source field returns error",
+			params: &vendorSourceParams{
+				atmosConfig: atmosConfig,
+				sources: []schema.AtmosVendorSource{
+					{
+						Component: "vpc",
+						Source:    "", // No source.
+						Targets:   []string{"./components/terraform/vpc"},
+					},
+				},
+				vendorConfigFileName: filepath.Join(tempDir, "vendor.yaml"),
+				vendorConfigFilePath: tempDir,
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := processAtmosVendorSource(tt.params)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Len(t, result, tt.expectedCount)
+			}
+		})
+	}
+}
+
 func TestDetermineSourceType_Extended(t *testing.T) {
 	// Additional test cases for determineSourceType.
 	tempDir := t.TempDir()
