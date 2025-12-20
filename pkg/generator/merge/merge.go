@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // ThreeWayMerger handles 3-way merging with automatic file type detection.
@@ -13,6 +15,8 @@ type ThreeWayMerger struct {
 
 // NewThreeWayMerger creates a new 3-way merger with the specified percentage threshold.
 func NewThreeWayMerger(thresholdPercent int) *ThreeWayMerger {
+	defer perf.Track(nil, "merge.NewThreeWayMerger")()
+
 	return &ThreeWayMerger{
 		thresholdPercent: thresholdPercent,
 	}
@@ -31,6 +35,8 @@ func NewThreeWayMerger(thresholdPercent int) *ThreeWayMerger {
 //
 // Returns the merged content or an error if conflicts exceed threshold.
 func (m *ThreeWayMerger) Merge(base, ours, theirs, fileName string) (*MergeResult, error) {
+	defer perf.Track(nil, "merge.ThreeWayMerger.Merge")()
+
 	// Detect file type based on extension
 	ext := strings.ToLower(filepath.Ext(fileName))
 
@@ -48,6 +54,8 @@ func (m *ThreeWayMerger) Merge(base, ours, theirs, fileName string) (*MergeResul
 // MergeWithStrategy allows explicit strategy selection, bypassing auto-detection.
 // This is useful when the file extension doesn't accurately represent the content type.
 func (m *ThreeWayMerger) MergeWithStrategy(base, ours, theirs string, strategy MergeStrategy) (*MergeResult, error) {
+	defer perf.Track(nil, "merge.ThreeWayMerger.MergeWithStrategy")()
+
 	switch strategy {
 	case StrategyYAML:
 		merger := NewYAMLMerger(m.thresholdPercent)

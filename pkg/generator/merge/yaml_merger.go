@@ -6,6 +6,8 @@ import (
 	"reflect"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // YAMLMerger handles 3-way merging of YAML files with structure awareness.
@@ -37,6 +39,8 @@ type YAMLMerger struct {
 
 // NewYAMLMerger creates a new YAML merger with the specified percentage threshold.
 func NewYAMLMerger(thresholdPercent int) *YAMLMerger {
+	defer perf.Track(nil, "merge.NewYAMLMerger")()
+
 	return &YAMLMerger{
 		thresholdPercent: thresholdPercent,
 	}
@@ -50,6 +54,8 @@ func NewYAMLMerger(thresholdPercent int) *YAMLMerger {
 //
 // Returns the merged YAML content or an error if conflicts exceed threshold.
 func (m *YAMLMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
+	defer perf.Track(nil, "merge.YAMLMerger.Merge")()
+
 	// Parse all three YAML documents
 	var baseNode, oursNode, theirsNode yaml.Node
 
