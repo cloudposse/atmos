@@ -11,6 +11,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // GitBaseStorage provides git-based storage for retrieving base file versions.
@@ -28,6 +29,8 @@ type GitBaseStorage struct {
 //   - Commit hash: "abc123def..."
 //   - Special ref: "HEAD"
 func NewGitBaseStorage(repo *git.Repository, baseRef string) *GitBaseStorage {
+	defer perf.Track(nil, "storage.NewGitBaseStorage")()
+
 	return &GitBaseStorage{
 		repo:    repo,
 		baseRef: baseRef,
@@ -42,6 +45,8 @@ func NewGitBaseStorage(repo *git.Repository, baseRef string) *GitBaseStorage {
 //   - Empty string and nil error if the file doesn't exist at the base ref
 //   - Error if the base ref is invalid or git operation fails
 func (s *GitBaseStorage) LoadBase(filePath string) (string, bool, error) {
+	defer perf.Track(nil, "storage.GitBaseStorage.LoadBase")()
+
 	// Resolve the base reference to a commit hash
 	hash, err := s.repo.ResolveRevision(plumbing.Revision(s.baseRef))
 	if err != nil {
@@ -95,6 +100,8 @@ func (s *GitBaseStorage) LoadBase(filePath string) (string, bool, error) {
 // ValidateBaseRef checks if the base reference exists in the repository.
 // Returns nil if the ref is valid, or an error with helpful guidance if invalid.
 func (s *GitBaseStorage) ValidateBaseRef() error {
+	defer perf.Track(nil, "storage.GitBaseStorage.ValidateBaseRef")()
+
 	_, err := s.repo.ResolveRevision(plumbing.Revision(s.baseRef))
 	if err != nil {
 		return fmt.Errorf(
@@ -120,6 +127,8 @@ func (s *GitBaseStorage) ValidateBaseRef() error {
 // Example: GetMergeBase("HEAD", "main") finds the commit where the current
 // branch diverged from main - the ideal base for 3-way merges.
 func (s *GitBaseStorage) GetMergeBase(ref1, ref2 string) (string, error) {
+	defer perf.Track(nil, "storage.GitBaseStorage.GetMergeBase")()
+
 	// Resolve both refs to commit hashes
 	hash1, err := s.repo.ResolveRevision(plumbing.Revision(ref1))
 	if err != nil {
@@ -159,10 +168,14 @@ func (s *GitBaseStorage) GetMergeBase(ref1, ref2 string) (string, error) {
 // SetBaseRef updates the base reference for this storage.
 // Useful when you want to use a different ref without creating a new storage instance.
 func (s *GitBaseStorage) SetBaseRef(baseRef string) {
+	defer perf.Track(nil, "storage.GitBaseStorage.SetBaseRef")()
+
 	s.baseRef = baseRef
 }
 
 // GetBaseRef returns the current base reference.
 func (s *GitBaseStorage) GetBaseRef() string {
+	defer perf.Track(nil, "storage.GitBaseStorage.GetBaseRef")()
+
 	return s.baseRef
 }
