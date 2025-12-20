@@ -103,10 +103,7 @@ func TestIsExtendedStepType(t *testing.T) {
 		{"filter", true},
 		{"file", true},
 		{"write", true},
-		{"success", true},
-		{"info", true},
-		{"warn", true},
-		{"error", true},
+		{"toast", true},
 		{"markdown", true},
 		{"spin", true},
 		{"table", true},
@@ -131,7 +128,7 @@ func TestValidateStep(t *testing.T) {
 	t.Run("validates valid step", func(t *testing.T) {
 		step := &schema.WorkflowStep{
 			Name:    "test",
-			Type:    "success",
+			Type:    "toast",
 			Content: "Success message",
 		}
 
@@ -142,7 +139,7 @@ func TestValidateStep(t *testing.T) {
 	t.Run("returns error for invalid step", func(t *testing.T) {
 		step := &schema.WorkflowStep{
 			Name: "test",
-			Type: "success",
+			Type: "toast",
 			// Missing required content.
 		}
 
@@ -177,8 +174,8 @@ func TestValidateWorkflow(t *testing.T) {
 		workflow := &schema.WorkflowDefinition{
 			Description: "Test workflow",
 			Steps: []schema.WorkflowStep{
-				{Name: "step1", Type: "success", Content: "Step 1"},
-				{Name: "step2", Type: "info", Content: "Step 2"},
+				{Name: "step1", Type: "toast", Level: "success", Content: "Step 1"},
+				{Name: "step2", Type: "toast", Level: "info", Content: "Step 2"},
 			},
 		}
 
@@ -190,7 +187,7 @@ func TestValidateWorkflow(t *testing.T) {
 		workflow := &schema.WorkflowDefinition{
 			Description: "Test workflow",
 			Steps: []schema.WorkflowStep{
-				{Name: "step1", Type: "success"}, // Missing content.
+				{Name: "step1", Type: "toast"}, // Missing content.
 				{Name: "step2", Type: "unknown"},
 			},
 		}
@@ -212,7 +209,7 @@ func TestValidateWorkflow(t *testing.T) {
 	t.Run("generates step names when missing", func(t *testing.T) {
 		workflow := &schema.WorkflowDefinition{
 			Steps: []schema.WorkflowStep{
-				{Type: "success", Content: "No name"},
+				{Type: "toast", Level: "success", Content: "No name"},
 			},
 		}
 
@@ -235,8 +232,8 @@ func TestListTypes(t *testing.T) {
 	assert.Contains(t, types[CategoryInteractive], "confirm")
 	assert.Contains(t, types[CategoryOutput], "spin")
 	assert.Contains(t, types[CategoryOutput], "table")
-	assert.Contains(t, types[CategoryUI], "success")
-	assert.Contains(t, types[CategoryUI], "error")
+	assert.Contains(t, types[CategoryUI], "toast")
+	assert.Contains(t, types[CategoryUI], "markdown")
 	assert.Contains(t, types[CategoryCommand], "atmos")
 	assert.Contains(t, types[CategoryCommand], "shell")
 }

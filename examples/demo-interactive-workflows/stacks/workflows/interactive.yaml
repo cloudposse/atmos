@@ -6,7 +6,7 @@
 # Features demonstrated:
 # - User input collection (input, confirm, choose, filter)
 # - Variable passing between steps using Go templates
-# - UI feedback (success, info, warn, error, markdown)
+# - UI feedback (toast with levels, markdown)
 # - Conditional flow based on user choices
 
 workflows:
@@ -38,7 +38,8 @@ workflows:
 
       # Step 3: Show info about selection
       - name: show_selection
-        type: info
+        type: toast
+        level: info
         content: "You selected: {{ .steps.select_environment.value }}"
 
       # Step 4: Confirm if production
@@ -56,7 +57,8 @@ workflows:
 
       # Step 6: Show summary
       - name: summary
-        type: success
+        type: toast
+        level: success
         content: |
           Deployment configured:
           - Environment: {{ .steps.select_environment.value }}
@@ -67,7 +69,8 @@ workflows:
     description: Select multiple components to deploy
     steps:
       - name: intro
-        type: info
+        type: toast
+        level: info
         content: "Select the components you want to deploy"
 
       - name: components
@@ -85,7 +88,8 @@ workflows:
           - cloudfront
 
       - name: confirm
-        type: success
+        type: toast
+        level: success
         content: "Selected {{ len .steps.components.values }} component(s)"
 
   # File selection workflow
@@ -102,7 +106,8 @@ workflows:
           - json
 
       - name: show_file
-        type: info
+        type: toast
+        level: info
         content: "You selected: {{ .steps.select_file.value }}"
 
   # Password/secret input example
@@ -110,7 +115,8 @@ workflows:
     description: Collect credentials securely
     steps:
       - name: intro
-        type: warn
+        type: toast
+        level: warning
         content: "You are about to enter sensitive credentials"
 
       - name: username
@@ -124,7 +130,8 @@ workflows:
         password: true
 
       - name: done
-        type: success
+        type: toast
+        level: success
         content: "Credentials collected for user: {{ .steps.username.value }}"
 
   # Text editor workflow
@@ -158,7 +165,8 @@ workflows:
         timeout: 30s
 
       - name: done
-        type: success
+        type: toast
+        level: success
         content: "Build completed successfully!"
 
   # Table output example
@@ -203,7 +211,8 @@ workflows:
         values: "{{ .steps.select_regions.values }}"
 
       - name: show
-        type: info
+        type: toast
+        level: info
         content: "Selected regions: {{ .steps.formatted.value }}"
 
   # Complete deployment pipeline
@@ -284,7 +293,8 @@ workflows:
 
       # Show completion message
       - name: done
-        type: success
+        type: toast
+        level: success
         content: "Deployment complete!"
 
       - name: spacer
@@ -364,5 +374,6 @@ workflows:
           recoverable: "true"
 
       - name: done
-        type: success
+        type: toast
+        level: success
         content: "Logging demo complete! Check your log output."
