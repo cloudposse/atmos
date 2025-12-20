@@ -45,14 +45,15 @@ components:
     # Supports both absolute and relative paths
     base_path: "components/helmfile"
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_USE_EKS' ENV var
-    # If not specified, defaults to 'true'
+    # If not specified, defaults to 'false'. Set to 'true' to enable EKS integration.
     use_eks: true
     # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH' ENV var
     kubeconfig_path: "/dev/shm"
-    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN' ENV var
-    helm_aws_profile_pattern: "{namespace}-{tenant}-gbl-{stage}-helm"
-    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN' ENV var
-    cluster_name_pattern: "{namespace}-{tenant}-{environment}-{stage}-eks-cluster"
+    # Can also be set using 'ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_TEMPLATE' ENV var
+    # Uses Go template syntax with access to component vars
+    cluster_name_template: "{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-eks-cluster"
+    # For AWS authentication, use the --identity flag with helmfile commands:
+    # atmos helmfile apply my-component -s prod --identity=prod-admin
 
   # List command configuration for components
   list:
