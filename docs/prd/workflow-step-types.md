@@ -16,11 +16,12 @@ Atmos workflows currently support only two step types:
 
 ### After Implementation
 
-Workflows will support **20+ step types** across four categories:
+Workflows will support **25+ step types** across five categories:
 1. **Interactive** - User input prompts (input, choose, confirm, filter, file, write)
-2. **Output** - Display formatting (spin, table, pager, format, join, style)
-3. **UI Messages** - Status messages (success, info, warn, error, markdown)
-4. **Command** - Existing types (atmos, shell)
+2. **Output** - Display formatting (spin, table, pager, format, join, style, linebreak, log)
+3. **UI Messages** - Status messages (toast, markdown)
+4. **Terminal** - Terminal control and workflow management (alert, title, clear, env, exit)
+5. **Command** - Existing types (atmos, shell)
 
 Plus **per-step output modes** for controlling how command output is displayed.
 
@@ -223,8 +224,9 @@ workflows:
 | Category | Types | Description |
 |----------|-------|-------------|
 | **Interactive** | `input`, `confirm`, `choose`, `filter`, `file`, `write` | User prompts (require TTY) |
-| **Output** | `spin`, `table`, `pager`, `format`, `join`, `style` | Display formatting |
-| **UI Messages** | `success`, `info`, `warn`, `error`, `markdown` | Status messages |
+| **Output** | `spin`, `table`, `pager`, `format`, `join`, `style`, `linebreak`, `log` | Display formatting |
+| **UI Messages** | `toast`, `markdown` | Status messages |
+| **Terminal** | `alert`, `title`, `clear`, `env`, `exit` | Terminal control and workflow management |
 | **Command** | `atmos`, `shell` | Execute commands (existing) |
 
 ---
@@ -764,6 +766,120 @@ Render and display markdown content.
 
 ---
 
+### Terminal Step Types
+
+These step types control the terminal environment and workflow execution flow.
+
+#### `alert` - Terminal Bell
+
+Plays a terminal bell sound to notify the user.
+
+```yaml
+- name: notify
+  type: alert
+  content: "Workflow complete!"  # Optional message
+```
+
+**Implementation:** `terminal.Alert()` from `pkg/terminal/`
+
+**Fields:**
+- `content` (optional) - Message to display after the bell (supports templates)
+
+**Notes:**
+- Respects `settings.terminal.alerts` configuration
+- Use at the end of long-running workflows to notify users
+
+---
+
+#### `title` - Terminal Window Title
+
+Sets or restores the terminal window title.
+
+```yaml
+- name: set_title
+  type: title
+  content: "Deploying to {{ .steps.env.value }}..."
+```
+
+```yaml
+- name: restore_title
+  type: title  # Empty content restores original title
+```
+
+**Implementation:** `terminal.SetTitle()` / `terminal.RestoreTitle()` from `pkg/terminal/`
+
+**Fields:**
+- `content` (optional) - Title text (supports templates). If empty, restores original title.
+
+**Notes:**
+- Respects `settings.terminal.title` configuration
+- Some terminals may not support title changes
+
+---
+
+#### `clear` - Clear Terminal Line
+
+Clears the current terminal line.
+
+```yaml
+- name: clear_line
+  type: clear
+```
+
+**Implementation:** `ui.ClearLine()` from `pkg/ui/`
+
+**Fields:**
+- None required
+
+---
+
+#### `env` - Set Environment Variables
+
+Sets environment variables for subsequent steps in the workflow.
+
+```yaml
+- name: set_env
+  type: env
+  vars:
+    DEPLOY_ENV: "{{ .steps.select_env.value }}"
+    AWS_REGION: us-east-1
+    TF_VAR_environment: "{{ .steps.select_env.value }}"
+```
+
+**Implementation:** `Variables.SetEnv()` from `pkg/workflow/step/`
+
+**Fields:**
+- `vars` (required) - Map of environment variable names to values (supports templates)
+
+**Notes:**
+- Variables are scoped to the workflow execution
+- Use to pass user input or computed values to subsequent shell/atmos commands
+
+---
+
+#### `exit` - Exit Workflow
+
+Exits the workflow immediately with a specific exit code.
+
+```yaml
+- name: abort
+  type: exit
+  code: 1
+  content: "Deployment cancelled by user"
+```
+
+**Implementation:** `os.Exit()` with optional message
+
+**Fields:**
+- `code` (optional) - Exit code (default: 0). Use non-zero for error conditions.
+- `content` (optional) - Message to display before exiting (supports templates)
+
+**Notes:**
+- The workflow terminates immediately; no subsequent steps run
+- Use for early exit on user cancellation or error conditions
+
+---
+
 ### Command Step Types
 
 #### `atmos` - Atmos Command (existing)
@@ -1047,11 +1163,15 @@ pkg/workflow/step/
 ├── style.go              # StyleHandler
 │
 ├── # UI message handlers
-├── success.go            # SuccessHandler
-├── info.go               # InfoHandler
-├── warn.go               # WarnHandler
-├── error.go              # ErrorHandler
+├── toast.go              # ToastHandler (success/info/warn/error)
 ├── markdown.go           # MarkdownHandler
+│
+├── # Terminal handlers
+├── alert.go              # AlertHandler
+├── title.go              # TitleHandler
+├── clear.go              # ClearHandler
+├── env.go                # EnvHandler
+├── exit.go               # ExitHandler
 │
 ├── # Command handlers
 ├── atmos.go              # AtmosHandler
