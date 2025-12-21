@@ -215,13 +215,18 @@ func TestMetadata(t *testing.T) {
 			// Check each item's fields (excluding status which contains ANSI codes).
 			for i := range result {
 				if i < len(tc.expected) {
-					// Verify status field exists and is non-empty.
+					// Verify status field exists and is non-empty (contains ANSI codes for table display).
 					assert.Contains(t, result[i], "status")
 					assert.NotEmpty(t, result[i]["status"])
 
+					// Verify status_text field exists with semantic value (for JSON/YAML/CSV).
+					assert.Contains(t, result[i], "status_text")
+					statusText := result[i]["status_text"].(string)
+					assert.Contains(t, []string{"enabled", "disabled", "locked"}, statusText, "status_text should be a semantic value")
+
 					// Check all other fields match expected.
 					for key, expectedVal := range tc.expected[i] {
-						if key != "status" {
+						if key != "status" && key != "status_text" {
 							assert.Equal(t, expectedVal, result[i][key], "mismatch for key %s", key)
 						}
 					}
@@ -265,9 +270,13 @@ func TestMetadata_IncludesVarsSettingsEnv(t *testing.T) {
 
 	assert.Len(t, result, 1)
 
-	// Verify status is included.
+	// Verify status is included (colored dot for table display).
 	assert.Contains(t, result[0], "status")
 	assert.NotEmpty(t, result[0]["status"])
+
+	// Verify status_text is included (semantic value for JSON/YAML/CSV).
+	assert.Contains(t, result[0], "status_text")
+	assert.Equal(t, "enabled", result[0]["status_text"])
 
 	// Verify vars are included
 	assert.Contains(t, result[0], "vars")
@@ -327,6 +336,47 @@ func TestGetStatusIndicator(t *testing.T) {
 			assert.Contains(t, result, tt.contains)
 			// Result is non-empty (may or may not have ANSI codes depending on TTY).
 			assert.NotEmpty(t, result)
+		})
+	}
+}
+
+func TestGetStatusText(t *testing.T) {
+	tests := []struct {
+		name     string
+		enabled  bool
+		locked   bool
+		expected string
+	}{
+		{
+			name:     "enabled and not locked returns enabled",
+			enabled:  true,
+			locked:   false,
+			expected: "enabled",
+		},
+		{
+			name:     "locked returns locked (takes precedence over enabled)",
+			enabled:  true,
+			locked:   true,
+			expected: "locked",
+		},
+		{
+			name:     "disabled returns disabled",
+			enabled:  false,
+			locked:   false,
+			expected: "disabled",
+		},
+		{
+			name:     "disabled and locked returns locked (locked takes precedence)",
+			enabled:  false,
+			locked:   true,
+			expected: "locked",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getStatusText(tt.enabled, tt.locked)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

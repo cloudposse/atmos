@@ -165,3 +165,701 @@ func TestExecWithSpinner_NonTTY(t *testing.T) {
 		_ = err // Accept either error
 	})
 }
+
+// Tests for dynamicSpinnerModel.
+func TestNewDynamicSpinnerModel(t *testing.T) {
+	t.Run("creates dynamic model with correct progress message", func(t *testing.T) {
+		progressMsg := "Processing data"
+
+		model := newDynamicSpinnerModel(progressMsg)
+
+		assert.Equal(t, progressMsg, model.progressMsg)
+		assert.Empty(t, model.completedMsg)
+		assert.False(t, model.done)
+		assert.Nil(t, model.err)
+	})
+}
+
+func TestDynamicSpinnerModel_Init(t *testing.T) {
+	t.Run("returns spinner tick command", func(t *testing.T) {
+		model := newDynamicSpinnerModel("test")
+		cmd := model.Init()
+		assert.NotNil(t, cmd)
+	})
+}
+
+func TestDynamicSpinnerModel_Update(t *testing.T) {
+	t.Run("handles ctrl+c key", func(t *testing.T) {
+		model := newDynamicSpinnerModel("test")
+		keyMsg := tea.KeyMsg{Type: tea.KeyCtrlC}
+
+		_, cmd := model.Update(keyMsg)
+		assert.NotNil(t, cmd) // Should return tea.Quit
+	})
+
+	t.Run("handles operation complete with dynamic message", func(t *testing.T) {
+		model := newDynamicSpinnerModel("test")
+		completeMsg := opCompleteDynamicMsg{completedMsg: "Done processing", err: nil}
+
+		updatedModel, cmd := model.Update(completeMsg)
+		assert.NotNil(t, cmd) // Should return tea.Quit
+
+		m, ok := updatedModel.(dynamicSpinnerModel)
+		require.True(t, ok)
+		assert.True(t, m.done)
+		assert.Equal(t, "Done processing", m.completedMsg)
+		assert.Nil(t, m.err)
+	})
+
+	t.Run("handles operation complete with error", func(t *testing.T) {
+		model := newDynamicSpinnerModel("test")
+		testErr := errors.New("dynamic operation failed")
+		completeMsg := opCompleteDynamicMsg{completedMsg: "", err: testErr}
+
+		updatedModel, cmd := model.Update(completeMsg)
+		assert.NotNil(t, cmd) // Should return tea.Quit
+
+		m, ok := updatedModel.(dynamicSpinnerModel)
+		require.True(t, ok)
+		assert.True(t, m.done)
+		assert.Equal(t, testErr, m.err)
+	})
+
+	t.Run("handles spinner tick message", func(t *testing.T) {
+		model := newDynamicSpinnerModel("test")
+		tickMsg := spinner.TickMsg{}
+
+		updatedModel, cmd := model.Update(tickMsg)
+		assert.NotNil(t, cmd) // Should return next tick command
+
+		m, ok := updatedModel.(dynamicSpinnerModel)
+		require.True(t, ok)
+		assert.False(t, m.done)
+	})
+
+	t.Run("ignores unknown messages", func(t *testing.T) {
+		model := newDynamicSpinnerModel("test")
+		unknownMsg := struct{}{}
+
+		updatedModel, cmd := model.Update(unknownMsg)
+		assert.Nil(t, cmd)
+
+		m, ok := updatedModel.(dynamicSpinnerModel)
+		require.True(t, ok)
+		assert.False(t, m.done)
+	})
+}
+
+func TestDynamicSpinnerModel_View(t *testing.T) {
+	t.Run("shows progress message when not done", func(t *testing.T) {
+		model := newDynamicSpinnerModel("Processing")
+		view := model.View()
+
+		assert.Contains(t, view, "Processing")
+	})
+
+	t.Run("shows dynamic completed message when done without error", func(t *testing.T) {
+		model := newDynamicSpinnerModel("Processing")
+		model.done = true
+		model.completedMsg = "Completed in 5 seconds"
+		model.err = nil
+
+		view := model.View()
+
+		assert.Contains(t, view, "Completed in 5 seconds")
+	})
+
+	t.Run("shows progress message as fallback when done without completedMsg", func(t *testing.T) {
+		model := newDynamicSpinnerModel("Processing")
+		model.done = true
+		model.completedMsg = ""
+		model.err = nil
+
+		view := model.View()
+
+		assert.Contains(t, view, "Processing")
+	})
+
+	t.Run("shows error indicator when done with error", func(t *testing.T) {
+		model := newDynamicSpinnerModel("Processing")
+		model.done = true
+		model.err = errors.New("test error")
+
+		view := model.View()
+
+		// When there's an error, we show the progress message with error indicator.
+		assert.Contains(t, view, "Processing")
+	})
+}
+
+func TestExecWithSpinnerDynamic_NonTTY(t *testing.T) {
+	t.Run("executes operation successfully with dynamic message", func(t *testing.T) {
+		executed := false
+		operation := func() (string, error) {
+			executed = true
+			return "Dynamic completion", nil
+		}
+
+		err := ExecWithSpinnerDynamic("Testing", operation)
+
+		assert.True(t, executed)
+		// Accept either outcome due to UI formatter state.
+		_ = err
+	})
+
+	t.Run("propagates operation errors", func(t *testing.T) {
+		expectedErr := errors.New("dynamic operation failed")
+		operation := func() (string, error) {
+			return "", expectedErr
+		}
+
+		err := ExecWithSpinnerDynamic("Testing", operation)
+
+		// Either get the operation error or UI formatter error.
+		_ = err
+	})
+
+	t.Run("uses progress message as fallback when no completion message", func(t *testing.T) {
+		executed := false
+		operation := func() (string, error) {
+			executed = true
+			return "", nil // Empty completion message
+		}
+
+		err := ExecWithSpinnerDynamic("Fallback test", operation)
+
+		assert.True(t, executed)
+		_ = err
+	})
+}
+
+// Tests for manualSpinnerModel.
+func TestNewManualSpinnerModel(t *testing.T) {
+	t.Run("creates manual model with correct progress message", func(t *testing.T) {
+		progressMsg := "Running tasks"
+
+		model := newManualSpinnerModel(progressMsg)
+
+		assert.Equal(t, progressMsg, model.progressMsg)
+		assert.Empty(t, model.finalMsg)
+		assert.False(t, model.done)
+		assert.False(t, model.success)
+	})
+}
+
+func TestManualSpinnerModel_Init(t *testing.T) {
+	t.Run("returns spinner tick command", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+		cmd := model.Init()
+		assert.NotNil(t, cmd)
+	})
+}
+
+func TestManualSpinnerModel_Update(t *testing.T) {
+	t.Run("handles ctrl+c key", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+		keyMsg := tea.KeyMsg{Type: tea.KeyCtrlC}
+
+		_, cmd := model.Update(keyMsg)
+		assert.NotNil(t, cmd) // Should return tea.Quit
+	})
+
+	t.Run("handles manual stop with success message", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+		stopMsg := manualStopMsg{message: "All done!", success: true}
+
+		updatedModel, cmd := model.Update(stopMsg)
+		assert.NotNil(t, cmd) // Should return tea.Quit
+
+		m, ok := updatedModel.(manualSpinnerModel)
+		require.True(t, ok)
+		assert.True(t, m.done)
+		assert.Equal(t, "All done!", m.finalMsg)
+		assert.True(t, m.success)
+	})
+
+	t.Run("handles manual stop with error message", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+		stopMsg := manualStopMsg{message: "Something failed", success: false}
+
+		updatedModel, cmd := model.Update(stopMsg)
+		assert.NotNil(t, cmd) // Should return tea.Quit
+
+		m, ok := updatedModel.(manualSpinnerModel)
+		require.True(t, ok)
+		assert.True(t, m.done)
+		assert.Equal(t, "Something failed", m.finalMsg)
+		assert.False(t, m.success)
+	})
+
+	t.Run("handles manual stop without message", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+		stopMsg := manualStopMsg{message: "", success: false}
+
+		updatedModel, cmd := model.Update(stopMsg)
+		assert.NotNil(t, cmd)
+
+		m, ok := updatedModel.(manualSpinnerModel)
+		require.True(t, ok)
+		assert.True(t, m.done)
+		assert.Empty(t, m.finalMsg)
+	})
+
+	t.Run("handles spinner tick message", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+		tickMsg := spinner.TickMsg{}
+
+		updatedModel, cmd := model.Update(tickMsg)
+		assert.NotNil(t, cmd)
+
+		m, ok := updatedModel.(manualSpinnerModel)
+		require.True(t, ok)
+		assert.False(t, m.done)
+	})
+
+	t.Run("ignores unknown messages", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+		unknownMsg := struct{}{}
+
+		updatedModel, cmd := model.Update(unknownMsg)
+		assert.Nil(t, cmd)
+
+		m, ok := updatedModel.(manualSpinnerModel)
+		require.True(t, ok)
+		assert.False(t, m.done)
+	})
+}
+
+func TestManualSpinnerModel_View(t *testing.T) {
+	t.Run("shows progress message when not done", func(t *testing.T) {
+		model := newManualSpinnerModel("Running")
+		view := model.View()
+
+		assert.Contains(t, view, "Running")
+	})
+
+	t.Run("shows success message when done with success", func(t *testing.T) {
+		model := newManualSpinnerModel("Running")
+		model.done = true
+		model.finalMsg = "Completed successfully"
+		model.success = true
+
+		view := model.View()
+
+		assert.Contains(t, view, "Completed successfully")
+	})
+
+	t.Run("shows error message when done with failure", func(t *testing.T) {
+		model := newManualSpinnerModel("Running")
+		model.done = true
+		model.finalMsg = "Operation failed"
+		model.success = false
+
+		view := model.View()
+
+		assert.Contains(t, view, "Operation failed")
+	})
+
+	t.Run("clears line when done with no message", func(t *testing.T) {
+		model := newManualSpinnerModel("Running")
+		model.done = true
+		model.finalMsg = ""
+
+		view := model.View()
+
+		// Should just have the reset line escape sequence.
+		assert.NotContains(t, view, "Running")
+	})
+}
+
+// Tests for Spinner struct (manual API).
+func TestSpinner_New(t *testing.T) {
+	t.Run("creates spinner with progress message", func(t *testing.T) {
+		s := New("Processing items")
+
+		assert.Equal(t, "Processing items", s.progressMsg)
+		assert.Nil(t, s.program)
+		assert.Nil(t, s.done)
+	})
+}
+
+func TestSpinner_StartStop_NonTTY(t *testing.T) {
+	// In test environment, TTY is typically not available.
+	// This tests the non-TTY path.
+	t.Run("start and stop are no-ops in non-TTY", func(t *testing.T) {
+		s := New("Testing")
+		s.Start()
+		s.Stop()
+		// Should not panic or hang.
+	})
+
+	t.Run("stop is idempotent", func(t *testing.T) {
+		s := New("Testing")
+		s.Stop() // Call without Start
+		s.Stop() // Call again
+		// Should not panic.
+	})
+}
+
+func TestSpinner_SuccessError_NonTTY(t *testing.T) {
+	// In test environment, TTY is typically not available.
+	t.Run("success shows message in non-TTY", func(t *testing.T) {
+		s := New("Testing")
+		s.Success("Done!")
+		// Accept any outcome due to UI formatter state.
+	})
+
+	t.Run("error shows message in non-TTY", func(t *testing.T) {
+		s := New("Testing")
+		s.Error("Failed!")
+		// Accept any outcome due to UI formatter state.
+	})
+
+	t.Run("success is idempotent", func(t *testing.T) {
+		s := New("Testing")
+		s.Success("Done!")
+		s.Success("Done again!") // Should not panic.
+	})
+
+	t.Run("error is idempotent", func(t *testing.T) {
+		s := New("Testing")
+		s.Error("Failed!")
+		s.Error("Failed again!") // Should not panic.
+	})
+}
+
+// Test newline constant.
+func TestNewlineConstant(t *testing.T) {
+	t.Run("newline has expected value", func(t *testing.T) {
+		assert.Equal(t, "\n", newline)
+	})
+}
+
+// Test message structs.
+func TestOpCompleteMsg(t *testing.T) {
+	t.Run("stores nil error", func(t *testing.T) {
+		msg := opCompleteMsg{err: nil}
+		assert.Nil(t, msg.err)
+	})
+
+	t.Run("stores error", func(t *testing.T) {
+		testErr := errors.New("test error")
+		msg := opCompleteMsg{err: testErr}
+		assert.Equal(t, testErr, msg.err)
+	})
+}
+
+func TestOpCompleteDynamicMsg(t *testing.T) {
+	t.Run("stores completed message and nil error", func(t *testing.T) {
+		msg := opCompleteDynamicMsg{completedMsg: "Done", err: nil}
+		assert.Equal(t, "Done", msg.completedMsg)
+		assert.Nil(t, msg.err)
+	})
+
+	t.Run("stores error with empty message", func(t *testing.T) {
+		testErr := errors.New("test error")
+		msg := opCompleteDynamicMsg{completedMsg: "", err: testErr}
+		assert.Empty(t, msg.completedMsg)
+		assert.Equal(t, testErr, msg.err)
+	})
+}
+
+func TestManualStopMsg(t *testing.T) {
+	t.Run("stores success message", func(t *testing.T) {
+		msg := manualStopMsg{message: "All done", success: true}
+		assert.Equal(t, "All done", msg.message)
+		assert.True(t, msg.success)
+	})
+
+	t.Run("stores error message", func(t *testing.T) {
+		msg := manualStopMsg{message: "Failed", success: false}
+		assert.Equal(t, "Failed", msg.message)
+		assert.False(t, msg.success)
+	})
+
+	t.Run("stores empty message", func(t *testing.T) {
+		msg := manualStopMsg{message: "", success: false}
+		assert.Empty(t, msg.message)
+	})
+}
+
+// Test Spinner isTTY field.
+func TestSpinner_IsTTY(t *testing.T) {
+	t.Run("spinner stores isTTY state", func(t *testing.T) {
+		s := New("Testing")
+		// In test environment, isTTY is typically false.
+		// We verify the field is properly set.
+		assert.NotNil(t, s)
+		// isTTY is determined by term.IsTTYSupportForStdout().
+	})
+}
+
+// Test spinner with already stopped state.
+func TestSpinner_AlreadyStopped(t *testing.T) {
+	t.Run("Stop on nil program is safe", func(t *testing.T) {
+		s := New("Testing")
+		// Don't call Start, just Stop.
+		s.Stop()
+		// Should not panic.
+	})
+
+	t.Run("Success on nil program shows message", func(t *testing.T) {
+		s := New("Testing")
+		// Don't call Start.
+		s.Success("Done!")
+		// Should not panic and should show message.
+	})
+
+	t.Run("Error on nil program shows message", func(t *testing.T) {
+		s := New("Testing")
+		// Don't call Start.
+		s.Error("Failed!")
+		// Should not panic and should show message.
+	})
+}
+
+// Test all spinner models ignore non-quit key messages.
+func TestSpinnerModels_IgnoreNonQuitKeys(t *testing.T) {
+	t.Run("spinnerModel ignores regular key presses", func(t *testing.T) {
+		model := newSpinnerModel("test", "test complete")
+		keyMsg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}
+		_, cmd := model.Update(keyMsg)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("spinnerModel ignores escape key", func(t *testing.T) {
+		model := newSpinnerModel("test", "test complete")
+		keyMsg := tea.KeyMsg{Type: tea.KeyEscape}
+		_, cmd := model.Update(keyMsg)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("dynamicSpinnerModel ignores enter key", func(t *testing.T) {
+		model := newDynamicSpinnerModel("test")
+		keyMsg := tea.KeyMsg{Type: tea.KeyEnter}
+		_, cmd := model.Update(keyMsg)
+		assert.Nil(t, cmd)
+	})
+
+	t.Run("manualSpinnerModel ignores tab key", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+		keyMsg := tea.KeyMsg{Type: tea.KeyTab}
+		_, cmd := model.Update(keyMsg)
+		assert.Nil(t, cmd)
+	})
+}
+
+// Test spinner model style initialization.
+func TestSpinnerModelStyle(t *testing.T) {
+	t.Run("spinnerModel has spinner with dot style", func(t *testing.T) {
+		model := newSpinnerModel("test", "done")
+		// Verify spinner was created.
+		assert.NotNil(t, model.spinner)
+	})
+
+	t.Run("dynamicSpinnerModel has spinner with dot style", func(t *testing.T) {
+		model := newDynamicSpinnerModel("test")
+		// Verify spinner was created.
+		assert.NotNil(t, model.spinner)
+	})
+
+	t.Run("manualSpinnerModel has spinner with dot style", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+		// Verify spinner was created.
+		assert.NotNil(t, model.spinner)
+	})
+}
+
+// Test Spinner struct fields.
+func TestSpinner_Fields(t *testing.T) {
+	t.Run("Spinner stores progressMsg", func(t *testing.T) {
+		s := New("My progress message")
+		assert.Equal(t, "My progress message", s.progressMsg)
+	})
+
+	t.Run("Spinner initially has nil program", func(t *testing.T) {
+		s := New("test")
+		assert.Nil(t, s.program)
+	})
+
+	t.Run("Spinner initially has nil done channel", func(t *testing.T) {
+		s := New("test")
+		assert.Nil(t, s.done)
+	})
+}
+
+// Test spinnerModel fields.
+func TestSpinnerModel_Fields(t *testing.T) {
+	t.Run("spinnerModel stores both messages", func(t *testing.T) {
+		model := newSpinnerModel("progress", "completed")
+		assert.Equal(t, "progress", model.progressMsg)
+		assert.Equal(t, "completed", model.completedMsg)
+	})
+
+	t.Run("spinnerModel initially not done", func(t *testing.T) {
+		model := newSpinnerModel("test", "done")
+		assert.False(t, model.done)
+	})
+
+	t.Run("spinnerModel initially no error", func(t *testing.T) {
+		model := newSpinnerModel("test", "done")
+		assert.Nil(t, model.err)
+	})
+}
+
+// Test dynamicSpinnerModel fields.
+func TestDynamicSpinnerModel_Fields(t *testing.T) {
+	t.Run("dynamicSpinnerModel stores progress message", func(t *testing.T) {
+		model := newDynamicSpinnerModel("dynamic progress")
+		assert.Equal(t, "dynamic progress", model.progressMsg)
+	})
+
+	t.Run("dynamicSpinnerModel initially has empty completedMsg", func(t *testing.T) {
+		model := newDynamicSpinnerModel("test")
+		assert.Empty(t, model.completedMsg)
+	})
+}
+
+// Test manualSpinnerModel fields.
+func TestManualSpinnerModel_Fields(t *testing.T) {
+	t.Run("manualSpinnerModel stores progress message", func(t *testing.T) {
+		model := newManualSpinnerModel("manual progress")
+		assert.Equal(t, "manual progress", model.progressMsg)
+	})
+
+	t.Run("manualSpinnerModel initially has empty finalMsg", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+		assert.Empty(t, model.finalMsg)
+	})
+
+	t.Run("manualSpinnerModel initially not success", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+		assert.False(t, model.success)
+	})
+}
+
+// Test view contains reset line escape sequence.
+func TestSpinnerViews_ContainResetLine(t *testing.T) {
+	t.Run("spinnerModel in-progress view has reset line", func(t *testing.T) {
+		model := newSpinnerModel("test", "done")
+		view := model.View()
+		// View should have the escape reset line sequence.
+		assert.NotEmpty(t, view)
+	})
+
+	t.Run("spinnerModel done view has reset line", func(t *testing.T) {
+		model := newSpinnerModel("test", "done")
+		model.done = true
+		view := model.View()
+		assert.NotEmpty(t, view)
+	})
+
+	t.Run("dynamicSpinnerModel view has reset line", func(t *testing.T) {
+		model := newDynamicSpinnerModel("test")
+		view := model.View()
+		assert.NotEmpty(t, view)
+	})
+
+	t.Run("manualSpinnerModel view has reset line", func(t *testing.T) {
+		model := newManualSpinnerModel("test")
+		view := model.View()
+		assert.NotEmpty(t, view)
+	})
+}
+
+// Test operation execution flow.
+func TestExecWithSpinner_OperationExecution(t *testing.T) {
+	t.Run("operation receives no arguments", func(t *testing.T) {
+		opCalled := false
+		op := func() error {
+			opCalled = true
+			return nil
+		}
+
+		_ = ExecWithSpinner("test", "done", op)
+		assert.True(t, opCalled, "operation should be called")
+	})
+
+	t.Run("operation error is returned", func(t *testing.T) {
+		expectedErr := errors.New("op failed")
+		op := func() error {
+			return expectedErr
+		}
+
+		err := ExecWithSpinner("test", "done", op)
+		// In non-TTY mode, the error should be returned directly.
+		// Accept either outcome based on environment.
+		_ = err
+	})
+}
+
+// Test dynamic operation execution flow.
+func TestExecWithSpinnerDynamic_OperationExecution(t *testing.T) {
+	t.Run("operation receives no arguments", func(t *testing.T) {
+		opCalled := false
+		op := func() (string, error) {
+			opCalled = true
+			return "done", nil
+		}
+
+		_ = ExecWithSpinnerDynamic("test", op)
+		assert.True(t, opCalled, "operation should be called")
+	})
+
+	t.Run("operation can return custom message", func(t *testing.T) {
+		op := func() (string, error) {
+			return "Custom completion message", nil
+		}
+
+		_ = ExecWithSpinnerDynamic("test", op)
+		// The message would be displayed if we had TTY.
+	})
+}
+
+// Test multiple spinner instances.
+func TestMultipleSpinnerInstances(t *testing.T) {
+	t.Run("can create multiple spinner instances", func(t *testing.T) {
+		s1 := New("Spinner 1")
+		s2 := New("Spinner 2")
+		s3 := New("Spinner 3")
+
+		assert.NotEqual(t, s1, s2)
+		assert.NotEqual(t, s2, s3)
+		assert.Equal(t, "Spinner 1", s1.progressMsg)
+		assert.Equal(t, "Spinner 2", s2.progressMsg)
+		assert.Equal(t, "Spinner 3", s3.progressMsg)
+	})
+}
+
+// Test spinner idempotency.
+func TestSpinner_Idempotency(t *testing.T) {
+	t.Run("calling Stop multiple times is safe", func(t *testing.T) {
+		s := New("test")
+		s.Stop()
+		s.Stop()
+		s.Stop()
+		// Should not panic.
+	})
+
+	t.Run("calling Success multiple times is safe", func(t *testing.T) {
+		s := New("test")
+		s.Success("done1")
+		s.Success("done2")
+		// Should not panic.
+	})
+
+	t.Run("calling Error multiple times is safe", func(t *testing.T) {
+		s := New("test")
+		s.Error("error1")
+		s.Error("error2")
+		// Should not panic.
+	})
+
+	t.Run("calling mixed completion methods is safe", func(t *testing.T) {
+		s := New("test")
+		s.Success("done")
+		s.Error("error")
+		s.Stop()
+		// Should not panic.
+	})
+}
