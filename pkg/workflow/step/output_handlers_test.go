@@ -1,6 +1,7 @@
 package step
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -296,6 +297,56 @@ func TestJoinHandlerValidation(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestJoinHandlerExecution(t *testing.T) {
+	handler, ok := Get("join")
+	require.True(t, ok)
+
+	tests := []struct {
+		name     string
+		step     *schema.WorkflowStep
+		expected string
+	}{
+		{
+			name: "join with default separator (newline)",
+			step: &schema.WorkflowStep{
+				Name:    "test",
+				Type:    "join",
+				Options: []string{"line1", "line2", "line3"},
+			},
+			expected: "line1\nline2\nline3",
+		},
+		{
+			name: "join with custom separator",
+			step: &schema.WorkflowStep{
+				Name:      "test",
+				Type:      "join",
+				Options:   []string{"a", "b", "c"},
+				Separator: ", ",
+			},
+			expected: "a, b, c",
+		},
+		{
+			name: "join with empty separator",
+			step: &schema.WorkflowStep{
+				Name:      "test",
+				Type:      "join",
+				Options:   []string{"foo", "bar"},
+				Separator: "",
+			},
+			expected: "foo\nbar", // Empty separator falls back to newline.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vars := NewVariables()
+			result, err := handler.Execute(context.Background(), tt.step, vars)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result.Value)
 		})
 	}
 }

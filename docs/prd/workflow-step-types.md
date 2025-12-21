@@ -631,7 +631,8 @@ Join multiple values. Maps to `gum join`.
 ```yaml
 - name: combined
   type: join
-  content:
+  separator: "\n"
+  options:
     - "{{ .steps.header.value }}"
     - "{{ .steps.body.value }}"
     - "{{ .steps.footer.value }}"
@@ -642,7 +643,9 @@ Access result: `{{ .steps.combined.value }}`
 **Implementation:** Simple string joining
 
 **Fields:**
-- `content` (required) - Array of strings/templates to join
+- `options` (required) - Array of strings/templates to join
+- `separator` - String to join values with (default: newline)
+- `content` - Alternative: single template string to resolve and return as-is
 
 ---
 
