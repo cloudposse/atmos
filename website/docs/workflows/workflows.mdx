@@ -602,22 +602,190 @@ steps:
 
 #### join
 
-Joins array values into a string with a separator.
+Joins multiple strings together with a separator.
 
 ```yaml
 steps:
-  - name: formatted
+  - name: combined
     type: join
     separator: ", "
-    values: "{{ .steps.regions.values }}"
+    options:
+      - "{{ .steps.header.value }}"
+      - "{{ .steps.body.value }}"
+      - "{{ .steps.footer.value }}"
 ```
 
 <dl>
-  <dt>`separator`</dt>
-  <dd>String to join values with</dd>
+  <dt>`options`</dt>
+  <dd>Array of strings to join (supports templates)</dd>
 
-  <dt>`values`</dt>
-  <dd>Array of values to join (use template to reference step output)</dd>
+  <dt>`separator`</dt>
+  <dd>String to join values with (default: newline)</dd>
+
+  <dt>`content`</dt>
+  <dd>Alternative: single template string to resolve and return as-is</dd>
+</dl>
+
+#### pager
+
+Displays content in a scrollable pager.
+
+```yaml
+steps:
+  - name: show_logs
+    type: pager
+    title: "Build Logs"
+    content: "{{ .steps.build.metadata.stdout }}"
+```
+
+Or load from a file:
+
+```yaml
+steps:
+  - name: show_readme
+    type: pager
+    title: "README"
+    path: "./README.md"
+    markdown: true
+```
+
+<dl>
+  <dt>`title`</dt>
+  <dd>Title displayed at the top of the pager</dd>
+
+  <dt>`content`</dt>
+  <dd>Content to display (supports templates)</dd>
+
+  <dt>`path`</dt>
+  <dd>Path to file to display (alternative to content)</dd>
+
+  <dt>`markdown`</dt>
+  <dd>Render content as markdown (default: auto-detect from .md/.markdown extension)</dd>
+</dl>
+
+#### format
+
+Formats and outputs text using Go templates.
+
+```yaml
+steps:
+  - name: summary
+    type: format
+    content: |
+      Environment: {{ .steps.env.value }}
+      Components: {{ .steps.components.values | join ", " }}
+```
+
+<dl>
+  <dt>`content`</dt>
+  <dd>Go template string to render and output</dd>
+</dl>
+
+#### style
+
+Applies terminal styling to content using lipgloss.
+
+```yaml
+steps:
+  - name: banner
+    type: style
+    content: "Deployment Complete"
+    foreground: "#00ff00"
+    border: rounded
+    padding: "1 2"
+    bold: true
+```
+
+<dl>
+  <dt>`content`</dt>
+  <dd>Text to style (supports templates)</dd>
+
+  <dt>`foreground`</dt>
+  <dd>Text color (hex or named)</dd>
+
+  <dt>`background`</dt>
+  <dd>Background color (hex or named)</dd>
+
+  <dt>`border`</dt>
+  <dd>Border style: `normal`, `rounded`, `thick`, `double`, `hidden`</dd>
+
+  <dt>`border_foreground`</dt>
+  <dd>Border color</dd>
+
+  <dt>`padding`</dt>
+  <dd>Padding (CSS-like: `"1"`, `"1 2"`, `"1 2 1 2"`)</dd>
+
+  <dt>`margin`</dt>
+  <dd>Margin (CSS-like format)</dd>
+
+  <dt>`width`</dt>
+  <dd>Fixed width in characters</dd>
+
+  <dt>`height`</dt>
+  <dd>Fixed height in lines</dd>
+
+  <dt>`align`</dt>
+  <dd>Text alignment: `left`, `center`, `right`</dd>
+
+  <dt>`bold`</dt>
+  <dd>Bold text</dd>
+
+  <dt>`italic`</dt>
+  <dd>Italic text</dd>
+
+  <dt>`underline`</dt>
+  <dd>Underlined text</dd>
+
+  <dt>`strikethrough`</dt>
+  <dd>Strikethrough text</dd>
+
+  <dt>`faint`</dt>
+  <dd>Dimmed text</dd>
+
+  <dt>`markdown`</dt>
+  <dd>Render content as markdown before styling</dd>
+</dl>
+
+#### linebreak
+
+Outputs blank lines for visual spacing.
+
+```yaml
+steps:
+  - name: spacer
+    type: linebreak
+    count: 2
+```
+
+<dl>
+  <dt>`count`</dt>
+  <dd>Number of blank lines to output (default: 1)</dd>
+</dl>
+
+#### log
+
+Outputs structured log messages at various levels.
+
+```yaml
+steps:
+  - name: debug_info
+    type: log
+    level: debug
+    content: "Processing component"
+    fields:
+      component: "{{ .steps.select.value }}"
+      stack: "{{ .env.ATMOS_STACK }}"
+```
+
+<dl>
+  <dt>`level`</dt>
+  <dd>Log level: `trace`, `debug`, `info`, `warn`, `error`</dd>
+
+  <dt>`content`</dt>
+  <dd>Log message (supports templates)</dd>
+
+  <dt>`fields`</dt>
+  <dd>Structured key-value pairs to include</dd>
 </dl>
 
 ### Variable Passing Between Steps
