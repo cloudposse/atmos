@@ -3,12 +3,14 @@
 
 **Error:** workflow step execution failed: subcommand exited with code 1
 
-## Hints
+## Explanation
 
-💡 The following command failed to execute:
+The following command failed to execute:
 
  echo "This should fail"
  exit 1
+
+## Hints
 
 💡 To resume the workflow from this step, run:
 
