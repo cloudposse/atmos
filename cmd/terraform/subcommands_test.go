@@ -11,6 +11,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 )
 
+// Note: These tests use viper.New() to create fresh, isolated viper instances
+// rather than cmd.TestKit because:
+// 1. TestKit is in cmd package (not exported to cmd/terraform)
+// 2. TestKit is designed for RootCmd state cleanup
+// 3. These tests only read global parsers (don't modify them)
+// 4. Fresh viper instances ensure complete test isolation
+
 // subcommandTestCase defines test parameters for terraform subcommands.
 type subcommandTestCase struct {
 	name           string
