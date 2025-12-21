@@ -64,6 +64,32 @@ func registerExecutionFlags(registry *flags.FlagRegistry) {
 	})
 }
 
+// BackendExecutionFlags returns flags for commands that generate backend files or run init.
+// These flags are used by: init, workspace, plan, apply, deploy.
+func BackendExecutionFlags() *flags.FlagRegistry {
+	registry := flags.NewFlagRegistry()
+	registry.Register(&flags.StringFlag{
+		Name:        "auto-generate-backend-file",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Override auto_generate_backend_file setting from atmos.yaml (true/false)",
+		EnvVars:     []string{"ATMOS_AUTO_GENERATE_BACKEND_FILE"},
+	})
+	registry.Register(&flags.StringFlag{
+		Name:        "init-run-reconfigure",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Override init_run_reconfigure setting from atmos.yaml (true/false)",
+		EnvVars:     []string{"ATMOS_INIT_RUN_RECONFIGURE"},
+	})
+	return registry
+}
+
+// WithBackendExecutionFlags returns a flags.Option that adds backend execution flags.
+func WithBackendExecutionFlags() flags.Option {
+	return flags.WithFlagRegistry(BackendExecutionFlags())
+}
+
 // registerProcessingFlags adds flags for template and function processing.
 func registerProcessingFlags(registry *flags.FlagRegistry) {
 	registry.Register(&flags.BoolFlag{
