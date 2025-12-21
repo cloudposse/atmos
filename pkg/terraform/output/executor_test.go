@@ -301,7 +301,8 @@ func TestExecutor_ExecuteWithSections_OutputError(t *testing.T) {
 	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
 	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
 	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
-	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, errors.New("output failed"))
+	// Use AnyTimes() because retryOnWindows may call Output multiple times on Windows.
+	mockRunner.EXPECT().Output(gomock.Any()).Return(nil, errors.New("output failed")).AnyTimes()
 
 	_, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, nil)
 	require.Error(t, err)
