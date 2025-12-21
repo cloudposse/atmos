@@ -7,6 +7,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// maxDependentDepth is the maximum recursion depth for flattening dependents.
+// This prevents potential stack overflow with extremely deep dependency chains.
+const maxDependentDepth = 100
+
 // Affected transforms a slice of schema.Affected into []map[string]any for the renderer.
 // If flattenDependents is true, dependents are flattened into separate rows with is_dependent=true.
 func Affected(affected []schema.Affected, flattenDependents bool) []map[string]any {
@@ -68,6 +72,7 @@ func affectedToMap(a *schema.Affected, isDependent bool, depth int) map[string]a
 }
 
 // flattenDependentsRecursive flattens nested dependents into a flat list.
+// Recursion is limited to maxDependentDepth to prevent stack overflow.
 func flattenDependentsRecursive(dependents []schema.Dependent, depth int) []map[string]any {
 	defer perf.Track(nil, "extract.flattenDependentsRecursive")()
 
@@ -77,8 +82,8 @@ func flattenDependentsRecursive(dependents []schema.Dependent, depth int) []map[
 		item := dependentToMap(&dependents[i], depth)
 		result = append(result, item)
 
-		// Recurse for nested dependents.
-		if len(dependents[i].Dependents) > 0 {
+		// Recurse for nested dependents if within depth limit.
+		if len(dependents[i].Dependents) > 0 && depth < maxDependentDepth {
 			nested := flattenDependentsRecursive(dependents[i].Dependents, depth+1)
 			result = append(result, nested...)
 		}

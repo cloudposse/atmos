@@ -8,6 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var affectedParser *flags.StandardParser
@@ -42,11 +43,10 @@ type AffectedOptions struct {
 
 // affectedCmd lists affected Atmos components and stacks.
 var affectedCmd = &cobra.Command{
-	Use:                "affected",
-	Short:              "List affected components and stacks",
-	Long:               "Display a table of affected components and stacks between Git commits.",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Args:               cobra.NoArgs,
+	Use:   "affected",
+	Short: "List affected components and stacks",
+	Long:  "Display a table of affected components and stacks between Git commits.",
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Parse flags using StandardParser with Viper precedence.
 		v := viper.GetViper()
@@ -114,6 +114,8 @@ func init() {
 }
 
 func executeListAffectedCmd(cmd *cobra.Command, args []string, opts *AffectedOptions) error {
+	defer perf.Track(nil, "list.executeListAffectedCmd")()
+
 	// Process and validate command line arguments.
 	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
 	if err != nil {

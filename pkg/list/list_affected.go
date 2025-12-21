@@ -2,6 +2,7 @@ package list
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
@@ -310,19 +311,13 @@ func parseAffectedColumnsFlag(columnsFlag []string) ([]column.Config, error) {
 	columns := make([]column.Config, 0, len(columnsFlag))
 	for _, spec := range columnsFlag {
 		// Split on first '=' to separate name from template.
-		idx := -1
-		for i, c := range spec {
-			if c == '=' {
-				idx = i
-				break
-			}
-		}
-		if idx == -1 {
+		parts := strings.SplitN(spec, "=", 2)
+		if len(parts) != 2 {
 			continue
 		}
 
-		name := spec[:idx]
-		value := spec[idx+1:]
+		name := parts[0]
+		value := parts[1]
 
 		if name == "" || value == "" {
 			continue

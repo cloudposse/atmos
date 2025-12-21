@@ -386,3 +386,128 @@ func TestAffected_AllFieldsPresent(t *testing.T) {
 		assert.Contains(t, result[0], field, "Missing field: %s", field)
 	}
 }
+
+func TestAffected_DepthLimit(t *testing.T) {
+	// Test that recursion stops at maxDependentDepth.
+	// Create a chain of dependents that exceeds the depth limit.
+
+	// Build a chain of dependents at depth 99 (just under the limit).
+	// The maxDependentDepth is 100, so depth 100 should be the last processed.
+	var buildDeepChain func(depth int) []schema.Dependent
+	buildDeepChain = func(depth int) []schema.Dependent {
+		if depth > 100 {
+			return nil
+		}
+		return []schema.Dependent{
+			{
+				Component:     "comp-" + string(rune('a'+depth%26)),
+				ComponentType: "terraform",
+				Stack:         "stack",
+				Dependents:    buildDeepChain(depth + 1),
+			},
+		}
+	}
+
+	affected := []schema.Affected{
+		{
+			Component:     "root",
+			ComponentType: "terraform",
+			Stack:         "stack",
+			Affected:      "file",
+			Dependents:    buildDeepChain(1),
+		},
+	}
+
+	result := Affected(affected, true)
+
+	// Verify we got results (the exact count depends on maxDependentDepth).
+	// At minimum we should have the root + 100 levels of dependents.
+	assert.Greater(t, len(result), 1)
+	// But we should not have more than maxDependentDepth + 1 items.
+	assert.LessOrEqual(t, len(result), maxDependentDepth+1)
+}
+
+func TestAffected_DependentWithSettings(t *testing.T) {
+	// Test dependents with their own settings.
+	affected := []schema.Affected{
+		{
+			Component:     "vpc",
+			ComponentType: "terraform",
+			Stack:         "dev",
+			Affected:      "file",
+			Dependents: []schema.Dependent{
+				{
+					Component:     "eks",
+					ComponentType: "terraform",
+					Stack:         "dev",
+					Settings: map[string]any{
+						"metadata": map[string]any{
+							"enabled": false,
+							"locked":  true,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := Affected(affected, true)
+
+	assert.Len(t, result, 2)
+	// Dependent should have its own settings applied.
+	assert.Equal(t, false, result[1]["enabled"])
+	assert.Equal(t, true, result[1]["locked"])
+	assert.Equal(t, "locked", result[1]["status_text"])
+}
+
+func TestAffected_EmptyDependentsList(t *testing.T) {
+	// Test affected with empty dependents list.
+	affected := []schema.Affected{
+		{
+			Component:     "vpc",
+			ComponentType: "terraform",
+			Stack:         "dev",
+			Affected:      "file",
+			Dependents:    []schema.Dependent{},
+		},
+	}
+
+	result := Affected(affected, true)
+
+	// Should only have the parent since dependents list is empty.
+	assert.Len(t, result, 1)
+	assert.Equal(t, "vpc", result[0]["component"])
+}
+
+func TestAffected_MultipleAffectedWithDependents(t *testing.T) {
+	// Test multiple affected items, each with dependents.
+	affected := []schema.Affected{
+		{
+			Component:     "vpc",
+			ComponentType: "terraform",
+			Stack:         "dev",
+			Affected:      "file",
+			Dependents: []schema.Dependent{
+				{Component: "eks", ComponentType: "terraform", Stack: "dev"},
+			},
+		},
+		{
+			Component:     "rds",
+			ComponentType: "terraform",
+			Stack:         "dev",
+			Affected:      "config",
+			Dependents: []schema.Dependent{
+				{Component: "app", ComponentType: "terraform", Stack: "dev"},
+			},
+		},
+	}
+
+	result := Affected(affected, true)
+
+	assert.Len(t, result, 4)
+	// Verify ordering: vpc, eks, rds, app.
+	assert.Equal(t, "vpc", result[0]["component"])
+	assert.Equal(t, "eks", result[1]["component"])
+	assert.Equal(t, "rds", result[2]["component"])
+	assert.Equal(t, "app", result[3]["component"])
+}

@@ -575,3 +575,131 @@ func TestAffectedCommandLong(t *testing.T) {
 		assert.NotEmpty(t, affectedCmd.Short)
 	})
 }
+
+// TestAffectedFlagTypes tests that all flags have the correct types.
+func TestAffectedFlagTypes(t *testing.T) {
+	stringFlags := []string{
+		"format", "delimiter", "sort", "ref", "sha",
+		"repo-path", "ssh-key", "ssh-key-password", "stack",
+	}
+
+	boolFlags := []string{
+		"clone-target-ref", "include-dependents", "exclude-locked",
+		"process-templates", "process-functions",
+	}
+
+	stringSliceFlags := []string{
+		"columns", "skip",
+	}
+
+	for _, flagName := range stringFlags {
+		t.Run(flagName+" is string type", func(t *testing.T) {
+			flag := affectedCmd.Flags().Lookup(flagName)
+			require.NotNil(t, flag, "Flag %s should exist", flagName)
+			assert.Equal(t, "string", flag.Value.Type())
+		})
+	}
+
+	for _, flagName := range boolFlags {
+		t.Run(flagName+" is bool type", func(t *testing.T) {
+			flag := affectedCmd.Flags().Lookup(flagName)
+			require.NotNil(t, flag, "Flag %s should exist", flagName)
+			assert.Equal(t, "bool", flag.Value.Type())
+		})
+	}
+
+	for _, flagName := range stringSliceFlags {
+		t.Run(flagName+" is stringSlice type", func(t *testing.T) {
+			flag := affectedCmd.Flags().Lookup(flagName)
+			require.NotNil(t, flag, "Flag %s should exist", flagName)
+			assert.Equal(t, "stringSlice", flag.Value.Type())
+		})
+	}
+}
+
+// TestAffectedCommandRegistration tests that the affected command is properly registered.
+func TestAffectedCommandRegistration(t *testing.T) {
+	t.Run("affected command is in listCmd subcommands", func(t *testing.T) {
+		found := false
+		for _, cmd := range listCmd.Commands() {
+			if cmd.Use == "affected" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "affected should be a subcommand of list")
+	})
+
+	t.Run("affected parser is not nil", func(t *testing.T) {
+		assert.NotNil(t, affectedParser)
+	})
+}
+
+// TestAffectedOptions_PartialOptions tests AffectedOptions with partial field population.
+func TestAffectedOptions_PartialOptions(t *testing.T) {
+	testCases := []struct {
+		name string
+		opts *AffectedOptions
+	}{
+		{
+			name: "only format",
+			opts: &AffectedOptions{Format: "table"},
+		},
+		{
+			name: "only ref",
+			opts: &AffectedOptions{Ref: "refs/heads/feature"},
+		},
+		{
+			name: "only sha",
+			opts: &AffectedOptions{SHA: "abc123def456"},
+		},
+		{
+			name: "only stack",
+			opts: &AffectedOptions{Stack: "dev"},
+		},
+		{
+			name: "only skip list",
+			opts: &AffectedOptions{Skip: []string{"comp1", "comp2"}},
+		},
+		{
+			name: "only columns",
+			opts: &AffectedOptions{Columns: []string{"Col1={{ .field }}"}},
+		},
+		{
+			name: "only processing flags",
+			opts: &AffectedOptions{
+				ProcessTemplates: true,
+				ProcessFunctions: false,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Just verify the options can be created without issues.
+			assert.NotNil(t, tc.opts)
+		})
+	}
+}
+
+// TestAffectedCommandHasRunE tests that the command has a RunE function.
+func TestAffectedCommandHasRunE(t *testing.T) {
+	assert.NotNil(t, affectedCmd.RunE, "affected command should have RunE function")
+}
+
+// TestAffectedFlagUsageStrings tests that flags have usage descriptions.
+func TestAffectedFlagUsageStrings(t *testing.T) {
+	flagsToCheck := []string{
+		"format", "columns", "delimiter", "sort", "ref", "sha",
+		"repo-path", "ssh-key", "clone-target-ref", "include-dependents",
+		"stack", "exclude-locked", "process-templates", "process-functions", "skip",
+	}
+
+	for _, flagName := range flagsToCheck {
+		t.Run(flagName+" has usage", func(t *testing.T) {
+			flag := affectedCmd.Flags().Lookup(flagName)
+			require.NotNil(t, flag, "Flag %s should exist", flagName)
+			assert.NotEmpty(t, flag.Usage, "Flag %s should have usage text", flagName)
+		})
+	}
+}

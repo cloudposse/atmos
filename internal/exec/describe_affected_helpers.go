@@ -228,19 +228,18 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, nil, nil, "", err
 	}
 
+	// Deferred cleanup ensures worktree is always removed.
+	defer cleanupWorktree(localRepoInfo.LocalWorktreePath, worktreePath)
+
 	// Open the worktree as a git repository.
 	remoteRepo, err := g.OpenWorktreeAwareRepo(worktreePath)
 	if err != nil {
-		g.RemoveWorktree(localRepoInfo.LocalWorktreePath, worktreePath)
-		removeTempDir(g.GetWorktreeParentDir(worktreePath))
 		return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
 	}
 
 	// Check the Git config of the target ref.
 	_, err = g.GetRepoConfig(remoteRepo)
 	if err != nil {
-		g.RemoveWorktree(localRepoInfo.LocalWorktreePath, worktreePath)
-		removeTempDir(g.GetWorktreeParentDir(worktreePath))
 		return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
 	}
 
@@ -259,17 +258,16 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		excludeLocked,
 	)
 	if err != nil {
-		g.RemoveWorktree(localRepoInfo.LocalWorktreePath, worktreePath)
-		removeTempDir(g.GetWorktreeParentDir(worktreePath))
 		return nil, nil, nil, "", err
 	}
 
-	// Clean up the worktree and temp directory.
-	// We use git worktree remove to properly unregister the worktree from git's tracking.
-	g.RemoveWorktree(localRepoInfo.LocalWorktreePath, worktreePath)
-	removeTempDir(g.GetWorktreeParentDir(worktreePath))
-
 	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
+}
+
+// cleanupWorktree removes a git worktree and its parent temp directory.
+func cleanupWorktree(repoPath, worktreePath string) {
+	g.RemoveWorktree(repoPath, worktreePath)
+	removeTempDir(g.GetWorktreeParentDir(worktreePath))
 }
 
 // ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, and processes stack configs

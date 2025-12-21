@@ -621,9 +621,6 @@ func GetTerraformOutput(
 		AuthManager:          resolvedAuthMgr, // Use resolved AuthManager (may be component-specific or inherited)
 	})
 	if err != nil {
-		if s != nil {
-			s.Stop()
-		}
 		return nil, false, fmt.Errorf("failed to describe the component %s in the stack %s: %w", component, stack, err)
 	}
 
@@ -643,9 +640,6 @@ func GetTerraformOutput(
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections, authContext)
 		if err != nil {
-			if s != nil {
-				s.Stop()
-			}
 			return nil, false, fmt.Errorf("failed to execute terraform output for the component %s in the stack %s: %w", component, stack, err)
 		}
 
@@ -655,9 +649,6 @@ func GetTerraformOutput(
 	}
 
 	if resultErr != nil {
-		if s != nil {
-			s.Stop()
-		}
 		return nil, false, resultErr
 	}
 
