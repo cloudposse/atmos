@@ -1041,3 +1041,577 @@ func TestAssumeRootIdentity_AllTaskPoliciesValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestAssumeRootIdentity_Paths(t *testing.T) {
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+		},
+	}
+
+	paths, err := i.Paths()
+	assert.NoError(t, err)
+	assert.Empty(t, paths)
+}
+
+func TestAssumeRootIdentity_resolveRootProviderName_WithManager(t *testing.T) {
+	mockManager := &mockAuthManager{
+		providerForIdentity: map[string]string{
+			"test-root": "sso-provider",
+		},
+	}
+
+	i := &assumeRootIdentity{
+		name:    "test-root",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Via:  &schema.IdentityVia{Provider: "fallback-provider"},
+		},
+	}
+
+	// When manager returns a provider, use it.
+	provider, err := i.resolveRootProviderName()
+	assert.NoError(t, err)
+	assert.Equal(t, "sso-provider", provider)
+}
+
+func TestAssumeRootIdentity_resolveRootProviderName_ManagerReturnsEmpty(t *testing.T) {
+	mockManager := &mockAuthManager{
+		providerForIdentity: map[string]string{},
+	}
+
+	i := &assumeRootIdentity{
+		name:             "test-root",
+		manager:          mockManager,
+		rootProviderName: "cached-provider",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Via:  &schema.IdentityVia{Provider: "fallback-provider"},
+		},
+	}
+
+	// When manager returns empty, fall back to cached value.
+	provider, err := i.resolveRootProviderName()
+	assert.NoError(t, err)
+	assert.Equal(t, "cached-provider", provider)
+}
+
+func TestAssumeRootIdentity_getRootProviderFromVia_CachedValue(t *testing.T) {
+	i := &assumeRootIdentity{
+		name:             "test-root",
+		rootProviderName: "cached-provider",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Via:  &schema.IdentityVia{Provider: "config-provider"},
+		},
+	}
+
+	// Cached value takes precedence over config.
+	provider, err := i.getRootProviderFromVia()
+	assert.NoError(t, err)
+	assert.Equal(t, "cached-provider", provider)
+}
+
+func TestAssumeRootIdentity_getRootProviderFromVia_ViaProvider(t *testing.T) {
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Via:  &schema.IdentityVia{Provider: "config-provider"},
+		},
+	}
+
+	// Falls back to Via.Provider from config.
+	provider, err := i.getRootProviderFromVia()
+	assert.NoError(t, err)
+	assert.Equal(t, "config-provider", provider)
+}
+
+func TestAssumeRootIdentity_getRootProviderFromVia_NoProvider(t *testing.T) {
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Via:  &schema.IdentityVia{Identity: "parent-identity"},
+		},
+	}
+
+	// Cannot determine root provider without Via.Provider.
+	_, err := i.getRootProviderFromVia()
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+}
+
+func TestAssumeRootIdentity_CredentialsExist_EmptyAccessKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
+
+	// Create credentials file with empty access key.
+	credPath := filepath.Join(tmpDir, "atmos", "aws", "aws-sso", "credentials")
+	require.NoError(t, os.MkdirAll(filepath.Dir(credPath), 0o700))
+	require.NoError(t, os.WriteFile(credPath, []byte("[test-root]\naws_access_key_id=\n"), 0o600))
+
+	identity, err := NewAssumeRootIdentity("test-root", &schema.Identity{
+		Kind: "aws/assume-root",
+		Via:  &schema.IdentityVia{Provider: "aws-sso"},
+		Principal: map[string]any{
+			"target_principal": "123456789012",
+			"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+		},
+	})
+	require.NoError(t, err)
+
+	exists, err := identity.CredentialsExist()
+	assert.NoError(t, err)
+	assert.False(t, exists, "empty access key should return false")
+}
+
+func TestAssumeRootIdentity_CredentialsExist_MissingSection(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
+
+	// Create credentials file without the identity section.
+	credPath := filepath.Join(tmpDir, "atmos", "aws", "aws-sso", "credentials")
+	require.NoError(t, os.MkdirAll(filepath.Dir(credPath), 0o700))
+	require.NoError(t, os.WriteFile(credPath, []byte("[other-identity]\naws_access_key_id=test\n"), 0o600))
+
+	identity, err := NewAssumeRootIdentity("test-root", &schema.Identity{
+		Kind: "aws/assume-root",
+		Via:  &schema.IdentityVia{Provider: "aws-sso"},
+		Principal: map[string]any{
+			"target_principal": "123456789012",
+			"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+		},
+	})
+	require.NoError(t, err)
+
+	exists, err := identity.CredentialsExist()
+	assert.NoError(t, err)
+	assert.False(t, exists, "missing section should return false")
+}
+
+func TestAssumeRootIdentity_Logout_NoProvider(t *testing.T) {
+	identity, err := NewAssumeRootIdentity("test-root", &schema.Identity{
+		Kind: "aws/assume-root",
+		Principal: map[string]any{
+			"target_principal": "123456789012",
+			"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+		},
+		// No Via configured.
+	})
+	require.NoError(t, err)
+
+	err = identity.Logout(context.Background())
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+}
+
+func TestAssumeRootIdentity_Environment_NoViaProvider(t *testing.T) {
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+			},
+			// No Via configured - should fail to resolve provider.
+		},
+	}
+
+	_, err := i.Environment()
+	assert.Error(t, err)
+}
+
+func TestAssumeRootIdentity_PrepareEnvironment_NoProvider(t *testing.T) {
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			// No Via configured.
+		},
+	}
+
+	environ := map[string]string{}
+	_, err := i.PrepareEnvironment(context.Background(), environ)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get provider name")
+}
+
+func TestAssumeRootIdentity_parseDurationSeconds_EmptyString(t *testing.T) {
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+				"duration":         "",
+			},
+		},
+	}
+	require.NoError(t, i.Validate())
+
+	duration := i.parseDurationSeconds()
+	assert.Nil(t, duration)
+}
+
+func TestAssumeRootIdentity_parseDurationSeconds_NoDurationKey(t *testing.T) {
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+			},
+		},
+	}
+	require.NoError(t, i.Validate())
+
+	duration := i.parseDurationSeconds()
+	assert.Nil(t, duration)
+}
+
+func TestAssumeRootIdentity_parseDurationSeconds_ShortDuration(t *testing.T) {
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+				"duration":         "5m",
+			},
+		},
+	}
+	require.NoError(t, i.Validate())
+
+	duration := i.parseDurationSeconds()
+	require.NotNil(t, duration)
+	assert.Equal(t, int32(300), *duration)
+}
+
+func TestAssumeRootIdentity_toAWSCredentials_NilExpiration(t *testing.T) {
+	i := &assumeRootIdentity{
+		name:   "test-root",
+		region: "us-east-1",
+	}
+
+	result := &sts.AssumeRootOutput{
+		Credentials: &ststypes.Credentials{
+			AccessKeyId:     aws.String("AKIAIOSFODNN7EXAMPLE"),
+			SecretAccessKey: aws.String("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"),
+			SessionToken:    aws.String("FwoGZXIvYXdzEBExample"),
+			Expiration:      nil, // Nil expiration.
+		},
+	}
+
+	creds, err := i.toAWSCredentials(result)
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+
+	awsCreds, ok := creds.(*types.AWSCredentials)
+	require.True(t, ok)
+	assert.Empty(t, awsCreds.Expiration)
+}
+
+// mockAuthManager implements types.AuthManager for testing.
+type mockAuthManager struct {
+	providerForIdentity map[string]string
+}
+
+func (m *mockAuthManager) GetProviderForIdentity(identityName string) string {
+	return m.providerForIdentity[identityName]
+}
+
+// Implement other AuthManager methods as no-ops for the mock.
+func (m *mockAuthManager) GetCachedCredentials(_ context.Context, _ string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+
+func (m *mockAuthManager) Authenticate(_ context.Context, _ string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+
+func (m *mockAuthManager) AuthenticateProvider(_ context.Context, _ string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+
+func (m *mockAuthManager) Whoami(_ context.Context, _ string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+
+func (m *mockAuthManager) Validate() error {
+	return nil
+}
+
+func (m *mockAuthManager) GetDefaultIdentity(_ bool) (string, error) {
+	return "", nil
+}
+
+func (m *mockAuthManager) ListIdentities() []string {
+	return nil
+}
+
+func (m *mockAuthManager) GetFilesDisplayPath(_ string) string {
+	return ""
+}
+
+func (m *mockAuthManager) GetProviderKindForIdentity(_ string) (string, error) {
+	return "", nil
+}
+
+func (m *mockAuthManager) GetChain() []string {
+	return nil
+}
+
+func (m *mockAuthManager) GetStackInfo() *schema.ConfigAndStacksInfo {
+	return nil
+}
+
+func (m *mockAuthManager) ListProviders() []string {
+	return nil
+}
+
+func (m *mockAuthManager) GetIdentities() map[string]schema.Identity {
+	return nil
+}
+
+func (m *mockAuthManager) GetProviders() map[string]schema.Provider {
+	return nil
+}
+
+func (m *mockAuthManager) Logout(_ context.Context, _ string, _ bool) error {
+	return nil
+}
+
+func (m *mockAuthManager) LogoutProvider(_ context.Context, _ string, _ bool) error {
+	return nil
+}
+
+func (m *mockAuthManager) LogoutAll(_ context.Context, _ bool) error {
+	return nil
+}
+
+func (m *mockAuthManager) GetEnvironmentVariables(_ string) (map[string]string, error) {
+	return nil, nil
+}
+
+func (m *mockAuthManager) PrepareShellEnvironment(_ context.Context, _ string, _ []string) ([]string, error) {
+	return nil, nil
+}
+
+func TestAssumeRootIdentity_CredentialsExist_ProviderResolutionError(t *testing.T) {
+	// Test when we can't resolve the provider name.
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			// No Via configured - can't resolve provider.
+		},
+	}
+
+	exists, err := i.CredentialsExist()
+	assert.Error(t, err)
+	assert.False(t, exists)
+}
+
+func TestAssumeRootIdentity_LoadCredentials_ProviderResolutionError(t *testing.T) {
+	// Test when we can't resolve the provider name.
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			// No Via configured.
+		},
+	}
+
+	_, err := i.LoadCredentials(context.Background())
+	assert.Error(t, err)
+}
+
+func TestAssumeRootIdentity_Validate_RegionFromPrincipal(t *testing.T) {
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+				"region":           "ap-southeast-1",
+			},
+		},
+	}
+
+	err := i.Validate()
+	assert.NoError(t, err)
+	assert.Equal(t, "ap-southeast-1", i.region)
+}
+
+func TestAssumeRootIdentity_Validate_EmptyTargetPrincipal(t *testing.T) {
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+			},
+		},
+	}
+
+	err := i.Validate()
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMissingPrincipal)
+}
+
+func TestAssumeRootIdentity_Validate_EmptyTaskPolicyArn(t *testing.T) {
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "",
+			},
+		},
+	}
+
+	err := i.Validate()
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMissingPrincipal)
+}
+
+func TestAssumeRootIdentity_PrepareEnvironment_EmptyRegion(t *testing.T) {
+	i := &assumeRootIdentity{
+		name:   "test-root",
+		region: "", // Empty region.
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Via:  &schema.IdentityVia{Provider: "test-provider"},
+		},
+	}
+
+	environ := map[string]string{}
+	result, err := i.PrepareEnvironment(context.Background(), environ)
+	assert.NoError(t, err)
+	// Even with empty region, should still set AWS vars.
+	assert.NotEmpty(t, result["AWS_SHARED_CREDENTIALS_FILE"])
+	assert.NotEmpty(t, result["AWS_CONFIG_FILE"])
+	assert.Equal(t, "test-root", result["AWS_PROFILE"])
+}
+
+func TestAssumeRootIdentity_Logout_WithCachedProvider(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
+
+	identity, err := NewAssumeRootIdentity("test-root", &schema.Identity{
+		Kind: "aws/assume-root",
+		Principal: map[string]any{
+			"target_principal": "123456789012",
+			"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+		},
+	})
+	require.NoError(t, err)
+
+	// Set cached provider name.
+	assumeRoot := identity.(*assumeRootIdentity)
+	assumeRoot.rootProviderName = "cached-provider"
+
+	// Create the credentials directory.
+	credPath := filepath.Join(tmpDir, "atmos", "aws", "cached-provider")
+	require.NoError(t, os.MkdirAll(credPath, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(credPath, "credentials"), []byte("[test-root]\naws_access_key_id=test\n"), 0o600))
+
+	err = identity.Logout(context.Background())
+	// Should succeed (cleans up files).
+	assert.NoError(t, err)
+}
+
+func TestAssumeRootIdentity_PostAuthenticate_StoresManagerAndProvider(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+		},
+	}
+
+	mockManager := &mockAuthManager{
+		providerForIdentity: map[string]string{
+			"test-root": "sso-provider",
+		},
+	}
+
+	authContext := &schema.AuthContext{}
+	stack := &schema.ConfigAndStacksInfo{}
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+		SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		SessionToken:    "FwoGZXIvYXdzEBExample",
+		Region:          "us-east-1",
+	}
+
+	err := i.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		AuthContext:  authContext,
+		StackInfo:    stack,
+		ProviderName: "aws-sso",
+		IdentityName: "test-root",
+		Credentials:  creds,
+		Manager:      mockManager,
+	})
+
+	require.NoError(t, err)
+	// Verify manager and provider name are stored.
+	assert.Equal(t, mockManager, i.manager)
+	assert.Equal(t, "aws-sso", i.rootProviderName)
+}
+
+func TestAssumeRootIdentity_Environment_WithEnvFromConfig(t *testing.T) {
+	i := &assumeRootIdentity{
+		name: "test-root",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Via:  &schema.IdentityVia{Provider: "test-provider"},
+			Env: []schema.EnvironmentVariable{
+				{Key: "CUSTOM_VAR1", Value: "value1"},
+				{Key: "CUSTOM_VAR2", Value: "value2"},
+			},
+		},
+	}
+
+	env, err := i.Environment()
+	assert.NoError(t, err)
+
+	// Should include custom env vars from config.
+	assert.Equal(t, "value1", env["CUSTOM_VAR1"])
+	assert.Equal(t, "value2", env["CUSTOM_VAR2"])
+}
+
+func TestAssumeRootIdentity_Logout_ViaProvider(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
+
+	identity, err := NewAssumeRootIdentity("test-root", &schema.Identity{
+		Kind: "aws/assume-root",
+		Via:  &schema.IdentityVia{Provider: "sso-provider"},
+		Principal: map[string]any{
+			"target_principal": "123456789012",
+			"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+		},
+	})
+	require.NoError(t, err)
+
+	// Create the credentials directory.
+	credPath := filepath.Join(tmpDir, "atmos", "aws", "sso-provider")
+	require.NoError(t, os.MkdirAll(credPath, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(credPath, "credentials"), []byte("[test-root]\naws_access_key_id=test\n"), 0o600))
+
+	err = identity.Logout(context.Background())
+	assert.NoError(t, err)
+}
