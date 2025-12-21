@@ -5,13 +5,13 @@ authors: [osterman]
 tags: [feature, dx]
 ---
 
-Atmos workflows now support 18 step types that transform static automation scripts into guided, user-friendly experiences. Build deployment wizards, collect input securely, display rich feedback, and create self-documenting runbooks—all within your existing workflow YAML.
+Atmos workflows now support 23 step types that transform static automation scripts into guided, user-friendly experiences. Build deployment wizards, collect input securely, display rich feedback, and create self-documenting runbooks—all within your existing workflow YAML.
 
 <!--truncate-->
 
 ## What Changed
 
-Workflows have evolved from simple command runners into a full-featured automation framework with a registry-based architecture supporting four categories of step types:
+Workflows have evolved from simple command runners into a full-featured automation framework with a registry-based architecture supporting five categories of step types:
 
 **Interactive Steps** (require TTY):
 - `input` - Text input with placeholder, default value, and password masking
@@ -33,6 +33,13 @@ Workflows have evolved from simple command runners into a full-featured automati
 - `linebreak` - Visual spacing between sections
 - `pager` - Scrollable file viewer with search
 - `log` - Structured logging with levels and fields
+
+**Terminal Steps**:
+- `alert` - Play terminal bell to notify users
+- `title` - Set/restore terminal window title
+- `clear` - Clear current terminal line
+- `env` - Set environment variables for subsequent steps
+- `exit` - Exit workflow with a specific exit code
 
 **Command Steps**:
 - `atmos` - Execute atmos commands

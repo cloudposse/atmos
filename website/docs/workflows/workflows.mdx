@@ -286,13 +286,13 @@ You can use [YAML Multiline Strings](https://yaml-multiline.info/) to create com
 
 :::tip Interactive Workflows
 
-Atmos supports 20+ step types for building interactive CLI wizards. Use `input`, `confirm`, `choose`, and `filter` to collect user input, `markdown` and `success`/`info`/`warn`/`error` for rich output, and `spin` for progress spinners. See the [Step Types](#step-types) section below for complete documentation.
+Atmos supports 25+ step types for building interactive CLI wizards. Use `input`, `confirm`, `choose`, and `filter` to collect user input, `markdown` and `success`/`info`/`warn`/`error` for rich output, `spin` for progress spinners, and `alert`/`title`/`env`/`exit` for terminal control. See the [Step Types](#step-types) section below for complete documentation.
 
 :::
 
 ## Step Types
 
-Atmos workflows support 20+ step types across four categories: Command, Interactive, UI Messages, and Output. These step types enable building sophisticated CLI wizards and interactive deployment pipelines.
+Atmos workflows support 25+ step types across five categories: Command, Interactive, UI Messages, Output, and Terminal. These step types enable building sophisticated CLI wizards and interactive deployment pipelines.
 
 ### Step Types Overview
 
@@ -302,6 +302,7 @@ Atmos workflows support 20+ step types across four categories: Command, Interact
 | **Interactive** | `input`, `confirm`, `choose`, `filter`, `file`, `write` | Collect user input |
 | **UI Messages** | `success`, `info`, `warn`, `error`, `markdown` | Display formatted messages |
 | **Output** | `spin`, `table`, `pager`, `format`, `join`, `style` | Format and display output |
+| **Terminal** | `alert`, `title`, `clear`, `env`, `exit` | Terminal control and workflow management |
 
 ### Interactive Step Types
 
@@ -787,6 +788,129 @@ steps:
   <dt>`fields`</dt>
   <dd>Structured key-value pairs to include</dd>
 </dl>
+
+### Terminal Step Types
+
+Terminal step types control the terminal environment and workflow execution flow.
+
+#### alert
+
+Plays a terminal bell sound to notify the user. Useful at the end of long-running workflows.
+
+```yaml
+steps:
+  - name: notify
+    type: alert
+    content: "Workflow complete!"  # Optional message
+```
+
+<dl>
+  <dt>`content`</dt>
+  <dd>Optional message to display after the bell (supports templates)</dd>
+</dl>
+
+:::tip
+Use `alert` at the end of long-running workflows to notify users when the workflow completes, even if they've switched to another window.
+:::
+
+#### title
+
+Sets the terminal window title. Useful for showing workflow progress in the title bar.
+
+```yaml
+steps:
+  - name: set_title
+    type: title
+    content: "Deploying to {{ .steps.env.value }}..."
+
+  - name: deploy
+    type: atmos
+    command: terraform apply vpc
+
+  - name: restore_title
+    type: title  # Empty content restores original title
+```
+
+<dl>
+  <dt>`content`</dt>
+  <dd>Title text (supports templates). If empty, restores the original title.</dd>
+</dl>
+
+:::note
+Respects `settings.terminal.title` configuration. Some terminals may not support title changes.
+:::
+
+#### clear
+
+Clears the current terminal line. Useful for cleaning up dynamic output.
+
+```yaml
+steps:
+  - name: clear_line
+    type: clear
+```
+
+No parameters required.
+
+#### env
+
+Sets environment variables for subsequent steps in the workflow.
+
+```yaml
+steps:
+  - name: get_env
+    type: choose
+    prompt: "Select environment"
+    options: [dev, staging, prod]
+
+  - name: set_env
+    type: env
+    vars:
+      DEPLOY_ENV: "{{ .steps.get_env.value }}"
+      AWS_REGION: us-east-1
+      TF_VAR_environment: "{{ .steps.get_env.value }}"
+
+  - name: deploy
+    type: atmos
+    command: terraform apply vpc
+```
+
+<dl>
+  <dt>`vars`</dt>
+  <dd>Map of environment variable names to values (supports templates)</dd>
+</dl>
+
+:::tip
+Use `env` to pass user input or computed values to subsequent shell/atmos commands as environment variables.
+:::
+
+#### exit
+
+Exits the workflow immediately with a specific exit code.
+
+```yaml
+steps:
+  - name: confirm
+    type: confirm
+    prompt: "Continue with deployment?"
+
+  - name: abort
+    type: exit
+    code: 1
+    content: "Deployment cancelled by user"
+```
+
+<dl>
+  <dt>`code`</dt>
+  <dd>Exit code (default: 0). Use non-zero for error conditions.</dd>
+
+  <dt>`content`</dt>
+  <dd>Optional message to display before exiting (supports templates)</dd>
+</dl>
+
+:::warning
+The `exit` step immediately terminates the workflow. No subsequent steps will run.
+:::
 
 ### Variable Passing Between Steps
 

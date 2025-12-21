@@ -18,6 +18,11 @@ func TestUIHandlersRegistration(t *testing.T) {
 	}{
 		{"toast", CategoryUI},
 		{"markdown", CategoryUI},
+		{"alert", CategoryUI},
+		{"title", CategoryUI},
+		{"clear", CategoryUI},
+		{"env", CategoryUI},
+		{"exit", CategoryUI},
 	}
 
 	for _, tt := range tests {
@@ -62,6 +67,48 @@ func TestUIHandlersValidation(t *testing.T) {
 			content:   "",
 			expectErr: true,
 		},
+		{
+			name:      "alert without content",
+			stepType:  "alert",
+			content:   "",
+			expectErr: false,
+		},
+		{
+			name:      "alert with content",
+			stepType:  "alert",
+			content:   "Workflow complete!",
+			expectErr: false,
+		},
+		{
+			name:      "title without content",
+			stepType:  "title",
+			content:   "",
+			expectErr: false,
+		},
+		{
+			name:      "title with content",
+			stepType:  "title",
+			content:   "Deploying...",
+			expectErr: false,
+		},
+		{
+			name:      "clear step",
+			stepType:  "clear",
+			content:   "",
+			expectErr: false,
+		},
+		{
+			name:      "exit without content",
+			stepType:  "exit",
+			content:   "",
+			expectErr: false,
+		},
+		{
+			name:      "exit with content",
+			stepType:  "exit",
+			content:   "Goodbye!",
+			expectErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -83,6 +130,83 @@ func TestUIHandlersValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEnvHandlerValidation(t *testing.T) {
+	handler, ok := Get("env")
+	require.True(t, ok, "env handler should be registered")
+
+	tests := []struct {
+		name      string
+		vars      map[string]string
+		expectErr bool
+	}{
+		{
+			name:      "env with vars",
+			vars:      map[string]string{"MY_VAR": "value"},
+			expectErr: false,
+		},
+		{
+			name:      "env with multiple vars",
+			vars:      map[string]string{"VAR1": "value1", "VAR2": "value2"},
+			expectErr: false,
+		},
+		{
+			name:      "env without vars",
+			vars:      nil,
+			expectErr: true,
+		},
+		{
+			name:      "env with empty vars",
+			vars:      map[string]string{},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := &schema.WorkflowStep{
+				Name: "test_step",
+				Type: "env",
+				Vars: tt.vars,
+			}
+
+			err := handler.Validate(step)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestEnvHandlerExecution(t *testing.T) {
+	handler, ok := Get("env")
+	require.True(t, ok, "env handler should be registered")
+
+	vars := NewVariables()
+	vars.Set("user_input", NewStepResult("production"))
+
+	step := &schema.WorkflowStep{
+		Name: "set_env",
+		Type: "env",
+		Vars: map[string]string{
+			"DEPLOY_ENV": "{{ .steps.user_input.value }}",
+			"STATIC_VAR": "fixed-value",
+			"AWS_REGION": "us-east-1",
+		},
+	}
+
+	ctx := context.Background()
+	result, err := handler.Execute(ctx, step, vars)
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+
+	// Verify environment variables were set.
+	assert.Equal(t, "production", vars.Env["DEPLOY_ENV"])
+	assert.Equal(t, "fixed-value", vars.Env["STATIC_VAR"])
+	assert.Equal(t, "us-east-1", vars.Env["AWS_REGION"])
 }
 
 func TestUIHandlersTemplateResolution(t *testing.T) {
