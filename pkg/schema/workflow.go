@@ -33,10 +33,11 @@ type WorkflowStep struct {
 	Limit       int      `yaml:"limit,omitempty" json:"limit,omitempty" mapstructure:"limit"`                   // Selection limit.
 
 	// Output/UI step fields.
-	Content string           `yaml:"content,omitempty" json:"content,omitempty" mapstructure:"content"` // Content for output types (supports templates).
-	Title   string           `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`       // Title for spin/pager.
-	Data    []map[string]any `yaml:"data,omitempty" json:"data,omitempty" mapstructure:"data"`          // Data for table type.
-	Columns []string         `yaml:"columns,omitempty" json:"columns,omitempty" mapstructure:"columns"` // Columns for table.
+	Content   string           `yaml:"content,omitempty" json:"content,omitempty" mapstructure:"content"`       // Content for output types (supports templates).
+	Title     string           `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`             // Title for spin/pager.
+	Data      []map[string]any `yaml:"data,omitempty" json:"data,omitempty" mapstructure:"data"`                // Data for table type.
+	Columns   []string         `yaml:"columns,omitempty" json:"columns,omitempty" mapstructure:"columns"`       // Columns for table.
+	Separator string           `yaml:"separator,omitempty" json:"separator,omitempty" mapstructure:"separator"` // Separator for join type (default: newline).
 
 	// File picker fields.
 	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker.
