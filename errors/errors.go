@@ -154,6 +154,7 @@ var (
 	ErrFailedToGetLocalRepo = errors.New("failed to get local repository")
 	ErrFailedToGetRepoInfo  = errors.New("failed to get repository info")
 	ErrLocalRepoFetch       = errors.New("local repo unavailable")
+	ErrGitRefNotFound       = errors.New("git reference not found on local filesystem")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")

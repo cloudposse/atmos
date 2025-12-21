@@ -87,24 +87,36 @@ export function compareVersionsDescending(a: string, b: string): number {
 
 /**
  * Groups blog posts by release version, sorted with unreleased first then descending.
+ * @param items - Blog post items to group.
+ * @param globalReleaseMap - Optional release map from blog-release-data plugin (permalink → release).
  */
-export function groupBlogPostsByRelease(items: BlogPostItem[]): ReleaseGroup[] {
-  const releaseMap = new Map<string, BlogPostItem[]>();
+export function groupBlogPostsByRelease(
+  items: BlogPostItem[],
+  globalReleaseMap?: Record<string, string>
+): ReleaseGroup[] {
+  const releaseGroups = new Map<string, BlogPostItem[]>();
 
   items.forEach((item) => {
-    const release = item.content.frontMatter?.release || 'unreleased';
-    if (!releaseMap.has(release)) {
-      releaseMap.set(release, []);
+    // Priority: frontMatter > globalReleaseMap > 'unreleased'.
+    let release = item.content.frontMatter?.release;
+    if (!release && globalReleaseMap) {
+      const permalink = item.content.metadata.permalink;
+      release = globalReleaseMap[permalink] || globalReleaseMap[`${permalink}/`];
     }
-    releaseMap.get(release)!.push(item);
+    release = release || 'unreleased';
+
+    if (!releaseGroups.has(release)) {
+      releaseGroups.set(release, []);
+    }
+    releaseGroups.get(release)!.push(item);
   });
 
   // Sort releases: unreleased first, then by version descending.
-  const sortedReleases = Array.from(releaseMap.keys()).sort(compareVersionsDescending);
+  const sortedReleases = Array.from(releaseGroups.keys()).sort(compareVersionsDescending);
 
   return sortedReleases.map((release) => ({
     release,
-    items: releaseMap.get(release)!,
+    items: releaseGroups.get(release)!,
   }));
 }
 

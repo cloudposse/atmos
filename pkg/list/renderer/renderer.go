@@ -144,7 +144,7 @@ func formatJSON(headers []string, rows [][]string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return string(jsonBytes), nil
+	return string(jsonBytes) + "\n", nil
 }
 
 // formatYAML formats headers and rows as YAML array of objects.
@@ -174,7 +174,7 @@ func formatDelimited(headers []string, rows [][]string, delimiter string) (strin
 	for _, row := range rows {
 		lines = append(lines, strings.Join(row, delimiter))
 	}
-	return strings.Join(lines, "\n"), nil
+	return strings.Join(lines, "\n") + "\n", nil
 }
 
 // formatStyledTableOrPlain formats output as a styled table for TTY or plain list when piped.

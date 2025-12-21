@@ -1,0 +1,10 @@
+# Development stack for terraform flags testing
+vars:
+  stage: dev
+
+components:
+  terraform:
+    testcomponent:
+      vars:
+        environment: "development"
+        enabled: true

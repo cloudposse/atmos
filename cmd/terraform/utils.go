@@ -176,9 +176,33 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	info.Skip = opts.Skip
 	info.Components = opts.Components
 	info.DryRun = opts.DryRun
+	info.SkipInit = opts.SkipInit
 	info.All = opts.All
 	info.Affected = opts.Affected
 	info.Query = opts.Query
+
+	// Backend execution flags (only apply if set via CLI).
+	if opts.AutoGenerateBackendFile != "" {
+		info.AutoGenerateBackendFile = opts.AutoGenerateBackendFile
+	}
+	if opts.InitRunReconfigure != "" {
+		info.InitRunReconfigure = opts.InitRunReconfigure
+	}
+	if opts.InitPassVars {
+		info.InitPassVars = "true"
+	}
+
+	// Plan/Apply/Deploy specific flags.
+	if opts.PlanFile != "" {
+		info.PlanFile = opts.PlanFile
+		info.UseTerraformPlan = true
+	}
+	if opts.PlanSkipPlanfile {
+		info.PlanSkipPlanfile = "true"
+	}
+	if opts.DeployRunInit {
+		info.DeployRunInit = "true"
+	}
 }
 
 // terraformRunWithOptions is the shared execution logic for terraform subcommands.
