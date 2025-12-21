@@ -53,7 +53,7 @@ func NewStore(opts planfile.StoreOptions) (planfile.Store, error) {
 
 	cfg, err := config.LoadDefaultConfig(context.Background(), awsOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrAWSConfigLoadFailed, err)
 	}
 
 	client := s3.NewFromConfig(cfg)
@@ -241,7 +241,7 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 		if isNotFoundError(err) {
 			return false, nil
 		}
-		return false, fmt.Errorf("failed to check if planfile exists: %w", err)
+		return false, fmt.Errorf("%w: failed to check if %s exists in S3: %w", errUtils.ErrPlanfileStatFailed, key, err)
 	}
 
 	return true, nil
@@ -262,7 +262,7 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata
 		if isNotFoundError(err) {
 			return nil, fmt.Errorf("%w: %s", errUtils.ErrPlanfileNotFound, key)
 		}
-		return nil, err
+		return nil, fmt.Errorf("%w: failed to get metadata for %s from S3: %w", errUtils.ErrPlanfileStatFailed, key, err)
 	}
 
 	// Try to load metadata from separate file.

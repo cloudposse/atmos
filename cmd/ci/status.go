@@ -2,16 +2,32 @@ package ci
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	_ "github.com/cloudposse/atmos/pkg/ci/github" // Register GitHub provider.
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// buildConfigAndStacksInfo creates ConfigAndStacksInfo from global flags.
+func buildConfigAndStacksInfo(globalFlags *global.Flags) schema.ConfigAndStacksInfo {
+	if globalFlags == nil {
+		return schema.ConfigAndStacksInfo{}
+	}
+	return schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
+	}
+}
 
 const (
 	// ShortSHALength is the standard length for displaying abbreviated git SHAs.
@@ -32,8 +48,11 @@ Shows status checks, pull request information, and related PRs.`,
 func runStatus(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
+	// Parse global flags before loading config to respect --config-path, --base-path, etc.
+	globalFlags := flags.ParseGlobalFlags(cmd, viper.GetViper())
+
 	// Load Atmos configuration (optional - CI status can work without it).
-	atmosConfig, configErr := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, configErr := cfg.InitCliConfig(buildConfigAndStacksInfo(&globalFlags), false)
 	configLoaded := configErr == nil
 	if configErr != nil {
 		log.Debug("Failed to load atmos config, continuing without CI enabled check", "error", configErr)
