@@ -1,0 +1,374 @@
+# yaml-language-server: $schema=schema.json
+# Integration tests for terraform CLI flags restored after registry migration
+# Tests for PR #1896: Restore terraform CLI flags after registry migration
+#
+# These tests verify that the restored flags are properly registered and recognized.
+# The primary goal is to ensure no "unknown flag" errors occur for valid flags.
+#
+# Fixed flags:
+#   --skip-init                  - Skip terraform init before running command
+#   --auto-generate-backend-file - Override auto_generate_backend_file setting
+#   --init-run-reconfigure       - Override init_run_reconfigure setting
+#   --init-pass-vars             - Pass the generated varfile to terraform init
+#   --planfile                   - Path to a terraform plan file to use
+#   --skip-planfile              - Skip writing the plan to a planfile
+#   --deploy-run-init            - Override deploy_run_init setting
+tests:
+  # Test that unknown flags still produce errors (negative test)
+  # This verifies our test infrastructure is working correctly
+  - name: "terraform plan with unknown flag produces error"
+    enabled: true
+    description: "Verify unknown flags still produce errors as expected"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--nonexistent-flag"
+    expect:
+      exit_code: 1
+      stderr:
+        - "unknown flag"
+
+  # Test --dry-run flag is recognized (baseline)
+  - name: "terraform plan with --dry-run flag is recognized"
+    enabled: true
+    description: "Verify --dry-run flag is recognized (no unknown flag error)"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  # Test --skip-init flag is recognized
+  - name: "terraform plan with --skip-init flag is recognized"
+    enabled: true
+    description: "Verify --skip-init flag is recognized on plan command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--skip-init"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  - name: "terraform output with --skip-init flag is recognized"
+    enabled: true
+    description: "Verify --skip-init flag is recognized on output command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "output"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--skip-init"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  # Test --auto-generate-backend-file flag is recognized on various commands
+  - name: "terraform init with --auto-generate-backend-file flag is recognized"
+    enabled: true
+    description: "Verify --auto-generate-backend-file flag is recognized on init command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "init"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--auto-generate-backend-file=true"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  - name: "terraform workspace with --auto-generate-backend-file flag is recognized"
+    enabled: true
+    description: "Verify --auto-generate-backend-file flag is recognized on workspace command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "workspace"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--auto-generate-backend-file=false"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  - name: "terraform plan with --auto-generate-backend-file flag is recognized"
+    enabled: true
+    description: "Verify --auto-generate-backend-file flag is recognized on plan command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--auto-generate-backend-file=true"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  # Test --init-run-reconfigure flag is recognized
+  - name: "terraform init with --init-run-reconfigure flag is recognized"
+    enabled: true
+    description: "Verify --init-run-reconfigure flag is recognized on init command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "init"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--init-run-reconfigure=true"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  - name: "terraform plan with --init-run-reconfigure flag is recognized"
+    enabled: true
+    description: "Verify --init-run-reconfigure flag is recognized on plan command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--init-run-reconfigure=false"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  # Test --init-pass-vars flag is recognized (global flag)
+  - name: "terraform plan with --init-pass-vars flag is recognized"
+    enabled: true
+    description: "Verify --init-pass-vars flag is recognized (OpenTofu feature)"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--init-pass-vars"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  - name: "terraform apply with --init-pass-vars flag is recognized"
+    enabled: true
+    description: "Verify --init-pass-vars flag is recognized on apply command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "apply"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--init-pass-vars"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  # Test --planfile flag is recognized
+  - name: "terraform apply with --planfile flag is recognized"
+    enabled: true
+    description: "Verify --planfile flag is recognized on apply command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "apply"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--planfile=/tmp/test-plan.tfplan"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  - name: "terraform deploy with --planfile flag is recognized"
+    enabled: true
+    description: "Verify --planfile flag is recognized on deploy command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "deploy"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--planfile=/tmp/test-plan.tfplan"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  # Test --skip-planfile flag is recognized
+  - name: "terraform plan with --skip-planfile flag is recognized"
+    enabled: true
+    description: "Verify --skip-planfile flag is recognized on plan command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--skip-planfile"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  # Test --deploy-run-init flag is recognized
+  - name: "terraform deploy with --deploy-run-init=true flag is recognized"
+    enabled: true
+    description: "Verify --deploy-run-init flag is recognized on deploy command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "deploy"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--deploy-run-init=true"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  - name: "terraform deploy with --deploy-run-init=false flag is recognized"
+    enabled: true
+    description: "Verify --deploy-run-init=false flag is recognized on deploy command"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "deploy"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--deploy-run-init=false"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  # Test multiple flags together
+  - name: "terraform deploy with multiple flags is recognized"
+    enabled: true
+    description: "Verify multiple terraform flags work together"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "deploy"
+      - "testcomponent"
+      - "-s"
+      - "prod"
+      - "--auto-generate-backend-file=true"
+      - "--init-run-reconfigure=false"
+      - "--deploy-run-init=true"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  - name: "terraform plan with multiple flags is recognized"
+    enabled: true
+    description: "Verify multiple terraform flags on plan command work together"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--skip-init"
+      - "--auto-generate-backend-file=false"
+      - "--init-run-reconfigure=true"
+      - "--skip-planfile"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"
+
+  - name: "terraform apply with multiple flags is recognized"
+    enabled: true
+    description: "Verify multiple terraform flags on apply command work together"
+    workdir: "fixtures/scenarios/atmos-terraform-flags"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "apply"
+      - "testcomponent"
+      - "-s"
+      - "dev"
+      - "--skip-init"
+      - "--auto-generate-backend-file=true"
+      - "--init-run-reconfigure=false"
+      - "--planfile=/tmp/test.tfplan"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "unknown flag"

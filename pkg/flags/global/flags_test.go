@@ -269,6 +269,48 @@ func TestIdentitySelector_IsEmpty(t *testing.T) {
 	}
 }
 
+// TestIdentitySelector_IsDisabled tests disabled check.
+func TestIdentitySelector_IsDisabled(t *testing.T) {
+	tests := []struct {
+		name     string
+		selector IdentitySelector
+		expected bool
+	}{
+		{
+			name:     "empty value - not disabled",
+			selector: NewIdentitySelector("", false),
+			expected: false,
+		},
+		{
+			name:     "normal identity - not disabled",
+			selector: NewIdentitySelector("prod-admin", true),
+			expected: false,
+		},
+		{
+			name:     "interactive selector - not disabled",
+			selector: NewIdentitySelector("__SELECT__", true),
+			expected: false,
+		},
+		{
+			name:     "disabled sentinel value - disabled",
+			selector: NewIdentitySelector("__DISABLED__", true),
+			expected: true,
+		},
+		{
+			name:     "disabled sentinel but not provided - not disabled",
+			selector: NewIdentitySelector("__DISABLED__", false),
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.selector.IsDisabled()
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
 // TestPagerSelector_Value tests value retrieval.
 func TestPagerSelector_Value(t *testing.T) {
 	tests := []struct {
