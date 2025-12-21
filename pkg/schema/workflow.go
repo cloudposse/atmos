@@ -73,6 +73,12 @@ type WorkflowStep struct {
 
 	// Environment variables (supports templates).
 	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+
+	// Env step type fields.
+	Vars map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"vars"` // Variables to set for env step type.
+
+	// Exit step type fields.
+	Code int `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"` // Exit code for exit step type.
 }
 
 // WorkflowDefinition represents a complete workflow with steps.
