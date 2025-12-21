@@ -47,6 +47,7 @@ For complete Terraform/OpenTofu documentation, see:
 func init() {
 	// Create parser with plan-specific flags using functional options.
 	planParser = flags.NewStandardParser(
+		WithBackendExecutionFlags(),
 		flags.WithBoolFlag("upload-status", "", false, "If set atmos will upload the plan result to the pro API"),
 		flags.WithBoolFlag("affected", "", false, "Plan the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Plan all components in all stacks"),
