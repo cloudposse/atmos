@@ -14,8 +14,16 @@ var (
 )
 
 // Register registers a store factory for the given type.
+// Both storeType and factory must be non-empty/non-nil.
 func Register(storeType string, factory StoreFactory) {
 	defer perf.Track(nil, "planfile.Register")()
+
+	if storeType == "" {
+		panic(fmt.Sprintf("%v: store type cannot be empty", errUtils.ErrPlanfileStoreInvalidArgs))
+	}
+	if factory == nil {
+		panic(fmt.Sprintf("%v: factory cannot be nil for store type %q", errUtils.ErrPlanfileStoreInvalidArgs, storeType))
+	}
 
 	registryMu.Lock()
 	defer registryMu.Unlock()

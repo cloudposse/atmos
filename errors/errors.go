@@ -806,13 +806,17 @@ var (
 	ErrGitHubTokenNotFound    = errors.New("GitHub token not found")
 
 	// Planfile storage errors.
-	ErrPlanfileNotFound       = errors.New("planfile not found")
-	ErrPlanfileUploadFailed   = errors.New("failed to upload planfile")
-	ErrPlanfileDownloadFailed = errors.New("failed to download planfile")
-	ErrPlanfileDeleteFailed   = errors.New("failed to delete planfile")
-	ErrPlanfileListFailed     = errors.New("failed to list planfiles")
-	ErrPlanfileStoreNotFound  = errors.New("planfile store not found")
-	ErrPlanfileKeyInvalid     = errors.New("planfile key generation failed: stack, component, and SHA are required")
+	ErrPlanfileNotFound         = errors.New("planfile not found")
+	ErrPlanfileUploadFailed     = errors.New("failed to upload planfile")
+	ErrPlanfileDownloadFailed   = errors.New("failed to download planfile")
+	ErrPlanfileDeleteFailed     = errors.New("failed to delete planfile")
+	ErrPlanfileListFailed       = errors.New("failed to list planfiles")
+	ErrPlanfileStoreNotFound    = errors.New("planfile store not found")
+	ErrPlanfileKeyInvalid       = errors.New("planfile key generation failed: stack, component, and SHA are required")
+	ErrPlanfileStatFailed       = errors.New("failed to check planfile status")
+	ErrPlanfileMetadataFailed   = errors.New("failed to load planfile metadata")
+	ErrPlanfileStoreInvalidArgs = errors.New("invalid planfile store arguments")
+	ErrAWSConfigLoadFailed      = errors.New("failed to load AWS configuration")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
