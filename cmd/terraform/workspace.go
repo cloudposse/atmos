@@ -2,9 +2,14 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/pkg/flags"
 )
+
+// workspaceParser handles flag parsing for workspace command.
+var workspaceParser *flags.StandardParser
 
 // workspaceCmd represents the terraform workspace command.
 var workspaceCmd = &cobra.Command{
@@ -26,11 +31,37 @@ For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/workspace
   https://opentofu.org/docs/cli/commands/workspace`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return terraformRun(terraformCmd, cmd, args)
+		v := viper.GetViper()
+
+		// Bind both parent and subcommand parsers.
+		if err := terraformParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+		if err := workspaceParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		// Parse base terraform options.
+		opts := ParseTerraformRunOptions(v)
+
+		return terraformRunWithOptions(terraformCmd, cmd, args, opts)
 	},
 }
 
 func init() {
+	// Create parser with workspace-specific flags.
+	workspaceParser = flags.NewStandardParser(
+		WithBackendExecutionFlags(),
+	)
+
+	// Register workspace-specific flags with Cobra.
+	workspaceParser.RegisterFlags(workspaceCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := workspaceParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
 	// Register completions for workspaceCmd.
 	RegisterTerraformCompletions(workspaceCmd)
 

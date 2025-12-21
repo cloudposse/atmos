@@ -27,15 +27,19 @@ EXAMPLES
 
 FLAGS
 
-      --affected          Apply the affected components in dependency order
+      --affected                           Apply the affected components in dependency order
 
-      --all               Apply all components in all stacks
+      --all                                Apply all components in all stacks
 
-      --from-plan string  Apply from plan file (uses deterministic location if path not specified)
+      --auto-generate-backend-file string  Override auto_generate_backend_file setting from atmos.yaml (true/false)
 
-  -h, --help              help for apply
+      --from-plan string                   Apply from plan file (uses deterministic location if path not specified)
 
-      --planfile string   Set the plan file to use
+  -h, --help                               help for apply
+
+      --init-run-reconfigure string        Override init_run_reconfigure setting from atmos.yaml (true/false)
+
+      --planfile string                    Set the plan file to use
 
 
 GLOBAL FLAGS
