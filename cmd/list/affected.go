@@ -8,6 +8,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var affectedParser *flags.StandardParser
@@ -114,6 +115,8 @@ func init() {
 }
 
 func executeListAffectedCmd(cmd *cobra.Command, args []string, opts *AffectedOptions) error {
+	defer perf.Track(nil, "list.executeListAffectedCmd")()
+
 	// Process and validate command line arguments.
 	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
 	if err != nil {
