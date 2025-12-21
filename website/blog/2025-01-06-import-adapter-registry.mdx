@@ -1,0 +1,33 @@
+---
+slug: import-adapter-registry
+title: "Unified Import Adapter Registry"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now includes a unified import adapter registry that provides a modular, extensible architecture for configuration imports.
+
+<!--truncate-->
+
+## What Changed
+
+The import system has been refactored to use an adapter-based registry pattern:
+
+- **GoGetterAdapter** handles all remote imports (http://, https://, git::, s3::, gcs::, oci://, etc.)
+- **LocalAdapter** handles local filesystem paths
+- **MockAdapter** provides synthetic YAML generation for testing
+
+This replaces the previous if/else chain with a clean, extensible registry that routes imports to the appropriate adapter based on URL scheme.
+
+## Why This Matters
+
+The new architecture:
+
+- **Fixes go-getter routing** - All go-getter schemes now work correctly (git::, s3::, gcs::, oci://, etc.)
+- **Enables extensibility** - New import schemes can be added by implementing the `ImportAdapter` interface
+- **Improves testability** - The `mock://` scheme enables testing without external dependencies
+- **Follows established patterns** - Consistent with the command registry and store registry patterns
+
+## How to Use It
+
+Existing imports continue to work unchanged. The new architecture is transparent to users while enabling future extensibility like `terragrunt://` for HCL-to-YAML transformation.
