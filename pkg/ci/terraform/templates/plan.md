@@ -39,8 +39,12 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 
 {{- if .Result.HasErrors }}
 ---
+{{- $first := true }}
 {{- range .Result.Errors }}
-
+{{ if not $first }}
+<!-- -->
+{{ end }}
+{{- $first = false }}
 > [!CAUTION]
 > :warning: {{ . }}
 {{- end }}

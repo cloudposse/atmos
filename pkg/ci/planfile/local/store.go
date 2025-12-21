@@ -187,7 +187,7 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
-		return false, fmt.Errorf("failed to check if planfile exists: %w", err)
+		return false, fmt.Errorf("%w: failed to check if %s exists: %w", errUtils.ErrPlanfileStatFailed, key, err)
 	}
 	return true, nil
 }
@@ -233,18 +233,18 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("%w: %s", errUtils.ErrPlanfileNotFound, key)
 		}
-		return nil, err
+		return nil, fmt.Errorf("%w: failed to stat planfile %s: %w", errUtils.ErrPlanfileStatFailed, key, err)
 	}
 
 	metadata, err := s.loadMetadata(fullPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: failed to load metadata for %s: %w", errUtils.ErrPlanfileMetadataFailed, key, err)
 	}
 	if metadata == nil {
 		// Return minimal metadata from file info.
 		info, err := os.Stat(fullPath)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: failed to get file info for %s: %w", errUtils.ErrPlanfileStatFailed, key, err)
 		}
 		metadata = &planfile.Metadata{
 			CreatedAt: info.ModTime(),

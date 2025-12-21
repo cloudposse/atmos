@@ -14,6 +14,8 @@ atmos terraform plan broken -s dev
 > [!CAUTION]
 > :warning: Invalid provider configuration
 
+<!-- -->
+
 > [!CAUTION]
 > :warning: Missing required argument
 </details>
