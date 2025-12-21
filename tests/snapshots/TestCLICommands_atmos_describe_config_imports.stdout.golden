@@ -20,6 +20,8 @@ components:
     kubeconfig_path: /dev/shm
     helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
     cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+    cluster_name_template: ""
+    cluster_name: ""
     command: ""
   packer:
     base_path: ""

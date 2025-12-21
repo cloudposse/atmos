@@ -20,6 +20,8 @@ components:
         kubeconfig_path: ""
         helm_aws_profile_pattern: ""
         cluster_name_pattern: ""
+        cluster_name_template: ""
+        cluster_name: ""
         command: ""
     packer:
         base_path: ""
