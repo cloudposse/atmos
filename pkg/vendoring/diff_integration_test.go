@@ -118,7 +118,7 @@ spec:
 			},
 			mockSetup:   func(m *MockGitOperations) {},
 			expectError: true,
-			expectedErr: errUtils.ErrComponentNotFound,
+			expectedErr: errUtils.ErrVendorComponentNotFound,
 		},
 		{
 			name: "unsupported source type",

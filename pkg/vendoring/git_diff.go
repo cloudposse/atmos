@@ -2,6 +2,7 @@ package vendoring
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -122,7 +123,7 @@ func getGitDiffBetweenRefsForFile(atmosConfig *schema.AtmosConfiguration, gitURI
 	// We'll use the approach of fetching both refs and then diffing.
 	tempDir, err := os.MkdirTemp("", "atmos-vendor-diff-*")
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrCreateTempDir, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrCreateTempDir, err)
 	}
 	defer os.RemoveAll(tempDir)
 
@@ -130,13 +131,13 @@ func getGitDiffBetweenRefsForFile(atmosConfig *schema.AtmosConfiguration, gitURI
 	ctx := context.Background()
 	cmd := exec.CommandContext(ctx, "git", "init", "--bare", tempDir)
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrGitCommandFailed, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrGitCommandFailed, err)
 	}
 
 	// Fetch the specific refs.
 	cmd = exec.CommandContext(ctx, "git", "-C", tempDir, "fetch", "--depth=1", gitURI, fromRef+":"+fromRef, toRef+":"+toRef)
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("%w: failed to fetch refs: %s", errUtils.ErrGitCommandFailed, err)
+		return nil, fmt.Errorf("%w: failed to fetch refs: %w", errUtils.ErrGitCommandFailed, err)
 	}
 
 	// Now we can diff.

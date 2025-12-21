@@ -26,6 +26,8 @@ type realGitOperations struct{}
 
 // NewGitOperations creates a new GitOperations implementation.
 func NewGitOperations() GitOperations {
+	defer perf.Track(nil, "vendoring.NewGitOperations")()
+
 	return &realGitOperations{}
 }
 

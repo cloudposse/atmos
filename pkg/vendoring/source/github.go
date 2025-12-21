@@ -83,7 +83,7 @@ func (g *GitHubProvider) GetDiff(
 
 	req, err := http.NewRequest("GET", compareURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create request: %s", errUtils.ErrGitDiffFailed, err)
+		return nil, fmt.Errorf("%w: failed to create request: %w", errUtils.ErrGitDiffFailed, err)
 	}
 
 	// Add GitHub API headers.
@@ -96,7 +96,7 @@ func (g *GitHubProvider) GetDiff(
 
 	resp, err := g.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to fetch diff from GitHub: %s", errUtils.ErrGitDiffFailed, err)
+		return nil, fmt.Errorf("%w: failed to fetch diff from GitHub: %w", errUtils.ErrGitDiffFailed, err)
 	}
 	defer resp.Body.Close()
 
@@ -108,7 +108,7 @@ func (g *GitHubProvider) GetDiff(
 
 	diff, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read diff: %s", errUtils.ErrGitDiffFailed, err)
+		return nil, fmt.Errorf("%w: failed to read diff: %w", errUtils.ErrGitDiffFailed, err)
 	}
 
 	// TODO: Apply file filtering if filePath is specified.

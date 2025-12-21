@@ -20,13 +20,13 @@ func updateYAMLVersion(atmosConfig *schema.AtmosConfiguration, filePath string, 
 	// Read the YAML file
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return fmt.Errorf("%w: %s", errUtils.ErrReadFile, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrReadFile, err)
 	}
 
 	// Parse into yaml.Node to preserve structure
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
-		return fmt.Errorf("%w: %s", errUtils.ErrParseFile, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrParseFile, err)
 	}
 
 	// Find and update the version field for the specified component
@@ -42,12 +42,12 @@ func updateYAMLVersion(atmosConfig *schema.AtmosConfiguration, filePath string, 
 	// Marshal back to YAML, preserving structure
 	out, err := yaml.Marshal(&root)
 	if err != nil {
-		return fmt.Errorf("%w: %s", errUtils.ErrYAMLUpdateFailed, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrYAMLUpdateFailed, err)
 	}
 
 	// Write back to file
 	if err := os.WriteFile(filePath, out, 0o644); err != nil { //nolint:gosec,revive // Standard file permissions for YAML config files
-		return fmt.Errorf("%w: %s", errUtils.ErrYAMLUpdateFailed, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrYAMLUpdateFailed, err)
 	}
 
 	return nil
@@ -134,13 +134,13 @@ func findComponentVersion(atmosConfig *schema.AtmosConfiguration, filePath strin
 	// Read the YAML file
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return "", fmt.Errorf("%w: %s", errUtils.ErrReadFile, err)
+		return "", fmt.Errorf("%w: %w", errUtils.ErrReadFile, err)
 	}
 
 	// Parse into yaml.Node
 	var root yaml.Node
 	if err := yaml.Unmarshal(data, &root); err != nil {
-		return "", fmt.Errorf("%w: %s", errUtils.ErrParseFile, err)
+		return "", fmt.Errorf("%w: %w", errUtils.ErrParseFile, err)
 	}
 
 	// Find the version
@@ -150,7 +150,7 @@ func findComponentVersion(atmosConfig *schema.AtmosConfiguration, filePath strin
 	}
 
 	if version == "" {
-		return "", fmt.Errorf("%w: %s", errUtils.ErrComponentNotFound, componentName)
+		return "", fmt.Errorf("%w: %s", errUtils.ErrVendorComponentNotFound, componentName)
 	}
 
 	return version, nil

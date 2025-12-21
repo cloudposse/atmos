@@ -53,7 +53,6 @@ require (
 	github.com/gobwas/glob v0.2.3
 	github.com/goccy/go-yaml v1.19.1
 	github.com/gofrs/flock v0.13.0
-	github.com/golang/mock v1.1.1
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.20.7
 	github.com/google/go-github/v59 v59.0.0
