@@ -8,9 +8,13 @@ import (
 	"strings"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// mockConfigFilePerms is the file permission for mock config files.
+const mockConfigFilePerms = 0o600
 
 // MockAdapter generates synthetic YAML for testing.
 // This enables unit tests without external dependencies.
@@ -58,6 +62,8 @@ func (m *MockAdapter) Schemes() []string {
 }
 
 // Resolve generates synthetic YAML based on the mock path.
+//
+//nolint:revive // argument-limit: matches ImportAdapter interface signature.
 func (m *MockAdapter) Resolve(
 	ctx context.Context,
 	importPath string,
@@ -72,7 +78,7 @@ func (m *MockAdapter) Resolve(
 
 	switch mockPath {
 	case "error":
-		return nil, fmt.Errorf("mock error: simulated import failure")
+		return nil, errUtils.ErrMockImportFailure
 
 	case "empty":
 		return m.writeConfig(importPath, tempDir, "# Empty mock configuration\n")
@@ -120,7 +126,7 @@ func (m *MockAdapter) writeConfig(importPath, tempDir, content string) ([]config
 	fileName := fmt.Sprintf("mock-import-%d.yaml", time.Now().UnixNano())
 	filePath := filepath.Join(tempDir, fileName)
 
-	if err := os.WriteFile(filePath, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(filePath, []byte(content), mockConfigFilePerms); err != nil {
 		return nil, fmt.Errorf("failed to write mock config: %w", err)
 	}
 

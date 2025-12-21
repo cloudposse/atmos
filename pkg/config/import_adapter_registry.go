@@ -154,6 +154,7 @@ func (n *noopAdapter) Schemes() []string {
 	return nil
 }
 
+//nolint:revive // argument-limit: matches ImportAdapter interface signature.
 func (n *noopAdapter) Resolve(
 	_ context.Context,
 	_ string,

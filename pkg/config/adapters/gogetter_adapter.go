@@ -49,6 +49,8 @@ func (g *GoGetterAdapter) Schemes() []string {
 }
 
 // Resolve downloads a remote configuration and processes any nested imports.
+//
+//nolint:revive // argument-limit: matches ImportAdapter interface signature.
 func (g *GoGetterAdapter) Resolve(
 	ctx context.Context,
 	importPath string,
