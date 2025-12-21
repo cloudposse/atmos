@@ -1,0 +1,109 @@
+---
+slug: interactive-workflow-steps
+title: "Interactive Workflow Steps: Build Guided DevOps Experiences"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Atmos workflows now support 18 step types that transform static automation scripts into guided, user-friendly experiences. Build deployment wizards, collect input securely, display rich feedback, and create self-documenting runbooks—all within your existing workflow YAML.
+
+<!--truncate-->
+
+## What Changed
+
+Workflows have evolved from simple command runners into a full-featured automation framework with a registry-based architecture supporting four categories of step types:
+
+**Interactive Steps** (require TTY):
+- `input` - Text input with placeholder, default value, and password masking
+- `choose` - Single-select from a list of options
+- `filter` - Searchable multi-select with fuzzy matching
+- `confirm` - Yes/no confirmation prompts
+- `file` - File browser with extension filtering
+- `write` - Multi-line text editor
+
+**Output Steps**:
+- `table` - Structured data in formatted tables
+- `format` - Apply Go templates to transform data
+- `join` - Combine values with custom separators
+
+**UI Steps**:
+- `toast` - Status messages with success/info/warning/error levels
+- `markdown` - Rich markdown rendering with syntax highlighting
+- `style` - Styled containers with borders, padding, and markdown support
+- `linebreak` - Visual spacing between sections
+- `pager` - Scrollable file viewer with search
+- `log` - Structured logging with levels and fields
+
+**Command Steps**:
+- `atmos` - Execute atmos commands
+- `shell` - Run shell commands
+- `spin` - Commands with animated progress spinner
+
+## Why This Matters
+
+Infrastructure automation often requires human judgment—confirming destructive operations, selecting environments, or providing deployment notes. Previously, teams had to build custom tooling or rely on external scripts. Now you can:
+
+1. **Guide users through complex operations** with step-by-step wizards
+2. **Collect and validate input** before executing changes
+3. **Pass data between steps** using Go templates (`{{ .steps.select_env.value }}`)
+4. **Access environment variables** directly (`{{ .env.USER }}`)
+5. **Provide rich feedback** with styled output and progress indicators
+
+## How to Use It
+
+Here's a deployment workflow that collects environment, components, and notes before executing:
+
+```yaml
+workflows:
+  deploy:
+    description: Interactive deployment with confirmation
+    steps:
+      - name: welcome
+        type: markdown
+        content: |
+          # Deployment Wizard
+          Select your target environment and components.
+
+      - name: environment
+        type: choose
+        prompt: "Select target environment"
+        options: [dev, staging, prod]
+
+      - name: components
+        type: filter
+        prompt: "Select components to deploy"
+        multiple: true
+        options: [vpc, eks, rds, monitoring]
+
+      - name: notes
+        type: input
+        prompt: "Deployment notes"
+        placeholder: "Brief description of changes"
+
+      - name: confirm
+        type: confirm
+        prompt: |
+          Deploy {{ len .steps.components.values }} components to {{ .steps.environment.value }}?
+
+      - name: deploying
+        type: spin
+        title: "Deploying..."
+        command: "atmos terraform apply {{ .steps.components.values | join \" \" }} -s {{ .steps.environment.value }}"
+
+      - name: done
+        type: toast
+        level: success
+        content: "Deployment complete!"
+```
+
+Run with:
+
+```shell
+atmos workflow deploy -f your-workflow-file
+```
+
+For a complete example, see the [demo-interactive-workflows](https://github.com/cloudposse/atmos/tree/main/examples/demo-interactive-workflows) directory.
+
+## Get Involved
+
+Have ideas for new step types or workflow features? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) or join the discussion in our [Slack community](https://slack.cloudposse.com).

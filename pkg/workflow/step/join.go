@@ -54,7 +54,12 @@ func (h *JoinHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 		return NewStepResult(content), nil
 	}
 
-	// Join with newlines by default.
-	result := strings.Join(parts, "\n")
+	// Use configured separator or default to newline.
+	separator := step.Separator
+	if separator == "" {
+		separator = "\n"
+	}
+
+	result := strings.Join(parts, separator)
 	return NewStepResult(result), nil
 }

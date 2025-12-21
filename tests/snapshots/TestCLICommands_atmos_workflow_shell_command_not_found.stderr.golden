@@ -6,11 +6,13 @@
 
 **Error:** workflow step execution failed: subcommand exited with code 127
 
-## Hints
+## Explanation
 
-💡 The following command failed to execute:
+The following command failed to execute:
 
  nonexistentcommand
+
+## Hints
 
 💡 To resume the workflow from this step, run:
 
