@@ -45,12 +45,12 @@ type TreeNode struct {
 
 // AttributeChange represents a single attribute change.
 type AttributeChange struct {
-	Key              string      // Attribute name.
-	Before           interface{} // Value before change (nil for create).
-	After            interface{} // Value after change (nil for delete).
-	Unknown          bool        // True if value is "(known after apply)".
-	Sensitive        bool        // True if value is sensitive.
-	ForcesReplacement bool       // True if this attribute forces resource replacement.
+	Key               string      // Attribute name.
+	Before            interface{} // Value before change (nil for create).
+	After             interface{} // Value after change (nil for delete).
+	Unknown           bool        // True if value is "(known after apply)".
+	Sensitive         bool        // True if value is sensitive.
+	ForcesReplacement bool        // True if this attribute forces resource replacement.
 }
 
 // BuildDependencyTree parses a planfile and builds the dependency tree.
