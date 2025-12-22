@@ -184,6 +184,19 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
         atmos terraform deploy <component> -s <stack> --skip=terraform.output,include
         ```
     </dd>
+
+    <dt>`--ui` <em>(optional)</em></dt>
+    <dd>
+        Enable streaming UI mode for real-time resource status display. Shows a Docker-build-style progress view with spinners, progress bar, and resource states.
+
+        The UI automatically disables when output is piped, in CI environments, or when running unsupported commands.
+
+        ```shell
+        atmos terraform deploy <component> -s <stack> --ui
+        ```
+
+        Use `--ui=false` to explicitly disable when enabled by config.
+    </dd>
 </dl>
 
 ## Native Terraform Flags

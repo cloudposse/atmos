@@ -165,7 +165,7 @@ func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []str
 		return err
 	}
 
-	opts := ParseTerraformRunOptions(v)
+	opts := ParseTerraformRunOptions(v, actualCmd)
 	return terraformRunWithOptions(parentCmd, actualCmd, args, opts)
 }
 
@@ -203,6 +203,10 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	if opts.DeployRunInit {
 		info.DeployRunInit = "true"
 	}
+
+	// UI flags.
+	info.UIEnabled = opts.UI
+	info.UIFlagExplicitlySet = opts.UIFlagSet
 }
 
 // terraformRunWithOptions is the shared execution logic for terraform subcommands.
