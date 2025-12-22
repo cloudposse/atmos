@@ -546,6 +546,142 @@ func TestRenderAttributeChanges_NumericValues(t *testing.T) {
 	assert.Contains(t, result, "10")
 }
 
+func TestRenderAttributeChanges_ForcesReplacement(t *testing.T) {
+	var b strings.Builder
+	changes := []*AttributeChange{
+		{Key: "content", Before: "old", After: "new", Unknown: false, ForcesReplacement: true},
+	}
+
+	renderAttributeChanges(&b, changes, "", false, defaultTreeStyle())
+
+	result := b.String()
+	// Should contain the attribute name.
+	assert.Contains(t, result, "content")
+	// Should show "# forces replacement" annotation.
+	assert.Contains(t, result, "# forces replacement")
+}
+
+func TestRenderAttributeChanges_ForcesReplacementMultiline(t *testing.T) {
+	var b strings.Builder
+	changes := []*AttributeChange{
+		{Key: "content", Before: "line1\nline2", After: "line1\nline3", Unknown: false, ForcesReplacement: true},
+	}
+
+	renderAttributeChanges(&b, changes, "", false, defaultTreeStyle())
+
+	result := b.String()
+	// Should contain the attribute name.
+	assert.Contains(t, result, "content")
+	// Should show "# forces replacement" annotation on the key line.
+	assert.Contains(t, result, "# forces replacement")
+}
+
+func TestRenderAttributeChanges_NoForcesReplacement(t *testing.T) {
+	var b strings.Builder
+	changes := []*AttributeChange{
+		{Key: "tags", Before: "old", After: "new", Unknown: false, ForcesReplacement: false},
+	}
+
+	renderAttributeChanges(&b, changes, "", false, defaultTreeStyle())
+
+	result := b.String()
+	// Should contain the attribute name.
+	assert.Contains(t, result, "tags")
+	// Should NOT show "# forces replacement" annotation.
+	assert.NotContains(t, result, "# forces replacement")
+}
+
+func TestExtractAttributeChanges_WithReplacePaths(t *testing.T) {
+	// Create a mock ResourceChange with ReplacePaths.
+	rc := &tfjson.ResourceChange{
+		Address: "local_file.example",
+		Change: &tfjson.Change{
+			Actions: []tfjson.Action{tfjson.ActionDelete, tfjson.ActionCreate},
+			Before: map[string]interface{}{
+				"content":  "old content",
+				"filename": "/tmp/test.txt",
+			},
+			After: map[string]interface{}{
+				"content":  "new content",
+				"filename": "/tmp/test.txt",
+			},
+			// ReplacePaths indicates "content" attribute forces replacement.
+			ReplacePaths: []interface{}{
+				[]interface{}{"content"},
+			},
+		},
+	}
+
+	changes := extractAttributeChanges(rc)
+
+	// Should have one change (content changed, filename stayed the same).
+	assert.Len(t, changes, 1)
+
+	// The content attribute should be marked as forcing replacement.
+	contentChange := changes[0]
+	assert.Equal(t, "content", contentChange.Key)
+	assert.True(t, contentChange.ForcesReplacement, "content should force replacement")
+}
+
+func TestExtractAttributeChanges_WithNestedReplacePaths(t *testing.T) {
+	// Create a mock ResourceChange with nested ReplacePaths (e.g., list element).
+	rc := &tfjson.ResourceChange{
+		Address: "aws_instance.example",
+		Change: &tfjson.Change{
+			Actions: []tfjson.Action{tfjson.ActionDelete, tfjson.ActionCreate},
+			Before: map[string]interface{}{
+				"ami":           "ami-old",
+				"instance_type": "t2.micro",
+			},
+			After: map[string]interface{}{
+				"ami":           "ami-new",
+				"instance_type": "t2.micro",
+			},
+			// ReplacePaths with nested path: ["ami"] forces replacement.
+			ReplacePaths: []interface{}{
+				[]interface{}{"ami"},
+			},
+		},
+	}
+
+	changes := extractAttributeChanges(rc)
+
+	// Should have one change (ami changed).
+	assert.Len(t, changes, 1)
+
+	// The ami attribute should be marked as forcing replacement.
+	amiChange := changes[0]
+	assert.Equal(t, "ami", amiChange.Key)
+	assert.True(t, amiChange.ForcesReplacement, "ami should force replacement")
+}
+
+func TestExtractAttributeChanges_NoReplacePaths(t *testing.T) {
+	// Create a mock ResourceChange without ReplacePaths (normal update).
+	rc := &tfjson.ResourceChange{
+		Address: "aws_instance.example",
+		Change: &tfjson.Change{
+			Actions: []tfjson.Action{tfjson.ActionUpdate},
+			Before: map[string]interface{}{
+				"tags": map[string]interface{}{"Name": "old"},
+			},
+			After: map[string]interface{}{
+				"tags": map[string]interface{}{"Name": "new"},
+			},
+			// No ReplacePaths - this is an in-place update.
+		},
+	}
+
+	changes := extractAttributeChanges(rc)
+
+	// Should have one change (tags changed).
+	assert.Len(t, changes, 1)
+
+	// The tags attribute should NOT be marked as forcing replacement.
+	tagsChange := changes[0]
+	assert.Equal(t, "tags", tagsChange.Key)
+	assert.False(t, tagsChange.ForcesReplacement, "tags should not force replacement")
+}
+
 // Tests for valuesEqual helper function.
 func TestValuesEqual(t *testing.T) {
 	tests := []struct {
