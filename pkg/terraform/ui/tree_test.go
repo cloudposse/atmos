@@ -13,11 +13,11 @@ func TestColorizedActionSymbol(t *testing.T) {
 		action   string
 		expected string
 	}{
-		{"create", "●"},  // Colored dot for create.
-		{"update", "●"},  // Colored dot for update.
-		{"delete", "●"},  // Colored dot for delete.
-		{"replace", "●"}, // Colored dot for replace (composite action).
-		{"read", "●"},    // Colored dot for read.
+		{"create", "●"},  // Green dot for create.
+		{"update", "●"},  // Yellow dot for update/change in place.
+		{"delete", "●"},  // Red dot for delete.
+		{"replace", "↻"}, // Orange refresh for replace/recreate.
+		{"read", "●"},    // Cyan dot for read.
 		{"no-op", " "},   // Space for no-op.
 		{"unknown", " "}, // Space for unknown.
 	}
