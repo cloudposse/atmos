@@ -299,6 +299,17 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 			},
 			expectedError: errUtils.ErrInvalidComponentsPacker,
 		},
+		{
+			name: "invalid custom component map type",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					"script": map[string]any{
+						"deploy-app": "invalid-not-a-map",
+					},
+				},
+			},
+			expectedError: errUtils.ErrInvalidComponentMapType,
+		},
 	}
 
 	for _, tt := range tests {
@@ -878,6 +889,15 @@ func TestProcessStackConfig_CustomComponentTypeFilter(t *testing.T) {
 			scriptSection, hasScript := components["script"].(map[string]any)
 			if tt.expectCustomScript {
 				assert.True(t, hasScript && len(scriptSection) > 0, "script components should be present")
+				// Verify metadata injection.
+				deployApp, ok := scriptSection["deploy-app"].(map[string]any)
+				require.True(t, ok, "deploy-app component should exist")
+				assert.Equal(t, "deploy-app", deployApp["component"], "component name should be injected")
+				assert.Equal(t, "script", deployApp[cfg.ComponentTypeSectionName], "component_type should be injected")
+				// Verify vars are present.
+				vars, ok := deployApp[cfg.VarsSectionName].(map[string]any)
+				require.True(t, ok, "vars should be merged")
+				assert.Equal(t, "myapp", vars["app_name"], "component vars should be preserved")
 			} else {
 				assert.True(t, !hasScript || len(scriptSection) == 0, "script components should NOT be present when filtered")
 			}
