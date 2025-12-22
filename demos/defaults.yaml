@@ -1,12 +1,20 @@
 ---
 version: "1.0"
 
+# Tool version requirements
+# Director will automatically download and install pinned versions
+tools:
+  atmos:
+    version: "1.202.1"           # Required version (semver without 'v' prefix)
+    source: "github"              # github = download from releases, local = copy from worktree
+    install_dir: ".cache/bin"     # Where to install (relative to demos/)
+
 # Global VHS settings (applied to all scenes unless overridden)
 vhs:
-  theme: "Catppuccin Mocha"
+  theme: "Monokai Vivid"
   font_family: "FiraCode Nerd Font"
   font_size: 14
-  typing_speed: "50ms"
+  typing_speed: "40ms"
   width: 1400
   height: 800
   padding: 10
@@ -24,8 +32,26 @@ optimization:
 
 # Storage backend configuration
 backend:
-  type: "gh-pages"
+  type: "stream"  # Primary backend for videos; R2 used as fallback for GIF/PNG
 
+  # Cloudflare Stream configuration (for MP4 videos)
+  stream:
+    # Credentials loaded from environment variables:
+    # - CLOUDFLARE_ACCOUNT_ID
+    # - CLOUDFLARE_STREAM_API_TOKEN
+    # - CLOUDFLARE_CUSTOMER_SUBDOMAIN (optional, extracted from API response)
+
+  # Cloudflare R2 configuration (for GIF/PNG images)
+  r2:
+    bucket_name: "cplive-cf-use1-prod-atmos-assets"
+    prefix: "demos/"
+    base_url: "https://pub-xxxxx.r2.dev/demos"  # Update with actual R2 public URL
+    # Credentials loaded from environment variables:
+    # - CLOUDFLARE_ACCOUNT_ID
+    # - CLOUDFLARE_R2_ACCESS_KEY_ID
+    # - CLOUDFLARE_R2_SECRET_ACCESS_KEY
+
+  # GitHub Pages configuration
   gh_pages:
     branch: "gh-pages"
     path: "demos"

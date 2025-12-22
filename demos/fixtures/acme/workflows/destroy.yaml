@@ -1,0 +1,30 @@
+# Destroy Workflow
+# Teardown infrastructure in the correct order
+
+name: destroy
+description: Destroy infrastructure in reverse order
+
+workflows:
+  destroy:
+    description: Destroy all components (reverse of deploy)
+    steps:
+      - command: echo "Starting teardown of ${ATMOS_STACK}"
+      - command: terraform destroy frontend -s ${ATMOS_STACK} --auto-approve
+      - command: terraform destroy api -s ${ATMOS_STACK} --auto-approve
+      - command: terraform destroy cache -s ${ATMOS_STACK} --auto-approve
+      - command: terraform destroy database -s ${ATMOS_STACK} --auto-approve
+      - command: terraform destroy cluster -s ${ATMOS_STACK} --auto-approve
+      - command: terraform destroy cdn -s ${ATMOS_STACK} --auto-approve
+      - command: terraform destroy vpc -s ${ATMOS_STACK} --auto-approve
+      - command: echo "Teardown complete!"
+
+  destroy-apps:
+    description: Destroy only application components
+    steps:
+      - command: terraform destroy frontend -s ${ATMOS_STACK} --auto-approve
+      - command: terraform destroy api -s ${ATMOS_STACK} --auto-approve
+
+  destroy-compute:
+    description: Destroy compute resources
+    steps:
+      - command: terraform destroy cluster -s ${ATMOS_STACK} --auto-approve

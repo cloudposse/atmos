@@ -16,12 +16,36 @@ type CacheMetadata struct {
 	Scenes  map[string]SceneHash `json:"scenes"`
 }
 
+// StreamVersion tracks a single version of a video on Cloudflare Stream.
+type StreamVersion struct {
+	UID         string    `json:"uid"`
+	PublishedAt time.Time `json:"published_at"`
+	PublishHash string    `json:"publish_hash"` // SHA256 of uploaded file.
+	Latest      bool      `json:"latest"`
+}
+
 // SceneHash stores the SHA256 hash and render time for a scene.
 type SceneHash struct {
 	TapeHash   string    `json:"tape_hash"`
 	AudioHash  string    `json:"audio_hash,omitempty"`
 	RenderedAt time.Time `json:"rendered_at"`
 	Outputs    []string  `json:"outputs"`
+
+	// Publish tracking fields.
+	PublishedAt *time.Time        `json:"published_at,omitempty"`
+	PublishHash string            `json:"publish_hash,omitempty"` // SHA256 of uploaded file.
+	PublicURLs  map[string]string `json:"public_urls,omitempty"`  // format -> URL.
+
+	// Video metadata (for MP4 files).
+	Duration      float64 `json:"duration,omitempty"`       // Duration in seconds.
+	ThumbnailTime float64 `json:"thumbnail_time,omitempty"` // Thumbnail timestamp in seconds.
+
+	// Stream-specific metadata for gallery components.
+	StreamUID       string `json:"stream_uid,omitempty"`       // Video UID from Cloudflare Stream (latest).
+	StreamSubdomain string `json:"stream_subdomain,omitempty"` // customer-xxx.cloudflarestream.com.
+
+	// Stream version history - tracks all UIDs for graceful transitions.
+	StreamVersions []StreamVersion `json:"stream_versions,omitempty"`
 }
 
 // LoadCache loads the cache metadata from disk.
@@ -158,4 +182,192 @@ func (c *CacheMetadata) UpdateScene(sceneName, tapeFile, audioFile string, outpu
 	}
 
 	return nil
+}
+
+// NeedsPublish checks if a scene output file needs to be published.
+// Returns true if the file has changed since last publish or has never been published.
+func (c *CacheMetadata) NeedsPublish(sceneName, outputFile string, force bool) (bool, error) {
+	// Force flag always triggers publish.
+	if force {
+		return true, nil
+	}
+
+	// Check if scene exists in cache.
+	sceneHash, exists := c.Scenes[sceneName]
+	if !exists {
+		// Never published before.
+		return true, nil
+	}
+
+	// If never published, need to publish.
+	if sceneHash.PublishedAt == nil || sceneHash.PublishHash == "" {
+		return true, nil
+	}
+
+	// Calculate current file hash.
+	currentHash, err := CalculateSHA256(outputFile)
+	if err != nil {
+		return false, fmt.Errorf("failed to calculate file hash: %w", err)
+	}
+
+	// Check if file hash changed.
+	if sceneHash.PublishHash != currentHash {
+		return true, nil
+	}
+
+	// Cache hit - no publish needed.
+	return false, nil
+}
+
+// StreamMetadata contains metadata from Cloudflare Stream upload response.
+type StreamMetadata struct {
+	UID               string
+	CustomerSubdomain string
+	Duration          float64 // Video duration in seconds.
+}
+
+// UpdatePublish updates the cache for a published scene.
+func (c *CacheMetadata) UpdatePublish(sceneName, outputFile, publicURL string, streamMetadata *StreamMetadata) error {
+	// Get existing scene hash or create new one.
+	sceneHash, exists := c.Scenes[sceneName]
+	if !exists {
+		sceneHash = SceneHash{
+			PublicURLs: make(map[string]string),
+		}
+	}
+
+	// Ensure PublicURLs map is initialized.
+	if sceneHash.PublicURLs == nil {
+		sceneHash.PublicURLs = make(map[string]string)
+	}
+
+	// Calculate file hash.
+	hash, err := CalculateSHA256(outputFile)
+	if err != nil {
+		return fmt.Errorf("failed to calculate file hash: %w", err)
+	}
+
+	// Update publish metadata.
+	now := time.Now()
+	sceneHash.PublishedAt = &now
+	sceneHash.PublishHash = hash
+
+	// Store Stream metadata if provided (for MP4 uploads).
+	if streamMetadata != nil {
+		// Update the current/latest UID fields.
+		sceneHash.StreamUID = streamMetadata.UID
+		sceneHash.StreamSubdomain = streamMetadata.CustomerSubdomain
+
+		// Store video duration.
+		if streamMetadata.Duration > 0 {
+			sceneHash.Duration = streamMetadata.Duration
+		}
+
+		// Add to version history.
+		sceneHash.addStreamVersion(streamMetadata.UID, now, hash)
+	}
+
+	// Store public URL by file extension (format).
+	ext := filepath.Ext(outputFile)
+	if ext != "" {
+		ext = ext[1:] // Remove leading dot
+		sceneHash.PublicURLs[ext] = publicURL
+	}
+
+	c.Scenes[sceneName] = sceneHash
+
+	return nil
+}
+
+// addStreamVersion adds a new Stream version to the history, marking it as latest.
+func (s *SceneHash) addStreamVersion(uid string, publishedAt time.Time, publishHash string) {
+	// Check if this UID already exists.
+	for i := range s.StreamVersions {
+		if s.StreamVersions[i].UID == uid {
+			// UID exists - update it and mark as latest.
+			s.StreamVersions[i].PublishedAt = publishedAt
+			s.StreamVersions[i].PublishHash = publishHash
+			s.StreamVersions[i].Latest = true
+			// Mark others as not latest.
+			for j := range s.StreamVersions {
+				if j != i {
+					s.StreamVersions[j].Latest = false
+				}
+			}
+			return
+		}
+	}
+
+	// New UID - mark all existing as not latest.
+	for i := range s.StreamVersions {
+		s.StreamVersions[i].Latest = false
+	}
+
+	// Add new version as latest.
+	s.StreamVersions = append(s.StreamVersions, StreamVersion{
+		UID:         uid,
+		PublishedAt: publishedAt,
+		PublishHash: publishHash,
+		Latest:      true,
+	})
+}
+
+// MigrateStreamUIDs migrates existing stream_uid fields to stream_versions array.
+// This preserves backward compatibility while enabling UID history tracking.
+func (c *CacheMetadata) MigrateStreamUIDs() int {
+	migrated := 0
+	for name, scene := range c.Scenes {
+		// Skip if no StreamUID or already has versions.
+		if scene.StreamUID == "" || len(scene.StreamVersions) > 0 {
+			continue
+		}
+
+		// Migrate existing UID to versions array.
+		publishedAt := time.Now()
+		if scene.PublishedAt != nil {
+			publishedAt = *scene.PublishedAt
+		}
+
+		scene.StreamVersions = []StreamVersion{
+			{
+				UID:         scene.StreamUID,
+				PublishedAt: publishedAt,
+				PublishHash: scene.PublishHash,
+				Latest:      true,
+			},
+		}
+		c.Scenes[name] = scene
+		migrated++
+	}
+	return migrated
+}
+
+// GetLatestStreamUID returns the latest Stream UID for a scene, or empty string if none.
+func (s *SceneHash) GetLatestStreamUID() string {
+	for _, v := range s.StreamVersions {
+		if v.Latest {
+			return v.UID
+		}
+	}
+	// Fallback to legacy field.
+	return s.StreamUID
+}
+
+// GetAllStreamUIDs returns all Stream UIDs for a scene (latest first).
+func (s *SceneHash) GetAllStreamUIDs() []string {
+	uids := make([]string, 0, len(s.StreamVersions))
+	// Add latest first.
+	for _, v := range s.StreamVersions {
+		if v.Latest {
+			uids = append(uids, v.UID)
+			break
+		}
+	}
+	// Add rest.
+	for _, v := range s.StreamVersions {
+		if !v.Latest {
+			uids = append(uids, v.UID)
+		}
+	}
+	return uids
 }

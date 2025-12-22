@@ -1,0 +1,15 @@
+# Acme Organization Defaults
+vars:
+  namespace: acme
+  tenant: acme
+  attributes: []
+  tags:
+    Organization: Acme Corp
+    ManagedBy: Atmos
+
+# Terraform defaults for all components
+terraform:
+  backend_type: local
+  backend:
+    local:
+      path: "terraform.tfstate"

@@ -258,6 +258,11 @@ const config = {
                         label: 'Reference'
                     },
                     {
+                        to: '/demos',
+                        position: 'left',
+                        label: 'Demos'
+                    },
+                    {
                         label: 'Community',
                         position: 'left',
                         to: '/community'

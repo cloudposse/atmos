@@ -1,21 +1,23 @@
 # demo-stacks-list scene - Show list commands
 Output demo-stacks-list.gif
+Output demo-stacks-list.mp4
 
 # VHS Configuration
-Set Theme "Catppuccin Mocha"
+Source ../../scenes/_theme.tape
 Set Width 1400
 Set Height 800
-Set FontSize 14
-Set TypingSpeed 50ms
+
+# Fix prompt (VHS runs with --no-rcs)
+Hide
+Type "PS1='\033[38;2;90;86;224m> \033[0m'"
+Enter
+Ctrl+L
+Show
 
 # Dependencies
 Require atmos
 
-# Setup
-Type "cd examples/demo-stacks"
-Enter
-Sleep 500ms
-
+# Scene starts
 Type "# List all available stacks"
 Enter
 Sleep 300ms
@@ -27,20 +29,17 @@ Enter
 Sleep 2s
 
 # Capture screenshot
-Screenshot demo-stacks-list-stacks.png
+Screenshot demo-stacks-list.png
 Sleep 1s
 
-Type "# List all components in a stack"
+Type "# List all components across stacks"
 Enter
 Sleep 300ms
 
-Type "atmos list components --stack dev"
+Type "atmos list components"
 Sleep 500ms
 Enter
-Sleep 2s
-
-Screenshot demo-stacks-list-components.png
-Sleep 1s
+Sleep 3s
 
 # Cleanup
 Sleep 1s

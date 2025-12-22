@@ -1,27 +1,29 @@
 # demo-stacks-component scene - Show describe component command
 Output demo-stacks-component.gif
+Output demo-stacks-component.mp4
 
 # VHS Configuration
-Set Theme "Catppuccin Mocha"
+Source ../../scenes/_theme.tape
 Set Width 1400
 Set Height 900
-Set FontSize 14
-Set TypingSpeed 50ms
+
+# Fix prompt (VHS runs with --no-rcs)
+Hide
+Type "PS1='\033[38;2;90;86;224m> \033[0m'"
+Enter
+Ctrl+L
+Show
 
 # Dependencies
 Require atmos
 
-# Setup
-Type "cd examples/demo-stacks"
-Enter
-Sleep 500ms
-
-Type "# Describe a component in a specific stack"
+# Scene starts
+Type "# Describe database component in dev"
 Enter
 Sleep 300ms
 
 # Execute describe component
-Type "atmos describe component myapp --stack dev"
+Type "atmos describe component database -s plat-dev-ue2"
 Sleep 500ms
 Enter
 Sleep 3s
@@ -31,24 +33,14 @@ Screenshot demo-stacks-component.png
 Sleep 2s
 
 # Show component in different stack
-Type "# View same component in staging"
+Type "# Compare with production configuration"
 Enter
 Sleep 300ms
 
-Type "atmos describe component myapp --stack staging"
+Type "atmos describe component database -s plat-prod-ue2"
 Sleep 500ms
 Enter
-Sleep 2s
-
-# Show component in prod
-Type "# View same component in prod"
-Enter
-Sleep 300ms
-
-Type "atmos describe component myapp --stack prod"
-Sleep 500ms
-Enter
-Sleep 2s
+Sleep 3s
 
 # Cleanup
 Sleep 1s

@@ -1,0 +1,58 @@
+# Atmos Configuration — powered by https://atmos.tools
+#
+# This configuration enables centralized, DRY, and consistent project scaffolding using Atmos.
+#
+# Included features:
+# - Organizational custom commands: https://atmos.tools/core-concepts/custom-commands
+# - Automated README generation: https://atmos.tools/cli/commands/docs/generate
+#
+
+# Import shared configuration used by all modules
+import:
+  - https://raw.githubusercontent.com/cloudposse/.github/refs/heads/main/.github/atmos/terraform-module.yaml
+
+docs:
+  generate:
+    readme-submodule:
+      base-dir: ./
+      input:
+        - readme: "./modules/vpc-endpoints/README.md"
+        - get_support: true
+      template: "https://raw.githubusercontent.com/cloudposse/.github/refs/heads/main/atmos.README.md.submodule.gotmpl"
+      output: "./modules/vpc-endpoints/README.md"
+      terraform:
+        source: ./modules/vpc-endpoints
+        enabled: true
+        format: "markdown table"
+        show_providers: false
+        show_inputs: true
+        show_outputs: true
+        sort_by: "name"
+        hide_empty: false
+        indent_level: 2
+
+
+commands:
+- name: readme
+  steps:
+    - "atmos docs generate readme"
+    - "atmos docs generate readme-submodule"
+
+- name: test
+  commands:
+  - name: "init"
+    description: Initialize tests
+    steps:
+      - "make -C test/src init"
+
+  - name: "run"
+    description: Run tests
+    steps:
+      - "cd test/src && go mod tidy"
+      - "cd test/src && go test -v -timeout 60m"
+
+  - name: "clean"
+    description: Clean tests
+    steps:
+      - "make -C test/src clean"
+      - "rm -rf examples/*/.terraform examples/*/.terraform.lock.hcl"

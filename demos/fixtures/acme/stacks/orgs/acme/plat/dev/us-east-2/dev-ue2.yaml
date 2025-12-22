@@ -1,0 +1,23 @@
+# Platform Dev US-East-2 Stack
+import:
+  - orgs/acme/plat/_defaults
+  - mixins/region/us-east-2
+  - mixins/stage/dev
+  - catalog/vpc
+  - catalog/cluster
+  - catalog/database
+  - catalog/api
+  - catalog/frontend
+  - catalog/cdn
+
+vars:
+  tags:
+    Environment: dev
+    Region: us-east-2
+
+# Disable cache in dev to save costs
+components:
+  terraform:
+    cache:
+      metadata:
+        enabled: false

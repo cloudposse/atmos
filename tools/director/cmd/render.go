@@ -10,13 +10,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/ffmpeg"
 	"github.com/cloudposse/atmos/pkg/vhs"
 	"github.com/cloudposse/atmos/tools/director/internal/scene"
+	"github.com/cloudposse/atmos/tools/director/internal/toolmgr"
 	vhsRenderer "github.com/cloudposse/atmos/tools/director/internal/vhs"
 )
 
 func renderCmd() *cobra.Command {
 	var (
-		all   bool
-		force bool
+		all            bool
+		force          bool
+		publish        bool
+		exportManifest bool
 	)
 
 	cmd := &cobra.Command{
@@ -41,11 +44,35 @@ director render --all
 
 # Force re-render even if outputs exist
 director render --force terraform-plan-basic
+
+# Render and publish in one command
+director render list-vars --force --publish
+
+# Render, publish, and export manifest
+director render list-vars --force --publish --export-manifest
 `,
 		RunE: func(c *cobra.Command, args []string) error {
+			ctx := context.Background()
+
 			demosDir, err := findDemosDir()
 			if err != nil {
 				return err
+			}
+
+			// Load tools configuration and ensure atmos is installed at the correct version.
+			toolsConfig, err := toolmgr.LoadToolsConfig(demosDir)
+			if err != nil {
+				return fmt.Errorf("failed to load tools config: %w", err)
+			}
+
+			if toolsConfig != nil && toolsConfig.Atmos != nil {
+				mgr := toolmgr.New(toolsConfig, demosDir)
+				atmosPath, err := mgr.EnsureInstalled(ctx, "atmos")
+				if err != nil {
+					return fmt.Errorf("failed to ensure atmos is installed: %w", err)
+				}
+				// Prepend install directory to PATH so VHS uses our version.
+				toolmgr.PrependToPath(filepath.Dir(atmosPath))
 			}
 
 			scenesFile := filepath.Join(demosDir, "scenes.yaml")
@@ -107,18 +134,34 @@ director render --force terraform-plan-basic
 			renderer := vhsRenderer.NewRenderer(demosDir)
 			renderer.SetForce(force)
 
-			ctx := context.Background()
 			successCount := 0
+			var renderedSceneNames []string
 			for _, sc := range scenesToRender {
 				c.Printf("Rendering %s... ", sc.Name)
 
-				if err := renderer.Render(ctx, sc); err != nil {
+				result, err := renderer.Render(ctx, sc)
+				if err != nil {
 					c.Printf("FAILED\n  Error: %v\n", err)
 					continue
 				}
 
-				c.Println("OK")
+				if result.Cached {
+					c.Println("CACHED (use --force to re-render)")
+				} else {
+					c.Println("OK")
+				}
+
+				// Show output file paths (relative to demos dir).
+				for _, path := range result.OutputPaths {
+					relPath, err := filepath.Rel(demosDir, path)
+					if err != nil {
+						relPath = path // Fallback to absolute if rel fails.
+					}
+					c.Printf("  → %s\n", relPath)
+				}
+
 				successCount++
+				renderedSceneNames = append(renderedSceneNames, sc.Name)
 			}
 
 			c.Printf("\nRendered %d/%d scene(s) successfully\n", successCount, len(scenesToRender))
@@ -127,12 +170,30 @@ director render --force terraform-plan-basic
 				return fmt.Errorf("some scenes failed to render")
 			}
 
+			// If --publish flag is set, publish the rendered scenes.
+			if publish && len(renderedSceneNames) > 0 {
+				c.Printf("\n")
+				if err := runPublish(ctx, c, demosDir, renderedSceneNames, force); err != nil {
+					return fmt.Errorf("publish failed: %w", err)
+				}
+			}
+
+			// If --export-manifest flag is set, export the manifest.
+			if exportManifest {
+				c.Printf("\n")
+				if err := runExportManifest(demosDir); err != nil {
+					return fmt.Errorf("export manifest failed: %w", err)
+				}
+			}
+
 			return nil
 		},
 	}
 
 	cmd.Flags().BoolVar(&all, "all", false, "Render all scenes (including disabled)")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Force re-render (ignore cache)")
+	cmd.Flags().BoolVarP(&publish, "publish", "p", false, "Publish rendered scenes after rendering")
+	cmd.Flags().BoolVarP(&exportManifest, "export-manifest", "e", false, "Export manifest after publishing")
 
 	return cmd
 }

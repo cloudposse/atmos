@@ -1,0 +1,617 @@
+{
+  "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+  "scenes": [
+    {
+      "name": "demo-stacks-describe",
+      "description": "Describe stacks in demo-stacks example",
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/53310f69d6e862dea67988b7bda4ea75/watch",
+          "type": "stream",
+          "uid": "53310f69d6e862dea67988b7bda4ea75",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "53310f69d6e862dea67988b7bda4ea75"
+          ],
+          "duration": 11.96,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/53310f69d6e862dea67988b7bda4ea75/thumbnails/thumbnail.jpg?time=10.1s"
+        }
+      }
+    },
+    {
+      "name": "demo-stacks-component",
+      "description": "Describe component configuration across environments",
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5427b0dcbffac66486f2f951558e0c19/watch",
+          "type": "stream",
+          "uid": "5427b0dcbffac66486f2f951558e0c19",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "5427b0dcbffac66486f2f951558e0c19"
+          ],
+          "duration": 13.16,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5427b0dcbffac66486f2f951558e0c19/thumbnails/thumbnail.jpg?time=11.1s"
+        }
+      }
+    },
+    {
+      "name": "demo-stacks-validate",
+      "description": "Validate stack and component configurations",
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/725a68782fd7f7e71c6ddd33081b0e58/watch",
+          "type": "stream",
+          "uid": "725a68782fd7f7e71c6ddd33081b0e58",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "725a68782fd7f7e71c6ddd33081b0e58"
+          ],
+          "duration": 11.32,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/725a68782fd7f7e71c6ddd33081b0e58/thumbnails/thumbnail.jpg?time=9.5s"
+        }
+      }
+    },
+    {
+      "name": "demo-stacks-terraform-plan",
+      "description": "Run terraform plan with demo-stacks",
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/1cda1c60ced3fd2ce382b8c0eac99c72/watch",
+          "type": "stream",
+          "uid": "1cda1c60ced3fd2ce382b8c0eac99c72",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "1cda1c60ced3fd2ce382b8c0eac99c72"
+          ],
+          "duration": 14.16,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/1cda1c60ced3fd2ce382b8c0eac99c72/thumbnails/thumbnail.jpg?time=12.7s"
+        }
+      }
+    },
+    {
+      "name": "demo-stacks-list",
+      "description": "List stacks and components",
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/d978592bef730a46918edae8811f65cc/watch",
+          "type": "stream",
+          "uid": "d978592bef730a46918edae8811f65cc",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "d978592bef730a46918edae8811f65cc"
+          ],
+          "duration": 9.68,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/d978592bef730a46918edae8811f65cc/thumbnails/thumbnail.jpg?time=7.6s"
+        }
+      }
+    },
+    {
+      "name": "terraform-plan",
+      "description": "Plan infrastructure changes before deploying",
+      "tags": [
+        "featured"
+      ],
+      "category": "terraform",
+      "title": "Terraform Plan",
+      "order": 1,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/4a96442a9bb65399e613aa7dc62068a8/watch",
+          "type": "stream",
+          "uid": "4a96442a9bb65399e613aa7dc62068a8",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "4a96442a9bb65399e613aa7dc62068a8"
+          ],
+          "duration": 7.84,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/4a96442a9bb65399e613aa7dc62068a8/thumbnails/thumbnail.jpg"
+        }
+      }
+    },
+    {
+      "name": "terraform-apply",
+      "description": "Apply infrastructure changes with approval",
+      "category": "terraform",
+      "title": "Terraform Apply",
+      "order": 2,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/53835cd7785e61e2f4f9be7e93a57a45/watch",
+          "type": "stream",
+          "uid": "53835cd7785e61e2f4f9be7e93a57a45",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "53835cd7785e61e2f4f9be7e93a57a45"
+          ],
+          "duration": 10.28,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/53835cd7785e61e2f4f9be7e93a57a45/thumbnails/thumbnail.jpg?time=9.3s"
+        }
+      }
+    },
+    {
+      "name": "terraform-affected",
+      "description": "Find components affected by changes",
+      "category": "terraform",
+      "title": "Affected Components",
+      "order": 3,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/db661d6e8a8cfbb3d7564fb518128163/watch",
+          "type": "stream",
+          "uid": "db661d6e8a8cfbb3d7564fb518128163",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "db661d6e8a8cfbb3d7564fb518128163"
+          ],
+          "duration": 13.56,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/db661d6e8a8cfbb3d7564fb518128163/thumbnails/thumbnail.jpg?time=12.2s"
+        }
+      }
+    },
+    {
+      "name": "terraform-describe",
+      "description": "Describe component configuration",
+      "category": "terraform",
+      "title": "Describe Component",
+      "order": 4,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/b2e127e3c3bab7eeace6b9091e7fdf1c/watch",
+          "type": "stream",
+          "uid": "b2e127e3c3bab7eeace6b9091e7fdf1c",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "b2e127e3c3bab7eeace6b9091e7fdf1c"
+          ],
+          "duration": 12.4,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/b2e127e3c3bab7eeace6b9091e7fdf1c/thumbnails/thumbnail.jpg?time=11.2s"
+        }
+      }
+    },
+    {
+      "name": "list-stacks",
+      "description": "List and explore stacks",
+      "tags": [
+        "featured"
+      ],
+      "category": "list",
+      "title": "List Stacks",
+      "order": 1,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/97ced1ffdcc36fe70a0f1d895a7853e4/watch",
+          "type": "stream",
+          "uid": "97ced1ffdcc36fe70a0f1d895a7853e4",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "97ced1ffdcc36fe70a0f1d895a7853e4"
+          ],
+          "duration": 9.72,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/97ced1ffdcc36fe70a0f1d895a7853e4/thumbnails/thumbnail.jpg?time=8.7s"
+        }
+      }
+    },
+    {
+      "name": "list-components",
+      "description": "List available components",
+      "category": "list",
+      "title": "List Components",
+      "order": 2,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/1964c68c8cfa4101d66115b0e649f88c/watch",
+          "type": "stream",
+          "uid": "1964c68c8cfa4101d66115b0e649f88c",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "1964c68c8cfa4101d66115b0e649f88c"
+          ],
+          "duration": 10.76,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/1964c68c8cfa4101d66115b0e649f88c/thumbnails/thumbnail.jpg?time=9.7s"
+        }
+      }
+    },
+    {
+      "name": "list-vars",
+      "description": "List component vars across stacks",
+      "category": "list",
+      "title": "List Vars",
+      "order": 3,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/cfc4db5d9e494f3b26967c1d31f70d86/watch",
+          "type": "stream",
+          "uid": "cfc4db5d9e494f3b26967c1d31f70d86",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "cfc4db5d9e494f3b26967c1d31f70d86"
+          ],
+          "duration": 8.36,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/cfc4db5d9e494f3b26967c1d31f70d86/thumbnails/thumbnail.jpg"
+        }
+      }
+    },
+    {
+      "name": "workflow-run",
+      "description": "Run multi-step workflows",
+      "category": "workflows",
+      "title": "Run Workflow",
+      "order": 1,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/b79a14f2d8198acfd805c39e934625e8/watch",
+          "type": "stream",
+          "uid": "b79a14f2d8198acfd805c39e934625e8",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "b79a14f2d8198acfd805c39e934625e8"
+          ],
+          "duration": 10.12,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/b79a14f2d8198acfd805c39e934625e8/thumbnails/thumbnail.jpg?time=9.1s"
+        }
+      }
+    },
+    {
+      "name": "workflow-list",
+      "description": "List available workflows",
+      "category": "workflows",
+      "title": "List Workflows",
+      "order": 2,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/b286c03f29f16576ddd1187bcc54d714/watch",
+          "type": "stream",
+          "uid": "b286c03f29f16576ddd1187bcc54d714",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "b286c03f29f16576ddd1187bcc54d714"
+          ],
+          "duration": 9.2,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/b286c03f29f16576ddd1187bcc54d714/thumbnails/thumbnail.jpg?time=8.3s"
+        }
+      }
+    },
+    {
+      "name": "vendor-pull",
+      "description": "Pull external components with vendoring",
+      "tags": [
+        "featured"
+      ],
+      "category": "workflows",
+      "title": "Vendor Pull",
+      "order": 3,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/f37a7440be222b79a8487e965a52643c/watch",
+          "type": "stream",
+          "uid": "f37a7440be222b79a8487e965a52643c",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "f37a7440be222b79a8487e965a52643c"
+          ],
+          "duration": 10.68,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/f37a7440be222b79a8487e965a52643c/thumbnails/thumbnail.jpg?time=9.6s"
+        }
+      }
+    },
+    {
+      "name": "dx-custom-commands",
+      "description": "Extend Atmos with custom commands",
+      "category": "dx",
+      "title": "Custom Commands",
+      "order": 1,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/41887dc9c610d5e1cb2ba77dc774a1f0/watch",
+          "type": "stream",
+          "uid": "41887dc9c610d5e1cb2ba77dc774a1f0",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "41887dc9c610d5e1cb2ba77dc774a1f0"
+          ],
+          "duration": 12.72,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/41887dc9c610d5e1cb2ba77dc774a1f0/thumbnails/thumbnail.jpg?time=11.4s"
+        }
+      }
+    },
+    {
+      "name": "dx-aliases",
+      "description": "Use shorthand aliases for common commands",
+      "category": "dx",
+      "title": "Aliases",
+      "order": 2,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/b820d495c1713f9ffa25bd893a0a35a8/watch",
+          "type": "stream",
+          "uid": "b820d495c1713f9ffa25bd893a0a35a8",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "b820d495c1713f9ffa25bd893a0a35a8"
+          ],
+          "duration": 13,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/b820d495c1713f9ffa25bd893a0a35a8/thumbnails/thumbnail.jpg?time=11.7s"
+        }
+      }
+    },
+    {
+      "name": "dx-version",
+      "description": "Check atmos version and updates",
+      "category": "dx",
+      "title": "Version Check",
+      "order": 3,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/a306ff5f5fb29e201854ae4e9cd77a7f/watch",
+          "type": "stream",
+          "uid": "a306ff5f5fb29e201854ae4e9cd77a7f",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "a306ff5f5fb29e201854ae4e9cd77a7f"
+          ],
+          "duration": 10.44,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/a306ff5f5fb29e201854ae4e9cd77a7f/thumbnails/thumbnail.jpg?time=9.4s"
+        }
+      }
+    },
+    {
+      "name": "dx-completion",
+      "description": "Generate shell completion scripts",
+      "category": "dx",
+      "title": "Shell Completion",
+      "order": 4,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/e2eec7dc874b61c105871f9d077c3c94/watch",
+          "type": "stream",
+          "uid": "e2eec7dc874b61c105871f9d077c3c94",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "e2eec7dc874b61c105871f9d077c3c94"
+          ],
+          "duration": 12.72,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/e2eec7dc874b61c105871f9d077c3c94/thumbnails/thumbnail.jpg?time=11.4s"
+        }
+      }
+    },
+    {
+      "name": "dx-docs",
+      "description": "Access documentation from CLI",
+      "category": "dx",
+      "title": "Documentation",
+      "order": 5,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5cf3cf84e45988819ea4c53d55e55014/watch",
+          "type": "stream",
+          "uid": "5cf3cf84e45988819ea4c53d55e55014",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "5cf3cf84e45988819ea4c53d55e55014"
+          ],
+          "duration": 10.52,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5cf3cf84e45988819ea4c53d55e55014/thumbnails/thumbnail.jpg?time=9.5s"
+        }
+      }
+    },
+    {
+      "name": "dx-validate",
+      "description": "Validate stack configurations",
+      "category": "dx",
+      "title": "Validate Stacks",
+      "order": 6,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/a39f0e130344f9ea134738fabde7adaa/watch",
+          "type": "stream",
+          "uid": "a39f0e130344f9ea134738fabde7adaa",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "a39f0e130344f9ea134738fabde7adaa"
+          ],
+          "duration": 11.92,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/a39f0e130344f9ea134738fabde7adaa/thumbnails/thumbnail.jpg?time=10.7s"
+        }
+      }
+    },
+    {
+      "name": "dx-devcontainer",
+      "description": "Isolated development environments with devcontainers",
+      "category": "dx",
+      "title": "Devcontainers",
+      "order": 7,
+      "formats": {}
+    },
+    {
+      "name": "auth-login",
+      "description": "Authenticate with cloud providers",
+      "tags": [
+        "featured"
+      ],
+      "category": "auth",
+      "title": "Login",
+      "order": 1,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/6c484ee7bd457b792546e6fcd2e25fa7/watch",
+          "type": "stream",
+          "uid": "6c484ee7bd457b792546e6fcd2e25fa7",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "6c484ee7bd457b792546e6fcd2e25fa7"
+          ],
+          "duration": 11.64,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/6c484ee7bd457b792546e6fcd2e25fa7/thumbnails/thumbnail.jpg?time=10.5s"
+        }
+      }
+    },
+    {
+      "name": "auth-terraform",
+      "description": "Run terraform with team credentials",
+      "category": "auth",
+      "title": "Authenticated Terraform",
+      "order": 2,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/d8ae92c999d84b9fb9b70962c436f20e/watch",
+          "type": "stream",
+          "uid": "d8ae92c999d84b9fb9b70962c436f20e",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "d8ae92c999d84b9fb9b70962c436f20e"
+          ],
+          "duration": 13.64,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/d8ae92c999d84b9fb9b70962c436f20e/thumbnails/thumbnail.jpg?time=12.3s"
+        }
+      }
+    },
+    {
+      "name": "auth-exec",
+      "description": "Execute commands with team credentials",
+      "category": "auth",
+      "title": "Exec with Credentials",
+      "order": 3,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/deb984a024f9adeabd3c759685e27e38/watch",
+          "type": "stream",
+          "uid": "deb984a024f9adeabd3c759685e27e38",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "deb984a024f9adeabd3c759685e27e38"
+          ],
+          "duration": 12.44,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/deb984a024f9adeabd3c759685e27e38/thumbnails/thumbnail.jpg?time=11.2s"
+        }
+      }
+    },
+    {
+      "name": "auth-console",
+      "description": "Open cloud provider console in browser",
+      "category": "auth",
+      "title": "Web Console",
+      "order": 4,
+      "formats": {}
+    },
+    {
+      "name": "auth-shell",
+      "description": "Start interactive shell with credentials",
+      "category": "auth",
+      "title": "Authenticated Shell",
+      "order": 5,
+      "formats": {}
+    },
+    {
+      "name": "auth-list",
+      "description": "Show configured identities and providers",
+      "tags": [
+        "featured"
+      ],
+      "category": "auth",
+      "title": "List Identities",
+      "order": 6,
+      "formats": {}
+    },
+    {
+      "name": "config-template-functions",
+      "description": "Use template functions in stacks",
+      "category": "config",
+      "title": "Template Functions",
+      "order": 1,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/673bad2d20eb930a3a742af6b22c2abe/watch",
+          "type": "stream",
+          "uid": "673bad2d20eb930a3a742af6b22c2abe",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "673bad2d20eb930a3a742af6b22c2abe"
+          ],
+          "duration": 13.52,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/673bad2d20eb930a3a742af6b22c2abe/thumbnails/thumbnail.jpg?time=12.2s"
+        }
+      }
+    },
+    {
+      "name": "config-describe-affected",
+      "description": "Find affected components from changes",
+      "category": "config",
+      "title": "Describe Affected",
+      "order": 2,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/0885a9fc356071260a7d7b4fb22f352a/watch",
+          "type": "stream",
+          "uid": "0885a9fc356071260a7d7b4fb22f352a",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "0885a9fc356071260a7d7b4fb22f352a"
+          ],
+          "duration": 13.28,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/0885a9fc356071260a7d7b4fb22f352a/thumbnails/thumbnail.jpg?time=12.0s"
+        }
+      }
+    },
+    {
+      "name": "config-validate-stacks",
+      "description": "Validate all stack configurations",
+      "category": "config",
+      "title": "Validate Stacks",
+      "order": 3,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/fa39f41787561ae137a644408900d4b3/watch",
+          "type": "stream",
+          "uid": "fa39f41787561ae137a644408900d4b3",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "fa39f41787561ae137a644408900d4b3"
+          ],
+          "duration": 12.28,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/fa39f41787561ae137a644408900d4b3/thumbnails/thumbnail.jpg?time=9.6s"
+        }
+      }
+    },
+    {
+      "name": "flagship-deploy-workflow",
+      "description": "Complete deployment workflow with Atmos",
+      "category": "flagship",
+      "title": "Deploy Workflow",
+      "order": 1,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/47c5ff9e0f5850cbe9eeacc90e335bba/watch",
+          "type": "stream",
+          "uid": "47c5ff9e0f5850cbe9eeacc90e335bba",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "47c5ff9e0f5850cbe9eeacc90e335bba"
+          ],
+          "duration": 15.8,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/47c5ff9e0f5850cbe9eeacc90e335bba/thumbnails/thumbnail.jpg?time=14.2s"
+        }
+      }
+    },
+    {
+      "name": "flagship-onboarding",
+      "description": "Getting started with Atmos",
+      "category": "flagship",
+      "title": "Getting Started",
+      "order": 2,
+      "formats": {
+        "mp4": {
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/1d1eeb103c2cf1e03b026f09eadc05e4/watch",
+          "type": "stream",
+          "uid": "1d1eeb103c2cf1e03b026f09eadc05e4",
+          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
+          "all_uids": [
+            "1d1eeb103c2cf1e03b026f09eadc05e4"
+          ],
+          "duration": 13.16,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/1d1eeb103c2cf1e03b026f09eadc05e4/thumbnails/thumbnail.jpg?time=9.6s"
+        }
+      }
+    }
+  ]
+}

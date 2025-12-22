@@ -1,31 +1,29 @@
-# demo-stacks-describe scene - Show describe stacks command
+# demo-stacks-describe scene - Show list and describe commands
 Output demo-stacks-describe.gif
+Output demo-stacks-describe.mp4
 
 # VHS Configuration
-Set Theme "Catppuccin Mocha"
+Source ../../scenes/_theme.tape
 Set Width 1400
 Set Height 900
-Set FontSize 14
-Set TypingSpeed 50ms
+
+# Fix prompt (VHS runs with --no-rcs)
+Hide
+Type "PS1='\033[38;2;90;86;224m> \033[0m'"
+Enter
+Ctrl+L
+Show
 
 # Dependencies
 Require atmos
 
-# Setup
-Type "# Navigate to demo-stacks example"
+# Scene starts
+Type "# List all available stacks"
 Enter
 Sleep 300ms
 
-Type "cd examples/demo-stacks"
-Enter
-Sleep 500ms
-
-Type "# Describe all stacks to see configuration"
-Enter
-Sleep 300ms
-
-# Execute describe stacks
-Type "atmos describe stacks"
+# Execute list stacks
+Type "atmos list stacks"
 Sleep 500ms
 Enter
 Sleep 3s
@@ -34,15 +32,15 @@ Sleep 3s
 Screenshot demo-stacks-describe.png
 Sleep 2s
 
-# Show specific stack
-Type "# View specific stack: dev"
+# Show component with provenance
+Type "# View VPC configuration with provenance"
 Enter
 Sleep 300ms
 
-Type "atmos describe stacks --stack dev"
+Type "atmos describe component vpc -s plat-dev-ue2 --provenance"
 Sleep 500ms
 Enter
-Sleep 2s
+Sleep 3s
 
 # Cleanup
 Sleep 1s
