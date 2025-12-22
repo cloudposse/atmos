@@ -86,14 +86,26 @@ func (r *ProgressRenderer) Render() {
 
 // RenderWithLabel renders the progress bar with the step label on the left.
 // Format: [1/5] stepname ... [████░░░] n/m
-// Each call prints a new line - no clearing is performed.
+// Renders WITHOUT newline for in-place display. Call ui.ClearLine() before
+// any step output, then RenderPermanent() after step completes.
 func (r *ProgressRenderer) RenderWithLabel(stepLabel string) {
 	if r == nil || !r.enabled {
 		return
 	}
 
 	output := r.formatProgressLine(stepLabel)
-	_ = ui.Writeln(output)
+	_ = ui.Write(output) // No newline - cursor stays on this line.
+}
+
+// RenderPermanent renders the progress bar WITH newline as a permanent record.
+// Call this after step execution completes to preserve the progress line.
+func (r *ProgressRenderer) RenderPermanent(stepLabel string) {
+	if r == nil || !r.enabled {
+		return
+	}
+
+	output := r.formatProgressLine(stepLabel)
+	_ = ui.Writeln(output) // With newline - becomes permanent record.
 }
 
 // formatProgressLine creates the progress line with right-aligned progress bar.

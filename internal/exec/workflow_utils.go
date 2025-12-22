@@ -334,15 +334,14 @@ func ExecuteWorkflow(
 		showRenderer.RenderHeaderIfNeeded(workflowDefinition, workflow, flags)
 
 		// Render step label with optional count prefix and progress bar.
-		// When progress is enabled, combine label + progress on single line.
-		// When progress is disabled, just show the label.
+		// When progress is enabled, combine label + progress on single line (no newline).
+		// When progress is disabled, just show the label with newline.
 		showCfg := stepPkg.GetShowConfig(&step, workflowDefinition)
+		label := stepPkg.FormatStepLabel(&step, workflowDefinition, stepIdx, totalSteps)
 		if progressRenderer.IsEnabled() {
 			progressRenderer.Update(stepIdx+1, step.Name)
-			label := stepPkg.FormatStepLabel(&step, workflowDefinition, stepIdx, totalSteps)
-			progressRenderer.RenderWithLabel(label)
+			progressRenderer.RenderWithLabel(label) // No newline - will be cleared.
 		} else if stepPkg.ShowCount(showCfg) {
-			label := stepPkg.FormatStepLabel(&step, workflowDefinition, stepIdx, totalSteps)
 			_ = ui.Writeln(label)
 		}
 
@@ -373,6 +372,13 @@ func ExecuteWorkflow(
 		// Add toolchain PATH if dependencies were installed.
 		if toolchainPATH != "" {
 			stepEnv = append(stepEnv, fmt.Sprintf("PATH=%s", toolchainPATH))
+		}
+
+		// Clear progress line and re-render as permanent record before step execution.
+		// This ensures progress line appears as header, then step output below it.
+		if progressRenderer.IsEnabled() {
+			_ = ui.ClearLine()
+			progressRenderer.RenderPermanent(label)
 		}
 
 		switch commandType {
