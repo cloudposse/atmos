@@ -681,13 +681,12 @@ func readEnvAmosConfigPath(v *viper.Viper) error {
 	log.Trace("Checking for atmos.yaml from ATMOS_CLI_CONFIG_PATH", "path", atmosPath)
 	err := mergeConfig(v, atmosPath, CliConfigFileName, true)
 	if err != nil {
-		switch err.(type) {
-		case viper.ConfigFileNotFoundError:
+		var configFileNotFoundError viper.ConfigFileNotFoundError
+		if errors.As(err, &configFileNotFoundError) {
 			log.Debug("config not found ENV var "+AtmosCliConfigPathEnvVar, "file", atmosPath)
 			return nil
-		default:
-			return err
 		}
+		return err
 	}
 	log.Trace("Found config ENV", AtmosCliConfigPathEnvVar, atmosPath)
 

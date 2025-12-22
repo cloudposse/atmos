@@ -16,7 +16,7 @@ import (
 	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	awsUtils "github.com/cloudposse/atmos/internal/aws_utils"
+	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -82,7 +82,7 @@ func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext)
 	}
 
 	// The minimum `assume role` duration allowed by AWS is 15 minutes.
-	cfg, err := awsUtils.LoadAWSConfigWithAuth(ctx, region, roleArn, 15*time.Minute, awsAuthContext)
+	cfg, err := awsIdentity.LoadConfigWithAuth(ctx, region, roleArn, 15*time.Minute, awsAuthContext)
 	if err != nil {
 		return nil, err
 	}
