@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -104,7 +105,7 @@ func (m *Model) listenForMessages() tea.Cmd {
 	return func() tea.Msg {
 		result, err := m.parser.Next()
 		if err != nil {
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				return doneMsg{exitCode: 0, err: nil}
 			}
 			return doneMsg{exitCode: 1, err: err}
@@ -197,47 +198,61 @@ func (m Model) View() string {
 func (m Model) progressView() string {
 	var b strings.Builder
 
-	// Header with context and current activity.
+	// Styles.
 	stackStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan)).Bold(true)
 	componentStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen))
 	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
 
-	header := fmt.Sprintf("%s %s %s/%s",
-		m.spinner.View(),
+	// Build spinner + command + stack/component.
+	spin := m.spinner.View() + " "
+	commandInfo := fmt.Sprintf("%s %s/%s",
 		m.command,
 		stackStyle.Render(m.stack),
 		componentStyle.Render(m.component),
 	)
 
-	// Add current activity to the header line (e.g., "Reading data.http.weather").
+	// Add current activity (e.g., "Reading data.http.weather").
+	activityInfo := ""
 	if currentOp := m.tracker.GetCurrentActivity(); currentOp != nil {
 		activityVerb := m.formatActivityVerb(currentOp)
 		opElapsed := time.Since(currentOp.StartTime).Seconds()
-		header += mutedStyle.Render(fmt.Sprintf(" %s %s (%.1fs)", activityVerb, currentOp.Address, opElapsed))
+		activityInfo = mutedStyle.Render(fmt.Sprintf(" %s %s (%.1fs)", activityVerb, currentOp.Address, opElapsed))
 	}
 
-	b.WriteString(header)
-	b.WriteString("\n")
-
-	// Progress bar.
+	// Progress bar and count.
 	total := m.tracker.GetTotalCount()
 	completed := m.tracker.GetCompletedCount()
-	elapsed := time.Since(m.startTime).Seconds()
 
+	var progressInfo string
 	if total > 0 {
 		percent := float64(completed) / float64(total)
 		progressBar := m.progress.ViewAs(percent)
-		b.WriteString(fmt.Sprintf("%s %d%% (%d/%d) %.1fs\n",
-			progressBar,
-			int(percent*100),
-			completed,
-			total,
-			elapsed,
-		))
+		progressInfo = fmt.Sprintf("%s %d/%d", progressBar, completed, total)
 	} else {
-		b.WriteString(fmt.Sprintf("%.1fs\n", elapsed))
+		elapsed := time.Since(m.startTime).Seconds()
+		progressInfo = fmt.Sprintf("%.1fs", elapsed)
 	}
-	b.WriteString("\n")
+
+	// Calculate available width and build inline layout.
+	// Layout: spinner + commandInfo + activityInfo + gap + progressInfo.
+	width := m.width
+	if width == 0 {
+		width = 120 // Default width if not set.
+	}
+
+	leftPart := spin + commandInfo + activityInfo
+	leftWidth := lipgloss.Width(leftPart)
+	rightWidth := lipgloss.Width(progressInfo)
+
+	// Calculate gap to right-align the progress bar.
+	gap := ""
+	cellsRemaining := width - leftWidth - rightWidth
+	if cellsRemaining > 0 {
+		gap = strings.Repeat(" ", cellsRemaining)
+	}
+
+	b.WriteString(leftPart + gap + progressInfo)
+	b.WriteString("\n\n")
 
 	// Render only completed/errored resources (in-progress ones are shown on the header line).
 	resources := m.tracker.GetResources()
