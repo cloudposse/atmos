@@ -268,3 +268,97 @@ func TestStepResultMetadataNilMap(t *testing.T) {
 	assert.NotNil(t, result.Metadata)
 	assert.Equal(t, "value", result.Metadata["key"])
 }
+
+func TestVariablesStageTracking(t *testing.T) {
+	t.Run("total stages defaults to zero", func(t *testing.T) {
+		vars := NewVariables()
+		assert.Equal(t, 0, vars.GetTotalStages())
+	})
+
+	t.Run("set and get total stages", func(t *testing.T) {
+		vars := NewVariables()
+		vars.SetTotalStages(5)
+		assert.Equal(t, 5, vars.GetTotalStages())
+	})
+
+	t.Run("stage index defaults to zero", func(t *testing.T) {
+		vars := NewVariables()
+		assert.Equal(t, 0, vars.GetStageIndex())
+	})
+
+	t.Run("increment stage index", func(t *testing.T) {
+		vars := NewVariables()
+		assert.Equal(t, 0, vars.GetStageIndex())
+
+		// First increment returns 1.
+		idx := vars.IncrementStageIndex()
+		assert.Equal(t, 1, idx)
+		assert.Equal(t, 1, vars.GetStageIndex())
+
+		// Second increment returns 2.
+		idx = vars.IncrementStageIndex()
+		assert.Equal(t, 2, idx)
+		assert.Equal(t, 2, vars.GetStageIndex())
+
+		// Third increment returns 3.
+		idx = vars.IncrementStageIndex()
+		assert.Equal(t, 3, idx)
+		assert.Equal(t, 3, vars.GetStageIndex())
+	})
+
+	t.Run("stage tracking together", func(t *testing.T) {
+		vars := NewVariables()
+		vars.SetTotalStages(3)
+
+		// Simulate stage progression.
+		assert.Equal(t, 1, vars.IncrementStageIndex())
+		assert.Equal(t, 2, vars.IncrementStageIndex())
+		assert.Equal(t, 3, vars.IncrementStageIndex())
+
+		// Final state.
+		assert.Equal(t, 3, vars.GetStageIndex())
+		assert.Equal(t, 3, vars.GetTotalStages())
+	})
+}
+
+func TestVariablesLoadOSEnv(t *testing.T) {
+	// NewVariables automatically loads OS env.
+	vars := NewVariables()
+
+	// PATH should be set on any Unix-like system.
+	path, ok := vars.Env["PATH"]
+	assert.True(t, ok, "PATH should be loaded from OS environment")
+	assert.NotEmpty(t, path)
+
+	// HOME should also exist.
+	home, ok := vars.Env["HOME"]
+	assert.True(t, ok, "HOME should be loaded from OS environment")
+	assert.NotEmpty(t, home)
+}
+
+func TestVariablesResolveWithEnv(t *testing.T) {
+	vars := NewVariables()
+	vars.SetEnv("CUSTOM_VAR", "custom_value")
+
+	result, err := vars.Resolve("env value is {{ .env.CUSTOM_VAR }}")
+	require.NoError(t, err)
+	assert.Equal(t, "env value is custom_value", result)
+}
+
+func TestVariablesResolveMetadata(t *testing.T) {
+	vars := NewVariables()
+	vars.Set("step1", NewStepResult("value").WithMetadata("exit_code", 0))
+
+	result, err := vars.Resolve("exit code: {{ .steps.step1.metadata.exit_code }}")
+	require.NoError(t, err)
+	assert.Equal(t, "exit code: 0", result)
+}
+
+func TestVariablesResolveError(t *testing.T) {
+	vars := NewVariables()
+	vars.Set("step1", NewStepResult("").WithError("something failed"))
+
+	result, err := vars.Resolve("error: {{ .steps.step1.error }}")
+	require.NoError(t, err)
+	assert.Equal(t, "error: something failed", result)
+}

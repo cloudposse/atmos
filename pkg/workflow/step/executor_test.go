@@ -3,14 +3,31 @@ package step
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+var executorInitOnce sync.Once
+
+// initExecutorTestIO initializes the I/O context for executor tests.
+func initExecutorTestIO(t *testing.T) {
+	t.Helper()
+	executorInitOnce.Do(func() {
+		ioCtx, err := iolib.NewContext()
+		require.NoError(t, err)
+		data.InitWriter(ioCtx)
+		ui.InitFormatter(ioCtx)
+	})
+}
 
 func TestStepExecutor(t *testing.T) {
 	t.Run("creates with empty variables", func(t *testing.T) {
@@ -384,5 +401,139 @@ func TestStepResult_Chaining(t *testing.T) {
 		assert.Equal(t, "val2", result.Metadata["key2"])
 		assert.Equal(t, "some error", result.Error)
 		assert.True(t, result.Skipped)
+	})
+}
+
+func TestStepExecutor_ExecuteRealSteps(t *testing.T) {
+	initExecutorTestIO(t)
+
+	t.Run("executes join step and stores result", func(t *testing.T) {
+		executor := NewStepExecutor()
+		step := &schema.WorkflowStep{
+			Name:    "join_test",
+			Type:    "join",
+			Options: []string{"a", "b", "c"},
+		}
+
+		result, err := executor.Execute(context.Background(), step)
+		require.NoError(t, err)
+		assert.Equal(t, "a\nb\nc", result.Value)
+
+		// Verify result is stored in variables.
+		storedResult, ok := executor.GetResult("join_test")
+		assert.True(t, ok)
+		assert.Equal(t, "a\nb\nc", storedResult.Value)
+	})
+
+	t.Run("executes format step with template", func(t *testing.T) {
+		executor := NewStepExecutor()
+
+		// First step stores a value.
+		executor.Variables().Set("env", NewStepResult("production"))
+
+		// Second step uses the template.
+		step := &schema.WorkflowStep{
+			Name:    "format_test",
+			Type:    "format",
+			Content: "Environment: {{ .steps.env.value }}",
+		}
+
+		result, err := executor.Execute(context.Background(), step)
+		require.NoError(t, err)
+		assert.Equal(t, "Environment: production", result.Value)
+	})
+
+	t.Run("defaults step name when not provided", func(t *testing.T) {
+		executor := NewStepExecutor()
+		step := &schema.WorkflowStep{
+			Type:    "join",
+			Options: []string{"x"},
+		}
+
+		result, err := executor.Execute(context.Background(), step)
+		require.NoError(t, err)
+		assert.Equal(t, "x", result.Value)
+
+		// Verify default name was used.
+		storedResult, ok := executor.GetResult("unnamed_step")
+		assert.True(t, ok)
+		assert.Equal(t, "x", storedResult.Value)
+	})
+
+	t.Run("validates step before execution", func(t *testing.T) {
+		executor := NewStepExecutor()
+		step := &schema.WorkflowStep{
+			Name: "invalid_toast",
+			Type: "toast",
+			// Missing required content.
+		}
+
+		_, err := executor.Execute(context.Background(), step)
+		assert.Error(t, err)
+	})
+
+	t.Run("executes with workflow context", func(t *testing.T) {
+		executor := NewStepExecutor()
+		executor.SetWorkflow(&schema.WorkflowDefinition{
+			Output: "capture",
+		})
+
+		step := &schema.WorkflowStep{
+			Name:    "shell_test",
+			Type:    "shell",
+			Command: "echo hello",
+		}
+
+		result, err := executor.Execute(context.Background(), step)
+		require.NoError(t, err)
+		assert.Contains(t, result.Value, "hello")
+	})
+}
+
+func TestStepExecutor_RunAllRealSteps(t *testing.T) {
+	initExecutorTestIO(t)
+
+	t.Run("runs multiple steps in sequence", func(t *testing.T) {
+		executor := NewStepExecutor()
+		workflow := &schema.WorkflowDefinition{
+			Steps: []schema.WorkflowStep{
+				{Name: "step1", Type: "join", Options: []string{"first"}},
+				{Name: "step2", Type: "join", Options: []string{"second"}},
+			},
+		}
+
+		err := executor.RunAll(context.Background(), workflow)
+		require.NoError(t, err)
+
+		// Verify both steps were executed.
+		result1, ok := executor.GetResult("step1")
+		assert.True(t, ok)
+		assert.Equal(t, "first", result1.Value)
+
+		result2, ok := executor.GetResult("step2")
+		assert.True(t, ok)
+		assert.Equal(t, "second", result2.Value)
+	})
+
+	t.Run("stops on first failure", func(t *testing.T) {
+		executor := NewStepExecutor()
+		workflow := &schema.WorkflowDefinition{
+			Steps: []schema.WorkflowStep{
+				{Name: "good_step", Type: "join", Options: []string{"ok"}},
+				{Name: "bad_step", Type: "unknown_xyz"},
+				{Name: "never_runs", Type: "join", Options: []string{"no"}},
+			},
+		}
+
+		err := executor.RunAll(context.Background(), workflow)
+		assert.Error(t, err)
+
+		// First step ran.
+		_, ok := executor.GetResult("good_step")
+		assert.True(t, ok)
+
+		// Third step did not run.
+		_, ok = executor.GetResult("never_runs")
+		assert.False(t, ok)
 	})
 }
