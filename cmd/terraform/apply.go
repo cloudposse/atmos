@@ -51,6 +51,7 @@ For complete Terraform/OpenTofu documentation, see:
 func init() {
 	// Create parser with apply-specific flags using functional options.
 	applyParser = flags.NewStandardParser(
+		WithBackendExecutionFlags(),
 		flags.WithStringFlag("from-plan", "", "", "Apply from plan file (uses deterministic location if path not specified)"),
 		flags.WithNoOptDefVal("from-plan", "true"),
 		flags.WithStringFlag("planfile", "", "", "Set the plan file to use"),

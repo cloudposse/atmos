@@ -8,6 +8,7 @@ const (
 	ProviderKindAWSUser              = "aws/user"
 	ProviderKindAWSAssumeRole        = "aws/assume-role"
 	ProviderKindAWSPermissionSet     = "aws/permission-set"
+	ProviderKindAWSAssumeRoot        = "aws/assume-root"
 
 	// Azure provider kinds.
 	ProviderKindAzureOIDC       = "azure/oidc"

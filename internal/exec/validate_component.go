@@ -14,7 +14,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -49,47 +49,47 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 	componentName := args[0]
 
 	// Initialize spinner.
-	message := fmt.Sprintf("Validating Atmos Component: %s", componentName)
-	p := NewSpinner(message)
-	spinnerDone := make(chan struct{})
-	// Run spinner in a goroutine
-	RunSpinner(p, spinnerDone, message)
-	// Ensure the spinner is stopped before returning
-	defer StopSpinner(p, spinnerDone)
+	s := spinner.New(fmt.Sprintf("Validating Atmos Component: %s", componentName))
+	s.Start()
 
 	flags := cmd.Flags()
 
 	stack, err := flags.GetString("stack")
 	if err != nil {
+		s.Stop()
 		return "", "", err
 	}
 
 	schemaPath, err := flags.GetString("schema-path")
 	if err != nil {
+		s.Stop()
 		return "", "", err
 	}
 
 	schemaType, err := flags.GetString("schema-type")
 	if err != nil {
+		s.Stop()
 		return "", "", err
 	}
 
 	modulePaths, err := flags.GetStringSlice("module-paths")
 	if err != nil {
+		s.Stop()
 		return "", "", err
 	}
 
 	timeout, err := flags.GetInt("timeout")
 	if err != nil {
+		s.Stop()
 		return "", "", err
 	}
 
 	_, err = ExecuteValidateComponent(&atmosConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
 	if err != nil {
-		u.PrintfMessageToTUI("\r%s Component validation failed\n", theme.Styles.XMark)
+		s.Error("Component validation failed")
 		return "", "", err
 	}
-	u.PrintfMessageToTUI("\r%s Component validated successfully\n", theme.Styles.Checkmark)
+	s.Success("Component validated successfully")
 	log.Debug("Component validation completed", "component", componentName, "stack", stack)
 
 	return componentName, stack, nil

@@ -137,6 +137,12 @@ func TestNewIdentity_Factory(t *testing.T) {
 			expectError:  false,
 		},
 		{
+			name:         "aws-assume-root-valid",
+			identityName: "root-access",
+			config:       &schema.Identity{Kind: "aws/assume-root"},
+			expectError:  false,
+		},
+		{
 			name:         "aws-user-valid",
 			identityName: "me",
 			config:       &schema.Identity{Kind: "aws/user"},
