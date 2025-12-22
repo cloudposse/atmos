@@ -202,6 +202,47 @@ func GetViewportConfig(step *schema.WorkflowStep, workflow *schema.WorkflowDefin
 	return nil
 }
 
+// FormatStepLabel formats the step label with optional count prefix.
+// If show.count is enabled, returns "[1/3] stepname" with stepname in muted style.
+// Otherwise returns just "stepname" in muted style.
+func FormatStepLabel(step *schema.WorkflowStep, workflow *schema.WorkflowDefinition, stepIndex, totalSteps int) string {
+	showCfg := GetShowConfig(step, workflow)
+	styles := theme.GetCurrentStyles()
+
+	// Format step name in muted (dark gray) style.
+	stepName := step.Name
+	if styles != nil {
+		stepName = styles.Muted.Render(step.Name)
+	}
+
+	if ShowCount(showCfg) && totalSteps > 0 {
+		countPrefix := fmt.Sprintf("[%d/%d]", stepIndex+1, totalSteps)
+		if styles != nil {
+			countPrefix = styles.Label.Render(countPrefix)
+		}
+		return countPrefix + " " + stepName
+	}
+	return stepName
+}
+
+// RenderCommand renders the command before execution if show.command is enabled.
+// Displays the command with a $ prefix for shell-like appearance.
+func RenderCommand(step *schema.WorkflowStep, workflow *schema.WorkflowDefinition, command string) {
+	showCfg := GetShowConfig(step, workflow)
+	if !ShowCommand(showCfg) || command == "" {
+		return
+	}
+
+	styles := theme.GetCurrentStyles()
+	var cmdDisplay string
+	if styles != nil {
+		cmdDisplay = styles.Muted.Render("$ " + command)
+	} else {
+		cmdDisplay = "$ " + command
+	}
+	_ = ui.Writeln(cmdDisplay)
+}
+
 // StreamingOutputWriter handles real-time output streaming with prefix.
 type StreamingOutputWriter struct {
 	prefix string
