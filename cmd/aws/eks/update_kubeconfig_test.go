@@ -1,4 +1,4 @@
-package cmd
+package eks
 
 import (
 	"testing"
@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestAwsEksCmdUpdateKubeconfigCmd_Error(t *testing.T) {
-	err := awsEksCmdUpdateKubeconfigCmd.RunE(awsEksCmdUpdateKubeconfigCmd, []string{})
+func TestUpdateKubeconfigCmd_Error(t *testing.T) {
+	err := updateKubeconfigCmd.RunE(updateKubeconfigCmd, []string{})
 	assert.Error(t, err, "aws eks update-kubeconfig command should return an error when called with no parameters")
 }
