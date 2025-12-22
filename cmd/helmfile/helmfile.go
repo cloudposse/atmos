@@ -24,8 +24,9 @@ var helmfileCmd = &cobra.Command{
 }
 
 func init() {
-	// https://github.com/spf13/cobra/issues/739
-	helmfileCmd.DisableFlagParsing = true
+	// Note: We use FParseErrWhitelist.UnknownFlags=true (set in command definition)
+	// instead of DisableFlagParsing=true to allow unknown flags through to helmfile
+	// while still enabling Cobra to parse known Atmos flags and display proper help.
 	helmfileCmd.PersistentFlags().Bool("", false, doubleDashHint)
 	addStackCompletion(helmfileCmd)
 
@@ -38,7 +39,10 @@ func init() {
 
 // helmfileRun is the shared execution function for all helmfile subcommands.
 func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
-	handleHelpRequest(cmd, args)
+	// Check if help was requested and display it.
+	if handleHelpRequest(cmd, args) {
+		return nil
+	}
 	// Enable heatmap tracking if --heatmap flag is present in os.Args
 	// (needed because flag parsing is disabled for helmfile commands).
 	enableHeatmapIfRequested()
