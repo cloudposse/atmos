@@ -19,6 +19,33 @@ import (
 const (
 	// Float64BitSize is the bitsize for ParseFloat (64-bit floating point).
 	Float64BitSize = 64
+
+	// DefaultSampleCount is the default number of frames to analyze for color detection.
+	DefaultSampleCount = 20
+
+	// DefaultFallbackPercent is the fallback position as percentage of video duration.
+	DefaultFallbackPercent = 0.25
+
+	// FileSizeNormalizer converts file size to a normalized score.
+	FileSizeNormalizer = 1000.0
+
+	// ShortVideoDuration threshold in seconds for short video detection.
+	ShortVideoDuration = 15
+
+	// LongVideoSampleCount is sample count for longer videos.
+	LongVideoSampleCount = 30
+
+	// ShortVideoSampleCount is sample count for shorter videos.
+	ShortVideoSampleCount = 15
+
+	// VideoStartPercent is the starting position as percentage to avoid intro frames.
+	VideoStartPercent = 0.10
+
+	// VideoEndPercent is the ending position as percentage to avoid outro frames.
+	VideoEndPercent = 0.90
+
+	// VideoMiddlePercent is the middle fallback position.
+	VideoMiddlePercent = 0.5
 )
 
 // CheckInstalled verifies that FFmpeg and FFprobe are available in the system PATH.
@@ -162,12 +189,12 @@ type FrameColorInfo struct {
 
 // FindMostColorfulFrame analyzes a video and finds the frame with the most colors.
 // It samples frames at regular intervals and returns the timestamp of the most colorful one.
-// sampleCount determines how many frames to analyze (more = slower but more accurate).
+// SampleCount determines how many frames to analyze (more = slower but more accurate).
 func FindMostColorfulFrame(ctx context.Context, videoPath string, sampleCount int) (float64, error) {
 	defer perf.Track(nil, "ffmpeg.FindMostColorfulFrame")()
 
 	if sampleCount <= 0 {
-		sampleCount = 20 // Default to 20 samples.
+		sampleCount = DefaultSampleCount
 	}
 
 	// Get video duration.
@@ -217,7 +244,7 @@ func FindMostColorfulFrame(ctx context.Context, videoPath string, sampleCount in
 
 	if len(frames) == 0 {
 		// Fallback to 25% into the video if we couldn't analyze any frames.
-		return duration * 0.25, nil
+		return duration * DefaultFallbackPercent, nil
 	}
 
 	// Sort by color score (highest first).
@@ -280,7 +307,7 @@ func analyzeFrameHistogram(ctx context.Context, framePath string) (float64, erro
 			return 0, fmt.Errorf("failed to analyze frame: %w", err)
 		}
 		// Normalize file size to a score (larger files often have more color detail).
-		return float64(info.Size()) / 1000.0, nil
+		return float64(info.Size()) / FileSizeNormalizer, nil
 	}
 
 	// Count unique color mentions in output (rough heuristic).
@@ -332,15 +359,15 @@ func FindBestThumbnailTime(ctx context.Context, videoPath string) (float64, erro
 		return 0, err
 	}
 
-	// For short videos (< 30s), sample more frames.
-	sampleCount := 30
-	if duration < 15 {
-		sampleCount = 15
+	// For short videos, sample more frames.
+	sampleCount := LongVideoSampleCount
+	if duration < ShortVideoDuration {
+		sampleCount = ShortVideoSampleCount
 	}
 
 	// Sample frames evenly across the video, avoiding first and last 10%.
-	startPct := 0.10
-	endPct := 0.90
+	startPct := VideoStartPercent
+	endPct := VideoEndPercent
 	startTime := duration * startPct
 	endTime := duration * endPct
 	sampleRange := endTime - startTime
@@ -354,7 +381,7 @@ func FindBestThumbnailTime(ctx context.Context, videoPath string) (float64, erro
 	// Create temp directory for frame extraction.
 	tempDir, err := os.MkdirTemp("", "thumbnail-*")
 	if err != nil {
-		return duration * 0.5, nil // Fallback to middle.
+		return duration * VideoMiddlePercent, nil // Fallback to middle.
 	}
 	defer os.RemoveAll(tempDir)
 
@@ -394,7 +421,7 @@ func FindBestThumbnailTime(ctx context.Context, videoPath string) (float64, erro
 	}
 
 	if len(frames) == 0 {
-		return duration * 0.5, nil // Fallback to middle.
+		return duration * VideoMiddlePercent, nil // Fallback to middle.
 	}
 
 	// Sort by score (highest first).
@@ -406,8 +433,8 @@ func FindBestThumbnailTime(ctx context.Context, videoPath string) (float64, erro
 	return frames[0].timestamp, nil
 }
 
-// detectSceneChanges finds timestamps where significant scene changes occur.
-func detectSceneChanges(ctx context.Context, videoPath string) ([]float64, error) {
+// DetectSceneChanges finds timestamps where significant scene changes occur.
+func DetectSceneChanges(ctx context.Context, videoPath string) ([]float64, error) {
 	// Use ffmpeg's scene detection filter.
 	cmd := exec.CommandContext(ctx, "ffmpeg",
 		"-i", videoPath,

@@ -21,8 +21,8 @@ func CheckInstalled() error {
 }
 
 // Render executes VHS to render a tape file.
-// workdir is where VHS starts the shell (the scene's working directory).
-// outputDir is where VHS writes output files (passed as VHS_OUTPUT_DIR env var).
+// Workdir is where VHS starts the shell (the scene's working directory).
+// OutputDir is where VHS writes output files (passed as VHS_OUTPUT_DIR env var).
 // Stdout and stderr are piped to the process's stdout/stderr for user visibility.
 func Render(ctx context.Context, tapeFile, workdir, outputDir string) error {
 	defer perf.Track(nil, "vhs.Render")()
