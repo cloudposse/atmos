@@ -656,12 +656,12 @@ func colorizedActionSymbol(action string) string {
 	readStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
 	replaceStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOrange)) // Orange for replace (delete+create).
 
-	// Use colored symbols for actions:
-	// - Green dot (●) for create
-	// - Yellow dot (●) for update/change in place
-	// - Red dot (●) for delete
-	// - Orange refresh (↻) for replace/recreate
-	// - Cyan dot (●) for read/refresh
+	// Use colored dots (●) for all actions with different colors:
+	// - Green: create
+	// - Yellow: update/change in place
+	// - Red: delete
+	// - Orange: replace/recreate
+	// - Cyan: read/refresh
 	switch action {
 	case "create":
 		return createStyle.Render(theme.IconActive)
@@ -670,7 +670,7 @@ func colorizedActionSymbol(action string) string {
 	case "delete":
 		return deleteStyle.Render(theme.IconActive)
 	case "replace":
-		return replaceStyle.Render(theme.IconRefresh)
+		return replaceStyle.Render(theme.IconActive)
 	case "read":
 		return readStyle.Render(theme.IconActive)
 	case "no-op":
