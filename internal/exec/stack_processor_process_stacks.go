@@ -577,6 +577,10 @@ func ProcessStackConfig(
 		if builtInTypes[componentType] {
 			continue // Already processed above.
 		}
+		// Skip if filter is set and doesn't match this custom type.
+		if componentTypeFilter != "" && componentTypeFilter != componentType {
+			continue
+		}
 		componentsMap, ok := components.(map[string]any)
 		if !ok {
 			continue

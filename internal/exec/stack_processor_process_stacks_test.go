@@ -799,3 +799,88 @@ func TestProcessStackConfig_ComponentTypeFilter(t *testing.T) {
 		})
 	}
 }
+
+func TestProcessStackConfig_CustomComponentTypeFilter(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Config with custom component type "script" alongside built-in types.
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.VarsSectionName: map[string]any{"enabled": true},
+				},
+			},
+			"script": map[string]any{
+				"deploy-app": map[string]any{
+					cfg.VarsSectionName: map[string]any{"app_name": "myapp"},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name                string
+		componentTypeFilter string
+		expectTerraform     bool
+		expectCustomScript  bool
+	}{
+		{
+			name:                "no filter includes all component types",
+			componentTypeFilter: "",
+			expectTerraform:     true,
+			expectCustomScript:  true,
+		},
+		{
+			name:                "terraform filter excludes custom types",
+			componentTypeFilter: cfg.TerraformComponentType,
+			expectTerraform:     true,
+			expectCustomScript:  false,
+		},
+		{
+			name:                "custom type filter includes only that type",
+			componentTypeFilter: "script",
+			expectTerraform:     false,
+			expectCustomScript:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ProcessStackConfig(
+				atmosConfig,
+				"/test/stacks",
+				"/test/terraform",
+				"/test/helmfile",
+				"/test/packer",
+				"test-stack.yaml",
+				config,
+				false,
+				false,
+				tt.componentTypeFilter,
+				map[string]map[string][]string{},
+				map[string]map[string]any{},
+				false,
+			)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+			require.True(t, ok, "components section should exist")
+
+			// Check terraform components.
+			terraformSection, hasTerraform := components[cfg.TerraformComponentType].(map[string]any)
+			if tt.expectTerraform {
+				assert.True(t, hasTerraform && len(terraformSection) > 0, "terraform components should be present")
+			}
+
+			// Check custom script components.
+			scriptSection, hasScript := components["script"].(map[string]any)
+			if tt.expectCustomScript {
+				assert.True(t, hasScript && len(scriptSection) > 0, "script components should be present")
+			} else {
+				assert.True(t, !hasScript || len(scriptSection) == 0, "script components should NOT be present when filtered")
+			}
+		})
+	}
+}
