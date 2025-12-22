@@ -292,6 +292,7 @@ Follow template (what/why/references).
 
 **Blog Posts (CI Enforced):**
 - PRs labeled `minor`/`major` MUST include blog post: `website/blog/YYYY-MM-DD-feature-name.mdx`
+- **Use today's date** for the filename and frontmatter when creating blog posts
 - Use `.mdx` with YAML front matter, `<!--truncate-->` after intro
 - **MUST read `website/blog/tags.yml`** - Only use tags defined there, never invent new tags
 - **MUST read `website/blog/authors.yml`** - Use existing author or add new entry for committer
