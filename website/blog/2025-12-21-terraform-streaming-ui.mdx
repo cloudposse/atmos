@@ -1,0 +1,166 @@
+---
+slug: terraform-streaming-ui
+title: "Introducing Streaming UI: Real-Time Progress for Terraform Commands"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Say goodbye to overwhelming Terraform output. The new streaming UI mode transforms verbose terraform output into a clean, Docker-build-style progress display with interactive confirmations, dependency tree visualization, and attribute-level change details.
+
+<!--truncate-->
+
+## What Changed
+
+We've added an optional streaming UI mode for Terraform commands (`plan`, `apply`, `deploy`, `init`, `refresh`) that displays real-time resource status with visual indicators, progress tracking, interactive confirmations, and condensed completion summaries.
+
+### Real-Time Progress Display
+
+**During execution:**
+```
+⠋ apply plat-ue2-dev/vpc
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 40% (2/5) 12.3s
+
+  ✓ Created  aws_vpc.main (2.1s)
+  ✓ Created  aws_subnet.public[0] (1.3s)
+  ⠋ Creating aws_security_group.default (5.2s)
+  ○ Pending  aws_instance.web[0]
+  ○ Pending  aws_instance.web[1]
+```
+
+**On completion:**
+```
+✓ apply plat-ue2-dev/vpc completed +3 ~1 -0 (15.2s)
+```
+
+**On error:**
+```
+✗ apply plat-ue2-dev/vpc failed: 1 error (12.1s)
+  Error: aws_instance.web[0]: InvalidAMIID.NotFound
+```
+
+### Dependency Tree with Attribute Changes
+
+The streaming UI shows a visual dependency tree of resources being changed, with attribute-level details:
+
+```
+     plat-ue2-dev/myapp
+  ~  ├── aws_s3_object.file
+     │  ~ content_type  "text/html"  →  "text/plain"
+     │  ~ source        "hello.html" →  "hello.txt"
+  +  └── aws_instance.new
+        + ami            (none)       →  "ami-12345"
+        + instance_type  (none)       →  "t3.micro"
+```
+
+For multi-line values (like file content), each line is shown with add/remove indicators:
+
+```
+  ~  └── aws_s3_object.weather
+        ~ content
+          - Current weather: Sunny, 72°F
+          - Humidity: 45%
+          + Current weather: Cloudy, 65°F
+          + Humidity: 80%
+          + Wind: 15 mph NW
+```
+
+### Interactive Confirmation
+
+Before applying changes, the UI displays a confirmation prompt:
+
+```
+  Do you want to apply these changes?
+  > Yes   No
+```
+
+The confirmation is styled with the Atmos theme and includes proper margins for visual clarity.
+
+## Why This Matters
+
+Terraform's default output is overwhelming, especially for new users. A simple infrastructure change can produce hundreds of lines containing:
+
+- Verbose state refresh messages for every resource
+- Provider initialization logs
+- JSON-like attribute diffs that obscure actual changes
+- Technical identifiers and ARNs
+
+This creates several problems:
+
+1. **Information overload** - Important changes are buried in noise
+2. **Progress blindness** - No clear indication of completion percentage during long operations
+3. **Error obscurity** - Errors get buried in the output stream
+4. **Context switching** - Mental overhead parsing Terraform syntax
+
+The streaming UI solves these by showing only what matters: which resources are changing, what attributes are affected, and their current status.
+
+## How to Use It
+
+### Enable via Flag
+
+```shell
+# Enable for a single command
+atmos terraform plan vpc -s dev --ui
+
+# Disable explicitly when enabled by config
+atmos terraform apply vpc -s prod --ui=false
+```
+
+### Enable via Configuration
+
+Add to your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    ui:
+      enabled: true
+```
+
+### Enable via Environment Variable
+
+```shell
+export ATMOS_TERRAFORM_UI=true
+atmos terraform plan vpc -s dev
+```
+
+## Smart Auto-Disable
+
+The streaming UI automatically falls back to standard output when:
+
+- **No TTY attached** - Output is piped or redirected
+- **CI environment detected** - `CI=true` environment variable is set
+- **Unsupported commands** - Commands that don't support JSON streaming
+
+This means your existing scripts and CI pipelines continue to work without modification.
+
+## Supported Commands
+
+| Command | Streaming UI |
+|---------|--------------|
+| `plan` | ✓ |
+| `apply` | ✓ |
+| `deploy` | ✓ |
+| `init` | ✓ |
+| `refresh` | ✓ |
+
+## Technical Details
+
+The implementation uses Terraform's machine-readable JSON output format (`-json` flag):
+
+1. Atmos automatically adds `-json` to terraform commands when UI mode is enabled
+2. Parses plan files to build a dependency tree with attribute-level changes
+3. Renders a Bubbletea-based TUI with spinners, progress bars, and status indicators
+4. Displays interactive confirmation prompts using the `huh` library
+5. Preserves exit codes (critical for `plan -detailed-exitcode`)
+
+This is a pure Go implementation using charmbracelet/bubbletea with no external dependencies or CGO requirements.
+
+## Learn More
+
+- [Terraform Configuration Reference](/cli/configuration/components/terraform)
+- [atmos terraform plan](/cli/commands/terraform/plan)
+- [atmos terraform apply](/cli/commands/terraform/apply)
+
+## Get Involved
+
+We'd love your feedback on the streaming UI. Try it out and let us know how it works for your workflow. Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) or join us in [Slack](https://slack.cloudposse.com).

@@ -89,6 +89,19 @@ atmos terraform refresh vpc -s dev -var="instance_type=t3.large"
         atmos terraform refresh vpc -s dev --dry-run
         ```
     </dd>
+
+    <dt>`--ui` <em>(optional)</em></dt>
+    <dd>
+        Enable streaming UI mode for real-time resource refresh progress. Shows which resources are being refreshed with status indicators.
+
+        The UI automatically disables when output is piped, in CI environments, or when running unsupported commands.
+
+        ```shell
+        atmos terraform refresh vpc -s dev --ui
+        ```
+
+        Use `--ui=false` to explicitly disable when enabled by config.
+    </dd>
 </dl>
 
 ## Native Terraform Flags

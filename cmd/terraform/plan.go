@@ -33,8 +33,8 @@ For complete Terraform/OpenTofu documentation, see:
 			return err
 		}
 
-		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		// Parse base terraform options with command context for UI flag detection.
+		opts := ParseTerraformRunOptions(v, cmd)
 
 		// Plan-specific flags (upload-status, skip-planfile) flow through the
 		// legacy ProcessCommandLineArgs which sets info.PlanSkipPlanfile.
