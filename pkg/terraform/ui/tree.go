@@ -530,7 +530,8 @@ func formatSimpleValue(v interface{}, sensitive bool) string {
 
 // renderMultilineDiff renders a line-by-line diff of two multi-line strings.
 // Only lines that differ get -/+ markers; unchanged lines have no marker.
-// This matches Terraform's native diff output style.
+// Consecutive changed lines are grouped (all - lines, then all + lines) to match
+// Terraform's native diff output style.
 func renderMultilineDiff(b *strings.Builder, before, after string, prefix string, showTreeLine bool, treeStyle lipgloss.Style) {
 	createStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen))
 	deleteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
@@ -541,64 +542,70 @@ func renderMultilineDiff(b *strings.Builder, before, after string, prefix string
 	beforeLines := strings.Split(before, "\n")
 	afterLines := strings.Split(after, "\n")
 
-	// Use a simple line-by-line diff algorithm.
-	// For each position, compare lines and output accordingly.
-	maxLen := len(beforeLines)
-	if len(afterLines) > maxLen {
-		maxLen = len(afterLines)
+	// Truncate long lines helper.
+	truncateLine := func(line string) string {
+		if len(line) > maxLineWidth {
+			return line[:maxLineWidth-3] + "..."
+		}
+		return line
 	}
 
-	i, j := 0, 0
-	for i < len(beforeLines) || j < len(afterLines) {
+	// Render a line with optional symbol.
+	renderLine := func(line, symbol string, style lipgloss.Style) {
 		var treeCont string
 		if showTreeLine {
 			treeCont = treeStyle.Render(prefix + "│")
 		} else {
 			treeCont = treeStyle.Render(prefix + " ")
 		}
-
-		// Get current lines (empty string if past end).
-		var beforeLine, afterLine string
-		if i < len(beforeLines) {
-			beforeLine = beforeLines[i]
+		if symbol == "" {
+			// No marker for unchanged lines.
+			b.WriteString(fmt.Sprintf("      %s    %s\n", treeCont, truncateLine(line)))
+		} else {
+			b.WriteString(fmt.Sprintf("      %s  %s %s\n", treeCont, style.Render(symbol), truncateLine(line)))
 		}
-		if j < len(afterLines) {
-			afterLine = afterLines[j]
-		}
+	}
 
-		// Truncate long lines.
-		truncateLine := func(line string) string {
-			if len(line) > maxLineWidth {
-				return line[:maxLineWidth-3] + "..."
-			}
-			return line
-		}
-
-		if i < len(beforeLines) && j < len(afterLines) && beforeLine == afterLine {
-			// Lines are identical - no marker, just show the line.
-			b.WriteString(fmt.Sprintf("      %s    %s\n",
-				treeCont,
-				truncateLine(beforeLine),
-			))
+	i, j := 0, 0
+	for i < len(beforeLines) || j < len(afterLines) {
+		// Check if current lines match.
+		if i < len(beforeLines) && j < len(afterLines) && beforeLines[i] == afterLines[j] {
+			// Lines are identical - no marker.
+			renderLine(beforeLines[i], "", lipgloss.Style{})
 			i++
 			j++
 		} else {
-			// Lines differ - show old line with -, then new line with +.
-			if i < len(beforeLines) {
-				b.WriteString(fmt.Sprintf("      %s  %s %s\n",
-					treeCont,
-					deleteStyle.Render("-"),
-					truncateLine(beforeLine),
-				))
-				i++
+			// Lines differ - find the extent of consecutive differences.
+			// Collect all consecutive differing lines, then output grouped.
+			var deletedLines []string
+			var addedLines []string
+
+			// Scan ahead to find how many consecutive lines differ.
+			// A line "differs" if it doesn't match or we're past one array's end.
+			for i < len(beforeLines) || j < len(afterLines) {
+				// Check if we're back to matching lines.
+				if i < len(beforeLines) && j < len(afterLines) && beforeLines[i] == afterLines[j] {
+					break // Found matching lines, stop collecting.
+				}
+
+				// Collect differing lines from both sides.
+				if i < len(beforeLines) {
+					deletedLines = append(deletedLines, beforeLines[i])
+					i++
+				}
+				if j < len(afterLines) {
+					addedLines = append(addedLines, afterLines[j])
+					j++
+				}
 			}
-			if j < len(afterLines) {
-				b.WriteString(fmt.Sprintf("      %s  %s %s\n",
-					treeCont,
-					createStyle.Render("+"),
-					truncateLine(afterLine),
-				))
-				j++
+
+			// Output all deleted lines first (grouped).
+			for _, line := range deletedLines {
+				renderLine(line, "-", deleteStyle)
+			}
+			// Then output all added lines (grouped).
+			for _, line := range addedLines {
+				renderLine(line, "+", createStyle)
 			}
 		}
 	}
