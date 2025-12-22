@@ -1,13 +1,14 @@
-package cmd
+package eks
 
 import (
 	"github.com/spf13/cobra"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// awsEksCmdUpdateKubeconfigCmd executes 'aws eks update-kubeconfig' command.
-var awsEksCmdUpdateKubeconfigCmd = &cobra.Command{
+// updateKubeconfigCmd executes 'aws eks update-kubeconfig' command.
+var updateKubeconfigCmd = &cobra.Command{
 	Use:   "update-kubeconfig",
 	Short: "Update `kubeconfig` for an EKS cluster using AWS CLI",
 	Long: `This command executes ` + "`" + `aws eks update-kubeconfig` + "`" + ` to download ` + "`" + `kubeconfig` + "`" + ` from an EKS cluster and saves it to a file. The command executes ` + "`" + `aws eks update-kubeconfig` + "`" + ` in three different ways:
@@ -28,25 +29,24 @@ then ` + "`" + `atmos` + "`" + ` executes the command without requiring the ` + 
 See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html for more information.`,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	ValidArgsFunction:  ComponentsArgCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		err := e.ExecuteAwsEksUpdateKubeconfigCommand(cmd, args)
-		return err
+		defer perf.Track(nil, "eks.updateKubeconfig.RunE")()
+		return e.ExecuteAwsEksUpdateKubeconfigCommand(cmd, args)
 	},
 }
 
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html.
 func init() {
-	awsEksCmdUpdateKubeconfigCmd.DisableFlagParsing = false
-	AddStackCompletion(awsEksCmdUpdateKubeconfigCmd)
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("profile", "", "Specify the AWS CLI profile to use for authentication")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("name", "", "Specify the name of the EKS cluster to update the kubeconfig for")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("region", "", "Specify the AWS region where the EKS cluster is located")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("kubeconfig", "", "Specify the path to the kubeconfig file to be updated or created for accessing the EKS cluster.")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("role-arn", "", "Specify the ARN of the IAM role to assume for authenticating with the EKS cluster.")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().Bool("dry-run", false, "Perform a dry run to simulate updating the kubeconfig without making any changes.")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().Bool("verbose", false, "Enable verbose logging to provide detailed output during the kubeconfig update process.")
-	awsEksCmdUpdateKubeconfigCmd.PersistentFlags().String("alias", "", "Specify an alias to use for the cluster context name in the kubeconfig file.")
+	updateKubeconfigCmd.DisableFlagParsing = false
+	updateKubeconfigCmd.PersistentFlags().StringP("stack", "s", "", "Specify the stack name")
+	updateKubeconfigCmd.PersistentFlags().String("profile", "", "Specify the AWS CLI profile to use for authentication")
+	updateKubeconfigCmd.PersistentFlags().String("name", "", "Specify the name of the EKS cluster to update the kubeconfig for")
+	updateKubeconfigCmd.PersistentFlags().String("region", "", "Specify the AWS region where the EKS cluster is located")
+	updateKubeconfigCmd.PersistentFlags().String("kubeconfig", "", "Specify the path to the kubeconfig file to be updated or created for accessing the EKS cluster.")
+	updateKubeconfigCmd.PersistentFlags().String("role-arn", "", "Specify the ARN of the IAM role to assume for authenticating with the EKS cluster.")
+	updateKubeconfigCmd.PersistentFlags().Bool("dry-run", false, "Perform a dry run to simulate updating the kubeconfig without making any changes.")
+	updateKubeconfigCmd.PersistentFlags().Bool("verbose", false, "Enable verbose logging to provide detailed output during the kubeconfig update process.")
+	updateKubeconfigCmd.PersistentFlags().String("alias", "", "Specify an alias to use for the cluster context name in the kubeconfig file.")
 
-	awsEksCmd.AddCommand(awsEksCmdUpdateKubeconfigCmd)
+	EksCmd.AddCommand(updateKubeconfigCmd)
 }

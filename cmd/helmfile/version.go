@@ -1,8 +1,6 @@
-package cmd
+package helmfile
 
-import (
-	"github.com/spf13/cobra"
-)
+import "github.com/spf13/cobra"
 
 // helmfileVersionCmd returns the Helmfile version.
 var helmfileVersionCmd = &cobra.Command{

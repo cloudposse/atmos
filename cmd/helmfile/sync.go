@@ -1,8 +1,8 @@
-package cmd
+package helmfile
 
 import "github.com/spf13/cobra"
 
-// Command: atmos helmfile sync
+// Command: atmos helmfile sync.
 var (
 	helmfileSyncShort = "Synchronize the state of Helm releases by reconciling the actual state with the desired state (applies changes as needed)."
 	helmfileSyncLong  = `This command ensures that the actual state of Helm releases in the cluster matches the desired
@@ -13,7 +13,7 @@ Example usage:
   atmos helmfile sync echo-server --stack tenant1-ue2-dev --redirect-stderr ./errors.txt`
 )
 
-// helmfileSyncCmd represents the base command for all helmfile sub-commands
+// helmfileSyncCmd represents the helmfile sync subcommand.
 var helmfileSyncCmd = &cobra.Command{
 	Use:                "sync",
 	Aliases:            []string{},

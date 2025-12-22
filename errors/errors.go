@@ -417,8 +417,8 @@ var (
 	// Helmfile configuration errors.
 	ErrMissingHelmfileBasePath           = errors.New("helmfile base path is required")
 	ErrMissingHelmfileKubeconfigPath     = errors.New("helmfile kubeconfig path is required")
-	ErrMissingHelmfileAwsProfilePattern  = errors.New("helmfile AWS profile pattern is required")  // Deprecated: use --identity flag instead.
-	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required") // Deprecated: use ErrMissingHelmfileClusterName.
+	ErrMissingHelmfileAwsProfilePattern  = errors.New("helmfile AWS profile pattern is required")
+	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required")
 	ErrMissingHelmfileClusterName        = errors.New("helmfile cluster name is required")
 	ErrMissingHelmfileAuth               = errors.New("helmfile AWS authentication is required")
 
