@@ -28,6 +28,9 @@
     "settings": {
       "$ref": "#/definitions/settings"
     },
+    "locals": {
+      "$ref": "#/definitions/locals"
+    },
     "components": {
       "$ref": "#/definitions/components"
     },
@@ -204,6 +207,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
             },
@@ -276,6 +282,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
             },
@@ -322,6 +331,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             },
             "command": {
               "$ref": "#/definitions/command"
@@ -380,6 +392,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
             }
@@ -408,6 +423,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             },
             "command": {
               "$ref": "#/definitions/command"
@@ -465,6 +483,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             },
             "command": {
               "$ref": "#/definitions/command"
@@ -674,6 +695,20 @@
     "env": {
       "title": "env",
       "description": "Env section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
+    },
+    "locals": {
+      "title": "locals",
+      "description": "File-scoped local variables for use within templates. Locals are resolved before other sections and can reference each other within the same file. Unlike vars and settings, locals do NOT inherit across file boundaries.",
       "oneOf": [
         {
           "type": "string",

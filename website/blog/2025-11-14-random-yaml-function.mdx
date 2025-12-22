@@ -1,0 +1,62 @@
+---
+slug: random-yaml-function
+title: "New !random YAML Function: Generate Random Values in Your Configurations"
+authors: [osterman]
+tags: [feature]
+date: 2025-11-14
+---
+
+Need to generate random port numbers, worker IDs, or other numeric values in your Atmos configurations? The new `!random` YAML function makes it easy.
+
+<!--truncate-->
+
+## What's New
+
+We've added a new `!random` YAML function that generates cryptographically secure random integers. Use it anywhere in your Atmos stack manifests:
+
+```yaml
+vars:
+  app_port: !random 49152 65535  # Random ephemeral port
+  worker_id: !random 1000 9999   # Random worker ID
+```
+
+The function accepts 0, 1, or 2 arguments:
+- `!random` - Random number 0-65535
+- `!random 100` - Random number 0-100
+- `!random 1024 65535` - Random number 1024-65535
+
+## Common Use Cases
+
+### DevContainer Port Forwarding
+
+Avoid port conflicts when running multiple devcontainer instances:
+
+```yaml
+components:
+  devcontainer:
+    backend-api:
+      spec:
+        image: mcr.microsoft.com/devcontainers/go:1.24
+        forwardPorts:
+          - !random 8000 9000
+          - !random 5432 5442
+```
+
+### Dynamic Configuration
+
+Generate unique identifiers and random values for testing:
+
+```yaml
+vars:
+  worker_id: !random 1000 9999
+  test_port: !random 20000 29999
+  backend_ports:
+    api: !random 10000 10999
+    metrics: !random 11000 11999
+```
+
+## Resources
+
+- [`!random` Function Documentation](/functions/yaml/random)
+- [YAML Functions Overview](/functions/yaml)
+- [DevContainer Documentation](/cli/commands/devcontainer)

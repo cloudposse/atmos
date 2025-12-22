@@ -100,6 +100,10 @@ func (b *GlobalOptionsBuilder) registerTerminalFlags(defaults *global.Flags) {
 	b.WithForceTTY()
 	b.WithMask()
 
+	// Interactive prompts configuration.
+	b.options = append(b.options, WithBoolFlag("interactive", "", defaults.Interactive, "Enable interactive prompts for missing required flags, optional value flags using the sentinel pattern, and missing positional arguments (requires TTY, disabled in CI)"))
+	b.options = append(b.options, WithEnvVars("interactive", "ATMOS_INTERACTIVE"))
+
 	// Output configuration - pager with NoOptDefVal.
 	b.options = append(b.options, WithStringFlag("pager", "", defaults.Pager.Value(), "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)"))
 	b.options = append(b.options, WithEnvVars("pager", "ATMOS_PAGER", "PAGER"))
@@ -114,6 +118,17 @@ func (b *GlobalOptionsBuilder) registerAuthenticationFlags(defaults *global.Flag
 	b.options = append(b.options, WithStringFlag("identity", "", defaults.Identity.Value(), "Identity to use for authentication. Use --identity to select interactively, --identity=NAME to specify"))
 	b.options = append(b.options, WithEnvVars("identity", "ATMOS_IDENTITY"))
 	b.options = append(b.options, WithNoOptDefVal("identity", "__SELECT__"))
+
+	// Profiles - configuration profiles.
+	b.options = append(b.options, func(cfg *parserConfig) {
+		cfg.registry.Register(&StringSliceFlag{
+			Name:        "profile",
+			Shorthand:   "",
+			Default:     defaults.Profile,
+			Description: "Activate configuration profiles (comma-separated or repeated flag)",
+			EnvVars:     []string{"ATMOS_PROFILE"},
+		})
+	})
 }
 
 // registerProfilingFlags registers profiling configuration flags.

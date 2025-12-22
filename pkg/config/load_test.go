@@ -3,10 +3,12 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -615,6 +617,1009 @@ components: {
 
 			// Assert that an error was returned
 			assert.Error(t, err, tt.description)
+		})
+	}
+}
+
+func TestInjectProvisionedIdentityImports_NoProviders(t *testing.T) {
+	// Test that injectProvisionedIdentityImports does nothing when no auth providers are configured.
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{},
+		},
+		Import: []string{"existing-import.yaml"},
+	}
+
+	err := injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"existing-import.yaml"}, src.Import)
+}
+
+func TestInjectProvisionedIdentityImports_WithProviders(t *testing.T) {
+	// Test that injectProvisionedIdentityImports prepends provisioned identity files when they exist.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Create mock provisioned identity file.
+	provisioningDir := filepath.Join(tempDir, "atmos", "auth", "test-provider")
+	err := os.MkdirAll(provisioningDir, 0o700)
+	require.NoError(t, err)
+
+	provisionedFile := filepath.Join(provisioningDir, "provisioned-identities.yaml")
+	err = os.WriteFile(provisionedFile, []byte("identities: {}\n"), 0o600)
+	require.NoError(t, err)
+
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"test-provider": {
+					Kind: "aws/iam-identity-center",
+				},
+			},
+		},
+		Import: []string{"existing-import.yaml"},
+	}
+
+	err = injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+
+	// Should have provisioned import prepended.
+	assert.Len(t, src.Import, 2)
+	assert.Contains(t, src.Import[0], "test-provider")
+	assert.Contains(t, src.Import[0], "provisioned-identities.yaml")
+	assert.Equal(t, "existing-import.yaml", src.Import[1])
+}
+
+func TestInjectProvisionedIdentityImports_NoProvisionedFiles(t *testing.T) {
+	// Test that injectProvisionedIdentityImports does nothing when provisioned files don't exist.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"test-provider": {
+					Kind: "aws/iam-identity-center",
+				},
+			},
+		},
+		Import: []string{"existing-import.yaml"},
+	}
+
+	err := injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+
+	// Should not modify imports when no provisioned files exist.
+	assert.Equal(t, []string{"existing-import.yaml"}, src.Import)
+}
+
+func TestInjectProvisionedIdentityImports_MultipleProviders(t *testing.T) {
+	// Test that injectProvisionedIdentityImports handles multiple providers.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Create provisioned files for two providers.
+	for _, providerName := range []string{"provider1", "provider2"} {
+		provisioningDir := filepath.Join(tempDir, "atmos", "auth", providerName)
+		err := os.MkdirAll(provisioningDir, 0o700)
+		require.NoError(t, err)
+
+		provisionedFile := filepath.Join(provisioningDir, "provisioned-identities.yaml")
+		err = os.WriteFile(provisionedFile, []byte("identities: {}\n"), 0o600)
+		require.NoError(t, err)
+	}
+
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"provider1": {Kind: "aws/iam-identity-center"},
+				"provider2": {Kind: "aws/iam-identity-center"},
+			},
+		},
+		Import: []string{"existing-import.yaml"},
+	}
+
+	err := injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+
+	// Should have both provisioned imports prepended.
+	assert.Len(t, src.Import, 3)
+	assert.Equal(t, "existing-import.yaml", src.Import[2])
+
+	// Check that both provider imports are present.
+	importPaths := strings.Join(src.Import, " ")
+	assert.Contains(t, importPaths, "provider1")
+	assert.Contains(t, importPaths, "provider2")
+}
+
+func TestInjectProvisionedIdentityImports_EmptyImportList(t *testing.T) {
+	// Test that injectProvisionedIdentityImports works when Import list is initially empty.
+	tempDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tempDir)
+
+	// Create mock provisioned identity file.
+	provisioningDir := filepath.Join(tempDir, "atmos", "auth", "test-provider")
+	err := os.MkdirAll(provisioningDir, 0o700)
+	require.NoError(t, err)
+
+	provisionedFile := filepath.Join(provisioningDir, "provisioned-identities.yaml")
+	err = os.WriteFile(provisionedFile, []byte("identities: {}\n"), 0o600)
+	require.NoError(t, err)
+
+	src := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"test-provider": {
+					Kind: "aws/iam-identity-center",
+				},
+			},
+		},
+		Import: []string{},
+	}
+
+	err = injectProvisionedIdentityImports(src)
+	assert.NoError(t, err)
+
+	// Should have only the provisioned import.
+	assert.Len(t, src.Import, 1)
+	assert.Contains(t, src.Import[0], "test-provider")
+	assert.Contains(t, src.Import[0], "provisioned-identities.yaml")
+}
+
+func TestFindAtmosConfigInParentDirs(t *testing.T) {
+	tests := []struct {
+		name           string
+		setupDirs      func(t *testing.T, tempDir string) string // Returns the start directory.
+		expectedResult func(tempDir string) string               // Returns expected result.
+	}{
+		{
+			name: "finds atmos.yaml in immediate parent",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create parent/child structure.
+				childDir := filepath.Join(tempDir, "child")
+				err := os.MkdirAll(childDir, 0o755)
+				require.NoError(t, err)
+
+				// Create atmos.yaml in parent (tempDir).
+				createTestConfig(t, tempDir, "base_path: .")
+
+				return childDir
+			},
+			expectedResult: func(tempDir string) string {
+				return tempDir
+			},
+		},
+		{
+			name: "finds atmos.yaml in grandparent",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create parent/child/grandchild structure.
+				grandchildDir := filepath.Join(tempDir, "parent", "child")
+				err := os.MkdirAll(grandchildDir, 0o755)
+				require.NoError(t, err)
+
+				// Create atmos.yaml in root (tempDir).
+				createTestConfig(t, tempDir, "base_path: .")
+
+				return grandchildDir
+			},
+			expectedResult: func(tempDir string) string {
+				return tempDir
+			},
+		},
+		{
+			name: "finds .atmos.yaml in parent",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create parent/child structure.
+				childDir := filepath.Join(tempDir, "child")
+				err := os.MkdirAll(childDir, 0o755)
+				require.NoError(t, err)
+
+				// Create .atmos.yaml (hidden) in parent.
+				dotConfigPath := filepath.Join(tempDir, ".atmos.yaml")
+				err = os.WriteFile(dotConfigPath, []byte("base_path: ."), 0o644)
+				require.NoError(t, err)
+
+				return childDir
+			},
+			expectedResult: func(tempDir string) string {
+				return tempDir
+			},
+		},
+		{
+			name: "returns empty when no config found",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create child directory without any atmos config.
+				childDir := filepath.Join(tempDir, "child")
+				err := os.MkdirAll(childDir, 0o755)
+				require.NoError(t, err)
+
+				return childDir
+			},
+			expectedResult: func(tempDir string) string {
+				return ""
+			},
+		},
+		{
+			name: "finds closest atmos.yaml when multiple exist",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create nested structure with configs at multiple levels.
+				// tempDir/atmos.yaml (grandparent).
+				// tempDir/parent/atmos.yaml (parent).
+				// tempDir/parent/child/ (starting dir).
+				parentDir := filepath.Join(tempDir, "parent")
+				childDir := filepath.Join(parentDir, "child")
+				err := os.MkdirAll(childDir, 0o755)
+				require.NoError(t, err)
+
+				// Create atmos.yaml in both levels.
+				createTestConfig(t, tempDir, "base_path: grandparent")
+				createTestConfig(t, parentDir, "base_path: parent")
+
+				return childDir
+			},
+			expectedResult: func(tempDir string) string {
+				return filepath.Join(tempDir, "parent")
+			},
+		},
+		{
+			name: "finds atmos.yaml in deeply nested structure",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create deeply nested component-like structure.
+				// tempDir/atmos.yaml
+				// tempDir/components/terraform/vpc/main.tf (start dir).
+				deepDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+				err := os.MkdirAll(deepDir, 0o755)
+				require.NoError(t, err)
+
+				// Create atmos.yaml at root.
+				createTestConfig(t, tempDir, "base_path: .")
+
+				return deepDir
+			},
+			expectedResult: func(tempDir string) string {
+				return tempDir
+			},
+		},
+		{
+			name: "prefers atmos.yaml over .atmos.yaml in same dir",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create parent/child structure with both configs in parent.
+				childDir := filepath.Join(tempDir, "child")
+				err := os.MkdirAll(childDir, 0o755)
+				require.NoError(t, err)
+
+				// Create both atmos.yaml and .atmos.yaml in parent.
+				createTestConfig(t, tempDir, "base_path: regular")
+				dotConfigPath := filepath.Join(tempDir, ".atmos.yaml")
+				err = os.WriteFile(dotConfigPath, []byte("base_path: hidden"), 0o644)
+				require.NoError(t, err)
+
+				return childDir
+			},
+			expectedResult: func(tempDir string) string {
+				// Should find the directory - atmos.yaml is checked first.
+				return tempDir
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			startDir := tt.setupDirs(t, tempDir)
+			expected := tt.expectedResult(tempDir)
+
+			result := findAtmosConfigInParentDirs(startDir)
+
+			assert.Equal(t, expected, result)
+		})
+	}
+}
+
+func TestReadWorkDirConfig_ParentDirectorySearch(t *testing.T) {
+	tests := []struct {
+		name           string
+		setupDirs      func(t *testing.T, tempDir string) string // Returns working directory.
+		expectConfig   bool
+		validateConfig func(t *testing.T, v *viper.Viper)
+	}{
+		{
+			name: "loads config from current directory",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				createTestConfig(t, tempDir, `
+base_path: /test/current
+`)
+				return tempDir
+			},
+			expectConfig: true,
+			validateConfig: func(t *testing.T, v *viper.Viper) {
+				assert.Equal(t, "/test/current", v.GetString("base_path"))
+			},
+		},
+		{
+			name: "loads config from parent directory",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				childDir := filepath.Join(tempDir, "child")
+				err := os.MkdirAll(childDir, 0o755)
+				require.NoError(t, err)
+
+				createTestConfig(t, tempDir, `
+base_path: /test/parent
+`)
+				return childDir
+			},
+			expectConfig: true,
+			validateConfig: func(t *testing.T, v *viper.Viper) {
+				assert.Equal(t, "/test/parent", v.GetString("base_path"))
+			},
+		},
+		{
+			name: "loads config from deeply nested component directory",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Simulate component directory structure.
+				componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+				err := os.MkdirAll(componentDir, 0o755)
+				require.NoError(t, err)
+
+				createTestConfig(t, tempDir, `
+base_path: /test/component-root
+components:
+  terraform:
+    base_path: components/terraform
+`)
+				return componentDir
+			},
+			expectConfig: true,
+			validateConfig: func(t *testing.T, v *viper.Viper) {
+				assert.Equal(t, "/test/component-root", v.GetString("base_path"))
+				assert.Equal(t, "components/terraform", v.GetString("components.terraform.base_path"))
+			},
+		},
+		{
+			name: "no config found returns no error",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				childDir := filepath.Join(tempDir, "child")
+				err := os.MkdirAll(childDir, 0o755)
+				require.NoError(t, err)
+				return childDir
+			},
+			expectConfig: false,
+			validateConfig: func(t *testing.T, v *viper.Viper) {
+				// Default values should be empty.
+				assert.Empty(t, v.GetString("base_path"))
+			},
+		},
+		{
+			name: "ATMOS_CLI_CONFIG_PATH disables parent directory search",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				childDir := filepath.Join(tempDir, "child")
+				err := os.MkdirAll(childDir, 0o755)
+				require.NoError(t, err)
+
+				// Create config in parent directory.
+				createTestConfig(t, tempDir, `
+base_path: /test/parent-should-not-find
+`)
+				// Set env to disable parent search.
+				t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+				return childDir
+			},
+			expectConfig: false,
+			validateConfig: func(t *testing.T, v *viper.Viper) {
+				// Should NOT find the parent config because ATMOS_CLI_CONFIG_PATH is set.
+				assert.Empty(t, v.GetString("base_path"))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			workDir := tt.setupDirs(t, tempDir)
+
+			// Change to working directory using t.Chdir for automatic cleanup.
+			t.Chdir(workDir)
+
+			v := viper.New()
+			v.SetConfigType("yaml")
+
+			err := readWorkDirConfig(v)
+			require.NoError(t, err)
+
+			if tt.expectConfig {
+				assert.NotEmpty(t, v.ConfigFileUsed())
+				assert.Contains(t, v.ConfigFileUsed(), "atmos.yaml")
+			}
+
+			tt.validateConfig(t, v)
+		})
+	}
+}
+
+// TestLoadConfig_DefaultConfigWithGitRootAtmosD tests that .atmos.d at git root is loaded
+// even when no atmos.yaml config file is found (using default config).
+func TestLoadConfig_DefaultConfigWithGitRootAtmosD(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create .atmos.d at "git root" with custom commands.
+	atmosDDir := filepath.Join(tempDir, ".atmos.d")
+	require.NoError(t, os.MkdirAll(atmosDDir, 0o755))
+
+	commandsContent := `commands:
+  - name: test-default-cmd
+    description: Test command from git root with default config
+    steps:
+      - echo "hello from git root default config"
+`
+	require.NoError(t, os.WriteFile(
+		filepath.Join(atmosDDir, "commands.yaml"),
+		[]byte(commandsContent),
+		0o644,
+	))
+
+	// Create a subdirectory with NO atmos.yaml - this will force default config.
+	subDir := filepath.Join(tempDir, "no-config-subdir")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+	// Mock git root to be tempDir.
+	t.Setenv("TEST_GIT_ROOT", tempDir)
+
+	// Change to subdirectory.
+	t.Chdir(subDir)
+
+	// Load config - should use default config but still find .atmos.d from git root.
+	config, err := LoadConfig(&schema.ConfigAndStacksInfo{})
+	require.NoError(t, err)
+
+	// Verify that the custom command from .atmos.d was loaded.
+	require.NotNil(t, config.Commands, "Commands should be loaded from .atmos.d at git root")
+	require.Len(t, config.Commands, 1, "Should have one custom command")
+	assert.Equal(t, "test-default-cmd", config.Commands[0].Name)
+}
+
+// TestMergeDefaultImports_GitRoot tests that .atmos.d at git root is discovered
+// even when running from a subdirectory.
+func TestMergeDefaultImports_GitRoot(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupDirs     func(t *testing.T, tempDir string) string
+		expectedKey   string
+		expectedValue string
+		description   string
+	}{
+		{
+			name: "loads_atmos_d_from_git_root_when_in_subdirectory",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create .atmos.d at "git root" (tempDir).
+				atmosDDir := filepath.Join(tempDir, ".atmos.d")
+				require.NoError(t, os.MkdirAll(atmosDDir, 0o755))
+
+				commandsContent := `commands:
+  - name: test-cmd
+    description: Test command from git root
+    steps:
+      - echo "hello from git root"
+`
+				require.NoError(t, os.WriteFile(
+					filepath.Join(atmosDDir, "commands.yaml"),
+					[]byte(commandsContent),
+					0o644,
+				))
+
+				// Create a subdirectory to run from.
+				subDir := filepath.Join(tempDir, "test")
+				require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+				return subDir
+			},
+			expectedKey:   "commands",
+			expectedValue: "", // Just check that commands key exists
+			description:   "Should load .atmos.d from git root when running from subdirectory",
+		},
+		{
+			name: "git_root_atmos_d_has_lower_priority_than_config_dir",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create .atmos.d at "git root" (tempDir) with lower priority setting.
+				gitRootAtmosDDir := filepath.Join(tempDir, ".atmos.d")
+				require.NoError(t, os.MkdirAll(gitRootAtmosDDir, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(gitRootAtmosDDir, "settings.yaml"),
+					[]byte(`settings:
+  test_priority: from_git_root
+`),
+					0o644,
+				))
+
+				// Create config directory with atmos.yaml.
+				configDir := filepath.Join(tempDir, "config")
+				require.NoError(t, os.MkdirAll(configDir, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(configDir, "atmos.yaml"),
+					[]byte(`base_path: ./`),
+					0o644,
+				))
+
+				// Create .atmos.d in config dir with higher priority setting.
+				configAtmosDDir := filepath.Join(configDir, ".atmos.d")
+				require.NoError(t, os.MkdirAll(configAtmosDDir, 0o755))
+				require.NoError(t, os.WriteFile(
+					filepath.Join(configAtmosDDir, "settings.yaml"),
+					[]byte(`settings:
+  test_priority: from_config_dir
+`),
+					0o644,
+				))
+
+				return configDir
+			},
+			expectedKey:   "settings.test_priority",
+			expectedValue: "from_config_dir",
+			description:   "Config dir .atmos.d should override git root .atmos.d",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			workDir := tt.setupDirs(t, tempDir)
+
+			// Mock git root to be tempDir.
+			t.Setenv("TEST_GIT_ROOT", tempDir)
+
+			// Change to working directory.
+			t.Chdir(workDir)
+
+			v := viper.New()
+			v.SetConfigType("yaml")
+
+			// Call mergeDefaultImports with the working directory.
+			err := mergeDefaultImports(workDir, v)
+			require.NoError(t, err, tt.description)
+
+			// Verify the expected key is set.
+			assert.True(t, v.IsSet(tt.expectedKey),
+				"Expected key %q to be set. %s", tt.expectedKey, tt.description)
+
+			if tt.expectedValue != "" {
+				assert.Equal(t, tt.expectedValue, v.GetString(tt.expectedKey),
+					"Expected value mismatch. %s", tt.description)
+			}
+		})
+	}
+}
+
+func TestPreserveCaseSensitiveMaps(t *testing.T) {
+	// Clear any previously tracked files at start of each test.
+	resetMergedConfigFiles()
+
+	t.Run("does nothing when no config file used", func(t *testing.T) {
+		resetMergedConfigFiles()
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+		assert.Nil(t, atmosConfig.CaseMaps)
+	})
+
+	t.Run("preserves env variable case", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "atmos.yaml")
+
+		// Create config with env section using mixed case.
+		configContent := `
+base_path: "."
+env:
+  GITHUB_TOKEN: "secret123"
+  AWS_REGION: "us-east-1"
+stacks:
+  base_path: "stacks"
+components:
+  terraform:
+    base_path: "components/terraform"
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0o644)
+		require.NoError(t, err)
+
+		v := viper.New()
+		v.SetConfigFile(configPath)
+		err = v.ReadInConfig()
+		require.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+		assert.NotNil(t, atmosConfig.CaseMaps)
+
+		// Check that case map was created for env.
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "GITHUB_TOKEN", envCaseMap["github_token"])
+		assert.Equal(t, "AWS_REGION", envCaseMap["aws_region"])
+	})
+
+	t.Run("preserves auth identity case", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "atmos.yaml")
+
+		// Create config with auth.identities section using mixed case.
+		configContent := `
+base_path: "."
+auth:
+  identities:
+    SuperAdmin:
+      aws:
+        profile: admin
+    DevUser:
+      aws:
+        profile: dev
+stacks:
+  base_path: "stacks"
+components:
+  terraform:
+    base_path: "components/terraform"
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0o644)
+		require.NoError(t, err)
+
+		v := viper.New()
+		v.SetConfigFile(configPath)
+		err = v.ReadInConfig()
+		require.NoError(t, err)
+
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+		assert.NotNil(t, atmosConfig.CaseMaps)
+
+		// Check that case map was created for auth.identities.
+		identityCaseMap := atmosConfig.CaseMaps.Get("auth.identities")
+		assert.NotNil(t, identityCaseMap)
+		assert.Equal(t, "SuperAdmin", identityCaseMap["superadmin"])
+		assert.Equal(t, "DevUser", identityCaseMap["devuser"])
+
+		// Check backward compatibility with IdentityCaseMap.
+		assert.Equal(t, "SuperAdmin", atmosConfig.Auth.IdentityCaseMap["superadmin"])
+		assert.Equal(t, "DevUser", atmosConfig.Auth.IdentityCaseMap["devuser"])
+	})
+
+	t.Run("merges case mappings from tracked imported files", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+
+		// Create first import file with some env vars.
+		importFile1 := filepath.Join(tempDir, "import1.yaml")
+		import1Content := `
+env:
+  AWS_ACCESS_KEY_ID: "key1"
+  AWS_SECRET_KEY: "secret1"
+`
+		err := os.WriteFile(importFile1, []byte(import1Content), 0o644)
+		require.NoError(t, err)
+
+		// Create second import file with additional env vars.
+		importFile2 := filepath.Join(tempDir, "import2.yaml")
+		import2Content := `
+env:
+  GITHUB_TOKEN: "token123"
+  AWS_REGION: "us-east-1"
+`
+		err = os.WriteFile(importFile2, []byte(import2Content), 0o644)
+		require.NoError(t, err)
+
+		// Track both files as if they were merged during import processing.
+		trackMergedConfigFile(importFile1)
+		trackMergedConfigFile(importFile2)
+
+		// Viper has no config file set, but we have tracked files.
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+		assert.NotNil(t, atmosConfig.CaseMaps)
+
+		// Check that case mappings from both files were merged.
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "AWS_ACCESS_KEY_ID", envCaseMap["aws_access_key_id"])
+		assert.Equal(t, "AWS_SECRET_KEY", envCaseMap["aws_secret_key"])
+		assert.Equal(t, "GITHUB_TOKEN", envCaseMap["github_token"])
+		assert.Equal(t, "AWS_REGION", envCaseMap["aws_region"])
+	})
+
+	t.Run("later imports override earlier imports for overlapping keys", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+
+		// Create first import file with an env var using one case.
+		importFile1 := filepath.Join(tempDir, "import1.yaml")
+		import1Content := `
+env:
+  my_token: "value1"
+`
+		err := os.WriteFile(importFile1, []byte(import1Content), 0o644)
+		require.NoError(t, err)
+
+		// Create second import file with the same key but different case.
+		importFile2 := filepath.Join(tempDir, "import2.yaml")
+		import2Content := `
+env:
+  MY_TOKEN: "value2"
+`
+		err = os.WriteFile(importFile2, []byte(import2Content), 0o644)
+		require.NoError(t, err)
+
+		// Track both files in order.
+		trackMergedConfigFile(importFile1)
+		trackMergedConfigFile(importFile2)
+
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+
+		// The second file's case should win.
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "MY_TOKEN", envCaseMap["my_token"])
+	})
+
+	t.Run("main config file is included when not tracked", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "atmos.yaml")
+
+		// Create main config with env section.
+		configContent := `
+base_path: "."
+env:
+  MAIN_CONFIG_VAR: "main_value"
+`
+		err := os.WriteFile(configPath, []byte(configContent), 0o644)
+		require.NoError(t, err)
+
+		v := viper.New()
+		v.SetConfigFile(configPath)
+		err = v.ReadInConfig()
+		require.NoError(t, err)
+
+		// Don't track the main config file - it should still be included.
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "MAIN_CONFIG_VAR", envCaseMap["main_config_var"])
+	})
+
+	t.Run("skips unreadable files gracefully", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+
+		// Create a valid import file.
+		validFile := filepath.Join(tempDir, "valid.yaml")
+		validContent := `
+env:
+  VALID_VAR: "valid_value"
+`
+		err := os.WriteFile(validFile, []byte(validContent), 0o644)
+		require.NoError(t, err)
+
+		// Track a non-existent file and the valid file.
+		trackMergedConfigFile(filepath.Join(tempDir, "nonexistent.yaml"))
+		trackMergedConfigFile(validFile)
+
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		// Should skip the unreadable file gracefully.
+		preserveCaseSensitiveMaps(v, atmosConfig)
+
+		// The valid file's mappings should still be preserved.
+		envCaseMap := atmosConfig.CaseMaps.Get("env")
+		assert.NotNil(t, envCaseMap)
+		assert.Equal(t, "VALID_VAR", envCaseMap["valid_var"])
+	})
+
+	t.Run("preserves auth identities from imported files", func(t *testing.T) {
+		resetMergedConfigFiles()
+		tempDir := t.TempDir()
+
+		// Create import file with auth identities.
+		importFile := filepath.Join(tempDir, "auth-import.yaml")
+		importContent := `
+auth:
+  identities:
+    ImportedAdmin:
+      aws:
+        profile: imported-admin
+    ImportedDev:
+      aws:
+        profile: imported-dev
+`
+		err := os.WriteFile(importFile, []byte(importContent), 0o644)
+		require.NoError(t, err)
+
+		trackMergedConfigFile(importFile)
+
+		v := viper.New()
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		preserveCaseSensitiveMaps(v, atmosConfig)
+
+		// Check that auth.identities case map was created.
+		identityCaseMap := atmosConfig.CaseMaps.Get("auth.identities")
+		assert.NotNil(t, identityCaseMap)
+		assert.Equal(t, "ImportedAdmin", identityCaseMap["importedadmin"])
+		assert.Equal(t, "ImportedDev", identityCaseMap["importeddev"])
+
+		// Check backward compatibility.
+		assert.Equal(t, "ImportedAdmin", atmosConfig.Auth.IdentityCaseMap["importedadmin"])
+		assert.Equal(t, "ImportedDev", atmosConfig.Auth.IdentityCaseMap["importeddev"])
+	})
+}
+
+func TestParseProfilesFromOsArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected []string
+	}{
+		{
+			name:     "no profile flag",
+			args:     []string{"atmos", "describe", "stacks"},
+			expected: nil,
+		},
+		{
+			name:     "single profile with equals syntax",
+			args:     []string{"atmos", "--profile=dev", "describe", "stacks"},
+			expected: []string{"dev"},
+		},
+		{
+			name:     "single profile with space syntax",
+			args:     []string{"atmos", "--profile", "dev", "describe", "stacks"},
+			expected: []string{"dev"},
+		},
+		{
+			name:     "multiple profiles comma-separated",
+			args:     []string{"atmos", "--profile=dev,staging", "describe", "stacks"},
+			expected: []string{"dev", "staging"},
+		},
+		{
+			name:     "multiple profile flags",
+			args:     []string{"atmos", "--profile=dev", "--profile=staging", "describe", "stacks"},
+			expected: []string{"dev", "staging"},
+		},
+		{
+			name:     "profile with whitespace",
+			args:     []string{"atmos", "--profile=  dev  ", "describe", "stacks"},
+			expected: []string{"dev"},
+		},
+		{
+			name:     "empty profile value",
+			args:     []string{"atmos", "--profile=", "describe", "stacks"},
+			expected: nil,
+		},
+		{
+			name:     "profile with other flags",
+			args:     []string{"atmos", "--stack=mystack", "--profile=dev", "--format=json", "describe", "stacks"},
+			expected: []string{"dev"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseProfilesFromOsArgs(tt.args)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParseViperProfilesFromEnv(t *testing.T) {
+	tests := []struct {
+		name     string
+		profiles []string
+		expected []string
+	}{
+		{
+			name:     "empty slice",
+			profiles: []string{},
+			expected: nil,
+		},
+		{
+			name:     "single profile",
+			profiles: []string{"dev"},
+			expected: []string{"dev"},
+		},
+		{
+			name:     "comma-separated as single string (Viper quirk)",
+			profiles: []string{"dev,staging,prod"},
+			expected: []string{"dev", "staging", "prod"},
+		},
+		{
+			name:     "whitespace-separated by Viper",
+			profiles: []string{"dev", "staging", "prod"},
+			expected: []string{"dev", "staging", "prod"},
+		},
+		{
+			name:     "mixed comma and whitespace (Viper quirk)",
+			profiles: []string{"dev", ",", "staging"},
+			expected: []string{"dev", "staging"},
+		},
+		{
+			name:     "profiles with whitespace",
+			profiles: []string{"  dev  ", "  staging  "},
+			expected: []string{"dev", "staging"},
+		},
+		{
+			name:     "empty strings and commas",
+			profiles: []string{"", ",", "  ", "dev"},
+			expected: []string{"dev"},
+		},
+		{
+			name:     "nil input",
+			profiles: nil,
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseViperProfilesFromEnv(tt.profiles)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParseProfilesFromEnvString(t *testing.T) {
+	tests := []struct {
+		name     string
+		envValue string
+		expected []string
+	}{
+		{
+			name:     "empty string",
+			envValue: "",
+			expected: nil,
+		},
+		{
+			name:     "single profile",
+			envValue: "dev",
+			expected: []string{"dev"},
+		},
+		{
+			name:     "comma-separated profiles",
+			envValue: "dev,staging,prod",
+			expected: []string{"dev", "staging", "prod"},
+		},
+		{
+			name:     "profiles with whitespace",
+			envValue: "  dev  ,  staging  ,  prod  ",
+			expected: []string{"dev", "staging", "prod"},
+		},
+		{
+			name:     "empty entries filtered",
+			envValue: "dev,,staging,  ,prod",
+			expected: []string{"dev", "staging", "prod"},
+		},
+		{
+			name:     "only commas",
+			envValue: ",,,",
+			expected: nil,
+		},
+		{
+			name:     "only whitespace",
+			envValue: "   ",
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseProfilesFromEnvString(tt.envValue)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

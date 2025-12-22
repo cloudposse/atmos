@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -621,7 +622,7 @@ func TestFormatTargetFolder(t *testing.T) {
 
 // TestApplyVendorFilters tests the filtering logic.
 func TestApplyVendorFilters(t *testing.T) {
-	initialInfos := []VendorInfo{
+	initialInfos := []extract.VendorInfo{
 		{Component: "vpc", Type: "terraform", Folder: "components/terraform/vpc"},
 		{Component: "eks", Type: "helmfile", Folder: "components/helmfile/eks"},
 		{Component: "rds", Type: "terraform", Folder: "components/terraform/rds"},
@@ -632,8 +633,8 @@ func TestApplyVendorFilters(t *testing.T) {
 	testCases := []struct {
 		name     string
 		options  FilterOptions
-		input    []VendorInfo
-		expected []VendorInfo
+		input    []extract.VendorInfo
+		expected []extract.VendorInfo
 	}{
 		{
 			name:     "NoFilters",
@@ -645,25 +646,25 @@ func TestApplyVendorFilters(t *testing.T) {
 			name:     "FilterComponentExactMatch",
 			options:  FilterOptions{StackPattern: "vpc"},
 			input:    initialInfos,
-			expected: []VendorInfo{initialInfos[0]},
+			expected: []extract.VendorInfo{initialInfos[0]},
 		},
 		{
 			name:     "FilterComponentNoMatch",
 			options:  FilterOptions{StackPattern: "nomatch"},
 			input:    initialInfos,
-			expected: []VendorInfo{},
+			expected: []extract.VendorInfo{},
 		},
 		{
 			name:     "FilterMultiplePatterns",
 			options:  FilterOptions{StackPattern: "vpc,eks"},
 			input:    initialInfos,
-			expected: []VendorInfo{initialInfos[0], initialInfos[1]},
+			expected: []extract.VendorInfo{initialInfos[0], initialInfos[1]},
 		},
 		{
 			name:     "FilterSpecialCaseEcs",
 			options:  FilterOptions{StackPattern: "ecs"},
 			input:    initialInfos,
-			expected: []VendorInfo{initialInfos[4]},
+			expected: []extract.VendorInfo{initialInfos[4]},
 		},
 	}
 

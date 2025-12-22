@@ -3,19 +3,16 @@ package list
 import (
 	"errors"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
-	f "github.com/cloudposse/atmos/pkg/list/format"
-	listutils "github.com/cloudposse/atmos/pkg/list/utils"
-	"github.com/cloudposse/atmos/pkg/schema"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/ui"
 	utils "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -46,12 +43,15 @@ var settingsCmd = &cobra.Command{
 		"atmos list settings --stack 'prod-*'",
 	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := checkAtmosConfig(); err != nil {
+		// Get Viper instance for flag/env precedence.
+		v := viper.GetViper()
+
+		// Check Atmos configuration (honors --base-path, --config, --config-path, --profile).
+		if err := checkAtmosConfig(cmd, v); err != nil {
 			return err
 		}
 
-		// Parse flags using StandardParser with Viper precedence
-		v := viper.GetViper()
+		// Parse flags using StandardParser with Viper precedence.
 		if err := settingsParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
@@ -67,7 +67,7 @@ var settingsCmd = &cobra.Command{
 			ProcessFunctions: v.GetBool("process-functions"),
 		}
 
-		output, err := listSettingsWithOptions(opts, args)
+		output, err := listSettingsWithOptions(cmd, v, opts, args)
 		if err != nil {
 			return err
 		}
@@ -112,43 +112,35 @@ func setupSettingsOptions(opts *SettingsOptions, componentFilter string) *l.Filt
 	}
 }
 
-// logNoSettingsFoundMessage logs an appropriate message when no settings are found.
-func logNoSettingsFoundMessage(componentFilter string) {
+// displayNoSettingsFoundMessage displays an appropriate message when no settings are found.
+func displayNoSettingsFoundMessage(componentFilter string) {
 	if componentFilter != "" {
-		log.Info("No settings found", "component", componentFilter)
+		_ = ui.Info("No settings found for component: " + componentFilter)
 	} else {
-		log.Info("No settings found")
+		_ = ui.Info("No settings found")
 	}
 }
 
-func listSettingsWithOptions(opts *SettingsOptions, args []string) (string, error) {
-	// Set default delimiter for CSV
-	if f.Format(opts.Format) == f.FormatCSV && opts.Delimiter == f.DefaultTSVDelimiter {
-		opts.Delimiter = f.DefaultCSVDelimiter
-	}
+func listSettingsWithOptions(cmd *cobra.Command, v *viper.Viper, opts *SettingsOptions, args []string) (string, error) {
+	// Set default delimiter for CSV.
+	setDefaultCSVDelimiter(&opts.Delimiter, opts.Format)
 
-	componentFilter := ""
-	if len(args) > 0 {
-		componentFilter = args[0]
-	}
+	componentFilter := getComponentFilter(args)
 
-	// Initialize CLI config
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, true)
+	// Initialize CLI config and auth manager (honors --base-path, --config, --config-path, --profile).
+	atmosConfig, authManager, err := initConfigAndAuth(cmd, v)
 	if err != nil {
-		return "", &listerrors.InitConfigError{Cause: err}
+		return "", err
 	}
 
-	// Check if component exists
-	if componentFilter != "" {
-		if !listutils.CheckComponentExists(&atmosConfig, componentFilter) {
-			return "", &listerrors.ComponentDefinitionNotFoundError{Component: componentFilter}
-		}
+	// Validate component exists if filter is specified.
+	if err := validateComponentFilter(&atmosConfig, componentFilter); err != nil {
+		return "", err
 	}
 
-	// Execute describe stacks
+	// Execute describe stacks.
 	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false,
-		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, nil)
+		opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager)
 	if err != nil {
 		return "", &listerrors.DescribeStacksError{Cause: err}
 	}
@@ -164,7 +156,7 @@ func listSettingsWithOptions(opts *SettingsOptions, args []string) (string, erro
 	if err != nil {
 		var noValuesErr *listerrors.NoValuesFoundError
 		if errors.As(err, &noValuesErr) {
-			logNoSettingsFoundMessage(componentFilter)
+			displayNoSettingsFoundMessage(componentFilter)
 			return "", nil
 		}
 		return "", err

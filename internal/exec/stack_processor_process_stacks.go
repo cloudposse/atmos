@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -47,6 +48,14 @@ func ProcessStackConfig(
 			u.DefaultStackConfigFileExtension),
 		".yml",
 	)
+
+	// Extract the stack-level 'name' field (logical name override) if present.
+	var stackManifestName string
+	if i, ok := config[cfg.NameSectionName]; ok {
+		if name, ok := i.(string); ok {
+			stackManifestName = name
+		}
+	}
 
 	globalVarsSection := map[string]any{}
 	globalHooksSection := map[string]any{}
@@ -198,7 +207,9 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndTerraformEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, terraformEnv})
+	// Include atmos.yaml global env as lowest priority in the merge chain.
+	atmosConfigEnv := envpkg.ConvertMapStringToAny(atmosConfig.Env)
+	globalAndTerraformEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, terraformEnv})
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +308,8 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndHelmfileEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, helmfileEnv})
+	// Include atmos.yaml global env as lowest priority in the merge chain.
+	globalAndHelmfileEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, helmfileEnv})
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +365,8 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndPackerEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, packerEnv})
+	// Include atmos.yaml global env as lowest priority in the merge chain.
+	globalAndPackerEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, packerEnv})
 	if err != nil {
 		return nil, err
 	}
@@ -509,6 +522,11 @@ func ProcessStackConfig(
 
 	result := map[string]any{
 		cfg.ComponentsSectionName: allComponents,
+	}
+
+	// Include the stack-level 'name' field if it was set.
+	if stackManifestName != "" {
+		result[cfg.NameSectionName] = stackManifestName
 	}
 
 	return result, nil

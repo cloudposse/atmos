@@ -1,9 +1,12 @@
 ---
 slug: macos-xdg-cli-conventions
-title: "Breaking Change: macOS Now Uses ~/.config for XDG Paths"
-authors: [atmos]
-tags: [breaking-change, enhancement]
-date: 2025-10-24
+title: 'Breaking Change: macOS Now Uses ~/.config for XDG Paths'
+authors:
+  - osterman
+tags:
+  - breaking-change
+date: 2025-10-24T00:00:00.000Z
+release: v1.196.0
 ---
 
 Atmos now follows CLI tool conventions on macOS, using `~/.config`, `~/.cache`, and `~/.local/share` instead of `~/Library/Application Support`. This ensures seamless integration with Geodesic and consistency with other DevOps tools.
@@ -108,7 +111,7 @@ ENV ATMOS_XDG_DATA_HOME=$HOME/.local/share
 ENV ATMOS_XDG_CACHE_HOME=$HOME/.cache
 ```
 
-This ensures Atmos credentials are stored in mounted directories (`~/.config`) rather than non-mounted system directories (`/etc/xdg_config_home`). See [Configuring Geodesic](/cli/commands/auth/tutorials/configuring-geodesic) for details.
+This ensures Atmos credentials are stored in mounted directories (`~/.config`) rather than non-mounted system directories (`/etc/xdg_config_home`). See [Configuring Geodesic](/tutorials/configuring-geodesic) for details.
 
 ### Consistent Cross-Platform Paths
 
@@ -153,7 +156,7 @@ This ensures **all code** in Atmos (even code that directly imports `github.com/
 
 ## Documentation Updates
 
-- [Configuring Geodesic with Atmos Auth](/cli/commands/auth/tutorials/configuring-geodesic) - Simplified configuration (no setup needed!)
+- [Configuring Geodesic with Atmos Auth](/tutorials/configuring-geodesic) - Simplified configuration (no setup needed!)
 - [Auth Usage Guide](/cli/commands/auth/usage) - Updated with correct macOS paths.
 
 ## Migration Support

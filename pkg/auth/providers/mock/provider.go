@@ -100,6 +100,14 @@ func (p *Provider) Environment() (map[string]string, error) {
 	}, nil
 }
 
+// Paths returns credential files/directories used by this provider.
+func (p *Provider) Paths() ([]types.Path, error) {
+	defer perf.Track(nil, "mock.Provider.Paths")()
+
+	// Mock provider doesn't use filesystem credentials.
+	return []types.Path{}, nil
+}
+
 // PrepareEnvironment prepares environment variables for external processes.
 // For mock providers, we don't modify the environment since mock credentials
 // are only for testing and don't interact with real cloud SDKs.

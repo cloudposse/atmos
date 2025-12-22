@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -48,19 +49,19 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 
 	// Validate command args before attempting authentication.
 	if len(commandArgs) == 0 {
-		return errors.Join(errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
 	}
 
 	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests)
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToInitializeAtmosConfig, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
 
 	// Create auth manager
 	authManager, err := createAuthManager(&atmosConfig.Auth)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
 	// Get identity from extracted flag or use default.
@@ -83,7 +84,7 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 	if identityName == "" || forceSelect {
 		defaultIdentity, err := authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
-			return errors.Join(errUtils.ErrNoDefaultIdentity, err)
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoDefaultIdentity, err)
 		}
 		identityName = defaultIdentity
 	}
@@ -101,13 +102,14 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 			if errors.Is(err, errUtils.ErrUserAborted) {
 				return errUtils.ErrUserAborted
 			}
-			return errors.Join(errUtils.ErrAuthenticationFailed, err)
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthenticationFailed, err)
 		}
 	}
 
 	// Prepare shell environment with file-based credentials.
-	// Start with current OS environment and let PrepareShellEnvironment configure auth.
-	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, os.Environ())
+	// Start with current OS environment + global env from atmos.yaml and let PrepareShellEnvironment configure auth.
+	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, baseEnv)
 	if err != nil {
 		return fmt.Errorf("failed to prepare command environment: %w", err)
 	}
@@ -129,7 +131,7 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 // executeCommandWithEnv executes a command with additional environment variables.
 func executeCommandWithEnv(args []string, envVars map[string]string) error {
 	if len(args) == 0 {
-		return errors.Join(errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
 	}
 
 	// Prepare the command
@@ -139,7 +141,7 @@ func executeCommandWithEnv(args []string, envVars map[string]string) error {
 	// Look for the command in PATH
 	cmdPath, err := exec.LookPath(cmdName)
 	if err != nil {
-		return errors.Join(errUtils.ErrCommandNotFound, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCommandNotFound, err)
 	}
 
 	// Prepare environment variables
@@ -165,7 +167,7 @@ func executeCommandWithEnv(args []string, envVars map[string]string) error {
 				return errUtils.ExitCodeError{Code: status.ExitStatus()}
 			}
 		}
-		return errors.Join(errUtils.ErrSubcommandFailed, err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrSubcommandFailed, err)
 	}
 
 	return nil

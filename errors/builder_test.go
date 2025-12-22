@@ -404,3 +404,68 @@ func TestErrorBuilder_MixedHintsAndExamples(t *testing.T) {
 	assert.Equal(t, "Example code", examples[0])
 	assert.Equal(t, "Another example", examples[1])
 }
+
+func TestErrorBuilder_SentinelMarking(t *testing.T) {
+	t.Run("automatically marks sentinel when used as base error", func(t *testing.T) {
+		err := Build(ErrContainerRuntimeOperation).
+			WithExplanation("Failed to start container").
+			WithHint("Check Docker is running").
+			Err()
+
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
+	})
+}
+
+func TestErrorBuilder_WithCause(t *testing.T) {
+	t.Run("wraps sentinel with cause error", func(t *testing.T) {
+		causeErr := errors.New("container already running")
+
+		err := Build(ErrContainerRuntimeOperation).
+			WithCause(causeErr).
+			WithExplanation("Failed to start container").
+			Err()
+
+		assert.Error(t, err)
+		// Both sentinel and cause should be in the error chain.
+		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
+		assert.True(t, errors.Is(err, causeErr))
+		// Error message should include the cause.
+		assert.Contains(t, err.Error(), "container already running")
+	})
+
+	t.Run("preserves cause error message", func(t *testing.T) {
+		causeErr := errors.New("docker daemon not running")
+
+		err := Build(ErrContainerRuntimeOperation).
+			WithCause(causeErr).
+			Err()
+
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "docker daemon not running")
+	})
+
+	t.Run("handles nil cause gracefully", func(t *testing.T) {
+		err := Build(ErrContainerRuntimeOperation).
+			WithCause(nil).
+			WithExplanation("Operation failed").
+			Err()
+
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
+	})
+
+	t.Run("works with errors.Is checks", func(t *testing.T) {
+		// This test verifies WithCause works correctly with errors.Is checks.
+		// Both sentinel and cause should be discoverable in the error chain.
+		causeErr := errors.New("connection refused")
+
+		err := Build(ErrContainerRuntimeOperation).
+			WithCause(causeErr).
+			Err()
+
+		// Verify both sentinel and cause are in the chain.
+		assert.True(t, errors.Is(err, ErrContainerRuntimeOperation))
+		assert.True(t, errors.Is(err, causeErr))
+	})
+}

@@ -1,0 +1,62 @@
+---
+title: atmos devcontainer logs
+sidebar_label: logs
+sidebar_class_name: command
+id: logs
+description: Show logs from a devcontainer
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to view logs from a devcontainer, useful for debugging container startup issues or monitoring background processes.
+</Intro>
+
+<Screengrab title="atmos devcontainer logs --help" slug="atmos-devcontainer-logs--help" />
+
+## Usage
+
+```shell
+atmos devcontainer logs <name> [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Name of the devcontainer to show logs from</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--instance string`</dt>
+  <dd>Instance name for this devcontainer (default: `default`)</dd>
+
+  <dt>`--follow` / `-f`</dt>
+  <dd>Follow log output in real-time</dd>
+
+  <dt>`--tail string`</dt>
+  <dd>Number of lines to show from the end of the logs (default: `all`)</dd>
+</dl>
+
+## Examples
+
+```shell
+# Show all logs
+atmos devcontainer logs geodesic
+
+# Follow logs in real-time
+atmos devcontainer logs geodesic --follow
+
+# Show last 100 lines
+atmos devcontainer logs geodesic --tail 100
+
+# Show logs from a specific instance
+atmos devcontainer logs terraform --instance project-a --follow
+```
+
+## See Also
+
+- [`atmos devcontainer start`](/cli/commands/devcontainer/start)
+- [`atmos devcontainer attach`](/cli/commands/devcontainer/attach)

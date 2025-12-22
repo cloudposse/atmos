@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"os"
 	"os/signal"
 	"syscall"
@@ -34,18 +33,28 @@ func main() {
 	// Ensure cleanup happens on normal exit.
 	defer cmd.Cleanup()
 
+	// Handle --version flag at application entry point to avoid deep exit in command infrastructure.
+	// This eliminates the need for os.Exit in PersistentPreRun, making tests work with Go 1.25.
+	// Check os.Args directly since we're in main() (tests call cmd.Execute() directly).
+	// Note: Only intercept --version flag here. The "version" subcommand should go through
+	// normal Cobra flow to ensure PersistentPreRun executes (needed for proper logging setup).
+	if len(os.Args) > 1 && os.Args[1] == "--version" {
+		err := cmd.ExecuteVersion()
+		if err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", "")
+		}
+		return // Exit normally after printing version
+	}
+
 	err := cmd.Execute()
 	if err != nil {
-		// Check for typed exit code error first to preserve subcommand exit codes.
-		var exitCodeErr errUtils.ExitCodeError
-		if errors.As(err, &exitCodeErr) {
-			log.Debug("Exiting with subcommand exit code", "code", exitCodeErr.Code)
-			errUtils.Exit(exitCodeErr.Code)
-		}
-		if errors.Is(err, errUtils.ErrPlanHasDiff) {
-			log.Debug("Exiting with code 2 due to plan differences")
-			errUtils.Exit(2)
-		}
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		// Format and print error using centralized formatter.
+		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+		os.Stderr.WriteString(formatted + "\n")
+
+		// Extract and use the correct exit code.
+		exitCode := errUtils.GetExitCode(err)
+		log.Debug("Exiting with exit code", "code", exitCode)
+		errUtils.Exit(exitCode)
 	}
 }

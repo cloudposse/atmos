@@ -72,6 +72,7 @@ commands:
             description: Name of the stack
             usage: ""
             required: true
+            default: null
         component_config:
           component: ""
           stack: ""
@@ -111,6 +112,7 @@ commands:
             description: Name of the stack
             usage: ""
             required: true
+            default: null
         component_config:
           component: ""
           stack: ""
@@ -163,6 +165,7 @@ commands:
             description: Name of the stack
             usage: ""
             required: true
+            default: null
         component_config:
           component: '{{ .Arguments.component }}'
           stack: '{{ .Flags.stack }}'
@@ -258,7 +261,7 @@ settings:
   list_merge_strategy: replace
   terminal:
     max_width: 120
-    pager: "0"
+    pager: "false"
     unicode: true
     syntax_highlighting:
       enabled: true
@@ -301,6 +304,7 @@ settings:
 vendor:
   base_path: ./vendor.yaml
 initialized: true
+basePathAbsolute: /absolute/path/to/repo
 stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/stacks
 includeStackAbsolutePaths:
   - /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/stacks/deploy/**/*

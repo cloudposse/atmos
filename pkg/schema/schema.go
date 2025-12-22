@@ -7,6 +7,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/cloudposse/atmos/pkg/config/casemap"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -21,6 +22,32 @@ type DescribeSettings struct {
 // Describe contains configuration for the describe command.
 type Describe struct {
 	Settings DescribeSettings `yaml:"settings,omitempty" json:"settings,omitempty" mapstructure:"settings"`
+}
+
+// ProfilesConfig defines configuration for the profiles system.
+type ProfilesConfig struct {
+	// BasePath is the custom directory for profile storage.
+	// If relative, resolved from atmos.yaml directory.
+	// If absolute, used as-is.
+	BasePath string `yaml:"base_path,omitempty" json:"base_path,omitempty" mapstructure:"base_path"`
+}
+
+// ConfigMetadata contains metadata about a configuration file or profile.
+type ConfigMetadata struct {
+	// Name is the name of the configuration or profile.
+	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+
+	// Description is a human-readable description.
+	Description string `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
+
+	// Version is the semantic version of the configuration.
+	Version string `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`
+
+	// Tags are labels for filtering and organization.
+	Tags []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
+
+	// Deprecated indicates if this configuration should no longer be used.
+	Deprecated bool `yaml:"deprecated,omitempty" json:"deprecated,omitempty" mapstructure:"deprecated"`
 }
 
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
@@ -41,6 +68,7 @@ type AtmosConfiguration struct {
 	StoresConfig                  store.StoresConfig `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
 	Vendor                        Vendor             `yaml:"vendor,omitempty" json:"vendor,omitempty" mapstructure:"vendor"`
 	Initialized                   bool               `yaml:"initialized" json:"initialized" mapstructure:"initialized"`
+	BasePathAbsolute              string             `yaml:"basePathAbsolute,omitempty" json:"basePathAbsolute,omitempty" mapstructure:"basePathAbsolute"`
 	StacksBaseAbsolutePath        string             `yaml:"stacksBaseAbsolutePath,omitempty" json:"stacksBaseAbsolutePath,omitempty" mapstructure:"stacksBaseAbsolutePath"`
 	IncludeStackAbsolutePaths     []string           `yaml:"includeStackAbsolutePaths,omitempty" json:"includeStackAbsolutePaths,omitempty" mapstructure:"includeStackAbsolutePaths"`
 	ExcludeStackAbsolutePaths     []string           `yaml:"excludeStackAbsolutePaths,omitempty" json:"excludeStackAbsolutePaths,omitempty" mapstructure:"excludeStackAbsolutePaths"`
@@ -61,8 +89,13 @@ type AtmosConfiguration struct {
 	Import          []string            `yaml:"import" json:"import" mapstructure:"import"`
 	Docs            Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Auth            AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	Env             map[string]string   `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
+	CaseMaps        *casemap.CaseMaps   `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
 	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
 	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
+	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
+	Profiles        ProfilesConfig      `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
+	Metadata        ConfigMetadata      `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -186,6 +219,24 @@ func (a *AtmosConfiguration) processResourceSchema(key string) {
 	a.Schemas[key] = resource
 }
 
+// GetCaseSensitiveMap returns the specified map with original key casing restored.
+// This compensates for Viper lowercasing all YAML map keys.
+// Supported paths: "env".
+func (a *AtmosConfiguration) GetCaseSensitiveMap(path string) map[string]string {
+	var source map[string]string
+	switch path {
+	case "env":
+		source = a.Env
+	default:
+		return nil
+	}
+
+	if a.CaseMaps == nil {
+		return source
+	}
+	return a.CaseMaps.ApplyCase(path, source)
+}
+
 type Validate struct {
 	EditorConfig EditorConfig `yaml:"editorconfig,omitempty" json:"editorconfig,omitempty" mapstructure:"editorconfig"`
 }
@@ -213,6 +264,7 @@ type Terminal struct {
 	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
 	Color              bool               `yaml:"color" json:"color" mapstructure:"color"`
 	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"` // Deprecated in config, use Color instead
+	ForceColor         bool               `yaml:"-" json:"-" mapstructure:"force_color"`            // ENV-only: ATMOS_FORCE_COLOR
 	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
 	Title              bool               `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
 	Alerts             bool               `yaml:"alerts,omitempty" json:"alerts,omitempty" mapstructure:"alerts"`
@@ -315,7 +367,7 @@ type TemplatesSettings struct {
 	Gomplate    TemplatesSettingsGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
 	Delimiters  []string                  `yaml:"delimiters,omitempty" json:"delimiters,omitempty" mapstructure:"delimiters"`
 	Evaluations int                       `yaml:"evaluations,omitempty" json:"evaluations,omitempty" mapstructure:"evaluations"`
-	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
 }
 
 type TemplatesSettingsSprig struct {
@@ -379,6 +431,9 @@ type Components struct {
 	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
 	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
 
+	// List configuration for component listing.
+	List ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
+
 	// Dynamic plugin component types.
 	// Uses mapstructure:",remain" to capture all unmapped fields from the YAML/JSON.
 	// This allows new component types (like mock, pulumi, cdk) to be added without schema changes.
@@ -408,11 +463,30 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 }
 
 type Stacks struct {
-	BasePath      string   `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	IncludedPaths []string `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
-	ExcludedPaths []string `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
-	NamePattern   string   `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
-	NameTemplate  string   `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
+	BasePath      string        `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	IncludedPaths []string      `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
+	ExcludedPaths []string      `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
+	NamePattern   string        `yaml:"name_pattern" json:"name_pattern" mapstructure:"name_pattern"`
+	NameTemplate  string        `yaml:"name_template" json:"name_template" mapstructure:"name_template"`
+	List          ListConfig    `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
+	Inherit       StacksInherit `yaml:"inherit,omitempty" json:"inherit,omitempty" mapstructure:"inherit"`
+}
+
+// StacksInherit controls inheritance behavior for stack processing.
+type StacksInherit struct {
+	// Metadata controls whether metadata fields are inherited from base components.
+	// When true (default), all metadata fields except 'inherits' are inherited.
+	// When false, metadata is per-component only (legacy behavior).
+	Metadata *bool `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+}
+
+// IsMetadataInheritanceEnabled returns whether metadata inheritance is enabled.
+// Defaults to true if not explicitly set.
+func (s *StacksInherit) IsMetadataInheritanceEnabled() bool {
+	if s.Metadata == nil {
+		return true // Default to true.
+	}
+	return *s.Metadata
 }
 
 type Workflows struct {
@@ -525,6 +599,7 @@ type ArgsAndFlagsInfo struct {
 	Affected                  bool
 	All                       bool
 	Identity                  string
+	NeedsPathResolution       bool // True if ComponentFromArg is a path that needs resolution.
 }
 
 // AuthContext holds active authentication credentials for multiple providers.
@@ -593,6 +668,7 @@ type ConfigAndStacksInfo struct {
 	StackFromArg                  string
 	Stack                         string
 	StackFile                     string
+	StackManifestName             string // Stack-level 'name' override from manifest (highest precedence).
 	ComponentType                 string
 	ComponentFromArg              string
 	Component                     string
@@ -667,6 +743,7 @@ type ConfigAndStacksInfo struct {
 	AtmosManifestJsonSchema   string
 	AtmosCliConfigPath        string
 	AtmosBasePath             string
+	ProfilesFromArg           []string
 	RedirectStdErr            string
 	LogsLevel                 string
 	LogsFile                  string
@@ -682,6 +759,16 @@ type ConfigAndStacksInfo struct {
 	All                       bool
 	Components                []string
 	Identity                  string
+	NeedsPathResolution       bool // True if ComponentFromArg is a path that needs resolution.
+}
+
+// GetComponentEnvSection returns the component's env section map.
+// This implements the utils.EnvVarContext interface.
+func (c *ConfigAndStacksInfo) GetComponentEnvSection() map[string]any {
+	if c == nil {
+		return nil
+	}
+	return c.ComponentEnvSection
 }
 
 type BackoffStrategy string
@@ -782,6 +869,7 @@ type BaseComponentConfig struct {
 	BaseComponentSettings                  AtmosSectionMapType
 	BaseComponentEnv                       AtmosSectionMapType
 	BaseComponentAuth                      AtmosSectionMapType
+	BaseComponentMetadata                  AtmosSectionMapType
 	BaseComponentProviders                 AtmosSectionMapType
 	BaseComponentHooks                     AtmosSectionMapType
 	FinalBaseComponentName                 string
@@ -912,4 +1000,5 @@ type ListConfig struct {
 type ListColumnConfig struct {
 	Name  string `yaml:"name" json:"name" mapstructure:"name"`
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
+	Width int    `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`
 }

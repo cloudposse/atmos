@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+import:
+  - mixins/region
+
+# Global locals - available to all sections in this file.
+# Note: The locals from the imported mixin should NOT be inherited here.
+locals:
+  # Simple values.
+  namespace: "acme"
+  environment: "dev"
+  stage: "us-east-1"
+
+  # Locals referencing other locals (tests dependency resolution).
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+  full_name: "{{ .locals.name_prefix }}-{{ .locals.stage }}"
+
+  # Complex value.
+  tags:
+    Environment: "{{ .locals.environment }}"
+    Namespace: "{{ .locals.namespace }}"
+
+vars:
+  environment: "{{ .locals.environment }}"
+  stage: "{{ .locals.stage }}"
+
+terraform:
+  # Terraform-scope locals - inherit from global, can override.
+  locals:
+    tf_specific: "terraform-only"
+    backend_bucket: "{{ .locals.namespace }}-{{ .locals.environment }}-tfstate"
+
+  backend_type: s3
+  backend:
+    s3:
+      encrypt: true
+      bucket: "{{ .locals.backend_bucket }}"
+      key: "terraform.tfstate"
+      region: "us-east-1"
+
+components:
+  terraform:
+    mock/instance-1:
+      metadata:
+        component: mock
+      # Component-level locals - inherit from terraform scope.
+      locals:
+        instance_id: "instance-1"
+        app_name: "{{ .locals.name_prefix }}-mock-{{ .locals.instance_id }}"
+      vars:
+        foo: "{{ .locals.app_name }}"
+        bar: "{{ .locals.environment }}"
+        baz: "{{ .locals.instance_id }}"
+        tags: "{{ .locals.tags }}"
+
+    mock/instance-2:
+      metadata:
+        component: mock
+      locals:
+        instance_id: "instance-2"
+        app_name: "{{ .locals.name_prefix }}-mock-{{ .locals.instance_id }}"
+      vars:
+        foo: "{{ .locals.app_name }}"
+        bar: "{{ .locals.environment }}"
+        baz: "{{ .locals.instance_id }}"
+        tags: "{{ .locals.tags }}"

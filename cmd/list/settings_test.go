@@ -203,9 +203,9 @@ func TestLogNoSettingsFoundMessage(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// This function only logs, so we just verify it doesn't panic
+			// This function only displays UI output, so we just verify it doesn't panic
 			assert.NotPanics(t, func() {
-				logNoSettingsFoundMessage(tc.componentFilter)
+				displayNoSettingsFoundMessage(tc.componentFilter)
 			})
 		})
 	}

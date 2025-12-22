@@ -20,6 +20,7 @@ type StyleSet struct {
 	Warning lipgloss.Style
 	Error   lipgloss.Style
 	Info    lipgloss.Style
+	Notice  lipgloss.Style
 	Debug   lipgloss.Style
 	Trace   lipgloss.Style
 
@@ -29,6 +30,7 @@ type StyleSet struct {
 	Command     lipgloss.Style
 	Description lipgloss.Style
 	Label       lipgloss.Style // Section labels/headers (non-status)
+	Spinner     lipgloss.Style // Loading/progress indicators
 
 	// Table styles
 	TableHeader    lipgloss.Style
@@ -66,6 +68,12 @@ type StyleSet struct {
 		SelectedItemStyle lipgloss.Style
 		BorderFocused     lipgloss.Style
 		BorderUnfocused   lipgloss.Style
+	}
+
+	// Interactive prompt styles for the Huh library's buttons and UI elements.
+	Interactive struct {
+		ButtonForeground lipgloss.Style // Button text style
+		ButtonBackground lipgloss.Style // Button background style
 	}
 
 	// Diff/Output styles
@@ -107,6 +115,7 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		Warning: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
 		Error:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)),
 		Info:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Link)),
+		Notice:  lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
 		Debug:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
 		Trace:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)).Faint(true),
 
@@ -116,6 +125,7 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		Command:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Primary)),
 		Description: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextPrimary)),
 		Label:       lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Primary)).Bold(true),
+		Spinner:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Spinner)),
 
 		// Table styles
 		TableHeader:    getTableHeaderStyle(scheme),
@@ -142,6 +152,9 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 
 		// TUI component styles
 		TUI: getTUIStyles(scheme),
+
+		// Interactive prompt styles.
+		Interactive: getInteractiveStyles(scheme),
 
 		// Diff/Output styles
 		Diff: getDiffStyles(scheme),
@@ -232,6 +245,20 @@ func getTUIStyles(scheme *ColorScheme) struct {
 			BorderForeground(lipgloss.Color(scheme.Border)),
 		BorderUnfocused: lipgloss.NewStyle().
 			Border(lipgloss.HiddenBorder()),
+	}
+}
+
+// getInteractiveStyles returns the interactive prompt styles for the given color scheme.
+func getInteractiveStyles(scheme *ColorScheme) struct {
+	ButtonForeground lipgloss.Style
+	ButtonBackground lipgloss.Style
+} {
+	return struct {
+		ButtonForeground lipgloss.Style
+		ButtonBackground lipgloss.Style
+	}{
+		ButtonForeground: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.ButtonForeground)),
+		ButtonBackground: lipgloss.NewStyle().Background(lipgloss.Color(scheme.ButtonBackground)),
 	}
 }
 
@@ -368,6 +395,23 @@ func InitializeStylesFromTheme(themeName string) error {
 	return nil
 }
 
+// InvalidateStyleCache clears the cached styles, forcing them to be regenerated.
+// This is needed when the terminal color profile changes (e.g., NO_COLOR is set)
+// because lipgloss styles bake in ANSI codes at creation time.
+//
+// Note: This also regenerates the deprecated theme.Styles global variable
+// to ensure backward compatibility with code still using the legacy API.
+func InvalidateStyleCache() {
+	CurrentStyles = nil
+	currentThemeName = ""
+	lastColorScheme = nil
+
+	// Force regeneration of legacy Styles global variable.
+	// This is needed because some code still uses theme.Styles.Checkmark/XMark
+	// which have ANSI codes baked in at creation time.
+	refreshLegacyStyles()
+}
+
 // getActiveThemeName determines the active theme name from configuration or environment.
 func getActiveThemeName() string {
 	// Bind environment variables on demand to ensure they're available
@@ -432,6 +476,16 @@ func GetInfoStyle() lipgloss.Style {
 		return lipgloss.NewStyle()
 	}
 	return styles.Info
+}
+
+// GetNoticeStyle returns the notice style from the current theme.
+// Notice style is used for neutral informational messages, typically in empty states.
+func GetNoticeStyle() lipgloss.Style {
+	styles := GetCurrentStyles()
+	if styles == nil {
+		return lipgloss.NewStyle()
+	}
+	return styles.Notice
 }
 
 // GetDebugStyle returns the debug style from the current theme.

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
+	"github.com/spf13/viper"
 	ini "gopkg.in/ini.v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -25,6 +26,9 @@ import (
 const (
 	PermissionRWX = 0o700
 	PermissionRW  = 0o600
+
+	// Directory names.
+	awsCacheDirName = "aws" // AWS SDK cache directory name under XDG_CACHE_HOME.
 
 	// File locking timeouts.
 	fileLockTimeout = 10 * time.Second
@@ -108,8 +112,7 @@ func LoadINIFile(path string) (*ini.File, error) {
 // Precedence: 1) basePath parameter from provider spec, 2) XDG config directory.
 //
 // Default path follows XDG Base Directory Specification:
-//   - Linux: $XDG_CONFIG_HOME/atmos/aws (default: ~/.config/atmos/aws)
-//   - macOS: ~/Library/Application Support/atmos/aws
+//   - Linux/macOS: $XDG_CONFIG_HOME/atmos/aws (default: ~/.config/atmos/aws)
 //   - Windows: %APPDATA%\atmos\aws
 //
 // Respects ATMOS_XDG_CONFIG_HOME and XDG_CONFIG_HOME environment variables.
@@ -566,6 +569,53 @@ func (m *AWSFileManager) GetCredentialsPath(providerName string) string {
 // GetConfigPath returns the path to the config file for the provider.
 func (m *AWSFileManager) GetConfigPath(providerName string) string {
 	return filepath.Join(m.baseDir, providerName, "config")
+}
+
+// GetCachePath returns the AWS SDK cache directory path.
+// AWS SDK uses ~/.aws/sso/cache or $XDG_CACHE_HOME/aws/sso/cache for SSO cache.
+// Returns empty string if cache directory cannot be determined.
+func (m *AWSFileManager) GetCachePath() string {
+	// Check for XDG_CACHE_HOME environment variable first.
+	// Use viper to respect environment variable precedence.
+	v := viper.New()
+	if err := v.BindEnv("XDG_CACHE_HOME"); err != nil {
+		// Binding failed, fall back to default path.
+		return m.getDefaultCachePath()
+	}
+
+	cacheDir := strings.TrimSpace(v.GetString("XDG_CACHE_HOME"))
+	if cacheDir == "" {
+		// XDG not set, fall back to default path.
+		return m.getDefaultCachePath()
+	}
+
+	// Expand tilde if present using homedir.Expand for correct handling.
+	// This properly handles ~/foo, ~user/foo, and other tilde cases.
+	if strings.HasPrefix(cacheDir, "~") {
+		expandedDir, err := homedir.Expand(cacheDir)
+		if err != nil {
+			// Expansion failed on tilde path, fall back to default.
+			// Using an unexpanded tilde would create an invalid relative path.
+			return m.getDefaultCachePath()
+		}
+		if expandedDir == "" {
+			// Expansion returned empty, fall back to default.
+			return m.getDefaultCachePath()
+		}
+		cacheDir = expandedDir
+	}
+
+	// XDG is set, use $XDG_CACHE_HOME/aws/sso/cache.
+	return filepath.Join(cacheDir, awsCacheDirName, "sso", "cache")
+}
+
+// getDefaultCachePath returns the default AWS cache path ~/.aws/sso/cache.
+func (m *AWSFileManager) getDefaultCachePath() string {
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(homeDir, ".aws", "sso", "cache")
 }
 
 // GetEnvironmentVariables returns the AWS file environment variables as EnvironmentVariable slice.

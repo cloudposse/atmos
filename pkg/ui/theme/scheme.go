@@ -30,6 +30,7 @@ type ColorScheme struct {
 	Selected  string // Selected items (typically brightGreen)
 	Highlight string // Highlighted text (typically magenta)
 	Gold      string // Special indicators (typically yellow or brightYellow)
+	Spinner   string // Loading/progress indicators (typically cyan)
 
 	// Table specific
 	HeaderText string // Table header text (typically brightCyan or green)
@@ -38,6 +39,10 @@ type ColorScheme struct {
 
 	// Help/Documentation specific
 	BackgroundHighlight string // Background for highlighted sections (usage/example blocks)
+
+	// Interactive prompts (Huh library)
+	ButtonForeground string // Button text color (light/cream)
+	ButtonBackground string // Button background color (primary/purple)
 
 	// Syntax highlighting
 	ChromaTheme string // Chroma theme name for syntax highlighting
@@ -88,6 +93,7 @@ func GenerateColorScheme(t *Theme) ColorScheme {
 		Selected:  t.BrightGreen,   // Bright green for selected
 		Highlight: t.BrightMagenta, // Bright magenta for highlights
 		Gold:      t.BrightYellow,  // Bright yellow for special indicators
+		Spinner:   t.Cyan,          // Cyan for loading/progress (calming, indicates activity)
 
 		// Table specific
 		HeaderText: t.Green,       // Green for headers
@@ -96,6 +102,10 @@ func GenerateColorScheme(t *Theme) ColorScheme {
 
 		// Help/Documentation specific
 		BackgroundHighlight: t.Black, // Dark background for code blocks
+
+		// Interactive prompts (Huh library)
+		ButtonForeground: t.BrightWhite, // Light cream text
+		ButtonBackground: t.BrightBlue,  // Primary action color (purple/blue)
 
 		// Syntax highlighting - map themes to appropriate Chroma themes
 		ChromaTheme: getChromaThemeForAtmosTheme(t),

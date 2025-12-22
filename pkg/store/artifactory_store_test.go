@@ -15,16 +15,12 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// Define custom log levels for testing.
-// Using charmbracelet/log package level constants.
+// Define log levels for testing using atmos logger constants.
 var (
-	// Standard levels from the charmbracelet/log package.
 	debugLogLevel = log.DebugLevel
 	infoLogLevel  = log.InfoLevel
 	warnLogLevel  = log.WarnLevel
-
-	// Trace is lower than debug in the charmbracelet/log package.
-	traceLogLevel log.Level = -4
+	traceLogLevel = log.TraceLevel
 )
 
 type MockArtifactoryClient struct {

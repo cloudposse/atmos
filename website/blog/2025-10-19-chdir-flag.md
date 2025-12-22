@@ -1,10 +1,14 @@
 ---
 slug: introducing-chdir-flag
-title: "Introducing --chdir: Simplify Your Multi-Repo Workflows"
-sidebar_label: "Introducing --chdir Flag"
-authors: [osterman]
-tags: [atmos, cli, productivity, developer-experience]
-date: 2025-10-19
+title: 'Introducing --chdir: Simplify Your Multi-Repo Workflows'
+sidebar_label: Introducing --chdir Flag
+authors:
+  - osterman
+tags:
+  - feature
+  - dx
+date: 2025-10-19T00:00:00.000Z
+release: v1.195.0
 ---
 
 We're excited to announce a new global flag that makes working with Atmos across multiple repositories and directories significantly easier: `--chdir` (or `-C` for short).

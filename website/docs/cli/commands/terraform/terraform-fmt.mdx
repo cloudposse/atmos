@@ -1,0 +1,104 @@
+---
+title: atmos terraform fmt
+sidebar_label: fmt
+sidebar_class_name: command
+id: fmt
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to format Terraform HCL configuration files for an Atmos component to canonical format and style.
+</Intro>
+
+<Screengrab title="atmos terraform fmt --help" slug="atmos-terraform-fmt--help" />
+
+## Usage
+
+Execute the `terraform fmt` command like this:
+
+```shell
+atmos terraform fmt <component> -s <stack> [options]
+```
+
+This command rewrites Terraform configuration files to a canonical format and style. This ensures consistency across your codebase and makes the code easier to read and maintain.
+
+:::info Atmos Behavior
+This is a pure passthrough command. Atmos does not perform automatic initialization, workspace management, or variable generation for `terraform fmt`. The command is executed directly in the component directory.
+:::
+## Examples
+
+### Format Files
+
+```shell
+# Format all Terraform files in the component directory
+atmos terraform fmt vpc -s dev
+```
+
+### Check Formatting Only
+
+```shell
+# Check if files are formatted without changing them
+atmos terraform fmt vpc -s dev -check
+```
+
+### Format with Diff
+
+```shell
+# Show what would be changed
+atmos terraform fmt vpc -s dev -diff
+```
+
+### Recursive Format
+
+```shell
+# Format all files recursively
+atmos terraform fmt vpc -s dev -recursive
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform fmt vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform fmt vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+This command supports native `terraform fmt` flags such as `-check` to verify formatting, `-diff` to show differences, `-recursive` to format subdirectories, `-write=false` to disable file updates.
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

@@ -1,0 +1,129 @@
+---
+title: Imports
+sidebar_label: import
+sidebar_class_name: command
+description: Import and merge multiple Atmos CLI configuration files.
+id: imports
+slug: /cli/configuration/imports
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+Atmos supports importing other CLI configurations to break large configurations into smaller, manageable pieces. Use imports to organize configuration by section or to share common settings across projects.
+</Intro>
+
+## Configuration
+
+Imports are defined in the `import` section of `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+import:
+  # Load the Atmos configuration from the main branch of the 'cloudposse/atmos' repository
+  - "https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml"
+  # Then merge the configs
+  - "configs.d/**/*"
+  # Finally, override some logging settings
+  - "./logs.yaml"
+```
+</File>
+
+## Import Types
+
+Imports can be any of the following:
+
+<dl>
+  <dt>Remote URL</dt>
+  <dd>
+    Load configuration from a remote URL. Always use HTTPS URLs and verify the authenticity of remote sources.
+    ```yaml
+    import:
+      - "https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/atmos.yaml"
+    ```
+  </dd>
+
+  <dt>Specific Path</dt>
+  <dd>
+    Load a specific configuration file by path. Relative paths are resolved from the `atmos.yaml` directory.
+    ```yaml
+    import:
+      - "./logs.yaml"
+      - "configs/terraform.yaml"
+    ```
+  </dd>
+
+  <dt>Glob Patterns</dt>
+  <dd>
+    Use wildcard globs (`*`), including recursive globs (`**`), to import multiple files. Only files ending in `.yml` or `.yaml` will be considered.
+    ```yaml
+    import:
+      - "configs.d/**/*"
+      - "*.yaml"
+    ```
+  </dd>
+</dl>
+
+:::tip Pro-Tip
+Atmos supports [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for all file names/paths (double-star/globstar `**` is supported as well)
+:::
+
+## Merge Order
+
+Imported configurations are deep-merged in order. The last file in the list supersedes settings in preceding imports:
+
+1. First imported file (lowest priority)
+2. Second imported file
+3. … (middle files)
+4. Last imported file (highest priority)
+5. Settings in the main `atmos.yaml` (highest priority)
+
+## Example: Organizing by Section
+
+Break a large configuration into section-specific files:
+
+```
+configs.d/
+├── base.yaml       # Base paths and general settings
+├── terraform.yaml  # Terraform component settings
+├── helmfile.yaml   # Helmfile component settings
+├── stacks.yaml     # Stack configuration
+├── workflows.yaml  # Workflow settings
+└── logs.yaml       # Logging configuration
+```
+
+<File title="atmos.yaml">
+```yaml
+import:
+  - "configs.d/**/*"
+
+# Override specific settings if needed
+logs:
+  level: Debug
+```
+</File>
+
+## Remote Imports
+
+:::warning Be Careful with Remote Imports
+- Always use HTTPS URLs (not HTTP)
+- Verify the authenticity of remote sources
+- Consider pinning to specific commit hashes instead of branch references for stability
+:::
+
+**Example with pinned commit:**
+```yaml
+import:
+  # Pinned to specific commit for reproducibility
+  - "https://raw.githubusercontent.com/cloudposse/atmos/abc123def456/atmos.yaml"
+```
+
+## Limitations
+
+- Templated imports of Atmos configuration are not supported (unlike stacks)
+- Only `.yml` and `.yaml` files are processed when using glob patterns
+
+## See Also
+
+- [CLI Configuration](/cli/configuration) — Overview of CLI configuration
+- [YAML Functions](/cli/configuration#yaml-functions) — Dynamic values in configuration

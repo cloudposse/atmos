@@ -1,0 +1,97 @@
+---
+title: atmos terraform graph
+sidebar_label: graph
+sidebar_class_name: command
+id: graph
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to generate a visual dependency graph for an Atmos component's Terraform resources in a specific stack.
+</Intro>
+
+<Screengrab title="atmos terraform graph --help" slug="atmos-terraform-graph--help" />
+
+## Usage
+
+Execute the `terraform graph` command like this:
+
+```shell
+atmos terraform graph <component> -s <stack> [options]
+```
+
+This command generates a graph of resources in DOT format, which can be converted to an image using Graphviz. This is useful for understanding resource dependencies and the order of operations.
+
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The graph generation itself is handled by native Terraform.
+:::
+## Examples
+
+### Generate Graph
+
+```shell
+# Generate a graph in DOT format
+atmos terraform graph vpc -s dev > graph.dot
+```
+
+### Generate Plan Graph
+
+```shell
+# Generate a graph of planned changes
+atmos terraform graph vpc -s dev -type=plan > plan-graph.dot
+```
+
+### Convert to Image
+
+```shell
+# Convert DOT file to PNG using Graphviz
+atmos terraform graph vpc -s dev | dot -Tpng > graph.png
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform graph vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform graph vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+This command supports native `terraform graph` flags such as `-type` to specify graph type (plan, plan-refresh-only, plan-destroy, or apply), `-draw-cycles` to highlight cycles.
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

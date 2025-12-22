@@ -3,7 +3,6 @@ package exec
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -17,10 +16,11 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	auth_types "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -32,7 +32,6 @@ const (
 	inputEnvVar              = "TF_INPUT"
 	automationEnvVar         = "TF_IN_AUTOMATION"
 	logEnvVar                = "TF_LOG"
-	spinnerOverwriteFormat   = "\r%s %s\n"
 	logCoreEnvVar            = "TF_LOG_CORE"
 	logPathEnvVar            = "TF_LOG_PATH"
 	logProviderEnvVar        = "TF_LOG_PROVIDER"
@@ -90,6 +89,12 @@ func (a *authContextWrapper) Authenticate(ctx context.Context, identityName stri
 	defer perf.Track(nil, "exec.authContextWrapper.Authenticate")()
 
 	panic("authContextWrapper.Authenticate should not be called")
+}
+
+func (a *authContextWrapper) AuthenticateProvider(ctx context.Context, providerName string) (*auth_types.WhoamiInfo, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.AuthenticateProvider")()
+
+	return nil, fmt.Errorf("%w: authContextWrapper.AuthenticateProvider for template context", errUtils.ErrNotImplemented)
 }
 
 func (a *authContextWrapper) Whoami(ctx context.Context, identityName string) (*auth_types.WhoamiInfo, error) {
@@ -526,7 +531,15 @@ func execTerraformOutput(
 // Returns:
 //   - value: The output value (may be nil if the output exists but has a null value)
 //   - exists: Whether the output key exists in the terraform outputs
-//   - error: Any error that occurred during retrieval (SDK errors, network issues, etc.)
+//
+// GetTerraformOutput retrieves the named Terraform output for a specific component in a stack.
+// It may return a cached result unless skipCache is true, and it will use the provided authManager
+// (if non-nil) or an authContext-derived wrapper to resolve credentials for describing the component.
+// If the component is configured to use a static remote state backend, the value is read from that
+// static section instead of executing Terraform.
+//
+// The function returns the output value, a boolean that is true when the output path exists (even if null),
+// and an error if retrieval or evaluation failed.
 func GetTerraformOutput(
 	atmosConfig *schema.AtmosConfiguration,
 	stack string,
@@ -558,16 +571,14 @@ func GetTerraformOutput(
 
 	// Use simple log message in debug/trace mode to avoid concurrent stderr writes with logger.
 	// Spinners write to stderr in a separate goroutine, causing misaligned log output.
+	var s *spinner.Spinner
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		log.Debug(message, "output", output, "component", component, "stack", stack)
 	} else {
-		// Initialize spinner for normal (non-debug) mode
-		p := NewSpinner(message)
-		spinnerDone := make(chan struct{})
-		// Run spinner in a goroutine
-		RunSpinner(p, spinnerDone, message)
-		// Ensure the spinner is stopped before returning
-		defer StopSpinner(p, spinnerDone)
+		// Initialize spinner for normal (non-debug) mode.
+		s = spinner.New(message)
+		s.Start()
+		defer s.Stop()
 	}
 
 	// Use the provided authManager directly if available.
@@ -610,7 +621,6 @@ func GetTerraformOutput(
 		AuthManager:          resolvedAuthMgr, // Use resolved AuthManager (may be component-specific or inherited)
 	})
 	if err != nil {
-		u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.XMark, message)
 		return nil, false, fmt.Errorf("failed to describe the component %s in the stack %s: %w", component, stack, err)
 	}
 
@@ -630,7 +640,6 @@ func GetTerraformOutput(
 		// Execute `terraform output`
 		terraformOutputs, err := execTerraformOutput(atmosConfig, component, stack, sections, authContext)
 		if err != nil {
-			u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.XMark, message)
 			return nil, false, fmt.Errorf("failed to execute terraform output for the component %s in the stack %s: %w", component, stack, err)
 		}
 
@@ -640,11 +649,10 @@ func GetTerraformOutput(
 	}
 
 	if resultErr != nil {
-		u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.XMark, message)
 		return nil, false, resultErr
 	}
 
-	u.PrintfMessageToTUI(spinnerOverwriteFormat, theme.Styles.Checkmark, message)
+	// Note: Spinner is stopped by defer s.Stop() - no completion message needed for this background operation.
 	return value, exists, nil
 }
 
@@ -738,14 +746,5 @@ func GetStaticRemoteStateOutput(
 // environToMap converts all the environment variables (excluding the variables prohibited by terraform-exec/tfexec) in the environment into a map of strings.
 // TODO: review this (find another way to execute `terraform output` not using `terraform-exec/tfexec`).
 func environToMap() map[string]string {
-	envMap := make(map[string]string)
-	for _, env := range os.Environ() {
-		pair := u.SplitStringAtFirstOccurrence(env, "=")
-		k := pair[0]
-		v := pair[1]
-		if !u.SliceContainsString(prohibitedEnvVars, k) && !u.SliceContainsStringStartsWith(prohibitedEnvVarPrefixes, k) {
-			envMap[k] = v
-		}
-	}
-	return envMap
+	return envpkg.EnvironToMapFiltered(prohibitedEnvVars, prohibitedEnvVarPrefixes)
 }

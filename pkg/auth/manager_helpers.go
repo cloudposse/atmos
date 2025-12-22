@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -177,17 +178,63 @@ func authenticateWithIdentity(authManager AuthManager, identityName string, sele
 //   - AuthManager with populated AuthContext after successful authentication
 //   - nil if authentication disabled, no identity specified, or no default identity configured (in CI mode)
 //   - error if authentication fails or auth is not configured when identity is specified
+//
+// Note: This function does not load stack configs for default identities.
+// Use CreateAndAuthenticateManagerWithAtmosConfig if you need stack-level default identity resolution.
 func CreateAndAuthenticateManager(
 	identityName string,
 	authConfig *schema.AuthConfig,
 	selectValue string,
 ) (AuthManager, error) {
+	// Delegate to the full implementation with nil atmosConfig.
+	// This maintains backward compatibility while allowing stack auth loading when atmosConfig is provided.
+	return CreateAndAuthenticateManagerWithAtmosConfig(identityName, authConfig, selectValue, nil)
+}
+
+// CreateAndAuthenticateManagerWithAtmosConfig creates and authenticates an AuthManager from an identity name.
+// This is the full implementation that supports loading stack configs for default identities.
+//
+// When atmosConfig is provided and identityName is empty:
+//   - Loads stack configuration files for auth identity defaults
+//   - Merges stack-level defaults with atmos.yaml defaults
+//   - Stack defaults take precedence over atmos.yaml defaults
+//
+// This solves the chicken-and-egg problem where:
+//   - We need to know the default identity to authenticate
+//   - But stack configs are only loaded after authentication is configured
+//   - Stack-level defaults (auth.identities.*.default: true) would otherwise be ignored
+//
+// Parameters:
+//   - identityName: The identity to authenticate (can be "__SELECT__" for interactive selection,
+//     "__DISABLED__" to disable auth, or empty for auto-detection)
+//   - authConfig: The auth configuration from atmos.yaml and stack configs
+//   - selectValue: The special value that triggers interactive identity selection (typically "__SELECT__")
+//   - atmosConfig: The full atmos configuration (optional, enables stack auth loading)
+//
+// Returns:
+//   - AuthManager with populated AuthContext after successful authentication
+//   - nil if authentication disabled, no identity specified, or no default identity configured (in CI mode)
+//   - error if authentication fails or auth is not configured when identity is specified
+func CreateAndAuthenticateManagerWithAtmosConfig(
+	identityName string,
+	authConfig *schema.AuthConfig,
+	selectValue string,
+	atmosConfig *schema.AtmosConfiguration,
+) (AuthManager, error) {
+	defer perf.Track(atmosConfig, "auth.CreateAndAuthenticateManagerWithAtmosConfig")()
+
 	log.Debug("CreateAndAuthenticateManager called", "identityName", identityName, "hasAuthConfig", authConfig != nil)
 
 	// Check if authentication is explicitly disabled.
 	if shouldDisableAuth(identityName) {
 		log.Debug("Authentication explicitly disabled")
 		return nil, nil
+	}
+
+	// If no identity specified and auth is configured, load stack configs for defaults.
+	// This solves the chicken-and-egg problem where stack-level defaults are not yet loaded.
+	if identityName == "" && isAuthConfigured(authConfig) && atmosConfig != nil {
+		loadAndMergeStackAuthDefaults(authConfig, atmosConfig)
 	}
 
 	// Resolve the identity name to use (may auto-detect or return empty).
@@ -219,4 +266,29 @@ func CreateAndAuthenticateManager(
 	}
 
 	return authManager, nil
+}
+
+// loadAndMergeStackAuthDefaults loads stack configs for auth defaults and merges them into authConfig.
+// This is a helper function that handles the stack auth loading logic.
+// Stack defaults take precedence over atmos.yaml defaults (following Atmos inheritance model).
+func loadAndMergeStackAuthDefaults(authConfig *schema.AuthConfig, atmosConfig *schema.AtmosConfiguration) {
+	defer perf.Track(atmosConfig, "auth.loadAndMergeStackAuthDefaults")()
+
+	// Always load stack configs - stack defaults take precedence over atmos.yaml.
+	// This follows the Atmos inheritance model where more specific config overrides global.
+	log.Debug("Loading stack configs for auth identity defaults")
+	stackDefaults, err := cfg.LoadStackAuthDefaults(atmosConfig)
+	if err != nil {
+		log.Debug("Failed to load stack auth defaults", "error", err)
+		return
+	}
+
+	if len(stackDefaults) == 0 {
+		log.Debug("No default identities found in stack configs")
+		return
+	}
+
+	// Merge stack defaults into auth config (stack takes precedence over atmos.yaml).
+	cfg.MergeStackAuthDefaults(authConfig, stackDefaults)
+	log.Debug("Merged stack auth defaults", "count", len(stackDefaults))
 }

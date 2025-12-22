@@ -40,6 +40,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos terraform --help
     enabled: true
@@ -58,6 +60,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos terraform apply --help
     enabled: true
@@ -77,6 +81,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos terraform apply help
     enabled: true
@@ -96,6 +102,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos terraform non-existent
     enabled: true
@@ -117,6 +125,7 @@ tests:
     workdir: "../"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_FORCE_TTY: "true"
     command: "atmos"
     args:
       - "terraform"
@@ -124,6 +133,10 @@ tests:
       - "non-existent"
     expect:
       exit_code: 1
+      # Normalize the base path in error messages to match repo path
+      # The error message shows both full pattern and base+cleanPattern separately
+      sanitize:
+        "/absolute/path/to/external": "/absolute/path/to/repo"
   - name: atmos terraform plan non-existent in workspace
     enabled: true
     snapshot: true
@@ -177,6 +190,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos helmfile --help
     enabled: true
@@ -195,6 +210,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos helmfile apply non-existent
     enabled: true
@@ -240,6 +257,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos helmfile apply --help
     enabled: true
@@ -259,6 +278,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos atlantis
     enabled: true
@@ -289,6 +310,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos atlantis --help
     enabled: true
@@ -307,6 +330,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
 
   - name: atmos atlantis generate
@@ -340,6 +365,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos atlantis generate --help
     enabled: true
@@ -359,6 +386,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos atlantis generate repo-config
     enabled: true
@@ -398,6 +427,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos atlantis generate repo-config --help
     enabled: true
@@ -419,9 +450,11 @@ tests:
         - "Atmos Releases:"
         - "Install Atmos:"
       stdout:
-        - "Flags:"
+        - "FLAGS"
         - "--affected-only"
         - "--config-template"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos atlantis generate repo-config non-existent
     enabled: true
@@ -455,6 +488,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos validate editorconfig --help
     enabled: true
@@ -474,6 +509,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos validate editorconfig non-existent
     enabled: true
@@ -518,6 +555,8 @@ tests:
         - "Update available!"
         - "Atmos Releases:"
         - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0
   - name: atmos version --check --non-existent
     enabled: true
@@ -545,4 +584,97 @@ tests:
       - "terraform"
       - "--help"
     expect:
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
+      exit_code: 0
+  # Global terraform compatibility flags tests
+  - name: atmos terraform -version passthrough
+    enabled: true
+    snapshot: true
+    description: "'atmos terraform -version' should pass -version to terraform directly"
+    workdir: "./"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: atmos
+    args:
+      - "terraform"
+      - "-version"
+    expect:
+      stdout_contains:
+        - "Terraform v"
+      exit_code: 0
+      # Normalize terraform version output which varies by environment
+      sanitize:
+        "Terraform v[0-9]+\\.[0-9]+\\.[0-9]+": "Terraform vX.X.X"
+        "on (darwin|linux|windows)_(arm64|amd64|386)": "on linux_amd64"
+        "is [0-9]+\\.[0-9]+\\.[0-9]+": "is X.X.X"
+        # Normalize download URL which varies between terraform versions
+        "https://www\\.terraform\\.io/downloads\\.html": "https://developer.hashicorp.com/terraform/install"
+  - name: atmos terraform -help passthrough
+    enabled: true
+    snapshot: true
+    description: "'atmos terraform -help' should pass -help to terraform directly"
+    workdir: "./"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: atmos
+    args:
+      - "terraform"
+      - "-help"
+    expect:
+      stdout_contains:
+        - "Usage: terraform"
+        - "Main commands:"
+      exit_code: 0
+      # Filter out lines that vary between terraform versions
+      diff:
+        - "^\\s+test\\s+"  # Test command description varies between versions
+        - "^\\s+modules\\s+"  # modules subcommand only in newer terraform versions
+        - "^\\s+stacks\\s+"  # stacks subcommand only in newer terraform versions (HCP Terraform)
+      # Normalize minor punctuation differences between terraform versions
+      sanitize:
+        "output, or the help": "output or the help"
+  - name: atmos --help config aliases section
+    enabled: true
+    snapshot: true
+    description: "'atmos --help' should show config aliases in dedicated ALIASES section"
+    workdir: "fixtures/scenarios/subcommand-alias"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: atmos
+    args:
+      - "--help"
+    expect:
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
+      exit_code: 0
+  - name: config alias tp --help shows terraform plan help
+    enabled: true
+    snapshot: true
+    description: "Config alias 'tp' should show terraform plan help"
+    workdir: "fixtures/scenarios/subcommand-alias"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: atmos
+    args:
+      - "tp"
+      - "--help"
+    expect:
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
+      exit_code: 0
+  - name: config alias tr --help shows terraform help
+    enabled: true
+    snapshot: true
+    description: "Config alias 'tr' should show terraform help"
+    workdir: "fixtures/scenarios/subcommand-alias"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: atmos
+    args:
+      - "tr"
+      - "--help"
+    expect:
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
       exit_code: 0

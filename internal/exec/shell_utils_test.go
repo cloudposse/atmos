@@ -13,16 +13,21 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestMergeEnvVars(t *testing.T) {
-	// Set up test environment variables
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: PATH case-sensitivity and HOME behavior differ")
+	}
+
+	// Set up test environment variables.
 	t.Setenv("PATH", "/usr/bin")
 	t.Setenv("TF_CLI_ARGS_plan", "-lock=false")
 	t.Setenv("HOME", "/home/test")
 
-	// Atmos environment variables to merge
+	// Atmos environment variables to merge.
 	componentEnv := []string{
 		"TF_CLI_ARGS_plan=-compact-warnings",
 		"ATMOS_VAR=value",
@@ -30,9 +35,9 @@ func TestMergeEnvVars(t *testing.T) {
 		"NEW_VAR=newvalue",
 	}
 
-	merged := mergeEnvVars(componentEnv)
+	merged := envpkg.MergeSystemEnv(componentEnv)
 
-	// Convert the merged list back to a map for easier assertions
+	// Convert the merged list back to a map for easier assertions.
 	mergedMap := make(map[string]string)
 	for _, env := range merged {
 		parts := strings.SplitN(env, "=", 2)
@@ -217,7 +222,7 @@ func TestConvertEnvMapToSlice(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertEnvMapToSlice(tt.input)
+			result := envpkg.ConvertMapToSlice(tt.input)
 			assert.Len(t, result, len(tt.expected))
 
 			// Convert result back to map for easier comparison.
@@ -394,7 +399,7 @@ func TestMergeEnvVarsSimple(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := mergeEnvVarsSimple(tt.newEnvList)
+			result := envpkg.MergeSystemEnvSimple(tt.newEnvList)
 
 			// Convert result to map for easier comparison.
 			resultMap := make(map[string]string)
@@ -460,8 +465,9 @@ func TestExecAuthShellCommand_ExitCodePropagation(t *testing.T) {
 			envVars := map[string]string{
 				"TEST_VAR": "test_value",
 			}
+			atmosConfig := &schema.AtmosConfiguration{}
 
-			err := ExecAuthShellCommand(nil, "test-identity", "test-provider", envVars, "/bin/sh", tt.shellArgs)
+			err := ExecAuthShellCommand(atmosConfig, "test-identity", "test-provider", envVars, "/bin/sh", tt.shellArgs)
 
 			if tt.expectedCode == 0 {
 				assert.NoError(t, err)
@@ -476,6 +482,10 @@ func TestExecAuthShellCommand_ExitCodePropagation(t *testing.T) {
 }
 
 func TestExecuteShellCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix commands (echo) and paths (/dev/stderr, /dev/stdout)")
+	}
+
 	atmosConfig := schema.AtmosConfiguration{}
 
 	t.Run("dry run mode", func(t *testing.T) {
@@ -582,6 +592,10 @@ func TestExecuteShellCommand(t *testing.T) {
 }
 
 func TestExecuteShell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix commands (echo, ls, env, grep)")
+	}
+
 	t.Run("simple echo command", func(t *testing.T) {
 		err := ExecuteShell(
 			"echo 'test'",

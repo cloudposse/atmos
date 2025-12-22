@@ -19,16 +19,23 @@ import (
 
 const (
 	// Atmos YAML functions.
-	AtmosYamlFuncExec            = "!exec"
-	AtmosYamlFuncStore           = "!store"
-	AtmosYamlFuncStoreGet        = "!store.get"
-	AtmosYamlFuncTemplate        = "!template"
-	AtmosYamlFuncTerraformOutput = "!terraform.output"
-	AtmosYamlFuncTerraformState  = "!terraform.state"
-	AtmosYamlFuncEnv             = "!env"
-	AtmosYamlFuncInclude         = "!include"
-	AtmosYamlFuncIncludeRaw      = "!include.raw"
-	AtmosYamlFuncGitRoot         = "!repo-root"
+	AtmosYamlFuncExec                    = "!exec"
+	AtmosYamlFuncStore                   = "!store"
+	AtmosYamlFuncStoreGet                = "!store.get"
+	AtmosYamlFuncTemplate                = "!template"
+	AtmosYamlFuncTerraformOutput         = "!terraform.output"
+	AtmosYamlFuncTerraformState          = "!terraform.state"
+	AtmosYamlFuncEnv                     = "!env"
+	AtmosYamlFuncInclude                 = "!include"
+	AtmosYamlFuncIncludeRaw              = "!include.raw"
+	AtmosYamlFuncGitRoot                 = "!repo-root"
+	AtmosYamlFuncCwd                     = "!cwd"
+	AtmosYamlFuncRandom                  = "!random"
+	AtmosYamlFuncLiteral                 = "!literal"
+	AtmosYamlFuncAwsAccountID            = "!aws.account_id"
+	AtmosYamlFuncAwsCallerIdentityArn    = "!aws.caller_identity_arn"
+	AtmosYamlFuncAwsCallerIdentityUserID = "!aws.caller_identity_user_id"
+	AtmosYamlFuncAwsRegion               = "!aws.region"
 
 	DefaultYAMLIndent = 2
 
@@ -46,19 +53,33 @@ var (
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncCwd,
+		AtmosYamlFuncRandom,
+		AtmosYamlFuncLiteral,
+		AtmosYamlFuncAwsAccountID,
+		AtmosYamlFuncAwsCallerIdentityArn,
+		AtmosYamlFuncAwsCallerIdentityUserID,
+		AtmosYamlFuncAwsRegion,
 	}
 
 	// AtmosYamlTagsMap provides O(1) lookup for custom tag checking.
 	// This optimization replaces the O(n) SliceContainsString calls that were previously
 	// called 75M+ times, causing significant performance overhead.
 	atmosYamlTagsMap = map[string]bool{
-		AtmosYamlFuncExec:            true,
-		AtmosYamlFuncStore:           true,
-		AtmosYamlFuncStoreGet:        true,
-		AtmosYamlFuncTemplate:        true,
-		AtmosYamlFuncTerraformOutput: true,
-		AtmosYamlFuncTerraformState:  true,
-		AtmosYamlFuncEnv:             true,
+		AtmosYamlFuncExec:                    true,
+		AtmosYamlFuncStore:                   true,
+		AtmosYamlFuncStoreGet:                true,
+		AtmosYamlFuncTemplate:                true,
+		AtmosYamlFuncTerraformOutput:         true,
+		AtmosYamlFuncTerraformState:          true,
+		AtmosYamlFuncEnv:                     true,
+		AtmosYamlFuncCwd:                     true,
+		AtmosYamlFuncRandom:                  true,
+		AtmosYamlFuncLiteral:                 true,
+		AtmosYamlFuncAwsAccountID:            true,
+		AtmosYamlFuncAwsCallerIdentityArn:    true,
+		AtmosYamlFuncAwsCallerIdentityUserID: true,
+		AtmosYamlFuncAwsRegion:               true,
 	}
 
 	// ParsedYAMLCache stores parsed yaml.Node objects and their position information
@@ -589,6 +610,16 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 	for _, n := range node.Content {
 		tag := strings.TrimSpace(n.Tag)
 		val := strings.TrimSpace(n.Value)
+
+		// Handle !literal tag - preserve value exactly as-is, bypass all template processing.
+		// This is processed early (like !include) so the value is never sent through
+		// Go template or Gomplate evaluation.
+		if tag == AtmosYamlFuncLiteral {
+			// Just clear the tag and keep the value unchanged.
+			// The value will pass through without any template processing.
+			n.Tag = ""
+			continue
+		}
 
 		// Use O(1) map lookup instead of O(n) slice search for performance.
 		// This optimization reduces 75M+ linear searches to constant-time lookups.

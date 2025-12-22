@@ -162,20 +162,34 @@ Each channel **must** be vendored to a unique path. If all channels vendor to th
 
 ### Stack Configuration
 
-After vendoring components from the appropriate branches to distinct paths, stacks use `metadata.component` to reference the correct channel-specific path:
+After vendoring components from the appropriate branches to distinct paths, define a base component in your catalog with `metadata.name` for stable workspace keys, then have stacks inherit and override the channel-specific path:
+
+<File title="stacks/catalog/vpc.yaml">
+```yaml
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+        name: vpc  # Stable identity - convention: top-level folder
+        # Each environment overrides 'component' to point to its channel
+```
+</File>
 
 <Tabs>
 <TabItem value="dev" label="Development" default>
 <File title="stacks/dev/us-east-1.yaml">
 ```yaml
+import:
+  - catalog/vpc
+
 components:
   terraform:
     vpc:
       metadata:
-        # Point to the dev channel vendored path
-        component: channels/dev/vpc
-      settings:
-        workspace_key_prefix: "vpc"
+        inherits: [vpc/defaults]
+        component: channels/dev/vpc  # Point to dev channel vendored path
+        # Inherits name: vpc → workspace_key_prefix: "vpc"
       vars:
         name: "dev-use1-vpc"
         cidr_block: "10.0.0.0/16"
@@ -186,14 +200,16 @@ components:
 <TabItem value="staging" label="Staging">
 <File title="stacks/staging/us-east-1.yaml">
 ```yaml
+import:
+  - catalog/vpc
+
 components:
   terraform:
     vpc:
       metadata:
-        # Point to the staging channel vendored path
-        component: channels/staging/vpc
-      settings:
-        workspace_key_prefix: "staging/vpc"
+        inherits: [vpc/defaults]
+        component: channels/staging/vpc  # Point to staging channel vendored path
+        # Inherits name: vpc → workspace_key_prefix: "vpc"
       vars:
         name: "staging-use1-vpc"
         cidr_block: "10.1.0.0/16"
@@ -204,14 +220,16 @@ components:
 <TabItem value="prod" label="Production">
 <File title="stacks/prod/us-east-1.yaml">
 ```yaml
+import:
+  - catalog/vpc
+
 components:
   terraform:
     vpc:
       metadata:
-        # Point to the production channel vendored path
-        component: channels/prod/vpc
-      settings:
-        workspace_key_prefix: "prod/vpc"
+        inherits: [vpc/defaults]
+        component: channels/prod/vpc  # Point to prod channel vendored path
+        # Inherits name: vpc → workspace_key_prefix: "vpc"
       vars:
         name: "prod-use1-vpc"
         cidr_block: "10.2.0.0/16"
@@ -344,4 +362,4 @@ Git Flow for infrastructure works best when you have strong CI/CD practices and 
 - [Release Tracks/Channels](./release-tracks-channels) - Configuration-based channel management
 - [Strict Version Pinning](./strict-version-pinning) - Tag-based version control
 - [Folder-Based Versioning](./folder-based-versioning) - File system-based versioning
-- [Component Inheritance](/design-patterns/component-inheritance) - Extending components across branches
+- [Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance) - Extending components across branches

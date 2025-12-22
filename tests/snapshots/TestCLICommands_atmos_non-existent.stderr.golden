@@ -11,12 +11,15 @@ Valid subcommands are:
 • aws
 • completion
 • describe
+• devcontainer
 • docs
+• env
 • helmfile
 • help
 • list
 • packer
 • pro
+• profile
 • show
 • support
 • terraform

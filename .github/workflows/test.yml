@@ -217,7 +217,7 @@ jobs:
         run: make testacc-cover
 
       - name: Upload coverage report to Codecov
-        if: matrix.flavor.target == 'linux'
+        if: matrix.flavor.target == 'linux' && (success() || failure())
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -418,6 +418,7 @@ jobs:
           # - examples/demo-stack-templating
           # - examples/demo-multi-cloud
           - examples/demo-vendoring
+          - examples/config-profiles
           - tests/fixtures/scenarios/complete
 
     timeout-minutes: 20
