@@ -114,7 +114,7 @@ The streaming UI automatically falls back to standard output when:
 
 1. **No TTY attached**: Output is being piped or redirected
 2. **CI environment detected**: `CI=true` environment variable is set
-3. **Unsupported command**: Commands other than `plan`, `apply`, `init`, `refresh`
+3. **Unsupported command**: Commands other than `plan`, `apply`, `init`, `destroy`
 
 This ensures scripts and CI pipelines continue to work without modification.
 

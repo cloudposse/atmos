@@ -36,7 +36,9 @@ func TestShouldUseStreamingUI_UnsupportedCommand(t *testing.T) {
 }
 
 func TestShouldUseStreamingUI_SupportedCommands(t *testing.T) {
-	supportedCommands := []string{"plan", "apply", "init", "refresh"}
+	// Test that supported commands (plan, apply, init, destroy) still need enablement.
+	// Note: refresh is NOT supported due to poor -json streaming support.
+	supportedCommands := []string{"plan", "apply", "init", "destroy"}
 	for _, cmd := range supportedCommands {
 		// In non-CI, non-TTY environment, this would still return false.
 		// But we're testing the command filtering logic.

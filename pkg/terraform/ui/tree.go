@@ -85,8 +85,13 @@ func buildTreeFromPlan(plan *tfjson.Plan, stack, component string) (*DependencyT
 			continue
 		}
 
+		// Determine action, handling composite actions like replace (delete+create).
 		action := "no-op"
-		if len(rc.Change.Actions) > 0 {
+		if len(rc.Change.Actions) == 2 {
+			// Composite action: Terraform can emit ["delete", "create"] or ["create", "delete"]
+			// for replace operations. We represent this as "replace".
+			action = "replace"
+		} else if len(rc.Change.Actions) > 0 {
 			action = string(rc.Change.Actions[0])
 		}
 
@@ -219,15 +224,35 @@ func extractReferences(expr *tfjson.Expression, prefix string) []string {
 		if strings.HasPrefix(ref, "var.") || strings.HasPrefix(ref, "local.") {
 			continue
 		}
-		// Add prefix for module context.
-		if prefix != "" && !strings.HasPrefix(ref, "module.") {
-			ref = prefix + "." + ref
-		}
-		// Normalize to resource address (remove attribute path).
-		parts := strings.Split(ref, ".")
-		if len(parts) >= 2 {
-			// Keep resource_type.name format.
-			ref = parts[0] + "." + parts[1]
+
+		// Handle module-qualified references (e.g., module.vpc.aws_subnet.main.id).
+		if strings.HasPrefix(ref, "module.") {
+			parts := strings.Split(ref, ".")
+			// Minimum for a module reference: module.name (2 parts).
+			// For a resource within a module: module.name.resource_type.resource_name (4+ parts).
+			if len(parts) >= 4 {
+				// Extract the module path and resource address.
+				// e.g., module.vpc.aws_subnet.main.id -> module path is module.vpc,
+				// resource is aws_subnet.main.
+				modulePath := parts[0] + "." + parts[1]
+				resourceType := parts[2]
+				resourceName := parts[3]
+				ref = modulePath + "." + resourceType + "." + resourceName
+			} else if len(parts) >= 2 {
+				// Just a module reference (module.name) - keep as-is.
+				ref = parts[0] + "." + parts[1]
+			}
+		} else {
+			// Non-module reference - normalize to resource address (remove attribute path).
+			parts := strings.Split(ref, ".")
+			if len(parts) >= 2 {
+				// Keep resource_type.name format.
+				ref = parts[0] + "." + parts[1]
+			}
+			// Add prefix for module context.
+			if prefix != "" {
+				ref = prefix + "." + ref
+			}
 		}
 		refs = append(refs, ref)
 	}
@@ -540,6 +565,7 @@ func colorizedActionSymbol(action string) string {
 	updateStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorYellow))
 	deleteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
 	readStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
+	replaceStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorPink)) // Pink for replace (delete+create).
 
 	// Use colored dot (●) for all actions instead of +/-/~.
 	switch action {
@@ -549,6 +575,8 @@ func colorizedActionSymbol(action string) string {
 		return updateStyle.Render(theme.IconActive)
 	case "delete":
 		return deleteStyle.Render(theme.IconActive)
+	case "replace":
+		return replaceStyle.Render(theme.IconActive)
 	case "read":
 		return readStyle.Render(theme.IconActive)
 	case "no-op":
@@ -575,6 +603,10 @@ func countActions(node *TreeNode, add, change, remove *int) {
 	case "update":
 		*change++
 	case "delete":
+		*remove++
+	case "replace":
+		// Replace counts as both add and remove since the resource is destroyed and recreated.
+		*add++
 		*remove++
 	}
 

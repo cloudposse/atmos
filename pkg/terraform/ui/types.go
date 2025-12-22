@@ -226,10 +226,10 @@ func (s ResourceState) String() string {
 
 // ResourceOperation tracks the lifecycle of a single resource.
 type ResourceOperation struct {
-	Address      string        // e.g., "aws_instance.example"
+	Address      string        // e.g., "aws_instance.example".
 	Module       string        // Module path if applicable.
-	ResourceType string        // e.g., "aws_instance"
-	ResourceName string        // e.g., "example"
+	ResourceType string        // e.g., "aws_instance".
+	ResourceName string        // e.g., "example".
 	Action       string        // create, update, delete, read, no-op.
 	State        ResourceState // Current state.
 	StartTime    time.Time     // When operation started.
