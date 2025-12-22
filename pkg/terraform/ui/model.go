@@ -19,6 +19,10 @@ const (
 	progressBarWidth = 40
 	tickInterval     = 100 * time.Millisecond
 
+	// minDisplayDuration ensures the progress UI is visible for at least this long.
+	// This helps users see the progress even for fast operations.
+	minDisplayDuration = 5 * time.Second
+
 	// ANSI escape sequences for terminal control.
 	clearToEOL = "\x1b[K" // Clear from cursor to end of line.
 	cursorUp   = "\x1b[A" // Move cursor up one line.
@@ -52,6 +56,9 @@ type doneMsg struct {
 	exitCode int
 	err      error
 }
+
+// delayedQuitMsg signals it's time to quit after the minimum display duration.
+type delayedQuitMsg struct{}
 
 // tickMsg for periodic updates.
 type tickMsg time.Time
@@ -151,9 +158,24 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.listenForMessages()
 
 	case doneMsg:
-		m.done = true
 		m.exitCode = msg.exitCode
 		m.err = msg.err
+
+		// Check if we need to wait for minimum display duration.
+		elapsed := time.Since(m.startTime)
+		if elapsed < minDisplayDuration {
+			// Wait for remaining time before quitting.
+			remaining := minDisplayDuration - elapsed
+			return m, tea.Tick(remaining, func(time.Time) tea.Msg {
+				return delayedQuitMsg{}
+			})
+		}
+
+		m.done = true
+		return m, tea.Quit
+
+	case delayedQuitMsg:
+		m.done = true
 		return m, tea.Quit
 	}
 
