@@ -405,12 +405,17 @@ func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, pref
 
 		// Determine key style based on change type (color indicates change type).
 		// No symbol on attribute lines - only color-coded keys.
+		// - Green: new attribute (before=nil, after!=nil)
+		// - Red: deleted attribute (before!=nil, after=nil, NOT unknown)
+		// - Yellow: updated attribute (both have values, or unknown computed value)
 		var keyStyle lipgloss.Style
 		if change.Before == nil && change.After != nil {
 			keyStyle = createStyle
-		} else if change.Before != nil && change.After == nil {
+		} else if change.Before != nil && change.After == nil && !change.Unknown {
+			// Only show as delete if it's truly being removed (not a computed value).
 			keyStyle = deleteStyle
 		} else {
+			// Updated value (including unknown/computed values).
 			keyStyle = updateStyle
 		}
 
