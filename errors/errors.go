@@ -660,6 +660,20 @@ var (
 	ErrInteractiveModeNotAvailable = errors.New("interactive mode not available")
 	ErrNoOptionsAvailable          = errors.New("no options available")
 
+	// Integration errors.
+	ErrIntegrationNotFound    = errors.New("integration not found")
+	ErrUnknownIntegrationKind = errors.New("unknown integration kind")
+	ErrIntegrationFailed      = errors.New("integration execution failed")
+	ErrNoLinkedIntegrations   = errors.New("identity has no linked integrations")
+
+	// ECR authentication errors.
+	ErrECRAuthFailed       = errors.New("ECR authentication failed")
+	ErrECRTokenExpired     = errors.New("ECR authorization token expired")
+	ErrECRRegistryNotFound = errors.New("ECR registry not found")
+	ErrECRInvalidRegistry  = errors.New("invalid ECR registry URL")
+	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
+	ErrDockerConfigRead    = errors.New("failed to read Docker config")
+
 	// Locals-related errors.
 	ErrLocalsInvalidType       = errors.New("locals must be a map")
 	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
