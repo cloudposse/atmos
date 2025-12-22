@@ -443,13 +443,16 @@ func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, pref
 			hasBeforeContent := beforeStr != "" && beforeStr != "(none)"
 			hasAfterContent := afterStr != "" && afterStr != "(none)"
 
-			// Render old value lines (if any).
-			if hasBeforeContent {
+			// Render diff based on what content we have.
+			if hasBeforeContent && hasAfterContent {
+				// Both have content - do a proper line-by-line diff.
+				// This shows only changed lines with -/+ markers.
+				renderMultilineDiff(b, beforeStr, afterStr, prefix, hasMoreContent, treeStyle)
+			} else if hasBeforeContent {
+				// Only old content (deletion) - show all lines with -.
 				renderMultilineValue(b, beforeStr, prefix, hasMoreContent, treeStyle, "-")
-			}
-
-			// Render new value lines.
-			if hasAfterContent {
+			} else if hasAfterContent {
+				// Only new content (creation) - show all lines with +.
 				renderMultilineValue(b, afterStr, prefix, hasMoreContent, treeStyle, "+")
 			}
 		} else {
@@ -525,10 +528,84 @@ func formatSimpleValue(v interface{}, sensitive bool) string {
 	}
 }
 
-// renderMultilineValue renders each line of a multi-line string value.
-// Values are not colorized - only the +/- symbol is colored.
-// showTreeLine controls whether to show the vertical tree connector (│) - should be false
-// when this is the last content with nothing below it.
+// renderMultilineDiff renders a line-by-line diff of two multi-line strings.
+// Only lines that differ get -/+ markers; unchanged lines have no marker.
+// This matches Terraform's native diff output style.
+func renderMultilineDiff(b *strings.Builder, before, after string, prefix string, showTreeLine bool, treeStyle lipgloss.Style) {
+	createStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen))
+	deleteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
+
+	// Get terminal width for smart truncation.
+	maxLineWidth := getMaxLineWidth()
+
+	beforeLines := strings.Split(before, "\n")
+	afterLines := strings.Split(after, "\n")
+
+	// Use a simple line-by-line diff algorithm.
+	// For each position, compare lines and output accordingly.
+	maxLen := len(beforeLines)
+	if len(afterLines) > maxLen {
+		maxLen = len(afterLines)
+	}
+
+	i, j := 0, 0
+	for i < len(beforeLines) || j < len(afterLines) {
+		var treeCont string
+		if showTreeLine {
+			treeCont = treeStyle.Render(prefix + "│")
+		} else {
+			treeCont = treeStyle.Render(prefix + " ")
+		}
+
+		// Get current lines (empty string if past end).
+		var beforeLine, afterLine string
+		if i < len(beforeLines) {
+			beforeLine = beforeLines[i]
+		}
+		if j < len(afterLines) {
+			afterLine = afterLines[j]
+		}
+
+		// Truncate long lines.
+		truncateLine := func(line string) string {
+			if len(line) > maxLineWidth {
+				return line[:maxLineWidth-3] + "..."
+			}
+			return line
+		}
+
+		if i < len(beforeLines) && j < len(afterLines) && beforeLine == afterLine {
+			// Lines are identical - no marker, just show the line.
+			b.WriteString(fmt.Sprintf("      %s    %s\n",
+				treeCont,
+				truncateLine(beforeLine),
+			))
+			i++
+			j++
+		} else {
+			// Lines differ - show old line with -, then new line with +.
+			if i < len(beforeLines) {
+				b.WriteString(fmt.Sprintf("      %s  %s %s\n",
+					treeCont,
+					deleteStyle.Render("-"),
+					truncateLine(beforeLine),
+				))
+				i++
+			}
+			if j < len(afterLines) {
+				b.WriteString(fmt.Sprintf("      %s  %s %s\n",
+					treeCont,
+					createStyle.Render("+"),
+					truncateLine(afterLine),
+				))
+				j++
+			}
+		}
+	}
+}
+
+// renderMultilineValue renders each line of a multi-line string value with a symbol.
+// Used when there's only before OR after content (not both for diffing).
 func renderMultilineValue(b *strings.Builder, content, prefix string, showTreeLine bool, treeStyle lipgloss.Style, symbol string) {
 	createStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen))
 	deleteStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
@@ -556,7 +633,7 @@ func renderMultilineValue(b *strings.Builder, content, prefix string, showTreeLi
 		if len(line) > maxLineWidth {
 			line = line[:maxLineWidth-3] + "..."
 		}
-		// Output: tree continuation + symbol + line content (not escaped, not colorized).
+		// Output: tree continuation + symbol + line content.
 		b.WriteString(fmt.Sprintf("      %s  %s %s\n",
 			treeCont,
 			symbolStyle.Render(symbol),
