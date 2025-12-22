@@ -29,8 +29,8 @@ This ensures that the changes defined in your Terraform configuration are applie
 			return err
 		}
 
-		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		// Parse base terraform options with command context for UI flag detection.
+		opts := ParseTerraformRunOptions(v, cmd)
 
 		// Deploy-specific flags (deploy-run-init, from-plan, planfile) flow through
 		// the legacy ProcessCommandLineArgs which sets info.DeployRunInit, etc.

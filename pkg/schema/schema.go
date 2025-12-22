@@ -432,6 +432,14 @@ type Terraform struct {
 	// PluginCacheDir is an optional custom path for the plugin cache.
 	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
 	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	UI             TerraformUI `yaml:"ui" json:"ui" mapstructure:"ui"`
+}
+
+// TerraformUI contains streaming UI configuration.
+type TerraformUI struct {
+	// Enabled enables the streaming TUI mode for plan/apply/init/refresh commands.
+	// When enabled, terraform output is streamed in real-time with a progress display.
+	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
 }
 
 type TerraformInit struct {
@@ -821,6 +829,8 @@ type ConfigAndStacksInfo struct {
 	Components                []string
 	Identity                  string
 	NeedsPathResolution       bool // True if ComponentFromArg is a path that needs resolution.
+	UIEnabled                 bool // Enable streaming UI mode for terraform commands.
+	UIFlagExplicitlySet       bool // Whether --ui flag was explicitly set (vs. config/default).
 }
 
 // GetComponentEnvSection returns the component's env section map.
