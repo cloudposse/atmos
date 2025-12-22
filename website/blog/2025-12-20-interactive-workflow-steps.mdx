@@ -46,6 +46,13 @@ Workflows have evolved from simple command runners into a full-featured automati
 - `shell` - Run shell commands
 - `spin` - Commands with animated progress spinner
 
+**Show Configuration** (workflow and step level):
+- `header` - Display workflow description as styled header
+- `flags` - Show command-line flag values (stack, identity, etc.)
+- `count` - Show step count prefix (e.g., `[1/5]`)
+- `command` - Show step command before execution with `$` prefix
+- `progress` - Show right-aligned progress bar (Docker-build style)
+
 ## Why This Matters
 
 Infrastructure automation often requires human judgment—confirming destructive operations, selecting environments, or providing deployment notes. Previously, teams had to build custom tooling or rely on external scripts. Now you can:
@@ -58,12 +65,17 @@ Infrastructure automation often requires human judgment—confirming destructive
 
 ## How to Use It
 
-Here's a deployment workflow that collects environment, components, and notes before executing:
+Here's a deployment workflow that collects environment, components, and notes before executing. The `show` configuration adds automatic formatting—headers, step counts, and a progress bar:
 
 ```yaml
 workflows:
   deploy:
     description: Interactive deployment with confirmation
+    show:
+      header: true    # Display description as styled header
+      count: true     # Show [1/7] step count
+      command: true   # Show $ prefix before commands
+      progress: true  # Progress bar (TTY only)
     steps:
       - name: welcome
         type: markdown

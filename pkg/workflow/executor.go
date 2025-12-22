@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	stepPkg "github.com/cloudposse/atmos/pkg/workflow/step"
 )
 
 // workflowErrorTitle is the standard title for workflow errors.
@@ -98,8 +99,28 @@ func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
 		return result, err
 	}
 
+	// Initialize show renderer for header/flags display.
+	showRenderer := NewShowRenderer()
+
+	// Build flags map for header display.
+	flags := e.buildFlagsMap(params)
+
+	// Initialize progress renderer if enabled.
+	totalSteps := len(steps)
+	progressRenderer := NewProgressRenderer(params.WorkflowDefinition, totalSteps)
+
+	// Render header before first step (if enabled).
+	showRenderer.RenderHeaderIfNeeded(params.WorkflowDefinition, params.Workflow, flags)
+
 	// Execute each step.
 	for stepIdx, step := range steps {
+
+		// Update and render progress (if enabled).
+		if progressRenderer.IsEnabled() {
+			progressRenderer.Update(stepIdx+1, step.Name)
+			progressRenderer.Render()
+		}
+
 		stepResult := e.executeStep(params, &step, stepIdx)
 		result.Steps = append(result.Steps, stepResult.StepResult)
 
@@ -107,11 +128,37 @@ func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
 			result.Success = false
 			result.Error = stepResult.Error
 			result.ResumeCommand = e.buildResumeCommand(params.Workflow, params.WorkflowPath, step.Name, stepResult.finalStack, params.AtmosConfig)
+			if progressRenderer.IsEnabled() {
+				progressRenderer.Done()
+			}
 			return result, stepResult.Error
 		}
 	}
 
+	// Mark progress as done.
+	if progressRenderer.IsEnabled() {
+		progressRenderer.Done()
+	}
+
 	return result, nil
+}
+
+// buildFlagsMap builds a map of flags for display in the header.
+func (e *Executor) buildFlagsMap(params *WorkflowParams) map[string]string {
+	flags := make(map[string]string)
+	if params.Opts.CommandLineStack != "" {
+		flags["stack"] = params.Opts.CommandLineStack
+	}
+	if params.Opts.CommandLineIdentity != "" {
+		flags["identity"] = params.Opts.CommandLineIdentity
+	}
+	if params.Opts.DryRun {
+		flags["dry-run"] = "true"
+	}
+	if params.Opts.FromStep != "" {
+		flags["from-step"] = params.Opts.FromStep
+	}
+	return flags
 }
 
 // handleFromStep processes the --from-step flag and returns the filtered steps.
@@ -199,6 +246,9 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 	// Calculate working directory with inheritance from workflow-level.
 	workDir := e.calculateWorkingDirectory(params.WorkflowDefinition, step, params.AtmosConfig.BasePath)
 
+	// Render command before execution if show.command is enabled.
+	e.renderStepCommand(step, params.WorkflowDefinition, command, commandType, finalStack)
+
 	// Execute the command based on type.
 	cmdParams := &runCommandParams{
 		command:          command,
@@ -221,6 +271,17 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 		},
 		finalStack: finalStack,
 	}
+}
+
+// renderStepCommand renders the command before execution if show.command is enabled.
+func (e *Executor) renderStepCommand(step *schema.WorkflowStep, workflow *schema.WorkflowDefinition, command, commandType, finalStack string) {
+	displayCmd := command
+	if commandType == config.AtmosCommand && finalStack != "" {
+		displayCmd = fmt.Sprintf("atmos %s -s %s", command, finalStack)
+	} else if commandType == config.AtmosCommand {
+		displayCmd = "atmos " + command
+	}
+	stepPkg.RenderCommand(step, workflow, displayCmd)
 }
 
 // prepareStepEnvironment prepares the environment for a step, handling authentication if needed.

@@ -32,6 +32,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	workflowPkg "github.com/cloudposse/atmos/pkg/workflow"
 	stepPkg "github.com/cloudposse/atmos/pkg/workflow/step"
 )
 
@@ -245,6 +246,9 @@ func ExecuteWorkflow(
 	// Reset step executor state at the start of each workflow to ensure clean variable scope.
 	ResetStepExecutorState()
 
+	// Initialize step executor with stage count for stage step type.
+	initStepExecutorWithStages(workflowDefinition)
+
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
@@ -315,7 +319,33 @@ func ExecuteWorkflow(
 		}
 	}
 
+	// Initialize show renderer for header/flags display.
+	showRenderer := workflowPkg.NewShowRenderer()
+
+	// Build flags map for header display.
+	flags := buildWorkflowFlagsMap(commandLineStack, commandLineIdentity, dryRun, fromStep)
+
+	// Initialize progress renderer if enabled.
+	totalSteps := len(steps)
+	progressRenderer := workflowPkg.NewProgressRenderer(workflowDefinition, totalSteps)
+
 	for stepIdx, step := range steps {
+		// Render header before first step (if enabled).
+		showRenderer.RenderHeaderIfNeeded(workflowDefinition, workflow, flags)
+
+		// Render step label with optional count prefix and progress bar.
+		// When progress is enabled, combine label + progress on single line.
+		// When progress is disabled, just show the label.
+		showCfg := stepPkg.GetShowConfig(&step, workflowDefinition)
+		if progressRenderer.IsEnabled() {
+			progressRenderer.Update(stepIdx+1, step.Name)
+			label := stepPkg.FormatStepLabel(&step, workflowDefinition, stepIdx, totalSteps)
+			progressRenderer.RenderWithLabel(label)
+		} else if stepPkg.ShowCount(showCfg) {
+			label := stepPkg.FormatStepLabel(&step, workflowDefinition, stepIdx, totalSteps)
+			_ = ui.Writeln(label)
+		}
+
 		command := strings.TrimSpace(step.Command)
 		commandType := strings.TrimSpace(step.Type)
 		stepIdentity := strings.TrimSpace(step.Identity)
@@ -347,6 +377,8 @@ func ExecuteWorkflow(
 
 		switch commandType {
 		case "shell":
+			// Render command before execution if show.command is enabled.
+			stepPkg.RenderCommand(&step, workflowDefinition, command)
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
 			err = ExecuteShell(command, commandName, ".", stepEnv, dryRun)
 		case "atmos":
@@ -388,6 +420,14 @@ func ExecuteWorkflow(
 				log.Debug("Using stack", "stack", finalStack)
 			}
 
+			// Build display command for RenderCommand.
+			displayCmd := "atmos " + command
+			if finalStack != "" {
+				displayCmd = fmt.Sprintf("atmos %s -s %s", command, finalStack)
+			}
+			// Render command before execution if show.command is enabled.
+			stepPkg.RenderCommand(&step, workflowDefinition, displayCmd)
+
 			_ = ui.Infof("Executing command: `atmos %s`", command)
 			err = retry.With7Params(context.Background(), step.Retry,
 				ExecuteShellCommand,
@@ -406,6 +446,10 @@ func ExecuteWorkflow(
 		}
 
 		if err != nil {
+			// Clean up progress on error.
+			if progressRenderer.IsEnabled() {
+				progressRenderer.Done()
+			}
 			return buildWorkflowStepError(err, &workflowStepErrorContext{
 				WorkflowPath:     workflowPath,
 				WorkflowBasePath: atmosConfig.Workflows.BasePath,
@@ -416,6 +460,11 @@ func ExecuteWorkflow(
 				FinalStack:       finalStack,
 			})
 		}
+	}
+
+	// Mark progress as done.
+	if progressRenderer.IsEnabled() {
+		progressRenderer.Done()
 	}
 
 	return nil
@@ -452,6 +501,34 @@ func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep,
 // This should be called at the start of a new workflow execution.
 func ResetStepExecutorState() {
 	stepExecutorState = nil
+}
+
+// initStepExecutorWithStages initializes the step executor with stage count.
+// This must be called before executing any steps so stage steps know the total.
+func initStepExecutorWithStages(workflow *schema.WorkflowDefinition) {
+	if stepExecutorState == nil {
+		stepExecutorState = stepPkg.NewStepExecutor()
+	}
+	totalStages := stepPkg.CountStages(workflow)
+	stepExecutorState.Variables().SetTotalStages(totalStages)
+}
+
+// buildWorkflowFlagsMap builds a map of workflow flags for display in the header.
+func buildWorkflowFlagsMap(stack, identity string, dryRun bool, fromStep string) map[string]string {
+	flags := make(map[string]string)
+	if stack != "" {
+		flags["stack"] = stack
+	}
+	if identity != "" {
+		flags["identity"] = identity
+	}
+	if dryRun {
+		flags["dry-run"] = "true"
+	}
+	if fromStep != "" {
+		flags["from-step"] = fromStep
+	}
+	return flags
 }
 
 // ExecuteDescribeWorkflows executes `atmos describe workflows` command.
