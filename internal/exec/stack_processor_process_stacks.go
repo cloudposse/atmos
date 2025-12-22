@@ -590,8 +590,8 @@ func ProcessStackConfig(
 		for componentName, componentConfig := range componentsMap {
 			componentMap, ok := componentConfig.(map[string]any)
 			if !ok {
-				processedComponents[componentName] = componentConfig
-				continue
+				return nil, fmt.Errorf("%w: custom component '%s' in type '%s' must be a map, got %T in stack '%s'",
+					errUtils.ErrInvalidComponentMapType, componentName, componentType, componentConfig, stackName)
 			}
 			// Merge global vars into component vars.
 			componentVars := map[string]any{}
