@@ -31,6 +31,7 @@ type AuthResult struct {
 // ResolveAWSAuth determines the AWS authentication method with precedence:
 // 1. The --identity flag (highest - uses identity system).
 // 2. The helm_aws_profile_pattern (deprecated, logs warning).
+// The context parameter must be non-nil when using helm_aws_profile_pattern.
 func ResolveAWSAuth(input AuthInput, context *Context) (*AuthResult, error) {
 	defer perf.Track(nil, "helmfile.ResolveAWSAuth")()
 
@@ -46,6 +47,9 @@ func ResolveAWSAuth(input AuthInput, context *Context) (*AuthResult, error) {
 
 	// 2. helm_aws_profile_pattern (deprecated).
 	if input.ProfilePattern != "" {
+		if context == nil {
+			return nil, fmt.Errorf("ResolveAWSAuth: context is required for helm_aws_profile_pattern expansion: %w", errUtils.ErrNilParam)
+		}
 		profile := cfg.ReplaceContextTokens(*context, input.ProfilePattern)
 		return &AuthResult{
 			UseIdentityAuth: false,
