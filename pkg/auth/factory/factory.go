@@ -53,6 +53,8 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 		return awsIdentities.NewPermissionSetIdentity(name, config)
 	case "aws/assume-role":
 		return awsIdentities.NewAssumeRoleIdentity(name, config)
+	case "aws/assume-root":
+		return awsIdentities.NewAssumeRootIdentity(name, config)
 	case "aws/user":
 		return awsIdentities.NewUserIdentity(name, config)
 	case "azure/subscription":
