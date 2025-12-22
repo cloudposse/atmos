@@ -36,31 +36,31 @@ Add an optional streaming TUI (Terminal User Interface) mode that transforms Ter
 
 **During execution:**
 ```
-⠋ apply plat-ue2-dev/vpc
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 40% (2/5) 12.3s
+⠋ apply plat-ue2-dev/vpc Creating aws_security_group.default (5.2s)  ████████░░░░ 2/5
 
   ✓ Created  aws_vpc.main (2.1s)
   ✓ Created  aws_subnet.public[0] (1.3s)
-  ⠋ Creating aws_security_group.default (5.2s)
-  ○ Pending  aws_instance.web[0]
-  ○ Pending  aws_instance.web[1]
 ```
+
+The inline progress bar shows spinner, command, current activity, and completion status on a single line.
 
 **Dependency tree with attribute changes:**
 ```
      plat-ue2-dev/myapp
-  ~  ├── aws_s3_object.file
-     │  ~ content_type  "text/html"  →  "text/plain"
-     │  ~ source        "hello.html" →  "hello.txt"
-  +  └── aws_instance.new
-        + ami            (none)       →  "ami-12345"
-        + instance_type  (none)       →  "t3.micro"
+  ●  ├── aws_s3_object.file
+     │     content_type  "text/html"  →  "text/plain"
+     │     source        "hello.html" →  "hello.txt"
+  ●  └── aws_instance.new
+           ami            (none)       →  "ami-12345"
+           instance_type  (none)       →  "t3.micro"
 ```
+
+Resources are marked with colored dots (●): green for create, yellow for update, red for delete. Attribute changes display in a two-column layout with color-coded keys.
 
 **Multi-line value changes:**
 ```
-  ~  └── aws_s3_object.weather
-        ~ content
+  ●  └── aws_s3_object.weather
+           content
           - Current weather: Sunny, 72°F
           - Humidity: 45%
           + Current weather: Cloudy, 65°F
@@ -76,12 +76,12 @@ Add an optional streaming TUI (Terminal User Interface) mode that transforms Ter
 
 **On completion:**
 ```
-✓ apply plat-ue2-dev/vpc completed +3 ~1 -0 (15.2s)
+✓ Apply plat-ue2-dev/vpc completed (15.2s)
 ```
 
 **On error:**
 ```
-✗ apply plat-ue2-dev/vpc failed: 1 error (12.1s)
+✗ Apply plat-ue2-dev/vpc failed: 1 error (12.1s)
   Error: aws_instance.web[0]: InvalidAMIID.NotFound
 ```
 
@@ -187,8 +187,8 @@ pkg/terraform/ui/
 
 **DependencyTree**: Parses terraform plan JSON output to build a visual tree of resource changes with:
 - Box-drawing characters for hierarchical structure
-- Action symbols (+, ~, -) with appropriate colors
-- Attribute-level changes with before → after values
+- Colored dots (●) for resource actions (green=create, yellow=update, red=delete)
+- Attribute-level changes with color-coded keys and before → after values in two-column layout
 - Multi-line value support for file content and similar attributes
 
 **ConfirmApply/ConfirmDestroy**: Interactive confirmation prompts using the `huh` library with:

@@ -17,46 +17,46 @@ We've added an optional streaming UI mode for Terraform commands (`plan`, `apply
 
 **During execution:**
 ```
-⠋ apply plat-ue2-dev/vpc
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 40% (2/5) 12.3s
+⠋ apply plat-ue2-dev/vpc Creating aws_security_group.default (5.2s)  ████████░░░░ 2/5
 
   ✓ Created  aws_vpc.main (2.1s)
   ✓ Created  aws_subnet.public[0] (1.3s)
-  ⠋ Creating aws_security_group.default (5.2s)
-  ○ Pending  aws_instance.web[0]
-  ○ Pending  aws_instance.web[1]
 ```
+
+The inline progress bar shows the current activity, elapsed time, and completion status on a single line.
 
 **On completion:**
 ```
-✓ apply plat-ue2-dev/vpc completed +3 ~1 -0 (15.2s)
+✓ Apply plat-ue2-dev/vpc completed (15.2s)
 ```
 
 **On error:**
 ```
-✗ apply plat-ue2-dev/vpc failed: 1 error (12.1s)
+✗ Apply plat-ue2-dev/vpc failed: 1 error (12.1s)
   Error: aws_instance.web[0]: InvalidAMIID.NotFound
 ```
 
 ### Dependency Tree with Attribute Changes
 
-The streaming UI shows a visual dependency tree of resources being changed, with attribute-level details:
+The streaming UI shows a visual dependency tree of resources being changed, with color-coded indicators:
 
 ```
      plat-ue2-dev/myapp
-  ~  ├── aws_s3_object.file
-     │  ~ content_type  "text/html"  →  "text/plain"
-     │  ~ source        "hello.html" →  "hello.txt"
-  +  └── aws_instance.new
-        + ami            (none)       →  "ami-12345"
-        + instance_type  (none)       →  "t3.micro"
+  ●  ├── aws_s3_object.file
+     │     content_type  "text/html"  →  "text/plain"
+     │     source        "hello.html" →  "hello.txt"
+  ●  └── aws_instance.new
+           ami            (none)       →  "ami-12345"
+           instance_type  (none)       →  "t3.micro"
 ```
+
+Resources are marked with colored dots (●): green for create, yellow for update, red for delete. Attribute changes show old → new values in a two-column layout.
 
 For multi-line values (like file content), each line is shown with add/remove indicators:
 
 ```
-  ~  └── aws_s3_object.weather
-        ~ content
+  ●  └── aws_s3_object.weather
+           content
           - Current weather: Sunny, 72°F
           - Humidity: 45%
           + Current weather: Cloudy, 65°F
