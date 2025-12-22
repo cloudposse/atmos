@@ -556,6 +556,10 @@ var (
 	ErrSSOProvisioningFailed  = errors.New("aws sso identity provisioning failed")
 	ErrSSOInvalidToken        = errors.New("invalid aws sso token")
 
+	// AWS IAM User credential errors.
+	ErrAwsCredentialsInvalid = errors.New("aws credentials are invalid or have been revoked")
+	ErrInvalidDuration       = errors.New("invalid duration format")
+
 	// Auth manager and identity/provider resolution errors (centralized sentinels).
 	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")
 	ErrNoCredentialsFound            = errors.New("no credentials found for identity")
