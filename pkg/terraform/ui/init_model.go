@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/mattn/go-runewidth"
 
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -172,9 +173,9 @@ func (m *InitModel) renderProgress() string {
 	// Show recent provider/module lines (dimmed).
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
 	for _, line := range m.lines {
-		// Truncate long lines.
-		if len(line) > 70 {
-			line = line[:67] + "..."
+		// Truncate long lines using rune-aware width to handle multi-byte UTF-8.
+		if runewidth.StringWidth(line) > 70 {
+			line = runewidth.Truncate(line, 67, "...")
 		}
 		b.WriteString(fmt.Sprintf("    %s\n", dimStyle.Render(line)))
 	}
