@@ -35,9 +35,15 @@ director new terraform-apply-basic
 	// Add subcommands
 	root.AddCommand(newCmd())
 	root.AddCommand(renderCmd())
+	root.AddCommand(publishCmd())
 	root.AddCommand(validateCmd())
 	root.AddCommand(catalogCmd())
 	root.AddCommand(showCmd())
+	root.AddCommand(installCmd())
+	root.AddCommand(exportCmd())
+	root.AddCommand(migrateCmd())
+	root.AddCommand(updateDurationCmd())
+	root.AddCommand(updateThumbnailsCmd())
 
 	// Execute with Fang enhancements (styled help, errors, etc.)
 	return fang.Execute(

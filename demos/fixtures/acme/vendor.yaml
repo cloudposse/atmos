@@ -1,0 +1,39 @@
+# Vendor Configuration
+# Pin and pull component dependencies from remote sources
+
+apiVersion: atmos/v1
+kind: ComponentVendor
+
+metadata:
+  name: acme-components
+  description: Acme Corp component dependencies
+
+spec:
+  sources:
+    # VPC component from Cloud Posse
+    - component: vpc
+      source: github.com/cloudposse/terraform-aws-vpc
+      version: 2.2.0
+      targets:
+        - components/terraform/vpc
+
+    # EKS cluster component
+    - component: cluster
+      source: github.com/cloudposse/terraform-aws-eks-cluster
+      version: 4.1.0
+      targets:
+        - components/terraform/cluster
+
+    # RDS Aurora component
+    - component: database
+      source: github.com/cloudposse/terraform-aws-rds-cluster
+      version: 1.9.0
+      targets:
+        - components/terraform/database
+
+    # ElastiCache Redis component
+    - component: cache
+      source: github.com/cloudposse/terraform-aws-elasticache-redis
+      version: 1.2.0
+      targets:
+        - components/terraform/cache

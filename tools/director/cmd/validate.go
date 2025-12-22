@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ffmpeg"
 	"github.com/cloudposse/atmos/tools/director/internal/scene"
+	"github.com/cloudposse/atmos/tools/director/internal/toolmgr"
 )
 
 func validateCmd() *cobra.Command {
@@ -31,9 +33,32 @@ director validate
 # Shows which scenes are enabled/disabled and any errors
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+
 			demosDir, err := findDemosDir()
 			if err != nil {
 				return err
+			}
+
+			// Load and display tools configuration.
+			toolsConfig, err := toolmgr.LoadToolsConfig(demosDir)
+			if err != nil {
+				return fmt.Errorf("failed to load tools config: %w", err)
+			}
+
+			if toolsConfig != nil && toolsConfig.Atmos != nil {
+				cmd.Println("Tool versions:")
+				mgr := toolmgr.New(toolsConfig, demosDir)
+
+				// Check if atmos is installed at correct version.
+				path, err := mgr.EnsureInstalled(ctx, "atmos")
+				if err != nil {
+					cmd.Printf("  ✗ atmos: %v\n", err)
+				} else {
+					version, _ := mgr.Version("atmos")
+					cmd.Printf("  ✓ atmos v%s (%s)\n", version, path)
+				}
+				cmd.Println()
 			}
 
 			scenesFile := filepath.Join(demosDir, "scenes.yaml")

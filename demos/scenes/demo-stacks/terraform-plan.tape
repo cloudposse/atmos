@@ -1,38 +1,30 @@
 # demo-stacks-terraform-plan scene - Show terraform plan with demo-stacks
 Output demo-stacks-terraform-plan.gif
+Output demo-stacks-terraform-plan.mp4
 
 # VHS Configuration
-Set Theme "Catppuccin Mocha"
+Source ../../scenes/_theme.tape
 Set Width 1400
 Set Height 900
-Set FontSize 14
-Set TypingSpeed 50ms
+
+# Fix prompt (VHS runs with --no-rcs)
+Hide
+Type "PS1='\033[38;2;90;86;224m> \033[0m'"
+Enter
+Ctrl+L
+Show
 
 # Dependencies
 Require atmos
 Require terraform
 
-# Setup
-Type "cd examples/demo-stacks"
-Enter
-Sleep 500ms
-
-Type "# Initialize and plan terraform component"
-Enter
-Sleep 300ms
-
-# First show what we're planning
-Type "atmos describe component myapp --stack dev | grep -A 5 vars"
-Sleep 500ms
-Enter
-Sleep 2s
-
-Type "# Run terraform plan for myapp in dev stack"
+# Scene starts
+Type "# Plan VPC infrastructure changes"
 Enter
 Sleep 300ms
 
 # Execute terraform plan
-Type "atmos terraform plan myapp --stack dev"
+Type "atmos terraform plan vpc -s plat-dev-ue2"
 Sleep 500ms
 Enter
 Sleep 5s
@@ -40,6 +32,16 @@ Sleep 5s
 # Capture screenshot
 Screenshot demo-stacks-terraform-plan.png
 Sleep 2s
+
+# Show another component
+Type "# Plan database changes"
+Enter
+Sleep 300ms
+
+Type "atmos terraform plan database -s plat-dev-ue2"
+Sleep 500ms
+Enter
+Sleep 4s
 
 # Cleanup
 Sleep 1s

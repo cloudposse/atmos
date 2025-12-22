@@ -1,21 +1,23 @@
 # demo-stacks-validate scene - Show validate stacks command
 Output demo-stacks-validate.gif
+Output demo-stacks-validate.mp4
 
 # VHS Configuration
-Set Theme "Catppuccin Mocha"
+Source ../../scenes/_theme.tape
 Set Width 1400
 Set Height 800
-Set FontSize 14
-Set TypingSpeed 50ms
+
+# Fix prompt (VHS runs with --no-rcs)
+Hide
+Type "PS1='\033[38;2;90;86;224m> \033[0m'"
+Enter
+Ctrl+L
+Show
 
 # Dependencies
 Require atmos
 
-# Setup
-Type "cd examples/demo-stacks"
-Enter
-Sleep 500ms
-
+# Scene starts
 Type "# Validate stack configurations"
 Enter
 Sleep 300ms
@@ -35,7 +37,7 @@ Type "# Validate specific component"
 Enter
 Sleep 300ms
 
-Type "atmos validate component myapp --stack dev"
+Type "atmos validate component vpc -s plat-dev-ue2"
 Sleep 500ms
 Enter
 Sleep 2s

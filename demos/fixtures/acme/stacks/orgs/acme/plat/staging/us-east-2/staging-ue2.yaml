@@ -1,0 +1,17 @@
+# Platform Staging US-East-2 Stack
+import:
+  - orgs/acme/plat/_defaults
+  - mixins/region/us-east-2
+  - mixins/stage/staging
+  - catalog/vpc
+  - catalog/cluster
+  - catalog/database
+  - catalog/cache
+  - catalog/api
+  - catalog/frontend
+  - catalog/cdn
+
+vars:
+  tags:
+    Environment: staging
+    Region: us-east-2

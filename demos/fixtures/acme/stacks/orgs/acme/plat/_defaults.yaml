@@ -1,0 +1,8 @@
+# Platform Team Defaults
+import:
+  - orgs/acme/_defaults
+
+vars:
+  tenant: plat
+  tags:
+    Team: Platform

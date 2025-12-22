@@ -1,0 +1,30 @@
+# Platform Production EU-West-1 Stack (DR/GDPR)
+import:
+  - orgs/acme/plat/_defaults
+  - mixins/region/eu-west-1
+  - mixins/stage/prod
+  - catalog/vpc
+  - catalog/cluster
+  - catalog/database
+  - catalog/cache
+  - catalog/api
+  - catalog/frontend
+  - catalog/cdn
+
+vars:
+  tags:
+    Environment: prod
+    Region: eu-west-1
+    Compliance: GDPR
+
+# Lock critical infrastructure in production
+components:
+  terraform:
+    cluster:
+      metadata:
+        locked: true
+        locked_reason: "Critical production infrastructure - requires change management approval"
+    database:
+      metadata:
+        locked: true
+        locked_reason: "Production database - requires DBA approval for changes"

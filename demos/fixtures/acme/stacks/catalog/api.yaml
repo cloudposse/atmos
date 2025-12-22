@@ -1,0 +1,29 @@
+# API Component Catalog
+# Backend API service deployment
+
+components:
+  terraform:
+    api:
+      metadata:
+        component: api
+        type: real
+      vars:
+        enabled: true
+        name: "api"
+        image_repository: "acme/api"
+        image_tag: "latest"
+        replicas: 3
+        cpu_request: "256m"
+        memory_request: "512Mi"
+        cpu_limit: "1000m"
+        memory_limit: "2Gi"
+        health_check_path: "/health"
+        metrics_enabled: true
+        autoscaling:
+          enabled: true
+          min_replicas: 2
+          max_replicas: 10
+          target_cpu_utilization: 70
+        # Read from other component states
+        cluster_endpoint: !terraform.state cluster cluster_endpoint
+        database_endpoint: !terraform.state database endpoint

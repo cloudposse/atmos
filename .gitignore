@@ -21,6 +21,10 @@
 # Atmos binary (only in root directory)
 /atmos
 
+# Demo binaries and large audio files
+tools/director/director
+demos/audio/
+
 # Module directory
 .terraform
 **/.idea
@@ -40,6 +44,10 @@
 # Nix
 .envrc
 .direnv/
+
+# Environment files
+.env*
+!.envrc
 
 # Tool version managers
 .tool-versions

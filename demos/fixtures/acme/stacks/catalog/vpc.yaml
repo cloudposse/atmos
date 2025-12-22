@@ -1,0 +1,21 @@
+# VPC Component Catalog
+# Network foundation for all infrastructure
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        type: real
+      vars:
+        enabled: true
+        name: "vpc"
+        max_subnet_count: 3
+        nat_gateway_enabled: true
+        nat_instance_enabled: false
+        vpc_flow_logs_enabled: true
+        vpc_flow_logs_bucket_arn: ""
+        ipv4_primary_cidr_block: "10.0.0.0/16"
+        map_public_ip_on_launch: true
+        default_security_group_deny_all: true
+        default_network_acl_deny_all: false

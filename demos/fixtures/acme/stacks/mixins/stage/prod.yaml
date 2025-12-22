@@ -1,0 +1,4 @@
+# Stage: Production
+vars:
+  stage: prod
+  namespace: acme

@@ -14,13 +14,24 @@ type ScenesList struct {
 
 // Scene represents a single demo scene.
 type Scene struct {
-	Name        string       `yaml:"name"`
-	Enabled     bool         `yaml:"enabled"`
-	Description string       `yaml:"description"`
-	Tape        string       `yaml:"tape"`
-	Requires    []string     `yaml:"requires"`
-	Outputs     []string     `yaml:"outputs"`
-	Audio       *AudioConfig `yaml:"audio,omitempty"`
+	Name        string         `yaml:"name"`
+	Enabled     bool           `yaml:"enabled"`
+	Description string         `yaml:"description"`
+	Tape        string         `yaml:"tape"`
+	Workdir     string         `yaml:"workdir,omitempty"` // Working directory for VHS (relative to repo root)
+	Requires    []string       `yaml:"requires"`
+	Outputs     []string       `yaml:"outputs"`
+	Audio       *AudioConfig   `yaml:"audio,omitempty"`
+	Tags        []string       `yaml:"tags,omitempty"`    // Tags for filtering (e.g., "featured")
+	Gallery     *GalleryConfig `yaml:"gallery,omitempty"` // Gallery display configuration
+	Prep        []string       `yaml:"prep,omitempty"`    // Shell commands to run before VHS (in workdir)
+}
+
+// GalleryConfig contains settings for how the scene appears in the website gallery.
+type GalleryConfig struct {
+	Category string `yaml:"category"`        // Category ID (e.g., "terraform", "list", "dx")
+	Title    string `yaml:"title,omitempty"` // Display title (defaults to scene name)
+	Order    int    `yaml:"order,omitempty"` // Sort order within category (lower = first)
 }
 
 // AudioConfig contains background audio configuration for MP4 outputs.

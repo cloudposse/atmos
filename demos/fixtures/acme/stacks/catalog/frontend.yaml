@@ -1,0 +1,31 @@
+# Frontend Component Catalog
+# Web application deployment
+
+components:
+  terraform:
+    frontend:
+      metadata:
+        component: frontend
+        type: real
+      vars:
+        enabled: true
+        name: "frontend"
+        image_repository: "acme/frontend"
+        image_tag: "latest"
+        replicas: 3
+        cpu_request: "128m"
+        memory_request: "256Mi"
+        cpu_limit: "500m"
+        memory_limit: "1Gi"
+        health_check_path: "/"
+        static_assets_bucket: true
+        cdn_enabled: true
+        autoscaling:
+          enabled: true
+          min_replicas: 2
+          max_replicas: 20
+          target_cpu_utilization: 60
+        # Read from other component states
+        cluster_endpoint: !terraform.state cluster cluster_endpoint
+        api_endpoint: !terraform.state api service_url
+        cdn_domain: !terraform.state cdn domain_name

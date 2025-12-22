@@ -1,0 +1,25 @@
+# Cache Component Catalog
+# ElastiCache Redis
+
+components:
+  terraform:
+    cache:
+      metadata:
+        component: cache
+        type: real
+      vars:
+        enabled: true
+        name: "redis"
+        engine: "redis"
+        engine_version: "7.1"
+        node_type: "cache.t3.medium"
+        num_cache_clusters: 2
+        automatic_failover_enabled: true
+        at_rest_encryption_enabled: true
+        transit_encryption_enabled: true
+        snapshot_retention_limit: 7
+        snapshot_window: "05:00-06:00"
+        maintenance_window: "Mon:06:00-Mon:07:00"
+        # Read from VPC component state
+        vpc_id: !terraform.state vpc vpc_id
+        subnet_ids: !terraform.state vpc private_subnet_ids
