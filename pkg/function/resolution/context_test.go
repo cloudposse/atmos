@@ -371,7 +371,7 @@ func TestConcurrentContextAccess(t *testing.T) {
 
 			// Each goroutine gets/creates its own context.
 			ctx := GetOrCreate()
-			require.NotNil(t, ctx)
+			assert.NotNil(t, ctx)
 
 			// Push a unique node.
 			atmosConfig := &schema.AtmosConfiguration{}
@@ -381,7 +381,8 @@ func TestConcurrentContextAccess(t *testing.T) {
 				FunctionType: "terraform.output",
 				FunctionCall: "test",
 			}
-			_ = ctx.Push(atmosConfig, node)
+			err := ctx.Push(atmosConfig, node)
+			assert.NoError(t, err)
 
 			// Verify the context has exactly one node.
 			assert.Len(t, ctx.CallStack, 1)

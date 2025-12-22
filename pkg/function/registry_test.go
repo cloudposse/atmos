@@ -238,3 +238,194 @@ func TestTemplateFunction_Execute(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "not json", result)
 }
+
+func TestRegistry_List(t *testing.T) {
+	registry := NewRegistry()
+
+	// Empty registry.
+	names := registry.List()
+	assert.Empty(t, names)
+
+	// Register some functions.
+	fn1 := &EnvFunction{
+		BaseFunction: BaseFunction{
+			FunctionName:  "func1",
+			FunctionPhase: PreMerge,
+		},
+	}
+	fn2 := &EnvFunction{
+		BaseFunction: BaseFunction{
+			FunctionName:  "func2",
+			FunctionPhase: PreMerge,
+		},
+	}
+	require.NoError(t, registry.Register(fn1))
+	require.NoError(t, registry.Register(fn2))
+
+	names = registry.List()
+	assert.Len(t, names, 2)
+	assert.Contains(t, names, "func1")
+	assert.Contains(t, names, "func2")
+}
+
+func TestRegistry_Len(t *testing.T) {
+	registry := NewRegistry()
+
+	// Empty registry.
+	assert.Equal(t, 0, registry.Len())
+
+	// Register a function.
+	fn := &EnvFunction{
+		BaseFunction: BaseFunction{
+			FunctionName:  "len-test",
+			FunctionPhase: PreMerge,
+		},
+	}
+	require.NoError(t, registry.Register(fn))
+	assert.Equal(t, 1, registry.Len())
+}
+
+func TestRegistry_Clear(t *testing.T) {
+	registry := NewRegistry()
+
+	// Register some functions.
+	fn1 := &EnvFunction{
+		BaseFunction: BaseFunction{
+			FunctionName:    "clear-test1",
+			FunctionAliases: []string{"alias1"},
+			FunctionPhase:   PreMerge,
+		},
+	}
+	fn2 := &EnvFunction{
+		BaseFunction: BaseFunction{
+			FunctionName:  "clear-test2",
+			FunctionPhase: PreMerge,
+		},
+	}
+	require.NoError(t, registry.Register(fn1))
+	require.NoError(t, registry.Register(fn2))
+	assert.Equal(t, 2, registry.Len())
+
+	// Clear the registry.
+	registry.Clear()
+	assert.Equal(t, 0, registry.Len())
+	assert.False(t, registry.Has("clear-test1"))
+	assert.False(t, registry.Has("alias1"))
+	assert.False(t, registry.Has("clear-test2"))
+}
+
+func TestRegistry_AliasConflicts(t *testing.T) {
+	registry := NewRegistry()
+
+	// Register a function with alias.
+	fn1 := &EnvFunction{
+		BaseFunction: BaseFunction{
+			FunctionName:    "alias-conflict-1",
+			FunctionAliases: []string{"shared-alias"},
+			FunctionPhase:   PreMerge,
+		},
+	}
+	require.NoError(t, registry.Register(fn1))
+
+	// Try to register another function with same alias.
+	fn2 := &EnvFunction{
+		BaseFunction: BaseFunction{
+			FunctionName:    "alias-conflict-2",
+			FunctionAliases: []string{"shared-alias"},
+			FunctionPhase:   PreMerge,
+		},
+	}
+	err := registry.Register(fn2)
+	assert.ErrorIs(t, err, ErrFunctionAlreadyRegistered)
+}
+
+func TestRegistry_NameConflictsWithAlias(t *testing.T) {
+	registry := NewRegistry()
+
+	// Register a function with alias.
+	fn1 := &EnvFunction{
+		BaseFunction: BaseFunction{
+			FunctionName:    "name-alias-conflict",
+			FunctionAliases: []string{"will-conflict"},
+			FunctionPhase:   PreMerge,
+		},
+	}
+	require.NoError(t, registry.Register(fn1))
+
+	// Try to register function where name matches existing alias.
+	fn2 := &EnvFunction{
+		BaseFunction: BaseFunction{
+			FunctionName:  "will-conflict",
+			FunctionPhase: PreMerge,
+		},
+	}
+	err := registry.Register(fn2)
+	assert.ErrorIs(t, err, ErrFunctionAlreadyRegistered)
+}
+
+func TestRegistry_AliasConflictsWithName(t *testing.T) {
+	registry := NewRegistry()
+
+	// Register a function.
+	fn1 := &EnvFunction{
+		BaseFunction: BaseFunction{
+			FunctionName:  "existing-name",
+			FunctionPhase: PreMerge,
+		},
+	}
+	require.NoError(t, registry.Register(fn1))
+
+	// Try to register function where alias matches existing name.
+	fn2 := &EnvFunction{
+		BaseFunction: BaseFunction{
+			FunctionName:    "new-func",
+			FunctionAliases: []string{"existing-name"},
+			FunctionPhase:   PreMerge,
+		},
+	}
+	err := registry.Register(fn2)
+	assert.ErrorIs(t, err, ErrFunctionAlreadyRegistered)
+}
+
+func TestRegistry_Unregister_NonExistent(t *testing.T) {
+	registry := NewRegistry()
+
+	// Unregister non-existent function should not panic.
+	registry.Unregister("non-existent")
+	assert.Equal(t, 0, registry.Len())
+}
+
+func TestRegistry_CaseInsensitive(t *testing.T) {
+	registry := NewRegistry()
+
+	fn := &EnvFunction{
+		BaseFunction: BaseFunction{
+			FunctionName:    "CaseSensitive",
+			FunctionAliases: []string{"ALIAS"},
+			FunctionPhase:   PreMerge,
+		},
+	}
+	require.NoError(t, registry.Register(fn))
+
+	// Test case-insensitive lookup.
+	assert.True(t, registry.Has("casesensitive"))
+	assert.True(t, registry.Has("CASESENSITIVE"))
+	assert.True(t, registry.Has("alias"))
+	assert.True(t, registry.Has("ALIAS"))
+
+	// Get returns the function with original name case.
+	got, err := registry.Get("CASESENSITIVE")
+	require.NoError(t, err)
+	assert.Equal(t, "CaseSensitive", got.Name())
+}
+
+func TestRegistry_GetByPhase_Empty(t *testing.T) {
+	registry := NewRegistry()
+
+	// Empty registry should return empty slice.
+	preMerge := registry.GetByPhase(PreMerge)
+	assert.Empty(t, preMerge)
+
+	postMerge := registry.GetByPhase(PostMerge)
+	assert.Empty(t, postMerge)
+}

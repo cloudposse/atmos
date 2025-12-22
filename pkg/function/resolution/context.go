@@ -174,7 +174,6 @@ func (ctx *Context) Pop(atmosConfig *schema.AtmosConfiguration) {
 func (ctx *Context) buildCircularDependencyError(newNode DependencyNode) error {
 	var builder strings.Builder
 
-	builder.WriteString(fmt.Sprintf("%s\n\n", errUtils.ErrCircularDependency))
 	builder.WriteString("Dependency chain:\n")
 
 	// Show the full call stack.

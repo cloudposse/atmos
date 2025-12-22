@@ -511,3 +511,112 @@ func TestExtractPipeOptions(t *testing.T) {
 func strPtr(s string) *string {
 	return &s
 }
+
+func TestRetrieveFromStore(t *testing.T) {
+	tests := []struct {
+		name        string
+		storeValue  any
+		storeErr    error
+		hasDefault  bool
+		defaultVal  string
+		want        any
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:       "successful retrieval",
+			storeValue: "stored-value",
+			want:       "stored-value",
+		},
+		{
+			name:       "error with default",
+			storeErr:   errors.New("not found"),
+			hasDefault: true,
+			defaultVal: "default-val",
+			want:       "default-val",
+		},
+		{
+			name:        "error without default",
+			storeErr:    errors.New("not found"),
+			wantErr:     true,
+			errContains: "failed to get key",
+		},
+		{
+			name:       "nil value with default",
+			storeValue: nil,
+			hasDefault: true,
+			defaultVal: "default-for-nil",
+			want:       "default-for-nil",
+		},
+		{
+			name:       "nil value without default",
+			storeValue: nil,
+			want:       nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockStore{
+				getKeyFunc: func(key string) (any, error) {
+					return tt.storeValue, tt.storeErr
+				},
+			}
+
+			params := &storeGetParams{
+				storeName: "test",
+				key:       "testkey",
+			}
+			if tt.hasDefault {
+				params.defaultValue = &tt.defaultVal
+			}
+
+			result, err := retrieveFromStore(mock, params)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errContains != "" {
+					assert.Contains(t, err.Error(), tt.errContains)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, result)
+		})
+	}
+}
+
+func TestStoreParams_Struct(t *testing.T) {
+	// Test that storeParams struct can be created and used.
+	params := storeParams{
+		storeName:    "mystore",
+		stack:        "mystack",
+		component:    "mycomp",
+		key:          "mykey",
+		query:        ".path",
+		defaultValue: strPtr("default"),
+	}
+
+	assert.Equal(t, "mystore", params.storeName)
+	assert.Equal(t, "mystack", params.stack)
+	assert.Equal(t, "mycomp", params.component)
+	assert.Equal(t, "mykey", params.key)
+	assert.Equal(t, ".path", params.query)
+	assert.Equal(t, "default", *params.defaultValue)
+}
+
+func TestStoreGetParams_Struct(t *testing.T) {
+	// Test that storeGetParams struct can be created and used.
+	params := storeGetParams{
+		storeName:    "mystore",
+		key:          "mykey",
+		query:        ".path",
+		defaultValue: strPtr("default"),
+	}
+
+	assert.Equal(t, "mystore", params.storeName)
+	assert.Equal(t, "mykey", params.key)
+	assert.Equal(t, ".path", params.query)
+	assert.Equal(t, "default", *params.defaultValue)
+}

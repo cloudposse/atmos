@@ -2,9 +2,11 @@ package function
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 
+	"github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -42,7 +44,7 @@ func (f *GitRootFunction) Execute(ctx context.Context, args string, execCtx *Exe
 
 	output, err := cmd.Output()
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: failed to get git repository root: %w", errors.ErrGitCommandFailed, err)
 	}
 
 	result := strings.TrimSpace(string(output))
