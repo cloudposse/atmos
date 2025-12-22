@@ -82,8 +82,8 @@ GLOBAL FLAGS
       --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                 standard file descriptor (including '/dev/null')
 
-  -s, --stack string            The stack flag specifies the environment or configuration set for deployment in
-                                Atmos CLI.
+  -s, --stack string            The stack flag specifies the environment or configuration set for deployment in Atmos
+                                CLI.
 
   -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
 
