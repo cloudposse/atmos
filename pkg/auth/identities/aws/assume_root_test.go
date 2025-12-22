@@ -16,7 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/tests"
+	testutil "github.com/cloudposse/atmos/tests"
 )
 
 func TestNewAssumeRootIdentity(t *testing.T) {
@@ -597,13 +597,13 @@ func TestAssumeRootIdentity_Authenticate_ValidationErrors(t *testing.T) {
 			name:        "nil principal",
 			principal:   nil,
 			expectError: true,
-			wantErr:     errUtils.ErrInvalidIdentityConfig,
+			wantErr:     errUtils.ErrMissingPrincipal,
 		},
 		{
 			name:        "missing target_principal",
 			principal:   map[string]any{"task_policy_arn": "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials"},
 			expectError: true,
-			wantErr:     errUtils.ErrInvalidIdentityConfig,
+			wantErr:     errUtils.ErrMissingPrincipal,
 		},
 		{
 			name: "missing task_policy_arn",
@@ -611,7 +611,7 @@ func TestAssumeRootIdentity_Authenticate_ValidationErrors(t *testing.T) {
 				"target_principal": "123456789012",
 			},
 			expectError: true,
-			wantErr:     errUtils.ErrInvalidIdentityConfig,
+			wantErr:     errUtils.ErrMissingPrincipal,
 		},
 	}
 
@@ -643,8 +643,13 @@ func TestAssumeRootIdentity_Authenticate_ValidationErrors(t *testing.T) {
 	}
 }
 
+// TestAssumeRootIdentity_newSTSClient_RegionResolution is an integration test that requires AWS credentials.
+// It validates region resolution logic when creating the STS client.
+// Skips when AWS profile is not available (local development).
+// Unit test coverage for region resolution is provided by TestNewSTSClientWithCredentials_RegionResolution
+// in sts_client_test.go which doesn't require AWS credentials.
 func TestAssumeRootIdentity_newSTSClient_RegionResolution(t *testing.T) {
-	tests.RequireAWSProfile(t, "cplive-core-gbl-identity")
+	testutil.RequireAWSProfile(t, "cplive-core-gbl-identity")
 
 	testCases := []struct {
 		name           string
@@ -1319,6 +1324,8 @@ func TestAssumeRootIdentity_toAWSCredentials_NilExpiration(t *testing.T) {
 }
 
 // mockAuthManager implements types.AuthManager for testing.
+// NOTE: Consider using mockgen to generate this mock if AuthManager interface changes frequently.
+// Example: mockgen -destination=mocks/mock_auth_manager.go -package=mocks github.com/cloudposse/atmos/pkg/auth/types AuthManager.
 type mockAuthManager struct {
 	providerForIdentity map[string]string
 }

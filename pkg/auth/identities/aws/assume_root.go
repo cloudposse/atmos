@@ -167,7 +167,7 @@ func (i *assumeRootIdentity) Authenticate(ctx context.Context, baseCreds types.I
 
 	// Validate identity configuration.
 	if err := i.Validate(); err != nil {
-		return nil, fmt.Errorf("%w: invalid assume root identity: %w", errUtils.ErrInvalidIdentityConfig, err)
+		return nil, err
 	}
 
 	// AssumeRoot requires AWS credentials (cannot use OIDC directly).
