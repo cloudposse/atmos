@@ -334,3 +334,171 @@ func TestPromptForSemanticValues_NilComponent(t *testing.T) {
 	assert.Empty(t, argumentsData)
 	assert.Empty(t, flagsData)
 }
+
+func TestDefaultPromptConfig(t *testing.T) {
+	_ = NewTestKit(t)
+
+	cfg := DefaultPromptConfig()
+
+	assert.NotNil(t, cfg, "DefaultPromptConfig should return non-nil config")
+	assert.NotNil(t, cfg.ListComponents, "ListComponents should be set")
+	assert.NotNil(t, cfg.ListStacks, "ListStacks should be set")
+	assert.NotNil(t, cfg.PromptArg, "PromptArg should be set")
+	assert.NotNil(t, cfg.PromptFlag, "PromptFlag should be set")
+}
+
+func TestPromptForStackValue(t *testing.T) {
+	tests := []struct {
+		name         string
+		mockStacks   []string
+		mockErr      error
+		promptResult string
+		isArg        bool
+		wantValue    string
+		wantErr      bool
+	}{
+		{
+			name:         "returns selected stack for arg",
+			mockStacks:   []string{"dev", "prod", "staging"},
+			promptResult: "prod",
+			isArg:        true,
+			wantValue:    "prod",
+		},
+		{
+			name:         "returns selected stack for flag",
+			mockStacks:   []string{"dev", "prod"},
+			promptResult: "dev",
+			isArg:        false,
+			wantValue:    "dev",
+		},
+		{
+			name:       "returns empty when ListStacks fails",
+			mockStacks: nil,
+			mockErr:    assert.AnError,
+			isArg:      true,
+			wantValue:  "",
+		},
+		{
+			name:       "returns empty when stacks list is empty",
+			mockStacks: []string{},
+			isArg:      true,
+			wantValue:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			mockCfg := &PromptConfig{
+				ListStacks: func(_ *cobra.Command) ([]string, error) {
+					return tt.mockStacks, tt.mockErr
+				},
+				PromptArg: func(_, _ string, _ flags.CompletionFunc, _ *cobra.Command, _ []string) (string, error) {
+					return tt.promptResult, nil
+				},
+				PromptFlag: func(_, _ string, _ flags.CompletionFunc, _ *cobra.Command, _ []string) (string, error) {
+					return tt.promptResult, nil
+				},
+			}
+
+			cmd := &cobra.Command{Use: "test"}
+			result, err := promptForStackValue(cmd, "stack", mockCfg, tt.isArg)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.wantValue, result)
+		})
+	}
+}
+
+func TestPromptForComponentValue(t *testing.T) {
+	tests := []struct {
+		name           string
+		mockComponents []string
+		mockErr        error
+		promptResult   string
+		isArg          bool
+		wantValue      string
+		wantErr        bool
+	}{
+		{
+			name:           "returns selected component for arg",
+			mockComponents: []string{"vpc", "eks", "rds"},
+			promptResult:   "eks",
+			isArg:          true,
+			wantValue:      "eks",
+		},
+		{
+			name:           "returns selected component for flag",
+			mockComponents: []string{"vpc", "eks"},
+			promptResult:   "vpc",
+			isArg:          false,
+			wantValue:      "vpc",
+		},
+		{
+			name:           "returns empty when ListComponents fails",
+			mockComponents: nil,
+			mockErr:        assert.AnError,
+			isArg:          true,
+			wantValue:      "",
+		},
+		{
+			name:           "returns empty when components list is empty",
+			mockComponents: []string{},
+			isArg:          true,
+			wantValue:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			mockCfg := &PromptConfig{
+				ListComponents: func(_ context.Context, _ string, _ map[string]any) ([]string, error) {
+					return tt.mockComponents, tt.mockErr
+				},
+				PromptArg: func(_, _ string, _ flags.CompletionFunc, _ *cobra.Command, _ []string) (string, error) {
+					return tt.promptResult, nil
+				},
+				PromptFlag: func(_, _ string, _ flags.CompletionFunc, _ *cobra.Command, _ []string) (string, error) {
+					return tt.promptResult, nil
+				},
+			}
+
+			cmd := &cobra.Command{Use: "test"}
+			stacksMap := map[string]any{}
+			result, err := promptForComponentValue(cmd, "component", "script", stacksMap, mockCfg, tt.isArg)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.wantValue, result)
+		})
+	}
+}
+
+func TestCustomComponentCompletion(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Test that customComponentCompletion returns a valid function.
+	completionFunc := customComponentCompletion("script")
+	assert.NotNil(t, completionFunc, "customComponentCompletion should return a non-nil function")
+
+	// The function returns a closure that can be called.
+	// We can't easily test the full behavior without a valid atmos config,
+	// but we can verify the function signature is correct.
+	cmd := &cobra.Command{Use: "test"}
+	results, directive := completionFunc(cmd, []string{}, "")
+
+	// Without a valid config, it should return NoFileComp directive.
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	// Results may be nil or empty when config loading fails.
+	assert.Empty(t, results, "Should return empty results when config fails")
+}
