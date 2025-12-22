@@ -965,6 +965,47 @@ workflows:
   <dd>Suppress output (check exit code only)</dd>
 </dl>
 
+### Show Configuration
+
+Control automatic formatting and progress display using the `show` field at the workflow or step level. All options default to `false` (opt-in).
+
+```yaml
+workflows:
+  verbose-deploy:
+    description: Deploy with full visibility
+    show:
+      header: true    # Display workflow description as styled header
+      flags: true     # Show command-line flags (stack, identity, etc.)
+      count: true     # Show step count prefix [1/5]
+      command: true   # Show step command before execution
+      progress: true  # Show progress bar (TTY only)
+    steps:
+      - name: plan
+        type: atmos
+        command: terraform plan vpc
+        show:
+          command: false  # Override: don't show command for this step
+```
+
+<dl>
+  <dt>`header`</dt>
+  <dd>Display the workflow description as a styled header before the first step executes</dd>
+
+  <dt>`flags`</dt>
+  <dd>Show command-line flag values under the header (e.g., `stack: dev`, `identity: prod-admin`)</dd>
+
+  <dt>`command`</dt>
+  <dd>Show each step's command before execution with a `$` prefix for shell-like appearance</dd>
+
+  <dt>`count`</dt>
+  <dd>Show step count prefix (e.g., `[1/5]`) in step headers</dd>
+
+  <dt>`progress`</dt>
+  <dd>Show a right-aligned progress bar during execution (Docker-build style, TTY only)</dd>
+</dl>
+
+Step-level `show` settings override workflow-level defaults via deep merge. Only set fields are overridden; unset fields inherit from the workflow.
+
 ### TTY Requirements
 
 Interactive steps require a terminal (TTY) to function. In non-interactive environments like CI/CD:
@@ -973,6 +1014,7 @@ Interactive steps require a terminal (TTY) to function. In non-interactive envir
 - Set default values in your workflow configuration
 - Use environment variables instead of interactive prompts
 - Consider using conditional logic to skip interactive steps in CI
+- The `progress` show option only renders in TTY mode
 
 ## Executing Workflow from a Named Step
 

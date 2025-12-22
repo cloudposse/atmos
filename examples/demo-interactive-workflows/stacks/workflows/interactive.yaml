@@ -8,6 +8,7 @@
 # - Variable passing between steps using Go templates
 # - UI feedback (toast with levels, markdown)
 # - Conditional flow based on user choices
+# - Show configuration for automatic formatting (header, flags, count, command, progress)
 
 workflows:
 
@@ -323,6 +324,88 @@ workflows:
         title: "Interactive Workflows README"
         path: "README.md"
 
+  # Show configuration demo - automatic formatting features
+  show-demo:
+    description: Demonstrate the show configuration for automatic formatting
+    show:
+      header: true     # Display workflow description as styled header
+      flags: true      # Show command-line flags (stack, identity, etc.)
+      count: true      # Show step count prefix [1/5]
+      progress: true   # Show progress bar (TTY only)
+    steps:
+      - name: intro
+        type: markdown
+        content: |
+          This workflow demonstrates the **show** configuration options.
+
+      - name: pause
+        type: sleep
+        timeout: 500ms
+
+      - name: info
+        type: toast
+        level: info
+        content: "Processing configuration..."
+
+      - name: pause2
+        type: sleep
+        timeout: 500ms
+
+      - name: complete
+        type: toast
+        level: success
+        content: "All steps completed!"
+
+  # Verbose build workflow with full show configuration
+  verbose-build:
+    description: Build with full visibility into each step
+    show:
+      header: true
+      count: true
+      progress: true
+    steps:
+      - name: lint
+        type: toast
+        level: info
+        content: "Linting code..."
+
+      - name: lint-delay
+        type: sleep
+        timeout: 500ms
+
+      - name: lint-done
+        type: toast
+        level: success
+        content: "Lint passed"
+
+      - name: test
+        type: toast
+        level: info
+        content: "Running tests..."
+
+      - name: test-delay
+        type: sleep
+        timeout: 500ms
+
+      - name: test-done
+        type: toast
+        level: success
+        content: "Tests passed"
+
+      - name: build
+        type: toast
+        level: info
+        content: "Building application..."
+
+      - name: build-delay
+        type: sleep
+        timeout: 500ms
+
+      - name: done
+        type: toast
+        level: success
+        content: "Build pipeline complete!"
+
   # Logging workflow example
   logging:
     description: Demonstrate structured logging with different levels
@@ -377,3 +460,51 @@ workflows:
         type: toast
         level: success
         content: "Logging demo complete! Check your log output."
+
+  # Stage workflow example - shows position among stage steps only
+  stage-demo:
+    description: Demonstrate stage step type for high-level progress
+    steps:
+      - name: setup
+        type: stage
+        title: "Setup"
+
+      - name: setup-work
+        type: toast
+        level: info
+        content: "Performing setup tasks..."
+
+      - name: setup-delay
+        type: sleep
+        timeout: 300ms
+
+      - name: configure
+        type: stage
+        title: "Configuration"
+
+      - name: config-work
+        type: toast
+        level: info
+        content: "Configuring application..."
+
+      - name: config-delay
+        type: sleep
+        timeout: 300ms
+
+      - name: deploy
+        type: stage
+        title: "Deployment"
+
+      - name: deploy-work
+        type: toast
+        level: info
+        content: "Deploying to environment..."
+
+      - name: deploy-delay
+        type: sleep
+        timeout: 300ms
+
+      - name: done
+        type: toast
+        level: success
+        content: "Pipeline complete!"

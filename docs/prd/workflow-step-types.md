@@ -219,13 +219,60 @@ workflows:
 - Falls back to `log` mode if terminal is too small or not a TTY
 - Respects `--force-tty` and `ATMOS_FORCE_TTY` for screenshot generation
 
+### Show Configuration
+
+Configure automatic display features for workflows. Supports workflow-level defaults with step-level overrides using deep merge.
+
+```yaml
+workflows:
+  deploy:
+    description: "Deploy infrastructure"
+    show:
+      header: true      # Display workflow description as styled header
+      flags: true       # Show flag values under header (e.g., "stack: dev")
+      command: true     # Show step command before execution ($ prefix)
+      count: true       # Show step count prefix (e.g., "[1/3]")
+      progress: true    # Show progress bar (Docker-build style)
+    steps:
+      - name: validate
+        command: terraform validate
+        type: shell
+        show:
+          command: false  # Override: don't show command for this step
+```
+
+**Show Features:**
+
+| Feature | Description | Default |
+|---------|-------------|---------|
+| `header` | Display workflow description as styled header before first step | `false` |
+| `flags` | Show workflow-level flag values (stack, identity, etc.) under header | `false` |
+| `command` | Show step command before execution with `$` prefix | `false` |
+| `count` | Show step count prefix `[1/3]` before step name | `false` |
+| `progress` | Show right-aligned progress bar (Docker-build style, TTY only) | `false` |
+
+**Show behavior:**
+- All features default to `false` (opt-in for backward compatibility)
+- Uses `*bool` fields for tri-state logic: `nil` (inherit), `true`, `false`
+- Step-level `show` settings override workflow-level settings via deep merge
+- Progress bar only renders in TTY mode (graceful degradation to no-op in CI)
+- Header renders once before the first step executes
+- Flags display workflow-level parameters: `--stack`, `--identity`, `--dry-run`
+
+**Implementation notes:**
+- `ShowConfig` struct in `pkg/schema/workflow.go`
+- `GetShowConfig()` in `pkg/workflow/step/show_config.go` for resolution
+- `ShowRenderer` in `pkg/workflow/show_renderer.go` for header/flags
+- `ProgressRenderer` in `pkg/workflow/progress.go` for progress bar
+- Follows existing patterns: `GetOutputMode()`, `GetViewportConfig()`
+
 ### Step Type Summary
 
 | Category | Types | Description |
 |----------|-------|-------------|
 | **Interactive** | `input`, `confirm`, `choose`, `filter`, `file`, `write` | User prompts (require TTY) |
 | **Output** | `spin`, `table`, `pager`, `format`, `join`, `style`, `linebreak`, `log` | Display formatting |
-| **UI Messages** | `toast`, `markdown` | Status messages |
+| **UI Messages** | `toast`, `markdown`, `sleep`, `stage` | Status messages, timing, and progress |
 | **Terminal** | `alert`, `title`, `clear`, `env`, `exit` | Terminal control and workflow management |
 | **Command** | `atmos`, `shell` | Execute commands (existing) |
 
@@ -763,6 +810,70 @@ Render and display markdown content.
 
 **Fields:**
 - `content` (required) - Markdown text (supports templates)
+
+---
+
+#### `sleep` - Pause Execution
+
+Pauses workflow execution for a specified duration. Useful for demos, rate limiting, or allowing time for resources to stabilize.
+
+```yaml
+- name: wait
+  type: sleep
+  timeout: 2s
+```
+
+**Implementation:** `time.After()` with context cancellation support
+
+**Fields:**
+- `timeout` (optional) - Duration to sleep (default: 1s). Supports Go duration format: `500ms`, `2s`, `1m30s`, etc.
+
+**Notes:**
+- Respects context cancellation (Ctrl+C will interrupt the sleep)
+- Supports Go template resolution in timeout field
+
+---
+
+#### `stage` - Workflow Stage Indicator
+
+Displays a high-level stage position within a workflow. Unlike `show.count` which shows position among all steps, `stage` shows position only among steps of type `stage`.
+
+```yaml
+- name: setup
+  type: stage
+  title: "Setup"
+
+- name: setup-work
+  type: toast
+  content: "Performing setup tasks..."
+
+- name: configure
+  type: stage
+  title: "Configuration"
+
+- name: deploy
+  type: stage
+  title: "Deployment"
+```
+
+Output:
+```
+[Stage 1/3] Setup
+ℹ Performing setup tasks...
+[Stage 2/3] Configuration
+[Stage 3/3] Deployment
+```
+
+**Implementation:** `StageHandler` in `pkg/workflow/step/stage.go`
+
+**Fields:**
+- `title` (optional) - Stage title to display (defaults to step name)
+
+**Notes:**
+- Total stages counted before execution starts
+- Stage index auto-increments as each stage step executes
+- Useful for showing high-level progress in complex workflows
+- Can be combined with `show.progress` for detailed + high-level tracking
 
 ---
 
