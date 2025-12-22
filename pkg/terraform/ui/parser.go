@@ -34,25 +34,28 @@ type ParseResult struct {
 // Next reads and parses the next JSON message.
 // Returns io.EOF when there are no more messages.
 func (p *Parser) Next() (*ParseResult, error) {
-	if !p.scanner.Scan() {
-		if err := p.scanner.Err(); err != nil {
-			return nil, err
+	// Use iterative approach to skip empty lines, avoiding potential stack overflow.
+	for {
+		if !p.scanner.Scan() {
+			if err := p.scanner.Err(); err != nil {
+				return nil, err
+			}
+			return nil, io.EOF
 		}
-		return nil, io.EOF
-	}
 
-	line := p.scanner.Bytes()
-	if len(line) == 0 {
-		// Skip empty lines.
-		return p.Next()
-	}
+		line := p.scanner.Bytes()
+		if len(line) == 0 {
+			// Skip empty lines and continue to the next iteration.
+			continue
+		}
 
-	msg, err := p.parseMessage(line)
-	return &ParseResult{
-		Message: msg,
-		Raw:     append([]byte{}, line...), // Copy to avoid scanner reuse.
-		Err:     err,
-	}, nil
+		msg, err := p.parseMessage(line)
+		return &ParseResult{
+			Message: msg,
+			Raw:     append([]byte{}, line...), // Copy to avoid scanner reuse.
+			Err:     err,
+		}, nil
+	}
 }
 
 // parseMessage parses a JSON line into the appropriate message type.

@@ -143,7 +143,9 @@ func buildArgsWithJSON(args []string, subCommand string) []string {
 	}
 
 	// Find the position to insert -json (after the subcommand).
-	result := make([]string, 0, len(args)+1)
+	// Use explicit capacity to avoid overflow concerns.
+	capacity := len(args) + 1
+	result := make([]string, 0, capacity)
 
 	// For plan, we also want to add -out if not present (for terraform show later).
 	for i, arg := range args {
@@ -550,7 +552,9 @@ func extractPlanFile(args []string) string {
 
 func buildPlanArgs(args []string, planFile string) []string {
 	// Convert apply args to plan args.
-	result := make([]string, 0, len(args)+2)
+	// Use explicit capacity to avoid overflow concerns.
+	capacity := len(args) + 2
+	result := make([]string, 0, capacity)
 
 	// Replace "apply" with "plan".
 	for i, arg := range args {
@@ -577,7 +581,9 @@ func buildApplyArgs(planFile string) []string {
 
 func buildDestroyPlanArgs(args []string, planFile string) []string {
 	// Convert destroy args to plan -destroy args.
-	result := make([]string, 0, len(args)+3)
+	// Use explicit capacity to avoid overflow concerns.
+	capacity := len(args) + 3
+	result := make([]string, 0, capacity)
 
 	// Replace "destroy" with "plan" and add -destroy flag.
 	for i, arg := range args {
