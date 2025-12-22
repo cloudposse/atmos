@@ -45,11 +45,12 @@ type TreeNode struct {
 
 // AttributeChange represents a single attribute change.
 type AttributeChange struct {
-	Key       string      // Attribute name.
-	Before    interface{} // Value before change (nil for create).
-	After     interface{} // Value after change (nil for delete).
-	Unknown   bool        // True if value is "(known after apply)".
-	Sensitive bool        // True if value is sensitive.
+	Key              string      // Attribute name.
+	Before           interface{} // Value before change (nil for create).
+	After            interface{} // Value after change (nil for delete).
+	Unknown          bool        // True if value is "(known after apply)".
+	Sensitive        bool        // True if value is sensitive.
+	ForcesReplacement bool       // True if this attribute forces resource replacement.
 }
 
 // BuildDependencyTree parses a planfile and builds the dependency tree.
@@ -422,14 +423,22 @@ func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, pref
 		// Pad key for alignment.
 		paddedKey := fmt.Sprintf("%-*s", maxKeyWidth, change.Key)
 
+		// Build "# forces replacement" annotation if applicable.
+		var forcesReplacementAnnotation string
+		if change.ForcesReplacement {
+			replaceStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorOrange))
+			forcesReplacementAnnotation = " " + replaceStyle.Render("# forces replacement")
+		}
+
 		// Check if we need multi-line rendering.
 		if fc.isMulti {
 			// Multi-line rendering: show key on first line, then each value line.
 			// No arrow separator for multi-line values.
 			// No symbol - only color-coded key.
-			b.WriteString(fmt.Sprintf("      %s  %s\n",
+			b.WriteString(fmt.Sprintf("      %s  %s%s\n",
 				treeCont,
 				keyStyle.Render(paddedKey),
+				forcesReplacementAnnotation,
 			))
 
 			// Determine if tree line should show for multi-line content:
@@ -462,12 +471,13 @@ func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, pref
 			// Pad old value for consistent column alignment.
 			paddedOldVal := fmt.Sprintf("%-*s", maxOldValWidth, fc.oldVal)
 
-			b.WriteString(fmt.Sprintf("      %s  %s %s  %s  %s\n",
+			b.WriteString(fmt.Sprintf("      %s  %s %s  %s  %s%s\n",
 				treeCont,
 				keyStyle.Render(paddedKey),
 				dimStyle.Render(paddedOldVal),
 				dimStyle.Render("→"),
 				fc.newVal,
+				forcesReplacementAnnotation,
 			))
 		}
 	}
@@ -728,6 +738,20 @@ func extractAttributeChanges(rc *tfjson.ResourceChange) []*AttributeChange {
 	unknownMap, _ := rc.Change.AfterUnknown.(map[string]interface{})
 	sensitiveMap, _ := rc.Change.AfterSensitive.(map[string]interface{})
 
+	// Build a set of attributes that force replacement.
+	// ReplacePaths is a slice of paths, where each path is a slice of indexes (strings or ints).
+	// For top-level attributes, the path is a single-element slice containing the attribute name.
+	forcesReplacement := make(map[string]bool)
+	for _, path := range rc.Change.ReplacePaths {
+		// Each path is a slice of indexes.
+		if pathSlice, ok := path.([]interface{}); ok && len(pathSlice) > 0 {
+			// The first element is the top-level attribute name.
+			if attrName, ok := pathSlice[0].(string); ok {
+				forcesReplacement[attrName] = true
+			}
+		}
+	}
+
 	// Collect all keys from both maps.
 	allKeys := make(map[string]bool)
 	for k := range beforeMap {
@@ -768,11 +792,12 @@ func extractAttributeChanges(rc *tfjson.ResourceChange) []*AttributeChange {
 		// Only include if the value changed.
 		if !valuesEqual(beforeVal, afterVal) || unknown {
 			changes = append(changes, &AttributeChange{
-				Key:       key,
-				Before:    beforeVal,
-				After:     afterVal,
-				Unknown:   unknown,
-				Sensitive: sensitive,
+				Key:               key,
+				Before:            beforeVal,
+				After:             afterVal,
+				Unknown:           unknown,
+				Sensitive:         sensitive,
+				ForcesReplacement: forcesReplacement[key],
 			})
 		}
 	}
