@@ -14,6 +14,10 @@ type Variables struct {
 	Steps map[string]*StepResult
 	// Env contains environment variables.
 	Env map[string]string
+	// stageIndex tracks current stage position (1-indexed).
+	stageIndex int
+	// totalStages tracks total number of stage steps in workflow.
+	totalStages int
 }
 
 // NewVariables creates a new Variables instance with OS environment pre-populated.
@@ -61,6 +65,27 @@ func (v *Variables) GetValues(stepName string) ([]string, bool) {
 // SetEnv sets an environment variable.
 func (v *Variables) SetEnv(key, value string) {
 	v.Env[key] = value
+}
+
+// SetTotalStages sets the total number of stage steps in the workflow.
+func (v *Variables) SetTotalStages(total int) {
+	v.totalStages = total
+}
+
+// GetTotalStages returns the total number of stage steps.
+func (v *Variables) GetTotalStages() int {
+	return v.totalStages
+}
+
+// IncrementStageIndex increments and returns the current stage index.
+func (v *Variables) IncrementStageIndex() int {
+	v.stageIndex++
+	return v.stageIndex
+}
+
+// GetStageIndex returns the current stage index.
+func (v *Variables) GetStageIndex() int {
+	return v.stageIndex
 }
 
 // templateData returns the data structure for Go template execution.

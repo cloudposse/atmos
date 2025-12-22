@@ -12,6 +12,22 @@ type ViewportConfig struct {
 	Width  int `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`    // Columns.
 }
 
+// ShowConfig configures automatic display features for workflows.
+// All fields use *bool to enable tri-state logic: nil (inherit), true, false.
+// This allows step-level settings to override workflow-level defaults via deep merge.
+type ShowConfig struct {
+	// Header auto-displays workflow description as styled header before first step.
+	Header *bool `yaml:"header,omitempty" json:"header,omitempty" mapstructure:"header"`
+	// Flags displays workflow-level flag values under header (e.g., "stack: dev").
+	Flags *bool `yaml:"flags,omitempty" json:"flags,omitempty" mapstructure:"flags"`
+	// Command shows step command before execution (with $ prefix).
+	Command *bool `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
+	// Count shows step count prefix (e.g., "[1/3]").
+	Count *bool `yaml:"count,omitempty" json:"count,omitempty" mapstructure:"count"`
+	// Progress shows progress bar pinned to bottom (Docker-build style, TTY only).
+	Progress *bool `yaml:"progress,omitempty" json:"progress,omitempty" mapstructure:"progress"`
+}
+
 // WorkflowStep represents a single step in a workflow.
 type WorkflowStep struct {
 	// Existing fields.
@@ -79,6 +95,9 @@ type WorkflowStep struct {
 
 	// Exit step type fields.
 	Code int `yaml:"code,omitempty" json:"code,omitempty" mapstructure:"code"` // Exit code for exit step type.
+
+	// Show configuration for this step (overrides workflow-level show settings).
+	Show *ShowConfig `yaml:"show,omitempty" json:"show,omitempty" mapstructure:"show"`
 }
 
 // WorkflowDefinition represents a complete workflow with steps.
@@ -93,6 +112,7 @@ type WorkflowDefinition struct {
 	// Output mode fields.
 	Output   string          `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Default output mode for steps.
 	Viewport *ViewportConfig `yaml:"viewport,omitempty" json:"viewport,omitempty" mapstructure:"viewport"` // Default viewport settings.
+	Show     *ShowConfig     `yaml:"show,omitempty" json:"show,omitempty" mapstructure:"show"`             // Default show settings for steps.
 }
 
 type WorkflowConfig map[string]WorkflowDefinition
