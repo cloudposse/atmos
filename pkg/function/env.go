@@ -38,7 +38,7 @@ func parseEnvArgs(args string) (envVarName, envVarDefault string, err error) {
 
 	parts, err := utils.SplitStringByDelimiter(args, ' ')
 	if err != nil {
-		return "", "", fmt.Errorf("%w: %s", ErrInvalidArguments, args)
+		return "", "", fmt.Errorf("%w: failed to parse args %q: %w", ErrInvalidArguments, args, err)
 	}
 
 	switch len(parts) {

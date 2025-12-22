@@ -3,6 +3,7 @@ package function
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 
@@ -48,7 +49,7 @@ func (f *ExecFunction) Execute(ctx context.Context, args string, execCtx *Execut
 
 	res, err := utils.ExecuteShellAndReturnOutput(args, YAMLTag(TagExec)+" "+args, ".", os.Environ(), false)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: shell execution failed: %w", ErrExecutionFailed, err)
 	}
 
 	// Try to parse as JSON.

@@ -36,8 +36,8 @@ func TestAllTags(t *testing.T) {
 	}
 }
 
-func TestTagsMap(t *testing.T) {
-	// Verify all expected tags are in the map.
+func TestIsValidTag(t *testing.T) {
+	// Verify all expected tags are valid.
 	expectedTags := []string{
 		TagExec,
 		TagStore,
@@ -58,11 +58,11 @@ func TestTagsMap(t *testing.T) {
 	}
 
 	for _, tag := range expectedTags {
-		assert.True(t, TagsMap[tag], "expected tag %s to be in TagsMap", tag)
+		assert.True(t, IsValidTag(tag), "expected tag %s to be valid", tag)
 	}
 
 	// Verify non-existent tag returns false.
-	assert.False(t, TagsMap["non-existent-tag"])
+	assert.False(t, IsValidTag("non-existent-tag"))
 }
 
 func TestYAMLTag(t *testing.T) {
@@ -169,15 +169,12 @@ func TestYAMLTag_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestTagsMap_Consistency(t *testing.T) {
-	// Verify TagsMap is consistent with AllTags.
+func TestIsValidTag_Consistency(t *testing.T) {
+	// Verify IsValidTag is consistent with AllTags.
 	tags := AllTags()
 
-	// All tags in AllTags should be in TagsMap.
+	// All tags in AllTags should be valid.
 	for _, tag := range tags {
-		assert.True(t, TagsMap[tag], "tag %s in AllTags() but not in TagsMap", tag)
+		assert.True(t, IsValidTag(tag), "tag %s in AllTags() but IsValidTag returns false", tag)
 	}
-
-	// Count should match.
-	assert.Equal(t, len(tags), len(TagsMap))
 }

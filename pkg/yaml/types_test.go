@@ -64,22 +64,5 @@ func TestLongString_MarshalYAML_Integration(t *testing.T) {
 	require.NoError(t, err)
 
 	// The output should use folded style (>).
-	assert.Contains(t, string(out), "description:")
-}
-
-func TestDefaultIndent(t *testing.T) {
-	// Verify the default indent constant.
-	assert.Equal(t, 2, DefaultIndent)
-}
-
-func TestOptions_Struct(t *testing.T) {
-	// Verify Options struct can be created and used.
-	opts := Options{
-		Indent: 4,
-	}
-	assert.Equal(t, 4, opts.Indent)
-
-	// Default value.
-	defaultOpts := Options{}
-	assert.Equal(t, 0, defaultOpts.Indent)
+	assert.Contains(t, string(out), "description: >")
 }

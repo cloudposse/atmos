@@ -8,69 +8,78 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExecFunction_Execute_Basic(t *testing.T) {
+func TestExecFunction_Execute_InvalidArgs(t *testing.T) {
 	fn := NewExecFunction()
 
-	// Test simple echo command (echo adds a newline).
-	result, err := fn.Execute(context.Background(), "echo hello", nil)
-	require.NoError(t, err)
-	assert.Equal(t, "hello\n", result)
+	tests := []struct {
+		name string
+		args string
+	}{
+		{name: "empty args", args: ""},
+		{name: "whitespace only", args: "   "},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := fn.Execute(context.Background(), tt.args, nil)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, ErrInvalidArguments)
+		})
+	}
 }
 
-func TestExecFunction_Execute_EmptyArgs(t *testing.T) {
+func TestExecFunction_Execute_OutputParsing(t *testing.T) {
 	fn := NewExecFunction()
 
-	// Empty args should return error.
-	_, err := fn.Execute(context.Background(), "", nil)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrInvalidArguments)
+	tests := []struct {
+		name      string
+		command   string
+		checkFunc func(t *testing.T, result any)
+	}{
+		{
+			name:    "simple string output",
+			command: "echo hello",
+			checkFunc: func(t *testing.T, result any) {
+				assert.Equal(t, "hello\n", result)
+			},
+		},
+		{
+			name:    "JSON object output",
+			command: `echo '{"key": "value"}'`,
+			checkFunc: func(t *testing.T, result any) {
+				m, ok := result.(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "value", m["key"])
+			},
+		},
+		{
+			name:    "JSON array output",
+			command: `echo '[1, 2, 3]'`,
+			checkFunc: func(t *testing.T, result any) {
+				arr, ok := result.([]any)
+				require.True(t, ok)
+				assert.Len(t, arr, 3)
+			},
+		},
+		{
+			name:    "non-JSON output",
+			command: "echo 'not json'",
+			checkFunc: func(t *testing.T, result any) {
+				assert.Equal(t, "not json\n", result)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := fn.Execute(context.Background(), tt.command, nil)
+			require.NoError(t, err)
+			tt.checkFunc(t, result)
+		})
+	}
 }
 
-func TestExecFunction_Execute_WhitespaceOnly(t *testing.T) {
-	fn := NewExecFunction()
-
-	// Whitespace-only args should return error.
-	_, err := fn.Execute(context.Background(), "   ", nil)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrInvalidArguments)
-}
-
-func TestExecFunction_Execute_JSONOutput(t *testing.T) {
-	fn := NewExecFunction()
-
-	// Test command that outputs JSON.
-	result, err := fn.Execute(context.Background(), `echo '{"key": "value"}'`, nil)
-	require.NoError(t, err)
-
-	// Result should be parsed as map.
-	m, ok := result.(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "value", m["key"])
-}
-
-func TestExecFunction_Execute_JSONArray(t *testing.T) {
-	fn := NewExecFunction()
-
-	// Test command that outputs JSON array.
-	result, err := fn.Execute(context.Background(), `echo '[1, 2, 3]'`, nil)
-	require.NoError(t, err)
-
-	// Result should be parsed as slice.
-	arr, ok := result.([]any)
-	require.True(t, ok)
-	assert.Len(t, arr, 3)
-}
-
-func TestExecFunction_Execute_NonJSONOutput(t *testing.T) {
-	fn := NewExecFunction()
-
-	// Test command that outputs non-JSON (echo adds a newline).
-	result, err := fn.Execute(context.Background(), "echo 'not json'", nil)
-	require.NoError(t, err)
-	assert.Equal(t, "not json\n", result)
-}
-
-func TestNewExecFunction(t *testing.T) {
+func TestExecFunction_Metadata(t *testing.T) {
 	fn := NewExecFunction()
 	require.NotNil(t, fn)
 	assert.Equal(t, TagExec, fn.Name())

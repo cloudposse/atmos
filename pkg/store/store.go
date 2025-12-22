@@ -3,6 +3,8 @@ package store
 import "strings"
 
 // Store defines the common interface for all store implementations.
+//
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_store.go -package=store
 type Store interface {
 	Set(stack string, component string, key string, value any) error
 	Get(stack string, component string, key string) (any, error)

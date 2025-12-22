@@ -84,8 +84,8 @@ func AllTags() []string {
 	}
 }
 
-// TagsMap provides O(1) lookup for tag names.
-var TagsMap = map[string]bool{
+// tagsMap provides O(1) lookup for tag names.
+var tagsMap = map[string]bool{
 	TagExec:                    true,
 	TagStore:                   true,
 	TagStoreGet:                true,
@@ -102,6 +102,13 @@ var TagsMap = map[string]bool{
 	TagAwsCallerIdentityArn:    true,
 	TagAwsCallerIdentityUserID: true,
 	TagAwsRegion:               true,
+}
+
+// IsValidTag checks if the given tag name is registered.
+func IsValidTag(tag string) bool {
+	defer perf.Track(nil, "function.IsValidTag")()
+
+	return tagsMap[tag]
 }
 
 // YAMLTag returns the YAML tag format for a function name (e.g., "env" -> "!env").

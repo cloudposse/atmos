@@ -1,9 +1,5 @@
 package function
 
-import (
-	"github.com/cloudposse/atmos/pkg/perf"
-)
-
 // Phase represents when a function should be executed during configuration processing.
 type Phase int
 
@@ -19,8 +15,6 @@ const (
 
 // String returns a human-readable representation of the phase.
 func (p Phase) String() string {
-	defer perf.Track(nil, "function.Phase.String")()
-
 	switch p {
 	case PreMerge:
 		return "pre-merge"

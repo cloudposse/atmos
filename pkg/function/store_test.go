@@ -7,38 +7,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
-
-// mockStore implements the store.Store interface for testing.
-type mockStore struct {
-	getFunc    func(stack, component, key string) (any, error)
-	getKeyFunc func(key string) (any, error)
-	setFunc    func(stack, component, key string, value any) error
-}
-
-func (m *mockStore) Get(stack, component, key string) (any, error) {
-	if m.getFunc != nil {
-		return m.getFunc(stack, component, key)
-	}
-	return nil, errors.New("not implemented")
-}
-
-func (m *mockStore) GetKey(key string) (any, error) {
-	if m.getKeyFunc != nil {
-		return m.getKeyFunc(key)
-	}
-	return nil, errors.New("not implemented")
-}
-
-func (m *mockStore) Set(stack, component, key string, value any) error {
-	if m.setFunc != nil {
-		return m.setFunc(stack, component, key, value)
-	}
-	return nil
-}
 
 func TestNewStoreFunction(t *testing.T) {
 	fn := NewStoreFunction()
@@ -121,15 +94,22 @@ func TestStoreFunction_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &mockStore{
-				getFunc: func(stack, component, key string) (any, error) {
-					return tt.storeValue, tt.storeErr
-				},
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockStore := store.NewMockStore(ctrl)
+
+			// Only set up expectation if store will be found.
+			if tt.errContains != "store 'nonexistent' not found" && tt.errContains != "requires 3 or 4 parameters" {
+				mockStore.EXPECT().
+					Get(gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(tt.storeValue, tt.storeErr).
+					AnyTimes()
 			}
 
 			atmosConfig := &schema.AtmosConfiguration{
 				Stores: map[string]store.Store{
-					"mystore": mock,
+					"mystore": mockStore,
 				},
 			}
 
@@ -228,15 +208,22 @@ func TestStoreGetFunction_Execute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &mockStore{
-				getKeyFunc: func(key string) (any, error) {
-					return tt.storeValue, tt.storeErr
-				},
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockStore := store.NewMockStore(ctrl)
+
+			// Only set up expectation if store will be found.
+			if tt.errContains != "store 'nonexistent' not found" && tt.errContains != "requires 2 parameters" {
+				mockStore.EXPECT().
+					GetKey(gomock.Any()).
+					Return(tt.storeValue, tt.storeErr).
+					AnyTimes()
 			}
 
 			atmosConfig := &schema.AtmosConfiguration{
 				Stores: map[string]store.Store{
-					"mystore": mock,
+					"mystore": mockStore,
 				},
 			}
 
@@ -557,11 +544,14 @@ func TestRetrieveFromStore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &mockStore{
-				getKeyFunc: func(key string) (any, error) {
-					return tt.storeValue, tt.storeErr
-				},
-			}
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockStore := store.NewMockStore(ctrl)
+			mockStore.EXPECT().
+				GetKey(gomock.Any()).
+				Return(tt.storeValue, tt.storeErr).
+				AnyTimes()
 
 			params := &storeGetParams{
 				storeName: "test",
@@ -571,7 +561,7 @@ func TestRetrieveFromStore(t *testing.T) {
 				params.defaultValue = &tt.defaultVal
 			}
 
-			result, err := retrieveFromStore(mock, params)
+			result, err := retrieveFromStore(mockStore, params)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -585,38 +575,4 @@ func TestRetrieveFromStore(t *testing.T) {
 			assert.Equal(t, tt.want, result)
 		})
 	}
-}
-
-func TestStoreParams_Struct(t *testing.T) {
-	// Test that storeParams struct can be created and used.
-	params := storeParams{
-		storeName:    "mystore",
-		stack:        "mystack",
-		component:    "mycomp",
-		key:          "mykey",
-		query:        ".path",
-		defaultValue: strPtr("default"),
-	}
-
-	assert.Equal(t, "mystore", params.storeName)
-	assert.Equal(t, "mystack", params.stack)
-	assert.Equal(t, "mycomp", params.component)
-	assert.Equal(t, "mykey", params.key)
-	assert.Equal(t, ".path", params.query)
-	assert.Equal(t, "default", *params.defaultValue)
-}
-
-func TestStoreGetParams_Struct(t *testing.T) {
-	// Test that storeGetParams struct can be created and used.
-	params := storeGetParams{
-		storeName:    "mystore",
-		key:          "mykey",
-		query:        ".path",
-		defaultValue: strPtr("default"),
-	}
-
-	assert.Equal(t, "mystore", params.storeName)
-	assert.Equal(t, "mykey", params.key)
-	assert.Equal(t, ".path", params.query)
-	assert.Equal(t, "default", *params.defaultValue)
 }

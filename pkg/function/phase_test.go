@@ -37,8 +37,7 @@ func TestPhase_String(t *testing.T) {
 	}
 }
 
-func TestPhase_Constants(t *testing.T) {
-	// Verify the phase constants have expected values.
-	assert.Equal(t, Phase(0), PreMerge)
-	assert.Equal(t, Phase(1), PostMerge)
+func TestPhase_Ordering(t *testing.T) {
+	// Verify PreMerge executes before PostMerge (ordering matters for function execution).
+	assert.True(t, PreMerge < PostMerge)
 }

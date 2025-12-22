@@ -2,6 +2,7 @@ package function
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,43 +15,43 @@ func TestRandomFunction_Execute_ErrorCases(t *testing.T) {
 	tests := []struct {
 		name        string
 		args        string
-		expectError bool
+		expectError error
 		errorMsg    string
 	}{
 		{
 			name:        "invalid max value",
 			args:        "not-a-number",
-			expectError: true,
+			expectError: ErrInvalidArguments,
 			errorMsg:    "invalid max value",
 		},
 		{
 			name:        "invalid min value",
 			args:        "not-a-number 100",
-			expectError: true,
+			expectError: ErrInvalidArguments,
 			errorMsg:    "invalid min value",
 		},
 		{
 			name:        "invalid max value with valid min",
 			args:        "10 not-a-number",
-			expectError: true,
+			expectError: ErrInvalidArguments,
 			errorMsg:    "invalid max value",
 		},
 		{
 			name:        "too many arguments",
 			args:        "1 2 3",
-			expectError: true,
+			expectError: ErrInvalidArguments,
 			errorMsg:    "accepts 0, 1, or 2 arguments",
 		},
 		{
 			name:        "min equals max",
 			args:        "10 10",
-			expectError: true,
+			expectError: ErrInvalidArguments,
 			errorMsg:    "min value",
 		},
 		{
 			name:        "min greater than max",
 			args:        "100 10",
-			expectError: true,
+			expectError: ErrInvalidArguments,
 			errorMsg:    "min value",
 		},
 	}
@@ -58,12 +59,9 @@ func TestRandomFunction_Execute_ErrorCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := fn.Execute(context.Background(), tt.args, nil)
-			if tt.expectError {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errorMsg)
-			} else {
-				require.NoError(t, err)
-			}
+			require.Error(t, err)
+			assert.True(t, errors.Is(err, tt.expectError))
+			assert.Contains(t, err.Error(), tt.errorMsg)
 		})
 	}
 }
@@ -113,6 +111,6 @@ func TestGenerateRandom(t *testing.T) {
 
 	// Test error case.
 	_, err := generateRandom(100, 50)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "min value")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrInvalidArguments))
 }

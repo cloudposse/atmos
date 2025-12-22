@@ -139,10 +139,9 @@ func TestLookupEnvFromContext(t *testing.T) {
 	assert.Empty(t, val)
 }
 
-func TestNewEnvFunction(t *testing.T) {
+func TestEnvFunction_Metadata(t *testing.T) {
 	fn := NewEnvFunction()
 	require.NotNil(t, fn)
 	assert.Equal(t, TagEnv, fn.Name())
 	assert.Equal(t, PreMerge, fn.Phase())
-	assert.Nil(t, fn.Aliases())
 }

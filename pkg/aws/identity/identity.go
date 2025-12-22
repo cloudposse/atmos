@@ -28,7 +28,7 @@ type CallerIdentity struct {
 // Getter provides an interface for retrieving AWS caller identity information.
 // This interface enables dependency injection and testability.
 //
-//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_getter_test.go -package=identity
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_identity.go -package=identity
 type Getter interface {
 	// GetCallerIdentity retrieves the AWS caller identity for the current credentials.
 	// Returns the account ID, ARN, and user ID of the calling identity.
