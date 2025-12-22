@@ -95,3 +95,157 @@ func TestOutputModeWriterDefaults(t *testing.T) {
 	assert.NotNil(t, writer)
 	assert.Equal(t, OutputMode("unknown_mode"), writer.mode)
 }
+
+func TestFormatStepLabel(t *testing.T) {
+	tests := []struct {
+		name       string
+		step       *schema.WorkflowStep
+		workflow   *schema.WorkflowDefinition
+		stepIndex  int
+		totalSteps int
+		wantCount  bool
+	}{
+		{
+			name:       "no count when show.count not enabled",
+			step:       &schema.WorkflowStep{Name: "build"},
+			workflow:   nil,
+			stepIndex:  0,
+			totalSteps: 3,
+			wantCount:  false,
+		},
+		{
+			name: "includes count when show.count enabled",
+			step: &schema.WorkflowStep{
+				Name: "build",
+				Show: &schema.ShowConfig{Count: BoolPtr(true)},
+			},
+			workflow:   nil,
+			stepIndex:  0,
+			totalSteps: 3,
+			wantCount:  true,
+		},
+		{
+			name: "workflow level show.count",
+			step: &schema.WorkflowStep{Name: "test"},
+			workflow: &schema.WorkflowDefinition{
+				Show: &schema.ShowConfig{Count: BoolPtr(true)},
+			},
+			stepIndex:  1,
+			totalSteps: 5,
+			wantCount:  true,
+		},
+		{
+			name: "no count when totalSteps is zero",
+			step: &schema.WorkflowStep{
+				Name: "deploy",
+				Show: &schema.ShowConfig{Count: BoolPtr(true)},
+			},
+			workflow:   nil,
+			stepIndex:  0,
+			totalSteps: 0,
+			wantCount:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatStepLabel(tt.step, tt.workflow, tt.stepIndex, tt.totalSteps)
+
+			// Step name should always be present.
+			assert.Contains(t, result, tt.step.Name)
+
+			if tt.wantCount && tt.totalSteps > 0 {
+				// Should contain count format like [1/3].
+				expectedCount := "[" + string('0'+byte(tt.stepIndex+1)) + "/" + string('0'+byte(tt.totalSteps)) + "]"
+				assert.Contains(t, result, expectedCount)
+			}
+		})
+	}
+}
+
+func TestRenderCommand(t *testing.T) {
+	// RenderCommand writes to ui output, so we just verify it doesn't panic.
+	// The actual output goes to ui.Writeln which writes to stderr.
+	tests := []struct {
+		name     string
+		step     *schema.WorkflowStep
+		workflow *schema.WorkflowDefinition
+		command  string
+	}{
+		{
+			name:     "no output when show.command not enabled",
+			step:     &schema.WorkflowStep{Name: "test"},
+			workflow: nil,
+			command:  "echo hello",
+		},
+		{
+			name: "renders when show.command enabled",
+			step: &schema.WorkflowStep{
+				Name: "test",
+				Show: &schema.ShowConfig{Command: BoolPtr(true)},
+			},
+			workflow: nil,
+			command:  "echo hello",
+		},
+		{
+			name: "no output when command empty",
+			step: &schema.WorkflowStep{
+				Name: "test",
+				Show: &schema.ShowConfig{Command: BoolPtr(true)},
+			},
+			workflow: nil,
+			command:  "",
+		},
+		{
+			name: "workflow level show.command",
+			step: &schema.WorkflowStep{Name: "test"},
+			workflow: &schema.WorkflowDefinition{
+				Show: &schema.ShowConfig{Command: BoolPtr(true)},
+			},
+			command: "make build",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Should not panic.
+			RenderCommand(tt.step, tt.workflow, tt.command)
+		})
+	}
+}
+
+func TestFormatStepFooter(t *testing.T) {
+	writer := NewOutputModeWriter(OutputModeLog, "my_step", nil)
+
+	t.Run("success footer", func(t *testing.T) {
+		footer := writer.formatStepFooter(nil)
+		assert.Contains(t, footer, "my_step")
+		assert.Contains(t, footer, "completed")
+	})
+
+	t.Run("failed footer", func(t *testing.T) {
+		footer := writer.formatStepFooter(assert.AnError)
+		assert.Contains(t, footer, "my_step")
+		assert.Contains(t, footer, "failed")
+	})
+}
+
+func TestFormatSuccessFooter(t *testing.T) {
+	writer := NewOutputModeWriter(OutputModeLog, "deploy", nil)
+
+	// Test without styles (nil styles).
+	footer := writer.formatSuccessFooter(nil)
+	assert.Contains(t, footer, "✓")
+	assert.Contains(t, footer, "deploy")
+	assert.Contains(t, footer, "completed")
+}
+
+func TestFormatFailedFooter(t *testing.T) {
+	writer := NewOutputModeWriter(OutputModeLog, "build", nil)
+
+	// Test without styles (nil styles).
+	footer := writer.formatFailedFooter(nil)
+	assert.Contains(t, footer, "✗")
+	assert.Contains(t, footer, "build")
+	assert.Contains(t, footer, "failed")
+}

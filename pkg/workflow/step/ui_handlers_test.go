@@ -2,11 +2,14 @@ package step
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -390,6 +393,292 @@ func TestStepResult(t *testing.T) {
 	})
 }
 
+func TestToastHandlerExecution(t *testing.T) {
+	handler, ok := Get("toast")
+	require.True(t, ok)
+
+	tests := []struct {
+		name    string
+		level   string
+		content string
+	}{
+		{"success level", "success", "Deployment complete!"},
+		{"info level", "info", "Processing..."},
+		{"warning level", "warning", "Deprecation notice"},
+		{"error level", "error", "Build failed"},
+		{"default level (empty)", "", "Default message"},
+		{"warn alias", "warn", "Warning message"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := &schema.WorkflowStep{
+				Name:    "test_toast",
+				Type:    "toast",
+				Level:   tt.level,
+				Content: tt.content,
+			}
+			vars := NewVariables()
+
+			result, err := handler.Execute(context.Background(), step, vars)
+			// In test environment, UI formatter may not be initialized - this is expected.
+			if err != nil {
+				assert.True(t, errors.Is(err, errUtils.ErrUIFormatterNotInitialized),
+					"expected ErrUIFormatterNotInitialized, got: %v", err)
+				return
+			}
+			assert.Equal(t, tt.content, result.Value)
+		})
+	}
+}
+
+func TestAlertHandlerExecution(t *testing.T) {
+	handler, ok := Get("alert")
+	require.True(t, ok)
+
+	t.Run("alert without content", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name: "test_alert",
+			Type: "alert",
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		// Alert without content doesn't use UI formatter, so should always succeed.
+		require.NoError(t, err)
+		assert.Equal(t, "", result.Value)
+	})
+
+	t.Run("alert with content", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_alert",
+			Type:    "alert",
+			Content: "Task completed!",
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		// In test environment, UI formatter may not be initialized - this is expected.
+		if err != nil {
+			assert.True(t, errors.Is(err, errUtils.ErrUIFormatterNotInitialized),
+				"expected ErrUIFormatterNotInitialized, got: %v", err)
+			return
+		}
+		assert.Equal(t, "Task completed!", result.Value)
+	})
+
+	t.Run("alert with template", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_alert",
+			Type:    "alert",
+			Content: "Deployed {{ .steps.env.value }}",
+		}
+		vars := NewVariables()
+		vars.Set("env", NewStepResult("production"))
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		// In test environment, UI formatter may not be initialized - this is expected.
+		if err != nil {
+			assert.True(t, errors.Is(err, errUtils.ErrUIFormatterNotInitialized),
+				"expected ErrUIFormatterNotInitialized, got: %v", err)
+			return
+		}
+		assert.Equal(t, "Deployed production", result.Value)
+	})
+}
+
+func TestTitleHandlerExecution(t *testing.T) {
+	handler, ok := Get("title")
+	require.True(t, ok)
+
+	t.Run("set title", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_title",
+			Type:    "title",
+			Content: "My Workflow",
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		require.NoError(t, err)
+		assert.Equal(t, "My Workflow", result.Value)
+	})
+
+	t.Run("restore title (empty content)", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name: "test_title",
+			Type: "title",
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		require.NoError(t, err)
+		assert.Equal(t, "", result.Value)
+	})
+
+	t.Run("title with template", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_title",
+			Type:    "title",
+			Content: "Deploying {{ .steps.component.value }}",
+		}
+		vars := NewVariables()
+		vars.Set("component", NewStepResult("vpc"))
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		require.NoError(t, err)
+		assert.Equal(t, "Deploying vpc", result.Value)
+	})
+}
+
+func TestLinebreakHandlerExecution(t *testing.T) {
+	handler, ok := Get("linebreak")
+	require.True(t, ok)
+
+	t.Run("default count (1)", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name: "test_linebreak",
+			Type: "linebreak",
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		// In test environment, UI formatter may not be initialized - this is expected.
+		if err != nil {
+			assert.True(t, errors.Is(err, errUtils.ErrUIFormatterNotInitialized),
+				"expected ErrUIFormatterNotInitialized, got: %v", err)
+			return
+		}
+		assert.Equal(t, "", result.Value)
+	})
+
+	t.Run("explicit count", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:  "test_linebreak",
+			Type:  "linebreak",
+			Count: 3,
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		// In test environment, UI formatter may not be initialized - this is expected.
+		if err != nil {
+			assert.True(t, errors.Is(err, errUtils.ErrUIFormatterNotInitialized),
+				"expected ErrUIFormatterNotInitialized, got: %v", err)
+			return
+		}
+		assert.Equal(t, "", result.Value)
+	})
+
+	t.Run("zero count defaults to 1", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:  "test_linebreak",
+			Type:  "linebreak",
+			Count: 0,
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		// In test environment, UI formatter may not be initialized - this is expected.
+		if err != nil {
+			assert.True(t, errors.Is(err, errUtils.ErrUIFormatterNotInitialized),
+				"expected ErrUIFormatterNotInitialized, got: %v", err)
+			return
+		}
+		assert.Equal(t, "", result.Value)
+	})
+}
+
+func TestClearHandlerExecution(t *testing.T) {
+	handler, ok := Get("clear")
+	require.True(t, ok)
+
+	step := &schema.WorkflowStep{
+		Name: "test_clear",
+		Type: "clear",
+	}
+	vars := NewVariables()
+
+	result, err := handler.Execute(context.Background(), step, vars)
+	// In test environment, UI formatter may not be initialized - this is expected.
+	if err != nil {
+		assert.True(t, errors.Is(err, errUtils.ErrUIFormatterNotInitialized),
+			"expected ErrUIFormatterNotInitialized, got: %v", err)
+		return
+	}
+	assert.Equal(t, "", result.Value)
+}
+
+func TestSleepHandlerExecution(t *testing.T) {
+	handler, ok := Get("sleep")
+	require.True(t, ok)
+
+	t.Run("custom short duration", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_sleep",
+			Type:    "sleep",
+			Timeout: "50ms",
+		}
+		vars := NewVariables()
+
+		start := time.Now()
+		result, err := handler.Execute(context.Background(), step, vars)
+		elapsed := time.Since(start)
+
+		require.NoError(t, err)
+		assert.Equal(t, "50ms", result.Value)
+		assert.GreaterOrEqual(t, elapsed, 50*time.Millisecond)
+		assert.Less(t, elapsed, 500*time.Millisecond)
+	})
+
+	t.Run("context cancellation", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_sleep",
+			Type:    "sleep",
+			Timeout: "10s",
+		}
+		vars := NewVariables()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		// Cancel immediately.
+		cancel()
+
+		_, err := handler.Execute(ctx, step, vars)
+		assert.Error(t, err)
+		assert.Equal(t, context.Canceled, err)
+	})
+
+	t.Run("invalid duration", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_sleep",
+			Type:    "sleep",
+			Timeout: "invalid",
+		}
+		vars := NewVariables()
+
+		_, err := handler.Execute(context.Background(), step, vars)
+		assert.Error(t, err)
+	})
+
+	t.Run("duration with template", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_sleep",
+			Type:    "sleep",
+			Timeout: "{{ .steps.delay.value }}",
+		}
+		vars := NewVariables()
+		vars.Set("delay", NewStepResult("25ms"))
+
+		start := time.Now()
+		result, err := handler.Execute(context.Background(), step, vars)
+		elapsed := time.Since(start)
+
+		require.NoError(t, err)
+		assert.Equal(t, "25ms", result.Value)
+		assert.GreaterOrEqual(t, elapsed, 25*time.Millisecond)
+	})
+}
+
 func TestRegistryOperations(t *testing.T) {
 	t.Run("list returns all handlers", func(t *testing.T) {
 		handlers := List()
@@ -412,5 +701,88 @@ func TestRegistryOperations(t *testing.T) {
 		handler, ok := Get("non-existent")
 		assert.False(t, ok)
 		assert.Nil(t, handler)
+	})
+}
+
+func TestExitHandlerExecution(t *testing.T) {
+	handler, ok := Get("exit")
+	require.True(t, ok)
+
+	t.Run("exit with default code", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name: "test_exit",
+			Type: "exit",
+			Code: 0,
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.True(t, errors.Is(err, errUtils.ErrWorkflowExit))
+		assert.Equal(t, 0, errUtils.GetExitCode(err))
+	})
+
+	t.Run("exit with custom code", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name: "test_exit",
+			Type: "exit",
+			Code: 42,
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		assert.True(t, errors.Is(err, errUtils.ErrWorkflowExit))
+		assert.Equal(t, 42, errUtils.GetExitCode(err))
+	})
+
+	t.Run("exit with content message", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_exit",
+			Type:    "exit",
+			Code:    1,
+			Content: "Exiting workflow",
+		}
+		vars := NewVariables()
+
+		// Execute will fail in test environment if UI is not initialized,
+		// but we're testing the error path.
+		result, err := handler.Execute(context.Background(), step, vars)
+		// May return ErrUIFormatterNotInitialized or ErrWorkflowExit.
+		assert.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("exit with template content", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_exit",
+			Type:    "exit",
+			Code:    1,
+			Content: "Exiting {{ .steps.reason.value }}",
+		}
+		vars := NewVariables()
+		vars.Set("reason", NewStepResult("due to error"))
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		assert.Error(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("exit with invalid template", func(t *testing.T) {
+		step := &schema.WorkflowStep{
+			Name:    "test_exit",
+			Type:    "exit",
+			Code:    1,
+			Content: "Exiting {{ .steps.invalid.value",
+		}
+		vars := NewVariables()
+
+		result, err := handler.Execute(context.Background(), step, vars)
+		assert.Error(t, err)
+		assert.Nil(t, result)
+		// Should be template error, not workflow exit error.
+		assert.False(t, errors.Is(err, errUtils.ErrWorkflowExit))
 	})
 }
