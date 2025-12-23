@@ -19,7 +19,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - cel.dev/expr
     License: Apache-2.0
-    URL: https://github.com/google/cel-spec/blob/v0.24.0/LICENSE
+    URL: Unknown
 
   - cloud.google.com/go/auth
     License: Apache-2.0
