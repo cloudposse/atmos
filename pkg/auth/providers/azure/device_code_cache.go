@@ -308,7 +308,10 @@ func (p *deviceCodeProvider) populateCLICacheWithTokens(
 	log.Debug("Added Account entry to MSAL cache", azureCloud.LogFieldKey, accountKey, "username", username)
 
 	// Add management API token.
-	scope := "https://management.azure.com/.default https://management.azure.com/user_impersonation"
+	// IMPORTANT: Use only ".default" scope to match Azure CLI's token lookup.
+	// Azure CLI looks up tokens using "https://management.azure.com/.default" as the cache key.
+	// Using a different scope format (like adding user_impersonation) causes lookup failures.
+	scope := "https://management.azure.com/.default"
 	cacheKey := addTokenToCLICache(accessTokenSection, update.AccessToken, update.ExpiresAt, scope, ids)
 
 	// Add Graph API and KeyVault tokens if available.
