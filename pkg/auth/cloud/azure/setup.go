@@ -332,10 +332,13 @@ func addAccountAndTokens(accessTokenSection, accountSection map[string]interface
 	accountSection[accountKey] = accountEntry
 
 	// Add management API token.
+	// IMPORTANT: Use only ".default" scope to match Azure CLI's token lookup.
+	// Azure CLI looks up tokens using "https://management.azure.com/.default" as the cache key.
+	// Using a different scope format (like adding user_impersonation) causes lookup failures.
 	addTokenToCache(accessTokenSection, &tokenCacheParams{
 		Token:         params.AccessToken,
 		Expiration:    params.Expiration,
-		Scope:         "https://management.azure.com/.default https://management.azure.com/user_impersonation",
+		Scope:         "https://management.azure.com/.default",
 		HomeAccountID: ids.homeAccountID,
 		Environment:   ids.environment,
 		ClientID:      ids.clientID,
