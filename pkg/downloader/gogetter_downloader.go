@@ -2,6 +2,7 @@ package downloader
 
 import (
 	"context"
+	"net/http"
 	"sync"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -23,6 +24,7 @@ func (c *goGetterClient) Get() error {
 type goGetterClientFactory struct {
 	atmosConfig *schema.AtmosConfiguration
 	retryConfig *schema.RetryConfig
+	httpClient  *http.Client // Optional custom HTTP client for testing.
 }
 
 // NewClient creates a new `go-getter` client.
@@ -38,6 +40,12 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		clientMode = getter.ClientModeFile
 	}
 
+	// Create HTTP getter with optional custom client.
+	httpGetter := &getter.HttpGetter{}
+	if f.httpClient != nil {
+		httpGetter.Client = f.httpClient
+	}
+
 	client := &getter.Client{
 		Ctx:             ctx,
 		Src:             src,
@@ -45,13 +53,13 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		Mode:            clientMode,
 		DisableSymlinks: false,
 		Getters: map[string]getter.Getter{
-			// Overriding 'git'
+			// Overriding 'git'.
 			"git":   &CustomGitGetter{RetryConfig: f.retryConfig},
 			"file":  &getter.FileGetter{},
 			"hg":    &getter.HgGetter{},
-			"http":  &getter.HttpGetter{},
-			"https": &getter.HttpGetter{},
-			// "s3": &getter.S3Getter{}, // add as needed
+			"http":  httpGetter,
+			"https": httpGetter,
+			// "s3": &getter.S3Getter{}, // add as needed.
 			// "gcs": &getter.GCSGetter{},
 		},
 	}
@@ -80,6 +88,14 @@ type GoGetterOption func(*goGetterClientFactory)
 func WithRetryConfig(retryConfig *schema.RetryConfig) GoGetterOption {
 	return func(f *goGetterClientFactory) {
 		f.retryConfig = retryConfig
+	}
+}
+
+// WithHTTPClient sets a custom HTTP client for HTTP/HTTPS requests.
+// This is useful for testing with mock servers or custom transport configurations.
+func WithHTTPClient(client *http.Client) GoGetterOption {
+	return func(f *goGetterClientFactory) {
+		f.httpClient = client
 	}
 }
 

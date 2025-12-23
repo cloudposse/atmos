@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
 func TestYAMLToMapOfInterfaces(t *testing.T) {
@@ -25,6 +27,28 @@ func TestYAMLToMapOfInterfacesRedPath(t *testing.T) {
 }
 
 func TestUnmarshalYAMLFromFile(t *testing.T) {
+	// Create mock server to intercept GitHub requests.
+	// This avoids network dependencies and GitHub rate limiting in CI.
+	mock := httpmock.NewGitHubMockServer(t)
+
+	// Register the remote file content that the fixture expects.
+	// The fixture uses: !include https://raw.githubusercontent.com/.../stack-templates-2/stacks/deploy/nonprod.yaml .components.terraform.component-1.settings
+	mock.RegisterFile("stack-templates-2/stacks/deploy/nonprod.yaml", `
+components:
+  terraform:
+    component-1:
+      settings:
+        config:
+          a: component-1-a
+          b: component-1-b
+          c: component-1-c
+`)
+
+	// Replace default transport to intercept GitHub requests.
+	oldTransport := http.DefaultTransport
+	http.DefaultTransport = mock.Transport()
+	t.Cleanup(func() { http.DefaultTransport = oldTransport })
+
 	stacksPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-include-yaml-function")
 	file := filepath.Join(stacksPath, "stacks", "deploy", "nonprod.yaml")
 

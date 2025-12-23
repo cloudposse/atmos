@@ -2,7 +2,6 @@ package downloader
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,7 +15,6 @@ import (
 )
 
 const (
-	errDownloadFileFormat = "%w: '%s': %v"
 	// MinRateLimitRemaining is the minimum remaining rate limit before pre-check waits.
 	MinRateLimitRemaining = 5
 )
@@ -69,7 +67,11 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 
 	client, err := fd.clientFactory.NewClient(ctx, src, dest, mode)
 	if err != nil {
-		return fmt.Errorf("%w: %v", errUtils.ErrCreateDownloadClient, err)
+		return errUtils.Build(errUtils.ErrCreateDownloadClient).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Check that the URL format is valid").
+			Err()
 	}
 
 	return client.Get()
@@ -81,12 +83,20 @@ func (fd *fileDownloader) FetchAndAutoParse(src string) (any, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
+		return nil, errUtils.Build(errUtils.ErrDownloadFile).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Check network connectivity and verify the URL is accessible").
+			Err()
 	}
 
 	v, err := filetype.DetectFormatAndParseFile(fd.fileReader, filePath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+		return nil, errUtils.Build(errUtils.ErrParseFile).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Verify the file format matches the expected type").
+			Err()
 	}
 	return v, nil
 }
@@ -97,19 +107,27 @@ func (fd *fileDownloader) FetchAndParseByExtension(src string) (any, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
+		return nil, errUtils.Build(errUtils.ErrDownloadFile).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Check network connectivity and verify the URL is accessible").
+			Err()
 	}
 
-	// Create a custom reader that reads the downloaded file but uses the original URL for extension detection
+	// Create a custom reader that reads the downloaded file but uses the original URL for extension detection.
 	readFunc := func(filename string) ([]byte, error) {
-		// Read the actual downloaded file, not the URL
+		// Read the actual downloaded file, not the URL.
 		return fd.fileReader(filePath)
 	}
 
-	// Pass the original source URL for extension detection
+	// Pass the original source URL for extension detection.
 	v, err := filetype.ParseFileByExtension(readFunc, src)
 	if err != nil {
-		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+		return nil, errUtils.Build(errUtils.ErrParseFile).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Verify the file format matches the expected type").
+			Err()
 	}
 	return v, nil
 }
@@ -120,12 +138,20 @@ func (fd *fileDownloader) FetchAndParseRaw(src string) (any, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
+		return nil, errUtils.Build(errUtils.ErrDownloadFile).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Check network connectivity and verify the URL is accessible").
+			Err()
 	}
 
 	v, err := filetype.ParseFileRaw(fd.fileReader, filePath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+		return nil, errUtils.Build(errUtils.ErrParseFile).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Verify the file format matches the expected type").
+			Err()
 	}
 	return v, nil
 }
@@ -136,7 +162,11 @@ func (fd *fileDownloader) FetchData(src string) ([]byte, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
+		return nil, errUtils.Build(errUtils.ErrDownloadFile).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Check network connectivity and verify the URL is accessible").
+			Err()
 	}
 
 	return fd.fileReader(filePath)
