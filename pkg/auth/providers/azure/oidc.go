@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -235,30 +236,48 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials
 	return creds, nil
 }
 
-// acquireAdditionalTokens acquires Graph API and KeyVault tokens.
+// acquireAdditionalTokens acquires Graph API and KeyVault tokens in parallel.
 // These tokens are optional - failures are logged but don't block authentication.
+// Uses goroutines to acquire both tokens concurrently for better performance.
 func (p *oidcProvider) acquireAdditionalTokens(ctx context.Context, federatedToken string, creds *authTypes.AzureCredentials) {
+	var wg sync.WaitGroup
+	var mu sync.Mutex // Protects creds writes.
+
+	wg.Add(2) //nolint:mnd
+
 	// Acquire Microsoft Graph API token (required for azuread provider).
-	graphResp, err := p.exchangeToken(ctx, federatedToken, azureGraphAPIScope)
-	if err != nil {
-		log.Debug("Failed to acquire Graph API token (azuread provider may not work)", "error", err)
-	} else {
+	go func() {
+		defer wg.Done()
+		graphResp, err := p.exchangeToken(ctx, federatedToken, azureGraphAPIScope)
+		if err != nil {
+			log.Debug("Failed to acquire Graph API token (azuread provider may not work)", "error", err)
+			return
+		}
 		expiresOn := time.Now().Add(time.Duration(graphResp.ExpiresIn) * time.Second)
+		mu.Lock()
 		creds.GraphAPIToken = graphResp.AccessToken
 		creds.GraphAPIExpiration = expiresOn.Format(time.RFC3339)
+		mu.Unlock()
 		log.Debug("Acquired Graph API token", "expiresOn", creds.GraphAPIExpiration)
-	}
+	}()
 
 	// Acquire Azure KeyVault API token (optional, for KeyVault operations).
-	kvResp, err := p.exchangeToken(ctx, federatedToken, azureKeyVaultScope)
-	if err != nil {
-		log.Debug("Failed to acquire KeyVault API token (KeyVault operations may not work)", "error", err)
-	} else {
+	go func() {
+		defer wg.Done()
+		kvResp, err := p.exchangeToken(ctx, federatedToken, azureKeyVaultScope)
+		if err != nil {
+			log.Debug("Failed to acquire KeyVault API token (KeyVault operations may not work)", "error", err)
+			return
+		}
 		expiresOn := time.Now().Add(time.Duration(kvResp.ExpiresIn) * time.Second)
+		mu.Lock()
 		creds.KeyVaultToken = kvResp.AccessToken
 		creds.KeyVaultExpiration = expiresOn.Format(time.RFC3339)
+		mu.Unlock()
 		log.Debug("Acquired KeyVault API token", "expiresOn", creds.KeyVaultExpiration)
-	}
+	}()
+
+	wg.Wait()
 }
 
 // readFederatedToken reads the federated token from the configured source.
