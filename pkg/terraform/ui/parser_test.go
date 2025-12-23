@@ -214,3 +214,77 @@ func TestParser_Next_MultipleMessages(t *testing.T) {
 	_, err = parser.Next()
 	assert.Equal(t, io.EOF, err)
 }
+
+func TestParser_Next_OutputsMessage(t *testing.T) {
+	input := `{"@level":"info","@message":"Outputs","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"outputs","outputs":{"vpc_id":{"sensitive":false,"type":"string","value":"vpc-123abc"},"database_password":{"sensitive":true,"type":"string","value":"secret123"}}}` + "\n"
+	parser := NewParser(strings.NewReader(input))
+
+	result, err := parser.Next()
+	require.NoError(t, err)
+	require.NotNil(t, result.Message)
+
+	msg, ok := result.Message.(*OutputsMessage)
+	require.True(t, ok, "expected OutputsMessage")
+	require.Contains(t, msg.Outputs, "vpc_id")
+	require.Contains(t, msg.Outputs, "database_password")
+	assert.Equal(t, "vpc-123abc", msg.Outputs["vpc_id"].Value)
+	assert.False(t, msg.Outputs["vpc_id"].Sensitive)
+	assert.True(t, msg.Outputs["database_password"].Sensitive)
+}
+
+func TestParser_Next_SkipsEmptyLines(t *testing.T) {
+	input := "\n\n\n" + `{"@level":"info","@message":"Terraform 1.9.0","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"version","terraform":"1.9.0","ui":"1.2"}` + "\n\n"
+	parser := NewParser(strings.NewReader(input))
+
+	result, err := parser.Next()
+	require.NoError(t, err)
+	require.NotNil(t, result.Message)
+
+	msg, ok := result.Message.(*VersionMessage)
+	require.True(t, ok, "expected VersionMessage after empty lines")
+	assert.Equal(t, "1.9.0", msg.Terraform)
+}
+
+func TestParser_Next_WarningDiagnostic(t *testing.T) {
+	input := `{"@level":"warn","@message":"Warning: Deprecated attribute","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"diagnostic","diagnostic":{"severity":"warning","summary":"Deprecated attribute","detail":"The attribute 'foo' is deprecated. Use 'bar' instead."}}` + "\n"
+	parser := NewParser(strings.NewReader(input))
+
+	result, err := parser.Next()
+	require.NoError(t, err)
+	require.NotNil(t, result.Message)
+
+	msg, ok := result.Message.(*DiagnosticMessage)
+	require.True(t, ok, "expected DiagnosticMessage")
+	assert.Equal(t, "warning", msg.Diagnostic.Severity)
+	assert.Equal(t, "Deprecated attribute", msg.Diagnostic.Summary)
+	assert.Contains(t, msg.Diagnostic.Detail, "deprecated")
+}
+
+func TestParser_Next_DiagnosticWithRange(t *testing.T) {
+	input := `{"@level":"error","@message":"Error: Invalid expression","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"diagnostic","diagnostic":{"severity":"error","summary":"Invalid expression","detail":"Expected string, got number","range":{"filename":"main.tf","start":{"line":10,"column":5,"byte":100},"end":{"line":10,"column":15,"byte":110}}}}` + "\n"
+	parser := NewParser(strings.NewReader(input))
+
+	result, err := parser.Next()
+	require.NoError(t, err)
+	require.NotNil(t, result.Message)
+
+	msg, ok := result.Message.(*DiagnosticMessage)
+	require.True(t, ok, "expected DiagnosticMessage")
+	require.NotNil(t, msg.Diagnostic.Range)
+	assert.Equal(t, "main.tf", msg.Diagnostic.Range.Filename)
+	assert.Equal(t, 10, msg.Diagnostic.Range.Start.Line)
+	assert.Equal(t, 5, msg.Diagnostic.Range.Start.Column)
+}
+
+func TestParser_Next_LogMessage(t *testing.T) {
+	input := `{"@level":"info","@message":"Some log message","@module":"terraform.ui","@timestamp":"2024-01-01T00:00:00.000000Z","type":"log"}` + "\n"
+	parser := NewParser(strings.NewReader(input))
+
+	result, err := parser.Next()
+	require.NoError(t, err)
+	require.NotNil(t, result.Message)
+
+	// Log messages should be parsed but we don't have a specific type for them.
+	// They may return a generic map or a LogMessage type.
+	assert.NotNil(t, result.Message)
+}

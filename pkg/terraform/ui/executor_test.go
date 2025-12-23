@@ -145,6 +145,163 @@ func TestIsNumericString(t *testing.T) {
 	}
 }
 
+func TestExtractOutFlag(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected string
+	}{
+		{"flag with separate value", []string{"plan", "-out", "myplan.tfplan"}, "myplan.tfplan"},
+		{"flag with equals", []string{"plan", "-out=myplan.tfplan"}, "myplan.tfplan"},
+		{"no flag", []string{"plan"}, ""},
+		{"other flags only", []string{"plan", "-var", "foo=bar"}, ""},
+		{"flag at end without value", []string{"plan", "-out"}, ""},
+		{"empty args", []string{}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractOutFlag(tt.args)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestHasFlag(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		flag     string
+		expected bool
+	}{
+		{"flag present", []string{"apply", "-auto-approve"}, "-auto-approve", true},
+		{"flag absent", []string{"apply"}, "-auto-approve", false},
+		{"multiple flags with target", []string{"apply", "-var", "x=1", "-auto-approve"}, "-auto-approve", true},
+		{"similar prefix not matched", []string{"apply", "-auto-approve-all"}, "-auto-approve", false},
+		{"empty args", []string{}, "-auto-approve", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasFlag(tt.args, tt.flag)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExtractPlanFile(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected string
+	}{
+		{"--from-plan with separate value", []string{"apply", "--from-plan", "plan.tfplan"}, "plan.tfplan"},
+		{"--from-plan with equals", []string{"apply", "--from-plan=plan.tfplan"}, "plan.tfplan"},
+		{"--planfile with separate value", []string{"apply", "--planfile", "plan.tfplan"}, "plan.tfplan"},
+		{"--planfile with equals", []string{"apply", "--planfile=plan.tfplan"}, "plan.tfplan"},
+		{"positional planfile", []string{"apply", "myplan.tfplan"}, "myplan.tfplan"},
+		{"no planfile", []string{"apply", "-auto-approve"}, ""},
+		{"positional non-tfplan file", []string{"apply", "config.tf"}, ""},
+		{"empty args", []string{}, ""},
+		{"single arg apply only", []string{"apply"}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractPlanFile(tt.args)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildPlanArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		planFile string
+		expected []string
+	}{
+		{
+			name:     "basic apply to plan",
+			args:     []string{"apply", "-var", "foo=bar"},
+			planFile: "/tmp/plan.tfplan",
+			expected: []string{"plan", "-var", "foo=bar", "-out=/tmp/plan.tfplan"},
+		},
+		{
+			name:     "strips auto-approve",
+			args:     []string{"apply", "-auto-approve", "-var", "x=1"},
+			planFile: "/tmp/plan.tfplan",
+			expected: []string{"plan", "-var", "x=1", "-out=/tmp/plan.tfplan"},
+		},
+		{
+			name:     "apply only",
+			args:     []string{"apply"},
+			planFile: "/tmp/plan.tfplan",
+			expected: []string{"plan", "-out=/tmp/plan.tfplan"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildPlanArgs(tt.args, tt.planFile)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildApplyArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		planFile string
+		expected []string
+	}{
+		{"basic planfile", "/tmp/plan.tfplan", []string{"apply", "/tmp/plan.tfplan"}},
+		{"different path", "/var/tmp/my-plan.tfplan", []string{"apply", "/var/tmp/my-plan.tfplan"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildApplyArgs(tt.planFile)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildDestroyPlanArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		planFile string
+		expected []string
+	}{
+		{
+			name:     "basic destroy to plan",
+			args:     []string{"destroy", "-var", "foo=bar"},
+			planFile: "/tmp/destroy.tfplan",
+			expected: []string{"plan", "-destroy", "-var", "foo=bar", "-out=/tmp/destroy.tfplan"},
+		},
+		{
+			name:     "strips auto-approve",
+			args:     []string{"destroy", "-auto-approve"},
+			planFile: "/tmp/destroy.tfplan",
+			expected: []string{"plan", "-destroy", "-out=/tmp/destroy.tfplan"},
+		},
+		{
+			name:     "destroy only",
+			args:     []string{"destroy"},
+			planFile: "/tmp/destroy.tfplan",
+			expected: []string{"plan", "-destroy", "-out=/tmp/destroy.tfplan"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildDestroyPlanArgs(tt.args, tt.planFile)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestFormatOutputValue(t *testing.T) {
 	tests := []struct {
 		name     string

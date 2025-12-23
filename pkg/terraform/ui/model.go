@@ -41,6 +41,17 @@ type Model struct {
 	component string // Component name for display.
 	stack     string // Stack name for display.
 	command   string // "plan", "apply", "init", "refresh".
+	clock     Clock  // Clock for time operations (injectable for testing).
+}
+
+// ModelOption configures a Model.
+type ModelOption func(*Model)
+
+// WithClock sets the clock implementation for time operations.
+func WithClock(c Clock) ModelOption {
+	return func(m *Model) {
+		m.clock = c
+	}
 }
 
 // messageMsg wraps a parsed terraform message.
@@ -58,7 +69,7 @@ type doneMsg struct {
 type tickMsg time.Time
 
 // NewModel creates a new streaming model.
-func NewModel(component, stack, command string, reader io.Reader) *Model {
+func NewModel(component, stack, command string, reader io.Reader, opts ...ModelOption) *Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
@@ -69,7 +80,7 @@ func NewModel(component, stack, command string, reader io.Reader) *Model {
 		progress.WithoutPercentage(),
 	)
 
-	return &Model{
+	m := &Model{
 		tracker:   NewResourceTracker(),
 		parser:    NewParser(reader),
 		reader:    reader,
@@ -78,8 +89,18 @@ func NewModel(component, stack, command string, reader io.Reader) *Model {
 		component: component,
 		stack:     stack,
 		command:   command,
-		startTime: time.Now(),
+		clock:     defaultClock(),
 	}
+
+	// Apply options.
+	for _, opt := range opts {
+		opt(m)
+	}
+
+	// Set startTime using the clock (after options are applied).
+	m.startTime = m.clock.Now()
+
+	return m
 }
 
 // Init initializes the model.
@@ -193,7 +214,7 @@ func (m Model) progressView() string {
 	activityInfo := ""
 	if currentOp := m.tracker.GetCurrentActivity(); currentOp != nil {
 		activityVerb := m.formatActivityVerb(currentOp)
-		opElapsed := time.Since(currentOp.StartTime).Seconds()
+		opElapsed := m.clock.Since(currentOp.StartTime).Seconds()
 		activityInfo = mutedStyle.Render(fmt.Sprintf(" %s %s (%.1fs)", activityVerb, currentOp.Address, opElapsed))
 	}
 
@@ -207,7 +228,7 @@ func (m Model) progressView() string {
 		progressBar := m.progress.ViewAs(percent)
 		progressInfo = fmt.Sprintf("%s %d/%d", progressBar, completed, total)
 	} else {
-		elapsed := time.Since(m.startTime).Seconds()
+		elapsed := m.clock.Since(m.startTime).Seconds()
 		progressInfo = fmt.Sprintf("%.1fs", elapsed)
 	}
 
@@ -304,7 +325,7 @@ func (m Model) renderResource(res *ResourceOperation) string {
 	// Build timing info.
 	var timingStr string
 	if res.State == ResourceStateInProgress || res.State == ResourceStateRefreshing {
-		elapsed := time.Since(res.StartTime).Seconds()
+		elapsed := m.clock.Since(res.StartTime).Seconds()
 		timingStr = fmt.Sprintf(" (%.1fs)", elapsed)
 	} else if res.State == ResourceStateComplete || res.State == ResourceStateError {
 		if res.ElapsedSecs > 0 {
@@ -379,7 +400,7 @@ func (m Model) formatActionComplete(action string) string {
 // finalView renders the completion state.
 func (m Model) finalView() string {
 	var b strings.Builder
-	elapsed := time.Since(m.startTime).Seconds()
+	elapsed := m.clock.Since(m.startTime).Seconds()
 
 	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
 	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))

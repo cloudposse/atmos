@@ -38,6 +38,17 @@ type InitModel struct {
 	stack      string
 	subCommand string // "init" or "workspace"
 	workspace  string // Workspace name (for workspace commands)
+	clock      Clock  // Clock for time operations (injectable for testing).
+}
+
+// InitModelOption configures an InitModel.
+type InitModelOption func(*InitModel)
+
+// WithInitClock sets the clock implementation for time operations.
+func WithInitClock(c Clock) InitModelOption {
+	return func(m *InitModel) {
+		m.clock = c
+	}
 }
 
 // initLineMsg wraps a line from init output.
@@ -52,13 +63,13 @@ type initDoneMsg struct {
 }
 
 // NewInitModel creates a new init/workspace streaming model.
-func NewInitModel(component, stack, subCommand, workspace string, reader io.Reader) *InitModel {
+func NewInitModel(component, stack, subCommand, workspace string, reader io.Reader, opts ...InitModelOption) *InitModel {
 	// Use MiniDot spinner for init/workspace (more subtle, different from plan/apply).
 	s := spinner.New()
 	s.Spinner = spinner.MiniDot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
 
-	return &InitModel{
+	m := &InitModel{
 		spinner:    s,
 		scanner:    bufio.NewScanner(reader),
 		lines:      make([]string, 0),
@@ -66,8 +77,18 @@ func NewInitModel(component, stack, subCommand, workspace string, reader io.Read
 		stack:      stack,
 		subCommand: subCommand,
 		workspace:  workspace,
-		startTime:  time.Now(),
+		clock:      defaultClock(),
 	}
+
+	// Apply options.
+	for _, opt := range opts {
+		opt(m)
+	}
+
+	// Set startTime using the clock (after options are applied).
+	m.startTime = m.clock.Now()
+
+	return m
 }
 
 // Init initializes the model.
@@ -152,7 +173,7 @@ func (m InitModel) View() string {
 func (m *InitModel) renderProgress() string {
 	var b strings.Builder
 
-	elapsed := time.Since(m.startTime).Seconds()
+	elapsed := m.clock.Since(m.startTime).Seconds()
 	action := m.formatAction()
 
 	// Header line with spinner.
@@ -184,7 +205,7 @@ func (m *InitModel) renderProgress() string {
 }
 
 func (m *InitModel) renderComplete() string {
-	elapsed := time.Since(m.startTime).Seconds()
+	elapsed := m.clock.Since(m.startTime).Seconds()
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
 
 	// Format the action description.
