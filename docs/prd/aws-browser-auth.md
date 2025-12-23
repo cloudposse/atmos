@@ -7,37 +7,44 @@
 
 ## Overview
 
-Add support for AWS browser-based authentication using the new `aws login` command introduced in AWS CLI 2.32.0. This enables developers to authenticate to AWS using the same credentials they use for the AWS Management Console, eliminating the need for long-term IAM access keys.
+Enhance the existing `aws/user` identity to support browser-based OAuth2 authentication as a fallback when no static credentials are configured. This enables developers to authenticate using the same credentials they use for the AWS Management Console, eliminating the need for long-term IAM access keys.
 
 ## Problem Statement
 
-Currently, atmos supports AWS authentication via:
-- **IAM Identity Center (SSO)** - `aws/iam-identity-center` provider
-- **SAML** - `aws/saml` provider
-- **Static IAM User Credentials** - `aws/user` identity
+Currently, the `aws/user` identity requires one of:
+1. Hardcoded credentials in YAML config
+2. Credentials stored in keychain via `atmos auth user configure`
 
-However, many AWS users authenticate to the console using:
+If neither is available, authentication fails with an error prompting the user to run `atmos auth user configure`.
+
+Many AWS users authenticate to the console using:
 - Root user credentials
 - IAM user username/password
 - Federated identity providers (non-SSO)
 
-These users currently have no secure way to obtain programmatic credentials in atmos without creating long-term access keys, which AWS discourages as a security risk.
+These users should be able to authenticate seamlessly without pre-configuring static credentials.
 
 ## Solution
 
-Introduce a new `aws/login` provider that leverages the AWS CLI's `aws login` command to obtain temporary credentials through browser-based OAuth2 authentication with PKCE.
+Enhance the `aws/user` identity with a three-tier credential resolution strategy:
+
+1. **YAML Config** - Hardcoded or environment-sourced credentials
+2. **Keychain** - Credentials stored via `atmos auth user configure`
+3. **Browser Webflow** - OAuth2 authentication via AWS console sign-in (NEW)
+
+This is NOT a new provider type - it enhances the existing `aws/user` identity.
 
 ## User Stories
 
-### US-1: IAM User Authentication
-**As** a developer with an IAM user account
-**I want** to authenticate using my console username and password
-**So that** I can use atmos without creating long-term access keys
+### US-1: Zero-Config Authentication
+**As** a developer with an AWS account
+**I want** to use `atmos auth login` without pre-configuring credentials
+**So that** I can get started immediately using my console credentials
 
-### US-2: Root User Authentication
-**As** an AWS account administrator
-**I want** to authenticate using root credentials when necessary
-**So that** I can perform privileged operations securely
+### US-2: Fallback Authentication
+**As** a developer whose keychain credentials expired or were deleted
+**I want** atmos to automatically fall back to browser authentication
+**So that** I don't need to manually reconfigure credentials
 
 ### US-3: Federated User Authentication
 **As** a developer who signs in via corporate identity provider
@@ -51,7 +58,7 @@ Introduce a new `aws/login` provider that leverages the AWS CLI's `aws login` co
 
 ### US-5: Role Chaining
 **As** a developer
-**I want** to assume IAM roles using my login credentials
+**I want** to assume IAM roles using my browser-authenticated credentials
 **So that** I can access resources in different accounts
 
 ## Technical Details
@@ -104,58 +111,67 @@ Two new events are logged:
 
 ## Configuration Schema
 
-### Provider Configuration
+### Identity Configuration
+
+The `aws/user` identity now supports three credential sources with automatic fallback:
 
 ```yaml
 auth:
-  providers:
-    <provider-name>:
-      kind: aws/login
-      region: <aws-region>        # Required: AWS region
+  identities:
+    <identity-name>:
+      kind: aws/user
+      credentials:
+        region: <aws-region>      # Optional: AWS region (default: us-east-1)
+        # Optional: Static credentials (highest priority)
+        access_key_id: <key>
+        secret_access_key: <secret>
+        mfa_arn: <arn>            # Optional: MFA device ARN
       session:
         duration: <duration>      # Optional: Session duration (default: 12h, max: 12h)
-      spec:
-        remote: <bool>            # Optional: Force headless mode (default: false)
-        profile: <string>         # Optional: AWS CLI profile name (default: atmos-<provider-name>)
 ```
+
+### Credential Resolution Order
+
+1. **YAML Config** - If `access_key_id` and `secret_access_key` are set
+2. **Keychain** - If credentials stored via `atmos auth user configure`
+3. **Browser Webflow** - If neither above is available (NEW)
 
 ### Example Configurations
 
-#### Basic Usage
+#### Zero-Config (Browser Auth Only)
 ```yaml
 auth:
-  providers:
-    aws-console:
-      kind: aws/login
-      region: us-east-1
+  identities:
+    my-user:
+      kind: aws/user
+      # No credentials block - will use browser authentication
 ```
 
-#### With Role Assumption
+#### Static Credentials from Environment
 ```yaml
 auth:
-  providers:
-    aws-console:
-      kind: aws/login
-      region: us-east-1
-
   identities:
+    my-user:
+      kind: aws/user
+      credentials:
+        access_key_id: !env MY_AWS_ACCESS_KEY_ID
+        secret_access_key: !env MY_AWS_SECRET_ACCESS_KEY
+```
+
+#### With Role Chaining
+```yaml
+auth:
+  identities:
+    my-user:
+      kind: aws/user
+      # Browser auth as fallback
+
     prod-admin:
       kind: aws/assume-role
       via:
-        provider: aws-console
+        identity: my-user
       principal:
         role_arn: arn:aws:iam::123456789012:role/AdminRole
-```
-
-#### Headless Mode
-```yaml
-auth:
-  providers:
-    aws-console-remote:
-      kind: aws/login
-      region: us-east-1
-      spec:
-        remote: true
 ```
 
 ## User Experience
@@ -163,7 +179,10 @@ auth:
 ### Interactive Flow (Browser Available)
 
 ```
-$ atmos auth login --provider aws-console
+$ atmos auth login --identity my-user
+
+No stored credentials found for 'my-user'.
+Starting browser authentication...
 
 ╭──────────────────────────────────────────────────────────╮
 │  🔐 AWS Browser Authentication                           │
@@ -177,7 +196,7 @@ $ atmos auth login --provider aws-console
 
 ✓ Authentication successful!
 
-  Provider    aws-console
+  Identity    my-user
   Account     123456789012
   Principal   arn:aws:iam::123456789012:user/developer
   Region      us-east-1
@@ -186,8 +205,13 @@ $ atmos auth login --provider aws-console
 
 ### Headless Flow (Remote Mode)
 
+When running in a non-TTY environment or with `--remote` flag:
+
 ```
-$ atmos auth login --provider aws-console-remote
+$ atmos auth login --identity my-user --remote
+
+No stored credentials found for 'my-user'.
+Starting browser authentication (remote mode)...
 
 ╭──────────────────────────────────────────────────────────╮
 │  🔐 AWS Browser Authentication (Remote Mode)             │
@@ -201,6 +225,24 @@ $ atmos auth login --provider aws-console-remote
 Authorization code: █
 
 ✓ Authentication successful!
+```
+
+### Credential Resolution Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    aws/user Identity                         │
+├─────────────────────────────────────────────────────────────┤
+│  1. Check YAML config for credentials                       │
+│     └─ Found? → Use static credentials                      │
+│                                                             │
+│  2. Check keychain for stored credentials                   │
+│     └─ Found? → Use keychain credentials                    │
+│                                                             │
+│  3. Initiate browser webflow                                │
+│     └─ Interactive TTY? → Open browser automatically        │
+│     └─ Headless/--remote? → Display URL for manual auth     │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
@@ -233,11 +275,33 @@ Authorization code: █
 
 ## Implementation Approach
 
-### Recommended: Native AWS SDK Integration
+### Enhance `aws/user` Identity with Webflow Fallback
 
-Implement the OAuth2 Authorization Code flow with PKCE directly using the AWS SDK for Go. The AWS SDK supports this authentication flow natively.
+Modify `pkg/auth/identities/aws/user.go` to add browser authentication as a third credential source.
 
-**Technical Implementation:**
+**Key Changes to `resolveLongLivedCredentials()`:**
+
+```go
+// Current flow (simplified):
+// 1. Check YAML config → return if found
+// 2. Check keychain → return if found
+// 3. Return error "credentials not found"
+
+// New flow:
+// 1. Check YAML config → return if found
+// 2. Check keychain → return if found
+// 3. Initiate browser webflow → return credentials
+```
+
+**New Files:**
+
+| File | Purpose |
+|------|---------|
+| `pkg/auth/identities/aws/webflow.go` | OAuth2 PKCE flow implementation |
+| `pkg/auth/identities/aws/webflow_test.go` | Unit tests with mocked HTTP |
+
+**Technical Implementation (in `webflow.go`):**
+
 1. Start local HTTP server on `http://127.0.0.1:<port>/oauth/callback`
 2. Generate PKCE code verifier (random 32-byte string, base64url encoded)
 3. Generate code challenge (SHA-256 hash of verifier, base64url encoded)
@@ -253,22 +317,13 @@ Implement the OAuth2 Authorization Code flow with PKCE directly using the AWS SD
    ```
 5. Receive authorization code via callback
 6. Exchange code for tokens via AWS signin service
-7. Use tokens to obtain temporary AWS credentials
+7. Return temporary AWS credentials
 
 **Advantages:**
-- No external AWS CLI dependency
-- Full control over UX and error handling
+- No new provider type - extends existing `aws/user` identity
+- Seamless fallback when no credentials configured
 - Follows existing atmos auth patterns (similar to SSO device flow)
-- SDK handles token refresh and credential management
-
-**Disadvantages:**
-- More code to implement and maintain
-- Must handle PKCE flow ourselves
-
-**Note:** The AWS CLI wrapper approach was considered but rejected because:
-- Adds external dependency (AWS CLI 2.32.0+)
-- Less control over authentication UX
-- SDK already supports this flow
+- No external AWS CLI dependency
 
 ## Security Considerations
 
@@ -296,38 +351,38 @@ Implement the OAuth2 Authorization Code flow with PKCE directly using the AWS SD
 ## Documentation
 
 ### Files to Create/Update
-- `website/docs/cli/commands/auth/login.mdx` - Update with new provider
-- `website/docs/core-concepts/authentication/aws-login.mdx` - New concept page
-- Schema documentation updates
+- `website/docs/core-concepts/authentication/aws-user.mdx` - Update with browser auth fallback
+- `website/docs/cli/commands/auth/login.mdx` - Add `--remote` flag documentation
+- Schema documentation updates for credential resolution order
 
 ## Rollout Plan
 
 ### Phase 1: Core Implementation
-- Create `aws/login` provider
-- Implement CLI wrapper with version validation
+- Create `pkg/auth/identities/aws/webflow.go` with OAuth2 PKCE flow
+- Modify `resolveLongLivedCredentials()` in `user.go` to add webflow fallback
 - Add error handling and hints
 
 ### Phase 2: UI and Integration
-- Implement browser opening and spinner UI
-- Add headless mode support
-- Integration with `aws/assume-role`
+- Implement browser opening and spinner UI (reuse patterns from SSO)
+- Add headless/remote mode support with `--remote` flag
+- Add unit tests with mocked HTTP server
 
 ### Phase 3: Documentation and Polish
-- Docusaurus documentation
-- Example configurations
+- Update Docusaurus documentation for `aws/user` identity
+- Add example configurations
 - Blog post for release
 
 ## Success Metrics
 
-1. **Adoption**: Number of users configuring `aws/login` provider
+1. **Adoption**: Number of users using `aws/user` without static credentials
 2. **Error Rate**: Authentication failures due to implementation issues
 3. **User Feedback**: GitHub issues and community feedback
 
 ## Open Questions
 
-1. **Profile Naming**: Should atmos auto-generate profile names or let users specify?
-2. **Auto-Detection**: Should we auto-detect non-TTY and switch to remote mode?
-3. **Credential Source**: When using role chaining, should we write credentials to files or pass via environment?
+1. **Auto-Detection**: Should we auto-detect non-TTY and switch to remote mode automatically?
+2. **Credential Caching**: Should webflow credentials be cached in keychain after successful auth?
+3. **Disable Option**: Should there be a config option to disable webflow fallback (for security-conscious orgs)?
 
 ## References
 
