@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -26,6 +27,8 @@ func (h *ToastHandler) Validate(step *schema.WorkflowStep) error {
 
 // Execute displays the message with the appropriate style based on level.
 func (h *ToastHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
+	defer perf.Track(nil, "step.ToastHandler.Execute")()
+
 	content, err := h.ResolveContent(ctx, step, vars)
 	if err != nil {
 		return nil, err
