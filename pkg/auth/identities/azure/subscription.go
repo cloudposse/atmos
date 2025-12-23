@@ -107,6 +107,7 @@ func (i *subscriptionIdentity) Authenticate(ctx context.Context, baseCreds authT
 		ClientID:           azureCreds.ClientID,           // Preserve client ID for MSAL cache format.
 		IsServicePrincipal: azureCreds.IsServicePrincipal, // Preserve auth type for MSAL cache format.
 		TokenFilePath:      azureCreds.TokenFilePath,      // Preserve token file path for OIDC.
+		FederatedToken:     azureCreds.FederatedToken,     // Preserve federated token for Azure CLI.
 	}
 
 	// If location not specified in identity, use provider's location.

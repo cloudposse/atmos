@@ -33,6 +33,10 @@ type AzureCredentials struct {
 	// TokenFilePath is the path to the OIDC token file (e.g., from GitHub Actions).
 	// Used for Terraform ARM_USE_OIDC authentication.
 	TokenFilePath string `json:"token_file_path,omitempty"`
+	// FederatedToken is the actual OIDC/federated token value.
+	// This is stored during authentication for use by Azure CLI.
+	// In GitHub Actions, this is obtained dynamically, not from a file.
+	FederatedToken string `json:"-"` // Don't persist - it's ephemeral.
 }
 
 // IsExpired returns true if the credentials are expired.

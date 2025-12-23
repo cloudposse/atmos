@@ -259,17 +259,10 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID stri
 
 	// For service principal auth, also update service_principal_entries.json.
 	// This allows Azure CLI commands to work with OIDC tokens during the CI workflow.
-	if azureCreds.IsServicePrincipal && azureCreds.ClientID != "" && azureCreds.TokenFilePath != "" {
-		// Read the actual token content from the file.
-		tokenContent, err := os.ReadFile(azureCreds.TokenFilePath)
-		if err != nil {
-			log.Debug("Failed to read federated token file", "path", azureCreds.TokenFilePath, "error", err)
-			// Non-fatal - continue without service principal entries.
-		} else {
-			if err := updateServicePrincipalEntries(home, azureCreds.ClientID, tenantID, string(tokenContent)); err != nil {
-				log.Debug("Failed to update service principal entries", "error", err)
-				// Non-fatal.
-			}
+	if azureCreds.IsServicePrincipal && azureCreds.ClientID != "" && azureCreds.FederatedToken != "" {
+		if err := updateServicePrincipalEntries(home, azureCreds.ClientID, tenantID, azureCreds.FederatedToken); err != nil {
+			log.Debug("Failed to update service principal entries", "error", err)
+			// Non-fatal.
 		}
 	}
 

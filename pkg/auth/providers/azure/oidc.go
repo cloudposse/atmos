@@ -225,6 +225,7 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials
 		ClientID:           p.clientID,
 		IsServicePrincipal: true,
 		TokenFilePath:      tokenFilePath,
+		FederatedToken:     federatedToken, // Store for Azure CLI service_principal_entries.json.
 	}
 
 	// Acquire additional tokens for Azure CLI and Terraform provider compatibility.
