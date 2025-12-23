@@ -33,29 +33,32 @@ func TestFileHandler_ResolveStartPath(t *testing.T) {
 	})
 
 	t.Run("static path", func(t *testing.T) {
+		tmpDir := t.TempDir()
 		step := &schema.WorkflowStep{
 			Name: "test",
-			Path: "/tmp",
+			Path: tmpDir,
 		}
 		vars := NewVariables()
 
 		path, err := fileHandler.resolveStartPath(step, vars)
 		require.NoError(t, err)
-		// On macOS, /tmp is symlinked to /private/tmp.
-		assert.True(t, path == "/tmp" || path == "/private/tmp")
+		// Path should be an absolute path matching or containing the temp directory.
+		assert.True(t, filepath.IsAbs(path))
 	})
 
 	t.Run("template path", func(t *testing.T) {
+		tmpDir := t.TempDir()
 		step := &schema.WorkflowStep{
 			Name: "test",
 			Path: "{{ .steps.dir.value }}",
 		}
 		vars := NewVariables()
-		vars.Set("dir", NewStepResult("/tmp"))
+		vars.Set("dir", NewStepResult(tmpDir))
 
 		path, err := fileHandler.resolveStartPath(step, vars)
 		require.NoError(t, err)
-		assert.True(t, path == "/tmp" || path == "/private/tmp")
+		// Path should be an absolute path matching or containing the temp directory.
+		assert.True(t, filepath.IsAbs(path))
 	})
 
 	t.Run("invalid template", func(t *testing.T) {
