@@ -64,7 +64,7 @@ When resolving long-lived credentials from keyring:
 
 ### 2.4 User Experience Flow
 
-```
+```shell
 $ atmos auth login dev-admin
 
 ⚠ AWS credentials are required for identity: dev-admin
