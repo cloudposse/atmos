@@ -806,3 +806,109 @@ func TestGetContrastTextColor_InvalidInput(t *testing.T) {
 	assert.Equal(t, "#FFFFFF", getContrastTextColor("#ZZZ"))
 	assert.Equal(t, "#FFFFFF", getContrastTextColor(""))
 }
+
+func TestRenderChangeSummaryBadges_NoChanges(t *testing.T) {
+	result := RenderChangeSummaryBadges(0, 0, 0)
+	assert.Contains(t, result, "NO CHANGES")
+	// Use patterns with numbers to avoid matching within "NO CHANGES".
+	assert.NotRegexp(t, `\d+ ADD`, result)
+	assert.NotRegexp(t, `\d+ CHANGE`, result)
+	assert.NotRegexp(t, `\d+ DELETE`, result)
+}
+
+func TestRenderChangeSummaryBadges_OnlyAdd(t *testing.T) {
+	result := RenderChangeSummaryBadges(3, 0, 0)
+	assert.Contains(t, result, "3 ADD")
+	assert.NotContains(t, result, "CHANGE")
+	assert.NotContains(t, result, "DELETE")
+	assert.NotContains(t, result, "NO CHANGES")
+}
+
+func TestRenderChangeSummaryBadges_OnlyChange(t *testing.T) {
+	result := RenderChangeSummaryBadges(0, 2, 0)
+	assert.Contains(t, result, "2 CHANGE")
+	assert.NotContains(t, result, "ADD")
+	assert.NotContains(t, result, "DELETE")
+	assert.NotContains(t, result, "NO CHANGES")
+}
+
+func TestRenderChangeSummaryBadges_OnlyRemove(t *testing.T) {
+	result := RenderChangeSummaryBadges(0, 0, 5)
+	assert.Contains(t, result, "5 DELETE")
+	assert.NotContains(t, result, "ADD")
+	assert.NotContains(t, result, "CHANGE")
+	assert.NotContains(t, result, "NO CHANGES")
+}
+
+func TestRenderChangeSummaryBadges_AllTypes(t *testing.T) {
+	result := RenderChangeSummaryBadges(1, 2, 3)
+	assert.Contains(t, result, "1 ADD")
+	assert.Contains(t, result, "2 CHANGE")
+	assert.Contains(t, result, "3 DELETE")
+	assert.NotContains(t, result, "NO CHANGES")
+}
+
+func TestCountActions_Nil(t *testing.T) {
+	var add, change, remove int
+	countActions(nil, &add, &change, &remove)
+	assert.Equal(t, 0, add)
+	assert.Equal(t, 0, change)
+	assert.Equal(t, 0, remove)
+}
+
+func TestCountActions_SingleNode(t *testing.T) {
+	tests := []struct {
+		name         string
+		action       string
+		expectAdd    int
+		expectChange int
+		expectRemove int
+	}{
+		{"create action", "create", 1, 0, 0},
+		{"update action", "update", 0, 1, 0},
+		{"delete action", "delete", 0, 0, 1},
+		{"replace action", "replace", 1, 0, 1}, // Replace counts as add + remove.
+		{"unknown action", "unknown", 0, 0, 0},
+		{"empty action", "", 0, 0, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var add, change, remove int
+			node := &TreeNode{Address: "test", Action: tt.action}
+			countActions(node, &add, &change, &remove)
+			assert.Equal(t, tt.expectAdd, add)
+			assert.Equal(t, tt.expectChange, change)
+			assert.Equal(t, tt.expectRemove, remove)
+		})
+	}
+}
+
+func TestCountActions_Recursive(t *testing.T) {
+	root := &TreeNode{
+		Address: "root",
+		Action:  "", // Root typically has no action.
+		Children: []*TreeNode{
+			{Address: "a", Action: "create"},
+			{
+				Address: "b",
+				Action:  "update",
+				Children: []*TreeNode{
+					{Address: "c", Action: "delete"},
+					{Address: "d", Action: "replace"}, // +1 add, +1 remove.
+				},
+			},
+			{Address: "e", Action: "create"},
+		},
+	}
+
+	var add, change, remove int
+	countActions(root, &add, &change, &remove)
+
+	// create(a) + replace(d) + create(e) = 3 add.
+	assert.Equal(t, 3, add)
+	// update(b) = 1 change.
+	assert.Equal(t, 1, change)
+	// delete(c) + replace(d) = 2 remove.
+	assert.Equal(t, 2, remove)
+}
