@@ -100,13 +100,16 @@ type UpdateCheckRunOptions struct {
 	// CheckRunID is the ID of the check run to update.
 	CheckRunID int64
 
+	// Name is the check run name (required for GitHub API updates).
+	Name string
+
 	// Status is the new status.
 	Status CheckRunState
 
 	// Conclusion is the final conclusion (required when status is "completed").
 	Conclusion string
 
-	// Title is an updated title.
+	// Title is the output title (distinct from the check run name).
 	Title string
 
 	// Summary is an updated markdown summary.

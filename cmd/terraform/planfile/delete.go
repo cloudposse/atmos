@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -80,11 +81,9 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Confirm deletion if not forced.
+	// Require --force flag for deletion.
 	if !deleteForce {
-		_ = ui.Warning(fmt.Sprintf("This will delete planfile: %s", key))
-		_ = ui.Info("Use --force to skip this confirmation")
-		return nil
+		return fmt.Errorf("%w: %s", errUtils.ErrPlanfileDeleteRequireForce, key)
 	}
 
 	// Delete.
