@@ -1,68 +1,26 @@
-# Product Requirements Document: Auth Credential Invalidation Handling
+# Product Requirements Document: Seamless Authentication Recovery
 
 ## Executive Summary
 
-This PRD addresses the issue where `atmos auth login` fails persistently after AWS credentials have been rotated or revoked on the AWS side. The solution automatically detects the `InvalidClientTokenId` error from AWS STS, clears stale credentials from the keyring, prompts for new credentials inline, and retries authentication.
+Enable Atmos to automatically recover from credential invalidation scenarios, providing a seamless single-command authentication experience. When credentials become invalid (rotated, revoked, or expired), Atmos should detect the issue, clean up stale state, and guide users through recovery inline—all within the same `atmos auth login` command.
 
-Additionally, this PRD addresses a bug where session duration configured via `atmos auth user configure` was not being preserved, causing tokens to expire after 12 hours instead of the configured duration (up to 36 hours with MFA).
+## 1. Goals
 
-## 1. Problem Statement
+### Primary Goals
 
-### Current Challenges
+- **Single Command Recovery**: Users should be able to recover from any credential state with just `atmos auth login`
+- **Inline Credential Prompting**: When credentials are missing or invalid, prompt for new ones without requiring a separate configure command
+- **Automatic Cleanup**: Stale credentials should be cleared automatically to prevent repeated failures
+- **Actionable Guidance**: Error messages should clearly explain what happened and what to do next
 
-- **Persistent Authentication Failures**: When AWS access keys are rotated or revoked, `atmos auth login` fails with `InvalidClientTokenId` error
-- **Stale Credentials in Keyring**: The keyring retains old credentials even after they become invalid on AWS side
-- **Logout Doesn't Fix It**: `atmos auth logout` followed by `auth login` doesn't resolve the issue because keyring credentials are preserved by default
-- **Poor Error Messages**: The error message doesn't explain why authentication failed or how to fix it
-- **Manual Intervention Required**: Users must manually reconfigure their AWS credentials to recover
-- **Session Duration Bug**: Session duration configured in keyring was not being passed through, causing 36h MFA sessions to expire after 12h
+### Secondary Goals
 
-### User Impact
+- **Extended Session Support**: Honor configured session durations (up to 36 hours with MFA)
+- **Graceful Degradation**: When prompting isn't available (non-interactive), provide clear fallback instructions
 
-- Breaks developer workflows unpredictably (often after ~24 hours due to session duration bug)
-- Undermines confidence in extended MFA session configuration
-- Forces disruptive manual remediation (full user reconfiguration)
+## 2. User Experience
 
-### Root Cause Analysis
-
-1. Session token expires (normal behavior after configured duration)
-2. `atmos auth login` attempts to generate new session token using cached long-lived credentials
-3. AWS STS returns `InvalidClientTokenId` because the underlying access keys were rotated/revoked
-4. Atmos stores credentials in keyring with `--keychain` flag required to clear them
-5. Without clearing keyring, subsequent login attempts keep using stale credentials
-6. **Bug**: `resolveLongLivedCredentials()` was not copying `SessionDuration` from keyring credentials
-
-## 2. Solution Design
-
-### 2.1 Error Detection
-
-Detect specific AWS STS error codes that indicate credential problems:
-
-| Error Code | Meaning | Action |
-|------------|---------|--------|
-| `InvalidClientTokenId` | Access keys rotated/revoked | Clear keyring, prompt for new credentials, retry |
-| `ExpiredTokenException` | Session token expired | Guide user to re-login |
-| `AccessDenied` | Missing IAM permissions | Guide user to check IAM policies |
-
-### 2.2 Automatic Remediation with Inline Prompting
-
-When `InvalidClientTokenId` is detected:
-
-1. **Automatically clear stale credentials** from keyring for the affected identity
-2. **Prompt for new credentials inline** using interactive form
-3. **Store new credentials** in keyring
-4. **Retry STS call** with new credentials
-5. **Provide actionable error message** if prompting fails or is cancelled
-
-### 2.3 Session Duration Bug Fix
-
-When resolving long-lived credentials from keyring:
-
-1. **Copy `SessionDuration` field** from keyring credentials to the result struct
-2. **Pass session duration** to `getSessionDuration()` function
-3. **Use configured duration** when calling AWS STS GetSessionToken
-
-### 2.4 User Experience Flow
+### Target Flow
 
 ```shell
 $ atmos auth login dev-admin
@@ -87,30 +45,65 @@ Enter MFA Token: 123456
   Expires    2024-12-24 04:58:00 MST (35h 59m)
 ```
 
+### Error Detection and Response
+
+| Error Code | Meaning | Action |
+|------------|---------|--------|
+| `InvalidClientTokenId` | Access keys rotated/revoked | Clear stale credentials, prompt for new ones, retry |
+| `ExpiredTokenException` | Session token expired | Guide user to re-login |
+| `AccessDenied` | Missing IAM permissions | Guide user to check IAM policies |
+
 ## 3. Implementation
 
-### 3.1 New Sentinel Error
+### 3.1 Generic Credential Prompting Interface
 
-Add `ErrAwsCredentialsInvalid` to `errors/errors.go`:
-
-```go
-// AWS IAM User credential errors.
-ErrAwsCredentialsInvalid = errors.New("aws credentials are invalid or have been revoked")
-```
-
-### 3.2 Credential Prompting Function Variable
-
-Add `PromptCredentialsFunc` variable in `pkg/auth/identities/aws/user.go`:
+Add generic types in `pkg/auth/types/credential_prompt.go`:
 
 ```go
-// PromptCredentialsFunc is a helper indirection to allow the cmd package to provide
-// credential prompting UI. When set, it's called when credentials are missing or invalid.
-var PromptCredentialsFunc func(identityName string, mfaArn string) (*types.AWSCredentials, error)
+// CredentialField describes a single credential input field.
+type CredentialField struct {
+    Name        string              // Field identifier (e.g., "access_key_id").
+    Title       string              // Display title (e.g., "AWS Access Key ID").
+    Description string              // Help text.
+    Required    bool                // Must be non-empty.
+    Secret      bool                // Mask input (password mode).
+    Default     string              // Pre-populated value.
+    Validator   func(string) error  // Optional validation function.
+}
+
+// CredentialPromptSpec defines what credentials to prompt for.
+type CredentialPromptSpec struct {
+    IdentityName string            // Name of the identity requiring credentials.
+    CloudType    string            // Cloud provider: "aws", "azure", "gcp".
+    Fields       []CredentialField // Fields to prompt for.
+}
+
+// CredentialPromptFunc is the generic prompting interface.
+type CredentialPromptFunc func(spec CredentialPromptSpec) (map[string]string, error)
 ```
 
-### 3.3 Error Handler Function (Updated)
+### 3.2 AWS Credential Spec Builder
 
-Update `handleSTSError()` method to return new credentials when prompting succeeds:
+Each identity type defines its credential fields in `pkg/auth/identities/aws/credential_prompt.go`:
+
+```go
+func buildAWSCredentialSpec(identityName string, mfaArn string) types.CredentialPromptSpec {
+    return types.CredentialPromptSpec{
+        IdentityName: identityName,
+        CloudType:    "AWS",
+        Fields: []types.CredentialField{
+            {Name: "access_key_id", Title: "AWS Access Key ID", Required: true},
+            {Name: "secret_access_key", Title: "AWS Secret Access Key", Required: true, Secret: true},
+            {Name: "mfa_arn", Title: "MFA ARN", Required: false, Default: mfaArn},
+            {Name: "session_duration", Title: "Session Duration", Required: false},
+        },
+    }
+}
+```
+
+### 3.2 Error Handler with Automatic Recovery
+
+Update `handleSTSError()` to detect specific AWS errors and recover:
 
 ```go
 func (i *userIdentity) handleSTSError(err error) (*types.AWSCredentials, error) {
@@ -131,10 +124,10 @@ func (i *userIdentity) handleSTSError(err error) (*types.AWSCredentials, error) 
                 }
             }
 
-            return nil, errUtils.Build(errUtils.ErrAwsCredentialsInvalid).
-                WithHint("Your AWS access keys have been rotated or revoked on the AWS side").
+            return nil, errUtils.Build(errUtils.ErrCredentialsInvalid).
+                WithExplanation("Your AWS access keys have been rotated or revoked on the AWS side").
+                WithExplanation("Stale credentials have been automatically cleared from keychain").
                 WithHintf("Run: atmos auth user configure --identity %s", i.name).
-                WithHint("Stale credentials have been automatically cleared from keychain").
                 WithContext("identity", i.name).
                 WithContext("error_code", apiErr.ErrorCode()).
                 Err()
@@ -145,20 +138,20 @@ func (i *userIdentity) handleSTSError(err error) (*types.AWSCredentials, error) 
 }
 ```
 
-### 3.4 Session Duration Fix
+### 3.3 Session Duration Preservation
 
-Update `resolveLongLivedCredentials()` to copy `SessionDuration` from keyring:
+Ensure `SessionDuration` is copied from keyring credentials:
 
 ```go
 result := &types.AWSCredentials{
     AccessKeyID:     keystoreCreds.AccessKeyID,
     SecretAccessKey: keystoreCreds.SecretAccessKey,
     MfaArn:          keystoreCreds.MfaArn,
-    SessionDuration: keystoreCreds.SessionDuration, // FIX: Preserve session duration from keyring
+    SessionDuration: keystoreCreds.SessionDuration, // Preserve session duration from keyring
 }
 ```
 
-### 3.5 Credential Prompting Implementation
+### 3.4 Credential Prompting Implementation
 
 Create `cmd/auth_credential_prompt.go` to register the credential prompting function:
 
@@ -179,18 +172,16 @@ func promptForAWSCredentials(identityName string, mfaArn string) (*types.AWSCred
 
 ## 4. Testing
 
-### 4.1 Unit Tests
+### Unit Tests
 
-Add/update tests for each error code scenario:
+- `TestUserIdentity_HandleSTSError_InvalidClientTokenId` — Verify credentials cleared, prompting called
+- `TestUserIdentity_HandleSTSError_ExpiredTokenException` — Verify correct error message
+- `TestUserIdentity_HandleSTSError_AccessDenied` — Verify IAM guidance
+- `TestUserIdentity_HandleSTSError_GenericError` — Verify fallback behavior
+- `TestUserIdentity_HandleSTSError_WithPromptFunc` — Verify prompting returns new credentials
+- `TestUserIdentity_HandleSTSError_PromptFuncFails` — Verify error when prompting fails
 
-- `TestUserIdentity_HandleSTSError_InvalidClientTokenId` - Verify credentials cleared, prompting called
-- `TestUserIdentity_HandleSTSError_ExpiredTokenException` - Verify correct error message
-- `TestUserIdentity_HandleSTSError_AccessDenied` - Verify IAM guidance
-- `TestUserIdentity_HandleSTSError_GenericError` - Verify fallback behavior
-
-### 4.2 Test Implementation
-
-Use `mockAPIError` type implementing `smithy.APIError` interface:
+### Mock Implementation
 
 ```go
 type mockAPIError struct {
@@ -206,23 +197,25 @@ func (e *mockAPIError) ErrorFault() smithy.ErrorFault { return smithy.FaultClien
 
 ## 5. Files Modified
 
-| File                                   | Changes                                                                                     |
-|----------------------------------------|---------------------------------------------------------------------------------------------|
-| `errors/errors.go`                     | Add `ErrAwsCredentialsInvalid` sentinel error                                               |
-| `pkg/auth/identities/aws/user.go`      | Add `PromptCredentialsFunc`, update `handleSTSError()`, fix `resolveLongLivedCredentials()` |
-| `pkg/auth/identities/aws/user_test.go` | Update tests for new return signature                                                       |
-| `cmd/auth_credential_prompt.go`        | New file - credential prompting implementation                                              |
+| File | Changes |
+|------|---------|
+| `errors/errors.go` | Add `ErrCredentialsInvalid` sentinel error |
+| `pkg/auth/types/credential_prompt.go` | New file with generic credential prompting interface |
+| `pkg/auth/identities/aws/user.go` | Update error handling, fix session duration |
+| `pkg/auth/identities/aws/user_test.go` | Add tests for new functionality |
+| `pkg/auth/identities/aws/credential_prompt.go` | New file with AWS credential prompting implementation |
+| `pkg/auth/identities/aws/credential_prompt_test.go` | Tests for credential validation and form building |
 
 ## 6. Success Metrics
 
 - **Single Command Recovery**: Users can recover from credential invalidation with just `atmos auth login`
-- **Session Duration Works**: 36-hour MFA sessions last the full 36 hours
-- **Error Clarity**: Error messages provide specific, actionable remediation steps
+- **Session Duration Works**: Configured session durations (up to 36 hours with MFA) are honored
+- **Error Clarity**: Error messages clearly explain what happened (explanation) and what to do (hint)
 - **Automatic Cleanup**: Stale credentials are cleared automatically, preventing repeated failures
 - **Test Coverage**: All error scenarios have unit test coverage
 
 ## 7. Future Considerations
 
-- Add similar error detection for other AWS API errors (AssumeRole, AssumeRoleWithSAML)
-- Consider adding a `atmos auth repair` command for manual credential cleanup
-- Add telemetry for credential invalidation events to track frequency
+- Extend error detection to other AWS API calls (AssumeRole, AssumeRoleWithSAML)
+- Add `atmos auth repair` command for manual credential cleanup
+- Generalize credential prompting interface for multi-cloud support

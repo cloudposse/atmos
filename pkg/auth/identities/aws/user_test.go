@@ -1128,7 +1128,7 @@ func TestUserIdentity_HandleSTSError_InvalidClientTokenId(t *testing.T) {
 	// Verify: Error should contain the sentinel error.
 	require.Error(t, resultErr)
 	assert.Nil(t, newCreds, "No new credentials should be returned when prompting is disabled")
-	assert.Contains(t, resultErr.Error(), "aws credentials are invalid or have been revoked")
+	assert.Contains(t, resultErr.Error(), "credentials are invalid or have been revoked")
 
 	// Verify: Stale credentials should be cleared from keyring.
 	_, err = store.Retrieve("test-invalid-creds")
@@ -1309,7 +1309,7 @@ func TestUserIdentity_HandleSTSError_PromptFuncFails(t *testing.T) {
 	// Verify: Error should be returned when prompting fails.
 	require.Error(t, resultErr)
 	assert.Nil(t, resultCreds, "No credentials should be returned when prompting fails")
-	assert.Contains(t, resultErr.Error(), "aws credentials are invalid or have been revoked")
+	assert.Contains(t, resultErr.Error(), "credentials are invalid or have been revoked")
 	// Note: Hints are stored in ErrorBuilder structure, not in the main error message.
 	// The hint "Credential prompting was cancelled or failed" is added but won't appear in Error().
 }
@@ -1510,7 +1510,7 @@ func TestUserIdentity_PromptForNewCredentials(t *testing.T) {
 		creds, err := userIdent.promptForNewCredentials("InvalidClientTokenId")
 		require.Error(t, err)
 		assert.Nil(t, creds)
-		assert.Contains(t, err.Error(), "aws credentials are invalid")
+		assert.Contains(t, err.Error(), "credentials are invalid")
 	})
 }
 
@@ -1579,7 +1579,7 @@ func TestUserIdentity_HandleInvalidClientTokenId(t *testing.T) {
 		creds, err := userIdent.handleInvalidClientTokenId(mockErr)
 		require.Error(t, err)
 		assert.Nil(t, creds)
-		assert.Contains(t, err.Error(), "aws credentials are invalid")
+		assert.Contains(t, err.Error(), "credentials are invalid")
 	})
 
 	t.Run("with prompt function success", func(t *testing.T) {

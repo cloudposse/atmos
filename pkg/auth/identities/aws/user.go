@@ -351,10 +351,10 @@ func (i *userIdentity) handleInvalidClientTokenId(apiErr smithy.APIError) (*type
 		return i.promptForNewCredentials(apiErr.ErrorCode())
 	}
 
-	return nil, errUtils.Build(errUtils.ErrAwsCredentialsInvalid).
-		WithHint("Your AWS access keys have been rotated or revoked on the AWS side").
+	return nil, errUtils.Build(errUtils.ErrCredentialsInvalid).
+		WithExplanation("Your AWS access keys have been rotated or revoked on the AWS side").
+		WithExplanation("Stale credentials have been automatically cleared from keychain").
 		WithHintf("Run: atmos auth user configure --identity %s", i.name).
-		WithHint("Stale credentials have been automatically cleared from keychain").
 		WithContext("identity", i.name).
 		WithContext("error_code", apiErr.ErrorCode()).
 		Err()
@@ -376,9 +376,9 @@ func (i *userIdentity) promptForNewCredentials(errorCode string) (*types.AWSCred
 	newCreds, promptErr := PromptCredentialsFunc(i.name, yamlMfaArn)
 	if promptErr != nil {
 		log.Debug("Credential prompting failed", logKeyIdentity, i.name, "error", promptErr)
-		return nil, errUtils.Build(errUtils.ErrAwsCredentialsInvalid).
-			WithHint("Your AWS access keys have been rotated or revoked on the AWS side").
-			WithHint("Credential prompting was cancelled or failed").
+		return nil, errUtils.Build(errUtils.ErrCredentialsInvalid).
+			WithExplanation("Your AWS access keys have been rotated or revoked on the AWS side").
+			WithExplanation("Credential prompting was cancelled or failed").
 			WithHintf("Run: atmos auth user configure --identity %s", i.name).
 			WithContext("identity", i.name).
 			WithContext("error_code", errorCode).
@@ -392,7 +392,7 @@ func (i *userIdentity) promptForNewCredentials(errorCode string) (*types.AWSCred
 func (i *userIdentity) handleExpiredToken(apiErr smithy.APIError) (*types.AWSCredentials, error) {
 	log.Error("AWS session token expired", logKeyIdentity, i.name, "error_code", apiErr.ErrorCode())
 	return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
-		WithHint("AWS session token has expired").
+		WithExplanation("AWS session token has expired").
 		WithHintf("Run: atmos auth login --identity %s", i.name).
 		WithContext("identity", i.name).
 		WithContext("error_code", apiErr.ErrorCode()).
@@ -403,7 +403,7 @@ func (i *userIdentity) handleExpiredToken(apiErr smithy.APIError) (*types.AWSCre
 func (i *userIdentity) handleAccessDenied(apiErr smithy.APIError) (*types.AWSCredentials, error) {
 	log.Error("Access denied when calling GetSessionToken", logKeyIdentity, i.name, "error_code", apiErr.ErrorCode())
 	return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
-		WithHint("Your IAM user does not have permission to call sts:GetSessionToken").
+		WithExplanation("Your IAM user does not have permission to call sts:GetSessionToken").
 		WithHint("Ensure your IAM user has the sts:GetSessionToken permission").
 		WithContext("identity", i.name).
 		WithContext("error_code", apiErr.ErrorCode()).
@@ -420,13 +420,6 @@ var promptMfaTokenFunc = func(longLivedCreds *types.AWSCredentials) (string, err
 	}
 	return mfaToken, nil
 }
-
-// PromptCredentialsFunc is a helper indirection to allow the cmd package to provide
-// credential prompting UI. When set, it's called when credentials are missing or invalid.
-// The function should prompt the user for credentials and store them in the keyring.
-// Returns the new credentials or an error.
-// If nil, credential prompting is disabled and errors are returned instead.
-var PromptCredentialsFunc func(identityName string, mfaArn string) (*types.AWSCredentials, error)
 
 // getSessionDuration returns the configured session duration in seconds.
 // It validates the duration against AWS limits based on whether MFA is used.
