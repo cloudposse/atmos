@@ -202,7 +202,12 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID stri
 	username, err := extractUsernameFromToken(azureCreds.AccessToken)
 	if err != nil {
 		log.Debug("Failed to extract username from token, using fallback", "error", err)
-		username = "user@unknown" // Fallback username.
+		// For service principal, use client ID as username.
+		if azureCreds.IsServicePrincipal && azureCreds.ClientID != "" {
+			username = azureCreds.ClientID
+		} else {
+			username = "user@unknown" // Fallback username.
+		}
 	}
 
 	// Get home directory.
@@ -239,7 +244,7 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID stri
 	}
 
 	// Update azureProfile.json.
-	if err := updateAzureProfile(home, username, tenantID, subscriptionID); err != nil {
+	if err := updateAzureProfile(home, username, tenantID, subscriptionID, azureCreds.IsServicePrincipal); err != nil {
 		log.Debug("Failed to update Azure profile", "error", err)
 		// Non-fatal.
 	}
@@ -557,7 +562,7 @@ func addTokenToCache(accessTokenSection map[string]interface{}, params *tokenCac
 }
 
 // updateAzureProfile updates the azureProfile.json file with the current subscription.
-func updateAzureProfile(home, username, tenantID, subscriptionID string) error {
+func updateAzureProfile(home, username, tenantID, subscriptionID string, isServicePrincipal bool) error {
 	profilePath := filepath.Join(home, ".azure", "azureProfile.json")
 	azureDir := filepath.Dir(profilePath)
 	if err := os.MkdirAll(azureDir, DirPermissions); err != nil {
@@ -585,7 +590,7 @@ func updateAzureProfile(home, username, tenantID, subscriptionID string) error {
 	}
 
 	// Update subscriptions in profile.
-	profile["subscriptions"] = UpdateSubscriptionsInProfile(profile, username, tenantID, subscriptionID)
+	profile["subscriptions"] = UpdateSubscriptionsInProfile(profile, username, tenantID, subscriptionID, isServicePrincipal)
 
 	// Write updated profile.
 	updatedData, err := json.MarshalIndent(profile, "", "  ")
@@ -615,11 +620,17 @@ func updateAzureProfile(home, username, tenantID, subscriptionID string) error {
 
 // UpdateSubscriptionsInProfile updates the subscriptions array in an Azure profile.
 // It sets the specified subscription as default and marks all others as not default.
-func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tenantID, subscriptionID string) []interface{} {
+func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tenantID, subscriptionID string, isServicePrincipal bool) []interface{} {
 	// Get subscriptions array.
 	subscriptionsRaw, ok := profile["subscriptions"].([]interface{})
 	if !ok {
 		subscriptionsRaw = []interface{}{}
+	}
+
+	// Determine user type based on authentication method.
+	userType := "user"
+	if isServicePrincipal {
+		userType = "servicePrincipal"
 	}
 
 	// Find or create subscription entry.
@@ -638,7 +649,7 @@ func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tena
 			sub["state"] = "Enabled"
 			sub[FieldUser] = map[string]interface{}{
 				"name": username,
-				"type": "user",
+				"type": userType,
 			}
 			sub["environmentName"] = "AzureCloud"
 			subscriptionsRaw[i] = sub
@@ -661,7 +672,7 @@ func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tena
 			"environmentName": "AzureCloud",
 			FieldUser: map[string]interface{}{
 				"name": username,
-				"type": "user",
+				"type": userType,
 			},
 		}
 		subscriptionsRaw = append(subscriptionsRaw, newSub)

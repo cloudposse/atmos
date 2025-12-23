@@ -788,7 +788,7 @@ func TestUpdateAzureProfile(t *testing.T) {
 
 			tt.setupProfile(testHome)
 
-			err := updateAzureProfile(testHome, tt.username, tt.tenantID, tt.subscriptionID)
+			err := updateAzureProfile(testHome, tt.username, tt.tenantID, tt.subscriptionID, false)
 
 			if tt.expectError {
 				require.Error(t, err)

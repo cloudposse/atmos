@@ -510,7 +510,8 @@ func (p *deviceCodeProvider) updateAzureProfile(home, username string) error {
 	}
 
 	// Update subscriptions in profile.
-	profile["subscriptions"] = azureCloud.UpdateSubscriptionsInProfile(profile, username, p.tenantID, p.subscriptionID)
+	// Device code flow is user authentication (not service principal).
+	profile["subscriptions"] = azureCloud.UpdateSubscriptionsInProfile(profile, username, p.tenantID, p.subscriptionID, false)
 
 	// Write updated profile.
 	updatedData, err := json.MarshalIndent(profile, "", "  ")
