@@ -71,7 +71,7 @@ func (p *Provider) createCheckRun(ctx context.Context, opts *ci.CreateCheckRunOp
 // updateCheckRun updates an existing check run.
 func (p *Provider) updateCheckRun(ctx context.Context, opts *ci.UpdateCheckRunOptions) (*ci.CheckRun, error) {
 	ghOpts := github.UpdateCheckRunOptions{
-		Name: opts.Title, // Name is required for updates.
+		Name: opts.Name, // Name is required for updates.
 	}
 
 	// Map status to GitHub API values.
