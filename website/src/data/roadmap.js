@@ -231,10 +231,10 @@ export const roadmapConfig = {
         { label: 'File generation (`generate` blocks)', status: 'shipped', quarter: 'q4-2025', description: 'Generate files like backend.tf and provider.tf from stack configuration with inheritance support.' },
         { label: 'Automatic backend provisioning', status: 'shipped', quarter: 'q4-2025', docs: '/components/terraform/backend-provisioning', description: 'Provision the backend itself (S3 bucket with native state locking) for cold-start scenarios and one-shot Terraform deployments.' },
         { label: 'AWS context YAML functions', status: 'shipped', quarter: 'q4-2025', docs: '/functions/yaml/aws.account-id', description: 'Access AWS caller identity in stack configuration.', codeExample: 'account_id: !aws.account-id' },
-        { label: 'Automatic source provisioning', status: 'planned', quarter: 'q1-2026', description: 'Automatically fetch component sources without explicit vendoring—just reference and deploy.' },
+        { label: '`plan --all` and `apply --all`', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/terraform/terraform-apply', description: 'Plan or apply all affected components in a single command with dependency ordering.' },
+        { label: 'Automatic source provisioning', status: 'planned', quarter: 'q1-2026', pr: 1877, description: 'Automatically fetch component sources without explicit vendoring—just reference and deploy.' },
         { label: 'Concurrent component provisioning', status: 'planned', quarter: 'q1-2026', description: 'Deploy multiple components in parallel with dependency-aware orchestration.' },
-        { label: '`plan --all` and `apply --all`', status: 'planned', quarter: 'q1-2026', description: 'Plan or apply all affected components in a single command with dependency ordering.' },
-        { label: 'Automatic provider caching', status: 'planned', quarter: 'q1-2026', description: 'Cache Terraform providers across components to speed up init and reduce bandwidth.' },
+        { label: 'Automatic provider caching', status: 'planned', quarter: 'q1-2026', pr: 1882, description: 'Cache Terraform providers across components to speed up init and reduce bandwidth.' },
         { label: 'Provider auto-generation', status: 'planned', quarter: 'q1-2026', docs: '/components/terraform/providers', description: 'Generate provider.tf with proper credentials and region configuration from stack metadata.' },
         { label: 'Multi-stack formats', status: 'planned', quarter: 'q2-2026', description: 'Support for alternative stack formats including single-file stacks and Terragrunt-style layouts.' },
       ],
@@ -242,6 +242,8 @@ export const roadmapConfig = {
       prs: [
         { number: 1878, title: 'Add generate section inheritance and auto-generation support' },
         { number: 1893, title: 'Add Terragrunt Support PRD' },
+        { number: 1877, title: 'Add native source provisioner for JIT component vendoring' },
+        { number: 1882, title: 'Add native Terraform provider caching with XDG support' },
       ],
     },
     {
