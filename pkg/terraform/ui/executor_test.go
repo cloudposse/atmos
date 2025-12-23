@@ -6,14 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestShouldUseStreamingUI_ExplicitlyEnabled(t *testing.T) {
-	// --ui flag explicitly set to true.
-	result := ShouldUseStreamingUI(true, true, false, "plan")
-	// Note: This would return false in CI because telemetry.IsCI() returns true.
-	// We can't easily test the positive case here.
-	assert.Equal(t, false, result) // CI environment auto-disables.
-}
-
 func TestShouldUseStreamingUI_ExplicitlyDisabled(t *testing.T) {
 	// --ui=false explicitly set.
 	result := ShouldUseStreamingUI(true, false, true, "plan")
@@ -44,38 +36,6 @@ func TestShouldUseStreamingUI_SupportedCommands(t *testing.T) {
 		// But we're testing the command filtering logic.
 		result := ShouldUseStreamingUI(false, false, false, cmd)
 		assert.False(t, result, "command %s needs enabled flag or config to use streaming UI", cmd)
-	}
-}
-
-func TestShouldUseStreamingUI_EnabledWithFlag(t *testing.T) {
-	// Test that supported commands pass through the flag/config check when enabled via flag.
-	// Note: In CI or non-TTY environments, this still returns false because the function
-	// checks IsCI() and IsTTYSupportForStdout(). These tests verify the early return paths
-	// work correctly - when NOT in CI/non-TTY, the function would return true.
-	supportedCommands := []string{"plan", "apply", "init", "destroy"}
-	for _, cmd := range supportedCommands {
-		// uiFlagSet=true, uiFlag=true should pass the enablement check.
-		// The function may still return false due to CI/TTY detection.
-		result := ShouldUseStreamingUI(true, true, false, cmd)
-		// In test environment (CI or non-TTY), this returns false.
-		// This test verifies the command filtering works for supported commands.
-		_ = result // Result depends on environment.
-	}
-}
-
-func TestShouldUseStreamingUI_EnabledWithConfig(t *testing.T) {
-	// Test that supported commands pass through when enabled via config.
-	// Note: In CI or non-TTY environments, this still returns false because the function
-	// checks IsCI() and IsTTYSupportForStdout(). These tests verify the config enablement
-	// path works correctly.
-	supportedCommands := []string{"plan", "apply", "init", "destroy"}
-	for _, cmd := range supportedCommands {
-		// uiFlagSet=false, uiFlag=false, configEnabled=true should pass the enablement check.
-		// The function may still return false due to CI/TTY detection.
-		result := ShouldUseStreamingUI(false, false, true, cmd)
-		// In test environment (CI or non-TTY), this returns false.
-		// This test verifies the command filtering works for supported commands.
-		_ = result // Result depends on environment.
 	}
 }
 
@@ -132,25 +92,6 @@ func TestBuildArgsWithJSON_NoSubcommandAtStart(t *testing.T) {
 	assert.Contains(t, result, "-json")
 	// In this case, -json should be prepended.
 	assert.Equal(t, "-json", result[0])
-}
-
-func TestExecuteOptions_Fields(t *testing.T) {
-	opts := ExecuteOptions{
-		Command:    "terraform",
-		Args:       []string{"plan", "-out", "plan.out"},
-		WorkingDir: "/path/to/component",
-		Env:        []string{"AWS_REGION=us-east-1"},
-		Component:  "vpc",
-		Stack:      "dev-ue2",
-		SubCommand: "plan",
-		DryRun:     false,
-	}
-
-	assert.Equal(t, "terraform", opts.Command)
-	assert.Equal(t, "vpc", opts.Component)
-	assert.Equal(t, "dev-ue2", opts.Stack)
-	assert.Equal(t, "plan", opts.SubCommand)
-	assert.False(t, opts.DryRun)
 }
 
 func TestDetectOutputContentType(t *testing.T) {
