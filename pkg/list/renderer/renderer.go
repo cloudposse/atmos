@@ -45,11 +45,12 @@ func New(
 	}
 }
 
-// Render executes the full pipeline and writes output.
-func (r *Renderer) Render(data []map[string]any) error {
+// RenderToString executes the full pipeline and returns formatted output.
+// This is useful when the caller needs to process the output (e.g., pass to pager).
+func (r *Renderer) RenderToString(data []map[string]any) (string, error) {
 	// Guard against nil column selector.
 	if r.selector == nil {
-		return fmt.Errorf("%w: renderer created with nil column selector", errUtils.ErrInvalidConfig)
+		return "", fmt.Errorf("%w: renderer created with nil column selector", errUtils.ErrInvalidConfig)
 	}
 
 	// Step 1: Apply filters (AND logic).
@@ -58,36 +59,46 @@ func (r *Renderer) Render(data []map[string]any) error {
 		chain := filter.NewChain(r.filters...)
 		result, err := chain.Apply(filtered)
 		if err != nil {
-			return fmt.Errorf("filtering failed: %w", err)
+			return "", fmt.Errorf("filtering failed: %w", err)
 		}
 		var ok bool
 		filtered, ok = result.([]map[string]any)
 		if !ok {
-			return fmt.Errorf("%w: filter returned invalid type: expected []map[string]any, got %T", errUtils.ErrInvalidConfig, result)
+			return "", fmt.Errorf("%w: filter returned invalid type: expected []map[string]any, got %T", errUtils.ErrInvalidConfig, result)
 		}
 	}
 
 	// Step 2: Extract columns with template evaluation.
 	headers, rows, err := r.selector.Extract(filtered)
 	if err != nil {
-		return fmt.Errorf("column extraction failed: %w", err)
+		return "", fmt.Errorf("column extraction failed: %w", err)
 	}
 
 	// Step 3: Sort rows.
 	if len(r.sorters) > 0 {
 		ms := sort.NewMultiSorter(r.sorters...)
 		if err := ms.Sort(rows, headers); err != nil {
-			return fmt.Errorf("sorting failed: %w", err)
+			return "", fmt.Errorf("sorting failed: %w", err)
 		}
 	}
 
 	// Step 4: Format output.
 	formatted, err := r.formatTable(headers, rows)
 	if err != nil {
-		return fmt.Errorf("formatting failed: %w", err)
+		return "", fmt.Errorf("formatting failed: %w", err)
 	}
 
-	// Step 5: Write to appropriate stream.
+	return formatted, nil
+}
+
+// Render executes the full pipeline and writes output.
+func (r *Renderer) Render(data []map[string]any) error {
+	formatted, err := r.RenderToString(data)
+	if err != nil {
+		return err
+	}
+
+	// Write to appropriate stream.
 	if err := r.output.Write(formatted); err != nil {
 		return fmt.Errorf("output failed: %w", err)
 	}
