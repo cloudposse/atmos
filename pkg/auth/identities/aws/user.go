@@ -149,8 +149,8 @@ func (i *userIdentity) resolveLongLivedCredentials() (*types.AWSCredentials, err
 	result := &types.AWSCredentials{
 		AccessKeyID:     keystoreCreds.AccessKeyID,
 		SecretAccessKey: keystoreCreds.SecretAccessKey,
-		MfaArn:          keystoreCreds.MfaArn,          // Start with keyring MFA ARN
-		SessionDuration: keystoreCreds.SessionDuration, // Preserve session duration from keyring
+		MfaArn:          keystoreCreds.MfaArn,          // Start with keyring MFA ARN.
+		SessionDuration: keystoreCreds.SessionDuration, // Preserve session duration from keyring.
 	}
 
 	// Override MFA ARN from YAML if present (allows version-controlled MFA config).
