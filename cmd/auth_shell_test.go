@@ -7,9 +7,16 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 )
 
 func TestAuthShellCmd_FlagParsing(t *testing.T) {
+	// Disable credential prompting to prevent interactive UI from blocking tests on Windows.
+	originalPromptFunc := aws.PromptCredentialsFunc
+	aws.PromptCredentialsFunc = nil
+	defer func() { aws.PromptCredentialsFunc = originalPromptFunc }()
+
 	tests := []struct {
 		name          string
 		args          []string
@@ -100,6 +107,11 @@ func TestAuthShellCmd_CommandStructure(t *testing.T) {
 }
 
 func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
+	// Disable credential prompting to prevent interactive UI from blocking tests on Windows.
+	originalPromptFunc := aws.PromptCredentialsFunc
+	aws.PromptCredentialsFunc = nil
+	defer func() { aws.PromptCredentialsFunc = originalPromptFunc }()
+
 	// Set up test fixture.
 	testDir := "../tests/fixtures/scenarios/atmos-auth"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
@@ -117,6 +129,11 @@ func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
 }
 
 func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
+	// Disable credential prompting to prevent interactive UI from blocking tests on Windows.
+	originalPromptFunc := aws.PromptCredentialsFunc
+	aws.PromptCredentialsFunc = nil
+	defer func() { aws.PromptCredentialsFunc = originalPromptFunc }()
+
 	// Test that the command handles nil environment variables gracefully.
 	// This tests the path where envVars is nil and gets initialized to empty map.
 	testDir := "../tests/fixtures/scenarios/atmos-auth"
