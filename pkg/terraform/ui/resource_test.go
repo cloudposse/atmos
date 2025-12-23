@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResourceTracker_NewResourceTracker(t *testing.T) {
@@ -336,4 +337,188 @@ func TestResourceTracker_Concurrency(t *testing.T) {
 
 	// Verify we have some resources.
 	assert.Greater(t, rt.GetTotalCount(), 0)
+}
+
+func TestResourceTracker_HandleApplyStart_UnplannedResource(t *testing.T) {
+	rt := NewResourceTracker()
+
+	// Apply start for resource NOT in plan (edge case for dynamic resources).
+	start := &ApplyStartMessage{
+		Hook: ApplyHook{
+			Resource: ResourceAddr{
+				Addr:         "aws_instance.dynamic",
+				Module:       "module.dynamic",
+				ResourceType: "aws_instance",
+				ResourceName: "dynamic",
+			},
+			Action:  "create",
+			IDKey:   "id",
+			IDValue: "",
+		},
+	}
+	rt.HandleMessage(start)
+
+	assert.Equal(t, PhaseApplying, rt.GetPhase())
+	assert.Equal(t, 1, rt.GetTotalCount())
+	assert.Equal(t, 1, rt.GetActiveCount())
+
+	resources := rt.GetResources()
+	require.Len(t, resources, 1)
+	assert.Equal(t, "aws_instance.dynamic", resources[0].Address)
+	assert.Equal(t, ResourceStateInProgress, resources[0].State)
+	assert.Equal(t, "module.dynamic", resources[0].Module)
+}
+
+func TestResourceTracker_HandleRefreshStart_ExistingResource(t *testing.T) {
+	rt := NewResourceTracker()
+
+	// Add planned change first.
+	rt.HandleMessage(&PlannedChangeMessage{
+		Change: PlannedChange{
+			Resource: ResourceAddr{
+				Addr:         "aws_instance.web",
+				ResourceType: "aws_instance",
+				ResourceName: "web",
+			},
+			Action: "update",
+		},
+	})
+
+	// Verify initial state.
+	resources := rt.GetResources()
+	require.Len(t, resources, 1)
+	assert.Equal(t, ResourceStatePending, resources[0].State)
+
+	// Now refresh the same resource.
+	rt.HandleMessage(&RefreshStartMessage{
+		Hook: RefreshHook{
+			Resource: ResourceAddr{
+				Addr:         "aws_instance.web",
+				ResourceType: "aws_instance",
+				ResourceName: "web",
+			},
+			IDKey:   "id",
+			IDValue: "i-existing",
+		},
+	})
+
+	// Verify state changed to refreshing.
+	assert.Equal(t, PhaseRefreshing, rt.GetPhase())
+	resources = rt.GetResources()
+	require.Len(t, resources, 1)
+	assert.Equal(t, ResourceStateRefreshing, resources[0].State)
+}
+
+func TestResourceTracker_HandleOutputs(t *testing.T) {
+	rt := NewResourceTracker()
+
+	outputs := &OutputsMessage{
+		Outputs: map[string]OutputValue{
+			"vpc_id":      {Value: "vpc-123abc", Sensitive: false},
+			"db_password": {Value: "secret", Sensitive: true},
+		},
+	}
+	rt.HandleMessage(outputs)
+
+	result := rt.GetOutputs()
+	require.NotNil(t, result)
+	require.Len(t, result.Outputs, 2)
+	assert.Equal(t, "vpc-123abc", result.Outputs["vpc_id"].Value)
+	assert.False(t, result.Outputs["vpc_id"].Sensitive)
+	assert.True(t, result.Outputs["db_password"].Sensitive)
+}
+
+func TestResourceTracker_GetCurrentActivity_NoActive(t *testing.T) {
+	rt := NewResourceTracker()
+
+	// Add a completed resource.
+	rt.HandleMessage(&PlannedChangeMessage{
+		Change: PlannedChange{
+			Resource: ResourceAddr{Addr: "aws_vpc.main"},
+			Action:   "create",
+		},
+	})
+
+	// No active resources yet (only pending).
+	activity := rt.GetCurrentActivity()
+	assert.Nil(t, activity)
+}
+
+func TestResourceTracker_GetCurrentActivity_WithActive(t *testing.T) {
+	rt := NewResourceTracker()
+
+	// Add and start a resource.
+	rt.HandleMessage(&PlannedChangeMessage{
+		Change: PlannedChange{
+			Resource: ResourceAddr{Addr: "aws_vpc.main"},
+			Action:   "create",
+		},
+	})
+	rt.HandleMessage(&ApplyStartMessage{
+		Hook: ApplyHook{
+			Resource: ResourceAddr{Addr: "aws_vpc.main"},
+			Action:   "create",
+		},
+	})
+
+	activity := rt.GetCurrentActivity()
+	require.NotNil(t, activity)
+	assert.Equal(t, "aws_vpc.main", activity.Address)
+	assert.Equal(t, ResourceStateInProgress, activity.State)
+}
+
+func TestResourceTracker_HandleApplyProgress(t *testing.T) {
+	rt := NewResourceTracker()
+
+	// Set up resource in progress.
+	rt.HandleMessage(&PlannedChangeMessage{
+		Change: PlannedChange{
+			Resource: ResourceAddr{Addr: "aws_instance.web"},
+			Action:   "create",
+		},
+	})
+	rt.HandleMessage(&ApplyStartMessage{
+		Hook: ApplyHook{
+			Resource: ResourceAddr{Addr: "aws_instance.web"},
+			Action:   "create",
+		},
+	})
+
+	// Send progress update.
+	rt.HandleMessage(&ApplyProgressMessage{
+		Hook: ApplyHook{
+			Resource:    ResourceAddr{Addr: "aws_instance.web"},
+			Action:      "create",
+			ElapsedSecs: 30,
+		},
+	})
+
+	resources := rt.GetResources()
+	require.Len(t, resources, 1)
+	assert.Equal(t, 30, resources[0].ElapsedSecs)
+	assert.Equal(t, ResourceStateInProgress, resources[0].State)
+}
+
+func TestResourceTracker_ChangeSummaryWithErrorDoesNotOverridePhase(t *testing.T) {
+	rt := NewResourceTracker()
+
+	// First, error diagnostic.
+	rt.HandleMessage(&DiagnosticMessage{
+		Diagnostic: Diagnostic{
+			Severity: "error",
+			Summary:  "Configuration error",
+		},
+	})
+	assert.Equal(t, PhaseError, rt.GetPhase())
+
+	// Change summary after error should not change phase back to complete.
+	rt.HandleMessage(&ChangeSummaryMessage{
+		Changes: Changes{
+			Add:       0,
+			Change:    0,
+			Remove:    0,
+			Operation: "apply",
+		},
+	})
+	assert.Equal(t, PhaseError, rt.GetPhase())
 }
