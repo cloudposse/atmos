@@ -101,7 +101,7 @@ func buildAWSCredentialSpec(identityName string, mfaArn string) types.Credential
 }
 ```
 
-### 3.2 Error Handler with Automatic Recovery
+### 3.3 Error Handler with Automatic Recovery
 
 Update `handleSTSError()` to detect specific AWS errors and recover:
 
@@ -138,7 +138,7 @@ func (i *userIdentity) handleSTSError(err error) (*types.AWSCredentials, error) 
 }
 ```
 
-### 3.3 Session Duration Preservation
+### 3.4 Session Duration Preservation
 
 Ensure `SessionDuration` is copied from keyring credentials:
 
@@ -147,11 +147,11 @@ result := &types.AWSCredentials{
     AccessKeyID:     keystoreCreds.AccessKeyID,
     SecretAccessKey: keystoreCreds.SecretAccessKey,
     MfaArn:          keystoreCreds.MfaArn,
-    SessionDuration: keystoreCreds.SessionDuration, // Preserve session duration from keyring
+    SessionDuration: keystoreCreds.SessionDuration, // Preserve session duration from keyring.
 }
 ```
 
-### 3.4 Credential Prompting Implementation
+### 3.5 Credential Prompting Implementation
 
 Create `cmd/auth_credential_prompt.go` to register the credential prompting function:
 
