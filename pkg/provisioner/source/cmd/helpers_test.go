@@ -1,4 +1,4 @@
-package source
+package cmd
 
 import (
 	"context"
@@ -99,6 +99,7 @@ func TestProvisionSource_NoMetadataSource(t *testing.T) {
 				},
 			},
 		},
+		ComponentType:   "terraform",
 		Component:       "vpc",
 		Stack:           "dev",
 		ComponentConfig: map[string]any{}, // No metadata.source.
@@ -130,8 +131,9 @@ func TestProvisionSource_TargetExists(t *testing.T) {
 				},
 			},
 		},
-		Component: "vpc",
-		Stack:     "dev",
+		ComponentType: "terraform",
+		Component:     "vpc",
+		Stack:         "dev",
 		ComponentConfig: map[string]any{
 			"metadata": map[string]any{
 				"source": map[string]any{
@@ -172,8 +174,9 @@ func TestProvisionSource_TopLevelSource(t *testing.T) {
 				},
 			},
 		},
-		Component: "vpc",
-		Stack:     "dev",
+		ComponentType: "terraform",
+		Component:     "vpc",
+		Stack:         "dev",
 		ComponentConfig: map[string]any{
 			// Using top-level source instead of metadata.source.
 			"source": map[string]any{

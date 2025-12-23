@@ -1,6 +1,8 @@
-package source
+package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -11,43 +13,45 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
 )
 
-var describeParser *flags.StandardParser
-
-var describeCmd = &cobra.Command{
-	Use:   "describe <component>",
-	Short: "Show source configuration for a component",
-	Long: `Display the source configuration for a terraform component.
-
-This command shows the source URI, version, and any path filters configured
-for the component. Output matches the stack manifest schema format.`,
-	Example: `  # Describe source configuration
-  atmos terraform source describe vpc --stack dev`,
-	Args: cobra.ExactArgs(1),
-	RunE: executeDescribeCommand,
-}
-
-func init() {
-	describeCmd.DisableFlagParsing = false
-
-	describeParser = flags.NewStandardParser(
+// DescribeCommand creates a describe command for the given component type.
+func DescribeCommand(cfg *Config) *cobra.Command {
+	parser := flags.NewStandardParser(
 		flags.WithStackFlag(),
 	)
 
-	describeParser.RegisterFlags(describeCmd)
+	cmd := &cobra.Command{
+		Use:   "describe <component>",
+		Short: fmt.Sprintf("Show source configuration for a %s component", cfg.TypeLabel),
+		Long: fmt.Sprintf(`Display the source configuration for a %s component.
 
-	if err := describeParser.BindToViper(viper.GetViper()); err != nil {
+This command shows the source URI, version, and any path filters configured
+for the component. Output matches the stack manifest schema format.`, cfg.TypeLabel),
+		Example: fmt.Sprintf(`  # Describe source configuration
+  atmos %s source describe vpc --stack dev`, cfg.ComponentType),
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return executeDescribe(cmd, args, cfg, parser)
+		},
+	}
+
+	cmd.DisableFlagParsing = false
+	parser.RegisterFlags(cmd)
+
+	if err := parser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+
+	return cmd
 }
 
-func executeDescribeCommand(cmd *cobra.Command, args []string) error {
-	defer perf.Track(nil, "source.describe.RunE")()
+func executeDescribe(cmd *cobra.Command, args []string, cfg *Config, parser *flags.StandardParser) error {
+	defer perf.Track(nil, fmt.Sprintf("source.%s.describe.RunE", cfg.ComponentType))()
 
 	component := args[0]
 
 	// Parse flags.
 	v := viper.GetViper()
-	if err := describeParser.BindFlagsToViper(cmd, v); err != nil {
+	if err := parser.BindFlagsToViper(cmd, v); err != nil {
 		return err
 	}
 
@@ -83,7 +87,7 @@ func executeDescribeCommand(cmd *cobra.Command, args []string) error {
 	// Output as YAML matching stack manifest schema format.
 	output := map[string]any{
 		"components": map[string]any{
-			"terraform": map[string]any{
+			cfg.ComponentType: map[string]any{
 				component: map[string]any{
 					"source": sourceSpec,
 				},

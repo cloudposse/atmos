@@ -1,0 +1,124 @@
+---
+title: atmos helmfile source describe
+sidebar_label: source describe
+sidebar_class_name: command
+id: describe
+description: Show source configuration for a component
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use this command to display the `source` configuration for a Helmfile component. This shows the source URI, version, and any path filters configured for vendoring.
+</Intro>
+
+<ActionCard title="Source-Based Version Pinning">
+    Learn how to configure the `source` field for per-environment version control.
+    <div>
+      <PrimaryCTA to="/design-patterns/version-management/source-based-versioning">Design Pattern</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<Screengrab title="atmos helmfile source describe --help" slug="atmos-helmfile-source-describe--help" />
+
+## Usage
+
+```shell
+atmos helmfile source describe <component> --stack <stack>
+```
+
+## Description
+
+The `describe` command extracts and displays the `source` configuration from a component's stack manifest. The output matches the stack manifest schema format, making it easy to copy and paste into your configuration. This is useful for:
+
+- Verifying source configuration before vendoring
+- Checking the version configured for a component
+- Reviewing included/excluded path filters
+- Debugging source provisioning issues
+
+## Examples
+
+### View Source Configuration
+
+Display the source configuration for a component:
+
+```shell
+atmos helmfile source describe ingress-nginx --stack dev
+```
+
+Output:
+```yaml
+components:
+  helmfile:
+    ingress-nginx:
+      source:
+        uri: github.com/cloudposse/helmfiles//releases/ingress-nginx
+        version: 1.0.0
+        included_paths:
+          - "*.yaml"
+          - "values/**"
+        excluded_paths:
+          - "*.md"
+          - "tests/**"
+```
+
+### String Format Source
+
+When source is configured as a simple string:
+
+```shell
+atmos helmfile source describe cert-manager --stack dev
+```
+
+Output:
+```yaml
+components:
+  helmfile:
+    cert-manager:
+      source:
+        uri: github.com/cloudposse/helmfiles//releases/cert-manager?ref=1.0.0
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>**Required.** The name of the Atmos component to describe.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>**Required.** The Atmos stack name. Can also be set via `ATMOS_STACK` environment variable.</dd>
+</dl>
+
+## Output Format
+
+The command outputs YAML matching the stack manifest schema:
+
+<dl>
+  <dt>`components.helmfile.<component>.source`</dt>
+  <dd>The parsed source specification for the component.</dd>
+
+  <dt>`source.uri`</dt>
+  <dd>The go-getter compatible source URI.</dd>
+
+  <dt>`source.version`</dt>
+  <dd>The version tag, branch, or commit (if specified separately).</dd>
+
+  <dt>`source.included_paths`</dt>
+  <dd>List of glob patterns for files to include.</dd>
+
+  <dt>`source.excluded_paths`</dt>
+  <dd>List of glob patterns for files to exclude.</dd>
+</dl>
+
+## See Also
+
+- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) — Design pattern for per-environment version control
+- [`atmos helmfile source`](/cli/commands/helmfile/source) — Parent command overview
+- [`atmos helmfile source pull`](/cli/commands/helmfile/source/pull) — Vendor component source
+- [`atmos helmfile source delete`](/cli/commands/helmfile/source/delete) — Remove vendored source

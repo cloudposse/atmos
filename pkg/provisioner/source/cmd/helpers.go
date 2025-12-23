@@ -1,4 +1,4 @@
-package source
+package cmd
 
 import (
 	"context"
@@ -49,7 +49,7 @@ type CommonOptions struct {
 
 // ParseCommonFlags parses common flags (stack, identity, force) using StandardParser with Viper precedence.
 func ParseCommonFlags(cmd *cobra.Command, parser *flags.StandardParser) (*CommonOptions, error) {
-	defer perf.Track(nil, "source.ParseCommonFlags")()
+	defer perf.Track(nil, "source.cmd.ParseCommonFlags")()
 
 	v := viper.GetViper()
 	if err := parser.BindFlagsToViper(cmd, v); err != nil {
@@ -77,7 +77,7 @@ func ParseCommonFlags(cmd *cobra.Command, parser *flags.StandardParser) (*Common
 // The globalFlags parameter wires CLI global flags (--base-path, --config, --config-path, --profile)
 // to the configuration loader.
 func InitConfigAndAuth(component, stack, identity string, globalFlags *global.Flags) (*schema.AtmosConfiguration, *schema.AuthContext, error) {
-	defer perf.Track(nil, "source.InitConfigAndAuth")()
+	defer perf.Track(nil, "source.cmd.InitConfigAndAuth")()
 
 	// Build config info with global flag values.
 	configInfo := schema.ConfigAndStacksInfo{
@@ -131,7 +131,7 @@ func InitConfigAndAuth(component, stack, identity string, globalFlags *global.Fl
 
 // DescribeComponent returns the component configuration from stack.
 func DescribeComponent(component, stack string) (map[string]any, error) {
-	defer perf.Track(nil, "source.DescribeComponent")()
+	defer perf.Track(nil, "source.cmd.DescribeComponent")()
 
 	return describeComponentFunc(component, stack)
 }
@@ -139,6 +139,7 @@ func DescribeComponent(component, stack string) (map[string]any, error) {
 // ProvisionSourceOptions holds parameters for provisioning a component source.
 type ProvisionSourceOptions struct {
 	AtmosConfig     *schema.AtmosConfiguration
+	ComponentType   string // "terraform", "helmfile", "packer"
 	Component       string
 	Stack           string
 	ComponentConfig map[string]any
@@ -148,11 +149,11 @@ type ProvisionSourceOptions struct {
 
 // ProvisionSource vendors a component source based on the source configuration.
 func ProvisionSource(ctx context.Context, opts *ProvisionSourceOptions) error {
-	defer perf.Track(opts.AtmosConfig, "source.ProvisionSource")()
+	defer perf.Track(opts.AtmosConfig, "source.cmd.ProvisionSource")()
 
 	return source.Provision(ctx, &source.ProvisionParams{
 		AtmosConfig:     opts.AtmosConfig,
-		ComponentType:   "terraform",
+		ComponentType:   opts.ComponentType,
 		Component:       opts.Component,
 		Stack:           opts.Stack,
 		ComponentConfig: opts.ComponentConfig,

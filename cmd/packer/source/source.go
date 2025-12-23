@@ -1,4 +1,4 @@
-// Package source provides CLI commands for managing terraform component sources.
+// Package source provides CLI commands for managing packer component sources.
 // This includes JIT (just-in-time) vendoring from source configuration.
 package source
 
@@ -8,17 +8,17 @@ import (
 	sourcecmd "github.com/cloudposse/atmos/pkg/provisioner/source/cmd"
 )
 
-// terraformConfig holds the component-type-specific configuration for terraform.
-var terraformConfig = &sourcecmd.Config{
-	ComponentType: "terraform",
-	TypeLabel:     "Terraform",
+// packerConfig holds the component-type-specific configuration for packer.
+var packerConfig = &sourcecmd.Config{
+	ComponentType: "packer",
+	TypeLabel:     "Packer",
 }
 
 // sourceCmd represents the source command.
 var sourceCmd = &cobra.Command{
 	Use:   "source",
-	Short: "Manage Terraform component sources (JIT vendoring)",
-	Long: `Manage Terraform component sources defined in stack configuration.
+	Short: "Manage Packer component sources (JIT vendoring)",
+	Long: `Manage Packer component sources defined in stack configuration.
 
 The source provisioner enables just-in-time (JIT) vendoring of component sources
 directly from stack configuration. Components can declare their source location
@@ -33,10 +33,10 @@ Commands:
 
 func init() {
 	// Add subcommands from shared package.
-	sourceCmd.AddCommand(sourcecmd.PullCommand(terraformConfig))
-	sourceCmd.AddCommand(sourcecmd.ListCommand(terraformConfig))
-	sourceCmd.AddCommand(sourcecmd.DescribeCommand(terraformConfig))
-	sourceCmd.AddCommand(sourcecmd.DeleteCommand(terraformConfig))
+	sourceCmd.AddCommand(sourcecmd.PullCommand(packerConfig))
+	sourceCmd.AddCommand(sourcecmd.ListCommand(packerConfig))
+	sourceCmd.AddCommand(sourcecmd.DescribeCommand(packerConfig))
+	sourceCmd.AddCommand(sourcecmd.DeleteCommand(packerConfig))
 }
 
 // GetSourceCommand returns the source command for parent registration.

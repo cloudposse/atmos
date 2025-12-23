@@ -162,6 +162,8 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentType 
 		return atmosConfig.Components.Terraform.BasePath
 	case "helmfile":
 		return atmosConfig.Components.Helmfile.BasePath
+	case "packer":
+		return atmosConfig.Components.Packer.BasePath
 	default:
 		return ""
 	}

@@ -1,4 +1,4 @@
-package source
+package cmd
 
 import (
 	"fmt"
@@ -17,43 +17,51 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-var deleteParser *flags.StandardParser
-
-var deleteCmd = &cobra.Command{
-	Use:   "delete <component>",
-	Short: "Remove vendored source directory",
-	Long: `Delete the vendored source directory for a terraform component.
-
-This command removes the component directory that was created by 'atmos terraform source pull'.
-Requires --force flag for safety.`,
-	Example: `  # Delete vendored source
-  atmos terraform source delete vpc --stack dev --force`,
-	Args: cobra.ExactArgs(1),
-	RunE: executeDeleteCommand,
-}
-
-func init() {
-	deleteCmd.DisableFlagParsing = false
-
-	deleteParser = flags.NewStandardParser(
+// DeleteCommand creates a delete command for the given component type.
+func DeleteCommand(config *Config) *cobra.Command {
+	parser := flags.NewStandardParser(
 		flags.WithStackFlag(),
 		flags.WithBoolFlag("force", "f", false, "Force deletion without confirmation"),
 	)
 
-	deleteParser.RegisterFlags(deleteCmd)
+	cmd := &cobra.Command{
+		Use:   "delete <component>",
+		Short: fmt.Sprintf("Remove vendored %s source directory", config.TypeLabel),
+		Long: fmt.Sprintf(`Delete the vendored source directory for a %s component.
 
-	if err := deleteParser.BindToViper(viper.GetViper()); err != nil {
+This command removes the component directory that was created by 'atmos %s source pull'.
+Requires --force flag for safety.`, config.TypeLabel, config.ComponentType),
+		Example: fmt.Sprintf(`  # Delete vendored source
+  atmos %s source delete vpc --stack dev --force`, config.ComponentType),
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return executeDelete(cmd, args, config, parser)
+		},
+	}
+
+	cmd.DisableFlagParsing = false
+	parser.RegisterFlags(cmd)
+
+	if err := parser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+
+	return cmd
 }
 
-func executeDeleteCommand(cmd *cobra.Command, args []string) error {
-	defer perf.Track(nil, "source.delete.RunE")()
+// deleteOptions holds parsed delete command options.
+type deleteOptions struct {
+	Stack       string
+	GlobalFlags global.Flags
+}
+
+func executeDelete(cmd *cobra.Command, args []string, config *Config, parser *flags.StandardParser) error {
+	defer perf.Track(nil, fmt.Sprintf("source.%s.delete.RunE", config.ComponentType))()
 
 	component := args[0]
 
 	// Parse flags and get delete options.
-	deleteOpts, err := parseDeleteFlags(cmd)
+	deleteOpts, err := parseDeleteFlags(cmd, parser)
 	if err != nil {
 		return err
 	}
@@ -65,13 +73,13 @@ func executeDeleteCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Determine and delete the target directory.
-	return deleteSourceDirectory(atmosConfig, component, componentConfig, deleteOpts.Stack)
+	return deleteSourceDirectory(atmosConfig, config.ComponentType, component, componentConfig, deleteOpts.Stack)
 }
 
 // parseDeleteFlags parses delete command flags and validates them.
-func parseDeleteFlags(cmd *cobra.Command) (*deleteOptions, error) {
+func parseDeleteFlags(cmd *cobra.Command, parser *flags.StandardParser) (*deleteOptions, error) {
 	v := viper.GetViper()
-	if err := deleteParser.BindFlagsToViper(cmd, v); err != nil {
+	if err := parser.BindFlagsToViper(cmd, v); err != nil {
 		return nil, err
 	}
 
@@ -136,8 +144,8 @@ func initDeleteContext(component, stack string, globalFlags *global.Flags) (*sch
 }
 
 // deleteSourceDirectory deletes the vendored source directory.
-func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, component string, componentConfig map[string]any, _ string) error {
-	targetDir, err := source.DetermineTargetDirectory(atmosConfig, "terraform", component, componentConfig)
+func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, componentType, component string, componentConfig map[string]any, _ string) error {
+	targetDir, err := source.DetermineTargetDirectory(atmosConfig, componentType, component, componentConfig)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(err).
@@ -160,10 +168,4 @@ func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, component str
 
 	_ = ui.Success(fmt.Sprintf("Successfully deleted: %s", targetDir))
 	return nil
-}
-
-// deleteOptions holds parsed delete command options.
-type deleteOptions struct {
-	Stack       string
-	GlobalFlags global.Flags
 }
