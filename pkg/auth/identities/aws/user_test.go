@@ -170,6 +170,12 @@ func TestUserIdentity_Authenticate_GeneratesNewWhenExpired(t *testing.T) {
 		return "", errors.New("mock: should not call MFA prompt in this test")
 	}
 
+	// Mock credential prompt to avoid interactive UI blocking on Windows.
+	// When STS returns InvalidClientTokenId, the error handler tries to prompt for new credentials.
+	originalCredPromptFunc := PromptCredentialsFunc
+	defer func() { PromptCredentialsFunc = originalCredPromptFunc }()
+	PromptCredentialsFunc = nil // Disable prompting to avoid blocking.
+
 	// Create identity without MFA to avoid prompt.
 	identity, err := NewUserIdentity("test-user", &schema.Identity{
 		Kind: "aws/user",
