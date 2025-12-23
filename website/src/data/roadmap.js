@@ -108,7 +108,7 @@ export const roadmapConfig = {
         { label: 'Added `atmos list components`', status: 'shipped', quarter: 'q1-2025', docs: '/cli/commands/list/components', description: 'Discover all available components across your infrastructure catalog.', codeExample: 'atmos list components' },
         { label: 'Added `atmos list workflows`', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/list/workflows', description: 'Browse available workflows with their descriptions and step counts.', codeExample: 'atmos list workflows' },
         { label: 'Added `atmos list affected` with spinner UI', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/list/affected', changelog: 'list-affected-command', description: 'Identify which stacks and components are affected by your changes—perfect for targeted CI/CD.' },
-        { label: 'Customizable list output', status: 'shipped', quarter: 'q4-2025', changelog: 'customizable-list-command-output', description: 'Create custom views of your configuration with customizable columns—display exactly the data you need.' },
+        { label: 'Customizable list columns', status: 'shipped', quarter: 'q4-2025', changelog: 'customizable-list-command-output', description: 'Create custom views of your configuration with customizable columns—display exactly the data you need.' },
         { label: 'JMESPath queries (`--query`)', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/list/stacks', description: 'Filter and transform list output with JMESPath queries for precise data extraction.', codeExample: 'atmos list stacks --query "[?components.terraform.vpc]"' },
       ],
       issues: [],
