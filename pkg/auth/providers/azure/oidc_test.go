@@ -698,9 +698,9 @@ func TestOIDCProvider_ExchangeToken(t *testing.T) {
 				tokenEndpoint: server.URL,
 			}
 
-			// Call exchangeToken.
+			// Call exchangeToken with management scope.
 			ctx := context.Background()
-			resp, err := provider.exchangeToken(ctx, "test-federated-token")
+			resp, err := provider.exchangeToken(ctx, "test-federated-token", azureManagementScope)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -1188,7 +1188,7 @@ func TestOIDCProvider_ExchangeToken_EdgeCases(t *testing.T) {
 			tokenEndpoint: server.URL,
 		}
 
-		_, err := provider.exchangeToken(context.Background(), "test-federated-token")
+		_, err := provider.exchangeToken(context.Background(), "test-federated-token", azureManagementScope)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 		assert.Contains(t, err.Error(), "empty access token")
@@ -1210,7 +1210,7 @@ func TestOIDCProvider_ExchangeToken_EdgeCases(t *testing.T) {
 			tokenEndpoint: server.URL,
 		}
 
-		_, err := provider.exchangeToken(context.Background(), "test-federated-token")
+		_, err := provider.exchangeToken(context.Background(), "test-federated-token", azureManagementScope)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 		assert.Contains(t, err.Error(), "failed to decode")

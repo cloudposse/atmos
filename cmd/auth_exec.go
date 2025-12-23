@@ -36,7 +36,8 @@ var authExecCmd = &cobra.Command{
 // executeAuthExecCommand is the main execution function for auth exec command.
 func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
-	checkAtmosConfig()
+	// Skip stack validation since auth exec only needs auth configuration, not stack manifests.
+	checkAtmosConfig(WithStackValidation(false))
 
 	return executeAuthExecCommandCore(cmd, args)
 }

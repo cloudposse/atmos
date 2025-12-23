@@ -29,6 +29,12 @@ const (
 	// Default scope for Azure management API.
 	azureManagementScope = "https://management.azure.com/.default"
 
+	// Scope for Microsoft Graph API (required for azuread provider and some az commands).
+	azureGraphAPIScope = "https://graph.microsoft.com/.default"
+
+	// Scope for Azure KeyVault API (optional, for KeyVault operations).
+	azureKeyVaultScope = "https://vault.azure.net/.default"
+
 	// Grant type for client credentials with federated token.
 	grantTypeClientCredentials = "client_credentials"
 
@@ -175,6 +181,10 @@ func (p *oidcProvider) getTokenEndpoint() string {
 
 // Authenticate performs Azure OIDC authentication by exchanging a federated token
 // (from GitHub Actions, Azure DevOps, etc.) for Azure credentials.
+// This acquires tokens for multiple scopes to ensure Azure CLI and Terraform compatibility:
+// - Management API (ARM operations)
+// - Graph API (azuread provider and some az commands)
+// - KeyVault API (optional, for KeyVault operations).
 func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error) {
 	defer perf.Track(nil, "azure.oidcProvider.Authenticate")()
 
@@ -190,8 +200,8 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials
 		return nil, err
 	}
 
-	// Exchange the federated token for an Azure access token.
-	tokenResp, err := p.exchangeToken(ctx, federatedToken)
+	// Exchange the federated token for the primary Azure Management API token.
+	tokenResp, err := p.exchangeToken(ctx, federatedToken, azureManagementScope)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +209,7 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials
 	// Calculate expiration time.
 	expiresOn := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 
-	// Create Azure credentials.
+	// Create Azure credentials with the primary management token.
 	creds := &authTypes.AzureCredentials{
 		AccessToken:    tokenResp.AccessToken,
 		TokenType:      tokenResp.TokenType,
@@ -209,14 +219,46 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials
 		Location:       p.location,
 	}
 
+	// Acquire additional tokens for Azure CLI and Terraform provider compatibility.
+	// These are acquired in parallel for efficiency.
+	p.acquireAdditionalTokens(ctx, federatedToken, creds)
+
 	log.Debug("Successfully authenticated with Azure OIDC",
 		"provider", p.name,
 		"tenant", p.tenantID,
 		"subscription", p.subscriptionID,
 		"expiresOn", expiresOn.Format(time.RFC3339),
+		"hasGraphToken", creds.GraphAPIToken != "",
+		"hasKeyVaultToken", creds.KeyVaultToken != "",
 	)
 
 	return creds, nil
+}
+
+// acquireAdditionalTokens acquires Graph API and KeyVault tokens.
+// These tokens are optional - failures are logged but don't block authentication.
+func (p *oidcProvider) acquireAdditionalTokens(ctx context.Context, federatedToken string, creds *authTypes.AzureCredentials) {
+	// Acquire Microsoft Graph API token (required for azuread provider).
+	graphResp, err := p.exchangeToken(ctx, federatedToken, azureGraphAPIScope)
+	if err != nil {
+		log.Debug("Failed to acquire Graph API token (azuread provider may not work)", "error", err)
+	} else {
+		expiresOn := time.Now().Add(time.Duration(graphResp.ExpiresIn) * time.Second)
+		creds.GraphAPIToken = graphResp.AccessToken
+		creds.GraphAPIExpiration = expiresOn.Format(time.RFC3339)
+		log.Debug("Acquired Graph API token", "expiresOn", creds.GraphAPIExpiration)
+	}
+
+	// Acquire Azure KeyVault API token (optional, for KeyVault operations).
+	kvResp, err := p.exchangeToken(ctx, federatedToken, azureKeyVaultScope)
+	if err != nil {
+		log.Debug("Failed to acquire KeyVault API token (KeyVault operations may not work)", "error", err)
+	} else {
+		expiresOn := time.Now().Add(time.Duration(kvResp.ExpiresIn) * time.Second)
+		creds.KeyVaultToken = kvResp.AccessToken
+		creds.KeyVaultExpiration = expiresOn.Format(time.RFC3339)
+		log.Debug("Acquired KeyVault API token", "expiresOn", creds.KeyVaultExpiration)
+	}
 }
 
 // readFederatedToken reads the federated token from the configured source.
@@ -334,8 +376,8 @@ func (p *oidcProvider) fetchGitHubActionsToken() (string, error) {
 	return result.Value, nil
 }
 
-// exchangeToken exchanges a federated token for an Azure access token.
-func (p *oidcProvider) exchangeToken(ctx context.Context, federatedToken string) (*tokenResponse, error) {
+// exchangeToken exchanges a federated token for an Azure access token for the specified scope.
+func (p *oidcProvider) exchangeToken(ctx context.Context, federatedToken, scope string) (*tokenResponse, error) {
 	defer perf.Track(nil, "azure.oidcProvider.exchangeToken")()
 
 	tokenEndpoint := p.getTokenEndpoint()
@@ -346,7 +388,7 @@ func (p *oidcProvider) exchangeToken(ctx context.Context, federatedToken string)
 	data.Set("client_id", p.clientID)
 	data.Set("client_assertion_type", clientAssertionTypeJWT)
 	data.Set("client_assertion", federatedToken)
-	data.Set("scope", azureManagementScope)
+	data.Set("scope", scope)
 
 	// Create HTTP request.
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenEndpoint, strings.NewReader(data.Encode()))
@@ -382,6 +424,7 @@ func (p *oidcProvider) exchangeToken(ctx context.Context, federatedToken string)
 	}
 
 	log.Debug("Successfully exchanged federated token for Azure access token",
+		"scope", scope,
 		"tokenType", tokenResp.TokenType,
 		"expiresIn", tokenResp.ExpiresIn,
 	)
