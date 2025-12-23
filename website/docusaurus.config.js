@@ -435,6 +435,11 @@ const config = {
                         position: 'left',
                         to: '/changelog'
                     },
+                    {
+                        label: 'Roadmap',
+                        position: 'left',
+                        to: '/roadmap'
+                    },
                     // GitHub stars badge
                     {
                         type: 'custom-github-stars',
