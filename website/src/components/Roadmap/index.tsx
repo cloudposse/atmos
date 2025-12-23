@@ -4,6 +4,7 @@ import Link from '@docusaurus/Link';
 import { RiLightbulbLine, RiExternalLinkLine } from 'react-icons/ri';
 import RoadmapHero from './RoadmapHero';
 import QuarterTimeline from './QuarterTimeline';
+import FeaturedSection from './FeaturedSection';
 import InitiativeCard from './InitiativeCard';
 import { roadmapConfig } from '@site/src/data/roadmap';
 import styles from './styles.module.css';
@@ -22,6 +23,10 @@ export default function Roadmap(): JSX.Element {
         <section className={styles.timelineSection}>
           <QuarterTimeline quarters={roadmapConfig.quarters} initiatives={roadmapConfig.initiatives} />
         </section>
+
+        {roadmapConfig.featured && roadmapConfig.featured.length > 0 && (
+          <FeaturedSection items={roadmapConfig.featured} />
+        )}
 
         <section className={styles.section}>
           <h2 className={styles.sectionTitle}>Initiatives</h2>

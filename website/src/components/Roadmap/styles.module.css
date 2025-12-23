@@ -92,6 +92,202 @@
   background: rgba(237, 137, 54, 0.25);
 }
 
+/* Featured Section Styles */
+.featuredSection {
+  margin-bottom: 3rem;
+}
+
+.featuredGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+@media screen and (max-width: 1024px) {
+  .featuredGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media screen and (max-width: 640px) {
+  .featuredGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.featuredCard {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s ease;
+}
+
+.featuredCard:hover {
+  border-color: rgba(30, 91, 184, 0.3);
+  box-shadow: 0 4px 16px rgba(30, 91, 184, 0.1);
+}
+
+:global(html[data-theme='dark']) .featuredCard {
+  background: #1e1e2e;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+:global(html[data-theme='dark']) .featuredCard:hover {
+  border-color: rgba(83, 140, 233, 0.4);
+  box-shadow: 0 4px 16px rgba(83, 140, 233, 0.15);
+}
+
+.featuredHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.featuredIconWrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(30, 91, 184, 0.1) 0%, rgba(83, 140, 233, 0.1) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+:global(html[data-theme='dark']) .featuredIconWrapper {
+  background: linear-gradient(135deg, rgba(83, 140, 233, 0.15) 0%, rgba(83, 140, 233, 0.1) 100%);
+}
+
+.featuredIcon {
+  font-size: 1.5rem;
+  color: #1e5bb8;
+}
+
+:global(html[data-theme='dark']) .featuredIcon {
+  color: #538ce9;
+}
+
+.featuredStatus {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.featuredStatusShipped {
+  background: rgba(56, 161, 105, 0.15);
+  color: #38a169;
+}
+
+:global(html[data-theme='dark']) .featuredStatusShipped {
+  background: rgba(56, 161, 105, 0.2);
+  color: #68d391;
+}
+
+.featuredStatusInProgress {
+  background: rgba(30, 91, 184, 0.15);
+  color: #1e5bb8;
+}
+
+:global(html[data-theme='dark']) .featuredStatusInProgress {
+  background: rgba(83, 140, 233, 0.2);
+  color: #538ce9;
+}
+
+.featuredStatusPlanned {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--ifm-color-emphasis-600);
+}
+
+:global(html[data-theme='dark']) .featuredStatusPlanned {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ifm-color-emphasis-500);
+}
+
+.featuredTitle {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem 0;
+  color: var(--ifm-heading-color);
+}
+
+.featuredTagline {
+  font-size: 0.9rem;
+  color: #1e5bb8;
+  font-weight: 500;
+  margin: 0 0 0.75rem 0;
+}
+
+:global(html[data-theme='dark']) .featuredTagline {
+  color: #538ce9;
+}
+
+.featuredDescription {
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-600);
+  line-height: 1.5;
+  margin: 0;
+  flex: 1;
+}
+
+.featuredFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+:global(html[data-theme='dark']) .featuredFooter {
+  border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+.featuredQuarter {
+  font-size: 0.8rem;
+  color: var(--ifm-color-emphasis-500);
+  font-weight: 500;
+}
+
+.featuredLinks {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.featuredLink {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ifm-color-emphasis-600);
+  transition: all 0.2s ease;
+}
+
+.featuredLink:hover {
+  background: rgba(30, 91, 184, 0.1);
+  color: #1e5bb8;
+}
+
+:global(html[data-theme='dark']) .featuredLink {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+:global(html[data-theme='dark']) .featuredLink:hover {
+  background: rgba(83, 140, 233, 0.15);
+  color: #538ce9;
+}
+
 /* Hero Styles */
 .hero {
   text-align: center;
