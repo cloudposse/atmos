@@ -260,6 +260,7 @@ export const roadmapConfig = {
         { label: 'CodeRabbit review integration', status: 'shipped', quarter: 'q3-2025', description: 'Automated code reviews with AI-powered suggestions and security analysis.' },
         { label: 'Nightly releases (RC candidates)', status: 'shipped', quarter: 'q4-2025', description: 'Automated nightly builds for testing upcoming features before stable release.' },
         { label: 'PR feature releases', status: 'shipped', quarter: 'q4-2025', description: 'Every PR gets a pre-release version for easy testing before merge.' },
+        { label: 'Push for stability', status: 'shipped', quarter: 'q4-2025', description: 'Focused effort on bug fixes, edge cases, and reliability improvements across the codebase.' },
         { label: '80%+ test coverage', status: 'in-progress', quarter: 'q1-2026', description: 'Targeting 80%+ test coverage with focus on critical paths and edge cases.' },
       ],
       issues: [],
