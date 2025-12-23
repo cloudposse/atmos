@@ -198,7 +198,10 @@ func TestUserIdentity_Authenticate_GeneratesNewWhenExpired(t *testing.T) {
 
 	// Test: Call Authenticate() - it should detect expired credentials and attempt to generate new ones.
 	// Since we can't actually call AWS STS in tests, we expect this to fail at the generateSessionToken step.
-	ctx := context.Background()
+	// Use short timeout so SDK calls fail fast in tests (especially important on Windows where network
+	// operations may hang longer due to IMDS checks or different TCP timeout behavior).
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	_, err = userIdent.Authenticate(ctx, nil)
 
 	// Verify: Authentication attempted to generate new token (would fail because no real AWS creds).

@@ -21,12 +21,6 @@ const (
 	FieldSessionDuration = "session_duration"
 )
 
-func init() {
-	// Register the generic credential prompting function.
-	// This allows the auth login flow to prompt for credentials when they're missing or invalid.
-	GenericPromptCredentialsFunc = promptCredentialsGeneric
-}
-
 // GenericPromptCredentialsFunc is the generic credential prompting function.
 // It uses CredentialPromptSpec to determine what fields to collect.
 var GenericPromptCredentialsFunc types.CredentialPromptFunc
@@ -37,6 +31,10 @@ var GenericPromptCredentialsFunc types.CredentialPromptFunc
 var PromptCredentialsFunc func(identityName string, mfaArn string) (*types.AWSCredentials, error)
 
 func init() {
+	// Register the generic credential prompting function.
+	// This allows the auth login flow to prompt for credentials when they're missing or invalid.
+	GenericPromptCredentialsFunc = promptCredentialsGeneric
+
 	// Set up the AWS-specific wrapper that uses the generic prompting.
 	PromptCredentialsFunc = promptForAWSCredentials
 }
