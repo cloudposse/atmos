@@ -662,6 +662,18 @@ type AzureAuthContext struct {
 
 	// Location is the Azure region/location (optional, e.g., "eastus").
 	Location string `json:"location,omitempty" yaml:"location,omitempty"`
+
+	// UseOIDC indicates whether to use OIDC authentication instead of CLI auth.
+	// When true, Terraform will use ARM_USE_OIDC=true instead of ARM_USE_CLI=true.
+	UseOIDC bool `json:"use_oidc,omitempty" yaml:"use_oidc,omitempty"`
+
+	// ClientID is the Azure AD application (client) ID for OIDC authentication.
+	// Required when UseOIDC is true.
+	ClientID string `json:"client_id,omitempty" yaml:"client_id,omitempty"`
+
+	// TokenFilePath is the path to the OIDC token file (e.g., from GitHub Actions).
+	// Optional - if not set, AZURE_FEDERATED_TOKEN_FILE env var will be used.
+	TokenFilePath string `json:"token_file_path,omitempty" yaml:"token_file_path,omitempty"`
 }
 
 type ConfigAndStacksInfo struct {

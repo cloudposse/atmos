@@ -30,6 +30,9 @@ type AzureCredentials struct {
 	// IsServicePrincipal indicates this is service principal auth (OIDC/client credentials).
 	// Service principal tokens use a different MSAL cache format than user tokens.
 	IsServicePrincipal bool `json:"is_service_principal,omitempty"`
+	// TokenFilePath is the path to the OIDC token file (e.g., from GitHub Actions).
+	// Used for Terraform ARM_USE_OIDC authentication.
+	TokenFilePath string `json:"token_file_path,omitempty"`
 }
 
 // IsExpired returns true if the credentials are expired.

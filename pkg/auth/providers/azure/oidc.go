@@ -207,6 +207,12 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials
 	// Calculate expiration time.
 	expiresOn := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 
+	// Determine token file path for Terraform OIDC.
+	tokenFilePath := p.tokenFilePath
+	if tokenFilePath == "" {
+		tokenFilePath = os.Getenv("AZURE_FEDERATED_TOKEN_FILE")
+	}
+
 	// Create Azure credentials with the primary management token.
 	// Mark as service principal for correct MSAL cache format.
 	creds := &authTypes.AzureCredentials{
@@ -218,6 +224,7 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials
 		Location:           p.location,
 		ClientID:           p.clientID,
 		IsServicePrincipal: true,
+		TokenFilePath:      tokenFilePath,
 	}
 
 	// Acquire additional tokens for Azure CLI and Terraform provider compatibility.

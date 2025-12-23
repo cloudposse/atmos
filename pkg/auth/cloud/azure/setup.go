@@ -97,6 +97,10 @@ func SetAuthContext(params *SetAuthContextParams) error {
 		SubscriptionID:  azureCreds.SubscriptionID,
 		TenantID:        azureCreds.TenantID,
 		Location:        location,
+		// OIDC-specific fields for Terraform ARM_USE_OIDC support.
+		UseOIDC:       azureCreds.IsServicePrincipal,
+		ClientID:      azureCreds.ClientID,
+		TokenFilePath: azureCreds.TokenFilePath,
 	}
 
 	log.Debug("Set Azure auth context",
@@ -166,11 +170,15 @@ func SetEnvironmentVariables(authContext *schema.AuthContext, stackInfo *schema.
 	}
 
 	// Use shared PrepareEnvironment helper to get properly configured environment.
+	// Pass OIDC fields from auth context for Terraform ARM_USE_OIDC support.
 	environMap = PrepareEnvironment(PrepareEnvironmentConfig{
 		Environ:        environMap,
 		SubscriptionID: azureAuth.SubscriptionID,
 		TenantID:       azureAuth.TenantID,
 		Location:       azureAuth.Location,
+		UseOIDC:        azureAuth.UseOIDC,
+		ClientID:       azureAuth.ClientID,
+		TokenFilePath:  azureAuth.TokenFilePath,
 	})
 
 	// Replace ComponentEnvSection with prepared environment.
@@ -247,6 +255,15 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID stri
 	if err := updateAzureProfile(home, username, tenantID, subscriptionID, azureCreds.IsServicePrincipal); err != nil {
 		log.Debug("Failed to update Azure profile", "error", err)
 		// Non-fatal.
+	}
+
+	// For service principal auth, also update service_principal_entries.json.
+	// This allows Azure CLI commands to work with OIDC tokens during the CI workflow.
+	if azureCreds.IsServicePrincipal && azureCreds.ClientID != "" {
+		if err := updateServicePrincipalEntries(home, azureCreds.ClientID, tenantID, azureCreds.TokenFilePath); err != nil {
+			log.Debug("Failed to update service principal entries", "error", err)
+			// Non-fatal.
+		}
 	}
 
 	return nil
@@ -679,6 +696,90 @@ func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tena
 	}
 
 	return subscriptionsRaw
+}
+
+// updateServicePrincipalEntries updates the service_principal_entries.json file for Azure CLI.
+// This enables Azure CLI commands to work with OIDC tokens during CI workflows.
+// Format: https://github.com/Azure/azure-cli/blob/main/src/azure-cli-core/azure/cli/core/auth/identity.py
+func updateServicePrincipalEntries(home, clientID, tenantID, tokenFilePath string) error {
+	entriesPath := filepath.Join(home, ".azure", "service_principal_entries.json")
+	azureDir := filepath.Dir(entriesPath)
+	if err := os.MkdirAll(azureDir, DirPermissions); err != nil {
+		return fmt.Errorf("failed to create .azure directory: %w", err)
+	}
+
+	// Load existing entries or create new array.
+	var entries []map[string]interface{}
+	data, err := os.ReadFile(entriesPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to read service principal entries: %w", err)
+		}
+		entries = []map[string]interface{}{}
+	} else {
+		// Strip UTF-8 BOM if present.
+		data = stripBOM(data)
+
+		if err := json.Unmarshal(data, &entries); err != nil {
+			// If file is corrupted, start fresh.
+			log.Debug("Failed to parse service principal entries, creating new file", "error", err)
+			entries = []map[string]interface{}{}
+		}
+	}
+
+	// Find or create entry for this service principal.
+	var found bool
+	for i, entry := range entries {
+		if cid, ok := entry["servicePrincipalId"].(string); ok && cid == clientID {
+			// Update existing entry.
+			entries[i] = createServicePrincipalEntry(clientID, tenantID, tokenFilePath)
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		// Add new entry.
+		entries = append(entries, createServicePrincipalEntry(clientID, tenantID, tokenFilePath))
+	}
+
+	// Write updated entries.
+	updatedData, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal service principal entries: %w", err)
+	}
+
+	// Acquire file lock to prevent concurrent writes.
+	lockPath := entriesPath + ".lock"
+	lock, err := AcquireFileLock(lockPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if unlockErr := lock.Unlock(); unlockErr != nil {
+			log.Debug("Failed to unlock service principal entries file", "lock_file", lockPath, "error", unlockErr)
+		}
+	}()
+
+	if err := os.WriteFile(entriesPath, updatedData, FilePermissions); err != nil {
+		return fmt.Errorf("failed to write service principal entries: %w", err)
+	}
+
+	log.Debug("Updated Azure CLI service principal entries", "path", entriesPath, "client_id", clientID)
+	return nil
+}
+
+// createServicePrincipalEntry creates a service principal entry for OIDC authentication.
+// For OIDC, we use client_assertion_file_path to point to the federated token file.
+func createServicePrincipalEntry(clientID, tenantID, tokenFilePath string) map[string]interface{} {
+	entry := map[string]interface{}{
+		"servicePrincipalId":     clientID,
+		"servicePrincipalTenant": tenantID,
+		// For OIDC, we point to the token file instead of embedding the token.
+		// Azure CLI will read the token from this file when needed.
+		"client_assertion_file_path": tokenFilePath,
+	}
+	return entry
 }
 
 // extractOIDFromToken extracts the user OID from a JWT token.
