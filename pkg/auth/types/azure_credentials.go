@@ -24,6 +24,12 @@ type AzureCredentials struct {
 	GraphAPIExpiration string `json:"graph_api_expiration,omitempty"` // RFC3339 timestamp for Graph API token
 	KeyVaultToken      string `json:"key_vault_token,omitempty"`      // Azure KeyVault API token
 	KeyVaultExpiration string `json:"key_vault_expiration,omitempty"` // RFC3339 timestamp for KeyVault token
+	// ClientID is set for service principal authentication (OIDC).
+	// When set, MSAL cache uses client credentials format instead of user format.
+	ClientID string `json:"client_id,omitempty"`
+	// IsServicePrincipal indicates this is service principal auth (OIDC/client credentials).
+	// Service principal tokens use a different MSAL cache format than user tokens.
+	IsServicePrincipal bool `json:"is_service_principal,omitempty"`
 }
 
 // IsExpired returns true if the credentials are expired.

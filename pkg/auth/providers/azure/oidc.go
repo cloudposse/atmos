@@ -207,13 +207,16 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials
 	expiresOn := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 
 	// Create Azure credentials with the primary management token.
+	// Mark as service principal for correct MSAL cache format.
 	creds := &authTypes.AzureCredentials{
-		AccessToken:    tokenResp.AccessToken,
-		TokenType:      tokenResp.TokenType,
-		Expiration:     expiresOn.Format(time.RFC3339),
-		TenantID:       p.tenantID,
-		SubscriptionID: p.subscriptionID,
-		Location:       p.location,
+		AccessToken:       tokenResp.AccessToken,
+		TokenType:         tokenResp.TokenType,
+		Expiration:        expiresOn.Format(time.RFC3339),
+		TenantID:          p.tenantID,
+		SubscriptionID:    p.subscriptionID,
+		Location:          p.location,
+		ClientID:          p.clientID,
+		IsServicePrincipal: true,
 	}
 
 	// Acquire additional tokens for Azure CLI and Terraform provider compatibility.

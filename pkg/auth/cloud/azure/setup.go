@@ -231,6 +231,8 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID stri
 		KeyVaultExpiration: keyVaultExpiration,
 		UserOID:            userOID,
 		TenantID:           tenantID,
+		ClientID:           azureCreds.ClientID,
+		IsServicePrincipal: azureCreds.IsServicePrincipal,
 	}); err != nil {
 		log.Debug("Failed to update MSAL cache", "error", err)
 		// Continue to try azureProfile update.
@@ -256,6 +258,15 @@ type msalCacheUpdate struct {
 	KeyVaultExpiration string
 	UserOID            string
 	TenantID           string
+	// ClientID is set for service principal authentication (OIDC).
+	ClientID string
+	// IsServicePrincipal indicates this is service principal auth.
+	// Service principal tokens use a different MSAL cache format:
+	// - home_account_id is empty (cache key starts with "-")
+	// - No Account entry is created
+	// - AppMetadata entry is added
+	// Reference: https://github.com/AzureAD/microsoft-authentication-library-for-python
+	IsServicePrincipal bool
 }
 
 // updateMSALCache updates the Azure CLI MSAL token cache.
@@ -269,8 +280,15 @@ func updateMSALCache(params *msalCacheUpdate) error {
 	}
 
 	// Initialize cache sections and populate with tokens.
-	accessTokenSection, accountSection := initializeCacheSections(cache)
-	addAccountAndTokens(accessTokenSection, accountSection, params)
+	sections := initializeCacheSections(cache)
+
+	if params.IsServicePrincipal {
+		// Service principal uses different MSAL cache format.
+		addServicePrincipalTokens(sections, params)
+	} else {
+		// User authentication uses standard format.
+		addUserAccountAndTokens(sections, params)
+	}
 
 	// Write updated cache.
 	updatedData, err := json.MarshalIndent(cache, "", "  ")
@@ -281,23 +299,42 @@ func updateMSALCache(params *msalCacheUpdate) error {
 	return writeMSALCacheToFile(msalCachePath, updatedData)
 }
 
-// initializeCacheSections ensures AccessToken and Account sections exist in cache.
-func initializeCacheSections(cache map[string]interface{}) (accessTokenSection, accountSection map[string]interface{}) {
+// msalCacheSections holds all MSAL cache sections.
+type msalCacheSections struct {
+	accessToken map[string]interface{}
+	account     map[string]interface{}
+	appMetadata map[string]interface{}
+}
+
+// initializeCacheSections ensures all MSAL cache sections exist.
+func initializeCacheSections(cache map[string]interface{}) *msalCacheSections {
+	sections := &msalCacheSections{}
+
 	// Ensure AccessToken section exists.
-	accessTokenSection, ok := cache[FieldAccessToken].(map[string]interface{})
-	if !ok {
-		accessTokenSection = make(map[string]interface{})
-		cache[FieldAccessToken] = accessTokenSection
+	if at, ok := cache[FieldAccessToken].(map[string]interface{}); ok {
+		sections.accessToken = at
+	} else {
+		sections.accessToken = make(map[string]interface{})
+		cache[FieldAccessToken] = sections.accessToken
 	}
 
 	// Ensure Account section exists.
-	accountSection, ok = cache["Account"].(map[string]interface{})
-	if !ok {
-		accountSection = make(map[string]interface{})
-		cache["Account"] = accountSection
+	if acc, ok := cache["Account"].(map[string]interface{}); ok {
+		sections.account = acc
+	} else {
+		sections.account = make(map[string]interface{})
+		cache["Account"] = sections.account
 	}
 
-	return accessTokenSection, accountSection
+	// Ensure AppMetadata section exists (used for service principal auth).
+	if am, ok := cache["AppMetadata"].(map[string]interface{}); ok {
+		sections.appMetadata = am
+	} else {
+		sections.appMetadata = make(map[string]interface{})
+		cache["AppMetadata"] = sections.appMetadata
+	}
+
+	return sections
 }
 
 // msalIdentifiers holds common MSAL cache identifiers.
@@ -308,9 +345,9 @@ type msalIdentifiers struct {
 	realm         string
 }
 
-// addAccountAndTokens adds account entry and all tokens to MSAL cache.
-func addAccountAndTokens(accessTokenSection, accountSection map[string]interface{}, params *msalCacheUpdate) {
-	// Create common MSAL identifiers.
+// addUserAccountAndTokens adds account entry and tokens for user authentication.
+func addUserAccountAndTokens(sections *msalCacheSections, params *msalCacheUpdate) {
+	// Create common MSAL identifiers for user auth.
 	ids := msalIdentifiers{
 		homeAccountID: fmt.Sprintf("%s.%s", params.UserOID, params.TenantID),
 		environment:   "login.microsoftonline.com",
@@ -329,13 +366,10 @@ func addAccountAndTokens(accessTokenSection, accountSection map[string]interface
 		"authority_type":   "MSSTS",
 		"account_source":   "device_code",
 	}
-	accountSection[accountKey] = accountEntry
+	sections.account[accountKey] = accountEntry
 
 	// Add management API token.
-	// IMPORTANT: Use only ".default" scope to match Azure CLI's token lookup.
-	// Azure CLI looks up tokens using "https://management.azure.com/.default" as the cache key.
-	// Using a different scope format (like adding user_impersonation) causes lookup failures.
-	addTokenToCache(accessTokenSection, &tokenCacheParams{
+	addTokenToCache(sections.accessToken, &tokenCacheParams{
 		Token:         params.AccessToken,
 		Expiration:    params.Expiration,
 		Scope:         "https://management.azure.com/.default",
@@ -347,7 +381,53 @@ func addAccountAndTokens(accessTokenSection, accountSection map[string]interface
 	})
 
 	// Add optional Graph and KeyVault tokens.
-	addOptionalTokens(accessTokenSection, params, ids)
+	addOptionalTokens(sections.accessToken, params, ids)
+}
+
+// addServicePrincipalTokens adds tokens for service principal (OIDC) authentication.
+// Service principal auth uses a different MSAL cache format per the MSAL Python reference:
+// - home_account_id is empty (cache key starts with "-")
+// - No Account entry is created
+// - AppMetadata entry is added
+// Reference: https://github.com/AzureAD/microsoft-authentication-library-for-python/blob/dev/msal/token_cache.py
+func addServicePrincipalTokens(sections *msalCacheSections, params *msalCacheUpdate) {
+	environment := "login.microsoftonline.com"
+
+	// For service principal, home_account_id is empty.
+	// This results in cache keys starting with "-".
+	ids := msalIdentifiers{
+		homeAccountID: "", // Empty for service principal.
+		environment:   environment,
+		clientID:      params.ClientID,
+		realm:         params.TenantID,
+	}
+
+	// Add AppMetadata entry (required for service principal).
+	// Format: appmetadata-{environment}-{client_id} (lowercase).
+	appMetadataKey := fmt.Sprintf("appmetadata-%s-%s", strings.ToLower(environment), strings.ToLower(params.ClientID))
+	sections.appMetadata[appMetadataKey] = map[string]interface{}{
+		FieldEnvironment: environment,
+		"client_id":      params.ClientID,
+		"family_id":      "", // Empty for non-FOCI apps.
+	}
+	log.Debug("Added AppMetadata entry to MSAL cache", LogFieldKey, appMetadataKey)
+
+	// Add management API token.
+	// For service principal, the cache key format is:
+	// -{environment}-accesstoken-{client_id}-{realm}-{target} (all lowercase).
+	addTokenToCache(sections.accessToken, &tokenCacheParams{
+		Token:         params.AccessToken,
+		Expiration:    params.Expiration,
+		Scope:         "https://management.azure.com/.default",
+		HomeAccountID: ids.homeAccountID,
+		Environment:   ids.environment,
+		ClientID:      ids.clientID,
+		Realm:         ids.realm,
+		APIName:       "Management API",
+	})
+
+	// Add optional Graph and KeyVault tokens.
+	addOptionalTokens(sections.accessToken, params, ids)
 }
 
 // addOptionalTokens adds Graph and KeyVault tokens if available.
