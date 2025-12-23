@@ -18,9 +18,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	perf "github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	u "github.com/cloudposse/atmos/pkg/utils"
+)
+
+// Query normalization constants.
+const (
+	querySelectPrefix = "select("
+	queryArraySuffix  = "]"
 )
 
 var componentsParser *flags.StandardParser
@@ -36,6 +44,7 @@ type ComponentsOptions struct {
 	Columns  []string
 	Sort     string
 	Abstract bool
+	Query    string
 }
 
 // componentsCmd lists atmos components.
@@ -84,6 +93,7 @@ var componentsCmd = &cobra.Command{
 			Columns:  v.GetStringSlice("columns"),
 			Sort:     v.GetString("sort"),
 			Abstract: v.GetBool("abstract"),
+			Query:    v.GetString("query"),
 		}
 
 		return listComponentsWithOptions(cmd, args, opts)
@@ -130,6 +140,7 @@ func init() {
 		WithEnabledFlag,
 		WithLockedFlag,
 		WithAbstractFlag,
+		WithQueryFlag,
 	)
 
 	// Register flags.
@@ -208,6 +219,21 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 func renderComponents(atmosConfig *schema.AtmosConfiguration, opts *ComponentsOptions, components []map[string]any) error {
 	defer perf.Track(nil, "list.components.renderComponents")()
 
+	// If --query is provided, filter components using YQ expression first.
+	if opts.Query != "" {
+		// Normalize the query to ensure it returns an array and handle simplified syntax.
+		normalizedQuery, err := normalizeComponentQuery(opts.Query)
+		if err != nil {
+			return err
+		}
+
+		filtered, err := filterComponentsWithQuery(atmosConfig, components, normalizedQuery)
+		if err != nil {
+			return fmt.Errorf("query filter failed: %w", err)
+		}
+		components = filtered
+	}
+
 	// Build filters.
 	filters := buildComponentFilters(opts)
 
@@ -226,11 +252,129 @@ func renderComponents(atmosConfig *schema.AtmosConfiguration, opts *ComponentsOp
 		return fmt.Errorf("error parsing sort specification: %w", err)
 	}
 
-	// Create renderer and execute pipeline.
+	// Create renderer and execute pipeline with pager support.
 	outputFormat := format.Format(opts.Format)
 	r := renderer.New(filters, selector, sorters, outputFormat, "")
 
-	return r.Render(components)
+	return renderWithPager(atmosConfig, "List Components", r, components)
+}
+
+// normalizeComponentQuery ensures the query returns an array of component maps.
+// This function auto-wraps queries to prevent multi-document YAML parsing errors
+// and provides a simplified syntax where users can write:
+//
+//	select(.locked == true)
+//
+// Instead of the verbose:
+//
+//	[.[] | select(.locked == true)]
+//
+// Returns error for scalar extraction queries that don't make sense for list components.
+func normalizeComponentQuery(query string) (string, error) {
+	defer perf.Track(nil, "list.components.normalizeComponentQuery")()
+
+	originalQuery := query
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return query, nil
+	}
+
+	// Already wrapped in array brackets - use as-is.
+	if strings.HasPrefix(query, "[") && strings.HasSuffix(query, "]") {
+		return query, nil
+	}
+
+	// Identity query - returns all components.
+	if query == "." {
+		return query, nil
+	}
+
+	// Detect scalar extraction patterns (not supported for list components).
+	if isScalarExtractionQuery(query) {
+		return "", fmt.Errorf("%w: '%s'; use 'atmos describe component --query' for field extraction, "+
+			"or use 'select(...)' to filter components", errUtils.ErrScalarExtractionNotSupported, query)
+	}
+
+	var normalized string
+
+	// Normalize query based on its prefix.
+	switch {
+	case strings.HasPrefix(query, querySelectPrefix):
+		// Starts with select() - add .[] | prefix and wrap in array.
+		normalized = "[.[] | " + query + queryArraySuffix
+	case strings.HasPrefix(query, ".[]"):
+		// Starts with .[] - wrap in array to prevent multi-doc YAML.
+		normalized = "[" + query + queryArraySuffix
+	default:
+		// Default: wrap in array.
+		normalized = "[" + query + queryArraySuffix
+	}
+
+	log.Trace("Normalized component query", "original", originalQuery, "normalized", normalized)
+	return normalized, nil
+}
+
+// isScalarExtractionQuery detects queries that extract scalar values instead of filtering.
+// These queries are not supported for `list components` because they would return
+// individual field values rather than complete component maps.
+func isScalarExtractionQuery(query string) bool {
+	defer perf.Track(nil, "list.components.isScalarExtractionQuery")()
+
+	// .[].field - extracts field from each item (without select).
+	if strings.HasPrefix(query, ".[].") && !strings.Contains(query, querySelectPrefix) {
+		return true
+	}
+
+	// .[] | .field - extracts field with pipe (without select).
+	if strings.HasPrefix(query, ".[] | .") && !strings.Contains(query, querySelectPrefix) {
+		return true
+	}
+
+	// .[0].field or .[N].field - extracts from indexed item.
+	if strings.HasPrefix(query, ".[") && strings.Contains(query, "].") {
+		afterBracket := strings.SplitN(query, "].", 2)
+		if len(afterBracket) == 2 && !strings.Contains(afterBracket[1], querySelectPrefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// filterComponentsWithQuery filters components using a YQ expression.
+// The query should be a YQ filter expression that selects matching components.
+// Returns the filtered list of components to be rendered normally.
+func filterComponentsWithQuery(atmosConfig *schema.AtmosConfiguration, components []map[string]any, query string) ([]map[string]any, error) {
+	defer perf.Track(nil, "list.components.filterComponentsWithQuery")()
+
+	// Use the existing YQ evaluation from pkg/utils.
+	result, err := u.EvaluateYqExpression(atmosConfig, components, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to evaluate query '%s': %w", query, err)
+	}
+
+	// Handle the result - it could be a slice or a single item.
+	switch v := result.(type) {
+	case []any:
+		// Convert []any back to []map[string]any.
+		filtered := make([]map[string]any, 0, len(v))
+		for _, item := range v {
+			if m, ok := item.(map[string]any); ok {
+				filtered = append(filtered, m)
+			}
+		}
+		return filtered, nil
+	case []map[string]any:
+		return v, nil
+	case map[string]any:
+		// Single result, wrap in slice.
+		return []map[string]any{v}, nil
+	case nil:
+		// No results.
+		return []map[string]any{}, nil
+	default:
+		return nil, fmt.Errorf("%w: got %T, expected array of components", errUtils.ErrQueryUnexpectedResultType, result)
+	}
 }
 
 // buildComponentFilters creates filters based on command options.
@@ -249,12 +393,12 @@ func buildComponentFilters(opts *ComponentsOptions) []filter.Filter {
 		}
 	}
 
-	// Type filter (authoritative when provided, targets component_type field).
+	// Type filter (authoritative when provided, targets type field: real/abstract).
 	if opts.Type != "" && opts.Type != "all" {
-		filters = append(filters, filter.NewColumnFilter("component_type", opts.Type))
+		filters = append(filters, filter.NewColumnFilter("type", opts.Type))
 	} else if opts.Type == "" && !opts.Abstract {
 		// Only apply default abstract filter when Type is not set.
-		filters = append(filters, filter.NewColumnFilter("component_type", "real"))
+		filters = append(filters, filter.NewColumnFilter("type", "real"))
 	}
 
 	// Enabled filter (tri-state: nil = all, true = enabled only, false = disabled only).
@@ -292,14 +436,14 @@ func getComponentColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []s
 		return configs
 	}
 
-	// Default columns: show all standard component fields.
+	// Default columns: show status dot and standard component fields.
 	return []column.Config{
+		{Name: " ", Value: "{{ .status }}", Width: 1},
 		{Name: "Component", Value: "{{ .component }}"},
 		{Name: "Stack", Value: "{{ .stack }}"},
-		{Name: "Type", Value: "{{ .type }}"},
-		{Name: "Component Type", Value: "{{ .component_type }}"},
-		{Name: "Enabled", Value: "{{ .enabled }}"},
-		{Name: "Locked", Value: "{{ .locked }}"},
+		{Name: "Kind", Value: "{{ .kind }}"},           // terraform, helmfile, packer
+		{Name: "Type", Value: "{{ .type }}"},           // real, abstract
+		{Name: "Path", Value: "{{ .component_path }}"}, // filesystem path to component
 	}
 }
 

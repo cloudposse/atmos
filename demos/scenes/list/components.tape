@@ -1,6 +1,7 @@
 # list-components scene - Explore component metadata
 Output list-components.gif
 Output list-components.mp4
+Output list-components.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -25,20 +26,37 @@ Sleep 1s
 Type "atmos list components"
 Sleep 500ms
 Enter
-Sleep 2s
+Sleep 5s
 
 # Capture screenshot
 Screenshot list-components.png
 
-Type "# View component configuration with provenance"
 Enter
-Sleep 500ms
-
-Type "atmos describe component vpc -s plat-dev-ue2 --provenance"
-Sleep 500ms
-Enter
-Sleep 3s
-
-Type "# See where every value comes from"
+Type "# Filter components with simplified YQ expressions"
 Enter
 Sleep 1s
+
+Type@150ms `atmos list components --query 'select(.kind == "terraform")'`
+Sleep 500ms
+Enter
+Sleep 5s
+
+Enter
+Type "# Filter locked components"
+Enter
+Sleep 1s
+
+Type@150ms `atmos list components --query 'select(.locked == true)'`
+Sleep 500ms
+Enter
+Sleep 5s
+
+Enter
+Type "# Combine filters with stack patterns"
+Enter
+Sleep 1s
+
+Type@150ms `atmos list components --query 'select(.stack | test("prod"))' --stack 'plat-*'`
+Sleep 500ms
+Enter
+Sleep 5s
