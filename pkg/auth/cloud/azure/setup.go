@@ -259,10 +259,17 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID stri
 
 	// For service principal auth, also update service_principal_entries.json.
 	// This allows Azure CLI commands to work with OIDC tokens during the CI workflow.
-	if azureCreds.IsServicePrincipal && azureCreds.ClientID != "" {
-		if err := updateServicePrincipalEntries(home, azureCreds.ClientID, tenantID, azureCreds.TokenFilePath); err != nil {
-			log.Debug("Failed to update service principal entries", "error", err)
-			// Non-fatal.
+	if azureCreds.IsServicePrincipal && azureCreds.ClientID != "" && azureCreds.TokenFilePath != "" {
+		// Read the actual token content from the file.
+		tokenContent, err := os.ReadFile(azureCreds.TokenFilePath)
+		if err != nil {
+			log.Debug("Failed to read federated token file", "path", azureCreds.TokenFilePath, "error", err)
+			// Non-fatal - continue without service principal entries.
+		} else {
+			if err := updateServicePrincipalEntries(home, azureCreds.ClientID, tenantID, string(tokenContent)); err != nil {
+				log.Debug("Failed to update service principal entries", "error", err)
+				// Non-fatal.
+			}
 		}
 	}
 
@@ -700,8 +707,9 @@ func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tena
 
 // updateServicePrincipalEntries updates the service_principal_entries.json file for Azure CLI.
 // This enables Azure CLI commands to work with OIDC tokens during CI workflows.
-// Format: https://github.com/Azure/azure-cli/blob/main/src/azure-cli-core/azure/cli/core/auth/identity.py
-func updateServicePrincipalEntries(home, clientID, tenantID, tokenFilePath string) error {
+// Field names match Azure CLI's ServicePrincipalStore: client_id, tenant, client_assertion.
+// Reference: https://github.com/Azure/azure-cli/blob/main/src/azure-cli-core/azure/cli/core/auth/identity.py
+func updateServicePrincipalEntries(home, clientID, tenantID, federatedToken string) error {
 	entriesPath := filepath.Join(home, ".azure", "service_principal_entries.json")
 	azureDir := filepath.Dir(entriesPath)
 	if err := os.MkdirAll(azureDir, DirPermissions); err != nil {
@@ -728,11 +736,12 @@ func updateServicePrincipalEntries(home, clientID, tenantID, tokenFilePath strin
 	}
 
 	// Find or create entry for this service principal.
+	// Azure CLI looks up entries by client_id field.
 	var found bool
 	for i, entry := range entries {
-		if cid, ok := entry["servicePrincipalId"].(string); ok && cid == clientID {
+		if cid, ok := entry["client_id"].(string); ok && cid == clientID {
 			// Update existing entry.
-			entries[i] = createServicePrincipalEntry(clientID, tenantID, tokenFilePath)
+			entries[i] = createServicePrincipalEntry(clientID, tenantID, federatedToken)
 			found = true
 			break
 		}
@@ -740,7 +749,7 @@ func updateServicePrincipalEntries(home, clientID, tenantID, tokenFilePath strin
 
 	if !found {
 		// Add new entry.
-		entries = append(entries, createServicePrincipalEntry(clientID, tenantID, tokenFilePath))
+		entries = append(entries, createServicePrincipalEntry(clientID, tenantID, federatedToken))
 	}
 
 	// Write updated entries.
@@ -770,16 +779,16 @@ func updateServicePrincipalEntries(home, clientID, tenantID, tokenFilePath strin
 }
 
 // createServicePrincipalEntry creates a service principal entry for OIDC authentication.
-// For OIDC, we use client_assertion_file_path to point to the federated token file.
-func createServicePrincipalEntry(clientID, tenantID, tokenFilePath string) map[string]interface{} {
-	entry := map[string]interface{}{
-		"servicePrincipalId":     clientID,
-		"servicePrincipalTenant": tenantID,
-		// For OIDC, we point to the token file instead of embedding the token.
-		// Azure CLI will read the token from this file when needed.
-		"client_assertion_file_path": tokenFilePath,
+// Field names match Azure CLI's ServicePrincipalStore constants:
+// - _CLIENT_ID = 'client_id'
+// - _TENANT = 'tenant'
+// - _CLIENT_ASSERTION = 'client_assertion'
+func createServicePrincipalEntry(clientID, tenantID, federatedToken string) map[string]interface{} {
+	return map[string]interface{}{
+		"client_id":        clientID,
+		"tenant":           tenantID,
+		"client_assertion": federatedToken,
 	}
-	return entry
 }
 
 // extractOIDFromToken extracts the user OID from a JWT token.
