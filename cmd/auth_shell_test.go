@@ -12,7 +12,7 @@ import (
 )
 
 func TestAuthShellCmd_FlagParsing(t *testing.T) {
-	// Disable credential prompting to prevent interactive UI from blocking tests on Windows.
+	// Disable credential prompting to prevent interactive UI from blocking tests.
 	originalPromptFunc := aws.PromptCredentialsFunc
 	aws.PromptCredentialsFunc = nil
 	defer func() { aws.PromptCredentialsFunc = originalPromptFunc }()
@@ -107,7 +107,7 @@ func TestAuthShellCmd_CommandStructure(t *testing.T) {
 }
 
 func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
-	// Disable credential prompting to prevent interactive UI from blocking tests on Windows.
+	// Disable credential prompting to prevent interactive UI from blocking tests.
 	originalPromptFunc := aws.PromptCredentialsFunc
 	aws.PromptCredentialsFunc = nil
 	defer func() { aws.PromptCredentialsFunc = originalPromptFunc }()
@@ -129,7 +129,7 @@ func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
 }
 
 func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
-	// Disable credential prompting to prevent interactive UI from blocking tests on Windows.
+	// Disable credential prompting to prevent interactive UI from blocking tests.
 	originalPromptFunc := aws.PromptCredentialsFunc
 	aws.PromptCredentialsFunc = nil
 	defer func() { aws.PromptCredentialsFunc = originalPromptFunc }()
