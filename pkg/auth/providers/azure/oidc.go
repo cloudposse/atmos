@@ -209,13 +209,13 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (authTypes.ICredentials
 	// Create Azure credentials with the primary management token.
 	// Mark as service principal for correct MSAL cache format.
 	creds := &authTypes.AzureCredentials{
-		AccessToken:       tokenResp.AccessToken,
-		TokenType:         tokenResp.TokenType,
-		Expiration:        expiresOn.Format(time.RFC3339),
-		TenantID:          p.tenantID,
-		SubscriptionID:    p.subscriptionID,
-		Location:          p.location,
-		ClientID:          p.clientID,
+		AccessToken:        tokenResp.AccessToken,
+		TokenType:          tokenResp.TokenType,
+		Expiration:         expiresOn.Format(time.RFC3339),
+		TenantID:           p.tenantID,
+		SubscriptionID:     p.subscriptionID,
+		Location:           p.location,
+		ClientID:           p.clientID,
 		IsServicePrincipal: true,
 	}
 
