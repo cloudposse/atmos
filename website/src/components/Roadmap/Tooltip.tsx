@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import styles from './styles.module.css';
 
@@ -13,6 +13,7 @@ export default function Tooltip({ content, children }: TooltipProps): JSX.Elemen
   const [isDark, setIsDark] = useState(false);
   const triggerRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const tooltipId = useId();
 
   // Check theme from DOM attribute directly for reliable dark mode detection.
   useEffect(() => {
@@ -34,7 +35,9 @@ export default function Tooltip({ content, children }: TooltipProps): JSX.Elemen
   }, []);
 
   useEffect(() => {
-    if (isVisible && triggerRef.current && tooltipRef.current) {
+    const updatePosition = () => {
+      if (!isVisible || !triggerRef.current || !tooltipRef.current) return;
+
       const triggerRect = triggerRef.current.getBoundingClientRect();
       const tooltipRect = tooltipRef.current.getBoundingClientRect();
 
@@ -49,7 +52,19 @@ export default function Tooltip({ content, children }: TooltipProps): JSX.Elemen
       }
 
       setPosition({ x, y });
+    };
+
+    updatePosition();
+
+    if (isVisible) {
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
     }
+
+    return () => {
+      window.removeEventListener('scroll', updatePosition, true);
+      window.removeEventListener('resize', updatePosition);
+    };
   }, [isVisible]);
 
   // Theme-aware colors - keep dark tooltip in both modes for consistency.
@@ -61,6 +76,8 @@ export default function Tooltip({ content, children }: TooltipProps): JSX.Elemen
     <span
       ref={triggerRef}
       className={styles.tooltipTrigger}
+      tabIndex={0}
+      aria-describedby={isVisible ? tooltipId : undefined}
       onMouseEnter={() => setIsVisible(true)}
       onMouseLeave={() => setIsVisible(false)}
       onFocus={() => setIsVisible(true)}
@@ -71,6 +88,8 @@ export default function Tooltip({ content, children }: TooltipProps): JSX.Elemen
         {isVisible && (
           <motion.div
             ref={tooltipRef}
+            id={tooltipId}
+            role="tooltip"
             className={styles.tooltip}
             style={{
               position: 'fixed',

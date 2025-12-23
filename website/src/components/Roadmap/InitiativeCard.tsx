@@ -27,7 +27,7 @@ interface Initiative {
   milestones: Milestone[];
   issues: number[];
   prs: PRReference[];
-  changelogSlugs: string[];
+  changelogSlugs?: string[];
 }
 
 interface InitiativeCardProps {
@@ -40,7 +40,7 @@ export default function InitiativeCard({
   index = 0,
 }: InitiativeCardProps): JSX.Element {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [selectedMilestone, setSelectedMilestone] = useState<Milestone | null>(null);
+  const [selectedMilestone, setSelectedMilestone] = useState<Milestone | undefined>(undefined);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Dynamically get the icon component.

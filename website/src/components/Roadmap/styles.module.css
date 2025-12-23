@@ -1285,7 +1285,7 @@
 }
 
 .tooltip {
-  z-index: 9999;
+  z-index: 1002;
   padding: 0.5rem 0.75rem;
   background: #1e1e2e;
   color: #f0f0f0;

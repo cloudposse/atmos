@@ -7,10 +7,16 @@ import { renderInlineMarkdown } from './utils';
 import type { Milestone } from './MilestoneList';
 
 interface MilestoneDrawerProps {
-  milestone: Milestone | null;
+  milestone: Milestone | undefined;
   isOpen: boolean;
   onClose: () => void;
 }
+
+const statusClassMap: Record<string, string> = {
+  shipped: 'drawerMetaStatusShipped',
+  'in-progress': 'drawerMetaStatusInprogress',
+  planned: 'drawerMetaStatusPlanned',
+};
 
 export default function MilestoneDrawer({
   milestone,
@@ -142,7 +148,7 @@ export default function MilestoneDrawer({
                   {milestone.quarter.replace('q', 'Q').replace('-', ' ')}
                 </span>
                 <span
-                  className={`${styles.drawerMetaStatus} ${styles[`drawerMetaStatus${milestone.status.charAt(0).toUpperCase() + milestone.status.slice(1).replace('-', '')}`]}`}
+                  className={`${styles.drawerMetaStatus} ${styles[statusClassMap[milestone.status] || 'drawerMetaStatusPlanned']}`}
                 >
                   {milestone.status === 'shipped'
                     ? 'Shipped'
