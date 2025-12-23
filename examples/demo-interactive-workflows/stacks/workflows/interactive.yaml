@@ -47,7 +47,7 @@ workflows:
       - name: confirm_prod
         type: confirm
         prompt: "You selected PRODUCTION. Are you absolutely sure?"
-        # This step only runs if prod was selected (future: conditional support)
+        # Note: This always runs regardless of selection. Conditional step execution is a future feature.
 
       # Step 5: Get deployment message
       - name: deployment_message
