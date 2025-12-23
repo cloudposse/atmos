@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/zalando/go-keyring"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	atmosCreds "github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -1417,4 +1418,196 @@ func TestUser_resolveLongLivedCredentials_ErrorWhenMissingAndNoPrompt(t *testing
 	assert.Nil(t, creds)
 	assert.Contains(t, err.Error(), "AWS User credentials not found")
 	assert.Contains(t, err.Error(), "atmos auth user configure")
+}
+
+// TestUserIdentity_ClearStaleCredentials tests the clearStaleCredentials helper.
+func TestUserIdentity_ClearStaleCredentials(t *testing.T) {
+	t.Run("clears existing credentials", func(t *testing.T) {
+		store := atmosCreds.NewCredentialStore()
+
+		// Store credentials first.
+		err := store.Store("test-clear-creds", &types.AWSCredentials{
+			AccessKeyID:     "AKIATEST",
+			SecretAccessKey: "SECRET",
+		})
+		require.NoError(t, err)
+
+		// Create identity.
+		identity, err := NewUserIdentity("test-clear-creds", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		// Clear credentials (should not panic).
+		userIdent.clearStaleCredentials()
+
+		// Verify credentials are gone.
+		_, err = store.Retrieve("test-clear-creds")
+		assert.Error(t, err, "Credentials should be deleted")
+	})
+
+	t.Run("handles missing credentials gracefully", func(t *testing.T) {
+		// Create identity with non-existent credentials.
+		identity, err := NewUserIdentity("test-nonexistent-creds", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		// Should not panic even if credentials don't exist.
+		userIdent.clearStaleCredentials()
+	})
+}
+
+// TestUserIdentity_PromptForNewCredentials tests the promptForNewCredentials helper.
+func TestUserIdentity_PromptForNewCredentials(t *testing.T) {
+	t.Run("returns credentials on success", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-prompt-success", &schema.Identity{
+			Kind: "aws/user",
+			Credentials: map[string]any{
+				"mfa_arn": "arn:aws:iam::123456789012:mfa/yaml-user",
+			},
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		// Set up mock prompt function.
+		originalPromptFunc := PromptCredentialsFunc
+		PromptCredentialsFunc = func(identityName string, mfaArn string) (*types.AWSCredentials, error) {
+			assert.Equal(t, "test-prompt-success", identityName)
+			assert.Equal(t, "arn:aws:iam::123456789012:mfa/yaml-user", mfaArn)
+			return &types.AWSCredentials{
+				AccessKeyID:     "PROMPTED_KEY",
+				SecretAccessKey: "PROMPTED_SECRET",
+			}, nil
+		}
+		defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+		creds, err := userIdent.promptForNewCredentials("InvalidClientTokenId")
+		require.NoError(t, err)
+		assert.Equal(t, "PROMPTED_KEY", creds.AccessKeyID)
+	})
+
+	t.Run("returns error on prompt failure", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-prompt-fail", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		// Set up mock prompt function that fails.
+		originalPromptFunc := PromptCredentialsFunc
+		PromptCredentialsFunc = func(identityName string, mfaArn string) (*types.AWSCredentials, error) {
+			return nil, errors.New("user cancelled")
+		}
+		defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+		creds, err := userIdent.promptForNewCredentials("InvalidClientTokenId")
+		require.Error(t, err)
+		assert.Nil(t, creds)
+		assert.Contains(t, err.Error(), "aws credentials are invalid")
+	})
+}
+
+// TestUserIdentity_HandleExpiredToken tests the handleExpiredToken helper directly.
+func TestUserIdentity_HandleExpiredToken(t *testing.T) {
+	identity, err := NewUserIdentity("test-expired", &schema.Identity{
+		Kind: "aws/user",
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	mockErr := &mockAPIError{
+		code:    "ExpiredTokenException",
+		message: "Token expired",
+	}
+
+	creds, err := userIdent.handleExpiredToken(mockErr)
+	require.Error(t, err)
+	assert.Nil(t, creds)
+	// Error message contains the base error; hints are stored separately in ErrorBuilder.
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+}
+
+// TestUserIdentity_HandleAccessDenied tests the handleAccessDenied helper directly.
+func TestUserIdentity_HandleAccessDenied(t *testing.T) {
+	identity, err := NewUserIdentity("test-denied", &schema.Identity{
+		Kind: "aws/user",
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	mockErr := &mockAPIError{
+		code:    "AccessDenied",
+		message: "Access denied",
+	}
+
+	creds, err := userIdent.handleAccessDenied(mockErr)
+	require.Error(t, err)
+	assert.Nil(t, creds)
+	// Error message contains the base error; hints are stored separately in ErrorBuilder.
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+}
+
+// TestUserIdentity_HandleInvalidClientTokenId tests the handleInvalidClientTokenId helper directly.
+func TestUserIdentity_HandleInvalidClientTokenId(t *testing.T) {
+	t.Run("without prompt function", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-invalid-token-no-prompt", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		mockErr := &mockAPIError{
+			code:    "InvalidClientTokenId",
+			message: "Invalid token",
+		}
+
+		// Ensure PromptCredentialsFunc is nil.
+		originalPromptFunc := PromptCredentialsFunc
+		PromptCredentialsFunc = nil
+		defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+		creds, err := userIdent.handleInvalidClientTokenId(mockErr)
+		require.Error(t, err)
+		assert.Nil(t, creds)
+		assert.Contains(t, err.Error(), "aws credentials are invalid")
+	})
+
+	t.Run("with prompt function success", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-invalid-token-prompt-ok", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		mockErr := &mockAPIError{
+			code:    "InvalidClientTokenId",
+			message: "Invalid token",
+		}
+
+		// Set up mock prompt function.
+		originalPromptFunc := PromptCredentialsFunc
+		PromptCredentialsFunc = func(identityName string, mfaArn string) (*types.AWSCredentials, error) {
+			return &types.AWSCredentials{
+				AccessKeyID:     "NEW_KEY",
+				SecretAccessKey: "NEW_SECRET",
+			}, nil
+		}
+		defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+		creds, err := userIdent.handleInvalidClientTokenId(mockErr)
+		require.NoError(t, err)
+		assert.NotNil(t, creds)
+		assert.Equal(t, "NEW_KEY", creds.AccessKeyID)
+	})
 }
