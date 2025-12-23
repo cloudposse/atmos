@@ -86,6 +86,7 @@ export const roadmapConfig = {
         { label: 'Backend provisioning', status: 'shipped', quarter: 'q4-2025', docs: '/components/terraform/backend-provisioning', description: 'Automatic backend.tf generation—no more manually managing backend configuration files.' },
         { label: 'Streaming Terraform UI', status: 'in-progress', quarter: 'q4-2025', description: 'Real-time Terraform plan/apply visualization with resource-level progress tracking.' },
         { label: 'Native CI integration with summary templates', status: 'in-progress', quarter: 'q4-2025', description: 'GitHub/GitLab-native summaries with formatted plan output, cost estimates, and approval workflows.' },
+        { label: 'Component-aware tab completion', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/completion', changelog: 'component-aware-stack-completion', description: 'Shell completion that understands your stacks and components—type less, discover more.' },
       ],
       issues: [],
       prs: [
@@ -109,7 +110,6 @@ export const roadmapConfig = {
         { label: 'Added `atmos list affected` with spinner UI', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/list/affected', changelog: 'list-affected-command', description: 'Identify which stacks and components are affected by your changes—perfect for targeted CI/CD.' },
         { label: 'Customizable list output', status: 'shipped', quarter: 'q4-2025', changelog: 'customizable-list-command-output', description: 'Create custom views of your configuration with customizable columns—display exactly the data you need.' },
         { label: 'JMESPath queries (`--query`)', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/list/stacks', description: 'Filter and transform list output with JMESPath queries for precise data extraction.', codeExample: 'atmos list stacks --query "[?components.terraform.vpc]"' },
-        { label: 'Component-aware tab completion', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/completion', changelog: 'component-aware-stack-completion', description: 'Shell completion that understands your stacks and components—type less, discover more.' },
       ],
       issues: [],
       prs: [
