@@ -142,4 +142,4 @@ workflows:
 Interactive steps require a TTY. In CI environments:
 - Use `--dry-run` to preview workflows
 - Set default values in configuration
-- Use environment variables instead of prompts
+- Use environment variables instead of prompts.
