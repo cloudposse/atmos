@@ -79,7 +79,7 @@ vars:
 1. **Different lifecycles** - Store values change on every `terraform apply`; secrets change rarely (manual rotation)
 2. **Different access patterns** - Stores need stack/component scoping for outputs; secrets may be global or scoped
 3. **Different security models** - Store values are infrastructure state; secrets need audit trails and rotation policies
-4. **Different tooling** - Stores integrate with Terraform workflow; secrets need standalone CRUD CLI
+4. **Different tooling** - Stores integrate with Terraform workflow; secrets need dedicated CRUD commands
 5. **Different backends** - Stores optimize for Terraform state backends; secrets optimize for secret managers with rotation/auditing
 
 ## Configuration Schema
