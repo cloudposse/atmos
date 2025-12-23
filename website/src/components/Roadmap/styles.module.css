@@ -1030,12 +1030,12 @@
   font-size: 1rem;
 }
 
-/* Progress Colors (CSS Variables) */
+/* Progress Colors (CSS Variables) - neutral blue gradient, no red/orange "behind" connotation */
 :root {
   --progress-complete: #38a169;
   --progress-high: #3182ce;
-  --progress-medium: #dd6b20;
-  --progress-low: #e53e3e;
+  --progress-medium: #5a9bd5;
+  --progress-low: #7fb3e0;
 }
 
 /* Responsive Styles */
