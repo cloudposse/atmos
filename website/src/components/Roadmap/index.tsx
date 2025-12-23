@@ -1,7 +1,7 @@
 import React from 'react';
 import { MotionConfig } from 'framer-motion';
 import Link from '@docusaurus/Link';
-import { RiLightbulbLine } from 'react-icons/ri';
+import { RiLightbulbLine, RiExternalLinkLine } from 'react-icons/ri';
 import RoadmapHero from './RoadmapHero';
 import QuarterTimeline from './QuarterTimeline';
 import InitiativeCard from './InitiativeCard';
@@ -28,6 +28,13 @@ export default function Roadmap(): JSX.Element {
           <p className={styles.sectionDescription}>
             Click on any initiative to see detailed milestones and progress.
             {' '}
+            <Link
+              to="https://github.com/cloudposse/atmos/issues"
+              className={styles.viewFeaturesLink}
+            >
+              <RiExternalLinkLine />
+              <span>View Features</span>
+            </Link>
             <Link
               to="https://github.com/cloudposse/atmos/issues/new?template=feature_request.yml"
               className={styles.featureRequestLink}

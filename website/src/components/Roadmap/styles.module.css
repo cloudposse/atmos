@@ -32,6 +32,36 @@
   font-size: 1rem;
 }
 
+.viewFeaturesLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  background: rgba(30, 91, 184, 0.1);
+  color: #1e5bb8;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  vertical-align: middle;
+}
+
+.viewFeaturesLink:hover {
+  background: rgba(30, 91, 184, 0.2);
+  text-decoration: none;
+}
+
+:global(html[data-theme='dark']) .viewFeaturesLink {
+  background: rgba(83, 140, 233, 0.15);
+  color: #538ce9;
+}
+
+:global(html[data-theme='dark']) .viewFeaturesLink:hover {
+  background: rgba(83, 140, 233, 0.25);
+}
+
 .featureRequestLink {
   display: inline-flex;
   align-items: center;
