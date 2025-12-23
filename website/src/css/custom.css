@@ -297,14 +297,41 @@ html[data-theme='dark'] {
     --docsearch-searchbox-background: #121526 !important;
 }
 
+/* Modern glassy admonition styling for dark mode */
 [data-theme='dark'] .alert--secondary {
-    --ifm-color-secondary-contrast-background: rgb(145 161 217 / 24%);
-    --ifm-alert-background-color: rgb(145 161 217 / 24%);
+    --ifm-color-secondary-contrast-background: rgba(145, 161, 217, 0.12);
+    --ifm-alert-background-color: rgba(145, 161, 217, 0.12);
+    border: 1px solid rgba(145, 161, 217, 0.30);
 }
 
-[data-theme='dark'] .alert--info {
-    --ifm-color-info-contrast-background: rgb(25, 60, 71, 0.50);
-    --ifm-alert-background-color: rgb(25, 60, 71, 0.50);
+[data-theme='dark'] .alert--info,
+[data-theme='dark'] .theme-admonition-info,
+[data-theme='dark'] .theme-admonition-note {
+    --ifm-color-info-contrast-background: rgba(56, 139, 253, 0.12);
+    --ifm-alert-background-color: rgba(56, 139, 253, 0.12);
+    border: 1px solid rgba(56, 139, 253, 0.35);
+}
+
+[data-theme='dark'] .alert--success,
+[data-theme='dark'] .theme-admonition-tip {
+    --ifm-alert-background-color: rgba(35, 134, 54, 0.12);
+    --ifm-color-success-contrast-background: rgba(35, 134, 54, 0.12);
+    border: 1px solid rgba(46, 160, 67, 0.35);
+}
+
+[data-theme='dark'] .alert--warning,
+[data-theme='dark'] .theme-admonition-warning,
+[data-theme='dark'] .theme-admonition-caution {
+    --ifm-alert-background-color: rgba(187, 128, 9, 0.12);
+    --ifm-color-warning-contrast-background: rgba(187, 128, 9, 0.12);
+    border: 1px solid rgba(210, 153, 34, 0.35);
+}
+
+[data-theme='dark'] .alert--danger,
+[data-theme='dark'] .theme-admonition-danger {
+    --ifm-alert-background-color: rgba(248, 81, 73, 0.12);
+    --ifm-color-danger-contrast-background: rgba(248, 81, 73, 0.12);
+    border: 1px solid rgba(248, 81, 73, 0.35);
 }
 
 .alert--secondary {
