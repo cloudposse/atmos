@@ -2,10 +2,15 @@ package eks
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// updateKubeconfigParser handles flag parsing with Viper precedence.
+var updateKubeconfigParser *flags.StandardParser
 
 // updateKubeconfigCmd executes 'aws eks update-kubeconfig' command.
 var updateKubeconfigCmd = &cobra.Command{
@@ -31,22 +36,44 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "eks.updateKubeconfig.RunE")()
+
+		// Bind flags to Viper for precedence handling.
+		v := viper.GetViper()
+		if err := updateKubeconfigParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
 		return e.ExecuteAwsEksUpdateKubeconfigCommand(cmd, args)
 	},
 }
 
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html.
 func init() {
-	updateKubeconfigCmd.DisableFlagParsing = false
-	updateKubeconfigCmd.PersistentFlags().StringP("stack", "s", "", "Specify the stack name")
-	updateKubeconfigCmd.PersistentFlags().String("profile", "", "Specify the AWS CLI profile to use for authentication")
-	updateKubeconfigCmd.PersistentFlags().String("name", "", "Specify the name of the EKS cluster to update the kubeconfig for")
-	updateKubeconfigCmd.PersistentFlags().String("region", "", "Specify the AWS region where the EKS cluster is located")
-	updateKubeconfigCmd.PersistentFlags().String("kubeconfig", "", "Specify the path to the kubeconfig file to be updated or created for accessing the EKS cluster.")
-	updateKubeconfigCmd.PersistentFlags().String("role-arn", "", "Specify the ARN of the IAM role to assume for authenticating with the EKS cluster.")
-	updateKubeconfigCmd.PersistentFlags().Bool("dry-run", false, "Perform a dry run to simulate updating the kubeconfig without making any changes.")
-	updateKubeconfigCmd.PersistentFlags().Bool("verbose", false, "Enable verbose logging to provide detailed output during the kubeconfig update process.")
-	updateKubeconfigCmd.PersistentFlags().String("alias", "", "Specify an alias to use for the cluster context name in the kubeconfig file.")
+	// Create parser with update-kubeconfig-specific flags using functional options.
+	updateKubeconfigParser = flags.NewStandardParser(
+		flags.WithStringFlag("stack", "s", "", "Specify the stack name"),
+		flags.WithStringFlag("profile", "", "", "Specify the AWS CLI profile to use for authentication"),
+		flags.WithStringFlag("name", "", "", "Specify the name of the EKS cluster to update the kubeconfig for"),
+		flags.WithStringFlag("region", "", "", "Specify the AWS region where the EKS cluster is located"),
+		flags.WithStringFlag("kubeconfig", "", "", "Specify the path to the kubeconfig file to be updated or created for accessing the EKS cluster."),
+		flags.WithStringFlag("role-arn", "", "", "Specify the ARN of the IAM role to assume for authenticating with the EKS cluster."),
+		flags.WithBoolFlag("dry-run", "", false, "Perform a dry run to simulate updating the kubeconfig without making any changes."),
+		flags.WithBoolFlag("verbose", "", false, "Enable verbose logging to provide detailed output during the kubeconfig update process."),
+		flags.WithStringFlag("alias", "", "", "Specify an alias to use for the cluster context name in the kubeconfig file."),
+		// Environment variable bindings.
+		flags.WithEnvVars("stack", "ATMOS_STACK"),
+		flags.WithEnvVars("profile", "ATMOS_AWS_PROFILE", "AWS_PROFILE"),
+		flags.WithEnvVars("region", "ATMOS_AWS_REGION", "AWS_REGION"),
+		flags.WithEnvVars("kubeconfig", "ATMOS_KUBECONFIG", "KUBECONFIG"),
+	)
+
+	// Register flags with Cobra command.
+	updateKubeconfigParser.RegisterFlags(updateKubeconfigCmd)
+
+	// Bind to Viper for environment variable support.
+	if err := updateKubeconfigParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
 	EksCmd.AddCommand(updateKubeconfigCmd)
 }
