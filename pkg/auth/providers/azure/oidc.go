@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	httpClient "github.com/cloudposse/atmos/pkg/http"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -42,11 +43,6 @@ const (
 	clientAssertionTypeJWT = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 )
 
-// HTTPDoer is an interface for HTTP clients that can execute requests.
-type HTTPDoer interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
 // oidcProvider implements Azure OIDC/Workload Identity Federation authentication.
 // This provider is designed for CI/CD environments (GitHub Actions, Azure DevOps, etc.)
 // where a federated identity token is exchanged for Azure credentials.
@@ -61,7 +57,8 @@ type oidcProvider struct {
 	tokenFilePath  string
 
 	// httpClient is the HTTP client used for requests. If nil, a default client is used.
-	httpClient HTTPDoer
+	// Uses the shared httpClient.Client interface from pkg/http for consistency.
+	httpClient httpClient.Client
 	// tokenEndpoint can be overridden for testing. If empty, uses Azure AD endpoint.
 	tokenEndpoint string
 }
@@ -164,11 +161,11 @@ func (p *oidcProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 }
 
 // getHTTPClient returns the HTTP client to use for requests.
-func (p *oidcProvider) getHTTPClient() HTTPDoer {
+func (p *oidcProvider) getHTTPClient() httpClient.Client {
 	if p.httpClient != nil {
 		return p.httpClient
 	}
-	return &http.Client{Timeout: OIDCTimeout}
+	return httpClient.NewDefaultClient(OIDCTimeout)
 }
 
 // getTokenEndpoint returns the token endpoint URL.
