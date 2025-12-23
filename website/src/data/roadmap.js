@@ -247,15 +247,14 @@ export const roadmapConfig = {
     {
       id: 'quality',
       icon: 'RiShieldCheckLine',
-      title: 'Code Quality and Community',
-      tagline: 'Rigorous testing, open contribution',
+      title: 'Code Quality and Test Coverage',
+      tagline: 'Rigorous testing, AI-assisted development',
       description:
         '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. Embracing AI-assisted development while maintaining high standards.',
       progress: 85,
       status: 'in-progress',
       milestones: [
         { label: 'Test coverage from <20% to 74%', status: 'shipped', quarter: 'q1-2025', description: 'Massive test coverage improvement from less than 20% to 74%—a 54% increase in one year.' },
-        { label: 'Changelog introduction', status: 'shipped', quarter: 'q1-2025', description: 'Detailed changelogs for every release with feature announcements and migration guides.' },
         { label: 'Weekly release cadence', status: 'shipped', quarter: 'q2-2025', description: 'Predictable weekly releases every Tuesday with semantic versioning.' },
         { label: 'Claude Code + Claude skills', status: 'shipped', quarter: 'q3-2025', description: 'AI-assisted development with custom Claude Code skills for Atmos-specific patterns.' },
         { label: 'CodeRabbit review integration', status: 'shipped', quarter: 'q3-2025', description: 'Automated code reviews with AI-powered suggestions and security analysis.' },
@@ -267,20 +266,21 @@ export const roadmapConfig = {
     {
       id: 'docs',
       icon: 'RiBookOpenLine',
-      title: 'Documentation Overhaul',
+      title: 'Documentation Overhaul and Community Announcements',
       tagline: 'Every command, every config, cross-linked',
       description:
         'Comprehensive documentation of every `atmos.yaml` section, every CLI command, with cross-linking between commands and their configurations.',
       progress: 95,
       status: 'in-progress',
       milestones: [
+        { label: 'Changelog introduction', status: 'shipped', quarter: 'q1-2025', docs: '/changelog', description: 'Detailed changelogs for every release with feature announcements and migration guides.' },
         { label: 'Every `atmos.yaml` section documented', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/configuration', description: 'Complete reference for every configuration option in atmos.yaml with examples and defaults.' },
         { label: 'Every CLI command documented', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/commands', description: 'Comprehensive documentation for every CLI command with usage examples and screenshots.' },
         { label: 'Cross-linking commands to configs', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/commands', description: 'Navigate from any command to its related configuration and vice versa.' },
         { label: 'Design patterns refresh', status: 'shipped', quarter: 'q3-2025', docs: '/design-patterns', description: 'Updated design patterns with real-world examples for common infrastructure scenarios.' },
         { label: 'Versioning strategy docs', status: 'shipped', quarter: 'q3-2025', docs: '/design-patterns/version-management', changelog: 'comprehensive-version-management-documentation', description: 'Complete guide to version management including component versioning and upgrade strategies.' },
         { label: 'New learning section', status: 'shipped', quarter: 'q4-2025', docs: '/learn/concepts-overview', changelog: 'documentation-reorganization', description: 'Step-by-step tutorials for getting started with Atmos from scratch.' },
-        { label: 'Migration guides (Terragrunt, Workspaces, Native Terraform)', status: 'shipped', quarter: 'q4-2025', docs: '/migration/terragrunt', changelog: 'migration-guides', description: 'Detailed guides for migrating from Terragrunt, Terraform workspaces, and native Terraform to Atmos.' },
+        { label: 'Added migration guides', status: 'shipped', quarter: 'q4-2025', docs: '/migration/terragrunt', changelog: 'migration-guides', description: 'Detailed guides for migrating from Terragrunt, Terraform workspaces, and native Terraform to Atmos.' },
         { label: 'Roadmap', status: 'shipped', quarter: 'q4-2025', docs: '/roadmap', description: 'Public roadmap showing past accomplishments and future plans.' },
       ],
       issues: [],
