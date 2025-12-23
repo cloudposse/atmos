@@ -33,6 +33,7 @@ const (
 	minSessionSeconds         = 900    // 15 minutes - AWS minimum
 	awsUserProviderName       = "aws-user"
 	logKeyIdentity            = "identity"
+	logKeyErrorCode           = "error_code"
 	defaultRegion             = "us-east-1"
 )
 
@@ -278,11 +279,11 @@ func (i *userIdentity) callGetSessionToken(ctx context.Context, longLivedCreds *
 
 // handleSTSErrorWithRetry handles STS errors and optionally retries with new credentials.
 func (i *userIdentity) handleSTSErrorWithRetry(ctx context.Context, err error, region string, isRetry bool) (types.ICredentials, error) {
-	newCreds, stsErr := i.handleSTSError(err)
+	newCreds, stsErr := i.handleSTSError(err, isRetry)
 	if stsErr != nil {
 		return nil, stsErr
 	}
-	if newCreds != nil && !isRetry {
+	if newCreds != nil {
 		log.Debug("Retrying STS call with new credentials", logKeyIdentity, i.name)
 		if newCreds.Region == "" {
 			newCreds.Region = region
@@ -320,8 +321,9 @@ func (i *userIdentity) processSTSResult(result *sts.GetSessionTokenOutput, regio
 
 // handleSTSError processes errors from STS API calls and returns appropriate user-friendly errors.
 // It detects specific AWS error codes like InvalidClientTokenId and provides actionable guidance.
-// Returns: (new credentials if prompting succeeded, error if prompting failed/disabled).
-func (i *userIdentity) handleSTSError(err error) (*types.AWSCredentials, error) {
+// The isRetry parameter indicates if this is a retry attempt after credential prompting.
+// Returns: (new credentials if prompting succeeded, error if prompting failed/disabled or on retry).
+func (i *userIdentity) handleSTSError(err error, isRetry bool) (*types.AWSCredentials, error) {
 	var apiErr smithy.APIError
 	if !errors.As(err, &apiErr) {
 		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
@@ -329,7 +331,7 @@ func (i *userIdentity) handleSTSError(err error) (*types.AWSCredentials, error) 
 
 	switch apiErr.ErrorCode() {
 	case "InvalidClientTokenId":
-		return i.handleInvalidClientTokenId(apiErr)
+		return i.handleInvalidClientTokenId(apiErr, isRetry)
 	case "ExpiredTokenException":
 		return i.handleExpiredToken(apiErr)
 	case "AccessDenied":
@@ -340,24 +342,38 @@ func (i *userIdentity) handleSTSError(err error) (*types.AWSCredentials, error) 
 }
 
 // handleInvalidClientTokenId handles the case where AWS access keys have been rotated or revoked.
-// It clears stale credentials and optionally prompts for new ones.
-func (i *userIdentity) handleInvalidClientTokenId(apiErr smithy.APIError) (*types.AWSCredentials, error) {
+// It clears stale credentials and optionally prompts for new ones (only on first attempt).
+// The isRetry parameter prevents duplicate prompting when the newly-entered credentials also fail.
+func (i *userIdentity) handleInvalidClientTokenId(apiErr smithy.APIError, isRetry bool) (*types.AWSCredentials, error) {
 	log.Error("AWS credentials are invalid or have been revoked",
-		logKeyIdentity, i.name, "error_code", apiErr.ErrorCode(), "suggestion", "reconfigure credentials")
+		logKeyIdentity, i.name, logKeyErrorCode, apiErr.ErrorCode(), "suggestion", "reconfigure credentials")
 
 	i.clearStaleCredentials()
 
-	if PromptCredentialsFunc != nil {
+	// Only prompt for credentials on the first attempt, not on retry.
+	// If this is a retry, the user already provided credentials that also failed.
+	if PromptCredentialsFunc != nil && !isRetry {
 		return i.promptForNewCredentials(apiErr.ErrorCode())
 	}
 
-	return nil, errUtils.Build(errUtils.ErrCredentialsInvalid).
-		WithExplanation("Your AWS access keys have been rotated or revoked on the AWS side").
-		WithExplanation("Stale credentials have been automatically cleared from keychain").
-		WithHintf("Run: atmos auth user configure --identity %s", i.name).
+	// Build appropriate error message based on whether this is a retry.
+	builder := errUtils.Build(errUtils.ErrCredentialsInvalid).
 		WithContext("identity", i.name).
-		WithContext("error_code", apiErr.ErrorCode()).
-		Err()
+		WithContext(logKeyErrorCode, apiErr.ErrorCode())
+
+	if isRetry {
+		builder = builder.
+			WithExplanation("The newly-entered AWS credentials are also invalid").
+			WithHint("Please verify your access key ID and secret access key are correct").
+			WithHintf("Run: atmos auth user configure --identity %s", i.name)
+	} else {
+		builder = builder.
+			WithExplanation("Your AWS access keys have been rotated or revoked on the AWS side").
+			WithExplanation("Stale credentials have been automatically cleared from keychain").
+			WithHintf("Run: atmos auth user configure --identity %s", i.name)
+	}
+
+	return nil, builder.Err()
 }
 
 // clearStaleCredentials removes stale credentials from the keyring.
@@ -381,7 +397,7 @@ func (i *userIdentity) promptForNewCredentials(errorCode string) (*types.AWSCred
 			WithExplanation("Credential prompting was cancelled or failed").
 			WithHintf("Run: atmos auth user configure --identity %s", i.name).
 			WithContext("identity", i.name).
-			WithContext("error_code", errorCode).
+			WithContext(logKeyErrorCode, errorCode).
 			Err()
 	}
 	log.Debug("New credentials provided via prompt", logKeyIdentity, i.name)
@@ -390,23 +406,23 @@ func (i *userIdentity) promptForNewCredentials(errorCode string) (*types.AWSCred
 
 // handleExpiredToken handles the case where the session token has expired.
 func (i *userIdentity) handleExpiredToken(apiErr smithy.APIError) (*types.AWSCredentials, error) {
-	log.Error("AWS session token expired", logKeyIdentity, i.name, "error_code", apiErr.ErrorCode())
+	log.Error("AWS session token expired", logKeyIdentity, i.name, logKeyErrorCode, apiErr.ErrorCode())
 	return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
 		WithExplanation("AWS session token has expired").
 		WithHintf("Run: atmos auth login --identity %s", i.name).
 		WithContext("identity", i.name).
-		WithContext("error_code", apiErr.ErrorCode()).
+		WithContext(logKeyErrorCode, apiErr.ErrorCode()).
 		Err()
 }
 
 // handleAccessDenied handles the case where the user doesn't have permission to call GetSessionToken.
 func (i *userIdentity) handleAccessDenied(apiErr smithy.APIError) (*types.AWSCredentials, error) {
-	log.Error("Access denied when calling GetSessionToken", logKeyIdentity, i.name, "error_code", apiErr.ErrorCode())
+	log.Error("Access denied when calling GetSessionToken", logKeyIdentity, i.name, logKeyErrorCode, apiErr.ErrorCode())
 	return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
 		WithExplanation("Your IAM user does not have permission to call sts:GetSessionToken").
 		WithHint("Ensure your IAM user has the sts:GetSessionToken permission").
 		WithContext("identity", i.name).
-		WithContext("error_code", apiErr.ErrorCode()).
+		WithContext(logKeyErrorCode, apiErr.ErrorCode()).
 		Err()
 }
 

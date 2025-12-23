@@ -1131,8 +1131,8 @@ func TestUserIdentity_HandleSTSError_InvalidClientTokenId(t *testing.T) {
 	PromptCredentialsFunc = nil
 	defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
-	// Call handleSTSError.
-	newCreds, resultErr := userIdent.handleSTSError(mockErr)
+	// Call handleSTSError (isRetry=false for first attempt).
+	newCreds, resultErr := userIdent.handleSTSError(mockErr, false)
 
 	// Verify: Error should contain the sentinel error.
 	require.Error(t, resultErr)
@@ -1160,8 +1160,8 @@ func TestUserIdentity_HandleSTSError_ExpiredTokenException(t *testing.T) {
 		message: "The security token has expired",
 	}
 
-	// Call handleSTSError.
-	newCreds, resultErr := userIdent.handleSTSError(mockErr)
+	// Call handleSTSError (isRetry=false for first attempt).
+	newCreds, resultErr := userIdent.handleSTSError(mockErr, false)
 
 	// Verify: Error should contain the authentication failed sentinel.
 	require.Error(t, resultErr)
@@ -1185,8 +1185,8 @@ func TestUserIdentity_HandleSTSError_AccessDenied(t *testing.T) {
 		message: "User is not authorized to perform sts:GetSessionToken",
 	}
 
-	// Call handleSTSError.
-	newCreds, resultErr := userIdent.handleSTSError(mockErr)
+	// Call handleSTSError (isRetry=false for first attempt).
+	newCreds, resultErr := userIdent.handleSTSError(mockErr, false)
 
 	// Verify: Error should contain the authentication failed sentinel.
 	require.Error(t, resultErr)
@@ -1207,8 +1207,8 @@ func TestUserIdentity_HandleSTSError_GenericError(t *testing.T) {
 	// Create a generic error (not an AWS API error).
 	genericErr := errors.New("network connection failed")
 
-	// Call handleSTSError.
-	newCreds, resultErr := userIdent.handleSTSError(genericErr)
+	// Call handleSTSError (isRetry=false for first attempt).
+	newCreds, resultErr := userIdent.handleSTSError(genericErr, false)
 
 	// Verify: Error should wrap the original error with ErrAuthenticationFailed.
 	require.Error(t, resultErr)
@@ -1267,8 +1267,8 @@ func TestUserIdentity_HandleSTSError_WithPromptFunc(t *testing.T) {
 	}
 	defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
-	// Call handleSTSError.
-	resultCreds, resultErr := userIdent.handleSTSError(mockErr)
+	// Call handleSTSError (isRetry=false for first attempt).
+	resultCreds, resultErr := userIdent.handleSTSError(mockErr, false)
 
 	// Verify: No error because prompting succeeded.
 	require.NoError(t, resultErr)
@@ -1312,8 +1312,8 @@ func TestUserIdentity_HandleSTSError_PromptFuncFails(t *testing.T) {
 	}
 	defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
-	// Call handleSTSError.
-	resultCreds, resultErr := userIdent.handleSTSError(mockErr)
+	// Call handleSTSError (isRetry=false for first attempt).
+	resultCreds, resultErr := userIdent.handleSTSError(mockErr, false)
 
 	// Verify: Error should be returned when prompting fails.
 	require.Error(t, resultErr)
@@ -1585,7 +1585,8 @@ func TestUserIdentity_HandleInvalidClientTokenId(t *testing.T) {
 		PromptCredentialsFunc = nil
 		defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
-		creds, err := userIdent.handleInvalidClientTokenId(mockErr)
+		// isRetry=false for first attempt.
+		creds, err := userIdent.handleInvalidClientTokenId(mockErr, false)
 		require.Error(t, err)
 		assert.Nil(t, creds)
 		assert.Contains(t, err.Error(), "credentials are invalid")
@@ -1614,9 +1615,45 @@ func TestUserIdentity_HandleInvalidClientTokenId(t *testing.T) {
 		}
 		defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
-		creds, err := userIdent.handleInvalidClientTokenId(mockErr)
+		// isRetry=false for first attempt.
+		creds, err := userIdent.handleInvalidClientTokenId(mockErr, false)
 		require.NoError(t, err)
 		assert.NotNil(t, creds)
 		assert.Equal(t, "NEW_KEY", creds.AccessKeyID)
+	})
+
+	t.Run("on retry skips prompting", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-invalid-token-retry", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		mockErr := &mockAPIError{
+			code:    "InvalidClientTokenId",
+			message: "Invalid token",
+		}
+
+		// Set up mock prompt function that should NOT be called on retry.
+		promptCalled := false
+		originalPromptFunc := PromptCredentialsFunc
+		PromptCredentialsFunc = func(identityName string, mfaArn string) (*types.AWSCredentials, error) {
+			promptCalled = true
+			return &types.AWSCredentials{
+				AccessKeyID:     "SHOULD_NOT_BE_USED",
+				SecretAccessKey: "SHOULD_NOT_BE_USED",
+			}, nil
+		}
+		defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+		// isRetry=true - prompting should be skipped.
+		creds, err := userIdent.handleInvalidClientTokenId(mockErr, true)
+		require.Error(t, err)
+		assert.Nil(t, creds)
+		assert.False(t, promptCalled, "PromptCredentialsFunc should NOT be called on retry")
+		// The error wraps ErrCredentialsInvalid which has the message "credentials are invalid or have been revoked".
+		// The explanation "newly-entered AWS credentials are also invalid" is stored in error metadata.
+		assert.Contains(t, err.Error(), "credentials are invalid")
 	})
 }
