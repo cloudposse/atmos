@@ -922,6 +922,30 @@
   margin: 0;
 }
 
+.milestoneGroup {
+  margin-bottom: 1.5rem;
+}
+
+.milestoneGroup:last-child {
+  margin-bottom: 0;
+}
+
+.milestoneGroupTitle {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ifm-color-emphasis-500);
+  margin: 0 0 0.75rem 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+:global(html[data-theme='dark']) .milestoneGroupTitle {
+  color: var(--ifm-color-emphasis-400);
+  border-bottom-color: var(--ifm-color-emphasis-300);
+}
+
 .milestoneItem {
   display: flex;
   align-items: flex-start;

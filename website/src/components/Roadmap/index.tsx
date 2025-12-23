@@ -29,7 +29,7 @@ export default function Roadmap(): JSX.Element {
         )}
 
         <section className={styles.section}>
-          <h2 className={styles.sectionTitle}>Initiatives</h2>
+          <h2 className={styles.sectionTitle}>Major Initiatives</h2>
           <p className={styles.sectionDescription}>
             Click on any initiative to see detailed milestones and progress.
             {' '}

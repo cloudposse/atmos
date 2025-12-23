@@ -118,6 +118,7 @@ export default function InitiativeCard({
               <MilestoneList
                 milestones={initiative.milestones}
                 onMilestoneClick={handleMilestoneClick}
+                grouped
               />
 
               {(initiative.issues.length > 0 || initiative.prs?.length > 0) && (

@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import Link from '@docusaurus/Link';
 import * as Icons from 'react-icons/ri';
-import { RiExternalLinkLine, RiBookOpenLine, RiMegaphoneLine, RiGitPullRequestLine } from 'react-icons/ri';
+import { RiExternalLinkLine, RiBookOpenLine, RiMegaphoneLine, RiGitPullRequestLine, RiFileTextLine } from 'react-icons/ri';
 import styles from './styles.module.css';
 
 interface FeaturedItem {
@@ -16,6 +16,7 @@ interface FeaturedItem {
   docs?: string;
   changelog?: string;
   pr?: number;
+  prd?: string;
 }
 
 interface FeaturedSectionProps {
@@ -28,7 +29,29 @@ const statusConfig = {
   planned: { label: 'Planned', className: 'featuredStatusPlanned' },
 };
 
+// Sort order: shipped first, then in-progress, then planned.
+const statusOrder: Record<string, number> = {
+  shipped: 0,
+  'in-progress': 1,
+  planned: 2,
+};
+
+// Parse quarter string (e.g., "q1-2026") into a sortable number.
+const parseQuarter = (quarter: string): number => {
+  const match = quarter.match(/q(\d)-(\d{4})/);
+  if (!match) return 0;
+  const [, q, year] = match;
+  return parseInt(year, 10) * 10 + parseInt(q, 10);
+};
+
 export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.Element {
+  // Sort items by status (shipped first), then by quarter (earlier first).
+  const sortedItems = [...items].sort((a, b) => {
+    const statusDiff = statusOrder[a.status] - statusOrder[b.status];
+    if (statusDiff !== 0) return statusDiff;
+    return parseQuarter(a.quarter) - parseQuarter(b.quarter);
+  });
+
   return (
     <section className={styles.featuredSection}>
       <h2 className={styles.sectionTitle}>Featured Improvements</h2>
@@ -36,7 +59,7 @@ export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.El
         Major capabilities that transform how you work with infrastructure.
       </p>
       <div className={styles.featuredGrid}>
-        {items.map((item, index) => {
+        {sortedItems.map((item, index) => {
           const IconComponent = (Icons as Record<string, React.ComponentType<{ className?: string }>>)[
             item.icon
           ] || Icons.RiQuestionLine;
@@ -84,6 +107,15 @@ export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.El
                       title="View Documentation"
                     >
                       <RiBookOpenLine />
+                    </Link>
+                  )}
+                  {item.prd && (
+                    <Link
+                      to={`https://github.com/cloudposse/atmos/blob/main/docs/prd/${item.prd}.md`}
+                      className={styles.featuredLink}
+                      title="View PRD"
+                    >
+                      <RiFileTextLine />
                     </Link>
                   )}
                   {item.pr && (
