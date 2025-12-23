@@ -32,6 +32,36 @@
   font-size: 1rem;
 }
 
+.featureRequestLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  background: rgba(237, 137, 54, 0.1);
+  color: #ed8936;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  vertical-align: middle;
+}
+
+.featureRequestLink:hover {
+  background: rgba(237, 137, 54, 0.2);
+  text-decoration: none;
+}
+
+:global(html[data-theme='dark']) .featureRequestLink {
+  background: rgba(237, 137, 54, 0.15);
+  color: #f6ad55;
+}
+
+:global(html[data-theme='dark']) .featureRequestLink:hover {
+  background: rgba(237, 137, 54, 0.25);
+}
+
 /* Hero Styles */
 .hero {
   text-align: center;
