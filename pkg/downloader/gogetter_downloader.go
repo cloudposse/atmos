@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/hashicorp/go-getter"
+
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // detectorsMutex guards modifications to getter.Detectors.
@@ -101,6 +103,8 @@ func WithHTTPClient(client *http.Client) GoGetterOption {
 
 // NewGoGetterDownloader creates a new go-getter based downloader.
 func NewGoGetterDownloader(atmosConfig *schema.AtmosConfiguration, opts ...GoGetterOption) FileDownloader {
+	defer perf.Track(atmosConfig, "pkg.downloader.NewGoGetterDownloader")()
+
 	factory := &goGetterClientFactory{
 		atmosConfig: atmosConfig,
 	}

@@ -7,11 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/google/uuid"
 )
 
 const (
