@@ -11,14 +11,14 @@ From the [Deployments PRD](docs/prd/deployments/problem-statement.md):
 > **Secrets sprawl:** Deploying to prod loads secrets from dev (because inheritance), staging (because inheritance), and prod (what we actually need). Result: Prod pipeline has dev secrets. Security audit: CRITICAL FINDING.
 
 Additionally:
-- No unified CLI for secret CRUD operations (`init`, `add`, `get`, `rm`, `pull`, `push`)
+- No unified CLI for secret CRUD operations (`init`, `set`, `get`, `delete`, `pull`, `push`)
 - No declarative registry of what secrets exist and where they're stored
 - Chamber (historical solution) is AWS-only
 - Stores are designed for terraform output persistence, not user-managed secrets
 
 ## Design Principles
 
-1. **Vercel-like DX** - Simple CRUD: `atmos secret init`, `atmos secret add`, etc.
+1. **Vercel-like DX** - Simple CRUD: `atmos secret init`, `atmos secret set`, etc.
 2. **GitOps-friendly** - Explicit declarations in YAML, not opaque backend state
 3. **Cloud-native** - Each cloud gets optimized backend (SSM, Key Vault, GSM), not cross-cloud abstraction
 4. **Zero-config where possible** - Sensible defaults, auto-generated paths
@@ -65,7 +65,7 @@ vars:
 | Aspect | Stores | Secrets |
 |--------|--------|---------|
 | Purpose | State/output persistence | User configuration secrets |
-| Updated by | Terraform outputs (`!terraform.output`) | Users via CLI (`atmos secret add`) |
+| Updated by | Terraform outputs (`!terraform.output`) | Users via CLI (`atmos secret set`) |
 | Scope | Terraform components | All component types |
 | Listing | Not supported (opaque) | Required (declarative registry) |
 | Interface | `!store`/`!store.get` functions | `!secret` function + CRUD CLI |
@@ -291,25 +291,27 @@ atmos secret init --stack prod --dry-run
 - Writes values to configured backend
 - Skips already-initialized secrets (unless `--force`)
 
-### `atmos secret add`
+### `atmos secret set`
 
-Add or update a secret value.
+Set a secret value (create or update).
+
+**Aliases:** `add`
 
 ```bash
-# Add global secret
-atmos secret add ARTIFACTORY_TOKEN
+# Set global secret
+atmos secret set ARTIFACTORY_TOKEN
 
-# Add component-scoped secret
-atmos secret add DATADOG_API_KEY --stack prod --component api
+# Set component-scoped secret
+atmos secret set DATADOG_API_KEY --stack prod --component api
 
 # Non-interactive (for CI)
-atmos secret add DATADOG_API_KEY="value" --stack prod --component api
+atmos secret set DATADOG_API_KEY="value" --stack prod --component api
 
 # From stdin (for large values like keys)
-cat private-key.pem | atmos secret add GITHUB_APP_KEY --stdin
+cat private-key.pem | atmos secret set GITHUB_APP_KEY --stdin
 
 # Force overwrite existing
-atmos secret add DATADOG_API_KEY --force
+atmos secret set DATADOG_API_KEY --force
 ```
 
 ### `atmos secret get`
@@ -328,19 +330,21 @@ atmos secret get DATADOG_API_KEY --format json
 atmos secret get DATADOG_API_KEY --format env
 ```
 
-### `atmos secret rm`
+### `atmos secret delete`
 
 Remove a secret from the backend.
 
-```bash
-# Remove global secret
-atmos secret rm ARTIFACTORY_TOKEN
+**Aliases:** `rm`
 
-# Remove component-scoped secret
-atmos secret rm DATADOG_API_KEY --stack prod --component api
+```bash
+# Delete global secret
+atmos secret delete ARTIFACTORY_TOKEN
+
+# Delete component-scoped secret
+atmos secret delete DATADOG_API_KEY --stack prod --component api
 
 # Force (no confirmation)
-atmos secret rm DATADOG_API_KEY --force
+atmos secret delete DATADOG_API_KEY --force
 ```
 
 ### `atmos secret list`
@@ -600,9 +604,9 @@ pkg/secrets/
 cmd/secret/
     secret.go            # Main command, subcommand registration
     init.go              # atmos secret init
-    add.go               # atmos secret add
+    set.go               # atmos secret set (alias: add)
     get.go               # atmos secret get
-    rm.go                # atmos secret rm
+    delete.go            # atmos secret delete (alias: rm)
     list.go              # atmos secret list
     pull.go              # atmos secret pull
     push.go              # atmos secret push
@@ -634,7 +638,7 @@ pkg/schema/
 - Use **flag handler pattern** (`pkg/flags/`) for all command flags
 - Component type resolution: auto-detect -> selector -> `--type` flag
 - `init` command (interactive prompts for missing secrets)
-- `add`, `get`, `rm` commands
+- `set`, `get`, `delete` commands (with `add`/`rm` aliases)
 - `--path` flag for structured secret extraction
 
 ### Phase 3: YAML Integration
@@ -666,9 +670,9 @@ website/docs/cli/commands/secret/
     _category_.json           # Sidebar category config
     index.mdx                 # Overview: atmos secret
     init.mdx                  # atmos secret init
-    add.mdx                   # atmos secret add
+    set.mdx                   # atmos secret set (alias: add)
     get.mdx                   # atmos secret get
-    rm.mdx                    # atmos secret rm
+    delete.mdx                # atmos secret delete (alias: rm)
     list.mdx                  # atmos secret list
     pull.mdx                  # atmos secret pull
     push.mdx                  # atmos secret push
