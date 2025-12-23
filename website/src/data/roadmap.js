@@ -216,7 +216,7 @@ export const roadmapConfig = {
     {
       id: 'migration',
       icon: 'RiExchangeLine',
-      title: 'Migration & Code Generation',
+      title: 'Feature Parity with Terragrunt',
       tagline: 'Familiar concepts for Terragrunt users',
       description:
         'Users migrating from Terragrunt expect code generation, backend generation, and other familiar patterns.',
@@ -242,7 +242,7 @@ export const roadmapConfig = {
     {
       id: 'quality',
       icon: 'RiShieldCheckLine',
-      title: 'Quality & Community',
+      title: 'Code Quality and Community',
       tagline: 'Rigorous testing, open contribution',
       description:
         '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. Embracing AI-assisted development while maintaining high standards.',
@@ -274,8 +274,9 @@ export const roadmapConfig = {
         { label: 'Cross-linking commands to configs', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/commands', description: 'Navigate from any command to its related configuration and vice versa.' },
         { label: 'Design patterns refresh', status: 'shipped', quarter: 'q3-2025', docs: '/design-patterns/design-patterns', description: 'Updated design patterns with real-world examples for common infrastructure scenarios.' },
         { label: 'Versioning strategy docs', status: 'shipped', quarter: 'q3-2025', docs: '/design-patterns/version-management', changelog: 'comprehensive-version-management-documentation', description: 'Complete guide to version management including component versioning and upgrade strategies.' },
-        { label: 'Learning section', status: 'shipped', quarter: 'q4-2025', docs: '/learn/concepts-overview', changelog: 'documentation-reorganization', description: 'Step-by-step tutorials for getting started with Atmos from scratch.' },
-        { label: 'Migration guides (Terragrunt, Workspaces)', status: 'shipped', quarter: 'q4-2025', docs: '/migration/terragrunt', changelog: 'migration-guides', description: 'Detailed guides for migrating from Terragrunt and Terraform workspaces to Atmos.' },
+        { label: 'New learning section', status: 'shipped', quarter: 'q4-2025', docs: '/learn/concepts-overview', changelog: 'documentation-reorganization', description: 'Step-by-step tutorials for getting started with Atmos from scratch.' },
+        { label: 'Migration guides (Terragrunt, Workspaces, Native Terraform)', status: 'shipped', quarter: 'q4-2025', docs: '/migration/terragrunt', changelog: 'migration-guides', description: 'Detailed guides for migrating from Terragrunt, Terraform workspaces, and native Terraform to Atmos.' },
+        { label: 'Roadmap', status: 'shipped', quarter: 'q4-2025', docs: '/roadmap', description: 'Public roadmap showing past accomplishments and future plans.' },
       ],
       issues: [],
       prs: [],
