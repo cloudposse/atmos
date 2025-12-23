@@ -33,7 +33,7 @@ export default function Roadmap(): JSX.Element {
               className={styles.viewFeaturesLink}
             >
               <RiExternalLinkLine />
-              <span>View Features</span>
+              <span>View Issues</span>
             </Link>
             <Link
               to="https://github.com/cloudposse/atmos/issues/new?template=feature_request.yml"
