@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -246,6 +247,22 @@ func TestLoaderGetComponentOverrides(t *testing.T) {
 
 // TestLoaderResolvePath tests path resolution logic.
 func TestLoaderResolvePath(t *testing.T) {
+	// Platform-specific absolute paths.
+	// On Windows, absolute paths require a drive letter (e.g., C:\).
+	// On Unix, absolute paths start with / (e.g., /absolute/path).
+	var absPath, absTemplatePath, absCustomPath, absAtmosPath string
+	if runtime.GOOS == "windows" {
+		absPath = "C:\\absolute\\path\\template.md"
+		absTemplatePath = "C:\\absolute\\path\\template.md"
+		absCustomPath = "C:\\custom"
+		absAtmosPath = "C:\\atmos"
+	} else {
+		absPath = "/absolute/path/template.md"
+		absTemplatePath = "/absolute/path/template.md"
+		absCustomPath = "/custom"
+		absAtmosPath = "/atmos"
+	}
+
 	tests := []struct {
 		name      string
 		basePath  string
@@ -255,22 +272,22 @@ func TestLoaderResolvePath(t *testing.T) {
 	}{
 		{
 			name:     "absolute path unchanged",
-			basePath: filepath.FromSlash("/custom"),
-			filename: filepath.FromSlash("/absolute/path/template.md"),
-			want:     filepath.FromSlash("/absolute/path/template.md"),
+			basePath: absCustomPath,
+			filename: absPath,
+			want:     absTemplatePath,
 		},
 		{
 			name:     "relative resolved from basePath",
-			basePath: filepath.FromSlash("/custom"),
+			basePath: absCustomPath,
 			filename: "template.md",
-			want:     filepath.FromSlash("/custom/template.md"),
+			want:     filepath.Join(absCustomPath, "template.md"),
 		},
 		{
 			name:      "relative resolved from atmosBase when no basePath",
 			basePath:  "",
-			atmosBase: filepath.FromSlash("/atmos"),
+			atmosBase: absAtmosPath,
 			filename:  "template.md",
-			want:      filepath.FromSlash("/atmos/template.md"),
+			want:      filepath.Join(absAtmosPath, "template.md"),
 		},
 		{
 			name:     "relative unchanged when no bases",
