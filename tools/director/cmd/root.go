@@ -32,12 +32,13 @@ director new terraform-apply-basic
 `,
 	}
 
-	// Add subcommands
+	// Add subcommands.
 	root.AddCommand(newCmd())
 	root.AddCommand(renderCmd())
 	root.AddCommand(publishCmd())
 	root.AddCommand(validateCmd())
-	root.AddCommand(catalogCmd())
+	root.AddCommand(listCmd())    // Parent command for list subcommands.
+	root.AddCommand(catalogCmd()) // Hidden, backward compat.
 	root.AddCommand(showCmd())
 	root.AddCommand(installCmd())
 	root.AddCommand(exportCmd())

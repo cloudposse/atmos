@@ -3,7 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -20,6 +23,9 @@ func renderCmd() *cobra.Command {
 		force          bool
 		publish        bool
 		exportManifest bool
+		formats        string
+		noSVGFix       bool
+		category       string
 	)
 
 	cmd := &cobra.Command{
@@ -50,6 +56,18 @@ director render list-vars --force --publish
 
 # Render, publish, and export manifest
 director render list-vars --force --publish --export-manifest
+
+# Render only SVG format (faster for testing)
+director render terraform-plan --format svg
+
+# Render multiple specific formats
+director render terraform-plan --format svg,gif
+
+# Render all scenes in a category
+director render --category terraform --force --publish
+
+# Render and publish all list-related demos
+director render --category list --force --publish --export-manifest
 `,
 		RunE: func(c *cobra.Command, args []string) error {
 			ctx := context.Background()
@@ -59,10 +77,24 @@ director render list-vars --force --publish --export-manifest
 				return err
 			}
 
-			// Load tools configuration and ensure atmos is installed at the correct version.
-			toolsConfig, err := toolmgr.LoadToolsConfig(demosDir)
+			// Load full defaults configuration including hooks.
+			defaultsConfig, err := toolmgr.LoadDefaultsConfig(demosDir)
 			if err != nil {
-				return fmt.Errorf("failed to load tools config: %w", err)
+				return fmt.Errorf("failed to load defaults config: %w", err)
+			}
+
+			// Run pre-render hooks before anything else.
+			if defaultsConfig != nil && defaultsConfig.Hooks != nil && len(defaultsConfig.Hooks.PreRender) > 0 {
+				repoRoot := filepath.Dir(demosDir)
+				if err := runPreRenderHooks(ctx, c, defaultsConfig.Hooks.PreRender, repoRoot); err != nil {
+					return fmt.Errorf("pre-render hooks failed: %w", err)
+				}
+			}
+
+			// Load tools configuration and ensure atmos is installed at the correct version.
+			var toolsConfig *toolmgr.ToolsConfig
+			if defaultsConfig != nil {
+				toolsConfig = defaultsConfig.Tools
 			}
 
 			if toolsConfig != nil && toolsConfig.Atmos != nil {
@@ -99,6 +131,17 @@ director render list-vars --force --publish --export-manifest
 				if len(scenesToRender) == 0 {
 					return fmt.Errorf("no matching scenes found for: %v", args)
 				}
+			} else if category != "" {
+				// Render all scenes in a category.
+				for _, sc := range scenesList.Scenes {
+					if sc.GetCategory() == category && (all || sc.Enabled) {
+						scenesToRender = append(scenesToRender, sc)
+					}
+				}
+
+				if len(scenesToRender) == 0 {
+					return fmt.Errorf("no matching scenes found for category: %s", category)
+				}
 			} else {
 				// Render all scenes (or all enabled).
 				for _, sc := range scenesList.Scenes {
@@ -129,10 +172,47 @@ director render list-vars --force --publish --export-manifest
 				}
 			}
 
+			// Check if any scene needs SVG output (considering format filter).
+			needsSVG := false
+			for _, sc := range scenesToRender {
+				for _, output := range sc.Outputs {
+					if output == "svg" {
+						// If format filter is set, only check if svg is in the filter.
+						if formats == "" || strings.Contains(formats, "svg") {
+							needsSVG = true
+							break
+						}
+					}
+				}
+				if needsSVG {
+					break
+				}
+			}
+
+			// Check VHS SVG support if needed.
+			if needsSVG {
+				if err := vhs.CheckSVGSupport(); err != nil {
+					return err
+				}
+			}
+
+			// Parse format filter.
+			var formatFilter []string
+			if formats != "" {
+				formatFilter = strings.Split(formats, ",")
+				for i, f := range formatFilter {
+					formatFilter[i] = strings.TrimSpace(f)
+				}
+			}
+
 			c.Printf("Rendering %d scene(s)...\n\n", len(scenesToRender))
 
 			renderer := vhsRenderer.NewRenderer(demosDir)
 			renderer.SetForce(force)
+			renderer.SetSkipSVGFix(noSVGFix)
+			if len(formatFilter) > 0 {
+				renderer.SetFormatFilter(formatFilter)
+			}
 
 			successCount := 0
 			var renderedSceneNames []string
@@ -173,7 +253,7 @@ director render list-vars --force --publish --export-manifest
 			// If --publish flag is set, publish the rendered scenes.
 			if publish && len(renderedSceneNames) > 0 {
 				c.Printf("\n")
-				if err := runPublish(ctx, c, demosDir, renderedSceneNames, force); err != nil {
+				if err := runPublish(ctx, c, demosDir, renderedSceneNames, force, formatFilter); err != nil {
 					return fmt.Errorf("publish failed: %w", err)
 				}
 			}
@@ -194,6 +274,30 @@ director render list-vars --force --publish --export-manifest
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Force re-render (ignore cache)")
 	cmd.Flags().BoolVarP(&publish, "publish", "p", false, "Publish rendered scenes after rendering")
 	cmd.Flags().BoolVarP(&exportManifest, "export-manifest", "e", false, "Export manifest after publishing")
+	cmd.Flags().StringVar(&formats, "format", "", "Only render specific formats (comma-separated: svg,gif,mp4,png)")
+	cmd.Flags().BoolVar(&noSVGFix, "no-svg-fix", false, "Skip SVG line-height post-processing")
+	cmd.Flags().StringVarP(&category, "category", "c", "", "Render all scenes in a category (e.g., terraform, list, dx)")
 
 	return cmd
+}
+
+// runPreRenderHooks runs pre-render hook commands before VHS rendering.
+func runPreRenderHooks(ctx context.Context, c *cobra.Command, hooks []string, workdir string) error {
+	c.Printf("Running pre-render hooks...\n")
+
+	for i, cmdStr := range hooks {
+		c.Printf("  [%d/%d] %s\n", i+1, len(hooks), cmdStr)
+
+		cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
+		cmd.Dir = workdir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("hook %d failed (%s): %w", i+1, cmdStr, err)
+		}
+	}
+
+	c.Printf("Pre-render hooks completed.\n\n")
+	return nil
 }
