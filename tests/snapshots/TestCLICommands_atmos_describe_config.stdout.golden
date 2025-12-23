@@ -228,9 +228,10 @@
   "profiles": {},
   "metadata": {},
   "ci": {
-    "outputs": {},
-    "status_checks": {},
-    "pr_comment": {},
+    "output": {},
+    "summary": {},
+    "checks": {},
+    "comments": {},
     "templates": {}
   }
 }
