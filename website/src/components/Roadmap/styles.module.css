@@ -1750,8 +1750,7 @@
 }
 
 .drawerLinkButton:hover {
-  color: var(--ifm-color-emphasis-800);
-  text-decoration: underline;
+  color: var(--ifm-color-emphasis-900);
 }
 
 :global(html[data-theme='dark']) .drawerLinkButton {
@@ -1759,8 +1758,7 @@
 }
 
 :global(html[data-theme='dark']) .drawerLinkButton:hover {
-  color: var(--ifm-color-emphasis-300);
-  text-decoration: underline;
+  color: var(--ifm-color-emphasis-200);
 }
 
 .drawerLinkButtonDocs {
@@ -1768,8 +1766,7 @@
 }
 
 .drawerLinkButtonDocs:hover {
-  color: var(--ifm-color-emphasis-800);
-  text-decoration: underline;
+  color: var(--ifm-color-emphasis-900);
 }
 
 :global(html[data-theme='dark']) .drawerLinkButtonDocs {
@@ -1777,8 +1774,7 @@
 }
 
 :global(html[data-theme='dark']) .drawerLinkButtonDocs:hover {
-  color: var(--ifm-color-emphasis-300);
-  text-decoration: underline;
+  color: var(--ifm-color-emphasis-200);
 }
 
 .drawerMeta {
