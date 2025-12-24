@@ -23,7 +23,11 @@ Type "# View and manage atmos profiles"
 Enter
 Sleep 1s
 
-Type "atmos profile"
+Type "# List all configured profiles"
+Enter
+Sleep 300ms
+
+Type "atmos profile list"
 Sleep 2s
 Enter
 Sleep 3s
@@ -31,10 +35,18 @@ Sleep 3s
 # Capture screenshot
 Screenshot profile.png
 
-Type "# Configure different profiles for various environments"
+Type "# Show details of a specific profile"
+Enter
+Sleep 300ms
+
+Type "atmos profile show"
+Sleep 2s
+Enter
+Sleep 3s
+
+Type "# Switch between environments with profiles"
 Enter
 Sleep 1s
-
 
 # Hold final frame
 Sleep 10s
