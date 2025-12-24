@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Link from '@docusaurus/Link';
-import { RiCheckLine, RiLoader4Line, RiCalendarTodoLine } from 'react-icons/ri';
+import { RiCheckLine, RiLoader4Line, RiCalendarTodoLine, RiArrowDownSLine } from 'react-icons/ri';
 import styles from './styles.module.css';
 import { renderInlineMarkdown } from './utils';
 
@@ -16,6 +16,8 @@ export interface Milestone {
   docs?: string;
   /** Short description shown in the detail drawer. */
   description?: string;
+  /** Why this matters - benefit-focused explanation shown below description. */
+  benefits?: string;
   /** Screenshot image path (optional) - shown in the detail drawer. */
   screenshot?: string;
   /** Code example (optional) - shown in the detail drawer. */
@@ -33,6 +35,8 @@ interface MilestoneListProps {
   onMilestoneClick?: (milestone: Milestone) => void;
   /** Show milestones grouped by category and priority. */
   grouped?: boolean;
+  /** When true, expand all collapsible groups. */
+  expandAll?: boolean;
 }
 
 const statusConfig = {
@@ -69,6 +73,8 @@ const sortMilestones = (milestones: Milestone[]): Milestone[] => {
 interface MilestoneGroup {
   title: string;
   milestones: Milestone[];
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
 }
 
 const groupMilestones = (milestones: Milestone[]): MilestoneGroup[] => {
@@ -83,7 +89,7 @@ const groupMilestones = (milestones: Milestone[]): MilestoneGroup[] => {
     groups.push({ title: 'Featured Improvements', milestones: featuredHigh });
   }
   if (featuredOther.length > 0) {
-    groups.push({ title: 'Featured — Nice to Have', milestones: featuredOther });
+    groups.push({ title: 'Related Improvements', milestones: featuredOther });
   }
 
   // Everything Else.
@@ -95,7 +101,7 @@ const groupMilestones = (milestones: Milestone[]): MilestoneGroup[] => {
     groups.push({ title: 'Other Updates', milestones: otherHigh });
   }
   if (otherOther.length > 0) {
-    groups.push({ title: 'Other — Nice to Have', milestones: otherOther });
+    groups.push({ title: 'Other Improvements', milestones: otherOther, collapsible: true, defaultCollapsed: true });
   }
 
   return groups;
@@ -106,6 +112,7 @@ export default function MilestoneList({
   showQuarter = true,
   onMilestoneClick,
   grouped = false,
+  expandAll = false,
 }: MilestoneListProps): JSX.Element {
   // Get the primary link for the milestone label (announcement first, then docs).
   const getMilestoneLabelLink = (milestone: Milestone): string | null => {
@@ -116,7 +123,7 @@ export default function MilestoneList({
 
   // Check if milestone has rich content worth showing in drawer.
   const hasRichContent = (milestone: Milestone): boolean => {
-    return Boolean(milestone.description || milestone.screenshot || milestone.codeExample);
+    return Boolean(milestone.description || milestone.benefits || milestone.screenshot || milestone.codeExample);
   };
 
   // Render badges on the right side (Announcement, Docs, PRs).
@@ -219,6 +226,29 @@ export default function MilestoneList({
     );
   };
 
+  // Track collapsed state for collapsible groups.
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroup = (title: string) => {
+    setCollapsedGroups((prev) => ({
+      ...prev,
+      [title]: !prev[title],
+    }));
+  };
+
+  const isGroupCollapsed = (group: MilestoneGroup): boolean => {
+    // If expandAll is true, never collapse.
+    if (expandAll) {
+      return false;
+    }
+    // If explicitly set in state, use that.
+    if (collapsedGroups[group.title] !== undefined) {
+      return collapsedGroups[group.title];
+    }
+    // Otherwise use default.
+    return group.defaultCollapsed ?? false;
+  };
+
   // Grouped view.
   if (grouped) {
     const groups = groupMilestones(milestones);
@@ -237,14 +267,35 @@ export default function MilestoneList({
 
     return (
       <div className={styles.milestoneList}>
-        {groups.map((group) => (
-          <div key={group.title} className={styles.milestoneGroup}>
-            <h4 className={styles.milestoneGroupTitle}>{group.title}</h4>
-            <ul className={styles.milestoneItems}>
-              {group.milestones.map(renderMilestoneItem)}
-            </ul>
-          </div>
-        ))}
+        {groups.map((group) => {
+          const collapsed = isGroupCollapsed(group);
+
+          return (
+            <div key={group.title} className={styles.milestoneGroup}>
+              {group.collapsible ? (
+                <button
+                  type="button"
+                  className={`${styles.milestoneGroupTitleCollapsible} ${!collapsed ? styles.milestoneGroupTitleCollapsibleExpanded : ''}`}
+                  onClick={() => toggleGroup(group.title)}
+                  aria-expanded={!collapsed}
+                >
+                  <RiArrowDownSLine
+                    className={`${styles.milestoneGroupChevron} ${collapsed ? styles.milestoneGroupChevronCollapsed : ''}`}
+                  />
+                  {group.title}
+                  <span className={styles.milestoneGroupCount}>({group.milestones.length})</span>
+                </button>
+              ) : (
+                <h4 className={styles.milestoneGroupTitle}>{group.title}</h4>
+              )}
+              {!collapsed && (
+                <ul className={styles.milestoneItems}>
+                  {group.milestones.map(renderMilestoneItem)}
+                </ul>
+              )}
+            </div>
+          );
+        })}
       </div>
     );
   }

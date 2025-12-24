@@ -92,6 +92,37 @@
   background: rgba(237, 137, 54, 0.25);
 }
 
+.expandAllButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  background: transparent;
+  color: var(--ifm-color-emphasis-500);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  vertical-align: middle;
+}
+
+.expandAllButton:hover {
+  background: var(--ifm-color-emphasis-100);
+  border-color: var(--ifm-color-emphasis-400);
+  color: var(--ifm-color-emphasis-700);
+}
+
+:global(html[data-theme='dark']) .expandAllButton {
+  border-color: var(--ifm-color-emphasis-400);
+}
+
+:global(html[data-theme='dark']) .expandAllButton:hover {
+  background: var(--ifm-color-emphasis-200);
+}
+
 /* Featured Section Styles */
 .featuredSection {
   margin-bottom: 3rem;
@@ -286,6 +317,194 @@
 :global(html[data-theme='dark']) .featuredLink:hover {
   background: rgba(83, 140, 233, 0.15);
   color: #538ce9;
+}
+
+/* Clickable featured card styles */
+.featuredCardClickable {
+  cursor: pointer;
+}
+
+.featuredCardClickable:focus {
+  outline: 2px solid #1e5bb8;
+  outline-offset: 2px;
+}
+
+:global(html[data-theme='dark']) .featuredCardClickable:focus {
+  outline-color: #538ce9;
+}
+
+/* Featured drawer specific styles */
+.featuredDrawerTitleGroup {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.featuredDrawerIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(30, 91, 184, 0.1) 0%, rgba(83, 140, 233, 0.1) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  color: #1e5bb8;
+  flex-shrink: 0;
+}
+
+:global(html[data-theme='dark']) .featuredDrawerIcon {
+  background: linear-gradient(135deg, rgba(83, 140, 233, 0.15) 0%, rgba(83, 140, 233, 0.1) 100%);
+  color: #538ce9;
+}
+
+.featuredDrawerTagline {
+  font-size: 1rem;
+  color: #1e5bb8;
+  font-weight: 500;
+  margin: 0 0 1rem 0;
+}
+
+:global(html[data-theme='dark']) .featuredDrawerTagline {
+  color: #538ce9;
+}
+
+/* Roadmap Stats Styles */
+.roadmapStats {
+  background: white;
+  border-radius: 12px;
+  padding: 1.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  margin-bottom: 2rem;
+}
+
+:global(html[data-theme='dark']) .roadmapStats {
+  background: #1e1e2e;
+  border-color: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.statsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.statsTitle {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--ifm-heading-color);
+}
+
+.statsPercent {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #38a169;
+}
+
+:global(html[data-theme='dark']) .statsPercent {
+  color: #68d391;
+}
+
+.statsProgressBar {
+  height: 8px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 4px;
+  overflow: hidden;
+  display: flex;
+  margin-bottom: 1rem;
+}
+
+:global(html[data-theme='dark']) .statsProgressBar {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.statsProgressShipped {
+  height: 100%;
+  background: linear-gradient(90deg, #38a169 0%, #48bb78 100%);
+  border-radius: 4px 0 0 4px;
+}
+
+.statsProgressInProgress {
+  height: 100%;
+  background: linear-gradient(90deg, #1e5bb8 0%, #538ce9 100%);
+}
+
+:global(html[data-theme='dark']) .statsProgressInProgress {
+  background: linear-gradient(90deg, #538ce9 0%, #90cdf4 100%);
+}
+
+.statsBreakdown {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+}
+
+@media screen and (max-width: 480px) {
+  .statsBreakdown {
+    gap: 1rem;
+  }
+}
+
+.statItem {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.statIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+}
+
+.statIconShipped {
+  background: rgba(56, 161, 105, 0.15);
+  color: #38a169;
+}
+
+:global(html[data-theme='dark']) .statIconShipped {
+  background: rgba(56, 161, 105, 0.2);
+  color: #68d391;
+}
+
+.statIconInProgress {
+  background: rgba(30, 91, 184, 0.15);
+  color: #1e5bb8;
+}
+
+:global(html[data-theme='dark']) .statIconInProgress {
+  background: rgba(83, 140, 233, 0.2);
+  color: #538ce9;
+}
+
+.statIconPlanned {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--ifm-color-emphasis-500);
+}
+
+:global(html[data-theme='dark']) .statIconPlanned {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ifm-color-emphasis-400);
+}
+
+.statCount {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--ifm-heading-color);
+}
+
+.statLabel {
+  font-size: 0.85rem;
+  color: var(--ifm-color-emphasis-500);
 }
 
 /* Hero Styles */
@@ -936,7 +1155,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--ifm-color-emphasis-500);
-  margin: 0 0 0.75rem 0.75rem;
+  margin: 0 0 0.75rem 0;
   padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--ifm-color-emphasis-200);
 }
@@ -944,6 +1163,63 @@
 :global(html[data-theme='dark']) .milestoneGroupTitle {
   color: var(--ifm-color-emphasis-400);
   border-bottom-color: var(--ifm-color-emphasis-300);
+}
+
+.milestoneGroupTitleCollapsible {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ifm-color-emphasis-500);
+  margin: 0 0 0.75rem 0;
+  padding: 0.25rem 0.5rem 0.5rem 0;
+  border: none;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.milestoneGroupTitleCollapsibleExpanded {
+  border-bottom-color: var(--ifm-color-emphasis-200);
+}
+
+.milestoneGroupTitleCollapsible:hover {
+  color: var(--ifm-color-primary);
+}
+
+:global(html[data-theme='dark']) .milestoneGroupTitleCollapsible {
+  color: var(--ifm-color-emphasis-400);
+}
+
+:global(html[data-theme='dark']) .milestoneGroupTitleCollapsibleExpanded {
+  border-bottom-color: var(--ifm-color-emphasis-300);
+}
+
+:global(html[data-theme='dark']) .milestoneGroupTitleCollapsible:hover {
+  color: var(--ifm-color-primary-light);
+}
+
+.milestoneGroupChevron {
+  font-size: 1rem;
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.milestoneGroupChevronCollapsed {
+  transform: rotate(-90deg);
+}
+
+.milestoneGroupCount {
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: var(--ifm-color-emphasis-400);
+  margin-left: 0.25rem;
 }
 
 .milestoneItem {
@@ -1383,6 +1659,39 @@
   line-height: 1.6;
   color: var(--ifm-color-emphasis-700);
   margin: 0 0 1.5rem 0;
+}
+
+.drawerBenefits {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: rgba(56, 161, 105, 0.08);
+  border-radius: 8px;
+  border-left: 3px solid #38a169;
+}
+
+:global(html[data-theme='dark']) .drawerBenefits {
+  background: rgba(104, 211, 145, 0.1);
+  border-left-color: #68d391;
+}
+
+.drawerBenefitsTitle {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #38a169;
+  margin: 0 0 0.5rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+:global(html[data-theme='dark']) .drawerBenefitsTitle {
+  color: #68d391;
+}
+
+.drawerBenefitsText {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: var(--ifm-color-emphasis-700);
+  margin: 0;
 }
 
 .drawerScreenshot {

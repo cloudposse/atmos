@@ -1,13 +1,27 @@
 import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from '@docusaurus/Link';
-import { RiCloseLine, RiBookOpenLine, RiMegaphoneLine } from 'react-icons/ri';
+import { RiCloseLine, RiBookOpenLine, RiMegaphoneLine, RiGitPullRequestLine, RiFileTextLine } from 'react-icons/ri';
+import * as Icons from 'react-icons/ri';
 import styles from './styles.module.css';
-import { renderInlineMarkdown } from './utils';
-import type { Milestone } from './MilestoneList';
 
-interface MilestoneDrawerProps {
-  milestone: Milestone | undefined;
+export interface FeaturedItem {
+  id: string;
+  icon: string;
+  title: string;
+  tagline: string;
+  description: string;
+  benefits?: string;
+  status: 'shipped' | 'in-progress' | 'planned';
+  quarter: string;
+  docs?: string;
+  changelog?: string;
+  pr?: number;
+  prd?: string;
+}
+
+interface FeaturedDrawerProps {
+  item: FeaturedItem | undefined;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -18,11 +32,11 @@ const statusClassMap: Record<string, string> = {
   planned: 'drawerMetaStatusPlanned',
 };
 
-export default function MilestoneDrawer({
-  milestone,
+export default function FeaturedDrawer({
+  item,
   isOpen,
   onClose,
-}: MilestoneDrawerProps): JSX.Element | null {
+}: FeaturedDrawerProps): JSX.Element | null {
   const drawerRef = useRef<HTMLDivElement>(null);
 
   // Close on escape key.
@@ -63,9 +77,14 @@ export default function MilestoneDrawer({
     };
   }, [isOpen]);
 
+  // Get the icon component.
+  const IconComponent = item
+    ? (Icons as Record<string, React.ComponentType<{ className?: string }>>)[item.icon] || Icons.RiQuestionLine
+    : Icons.RiQuestionLine;
+
   return (
     <AnimatePresence>
-      {isOpen && milestone && (
+      {isOpen && item && (
         <>
           {/* Backdrop */}
           <motion.div
@@ -87,9 +106,12 @@ export default function MilestoneDrawer({
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           >
             <div className={styles.drawerHeader}>
-              <h3 className={styles.drawerTitle}>
-                {renderInlineMarkdown(milestone.label)}
-              </h3>
+              <div className={styles.featuredDrawerTitleGroup}>
+                <div className={styles.featuredDrawerIcon}>
+                  <IconComponent />
+                </div>
+                <h3 className={styles.drawerTitle}>{item.title}</h3>
+              </div>
               <button
                 className={styles.drawerClose}
                 onClick={onClose}
@@ -100,66 +122,70 @@ export default function MilestoneDrawer({
             </div>
 
             <div className={styles.drawerContent}>
-              {milestone.description && (
+              <p className={styles.featuredDrawerTagline}>{item.tagline}</p>
+
+              {item.description && (
                 <p className={styles.drawerDescription}>
-                  {milestone.description}
+                  {item.description}
                 </p>
               )}
 
-              {milestone.benefits && (
+              {item.benefits && (
                 <div className={styles.drawerBenefits}>
                   <h4 className={styles.drawerBenefitsTitle}>Why It Matters</h4>
-                  <p className={styles.drawerBenefitsText}>{milestone.benefits}</p>
-                </div>
-              )}
-
-              {milestone.screenshot && (
-                <div className={styles.drawerScreenshot}>
-                  <img
-                    src={milestone.screenshot}
-                    alt={`Screenshot for ${milestone.label}`}
-                    loading="lazy"
-                  />
-                </div>
-              )}
-
-              {milestone.codeExample && (
-                <div className={styles.drawerCodeExample}>
-                  <code>{milestone.codeExample}</code>
+                  <p className={styles.drawerBenefitsText}>{item.benefits}</p>
                 </div>
               )}
 
               <div className={styles.drawerLinks}>
-                {milestone.changelog && (
+                {item.changelog && (
                   <Link
-                    to={`/changelog/${milestone.changelog}`}
+                    to={`/changelog/${item.changelog}`}
                     className={styles.drawerLinkButton}
                   >
                     <RiMegaphoneLine />
                     <span>View Announcement</span>
                   </Link>
                 )}
-                {milestone.docs && (
+                {item.docs && (
                   <Link
-                    to={milestone.docs}
+                    to={item.docs}
                     className={`${styles.drawerLinkButton} ${styles.drawerLinkButtonDocs}`}
                   >
                     <RiBookOpenLine />
                     <span>Read Documentation</span>
                   </Link>
                 )}
+                {item.prd && (
+                  <Link
+                    to={`https://github.com/cloudposse/atmos/blob/main/docs/prd/${item.prd}.md`}
+                    className={styles.drawerLinkButton}
+                  >
+                    <RiFileTextLine />
+                    <span>View PRD</span>
+                  </Link>
+                )}
+                {item.pr && (
+                  <Link
+                    to={`https://github.com/cloudposse/atmos/pull/${item.pr}`}
+                    className={styles.drawerLinkButton}
+                  >
+                    <RiGitPullRequestLine />
+                    <span>View PR #{item.pr}</span>
+                  </Link>
+                )}
               </div>
 
               <div className={styles.drawerMeta}>
                 <span className={styles.drawerMetaItem}>
-                  {milestone.quarter.replace('q', 'Q').replace('-', ' ')}
+                  {item.quarter.replace('q', 'Q').replace('-', ' ')}
                 </span>
                 <span
-                  className={`${styles.drawerMetaStatus} ${styles[statusClassMap[milestone.status] || 'drawerMetaStatusPlanned']}`}
+                  className={`${styles.drawerMetaStatus} ${styles[statusClassMap[item.status] || 'drawerMetaStatusPlanned']}`}
                 >
-                  {milestone.status === 'shipped'
+                  {item.status === 'shipped'
                     ? 'Shipped'
-                    : milestone.status === 'in-progress'
+                    : item.status === 'in-progress'
                       ? 'In Progress'
                       : 'Planned'}
                 </span>

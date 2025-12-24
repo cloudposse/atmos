@@ -1,23 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from '@docusaurus/Link';
 import * as Icons from 'react-icons/ri';
 import { RiExternalLinkLine, RiBookOpenLine, RiMegaphoneLine, RiGitPullRequestLine, RiFileTextLine } from 'react-icons/ri';
+import FeaturedDrawer, { FeaturedItem } from './FeaturedDrawer';
 import styles from './styles.module.css';
-
-interface FeaturedItem {
-  id: string;
-  icon: string;
-  title: string;
-  tagline: string;
-  description: string;
-  status: 'shipped' | 'in-progress' | 'planned';
-  quarter: string;
-  docs?: string;
-  changelog?: string;
-  pr?: number;
-  prd?: string;
-}
 
 interface FeaturedSectionProps {
   items: FeaturedItem[];
@@ -45,12 +32,31 @@ const parseQuarter = (quarter: string): number => {
 };
 
 export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.Element {
+  const [selectedItem, setSelectedItem] = useState<FeaturedItem | undefined>(undefined);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
   // Sort items by status (shipped first), then by quarter (earlier first).
   const sortedItems = [...items].sort((a, b) => {
     const statusDiff = statusOrder[a.status] - statusOrder[b.status];
     if (statusDiff !== 0) return statusDiff;
     return parseQuarter(a.quarter) - parseQuarter(b.quarter);
   });
+
+  const handleCardClick = (item: FeaturedItem) => {
+    setSelectedItem(item);
+    setIsDrawerOpen(true);
+  };
+
+  const handleDrawerClose = () => {
+    setIsDrawerOpen(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, item: FeaturedItem) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleCardClick(item);
+    }
+  };
 
   return (
     <section className={styles.featuredSection}>
@@ -68,10 +74,15 @@ export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.El
           return (
             <motion.div
               key={item.id}
-              className={styles.featuredCard}
+              className={`${styles.featuredCard} ${styles.featuredCardClickable}`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.4, delay: index * 0.1 }}
+              onClick={() => handleCardClick(item)}
+              onKeyDown={(e) => handleKeyDown(e, item)}
+              role="button"
+              tabIndex={0}
+              title="Click for details"
             >
               <div className={styles.featuredHeader}>
                 <div className={styles.featuredIconWrapper}>
@@ -96,6 +107,7 @@ export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.El
                       to={`/changelog/${item.changelog}`}
                       className={styles.featuredLink}
                       title="View Announcement"
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <RiMegaphoneLine />
                     </Link>
@@ -105,6 +117,7 @@ export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.El
                       to={item.docs}
                       className={styles.featuredLink}
                       title="View Documentation"
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <RiBookOpenLine />
                     </Link>
@@ -114,6 +127,7 @@ export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.El
                       to={`https://github.com/cloudposse/atmos/blob/main/docs/prd/${item.prd}.md`}
                       className={styles.featuredLink}
                       title="View PRD"
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <RiFileTextLine />
                     </Link>
@@ -123,6 +137,7 @@ export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.El
                       to={`https://github.com/cloudposse/atmos/pull/${item.pr}`}
                       className={styles.featuredLink}
                       title={`View PR #${item.pr}`}
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <RiGitPullRequestLine />
                     </Link>
@@ -133,6 +148,12 @@ export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.El
           );
         })}
       </div>
+
+      <FeaturedDrawer
+        item={selectedItem}
+        isOpen={isDrawerOpen}
+        onClose={handleDrawerClose}
+      />
     </section>
   );
 }

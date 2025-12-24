@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from '@docusaurus/Link';
 import { RiArrowDownSLine, RiGithubLine, RiGitPullRequestLine } from 'react-icons/ri';
@@ -33,15 +33,25 @@ interface Initiative {
 interface InitiativeCardProps {
   initiative: Initiative;
   index?: number;
+  /** When true, expand all collapsible milestone sections. */
+  expandAllMilestones?: boolean;
 }
 
 export default function InitiativeCard({
   initiative,
   index = 0,
+  expandAllMilestones = false,
 }: InitiativeCardProps): JSX.Element {
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedMilestone, setSelectedMilestone] = useState<Milestone | undefined>(undefined);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  // Expand the initiative card when expandAllMilestones is true.
+  useEffect(() => {
+    if (expandAllMilestones) {
+      setIsExpanded(true);
+    }
+  }, [expandAllMilestones]);
 
   // Dynamically get the icon component.
   const IconComponent = (Icons as Record<string, React.ComponentType<{ className?: string }>>)[
@@ -119,6 +129,7 @@ export default function InitiativeCard({
                 milestones={initiative.milestones}
                 onMilestoneClick={handleMilestoneClick}
                 grouped
+                expandAll={expandAllMilestones}
               />
 
               {(initiative.issues.length > 0 || initiative.prs?.length > 0) && (
