@@ -111,3 +111,4 @@ scratch/
 COVERAGE_SUMMARY.md
 TESTABILITY_CHANGES_SUMMARY.md
 *.ansi
+.claude/plans/
