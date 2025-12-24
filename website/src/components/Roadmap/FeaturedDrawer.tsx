@@ -160,6 +160,8 @@ export default function FeaturedDrawer({
                   <Link
                     to={`https://github.com/cloudposse/atmos/blob/main/docs/prd/${item.prd}.md`}
                     className={styles.drawerLinkButton}
+                    target="_blank"
+                    rel="noopener noreferrer"
                   >
                     <RiFileTextLine />
                     <span>View PRD</span>
@@ -169,6 +171,8 @@ export default function FeaturedDrawer({
                   <Link
                     to={`https://github.com/cloudposse/atmos/pull/${item.pr}`}
                     className={styles.drawerLinkButton}
+                    target="_blank"
+                    rel="noopener noreferrer"
                   >
                     <RiGitPullRequestLine />
                     <span>View PR #{item.pr}</span>

@@ -146,6 +146,8 @@ export default function InitiativeCard({
                             to={`https://github.com/cloudposse/atmos/issues/${issue}`}
                             className={styles.initiativeIssueLink}
                             onClick={(e) => e.stopPropagation()}
+                            target="_blank"
+                            rel="noopener noreferrer"
                           >
                             #{issue}
                           </Link>
@@ -165,6 +167,8 @@ export default function InitiativeCard({
                               to={`https://github.com/cloudposse/atmos/pull/${pr.number}`}
                               className={styles.initiativePrLink}
                               onClick={(e) => e.stopPropagation()}
+                              target="_blank"
+                              rel="noopener noreferrer"
                             >
                               #{pr.number}
                             </Link>

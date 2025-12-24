@@ -128,6 +128,8 @@ export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.El
                       className={styles.featuredLink}
                       title="View PRD"
                       onClick={(e) => e.stopPropagation()}
+                      target="_blank"
+                      rel="noopener noreferrer"
                     >
                       <RiFileTextLine />
                     </Link>
@@ -138,6 +140,8 @@ export default function FeaturedSection({ items }: FeaturedSectionProps): JSX.El
                       className={styles.featuredLink}
                       title={`View PR #${item.pr}`}
                       onClick={(e) => e.stopPropagation()}
+                      target="_blank"
+                      rel="noopener noreferrer"
                     >
                       <RiGitPullRequestLine />
                     </Link>
