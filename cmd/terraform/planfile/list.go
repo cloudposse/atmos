@@ -2,25 +2,30 @@ package planfile
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/ci/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/renderer"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-const (
-	// TableHeaderWidth is the width for the table header separator line.
-	tableHeaderWidth = 100
-)
+// listParser handles flag parsing with Viper precedence for the list command.
+var listParser *flags.StandardParser
+
+// ListOptions contains parsed flags for the list command.
+type ListOptions struct {
+	BaseOptions
+	Format string
+	Prefix string
+}
 
 var listCmd = &cobra.Command{
 	Use:   "list [prefix]",
@@ -32,34 +37,59 @@ Optionally filter by prefix (e.g., stack name or component).`,
 	RunE: runList,
 }
 
-var (
-	listStore  string
-	listFormat string
-)
-
 func init() {
-	listCmd.Flags().StringVar(&listStore, "store", "", "Storage backend to use (default from config)")
-	listCmd.Flags().StringVar(&listFormat, "format", "table", "Output format: table, json, yaml")
+	// Create parser with list-specific flags using functional options.
+	listParser = flags.NewStandardParser(
+		flags.WithStringFlag("store", "", "", "Storage backend to use (default from config)"),
+		flags.WithStringFlag("format", "", "table", "Output format: table, json, yaml, csv, tsv"),
+		flags.WithEnvVars("store", "ATMOS_PLANFILE_STORE"),
+		flags.WithEnvVars("format", "ATMOS_PLANFILE_FORMAT"),
+	)
+
+	// Register flags with the command.
+	listParser.RegisterFlags(listCmd)
+
+	// Bind to Viper for environment variable support.
+	if err := listParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Add to parent command.
+	PlanfileCmd.AddCommand(listCmd)
 }
 
-func runList(cmd *cobra.Command, args []string) error {
-	defer perf.Track(nil, "planfile.runList")()
-
+// parseListOptions parses command flags into ListOptions.
+func parseListOptions(cmd *cobra.Command, v *viper.Viper, args []string) *ListOptions {
 	prefix := ""
 	if len(args) > 0 {
 		prefix = args[0]
 	}
 
-	// Get global flags from Viper (includes base-path, config, config-path, profile).
+	return &ListOptions{
+		BaseOptions: parseBaseOptions(cmd, v),
+		Format:      v.GetString("format"),
+		Prefix:      prefix,
+	}
+}
+
+func runList(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "planfile.runList")()
+
+	// Bind flags to Viper for proper precedence.
 	v := viper.GetViper()
-	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	if err := listParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
+	// Parse options.
+	opts := parseListOptions(cmd, v, args)
 
 	// Build ConfigAndStacksInfo from global flags to honor config selection flags.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{
-		AtmosBasePath:           globalFlags.BasePath,
-		AtmosConfigFilesFromArg: globalFlags.Config,
-		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
-		ProfilesFromArg:         globalFlags.Profile,
+		AtmosBasePath:           opts.BasePath,
+		AtmosConfigFilesFromArg: opts.Config,
+		AtmosConfigDirsFromArg:  opts.ConfigPath,
+		ProfilesFromArg:         opts.Profile,
 	}
 
 	// Load atmos configuration.
@@ -69,7 +99,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get the storage configuration.
-	storeOpts, err := getStoreOptions(&atmosConfig, listStore)
+	storeOpts, err := getStoreOptions(&atmosConfig, opts.Store)
 	if err != nil {
 		return err
 	}
@@ -82,64 +112,78 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	// List planfiles.
 	ctx := context.Background()
-	files, err := store.List(ctx, prefix)
+	files, err := store.List(ctx, opts.Prefix)
 	if err != nil {
 		return err
 	}
 
-	return formatListOutput(files, listFormat)
+	return renderPlanfileList(files, opts.Format)
 }
 
-// formatListOutput formats and outputs the planfile list in the specified format.
-func formatListOutput(files []planfile.PlanfileInfo, format string) error {
-	switch format {
-	case "json":
-		return formatListJSON(files)
-	case "yaml":
-		formatListYAML(files)
-	default:
-		formatListTable(files)
-	}
-	return nil
-}
-
-// formatListJSON outputs the planfile list as JSON.
-func formatListJSON(files []planfile.PlanfileInfo) error {
-	output, err := json.MarshalIndent(files, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal output: %w", err)
-	}
-	_ = data.Writeln(string(output))
-	return nil
-}
-
-// formatListYAML outputs the planfile list as YAML.
-func formatListYAML(files []planfile.PlanfileInfo) {
-	for _, f := range files {
-		_ = data.Writef("- key: %s\n", f.Key)
-		_ = data.Writef("  size: %d\n", f.Size)
-		_ = data.Writef("  last_modified: %s\n", f.LastModified.Format("2006-01-02T15:04:05Z07:00"))
-		if f.Metadata != nil {
-			_ = data.Writef("  stack: %s\n", f.Metadata.Stack)
-			_ = data.Writef("  component: %s\n", f.Metadata.Component)
-			_ = data.Writef("  sha: %s\n", f.Metadata.SHA)
-		}
-	}
-}
-
-// formatListTable outputs the planfile list as a table.
-func formatListTable(files []planfile.PlanfileInfo) {
+// renderPlanfileList formats and outputs the planfile list using pkg/list infrastructure.
+func renderPlanfileList(files []planfile.PlanfileInfo, outputFormat string) error {
 	if len(files) == 0 {
-		_ = data.Writeln("No planfiles found.")
-		return
+		// No planfiles found - render empty result.
+		return renderWithRenderer([]map[string]any{}, outputFormat)
 	}
 
-	_ = data.Writef("%-60s %10s %s\n", "KEY", "SIZE", "LAST MODIFIED")
-	_ = data.Writeln(strings.Repeat("-", tableHeaderWidth))
-
-	for _, f := range files {
-		_ = data.Writef("%-60s %10d %s\n", f.Key, f.Size, f.LastModified.Format("2006-01-02 15:04"))
+	// Convert PlanfileInfo to map[string]any for the renderer.
+	data := make([]map[string]any, len(files))
+	for i, f := range files {
+		item := map[string]any{
+			"key":           f.Key,
+			"size":          f.Size,
+			"last_modified": f.LastModified.Format("2006-01-02 15:04"),
+		}
+		if f.Metadata != nil {
+			item["stack"] = f.Metadata.Stack
+			item["component"] = f.Metadata.Component
+			item["sha"] = f.Metadata.SHA
+		} else {
+			item["stack"] = ""
+			item["component"] = ""
+			item["sha"] = ""
+		}
+		data[i] = item
 	}
 
-	_ = data.Writef("\nTotal: %d planfile(s)\n", len(files))
+	return renderWithRenderer(data, outputFormat)
+}
+
+// renderWithRenderer uses pkg/list renderer for consistent output formatting.
+func renderWithRenderer(data []map[string]any, outputFormat string) error {
+	// Define columns for planfile listing.
+	columns := []column.Config{
+		{Name: "KEY", Value: "{{ .key }}"},
+		{Name: "SIZE", Value: "{{ .size }}"},
+		{Name: "MODIFIED", Value: "{{ .last_modified }}"},
+		{Name: "STACK", Value: "{{ .stack }}"},
+		{Name: "COMPONENT", Value: "{{ .component }}"},
+	}
+
+	// Create column selector with template functions.
+	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
+	if err != nil {
+		return fmt.Errorf("failed to create column selector: %w", err)
+	}
+
+	// Map format string to format.Format type.
+	var fmt format.Format
+	switch outputFormat {
+	case "json":
+		fmt = format.FormatJSON
+	case "yaml":
+		fmt = format.FormatYAML
+	case "csv":
+		fmt = format.FormatCSV
+	case "tsv":
+		fmt = format.FormatTSV
+	default:
+		fmt = format.FormatTable
+	}
+
+	// Create renderer (no filters, no sorters, using format and default delimiter).
+	r := renderer.New(nil, selector, nil, fmt, "")
+
+	return r.Render(data)
 }

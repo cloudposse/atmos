@@ -22,7 +22,7 @@ func initTestIO(t *testing.T) {
 	ui.InitFormatter(ioCtx)
 }
 
-func TestFormatListOutput(t *testing.T) {
+func TestRenderPlanfileList(t *testing.T) {
 	initTestIO(t)
 
 	files := []planfile.PlanfileInfo{
@@ -39,99 +39,50 @@ func TestFormatListOutput(t *testing.T) {
 	}
 
 	t.Run("table format", func(t *testing.T) {
-		err := formatListOutput(files, "table")
+		err := renderPlanfileList(files, "table")
 		assert.NoError(t, err)
 	})
 
 	t.Run("json format", func(t *testing.T) {
-		err := formatListOutput(files, "json")
+		err := renderPlanfileList(files, "json")
 		assert.NoError(t, err)
 	})
 
 	t.Run("yaml format", func(t *testing.T) {
-		err := formatListOutput(files, "yaml")
+		err := renderPlanfileList(files, "yaml")
+		assert.NoError(t, err)
+	})
+
+	t.Run("csv format", func(t *testing.T) {
+		err := renderPlanfileList(files, "csv")
+		assert.NoError(t, err)
+	})
+
+	t.Run("tsv format", func(t *testing.T) {
+		err := renderPlanfileList(files, "tsv")
 		assert.NoError(t, err)
 	})
 
 	t.Run("unknown format defaults to table", func(t *testing.T) {
-		err := formatListOutput(files, "unknown")
+		err := renderPlanfileList(files, "unknown")
 		assert.NoError(t, err)
 	})
 }
 
-func TestFormatListTable(t *testing.T) {
+func TestRenderPlanfileListEmpty(t *testing.T) {
 	initTestIO(t)
 
 	t.Run("empty list", func(t *testing.T) {
 		// Should not panic with empty list.
-		assert.NotPanics(t, func() {
-			formatListTable([]planfile.PlanfileInfo{})
-		})
-	})
-
-	t.Run("with files", func(t *testing.T) {
-		files := []planfile.PlanfileInfo{
-			{
-				Key:          "key1.tfplan",
-				Size:         1024,
-				LastModified: time.Now(),
-			},
-		}
-		assert.NotPanics(t, func() {
-			formatListTable(files)
-		})
-	})
-}
-
-func TestFormatListJSON(t *testing.T) {
-	initTestIO(t)
-
-	t.Run("empty list", func(t *testing.T) {
-		err := formatListJSON([]planfile.PlanfileInfo{})
-		assert.NoError(t, err)
-	})
-
-	t.Run("with files", func(t *testing.T) {
-		files := []planfile.PlanfileInfo{
-			{
-				Key:          "key1.tfplan",
-				Size:         1024,
-				LastModified: time.Now(),
-				Metadata: &planfile.Metadata{
-					Stack:     "test-stack",
-					Component: "test-component",
-				},
-			},
-		}
-		err := formatListJSON(files)
+		err := renderPlanfileList([]planfile.PlanfileInfo{}, "table")
 		assert.NoError(t, err)
 	})
 }
 
-func TestFormatListYAML(t *testing.T) {
+func TestRenderPlanfileListWithMetadata(t *testing.T) {
 	initTestIO(t)
 
-	t.Run("empty list", func(t *testing.T) {
-		// Should not panic with empty list.
-		assert.NotPanics(t, func() {
-			formatListYAML([]planfile.PlanfileInfo{})
-		})
-	})
-
-	t.Run("with files without metadata", func(t *testing.T) {
-		files := []planfile.PlanfileInfo{
-			{
-				Key:          "key1.tfplan",
-				Size:         1024,
-				LastModified: time.Now(),
-			},
-		}
-		assert.NotPanics(t, func() {
-			formatListYAML(files)
-		})
-	})
-
-	t.Run("with files with metadata", func(t *testing.T) {
+	t.Run("with metadata", func(t *testing.T) {
 		files := []planfile.PlanfileInfo{
 			{
 				Key:          "key1.tfplan",
@@ -144,16 +95,22 @@ func TestFormatListYAML(t *testing.T) {
 				},
 			},
 		}
-		assert.NotPanics(t, func() {
-			formatListYAML(files)
-		})
+		err := renderPlanfileList(files, "json")
+		assert.NoError(t, err)
+	})
+
+	t.Run("without metadata", func(t *testing.T) {
+		files := []planfile.PlanfileInfo{
+			{
+				Key:          "key1.tfplan",
+				Size:         1024,
+				LastModified: time.Now(),
+			},
+		}
+		err := renderPlanfileList(files, "yaml")
+		assert.NoError(t, err)
 	})
 }
-
-// Note: TestTableHeaderWidth and TestPlanfileInfoSorting were removed as tautological.
-// - TestTableHeaderWidth asserted a constant equals a hardcoded value
-// - TestPlanfileInfoSorting only verified slice length, not actual sorting
-// Per coding guidelines: "Test behavior, not implementation; avoid tautological tests."
 
 // Note: Testing runList requires extensive mocking of:
 // - Atmos config loading
@@ -183,11 +140,11 @@ func TestOutputFormats(t *testing.T) {
 		},
 	}
 
-	formats := []string{"table", "json", "yaml", ""}
+	formats := []string{"table", "json", "yaml", "csv", "tsv", ""}
 	for _, format := range formats {
 		t.Run("format_"+format, func(t *testing.T) {
 			assert.NotPanics(t, func() {
-				_ = formatListOutput(files, format)
+				_ = renderPlanfileList(files, format)
 			})
 		})
 	}

@@ -16,6 +16,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// deleteParser handles flag parsing with Viper precedence for the delete command.
+var deleteParser *flags.StandardParser
+
+// DeleteOptions contains parsed flags for the delete command.
+type DeleteOptions struct {
+	BaseOptions
+	Key   string
+	Force bool
+}
+
 var deleteCmd = &cobra.Command{
 	Use:   "delete <key>",
 	Short: "Delete a Terraform plan file from storage",
@@ -24,73 +34,97 @@ var deleteCmd = &cobra.Command{
 	RunE:  runDelete,
 }
 
-var (
-	deleteStore string
-	deleteForce bool
-)
-
 func init() {
-	deleteCmd.Flags().StringVar(&deleteStore, "store", "", "Storage backend to use (default from config)")
-	deleteCmd.Flags().BoolVar(&deleteForce, "force", false, "Skip confirmation prompt")
+	// Create parser with delete-specific flags using functional options.
+	deleteParser = flags.NewStandardParser(
+		flags.WithStringFlag("store", "", "", "Storage backend to use (default from config)"),
+		flags.WithBoolFlag("force", "f", false, "Skip confirmation prompt"),
+		flags.WithEnvVars("store", "ATMOS_PLANFILE_STORE"),
+		flags.WithEnvVars("force", "ATMOS_PLANFILE_DELETE_FORCE"),
+	)
+
+	// Register flags with the command.
+	deleteParser.RegisterFlags(deleteCmd)
+
+	// Bind to Viper for environment variable support.
+	if err := deleteParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Add to parent command.
+	PlanfileCmd.AddCommand(deleteCmd)
+}
+
+// parseDeleteOptions parses command flags into DeleteOptions.
+func parseDeleteOptions(cmd *cobra.Command, v *viper.Viper, args []string) *DeleteOptions {
+	return &DeleteOptions{
+		BaseOptions: parseBaseOptions(cmd, v),
+		Key:         args[0],
+		Force:       v.GetBool("force"),
+	}
 }
 
 func runDelete(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "planfile.runDelete")()
 
-	key := args[0]
-
-	// Get global flags from Viper (includes base-path, config, config-path, profile).
+	// Bind flags to Viper for proper precedence.
 	v := viper.GetViper()
-	globalFlags := flags.ParseGlobalFlags(cmd, v)
-
-	// Build ConfigAndStacksInfo from global flags to honor config selection flags.
-	configAndStacksInfo := schema.ConfigAndStacksInfo{
-		AtmosBasePath:           globalFlags.BasePath,
-		AtmosConfigFilesFromArg: globalFlags.Config,
-		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
-		ProfilesFromArg:         globalFlags.Profile,
-	}
-
-	// Load atmos configuration.
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
-	if err != nil {
+	if err := deleteParser.BindFlagsToViper(cmd, v); err != nil {
 		return err
 	}
 
-	// Get the storage configuration.
-	storeOpts, err := getStoreOptions(&atmosConfig, deleteStore)
-	if err != nil {
-		return err
-	}
+	// Parse options.
+	opts := parseDeleteOptions(cmd, v, args)
 
-	// Create the store.
-	store, err := planfile.NewStore(storeOpts)
+	// Initialize configuration and store.
+	store, err := initDeleteStore(opts)
 	if err != nil {
 		return err
 	}
 
 	// Check if planfile exists.
 	ctx := context.Background()
-	exists, err := store.Exists(ctx, key)
+	exists, err := store.Exists(ctx, opts.Key)
 	if err != nil {
 		return err
 	}
-
 	if !exists {
-		_ = ui.Warning(fmt.Sprintf("Planfile does not exist: %s", key))
+		_ = ui.Warning(fmt.Sprintf("Planfile does not exist: %s", opts.Key))
 		return nil
 	}
 
 	// Require --force flag for deletion.
-	if !deleteForce {
-		return fmt.Errorf("%w: %s", errUtils.ErrPlanfileDeleteRequireForce, key)
+	if !opts.Force {
+		return fmt.Errorf("%w: %s", errUtils.ErrPlanfileDeleteRequireForce, opts.Key)
 	}
 
 	// Delete.
-	if err := store.Delete(ctx, key); err != nil {
+	if err := store.Delete(ctx, opts.Key); err != nil {
 		return err
 	}
 
-	_ = ui.Success(fmt.Sprintf("Deleted planfile from %s: %s", store.Name(), key))
+	_ = ui.Success(fmt.Sprintf("Deleted planfile from %s: %s", store.Name(), opts.Key))
 	return nil
+}
+
+// initDeleteStore initializes the planfile store from options.
+func initDeleteStore(opts *DeleteOptions) (planfile.Store, error) {
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosBasePath:           opts.BasePath,
+		AtmosConfigFilesFromArg: opts.Config,
+		AtmosConfigDirsFromArg:  opts.ConfigPath,
+		ProfilesFromArg:         opts.Profile,
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return nil, err
+	}
+
+	storeOpts, err := getStoreOptions(&atmosConfig, opts.Store)
+	if err != nil {
+		return nil, err
+	}
+
+	return planfile.NewStore(storeOpts)
 }

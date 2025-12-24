@@ -13,24 +13,14 @@ import (
 )
 
 func TestBuildUploadMetadata(t *testing.T) {
-	// Save original values.
-	originalStack := uploadStack
-	originalComponent := uploadComponent
-	originalSHA := uploadSHA
-
-	// Restore after test.
-	defer func() {
-		uploadStack = originalStack
-		uploadComponent = originalComponent
-		uploadSHA = originalSHA
-	}()
-
 	t.Run("with all fields set", func(t *testing.T) {
-		uploadStack = "test-stack"
-		uploadComponent = "test-component"
-		uploadSHA = "abc123"
+		opts := &UploadOptions{
+			Stack:     "test-stack",
+			Component: "test-component",
+			SHA:       "abc123",
+		}
 
-		metadata := buildUploadMetadata()
+		metadata := buildUploadMetadata(opts)
 		require.NotNil(t, metadata)
 		assert.Equal(t, "test-stack", metadata.Stack)
 		assert.Equal(t, "test-component", metadata.Component)
@@ -41,11 +31,13 @@ func TestBuildUploadMetadata(t *testing.T) {
 	})
 
 	t.Run("with empty fields", func(t *testing.T) {
-		uploadStack = ""
-		uploadComponent = ""
-		uploadSHA = ""
+		opts := &UploadOptions{
+			Stack:     "",
+			Component: "",
+			SHA:       "",
+		}
 
-		metadata := buildUploadMetadata()
+		metadata := buildUploadMetadata(opts)
 		require.NotNil(t, metadata)
 		assert.Empty(t, metadata.Stack)
 		assert.Empty(t, metadata.Component)
@@ -54,49 +46,41 @@ func TestBuildUploadMetadata(t *testing.T) {
 }
 
 func TestResolveUploadKey(t *testing.T) {
-	// Save original values.
-	originalKey := uploadKey
-	originalStack := uploadStack
-	originalComponent := uploadComponent
-	originalSHA := uploadSHA
-
-	// Restore after test.
-	defer func() {
-		uploadKey = originalKey
-		uploadStack = originalStack
-		uploadComponent = originalComponent
-		uploadSHA = originalSHA
-	}()
-
 	t.Run("explicit key provided", func(t *testing.T) {
-		uploadKey = "custom/key.tfplan"
-		uploadStack = "ignored"
-		uploadComponent = "ignored"
-		uploadSHA = "ignored"
+		opts := &UploadOptions{
+			Key:       "custom/key.tfplan",
+			Stack:     "ignored",
+			Component: "ignored",
+			SHA:       "ignored",
+		}
 
-		key, err := resolveUploadKey()
+		key, err := resolveUploadKey(opts)
 		require.NoError(t, err)
 		assert.Equal(t, "custom/key.tfplan", key)
 	})
 
 	t.Run("generated key from metadata", func(t *testing.T) {
-		uploadKey = ""
-		uploadStack = "my-stack"
-		uploadComponent = "my-component"
-		uploadSHA = "def456"
+		opts := &UploadOptions{
+			Key:       "",
+			Stack:     "my-stack",
+			Component: "my-component",
+			SHA:       "def456",
+		}
 
-		key, err := resolveUploadKey()
+		key, err := resolveUploadKey(opts)
 		require.NoError(t, err)
 		assert.Equal(t, "my-stack/my-component/def456.tfplan", key)
 	})
 
 	t.Run("missing required fields for generated key", func(t *testing.T) {
-		uploadKey = ""
-		uploadStack = ""
-		uploadComponent = "component"
-		uploadSHA = "sha123"
+		opts := &UploadOptions{
+			Key:       "",
+			Stack:     "",
+			Component: "component",
+			SHA:       "sha123",
+		}
 
-		_, err := resolveUploadKey()
+		_, err := resolveUploadKey(opts)
 		assert.True(t, errors.Is(err, errUtils.ErrPlanfileKeyInvalid))
 	})
 }
