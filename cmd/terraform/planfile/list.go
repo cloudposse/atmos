@@ -168,22 +168,22 @@ func renderWithRenderer(data []map[string]any, outputFormat string) error {
 	}
 
 	// Map format string to format.Format type.
-	var fmt format.Format
+	var outputFmt format.Format
 	switch outputFormat {
 	case "json":
-		fmt = format.FormatJSON
+		outputFmt = format.FormatJSON
 	case "yaml":
-		fmt = format.FormatYAML
+		outputFmt = format.FormatYAML
 	case "csv":
-		fmt = format.FormatCSV
+		outputFmt = format.FormatCSV
 	case "tsv":
-		fmt = format.FormatTSV
+		outputFmt = format.FormatTSV
 	default:
-		fmt = format.FormatTable
+		outputFmt = format.FormatTable
 	}
 
 	// Create renderer (no filters, no sorters, using format and default delimiter).
-	r := renderer.New(nil, selector, nil, fmt, "")
+	r := renderer.New(nil, selector, nil, outputFmt, "")
 
 	return r.Render(data)
 }
