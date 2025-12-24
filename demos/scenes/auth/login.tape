@@ -27,7 +27,7 @@ Type "# Check current authentication status"
 Enter
 Sleep 2s
 
-Type "atmos auth status"
+Type "atmos auth whoami"
 Sleep 2s
 Enter
 Sleep 3s

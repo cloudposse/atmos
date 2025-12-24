@@ -102,6 +102,72 @@ integrations:
         table: acme-gitops-locks
         role: arn:aws:iam::111111111111:role/acme-gitops
 
+# Authentication configuration
+# Uses cptest namespace with demo account IDs
+auth:
+  default: plat-dev/admin
+
+  providers:
+    cptest-sso:
+      kind: aws/iam-identity-center
+      region: us-east-2
+      start_url: https://cptest.awsapps.com/start/
+
+  identities:
+    # Base identity via IAM Identity Center
+    core-identity/platform-team-access:
+      kind: aws/permission-set
+      via:
+        provider: cptest-sso
+      principal:
+        name: "PlatformTeamAccess"
+        account:
+          name: "core-identity"
+
+    # Core accounts
+    core-identity/admin:
+      kind: aws/assume-role
+      via:
+        identity: core-identity/platform-team-access
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/cptest-core-gbl-identity-admin
+
+    core-network/admin:
+      kind: aws/assume-role
+      via:
+        identity: core-identity/platform-team-access
+      principal:
+        assume_role: arn:aws:iam::222222222222:role/cptest-core-gbl-network-admin
+
+    core-security/admin:
+      kind: aws/assume-role
+      via:
+        identity: core-identity/platform-team-access
+      principal:
+        assume_role: arn:aws:iam::333333333333:role/cptest-core-gbl-security-admin
+
+    # Platform accounts
+    plat-dev/admin:
+      kind: aws/assume-role
+      via:
+        identity: core-identity/platform-team-access
+      principal:
+        assume_role: arn:aws:iam::444444444444:role/cptest-plat-gbl-dev-admin
+
+    plat-staging/admin:
+      kind: aws/assume-role
+      via:
+        identity: core-identity/platform-team-access
+      principal:
+        assume_role: arn:aws:iam::555555555555:role/cptest-plat-gbl-staging-admin
+
+    plat-prod/admin:
+      kind: aws/assume-role
+      via:
+        identity: core-identity/platform-team-access
+      principal:
+        assume_role: arn:aws:iam::666666666666:role/cptest-plat-gbl-prod-admin
+
 # Schemas for validation (disabled for demo)
 # schemas:
 #   jsonschema:

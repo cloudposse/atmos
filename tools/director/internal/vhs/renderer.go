@@ -235,6 +235,7 @@ func (r *Renderer) containsMP4(outputs []string) bool {
 
 // createFilteredTape creates a temporary tape file with only the specified output formats.
 // It reads the original tape, removes Output directives for formats not in the filter,
+// inlines Source directives (since VHS doesn't support absolute paths and we may run from different workdir),
 // and writes the result to a temp file.
 func (r *Renderer) createFilteredTape(originalTape, sceneName string, formats []string) (string, error) {
 	// Create set of allowed formats.
@@ -243,22 +244,36 @@ func (r *Renderer) createFilteredTape(originalTape, sceneName string, formats []
 		allowedFormats[f] = true
 	}
 
-	// Read original tape file.
-	file, err := os.Open(originalTape)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-
 	// Create temp file in the same directory to preserve relative paths.
-	tempFile, err := os.CreateTemp(filepath.Dir(originalTape), "filtered-*.tape")
+	tapeDir := filepath.Dir(originalTape)
+	tempFile, err := os.CreateTemp(tapeDir, "filtered-*.tape")
 	if err != nil {
 		return "", err
 	}
 	defer tempFile.Close()
 
+	// Process the tape file, inlining Source directives.
+	if err := r.processFilteredTape(originalTape, tapeDir, sceneName, allowedFormats, tempFile); err != nil {
+		os.Remove(tempFile.Name())
+		return "", err
+	}
+
+	return tempFile.Name(), nil
+}
+
+// processFilteredTape processes a tape file, filtering outputs and inlining sources.
+func (r *Renderer) processFilteredTape(tapeFile, baseDir, sceneName string, allowedFormats map[string]bool, out *os.File) error {
+	// Read tape file.
+	file, err := os.Open(tapeFile)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
 	// Regex to match Output directives: "Output scenename.format".
 	outputRegex := regexp.MustCompile(`^Output\s+` + regexp.QuoteMeta(sceneName) + `\.(\w+)\s*$`)
+	// Regex to match Source directives: "Source path/to/file.tape".
+	sourceRegex := regexp.MustCompile(`^Source\s+(.+?)\s*$`)
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -273,19 +288,76 @@ func (r *Renderer) createFilteredTape(originalTape, sceneName string, formats []
 			}
 		}
 
+		// Check if this is a Source directive - inline its content.
+		if matches := sourceRegex.FindStringSubmatch(line); matches != nil {
+			sourcePath := matches[1]
+			// Resolve relative to tape file directory.
+			if !filepath.IsAbs(sourcePath) {
+				sourcePath = filepath.Join(filepath.Dir(tapeFile), sourcePath)
+			}
+			// Read and inline the source file content.
+			if _, err := os.Stat(sourcePath); err == nil {
+				// Write comment indicating where the content came from.
+				if _, err := fmt.Fprintf(out, "# Inlined from: %s\n", filepath.Base(sourcePath)); err != nil {
+					return err
+				}
+				// Recursively process the source file (it might have its own Source directives).
+				if err := r.inlineSourceFile(sourcePath, filepath.Dir(sourcePath), out); err != nil {
+					return fmt.Errorf("failed to inline source %s: %w", sourcePath, err)
+				}
+				continue // Don't write the original Source line.
+			}
+			// If file doesn't exist, keep the original line (VHS will error on it anyway).
+		}
+
 		// Write line to temp file.
-		if _, err := fmt.Fprintln(tempFile, line); err != nil {
-			os.Remove(tempFile.Name())
-			return "", err
+		if _, err := fmt.Fprintln(out, line); err != nil {
+			return err
 		}
 	}
 
-	if err := scanner.Err(); err != nil {
-		os.Remove(tempFile.Name())
-		return "", err
+	return scanner.Err()
+}
+
+// inlineSourceFile reads a source file and writes its content to the output, processing nested Sources.
+func (r *Renderer) inlineSourceFile(sourcePath, baseDir string, out *os.File) error {
+	file, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// Regex to match Source directives.
+	sourceRegex := regexp.MustCompile(`^Source\s+(.+?)\s*$`)
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Check if this is a nested Source directive.
+		if matches := sourceRegex.FindStringSubmatch(line); matches != nil {
+			nestedPath := matches[1]
+			if !filepath.IsAbs(nestedPath) {
+				nestedPath = filepath.Join(baseDir, nestedPath)
+			}
+			if _, err := os.Stat(nestedPath); err == nil {
+				if _, err := fmt.Fprintf(out, "# Inlined from: %s\n", filepath.Base(nestedPath)); err != nil {
+					return err
+				}
+				if err := r.inlineSourceFile(nestedPath, filepath.Dir(nestedPath), out); err != nil {
+					return err
+				}
+				continue
+			}
+		}
+
+		// Write line.
+		if _, err := fmt.Fprintln(out, line); err != nil {
+			return err
+		}
 	}
 
-	return tempFile.Name(), nil
+	return scanner.Err()
 }
 
 // findMP4OutputPath finds the MP4 file path from the scene outputs.

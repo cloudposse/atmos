@@ -35,12 +35,16 @@ Type "# Opens atmos.tools in your browser"
 Enter
 Sleep 2s
 
-Type "atmos docs terraform"
+Type "# View component documentation"
+Enter
+Sleep 300ms
+
+Type "atmos docs vpc"
 Sleep 2s
 Enter
 Sleep 3s
 
-Type "# Quick access to any command's docs"
+Type "# Quick access to component README files"
 Enter
 Sleep 1s
 

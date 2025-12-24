@@ -464,6 +464,9 @@ scenes:
       category: "dx"
       title: "Custom Commands"
       order: 1
+    validate:
+      # Custom commands use terraform - errors expected without terraform installed
+      must_not_match: []
 
   - name: "aliases"
     enabled: true
@@ -488,6 +491,9 @@ scenes:
       category: "dx"
       title: "Aliases"
       order: 2
+    validate:
+      # tp alias expands to terraform plan - errors expected without terraform
+      must_not_match: []
 
   - name: "version"
     enabled: true
@@ -536,6 +542,9 @@ scenes:
       category: "dx"
       title: "Shell Completion"
       order: 4
+    validate:
+      # VHS terminal doesn't have full shell environment for completion sourcing
+      must_not_match: []
 
   - name: "docs"
     enabled: true
@@ -608,6 +617,9 @@ scenes:
       category: "dx"
       title: "Devcontainers"
       order: 7
+    validate:
+      # Devcontainer commands require Docker - errors expected without Docker
+      must_not_match: []
 
   # --- Command Scenes (docs only, not in gallery) ---
 
@@ -698,6 +710,9 @@ scenes:
       category: "dx"
       title: "Profile"
       order: 9
+    validate:
+      # Profile commands may show errors if no profiles configured
+      must_not_match: []
 
   # --- Authentication ---
 
@@ -725,6 +740,9 @@ scenes:
       category: "auth"
       title: "Login"
       order: 1
+    validate:
+      # Auth commands require live SSO - errors are expected in demos
+      must_not_match: []
 
   - name: "auth-terraform"
     enabled: true
@@ -751,6 +769,9 @@ scenes:
       category: "auth"
       title: "Authenticated Terraform"
       order: 2
+    validate:
+      # Auth commands require live SSO - errors are expected in demos
+      must_not_match: []
 
   - name: "auth-exec"
     enabled: true
@@ -775,6 +796,9 @@ scenes:
       category: "auth"
       title: "Exec with Credentials"
       order: 3
+    validate:
+      # Auth commands require live SSO - errors are expected in demos
+      must_not_match: []
 
   - name: "auth-console"
     enabled: true
@@ -799,6 +823,9 @@ scenes:
       category: "auth"
       title: "Web Console"
       order: 4
+    validate:
+      # Auth commands require live SSO - errors are expected in demos
+      must_not_match: []
 
   - name: "auth-shell"
     enabled: true
@@ -823,6 +850,9 @@ scenes:
       category: "auth"
       title: "Authenticated Shell"
       order: 5
+    validate:
+      # Auth commands require live SSO - errors are expected in demos
+      must_not_match: []
 
   - name: "auth-list"
     enabled: true
@@ -872,6 +902,9 @@ scenes:
       category: "auth"
       title: "Who Am I"
       order: 7
+    validate:
+      # Auth commands require live SSO - errors are expected in demos
+      must_not_match: []
 
   - name: "auth-env"
     enabled: true
@@ -896,6 +929,9 @@ scenes:
       category: "auth"
       title: "Auth Env"
       order: 8
+    validate:
+      # Auth commands require live SSO - errors are expected in demos
+      must_not_match: []
 
   # --- Configuration & Validation ---
 
