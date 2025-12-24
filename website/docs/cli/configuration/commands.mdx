@@ -8,10 +8,13 @@ description: Use the `atmos.yaml` to configure any custom commands you want to a
 
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
 Atmos can be easily extended to support any number of custom CLI commands. Custom commands are exposed through the `atmos` CLI when you run `atmos help`. It's a great way to centralize the way operational tools are run in order to improve DX.
 </Intro>
+
+<DemoVideo id="commands" title="Atmos Custom Commands" showCaption={false} />
 
 For example, one great way to use custom commands is to tie all the miscellaneous scripts into one consistent CLI interface. Then we can kiss those
 ugly, inconsistent arguments to bash scripts goodbye! Just wire up the commands in atmos to call the script. Then developers can just run `atmos help`

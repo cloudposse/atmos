@@ -1,9 +1,10 @@
 # aliases scene - Use shorthand aliases for common commands
-Output dx-aliases.gif
-Output dx-aliases.mp4
+Output aliases.gif
+Output aliases.mp4
+Output aliases.svg
 
 # VHS Configuration
-Source ../../scenes/_theme.tape
+Source _theme.tape
 Set Width 1400
 Set Height 800
 
@@ -24,25 +25,29 @@ Sleep 1s
 
 Type "# View available aliases in atmos.yaml"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "grep -A 10 'aliases:' atmos.yaml"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 # Capture screenshot
-Screenshot dx-aliases.png
+Screenshot aliases.png
 
 Type "# Use 'tp' instead of 'terraform plan'"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos tp vpc -s plat-dev-ue2"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 Type "# Work faster with less typing"
 Enter
 Sleep 1s
+
+
+# Hold final frame
+Sleep 10s

@@ -7,6 +7,23 @@ import (
 	perf "github.com/cloudposse/atmos/pkg/perf"
 )
 
+// computeComponentStatus computes status and status_text for a component.
+// It uses the already-extracted enabled/locked values from the component map.
+func computeComponentStatus(comp map[string]any) {
+	enabled := true
+	locked := false
+
+	if val, ok := comp[metadataEnabled].(bool); ok {
+		enabled = val
+	}
+	if val, ok := comp[metadataLocked].(bool); ok {
+		locked = val
+	}
+
+	comp["status"] = getStatusIndicator(enabled, locked)
+	comp["status_text"] = getStatusText(enabled, locked)
+}
+
 const (
 	// Component metadata field names.
 	metadataEnabled = "enabled"
@@ -66,13 +83,13 @@ func extractComponentType(stackName, componentType string, componentsMap map[str
 }
 
 // buildBaseComponent creates the base component map with required fields.
-func buildBaseComponent(componentName, stackName, componentType string) map[string]any {
+func buildBaseComponent(componentName, stackName, componentKind string) map[string]any {
 	defer perf.Track(nil, "list.extract.buildBaseComponent")()
 
 	return map[string]any{
 		"component": componentName,
 		"stack":     stackName,
-		"type":      componentType,
+		"kind":      componentKind, // terraform, helmfile, packer
 	}
 }
 
@@ -85,6 +102,13 @@ func enrichComponentWithMetadata(comp map[string]any, componentData any) {
 		return
 	}
 
+	// Extract component_path from component_info if available.
+	if componentInfo, ok := compMap["component_info"].(map[string]any); ok {
+		if path, ok := componentInfo["component_path"].(string); ok {
+			comp["component_path"] = path
+		}
+	}
+
 	metadata, hasMetadata := compMap["metadata"].(map[string]any)
 	if hasMetadata {
 		comp["metadata"] = metadata
@@ -92,6 +116,9 @@ func enrichComponentWithMetadata(comp map[string]any, componentData any) {
 	} else {
 		setDefaultMetadataFields(comp)
 	}
+
+	// Compute status indicator after enabled/locked are set.
+	computeComponentStatus(comp)
 
 	comp["data"] = compMap
 }
@@ -102,7 +129,7 @@ func extractMetadataFields(comp map[string]any, metadata map[string]any) {
 
 	comp[metadataEnabled] = getBoolWithDefault(metadata, metadataEnabled, true)
 	comp[metadataLocked] = getBoolWithDefault(metadata, metadataLocked, false)
-	comp["component_type"] = getStringWithDefault(metadata, "type", "real")
+	comp["type"] = getStringWithDefault(metadata, "type", "real") // real, abstract
 }
 
 // setDefaultMetadataFields sets default values for metadata fields.
@@ -111,7 +138,7 @@ func setDefaultMetadataFields(comp map[string]any) {
 
 	comp[metadataEnabled] = true
 	comp[metadataLocked] = false
-	comp["component_type"] = "real"
+	comp["type"] = "real" // real, abstract
 }
 
 // getBoolWithDefault safely extracts a bool value or returns the default.

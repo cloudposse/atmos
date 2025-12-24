@@ -24,6 +24,21 @@
   border-radius: 8px 8px 0 0;
 }
 
+.svgPlayer {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px 8px 0 0;
+}
+
+/* When no caption, use full rounded corners. */
+.noCaption .video,
+.noCaption .gif,
+.noCaption .streamPlayer,
+.noCaption .svgPlayer {
+  border-radius: 8px;
+}
+
 .playOverlay {
   position: absolute;
   top: 0;

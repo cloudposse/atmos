@@ -15,10 +15,17 @@ export function FeaturedDemoCarousel({ demos = FEATURED_DEMOS, delayBetweenVideo
   const [isTransitioning, setIsTransitioning] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<StreamPlayerApi | undefined>(undefined);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const delayTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const svgTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const currentDemo = demos[currentIndex];
-  const { streamUid, thumbnail } = currentDemo ? getDemoAssetUrls(currentDemo.id) : { streamUid: null, thumbnail: null };
+  const { streamUid, thumbnail, svg, mp3, svgDuration } = currentDemo
+    ? getDemoAssetUrls(currentDemo.id)
+    : { streamUid: null, thumbnail: null, svg: null, mp3: null, svgDuration: null };
+
+  // Prefer SVG over Stream video for playback.
+  const useSvg = !!svg;
 
   // Arrow key navigation (only when container is focused or in viewport).
   useEffect(() => {
@@ -41,14 +48,46 @@ export function FeaturedDemoCarousel({ demos = FEATURED_DEMOS, delayBetweenVideo
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [demos.length]);
 
-  // Clean up timer on unmount.
+  // Clean up timers on unmount.
   useEffect(() => {
     return () => {
       if (delayTimerRef.current) {
         clearTimeout(delayTimerRef.current);
       }
+      if (svgTimerRef.current) {
+        clearTimeout(svgTimerRef.current);
+      }
     };
   }, []);
+
+  // Timer-based advancement for SVG (since SVG doesn't have onEnded event).
+  useEffect(() => {
+    if (useSvg && svgDuration && svgDuration > 0) {
+      // Clear any existing timer.
+      if (svgTimerRef.current) {
+        clearTimeout(svgTimerRef.current);
+      }
+
+      // Set timer for SVG duration.
+      svgTimerRef.current = setTimeout(() => {
+        handleVideoEnd();
+      }, svgDuration * 1000);
+
+      // Start audio playback if available.
+      if (mp3 && audioRef.current) {
+        audioRef.current.currentTime = 0;
+        audioRef.current.play().catch(() => {
+          // Autoplay blocked - that's fine, proceed silently.
+        });
+      }
+
+      return () => {
+        if (svgTimerRef.current) {
+          clearTimeout(svgTimerRef.current);
+        }
+      };
+    }
+  }, [currentIndex, useSvg, svgDuration, mp3]);
 
   const handleVideoEnd = useCallback(() => {
     // Start delay before transitioning to next video.
@@ -63,6 +102,14 @@ export function FeaturedDemoCarousel({ demos = FEATURED_DEMOS, delayBetweenVideo
     if (delayTimerRef.current) {
       clearTimeout(delayTimerRef.current);
       delayTimerRef.current = null;
+    }
+    if (svgTimerRef.current) {
+      clearTimeout(svgTimerRef.current);
+      svgTimerRef.current = null;
+    }
+    // Pause audio when manually transitioning.
+    if (audioRef.current) {
+      audioRef.current.pause();
     }
     setIsWaitingForNext(false);
   };
@@ -130,9 +177,17 @@ export function FeaturedDemoCarousel({ demos = FEATURED_DEMOS, delayBetweenVideo
           <div className={styles.spacer} />
         </div>
 
-        {/* Video player - controls visible on hover */}
+        {/* Video/SVG player - controls visible on hover */}
         <div className={`${styles.viewport} ${isTransitioning ? styles.fading : ''}`}>
-          {streamUid ? (
+          {useSvg ? (
+            // SVG animated terminal recording.
+            <img
+              key={`${currentDemo.id}-svg`}
+              src={svg}
+              alt={currentDemo?.title || 'Demo'}
+              className={styles.svgPlayer}
+            />
+          ) : streamUid ? (
             <Stream
               key={streamUid}
               src={streamUid}
@@ -151,6 +206,15 @@ export function FeaturedDemoCarousel({ demos = FEATURED_DEMOS, delayBetweenVideo
             </div>
           )}
         </div>
+
+        {/* Hidden audio element for SVG playback */}
+        {mp3 && (
+          <audio
+            ref={audioRef}
+            src={mp3}
+            preload="auto"
+          />
+        )}
 
         {/* Arrow navigation buttons (visible on hover) */}
         <button

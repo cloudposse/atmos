@@ -1,6 +1,7 @@
 # template-functions scene - Use template functions in stacks
 Output config-template-functions.gif
 Output config-template-functions.mp4
+Output config-template-functions.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -24,10 +25,10 @@ Sleep 1s
 
 Type "# View stack with template functions"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "cat stacks/catalog/api.yaml"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
@@ -36,13 +37,16 @@ Screenshot config-template-functions.png
 
 Type "# Resolved configuration with values from other components"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos describe component api -s plat-dev-ue2"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 Type "# Dynamic values reduce duplication"
 Enter
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

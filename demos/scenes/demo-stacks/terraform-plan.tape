@@ -1,6 +1,7 @@
 # demo-stacks-terraform-plan scene - Show terraform plan with demo-stacks
 Output demo-stacks-terraform-plan.gif
 Output demo-stacks-terraform-plan.mp4
+Output demo-stacks-terraform-plan.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -25,7 +26,7 @@ Sleep 300ms
 
 # Execute terraform plan
 Type "atmos terraform plan vpc -s plat-dev-ue2"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 5s
 
@@ -39,9 +40,12 @@ Enter
 Sleep 300ms
 
 Type "atmos terraform plan database -s plat-dev-ue2"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 4s
 
 # Cleanup
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

@@ -1,6 +1,7 @@
 # vendor-pull scene - Pin and pull component dependencies
 Output vendor-pull.gif
 Output vendor-pull.mp4
+Output vendor-pull.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -18,31 +19,39 @@ Show
 Require atmos
 
 # Scene starts
-Type "# Pull components from remote sources"
+Type "# List vendored components"
 Enter
-Sleep 1s
+Sleep 2s
 
-Type "# View vendor configuration"
-Enter
-Sleep 500ms
-
-Type "cat vendor.yaml"
-Sleep 500ms
+Type "atmos list vendor"
+Sleep 2s
 Enter
 Sleep 2s
 
 # Capture screenshot
 Screenshot vendor-pull.png
 
-Type "# Pull vendored components"
+Type "# Pull all vendored components"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos vendor pull"
-Sleep 500ms
+Sleep 2s
 Enter
-Sleep 3s
+Sleep 8s
 
-Type "# Pin versions, pull dependencies - reproducible builds"
+Type "# Pull only networking components by tag"
+Enter
+Sleep 2s
+
+Type "atmos vendor pull --tags networking"
+Sleep 2s
+Enter
+Sleep 6s
+
+Type "# Pin versions, pull by tags - reproducible builds"
 Enter
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

@@ -1,6 +1,7 @@
 # terraform-auth scene - Use authenticated Terraform commands
 Output auth-terraform.gif
 Output auth-terraform.mp4
+Output auth-terraform.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -24,10 +25,10 @@ Sleep 1s
 
 Type "# Credentials managed by Atmos Pro"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos terraform plan vpc -s plat-dev-ue2"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
@@ -36,13 +37,16 @@ Screenshot auth-terraform.png
 
 Type "# Apply changes with team audit trail"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos terraform apply vpc -s plat-dev-ue2"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 Type "# Secure, audited infrastructure management"
 Enter
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

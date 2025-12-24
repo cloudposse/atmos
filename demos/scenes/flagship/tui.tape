@@ -1,6 +1,7 @@
 # tui scene - Interactive Atmos TUI
 Output flagship-tui.gif
 Output flagship-tui.mp4
+Output flagship-tui.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -23,7 +24,7 @@ Enter
 Sleep 1s
 
 Type "atmos"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 2s
 
@@ -41,7 +42,7 @@ Screenshot flagship-tui.png
 
 # Switch to Stacks panel with Tab
 Tab
-Sleep 500ms
+Sleep 2s
 
 # Navigate stacks
 Down
@@ -51,7 +52,7 @@ Sleep 400ms
 
 # Switch to Components panel
 Tab
-Sleep 500ms
+Sleep 2s
 
 # Navigate components
 Down
@@ -59,7 +60,7 @@ Sleep 400ms
 
 # Go back to Commands
 Tab
-Sleep 500ms
+Sleep 2s
 
 # Navigate to a command and execute
 Down
@@ -73,8 +74,11 @@ Sleep 3s
 
 # Exit the TUI
 Escape
-Sleep 500ms
+Sleep 2s
 
 Type "# The TUI provides an intuitive way to explore and run Atmos commands"
 Enter
 Sleep 2s
+
+# Hold final frame
+Sleep 10s

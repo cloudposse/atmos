@@ -565,3 +565,18 @@ func GetBorderColor() string {
 	}
 	return scheme.Border
 }
+
+// GetHeaderTextColor returns the table header text color from the current theme.
+func GetHeaderTextColor() string {
+	// Use cached color scheme if available.
+	if lastColorScheme != nil {
+		return lastColorScheme.HeaderText
+	}
+
+	// Fall back to loading from theme.
+	scheme, err := GetColorSchemeForTheme(getActiveThemeName())
+	if err != nil || scheme == nil {
+		return "#98e024" // Default green (Atmos theme)
+	}
+	return scheme.HeaderText
+}

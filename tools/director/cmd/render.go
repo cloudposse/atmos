@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/vhs"
 	"github.com/cloudposse/atmos/tools/director/internal/scene"
 	"github.com/cloudposse/atmos/tools/director/internal/toolmgr"
+	"github.com/cloudposse/atmos/tools/director/internal/validation"
 	vhsRenderer "github.com/cloudposse/atmos/tools/director/internal/vhs"
 )
 
@@ -26,6 +27,8 @@ func renderCmd() *cobra.Command {
 		formats        string
 		noSVGFix       bool
 		category       string
+		tag            string
+		validate       bool
 	)
 
 	cmd := &cobra.Command{
@@ -63,11 +66,23 @@ director render terraform-plan --format svg
 # Render multiple specific formats
 director render terraform-plan --format svg,gif
 
-# Render all scenes in a category
+# Render all scenes in a category (uses gallery.category)
 director render --category terraform --force --publish
+
+# Render all scenes with a specific tag
+director render --tag version --force --publish
+
+# Render all featured scenes
+director render --tag featured --force
 
 # Render and publish all list-related demos
 director render --category list --force --publish --export-manifest
+
+# Render and validate outputs for errors
+director render terraform-plan --force --validate
+
+# Full pipeline: render, publish, export manifest, and validate
+director render --category vendor --force --publish --export-manifest --validate
 `,
 		RunE: func(c *cobra.Command, args []string) error {
 			ctx := context.Background()
@@ -131,8 +146,19 @@ director render --category list --force --publish --export-manifest
 				if len(scenesToRender) == 0 {
 					return fmt.Errorf("no matching scenes found for: %v", args)
 				}
+			} else if tag != "" {
+				// Render all scenes with a specific tag.
+				for _, sc := range scenesList.Scenes {
+					if sc.HasTag(tag) && (all || sc.Enabled) {
+						scenesToRender = append(scenesToRender, sc)
+					}
+				}
+
+				if len(scenesToRender) == 0 {
+					return fmt.Errorf("no matching scenes found for tag: %s", tag)
+				}
 			} else if category != "" {
-				// Render all scenes in a category.
+				// Render all scenes in a category (uses gallery.category).
 				for _, sc := range scenesList.Scenes {
 					if sc.GetCategory() == category && (all || sc.Enabled) {
 						scenesToRender = append(scenesToRender, sc)
@@ -266,6 +292,14 @@ director render --category list --force --publish --export-manifest
 				}
 			}
 
+			// If --validate flag is set, validate the rendered SVGs.
+			if validate && len(renderedSceneNames) > 0 {
+				c.Printf("\n")
+				if err := runValidation(c, demosDir, scenesList, renderedSceneNames, defaultsConfig); err != nil {
+					return fmt.Errorf("validation failed: %w", err)
+				}
+			}
+
 			return nil
 		},
 	}
@@ -276,7 +310,9 @@ director render --category list --force --publish --export-manifest
 	cmd.Flags().BoolVarP(&exportManifest, "export-manifest", "e", false, "Export manifest after publishing")
 	cmd.Flags().StringVar(&formats, "format", "", "Only render specific formats (comma-separated: svg,gif,mp4,png)")
 	cmd.Flags().BoolVar(&noSVGFix, "no-svg-fix", false, "Skip SVG line-height post-processing")
-	cmd.Flags().StringVarP(&category, "category", "c", "", "Render all scenes in a category (e.g., terraform, list, dx)")
+	cmd.Flags().StringVarP(&category, "category", "c", "", "Render all scenes in a gallery category (e.g., terraform, list, dx)")
+	cmd.Flags().StringVarP(&tag, "tag", "t", "", "Render all scenes with a specific tag (e.g., version, featured)")
+	cmd.Flags().BoolVarP(&validate, "validate", "v", false, "Validate rendered SVG outputs after rendering")
 
 	return cmd
 }
@@ -299,5 +335,84 @@ func runPreRenderHooks(ctx context.Context, c *cobra.Command, hooks []string, wo
 	}
 
 	c.Printf("Pre-render hooks completed.\n\n")
+	return nil
+}
+
+// runValidation validates rendered SVG outputs for the given scenes.
+func runValidation(c *cobra.Command, demosDir string, scenesList *scene.ScenesList, renderedSceneNames []string, defaults *toolmgr.DefaultsConfig) error {
+	// Build a set of rendered scene names for quick lookup.
+	renderedSet := make(map[string]bool)
+	for _, name := range renderedSceneNames {
+		renderedSet[name] = true
+	}
+
+	// Get validation defaults.
+	var validationDefaults *scene.ValidationConfig
+	if defaults != nil && defaults.Validation != nil {
+		validationDefaults = defaults.Validation
+	}
+
+	validator := validation.New(validationDefaults)
+
+	c.Printf("Validating rendered SVG outputs...\n\n")
+
+	hasErrors := false
+	validatedCount := 0
+
+	for _, sc := range scenesList.Scenes {
+		// Only validate scenes that were just rendered.
+		if !renderedSet[sc.Name] {
+			continue
+		}
+
+		// Check if SVG is in outputs.
+		hasSVG := false
+		for _, output := range sc.Outputs {
+			if output == "svg" {
+				hasSVG = true
+				break
+			}
+		}
+		if !hasSVG {
+			continue
+		}
+
+		// Find the SVG output file.
+		svgPath := findSVGOutput(demosDir, sc)
+		if svgPath == "" {
+			c.Printf("⊘ %s (SVG not found)\n", sc.Name)
+			continue
+		}
+
+		// Validate the SVG.
+		result, err := validator.ValidateSVG(svgPath, sc.Validate)
+		if err != nil {
+			c.Printf("✗ %s: %v\n", sc.Name, err)
+			hasErrors = true
+			continue
+		}
+
+		validatedCount++
+
+		if result.Passed {
+			c.Printf("✓ %s\n", sc.Name)
+		} else {
+			c.Printf("✗ %s\n", sc.Name)
+			for _, e := range result.Errors {
+				c.Printf("    %s\n", e)
+			}
+			for _, m := range result.Missing {
+				c.Printf("    %s\n", m)
+			}
+			hasErrors = true
+		}
+	}
+
+	c.Printf("\nValidated %d scene(s)\n", validatedCount)
+
+	if hasErrors {
+		return fmt.Errorf("some scenes failed validation")
+	}
+
 	return nil
 }

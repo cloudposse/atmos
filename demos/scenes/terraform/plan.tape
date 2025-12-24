@@ -1,6 +1,7 @@
 # terraform-plan scene - Basic terraform plan workflow
 Output terraform-plan.gif
 Output terraform-plan.mp4
+Output terraform-plan.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -24,7 +25,7 @@ Enter
 Sleep 1s
 
 Type "atmos terraform plan vpc -s plat-dev-ue2"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
@@ -36,3 +37,6 @@ Sleep 2s
 Type "# See exactly what will change before deploying"
 Enter
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

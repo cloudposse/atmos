@@ -2,7 +2,7 @@
 # Pin and pull component dependencies from remote sources
 
 apiVersion: atmos/v1
-kind: ComponentVendor
+kind: AtmosVendorConfig
 
 metadata:
   name: acme-components
@@ -14,6 +14,9 @@ spec:
     - component: vpc
       source: github.com/cloudposse/terraform-aws-vpc
       version: 2.2.0
+      tags:
+        - networking
+        - infrastructure
       targets:
         - components/terraform/vpc
 
@@ -21,6 +24,9 @@ spec:
     - component: cluster
       source: github.com/cloudposse/terraform-aws-eks-cluster
       version: 4.1.0
+      tags:
+        - compute
+        - kubernetes
       targets:
         - components/terraform/cluster
 
@@ -28,6 +34,9 @@ spec:
     - component: database
       source: github.com/cloudposse/terraform-aws-rds-cluster
       version: 1.9.0
+      tags:
+        - data
+        - database
       targets:
         - components/terraform/database
 
@@ -35,5 +44,8 @@ spec:
     - component: cache
       source: github.com/cloudposse/terraform-aws-elasticache-redis
       version: 1.2.0
+      tags:
+        - data
+        - cache
       targets:
         - components/terraform/cache

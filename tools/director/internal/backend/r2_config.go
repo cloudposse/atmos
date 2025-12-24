@@ -73,6 +73,11 @@ func LoadR2Config(backendConfig map[string]interface{}) (*R2Config, error) {
 		config.BucketName = envBucket
 	}
 
+	// Allow environment variable override for base URL.
+	if envBaseURL := os.Getenv("CLOUDFLARE_R2_BASE_URL"); envBaseURL != "" {
+		config.BaseURL = envBaseURL
+	}
+
 	// Validate bucket name is set.
 	if config.BucketName == "" {
 		return nil, fmt.Errorf("%w: bucket_name not configured in defaults.yaml or CLOUDFLARE_BUCKET_NAME environment variable",

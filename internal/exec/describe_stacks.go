@@ -434,6 +434,11 @@ func ExecuteDescribeStacks(
 							componentSection["workspace"] = workspace
 							configAndStacksInfo.ComponentSection["workspace"] = workspace
 
+							// Add component_info with component_path.
+							componentInfo := buildComponentInfo(atmosConfig, componentSection, cfg.TerraformSectionName)
+							componentSection["component_info"] = componentInfo
+							configAndStacksInfo.ComponentSection["component_info"] = componentInfo
+
 							// Process `Go` templates.
 							if processTemplates {
 								componentSectionStr, err := u.ConvertToYAML(componentSection)
@@ -675,6 +680,11 @@ func ExecuteDescribeStacks(
 							componentSection["atmos_stack_file"] = stackFileName
 							componentSection["atmos_manifest"] = stackFileName
 
+							// Add component_info with component_path.
+							componentInfo := buildComponentInfo(atmosConfig, componentSection, cfg.HelmfileSectionName)
+							componentSection["component_info"] = componentInfo
+							configAndStacksInfo.ComponentSection["component_info"] = componentInfo
+
 							// Process `Go` templates.
 							if processTemplates {
 								componentSectionStr, err := u.ConvertToYAML(componentSection)
@@ -901,6 +911,11 @@ func ExecuteDescribeStacks(
 							componentSection["atmos_stack_file"] = stackFileName
 							componentSection["atmos_manifest"] = stackFileName
 
+							// Add component_info with component_path.
+							componentInfo := buildComponentInfo(atmosConfig, componentSection, cfg.PackerSectionName)
+							componentSection["component_info"] = componentInfo
+							configAndStacksInfo.ComponentSection["component_info"] = componentInfo
+
 							// Process `Go` templates.
 							if processTemplates {
 								componentSectionStr, err := u.ConvertToYAML(componentSection)
@@ -1025,4 +1040,71 @@ func ExecuteDescribeStacks(
 	}
 
 	return finalStacksMap, nil
+}
+
+// buildComponentInfo constructs the component_info map with component_path for a component.
+// It uses the base component name from componentSection["component"] to resolve the path,
+// which handles both base components and derived components correctly.
+// The component_path is returned as a relative path from the project root.
+func buildComponentInfo(atmosConfig *schema.AtmosConfiguration, componentSection map[string]any, componentKind string) map[string]any {
+	defer perf.Track(atmosConfig, "exec.buildComponentInfo")()
+
+	componentInfo := map[string]any{
+		"component_type": componentKind,
+	}
+
+	// Get the actual component name to use for path resolution.
+	// For derived components, this is the base component from metadata.component.
+	// For base components, this is just the component name itself.
+	finalComponent := ""
+	if comp, ok := componentSection[cfg.ComponentSectionName].(string); ok && comp != "" {
+		finalComponent = comp
+	}
+
+	if finalComponent == "" {
+		return componentInfo
+	}
+
+	// Get the component folder prefix if it exists in metadata.
+	componentFolderPrefix := ""
+	if metadata, ok := componentSection[cfg.MetadataSectionName].(map[string]any); ok {
+		if prefix, ok := metadata["component_folder_prefix"].(string); ok {
+			componentFolderPrefix = prefix
+		}
+	}
+
+	// Build the relative component path directly from config.
+	// This avoids returning absolute paths which are environment-specific.
+	var relativePath string
+
+	switch componentKind {
+	case cfg.TerraformSectionName:
+		basePath := atmosConfig.Components.Terraform.BasePath
+		if componentFolderPrefix != "" {
+			relativePath = fmt.Sprintf("%s/%s/%s", basePath, componentFolderPrefix, finalComponent)
+		} else {
+			relativePath = fmt.Sprintf("%s/%s", basePath, finalComponent)
+		}
+	case cfg.HelmfileSectionName:
+		basePath := atmosConfig.Components.Helmfile.BasePath
+		if componentFolderPrefix != "" {
+			relativePath = fmt.Sprintf("%s/%s/%s", basePath, componentFolderPrefix, finalComponent)
+		} else {
+			relativePath = fmt.Sprintf("%s/%s", basePath, finalComponent)
+		}
+	case cfg.PackerSectionName:
+		// Packer doesn't have a dedicated BasePath in schema, use terraform pattern.
+		basePath := "components/packer"
+		if componentFolderPrefix != "" {
+			relativePath = fmt.Sprintf("%s/%s/%s", basePath, componentFolderPrefix, finalComponent)
+		} else {
+			relativePath = fmt.Sprintf("%s/%s", basePath, finalComponent)
+		}
+	}
+
+	if relativePath != "" {
+		componentInfo[cfg.ComponentPathSectionName] = relativePath
+	}
+
+	return componentInfo
 }

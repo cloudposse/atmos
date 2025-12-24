@@ -1,12 +1,16 @@
 package vhs
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/cloudposse/atmos/pkg/ffmpeg"
 	"github.com/cloudposse/atmos/pkg/vhs"
@@ -15,10 +19,12 @@ import (
 
 // Renderer renders VHS tape files to GIF/PNG.
 type Renderer struct {
-	demosDir string
-	cacheDir string
-	cache    *CacheMetadata
-	force    bool
+	demosDir     string
+	cacheDir     string
+	cache        *CacheMetadata
+	force        bool
+	formatFilter []string // If set, only render these formats.
+	skipSVGFix   bool     // If true, skip SVG line-height post-processing.
 }
 
 // RenderResult contains the result of a render operation.
@@ -39,6 +45,16 @@ func NewRenderer(demosDir string) *Renderer {
 // SetForce sets the force flag to skip cache checks.
 func (r *Renderer) SetForce(force bool) {
 	r.force = force
+}
+
+// SetFormatFilter sets the format filter to only render specific formats.
+func (r *Renderer) SetFormatFilter(formats []string) {
+	r.formatFilter = formats
+}
+
+// SetSkipSVGFix sets whether to skip SVG line-height post-processing.
+func (r *Renderer) SetSkipSVGFix(skip bool) {
+	r.skipSVGFix = skip
 }
 
 // Render renders a scene using VHS with cache checking.
@@ -66,8 +82,21 @@ func (r *Renderer) Render(ctx context.Context, sc *scene.Scene) (*RenderResult, 
 		audioFile = filepath.Join(r.demosDir, sc.Audio.Source)
 	}
 
-	// Build output file paths.
-	outputFiles := r.buildOutputPaths(sc)
+	// Filter outputs if format filter is set.
+	effectiveOutputs := sc.Outputs
+	if len(r.formatFilter) > 0 {
+		effectiveOutputs = r.filterOutputs(sc.Outputs, r.formatFilter)
+		if len(effectiveOutputs) == 0 {
+			// No matching formats to render.
+			return &RenderResult{
+				Cached:      true,
+				OutputPaths: nil,
+			}, nil
+		}
+	}
+
+	// Build output file paths based on effective outputs.
+	outputFiles := r.buildOutputPathsForFormats(sc.Name, effectiveOutputs)
 
 	// Check if render is needed.
 	needsRender, err := r.cache.NeedsRender(sc.Name, tapeFile, audioFile, outputFiles, r.force)
@@ -99,27 +128,48 @@ func (r *Renderer) Render(ctx context.Context, sc *scene.Scene) (*RenderResult, 
 		}
 	}
 
-	if err := vhs.Render(ctx, tapeFile, workdir, r.cacheDir); err != nil {
+	// If format filter is set, create a temporary tape file with only the requested outputs.
+	tapeToRender := tapeFile
+	if len(r.formatFilter) > 0 {
+		tempTape, err := r.createFilteredTape(tapeFile, sc.Name, effectiveOutputs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create filtered tape: %w", err)
+		}
+		defer os.Remove(tempTape)
+		tapeToRender = tempTape
+	}
+
+	if err := vhs.Render(ctx, tapeToRender, workdir, r.cacheDir); err != nil {
 		return nil, err
 	}
 
 	// Move output files from workdir to cacheDir.
 	// VHS writes outputs relative to workdir based on the Output directive.
-	if err := r.moveOutputsToCache(sc, workdir); err != nil {
+	if err := r.moveOutputsToCacheForFormats(sc.Name, effectiveOutputs, workdir); err != nil {
 		return nil, fmt.Errorf("failed to move outputs to cache: %w", err)
 	}
 
 	// TODO: Optimize GIF with gifsicle if enabled in defaults.yaml.
 
 	// Process audio for MP4 outputs if configured.
-	if sc.Audio != nil && r.containsMP4(sc.Outputs) {
+	if sc.Audio != nil && r.containsFormat(effectiveOutputs, "mp4") {
 		if err := r.processAudioForMP4(ctx, sc); err != nil {
 			return nil, fmt.Errorf("audio processing failed: %w", err)
 		}
 	}
 
-	// Update cache with new hash.
-	if err := r.cache.UpdateScene(sc.Name, tapeFile, audioFile, outputFiles); err != nil {
+	// Calculate scene duration.
+	// For SVG-only scenes, estimate from tape Sleep commands.
+	// For MP4 scenes, the actual duration will be updated when publishing.
+	duration, err := scene.CalculateTapeDuration(tapeFile)
+	if err != nil {
+		// Non-fatal - just log and continue with zero duration.
+		fmt.Printf("  Warning: could not calculate tape duration: %v\n", err)
+		duration = 0
+	}
+
+	// Update cache with new hash and duration.
+	if err := r.cache.UpdateScene(sc.Name, tapeFile, audioFile, outputFiles, duration); err != nil {
 		return nil, fmt.Errorf("failed to update cache: %w", err)
 	}
 
@@ -137,24 +187,105 @@ func (r *Renderer) Render(ctx context.Context, sc *scene.Scene) (*RenderResult, 
 // buildOutputPaths builds the expected output file paths for a scene.
 // Uses the scene name which matches the Output directive in the tape file.
 func (r *Renderer) buildOutputPaths(sc *scene.Scene) []string {
+	return r.buildOutputPathsForFormats(sc.Name, sc.Outputs)
+}
+
+// buildOutputPathsForFormats builds output file paths for specific formats.
+func (r *Renderer) buildOutputPathsForFormats(sceneName string, formats []string) []string {
 	var paths []string
 
-	for _, format := range sc.Outputs {
-		filename := fmt.Sprintf("%s.%s", sc.Name, format)
+	for _, format := range formats {
+		filename := fmt.Sprintf("%s.%s", sceneName, format)
 		paths = append(paths, filepath.Join(r.cacheDir, filename))
 	}
 
 	return paths
 }
 
-// containsMP4 checks if the outputs array contains "mp4".
-func (r *Renderer) containsMP4(outputs []string) bool {
+// filterOutputs returns only the outputs that match the filter.
+func (r *Renderer) filterOutputs(outputs, filter []string) []string {
+	filterSet := make(map[string]bool)
+	for _, f := range filter {
+		filterSet[f] = true
+	}
+
+	var result []string
 	for _, output := range outputs {
-		if output == "mp4" {
+		if filterSet[output] {
+			result = append(result, output)
+		}
+	}
+	return result
+}
+
+// containsFormat checks if the outputs array contains a specific format.
+func (r *Renderer) containsFormat(outputs []string, format string) bool {
+	for _, output := range outputs {
+		if output == format {
 			return true
 		}
 	}
 	return false
+}
+
+// containsMP4 checks if the outputs array contains "mp4".
+func (r *Renderer) containsMP4(outputs []string) bool {
+	return r.containsFormat(outputs, "mp4")
+}
+
+// createFilteredTape creates a temporary tape file with only the specified output formats.
+// It reads the original tape, removes Output directives for formats not in the filter,
+// and writes the result to a temp file.
+func (r *Renderer) createFilteredTape(originalTape, sceneName string, formats []string) (string, error) {
+	// Create set of allowed formats.
+	allowedFormats := make(map[string]bool)
+	for _, f := range formats {
+		allowedFormats[f] = true
+	}
+
+	// Read original tape file.
+	file, err := os.Open(originalTape)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	// Create temp file in the same directory to preserve relative paths.
+	tempFile, err := os.CreateTemp(filepath.Dir(originalTape), "filtered-*.tape")
+	if err != nil {
+		return "", err
+	}
+	defer tempFile.Close()
+
+	// Regex to match Output directives: "Output scenename.format".
+	outputRegex := regexp.MustCompile(`^Output\s+` + regexp.QuoteMeta(sceneName) + `\.(\w+)\s*$`)
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Check if this is an Output directive.
+		if matches := outputRegex.FindStringSubmatch(line); matches != nil {
+			format := matches[1]
+			// Only include if format is in the allowed list.
+			if !allowedFormats[format] {
+				continue
+			}
+		}
+
+		// Write line to temp file.
+		if _, err := fmt.Fprintln(tempFile, line); err != nil {
+			os.Remove(tempFile.Name())
+			return "", err
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		os.Remove(tempFile.Name())
+		return "", err
+	}
+
+	return tempFile.Name(), nil
 }
 
 // findMP4OutputPath finds the MP4 file path from the scene outputs.
@@ -222,10 +353,15 @@ func (r *Renderer) processAudioForMP4(ctx context.Context, sc *scene.Scene) erro
 // VHS writes files relative to its working directory, so we need to move them
 // to the cache directory for consistency and easy access.
 func (r *Renderer) moveOutputsToCache(sc *scene.Scene, workdir string) error {
+	return r.moveOutputsToCacheForFormats(sc.Name, sc.Outputs, workdir)
+}
+
+// moveOutputsToCacheForFormats moves specific format outputs from workdir to cacheDir.
+func (r *Renderer) moveOutputsToCacheForFormats(sceneName string, formats []string, workdir string) error {
 	// Get the expected output filenames based on the tape file Output directives.
 	// The Output directive uses the scene name as prefix.
-	for _, format := range sc.Outputs {
-		filename := fmt.Sprintf("%s.%s", sc.Name, format)
+	for _, format := range formats {
+		filename := fmt.Sprintf("%s.%s", sceneName, format)
 		srcPath := filepath.Join(workdir, filename)
 		dstPath := filepath.Join(r.cacheDir, filename)
 
@@ -242,16 +378,25 @@ func (r *Renderer) moveOutputsToCache(sc *scene.Scene, workdir string) error {
 		if err := moveFile(srcPath, dstPath); err != nil {
 			return fmt.Errorf("failed to move %s to %s: %w", srcPath, dstPath, err)
 		}
+
+		// Post-process SVG files to fix line height (unless skipped).
+		if format == "svg" && !r.skipSVGFix {
+			if err := r.postProcessSVG(dstPath); err != nil {
+				return fmt.Errorf("failed to post-process SVG %s: %w", dstPath, err)
+			}
+		}
 	}
 
-	// Also handle Screenshot outputs (png files with scene name prefix).
-	pngFilename := fmt.Sprintf("%s.png", sc.Name)
-	pngSrcPath := filepath.Join(workdir, pngFilename)
-	pngDstPath := filepath.Join(r.cacheDir, pngFilename)
+	// Also handle Screenshot outputs (png files with scene name prefix) if png is in formats.
+	if r.containsFormat(formats, "png") {
+		pngFilename := fmt.Sprintf("%s.png", sceneName)
+		pngSrcPath := filepath.Join(workdir, pngFilename)
+		pngDstPath := filepath.Join(r.cacheDir, pngFilename)
 
-	if _, err := os.Stat(pngSrcPath); err == nil {
-		if err := moveFile(pngSrcPath, pngDstPath); err != nil {
-			return fmt.Errorf("failed to move screenshot %s to %s: %w", pngSrcPath, pngDstPath, err)
+		if _, err := os.Stat(pngSrcPath); err == nil {
+			if err := moveFile(pngSrcPath, pngDstPath); err != nil {
+				return fmt.Errorf("failed to move screenshot %s to %s: %w", pngSrcPath, pngDstPath, err)
+			}
 		}
 	}
 
@@ -304,4 +449,137 @@ func (r *Renderer) runPrepCommands(ctx context.Context, sc *scene.Scene, workdir
 		}
 	}
 	return nil
+}
+
+// fixSVGLineHeight fixes the line height in an SVG file generated by VHS.
+// VHS uses a fixed charHeight of 34px regardless of font-size, resulting in
+// excessive line spacing. This function scales Y coordinates of text elements
+// to achieve proper line height based on the configured font size and line height.
+func fixSVGLineHeight(svgPath string, fontSize, lineHeight float64) error {
+	// VHS uses charHeight=34 internally for SVG rendering (measured from actual output).
+	// Each text line is placed at y = lineNumber * 34 (e.g., 27.2, 61.2, 95.2...).
+	// We want lines at y = lineNumber * (fontSize * lineHeight).
+	// Scale = (fontSize * lineHeight) / charHeight
+	// Example: (14 * 1.0) / 34 = 14 / 34 = 0.41
+	vhsCharHeight := 34.0
+	targetLineSpacing := fontSize * lineHeight
+	scale := targetLineSpacing / vhsCharHeight
+
+	// Read the SVG file.
+	content, err := os.ReadFile(svgPath)
+	if err != nil {
+		return fmt.Errorf("failed to read SVG: %w", err)
+	}
+
+	svgContent := string(content)
+
+	// Track the maximum Y coordinate we encounter to calculate new height.
+	var maxY float64
+
+	// Regular expression to match <text> elements with y="N" attributes.
+	// We only want to scale Y coordinates inside <text> elements, not the viewBox/height.
+	// VHS SVG structure: <text ... y="N">...</text>
+	textYRegex := regexp.MustCompile(`(<text[^>]*\s)y="([0-9.]+)"`)
+
+	// Replace Y coordinates in text elements with scaled values.
+	fixed := textYRegex.ReplaceAllStringFunc(svgContent, func(match string) string {
+		matches := textYRegex.FindStringSubmatch(match)
+		if len(matches) < 3 {
+			return match
+		}
+		yVal, err := strconv.ParseFloat(matches[2], 64)
+		if err != nil {
+			return match
+		}
+		// Scale the Y value.
+		newY := yVal * scale
+		if newY > maxY {
+			maxY = newY
+		}
+		return fmt.Sprintf(`%sy="%.1f"`, matches[1], newY)
+	})
+
+	// Also handle <tspan> elements which may have their own y coordinates.
+	tspanYRegex := regexp.MustCompile(`(<tspan[^>]*\s)y="([0-9.]+)"`)
+	fixed = tspanYRegex.ReplaceAllStringFunc(fixed, func(match string) string {
+		matches := tspanYRegex.FindStringSubmatch(match)
+		if len(matches) < 3 {
+			return match
+		}
+		yVal, err := strconv.ParseFloat(matches[2], 64)
+		if err != nil {
+			return match
+		}
+		newY := yVal * scale
+		if newY > maxY {
+			maxY = newY
+		}
+		return fmt.Sprintf(`%sy="%.1f"`, matches[1], newY)
+	})
+
+	// Scale Y coordinates in rect elements (background boxes for highlights).
+	// Only matches rects that have a y attribute (positioned elements, not outer background).
+	rectYRegex := regexp.MustCompile(`(<rect[^>]*\s)y="([0-9.]+)"`)
+	fixed = rectYRegex.ReplaceAllStringFunc(fixed, func(match string) string {
+		matches := rectYRegex.FindStringSubmatch(match)
+		if len(matches) < 3 {
+			return match
+		}
+		yVal, err := strconv.ParseFloat(matches[2], 64)
+		if err != nil {
+			return match
+		}
+		newY := yVal * scale
+		if newY > maxY {
+			maxY = newY
+		}
+		return fmt.Sprintf(`%sy="%.1f"`, matches[1], newY)
+	})
+
+	// Scale heights in rect elements that have a y attribute (positioned elements only).
+	// Matches: <rect ... y="..." ... height="..." ...> (y must appear before height).
+	// This excludes outer background rects like <rect width="1400" height="800"/>.
+	rectHeightRegex := regexp.MustCompile(`(<rect[^>]*y="[^"]*"[^>]*\s)height="([0-9.]+)"`)
+	fixed = rectHeightRegex.ReplaceAllStringFunc(fixed, func(match string) string {
+		matches := rectHeightRegex.FindStringSubmatch(match)
+		if len(matches) < 3 {
+			return match
+		}
+		heightVal, err := strconv.ParseFloat(matches[2], 64)
+		if err != nil {
+			return match
+		}
+		newHeight := heightVal * scale
+		return fmt.Sprintf(`%sheight="%.1f"`, matches[1], newHeight)
+	})
+
+	// Write the fixed SVG back.
+	if err := os.WriteFile(svgPath, []byte(fixed), 0o644); err != nil {
+		return fmt.Errorf("failed to write fixed SVG: %w", err)
+	}
+
+	return nil
+}
+
+// postProcessSVG applies post-processing fixes to SVG files.
+func (r *Renderer) postProcessSVG(svgPath string) error {
+	// Default values matching the tape theme settings.
+	// Note: LineHeight should match the tape's "Set LineHeight" value.
+	// Using 1.0 ensures terminal row count matches visual rendering for TUI apps.
+	fontSize := 14.0
+	lineHeight := 1.0
+
+	// TODO: Parse font-size and line-height from the SVG or tape file.
+	// For now, use the defaults from tape settings.
+
+	if !strings.HasSuffix(svgPath, ".svg") {
+		return nil
+	}
+
+	if _, err := os.Stat(svgPath); os.IsNotExist(err) {
+		return nil // File doesn't exist, skip.
+	}
+
+	fmt.Printf("  Post-processing SVG line height: %s\n", filepath.Base(svgPath))
+	return fixSVGLineHeight(svgPath, fontSize, lineHeight)
 }

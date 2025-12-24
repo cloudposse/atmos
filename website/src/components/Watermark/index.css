@@ -21,11 +21,11 @@
 
 /* Theme-based logo switching */
 /* Light mode: show light logo, hide dark logo */
-.cloudposse-logo__light {
+html:not([data-theme='dark']) .cloudposse-logo__light {
   display: block;
 }
 
-.cloudposse-logo__dark {
+html:not([data-theme='dark']) .cloudposse-logo__dark {
   display: none;
 }
 

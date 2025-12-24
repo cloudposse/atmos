@@ -1,9 +1,10 @@
 # validate scene - Validate stack configurations
-Output dx-validate.gif
-Output dx-validate.mp4
+Output validate.gif
+Output validate.mp4
+Output validate.svg
 
 # VHS Configuration
-Source ../../scenes/_theme.tape
+Source _theme.tape
 Set Width 1400
 Set Height 800
 
@@ -23,22 +24,26 @@ Enter
 Sleep 1s
 
 Type "atmos validate stacks"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 # Capture screenshot
-Screenshot dx-validate.png
+Screenshot validate.png
 
 Type "# Catch configuration errors before deployment"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos validate component vpc -s plat-dev-ue2"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 Type "# Ensure infrastructure consistency"
 Enter
 Sleep 1s
+
+
+# Hold final frame
+Sleep 10s

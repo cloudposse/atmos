@@ -186,3 +186,96 @@ func TestStacksForComponent_EmptyComponents(t *testing.T) {
 	_, err := StacksForComponent("vpc", stacksMap)
 	assert.ErrorIs(t, err, errUtils.ErrNoStacksFound)
 }
+
+func TestStacks_ExtractsVars(t *testing.T) {
+	// This tests that vars are extracted from components and exposed for template access.
+	// The structure mirrors ExecuteDescribeStacks output where vars are nested
+	// inside components: stackMap["components"]["terraform"]["<component>"]["vars"].
+	// Templates access vars via {{ .vars.fieldname }}.
+	stacksMap := map[string]any{
+		"plat-ue2-dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{
+							"namespace":   "acme",
+							"tenant":      "plat",
+							"environment": "ue2",
+							"stage":       "dev",
+							"region":      "us-east-2",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	stacks, err := Stacks(stacksMap)
+	require.NoError(t, err)
+	require.Len(t, stacks, 1)
+
+	stack := stacks[0]
+	assert.Equal(t, "plat-ue2-dev", stack["stack"])
+
+	// Vars are exposed for template access (e.g., {{ .vars.namespace }}).
+	vars, ok := stack["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme", vars["namespace"])
+	assert.Equal(t, "plat", vars["tenant"])
+	assert.Equal(t, "ue2", vars["environment"])
+	assert.Equal(t, "dev", vars["stage"])
+	assert.Equal(t, "us-east-2", vars["region"])
+}
+
+func TestStacks_NoVars(t *testing.T) {
+	// When components have no vars, an empty vars map should be set.
+	stacksMap := map[string]any{
+		"test-stack": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{},
+				},
+			},
+		},
+	}
+
+	stacks, err := Stacks(stacksMap)
+	require.NoError(t, err)
+	require.Len(t, stacks, 1)
+
+	stack := stacks[0]
+	assert.Equal(t, "test-stack", stack["stack"])
+
+	// Vars should be an empty map when not found.
+	vars, ok := stack["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Empty(t, vars)
+}
+
+func TestStacks_VarsFromHelmfile(t *testing.T) {
+	// Vars should be extracted from any component type.
+	stacksMap := map[string]any{
+		"plat-ue2-dev": map[string]any{
+			"components": map[string]any{
+				"helmfile": map[string]any{
+					"ingress": map[string]any{
+						"vars": map[string]any{
+							"namespace": "acme",
+							"tenant":    "plat",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	stacks, err := Stacks(stacksMap)
+	require.NoError(t, err)
+	require.Len(t, stacks, 1)
+
+	stack := stacks[0]
+	vars, ok := stack["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme", vars["namespace"])
+	assert.Equal(t, "plat", vars["tenant"])
+}

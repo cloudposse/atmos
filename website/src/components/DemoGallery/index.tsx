@@ -16,17 +16,25 @@ interface DemoCardProps {
 }
 
 function DemoCard({ demo, onClick }: DemoCardProps): JSX.Element {
-  const { png, streamUid } = getDemoAssetUrls(demo.id);
+  const { png, streamUid, svg } = getDemoAssetUrls(demo.id);
   const manifestData = getManifestData(demo.id);
   const videoUid = streamUid || manifestData?.formats?.mp4?.uid;
+
+  // Prefer SVG over video for hover preview.
+  const useSvgPreview = !!svg;
 
   const [isHovered, setIsHovered] = useState(false);
   const [hasBeenHovered, setHasBeenHovered] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const streamRef = useRef<StreamPlayerApi | undefined>(undefined);
 
-  // Once hovered, keep video mounted to preserve buffer quality.
+  // Once hovered, keep video mounted to preserve buffer quality (only for video).
   useEffect(() => {
+    if (useSvgPreview) {
+      // SVG doesn't need special handling.
+      return;
+    }
+
     if (isHovered && videoUid) {
       setHasBeenHovered(true);
       // Start playing when hovered.
@@ -39,7 +47,7 @@ function DemoCard({ demo, onClick }: DemoCardProps): JSX.Element {
       streamRef.current.currentTime = 0;
       setIsPlaying(false);
     }
-  }, [isHovered, videoUid]);
+  }, [isHovered, videoUid, useSvgPreview]);
 
   const handleMouseEnter = () => {
     setIsHovered(true);
@@ -60,7 +68,7 @@ function DemoCard({ demo, onClick }: DemoCardProps): JSX.Element {
     }
   };
 
-  // Placeholder cards are not clickable
+  // Placeholder cards are not clickable.
   const handleClick = demo.isPlaceholder ? undefined : onClick;
 
   return (
@@ -72,7 +80,16 @@ function DemoCard({ demo, onClick }: DemoCardProps): JSX.Element {
     >
       <div className={`${styles.thumbnail} ${!png ? styles.noThumbnail : ''}`}>
         {png && <img src={png} alt={demo.title} loading="lazy" />}
-        {hasBeenHovered && videoUid && (
+
+        {/* SVG preview on hover (preferred) */}
+        {useSvgPreview && (
+          <div className={`${styles.videoPreview} ${isHovered ? styles.videoVisible : ''}`}>
+            <img src={svg} alt={demo.title} className={styles.svgPreview} />
+          </div>
+        )}
+
+        {/* Video preview on hover (fallback to Stream) */}
+        {!useSvgPreview && hasBeenHovered && videoUid && (
           <div className={`${styles.videoPreview} ${isHovered && isPlaying ? styles.videoVisible : ''}`}>
             <Stream
               src={videoUid}
@@ -88,6 +105,7 @@ function DemoCard({ demo, onClick }: DemoCardProps): JSX.Element {
             />
           </div>
         )}
+
         {demo.isPlaceholder ? (
           <span className={styles.comingSoon}>Coming Soon</span>
         ) : (

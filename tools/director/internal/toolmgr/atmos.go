@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 )
 
@@ -89,28 +90,19 @@ func (m *Manager) installAtmosFromGitHub(ctx context.Context, version, destPath 
 
 // installAtmosFromLocal copies the locally-built atmos binary.
 func (m *Manager) installAtmosFromLocal(destPath string) error {
-	// Look for local atmos binary in common locations.
+	// Worktree root is the parent of demosDir.
+	worktreeRoot := filepath.Dir(m.demosDir)
+
+	// Look for local atmos binary in common locations relative to worktree root.
 	candidates := []string{
-		// Worktree build.
-		"atmos",
-		"./atmos",
-		"build/atmos",
-		"./build/atmos",
-		// Parent directories (since we might be in demos/).
-		"../atmos",
-		"../../atmos",
-		"../build/atmos",
-		"../../build/atmos",
+		filepath.Join(worktreeRoot, "build", "atmos"),
+		filepath.Join(worktreeRoot, "atmos"),
 	}
 
 	var srcPath string
 	for _, candidate := range candidates {
-		absPath := candidate
-		if !isAbs(candidate) {
-			absPath = candidate // Will be resolved relative to cwd.
-		}
-		if _, err := os.Stat(absPath); err == nil {
-			srcPath = absPath
+		if _, err := os.Stat(candidate); err == nil {
+			srcPath = candidate
 			break
 		}
 	}
@@ -144,9 +136,4 @@ func (m *Manager) installAtmosFromLocal(destPath string) error {
 	}
 
 	return nil
-}
-
-// isAbs is a simple check for absolute paths.
-func isAbs(path string) bool {
-	return len(path) > 0 && path[0] == '/'
 }

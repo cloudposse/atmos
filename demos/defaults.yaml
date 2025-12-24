@@ -1,12 +1,18 @@
 ---
 version: "1.0"
 
+# Hooks to run at various stages
+hooks:
+  # Commands to run before any VHS rendering starts (runs once per director session)
+  pre_render:
+    - "make build"
+
 # Tool version requirements
 # Director will automatically download and install pinned versions
 tools:
   atmos:
-    version: "1.202.1"           # Required version (semver without 'v' prefix)
-    source: "github"              # github = download from releases, local = copy from worktree
+    version: "dev"                # Use "dev" for local builds
+    source: "local"               # github = download from releases, local = copy from worktree
     install_dir: ".cache/bin"     # Where to install (relative to demos/)
 
 # Global VHS settings (applied to all scenes unless overridden)
@@ -21,6 +27,25 @@ vhs:
   framerate: 20
   shell: "bash"
   cursor_blink: false
+
+# Post-render validation defaults
+# These patterns are checked against SVG output text
+# Scenes can override with their own validate: section
+validation:
+  # Patterns that must NOT appear in rendered output (errors)
+  must_not_match:
+    - "Error: "                       # Atmos error messages
+    - "bash: .*: command not found"   # Shell command not found
+    - "command not found"             # Generic command not found
+    - "panic:"                         # Go panics
+    - "FAILED"                         # Test/build failures
+    - "No such file or directory"     # Missing file errors
+    - "permission denied"             # Permission errors
+    - "fatal:"                         # Git/other fatal errors
+
+  # Patterns that MUST appear (commented out - enable per-scene as needed)
+  # must_match:
+  #   - ">"                            # Shell prompt should appear
 
 # GIF optimization settings
 optimization:
@@ -41,15 +66,16 @@ backend:
     # - CLOUDFLARE_STREAM_API_TOKEN
     # - CLOUDFLARE_CUSTOMER_SUBDOMAIN (optional, extracted from API response)
 
-  # Cloudflare R2 configuration (for GIF/PNG images)
+  # Cloudflare R2 configuration (for GIF/PNG/SVG/MP3 files)
   r2:
     bucket_name: "cplive-cf-use1-prod-atmos-assets"
     prefix: "demos/"
-    base_url: "https://pub-xxxxx.r2.dev/demos"  # Update with actual R2 public URL
+    base_url: "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev"
     # Credentials loaded from environment variables:
     # - CLOUDFLARE_ACCOUNT_ID
     # - CLOUDFLARE_R2_ACCESS_KEY_ID
     # - CLOUDFLARE_R2_SECRET_ACCESS_KEY
+    # - CLOUDFLARE_R2_BASE_URL (optional, overrides base_url above)
 
   # GitHub Pages configuration
   gh_pages:

@@ -1,6 +1,7 @@
 # describe-affected scene - Find affected components from changes
 Output config-describe-affected.gif
 Output config-describe-affected.mp4
+Output config-describe-affected.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -24,10 +25,10 @@ Sleep 1s
 
 Type "# Compare HEAD against main branch"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos describe affected --ref main"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
@@ -36,13 +37,16 @@ Screenshot config-describe-affected.png
 
 Type "# Get affected stacks for CI/CD pipelines"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos describe affected --ref main --format json"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 Type "# Deploy only what changed"
 Enter
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

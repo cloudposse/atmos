@@ -1,9 +1,10 @@
 # docs scene - Access documentation from CLI
-Output dx-docs.gif
-Output dx-docs.mp4
+Output docs.gif
+Output docs.mp4
+Output docs.svg
 
 # VHS Configuration
-Source ../../scenes/_theme.tape
+Source _theme.tape
 Set Width 1400
 Set Height 800
 
@@ -23,22 +24,26 @@ Enter
 Sleep 1s
 
 Type "atmos docs"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 # Capture screenshot
-Screenshot dx-docs.png
+Screenshot docs.png
 
 Type "# Opens atmos.tools in your browser"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos docs terraform"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 Type "# Quick access to any command's docs"
 Enter
 Sleep 1s
+
+
+# Hold final frame
+Sleep 10s

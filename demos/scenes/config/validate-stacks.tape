@@ -1,6 +1,7 @@
 # validate-stacks scene - Validate all stack configurations
 Output config-validate-stacks.gif
 Output config-validate-stacks.mp4
+Output config-validate-stacks.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -24,10 +25,10 @@ Sleep 1s
 
 Type "# Check all stacks against schemas"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos validate stacks"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
@@ -36,13 +37,16 @@ Screenshot config-validate-stacks.png
 
 Type "# Validate specific stack"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos validate stacks --stack plat-dev-ue2"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 Type "# Catch errors before deployment"
 Enter
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

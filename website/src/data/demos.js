@@ -20,6 +20,7 @@ const categoryDefinitions = [
   { id: 'terraform', title: 'Terraform Commands', description: 'Execute Terraform operations across your infrastructure' },
   { id: 'list', title: 'List Commands', description: 'Explore and discover your infrastructure' },
   { id: 'workflows', title: 'Workflows & Automation', description: 'Automate multi-step infrastructure operations' },
+  { id: 'vendor', title: 'Vendoring', description: 'Pin and pull component dependencies from remote sources' },
   { id: 'dx', title: 'Developer Experience', description: 'Tools and features for a great developer experience' },
   { id: 'auth', title: 'Authentication', description: 'Secure credential management for cloud providers' },
   { id: 'config', title: 'Configuration & Validation', description: 'Advanced configuration features and validation' },
@@ -53,10 +54,11 @@ function getManifestDuration(demoId) {
   return null;
 }
 
-// Helper to check if a scene has video (not a placeholder)
+// Helper to check if a scene has video or SVG content (not a placeholder)
 function hasVideo(demoId) {
   const scene = manifestScenes[demoId];
-  return scene?.formats?.mp4?.uid != null;
+  // Check for Stream video UID or SVG URL
+  return scene?.formats?.mp4?.uid != null || scene?.formats?.svg?.url != null;
 }
 
 // Build categories dynamically from manifest
@@ -85,25 +87,47 @@ export const DEMO_ASSETS_BASE_URL = 'https://demos.atmos.tools';
 export const STREAM_SUBDOMAIN = manifest.subdomain || '';
 
 // Helper to get asset URLs for a demo
-// Uses Stream thumbnail when available, falls back to R2 PNG
+// Uses manifest URLs when available, falls back to base URL construction
 export function getDemoAssetUrls(demoId) {
   const scene = manifestScenes[demoId];
   const mp4Format = scene?.formats?.mp4;
+  const svgFormat = scene?.formats?.svg;
+  const mp3Format = scene?.formats?.mp3;
 
   // Check if scene has any formats (not a placeholder)
   const hasFormats = scene?.formats && Object.keys(scene.formats).length > 0;
 
-  // Use Stream thumbnail if available, R2 fallback for published, null for placeholders
-  const thumbnail = mp4Format?.thumbnail
-    || (hasFormats ? `${DEMO_ASSETS_BASE_URL}/${demoId}.png` : null);
+  // Derive PNG thumbnail URL:
+  // 1. Use Stream thumbnail if available (MP4 videos)
+  // 2. For SVG-only demos, derive PNG from SVG URL (same path, .png extension)
+  // 3. Fall back to base URL for legacy demos
+  let thumbnail = mp4Format?.thumbnail;
+  if (!thumbnail && svgFormat?.url) {
+    // Derive PNG URL from SVG URL (e.g., .../list-stacks.svg -> .../list-stacks.png)
+    thumbnail = svgFormat.url.replace(/\.svg$/, '.png');
+  } else if (!thumbnail && hasFormats) {
+    thumbnail = `${DEMO_ASSETS_BASE_URL}/${demoId}.png`;
+  }
 
   // Use Stream URL if available
   const mp4Url = mp4Format?.url || (hasFormats ? `${DEMO_ASSETS_BASE_URL}/${demoId}.mp4` : null);
+
+  // SVG URL from manifest
+  const svgUrl = svgFormat?.url || null;
+
+  // MP3 audio URL from manifest
+  const mp3Url = mp3Format?.url || null;
+
+  // SVG duration (for timer-based advancement)
+  const svgDuration = svgFormat?.duration || mp4Format?.duration || null;
 
   return {
     gif: hasFormats ? `${DEMO_ASSETS_BASE_URL}/${demoId}.gif` : null,
     png: thumbnail,
     mp4: mp4Url,
+    svg: svgUrl,
+    mp3: mp3Url,
+    svgDuration: svgDuration,
     thumbnail: thumbnail,
     streamUid: mp4Format?.uid || null,
   };

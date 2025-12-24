@@ -5,5 +5,12 @@ components/terraform/**/terraform.tfstate
 components/terraform/**/terraform.tfstate.backup
 components/terraform/**/.terraform.lock.hcl
 
+# Vendored components - pulled dynamically via `atmos vendor pull`
+# These are defined in vendor.yaml and should not be committed
+components/terraform/vpc/
+components/terraform/cluster/
+components/terraform/database/
+components/terraform/cache/
+
 # Keep mock state source files
 !.mock-states/*.tfstate

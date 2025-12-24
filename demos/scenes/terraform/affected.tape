@@ -1,6 +1,7 @@
 # terraform-affected scene - Smart deployments with affected detection
 Output terraform-affected.gif
 Output terraform-affected.mp4
+Output terraform-affected.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -25,10 +26,10 @@ Sleep 1s
 
 Type "# Check what's affected by recent changes"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos describe affected"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
@@ -37,13 +38,16 @@ Screenshot terraform-affected.png
 
 Type "# Include dependent components too"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos describe affected --include-dependents"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 Type "# Smart deployments - only what changed, plus dependents"
 Enter
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

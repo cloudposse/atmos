@@ -121,11 +121,15 @@ func (m *Manager) EnsureInstalled(ctx context.Context, tool string) (string, err
 	binaryPath := filepath.Join(absInstallDir, tool)
 
 	// Check if already installed at correct version.
-	if cached, ok := m.cache.Tools[tool]; ok {
-		if cached.Version == config.Version {
-			// Verify file still exists.
-			if _, err := os.Stat(binaryPath); err == nil {
-				return binaryPath, nil
+	// For local source with "dev" version, always re-copy to pick up changes.
+	skipCache := config.Source == "local" && config.Version == "dev"
+	if !skipCache {
+		if cached, ok := m.cache.Tools[tool]; ok {
+			if cached.Version == config.Version {
+				// Verify file still exists.
+				if _, err := os.Stat(binaryPath); err == nil {
+					return binaryPath, nil
+				}
 			}
 		}
 	}

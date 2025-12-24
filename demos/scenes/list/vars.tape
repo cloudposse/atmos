@@ -1,6 +1,7 @@
 # list-vars scene - List component vars across stacks
 Output list-vars.gif
 Output list-vars.mp4
+Output list-vars.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -20,10 +21,10 @@ Require atmos
 # Scene starts
 Type "# List component vars across all stacks"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos list vars vpc"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
@@ -35,10 +36,13 @@ Enter
 Sleep 300ms
 
 Type "atmos list vars vpc --query .vars.vpc_cidr"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 Type "# See all variable values at a glance"
 Enter
 Sleep 1s
+
+# Hold final frame
+Sleep 10s
