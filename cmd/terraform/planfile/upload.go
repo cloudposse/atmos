@@ -23,6 +23,19 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// uploadParser handles flag parsing with Viper precedence for the upload command.
+var uploadParser *flags.StandardParser
+
+// UploadOptions contains parsed flags for the upload command.
+type UploadOptions struct {
+	BaseOptions
+	PlanfilePath string
+	Key          string
+	Stack        string
+	Component    string
+	SHA          string
+}
+
 var uploadCmd = &cobra.Command{
 	Use:   "upload <planfile>",
 	Short: "Upload a Terraform plan file to storage",
@@ -34,49 +47,79 @@ Supported backends: local, s3, github-artifacts.`,
 	RunE: runUpload,
 }
 
-var (
-	uploadStore     string
-	uploadKey       string
-	uploadStack     string
-	uploadComponent string
-	uploadSHA       string
-)
-
 func init() {
-	uploadCmd.Flags().StringVar(&uploadStore, "store", "", "Storage backend to use (default from config)")
-	uploadCmd.Flags().StringVar(&uploadKey, "key", "", "Storage key (default: generated from stack/component/SHA)")
-	uploadCmd.Flags().StringVar(&uploadStack, "stack", "", "Stack name for metadata")
-	uploadCmd.Flags().StringVar(&uploadComponent, "component", "", "Component name for metadata")
-	uploadCmd.Flags().StringVar(&uploadSHA, "sha", "", "Git SHA for metadata (default: current HEAD)")
+	// Create parser with upload-specific flags using functional options.
+	uploadParser = flags.NewStandardParser(
+		flags.WithStringFlag("store", "", "", "Storage backend to use (default from config)"),
+		flags.WithStringFlag("key", "", "", "Storage key (default: generated from stack/component/SHA)"),
+		flags.WithStringFlag("stack", "", "", "Stack name for metadata"),
+		flags.WithStringFlag("component", "", "", "Component name for metadata"),
+		flags.WithStringFlag("sha", "", "", "Git SHA for metadata (default: current HEAD)"),
+		flags.WithEnvVars("store", "ATMOS_PLANFILE_STORE"),
+		flags.WithEnvVars("key", "ATMOS_PLANFILE_KEY"),
+		flags.WithEnvVars("stack", "ATMOS_PLANFILE_STACK"),
+		flags.WithEnvVars("component", "ATMOS_PLANFILE_COMPONENT"),
+		flags.WithEnvVars("sha", "ATMOS_PLANFILE_SHA"),
+	)
+
+	// Register flags with the command.
+	uploadParser.RegisterFlags(uploadCmd)
+
+	// Bind to Viper for environment variable support.
+	if err := uploadParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Add to parent command.
+	PlanfileCmd.AddCommand(uploadCmd)
+}
+
+// parseUploadOptions parses command flags into UploadOptions.
+func parseUploadOptions(cmd *cobra.Command, v *viper.Viper, args []string) *UploadOptions {
+	return &UploadOptions{
+		BaseOptions:  parseBaseOptions(cmd, v),
+		PlanfilePath: args[0],
+		Key:          v.GetString("key"),
+		Stack:        v.GetString("stack"),
+		Component:    v.GetString("component"),
+		SHA:          v.GetString("sha"),
+	}
 }
 
 func runUpload(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "planfile.runUpload")()
 
-	planfilePath := args[0]
+	// Bind flags to Viper for proper precedence.
+	v := viper.GetViper()
+	if err := uploadParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
+	// Parse options.
+	opts := parseUploadOptions(cmd, v, args)
 
 	// Initialize configuration with global flags.
-	atmosConfig, err := initAtmosConfig(cmd)
+	atmosConfig, err := initAtmosConfig(opts)
 	if err != nil {
 		return err
 	}
 
 	// Create planfile store.
-	store, err := createStore(&atmosConfig, uploadStore)
+	store, err := createStore(&atmosConfig, opts.Store)
 	if err != nil {
 		return err
 	}
 
 	// Open the planfile.
-	f, err := os.Open(planfilePath)
+	f, err := os.Open(opts.PlanfilePath)
 	if err != nil {
-		return fmt.Errorf("%w: failed to open planfile %s: %w", errUtils.ErrPlanfileUploadFailed, planfilePath, err)
+		return fmt.Errorf("%w: failed to open planfile %s: %w", errUtils.ErrPlanfileUploadFailed, opts.PlanfilePath, err)
 	}
 	defer f.Close()
 
 	// Build metadata and generate key.
-	metadata := buildUploadMetadata()
-	key, err := resolveUploadKey()
+	metadata := buildUploadMetadata(opts)
+	key, err := resolveUploadKey(opts)
 	if err != nil {
 		return err
 	}
@@ -92,15 +135,12 @@ func runUpload(cmd *cobra.Command, args []string) error {
 }
 
 // initAtmosConfig initializes Atmos configuration with global flags.
-func initAtmosConfig(cmd *cobra.Command) (schema.AtmosConfiguration, error) {
-	v := viper.GetViper()
-	globalFlags := flags.ParseGlobalFlags(cmd, v)
-
+func initAtmosConfig(opts *UploadOptions) (schema.AtmosConfiguration, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{
-		AtmosBasePath:           globalFlags.BasePath,
-		AtmosConfigFilesFromArg: globalFlags.Config,
-		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
-		ProfilesFromArg:         globalFlags.Profile,
+		AtmosBasePath:           opts.BasePath,
+		AtmosConfigFilesFromArg: opts.Config,
+		AtmosConfigDirsFromArg:  opts.ConfigPath,
+		ProfilesFromArg:         opts.Profile,
 	}
 
 	return cfg.InitCliConfig(configAndStacksInfo, true)
@@ -116,25 +156,25 @@ func createStore(atmosConfig *schema.AtmosConfiguration, storeName string) (plan
 }
 
 // buildUploadMetadata creates metadata for the planfile upload.
-func buildUploadMetadata() *planfile.Metadata {
+func buildUploadMetadata(opts *UploadOptions) *planfile.Metadata {
 	return &planfile.Metadata{
-		Stack:     uploadStack,
-		Component: uploadComponent,
-		SHA:       uploadSHA,
+		Stack:     opts.Stack,
+		Component: opts.Component,
+		SHA:       opts.SHA,
 		CreatedAt: time.Now(),
 	}
 }
 
 // resolveUploadKey returns the upload key, generating one if not provided.
-func resolveUploadKey() (string, error) {
-	if uploadKey != "" {
-		return uploadKey, nil
+func resolveUploadKey(opts *UploadOptions) (string, error) {
+	if opts.Key != "" {
+		return opts.Key, nil
 	}
 	keyPattern := planfile.DefaultKeyPattern()
 	key, err := keyPattern.GenerateKey(&planfile.KeyContext{
-		Stack:     uploadStack,
-		Component: uploadComponent,
-		SHA:       uploadSHA,
+		Stack:     opts.Stack,
+		Component: opts.Component,
+		SHA:       opts.SHA,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to generate planfile key: %w", err)

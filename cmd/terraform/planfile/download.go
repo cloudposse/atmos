@@ -20,6 +20,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// downloadParser handles flag parsing with Viper precedence for the download command.
+var downloadParser *flags.StandardParser
+
+// DownloadOptions contains parsed flags for the download command.
+type DownloadOptions struct {
+	BaseOptions
+	Key        string
+	OutputPath string
+}
+
 var downloadCmd = &cobra.Command{
 	Use:   "download <key> [output-path]",
 	Short: "Download a Terraform plan file from storage",
@@ -31,28 +41,55 @@ with the basename of the key.`,
 	RunE: runDownload,
 }
 
-var downloadStore string
-
 func init() {
-	downloadCmd.Flags().StringVar(&downloadStore, "store", "", "Storage backend to use (default from config)")
+	// Create parser with download-specific flags using functional options.
+	downloadParser = flags.NewStandardParser(
+		flags.WithStringFlag("store", "", "", "Storage backend to use (default from config)"),
+		flags.WithEnvVars("store", "ATMOS_PLANFILE_STORE"),
+	)
+
+	// Register flags with the command.
+	downloadParser.RegisterFlags(downloadCmd)
+
+	// Bind to Viper for environment variable support.
+	if err := downloadParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Add to parent command.
+	PlanfileCmd.AddCommand(downloadCmd)
+}
+
+// parseDownloadOptions parses command flags into DownloadOptions.
+func parseDownloadOptions(cmd *cobra.Command, v *viper.Viper, args []string) *DownloadOptions {
+	key := args[0]
+	outputPath := getOutputPath(args)
+
+	return &DownloadOptions{
+		BaseOptions: parseBaseOptions(cmd, v),
+		Key:         key,
+		OutputPath:  outputPath,
+	}
 }
 
 func runDownload(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "planfile.runDownload")()
 
-	key := args[0]
-	outputPath := getOutputPath(args)
-
-	// Get global flags from Viper (includes base-path, config, config-path, profile).
+	// Bind flags to Viper for proper precedence.
 	v := viper.GetViper()
-	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	if err := downloadParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
+	// Parse options.
+	opts := parseDownloadOptions(cmd, v, args)
 
 	// Build ConfigAndStacksInfo from global flags to honor config selection flags.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{
-		AtmosBasePath:           globalFlags.BasePath,
-		AtmosConfigFilesFromArg: globalFlags.Config,
-		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
-		ProfilesFromArg:         globalFlags.Profile,
+		AtmosBasePath:           opts.BasePath,
+		AtmosConfigFilesFromArg: opts.Config,
+		AtmosConfigDirsFromArg:  opts.ConfigPath,
+		ProfilesFromArg:         opts.Profile,
 	}
 
 	// Load atmos configuration.
@@ -62,7 +99,7 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get the storage configuration.
-	storeOpts, err := getStoreOptions(&atmosConfig, downloadStore)
+	storeOpts, err := getStoreOptions(&atmosConfig, opts.Store)
 	if err != nil {
 		return err
 	}
@@ -74,12 +111,12 @@ func runDownload(cmd *cobra.Command, args []string) error {
 	}
 
 	// Download and write to file.
-	metadata, err := downloadToFile(store, key, outputPath)
+	metadata, err := downloadToFile(store, opts.Key, opts.OutputPath)
 	if err != nil {
 		return err
 	}
 
-	printDownloadSuccess(store.Name(), key, outputPath, metadata)
+	printDownloadSuccess(store.Name(), opts.Key, opts.OutputPath, metadata)
 	return nil
 }
 
