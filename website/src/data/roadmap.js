@@ -61,7 +61,7 @@ export const roadmapConfig = {
       title: 'Cloud Authentication',
       tagline: 'One identity layer for all clouds',
       description: 'Unified authentication across AWS, Azure, and GCP. SSO, OIDC, SAML, and keyring backends—all in one place. Zero local config required.',
-      benefits: 'One command replaces aws-vault, saml2aws, gcloud auth, and azure login. Credentials are managed consistently across all providers.',
+      benefits: 'One command replaces aws-vault, saml2aws, gcloud auth, and azure login. Credentials are managed consistently across all providers. Works identically in CI and locally.',
       status: 'shipped',
       quarter: 'q3-2025',
       docs: '/cli/configuration/auth/providers',
