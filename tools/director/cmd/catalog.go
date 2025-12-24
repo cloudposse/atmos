@@ -39,12 +39,13 @@ var (
 func listCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List scenes and categories",
-		Long:  `List demo scenes and categories defined in scenes.yaml.`,
+		Short: "List scenes, categories, and tags",
+		Long:  `List demo scenes, categories, and tags defined in scenes.yaml.`,
 	}
 
 	cmd.AddCommand(listScenesSubCmd())
 	cmd.AddCommand(listCategoriesCmd())
+	cmd.AddCommand(listTagsCmd())
 
 	return cmd
 }
@@ -316,6 +317,86 @@ director render --category terraform --force
 
 			fmt.Fprintln(os.Stdout)
 			fmt.Fprintln(os.Stdout, labelStyle.Render("Use 'director render --category <name>' to render all scenes in a category"))
+
+			return nil
+		},
+	}
+}
+
+// listTagsCmd lists available scene tags.
+func listTagsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "tags",
+		Short: "List available scene tags",
+		Long: `List all tags used by scenes in scenes.yaml.
+
+Tags are used to group related scenes for rendering. Use the tag name with
+'director render --tag <name>' to render all scenes with that tag.`,
+		Example: `
+# List all tags
+director list tags
+
+# Then render all scenes with a tag
+director render --tag version --force
+`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			demosDir, err := findDemosDir()
+			if err != nil {
+				return err
+			}
+
+			scenesFile := filepath.Join(demosDir, "scenes.yaml")
+			scenesList, err := scene.LoadScenes(scenesFile)
+			if err != nil {
+				return fmt.Errorf("failed to load scenes: %w", err)
+			}
+
+			// Collect tags with scene counts.
+			tags := make(map[string]int)
+			enabledByTag := make(map[string]int)
+
+			for _, sc := range scenesList.Scenes {
+				for _, t := range sc.Tags {
+					tags[t]++
+					if sc.Enabled {
+						enabledByTag[t]++
+					}
+				}
+			}
+
+			// Print header.
+			fmt.Fprint(os.Stdout, headerStyle.Render("Scene Tags"))
+			fmt.Fprintln(os.Stdout)
+			fmt.Fprintln(os.Stdout)
+
+			// Sort tags alphabetically.
+			var tagNames []string
+			for t := range tags {
+				tagNames = append(tagNames, t)
+			}
+			// Sort with "featured" first, then alphabetically.
+			sortedTags := make([]string, 0, len(tagNames))
+			for _, t := range tagNames {
+				if t == "featured" {
+					sortedTags = append([]string{t}, sortedTags...)
+				} else {
+					sortedTags = append(sortedTags, t)
+				}
+			}
+
+			// Print tags.
+			for _, t := range sortedTags {
+				count := tags[t]
+				enabled := enabledByTag[t]
+
+				tagStyled := tagStyle.Render(t)
+				countStr := countStyle.Render(fmt.Sprintf("(%d scenes, %d enabled)", count, enabled))
+
+				fmt.Fprintf(os.Stdout, "  %s  %s\n", tagStyled, countStr)
+			}
+
+			fmt.Fprintln(os.Stdout)
+			fmt.Fprintln(os.Stdout, labelStyle.Render("Use 'director render --tag <name>' to render all scenes with a tag"))
 
 			return nil
 		},

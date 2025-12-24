@@ -1,6 +1,7 @@
 # list scene - Show configured identities and providers
 Output auth-list.gif
 Output auth-list.mp4
+Output auth-list.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -24,10 +25,10 @@ Sleep 1s
 
 Type "# Show identity tree (default view)"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos auth list"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
@@ -36,13 +37,16 @@ Screenshot auth-list.png
 
 Type "# Table format for quick overview"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos auth list --format table"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 Type "# Multiple output formats available"
 Enter
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

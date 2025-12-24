@@ -1,6 +1,7 @@
 # workflow-run scene - Complex deployments as simple YAML
 Output workflow-run.gif
 Output workflow-run.mp4
+Output workflow-run.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -18,27 +19,30 @@ Show
 Require atmos
 
 # Scene starts
-Type "# See available workflows"
+Type "# Run a workflow by name - Atmos finds it automatically"
 Enter
-Sleep 500ms
+Sleep 2s
 
-Type "cat workflows/deploy.yaml"
-Sleep 500ms
+Type "atmos workflow deploy"
+Sleep 2s
 Enter
-Sleep 3s
+Sleep 4s
 
 # Capture screenshot
 Screenshot workflow-run.png
 
-Type "# Run the deployment workflow"
+Type "# Or explicitly select the workflow file"
 Enter
-Sleep 500ms
+Sleep 2s
 
-Type "atmos workflow deploy -f workflows/deploy.yaml"
-Sleep 500ms
+Type "atmos workflow deploy -f networking"
+Sleep 2s
 Enter
 Sleep 4s
 
-Type "# Complex deployments become simple YAML"
+Type "# Complex deployments become simple commands"
 Enter
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

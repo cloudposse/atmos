@@ -1,6 +1,7 @@
 # login scene - Authenticate with cloud providers
 Output auth-login.gif
 Output auth-login.mp4
+Output auth-login.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -24,10 +25,10 @@ Sleep 1s
 
 Type "# Check current authentication status"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos auth status"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
@@ -36,13 +37,16 @@ Screenshot auth-login.png
 
 Type "# Login to AWS, Azure, or other providers"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos auth login"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 Type "# Credentials cached for subsequent commands"
 Enter
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

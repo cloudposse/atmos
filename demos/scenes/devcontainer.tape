@@ -1,9 +1,10 @@
 # devcontainer scene - Isolated development environments
-Output dx-devcontainer.gif
-Output dx-devcontainer.mp4
+Output devcontainer.gif
+Output devcontainer.mp4
+Output devcontainer.svg
 
 # VHS Configuration
-Source ../../scenes/_theme.tape
+Source _theme.tape
 Set Width 1400
 Set Height 800
 
@@ -20,26 +21,26 @@ Require atmos
 # Scene starts
 Type "# Isolated development environments with devcontainers"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "# List available devcontainers"
 Enter
 Sleep 300ms
 
 Type "atmos devcontainer list"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 2s
 
 # Capture screenshot
-Screenshot dx-devcontainer.png
+Screenshot devcontainer.png
 
 Type "# Start a devcontainer"
 Enter
 Sleep 300ms
 
 Type "atmos devcontainer start default"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
@@ -48,7 +49,7 @@ Enter
 Sleep 300ms
 
 Type "atmos devcontainer attach default"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 2s
 
@@ -57,10 +58,14 @@ Enter
 Sleep 300ms
 
 Type "atmos devcontainer shell default"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 2s
 
 Type "# Reproducible environments - no more 'works on my machine'"
 Enter
 Sleep 1s
+
+
+# Hold final frame
+Sleep 10s

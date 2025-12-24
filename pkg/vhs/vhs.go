@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -16,6 +17,24 @@ func CheckInstalled() error {
 
 	if _, err := exec.LookPath("vhs"); err != nil {
 		return fmt.Errorf("%w (install: brew install vhs)", errUtils.ErrVHSNotFound)
+	}
+	return nil
+}
+
+// CheckSVGSupport verifies that the installed VHS supports SVG output.
+// SVG support is indicated by the presence of the --no-svg-opt flag in help.
+func CheckSVGSupport() error {
+	defer perf.Track(nil, "vhs.CheckSVGSupport")()
+
+	cmd := exec.Command("vhs", "--help")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to check VHS SVG support: %w", err)
+	}
+
+	// SVG support is indicated by the --no-svg-opt flag (available in agentstation/vhs fork).
+	if !strings.Contains(string(output), "--no-svg-opt") {
+		return fmt.Errorf("%w (install: brew install agentstation/tap/vhs)", errUtils.ErrVHSSVGNotSupported)
 	}
 	return nil
 }

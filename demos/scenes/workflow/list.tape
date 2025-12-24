@@ -1,6 +1,7 @@
 # workflow-list scene - Discover available workflows
 Output workflow-list.gif
 Output workflow-list.mp4
+Output workflow-list.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -18,27 +19,30 @@ Show
 Require atmos
 
 # Scene starts
-Type "# See all available workflows"
-Enter
-Sleep 1s
-
-Type "ls workflows/"
-Sleep 500ms
+Type "# List all available workflows"
 Enter
 Sleep 2s
 
-Type "# View workflow definitions"
+Type "atmos list workflows"
+Sleep 2s
 Enter
-Sleep 500ms
-
-Type "cat workflows/validate.yaml"
-Sleep 500ms
-Enter
-Sleep 3s
+Sleep 2s
 
 # Capture screenshot
 Screenshot workflow-list.png
 
+Type "# View a workflow definition"
+Enter
+Sleep 2s
+
+Type "cat workflows/deploy.yaml"
+Sleep 2s
+Enter
+Sleep 3s
+
 Type "# Self-documenting automation"
 Enter
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

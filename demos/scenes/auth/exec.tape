@@ -1,6 +1,7 @@
 # exec-auth scene - Execute commands with team credentials
 Output auth-exec.gif
 Output auth-exec.mp4
+Output auth-exec.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -24,10 +25,10 @@ Sleep 1s
 
 Type "# Run any command with assumed role"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos auth exec -- aws sts get-caller-identity"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
@@ -36,13 +37,16 @@ Screenshot auth-exec.png
 
 Type "# Access cloud resources securely"
 Enter
-Sleep 500ms
+Sleep 2s
 
 Type "atmos auth exec -- kubectl get pods"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 Type "# Unified credential management"
 Enter
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

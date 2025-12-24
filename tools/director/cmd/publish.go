@@ -18,7 +18,8 @@ import (
 
 // runPublish is the shared publish logic that can be called from both the publish command
 // and the render command (when --publish flag is used).
-func runPublish(ctx context.Context, c *cobra.Command, demosDir string, sceneNames []string, force bool) error {
+// formatFilter limits which formats to publish (nil means all formats).
+func runPublish(ctx context.Context, c *cobra.Command, demosDir string, sceneNames []string, force bool, formatFilter []string) error {
 	// Load .env file if it exists (check current dir first, then demos dir).
 	// Silently ignore if not present in either location.
 	_ = godotenv.Load() // Current directory
@@ -148,9 +149,21 @@ func runPublish(ctx context.Context, c *cobra.Command, demosDir string, sceneNam
 
 	// Publish each scene's outputs.
 	for sceneName, sc := range scenesToPublish {
+		// Get category for hierarchical path structure.
+		category := sc.GetCategory()
+		if category == "" {
+			fmt.Printf("⊘ %s (skipped - no gallery.category configured)\n", sceneName)
+			continue
+		}
+
 		// Process each output format.
 		// Output files are named after the scene name, not the tape filename.
 		for _, format := range sc.Outputs {
+			// Skip format if not in filter (when filter is set).
+			if len(formatFilter) > 0 && !containsFormat(formatFilter, format) {
+				continue
+			}
+
 			outputFile := filepath.Join(cacheDir, fmt.Sprintf("%s.%s", sceneName, format))
 
 			// Check if file exists.
@@ -182,7 +195,7 @@ func runPublish(ctx context.Context, c *cobra.Command, demosDir string, sceneNam
 				backendName = "R2"
 			} else {
 				// No backend supports this format - provide helpful message.
-				if format == "gif" || format == "png" {
+				if format == "gif" || format == "png" || format == "svg" {
 					fmt.Printf("⊘ %s.%s (skipped - requires R2 backend, see .env)\n", sceneName, format)
 				} else {
 					fmt.Printf("⊘ %s.%s (no backend supports this format)\n", sceneName, format)
@@ -190,10 +203,10 @@ func runPublish(ctx context.Context, c *cobra.Command, demosDir string, sceneNam
 				continue
 			}
 
-			// Build remote path with hierarchical structure.
+			// Build remote path with hierarchical structure: {category}/{scene-name}.{format}
 			// For R2: prefix (demos/) will be added by backend's buildKey()
-			// For Stream: Used as metadata name (demos/terraform-plan.mp4)
-			remotePath := fmt.Sprintf("demos/%s.%s", sceneName, format)
+			// For Stream: Used as metadata name
+			remotePath := fmt.Sprintf("%s/%s.%s", category, sceneName, format)
 
 			// Build human-readable title from scene description or name.
 			// This is displayed in Cloudflare Stream dashboard.
@@ -248,6 +261,45 @@ func runPublish(ctx context.Context, c *cobra.Command, demosDir string, sceneNam
 			}
 			uploadedFiles = append(uploadedFiles, publicURL)
 			fmt.Printf("✓ %s.%s → %s (%s)\n", sceneName, format, publicURL, backendName)
+		}
+
+		// Upload MP3 audio file if scene has audio config and R2 is available.
+		if sc.Audio != nil && sc.Audio.Source != "" && r2Backend != nil {
+			audioFile := filepath.Join(demosDir, sc.Audio.Source)
+
+			// Check if audio file exists.
+			if _, err := os.Stat(audioFile); err == nil {
+				// Check if MP3 needs publishing.
+				needsPublish, err := cache.NeedsPublish(sceneName, audioFile, force)
+				if err != nil {
+					return fmt.Errorf("failed to check publish status for %s: %w", audioFile, err)
+				}
+
+				if needsPublish {
+					// Build remote path: {category}/{scene-name}.mp3
+					remotePath := fmt.Sprintf("%s/%s.mp3", category, sceneName)
+					title := fmt.Sprintf("%s audio", sceneName)
+
+					publicURL := r2Backend.GetPublicURL(remotePath)
+
+					if err := r2Backend.Upload(ctx, audioFile, remotePath, title); err != nil {
+						return fmt.Errorf("failed to upload audio %s to R2: %w", audioFile, err)
+					}
+
+					// Update cache for audio file.
+					if err := cache.UpdatePublish(sceneName, audioFile, publicURL, nil); err != nil {
+						return fmt.Errorf("failed to update cache for audio %s: %w", audioFile, err)
+					}
+
+					uploaded++
+					uploadedToR2++
+					uploadedFiles = append(uploadedFiles, publicURL)
+					fmt.Printf("✓ %s.mp3 → %s (R2)\n", sceneName, publicURL)
+				} else {
+					skipped++
+					fmt.Printf("⊘ %s.mp3 (unchanged, skipped)\n", sceneName)
+				}
+			}
 		}
 	}
 
@@ -341,7 +393,7 @@ director publish --dry-run
 				return runPublishDryRun(ctx, c, demosDir, args, force)
 			}
 
-			return runPublish(ctx, c, demosDir, args, force)
+			return runPublish(ctx, c, demosDir, args, force, nil)
 		},
 	}
 
@@ -428,6 +480,13 @@ func runPublishDryRun(ctx context.Context, c *cobra.Command, demosDir string, sc
 
 	var wouldUpload int
 	for sceneName, sc := range scenesToPublish {
+		// Get category for hierarchical path structure.
+		category := sc.GetCategory()
+		if category == "" {
+			fmt.Printf("⊘ %s (would skip - no gallery.category configured)\n", sceneName)
+			continue
+		}
+
 		for _, format := range sc.Outputs {
 			outputFile := filepath.Join(cacheDir, fmt.Sprintf("%s.%s", sceneName, format))
 
@@ -455,13 +514,40 @@ func runPublishDryRun(ctx context.Context, c *cobra.Command, demosDir string, sc
 				continue
 			}
 
-			remotePath := fmt.Sprintf("demos/%s.%s", sceneName, format)
+			remotePath := fmt.Sprintf("%s/%s.%s", category, sceneName, format)
 			publicURL := selectedBackend.GetPublicURL(remotePath)
 			fmt.Printf("⊙ %s.%s → %s (%s, dry run)\n", sceneName, format, publicURL, backendName)
 			wouldUpload++
+		}
+
+		// Check MP3 audio file for dry run.
+		if sc.Audio != nil && sc.Audio.Source != "" && r2Backend != nil {
+			audioFile := filepath.Join(demosDir, sc.Audio.Source)
+
+			if _, err := os.Stat(audioFile); err == nil {
+				needsPublish, _ := cache.NeedsPublish(sceneName, audioFile, force)
+				if needsPublish {
+					remotePath := fmt.Sprintf("%s/%s.mp3", category, sceneName)
+					publicURL := r2Backend.GetPublicURL(remotePath)
+					fmt.Printf("⊙ %s.mp3 → %s (R2, dry run)\n", sceneName, publicURL)
+					wouldUpload++
+				} else {
+					fmt.Printf("⊘ %s.mp3 (unchanged, would skip)\n", sceneName)
+				}
+			}
 		}
 	}
 
 	fmt.Printf("\nDry run complete: would upload %d files\n", wouldUpload)
 	return nil
+}
+
+// containsFormat checks if the filter contains the given format.
+func containsFormat(filter []string, format string) bool {
+	for _, f := range filter {
+		if f == format {
+			return true
+		}
+	}
+	return false
 }

@@ -4,6 +4,12 @@
     {
       "name": "demo-stacks-describe",
       "description": "Describe stacks in demo-stacks example",
+      "tags": [
+        "describe"
+      ],
+      "category": "demo-stacks",
+      "title": "Describe Stacks",
+      "order": 1,
       "formats": {
         "mp4": {
           "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/53310f69d6e862dea67988b7bda4ea75/watch",
@@ -21,6 +27,12 @@
     {
       "name": "demo-stacks-component",
       "description": "Describe component configuration across environments",
+      "tags": [
+        "describe"
+      ],
+      "category": "demo-stacks",
+      "title": "Describe Component",
+      "order": 2,
       "formats": {
         "mp4": {
           "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5427b0dcbffac66486f2f951558e0c19/watch",
@@ -38,6 +50,12 @@
     {
       "name": "demo-stacks-validate",
       "description": "Validate stack and component configurations",
+      "tags": [
+        "validate"
+      ],
+      "category": "demo-stacks",
+      "title": "Validate Stacks",
+      "order": 3,
       "formats": {
         "mp4": {
           "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/725a68782fd7f7e71c6ddd33081b0e58/watch",
@@ -55,6 +73,12 @@
     {
       "name": "demo-stacks-terraform-plan",
       "description": "Run terraform plan with demo-stacks",
+      "tags": [
+        "terraform"
+      ],
+      "category": "demo-stacks",
+      "title": "Terraform Plan",
+      "order": 4,
       "formats": {
         "mp4": {
           "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/1cda1c60ced3fd2ce382b8c0eac99c72/watch",
@@ -72,6 +96,12 @@
     {
       "name": "demo-stacks-list",
       "description": "List stacks and components",
+      "tags": [
+        "list"
+      ],
+      "category": "demo-stacks",
+      "title": "List Stacks",
+      "order": 5,
       "formats": {
         "mp4": {
           "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/d978592bef730a46918edae8811f65cc/watch",
@@ -90,28 +120,20 @@
       "name": "terraform-plan",
       "description": "Plan infrastructure changes before deploying",
       "tags": [
-        "featured"
+        "featured",
+        "terraform"
       ],
       "category": "terraform",
       "title": "Terraform Plan",
       "order": 1,
-      "formats": {
-        "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/4a96442a9bb65399e613aa7dc62068a8/watch",
-          "type": "stream",
-          "uid": "4a96442a9bb65399e613aa7dc62068a8",
-          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
-          "all_uids": [
-            "4a96442a9bb65399e613aa7dc62068a8"
-          ],
-          "duration": 7.84,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/4a96442a9bb65399e613aa7dc62068a8/thumbnails/thumbnail.jpg"
-        }
-      }
+      "formats": {}
     },
     {
       "name": "terraform-apply",
       "description": "Apply infrastructure changes with approval",
+      "tags": [
+        "terraform"
+      ],
       "category": "terraform",
       "title": "Terraform Apply",
       "order": 2,
@@ -132,6 +154,10 @@
     {
       "name": "terraform-affected",
       "description": "Find components affected by changes",
+      "tags": [
+        "terraform",
+        "describe"
+      ],
       "category": "terraform",
       "title": "Affected Components",
       "order": 3,
@@ -152,6 +178,9 @@
     {
       "name": "terraform-describe",
       "description": "Describe component configuration",
+      "tags": [
+        "describe"
+      ],
       "category": "terraform",
       "title": "Describe Component",
       "order": 4,
@@ -173,48 +202,40 @@
       "name": "list-stacks",
       "description": "List and explore stacks",
       "tags": [
-        "featured"
+        "featured",
+        "list"
       ],
       "category": "list",
       "title": "List Stacks",
       "order": 1,
-      "formats": {
-        "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/97ced1ffdcc36fe70a0f1d895a7853e4/watch",
-          "type": "stream",
-          "uid": "97ced1ffdcc36fe70a0f1d895a7853e4",
-          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
-          "all_uids": [
-            "97ced1ffdcc36fe70a0f1d895a7853e4"
-          ],
-          "duration": 9.72,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/97ced1ffdcc36fe70a0f1d895a7853e4/thumbnails/thumbnail.jpg?time=8.7s"
-        }
-      }
+      "formats": {}
     },
     {
       "name": "list-components",
       "description": "List available components",
+      "tags": [
+        "list"
+      ],
       "category": "list",
       "title": "List Components",
       "order": 2,
       "formats": {
-        "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/1964c68c8cfa4101d66115b0e649f88c/watch",
-          "type": "stream",
-          "uid": "1964c68c8cfa4101d66115b0e649f88c",
-          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
-          "all_uids": [
-            "1964c68c8cfa4101d66115b0e649f88c"
-          ],
-          "duration": 10.76,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/1964c68c8cfa4101d66115b0e649f88c/thumbnails/thumbnail.jpg?time=9.7s"
+        "mp3": {
+          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/list/list-components.mp3",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/list/list-components.svg",
+          "type": "r2"
         }
       }
     },
     {
       "name": "list-vars",
       "description": "List component vars across stacks",
+      "tags": [
+        "list"
+      ],
       "category": "list",
       "title": "List Vars",
       "order": 3,
@@ -235,6 +256,9 @@
     {
       "name": "workflow-run",
       "description": "Run multi-step workflows",
+      "tags": [
+        "workflow"
+      ],
       "category": "workflows",
       "title": "Run Workflow",
       "order": 1,
@@ -255,6 +279,9 @@
     {
       "name": "workflow-list",
       "description": "List available workflows",
+      "tags": [
+        "workflow"
+      ],
       "category": "workflows",
       "title": "List Workflows",
       "order": 2,
@@ -276,158 +303,132 @@
       "name": "vendor-pull",
       "description": "Pull external components with vendoring",
       "tags": [
-        "featured"
+        "featured",
+        "vendor"
       ],
-      "category": "workflows",
+      "category": "vendor",
       "title": "Vendor Pull",
-      "order": 3,
+      "order": 1,
       "formats": {
-        "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/f37a7440be222b79a8487e965a52643c/watch",
-          "type": "stream",
-          "uid": "f37a7440be222b79a8487e965a52643c",
-          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
-          "all_uids": [
-            "f37a7440be222b79a8487e965a52643c"
-          ],
-          "duration": 10.68,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/f37a7440be222b79a8487e965a52643c/thumbnails/thumbnail.jpg?time=9.6s"
+        "mp3": {
+          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/vendor/vendor-pull.mp3",
+          "type": "r2"
+        },
+        "png": {
+          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/vendor/vendor-pull.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/vendor/vendor-pull.svg",
+          "type": "r2"
         }
       }
     },
     {
-      "name": "dx-custom-commands",
+      "name": "commands",
       "description": "Extend Atmos with custom commands",
+      "tags": [
+        "commands"
+      ],
       "category": "dx",
       "title": "Custom Commands",
       "order": 1,
-      "formats": {
-        "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/41887dc9c610d5e1cb2ba77dc774a1f0/watch",
-          "type": "stream",
-          "uid": "41887dc9c610d5e1cb2ba77dc774a1f0",
-          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
-          "all_uids": [
-            "41887dc9c610d5e1cb2ba77dc774a1f0"
-          ],
-          "duration": 12.72,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/41887dc9c610d5e1cb2ba77dc774a1f0/thumbnails/thumbnail.jpg?time=11.4s"
-        }
-      }
+      "formats": {}
     },
     {
-      "name": "dx-aliases",
+      "name": "aliases",
       "description": "Use shorthand aliases for common commands",
+      "tags": [
+        "aliases"
+      ],
       "category": "dx",
       "title": "Aliases",
       "order": 2,
-      "formats": {
-        "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/b820d495c1713f9ffa25bd893a0a35a8/watch",
-          "type": "stream",
-          "uid": "b820d495c1713f9ffa25bd893a0a35a8",
-          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
-          "all_uids": [
-            "b820d495c1713f9ffa25bd893a0a35a8"
-          ],
-          "duration": 13,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/b820d495c1713f9ffa25bd893a0a35a8/thumbnails/thumbnail.jpg?time=11.7s"
-        }
-      }
+      "formats": {}
     },
     {
-      "name": "dx-version",
+      "name": "version",
       "description": "Check atmos version and updates",
+      "tags": [
+        "version"
+      ],
       "category": "dx",
       "title": "Version Check",
       "order": 3,
-      "formats": {
-        "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/a306ff5f5fb29e201854ae4e9cd77a7f/watch",
-          "type": "stream",
-          "uid": "a306ff5f5fb29e201854ae4e9cd77a7f",
-          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
-          "all_uids": [
-            "a306ff5f5fb29e201854ae4e9cd77a7f"
-          ],
-          "duration": 10.44,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/a306ff5f5fb29e201854ae4e9cd77a7f/thumbnails/thumbnail.jpg?time=9.4s"
-        }
-      }
+      "formats": {}
     },
     {
-      "name": "dx-completion",
+      "name": "completion",
       "description": "Generate shell completion scripts",
+      "tags": [
+        "completion"
+      ],
       "category": "dx",
       "title": "Shell Completion",
       "order": 4,
-      "formats": {
-        "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/e2eec7dc874b61c105871f9d077c3c94/watch",
-          "type": "stream",
-          "uid": "e2eec7dc874b61c105871f9d077c3c94",
-          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
-          "all_uids": [
-            "e2eec7dc874b61c105871f9d077c3c94"
-          ],
-          "duration": 12.72,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/e2eec7dc874b61c105871f9d077c3c94/thumbnails/thumbnail.jpg?time=11.4s"
-        }
-      }
+      "formats": {}
     },
     {
-      "name": "dx-docs",
+      "name": "docs",
       "description": "Access documentation from CLI",
+      "tags": [
+        "docs"
+      ],
       "category": "dx",
       "title": "Documentation",
       "order": 5,
-      "formats": {
-        "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5cf3cf84e45988819ea4c53d55e55014/watch",
-          "type": "stream",
-          "uid": "5cf3cf84e45988819ea4c53d55e55014",
-          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
-          "all_uids": [
-            "5cf3cf84e45988819ea4c53d55e55014"
-          ],
-          "duration": 10.52,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5cf3cf84e45988819ea4c53d55e55014/thumbnails/thumbnail.jpg?time=9.5s"
-        }
-      }
+      "formats": {}
     },
     {
-      "name": "dx-validate",
+      "name": "validate",
       "description": "Validate stack configurations",
+      "tags": [
+        "validate"
+      ],
       "category": "dx",
       "title": "Validate Stacks",
       "order": 6,
-      "formats": {
-        "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/a39f0e130344f9ea134738fabde7adaa/watch",
-          "type": "stream",
-          "uid": "a39f0e130344f9ea134738fabde7adaa",
-          "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
-          "all_uids": [
-            "a39f0e130344f9ea134738fabde7adaa"
-          ],
-          "duration": 11.92,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/a39f0e130344f9ea134738fabde7adaa/thumbnails/thumbnail.jpg?time=10.7s"
-        }
-      }
+      "formats": {}
     },
     {
-      "name": "dx-devcontainer",
+      "name": "devcontainer",
       "description": "Isolated development environments with devcontainers",
+      "tags": [
+        "devcontainer"
+      ],
       "category": "dx",
       "title": "Devcontainers",
       "order": 7,
       "formats": {}
     },
     {
+      "name": "theme",
+      "description": "Configure terminal theme and colors",
+      "tags": [
+        "theme"
+      ],
+      "category": "dx",
+      "title": "Theme",
+      "order": 8,
+      "formats": {}
+    },
+    {
+      "name": "profile",
+      "description": "Manage atmos profiles",
+      "tags": [
+        "profile"
+      ],
+      "category": "dx",
+      "title": "Profile",
+      "order": 9,
+      "formats": {}
+    },
+    {
       "name": "auth-login",
       "description": "Authenticate with cloud providers",
       "tags": [
-        "featured"
+        "featured",
+        "auth"
       ],
       "category": "auth",
       "title": "Login",
@@ -449,6 +450,10 @@
     {
       "name": "auth-terraform",
       "description": "Run terraform with team credentials",
+      "tags": [
+        "auth",
+        "terraform"
+      ],
       "category": "auth",
       "title": "Authenticated Terraform",
       "order": 2,
@@ -469,6 +474,9 @@
     {
       "name": "auth-exec",
       "description": "Execute commands with team credentials",
+      "tags": [
+        "auth"
+      ],
       "category": "auth",
       "title": "Exec with Credentials",
       "order": 3,
@@ -489,6 +497,9 @@
     {
       "name": "auth-console",
       "description": "Open cloud provider console in browser",
+      "tags": [
+        "auth"
+      ],
       "category": "auth",
       "title": "Web Console",
       "order": 4,
@@ -497,6 +508,9 @@
     {
       "name": "auth-shell",
       "description": "Start interactive shell with credentials",
+      "tags": [
+        "auth"
+      ],
       "category": "auth",
       "title": "Authenticated Shell",
       "order": 5,
@@ -506,7 +520,8 @@
       "name": "auth-list",
       "description": "Show configured identities and providers",
       "tags": [
-        "featured"
+        "featured",
+        "auth"
       ],
       "category": "auth",
       "title": "List Identities",
@@ -514,8 +529,33 @@
       "formats": {}
     },
     {
+      "name": "auth-whoami",
+      "description": "Show current authenticated identity",
+      "tags": [
+        "auth"
+      ],
+      "category": "auth",
+      "title": "Who Am I",
+      "order": 7,
+      "formats": {}
+    },
+    {
+      "name": "auth-env",
+      "description": "Export auth credentials as environment variables",
+      "tags": [
+        "auth"
+      ],
+      "category": "auth",
+      "title": "Auth Env",
+      "order": 8,
+      "formats": {}
+    },
+    {
       "name": "config-template-functions",
       "description": "Use template functions in stacks",
+      "tags": [
+        "describe"
+      ],
       "category": "config",
       "title": "Template Functions",
       "order": 1,
@@ -536,6 +576,9 @@
     {
       "name": "config-describe-affected",
       "description": "Find affected components from changes",
+      "tags": [
+        "describe"
+      ],
       "category": "config",
       "title": "Describe Affected",
       "order": 2,
@@ -556,6 +599,9 @@
     {
       "name": "config-validate-stacks",
       "description": "Validate all stack configurations",
+      "tags": [
+        "validate"
+      ],
       "category": "config",
       "title": "Validate Stacks",
       "order": 3,
@@ -574,11 +620,27 @@
       }
     },
     {
+      "name": "flagship-tui",
+      "description": "Interactive Atmos TUI for exploring commands, stacks, and components",
+      "tags": [
+        "featured",
+        "tui"
+      ],
+      "category": "flagship",
+      "title": "Interactive TUI",
+      "order": 1,
+      "formats": {}
+    },
+    {
       "name": "flagship-deploy-workflow",
       "description": "Complete deployment workflow with Atmos",
+      "tags": [
+        "workflow",
+        "terraform"
+      ],
       "category": "flagship",
       "title": "Deploy Workflow",
-      "order": 1,
+      "order": 2,
       "formats": {
         "mp4": {
           "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/47c5ff9e0f5850cbe9eeacc90e335bba/watch",
@@ -596,9 +658,12 @@
     {
       "name": "flagship-onboarding",
       "description": "Getting started with Atmos",
+      "tags": [
+        "about"
+      ],
       "category": "flagship",
       "title": "Getting Started",
-      "order": 2,
+      "order": 3,
       "formats": {
         "mp4": {
           "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/1d1eeb103c2cf1e03b026f09eadc05e4/watch",

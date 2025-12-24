@@ -1,6 +1,7 @@
 # terraform-apply scene - Deploy with one command
 Output terraform-apply.gif
 Output terraform-apply.mp4
+Output terraform-apply.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -24,7 +25,7 @@ Enter
 Sleep 1s
 
 Type "atmos terraform apply vpc -s plat-dev-ue2 --auto-approve"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 4s
 
@@ -36,3 +37,6 @@ Sleep 2s
 Type "# Deploy with one command - no manual steps"
 Enter
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

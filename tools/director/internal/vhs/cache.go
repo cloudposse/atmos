@@ -160,7 +160,8 @@ func (c *CacheMetadata) NeedsRender(sceneName, tapeFile, audioFile string, outpu
 }
 
 // UpdateScene updates the cache for a rendered scene.
-func (c *CacheMetadata) UpdateScene(sceneName, tapeFile, audioFile string, outputs []string) error {
+// duration is the estimated scene duration in seconds (from tape Sleep commands or MP4 metadata).
+func (c *CacheMetadata) UpdateScene(sceneName, tapeFile, audioFile string, outputs []string, duration float64) error {
 	hash, err := CalculateSHA256(tapeFile)
 	if err != nil {
 		return fmt.Errorf("failed to calculate tape hash: %w", err)
@@ -179,6 +180,7 @@ func (c *CacheMetadata) UpdateScene(sceneName, tapeFile, audioFile string, outpu
 		AudioHash:  audioHash,
 		RenderedAt: time.Now(),
 		Outputs:    outputs,
+		Duration:   duration,
 	}
 
 	return nil

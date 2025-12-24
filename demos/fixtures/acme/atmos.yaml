@@ -20,6 +20,18 @@ stacks:
     - "**/_defaults.yaml"
   name_pattern: "{tenant}-{stage}-{environment}"
   name_template: "{{ .vars.tenant }}-{{ .vars.stage }}-{{ .vars.environment }}"
+  list:
+    columns:
+      - name: "Stack"
+        value: "{{ .stack }}"
+      - name: "Namespace"
+        value: "{{ .vars.namespace }}"
+      - name: "Tenant"
+        value: "{{ .vars.tenant }}"
+      - name: "Environment"
+        value: "{{ .vars.environment }}"
+      - name: "Stage"
+        value: "{{ .vars.stage }}"
 
 logs:
   file: "/dev/stderr"

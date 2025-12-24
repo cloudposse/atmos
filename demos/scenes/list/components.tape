@@ -24,7 +24,7 @@ Enter
 Sleep 1s
 
 Type "atmos list components"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 5s
 
@@ -37,7 +37,7 @@ Enter
 Sleep 1s
 
 Type@150ms `atmos list components --query 'select(.kind == "terraform")'`
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 5s
 
@@ -47,7 +47,7 @@ Enter
 Sleep 1s
 
 Type@150ms `atmos list components --query 'select(.locked == true)'`
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 5s
 
@@ -57,6 +57,9 @@ Enter
 Sleep 1s
 
 Type@150ms `atmos list components --query 'select(.stack | test("prod"))' --stack 'plat-*'`
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 5s
+
+# Hold final frame
+Sleep 10s

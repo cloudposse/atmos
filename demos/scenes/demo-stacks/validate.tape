@@ -1,6 +1,7 @@
 # demo-stacks-validate scene - Show validate stacks command
 Output demo-stacks-validate.gif
 Output demo-stacks-validate.mp4
+Output demo-stacks-validate.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -24,7 +25,7 @@ Sleep 300ms
 
 # Execute validate stacks
 Type "atmos validate stacks"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
@@ -38,9 +39,12 @@ Enter
 Sleep 300ms
 
 Type "atmos validate component vpc -s plat-dev-ue2"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 2s
 
 # Cleanup
 Sleep 1s
+
+# Hold final frame
+Sleep 10s

@@ -7,5 +7,6 @@ Set Theme { "name": "Atmos", "black": "#1a1a1a", "red": "#f4005f", "green": "#98
 # Common font and style settings
 Set FontFamily "FiraCode Nerd Font"
 Set FontSize 14
+Set LineHeight 1.2
 Set TypingSpeed 40ms
 Set Padding 10

@@ -59,10 +59,10 @@ func TestComponents(t *testing.T) {
 	for _, comp := range components {
 		assert.Contains(t, comp, "component")
 		assert.Contains(t, comp, "stack")
-		assert.Contains(t, comp, "type")
+		assert.Contains(t, comp, "kind") // terraform, helmfile, packer
 		assert.Contains(t, comp, "enabled")
 		assert.Contains(t, comp, "locked")
-		assert.Contains(t, comp, "component_type")
+		assert.Contains(t, comp, "type") // real, abstract
 	}
 }
 
@@ -117,10 +117,10 @@ func TestComponents_DefaultValues(t *testing.T) {
 	comp := components[0]
 	assert.Equal(t, "vpc", comp["component"])
 	assert.Equal(t, "test-stack", comp["stack"])
-	assert.Equal(t, "terraform", comp["type"])
+	assert.Equal(t, "terraform", comp["kind"]) // terraform, helmfile, packer
 	assert.Equal(t, true, comp["enabled"])
 	assert.Equal(t, false, comp["locked"])
-	assert.Equal(t, "real", comp["component_type"])
+	assert.Equal(t, "real", comp["type"]) // real, abstract
 }
 
 func TestComponentsForStack(t *testing.T) {
@@ -222,7 +222,7 @@ func TestExtractComponentType(t *testing.T) {
 	require.NotNil(t, vpc)
 	assert.Equal(t, "vpc", vpc["component"])
 	assert.Equal(t, "test-stack", vpc["stack"])
-	assert.Equal(t, "terraform", vpc["type"])
+	assert.Equal(t, "terraform", vpc["kind"]) // terraform, helmfile, packer
 	assert.Equal(t, true, vpc["enabled"])
 }
 

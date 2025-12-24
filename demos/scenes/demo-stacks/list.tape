@@ -1,6 +1,7 @@
 # demo-stacks-list scene - Show list commands
 Output demo-stacks-list.gif
 Output demo-stacks-list.mp4
+Output demo-stacks-list.svg
 
 # VHS Configuration
 Source ../../scenes/_theme.tape
@@ -24,7 +25,7 @@ Sleep 300ms
 
 # List stacks
 Type "atmos list stacks"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 2s
 
@@ -37,9 +38,12 @@ Enter
 Sleep 300ms
 
 Type "atmos list components"
-Sleep 500ms
+Sleep 2s
 Enter
 Sleep 3s
 
 # Cleanup
 Sleep 1s
+
+# Hold final frame
+Sleep 10s
