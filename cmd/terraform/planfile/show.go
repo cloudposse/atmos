@@ -16,6 +16,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// showParser handles flag parsing with Viper precedence for the show command.
+var showParser *flags.StandardParser
+
+// ShowOptions contains parsed flags for the show command.
+type ShowOptions struct {
+	BaseOptions
+	Key    string
+	Format string
+}
+
 var showCmd = &cobra.Command{
 	Use:   "show <key>",
 	Short: "Show metadata for a Terraform plan file",
@@ -24,31 +34,54 @@ var showCmd = &cobra.Command{
 	RunE:  runShow,
 }
 
-var (
-	showStore  string
-	showFormat string
-)
-
 func init() {
-	showCmd.Flags().StringVar(&showStore, "store", "", "Storage backend to use (default from config)")
-	showCmd.Flags().StringVar(&showFormat, "format", "yaml", "Output format: json, yaml")
+	// Create parser with show-specific flags using functional options.
+	showParser = flags.NewStandardParser(
+		flags.WithStringFlag("store", "", "", "Storage backend to use (default from config)"),
+		flags.WithStringFlag("format", "", "yaml", "Output format: json, yaml"),
+		flags.WithEnvVars("store", "ATMOS_PLANFILE_STORE"),
+		flags.WithEnvVars("format", "ATMOS_PLANFILE_SHOW_FORMAT"),
+	)
+
+	// Register flags with the command.
+	showParser.RegisterFlags(showCmd)
+
+	// Bind to Viper for environment variable support.
+	if err := showParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Add to parent command.
+	PlanfileCmd.AddCommand(showCmd)
+}
+
+// parseShowOptions parses command flags into ShowOptions.
+func parseShowOptions(cmd *cobra.Command, v *viper.Viper, args []string) *ShowOptions {
+	return &ShowOptions{
+		BaseOptions: parseBaseOptions(cmd, v),
+		Key:         args[0],
+		Format:      v.GetString("format"),
+	}
 }
 
 func runShow(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "planfile.runShow")()
 
-	key := args[0]
-
-	// Get global flags from Viper (includes base-path, config, config-path, profile).
+	// Bind flags to Viper for proper precedence.
 	v := viper.GetViper()
-	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	if err := showParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
+	// Parse options.
+	opts := parseShowOptions(cmd, v, args)
 
 	// Build ConfigAndStacksInfo from global flags to honor config selection flags.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{
-		AtmosBasePath:           globalFlags.BasePath,
-		AtmosConfigFilesFromArg: globalFlags.Config,
-		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
-		ProfilesFromArg:         globalFlags.Profile,
+		AtmosBasePath:           opts.BasePath,
+		AtmosConfigFilesFromArg: opts.Config,
+		AtmosConfigDirsFromArg:  opts.ConfigPath,
+		ProfilesFromArg:         opts.Profile,
 	}
 
 	// Load atmos configuration.
@@ -58,7 +91,7 @@ func runShow(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get the storage configuration.
-	storeOpts, err := getStoreOptions(&atmosConfig, showStore)
+	storeOpts, err := getStoreOptions(&atmosConfig, opts.Store)
 	if err != nil {
 		return err
 	}
@@ -71,12 +104,12 @@ func runShow(cmd *cobra.Command, args []string) error {
 
 	// Get metadata.
 	ctx := context.Background()
-	metadata, err := store.GetMetadata(ctx, key)
+	metadata, err := store.GetMetadata(ctx, opts.Key)
 	if err != nil {
 		return err
 	}
 
-	return formatShowOutput(key, store.Name(), metadata, showFormat)
+	return formatShowOutput(opts.Key, store.Name(), metadata, opts.Format)
 }
 
 // formatShowOutput formats and outputs the planfile metadata in the specified format.
