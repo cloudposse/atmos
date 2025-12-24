@@ -135,3 +135,4 @@ TESTABILITY_CHANGES_SUMMARY.md
 reply_to_*.sh
 *.ansi
 .claude-plan.md
+.claude/plans/
