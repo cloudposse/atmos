@@ -1734,19 +1734,16 @@
 
 .drawerLinks {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
   margin-bottom: 1.5rem;
 }
 
 .drawerLinkButton {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1rem;
-  background: rgba(30, 91, 184, 0.1);
+  gap: 0.35rem;
   color: #1e5bb8;
-  border-radius: 8px;
   text-decoration: none;
   font-size: 0.9rem;
   font-weight: 500;
@@ -1754,35 +1751,31 @@
 }
 
 .drawerLinkButton:hover {
-  background: rgba(30, 91, 184, 0.15);
-  text-decoration: none;
+  text-decoration: underline;
 }
 
 :global(html[data-theme='dark']) .drawerLinkButton {
-  background: rgba(83, 140, 233, 0.15);
   color: #538ce9;
 }
 
 :global(html[data-theme='dark']) .drawerLinkButton:hover {
-  background: rgba(83, 140, 233, 0.25);
+  text-decoration: underline;
 }
 
 .drawerLinkButtonDocs {
-  background: rgba(56, 161, 105, 0.1);
   color: #38a169;
 }
 
 .drawerLinkButtonDocs:hover {
-  background: rgba(56, 161, 105, 0.15);
+  text-decoration: underline;
 }
 
 :global(html[data-theme='dark']) .drawerLinkButtonDocs {
-  background: rgba(104, 211, 145, 0.15);
   color: #68d391;
 }
 
 :global(html[data-theme='dark']) .drawerLinkButtonDocs:hover {
-  background: rgba(104, 211, 145, 0.25);
+  text-decoration: underline;
 }
 
 .drawerMeta {
