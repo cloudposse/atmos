@@ -15,8 +15,7 @@ dev/terraform step=1: authentication failed
 ```
 
 This error provides no visibility into:
-- What command was being executed
-- The identity configuration being used
+- The identity being authenticated
 - The current profile (or lack thereof)
 - Actionable steps to resolve the issue
 
@@ -24,7 +23,7 @@ This error provides no visibility into:
 
 1. Provide rich, contextual error messages for all auth-related failures
 2. Use the standard ErrorBuilder pattern consistently across auth code
-3. Include identity configuration, profile info, and actionable hints
+3. Include profile info and actionable hints
 4. Cover authentication failures, credential cache issues, and configuration validation errors
 
 ## Non-Goals
@@ -59,63 +58,30 @@ This PRD covers error improvements for three categories:
 
 ### R1: Error Context Requirements
 
-All auth errors MUST include the following context when available:
+All auth errors MUST include the following context using the existing ErrorBuilder `.WithContext()` API:
 
 | Context | Description | Example |
 |---------|-------------|---------|
-| `identity` | Target identity name | `plat-dev/terraform` |
-| `identity_kind` | Identity type | `aws/assume-role` |
+| `profile` | Active profile(s) or "(not set)" | `devops` |
 | `provider` | Provider name | `aws-sso` |
-| `provider_kind` | Provider type | `aws/iam-identity-center` |
-| `profiles` | Active profiles or "(not set)" | `ATMOS_PROFILE=devops` |
-| `chain_step` | Current step in auth chain | `2 of 3` |
+| `identity` | Target identity name | `plat-dev/terraform` |
+| `expiration` | Credential expiration time (when applicable) | `2024-01-15T10:30:00Z` |
 
-### R2: Identity Configuration Display (Verbose Mode Only)
+### R2: Profile Status Display
 
-When `--verbose` flag is set and an identity-related error occurs, the error SHOULD display the full identity configuration in YAML format:
+All auth errors MUST include current profile status in the context table.
 
-```yaml
-Identity configuration:
-  plat-dev/terraform:
-    kind: aws/assume-role
-    via:
-      provider: github-oidc
-    principal:
-      assume_role: arn:aws:iam::344349181611:role/ins-plat-gbl-dev-terraform
-```
-
-**Behavior by mode:**
-
-| Mode | Identity Config Display |
-|------|------------------------|
-| Default (non-verbose) | Not shown - only identity name in context |
-| `--verbose` | Full YAML configuration displayed |
-
-Special cases (verbose mode only):
-- If identity not found in config: Display `Identity configuration: (not found in current profile)`
-- If identity config is partial: Display available fields only
-
-### R3: Profile Status Display
-
-All auth errors MUST include current profile status:
-
+If not set:
 ```text
-Current profile: ATMOS_PROFILE=devops
-```
-
-Or if not set:
-
-```text
-Current profile: (not set)
+| profile | (not set) |
 ```
 
 Multiple profiles should be comma-separated:
-
 ```text
-Current profile: ATMOS_PROFILE=ci,developer
+| profile | ci, developer |
 ```
 
-### R4: Actionable Hints
+### R3: Actionable Hints
 
 Each error type MUST include appropriate hints:
 
@@ -130,7 +96,7 @@ Each error type MUST include appropriate hints:
 | No profile set | "Set ATMOS_PROFILE or use --profile flag" |
 | Circular dependency | "Check identity chain configuration for cycles" |
 
-### R5: ErrorBuilder Migration
+### R4: ErrorBuilder Migration
 
 All auth errors MUST use the ErrorBuilder pattern:
 
@@ -139,14 +105,13 @@ return errUtils.Build(errUtils.ErrAuthenticationFailed).
     WithCause(underlyingErr).
     WithExplanation("Failed to authenticate identity").
     WithHint("Run `atmos auth --help` for troubleshooting").
-    WithContext("identity", identityName).
-    WithContext("identity_kind", identity.Kind()).
+    WithContext("profile", formatProfile(profilesFromArg)).
     WithContext("provider", providerName).
-    WithContext("profiles", formatProfiles(profilesFromArg)).
+    WithContext("identity", identityName).
     Err()
 ```
 
-### R6: Error Categories and Sentinels
+### R5: Error Categories and Sentinels
 
 Use appropriate sentinel errors for each category:
 
@@ -174,7 +139,7 @@ Use appropriate sentinel errors for each category:
 
 ## Example Error Output
 
-### Example 1: Authentication Failed (Default Mode)
+### Example 1: Authentication Failed
 
 ```markdown
 # Authentication Error
@@ -194,52 +159,12 @@ Failed to authenticate via credential chain for identity "plat-dev/terraform".
 
 | Key | Value |
 |-----|-------|
-| identity | plat-dev/terraform |
+| profile | devops |
 | provider | github-oidc |
-| profiles | ATMOS_PROFILE=devops |
-| chain_step | 1 of 2 |
-```
-
-### Example 2: Authentication Failed (Verbose Mode)
-
-With `--verbose` flag, the identity configuration is included:
-
-```markdown
-# Authentication Error
-
-**Error:** authentication failed
-
-## Explanation
-
-Failed to authenticate via credential chain for identity "plat-dev/terraform".
-
-## Identity Configuration
-
-```yaml
-plat-dev/terraform:
-  kind: aws/assume-role
-  via:
-    provider: github-oidc
-  principal:
-    assume_role: arn:aws:iam::344349181611:role/ins-plat-gbl-dev-terraform
-```
-
-## Hints
-
-💡 Run `atmos auth --help` for troubleshooting
-💡 Check that the GitHub OIDC provider is correctly configured
-
-## Context
-
-| Key | Value |
-|-----|-------|
 | identity | plat-dev/terraform |
-| provider | github-oidc |
-| profiles | ATMOS_PROFILE=devops |
-| chain_step | 1 of 2 |
 ```
 
-### Example 3: Credentials Expired (No Profile)
+### Example 2: Credentials Expired (No Profile)
 
 ```markdown
 # Authentication Error
@@ -259,13 +184,13 @@ Cached credentials for identity "core-auto/terraform" have expired.
 
 | Key | Value |
 |-----|-------|
-| identity | core-auto/terraform |
+| profile | (not set) |
 | provider | aws-sso |
-| profiles | (not set) |
+| identity | core-auto/terraform |
 | expiration | 2024-01-15T10:30:00Z |
 ```
 
-### Example 4: Identity Not Found in Profile
+### Example 3: Identity Not Found in Profile
 
 ```markdown
 # Authentication Error
@@ -286,9 +211,9 @@ Identity "plat-sandbox/terraform" not found in the current configuration.
 
 | Key | Value |
 |-----|-------|
+| profile | github-plan |
+| provider | (not set) |
 | identity | plat-sandbox/terraform |
-| profiles | ATMOS_PROFILE=github-plan |
-| available_identities | plat-dev/terraform, plat-prod/terraform, core-auto/terraform |
 ```
 
 ## Implementation Notes
@@ -298,39 +223,14 @@ Identity "plat-sandbox/terraform" not found in the current configuration.
 Create helper functions for consistent formatting:
 
 ```go
-// FormatProfiles formats profile information for error display.
-func FormatProfiles(profiles []string) string {
+// FormatProfile formats profile information for error display.
+func FormatProfile(profiles []string) string {
     if len(profiles) == 0 {
         return "(not set)"
     }
-    return "ATMOS_PROFILE=" + strings.Join(profiles, ",")
-}
-
-// FormatIdentityConfig formats identity config as YAML for error display.
-// Only called when verbose mode is enabled.
-func FormatIdentityConfig(identity types.Identity) string {
-    // Marshal identity to YAML format
-}
-
-// FormatIdentityNotFound returns placeholder for missing identity.
-func FormatIdentityNotFound() string {
-    return "(not found in current profile)"
-}
-
-// IsVerbose checks if verbose mode is enabled via --verbose flag or config.
-func IsVerbose(atmosConfig *schema.AtmosConfiguration) bool {
-    return atmosConfig != nil && atmosConfig.Logs.Level == "trace"
+    return strings.Join(profiles, ", ")
 }
 ```
-
-### Verbose Mode Detection
-
-The `--verbose` flag maps to the existing verbose/trace logging configuration in atmos. Identity configuration details are only included when:
-
-1. `--verbose` flag is passed on the command line, OR
-2. `logs.level: trace` is set in `atmos.yaml`
-
-This aligns with the existing ErrorBuilder behavior where the `## Context` table is already shown only in verbose mode.
 
 ### Files to Modify
 
@@ -349,7 +249,6 @@ This aligns with the existing ErrorBuilder behavior where the `## Context` table
 1. Unit tests for each error type with expected context
 2. Test that `errors.Is()` works correctly with wrapped errors
 3. Test profile formatting (set, not set, multiple)
-4. Test identity config formatting (found, not found, partial)
 
 ## Success Criteria
 
