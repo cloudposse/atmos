@@ -97,6 +97,10 @@ func SetAuthContext(params *SetAuthContextParams) error {
 		SubscriptionID:  azureCreds.SubscriptionID,
 		TenantID:        azureCreds.TenantID,
 		Location:        location,
+		// OIDC-specific fields for Terraform ARM_USE_OIDC support.
+		UseOIDC:       azureCreds.IsServicePrincipal,
+		ClientID:      azureCreds.ClientID,
+		TokenFilePath: azureCreds.TokenFilePath,
 	}
 
 	log.Debug("Set Azure auth context",
@@ -166,11 +170,15 @@ func SetEnvironmentVariables(authContext *schema.AuthContext, stackInfo *schema.
 	}
 
 	// Use shared PrepareEnvironment helper to get properly configured environment.
+	// Pass OIDC fields from auth context for Terraform ARM_USE_OIDC support.
 	environMap = PrepareEnvironment(PrepareEnvironmentConfig{
 		Environ:        environMap,
 		SubscriptionID: azureAuth.SubscriptionID,
 		TenantID:       azureAuth.TenantID,
 		Location:       azureAuth.Location,
+		UseOIDC:        azureAuth.UseOIDC,
+		ClientID:       azureAuth.ClientID,
+		TokenFilePath:  azureAuth.TokenFilePath,
 	})
 
 	// Replace ComponentEnvSection with prepared environment.
@@ -202,7 +210,12 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID stri
 	username, err := extractUsernameFromToken(azureCreds.AccessToken)
 	if err != nil {
 		log.Debug("Failed to extract username from token, using fallback", "error", err)
-		username = "user@unknown" // Fallback username.
+		// For service principal, use client ID as username.
+		if azureCreds.IsServicePrincipal && azureCreds.ClientID != "" {
+			username = azureCreds.ClientID
+		} else {
+			username = "user@unknown" // Fallback username.
+		}
 	}
 
 	// Get home directory.
@@ -231,15 +244,26 @@ func UpdateAzureCLIFiles(creds types.ICredentials, tenantID, subscriptionID stri
 		KeyVaultExpiration: keyVaultExpiration,
 		UserOID:            userOID,
 		TenantID:           tenantID,
+		ClientID:           azureCreds.ClientID,
+		IsServicePrincipal: azureCreds.IsServicePrincipal,
 	}); err != nil {
 		log.Debug("Failed to update MSAL cache", "error", err)
 		// Continue to try azureProfile update.
 	}
 
 	// Update azureProfile.json.
-	if err := updateAzureProfile(home, username, tenantID, subscriptionID); err != nil {
+	if err := updateAzureProfile(home, username, tenantID, subscriptionID, azureCreds.IsServicePrincipal); err != nil {
 		log.Debug("Failed to update Azure profile", "error", err)
 		// Non-fatal.
+	}
+
+	// For service principal auth, also update service_principal_entries.json.
+	// This allows Azure CLI commands to work with OIDC tokens during the CI workflow.
+	if azureCreds.IsServicePrincipal && azureCreds.ClientID != "" && azureCreds.FederatedToken != "" {
+		if err := updateServicePrincipalEntries(home, azureCreds.ClientID, tenantID, azureCreds.FederatedToken); err != nil {
+			log.Debug("Failed to update service principal entries", "error", err)
+			// Non-fatal.
+		}
 	}
 
 	return nil
@@ -256,6 +280,15 @@ type msalCacheUpdate struct {
 	KeyVaultExpiration string
 	UserOID            string
 	TenantID           string
+	// ClientID is set for service principal authentication (OIDC).
+	ClientID string
+	// IsServicePrincipal indicates this is service principal auth.
+	// Service principal tokens use a different MSAL cache format:
+	// - home_account_id is empty (cache key starts with "-")
+	// - No Account entry is created
+	// - AppMetadata entry is added
+	// Reference: https://github.com/AzureAD/microsoft-authentication-library-for-python
+	IsServicePrincipal bool
 }
 
 // updateMSALCache updates the Azure CLI MSAL token cache.
@@ -269,8 +302,15 @@ func updateMSALCache(params *msalCacheUpdate) error {
 	}
 
 	// Initialize cache sections and populate with tokens.
-	accessTokenSection, accountSection := initializeCacheSections(cache)
-	addAccountAndTokens(accessTokenSection, accountSection, params)
+	sections := initializeCacheSections(cache)
+
+	if params.IsServicePrincipal {
+		// Service principal uses different MSAL cache format.
+		addServicePrincipalTokens(sections, params)
+	} else {
+		// User authentication uses standard format.
+		addUserAccountAndTokens(sections, params)
+	}
 
 	// Write updated cache.
 	updatedData, err := json.MarshalIndent(cache, "", "  ")
@@ -281,23 +321,42 @@ func updateMSALCache(params *msalCacheUpdate) error {
 	return writeMSALCacheToFile(msalCachePath, updatedData)
 }
 
-// initializeCacheSections ensures AccessToken and Account sections exist in cache.
-func initializeCacheSections(cache map[string]interface{}) (accessTokenSection, accountSection map[string]interface{}) {
+// msalCacheSections holds all MSAL cache sections.
+type msalCacheSections struct {
+	accessToken map[string]interface{}
+	account     map[string]interface{}
+	appMetadata map[string]interface{}
+}
+
+// initializeCacheSections ensures all MSAL cache sections exist.
+func initializeCacheSections(cache map[string]interface{}) *msalCacheSections {
+	sections := &msalCacheSections{}
+
 	// Ensure AccessToken section exists.
-	accessTokenSection, ok := cache[FieldAccessToken].(map[string]interface{})
-	if !ok {
-		accessTokenSection = make(map[string]interface{})
-		cache[FieldAccessToken] = accessTokenSection
+	if at, ok := cache[FieldAccessToken].(map[string]interface{}); ok {
+		sections.accessToken = at
+	} else {
+		sections.accessToken = make(map[string]interface{})
+		cache[FieldAccessToken] = sections.accessToken
 	}
 
 	// Ensure Account section exists.
-	accountSection, ok = cache["Account"].(map[string]interface{})
-	if !ok {
-		accountSection = make(map[string]interface{})
-		cache["Account"] = accountSection
+	if acc, ok := cache["Account"].(map[string]interface{}); ok {
+		sections.account = acc
+	} else {
+		sections.account = make(map[string]interface{})
+		cache["Account"] = sections.account
 	}
 
-	return accessTokenSection, accountSection
+	// Ensure AppMetadata section exists (used for service principal auth).
+	if am, ok := cache["AppMetadata"].(map[string]interface{}); ok {
+		sections.appMetadata = am
+	} else {
+		sections.appMetadata = make(map[string]interface{})
+		cache["AppMetadata"] = sections.appMetadata
+	}
+
+	return sections
 }
 
 // msalIdentifiers holds common MSAL cache identifiers.
@@ -308,9 +367,9 @@ type msalIdentifiers struct {
 	realm         string
 }
 
-// addAccountAndTokens adds account entry and all tokens to MSAL cache.
-func addAccountAndTokens(accessTokenSection, accountSection map[string]interface{}, params *msalCacheUpdate) {
-	// Create common MSAL identifiers.
+// addUserAccountAndTokens adds account entry and tokens for user authentication.
+func addUserAccountAndTokens(sections *msalCacheSections, params *msalCacheUpdate) {
+	// Create common MSAL identifiers for user auth.
 	ids := msalIdentifiers{
 		homeAccountID: fmt.Sprintf("%s.%s", params.UserOID, params.TenantID),
 		environment:   "login.microsoftonline.com",
@@ -329,13 +388,13 @@ func addAccountAndTokens(accessTokenSection, accountSection map[string]interface
 		"authority_type":   "MSSTS",
 		"account_source":   "device_code",
 	}
-	accountSection[accountKey] = accountEntry
+	sections.account[accountKey] = accountEntry
 
 	// Add management API token.
-	addTokenToCache(accessTokenSection, &tokenCacheParams{
+	addTokenToCache(sections.accessToken, &tokenCacheParams{
 		Token:         params.AccessToken,
 		Expiration:    params.Expiration,
-		Scope:         "https://management.azure.com/.default https://management.azure.com/user_impersonation",
+		Scope:         "https://management.azure.com/.default",
 		HomeAccountID: ids.homeAccountID,
 		Environment:   ids.environment,
 		ClientID:      ids.clientID,
@@ -344,7 +403,53 @@ func addAccountAndTokens(accessTokenSection, accountSection map[string]interface
 	})
 
 	// Add optional Graph and KeyVault tokens.
-	addOptionalTokens(accessTokenSection, params, ids)
+	addOptionalTokens(sections.accessToken, params, ids)
+}
+
+// addServicePrincipalTokens adds tokens for service principal (OIDC) authentication.
+// Service principal auth uses a different MSAL cache format per the MSAL Python reference:
+// - home_account_id is empty (cache key starts with "-")
+// - No Account entry is created
+// - AppMetadata entry is added
+// Reference: https://github.com/AzureAD/microsoft-authentication-library-for-python/blob/dev/msal/token_cache.py
+func addServicePrincipalTokens(sections *msalCacheSections, params *msalCacheUpdate) {
+	environment := "login.microsoftonline.com"
+
+	// For service principal, home_account_id is empty.
+	// This results in cache keys starting with "-".
+	ids := msalIdentifiers{
+		homeAccountID: "", // Empty for service principal.
+		environment:   environment,
+		clientID:      params.ClientID,
+		realm:         params.TenantID,
+	}
+
+	// Add AppMetadata entry (required for service principal).
+	// Format: appmetadata-{environment}-{client_id} (lowercase).
+	appMetadataKey := fmt.Sprintf("appmetadata-%s-%s", strings.ToLower(environment), strings.ToLower(params.ClientID))
+	sections.appMetadata[appMetadataKey] = map[string]interface{}{
+		FieldEnvironment: environment,
+		"client_id":      params.ClientID,
+		"family_id":      "", // Empty for non-FOCI apps.
+	}
+	log.Debug("Added AppMetadata entry to MSAL cache", LogFieldKey, appMetadataKey)
+
+	// Add management API token.
+	// For service principal, the cache key format is:
+	// -{environment}-accesstoken-{client_id}-{realm}-{target} (all lowercase).
+	addTokenToCache(sections.accessToken, &tokenCacheParams{
+		Token:         params.AccessToken,
+		Expiration:    params.Expiration,
+		Scope:         "https://management.azure.com/.default",
+		HomeAccountID: ids.homeAccountID,
+		Environment:   ids.environment,
+		ClientID:      ids.clientID,
+		Realm:         ids.realm,
+		APIName:       "Management API",
+	})
+
+	// Add optional Graph and KeyVault tokens.
+	addOptionalTokens(sections.accessToken, params, ids)
 }
 
 // addOptionalTokens adds Graph and KeyVault tokens if available.
@@ -474,7 +579,7 @@ func addTokenToCache(accessTokenSection map[string]interface{}, params *tokenCac
 }
 
 // updateAzureProfile updates the azureProfile.json file with the current subscription.
-func updateAzureProfile(home, username, tenantID, subscriptionID string) error {
+func updateAzureProfile(home, username, tenantID, subscriptionID string, isServicePrincipal bool) error {
 	profilePath := filepath.Join(home, ".azure", "azureProfile.json")
 	azureDir := filepath.Dir(profilePath)
 	if err := os.MkdirAll(azureDir, DirPermissions); err != nil {
@@ -502,7 +607,7 @@ func updateAzureProfile(home, username, tenantID, subscriptionID string) error {
 	}
 
 	// Update subscriptions in profile.
-	profile["subscriptions"] = UpdateSubscriptionsInProfile(profile, username, tenantID, subscriptionID)
+	profile["subscriptions"] = UpdateSubscriptionsInProfile(profile, username, tenantID, subscriptionID, isServicePrincipal)
 
 	// Write updated profile.
 	updatedData, err := json.MarshalIndent(profile, "", "  ")
@@ -532,11 +637,17 @@ func updateAzureProfile(home, username, tenantID, subscriptionID string) error {
 
 // UpdateSubscriptionsInProfile updates the subscriptions array in an Azure profile.
 // It sets the specified subscription as default and marks all others as not default.
-func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tenantID, subscriptionID string) []interface{} {
+func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tenantID, subscriptionID string, isServicePrincipal bool) []interface{} {
 	// Get subscriptions array.
 	subscriptionsRaw, ok := profile["subscriptions"].([]interface{})
 	if !ok {
 		subscriptionsRaw = []interface{}{}
+	}
+
+	// Determine user type based on authentication method.
+	userType := "user"
+	if isServicePrincipal {
+		userType = "servicePrincipal"
 	}
 
 	// Find or create subscription entry.
@@ -555,7 +666,7 @@ func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tena
 			sub["state"] = "Enabled"
 			sub[FieldUser] = map[string]interface{}{
 				"name": username,
-				"type": "user",
+				"type": userType,
 			}
 			sub["environmentName"] = "AzureCloud"
 			subscriptionsRaw[i] = sub
@@ -578,13 +689,99 @@ func UpdateSubscriptionsInProfile(profile map[string]interface{}, username, tena
 			"environmentName": "AzureCloud",
 			FieldUser: map[string]interface{}{
 				"name": username,
-				"type": "user",
+				"type": userType,
 			},
 		}
 		subscriptionsRaw = append(subscriptionsRaw, newSub)
 	}
 
 	return subscriptionsRaw
+}
+
+// updateServicePrincipalEntries updates the service_principal_entries.json file for Azure CLI.
+// This enables Azure CLI commands to work with OIDC tokens during CI workflows.
+// Field names match Azure CLI's ServicePrincipalStore: client_id, tenant, client_assertion.
+// Reference: https://github.com/Azure/azure-cli/blob/main/src/azure-cli-core/azure/cli/core/auth/identity.py
+func updateServicePrincipalEntries(home, clientID, tenantID, federatedToken string) error {
+	entriesPath := filepath.Join(home, ".azure", "service_principal_entries.json")
+	azureDir := filepath.Dir(entriesPath)
+	if err := os.MkdirAll(azureDir, DirPermissions); err != nil {
+		return fmt.Errorf("failed to create .azure directory: %w", err)
+	}
+
+	// Load existing entries or create new array.
+	var entries []map[string]interface{}
+	data, err := os.ReadFile(entriesPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to read service principal entries: %w", err)
+		}
+		entries = []map[string]interface{}{}
+	} else {
+		// Strip UTF-8 BOM if present.
+		data = stripBOM(data)
+
+		if err := json.Unmarshal(data, &entries); err != nil {
+			// If file is corrupted, start fresh.
+			log.Debug("Failed to parse service principal entries, creating new file", "error", err)
+			entries = []map[string]interface{}{}
+		}
+	}
+
+	// Find or create entry for this service principal.
+	// Azure CLI looks up entries by client_id field.
+	var found bool
+	for i, entry := range entries {
+		if cid, ok := entry["client_id"].(string); ok && cid == clientID {
+			// Update existing entry.
+			entries[i] = createServicePrincipalEntry(clientID, tenantID, federatedToken)
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		// Add new entry.
+		entries = append(entries, createServicePrincipalEntry(clientID, tenantID, federatedToken))
+	}
+
+	// Write updated entries.
+	updatedData, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal service principal entries: %w", err)
+	}
+
+	// Acquire file lock to prevent concurrent writes.
+	lockPath := entriesPath + ".lock"
+	lock, err := AcquireFileLock(lockPath)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if unlockErr := lock.Unlock(); unlockErr != nil {
+			log.Debug("Failed to unlock service principal entries file", "lock_file", lockPath, "error", unlockErr)
+		}
+	}()
+
+	if err := os.WriteFile(entriesPath, updatedData, FilePermissions); err != nil {
+		return fmt.Errorf("failed to write service principal entries: %w", err)
+	}
+
+	log.Debug("Updated Azure CLI service principal entries", "path", entriesPath, "client_id", clientID)
+	return nil
+}
+
+// createServicePrincipalEntry creates a service principal entry for OIDC authentication.
+// Field names match Azure CLI's ServicePrincipalStore constants:
+// - _CLIENT_ID = 'client_id'
+// - _TENANT = 'tenant'
+// - _CLIENT_ASSERTION = 'client_assertion'
+func createServicePrincipalEntry(clientID, tenantID, federatedToken string) map[string]interface{} {
+	return map[string]interface{}{
+		"client_id":        clientID,
+		"tenant":           tenantID,
+		"client_assertion": federatedToken,
+	}
 }
 
 // extractOIDFromToken extracts the user OID from a JWT token.
