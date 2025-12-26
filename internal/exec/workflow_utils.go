@@ -189,9 +189,17 @@ func ExecuteWorkflow(
 }
 
 // FormatList formats a list of strings into a markdown bullet list.
-// This is an alias to workflow.FormatList for backward compatibility.
 func FormatList(items []string) string {
-	return workflow.FormatList(items)
+	if len(items) == 0 {
+		return ""
+	}
+	var result strings.Builder
+	for _, item := range items {
+		result.WriteString("- ")
+		result.WriteString(item)
+		result.WriteString("\n")
+	}
+	return result.String()
 }
 
 // ExecuteDescribeWorkflows executes `atmos describe workflows` command.

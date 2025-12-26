@@ -715,6 +715,135 @@ var (
 	ErrProcessorCycleDetected    = errors.New("dependency cycle detected")
 	ErrNilProcessor              = errors.New("nil processor")
 	ErrProcessorNilContext       = errors.New("nil context")
+
+	// Template errors.
+	ErrTemplateEvaluation = errors.New("template evaluation failed")
+
+	// Config errors.
+	ErrInvalidConfig = errors.New("invalid configuration")
+
+	// Locals errors.
+	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
+	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
+
+	// Git errors (additional).
+	ErrGitRefNotFound = errors.New("git reference not found on local filesystem")
+
+	// AWS errors (additional).
+	ErrAwsGetCallerIdentity = errors.New("failed to get AWS caller identity")
+
+	// Container runtime errors.
+	ErrContainerRuntimeOperation = errors.New("container runtime operation failed")
+	ErrRuntimeNotAvailable       = errors.New("container runtime not available")
+
+	// PTY errors.
+	ErrPTYNotSupported = errors.New("PTY not supported on this platform")
+
+	// Backend provisioner errors.
+	ErrBackendNotFound      = errors.New("backend configuration not found")
+	ErrBackendTypeRequired  = errors.New("backend_type is required")
+	ErrCreateNotImplemented = errors.New("create not implemented for backend type")
+	ErrApplyBucketDefaults  = errors.New("failed to apply bucket defaults")
+	ErrBucketRequired       = errors.New("backend.bucket is required")
+	ErrRegionRequired       = errors.New("backend.region is required")
+	ErrCheckBucketExist     = errors.New("failed to check bucket existence")
+	ErrCreateBucket         = errors.New("failed to create bucket")
+	ErrS3BucketAccessDenied = errors.New("access denied to S3 bucket")
+
+	// Container errors (additional).
+	ErrContainerNotFound = errors.New("container not found")
+
+	// S3 backend management errors.
+	ErrEnableVersioning  = errors.New("failed to enable versioning")
+	ErrEnableEncryption  = errors.New("failed to enable encryption")
+	ErrBlockPublicAccess = errors.New("failed to block public access")
+	ErrApplyTags         = errors.New("failed to apply tags")
+	ErrForceRequired     = errors.New("--force flag required for backend deletion")
+	ErrDeleteObjects     = errors.New("failed to delete objects from bucket")
+	ErrDeleteBucket      = errors.New("failed to delete bucket")
+	ErrListObjects       = errors.New("failed to list bucket objects")
+
+	// Path resolution errors.
+	ErrPathNotInComponentDir      = errors.New("path is not within Atmos component directories")
+	ErrPathResolutionFailed       = errors.New("failed to resolve component from path")
+	ErrPathIsComponentBase        = errors.New("must specify a component directory, not the base directory")
+	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
+
+	// Provisioner errors.
+	ErrDeleteNotImplemented = errors.New("delete not implemented for backend type")
+	ErrProvisionerFailed    = errors.New("provisioner failed")
+
+	// Component errors.
+	ErrComponentTypeMismatch     = errors.New("path component type does not match command")
+	ErrComponentNotInStack       = errors.New("component not found in stack configuration")
+	ErrAmbiguousComponentPath    = errors.New("ambiguous component path")
+	ErrInvalidStackConfiguration = errors.New("invalid stack configuration")
+
+	// List/discovery errors.
+	ErrNoStacksFound = errors.New("no stacks found")
+
+	// Git errors (additional).
+	ErrNotInGitRepository = errors.New("not inside a git repository")
+
+	// Version errors.
+	ErrVersionConstraint        = errors.New("version constraint not satisfied")
+	ErrInvalidVersionConstraint = errors.New("invalid version constraint")
+
+	// Workflow errors.
+	ErrWorkflowNoSteps         = errors.New("workflow has no steps defined")
+	ErrInvalidWorkflowStepType = errors.New("invalid workflow step type")
+	ErrInvalidFromStep         = errors.New("invalid from-step flag")
+	ErrWorkflowStepFailed      = errors.New("workflow step execution failed")
+	ErrWorkflowNoWorkflow      = errors.New("no workflow found")
+	ErrWorkflowFileNotFound    = errors.New("workflow file not found")
+	ErrInvalidWorkflowManifest = errors.New("invalid workflow manifest")
+
+	// Terraform component errors.
+	ErrFailedToLoadTerraformComponent = errors.New("failed to load terraform component")
+
+	// Auth errors.
+	ErrAuthProviderNotAvailable = errors.New("auth provider is not available")
+
+	// Devcontainer errors.
+	ErrDevcontainerNotFound      = errors.New("devcontainer not found")
+	ErrInvalidDevcontainerConfig = errors.New("invalid devcontainer configuration")
+	ErrContainerRunning          = errors.New("container is running")
+	ErrDevcontainerNameEmpty     = errors.New("devcontainer name cannot be empty")
+	ErrDevcontainerNameInvalid   = errors.New("devcontainer name contains invalid characters")
+	ErrDevcontainerNameTooLong   = errors.New("devcontainer name is too long")
+
+	// Config errors (additional).
+	ErrMissingAtmosConfig = errors.New("atmos configuration not found or invalid")
+
+	// Interactive mode errors.
+	ErrInteractiveModeNotAvailable = errors.New("interactive mode not available")
+	ErrNoOptionsAvailable          = errors.New("no options available")
+	ErrInteractiveNotAvailable     = errors.New("interactive mode not available")
+
+	// Locals errors (additional).
+	ErrLocalsInvalidType = errors.New("locals must be of type map[string]any")
+
+	// Terraform backend generation errors.
+	ErrMissingTerraformBackendType        = errors.New("missing backend type for the component")
+	ErrMissingTerraformBackendConfig      = errors.New("missing backend config for the component")
+	ErrMissingTerraformWorkspaceKeyPrefix = errors.New("missing 'workspace_key_prefix' for the 's3' backend for the component")
+	ErrDeprecatedCmdNotCallable           = errors.New("deprecated: the command is only callable via the terraform generate backends command")
+	ErrBackendSectionMissing              = errors.New("backend section is missing for the component")
+	ErrBackendTypeMissing                 = errors.New("backend_type is missing for the component")
+	ErrBackendConfigEmpty                 = errors.New("backend config is empty for the component")
+	ErrBackendTypeEmptyAfterRender        = errors.New("backend type is empty after rendering for the component")
+
+	// Terraform state errors.
+	ErrTerraformStateNotProvisioned = errors.New("terraform state not provisioned")
+	ErrTerraformOutputNotFound      = errors.New("terraform output not found")
+
+	// Subcommand errors.
+	ErrUnknownSubcommand = errors.New("unknown subcommand")
+
+	// Working directory errors.
+	ErrWorkingDirNotFound     = errors.New("working directory does not exist")
+	ErrWorkingDirAccessFailed = errors.New("failed to access working directory")
+	ErrWorkingDirNotDirectory = errors.New("working directory path is not a directory")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

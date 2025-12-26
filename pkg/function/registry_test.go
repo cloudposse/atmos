@@ -272,7 +272,11 @@ func TestExecutionContext(t *testing.T) {
 		"USER": "testuser",
 	}
 
-	ctx := NewExecutionContext(env, "/work/dir", "config.yaml")
+	ctx := &ExecutionContext{
+		Env:        env,
+		WorkingDir: "/work/dir",
+		SourceFile: "config.yaml",
+	}
 
 	assert.Equal(t, "/home/user", ctx.GetEnv("HOME"))
 	assert.Equal(t, "testuser", ctx.GetEnv("USER"))
