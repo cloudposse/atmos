@@ -35,11 +35,20 @@ Sleep 3s
 # Capture screenshot
 Screenshot aliases.png
 
-Type "# Use 'tp' instead of 'terraform plan'"
+Type "# Use 'ls' instead of 'list stacks'"
 Enter
 Sleep 2s
 
-Type "atmos tp vpc -s plat-dev-ue2"
+Type "atmos ls"
+Sleep 2s
+Enter
+Sleep 3s
+
+Type "# Use 'dc' instead of 'describe component'"
+Enter
+Sleep 1s
+
+Type "atmos dc vpc -s plat-dev-ue2"
 Sleep 2s
 Enter
 Sleep 3s

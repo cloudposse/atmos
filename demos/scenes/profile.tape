@@ -39,12 +39,35 @@ Type "# Show details of a specific profile"
 Enter
 Sleep 300ms
 
-Type "atmos profile show"
+Type "atmos profile show developer"
 Sleep 2s
 Enter
 Sleep 3s
 
-Type "# Switch between environments with profiles"
+Type "# Use profiles with the --profile flag"
+Enter
+Sleep 300ms
+
+Type "atmos list stacks --profile ci"
+Sleep 2s
+Enter
+Sleep 3s
+
+Type "# Or set ATMOS_PROFILE environment variable"
+Enter
+Sleep 300ms
+
+Type "export ATMOS_PROFILE=production"
+Sleep 1s
+Enter
+Sleep 1s
+
+Type "atmos list stacks"
+Sleep 2s
+Enter
+Sleep 3s
+
+Type "# Profiles provide environment-specific config overrides"
 Enter
 Sleep 1s
 

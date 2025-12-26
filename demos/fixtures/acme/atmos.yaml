@@ -46,9 +46,28 @@ aliases:
   dc: describe component
   ls: list stacks
   lc: list components
+  shell: devcontainer shell geodesic
+
+# Devcontainer configurations
+devcontainer:
+  geodesic:
+    settings:
+      runtime: podman
+    spec:
+      - !include .devcontainer/devcontainer.json
 
 # Custom commands for common operations
 commands:
+  - name: show-stack
+    description: "Show stack details including all components"
+    arguments:
+      - name: stack
+        description: "Target stack name"
+        required: true
+    steps:
+      - "echo '=== Stack: {{ .Arguments.stack }} ==='"
+      - "atmos list components -s {{ .Arguments.stack }}"
+
   - name: deploy-stack
     description: "Deploy entire stack (vpc -> cluster -> api)"
     arguments:
