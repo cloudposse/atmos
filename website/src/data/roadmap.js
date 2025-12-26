@@ -190,8 +190,8 @@ export const roadmapConfig = {
       tagline: 'Everything should be discoverable',
       description:
         'As infrastructure grows, teams need to explore what exists—stacks, components, workflows—and newcomers need a way to orient themselves. Intuitive list commands make your entire infrastructure discoverable and queryable at a glance.',
-      progress: 95,
-      status: 'in-progress',
+      progress: 100,
+      status: 'shipped',
       milestones: [
         { label: '`atmos list stacks` to browse all configured stacks', status: 'shipped', quarter: 'q1-2025', docs: '/cli/commands/list/stacks', description: 'List all stacks in your infrastructure with filtering and formatting options.', codeExample: 'atmos list stacks --format json', benefits: 'See all your stacks at a glance. New team members can understand infrastructure scope immediately.' },
         { label: '`atmos list components` to discover available components', status: 'shipped', quarter: 'q1-2025', docs: '/cli/commands/list/components', description: 'Discover all available components across your infrastructure catalog.', codeExample: 'atmos list components', benefits: 'Find available components without digging through directories. See what\'s ready to deploy.' },

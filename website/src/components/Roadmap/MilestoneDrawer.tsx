@@ -81,13 +81,16 @@ export default function MilestoneDrawer({
           <motion.div
             ref={drawerRef}
             className={styles.drawer}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="milestone-drawer-title"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           >
             <div className={styles.drawerHeader}>
-              <h3 className={styles.drawerTitle}>
+              <h3 id="milestone-drawer-title" className={styles.drawerTitle}>
                 {renderInlineMarkdown(milestone.label)}
               </h3>
               <button
