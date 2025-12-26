@@ -89,7 +89,7 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 	}
 
 	// No valid existing credentials - resolve base credentials and generate new session tokens.
-	longLivedCreds, err := i.resolveLongLivedCredentials()
+	longLivedCreds, err := i.resolveLongLivedCredentials(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -108,10 +108,8 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 // resolveLongLivedCredentials returns long-lived credentials with deep merge precedence.
 // Precedence order (per field): YAML config > Keyring store.
 // This allows users to store credentials in keyring but override specific fields (e.g., MFA ARN) in YAML.
-func (i *userIdentity) resolveLongLivedCredentials() (*types.AWSCredentials, error) {
-	// Start with keyring credentials as base (if available).
-	keystoreCreds, keystoreErr := i.credentialsFromStore()
-
+// The context is used to check if interactive prompts are allowed.
+func (i *userIdentity) resolveLongLivedCredentials(ctx context.Context) (*types.AWSCredentials, error) {
 	// Get YAML config values (may be empty or !env that resolved to empty).
 	yamlAccessKeyID, _ := i.config.Credentials["access_key_id"].(string)
 	yamlSecretAccessKey, _ := i.config.Credentials["secret_access_key"].(string)
@@ -133,54 +131,61 @@ func (i *userIdentity) resolveLongLivedCredentials() (*types.AWSCredentials, err
 	}
 
 	// YAML has no credentials, fall back to keyring.
+	return i.resolveCredentialsFromKeyring(ctx, yamlMfaArn)
+}
+
+// resolveCredentialsFromKeyring resolves credentials from keyring with prompting fallback.
+// It validates that keyring contains long-lived credentials (not session tokens).
+func (i *userIdentity) resolveCredentialsFromKeyring(ctx context.Context, yamlMfaArn string) (*types.AWSCredentials, error) {
+	keystoreCreds, keystoreErr := i.credentialsFromStore()
+	allowPrompts := types.AllowPrompts(ctx)
+
+	// No keyring credentials - prompt for new ones if allowed.
 	if keystoreErr != nil {
-		// If credential prompting is available, prompt for new credentials.
-		if PromptCredentialsFunc != nil {
-			log.Debug("No credentials found, prompting for new credentials", logKeyIdentity, i.name)
-			newCreds, promptErr := PromptCredentialsFunc(i.name, yamlMfaArn)
-			if promptErr != nil {
-				return nil, fmt.Errorf("%w: AWS User credentials not found for identity %q and prompting failed: %w", errUtils.ErrAwsUserNotConfigured, i.name, promptErr)
-			}
-			log.Debug("New credentials provided via prompt", logKeyIdentity, i.name)
-			return newCreds, nil
-		}
-		return nil, fmt.Errorf("%w: AWS User credentials not found for identity %q. Please configure credentials by running: atmos auth user configure --identity %s", errUtils.ErrAwsUserNotConfigured, i.name, i.name)
+		return i.promptOrError(allowPrompts, yamlMfaArn, "No credentials found",
+			fmt.Sprintf("AWS User credentials not found for identity %q", i.name),
+			fmt.Sprintf("atmos auth user configure --identity %s", i.name))
 	}
 
-	// Validate that keyring credentials are long-lived (not session credentials).
-	// Session credentials have a SessionToken and cannot be used with GetSessionToken API.
+	// Validate keyring has long-lived credentials (not session tokens).
 	if keystoreCreds.SessionToken != "" {
 		log.Warn("Keyring contains session credentials instead of long-lived credentials",
-			logKeyIdentity, i.name,
-			"hint", "This can happen if session credentials were accidentally stored. Re-configuring will fix this.")
-		// Treat as if credentials don't exist - prompt for new long-lived credentials.
-		if PromptCredentialsFunc != nil {
-			log.Debug("Prompting for long-lived credentials to replace session credentials", logKeyIdentity, i.name)
-			newCreds, promptErr := PromptCredentialsFunc(i.name, yamlMfaArn)
-			if promptErr != nil {
-				return nil, fmt.Errorf("%w: keyring contains session credentials (not long-lived) for identity %q and prompting failed: %w", errUtils.ErrAwsUserNotConfigured, i.name, promptErr)
-			}
-			return newCreds, nil
-		}
-		return nil, fmt.Errorf("%w: keyring contains session credentials (not long-lived) for identity %q. Please reconfigure with: atmos auth user configure --identity %s", errUtils.ErrAwsUserNotConfigured, i.name, i.name)
+			logKeyIdentity, i.name, "hint", "Re-configuring will fix this.")
+		return i.promptOrError(allowPrompts, yamlMfaArn, "Replacing session credentials",
+			fmt.Sprintf("keyring contains session credentials (not long-lived) for identity %q", i.name),
+			fmt.Sprintf("atmos auth user configure --identity %s", i.name))
 	}
 
-	// Deep merge: Start with keyring, override with non-empty YAML fields.
+	return i.mergeCredentialsWithYAML(keystoreCreds, yamlMfaArn), nil
+}
+
+// promptOrError prompts for credentials if allowed, otherwise returns an error with guidance.
+func (i *userIdentity) promptOrError(allowPrompts bool, yamlMfaArn, logReason, errContext, configureCmd string) (*types.AWSCredentials, error) {
+	if PromptCredentialsFunc != nil && allowPrompts {
+		log.Debug(logReason+", prompting for new credentials", logKeyIdentity, i.name)
+		newCreds, promptErr := PromptCredentialsFunc(i.name, yamlMfaArn)
+		if promptErr != nil {
+			return nil, fmt.Errorf("%w: %s and prompting failed: %w", errUtils.ErrAwsUserNotConfigured, errContext, promptErr)
+		}
+		return newCreds, nil
+	}
+	return nil, fmt.Errorf("%w: %s. Please configure credentials by running: %s", errUtils.ErrAwsUserNotConfigured, errContext, configureCmd)
+}
+
+// mergeCredentialsWithYAML creates credentials from keyring with YAML overrides.
+func (i *userIdentity) mergeCredentialsWithYAML(keystoreCreds *types.AWSCredentials, yamlMfaArn string) *types.AWSCredentials {
 	result := &types.AWSCredentials{
 		AccessKeyID:     keystoreCreds.AccessKeyID,
 		SecretAccessKey: keystoreCreds.SecretAccessKey,
-		MfaArn:          keystoreCreds.MfaArn,          // Start with keyring MFA ARN.
-		SessionDuration: keystoreCreds.SessionDuration, // Preserve session duration from keyring.
+		MfaArn:          keystoreCreds.MfaArn,
+		SessionDuration: keystoreCreds.SessionDuration,
 	}
-
-	// Override MFA ARN from YAML if present (allows version-controlled MFA config).
 	if yamlMfaArn != "" {
 		log.Debug("Overriding MFA ARN from YAML config", logKeyIdentity, i.name, "yaml_mfa_arn", yamlMfaArn, "keyring_mfa_arn", keystoreCreds.MfaArn)
 		result.MfaArn = yamlMfaArn
 	}
-
 	log.Debug("Using credentials from keyring", logKeyIdentity, i.name, "mfa_source", map[bool]string{true: "yaml", false: "keyring"}[yamlMfaArn != ""])
-	return result, nil
+	return result
 }
 
 // credentialsFromConfig builds AWS credentials from identity config if present.
@@ -299,7 +304,7 @@ func (i *userIdentity) callGetSessionToken(ctx context.Context, longLivedCreds *
 
 // handleSTSErrorWithRetry handles STS errors and optionally retries with new credentials.
 func (i *userIdentity) handleSTSErrorWithRetry(ctx context.Context, err error, longLivedCreds *types.AWSCredentials, region string, isRetry bool) (types.ICredentials, error) {
-	newCreds, stsErr := i.handleSTSError(err, longLivedCreds, isRetry)
+	newCreds, stsErr := i.handleSTSError(ctx, err, longLivedCreds, isRetry)
 	if stsErr != nil {
 		return nil, stsErr
 	}
@@ -341,10 +346,11 @@ func (i *userIdentity) processSTSResult(result *sts.GetSessionTokenOutput, regio
 
 // handleSTSError processes errors from STS API calls and returns appropriate user-friendly errors.
 // It detects specific AWS error codes like InvalidClientTokenId and provides actionable guidance.
+// The ctx parameter is used to check if interactive prompts are allowed.
 // The longLivedCreds parameter allows MFA token re-prompting when the error is MFA-related.
 // The isRetry parameter indicates if this is a retry attempt after credential prompting.
 // Returns: (new credentials if prompting succeeded, error if prompting failed/disabled or on retry).
-func (i *userIdentity) handleSTSError(err error, longLivedCreds *types.AWSCredentials, isRetry bool) (*types.AWSCredentials, error) {
+func (i *userIdentity) handleSTSError(ctx context.Context, err error, longLivedCreds *types.AWSCredentials, isRetry bool) (*types.AWSCredentials, error) {
 	var apiErr smithy.APIError
 	if !errors.As(err, &apiErr) {
 		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
@@ -352,11 +358,11 @@ func (i *userIdentity) handleSTSError(err error, longLivedCreds *types.AWSCreden
 
 	switch apiErr.ErrorCode() {
 	case "InvalidClientTokenId":
-		return i.handleInvalidClientTokenId(apiErr, isRetry)
+		return i.handleInvalidClientTokenId(ctx, apiErr, isRetry)
 	case "ExpiredTokenException":
 		return i.handleExpiredToken(apiErr)
 	case "AccessDenied":
-		return i.handleAccessDenied(apiErr, longLivedCreds, isRetry)
+		return i.handleAccessDenied(ctx, apiErr, longLivedCreds, isRetry)
 	default:
 		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
 	}
@@ -364,16 +370,18 @@ func (i *userIdentity) handleSTSError(err error, longLivedCreds *types.AWSCreden
 
 // handleInvalidClientTokenId handles the case where AWS access keys have been rotated or revoked.
 // It clears stale credentials and optionally prompts for new ones (only on first attempt).
+// The ctx parameter is used to check if interactive prompts are allowed.
 // The isRetry parameter prevents duplicate prompting when the newly-entered credentials also fail.
-func (i *userIdentity) handleInvalidClientTokenId(apiErr smithy.APIError, isRetry bool) (*types.AWSCredentials, error) {
+func (i *userIdentity) handleInvalidClientTokenId(ctx context.Context, apiErr smithy.APIError, isRetry bool) (*types.AWSCredentials, error) {
 	log.Error("AWS credentials are invalid or have been revoked",
 		logKeyIdentity, i.name, logKeyErrorCode, apiErr.ErrorCode(), "suggestion", "reconfigure credentials")
 
 	i.clearStaleCredentials()
 
-	// Only prompt for credentials on the first attempt, not on retry.
+	// Only prompt for credentials on the first attempt, not on retry, and only if prompts are allowed.
 	// If this is a retry, the user already provided credentials that also failed.
-	if PromptCredentialsFunc != nil && !isRetry {
+	allowPrompts := types.AllowPrompts(ctx)
+	if PromptCredentialsFunc != nil && !isRetry && allowPrompts {
 		return i.promptForNewCredentials(apiErr.ErrorCode())
 	}
 
@@ -438,7 +446,8 @@ func (i *userIdentity) handleExpiredToken(apiErr smithy.APIError) (*types.AWSCre
 
 // handleAccessDenied handles the case where the user doesn't have permission to call GetSessionToken.
 // It also detects MFA-related failures and re-prompts for the MFA token.
-func (i *userIdentity) handleAccessDenied(apiErr smithy.APIError, longLivedCreds *types.AWSCredentials, isRetry bool) (*types.AWSCredentials, error) {
+// The ctx parameter is used to check if interactive prompts are allowed.
+func (i *userIdentity) handleAccessDenied(ctx context.Context, apiErr smithy.APIError, longLivedCreds *types.AWSCredentials, isRetry bool) (*types.AWSCredentials, error) {
 	errorMsg := apiErr.ErrorMessage()
 
 	// Check if this is an MFA-related failure (invalid/expired token).
@@ -457,7 +466,9 @@ func (i *userIdentity) handleAccessDenied(apiErr smithy.APIError, longLivedCreds
 		}
 
 		// MFA is configured and we have long-lived credentials - just re-prompt for MFA token.
-		if longLivedCreds != nil && longLivedCreds.MfaArn != "" && promptMfaTokenFunc != nil {
+		// Only prompt if prompts are allowed in this context.
+		allowPrompts := types.AllowPrompts(ctx)
+		if longLivedCreds != nil && longLivedCreds.MfaArn != "" && promptMfaTokenFunc != nil && allowPrompts {
 			log.Warn("MFA token was invalid, prompting for new token", logKeyIdentity, i.name)
 			// Return the same long-lived credentials - the retry will prompt for a new MFA token.
 			return longLivedCreds, nil

@@ -281,6 +281,8 @@ func TestUser_credentialsFromStore(t *testing.T) {
 }
 
 func TestUser_resolveLongLivedCredentials_Order(t *testing.T) {
+	ctx := context.Background()
+
 	// When config has full credentials, prefer those.
 	id, err := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user", Credentials: map[string]any{
 		"access_key_id":     "AKIA",
@@ -288,7 +290,7 @@ func TestUser_resolveLongLivedCredentials_Order(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	ui := id.(*userIdentity)
-	creds, err := ui.resolveLongLivedCredentials()
+	creds, err := ui.resolveLongLivedCredentials(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "AKIA", creds.AccessKeyID)
 
@@ -298,13 +300,14 @@ func TestUser_resolveLongLivedCredentials_Order(t *testing.T) {
 	_ = store.Store("dev2", &types.AWSCredentials{AccessKeyID: "AK2", SecretAccessKey: "SEC2"})
 	id, _ = NewUserIdentity("dev2", &schema.Identity{Kind: "aws/user"})
 	ui = id.(*userIdentity)
-	creds, err = ui.resolveLongLivedCredentials()
+	creds, err = ui.resolveLongLivedCredentials(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "AK2", creds.AccessKeyID)
 }
 
 // TestUser_resolveLongLivedCredentials_DeepMerge validates the deep merge precedence rules.
 func TestUser_resolveLongLivedCredentials_DeepMerge(t *testing.T) {
+	ctx := context.Background()
 	store := atmosCreds.NewCredentialStore()
 
 	tests := []struct {
@@ -431,7 +434,7 @@ func TestUser_resolveLongLivedCredentials_DeepMerge(t *testing.T) {
 			ui := id.(*userIdentity)
 
 			// Resolve credentials.
-			creds, err := ui.resolveLongLivedCredentials()
+			creds, err := ui.resolveLongLivedCredentials(ctx)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -1132,7 +1135,7 @@ func TestUserIdentity_HandleSTSError_InvalidClientTokenId(t *testing.T) {
 	defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
 	// Call handleSTSError (isRetry=false for first attempt, nil longLivedCreds since we're testing InvalidClientTokenId).
-	newCreds, resultErr := userIdent.handleSTSError(mockErr, nil, false)
+	newCreds, resultErr := userIdent.handleSTSError(context.Background(), mockErr, nil, false)
 
 	// Verify: Error should contain the sentinel error.
 	require.Error(t, resultErr)
@@ -1161,7 +1164,7 @@ func TestUserIdentity_HandleSTSError_ExpiredTokenException(t *testing.T) {
 	}
 
 	// Call handleSTSError (isRetry=false for first attempt).
-	newCreds, resultErr := userIdent.handleSTSError(mockErr, nil, false)
+	newCreds, resultErr := userIdent.handleSTSError(context.Background(), mockErr, nil, false)
 
 	// Verify: Error should contain the authentication failed sentinel.
 	require.Error(t, resultErr)
@@ -1186,7 +1189,7 @@ func TestUserIdentity_HandleSTSError_AccessDenied(t *testing.T) {
 	}
 
 	// Call handleSTSError (isRetry=false for first attempt, nil longLivedCreds).
-	newCreds, resultErr := userIdent.handleSTSError(mockErr, nil, false)
+	newCreds, resultErr := userIdent.handleSTSError(context.Background(), mockErr, nil, false)
 
 	// Verify: Error should contain the authentication failed sentinel.
 	require.Error(t, resultErr)
@@ -1208,7 +1211,7 @@ func TestUserIdentity_HandleSTSError_GenericError(t *testing.T) {
 	genericErr := errors.New("network connection failed")
 
 	// Call handleSTSError (isRetry=false for first attempt).
-	newCreds, resultErr := userIdent.handleSTSError(genericErr, nil, false)
+	newCreds, resultErr := userIdent.handleSTSError(context.Background(), genericErr, nil, false)
 
 	// Verify: Error should wrap the original error with ErrAuthenticationFailed.
 	require.Error(t, resultErr)
@@ -1268,7 +1271,7 @@ func TestUserIdentity_HandleSTSError_WithPromptFunc(t *testing.T) {
 	defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
 	// Call handleSTSError (isRetry=false for first attempt, nil longLivedCreds for InvalidClientTokenId).
-	resultCreds, resultErr := userIdent.handleSTSError(mockErr, nil, false)
+	resultCreds, resultErr := userIdent.handleSTSError(context.Background(), mockErr, nil, false)
 
 	// Verify: No error because prompting succeeded.
 	require.NoError(t, resultErr)
@@ -1313,7 +1316,7 @@ func TestUserIdentity_HandleSTSError_PromptFuncFails(t *testing.T) {
 	defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
 	// Call handleSTSError (isRetry=false for first attempt, nil longLivedCreds for InvalidClientTokenId).
-	resultCreds, resultErr := userIdent.handleSTSError(mockErr, nil, false)
+	resultCreds, resultErr := userIdent.handleSTSError(context.Background(), mockErr, nil, false)
 
 	// Verify: Error should be returned when prompting fails.
 	require.Error(t, resultErr)
@@ -1325,6 +1328,7 @@ func TestUserIdentity_HandleSTSError_PromptFuncFails(t *testing.T) {
 
 // TestUser_resolveLongLivedCredentials_SessionDurationPreserved tests that SessionDuration is copied from keyring.
 func TestUser_resolveLongLivedCredentials_SessionDurationPreserved(t *testing.T) {
+	ctx := context.Background()
 	store := atmosCreds.NewCredentialStore()
 
 	// Store credentials with SessionDuration in keyring.
@@ -1351,7 +1355,7 @@ func TestUser_resolveLongLivedCredentials_SessionDurationPreserved(t *testing.T)
 	defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
 	// Resolve credentials.
-	creds, err := userIdent.resolveLongLivedCredentials()
+	creds, err := userIdent.resolveLongLivedCredentials(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, creds)
 
@@ -1364,6 +1368,7 @@ func TestUser_resolveLongLivedCredentials_SessionDurationPreserved(t *testing.T)
 
 // TestUser_resolveLongLivedCredentials_DetectsSessionCredentials tests that session credentials in keyring trigger re-prompt.
 func TestUser_resolveLongLivedCredentials_DetectsSessionCredentials(t *testing.T) {
+	ctx := context.Background()
 	store := atmosCreds.NewCredentialStore()
 
 	// Store session credentials (with SessionToken) in keyring - this is an error state.
@@ -1400,7 +1405,7 @@ func TestUser_resolveLongLivedCredentials_DetectsSessionCredentials(t *testing.T
 		defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
 		// Resolve credentials - should detect session credentials and prompt.
-		creds, err := userIdent.resolveLongLivedCredentials()
+		creds, err := userIdent.resolveLongLivedCredentials(ctx)
 		require.NoError(t, err)
 		require.NotNil(t, creds)
 
@@ -1419,7 +1424,7 @@ func TestUser_resolveLongLivedCredentials_DetectsSessionCredentials(t *testing.T
 		defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
 		// Resolve credentials - should detect session credentials and return error.
-		creds, err := userIdent.resolveLongLivedCredentials()
+		creds, err := userIdent.resolveLongLivedCredentials(ctx)
 		require.Error(t, err)
 		assert.Nil(t, creds)
 		assert.Contains(t, err.Error(), "session credentials")
@@ -1428,6 +1433,8 @@ func TestUser_resolveLongLivedCredentials_DetectsSessionCredentials(t *testing.T
 
 // TestUser_resolveLongLivedCredentials_PromptWhenMissing tests credential prompting when credentials are not found.
 func TestUser_resolveLongLivedCredentials_PromptWhenMissing(t *testing.T) {
+	ctx := context.Background()
+
 	// Create identity with no YAML credentials and no keyring credentials.
 	identity, err := NewUserIdentity("test-prompt-missing", &schema.Identity{
 		Kind:        "aws/user",
@@ -1454,7 +1461,7 @@ func TestUser_resolveLongLivedCredentials_PromptWhenMissing(t *testing.T) {
 	defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
 	// Resolve credentials.
-	creds, err := userIdent.resolveLongLivedCredentials()
+	creds, err := userIdent.resolveLongLivedCredentials(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, creds)
 
@@ -1469,6 +1476,8 @@ func TestUser_resolveLongLivedCredentials_PromptWhenMissing(t *testing.T) {
 
 // TestUser_resolveLongLivedCredentials_ErrorWhenMissingAndNoPrompt tests error when credentials missing and no prompt.
 func TestUser_resolveLongLivedCredentials_ErrorWhenMissingAndNoPrompt(t *testing.T) {
+	ctx := context.Background()
+
 	// Create identity with no YAML credentials and no keyring credentials.
 	identity, err := NewUserIdentity("test-missing-no-prompt", &schema.Identity{
 		Kind:        "aws/user",
@@ -1484,7 +1493,7 @@ func TestUser_resolveLongLivedCredentials_ErrorWhenMissingAndNoPrompt(t *testing
 	defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
 	// Resolve credentials - should fail.
-	creds, err := userIdent.resolveLongLivedCredentials()
+	creds, err := userIdent.resolveLongLivedCredentials(ctx)
 
 	// Verify: Error should be returned.
 	require.Error(t, err)
@@ -1610,6 +1619,8 @@ func TestUserIdentity_HandleExpiredToken(t *testing.T) {
 
 // TestUserIdentity_HandleAccessDenied tests the handleAccessDenied helper directly.
 func TestUserIdentity_HandleAccessDenied(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("non-MFA related AccessDenied", func(t *testing.T) {
 		identity, err := NewUserIdentity("test-denied", &schema.Identity{
 			Kind: "aws/user",
@@ -1624,7 +1635,7 @@ func TestUserIdentity_HandleAccessDenied(t *testing.T) {
 		}
 
 		// Non-MFA related error should return error immediately.
-		creds, err := userIdent.handleAccessDenied(mockErr, nil, false)
+		creds, err := userIdent.handleAccessDenied(ctx, mockErr, nil, false)
 		require.Error(t, err)
 		assert.Nil(t, creds)
 		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
@@ -1650,7 +1661,7 @@ func TestUserIdentity_HandleAccessDenied(t *testing.T) {
 		}
 
 		// MFA failure should return long-lived credentials for retry.
-		creds, err := userIdent.handleAccessDenied(mockErr, longLivedCreds, false)
+		creds, err := userIdent.handleAccessDenied(ctx, mockErr, longLivedCreds, false)
 		require.NoError(t, err)
 		require.NotNil(t, creds)
 		assert.Equal(t, "AKIAEXAMPLE", creds.AccessKeyID)
@@ -1676,7 +1687,7 @@ func TestUserIdentity_HandleAccessDenied(t *testing.T) {
 		}
 
 		// On retry, MFA failure should return error to prevent infinite loop.
-		creds, err := userIdent.handleAccessDenied(mockErr, longLivedCreds, true)
+		creds, err := userIdent.handleAccessDenied(ctx, mockErr, longLivedCreds, true)
 		require.Error(t, err)
 		assert.Nil(t, creds)
 		// Error wraps ErrAuthenticationFailed sentinel. Hints are stored in ErrorBuilder.
@@ -1686,6 +1697,8 @@ func TestUserIdentity_HandleAccessDenied(t *testing.T) {
 
 // TestUserIdentity_HandleInvalidClientTokenId tests the handleInvalidClientTokenId helper directly.
 func TestUserIdentity_HandleInvalidClientTokenId(t *testing.T) {
+	ctx := context.Background()
+
 	t.Run("without prompt function", func(t *testing.T) {
 		identity, err := NewUserIdentity("test-invalid-token-no-prompt", &schema.Identity{
 			Kind: "aws/user",
@@ -1705,7 +1718,7 @@ func TestUserIdentity_HandleInvalidClientTokenId(t *testing.T) {
 		defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
 		// isRetry=false for first attempt.
-		creds, err := userIdent.handleInvalidClientTokenId(mockErr, false)
+		creds, err := userIdent.handleInvalidClientTokenId(ctx, mockErr, false)
 		require.Error(t, err)
 		assert.Nil(t, creds)
 		assert.Contains(t, err.Error(), "credentials are invalid")
@@ -1735,7 +1748,7 @@ func TestUserIdentity_HandleInvalidClientTokenId(t *testing.T) {
 		defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
 		// isRetry=false for first attempt.
-		creds, err := userIdent.handleInvalidClientTokenId(mockErr, false)
+		creds, err := userIdent.handleInvalidClientTokenId(ctx, mockErr, false)
 		require.NoError(t, err)
 		assert.NotNil(t, creds)
 		assert.Equal(t, "NEW_KEY", creds.AccessKeyID)
@@ -1767,7 +1780,7 @@ func TestUserIdentity_HandleInvalidClientTokenId(t *testing.T) {
 		defer func() { PromptCredentialsFunc = originalPromptFunc }()
 
 		// isRetry=true - prompting should be skipped.
-		creds, err := userIdent.handleInvalidClientTokenId(mockErr, true)
+		creds, err := userIdent.handleInvalidClientTokenId(ctx, mockErr, true)
 		require.Error(t, err)
 		assert.Nil(t, creds)
 		assert.False(t, promptCalled, "PromptCredentialsFunc should NOT be called on retry")
