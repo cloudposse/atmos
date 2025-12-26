@@ -24,6 +24,21 @@ export default function MilestoneDrawer({
   onClose,
 }: MilestoneDrawerProps): JSX.Element | null {
   const drawerRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
+
+  // Focus management: save previous focus and focus close button when drawer opens.
+  useEffect(() => {
+    if (isOpen) {
+      previousActiveElement.current = document.activeElement as HTMLElement;
+      // Focus the close button after animation starts.
+      setTimeout(() => closeButtonRef.current?.focus(), 100);
+    } else if (previousActiveElement.current) {
+      // Return focus to triggering element on close.
+      previousActiveElement.current.focus();
+      previousActiveElement.current = null;
+    }
+  }, [isOpen]);
 
   // Close on escape key.
   useEffect(() => {
@@ -94,6 +109,7 @@ export default function MilestoneDrawer({
                 {renderInlineMarkdown(milestone.label)}
               </h3>
               <button
+                ref={closeButtonRef}
                 className={styles.drawerClose}
                 onClick={onClose}
                 aria-label="Close drawer"

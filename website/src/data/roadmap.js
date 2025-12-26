@@ -212,8 +212,8 @@ export const roadmapConfig = {
       tagline: 'Bootstrap systems and create reusable patterns',
       description:
         'Bootstrapping new environments and repeating complex multi-step operations manually is error-prone and time-consuming. Workflows encode these patterns once and execute them reliably across teams and environments.',
-      progress: 60,
-      status: 'in-progress',
+      progress: 100,
+      status: 'shipped',
       milestones: [
         { label: 'New workflow step types (show, sleep, stage, alert, etc.)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/workflows', description: 'Rich step types including message display, timed delays, user prompts, and alert notifications.', category: 'featured', priority: 'high', benefits: 'Build interactive deployment workflows with user confirmations and status updates.' },
         { label: 'New interactive input types for workflow steps', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/workflows', description: 'Typed inputs for workflow steps with validation—strings, numbers, booleans, and selections.', category: 'featured', priority: 'high', benefits: 'Inputs are validated before execution starts. Bad values are caught early, not mid-deployment.' },
@@ -365,8 +365,8 @@ export const roadmapConfig = {
       tagline: 'Every command, every config, cross-linked',
       description:
         'Comprehensive documentation of every `atmos.yaml` section, every CLI command, with cross-linking between commands and their configurations.',
-      progress: 95,
-      status: 'in-progress',
+      progress: 100,
+      status: 'shipped',
       milestones: [
         { label: 'Changelog introduction', status: 'shipped', quarter: 'q1-2025', docs: '/changelog', description: 'Detailed changelogs for every release with feature announcements and migration guides.', category: 'featured', priority: 'high', benefits: 'Know exactly what changed in each release. Plan upgrades with full visibility into breaking changes.' },
         { label: 'Every `atmos.yaml` section documented', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration', description: 'Complete reference for every configuration option in atmos.yaml with examples and defaults.', category: 'featured', priority: 'high', benefits: 'Find the exact option you need without reading source code. Every setting has examples.' },
