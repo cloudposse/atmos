@@ -488,6 +488,8 @@ func TestManager_GetCachedCredentials_ExpiredCredentials(t *testing.T) {
 	}
 
 	mockStore.EXPECT().Retrieve("identity1").Return(expiredCreds, nil)
+	// GetProviderName is called when building error context.
+	mockIdentity.EXPECT().GetProviderName().Return("aws-sso", nil)
 
 	_, err := m.GetCachedCredentials(context.Background(), "identity1")
 	assert.Error(t, err)
