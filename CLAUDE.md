@@ -273,6 +273,14 @@ Brief intro.
 - User-facing: `feature`, `enhancement`, `bugfix`, `dx`, `breaking-change`, `security`, `documentation`, `deprecation`
 - Internal: `core` (for contributor-only changes with zero user impact)
 
+**Roadmap Updates (CI Enforced):**
+- PRs labeled `minor`/`major` MUST also update `website/src/data/roadmap.js`
+- For new features: Add milestone to relevant initiative with `status: 'shipped'`
+- Link to changelog: Add `changelog: 'your-blog-slug'` to the milestone
+- Link to PR: Add `pr: <pr-number>` to the milestone
+- Update initiative `progress` percentage: `(shipped milestones / total milestones) * 100`
+- See `.claude/agents/roadmap.md` for detailed update instructions
+
 Use `no-release` label for docs-only changes.
 
 ### PR Tools
