@@ -683,23 +683,6 @@ var (
 	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
 	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
 	ErrLocalsResolution        = errors.New("failed to resolve local")
-
-	// Dependency errors.
-	ErrUnsupportedDependencyType = errors.New("unsupported dependency type")
-	ErrMissingDependencyField    = errors.New("dependency missing required field")
-	ErrDependencyTargetNotFound  = errors.New("dependency target not found")
-
-	// Terraform --all flag errors.
-	ErrStackRequiredWithAllFlag     = errors.New("stack is required when using --all flag")
-	ErrComponentWithAllFlagConflict = errors.New("component argument can't be used with --all flag")
-
-	// Terraform execution errors.
-	ErrTerraformExecFailed = errors.New("terraform execution failed")
-	ErrDescribeAffected    = errors.New("describe affected failed")
-	ErrDescribeStacks      = errors.New("describe stacks failed")
-	ErrBuildDepGraph       = errors.New("build dependency graph failed")
-	ErrTopologicalOrder    = errors.New("topological sort failed")
-	ErrFormatForLogging    = errors.New("format affected for logging failed")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
