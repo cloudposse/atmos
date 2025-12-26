@@ -66,17 +66,14 @@ func formatContextTable(err error, useColor bool) string {
 		return ""
 	}
 
-	// Parse "component=vpc stack=prod" format into key-value pairs.
+	// Parse "key1=value1 key2=value2" format into key-value pairs.
+	// Values can contain spaces (e.g., "profile=(not set)"), so we use a smarter parser.
 	var rows [][]string
 	for _, layer := range allDetails {
 		for _, detail := range layer.SafeDetails {
 			str := fmt.Sprintf("%v", detail)
-			pairs := strings.Split(str, " ")
-			for _, pair := range pairs {
-				if parts := strings.SplitN(pair, "=", 2); len(parts) == 2 {
-					rows = append(rows, []string{parts[0], parts[1]})
-				}
-			}
+			pairs := parseContextPairs(str)
+			rows = append(rows, pairs...)
 		}
 	}
 
@@ -424,16 +421,15 @@ func formatContextForMarkdown(err error) string {
 		return ""
 	}
 
-	// Parse "component=vpc stack=prod" format into key-value pairs.
+	// Parse "key1=value1 key2=value2" format into key-value pairs.
+	// Values can contain spaces (e.g., "profile=(not set)"), so we use a smarter parser.
 	var rows []string
 	for _, layer := range allDetails {
 		for _, detail := range layer.SafeDetails {
 			str := fmt.Sprintf("%v", detail)
-			pairs := strings.Split(str, " ")
+			pairs := parseContextPairs(str)
 			for _, pair := range pairs {
-				if parts := strings.SplitN(pair, "=", 2); len(parts) == 2 {
-					rows = append(rows, fmt.Sprintf("| %s | %s |", parts[0], parts[1]))
-				}
+				rows = append(rows, fmt.Sprintf("| %s | %s |", pair[0], pair[1]))
 			}
 		}
 	}
@@ -560,4 +556,46 @@ func formatStackTrace(err error, useColor bool) string {
 	// Use cockroachdb/errors format with stack traces.
 	details := fmt.Sprintf("%+v", err)
 	return style.Render(details)
+}
+
+// parseContextPairs parses a context string like "key1=value1 key2=value2" into key-value pairs.
+// Values can contain spaces (e.g., "profile=(not set)"), so we parse by finding the next key=
+// pattern rather than splitting on spaces.
+func parseContextPairs(s string) [][]string {
+	var pairs [][]string
+
+	// Find all positions where a key starts (word followed by =).
+	// Pattern: space or start of string, followed by word characters, followed by =.
+	keyPattern := regexp.MustCompile(`(?:^|\s)([a-zA-Z_][a-zA-Z0-9_]*)=`)
+	matches := keyPattern.FindAllStringSubmatchIndex(s, -1)
+
+	for i, match := range matches {
+		// match[2] and match[3] are the start/end of the captured key group.
+		keyStart := match[2]
+		keyEnd := match[3]
+		key := s[keyStart:keyEnd]
+
+		// Value starts after the = sign.
+		valueStart := keyEnd + 1 // skip the =
+
+		// Value ends at the start of the next key or end of string.
+		var valueEnd int
+		if i+1 < len(matches) {
+			// Next match's full match starts at match[0], but we want the space before.
+			valueEnd = matches[i+1][0]
+			// Trim trailing space from value.
+			for valueEnd > valueStart && s[valueEnd-1] == ' ' {
+				valueEnd--
+			}
+		} else {
+			valueEnd = len(s)
+		}
+
+		if valueStart <= valueEnd {
+			value := s[valueStart:valueEnd]
+			pairs = append(pairs, []string{key, value})
+		}
+	}
+
+	return pairs
 }
