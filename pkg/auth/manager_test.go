@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	ckerrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -164,14 +166,37 @@ func TestManager_GetDefaultIdentity_MultipleDefaultsOrder(t *testing.T) {
 	_, err := manager.GetDefaultIdentity(false)
 	require.Error(t, err)
 
-	// The error should contain all three default identities.
-	errorMsg := err.Error()
-	assert.Contains(t, errorMsg, "multiple default identities found:")
-	assert.Contains(t, errorMsg, "alpha")
-	assert.Contains(t, errorMsg, "charlie")
-	assert.Contains(t, errorMsg, "zebra")
+	// Should be the correct sentinel error.
+	assert.ErrorIs(t, err, errUtils.ErrMultipleDefaultIdentities)
+
+	// The error context should contain all three default identities in the "defaults" key.
+	// Context is stored in SafeDetails within the error chain.
+	// Use GetAllSafeDetails to get all layers of the error chain.
+	allDetails := ckerrors.GetAllSafeDetails(err)
+	require.NotEmpty(t, allDetails, "error should have safe details with context")
+
+	// Find the safe details layer that contains our context.
+	// Format is: "defaults=charlie, zebra, alpha profile=(not set)".
+	var contextStr string
+	for _, layer := range allDetails {
+		for _, detail := range layer.SafeDetails {
+			if strings.Contains(detail, "defaults=") {
+				contextStr = detail
+				break
+			}
+		}
+		if contextStr != "" {
+			break
+		}
+	}
+
+	require.NotEmpty(t, contextStr, "error should have defaults context")
+	// The context string should contain all default identities.
+	assert.Contains(t, contextStr, "alpha")
+	assert.Contains(t, contextStr, "charlie")
+	assert.Contains(t, contextStr, "zebra")
 	// Should not contain the non-default identity.
-	assert.NotContains(t, errorMsg, "beta")
+	assert.NotContains(t, contextStr, "beta")
 }
 
 func TestManager_ListIdentities(t *testing.T) {
