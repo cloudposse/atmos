@@ -81,7 +81,7 @@ func CreateS3Backend(
 	// Load AWS configuration with auth context.
 	awsConfig, err := loadAWSConfigWithAuth(ctx, config.region, config.roleArn, authContext)
 	if err != nil {
-		return errUtils.Build(errUtils.ErrLoadAWSConfig).
+		return errUtils.Build(errUtils.ErrLoadAwsConfig).
 			WithHint("Check AWS credentials are configured correctly").
 			WithHintf("Verify AWS region '%s' is valid", config.region).
 			WithHint("If using --identity flag, ensure the identity is authenticated").
