@@ -5,14 +5,19 @@ Output completion.svg
 
 # VHS Configuration
 Source _theme.tape
+Set Shell zsh
 Set Width 1400
 Set Height 800
 
 # Fix prompt and source completion (hidden setup)
 Hide
-Type "PS1='\033[38;2;90;86;224m> \033[0m'"
+Type "setopt INTERACTIVE_COMMENTS"
 Enter
-Type "source <(atmos completion bash)"
+Type "PS1=$'\\e[38;2;90;86;224m> \\e[0m'"
+Enter
+Type "autoload -U compinit && compinit"
+Enter
+Type "source <(atmos completion zsh)"
 Enter
 Ctrl+L
 Show
@@ -25,12 +30,7 @@ Type "# Enable tab completion for atmos"
 Enter
 Sleep 2s
 
-Type "# Add this to your shell profile (~/.bashrc or ~/.zshrc)"
-Enter
-Sleep 300ms
-
-Type "echo 'source <(atmos completion bash)'"
-Sleep 2s
+Type "# Add completion to your shell profile"
 Enter
 Sleep 1s
 

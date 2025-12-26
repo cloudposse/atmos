@@ -27,7 +27,7 @@ Type "# View custom commands in atmos.yaml"
 Enter
 Sleep 2s
 
-Type "grep -A 15 'commands:' atmos.yaml"
+Type "grep -A 10 'commands:' atmos.yaml"
 Sleep 2s
 Enter
 Sleep 3s
@@ -39,12 +39,12 @@ Type "# Run your custom command"
 Enter
 Sleep 2s
 
-Type "atmos deploy-stack plat-dev-ue2"
+Type "atmos show-stack plat-dev-ue2"
 Sleep 2s
 Enter
 Sleep 3s
 
-Type "# Your workflows, your commands - no scripting"
+Type "# Compose atmos commands into workflows"
 Enter
 Sleep 1s
 

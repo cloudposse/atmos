@@ -1,0 +1,18 @@
+{
+  "name": "Geodesic",
+  "image": "cloudposse/geodesic:latest",
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "type=bind,source=${localWorkspaceFolder},target=/workspace",
+  "mounts": [
+    "type=bind,source=${localEnv:HOME}/.config,target=/root/.config",
+    "type=bind,source=${localEnv:HOME}/.ssh,target=/root/.ssh,readonly",
+    "type=bind,source=${localEnv:HOME}/.aws,target=/root/.aws,readonly"
+  ],
+  "forwardPorts": [8080, 3000],
+  "containerEnv": {
+    "ATMOS_BASE_PATH": "/workspace",
+    "TERM": "${localEnv:TERM}"
+  },
+  "remoteUser": "root",
+  "runArgs": ["--hostname=geodesic"]
+}

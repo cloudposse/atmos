@@ -39,7 +39,7 @@ Type "# Start a devcontainer"
 Enter
 Sleep 300ms
 
-Type "atmos devcontainer start default"
+Type "atmos devcontainer start geodesic"
 Sleep 2s
 Enter
 Sleep 3s
@@ -48,7 +48,7 @@ Type "# Attach to the running container"
 Enter
 Sleep 300ms
 
-Type "atmos devcontainer attach default"
+Type "atmos devcontainer attach geodesic"
 Sleep 2s
 Enter
 Sleep 2s
@@ -57,7 +57,7 @@ Type "# Or launch directly with shell"
 Enter
 Sleep 300ms
 
-Type "atmos devcontainer shell default"
+Type "atmos devcontainer shell geodesic"
 Sleep 2s
 Enter
 Sleep 2s
