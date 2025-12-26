@@ -2038,7 +2038,18 @@ func TestUserIdentity_WriteAWSFiles(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify files were created by checking they exist.
-		// The files are written to XDG config directory.
+		env, err := identity.Environment()
+		require.NoError(t, err)
+
+		credsFile := env["AWS_SHARED_CREDENTIALS_FILE"]
+		assert.NotEmpty(t, credsFile, "credentials file path should be set")
+		_, err = os.Stat(credsFile)
+		assert.NoError(t, err, "credentials file should exist")
+
+		configFile := env["AWS_CONFIG_FILE"]
+		assert.NotEmpty(t, configFile, "config file path should be set")
+		_, err = os.Stat(configFile)
+		assert.NoError(t, err, "config file should exist")
 	})
 }
 
@@ -2052,11 +2063,10 @@ func TestUserIdentity_Logout_EdgeCases(t *testing.T) {
 
 		userIdent := identity.(*userIdentity)
 
-		// Logout should not error even if files don't exist.
+		// Logout should succeed even if credential files don't exist.
+		// This tests graceful handling of missing files.
 		err = userIdent.Logout(context.Background())
-		// The error depends on file existence, but should handle gracefully.
-		// Just ensure no panic occurs.
-		_ = err
+		assert.NoError(t, err, "logout should succeed even when no files exist")
 	})
 
 	t.Run("removes credential files on logout", func(t *testing.T) {
@@ -2073,12 +2083,12 @@ func TestUserIdentity_Logout_EdgeCases(t *testing.T) {
 			AccessKeyID:     "AKIALOGOUT",
 			SecretAccessKey: "secretlogout",
 		}
-		_ = userIdent.writeAWSFiles(creds, "us-east-1")
+		err = userIdent.writeAWSFiles(creds, "us-east-1")
+		require.NoError(t, err, "writing credentials should succeed")
 
-		// Now logout.
+		// Now logout - should remove credential files.
 		err = userIdent.Logout(context.Background())
-		// Should succeed or fail gracefully.
-		_ = err
+		assert.NoError(t, err, "logout should succeed after writing files")
 	})
 }
 

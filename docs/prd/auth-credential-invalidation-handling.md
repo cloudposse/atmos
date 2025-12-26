@@ -294,7 +294,7 @@ func (e *mockAPIError) ErrorFault() smithy.ErrorFault { return smithy.FaultClien
 - **Single Command Recovery**: Users can recover from credential invalidation with just `atmos auth login`
 - **MFA-Only Re-prompt**: Invalid MFA token only requires re-entering the MFA token, not all credentials
 - **Session Duration Works**: Configured session durations (up to 36 hours with MFA) are honored
-- **Error Clarity**: Error messages clearly explain what happened (explanation) and what to do (hint)
+- **Error Clarity**: Error messages describe what happened (explanation) and what to do (hint)
 - **Automatic Cleanup**: Stale credentials are cleared automatically, preventing repeated failures
 - **Session Credentials Detection**: Accidentally stored session credentials are detected and user is prompted to reconfigure
 - **Test Coverage**: All error scenarios have unit test coverage

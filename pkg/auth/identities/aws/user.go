@@ -72,6 +72,8 @@ func (i *userIdentity) GetProviderName() (string, error) {
 // Authenticate performs authentication by checking for existing valid session credentials
 // or generating new session tokens if needed.
 func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (types.ICredentials, error) {
+	defer perf.Track(nil, "aws.userIdentity.Authenticate")()
+
 	// First, try to load existing session credentials from AWS files.
 	// This prevents unnecessary GetSessionToken API calls when valid credentials already exist.
 	existingCreds, err := i.LoadCredentials(ctx)
