@@ -830,6 +830,17 @@ var (
 	// Container runtime errors.
 	ErrContainerRuntimeOperation = errors.New("container runtime operation failed")
 	ErrRuntimeNotAvailable       = errors.New("container runtime not available")
+
+	// Container errors (additional).
+	ErrContainerNotFound = errors.New("container not found")
+
+	// Devcontainer errors.
+	ErrDevcontainerNotFound      = errors.New("devcontainer not found")
+	ErrInvalidDevcontainerConfig = errors.New("invalid devcontainer configuration")
+	ErrContainerRunning          = errors.New("container is running")
+	ErrDevcontainerNameEmpty     = errors.New("devcontainer name cannot be empty")
+	ErrDevcontainerNameInvalid   = errors.New("devcontainer name contains invalid characters")
+	ErrDevcontainerNameTooLong   = errors.New("devcontainer name is too long")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

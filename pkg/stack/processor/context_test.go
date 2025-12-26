@@ -21,11 +21,11 @@ func TestNewStackContext(t *testing.T) {
 	})
 
 	t.Run("with execution context", func(t *testing.T) {
-		execCtx := function.NewExecutionContext(
-			map[string]string{"AWS_REGION": "us-east-1"},
-			"/work",
-			"test.yaml",
-		)
+		execCtx := &function.ExecutionContext{
+			Env:        map[string]string{"AWS_REGION": "us-east-1"},
+			WorkingDir: "/work",
+			SourceFile: "test.yaml",
+		}
 
 		ctx := NewStackContext(execCtx)
 
@@ -151,11 +151,11 @@ func TestStackContextClone(t *testing.T) {
 	})
 
 	t.Run("clone context", func(t *testing.T) {
-		execCtx := function.NewExecutionContext(
-			map[string]string{"AWS_REGION": "us-east-1"},
-			"/work",
-			"test.yaml",
-		)
+		execCtx := &function.ExecutionContext{
+			Env:        map[string]string{"AWS_REGION": "us-east-1"},
+			WorkingDir: "/work",
+			SourceFile: "test.yaml",
+		}
 
 		ctx := NewStackContext(execCtx).
 			WithStack("prod").

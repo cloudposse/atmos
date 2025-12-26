@@ -29,21 +29,6 @@ import (
 // Mutex to serialize writes to importsConfig maps during parallel import processing.
 var importsConfigLock = &sync.Mutex{}
 
-// importFileResult holds the result of processing a single import file in parallel.
-type importFileResult struct {
-	index                        int
-	importFile                   string
-	yamlConfig                   map[string]any
-	yamlConfigRaw                map[string]any
-	terraformOverridesInline     map[string]any
-	terraformOverridesImports    map[string]any
-	helmfileOverridesInline      map[string]any
-	helmfileOverridesImports     map[string]any
-	importRelativePathWithoutExt string
-	mergeContext                 *m.MergeContext
-	err                          error
-}
-
 // extractLocalsFromRawYAML parses raw YAML content and extracts/resolves file-scoped locals.
 // This function is called BEFORE template processing to make locals available during template execution.
 // The raw YAML may contain unresolved templates like {{ .locals.X }}, which YAML treats as strings.
@@ -159,6 +144,21 @@ type stackProcessResult struct {
 	uniqueImports []string
 	mergeContext  *m.MergeContext
 	err           error
+}
+
+// importFileResult holds the result of processing a single import file in parallel.
+type importFileResult struct {
+	index                        int
+	importFile                   string
+	yamlConfig                   map[string]any
+	yamlConfigRaw                map[string]any
+	terraformOverridesInline     map[string]any
+	terraformOverridesImports    map[string]any
+	helmfileOverridesInline      map[string]any
+	helmfileOverridesImports     map[string]any
+	importRelativePathWithoutExt string
+	mergeContext                 *m.MergeContext
+	err                          error
 }
 
 // ProcessYAMLConfigFiles takes a list of paths to stack manifests, processes and deep-merges all imports, and returns a list of stack configs.
@@ -548,11 +548,11 @@ func processYAMLConfigFileWithContextInternal(
 			if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 				stackManifestTemplatesErrorMessage = fmt.Sprintf("\n\n%s", stackYamlConfig)
 			}
-			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, tmplErr)
+			wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrInvalidStackManifest, tmplErr)
 			if mergeContext != nil {
 				return nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			}
-			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
+			return nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
 		}
 	}
 
@@ -1279,7 +1279,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 	return result, nil
 }
 
-// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty
+// sectionContainsAnyNotEmptySections checks if a section contains any of the provided low-level sections, and it's not empty.
 func sectionContainsAnyNotEmptySections(section map[string]any, sectionsToCheck []string) bool {
 	for _, s := range sectionsToCheck {
 		if len(s) > 0 {

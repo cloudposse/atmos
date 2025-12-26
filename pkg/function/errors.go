@@ -19,8 +19,15 @@ var (
 	// ErrDuplicateFunction is returned when trying to register a function that already exists.
 	ErrDuplicateFunction = errors.New("function already registered")
 
+	// ErrFunctionAlreadyRegistered is returned when attempting to register
+	// a function with a name or alias that already exists.
+	ErrFunctionAlreadyRegistered = errors.New("function already registered")
+
 	// ErrUnclosedQuote is returned when a string has an unclosed quote.
 	ErrUnclosedQuote = errors.New("unclosed quote")
+
+	// ErrCircularDependency is returned when a circular dependency is detected.
+	ErrCircularDependency = errors.New("circular dependency detected")
 
 	// ErrSpecialYAMLHandling indicates that a function requires special YAML node processing.
 	// Functions like !include need to modify the YAML tree directly.
