@@ -110,11 +110,10 @@ func TestDefaultProcessorIntegration(t *testing.T) {
 	}
 
 	// Set up environment in execution context.
-	execCtx := function.NewExecutionContext(
-		map[string]string{"AWS_REGION": "us-west-2"},
-		"",
-		"test.yaml",
-	)
+	execCtx := &function.ExecutionContext{
+		Env:        map[string]string{"AWS_REGION": "us-west-2"},
+		SourceFile: "test.yaml",
+	}
 	stackCtx := processor.NewStackContext(execCtx)
 
 	// Test post-merge processing.

@@ -47,12 +47,15 @@ import (
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
+	_ "github.com/cloudposse/atmos/cmd/env"
 	"github.com/cloudposse/atmos/cmd/internal"
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/profile"
 	_ "github.com/cloudposse/atmos/cmd/stack"
+	_ "github.com/cloudposse/atmos/cmd/terraform"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
 	"github.com/cloudposse/atmos/cmd/version"
+	_ "github.com/cloudposse/atmos/cmd/workflow"
 )
 
 const (
@@ -165,7 +168,7 @@ func processChdirFlag(cmd *cobra.Command) error {
 	homeDirProvider := filesystem.NewOSHomeDirProvider()
 	expandedPath, err := homeDirProvider.Expand(chdir)
 	if err != nil {
-		return fmt.Errorf("%w: %s", errUtils.ErrPathResolution, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrPathResolution, err)
 	}
 
 	// Clean and make absolute to handle both relative and absolute paths.
@@ -1320,7 +1323,7 @@ func initCobraConfig() {
 			command.Example = exampleContent.Content
 		}
 
-		if !(Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")) {
+		if !Contains(os.Args, "help") && !Contains(os.Args, "--help") && !Contains(os.Args, "-h") {
 			// Get actual arguments (handles DisableFlagParsing=true case).
 			arguments := flags.GetActualArgs(command, os.Args)
 			showUsageAndExit(command, arguments)
