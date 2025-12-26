@@ -11,11 +11,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 )
 
-func TestAuthShellCmd_FlagParsing(t *testing.T) {
-	// Disable credential prompting to prevent interactive UI from blocking tests.
-	originalPromptFunc := aws.PromptCredentialsFunc
+// disableAWSCredentialPrompting disables interactive credential prompting during tests.
+// This prevents huh forms from blocking test execution waiting for user input.
+func disableAWSCredentialPrompting(t *testing.T) {
+	t.Helper()
+	original := aws.PromptCredentialsFunc
 	aws.PromptCredentialsFunc = nil
-	defer func() { aws.PromptCredentialsFunc = originalPromptFunc }()
+	t.Cleanup(func() { aws.PromptCredentialsFunc = original })
+}
+
+func TestAuthShellCmd_FlagParsing(t *testing.T) {
+	disableAWSCredentialPrompting(t)
 
 	tests := []struct {
 		name          string
@@ -107,10 +113,7 @@ func TestAuthShellCmd_CommandStructure(t *testing.T) {
 }
 
 func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
-	// Disable credential prompting to prevent interactive UI from blocking tests.
-	originalPromptFunc := aws.PromptCredentialsFunc
-	aws.PromptCredentialsFunc = nil
-	defer func() { aws.PromptCredentialsFunc = originalPromptFunc }()
+	disableAWSCredentialPrompting(t)
 
 	// Set up test fixture.
 	testDir := "../tests/fixtures/scenarios/atmos-auth"
@@ -129,10 +132,7 @@ func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
 }
 
 func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
-	// Disable credential prompting to prevent interactive UI from blocking tests.
-	originalPromptFunc := aws.PromptCredentialsFunc
-	aws.PromptCredentialsFunc = nil
-	defer func() { aws.PromptCredentialsFunc = originalPromptFunc }()
+	disableAWSCredentialPrompting(t)
 
 	// Test that the command handles nil environment variables gracefully.
 	// This tests the path where envVars is nil and gets initialized to empty map.

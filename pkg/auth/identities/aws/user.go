@@ -145,6 +145,24 @@ func (i *userIdentity) resolveLongLivedCredentials() (*types.AWSCredentials, err
 		return nil, fmt.Errorf("%w: AWS User credentials not found for identity %q. Please configure credentials by running: atmos auth user configure --identity %s", errUtils.ErrAwsUserNotConfigured, i.name, i.name)
 	}
 
+	// Validate that keyring credentials are long-lived (not session credentials).
+	// Session credentials have a SessionToken and cannot be used with GetSessionToken API.
+	if keystoreCreds.SessionToken != "" {
+		log.Warn("Keyring contains session credentials instead of long-lived credentials",
+			logKeyIdentity, i.name,
+			"hint", "This can happen if session credentials were accidentally stored. Re-configuring will fix this.")
+		// Treat as if credentials don't exist - prompt for new long-lived credentials.
+		if PromptCredentialsFunc != nil {
+			log.Debug("Prompting for long-lived credentials to replace session credentials", logKeyIdentity, i.name)
+			newCreds, promptErr := PromptCredentialsFunc(i.name, yamlMfaArn)
+			if promptErr != nil {
+				return nil, fmt.Errorf("%w: keyring contains session credentials (not long-lived) for identity %q and prompting failed: %w", errUtils.ErrAwsUserNotConfigured, i.name, promptErr)
+			}
+			return newCreds, nil
+		}
+		return nil, fmt.Errorf("%w: keyring contains session credentials (not long-lived) for identity %q. Please reconfigure with: atmos auth user configure --identity %s", errUtils.ErrAwsUserNotConfigured, i.name, i.name)
+	}
+
 	// Deep merge: Start with keyring, override with non-empty YAML fields.
 	result := &types.AWSCredentials{
 		AccessKeyID:     keystoreCreds.AccessKeyID,
@@ -244,7 +262,7 @@ func (i *userIdentity) generateSessionTokenWithRetry(ctx context.Context, longLi
 	// Call STS to get session token.
 	result, err := i.callGetSessionToken(ctx, longLivedCreds, region)
 	if err != nil {
-		return i.handleSTSErrorWithRetry(ctx, err, region, isRetry)
+		return i.handleSTSErrorWithRetry(ctx, err, longLivedCreds, region, isRetry)
 	}
 
 	// Convert STS result to session credentials and write to AWS files.
@@ -278,8 +296,8 @@ func (i *userIdentity) callGetSessionToken(ctx context.Context, longLivedCreds *
 }
 
 // handleSTSErrorWithRetry handles STS errors and optionally retries with new credentials.
-func (i *userIdentity) handleSTSErrorWithRetry(ctx context.Context, err error, region string, isRetry bool) (types.ICredentials, error) {
-	newCreds, stsErr := i.handleSTSError(err, isRetry)
+func (i *userIdentity) handleSTSErrorWithRetry(ctx context.Context, err error, longLivedCreds *types.AWSCredentials, region string, isRetry bool) (types.ICredentials, error) {
+	newCreds, stsErr := i.handleSTSError(err, longLivedCreds, isRetry)
 	if stsErr != nil {
 		return nil, stsErr
 	}
@@ -321,9 +339,10 @@ func (i *userIdentity) processSTSResult(result *sts.GetSessionTokenOutput, regio
 
 // handleSTSError processes errors from STS API calls and returns appropriate user-friendly errors.
 // It detects specific AWS error codes like InvalidClientTokenId and provides actionable guidance.
+// The longLivedCreds parameter allows MFA token re-prompting when the error is MFA-related.
 // The isRetry parameter indicates if this is a retry attempt after credential prompting.
 // Returns: (new credentials if prompting succeeded, error if prompting failed/disabled or on retry).
-func (i *userIdentity) handleSTSError(err error, isRetry bool) (*types.AWSCredentials, error) {
+func (i *userIdentity) handleSTSError(err error, longLivedCreds *types.AWSCredentials, isRetry bool) (*types.AWSCredentials, error) {
 	var apiErr smithy.APIError
 	if !errors.As(err, &apiErr) {
 		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
@@ -335,7 +354,7 @@ func (i *userIdentity) handleSTSError(err error, isRetry bool) (*types.AWSCreden
 	case "ExpiredTokenException":
 		return i.handleExpiredToken(apiErr)
 	case "AccessDenied":
-		return i.handleAccessDenied(apiErr)
+		return i.handleAccessDenied(apiErr, longLivedCreds, isRetry)
 	default:
 		return nil, errors.Join(errUtils.ErrAuthenticationFailed, err)
 	}
@@ -416,7 +435,34 @@ func (i *userIdentity) handleExpiredToken(apiErr smithy.APIError) (*types.AWSCre
 }
 
 // handleAccessDenied handles the case where the user doesn't have permission to call GetSessionToken.
-func (i *userIdentity) handleAccessDenied(apiErr smithy.APIError) (*types.AWSCredentials, error) {
+// It also detects MFA-related failures and re-prompts for the MFA token.
+func (i *userIdentity) handleAccessDenied(apiErr smithy.APIError, longLivedCreds *types.AWSCredentials, isRetry bool) (*types.AWSCredentials, error) {
+	errorMsg := apiErr.ErrorMessage()
+
+	// Check if this is an MFA-related failure (invalid/expired token).
+	// AWS returns AccessDenied with specific messages for MFA failures.
+	if isMfaRelatedError(errorMsg) {
+		// Don't re-prompt for MFA if this is already a retry (prevents infinite loop).
+		if isRetry {
+			log.Error("MFA token invalid on retry attempt", logKeyIdentity, i.name, logKeyErrorCode, apiErr.ErrorCode())
+			return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+				WithExplanation("The MFA token you entered is invalid or has expired").
+				WithHint("MFA tokens are time-based and typically valid for 30 seconds").
+				WithHintf("Wait for a new token and run: atmos auth login --identity %s", i.name).
+				WithContext("identity", i.name).
+				WithContext(logKeyErrorCode, apiErr.ErrorCode()).
+				Err()
+		}
+
+		// MFA is configured and we have long-lived credentials - just re-prompt for MFA token.
+		if longLivedCreds != nil && longLivedCreds.MfaArn != "" && promptMfaTokenFunc != nil {
+			log.Warn("MFA token was invalid, prompting for new token", logKeyIdentity, i.name)
+			// Return the same long-lived credentials - the retry will prompt for a new MFA token.
+			return longLivedCreds, nil
+		}
+	}
+
+	// Generic AccessDenied - likely a permission issue.
 	log.Error("Access denied when calling GetSessionToken", logKeyIdentity, i.name, logKeyErrorCode, apiErr.ErrorCode())
 	return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
 		WithExplanation("Your IAM user does not have permission to call sts:GetSessionToken").
@@ -424,6 +470,23 @@ func (i *userIdentity) handleAccessDenied(apiErr smithy.APIError) (*types.AWSCre
 		WithContext("identity", i.name).
 		WithContext(logKeyErrorCode, apiErr.ErrorCode()).
 		Err()
+}
+
+// isMfaRelatedError checks if an AccessDenied error message indicates an MFA token issue.
+func isMfaRelatedError(errorMsg string) bool {
+	mfaPatterns := []string{
+		"MultiFactorAuthentication failed",
+		"invalid MFA",
+		"MFA token",
+		"one time pass code",
+	}
+	lowerMsg := strings.ToLower(errorMsg)
+	for _, pattern := range mfaPatterns {
+		if strings.Contains(lowerMsg, strings.ToLower(pattern)) {
+			return true
+		}
+	}
+	return false
 }
 
 // PromptMfaTokenFunc is a helper indirection to allow tests to stub MFA prompting.
