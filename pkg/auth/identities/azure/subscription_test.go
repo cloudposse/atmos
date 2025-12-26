@@ -254,6 +254,27 @@ func TestSubscriptionIdentity_Authenticate(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name: "preserves OIDC fields for service principal",
+			identity: &subscriptionIdentity{
+				name:           "azure-oidc",
+				subscriptionID: "identity-sub-789",
+				location:       "centralus",
+			},
+			baseCreds: &types.AzureCredentials{
+				AccessToken:        "sp-access-token",
+				TokenType:          "Bearer",
+				Expiration:         now.Add(1 * time.Hour).Format(time.RFC3339),
+				TenantID:           "tenant-123",
+				SubscriptionID:     "provider-sub-456",
+				Location:           "eastus",
+				ClientID:           "oidc-client-id",
+				IsServicePrincipal: true,
+				TokenFilePath:      "/path/to/token",
+				FederatedToken:     "federated-jwt-token-xyz",
+			},
+			expectError: false,
+		},
+		{
 			name: "identity with no location uses provider location",
 			identity: &subscriptionIdentity{
 				name:           "azure-dev",
@@ -328,6 +349,12 @@ func TestSubscriptionIdentity_Authenticate(t *testing.T) {
 			assert.Equal(t, baseCreds.TenantID, azureCreds.TenantID)
 			assert.Equal(t, baseCreds.GraphAPIToken, azureCreds.GraphAPIToken)
 			assert.Equal(t, baseCreds.KeyVaultToken, azureCreds.KeyVaultToken)
+
+			// Verify OIDC fields are preserved.
+			assert.Equal(t, baseCreds.ClientID, azureCreds.ClientID)
+			assert.Equal(t, baseCreds.IsServicePrincipal, azureCreds.IsServicePrincipal)
+			assert.Equal(t, baseCreds.TokenFilePath, azureCreds.TokenFilePath)
+			assert.Equal(t, baseCreds.FederatedToken, azureCreds.FederatedToken)
 		})
 	}
 }

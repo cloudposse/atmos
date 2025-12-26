@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -124,8 +125,13 @@ func TestCheckErrorPrintAndExit_ExitCodeError(t *testing.T) {
 
 func TestCheckErrorPrintAndExit_ExecExitError(t *testing.T) {
 	if os.Getenv("TEST_EXEC_EXIT") == "1" {
-		// Create an exec.ExitError
-		cmd := exec.Command("sh", "-c", "exit 3")
+		// Create an exec.ExitError using platform-appropriate command.
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.Command("cmd", "/C", "exit 3")
+		} else {
+			cmd = exec.Command("sh", "-c", "exit 3")
+		}
 		err := cmd.Run()
 		CheckErrorPrintAndExit(err, "Exec Error", "")
 		return
@@ -293,5 +299,115 @@ func TestInitializeMarkdown(t *testing.T) {
 
 		// Should initialize without error
 		assert.NotContains(t, logBuf.String(), "failed to initialize Markdown renderer")
+	})
+}
+
+func TestPrintStructuredPlainError(t *testing.T) {
+	// Save original stderr.
+	oldStderr := os.Stderr
+
+	t.Run("error with ErrorBuilder enrichments", func(t *testing.T) {
+		// Create a rich error using ErrorBuilder.
+		err := Build(ErrProfileNotFound).
+			WithExplanationf("Profile `%s` not found in any configured location", "test-profile").
+			WithExplanation("Searched in: `/path/.atmos/profiles/test-profile`").
+			WithHint("Run `atmos profile list` to see all available profiles").
+			WithHint("Create the profile directory in one of the search locations").
+			WithContext("profile", "test-profile").
+			WithContext("searched_paths", "/path/.atmos/profiles/test-profile").
+			WithExitCode(2).
+			Err()
+
+		// Capture stderr.
+		r, w, pipeErr := os.Pipe()
+		assert.NoError(t, pipeErr, "failed to create pipe")
+		os.Stderr = w
+
+		printStructuredPlainError(err, "", "")
+
+		// Restore stderr.
+		w.Close()
+		os.Stderr = oldStderr
+
+		var output bytes.Buffer
+		_, readErr := io.Copy(&output, r)
+		assert.NoError(t, readErr)
+
+		out := output.String()
+
+		// Should contain the error message.
+		assert.Contains(t, out, "profile not found", "output should contain base error")
+
+		// Should contain explanations.
+		assert.Contains(t, out, "Explanation:", "output should have explanation section")
+		assert.Contains(t, out, "Profile `test-profile` not found", "output should contain profile name in explanation")
+		assert.Contains(t, out, "Searched in:", "output should show searched paths")
+
+		// Should contain hints.
+		assert.Contains(t, out, "Hints:", "output should have hints section")
+		assert.Contains(t, out, "atmos profile list", "output should contain profile list hint")
+		assert.Contains(t, out, "Create the profile directory", "output should contain creation hint")
+
+		// Should contain context.
+		assert.Contains(t, out, "Context:", "output should have context section")
+		assert.Contains(t, out, "profile:", "output should show profile context")
+	})
+
+	t.Run("simple error without enrichments", func(t *testing.T) {
+		// Create a simple error without ErrorBuilder.
+		err := errors.New("simple error message")
+
+		// Capture stderr.
+		r, w, pipeErr := os.Pipe()
+		assert.NoError(t, pipeErr, "failed to create pipe")
+		os.Stderr = w
+
+		printStructuredPlainError(err, "Custom Title", "legacy suggestion")
+
+		// Restore stderr.
+		w.Close()
+		os.Stderr = oldStderr
+
+		var output bytes.Buffer
+		_, readErr := io.Copy(&output, r)
+		assert.NoError(t, readErr)
+
+		out := output.String()
+
+		// Should contain custom title.
+		assert.Contains(t, out, "Custom Title:", "output should contain custom title")
+
+		// Should contain error message.
+		assert.Contains(t, out, "simple error message", "output should contain error message")
+
+		// Should contain legacy suggestion.
+		assert.Contains(t, out, "legacy suggestion", "output should contain legacy suggestion")
+
+		// Should NOT contain section headers since no enrichments.
+		assert.NotContains(t, out, "Explanation:", "output should not have explanation section for simple error")
+		assert.NotContains(t, out, "Hints:", "output should not have hints section for simple error")
+		assert.NotContains(t, out, "Context:", "output should not have context section for simple error")
+	})
+
+	t.Run("default title when empty", func(t *testing.T) {
+		err := errors.New("test error")
+
+		// Capture stderr.
+		r, w, pipeErr := os.Pipe()
+		assert.NoError(t, pipeErr, "failed to create pipe")
+		os.Stderr = w
+
+		printStructuredPlainError(err, "", "")
+
+		// Restore stderr.
+		w.Close()
+		os.Stderr = oldStderr
+
+		var output bytes.Buffer
+		_, readErr := io.Copy(&output, r)
+		assert.NoError(t, readErr)
+
+		// Should default to "Error" when title is empty.
+		assert.Contains(t, output.String(), "Error:", "output should default to 'Error' title")
 	})
 }

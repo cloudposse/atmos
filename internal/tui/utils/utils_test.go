@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 func TestHighlightCode(t *testing.T) {
@@ -444,5 +446,32 @@ func TestRenderMarkdown_EdgeCases(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotEmpty(t, output)
 		// Just verify it renders without error - exact formatting may vary.
+	})
+}
+
+// TestNewAtmosHuhTheme tests the NewAtmosHuhTheme function.
+func TestNewAtmosHuhTheme(t *testing.T) {
+	t.Run("returns a theme wired to current Atmos styles", func(t *testing.T) {
+		huhTheme := NewAtmosHuhTheme()
+		require.NotNil(t, huhTheme, "NewAtmosHuhTheme should return a non-nil theme")
+
+		// Get the current Atmos styles to verify the theme uses them.
+		styles := theme.GetCurrentStyles()
+		require.NotNil(t, styles, "theme.GetCurrentStyles should return non-nil styles for this test")
+
+		// Extract expected colors from Atmos theme.
+		expectedPrimary := styles.Selected.GetForeground()
+		expectedBtnFg := styles.Interactive.ButtonForeground.GetForeground()
+		expectedBtnBg := styles.Interactive.ButtonBackground.GetBackground()
+
+		// Verify the Huh theme is wired to Atmos colors.
+		assert.Equal(t, expectedPrimary, huhTheme.Focused.SelectSelector.GetForeground(),
+			"SelectSelector should use theme's primary color")
+		assert.Equal(t, expectedPrimary, huhTheme.Blurred.Title.GetForeground(),
+			"Blurred.Title should use theme's primary color")
+		assert.Equal(t, expectedBtnFg, huhTheme.Focused.FocusedButton.GetForeground(),
+			"FocusedButton foreground should use theme's button foreground")
+		assert.Equal(t, expectedBtnBg, huhTheme.Focused.FocusedButton.GetBackground(),
+			"FocusedButton background should use theme's button background")
 	})
 }

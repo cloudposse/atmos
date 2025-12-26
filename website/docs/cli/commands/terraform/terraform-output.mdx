@@ -27,6 +27,23 @@ This command reads output values from the Terraform state file and prints them. 
 :::info Atmos Behavior
 Atmos provides standard setup for this command including automatic `terraform init`, workspace selection, and variable file generation. The output retrieval itself is handled by native Terraform.
 :::
+
+## Configuration
+
+Configure default behavior for `terraform output` in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    # Auto-generate backend configuration
+    auto_generate_backend_file: true
+```
+
+These settings can also be controlled via environment variables:
+```shell
+export ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=true
+```
+
 ## Examples
 
 ### Show All Outputs

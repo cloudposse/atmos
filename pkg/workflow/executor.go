@@ -16,6 +16,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // workflowErrorTitle is the standard title for workflow errors.
@@ -113,8 +114,7 @@ func (e *Executor) handleFromStep(
 	if len(steps) == 0 {
 		stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
 		err := errUtils.Build(errUtils.ErrInvalidFromStep).
-			WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.", fromStep, workflow).
-			WithHintf("Available steps:\n%s", FormatList(stepNames)).
+			WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.\n\n### Available steps:\n\n%s", fromStep, workflow, u.FormatList(stepNames)).
 			Err()
 		e.printError(err)
 		result.Success = false
@@ -177,13 +177,17 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 	// Calculate final stack.
 	finalStack := e.calculateFinalStack(params.WorkflowDefinition, step, params.Opts.CommandLineStack)
 
+	// Calculate working directory with inheritance from workflow-level.
+	workDir := e.calculateWorkingDirectory(params.WorkflowDefinition, step, params.AtmosConfig.BasePath)
+
 	// Execute the command based on type.
 	cmdParams := &runCommandParams{
-		command:     command,
-		commandType: commandType,
-		stepIdx:     stepIdx,
-		finalStack:  finalStack,
-		stepEnv:     stepEnv,
+		command:          command,
+		commandType:      commandType,
+		stepIdx:          stepIdx,
+		finalStack:       finalStack,
+		stepEnv:          stepEnv,
+		workingDirectory: workDir,
 	}
 	err = e.runCommand(params, cmdParams)
 	if err != nil {
@@ -210,26 +214,33 @@ func (e *Executor) prepareStepEnvironment(ctx context.Context, stepIdentity, ste
 
 // runCommandParams holds parameters for command execution.
 type runCommandParams struct {
-	command     string
-	commandType string
-	stepIdx     int
-	finalStack  string
-	stepEnv     []string
+	command          string
+	commandType      string
+	stepIdx          int
+	finalStack       string
+	stepEnv          []string
+	workingDirectory string
 }
 
 // runCommand executes the appropriate command type.
 func (e *Executor) runCommand(params *WorkflowParams, cmdParams *runCommandParams) error {
+	// Use working directory if set, otherwise default to current directory.
+	workDir := cmdParams.workingDirectory
+	if workDir == "" {
+		workDir = "."
+	}
+
 	switch cmdParams.commandType {
 	case "shell":
 		commandName := fmt.Sprintf("%s-step-%d", params.Workflow, cmdParams.stepIdx)
-		return e.runner.RunShell(cmdParams.command, commandName, ".", cmdParams.stepEnv, params.Opts.DryRun)
+		return e.runner.RunShell(cmdParams.command, commandName, workDir, cmdParams.stepEnv, params.Opts.DryRun)
 	case "atmos":
-		return e.executeAtmosCommand(params, cmdParams.command, cmdParams.finalStack, cmdParams.stepEnv)
+		return e.executeAtmosCommand(params, cmdParams.command, cmdParams.finalStack, cmdParams.stepEnv, workDir)
 	default:
 		// Return error without printing - handleStepError will print it with resume context.
 		return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
 			WithExplanationf("Step type `%s` is not supported. Each step must specify a valid type.", cmdParams.commandType).
-			WithHintf("Available types:\n%s", FormatList([]string{"atmos", "shell"})).
+			WithHintf("Available types:\n%s", u.FormatList([]string{"atmos", "shell"})).
 			Err()
 	}
 }
@@ -317,7 +328,7 @@ func (e *Executor) prepareAuthenticatedEnvironment(ctx context.Context, identity
 }
 
 // executeAtmosCommand executes an atmos command with the given parameters.
-func (e *Executor) executeAtmosCommand(params *WorkflowParams, command, finalStack string, stepEnv []string) error {
+func (e *Executor) executeAtmosCommand(params *WorkflowParams, command, finalStack string, stepEnv []string, workDir string) error {
 	// Parse command using shell.Fields for proper quote handling.
 	args, parseErr := shell.Fields(command, nil)
 	if parseErr != nil {
@@ -340,7 +351,7 @@ func (e *Executor) executeAtmosCommand(params *WorkflowParams, command, finalSta
 		Ctx:         params.Ctx,
 		AtmosConfig: params.AtmosConfig,
 		Args:        args,
-		Dir:         ".",
+		Dir:         workDir,
 		Env:         stepEnv,
 		DryRun:      params.Opts.DryRun,
 	}
@@ -365,6 +376,37 @@ func (e *Executor) calculateFinalStack(workflowDef *schema.WorkflowDefinition, s
 	}
 
 	return finalStack
+}
+
+// calculateWorkingDirectory determines the working directory for a workflow step.
+// Step-level working_directory overrides workflow-level.
+// Relative paths are resolved against base_path.
+func (e *Executor) calculateWorkingDirectory(workflowDef *schema.WorkflowDefinition, step *schema.WorkflowStep, basePath string) string {
+	// Step-level overrides workflow-level.
+	workDir := strings.TrimSpace(workflowDef.WorkingDirectory)
+	if stepWorkDir := strings.TrimSpace(step.WorkingDirectory); stepWorkDir != "" {
+		workDir = stepWorkDir
+	}
+
+	if workDir == "" {
+		return ""
+	}
+
+	// Resolve relative paths against base_path.
+	// Guard against empty basePath to avoid accidentally relative paths.
+	if !filepath.IsAbs(workDir) {
+		resolvedBasePath := basePath
+		if strings.TrimSpace(resolvedBasePath) == "" {
+			resolvedBasePath = "."
+		}
+		workDir = filepath.Join(resolvedBasePath, workDir)
+	}
+
+	// Note: Directory validation happens at execution time in the adapters.
+	// This allows YAML functions like !repo-root to be resolved first during config loading.
+	log.Debug("Using working directory for workflow step", "working_directory", workDir)
+
+	return workDir
 }
 
 // buildResumeCommand builds a command to resume the workflow from a specific step.
@@ -409,13 +451,4 @@ func CheckAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefini
 			steps[index].Name = fmt.Sprintf("step%d", index+1)
 		}
 	}
-}
-
-// FormatList formats a list of strings into a markdown bullet list.
-func FormatList(items []string) string {
-	var result strings.Builder
-	for _, item := range items {
-		result.WriteString(fmt.Sprintf("- `%s`\n", item))
-	}
-	return result.String()
 }

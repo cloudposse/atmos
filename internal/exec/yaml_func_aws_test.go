@@ -334,58 +334,9 @@ func TestAWSCacheWithErrors(t *testing.T) {
 	assert.Equal(t, 1, callCount, "Errors should be cached too")
 }
 
-func TestGetCacheKey(t *testing.T) {
-	tests := []struct {
-		name        string
-		authContext *schema.AWSAuthContext
-		expected    string
-	}{
-		{
-			name:        "nil auth context",
-			authContext: nil,
-			expected:    "default",
-		},
-		{
-			name: "with profile credentials and config file",
-			authContext: &schema.AWSAuthContext{
-				Profile:         "my-profile",
-				CredentialsFile: "/home/user/.aws/credentials",
-				ConfigFile:      "/home/user/.aws/config",
-			},
-			expected: "my-profile:/home/user/.aws/credentials:/home/user/.aws/config",
-		},
-		{
-			name: "empty profile",
-			authContext: &schema.AWSAuthContext{
-				Profile:         "",
-				CredentialsFile: "/some/path",
-				ConfigFile:      "/some/config",
-			},
-			expected: ":/some/path:/some/config",
-		},
-		{
-			name: "empty config file",
-			authContext: &schema.AWSAuthContext{
-				Profile:         "prod",
-				CredentialsFile: "/creds",
-				ConfigFile:      "",
-			},
-			expected: "prod:/creds:",
-		},
-	}
+// Note: TestGetCacheKey moved to pkg/aws/identity/identity_test.go.
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getCacheKey(tt.authContext)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestAWSGetterInterface(t *testing.T) {
-	// Ensure defaultAWSGetter implements AWSGetter.
-	var _ AWSGetter = &defaultAWSGetter{}
-}
+// Note: TestAWSGetterInterface moved to pkg/aws/identity/identity_test.go.
 
 func TestProcessTagAwsWithAuthContext(t *testing.T) {
 	// Clear cache before test.
@@ -540,35 +491,9 @@ func TestErrorWrapping(t *testing.T) {
 	assert.ErrorIs(t, err, underlyingErr)
 }
 
-// TestDefaultAWSGetterExists verifies the default getter exists.
-func TestDefaultAWSGetterExists(t *testing.T) {
-	// The awsGetter variable should be initialized.
-	assert.NotNil(t, awsGetter)
+// Note: TestDefaultAWSGetterExists moved to pkg/aws/identity/identity_test.go.
 
-	// It should be a *defaultAWSGetter.
-	_, ok := awsGetter.(*defaultAWSGetter)
-	assert.True(t, ok, "Default awsGetter should be *defaultAWSGetter")
-}
-
-// TestSetAWSGetterRestore verifies the restore function works.
-func TestSetAWSGetterRestore(t *testing.T) {
-	originalGetter := awsGetter
-
-	mockGetter := &mockAWSGetter{
-		identity: &AWSCallerIdentity{Account: "444444444444"},
-	}
-
-	restore := SetAWSGetter(mockGetter)
-
-	// Verify getter was replaced.
-	assert.Equal(t, mockGetter, awsGetter)
-
-	// Restore original.
-	restore()
-
-	// Verify original was restored.
-	assert.Equal(t, originalGetter, awsGetter)
-}
+// Note: TestSetAWSGetterRestore moved to pkg/aws/identity/identity_test.go.
 
 // TestErrAwsGetCallerIdentity verifies the error constant exists.
 func TestErrAwsGetCallerIdentity(t *testing.T) {
@@ -712,42 +637,8 @@ func TestCacheConcurrency(t *testing.T) {
 	assert.Equal(t, 1, callCount, "Concurrent access should result in only one getter call")
 }
 
-// TestCacheKeyWithRegion verifies cache key includes all relevant auth context fields.
-func TestCacheKeyWithRegion(t *testing.T) {
-	tests := []struct {
-		name        string
-		authContext *schema.AWSAuthContext
-		expected    string
-	}{
-		{
-			name: "full auth context with region",
-			authContext: &schema.AWSAuthContext{
-				Profile:         "prod",
-				CredentialsFile: "/prod/creds",
-				ConfigFile:      "/prod/config",
-				Region:          "us-east-1", // Region is in auth context but not in cache key.
-			},
-			expected: "prod:/prod/creds:/prod/config",
-		},
-		{
-			name: "same profile different region should have same cache key",
-			authContext: &schema.AWSAuthContext{
-				Profile:         "prod",
-				CredentialsFile: "/prod/creds",
-				ConfigFile:      "/prod/config",
-				Region:          "eu-west-1", // Different region, same cache key.
-			},
-			expected: "prod:/prod/creds:/prod/config",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getCacheKey(tt.authContext)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
+// NOTE: TestCacheKeyWithRegion was removed because getCacheKey is now an internal
+// implementation detail in pkg/aws/identity and has its own tests there.
 
 // TestAllAWSFunctionsShareCache verifies all four functions share the same cache.
 func TestAllAWSFunctionsShareCache(t *testing.T) {

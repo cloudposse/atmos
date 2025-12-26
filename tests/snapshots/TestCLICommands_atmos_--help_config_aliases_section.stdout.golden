@@ -1,0 +1,118 @@
+
+👽 test linux/amd64
+
+Atmos is a framework for orchestrating and operating infrastructure workflows   
+across multiple cloud and DevOps toolchains.                                    
+
+USAGE
+
+                                   
+    $ atmos [flags]                
+    $ atmos [sub-command] [flags]  
+                                   
+
+SUBCOMMAND ALIASES
+
+      hf               Alias of atmos helmfile command
+      pk               Alias of atmos packer command
+      tf               Alias of atmos terraform command
+
+AVAILABLE COMMANDS
+
+      about                   Learn about Atmos
+      atlantis [command]      Generate and manage Atlantis configurations
+      auth [command]          Authenticate with cloud providers and identity services.
+      aws [command]           Run AWS-specific commands for interacting with cloud resources
+      completion [command]    Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
+      describe [command]      Show details about Atmos configurations and components
+      devcontainer [command]  Manage development containers
+      docs [command]          Open Atmos documentation or display component-specific docs
+      env                     Output environment variables configured in atmos.yaml
+      helmfile [command]      Manage Helmfile-based Kubernetes deployments
+      help                    Help about any command
+      list [command]          List available stacks and components
+      packer [command]        Manage packer-based machine images for multiple platforms
+      pro [command]           Access premium features integrated with atmos-pro.com
+      profile [command]       Manage configuration profiles
+      support                 Show Atmos support options
+      terraform [command]     Execute Terraform commands using Atmos stack configurations
+      theme [command]         Manage terminal themes for Atmos CLI
+      validate [command]      Validate configurations against OPA policies and JSON schemas
+      vendor [command]        Manage external dependencies for components or stacks
+      version [command]       Display the version of Atmos you are running and check for updates
+      workflow                Run predefined tasks using workflows
+
+ALIASES
+
+      ta  alias for terraform apply
+      tp  alias for terraform plan
+      tr  alias for terraform
+
+FLAGS
+
+      --base-path string        Base path for Atmos project
+
+  -C, --chdir string            Change working directory before executing the command (run as if Atmos started in this
+                                directory)
+
+      --config strings          Paths to configuration files (comma-separated or repeated flag)
+
+      --config-path strings     Paths to search for Atmos configuration (comma-separated or repeated flag)
+
+      --force-color             Force color output even when not a TTY (useful for screenshots)
+
+      --force-tty               Force TTY mode with sane defaults when terminal detection fails (useful for
+                                screenshots)
+
+      --heatmap                 Show performance heatmap visualization after command execution (includes P95 latency)
+
+      --heatmap-mode string     Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI) (default
+                                bar)
+
+  -h, --help                    help for atmos
+
+      --identity string         Identity to use for authentication. Use --identity to select interactively, --
+                                identity=NAME to specify
+
+      --interactive             Enable interactive prompts for missing required flags, optional value flags using the
+                                sentinel pattern, and missing positional arguments (requires TTY, disabled in CI)
+                                (default true)
+
+      --logs-file string        The file to write Atmos logs to. Logs can be written to any file or any standard file
+                                descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
+                                /dev/stderr)
+
+      --logs-level string       Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log
+                                level is set to Off, Atmos will not log any messages (default Warning)
+
+      --mask                    Enable automatic masking of sensitive data in output (use --mask=false to disable)
+                                (default true)
+
+      --no-color                Disable color output
+
+      --pager string            Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --
+                                pager=less to use specific pager)
+
+      --profile strings         Activate configuration profiles (comma-separated or repeated flag)
+
+      --profile-file string     Write profiling data to file instead of starting server
+
+      --profile-type string     Type of profile to collect when using --profile-file. Options: cpu, heap, allocs,
+                                goroutine, block, mutex, threadcreate, trace (default cpu)
+
+      --profiler-enabled        Enable pprof profiling server
+
+      --profiler-host string    Host for pprof profiling server (default localhost)
+
+      --profiler-port int       Port for pprof profiling server (default 6060)
+
+      --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
+                                standard file descriptor (including '/dev/null')
+
+  -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
+
+      --version                 Display the Atmos CLI version
+
+
+
+Use atmos [command] --help for more information about a command.

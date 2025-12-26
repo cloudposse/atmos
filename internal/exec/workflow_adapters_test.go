@@ -340,6 +340,11 @@ func TestWorkflowUIProvider_PrintMessage(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
+	// Ensure stderr is restored even if test fails.
+	defer func() {
+		os.Stderr = oldStderr
+	}()
+
 	provider.PrintMessage("Hello %s!", "World")
 
 	w.Close()
@@ -359,6 +364,11 @@ func TestWorkflowUIProvider_PrintMessage_NoArgs(t *testing.T) {
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
+
+	// Ensure stderr is restored even if test fails.
+	defer func() {
+		os.Stderr = oldStderr
+	}()
 
 	provider.PrintMessage("Simple message")
 
@@ -499,6 +509,11 @@ func TestWorkflowUIProvider_PrintMessage_MultipleArgs(t *testing.T) {
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
+
+	// Ensure stderr is restored even if test fails.
+	defer func() {
+		os.Stderr = oldStderr
+	}()
 
 	provider.PrintMessage("Step %d of %d: %s", 1, 3, "running")
 

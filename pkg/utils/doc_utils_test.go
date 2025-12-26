@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -11,6 +12,10 @@ import (
 )
 
 func TestDisplayDocs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix commands (cat, less)")
+	}
+
 	// viper.Reset() is called in each subtest
 
 	t.Run("no pager - prints to stdout", func(t *testing.T) {

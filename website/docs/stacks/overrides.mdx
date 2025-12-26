@@ -88,6 +88,8 @@ section at the global, Terraform or Helmfile levels, all the components in the t
 the other hand, if we define an `overrides` section in a stack manifest, only the components directly defined in the manifest and its imports will get
 the overridden values, not all the components in the top-level Atmos stack.
 
+Note: The [`locals`](/stacks/locals) section is also file-scoped and does not inherit across imports, similar to `overrides`.
+
 This is especially useful when you have Atmos stack manifests split per Teams. Each Team manages a set of components, and you need to define a common
 configuration (or override the existing one) for the components that only a particular Team manages.
 

@@ -1438,6 +1438,111 @@ func TestTrimTrailingWhitespace(t *testing.T) {
 	}
 }
 
+func TestFormatSuccessAndError(t *testing.T) {
+	tests := []struct {
+		name         string
+		text         string
+		wantIcon     string
+		fallbackIcon string
+		initFormat   bool
+		formatFunc   func(string) string
+		funcName     string
+	}{
+		{
+			name:         "FormatSuccess with initialized formatter",
+			text:         "Operation completed",
+			wantIcon:     "✓",
+			fallbackIcon: "✓",
+			initFormat:   true,
+			formatFunc:   FormatSuccess,
+			funcName:     "FormatSuccess",
+		},
+		{
+			name:         "FormatSuccess fallback when formatter not initialized",
+			text:         "Operation completed",
+			wantIcon:     "✓",
+			fallbackIcon: "✓",
+			initFormat:   false,
+			formatFunc:   FormatSuccess,
+			funcName:     "FormatSuccess",
+		},
+		{
+			name:         "FormatError with initialized formatter",
+			text:         "Operation failed",
+			wantIcon:     "✗",
+			fallbackIcon: "✗",
+			initFormat:   true,
+			formatFunc:   FormatError,
+			funcName:     "FormatError",
+		},
+		{
+			name:         "FormatError fallback when formatter not initialized",
+			text:         "Operation failed",
+			wantIcon:     "✗",
+			fallbackIcon: "✗",
+			initFormat:   false,
+			formatFunc:   FormatError,
+			funcName:     "FormatError",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.initFormat {
+				// Initialize formatter.
+				ioCtx := createTestIOContext()
+				term := createMockTerminal(terminal.ColorNone)
+				InitFormatter(ioCtx)
+				globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+				// Cleanup after test.
+				defer func() {
+					formatterMu.Lock()
+					globalFormatter = nil
+					Format = nil
+					formatterMu.Unlock()
+				}()
+			} else {
+				// Clear formatter.
+				formatterMu.Lock()
+				oldFormatter := globalFormatter
+				oldFormat := Format
+				globalFormatter = nil
+				Format = nil
+				formatterMu.Unlock()
+
+				// Restore after test.
+				defer func() {
+					formatterMu.Lock()
+					globalFormatter = oldFormatter
+					Format = oldFormat
+					formatterMu.Unlock()
+				}()
+			}
+
+			got := tt.formatFunc(tt.text)
+
+			// Should always contain the icon.
+			if !strings.Contains(got, tt.wantIcon) {
+				t.Errorf("%s() = %q, want icon %q", tt.funcName, got, tt.wantIcon)
+			}
+
+			// Should always contain the text.
+			if !strings.Contains(got, tt.text) {
+				t.Errorf("%s() = %q, want text %q", tt.funcName, got, tt.text)
+			}
+
+			if !tt.initFormat {
+				// Fallback format should be "icon text".
+				expected := tt.fallbackIcon + " " + tt.text
+				if got != expected {
+					t.Errorf("%s() fallback = %q, want %q", tt.funcName, got, expected)
+				}
+			}
+		})
+	}
+}
+
 func TestTrimRight(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -3,6 +3,8 @@ package workflow
 import (
 	"context"
 	"errors"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -694,38 +696,6 @@ func TestCheckAndGenerateWorkflowStepNames(t *testing.T) {
 	}
 }
 
-// TestFormatList tests the list formatting function.
-func TestFormatList(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []string
-		expected string
-	}{
-		{
-			name:     "empty list",
-			input:    []string{},
-			expected: "",
-		},
-		{
-			name:     "single item",
-			input:    []string{"item1"},
-			expected: "- `item1`\n",
-		},
-		{
-			name:     "multiple items",
-			input:    []string{"item1", "item2", "item3"},
-			expected: "- `item1`\n- `item2`\n- `item3`\n",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := FormatList(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 // TestExecutor_Execute_NilUIProvider tests that executor works without UI provider.
 func TestExecutor_Execute_NilUIProvider(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -963,4 +933,224 @@ func TestExecutor_Execute_NilAtmosConfig(t *testing.T) {
 
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, errUtils.ErrNilParam)
+}
+
+// TestExecutor_Execute_WorkingDirectory tests working_directory support.
+func TestExecutor_Execute_WorkingDirectory(t *testing.T) {
+	// Use OS-portable paths for cross-platform compatibility.
+	// On Windows, paths like "/base" become "\base" which is NOT absolute.
+	// We need to use proper absolute paths for each platform.
+	var base, tmp, workflowDir, stepDir string
+	if runtime.GOOS == "windows" {
+		base = `C:\base`
+		tmp = `C:\tmp`
+		workflowDir = `C:\workflow-dir`
+		stepDir = `C:\step-dir`
+	} else {
+		base = "/base"
+		tmp = "/tmp"
+		workflowDir = "/workflow-dir"
+		stepDir = "/step-dir"
+	}
+
+	tests := []struct {
+		name                 string
+		workflowWorkDir      string
+		stepWorkDir          string
+		basePath             string
+		expectedShellWorkDir string
+		expectedAtmosWorkDir string
+	}{
+		{
+			name:                 "no working directory",
+			workflowWorkDir:      "",
+			stepWorkDir:          "",
+			basePath:             base,
+			expectedShellWorkDir: ".",
+			expectedAtmosWorkDir: ".",
+		},
+		{
+			name:                 "workflow level absolute path",
+			workflowWorkDir:      tmp,
+			stepWorkDir:          "",
+			basePath:             base,
+			expectedShellWorkDir: tmp,
+			expectedAtmosWorkDir: tmp,
+		},
+		{
+			name:                 "workflow level relative path",
+			workflowWorkDir:      "subdir",
+			stepWorkDir:          "",
+			basePath:             base,
+			expectedShellWorkDir: filepath.Join(base, "subdir"),
+			expectedAtmosWorkDir: filepath.Join(base, "subdir"),
+		},
+		{
+			name:                 "step overrides workflow",
+			workflowWorkDir:      workflowDir,
+			stepWorkDir:          stepDir,
+			basePath:             base,
+			expectedShellWorkDir: stepDir,
+			expectedAtmosWorkDir: stepDir,
+		},
+		{
+			name:                 "step relative overrides workflow",
+			workflowWorkDir:      workflowDir,
+			stepWorkDir:          "step-subdir",
+			basePath:             base,
+			expectedShellWorkDir: filepath.Join(base, "step-subdir"),
+			expectedAtmosWorkDir: filepath.Join(base, "step-subdir"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			// Create mocks.
+			mockRunner := NewMockCommandRunner(ctrl)
+			mockUI := NewMockUIProvider(ctrl)
+
+			// Expect shell command with correct working directory.
+			mockRunner.EXPECT().
+				RunShell("echo shell", "test-workflow-step-0", tt.expectedShellWorkDir, []string{}, false).
+				Return(nil)
+
+			// Expect atmos command with correct working directory.
+			mockRunner.EXPECT().
+				RunAtmos(gomock.Any()).
+				DoAndReturn(func(params *AtmosExecParams) error {
+					assert.Equal(t, tt.expectedAtmosWorkDir, params.Dir, "atmos command working directory mismatch")
+					return nil
+				})
+
+			mockUI.EXPECT().PrintMessage(gomock.Any(), gomock.Any()).AnyTimes()
+
+			// Create executor.
+			executor := NewExecutor(mockRunner, nil, mockUI)
+
+			// Define workflow with working_directory.
+			workflowDef := &schema.WorkflowDefinition{
+				WorkingDirectory: tt.workflowWorkDir,
+				Steps: []schema.WorkflowStep{
+					{
+						Name:             "shell-step",
+						Command:          "echo shell",
+						Type:             "shell",
+						WorkingDirectory: tt.stepWorkDir,
+					},
+					{
+						Name:             "atmos-step",
+						Command:          "version",
+						Type:             "atmos",
+						WorkingDirectory: tt.stepWorkDir,
+					},
+				},
+			}
+
+			params := &WorkflowParams{
+				Ctx:                context.Background(),
+				AtmosConfig:        &schema.AtmosConfiguration{BasePath: tt.basePath},
+				Workflow:           "test-workflow",
+				WorkflowPath:       "test.yaml",
+				WorkflowDefinition: workflowDef,
+				Opts:               ExecuteOptions{},
+			}
+
+			// Execute.
+			result, err := executor.Execute(params)
+
+			require.NoError(t, err)
+			assert.True(t, result.Success)
+			assert.Len(t, result.Steps, 2)
+		})
+	}
+}
+
+// TestCalculateWorkingDirectory tests the calculateWorkingDirectory function directly.
+func TestCalculateWorkingDirectory(t *testing.T) {
+	// Use OS-portable paths for cross-platform compatibility.
+	// On Windows, paths like "/base" become "\base" which is NOT absolute.
+	// We need to use proper absolute paths for each platform.
+	var base, absolutePath, workflowDirPath, stepDirPath string
+	if runtime.GOOS == "windows" {
+		base = `C:\base`
+		absolutePath = `C:\absolute\path`
+		workflowDirPath = `C:\workflow\dir`
+		stepDirPath = `C:\step\dir`
+	} else {
+		base = "/base"
+		absolutePath = "/absolute/path"
+		workflowDirPath = "/workflow/dir"
+		stepDirPath = "/step/dir"
+	}
+
+	tests := []struct {
+		name        string
+		workflowDir string
+		stepDir     string
+		basePath    string
+		expected    string
+	}{
+		{
+			name:        "empty returns empty",
+			workflowDir: "",
+			stepDir:     "",
+			basePath:    base,
+			expected:    "",
+		},
+		{
+			name:        "workflow absolute path",
+			workflowDir: absolutePath,
+			stepDir:     "",
+			basePath:    base,
+			expected:    absolutePath,
+		},
+		{
+			name:        "workflow relative path resolved against base",
+			workflowDir: filepath.FromSlash("relative/path"),
+			stepDir:     "",
+			basePath:    base,
+			expected:    filepath.Join(base, filepath.FromSlash("relative/path")),
+		},
+		{
+			name:        "step overrides workflow",
+			workflowDir: workflowDirPath,
+			stepDir:     stepDirPath,
+			basePath:    base,
+			expected:    stepDirPath,
+		},
+		{
+			name:        "step relative resolved against base",
+			workflowDir: "",
+			stepDir:     filepath.FromSlash("step/relative"),
+			basePath:    base,
+			expected:    filepath.Join(base, filepath.FromSlash("step/relative")),
+		},
+		{
+			name:        "whitespace trimmed from absolute path",
+			workflowDir: "  " + absolutePath + "  ",
+			stepDir:     "",
+			basePath:    base,
+			expected:    absolutePath,
+		},
+	}
+
+	executor := NewExecutor(nil, nil, nil)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			workflowDef := &schema.WorkflowDefinition{
+				WorkingDirectory: tt.workflowDir,
+			}
+			step := &schema.WorkflowStep{
+				WorkingDirectory: tt.stepDir,
+			}
+
+			result := executor.calculateWorkingDirectory(workflowDef, step, tt.basePath)
+
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

@@ -66,26 +66,44 @@ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
 ## Arguments
 
 <dl>
-    <dt>`component` <em>(required)</em></dt>
+    <dt>`component` <em>(optional)</em></dt>
     <dd>
-        Atmos terraform component.
+        Atmos terraform component. If not specified along with `--force`, cleans all components.
     </dd>
 </dl>
 
 ## Flags
 
 <dl>
-    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(optional)</em></dt>
     <dd>
-        Atmos stack.
+        Atmos stack. Required when specifying a component.
     </dd>
 
     <dt>`--dry-run` <em>(optional)</em></dt>
     <dd>
-        Dry run.
+        Dry run. Shows what files would be deleted without actually deleting them.
 
         ```shell
-        atmos terraform clean <component> -s <stack> --dry-run=true
+        atmos terraform clean <component> -s <stack> --dry-run
+        ```
+    </dd>
+
+    <dt>`--everything` <em>(optional)</em></dt>
+    <dd>
+        If set, Atmos will also delete the Terraform state files and directories for the component (the `terraform.tfstate.d` directory).
+
+        ```shell
+        atmos terraform clean <component> -s <stack> --everything
+        ```
+    </dd>
+
+    <dt>`--force` <em>(alias `-f`)</em> <em>(optional)</em></dt>
+    <dd>
+        Forcefully delete Terraform state files and directories without prompting for confirmation.
+
+        ```shell
+        atmos terraform clean <component> -s <stack> --force
         ```
     </dd>
 
@@ -94,3 +112,9 @@ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
         Skip deleting the `.terraform.lock.hcl` file.
     </dd>
 </dl>
+
+## Related Commands
+
+- [terraform init](/cli/commands/terraform/init) - Initialize a Terraform working directory
+- [terraform plan](/cli/commands/terraform/plan) - Generate an execution plan
+- [terraform apply](/cli/commands/terraform/apply) - Apply changes to infrastructure

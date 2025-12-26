@@ -1,16 +1,23 @@
 package list
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
-	l "github.com/cloudposse/atmos/pkg/list"
+	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/extract"
+	"github.com/cloudposse/atmos/pkg/list/filter"
+	"github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/renderer"
+	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 var workflowsParser *flags.StandardParser
@@ -18,70 +25,195 @@ var workflowsParser *flags.StandardParser
 // WorkflowsOptions contains parsed flags for the workflows command.
 type WorkflowsOptions struct {
 	global.Flags
-	File      string
-	Format    string
-	Delimiter string
+	File    string
+	Format  string
+	Columns []string
+	Sort    string
 }
 
 // workflowsCmd lists atmos workflows.
 var workflowsCmd = &cobra.Command{
 	Use:   "workflows",
-	Short: "List all Atmos workflows",
-	Long:  "List Atmos workflows, with options to filter results by specific files.",
+	Short: "List all Atmos workflows with filtering, sorting, and formatting options",
+	Long:  `List Atmos workflows with support for filtering by file, custom column selection, sorting, and multiple output formats.`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := checkAtmosConfig(true); err != nil {
+		// Get Viper instance for flag/env precedence.
+		v := viper.GetViper()
+
+		// Skip stack validation for workflows (honors --base-path, --config, --config-path, --profile).
+		if err := checkAtmosConfig(cmd, v, true); err != nil {
 			return err
 		}
 
-		// Parse flags using StandardParser with Viper precedence
-		v := viper.GetViper()
+		// Parse flags using StandardParser with Viper precedence.
 		if err := workflowsParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
 
 		opts := &WorkflowsOptions{
-			Flags:     flags.ParseGlobalFlags(cmd, v),
-			File:      v.GetString("file"),
-			Format:    v.GetString("format"),
-			Delimiter: v.GetString("delimiter"),
+			Flags:   flags.ParseGlobalFlags(cmd, v),
+			File:    v.GetString("file"),
+			Format:  v.GetString("format"),
+			Columns: v.GetStringSlice("columns"),
+			Sort:    v.GetString("sort"),
 		}
 
-		output, err := listWorkflowsWithOptions(opts)
-		if err != nil {
-			return err
-		}
-
-		u.PrintMessageInColor(output, theme.Colors.Success)
-		return nil
+		return listWorkflowsWithOptions(cmd, args, opts)
 	},
 }
 
+// columnsCompletionForWorkflows provides dynamic tab completion for --columns flag.
+// Returns column names from atmos.yaml workflows.list.columns configuration.
+func columnsCompletionForWorkflows(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	// Load atmos configuration with CLI flags.
+	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Extract column names from atmos.yaml configuration.
+	if len(atmosConfig.Workflows.List.Columns) > 0 {
+		var columnNames []string
+		for _, col := range atmosConfig.Workflows.List.Columns {
+			columnNames = append(columnNames, col.Name)
+		}
+		return columnNames, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// If no custom columns configured, return empty list.
+	return nil, cobra.ShellCompDirectiveNoFileComp
+}
+
 func init() {
-	// Create parser with workflows-specific flags using functional options
-	workflowsParser = flags.NewStandardParser(
-		flags.WithStringFlag("file", "f", "", "Filter workflows by file (e.g., atmos list workflows -f workflow1)"),
-		flags.WithStringFlag("format", "", "", "Output format (table, json, csv)"),
-		flags.WithStringFlag("delimiter", "", "\t", "Delimiter for csv output"),
-		flags.WithEnvVars("file", "ATMOS_WORKFLOW_FILE"),
-		flags.WithEnvVars("format", "ATMOS_LIST_FORMAT"),
-		flags.WithEnvVars("delimiter", "ATMOS_LIST_DELIMITER"),
+	// Create parser with workflows-specific flags using flag wrappers.
+	workflowsParser = NewListParser(
+		WithFormatFlag,
+		WithWorkflowsColumnsFlag,
+		WithSortFlag,
+		WithFileFlag,
 	)
 
-	// Register flags
+	// Register flags.
 	workflowsParser.RegisterFlags(workflowsCmd)
 
-	// Bind flags to Viper for environment variable support
+	// Register dynamic tab completion for --columns flag.
+	if err := workflowsCmd.RegisterFlagCompletionFunc("columns", columnsCompletionForWorkflows); err != nil {
+		panic(err)
+	}
+
+	// Bind flags to Viper for environment variable support.
 	if err := workflowsParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
 }
 
-func listWorkflowsWithOptions(opts *WorkflowsOptions) (string, error) {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
+func listWorkflowsWithOptions(cmd *cobra.Command, args []string, opts *WorkflowsOptions) error {
+	// Process command line args to get real ConfigAndStacksInfo with CLI flags.
+	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	return l.FilterAndListWorkflows(opts.File, atmosConfig.Workflows.List, opts.Format, opts.Delimiter)
+	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
+	if err != nil {
+		return err
+	}
+
+	// If format is empty, check command-specific config.
+	if opts.Format == "" && atmosConfig.Workflows.List.Format != "" {
+		opts.Format = atmosConfig.Workflows.List.Format
+	}
+
+	// Extract workflows into structured data.
+	workflows, err := extract.Workflows(&atmosConfig, opts.File)
+	if err != nil {
+		return err
+	}
+
+	if len(workflows) == 0 {
+		_ = ui.Info("No workflows found")
+		return nil
+	}
+
+	// Build filters.
+	filters := buildWorkflowFilters(opts)
+
+	// Get column configuration.
+	columns := getWorkflowColumns(&atmosConfig, opts.Columns)
+
+	// Build column selector.
+	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
+	if err != nil {
+		return fmt.Errorf("error creating column selector: %w", err)
+	}
+
+	// Build sorters.
+	sorters, err := buildWorkflowSorters(opts.Sort)
+	if err != nil {
+		return fmt.Errorf("error parsing sort specification: %w", err)
+	}
+
+	// Create renderer and execute pipeline.
+	outputFormat := format.Format(opts.Format)
+	r := renderer.New(filters, selector, sorters, outputFormat, "")
+
+	return r.Render(workflows)
+}
+
+// buildWorkflowFilters creates filters based on command options.
+func buildWorkflowFilters(opts *WorkflowsOptions) []filter.Filter {
+	var filters []filter.Filter
+
+	// File filter already handled by extraction logic.
+	// Add any additional filters here in the future.
+
+	return filters
+}
+
+// getWorkflowColumns returns column configuration.
+func getWorkflowColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) []column.Config {
+	// If --columns flag is provided, parse it and return.
+	if len(columnsFlag) > 0 {
+		return parseColumnsFlag(columnsFlag)
+	}
+
+	// Check atmos.yaml for workflows.list.columns configuration.
+	if len(atmosConfig.Workflows.List.Columns) > 0 {
+		var configs []column.Config
+		for _, col := range atmosConfig.Workflows.List.Columns {
+			configs = append(configs, column.Config{
+				Name:  col.Name,
+				Value: col.Value,
+				Width: col.Width,
+			})
+		}
+		return configs
+	}
+
+	// Default columns for workflows.
+	return []column.Config{
+		{Name: "File", Value: "{{ .file }}"},
+		{Name: "Workflow", Value: "{{ .name }}"},
+		{Name: "Description", Value: "{{ .description }}"},
+		{Name: "Steps", Value: "{{ .steps }}"},
+	}
+}
+
+// buildWorkflowSorters creates sorters from sort specification.
+func buildWorkflowSorters(sortSpec string) ([]*listSort.Sorter, error) {
+	if sortSpec == "" {
+		// Default sort: by file ascending, then workflow ascending.
+		return []*listSort.Sorter{
+			listSort.NewSorter("File", listSort.Ascending),
+			listSort.NewSorter("Workflow", listSort.Ascending),
+		}, nil
+	}
+
+	return listSort.ParseSortSpec(sortSpec)
 }

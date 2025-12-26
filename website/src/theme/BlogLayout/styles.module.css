@@ -13,11 +13,15 @@
   transition: flex 0.3s ease, max-width 0.3s ease;
 }
 
-/* TOC container - anchored to right side, never moves */
+/* TOC container - anchored to right side with sticky positioning */
 .tocWrapper {
   flex: 0 0 calc(100% * 2 / 12) !important;
   max-width: calc(100% * 2 / 12) !important;
   margin-left: auto !important;
+  position: sticky;
+  top: calc(var(--ifm-navbar-height) + 1rem);
+  align-self: flex-start;
+  max-height: calc(100vh - var(--ifm-navbar-height) - 2rem);
 }
 
 /* Mobile responsive styles */

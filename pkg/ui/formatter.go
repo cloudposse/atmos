@@ -308,6 +308,28 @@ func Write(text string) error {
 	return f.terminal.Write(text)
 }
 
+// FormatSuccess returns a success message with green checkmark as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatSuccess(text string) string {
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted
+		return "✓ " + text
+	}
+	return f.Success(text)
+}
+
+// FormatError returns an error message with red X as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatError(text string) string {
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted
+		return "✗ " + text
+	}
+	return f.Error(text)
+}
+
 // Writef writes formatted text to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Writef() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Writef(format string, a ...interface{}) error {

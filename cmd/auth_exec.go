@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -35,7 +36,8 @@ var authExecCmd = &cobra.Command{
 // executeAuthExecCommand is the main execution function for auth exec command.
 func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
-	checkAtmosConfig()
+	// Skip stack validation since auth exec only needs auth configuration, not stack manifests.
+	checkAtmosConfig(WithStackValidation(false))
 
 	return executeAuthExecCommandCore(cmd, args)
 }
@@ -106,8 +108,9 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 	}
 
 	// Prepare shell environment with file-based credentials.
-	// Start with current OS environment and let PrepareShellEnvironment configure auth.
-	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, os.Environ())
+	// Start with current OS environment + global env from atmos.yaml and let PrepareShellEnvironment configure auth.
+	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, baseEnv)
 	if err != nil {
 		return fmt.Errorf("failed to prepare command environment: %w", err)
 	}

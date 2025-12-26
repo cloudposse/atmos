@@ -8,7 +8,6 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func executeDescribeAffected(
@@ -55,41 +54,62 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
+	// Clear base component cache between current and remote stack processing
+	// to prevent cache contamination (cache keys don't include path information).
+	ClearBaseComponentConfigCache()
+
 	localRepoFileSystemPathAbs, err := filepath.Abs(localRepoFileSystemPath)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	basePath := atmosConfig.BasePath
-
-	// Handle `atmos` absolute base path.
-	// Absolute base path can be set in the `base_path` attribute in `atmos.yaml`, or using the ENV var `ATMOS_BASE_PATH` (as it's done in `geodesic`)
-	// If the `atmos` base path is absolute, find the relative path between the local repo path and the `atmos` base path.
-	// This relative path (the difference) is then used below to join with the remote (cloned) target repo path.
-	if filepath.IsAbs(basePath) {
-		basePath, err = filepath.Rel(localRepoFileSystemPathAbs, basePath)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-	}
-
-	// Update paths to point to the cloned remote repo dir
+	// Save current paths before modification.
 	currentStacksBaseAbsolutePath := atmosConfig.StacksBaseAbsolutePath
 	currentStacksTerraformDirAbsolutePath := atmosConfig.TerraformDirAbsolutePath
 	currentStacksHelmfileDirAbsolutePath := atmosConfig.HelmfileDirAbsolutePath
 	currentStacksPackerDirAbsolutePath := atmosConfig.PackerDirAbsolutePath
 	currentStacksStackConfigFilesAbsolutePaths := atmosConfig.StackConfigFilesAbsolutePaths
 
-	atmosConfig.StacksBaseAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath)
-	atmosConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Terraform.BasePath)
-	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Helmfile.BasePath)
-	atmosConfig.PackerDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Components.Packer.BasePath)
-	atmosConfig.StackConfigFilesAbsolutePaths, err = u.JoinPaths(
-		filepath.Join(remoteRepoFileSystemPath, basePath, atmosConfig.Stacks.BasePath),
-		atmosConfig.StackConfigFilesRelativePaths,
-	)
+	// Compute the relative paths from the git repo root to the current absolute paths.
+	// This handles the case where atmos is run from a subdirectory (e.g., -C examples/demo-stacks).
+	// We need to preserve the subdirectory path when constructing remote paths.
+	stacksRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentStacksBaseAbsolutePath)
 	if err != nil {
 		return nil, nil, nil, err
+	}
+	terraformRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentStacksTerraformDirAbsolutePath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	helmfileRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentStacksHelmfileDirAbsolutePath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	packerRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentStacksPackerDirAbsolutePath)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Compute relative paths for stack config files.
+	stackConfigFilesRelPaths := make([]string, len(currentStacksStackConfigFilesAbsolutePaths))
+	for i, absPath := range currentStacksStackConfigFilesAbsolutePaths {
+		relPath, err := filepath.Rel(localRepoFileSystemPathAbs, absPath)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		stackConfigFilesRelPaths[i] = relPath
+	}
+
+	// Update paths to point to the remote repo dir using the computed relative paths.
+	atmosConfig.StacksBaseAbsolutePath = filepath.Join(remoteRepoFileSystemPath, stacksRelPath)
+	atmosConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, terraformRelPath)
+	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, helmfileRelPath)
+	atmosConfig.PackerDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, packerRelPath)
+
+	// Convert relative stack config file paths to absolute paths in remote repo.
+	atmosConfig.StackConfigFilesAbsolutePaths = make([]string, len(stackConfigFilesRelPaths))
+	for i, relPath := range stackConfigFilesRelPaths {
+		atmosConfig.StackConfigFilesAbsolutePaths[i] = filepath.Join(remoteRepoFileSystemPath, relPath)
 	}
 
 	remoteStacks, err := ExecuteDescribeStacks(

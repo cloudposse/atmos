@@ -20,17 +20,42 @@ func TestGlobalOptionsBuilder(t *testing.T) {
 		parser := NewGlobalOptionsBuilder().Build()
 		parser.RegisterPersistentFlags(cmd)
 
-		// Verify key flags are registered as persistent flags (inherited by subcommands).
-		assert.NotNil(t, cmd.PersistentFlags().Lookup("logs-level"))
-		assert.NotNil(t, cmd.PersistentFlags().Lookup("logs-file"))
-		assert.NotNil(t, cmd.PersistentFlags().Lookup("chdir"))
-		assert.NotNil(t, cmd.PersistentFlags().Lookup("config"))
-		assert.NotNil(t, cmd.PersistentFlags().Lookup("config-path"))
-		assert.NotNil(t, cmd.PersistentFlags().Lookup("force-color"))
-		assert.NotNil(t, cmd.PersistentFlags().Lookup("force-tty"))
-		assert.NotNil(t, cmd.PersistentFlags().Lookup("mask"))
-		assert.NotNil(t, cmd.PersistentFlags().Lookup("pager"))
-		assert.NotNil(t, cmd.PersistentFlags().Lookup("identity"))
+		// Working directory and path configuration flags.
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("chdir"), "chdir flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("base-path"), "base-path flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("config"), "config flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("config-path"), "config-path flag should be registered")
+
+		// Logging configuration flags.
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("logs-level"), "logs-level flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("logs-file"), "logs-file flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("no-color"), "no-color flag should be registered")
+
+		// Terminal and I/O configuration flags.
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("force-color"), "force-color flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("force-tty"), "force-tty flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("mask"), "mask flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("pager"), "pager flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("interactive"), "interactive flag should be registered")
+
+		// Authentication flags.
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("identity"), "identity flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("profile"), "profile flag should be registered")
+
+		// Profiling flags.
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("profiler-enabled"), "profiler-enabled flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("profiler-port"), "profiler-port flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("profiler-host"), "profiler-host flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("profile-file"), "profile-file flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("profile-type"), "profile-type flag should be registered")
+
+		// Performance heatmap flags.
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("heatmap"), "heatmap flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("heatmap-mode"), "heatmap-mode flag should be registered")
+
+		// System flags.
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("redirect-stderr"), "redirect-stderr flag should be registered")
+		assert.NotNil(t, cmd.PersistentFlags().Lookup("version"), "version flag should be registered")
 	})
 
 	t.Run("uses defaults from global.NewFlags", func(t *testing.T) {

@@ -20,7 +20,7 @@ var (
 
 	// AWS SSM specific errors.
 	ErrRegionRequired = errors.New("region is required in ssm store configuration")
-	ErrLoadAWSConfig  = errors.New("failed to load AWS configuration")
+	ErrLoadAWSConfig  = errors.New("failed to load AWS config")
 	ErrSetParameter   = errors.New("failed to set parameter")
 	ErrGetParameter   = errors.New("failed to get parameter")
 

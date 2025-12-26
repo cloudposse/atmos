@@ -3,11 +3,16 @@ title: "atmos list metadata"
 id: "list-metadata"
 sidebar_label: metadata
 sidebar_class_name: command
+description: Use this command to list component metadata across all stacks
 ---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
 
-# atmos list metadata
+<Intro>
+Use this command to list component metadata across all stacks, displaying custom metadata fields in a table. Filter and sort metadata to quickly find components with specific attributes.
+</Intro>
 
-The `atmos list metadata` command displays component metadata across all stacks.
+<Screengrab title="atmos list metadata --help" slug="atmos-list-metadata--help" />
 
 ## Usage
 
@@ -17,60 +22,72 @@ atmos list metadata [flags]
 
 ## Description
 
-The `atmos list metadata` command helps you inspect component metadata across different stacks. It provides a tabular view where:
+The `atmos list metadata` command displays component metadata across all stacks in a tabular format. Each row represents a component instance, showing metadata fields like:
 
-- Each column represents a stack (e.g., dev-ue1, staging-ue1, prod-ue1)
-- Each row represents a key in the component's metadata
-- Cells contain the metadata values for each key in each stack
+- Component type (`abstract` or `real`)
+- Enabled/disabled status
+- Locked status
+- Base component name
+- Inheritance chain
+- Description
 
-The command is particularly useful for:
-- Comparing component metadata across different environments
-- Verifying component types and versions across stacks
-- Understanding component organization patterns across your infrastructure
+This command is useful for:
+- Auditing component types across environments
+- Finding enabled/disabled components
+- Understanding component inheritance patterns
+- Verifying locked components
 
 ## Flags
 
 <dl>
-  <dt>`--query string`</dt>
-  <dd>JMESPath query to filter metadata (default: `.metadata`)</dd>
-  <dt>`--max-columns int`</dt>
-  <dd>Maximum number of columns to display (default: `50`)</dd>
-  <dt>`--format string`</dt>
+  <dt>`--format` / `-f`</dt>
   <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
-  <dt>`--delimiter string`</dt>
+
+  <dt>`--columns`</dt>
+  <dd>Columns to display (comma-separated). Overrides `components.list.columns` configuration in atmos.yaml</dd>
+
+  <dt>`--stack` / `-s`</dt>
+  <dd>Filter by stack pattern (supports glob patterns, e.g., `plat-*-prod`)</dd>
+
+  <dt>`--filter`</dt>
+  <dd>Filter expression using YQ syntax (e.g., `.enabled == true`)</dd>
+
+  <dt>`--sort`</dt>
+  <dd>Sort by column:order (e.g., `stack:asc,component:desc`)</dd>
+
+  <dt>`--delimiter`</dt>
   <dd>Delimiter for csv/tsv output (default: `,` for csv, `\t` for tsv)</dd>
-  <dt>`--stack string`</dt>
-  <dd>Filter by stack pattern (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)</dd>
+
   <dt>`--identity` / `-i` <em>(optional)</em></dt>
   <dd>Authenticate with a specific identity before listing metadata.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list metadata --identity my-aws-identity`<br/><br/>Can also be set via `ATMOS_IDENTITY` environment variable.</dd>
 </dl>
 
 ## Examples
 
-List all metadata:
+List all component metadata:
 ```shell
 atmos list metadata
 ```
 
-List metadata for specific stacks:
+Filter by stack pattern:
 ```shell
-# List metadata for dev stacks
-atmos list metadata --stack '*-dev-*'
-
 # List metadata for production stacks
-atmos list metadata --stack 'prod-*'
+atmos list metadata --stack '*-prod'
+
+# List metadata for specific environment
+atmos list metadata --stack 'plat-ue2-*'
 ```
 
-List specific metadata using JMESPath queries:
+Filter by metadata fields:
 ```shell
-# Query component names
-atmos list metadata --query '.metadata.component'
+# Find all enabled components
+atmos list metadata --filter '.enabled == true'
 
-# Query component types
-atmos list metadata --query '.metadata.type'
+# Find all abstract components
+atmos list metadata --filter '.type == "abstract"'
 
-# Query component versions
-atmos list metadata --query '.metadata.version'
+# Find locked components
+atmos list metadata --filter '.locked == true'
 ```
 
 Output in different formats:
@@ -78,47 +95,135 @@ Output in different formats:
 # JSON format for machine processing
 atmos list metadata --format json
 
-# YAML format for configuration files
+# YAML format for configuration review
 atmos list metadata --format yaml
 
-# CSV format for spreadsheet compatibility
+# CSV format for spreadsheet analysis
 atmos list metadata --format csv
-
-# TSV format with tab delimiters
-atmos list metadata --format tsv
 ```
 
-### Custom Column using Stack Name
+Sort metadata:
+```shell
+# Sort by stack name ascending
+atmos list metadata --sort stack:asc
 
-You can use available variables like `.stack_name` in your column definitions:
+# Multi-column sort
+atmos list metadata --sort "type:desc,stack:asc,component:asc"
+```
+
+Custom column selection:
+```shell
+# Show only essential fields
+atmos list metadata --columns stack,component,type,enabled
+
+# Show inheritance information
+atmos list metadata --columns "component,component_base,inherits"
+```
+
+## Custom Columns Configuration
+
+You can customize the columns displayed by `atmos list metadata` in your `atmos.yaml`:
 
 ```yaml
-# In atmos.yaml, under the appropriate scope (values, vars, settings, or metadata)
-list:
-  columns:
-    - name: "Stack"
-      value: "{{ .stack_name }}"
-    - name: "Metadata"
-      value: "{{ .key }}"
-    - name: "Value"
-      value: "{{ .value }}"
+# atmos.yaml
+components:
+  list:
+    columns:
+      - name: Stack
+        value: "{{ .stack }}"
+      - name: Component
+        value: "{{ .component }}"
+      - name: Type
+        value: "{{ .type }}"
+      - name: Enabled
+        value: "{{ .enabled }}"
+      - name: Locked
+        value: "{{ .locked }}"
+      - name: Base Component
+        value: "{{ .component_base }}"
+      - name: Inherits
+        value: "{{ .inherits }}"
+      - name: Description
+        value: "{{ .description }}"
+```
+
+### Available Template Fields
+
+Column `value` fields support Go template syntax with access to:
+
+- `.stack` - Stack name
+- `.component` - Component name
+- `.component_type` - Component type (`terraform`, `helmfile`, etc.)
+- `.type` - Metadata type (`abstract`, `real`)
+- `.enabled` - Whether component is enabled (boolean)
+- `.locked` - Whether component is locked (boolean)
+- `.component_base` - Base Terraform/Helmfile component
+- `.inherits` - Comma-separated list of inherited components
+- `.description` - Component description
+- `.metadata` - Full metadata map for advanced templates
+
+### Template Functions
+
+Columns support template functions for data transformation:
+
+```yaml
+components:
+  list:
+    columns:
+      - name: Component (Upper)
+        value: "{{ .component | upper }}"
+      - name: Status
+        value: "{{ if .enabled }}✓ Enabled{{ else }}✗ Disabled{{ end }}"
+      - name: Type Badge
+        value: "{{ if eq .type \"abstract\" }}[A]{{ else }}[R]{{ end }}"
+      - name: Has Inherits
+        value: "{{ if .inherits }}Yes{{ else }}No{{ end }}"
+```
+
+Available functions:
+- `upper`, `lower` - String case conversion
+- `truncate` - Truncate string with ellipsis
+- `len` - Length of arrays/strings
+- `toString` - Convert value to string
+- `ternary` - Conditional expression
+- `eq`, `ne` - Equality comparison
+
+### Override Columns via CLI
+
+Override configured columns using the `--columns` flag:
+
+```shell
+# Display only stack, component, and type
+atmos list metadata --columns stack,component,type
+
+# Display custom subset
+atmos list metadata --columns "stack,component,type,enabled,locked"
 ```
 
 ## Example Output
 
 ```shell
 > atmos list metadata
-┌──────────────┬──────────────┬──────────────┬──────────────┐
-│              │   dev-ue1    │  staging-ue1 │   prod-ue1   │
-├──────────────┼──────────────┼──────────────┼──────────────┤
-│ component    │ vpc          │ vpc          │ vpc          │
-│ type         │ terraform    │ terraform    │ terraform    │
-│ version      │ 1.0.0        │ 1.0.0        │ 1.0.0        │
-└──────────────┴──────────────┴──────────────┴──────────────┘
+┌─────────────────┬───────────┬──────────┬─────────┬────────┬────────────────┬──────────────┬────────────────────┐
+│     Stack       │ Component │   Type   │ Enabled │ Locked │ Base Component │   Inherits   │    Description     │
+├─────────────────┼───────────┼──────────┼─────────┼────────┼────────────────┼──────────────┼────────────────────┤
+│ plat-ue2-dev    │ vpc       │ real     │ true    │ false  │ vpc            │ vpc/defaults │ Development VPC    │
+│ plat-ue2-dev    │ eks       │ real     │ true    │ false  │ eks            │ eks/defaults │ Development EKS    │
+│ plat-ue2-prod   │ vpc       │ real     │ true    │ true   │ vpc            │ vpc/defaults │ Production VPC     │
+│ plat-ue2-prod   │ eks       │ real     │ true    │ true   │ eks            │ eks/defaults │ Production EKS     │
+└─────────────────┴───────────┴──────────┴─────────┴────────┴────────────────┴──────────────┴────────────────────┘
 ```
 
 :::tip
-- For wide tables, try using more specific queries or reduce the number of stacks
-- Stack patterns support glob matching (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)
-- Metadata is typically found under component configurations
+- Use `--filter` to find specific metadata patterns (e.g., locked components, abstract components)
+- Combine `--stack` (glob) with `--filter` (YQ) for precise filtering
+- The `--sort` flag supports multi-column sorting for organized output
+- Metadata is component-level configuration (use [`atmos list settings`](/cli/commands/list/settings) for settings data)
 :::
+
+## Related Commands
+
+- [`atmos list instances`](/cli/commands/list/list-instances) - List all component instances with full configuration
+- [`atmos list components`](/cli/commands/list/components) - List all components
+- [`atmos list settings`](/cli/commands/list/settings) - List component settings
+- [`atmos describe component`](/cli/commands/describe/component) - Get detailed component configuration

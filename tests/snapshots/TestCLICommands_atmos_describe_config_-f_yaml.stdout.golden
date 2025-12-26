@@ -62,7 +62,7 @@ settings:
     token: phc_TEST_TOKEN_PLACEHOLDER
     logging: false
 initialized: true
-basePathAbsolute: /absolute/path/to/repo
+basePathAbsolute: /absolute/path/to/repo/examples/demo-stacks
 stacksBaseAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/stacks
 includeStackAbsolutePaths:
   - /absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*

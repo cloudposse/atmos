@@ -1,0 +1,39 @@
+---
+slug: function-registry-package
+title: "New pkg/function Package for Format-Agnostic Function Registry"
+authors: [osterman]
+tags: [core]
+---
+
+Introduces `pkg/function/`, a new format-agnostic function registry that consolidates YAML function handlers into a reusable package.
+
+<!--truncate-->
+
+## What Changed
+
+This release adds foundational packages for modular function handling:
+
+- **`pkg/function/`**: Format-agnostic function registry with handlers for all YAML functions (`!env`, `!exec`, `!terraform.output`, `!store.get`, `!literal`, etc.)
+- **`pkg/yaml/`**: YAML-specific utilities for position tracking and error handling
+- **`pkg/aws/identity/`**: Consolidated AWS identity caching (moved from `internal/aws_utils`)
+
+## Why This Matters
+
+The function registry separates concerns between format-specific parsing (YAML, HCL, JSON) and format-agnostic function execution. This enables:
+
+- **Code Reuse**: Single registry used across all configuration formats
+- **Extensibility**: New functions can be added without modifying core parsing logic
+- **Testing**: Interface-driven design with dependency injection for better testability
+- **Plugin Architecture**: Foundation for future plugin support
+
+## Technical Details
+
+Functions are organized by execution phase:
+- **PreMerge**: `!env`, `!exec`, `!random`, `!template`, `!include`, `!literal`
+- **PostMerge**: `!terraform.output`, `!terraform.state`, `!store.get`, `!aws.*`
+
+The registry provides thread-safe registration, lookup by name or alias, and phase-based filtering.
+
+## Get Involved
+
+This is preparatory work for broader YAML processing refactoring. Contributions and feedback are welcome at [github.com/cloudposse/atmos](https://github.com/cloudposse/atmos).

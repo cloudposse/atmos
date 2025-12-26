@@ -1,0 +1,120 @@
+---
+slug: list-affected-command
+title: "Introducing atmos list affected: A Better Way to See What Changed"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Quickly identify which components and stacks are affected by your changes with the new `atmos list affected` command.
+
+<!--truncate-->
+
+## What Changed
+
+We've added a new `atmos list affected` command that provides a human-readable table view of affected components and stacks between Git commits. This complements the existing `atmos describe affected` command, which outputs detailed JSON/YAML for automation.
+
+```shell
+atmos list affected
+```
+
+The command displays results in a clean table format with visual status indicators:
+
+```
+┌────────┬─────────────────────┬──────────────────┬──────────┬──────────┐
+│ Status │ Component           │ Stack            │ Type     │ Affected │
+├────────┼─────────────────────┼──────────────────┼──────────┼──────────┤
+│ ●      │ vpc                 │ plat-ue2-dev     │ terraform│ component│
+│ ●      │ vpc                 │ plat-ue2-prod    │ terraform│ component│
+│ ●      │ eks                 │ plat-ue2-dev     │ terraform│ stack.vars│
+│ ◐      │ rds                 │ plat-ue2-staging │ terraform│ file     │
+└────────┴─────────────────────┴──────────────────┴──────────┴──────────┘
+```
+
+## Why This Matters
+
+Before this change, understanding what components were affected by your changes required parsing JSON output or using tools like `jq`. Now you can get a quick overview directly in your terminal.
+
+**Visual status indicators** make it easy to spot:
+- `●` Enabled components ready for deployment
+- `◐` Locked components that shouldn't be modified
+- `○` Disabled components
+
+**Multiple output formats** support different workflows:
+- `table` (default) - Human-readable overview
+- `json` / `yaml` - Machine-readable for automation
+- `csv` / `tsv` - Spreadsheet and scripting integration
+
+## How to Use It
+
+### Basic Usage
+
+Compare your current branch against main:
+
+```shell
+atmos list affected
+```
+
+### Compare Against Specific References
+
+```shell
+# Compare against a specific branch
+atmos list affected --ref refs/heads/develop
+
+# Compare against a specific commit
+atmos list affected --sha abc123def456
+```
+
+### Filter and Sort Results
+
+```shell
+# Filter by stack
+atmos list affected --stack prod-us-east-1
+
+# Sort by component name
+atmos list affected --sort component:asc
+
+# Include dependent components
+atmos list affected --include-dependents
+```
+
+### Custom Column Selection
+
+```shell
+# Show only specific columns
+atmos list affected --columns component,stack,affected
+
+# Named columns with templates
+atmos list affected --columns "Component={{ .component }},Stack={{ .stack }}"
+```
+
+### CI/CD Integration
+
+```shell
+# JSON output for automation
+atmos list affected --format json
+
+# CSV for processing
+atmos list affected --format csv > affected.csv
+
+# Use pre-cloned repository
+atmos list affected --repo-path /tmp/target-repo --format json
+```
+
+## When to Use Each Command
+
+| Use Case | Command |
+|----------|---------|
+| Quick overview of changes | `atmos list affected` |
+| CI/CD pipelines (full data) | `atmos describe affected --format json` |
+| Spreadsheet analysis | `atmos list affected --format csv` |
+| Dependency visualization | `atmos list affected --include-dependents` |
+
+## Learn More
+
+- [atmos list affected documentation](/cli/commands/list/affected)
+- [atmos describe affected documentation](/cli/commands/describe/affected)
+- [GitHub Actions integration](/integrations/github-actions/affected-stacks)
+
+## Get Involved
+
+We'd love your feedback! Try out `atmos list affected` and let us know how it works for your workflow. Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) or join us in [Slack](https://slack.cloudposse.com).

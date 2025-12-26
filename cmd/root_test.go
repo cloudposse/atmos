@@ -836,12 +836,12 @@ func TestParseChdirFromArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Call the function with test args.
-			result := parseChdirFromArgList(tt.args)
+			// Call the internal function directly with test args.
+			result := parseChdirFromArgsInternal(tt.args)
 
 			// Verify.
 			assert.Equal(t, tt.expected, result,
-				"parseChdirFromArgList() with args %v should return %q, got %q",
+				"parseChdirFromArgsInternal() with args %v should return %q, got %q",
 				tt.args, tt.expected, result)
 		})
 	}

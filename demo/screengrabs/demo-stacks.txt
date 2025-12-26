@@ -46,6 +46,7 @@ atmos describe stacks --help
 atmos describe workflows --help
 atmos docs --help
 atmos docs generate --help
+atmos env --help
 atmos list --help
 atmos list components --help
 atmos list metadata --help
@@ -62,6 +63,12 @@ atmos profile list --help
 atmos profile show --help
 atmos terraform --help
 atmos terraform apply --help
+atmos terraform backend --help
+atmos terraform backend create --help
+atmos terraform backend delete --help
+atmos terraform backend describe --help
+atmos terraform backend list --help
+atmos terraform backend update --help
 atmos terraform clean --help
 atmos terraform console --help
 atmos terraform deploy --help

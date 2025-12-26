@@ -1,0 +1,47 @@
+---
+slug: working-directory-support
+title: "Working Directory Support for Commands and Workflows"
+authors: [osterman]
+tags: [feature, dx]
+date: 2025-12-09
+---
+
+Custom commands and workflow steps can now specify a `working_directory` to control where they execute.
+
+<!--truncate-->
+
+## Working Directory for Commands and Workflows
+
+Custom commands and workflow steps can now specify a `working_directory` to control where they execute:
+
+```yaml
+# .atmos.d/commands.yaml
+commands:
+  - name: localstack
+    description: Start LocalStack for local development
+    working_directory: docker/localstack
+    steps:
+      - docker compose up -d
+```
+
+```yaml
+# stacks/workflows/deploy.yaml
+workflows:
+  build-and-deploy:
+    steps:
+      - command: make build
+        working_directory: !repo-root
+        type: shell
+      - command: docker compose up -d
+        working_directory: docker/app
+        type: shell
+```
+
+- **Absolute paths** are used as-is
+- **Relative paths** resolve against `base_path`
+- **Step-level** overrides workflow-level settings
+
+## Documentation
+
+- [Custom Commands](/cli/configuration/commands#working-directory)
+- [Workflows](/cli/configuration/workflows#working-directory)

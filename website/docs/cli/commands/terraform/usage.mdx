@@ -426,7 +426,7 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
     <dd>
         Execute the command on the components filtered by a [YQ](https://mikefarah.gitbook.io/yq) expression, in all stacks or in a specific stack.
 
-        __NOTE__: All Atmos sections are available in the expression, e.g. `vars`, `settings`, `env`, `metadata`, `backend`, etc.
+        __NOTE__: All Atmos sections are available in the expression, e.g. `vars`, `locals`, `settings`, `env`, `metadata`, `backend`, etc.
 
         ```shell
         atmos terraform plan --query '.vars.tags.team == "data"'

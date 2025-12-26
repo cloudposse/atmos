@@ -52,6 +52,18 @@ func TestNewProvider_Factory(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:         "azure-oidc-valid",
+			providerName: "azure-oidc",
+			config: &schema.Provider{
+				Kind: "azure/oidc",
+				Spec: map[string]interface{}{
+					"tenant_id": "test-tenant-id",
+					"client_id": "test-client-id",
+				},
+			},
+			expectError: false,
+		},
+		{
 			name:         "github-oidc-valid",
 			providerName: "github-oidc",
 			config:       &schema.Provider{Kind: "github/oidc", Region: "us-east-1"},
@@ -134,6 +146,12 @@ func TestNewIdentity_Factory(t *testing.T) {
 			name:         "aws-assume-role-valid",
 			identityName: "role",
 			config:       &schema.Identity{Kind: "aws/assume-role"},
+			expectError:  false,
+		},
+		{
+			name:         "aws-assume-root-valid",
+			identityName: "root-access",
+			config:       &schema.Identity{Kind: "aws/assume-root"},
 			expectError:  false,
 		},
 		{

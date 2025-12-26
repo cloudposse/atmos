@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# This mixin defines locals that should NOT be inherited by files that import it.
+# This tests file-scoped isolation.
+locals:
+  mixin_region: "us-west-2"
+  mixin_prefix: "mixin"
+
+vars:
+  region: "us-west-2"

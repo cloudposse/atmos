@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	term "github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -45,10 +46,6 @@ const (
 	ColumnNameManifest = "Manifest"
 	// ColumnNameFolder is the column name for folder.
 	ColumnNameFolder = "Folder"
-	// VendorTypeComponent is the type for components with component manifests.
-	VendorTypeComponent = "Component Manifest"
-	// VendorTypeVendor is the type for vendor manifests.
-	VendorTypeVendor = "Vendor Manifest"
 	// TemplateKeyComponent is the template key for component name.
 	TemplateKeyComponent = "atmos_component"
 	// TemplateKeyVendorType is the template key for vendor type.
@@ -62,12 +59,6 @@ const (
 )
 
 // VendorInfo contains information about a vendor configuration.
-type VendorInfo struct {
-	Component string // Component name
-	Type      string // "Component Manifest" or "Vendor Manifest"
-	Manifest  string // Path to manifest file
-	Folder    string // Target folder
-}
 
 // formatVendorOutput handles output formatting for vendor list based on options.FormatStr.
 func formatVendorOutput(rows []map[string]interface{}, customHeaders []string, options *FilterOptions) (string, error) {
@@ -120,7 +111,7 @@ func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *Filter
 		return "", err
 	}
 
-	vendorInfos, err := getVendorInfos(atmosConfig)
+	vendorInfos, err := GetVendorInfos(atmosConfig)
 	if err != nil {
 		return "", err
 	}
@@ -133,30 +124,31 @@ func FilterAndListVendor(atmosConfig *schema.AtmosConfiguration, options *Filter
 }
 
 // getVendorInfos retrieves vendor information, handling test and production modes.
-func getVendorInfos(atmosConfig *schema.AtmosConfiguration) ([]VendorInfo, error) {
+// GetVendorInfos reads vendor configuration from vendor.yaml files.
+func GetVendorInfos(atmosConfig *schema.AtmosConfiguration) ([]extract.VendorInfo, error) {
 	isTest := strings.Contains(atmosConfig.BasePath, "atmos-test-vendor")
 	if isTest {
 		if atmosConfig.Vendor.BasePath == "" {
 			return nil, ErrVendorBasepathNotSet
 		}
-		return []VendorInfo{
+		return []extract.VendorInfo{
 			{
 				Component: "vpc/v1",
 				Folder:    "components/terraform/vpc/v1",
 				Manifest:  "components/terraform/vpc/v1/component",
-				Type:      VendorTypeComponent,
+				Type:      extract.VendorTypeComponent,
 			},
 			{
 				Component: "eks/cluster",
 				Folder:    "components/terraform/eks/cluster",
 				Manifest:  "vendor.d/eks",
-				Type:      VendorTypeVendor,
+				Type:      extract.VendorTypeVendor,
 			},
 			{
 				Component: "ecs/cluster",
 				Folder:    "components/terraform/ecs/cluster",
 				Manifest:  "vendor.d/ecs",
-				Type:      VendorTypeVendor,
+				Type:      extract.VendorTypeVendor,
 			},
 		}, nil
 	}
@@ -178,8 +170,8 @@ func getVendorColumns(atmosConfig *schema.AtmosConfiguration) []schema.ListColum
 }
 
 // findVendorConfigurations finds all vendor configurations.
-func findVendorConfigurations(atmosConfig *schema.AtmosConfiguration) ([]VendorInfo, error) {
-	var vendorInfos []VendorInfo
+func findVendorConfigurations(atmosConfig *schema.AtmosConfiguration) ([]extract.VendorInfo, error) {
+	var vendorInfos []extract.VendorInfo
 
 	if atmosConfig.Vendor.BasePath == "" {
 		return nil, ErrVendorBasepathNotSet
@@ -214,7 +206,7 @@ func findVendorConfigurations(atmosConfig *schema.AtmosConfiguration) ([]VendorI
 }
 
 // appendVendorManifests processes the vendor base path and appends any found manifests to the provided list.
-func appendVendorManifests(vendorInfos []VendorInfo, vendorBasePath string) []VendorInfo {
+func appendVendorManifests(vendorInfos []extract.VendorInfo, vendorBasePath string) []extract.VendorInfo {
 	// Check if vendorBasePath is a file or directory.
 	fileInfo, err := os.Stat(vendorBasePath)
 	if err != nil {
@@ -235,7 +227,7 @@ func appendVendorManifests(vendorInfos []VendorInfo, vendorBasePath string) []Ve
 }
 
 // appendVendorManifestsFromDirectory finds vendor manifests in a directory and appends them to the provided list.
-func appendVendorManifestsFromDirectory(vendorInfos []VendorInfo, dirPath string) []VendorInfo {
+func appendVendorManifestsFromDirectory(vendorInfos []extract.VendorInfo, dirPath string) []extract.VendorInfo {
 	log.Debug("Processing vendor manifests from directory", "path", dirPath)
 
 	vendorManifests, err := findVendorManifests(dirPath)
@@ -249,7 +241,7 @@ func appendVendorManifestsFromDirectory(vendorInfos []VendorInfo, dirPath string
 }
 
 // appendVendorManifestFromFile processes a single vendor manifest file and appends results to the provided list.
-func appendVendorManifestFromFile(vendorInfos []VendorInfo, filePath string) []VendorInfo {
+func appendVendorManifestFromFile(vendorInfos []extract.VendorInfo, filePath string) []extract.VendorInfo {
 	log.Debug("Processing single vendor manifest file", "path", filePath)
 
 	vendorManifests := processVendorManifest(filePath)
@@ -262,7 +254,7 @@ func appendVendorManifestFromFile(vendorInfos []VendorInfo, filePath string) []V
 }
 
 // processComponent processes a single component and returns a VendorInfo if it has a component manifest.
-func processComponent(atmosConfig *schema.AtmosConfiguration, componentName string, componentData interface{}) *VendorInfo {
+func processComponent(atmosConfig *schema.AtmosConfiguration, componentName string, componentData interface{}) *extract.VendorInfo {
 	_, ok := componentData.(map[string]interface{})
 	if !ok {
 		return nil
@@ -301,17 +293,17 @@ func processComponent(atmosConfig *schema.AtmosConfiguration, componentName stri
 	}
 
 	// Create vendor info.
-	return &VendorInfo{
+	return &extract.VendorInfo{
 		Component: componentName,
-		Type:      VendorTypeComponent,
+		Type:      extract.VendorTypeComponent,
 		Manifest:  relativeManifestPath,
 		Folder:    relativeComponentPath,
 	}
 }
 
 // findComponentManifests finds all component manifests.
-func findComponentManifests(atmosConfig *schema.AtmosConfiguration) ([]VendorInfo, error) {
-	var vendorInfos []VendorInfo
+func findComponentManifests(atmosConfig *schema.AtmosConfiguration) ([]extract.VendorInfo, error) {
+	var vendorInfos []extract.VendorInfo
 
 	stacksMap, err := exec.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
@@ -524,8 +516,8 @@ func formatTargetFolder(target, component, version string) string {
 
 // processVendorManifest processes a vendor manifest file and returns vendor infos.
 // If there's an error reading the manifest, it logs the error and returns nil.
-func processVendorManifest(path string) []VendorInfo {
-	var vendorInfos []VendorInfo
+func processVendorManifest(path string) []extract.VendorInfo {
+	var vendorInfos []extract.VendorInfo
 
 	// Read vendor manifest.
 	vendorManifest, err := readVendorManifest(path)
@@ -551,9 +543,9 @@ func processVendorManifest(path string) []VendorInfo {
 			formattedFolder := formatTargetFolder(*target, source.Component, source.Version)
 
 			// Add to vendor infos.
-			vendorInfos = append(vendorInfos, VendorInfo{
+			vendorInfos = append(vendorInfos, extract.VendorInfo{
 				Component: source.Component,
-				Type:      VendorTypeVendor,
+				Type:      extract.VendorTypeVendor,
 				Manifest:  relativeManifestPath,
 				Folder:    formattedFolder,
 			})
@@ -564,8 +556,8 @@ func processVendorManifest(path string) []VendorInfo {
 }
 
 // findVendorManifests finds all vendor manifests.
-func findVendorManifests(vendorBasePath string) ([]VendorInfo, error) {
-	var vendorInfos []VendorInfo
+func findVendorManifests(vendorBasePath string) ([]extract.VendorInfo, error) {
+	var vendorInfos []extract.VendorInfo
 
 	// Check if vendor base path exists.
 	if !utils.FileOrDirExists(vendorBasePath) {
@@ -630,14 +622,14 @@ func readVendorManifest(path string) (*schema.AtmosVendorConfig, error) {
 }
 
 // applyVendorFilters applies filters to vendor infos.
-func applyVendorFilters(vendorInfos []VendorInfo, stackPattern string) []VendorInfo {
+func applyVendorFilters(vendorInfos []extract.VendorInfo, stackPattern string) []extract.VendorInfo {
 	// If no stack pattern, return all vendor infos.
 	if stackPattern == "" {
 		return vendorInfos
 	}
 
 	// Filter by stack pattern.
-	var filteredVendorInfos []VendorInfo
+	var filteredVendorInfos []extract.VendorInfo
 	for _, vendorInfo := range vendorInfos {
 		// Check if component matches stack pattern.
 		if matchesStackPattern(vendorInfo.Component, stackPattern) {
