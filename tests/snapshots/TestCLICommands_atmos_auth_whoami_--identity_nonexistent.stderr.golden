@@ -1,15 +1,16 @@
+
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-# identityName
 
-**Error:** invalid auth config
-
-## Hints
-
-💡 Identity specified was not found in the auth config.
 # Error
 
 **Error:** identity not found
 
 ## Explanation
 
-nonexistent
+Identity "nonexistent" not found in the current configuration
+
+## Hints
+
+💡 Run atmos list identities to see available identities
+
+
