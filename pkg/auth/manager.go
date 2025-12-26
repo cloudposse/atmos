@@ -439,7 +439,12 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 		// Check if we're in interactive mode (have TTY).
 		if !isInteractive() {
 			// User requested interactive selection but we don't have a TTY.
-			return "", errUtils.ErrIdentitySelectionRequiresTTY
+			return "", errUtils.Build(errUtils.ErrIdentitySelectionRequiresTTY).
+				WithExplanation("Interactive identity selection requires a terminal").
+				WithHint("Use --identity flag to specify an identity").
+				WithHint("Or set a default identity in your auth configuration").
+				WithContext("profile", FormatProfile(m.getProfiles())).
+				Err()
 		}
 		// We have a TTY - show selector.
 		return m.promptForIdentity("Select an identity:", m.ListIdentities())
@@ -458,7 +463,12 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	case 0:
 		// No default identities found.
 		if !isInteractive() {
-			return "", errUtils.ErrNoDefaultIdentity
+			return "", errUtils.Build(errUtils.ErrNoDefaultIdentity).
+				WithExplanation("No default identity is configured for authentication").
+				WithHint("Use --identity flag to specify an identity").
+				WithHint("Or set default: true on an identity in your auth configuration").
+				WithContext("profile", FormatProfile(m.getProfiles())).
+				Err()
 		}
 		// In interactive mode, prompt user to choose from all identities.
 		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
@@ -470,7 +480,13 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	default:
 		// Multiple default identities found.
 		if !isInteractive() {
-			return "", fmt.Errorf(errFormatWithString, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedFmt, defaultIdentities))
+			return "", errUtils.Build(errUtils.ErrMultipleDefaultIdentities).
+				WithExplanation("Multiple identities are marked as default").
+				WithHint("Use --identity flag to specify which identity to use").
+				WithHint("Or ensure only one identity has default: true").
+				WithContext("profile", FormatProfile(m.getProfiles())).
+				WithContext("defaults", strings.Join(defaultIdentities, ", ")).
+				Err()
 		}
 		// In interactive mode, prompt user to choose from default identities.
 		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
@@ -480,7 +496,12 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 // promptForIdentity prompts the user to select an identity from the given list.
 func (m *manager) promptForIdentity(message string, identities []string) (string, error) {
 	if len(identities) == 0 {
-		return "", errUtils.ErrNoIdentitiesAvailable
+		return "", errUtils.Build(errUtils.ErrNoIdentitiesAvailable).
+			WithExplanation("No identities are configured for authentication").
+			WithHint("Add identities to your auth configuration in atmos.yaml").
+			WithHint("Run `atmos auth --help` for configuration examples").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			Err()
 	}
 
 	// Sort identities alphabetically for consistent ordering.
