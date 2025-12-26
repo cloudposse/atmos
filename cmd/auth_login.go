@@ -66,7 +66,8 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 		// Provider-level authentication (e.g., for SSO auto-provisioning).
 		whoami, err = authManager.AuthenticateProvider(ctx, providerName)
 		if err != nil {
-			return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
+			// Return error directly - it already has ErrorBuilder context with hints.
+			return err
 		}
 	} else {
 		// Try identity-level authentication first.
@@ -82,7 +83,8 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 			}
 			whoami, err = authManager.AuthenticateProvider(ctx, providerName)
 			if err != nil {
-				return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
+				// Return error directly - it already has ErrorBuilder context with hints.
+				return err
 			}
 		} else if err != nil {
 			return err
@@ -118,14 +120,16 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 				errors.Is(err, errUtils.ErrNoDefaultIdentity) {
 				return nil, true, nil
 			}
-			return nil, false, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrDefaultIdentity, err)
+			// Return error directly - it already has ErrorBuilder context with hints.
+			return nil, false, err
 		}
 	}
 
 	// Perform identity authentication.
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
-		return nil, false, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrAuthenticationFailed, identityName, err)
+		// Return error directly - it already has ErrorBuilder context with hints.
+		return nil, false, err
 	}
 
 	return whoami, false, nil
