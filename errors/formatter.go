@@ -59,19 +59,23 @@ func DefaultFormatterConfig() FormatterConfig {
 // Context is extracted from cockroachdb/errors safe details and displayed
 // as key-value pairs only in verbose mode.
 func formatContextTable(err error, useColor bool) string {
-	details := errors.GetSafeDetails(err)
-	if len(details.SafeDetails) == 0 {
+	// Use GetAllSafeDetails to traverse the entire error chain.
+	// Safe details may be wrapped at different levels of the error chain.
+	allDetails := errors.GetAllSafeDetails(err)
+	if len(allDetails) == 0 {
 		return ""
 	}
 
 	// Parse "component=vpc stack=prod" format into key-value pairs.
 	var rows [][]string
-	for _, detail := range details.SafeDetails {
-		str := fmt.Sprintf("%v", detail)
-		pairs := strings.Split(str, " ")
-		for _, pair := range pairs {
-			if parts := strings.SplitN(pair, "=", 2); len(parts) == 2 {
-				rows = append(rows, []string{parts[0], parts[1]})
+	for _, layer := range allDetails {
+		for _, detail := range layer.SafeDetails {
+			str := fmt.Sprintf("%v", detail)
+			pairs := strings.Split(str, " ")
+			for _, pair := range pairs {
+				if parts := strings.SplitN(pair, "=", 2); len(parts) == 2 {
+					rows = append(rows, []string{parts[0], parts[1]})
+				}
 			}
 		}
 	}
@@ -413,19 +417,23 @@ func renderMarkdown(md string, maxLineLength int) string {
 
 // formatContextForMarkdown formats context as a markdown table.
 func formatContextForMarkdown(err error) string {
-	details := errors.GetSafeDetails(err)
-	if len(details.SafeDetails) == 0 {
+	// Use GetAllSafeDetails to traverse the entire error chain.
+	// Safe details may be wrapped at different levels of the error chain.
+	allDetails := errors.GetAllSafeDetails(err)
+	if len(allDetails) == 0 {
 		return ""
 	}
 
 	// Parse "component=vpc stack=prod" format into key-value pairs.
 	var rows []string
-	for _, detail := range details.SafeDetails {
-		str := fmt.Sprintf("%v", detail)
-		pairs := strings.Split(str, " ")
-		for _, pair := range pairs {
-			if parts := strings.SplitN(pair, "=", 2); len(parts) == 2 {
-				rows = append(rows, fmt.Sprintf("| %s | %s |", parts[0], parts[1]))
+	for _, layer := range allDetails {
+		for _, detail := range layer.SafeDetails {
+			str := fmt.Sprintf("%v", detail)
+			pairs := strings.Split(str, " ")
+			for _, pair := range pairs {
+				if parts := strings.SplitN(pair, "=", 2); len(parts) == 2 {
+					rows = append(rows, fmt.Sprintf("| %s | %s |", parts[0], parts[1]))
+				}
 			}
 		}
 	}
