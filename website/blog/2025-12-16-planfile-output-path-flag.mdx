@@ -1,0 +1,59 @@
+---
+slug: planfile-output-path-flag
+title: 'New --output-path Flag for Planfile Generation'
+authors:
+  - osterman
+tags:
+  - enhancement
+  - dx
+date: 2025-12-16T00:00:00.000Z
+---
+
+The `terraform generate planfile` command now supports an `--output-path` flag that lets you specify an output directory while keeping the default filename convention.
+
+<!--truncate-->
+
+## What Changed
+
+Previously, you had two options for planfile output:
+- Default location in the component directory with auto-generated filename
+- Exact file path with `--file` flag
+
+Now there's a third option: specify just the output directory and let Atmos generate the filename automatically.
+
+## Using --output-path
+
+```shell
+# Generate planfile in a subdirectory with default naming
+atmos terraform generate planfile vpc -s plat-ue2-dev --output-path=planfiles
+
+# The planfile is created as: planfiles/plat-ue2-dev-vpc.planfile.json
+
+# Also supports absolute paths
+atmos terraform generate planfile vpc -s plat-ue2-dev -o /tmp/planfiles
+```
+
+The default filename format is `{stack}-{component}.planfile.{format}`.
+
+## Comparison with --file
+
+| Flag | Use Case |
+|------|----------|
+| `--file` | Specify exact output path including filename |
+| `--output-path` | Specify directory, use default filename |
+
+The flags are mutually exclusive - use one or the other, not both.
+
+## Why This Matters
+
+This is particularly useful for CI/CD pipelines where you want planfiles organized in a specific directory but don't want to construct filenames manually:
+
+```shell
+# Collect all planfiles in one location for review
+atmos terraform generate planfile vpc -s plat-ue2-dev --output-path=artifacts/planfiles
+atmos terraform generate planfile rds -s plat-ue2-dev --output-path=artifacts/planfiles
+```
+
+## Documentation
+
+See the [terraform generate planfile](/cli/commands/terraform/generate-planfile) documentation for complete usage details.
