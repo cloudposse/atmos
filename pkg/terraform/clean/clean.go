@@ -279,11 +279,7 @@ func (s *Service) getComponentsToClean(info *schema.ConfigAndStacksInfo, atmosCo
 	}
 
 	log.Debug("Clean: No component from arg, calling ExecuteDescribeStacks", "StackFromArg", info.StackFromArg)
-	var filterComponents []string
-	if info.ComponentFromArg != "" {
-		filterComponents = append(filterComponents, info.ComponentFromArg)
-	}
-	stacksMap, err := s.processor.ExecuteDescribeStacks(atmosConfig, info.StackFromArg, filterComponents)
+	stacksMap, err := s.processor.ExecuteDescribeStacks(atmosConfig, info.StackFromArg, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrDescribeStack, err)
 	}
