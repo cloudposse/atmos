@@ -12,6 +12,7 @@ acme-platform-dev:
         command: terraform
         component: mock
         env: {}
+        generate: {}
         hooks: {}
         inheritance: []
         metadata: {}
@@ -43,6 +44,7 @@ acme-platform-prod:
         command: terraform
         component: mock
         env: {}
+        generate: {}
         hooks: {}
         inheritance: []
         metadata: {}
@@ -74,6 +76,7 @@ acme-platform-staging:
         command: terraform
         component: mock
         env: {}
+        generate: {}
         hooks: {}
         inheritance: []
         metadata: {}

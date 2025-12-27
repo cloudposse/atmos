@@ -27,6 +27,7 @@ func TestGenerateCmd(t *testing.T) {
 
 		assert.Contains(t, names, "backend")
 		assert.Contains(t, names, "backends")
+		assert.Contains(t, names, "files")
 		assert.Contains(t, names, "varfile")
 		assert.Contains(t, names, "varfiles")
 		assert.Contains(t, names, "planfile")
@@ -57,6 +58,47 @@ func TestBackendCmd(t *testing.T) {
 		skipFlag := flags.Lookup("skip")
 		require.NotNil(t, skipFlag)
 		assert.Equal(t, "[]", skipFlag.DefValue)
+	})
+}
+
+func TestFilesCmd(t *testing.T) {
+	// Find the files command.
+	var filesCmdPtr *cobra.Command
+	for _, cmd := range GenerateCmd.Commands() {
+		if cmd.Name() == "files" {
+			filesCmdPtr = cmd
+			break
+		}
+	}
+
+	t.Run("command structure", func(t *testing.T) {
+		require.NotNil(t, filesCmdPtr)
+		assert.Equal(t, "files [component]", filesCmdPtr.Use)
+		assert.Contains(t, filesCmdPtr.Short, "Generate files")
+	})
+
+	t.Run("has expected flags", func(t *testing.T) {
+		require.NotNil(t, filesCmdPtr)
+		flags := filesCmdPtr.Flags()
+
+		stackFlag := flags.Lookup("stack")
+		require.NotNil(t, stackFlag)
+		assert.Equal(t, "s", stackFlag.Shorthand)
+
+		allFlag := flags.Lookup("all")
+		require.NotNil(t, allFlag)
+
+		stacksFlag := flags.Lookup("stacks")
+		require.NotNil(t, stacksFlag)
+
+		componentsFlag := flags.Lookup("components")
+		require.NotNil(t, componentsFlag)
+
+		dryRunFlag := flags.Lookup("dry-run")
+		require.NotNil(t, dryRunFlag)
+
+		cleanFlag := flags.Lookup("clean")
+		require.NotNil(t, cleanFlag)
 	})
 }
 

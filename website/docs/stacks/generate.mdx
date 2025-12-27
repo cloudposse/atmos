@@ -1,0 +1,421 @@
+---
+title: Generate Terraform Files
+sidebar_position: 17
+sidebar_label: generate
+sidebar_class_name: command
+description: Use the generate section to create auxiliary configuration files for Terraform components.
+id: generate
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+The `generate` section creates auxiliary configuration files for Terraform components based on your stack configuration. Define file templates once in your stacks and Atmos generates the appropriate files in each component directory.
+</Intro>
+
+## How It Works
+
+When you run `atmos terraform generate files` (or any terraform command with `auto_generate_files` enabled), Atmos:
+1. Reads the `generate` section from the component's stack configuration
+2. Processes each file definition using extension-aware serialization or Go templates
+3. Writes the generated files to the component directory
+4. Makes template context variables available for dynamic content
+
+This separation means you can generate environment-specific configuration files without hardcoding values in your Terraform modules.
+
+:::tip Generated Files
+Add generated files to your `.gitignore` since they are created automatically by Atmos:
+
+```gitignore
+# Atmos generated files
+locals.tf
+*.generated.tf
+```
+:::
+
+## Use Cases
+
+- **Dynamic Locals:** Generate `locals.tf` files with environment-specific values.
+- **Provider Configuration:** Create additional provider files dynamically.
+- **Documentation:** Generate README files with component metadata.
+- **Custom Configuration:** Create any auxiliary files your Terraform modules need.
+
+## Configuration
+
+The `generate` section is defined at the component level in stack configuration:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml title="stacks/orgs/acme/plat/prod/us-east-1.yaml"
+    components:
+      terraform:
+        vpc:
+          vars:
+            environment: prod
+            vpc_cidr: "10.0.0.0/16"
+          generate:
+            # Map values are serialized based on file extension
+            locals.tf:
+              locals:
+                environment: "{{ .vars.environment }}"
+                vpc_cidr: "{{ .vars.vpc_cidr }}"
+
+            # String values are treated as Go templates
+            README.md: |
+              # VPC Component
+              Environment: {{ .vars.environment }}
+              Stack: {{ .atmos_stack }}
+    ```
+  </TabItem>
+  <TabItem value="hcl" label="Generated locals.tf">
+    ```hcl title="components/terraform/vpc/locals.tf"
+    locals {
+      environment = "prod"
+      vpc_cidr    = "10.0.0.0/16"
+    }
+    ```
+  </TabItem>
+  <TabItem value="md" label="Generated README.md">
+    ```markdown title="components/terraform/vpc/README.md"
+    # VPC Component
+    Environment: prod
+    Stack: plat-ue1-prod
+    ```
+  </TabItem>
+</Tabs>
+
+## Extension-Aware Serialization
+
+When the value is a map, Atmos serializes it based on the file extension:
+
+| Extension | Format | Description |
+|-----------|--------|-------------|
+| `.tf`, `.hcl` | HCL | Valid Terraform/HCL syntax |
+| `.json` | JSON | 2-space indented JSON |
+| `.yaml`, `.yml` | YAML | 2-space indented YAML |
+| Other | JSON | Defaults to JSON format |
+
+### HCL Generation Example
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          generate:
+            locals.tf:
+              locals:
+                environment: "{{ .vars.environment }}"
+                tags:
+                  ManagedBy: Atmos
+                  Component: "{{ .component }}"
+    ```
+  </TabItem>
+  <TabItem value="hcl" label="Generated File">
+    ```hcl title="components/terraform/vpc/locals.tf"
+    locals {
+      environment = "prod"
+      tags = {
+        Component = "vpc"
+        ManagedBy = "Atmos"
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### JSON Generation Example
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml
+    components:
+      terraform:
+        vpc:
+          generate:
+            config.json:
+              settings:
+                environment: "{{ .vars.environment }}"
+                region: "{{ .vars.region }}"
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/vpc/config.json"
+    {
+      "settings": {
+        "environment": "prod",
+        "region": "us-east-1"
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+## Template Context
+
+String values and map string values are processed as Go templates with access to the full component context:
+
+### Available Variables
+
+<dl>
+  <dt>`{{ .vars }}`</dt>
+  <dd>Component variables from the `vars` section.</dd>
+
+  <dt>`{{ .settings }}`</dt>
+  <dd>Component settings from the `settings` section.</dd>
+
+  <dt>`{{ .env }}`</dt>
+  <dd>Component environment variables from the `env` section.</dd>
+
+  <dt>`{{ .backend }}`</dt>
+  <dd>Backend configuration.</dd>
+
+  <dt>`{{ .backend_type }}`</dt>
+  <dd>Backend type (e.g., `s3`, `azurerm`).</dd>
+
+  <dt>`{{ .providers }}`</dt>
+  <dd>Provider configurations.</dd>
+
+  <dt>`{{ .metadata }}`</dt>
+  <dd>Component metadata.</dd>
+
+  <dt>`{{ .namespace }}`</dt>
+  <dd>Namespace context variable.</dd>
+
+  <dt>`{{ .tenant }}`</dt>
+  <dd>Tenant context variable.</dd>
+
+  <dt>`{{ .environment }}`</dt>
+  <dd>Environment context variable.</dd>
+
+  <dt>`{{ .stage }}`</dt>
+  <dd>Stage context variable.</dd>
+
+  <dt>`{{ .region }}`</dt>
+  <dd>Region context variable (if defined in vars).</dd>
+
+  <dt>`{{ .atmos_component }}`</dt>
+  <dd>Atmos component name.</dd>
+
+  <dt>`{{ .atmos_stack }}`</dt>
+  <dd>Atmos stack name.</dd>
+
+  <dt>`{{ .component }}`</dt>
+  <dd>Final component name (after inheritance resolution).</dd>
+
+  <dt>`{{ .workspace }}`</dt>
+  <dd>Terraform workspace name.</dd>
+</dl>
+
+### Template Example
+
+<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        environment: prod
+        vpc_cidr: "10.0.0.0/16"
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+      generate:
+        context.tf: |
+          # Generated by Atmos - DO NOT EDIT
+          locals {
+            atmos_stack     = "{{ .atmos_stack }}"
+            atmos_component = "{{ .atmos_component }}"
+            environment     = "{{ .vars.environment }}"
+          }
+```
+</File>
+
+## Auto-Generation
+
+Enable automatic file generation during terraform commands by setting `auto_generate_files` in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    auto_generate_files: true
+```
+</File>
+
+When enabled, Atmos generates files from the `generate` section before executing any terraform command (`plan`, `apply`, etc.).
+
+## Examples
+
+### Generate Locals from Variables
+
+Create a `locals.tf` that mirrors select variables:
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml
+    components:
+      terraform:
+        eks:
+          vars:
+            cluster_name: acme-prod
+            cluster_version: "1.28"
+            node_groups:
+              default:
+                instance_type: m5.large
+                desired_size: 3
+          generate:
+            locals.tf:
+              locals:
+                cluster_name: "{{ .vars.cluster_name }}"
+                cluster_version: "{{ .vars.cluster_version }}"
+                environment: "{{ .vars.environment }}"
+    ```
+  </TabItem>
+  <TabItem value="hcl" label="Generated File">
+    ```hcl title="components/terraform/eks/locals.tf"
+    locals {
+      cluster_name    = "acme-prod"
+      cluster_version = "1.28"
+      environment     = "prod"
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+### Generate Multiple Files
+
+<File title="stacks/catalog/vpc/defaults.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      generate:
+        # HCL locals file
+        locals.tf:
+          locals:
+            environment: "{{ .vars.environment }}"
+            stage: "{{ .stage }}"
+
+        # JSON configuration
+        atmos-metadata.json:
+          stack: "{{ .atmos_stack }}"
+          component: "{{ .atmos_component }}"
+          workspace: "{{ .workspace }}"
+
+        # Markdown documentation
+        README.md: |
+          # {{ .atmos_component }}
+
+          This component is deployed to the `{{ .atmos_stack }}` stack.
+
+          ## Variables
+
+          - Environment: {{ .vars.environment }}
+          - Stage: {{ .stage }}
+```
+</File>
+
+### Conditional Content with Templates
+
+Use Go template conditionals for dynamic content:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        enable_nat_gateway: true
+        single_nat_gateway: false
+      generate:
+        nat-config.tf: |
+          locals {
+            {{ if .vars.enable_nat_gateway }}
+            nat_gateway_enabled = true
+            {{ if .vars.single_nat_gateway }}
+            nat_gateway_count = 1
+            {{ else }}
+            nat_gateway_count = length(var.availability_zones)
+            {{ end }}
+            {{ else }}
+            nat_gateway_enabled = false
+            nat_gateway_count   = 0
+            {{ end }}
+          }
+```
+
+### Component Inheritance with Generate
+
+The `generate` section is inherited and merged like other component sections:
+
+<Tabs>
+  <TabItem value="catalog" label="Catalog Defaults">
+    ```yaml title="stacks/catalog/vpc/_defaults.yaml"
+    components:
+      terraform:
+        vpc/defaults:
+          metadata:
+            type: abstract
+          generate:
+            locals.tf:
+              locals:
+                managed_by: Atmos
+    ```
+  </TabItem>
+  <TabItem value="stack" label="Stack Override">
+    ```yaml title="stacks/orgs/acme/plat/prod/us-east-1.yaml"
+    import:
+      - catalog/vpc/_defaults
+
+    components:
+      terraform:
+        vpc:
+          metadata:
+            inherits:
+              - vpc/defaults
+          generate:
+            # Merged with inherited generate section
+            locals.tf:
+              locals:
+                managed_by: Atmos
+                environment: "{{ .vars.environment }}"
+    ```
+  </TabItem>
+</Tabs>
+
+## Cleaning Generated Files
+
+Remove generated files with the `--clean` flag:
+
+```shell
+# Clean generated files for a single component
+atmos terraform generate files vpc -s prod-ue2 --clean
+
+# Clean generated files for all components
+atmos terraform generate files --all --clean
+```
+
+## Best Practices
+
+1. **Use for Environment-Specific Values:** Generate files for values that vary by environment rather than hardcoding in modules.
+
+2. **Add to .gitignore:** Generated files should not be committed to version control.
+
+3. **Document Generated Files:** Add comments indicating the file is generated and should not be edited manually.
+
+4. **Use Consistent Naming:** Establish naming conventions for generated files (e.g., `*.generated.tf`).
+
+5. **Leverage Inheritance:** Define common generate patterns in catalog defaults and inherit them.
+
+6. **Preview Before Applying:** Use `--dry-run` to preview what will be generated.
+
+## Related
+
+- [atmos terraform generate files](/cli/commands/terraform/generate-files) - CLI command reference
+- [Terraform Components](/stacks/components/terraform) - Component configuration overview
+- [Terraform Backend](/stacks/backend) - Backend file generation
+- [Terraform Providers](/stacks/providers) - Provider file generation
+- [Variables (vars)](/stacks/vars) - Defining component variables

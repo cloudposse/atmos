@@ -8,6 +8,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfclean "github.com/cloudposse/atmos/pkg/terraform/clean"
 )
 
 // cleanParser handles flag parsing for clean command.
@@ -71,7 +72,7 @@ Common use cases:
 			return err
 		}
 
-		opts := &e.CleanOptions{
+		opts := &tfclean.Options{
 			Component:    component,
 			Stack:        stack,
 			Force:        force,
@@ -79,7 +80,19 @@ Common use cases:
 			SkipLockFile: skipLockFile,
 			DryRun:       dryRun,
 		}
-		return e.ExecuteClean(opts, &atmosConfig)
+
+		// Create adapter with exec functions and execute clean.
+		adapter := tfclean.NewExecAdapter(
+			e.ProcessStacksForClean,
+			e.ExecuteDescribeStacksForClean,
+			e.GetGenerateFilenamesForComponent,
+			e.CollectComponentsDirectoryObjectsForClean,
+			e.ConstructTerraformComponentVarfileNameForClean,
+			e.ConstructTerraformComponentPlanfileNameForClean,
+			e.GetAllStacksComponentsPathsForClean,
+		)
+		service := tfclean.NewService(adapter)
+		return service.Execute(opts, &atmosConfig)
 	},
 }
 

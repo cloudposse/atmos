@@ -17,7 +17,8 @@ This command supports the following subcommands:
 - 'backends' to generate backend configuration files for all Atmos components in all stacks.
 - 'varfile' to generate a variable file (varfile) for an Atmos component in a stack.
 - 'varfiles' to generate varfiles for all Atmos components in all stacks.
-- 'planfile' to generate a planfile for an Atmos component in a stack.`,
+- 'planfile' to generate a planfile for an Atmos component in a stack.
+- 'files' to generate files from the generate section for an Atmos component.`,
 	Args:               cobra.NoArgs,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
