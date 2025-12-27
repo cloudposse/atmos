@@ -1,0 +1,25 @@
+# Prevent vendored and generated content from being committed
+
+# AWS integration fixture (real vendored modules)
+aws/
+
+# Vendored module artifacts
+**/components/**/.git/
+**/components/**/.github/
+**/components/**/.terraform/
+**/components/**/docs/
+**/components/**/examples/
+**/components/**/test/
+
+# Generated files
+**/*.tfvars.json
+**/terraform.tfstate*
+**/.terraform.lock.hcl
+
+# Vendored module files (keep only main.tf mocks)
+**/context.tf
+**/versions.tf
+**/LICENSE
+**/README.md
+**/README.yaml
+**/*.sample

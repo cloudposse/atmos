@@ -471,7 +471,26 @@ func copyToTargetWithPatterns(
 	// If no inclusion or exclusion patterns are defined, use the cp library.
 	if len(s.IncludedPaths) == 0 && len(s.ExcludedPaths) == 0 {
 		log.Debug("No inclusion or exclusion patterns defined; using cp.Copy for fast copy")
-		return cp.Copy(sourceDir, finalTarget)
+		copyOptions := cp.Options{
+			// Skip .git directories from source to avoid copying git metadata.
+			Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+				if filepath.Base(src) == ".git" {
+					return true, nil
+				}
+				return false, nil
+			},
+			// OnDirExists handles existing directories at the destination.
+			// If the destination already has a .git directory (from a previous vendor run),
+			// we need to leave it untouched to avoid permission errors on git packfiles
+			// which often have restrictive permissions.
+			OnDirExists: func(src, dest string) cp.DirExistsAction {
+				if filepath.Base(dest) == ".git" {
+					return cp.Untouchable
+				}
+				return cp.Merge
+			},
+		}
+		return cp.Copy(sourceDir, finalTarget, copyOptions)
 	}
 	// Process each inclusion pattern.
 	for _, pattern := range s.IncludedPaths {

@@ -17,7 +17,9 @@ import (
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	f "github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
+	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -257,4 +259,29 @@ func handleNoValuesError(err error, componentFilter string, logFunc func(string)
 		return "", nil
 	}
 	return "", err
+}
+
+// renderWithPager renders data using the renderer, optionally using a pager for interactive display.
+// If pager is enabled in atmosConfig and TTY is available, the output is displayed in a scrollable pager.
+// Otherwise, the output is written directly to stdout.
+func renderWithPager(atmosConfig *schema.AtmosConfiguration, title string, r *renderer.Renderer, data []map[string]any) error {
+	// Check if pager is enabled in config.
+	if atmosConfig.Settings.Terminal.IsPagerEnabled() {
+		// Get rendered content as string.
+		content, err := r.RenderToString(data)
+		if err != nil {
+			return err
+		}
+
+		// Try to use pager - it handles TTY detection and falls back to direct print.
+		pageCreator := pager.NewWithAtmosConfig(true)
+		if err := pageCreator.Run(title, content); err != nil {
+			// Pager failed, fall back to direct render.
+			return r.Render(data)
+		}
+		return nil
+	}
+
+	// No pager - render directly.
+	return r.Render(data)
 }
