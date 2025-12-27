@@ -91,7 +91,8 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 		var err error
 		identityName, err = authManager.GetDefaultIdentity(forceSelect)
 		if err != nil {
-			return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrDefaultIdentity, err)
+			// Return error directly - it already has ErrorBuilder context with hints.
+			return nil, err
 		}
 	}
 

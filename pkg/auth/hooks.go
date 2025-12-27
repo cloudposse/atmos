@@ -92,12 +92,15 @@ func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManage
 	// Hooks don't have CLI flags, so never force selection here.
 	name, err := authManager.GetDefaultIdentity(false)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrDefaultIdentity, hookOpTerraformPreHook, "failed to get default identity")
-		return "", errUtils.ErrDefaultIdentity
+		// Return error directly - it already has ErrorBuilder context with hints.
+		return "", err
 	}
 	if name == "" {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNoDefaultIdentity, hookOpTerraformPreHook, "Use the identity flag or specify an identity as default.")
-		return "", errUtils.ErrNoDefaultIdentity
+		return "", errUtils.Build(errUtils.ErrNoDefaultIdentity).
+			WithExplanation("No default identity is configured for authentication").
+			WithHint("Use --identity flag to specify an identity").
+			WithHint("Or set default: true on an identity in your auth configuration").
+			Err()
 	}
 	return name, nil
 }
