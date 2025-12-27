@@ -74,12 +74,72 @@ atmos terraform output vpc -s dev -json
 atmos terraform output vpc -s dev -raw vpc_id
 ```
 
+### Export All Outputs with --format
+
+The `--format` flag enables exporting all outputs in various formats, which is particularly useful for CI/CD workflows:
+
+```shell
+# Export as environment variables for GitHub Actions
+atmos terraform output app -s preview --skip-init --format=env --output-file=$GITHUB_OUTPUT
+
+# Export as bash exports for shell sourcing
+eval $(atmos terraform output vpc -s prod --format=bash)
+
+# Save as .env file
+atmos terraform output app -s staging --format=dotenv --output-file=.env
+
+# Export as JSON for processing
+atmos terraform output app -s staging --format=json --output-file=outputs.json
+
+# Export as HCL for Terraform locals
+atmos terraform output vpc -s prod --format=hcl --output-file=vpc_outputs.auto.tfvars
+
+# Export as CSV for spreadsheets
+atmos terraform output app -s prod --format=csv --output-file=outputs.csv
+
+# Export with UPPERCASE keys for environment variables
+atmos terraform output vpc -s prod --format=env --uppercase
+```
+
+### Format a Single Output
+
+You can combine the `--format` flag with a specific output name to format a single value:
+
+```shell
+# Get a single output as JSON (useful for complex values like maps/lists)
+atmos terraform output vpc -s dev vpc_config --format=json
+
+# Get a single output as YAML
+atmos terraform output vpc -s dev vpc_config --format=yaml
+
+# Export a single value to GitHub Actions
+atmos terraform output app -s preview url --format=env --output-file=$GITHUB_OUTPUT
+```
+
+:::note Complex Values
+For single outputs that contain complex values (maps or lists), only structured formats (`json`, `yaml`, `hcl`) are supported.
+Scalar-only formats (`env`, `dotenv`, `bash`, `csv`, `tsv`) will return an error for complex values.
+:::
+
 ## Arguments
 
 <dl>
     <dt>`component` <em>(required)</em></dt>
     <dd>
         Atmos component name.
+    </dd>
+
+    <dt>`output_name` <em>(optional)</em></dt>
+    <dd>
+        Name of a specific output to retrieve. When omitted, all outputs are returned.
+
+        ```shell
+        # All outputs
+        atmos terraform output vpc -s dev
+
+        # Single output
+        atmos terraform output vpc -s dev vpc_id
+        ```
     </dd>
 </dl>
 
@@ -89,6 +149,79 @@ atmos terraform output vpc -s dev -raw vpc_id
     <dt>`--stack` / `-s` <em>(required)</em></dt>
     <dd>
         Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--format` / `-f` <em>(optional)</em></dt>
+    <dd>
+        Output format for exports. When specified, retrieves outputs and formats them instead of passing through to native Terraform. Works with both all outputs or a single named output.
+
+        Supported formats:
+
+        | Format | Output Style | Use Case |
+        |--------|--------------|----------|
+        | `json` | `{"key": "value"}` | Machine parsing, piping to `jq` |
+        | `yaml` | `key: value` | Human-readable, config files |
+        | `hcl` | `key = "value"` | Terraform locals or tfvars files |
+        | `env` | `key=value` | GitHub Actions `$GITHUB_OUTPUT` |
+        | `dotenv` | `key='value'` | `.env` files with quoting |
+        | `bash` | `export key='value'` | Shell sourcing with `eval $(...)` |
+        | `csv` | `key,value` | Spreadsheets, data processing |
+        | `tsv` | `key<tab>value` | Tab-delimited for easy parsing |
+
+        ```shell
+        atmos terraform output vpc -s dev --format=env
+        ```
+
+        Environment variable: `ATMOS_TERRAFORM_OUTPUT_FORMAT`
+    </dd>
+
+    <dt>`--output-file` / `-o` <em>(optional)</em></dt>
+    <dd>
+        Write output to a file instead of stdout. Appends to the file if it exists.
+
+        ```shell
+        atmos terraform output vpc -s dev --format=env --output-file=$GITHUB_OUTPUT
+        ```
+
+        Environment variable: `ATMOS_TERRAFORM_OUTPUT_FILE`
+    </dd>
+
+    <dt>`--uppercase` / `-u` <em>(optional)</em></dt>
+    <dd>
+        Convert output keys to uppercase. Useful for environment variable exports where `vpc_id` becomes `VPC_ID`.
+
+        ```shell
+        # Export with uppercase keys
+        atmos terraform output vpc -s dev --format=env --uppercase
+
+        # Output: VPC_ID=vpc-123, SUBNET_ID=subnet-456
+        ```
+
+        Environment variable: `ATMOS_TERRAFORM_OUTPUT_UPPERCASE`
+    </dd>
+
+    <dt>`--flatten` <em>(optional)</em></dt>
+    <dd>
+        Flatten nested maps and arrays into flat key/value pairs using underscore as separator. Useful for exporting nested terraform outputs as individual environment variables.
+
+        ```shell
+        # Flatten nested maps
+        atmos terraform output vpc -s dev --format=env --flatten
+
+        # Input: {"config": {"host": "localhost", "port": 3000}}
+        # Output: config_host=localhost, config_port=3000
+
+        # Flatten arrays with numeric indices
+        # Input: {"subnets": [{"id": "subnet-1"}, {"id": "subnet-2"}]}
+        # Output: subnets_0_id=subnet-1, subnets_1_id=subnet-2
+
+        # Combine with --uppercase for standard ENV_VAR naming
+        atmos terraform output vpc -s dev --format=env --flatten --uppercase
+
+        # Output: CONFIG_HOST=localhost, CONFIG_PORT=3000
+        ```
+
+        Environment variable: `ATMOS_TERRAFORM_OUTPUT_FLATTEN`
     </dd>
 
     <dt>`--skip-init` <em>(optional)</em></dt>
