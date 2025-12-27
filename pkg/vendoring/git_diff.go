@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"time"
 
 	"github.com/mattn/go-isatty"
 
@@ -127,8 +128,10 @@ func getGitDiffBetweenRefsForFile(atmosConfig *schema.AtmosConfiguration, gitURI
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Initialize a bare repository.
-	ctx := context.Background()
+	// Initialize a bare repository with a reasonable timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
 	cmd := exec.CommandContext(ctx, "git", "init", "--bare", tempDir)
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrGitCommandFailed, err)

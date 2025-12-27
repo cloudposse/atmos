@@ -70,6 +70,21 @@ func (mr *MockGitOperationsMockRecorder) GetDiffBetweenRefs(atmosConfig, gitURI,
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDiffBetweenRefs", reflect.TypeOf((*MockGitOperations)(nil).GetDiffBetweenRefs), atmosConfig, gitURI, fromRef, toRef, contextLines, noColor)
 }
 
+// GetDiffBetweenRefsForFile mocks base method.
+func (m *MockGitOperations) GetDiffBetweenRefsForFile(atmosConfig *schema.AtmosConfiguration, gitURI, fromRef, toRef, filePath string, contextLines int, noColor bool) ([]byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDiffBetweenRefsForFile", atmosConfig, gitURI, fromRef, toRef, filePath, contextLines, noColor)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDiffBetweenRefsForFile indicates an expected call of GetDiffBetweenRefsForFile.
+func (mr *MockGitOperationsMockRecorder) GetDiffBetweenRefsForFile(atmosConfig, gitURI, fromRef, toRef, filePath, contextLines, noColor any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDiffBetweenRefsForFile", reflect.TypeOf((*MockGitOperations)(nil).GetDiffBetweenRefsForFile), atmosConfig, gitURI, fromRef, toRef, filePath, contextLines, noColor)
+}
+
 // GetRemoteTags mocks base method.
 func (m *MockGitOperations) GetRemoteTags(gitURI string) ([]string, error) {
 	m.ctrl.T.Helper()

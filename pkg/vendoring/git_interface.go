@@ -19,6 +19,9 @@ type GitOperations interface {
 
 	// GetDiffBetweenRefs generates a diff between two Git refs.
 	GetDiffBetweenRefs(atmosConfig *schema.AtmosConfiguration, gitURI string, fromRef string, toRef string, contextLines int, noColor bool) ([]byte, error)
+
+	// GetDiffBetweenRefsForFile generates a diff between two Git refs, limited to a specific file path.
+	GetDiffBetweenRefsForFile(atmosConfig *schema.AtmosConfiguration, gitURI string, fromRef string, toRef string, filePath string, contextLines int, noColor bool) ([]byte, error)
 }
 
 // realGitOperations implements GitOperations using actual git commands.
@@ -52,4 +55,13 @@ func (g *realGitOperations) GetDiffBetweenRefs(atmosConfig *schema.AtmosConfigur
 	defer perf.Track(atmosConfig, "exec.GetDiffBetweenRefs")()
 
 	return getGitDiffBetweenRefs(atmosConfig, gitURI, fromRef, toRef, contextLines, noColor)
+}
+
+// GetDiffBetweenRefsForFile implements GitOperations.GetDiffBetweenRefsForFile.
+//
+//nolint:revive // Seven parameters needed for Git diff configuration with file filtering.
+func (g *realGitOperations) GetDiffBetweenRefsForFile(atmosConfig *schema.AtmosConfiguration, gitURI string, fromRef string, toRef string, filePath string, contextLines int, noColor bool) ([]byte, error) {
+	defer perf.Track(atmosConfig, "exec.GetDiffBetweenRefsForFile")()
+
+	return getGitDiffBetweenRefsForFile(atmosConfig, gitURI, fromRef, toRef, filePath, contextLines, noColor)
 }
