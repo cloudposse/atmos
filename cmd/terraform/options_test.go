@@ -233,7 +233,7 @@ func TestParseTerraformRunOptions(t *testing.T) {
 			v := viper.New()
 			tt.setup(v)
 
-			result := ParseTerraformRunOptions(v)
+			result := ParseTerraformRunOptions(v, nil)
 
 			assert.Equal(t, tt.expected.ProcessTemplates, result.ProcessTemplates, "ProcessTemplates should match")
 			assert.Equal(t, tt.expected.ProcessFunctions, result.ProcessFunctions, "ProcessFunctions should match")

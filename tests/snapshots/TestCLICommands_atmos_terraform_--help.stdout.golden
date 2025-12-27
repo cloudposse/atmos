@@ -106,6 +106,8 @@ FLAGS
 
   -s, --stack string              Stack name
 
+      --ui                        Enable streaming UI mode for real-time resource status display
+
       --upload-status             Upload plan status to Atmos Pro
 
 

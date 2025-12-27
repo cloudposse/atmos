@@ -17,6 +17,9 @@
       },
       "plan": {
         "skip_planfile": false
+      },
+      "ui": {
+        "enabled": false
       }
     },
     "helmfile": {

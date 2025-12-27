@@ -17,6 +17,7 @@ var (
 	ErrDownloadFile                          = errors.New("failed to download file")
 	ErrParseFile                             = errors.New("failed to parse file")
 	ErrParseURL                              = errors.New("failed to parse URL")
+	ErrParseHexColor                         = errors.New("failed to parse hex color")
 	ErrInvalidURL                            = errors.New("invalid URL")
 	ErrCreateDownloadClient                  = errors.New("failed to create download client")
 	ErrProcessOCIImage                       = errors.New("failed to process OCI image")
@@ -76,6 +77,7 @@ var (
 	ErrUnknownServiceAlias    = errors.New("unknown service alias")
 	ErrTTYRequired            = errors.New("requires a TTY")
 	ErrInvalidAuthManagerType = errors.New("invalid authManager type")
+	ErrStreamingNotSupported  = errors.New("streaming UI not supported in this environment")
 
 	// Component and positional argument errors.
 	ErrComponentRequired          = errors.New("component is required")
