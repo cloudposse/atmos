@@ -11,7 +11,7 @@ From the [Deployments PRD](docs/prd/deployments/problem-statement.md):
 > **Secrets sprawl:** Deploying to prod loads secrets from dev (because inheritance), staging (because inheritance), and prod (what we actually need). Result: Prod pipeline has dev secrets. Security audit: CRITICAL FINDING.
 
 Additionally:
-- No unified CLI for secret CRUD operations (`init`, `set`, `get`, `delete`, `pull`, `push`)
+- No unified CLI for secret CRUD operations (`init`, `set`, `get`, `delete`, `pull`, `push`, `import`)
 - No declarative registry of what secrets exist and where they're stored
 - Chamber (historical solution) is AWS-only
 - Stores are designed for terraform output persistence, not user-managed secrets
@@ -387,15 +387,51 @@ atmos secret pull --stack dev --format json --output secrets.json
 
 ### `atmos secret push`
 
-Upload secrets from a local file to the backend.
+Upload secrets from a local file to the backend (must be declared).
 
 ```bash
-# Push from .env file
+# Push from .env file (secrets must be declared)
 atmos secret push --stack dev --component api --input .env
 
 # Push specific file
 atmos secret push --stack dev --component api --input .env.local
 ```
+
+### `atmos secret import`
+
+Import secrets from an env file, creating declarations if needed.
+
+```bash
+# Import from .env file (creates declarations + sets values)
+atmos secret import .env --stack prod --component api
+
+# Import global secrets
+atmos secret import .env.global
+
+# Preview what would be imported (dry-run)
+atmos secret import .env --stack prod --dry-run
+
+# Import from stdin
+cat .env | atmos secret import - --stack prod --component api
+
+# Specify backend for new declarations
+atmos secret import .env --stack prod --backend aws/ssm
+
+# Import from JSON format
+atmos secret import secrets.json --stack prod --format json
+```
+
+**Behavior:**
+- Parses env file (KEY=value format) or JSON/YAML
+- For each key:
+  - If not declared: creates declaration in appropriate location
+  - Sets value in configured backend
+- Supports `--dry-run` to preview changes
+- Respects `--backend` for new declarations (defaults to `default_backend`)
+
+**Difference from `push`:**
+- `push` requires secrets to be pre-declared (fails on undeclared keys)
+- `import` creates declarations as needed (bootstrap workflow)
 
 ### `atmos secret validate`
 
@@ -610,6 +646,7 @@ cmd/secret/
     list.go              # atmos secret list
     pull.go              # atmos secret pull
     push.go              # atmos secret push
+    import.go            # atmos secret import
     validate.go          # atmos secret validate
 
 pkg/function/
@@ -676,6 +713,7 @@ website/docs/cli/commands/secret/
     list.mdx                  # atmos secret list
     pull.mdx                  # atmos secret pull
     push.mdx                  # atmos secret push
+    import.mdx                # atmos secret import
     validate.mdx              # atmos secret validate
 ```
 
@@ -777,11 +815,21 @@ Location: `pkg/datafetcher/schema/`
 ## Prior Art
 
 - [AWS Copilot secret init](https://aws.github.io/copilot-cli/docs/commands/secret-init/) - YAML-based declarations
-- [Vercel Environment Variables](https://vercel.com/docs/environment-variables) - CLI-first DX
+- [Vercel Environment Variables](https://vercel.com/docs/cli/env) - CLI-first DX with `vercel env pull`
 - [Turborepo env](https://turbo.build/repo/docs/crafting-your-repository/using-environment-variables) - Scoped env vars
-- [Chamber](https://github.com/segmentio/chamber) - Service-based SSM secrets
-- [Doppler](https://docs.doppler.com/) - Project/environment scoping
+- [Chamber](https://github.com/segmentio/chamber) - Service-based SSM secrets with `chamber import` from JSON/YAML
+- [Doppler](https://docs.doppler.com/docs/importing-secrets) - Project/environment scoping with `doppler secrets upload` from .env/JSON/YAML
 - [helmfile/vals](https://github.com/helmfile/vals) - Read-only configuration loader (20+ backends)
+- [vercel-env-push](https://github.com/HiDeoo/vercel-env-push) - Third-party tool for pushing .env to Vercel (fills gap in official CLI)
+
+### Import Functionality Prior Art
+
+| Tool | Import Command | Formats | Notes |
+|------|---------------|---------|-------|
+| Doppler | `doppler secrets upload .env` | .env, JSON, YAML | Creates secrets directly |
+| Chamber | `chamber import service file.json` | JSON, YAML | Imports from export format |
+| Vercel | `vercel env pull` (pull only) | .env | No native push; third-party `vercel-env-push` |
+| 1Password | `op inject < .env` | .env template | Template-based injection |
 
 ## References
 
