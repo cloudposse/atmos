@@ -75,7 +75,7 @@ func errForceRequired() error {
 func createS3ClientForDeletion(ctx context.Context, config *s3Config, authContext *schema.AuthContext) (S3ClientAPI, error) {
 	awsConfig, err := loadAWSConfigWithAuth(ctx, config.region, config.roleArn, authContext)
 	if err != nil {
-		return nil, errUtils.Build(errUtils.ErrLoadAWSConfig).
+		return nil, errUtils.Build(errUtils.ErrLoadAwsConfig).
 			WithCause(err).
 			WithExplanation("Failed to load AWS configuration for backend deletion").
 			WithContext("region", config.region).

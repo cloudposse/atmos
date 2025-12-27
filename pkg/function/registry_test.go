@@ -2,430 +2,337 @@ package function
 
 import (
 	"context"
+	"errors"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestRegistry_RegisterAndGet(t *testing.T) {
-	registry := NewRegistry()
+// mockFunction is a test implementation of Function.
+type mockFunction struct {
+	BaseFunction
+	executeFunc func(ctx context.Context, args string, execCtx *ExecutionContext) (any, error)
+}
 
-	// Create a test function.
-	fn := &EnvFunction{
+func (f *mockFunction) Execute(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
+	if f.executeFunc != nil {
+		return f.executeFunc(ctx, args, execCtx)
+	}
+	return args, nil
+}
+
+func newMockFunction(name string, aliases []string, phase Phase) *mockFunction {
+	return &mockFunction{
 		BaseFunction: BaseFunction{
-			FunctionName:    "test-env",
-			FunctionAliases: []string{"test-e"},
-			FunctionPhase:   PreMerge,
+			FunctionName:    name,
+			FunctionAliases: aliases,
+			FunctionPhase:   phase,
 		},
 	}
+}
 
-	// Register the function.
-	err := registry.Register(fn)
+func TestNewRegistry(t *testing.T) {
+	r := NewRegistry()
+
+	assert.NotNil(t, r)
+	assert.Equal(t, 0, r.Len())
+}
+
+func TestRegistryRegister(t *testing.T) {
+	r := NewRegistry()
+
+	fn := newMockFunction("env", nil, PreMerge)
+	err := r.Register(fn)
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, r.Len())
+	assert.True(t, r.Has("env"))
+}
+
+func TestRegistryRegisterWithAliases(t *testing.T) {
+	r := NewRegistry()
+
+	fn := newMockFunction("store.get", []string{"store"}, PostMerge)
+	err := r.Register(fn)
+
+	require.NoError(t, err)
+	assert.True(t, r.Has("store.get"))
+	assert.True(t, r.Has("store"))
+}
+
+func TestRegistryRegisterDuplicate(t *testing.T) {
+	r := NewRegistry()
+
+	fn1 := newMockFunction("env", nil, PreMerge)
+	fn2 := newMockFunction("env", nil, PreMerge)
+
+	err := r.Register(fn1)
 	require.NoError(t, err)
 
-	// Get by primary name.
-	got, err := registry.Get("test-env")
-	require.NoError(t, err)
-	assert.Equal(t, "test-env", got.Name())
-
-	// Get by alias.
-	got, err = registry.Get("test-e")
-	require.NoError(t, err)
-	assert.Equal(t, "test-env", got.Name())
-
-	// Get non-existent function.
-	_, err = registry.Get("non-existent")
-	assert.ErrorIs(t, err, ErrFunctionNotFound)
+	err = r.Register(fn2)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrDuplicateFunction))
 }
 
-func TestRegistry_DuplicateRegistration(t *testing.T) {
-	registry := NewRegistry()
+func TestRegistryRegisterAliasConflict(t *testing.T) {
+	r := NewRegistry()
 
-	fn1 := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:  "dup-test",
-			FunctionPhase: PreMerge,
-		},
-	}
+	fn1 := newMockFunction("store.get", []string{"store"}, PostMerge)
+	fn2 := newMockFunction("other", []string{"store"}, PostMerge)
 
-	fn2 := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:  "dup-test",
-			FunctionPhase: PreMerge,
-		},
-	}
-
-	// First registration should succeed.
-	err := registry.Register(fn1)
+	err := r.Register(fn1)
 	require.NoError(t, err)
 
-	// Duplicate registration should fail.
-	err = registry.Register(fn2)
-	assert.ErrorIs(t, err, ErrFunctionAlreadyRegistered)
+	err = r.Register(fn2)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrDuplicateFunction))
 }
 
-func TestRegistry_GetByPhase(t *testing.T) {
-	registry := NewRegistry()
+func TestRegistryRegisterNameConflictsWithAlias(t *testing.T) {
+	r := NewRegistry()
 
-	// Register PreMerge function.
-	preMergeFn := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:  "pre-merge-fn",
-			FunctionPhase: PreMerge,
-		},
-	}
-	require.NoError(t, registry.Register(preMergeFn))
+	fn1 := newMockFunction("primary", []string{"alias"}, PreMerge)
+	fn2 := newMockFunction("alias", nil, PreMerge)
 
-	// Register PostMerge function.
-	postMergeFn := &StoreFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:  "post-merge-fn",
-			FunctionPhase: PostMerge,
-		},
-	}
-	require.NoError(t, registry.Register(postMergeFn))
-
-	// Get PreMerge functions.
-	preMergeFns := registry.GetByPhase(PreMerge)
-	assert.Len(t, preMergeFns, 1)
-	assert.Equal(t, "pre-merge-fn", preMergeFns[0].Name())
-
-	// Get PostMerge functions.
-	postMergeFns := registry.GetByPhase(PostMerge)
-	assert.Len(t, postMergeFns, 1)
-	assert.Equal(t, "post-merge-fn", postMergeFns[0].Name())
-}
-
-func TestRegistry_Has(t *testing.T) {
-	registry := NewRegistry()
-
-	fn := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:    "has-test",
-			FunctionAliases: []string{"has-alias"},
-			FunctionPhase:   PreMerge,
-		},
-	}
-	require.NoError(t, registry.Register(fn))
-
-	assert.True(t, registry.Has("has-test"))
-	assert.True(t, registry.Has("has-alias"))
-	assert.False(t, registry.Has("non-existent"))
-}
-
-func TestRegistry_Unregister(t *testing.T) {
-	registry := NewRegistry()
-
-	fn := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:    "unreg-test",
-			FunctionAliases: []string{"unreg-alias"},
-			FunctionPhase:   PreMerge,
-		},
-	}
-	require.NoError(t, registry.Register(fn))
-
-	// Verify it exists.
-	assert.True(t, registry.Has("unreg-test"))
-	assert.True(t, registry.Has("unreg-alias"))
-
-	// Unregister.
-	registry.Unregister("unreg-test")
-
-	// Verify it's gone.
-	assert.False(t, registry.Has("unreg-test"))
-	assert.False(t, registry.Has("unreg-alias"))
-}
-
-func TestDefaultRegistry_HasAllDefaults(t *testing.T) {
-	// Force re-initialization.
-	registry := DefaultRegistry()
-
-	// Check that default functions are registered.
-	expectedFunctions := []string{
-		TagEnv,
-		TagExec,
-		TagRandom,
-		TagTemplate,
-		TagRepoRoot,
-		TagInclude,
-		TagIncludeRaw,
-		TagStore,
-		TagStoreGet,
-		TagTerraformOutput,
-		TagTerraformState,
-		TagAwsAccountID,
-		TagAwsCallerIdentityArn,
-		TagAwsCallerIdentityUserID,
-		TagAwsRegion,
-	}
-
-	for _, name := range expectedFunctions {
-		assert.True(t, registry.Has(name), "expected function %s to be registered", name)
-	}
-}
-
-func TestEnvFunction_Execute(t *testing.T) {
-	fn := NewEnvFunction()
-
-	// Set up test environment variable.
-	t.Setenv("TEST_VAR", "test_value")
-
-	// Test basic env lookup.
-	result, err := fn.Execute(context.Background(), "TEST_VAR", nil)
+	err := r.Register(fn1)
 	require.NoError(t, err)
-	assert.Equal(t, "test_value", result)
 
-	// Test with default value for missing variable.
-	result, err = fn.Execute(context.Background(), "MISSING_VAR default_value", nil)
+	err = r.Register(fn2)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrDuplicateFunction))
+}
+
+func TestRegistryGet(t *testing.T) {
+	r := NewRegistry()
+
+	fn := newMockFunction("env", nil, PreMerge)
+	require.NoError(t, r.Register(fn))
+
+	got, err := r.Get("env")
 	require.NoError(t, err)
-	assert.Equal(t, "default_value", result)
+	assert.Equal(t, fn, got)
+}
 
-	// Test missing variable without default.
-	result, err = fn.Execute(context.Background(), "MISSING_VAR", nil)
+func TestRegistryGetByAlias(t *testing.T) {
+	r := NewRegistry()
+
+	fn := newMockFunction("store.get", []string{"store"}, PostMerge)
+	require.NoError(t, r.Register(fn))
+
+	got, err := r.Get("store")
 	require.NoError(t, err)
-	assert.Equal(t, "", result)
+	assert.Equal(t, fn, got)
 }
 
-func TestRandomFunction_Execute(t *testing.T) {
-	fn := NewRandomFunction()
+func TestRegistryGetNotFound(t *testing.T) {
+	r := NewRegistry()
 
-	// Test with no arguments (default range).
-	result, err := fn.Execute(context.Background(), "", nil)
+	_, err := r.Get("nonexistent")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrFunctionNotFound))
+}
+
+func TestRegistryHas(t *testing.T) {
+	r := NewRegistry()
+
+	fn := newMockFunction("env", []string{"environment"}, PreMerge)
+	require.NoError(t, r.Register(fn))
+
+	assert.True(t, r.Has("env"))
+	assert.True(t, r.Has("environment"))
+	assert.False(t, r.Has("nonexistent"))
+}
+
+func TestRegistryGetByPhase(t *testing.T) {
+	r := NewRegistry()
+
+	fn1 := newMockFunction("env", nil, PreMerge)
+	fn2 := newMockFunction("exec", nil, PreMerge)
+	fn3 := newMockFunction("terraform.output", nil, PostMerge)
+	fn4 := newMockFunction("store.get", nil, PostMerge)
+
+	require.NoError(t, r.Register(fn1))
+	require.NoError(t, r.Register(fn2))
+	require.NoError(t, r.Register(fn3))
+	require.NoError(t, r.Register(fn4))
+
+	preMerge := r.GetByPhase(PreMerge)
+	assert.Len(t, preMerge, 2)
+
+	postMerge := r.GetByPhase(PostMerge)
+	assert.Len(t, postMerge, 2)
+}
+
+func TestRegistryList(t *testing.T) {
+	r := NewRegistry()
+
+	fn1 := newMockFunction("env", nil, PreMerge)
+	fn2 := newMockFunction("exec", nil, PreMerge)
+	fn3 := newMockFunction("terraform.output", nil, PostMerge)
+
+	require.NoError(t, r.Register(fn1))
+	require.NoError(t, r.Register(fn2))
+	require.NoError(t, r.Register(fn3))
+
+	names := r.List()
+	sort.Strings(names)
+
+	assert.Equal(t, []string{"env", "exec", "terraform.output"}, names)
+}
+
+func TestRegistryUnregister(t *testing.T) {
+	r := NewRegistry()
+
+	fn := newMockFunction("env", []string{"environment"}, PreMerge)
+	require.NoError(t, r.Register(fn))
+
+	err := r.Unregister("env")
 	require.NoError(t, err)
-	val, ok := result.(int)
-	require.True(t, ok)
-	assert.GreaterOrEqual(t, val, 0)
-	assert.LessOrEqual(t, val, 65535)
 
-	// Test with max only.
-	result, err = fn.Execute(context.Background(), "100", nil)
+	assert.False(t, r.Has("env"))
+	assert.False(t, r.Has("environment"))
+	assert.Equal(t, 0, r.Len())
+}
+
+func TestRegistryUnregisterNotFound(t *testing.T) {
+	r := NewRegistry()
+
+	err := r.Unregister("nonexistent")
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, ErrFunctionNotFound))
+}
+
+func TestRegistryClear(t *testing.T) {
+	r := NewRegistry()
+
+	fn1 := newMockFunction("env", nil, PreMerge)
+	fn2 := newMockFunction("exec", nil, PreMerge)
+	require.NoError(t, r.Register(fn1))
+	require.NoError(t, r.Register(fn2))
+
+	assert.Equal(t, 2, r.Len())
+
+	r.Clear()
+
+	assert.Equal(t, 0, r.Len())
+	assert.False(t, r.Has("env"))
+	assert.False(t, r.Has("exec"))
+}
+
+func TestRegistryConcurrentAccess(t *testing.T) {
+	r := NewRegistry()
+	done := make(chan bool)
+
+	// Concurrent registration.
+	go func() {
+		for i := 0; i < 100; i++ {
+			fn := newMockFunction("env", nil, PreMerge)
+			_ = r.Register(fn)
+			_ = r.Unregister("env")
+		}
+		done <- true
+	}()
+
+	// Concurrent reads.
+	go func() {
+		for i := 0; i < 100; i++ {
+			_ = r.Has("env")
+			_, _ = r.Get("env")
+			_ = r.List()
+		}
+		done <- true
+	}()
+
+	<-done
+	<-done
+}
+
+func TestPhaseString(t *testing.T) {
+	tests := []struct {
+		phase    Phase
+		expected string
+	}{
+		{PreMerge, "pre-merge"},
+		{PostMerge, "post-merge"},
+		{Phase(99), "unknown"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.phase.String())
+		})
+	}
+}
+
+func TestExecutionContext(t *testing.T) {
+	env := map[string]string{
+		"HOME": "/home/user",
+		"USER": "testuser",
+	}
+
+	ctx := &ExecutionContext{
+		Env:        env,
+		WorkingDir: "/work/dir",
+		SourceFile: "config.yaml",
+	}
+
+	assert.Equal(t, "/home/user", ctx.GetEnv("HOME"))
+	assert.Equal(t, "testuser", ctx.GetEnv("USER"))
+	assert.Equal(t, "", ctx.GetEnv("NONEXISTENT"))
+
+	assert.True(t, ctx.HasEnv("HOME"))
+	assert.False(t, ctx.HasEnv("NONEXISTENT"))
+
+	assert.Equal(t, "/work/dir", ctx.WorkingDir)
+	assert.Equal(t, "config.yaml", ctx.SourceFile)
+}
+
+func TestExecutionContextNil(t *testing.T) {
+	var ctx *ExecutionContext
+
+	assert.Equal(t, "", ctx.GetEnv("HOME"))
+	assert.False(t, ctx.HasEnv("HOME"))
+}
+
+func TestExecutionContextNilEnv(t *testing.T) {
+	ctx := NewExecutionContext(nil, "", "")
+
+	assert.NotNil(t, ctx.Env)
+	assert.Equal(t, "", ctx.GetEnv("HOME"))
+	assert.False(t, ctx.HasEnv("HOME"))
+}
+
+func TestBaseFunction(t *testing.T) {
+	bf := &BaseFunction{
+		FunctionName:    "test",
+		FunctionAliases: []string{"t", "tst"},
+		FunctionPhase:   PostMerge,
+	}
+
+	assert.Equal(t, "test", bf.Name())
+	assert.Equal(t, []string{"t", "tst"}, bf.Aliases())
+	assert.Equal(t, PostMerge, bf.Phase())
+}
+
+func TestBaseFunctionNilAliases(t *testing.T) {
+	bf := &BaseFunction{
+		FunctionName: "test",
+	}
+
+	aliases := bf.Aliases()
+	assert.NotNil(t, aliases)
+	assert.Len(t, aliases, 0)
+}
+
+func TestMockFunctionExecute(t *testing.T) {
+	fn := newMockFunction("test", nil, PreMerge)
+	fn.executeFunc = func(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
+		return "executed: " + args, nil
+	}
+
+	result, err := fn.Execute(context.Background(), "arg1 arg2", nil)
 	require.NoError(t, err)
-	val, ok = result.(int)
-	require.True(t, ok)
-	assert.GreaterOrEqual(t, val, 0)
-	assert.LessOrEqual(t, val, 100)
-
-	// Test with min and max.
-	result, err = fn.Execute(context.Background(), "10 20", nil)
-	require.NoError(t, err)
-	val, ok = result.(int)
-	require.True(t, ok)
-	assert.GreaterOrEqual(t, val, 10)
-	assert.LessOrEqual(t, val, 20)
-}
-
-func TestTemplateFunction_Execute(t *testing.T) {
-	fn := NewTemplateFunction()
-
-	// Test JSON object.
-	result, err := fn.Execute(context.Background(), `{"key": "value"}`, nil)
-	require.NoError(t, err)
-	m, ok := result.(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "value", m["key"])
-
-	// Test JSON array.
-	result, err = fn.Execute(context.Background(), `[1, 2, 3]`, nil)
-	require.NoError(t, err)
-	arr, ok := result.([]any)
-	require.True(t, ok)
-	assert.Len(t, arr, 3)
-
-	// Test non-JSON string.
-	result, err = fn.Execute(context.Background(), "not json", nil)
-	require.NoError(t, err)
-	assert.Equal(t, "not json", result)
-}
-
-func TestRegistry_List(t *testing.T) {
-	registry := NewRegistry()
-
-	// Empty registry.
-	names := registry.List()
-	assert.Empty(t, names)
-
-	// Register some functions.
-	fn1 := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:  "func1",
-			FunctionPhase: PreMerge,
-		},
-	}
-	fn2 := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:  "func2",
-			FunctionPhase: PreMerge,
-		},
-	}
-	require.NoError(t, registry.Register(fn1))
-	require.NoError(t, registry.Register(fn2))
-
-	names = registry.List()
-	assert.Len(t, names, 2)
-	assert.Contains(t, names, "func1")
-	assert.Contains(t, names, "func2")
-}
-
-func TestRegistry_Len(t *testing.T) {
-	registry := NewRegistry()
-
-	// Empty registry.
-	assert.Equal(t, 0, registry.Len())
-
-	// Register a function.
-	fn := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:  "len-test",
-			FunctionPhase: PreMerge,
-		},
-	}
-	require.NoError(t, registry.Register(fn))
-	assert.Equal(t, 1, registry.Len())
-}
-
-func TestRegistry_Clear(t *testing.T) {
-	registry := NewRegistry()
-
-	// Register some functions.
-	fn1 := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:    "clear-test1",
-			FunctionAliases: []string{"alias1"},
-			FunctionPhase:   PreMerge,
-		},
-	}
-	fn2 := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:  "clear-test2",
-			FunctionPhase: PreMerge,
-		},
-	}
-	require.NoError(t, registry.Register(fn1))
-	require.NoError(t, registry.Register(fn2))
-	assert.Equal(t, 2, registry.Len())
-
-	// Clear the registry.
-	registry.Clear()
-	assert.Equal(t, 0, registry.Len())
-	assert.False(t, registry.Has("clear-test1"))
-	assert.False(t, registry.Has("alias1"))
-	assert.False(t, registry.Has("clear-test2"))
-}
-
-func TestRegistry_AliasConflicts(t *testing.T) {
-	registry := NewRegistry()
-
-	// Register a function with alias.
-	fn1 := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:    "alias-conflict-1",
-			FunctionAliases: []string{"shared-alias"},
-			FunctionPhase:   PreMerge,
-		},
-	}
-	require.NoError(t, registry.Register(fn1))
-
-	// Try to register another function with same alias.
-	fn2 := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:    "alias-conflict-2",
-			FunctionAliases: []string{"shared-alias"},
-			FunctionPhase:   PreMerge,
-		},
-	}
-	err := registry.Register(fn2)
-	assert.ErrorIs(t, err, ErrFunctionAlreadyRegistered)
-}
-
-func TestRegistry_NameConflictsWithAlias(t *testing.T) {
-	registry := NewRegistry()
-
-	// Register a function with alias.
-	fn1 := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:    "name-alias-conflict",
-			FunctionAliases: []string{"will-conflict"},
-			FunctionPhase:   PreMerge,
-		},
-	}
-	require.NoError(t, registry.Register(fn1))
-
-	// Try to register function where name matches existing alias.
-	fn2 := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:  "will-conflict",
-			FunctionPhase: PreMerge,
-		},
-	}
-	err := registry.Register(fn2)
-	assert.ErrorIs(t, err, ErrFunctionAlreadyRegistered)
-}
-
-func TestRegistry_AliasConflictsWithName(t *testing.T) {
-	registry := NewRegistry()
-
-	// Register a function.
-	fn1 := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:  "existing-name",
-			FunctionPhase: PreMerge,
-		},
-	}
-	require.NoError(t, registry.Register(fn1))
-
-	// Try to register function where alias matches existing name.
-	fn2 := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:    "new-func",
-			FunctionAliases: []string{"existing-name"},
-			FunctionPhase:   PreMerge,
-		},
-	}
-	err := registry.Register(fn2)
-	assert.ErrorIs(t, err, ErrFunctionAlreadyRegistered)
-}
-
-func TestRegistry_Unregister_NonExistent(t *testing.T) {
-	registry := NewRegistry()
-
-	// Unregister non-existent function should not panic.
-	registry.Unregister("non-existent")
-	assert.Equal(t, 0, registry.Len())
-}
-
-func TestRegistry_CaseInsensitive(t *testing.T) {
-	registry := NewRegistry()
-
-	fn := &EnvFunction{
-		BaseFunction: BaseFunction{
-			FunctionName:    "CaseSensitive",
-			FunctionAliases: []string{"ALIAS"},
-			FunctionPhase:   PreMerge,
-		},
-	}
-	require.NoError(t, registry.Register(fn))
-
-	// Test case-insensitive lookup.
-	assert.True(t, registry.Has("casesensitive"))
-	assert.True(t, registry.Has("CASESENSITIVE"))
-	assert.True(t, registry.Has("alias"))
-	assert.True(t, registry.Has("ALIAS"))
-
-	// Get returns the function with original name case.
-	got, err := registry.Get("CASESENSITIVE")
-	require.NoError(t, err)
-	assert.Equal(t, "CaseSensitive", got.Name())
-}
-
-func TestRegistry_GetByPhase_Empty(t *testing.T) {
-	registry := NewRegistry()
-
-	// Empty registry should return empty slice.
-	preMerge := registry.GetByPhase(PreMerge)
-	assert.Empty(t, preMerge)
-
-	postMerge := registry.GetByPhase(PostMerge)
-	assert.Empty(t, postMerge)
+	assert.Equal(t, "executed: arg1 arg2", result)
 }

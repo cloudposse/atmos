@@ -1,0 +1,63 @@
+---
+title: "atmos::exec"
+sidebar_position: 2
+sidebar_label: "atmos::exec"
+sidebar_class_name: command
+description: Execute shell commands in HCL stack configurations
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos::exec` function executes shell commands and assigns the output to values in HCL stack configurations.
+</Intro>
+
+## Usage
+
+```hcl
+// Execute a shell command
+version = atmos::exec("git describe --tags")
+
+// Execute with arguments
+user = atmos::exec("whoami")
+```
+
+## Arguments
+
+<dl>
+    <dt>`command`</dt>
+    <dd>Shell command to execute</dd>
+</dl>
+
+## Examples
+
+```hcl
+stack {
+  components {
+    terraform {
+      component "myapp" {
+        vars {
+          // Get git commit hash
+          git_commit = atmos::exec("git rev-parse --short HEAD")
+
+          // Get current timestamp
+          deploy_time = atmos::exec("date -u +%Y-%m-%dT%H:%M:%SZ")
+
+          // Get AWS account ID
+          account_id = atmos::exec("aws sts get-caller-identity --query Account --output text")
+        }
+      }
+    }
+  }
+}
+```
+
+## Security Considerations
+
+:::warning
+Be cautious when using `atmos::exec` with dynamic or user-provided input. The command is executed directly in the shell, which could pose security risks if not properly validated.
+:::
+
+## See Also
+
+- [!exec (YAML)](/functions/yaml/exec) - YAML equivalent

@@ -1,0 +1,12 @@
+{
+  "components": {
+    "terraform": {
+      "mock": {
+        "vars": {
+          "foo": "json override foo",
+          "baz": "json baz"
+        }
+      }
+    }
+  }
+}

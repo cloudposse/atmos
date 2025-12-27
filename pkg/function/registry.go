@@ -1,17 +1,17 @@
 package function
 
 import (
-	"strings"
+	"fmt"
 	"sync"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// Registry is a thread-safe registry for Function implementations.
+// Registry manages registered functions and provides lookup capabilities.
 type Registry struct {
 	mu        sync.RWMutex
-	functions map[string]Function
-	aliases   map[string]string // alias -> primary name
+	functions map[string]Function // Primary name -> Function.
+	aliases   map[string]string   // Alias -> Primary name.
 }
 
 // NewRegistry creates a new empty function registry.
@@ -24,93 +24,76 @@ func NewRegistry() *Registry {
 	}
 }
 
-// defaultRegistry is the global registry instance.
-var (
-	defaultRegistry     *Registry
-	defaultRegistryOnce sync.Once
-)
-
-// DefaultRegistry returns the global function registry.
-func DefaultRegistry() *Registry {
-	defer perf.Track(nil, "function.DefaultRegistry")()
-
-	defaultRegistryOnce.Do(func() {
-		defaultRegistry = NewRegistry()
-	})
-	return defaultRegistry
-}
-
 // Register adds a function to the registry.
-// Returns an error if the name or any alias is already registered.
+// Returns an error if a function with the same name or alias already exists.
 func (r *Registry) Register(fn Function) error {
 	defer perf.Track(nil, "function.Registry.Register")()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	name := strings.ToLower(fn.Name())
+	name := fn.Name()
 
-	// Check if primary name conflicts.
+	// Check if the name is already registered.
 	if _, exists := r.functions[name]; exists {
-		return ErrFunctionAlreadyRegistered
+		return fmt.Errorf("%w: %s", ErrDuplicateFunction, name)
 	}
+
+	// Check if the name conflicts with an alias.
 	if _, exists := r.aliases[name]; exists {
-		return ErrFunctionAlreadyRegistered
+		return fmt.Errorf("%w: %s is registered as an alias", ErrDuplicateFunction, name)
 	}
 
-	// Check if any alias conflicts.
+	// Check if any aliases conflict.
 	for _, alias := range fn.Aliases() {
-		alias = strings.ToLower(alias)
 		if _, exists := r.functions[alias]; exists {
-			return ErrFunctionAlreadyRegistered
+			return fmt.Errorf("%w: alias %s conflicts with function name", ErrDuplicateFunction, alias)
 		}
-		if _, exists := r.aliases[alias]; exists {
-			return ErrFunctionAlreadyRegistered
+		if existingPrimary, exists := r.aliases[alias]; exists {
+			return fmt.Errorf("%w: alias %s already registered for %s", ErrDuplicateFunction, alias, existingPrimary)
 		}
 	}
 
-	// Register the function and its aliases.
+	// Register the function.
 	r.functions[name] = fn
+
+	// Register all aliases.
 	for _, alias := range fn.Aliases() {
-		r.aliases[strings.ToLower(alias)] = name
+		r.aliases[alias] = name
 	}
 
 	return nil
 }
 
 // Get retrieves a function by name or alias.
-// Returns ErrFunctionNotFound if the function is not registered.
+// Returns ErrFunctionNotFound if the function doesn't exist.
 func (r *Registry) Get(name string) (Function, error) {
 	defer perf.Track(nil, "function.Registry.Get")()
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	name = strings.ToLower(name)
-
-	// Check primary names first.
+	// Try direct lookup.
 	if fn, exists := r.functions[name]; exists {
 		return fn, nil
 	}
 
-	// Check aliases.
+	// Try alias lookup.
 	if primaryName, exists := r.aliases[name]; exists {
 		if fn, exists := r.functions[primaryName]; exists {
 			return fn, nil
 		}
 	}
 
-	return nil, ErrFunctionNotFound
+	return nil, fmt.Errorf("%w: %s", ErrFunctionNotFound, name)
 }
 
-// Has checks if a function is registered by name or alias.
+// Has returns true if a function with the given name or alias exists.
 func (r *Registry) Has(name string) bool {
 	defer perf.Track(nil, "function.Registry.Has")()
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-
-	name = strings.ToLower(name)
 
 	if _, exists := r.functions[name]; exists {
 		return true
@@ -121,7 +104,7 @@ func (r *Registry) Has(name string) bool {
 	return false
 }
 
-// GetByPhase returns all functions that should execute in the given phase.
+// GetByPhase returns all functions that should run in the specified phase.
 func (r *Registry) GetByPhase(phase Phase) []Function {
 	defer perf.Track(nil, "function.Registry.GetByPhase")()
 
@@ -137,7 +120,7 @@ func (r *Registry) GetByPhase(phase Phase) []Function {
 	return result
 }
 
-// List returns all registered function names.
+// List returns all registered function names (not aliases).
 func (r *Registry) List() []string {
 	defer perf.Track(nil, "function.Registry.List")()
 
@@ -162,26 +145,27 @@ func (r *Registry) Len() int {
 }
 
 // Unregister removes a function from the registry.
-func (r *Registry) Unregister(name string) {
+// Also removes all associated aliases.
+func (r *Registry) Unregister(name string) error {
 	defer perf.Track(nil, "function.Registry.Unregister")()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	name = strings.ToLower(name)
-
 	fn, exists := r.functions[name]
 	if !exists {
-		return
+		return fmt.Errorf("%w: %s", ErrFunctionNotFound, name)
 	}
 
 	// Remove aliases first.
 	for _, alias := range fn.Aliases() {
-		delete(r.aliases, strings.ToLower(alias))
+		delete(r.aliases, alias)
 	}
 
 	// Remove the function.
 	delete(r.functions, name)
+
+	return nil
 }
 
 // Clear removes all functions from the registry.
