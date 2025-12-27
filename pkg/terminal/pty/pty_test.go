@@ -62,9 +62,10 @@ func TestExecWithPTY_BasicExecution(t *testing.T) {
 
 	var stdout bytes.Buffer
 
-	// Use sh -c with printf and a small sleep to ensure the PTY has time to read
-	// all buffered output before the subprocess exits and triggers EIO.
-	// This avoids the race condition described in https://go.dev/issue/57141
+	// Subprocess writes output then sleeps briefly before exiting.
+	// The sleep ensures the PTY has time to read all buffered output before
+	// the subprocess exits and triggers EIO. This avoids the race condition
+	// described in https://go.dev/issue/57141
 	cmd := exec.Command("sh", "-c", "printf '%s\\n' 'hello world'; sleep 0.1")
 	opts := &Options{
 		Stdin:         strings.NewReader(""), // Provide empty stdin for CI environments.

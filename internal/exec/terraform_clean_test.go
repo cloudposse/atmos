@@ -2,10 +2,12 @@ package exec
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/xdg"
 	"github.com/stretchr/testify/require"
 )
 
@@ -323,4 +325,72 @@ func TestCollectComponentsDirectoryObjects(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCleanPluginCache_Force(t *testing.T) {
+	// Create a temporary cache directory to simulate the XDG cache.
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tmpDir)
+
+	// Create the plugin cache directory with some content.
+	cacheDir, err := xdg.GetXDGCacheDir("terraform/plugins", 0o755)
+	require.NoError(t, err)
+
+	// Create a fake provider file.
+	testFile := filepath.Join(cacheDir, "registry.terraform.io", "hashicorp", "null", "test-provider")
+	err = os.MkdirAll(filepath.Dir(testFile), 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(testFile, []byte("fake provider"), 0o644)
+	require.NoError(t, err)
+
+	// Verify the file exists.
+	_, err = os.Stat(testFile)
+	require.NoError(t, err)
+
+	// Run cleanPluginCache with force=true.
+	err = cleanPluginCache(true, false)
+	require.NoError(t, err)
+
+	// Verify the cache directory was deleted.
+	_, err = os.Stat(cacheDir)
+	require.True(t, os.IsNotExist(err), "Cache directory should be deleted")
+}
+
+func TestCleanPluginCache_DryRun(t *testing.T) {
+	// Create a temporary cache directory to simulate the XDG cache.
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tmpDir)
+
+	// Create the plugin cache directory with some content.
+	cacheDir, err := xdg.GetXDGCacheDir("terraform/plugins", 0o755)
+	require.NoError(t, err)
+
+	// Create a fake provider file.
+	testFile := filepath.Join(cacheDir, "registry.terraform.io", "hashicorp", "null", "test-provider")
+	err = os.MkdirAll(filepath.Dir(testFile), 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(testFile, []byte("fake provider"), 0o644)
+	require.NoError(t, err)
+
+	// Run cleanPluginCache with dryRun=true.
+	err = cleanPluginCache(true, true)
+	require.NoError(t, err)
+
+	// Verify the file still exists (dry run should not delete).
+	_, err = os.Stat(testFile)
+	require.NoError(t, err, "File should still exist after dry run")
+}
+
+func TestCleanPluginCache_NonExistent(t *testing.T) {
+	// Create a temporary cache directory without the terraform/plugins folder.
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CACHE_HOME", tmpDir)
+
+	// Remove any existing cache dir.
+	cacheDir := filepath.Join(tmpDir, "atmos", "terraform", "plugins")
+	os.RemoveAll(cacheDir)
+
+	// Run cleanPluginCache - should not error even if directory doesn't exist.
+	err := cleanPluginCache(true, false)
+	require.NoError(t, err)
 }
