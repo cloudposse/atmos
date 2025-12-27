@@ -30,6 +30,7 @@ const (
 	AtmosYamlFuncIncludeRaw              = "!include.raw"
 	AtmosYamlFuncGitRoot                 = "!repo-root"
 	AtmosYamlFuncCwd                     = "!cwd"
+	AtmosYamlFuncUnset                   = "!unset"
 	AtmosYamlFuncRandom                  = "!random"
 	AtmosYamlFuncLiteral                 = "!literal"
 	AtmosYamlFuncAwsAccountID            = "!aws.account_id"
@@ -54,6 +55,7 @@ var (
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
 		AtmosYamlFuncCwd,
+		AtmosYamlFuncUnset,
 		AtmosYamlFuncRandom,
 		AtmosYamlFuncLiteral,
 		AtmosYamlFuncAwsAccountID,
@@ -74,6 +76,7 @@ var (
 		AtmosYamlFuncTerraformState:          true,
 		AtmosYamlFuncEnv:                     true,
 		AtmosYamlFuncCwd:                     true,
+		AtmosYamlFuncUnset:                   true,
 		AtmosYamlFuncRandom:                  true,
 		AtmosYamlFuncLiteral:                 true,
 		AtmosYamlFuncAwsAccountID:            true,
@@ -567,6 +570,12 @@ func WrapLongStrings(data any, maxLength int) any {
 func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	defer perf.Track(nil, "utils.ConvertToYAML")()
 
+	// Clean up duplicate array index keys created by Viper.
+	// Viper sometimes creates both array entries and indexed map keys (e.g., both "steps" array
+	// and "steps[0]", "steps[1]" keys) when merging configurations. This cleanup removes the
+	// indexed keys when an array exists to prevent duplicate output in YAML.
+	cleanedData := CleanupArrayIndexKeys(data)
+
 	// Get a buffer from the pool to reduce allocations.
 	buf := yamlBufferPool.Get().(*bytes.Buffer)
 	buf.Reset() // Ensure buffer is clean.
@@ -585,7 +594,7 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	}
 	encoder.SetIndent(indent)
 
-	if err := encoder.Encode(data); err != nil {
+	if err := encoder.Encode(cleanedData); err != nil {
 		return "", err
 	}
 	return buf.String(), nil

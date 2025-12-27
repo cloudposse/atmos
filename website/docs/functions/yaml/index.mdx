@@ -79,6 +79,11 @@ YAML supports three types of data: core, defined, and user-defined.
    where Atmos is executed from. Useful when you need paths relative to where you run Atmos
    rather than relative to the configuration file.
 
+ - The [__`!unset`__](/functions/yaml/unset) YAML function is used to delete or remove keys from
+   the configuration during inheritance and merging. This allows you to explicitly remove values
+   that were defined in parent configurations or imports, providing fine-grained control over
+   configuration inheritance
+
  - The [__`!random`__](/functions/yaml/random) YAML function generates a cryptographically secure random integer
    within a specified range, useful for generating random port numbers or IDs.
 
@@ -171,6 +176,13 @@ components:
         # Download a remote JSON file with .json extension and query data using YQ
         # Note: URLs without extensions are treated as text, so use URLs with appropriate extensions
         github_data: !include ./github-meta.json .api
+
+        # Remove a key that was defined in a parent configuration or import
+        deprecated_setting: !unset
+
+        # Remove specific nested configuration
+        legacy:
+          old_feature: !unset
 
         # Generate a random port number between 1024 and 65535
         app_port: !random 1024 65535
