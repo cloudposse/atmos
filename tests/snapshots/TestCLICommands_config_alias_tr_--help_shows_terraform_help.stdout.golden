@@ -58,6 +58,7 @@ AVAILABLE COMMANDS
       untaint             Remove the 'tainted' state from a resource instance
       validate            Check whether the configuration is valid
       version             Show the current Terraform version
+      workdir [command]   Manage component working directories
       workspace           Manage Terraform workspaces
 
 FLAGS

@@ -44,6 +44,7 @@ Valid subcommands are:
 • validate
 • varfile
 • version
+• workdir
 • workspace
 • write
 
