@@ -3,7 +3,6 @@
 *.tfstate
 *.tfstate.*
 **/*.tf.json
-**/planfile
 **/*.planfile
 **/*.kubeconfig
 **/terraform.tfvars.json
@@ -87,6 +86,7 @@ TEST_QUALITY_*.md
 /lintroller
 /.lintroller
 tools/lintroller/.lintroller
+.golangci/lintroller/lintroller
 /custom-gcl
 tools/gomodcheck/.gomodcheck
 
@@ -111,3 +111,4 @@ scratch/
 COVERAGE_SUMMARY.md
 TESTABILITY_CHANGES_SUMMARY.md
 *.ansi
+.claude/plans/

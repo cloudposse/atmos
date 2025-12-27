@@ -97,7 +97,7 @@ export const roadmapConfig = {
       icon: 'RiGitBranchLine',
       title: 'Native CI/CD Support',
       tagline: 'Local = CI, no configuration drift',
-      description: 'PR comments with formatted plans, cost estimates, and approval buttons. Commands behave identically locally and in CI.',
+      description: 'First-class CI/CD support with GitHub Actions integration, planfile storage (S3/GitHub Artifacts/Local), formatted PR comments, and job summaries.',
       benefits: 'PR reviewers see formatted plans directly in GitHub. No clicking through to CI logs. Get started with a few lines of workflow YAML.',
       status: 'in-progress',
       quarter: 'q1-2026',
@@ -165,7 +165,7 @@ export const roadmapConfig = {
         { label: 'Atmos Profiles', status: 'shipped', quarter: 'q4-2025', docs: '/cli/configuration/profiles', changelog: 'atmos-profiles', description: 'Named configuration profiles for different environments or projects, switchable on the fly.', benefits: 'Switch between projects or environments without editing config files or setting environment variables.' },
         { label: 'Automated Terraform backend provisioning', status: 'shipped', quarter: 'q4-2025', docs: '/components/terraform/backend-provisioning', changelog: 'automatic-backend-provisioning', description: 'Automatic backend.tf generation from stack configuration. Backends are defined once and inherited.', category: 'featured', priority: 'high', benefits: 'No more copy-pasting backend blocks. Backend configuration is defined once and applied consistently.' },
         { label: 'Streaming Terraform UI', status: 'in-progress', quarter: 'q4-2025', pr: 1908, description: 'Real-time Terraform plan/apply visualization with resource-level progress tracking.', benefits: 'See exactly what Terraform is doing as it happens. Identify slow resources and stuck operations.' },
-        { label: 'Native CI integration with summary templates', status: 'in-progress', quarter: 'q4-2025', pr: 1891, description: 'GitHub/GitLab-native summaries with formatted plan output, cost estimates, and approval workflows.', benefits: 'PR reviewers see formatted plans directly in GitHub. No clicking through to CI logs.' },
+        { label: 'Native CI integration with summary templates', status: 'in-progress', quarter: 'q1-2026', pr: 1891, description: 'GitHub-native summaries with formatted plan output, resource badges, and collapsible details.', benefits: 'PR reviewers see formatted plans directly in GitHub. No clicking through to CI logs.' },
         { label: 'Component-aware tab completion for all commands', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/completion', changelog: 'component-aware-stack-completion', description: 'Shell completion that understands your stacks and components for faster command entry.', category: 'featured', priority: 'high', benefits: 'Tab completion shows only valid stacks and components. Discover what exists without searching config files.' },
         { label: 'Filesystem paths for components', status: 'shipped', quarter: 'q4-2025', changelog: 'path-based-component-resolution', description: 'Reference components by filesystem path instead of component name. Run commands from component directories.', codeExample: 'atmos terraform plan ./components/vpc -s plat-ue1-prod', category: 'featured', priority: 'high', benefits: 'Work on components naturally by navigating to their directory. Component names are inferred from the path.' },
         { label: 'Automatic toolchain installation and version management', status: 'shipped', quarter: 'q4-2025', description: 'Install and manage tool versions (Terraform, OpenTofu, Helmfile) based on component requirements.', benefits: 'The correct tool versions are installed automatically. No tfenv, tgswitch, or manual version management.' },
@@ -293,12 +293,13 @@ export const roadmapConfig = {
       tagline: 'Native CI/CD support — local = CI',
       description:
         'CI pipelines shouldn\'t require complicated workflows, custom actions, and shell commands just to run what should be a one liner. They should just work. What works locally should work identically in CI with minimal configuration.',
-      progress: 35,
+      progress: 60,
       status: 'in-progress',
       milestones: [
         { label: 'Native GitHub OIDC enables automatic role assumptions', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', description: 'Secretless CI/CD with native OIDC—no AWS access keys stored in GitHub secrets.', category: 'featured', priority: 'high', benefits: 'No long-lived credentials to rotate. Security posture improves and audit burden decreases.' },
+        { label: 'Multi-backend planfile storage', status: 'in-progress', quarter: 'q1-2026', pr: 1891, description: 'Store and retrieve Terraform plan files across CI jobs with S3, GitHub Artifacts, and local backends.', category: 'featured', priority: 'high', benefits: 'Coordinate plan and apply across separate CI jobs. Plans include metadata for verification.' },
         { label: 'Easily sharing outputs between GitHub Actions steps', status: 'planned', quarter: 'q1-2026', description: 'Pass Terraform outputs between GitHub Actions workflow steps without manual JSON parsing.', category: 'featured', priority: 'high', benefits: 'Use Terraform outputs in subsequent steps naturally. No jq parsing or file juggling.' },
-        { label: 'Simplified GitHub Actions with native CI mode', status: 'in-progress', quarter: 'q1-2026', pr: 1891, docs: '/integrations/github-actions/github-actions', description: 'Pre-built GitHub Actions with automatic CI environment detection, formatted PR comments with plans, and minimal configuration.', category: 'featured', priority: 'high', benefits: 'Get started with a few lines of workflow YAML. Atmos handles CI detection and formatting.' },
+        { label: 'Simplified GitHub Actions with native CI mode', status: 'in-progress', quarter: 'q1-2026', pr: 1891, docs: '/integrations/github-actions/github-actions', description: 'Native CI mode with formatted PR comments, job summaries, planfile storage, and automatic environment detection.', category: 'featured', priority: 'high', benefits: 'Get started with a few lines of workflow YAML. Atmos handles CI detection, formatted output, and planfile coordination.' },
       ],
       issues: [],
       prs: [

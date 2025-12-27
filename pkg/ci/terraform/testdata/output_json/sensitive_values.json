@@ -1,0 +1,17 @@
+{
+  "api_key": {
+    "sensitive": true,
+    "type": "string",
+    "value": "super-secret-key-12345"
+  },
+  "database_password": {
+    "sensitive": true,
+    "type": "string",
+    "value": "db-password-xyz"
+  },
+  "public_endpoint": {
+    "sensitive": false,
+    "type": "string",
+    "value": "https://api.example.com"
+  }
+}

@@ -665,6 +665,31 @@ var (
 	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
 	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
 	ErrLocalsResolution        = errors.New("failed to resolve local")
+
+	// CI-related errors.
+	ErrCIDisabled             = errors.New("CI integration is disabled")
+	ErrCIProviderNotDetected  = errors.New("CI provider not detected")
+	ErrCIProviderNotFound     = errors.New("CI provider not found")
+	ErrCICheckRunCreateFailed = errors.New("failed to create check run")
+	ErrCICheckRunUpdateFailed = errors.New("failed to update check run")
+	ErrCIStatusFetchFailed    = errors.New("failed to fetch CI status")
+	ErrCIOutputWriteFailed    = errors.New("failed to write CI output")
+	ErrCISummaryWriteFailed   = errors.New("failed to write CI summary")
+	ErrGitHubTokenNotFound    = errors.New("GitHub token not found")
+
+	// Planfile storage errors.
+	ErrPlanfileNotFound           = errors.New("planfile not found")
+	ErrPlanfileUploadFailed       = errors.New("failed to upload planfile")
+	ErrPlanfileDownloadFailed     = errors.New("failed to download planfile")
+	ErrPlanfileDeleteFailed       = errors.New("failed to delete planfile")
+	ErrPlanfileListFailed         = errors.New("failed to list planfiles")
+	ErrPlanfileStoreNotFound      = errors.New("planfile store not found")
+	ErrPlanfileKeyInvalid         = errors.New("planfile key generation failed: stack, component, and SHA are required")
+	ErrPlanfileStatFailed         = errors.New("failed to check planfile status")
+	ErrPlanfileMetadataFailed     = errors.New("failed to load planfile metadata")
+	ErrPlanfileStoreInvalidArgs   = errors.New("invalid planfile store arguments")
+	ErrPlanfileDeleteRequireForce = errors.New("deletion requires --force flag")
+	ErrAWSConfigLoadFailed        = errors.New("failed to load AWS configuration")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

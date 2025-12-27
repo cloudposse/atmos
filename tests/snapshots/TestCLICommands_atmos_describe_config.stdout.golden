@@ -17,6 +17,9 @@
       },
       "plan": {
         "skip_planfile": false
+      },
+      "planfiles": {
+        "default": ""
       }
     },
     "helmfile": {
@@ -223,5 +226,12 @@
     "profile_type": ""
   },
   "profiles": {},
-  "metadata": {}
+  "metadata": {},
+  "ci": {
+    "output": {},
+    "summary": {},
+    "checks": {},
+    "comments": {},
+    "templates": {}
+  }
 }

@@ -1,0 +1,146 @@
+---
+slug: native-ci-integration
+title: "Native CI Integration: Rich Plan Summaries Without Extra Actions"
+authors: [osterman]
+tags: [feature]
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+When you see complex bash scripts and conditional logic in GitHub Actions workflows, that's a signal: the underlying tool wasn't designed for CI. Atmos now has built-in CI integration that makes the same command work identically locally and in CI—no wrapper scripts, no extra actions, no hidden complexity.
+
+<!--truncate-->
+
+## The Problem with CI Glue Code
+
+Look at any mature infrastructure repository's CI workflows. You'll find bash scripts parsing terraform output with `grep` and `awk`, conditional logic to handle plan files across jobs, and environment variable gymnastics to pass data between steps.
+
+This complexity isn't accidental—it's compensation. When tools aren't designed for CI, teams build layers of glue code to bridge the gap. The cost is real: workflows that work in CI fail locally (and vice versa), debugging requires reproducing the entire CI environment, and tribal knowledge accumulates in workflow files.
+
+## The Reproducibility Principle
+
+Infrastructure tools should follow a simple principle: **the same command should produce the same behavior everywhere.**
+
+```bash
+# This should work identically:
+atmos terraform plan vpc -s prod    # locally
+atmos terraform plan vpc -s prod    # in GitHub Actions
+atmos terraform plan vpc -s prod    # in GitLab CI
+```
+
+When a tool is truly CI-native, your workflow files become trivial:
+
+```yaml
+# Before: Complex workflow with hidden logic
+- name: Plan
+  run: |
+    output=$(atmos terraform plan vpc -s prod 2>&1)
+    echo "$output"
+    # Parse for changes...
+    # Upload artifacts...
+    # Post PR comment...
+
+# After: CI-native tool
+- name: Plan
+  run: atmos terraform plan vpc -s prod
+```
+
+## What This Enables
+
+Previously, getting beautiful plan summaries in GitHub Actions required using separate actions like `github-action-atmos-terraform-plan`. These wrapped the CLI with CI-specific behaviors, creating two codebases that evolved separately.
+
+Now, Atmos handles everything natively. The CLI detects when it's running in CI and automatically generates the same rich output you're used to—resource badges, collapsible diffs, terraform outputs.
+
+## What You Get
+
+- **Rich job summaries** with resource badges and collapsible diffs
+- **Live status checks** showing "Plan in progress" / "Plan complete"
+- **PR comments** with plan summaries
+- **Terraform outputs** exported to `$GITHUB_OUTPUT`
+- **Same command** works locally and in CI
+
+## Quick Start
+
+Here's a minimal workflow using [profiles](/cli/configuration/profiles) and [auth](/stacks/auth) with OIDC:
+
+<Tabs>
+<TabItem value="workflow" label="GitHub Actions Workflow" default>
+
+```yaml
+name: Terraform Plan
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      ATMOS_PROFILE: ci
+      ATMOS_IDENTITY: plat-dev/admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Terraform Plan
+        run: atmos terraform plan mycomponent -s dev-us-east-1
+```
+
+</TabItem>
+<TabItem value="profile" label="profiles/ci/auth.yaml">
+
+```yaml
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      region: us-east-2
+      spec:
+        audience: sts.amazonaws.com
+
+  identities:
+    plat-dev/admin:
+      kind: aws/assume-role
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/acme-plat-gbl-dev-terraform
+```
+
+</TabItem>
+</Tabs>
+
+That's it. Atmos detects GitHub Actions automatically and writes the plan summary to `$GITHUB_STEP_SUMMARY`.
+
+## Example Output
+
+```markdown
+## 🔄 Plan: `vpc` in `dev-us-east-1`
+
+[![create](https://shields.io/badge/CREATE-3-success?style=for-the-badge)](#)
+[![destroy](https://shields.io/badge/DESTROY-1-critical?style=for-the-badge)](#)
+
+> [!CAUTION]
+> **Terraform will delete resources!**
+
+<details><summary>Plan: 3 to add, 0 to change, 1 to destroy</summary>
+
+### Create
++ aws_vpc.main
++ aws_subnet.public[0]
++ aws_subnet.public[1]
+
+### Destroy
+- aws_security_group.deprecated
+
+</details>
+```
+
+## Learn More
+
+For complete configuration options, permissions reference, and advanced workflows, see the [CI Integration documentation](/cli/configuration/ci).

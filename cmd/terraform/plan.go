@@ -6,6 +6,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
+	h "github.com/cloudposse/atmos/pkg/hooks"
 )
 
 // planParser handles flag parsing for plan command.
@@ -42,6 +43,9 @@ For complete Terraform/OpenTofu documentation, see:
 
 		return terraformRunWithOptions(terraformCmd, cmd, args, opts)
 	},
+	PostRunE: func(cmd *cobra.Command, args []string) error {
+		return runHooks(h.AfterTerraformPlan, cmd, args)
+	},
 }
 
 func init() {
@@ -52,8 +56,10 @@ func init() {
 		flags.WithBoolFlag("affected", "", false, "Plan the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Plan all components in all stacks"),
 		flags.WithBoolFlag("skip-planfile", "", false, "Skip writing the plan to a file by not passing the `-out` flag to Terraform when executing the command. Set it to true when using Terraform Cloud since the `-out` flag is not supported. Terraform Cloud automatically stores plans in its backend"),
+		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
 		flags.WithEnvVars("upload-status", "ATMOS_TERRAFORM_PLAN_UPLOAD_STATUS"),
 		flags.WithEnvVars("skip-planfile", "ATMOS_TERRAFORM_PLAN_SKIP_PLANFILE"),
+		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 	)
 
 	// Register plan-specific flags with Cobra.

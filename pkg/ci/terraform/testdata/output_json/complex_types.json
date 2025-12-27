@@ -1,0 +1,25 @@
+{
+  "instance_ids": {
+    "sensitive": false,
+    "type": ["list", "string"],
+    "value": ["i-12345678", "i-87654321", "i-abcdef12"]
+  },
+  "tags": {
+    "sensitive": false,
+    "type": ["map", "string"],
+    "value": {
+      "Environment": "production",
+      "Team": "platform",
+      "CostCenter": "12345"
+    }
+  },
+  "config": {
+    "sensitive": false,
+    "type": ["object", {"enabled": "bool", "count": "number", "name": "string"}],
+    "value": {
+      "enabled": true,
+      "count": 5,
+      "name": "my-config"
+    }
+  }
+}
