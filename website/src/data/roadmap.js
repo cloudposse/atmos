@@ -119,6 +119,18 @@ export const roadmapConfig = {
       pr: 1891,
       prd: 'native-ci-integration',
     },
+    {
+      id: 'init-scaffold',
+      icon: 'RiMagicLine',
+      title: 'Project Scaffolding',
+      tagline: 'Initialize and generate from templates',
+      description: 'Create new Atmos projects and generate code from templates with interactive prompts, 3-way merge updates, and both built-in and custom template support.',
+      benefits: 'New projects are set up correctly from the start. Templates encode best practices and team standards. Updates preserve local customizations.',
+      status: 'shipped',
+      quarter: 'q4-2025',
+      docs: '/cli/commands/init',
+      prd: 'init-scaffold-commands',
+    },
   ],
 
   initiatives: [
@@ -197,6 +209,11 @@ export const roadmapConfig = {
         { label: 'Experimental feature controls', status: 'in-progress', quarter: 'q1-2026', pr: 1940, docs: '/cli/configuration/settings/experimental', changelog: 'experimental-feature-flag', description: 'Granular control over experimental features with CLI badges, configurable modes (warn, silence, disable, error), and environment variable support.', benefits: 'Explore new features safely. Block experimental commands in CI while testing locally.' },
         { label: 'Filename-based stack identity (zero-config)', status: 'shipped', quarter: 'q1-2026', pr: 1934, changelog: 'stack-name-identity', description: 'Stacks are identified by filename when no name, name_template, or name_pattern is configured. Newcomers can get started without any naming configuration.', benefits: 'New users can start immediately without configuring stack naming. Just create stack files and reference them by filename.' },
         { label: 'Packer directory-based templates', status: 'shipped', quarter: 'q1-2026', pr: 1982, changelog: 'packer-directory-based-templates', description: 'Packer commands now default to directory mode, loading all *.pkr.hcl files from the component directory. Aligns with HashiCorp best practices for multi-file configurations.', benefits: 'Organize Packer configurations across multiple files without explicit template configuration. Just run atmos packer build and it works.' },
+        { label: '`atmos init` command for project initialization', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/init', description: 'Initialize new Atmos projects from built-in or custom templates with interactive prompts.', category: 'featured', priority: 'high', benefits: 'New projects start with correct structure. No manual setup or copy-paste from examples.' },
+        { label: '`atmos scaffold generate` for template-based code generation', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/scaffold/generate', description: 'Generate stacks, components, and configurations from templates with variable substitution.', category: 'featured', priority: 'high', benefits: 'Encode team patterns as templates. Generate consistent code without copy-paste.' },
+        { label: '`atmos scaffold list` to discover available templates', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/scaffold/list', description: 'List available scaffold templates from embedded and custom sources.', benefits: 'Discover what templates are available. See template descriptions and sources.' },
+        { label: '`atmos scaffold validate` for template validation', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/scaffold/validate', description: 'Validate scaffold.yaml files against JSON schema.', benefits: 'Catch template configuration errors before generation. Clear validation messages.' },
+        { label: 'Three-way merge for scaffold updates', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/scaffold/generate', description: 'Smart merging preserves local customizations when updating from templates.', benefits: 'Update templates without losing local changes. Merge conflicts are highlighted clearly.' },
       ],
       issues: [],
       prs: [
