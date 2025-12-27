@@ -84,6 +84,8 @@ const (
 	PackerTemplateSectionName         = "template"
 	WorkspaceSectionName              = "workspace"
 	AuthSectionName                   = "auth"
+	RequiredVersionSectionName        = "required_version"
+	RequiredProvidersSectionName      = "required_providers"
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"

@@ -312,7 +312,7 @@ export const roadmapConfig = {
       tagline: 'Familiar concepts for Terragrunt users',
       description:
         'Users migrating from Terragrunt expect code generation, backend provisioning for cold-start scenarios, and other familiar patterns.',
-      progress: 60,
+      progress: 65,
       status: 'in-progress',
       milestones: [
         { label: 'File-scoped locals', status: 'shipped', quarter: 'q4-2025', docs: '/stacks/locals', changelog: 'file-scoped-locals', description: 'Define local variables at the file level for DRY configuration—familiar to Terragrunt users.', category: 'featured', priority: 'high', benefits: 'Avoid repetition with local variables. Terragrunt users can apply the same patterns they know.' },
@@ -325,6 +325,7 @@ export const roadmapConfig = {
         { label: 'Concurrent component provisioning', status: 'planned', quarter: 'q1-2026', pr: 1876, description: 'Deploy multiple components in parallel with dependency-aware orchestration.', category: 'featured', priority: 'high', benefits: 'Large deployments complete faster. Independent components run in parallel.' },
         { label: 'Automatic provider caching', status: 'planned', quarter: 'q1-2026', pr: 1882, description: 'Cache Terraform providers across components to speed up init and reduce bandwidth.', category: 'featured', priority: 'high', benefits: 'Faster terraform init. Providers are downloaded once and shared across components.' },
         { label: 'Provider auto-generation', status: 'shipped', quarter: 'q3-2025', docs: '/components/terraform/providers', description: 'Generate provider.tf with proper credentials and region configuration from stack metadata.', category: 'featured', priority: 'high', benefits: 'Providers are configured automatically from stack context. No manual provider blocks.' },
+        { label: 'Pin Terraform and provider versions', status: 'shipped', quarter: 'q4-2025', changelog: 'terraform-required-providers', description: 'Pin Terraform and provider versions directly in stack configuration with required_version and required_providers blocks.', category: 'featured', priority: 'high', benefits: 'Centralized version management across components. Override files work without modifying component source code.' },
         { label: 'Multi-stack formats', status: 'planned', quarter: 'q2-2026', pr: 1842, description: 'Support for alternative stack formats including single-file stacks and Terragrunt-style layouts.', category: 'featured', priority: 'high', benefits: 'Migrate from Terragrunt incrementally. Use the stack format that fits your project.' },
       ],
       issues: [],
