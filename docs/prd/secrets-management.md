@@ -399,10 +399,10 @@ atmos secret push --stack dev --component api --input .env.local
 
 ### `atmos secret import`
 
-Import secrets from an env file, creating declarations if needed.
+Import secrets from an env file for declared secrets.
 
 ```bash
-# Import from .env file (creates declarations + sets values)
+# Import from .env file (sets values for declared secrets)
 atmos secret import .env --stack prod --component api
 
 # Import global secrets
@@ -414,24 +414,21 @@ atmos secret import .env --stack prod --dry-run
 # Import from stdin
 cat .env | atmos secret import - --stack prod --component api
 
-# Specify backend for new declarations
-atmos secret import .env --stack prod --backend aws/ssm
-
 # Import from JSON format
 atmos secret import secrets.json --stack prod --format json
 ```
 
 **Behavior:**
 - Parses env file (KEY=value format) or JSON/YAML
-- For each key:
-  - If not declared: creates declaration in appropriate location
-  - Sets value in configured backend
+- For each key in the file:
+  - If declared: sets value in configured backend
+  - If not declared: warns and skips (maintains declarative registry principle)
 - Supports `--dry-run` to preview changes
-- Respects `--backend` for new declarations (defaults to `default_backend`)
+- Reports summary: X imported, Y skipped (undeclared)
 
 **Difference from `push`:**
-- `push` requires secrets to be pre-declared (fails on undeclared keys)
-- `import` creates declarations as needed (bootstrap workflow)
+- `push` fails immediately on any undeclared key
+- `import` warns and continues, importing what it can
 
 ### `atmos secret validate`
 
