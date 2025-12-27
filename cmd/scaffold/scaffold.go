@@ -74,11 +74,12 @@ type ScaffoldConfig struct {
 
 // PromptConfig represents a prompt configuration.
 type PromptConfig struct {
-	Name        string      `yaml:"name"`
-	Description string      `yaml:"description,omitempty"`
-	Type        string      `yaml:"type"`
-	Default     interface{} `yaml:"default,omitempty"`
-	Required    bool        `yaml:"required,omitempty"`
+	Name        string        `yaml:"name"`
+	Description string        `yaml:"description,omitempty"`
+	Type        string        `yaml:"type"`
+	Default     interface{}   `yaml:"default,omitempty"`
+	Required    bool          `yaml:"required,omitempty"`
+	Options     []interface{} `yaml:"options,omitempty"`
 }
 
 // scaffoldCmd represents the scaffold parent command.
