@@ -202,7 +202,7 @@ func GetStackTerraformStateFolder(componentPath string, stack string) ([]Directo
 		for i := range directories {
 			if directories[i].Files != nil {
 				for j := range directories[i].Files {
-					directories[i].Files[j].Name = folderName + "/" + directories[i].Files[j].Name
+					directories[i].Files[j].Name = filepath.Join(folderName, directories[i].Files[j].Name)
 				}
 			}
 		}
