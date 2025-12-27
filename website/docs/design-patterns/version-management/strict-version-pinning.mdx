@@ -33,6 +33,10 @@ These are **fixed points**—once created, the version never changes. This contr
 - When strict pinning is appropriate despite its limitations
 </KeyPoints>
 
+:::tip Simpler Alternative: Source-Based Version Pinning
+Atmos now supports [source-based version pinning](/design-patterns/version-management/source-based-versioning) which provides the same per-environment version control directly in stack configuration—without managing vendor manifests or pre-vendoring components. Use source-based versioning when you don't need vendored code committed to your repository.
+:::
+
 ## Use Cases
 
 Use the **Strict Version Pinning** pattern when:
@@ -328,6 +332,7 @@ Many teams successfully operate by optimizing for roll-forward with strong conve
 
 ## Related Patterns
 
+- [Source-Based Version Pinning](./source-based-versioning) - Native per-environment pinning without vendor files
 - [Versioning Schemes](./versioning-schemes) - Number-based schemes (SemVer, CalVer) that work with strict pinning
 - [Release Tracks/Channels](./release-tracks-channels) - Environments subscribe to moving version tracks
 - [Folder-Based Versioning](./folder-based-versioning) - Version through repository structure

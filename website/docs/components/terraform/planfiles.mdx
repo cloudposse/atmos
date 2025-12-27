@@ -58,7 +58,7 @@ When you apply a planfile, Terraform uses this snapshot instead of re-calculatin
 - **Audit Trail**: Planfiles serve as immutable records of approved changes for compliance
 - **Review Process**: Security teams can analyze planfiles before approval
 - **Approval Workflows**: Enable separation of duties - developers plan, ops team approves and applies
-- **Policy Validation**: Run security scanners (Checkov, tfsec, OPA) against planfiles. Use [`atmos terraform generate planfile`](/cli/commands/terraform/generate-planfile) to create the JSON version needed by most security scanning tools
+- **Policy Validation**: Run security scanners (Checkov, tfsec, OPA) against planfiles. Use [`atmos terraform generate planfile`](/cli/commands/terraform/generate/planfile) to create the JSON version needed by most security scanning tools
 
 ### 3. **CI/CD Pipeline Safety**
 - **Atomic Operations**: Apply exactly what passed through your CI/CD tests
@@ -799,5 +799,5 @@ atmos terraform apply vpc -s dev --from-plan
 - [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply command reference
 - [`atmos terraform deploy`](/cli/commands/terraform/deploy) - Deploy command reference
 - [`atmos terraform plan-diff`](/cli/commands/terraform/plan-diff) - Plan comparison
-- [`atmos terraform generate planfile`](/cli/commands/terraform/generate-planfile) - Generate JSON/YAML planfiles
+- [`atmos terraform generate planfile`](/cli/commands/terraform/generate/planfile) - Generate JSON/YAML planfiles
 - [Terraform Configuration](/cli/configuration/components/terraform#configuration) - Configure Terraform behavior

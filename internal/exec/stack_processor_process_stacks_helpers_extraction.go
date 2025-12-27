@@ -139,6 +139,19 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Terraform-specific: extract source configuration.
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.SourceSectionName]; ok {
+			componentSourceSection, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.source' in the file '%s'", errUtils.ErrInvalidTerraformSource, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentSourceSection = componentSourceSection
+		} else {
+			result.ComponentSourceSection = make(map[string]any, componentSmallMapCapacity)
+		}
+	}
+
 	// Extract the executable command.
 	if i, ok := opts.ComponentMap[cfg.CommandSectionName]; ok {
 		componentCommand, ok := i.(string)

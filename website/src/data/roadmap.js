@@ -87,10 +87,11 @@ export const roadmapConfig = {
       tagline: 'Just-in-time component fetching',
       description: 'Automatically fetch component sources on first use—no separate vendor step needed. Just reference and deploy.',
       benefits: 'Reference a component and deploy. No manual vendor step or CI job required. Components are fetched on demand like Terraform modules.',
-      status: 'in-progress',
-      quarter: 'q1-2026',
+      status: 'shipped',
+      quarter: 'q4-2025',
       pr: 1877,
       prd: 'provisioner-system',
+      docs: '/cli/commands/terraform/source',
     },
     {
       id: 'native-ci',
@@ -270,13 +271,13 @@ export const roadmapConfig = {
       tagline: 'Purpose-built engine with retry and resilience',
       description:
         'Terraform users expect to declare module sources inline. The source provisioner brings this pattern to stack configuration—declare where components come from and let vendoring handle the rest with retries, concurrency, and graceful failure recovery.',
-      progress: 40,
+      progress: 60,
       status: 'in-progress',
       milestones: [
         { label: 'Retry with exponential backoff', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/vendor/vendor-pull', description: 'Automatic retries with increasing delays for transient network failures and rate limits.', category: 'featured', priority: 'high', benefits: 'Vendoring succeeds despite flaky networks or GitHub rate limits. CI doesn\'t fail on transient errors.' },
         { label: 'Version constraints for vendor updates', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/vendor', changelog: 'version-constraint-validation', description: 'Semantic versioning constraints to control which versions are pulled during vendor updates.', benefits: 'Control upgrade behavior. Pin to major versions or allow patches automatically.' },
         { label: 'Vendor registry pattern migration', status: 'in-progress', quarter: 'q4-2025', pr: 1889, description: 'Refactoring vendoring to use a pluggable registry pattern for different source types.', benefits: 'Add new source types (OCI, custom registries) without modifying core vendoring code.' },
-        { label: 'Just-in-time vendoring', status: 'planned', quarter: 'q1-2026', pr: 1877, description: 'Automatically vendor components on first use—no separate vendor step needed.', category: 'featured', priority: 'high', benefits: 'Reference a component and deploy. No manual vendor step or CI job required.' },
+        { label: 'Just-in-time vendoring', status: 'shipped', quarter: 'q4-2025', pr: 1877, docs: '/cli/commands/terraform/source/source', description: 'Automatically vendor components on first use—no separate vendor step needed.', category: 'featured', priority: 'high', benefits: 'Reference a component and deploy. No manual vendor step or CI job required.' },
         { label: 'Component workdir provisioning', status: 'planned', quarter: 'q1-2026', pr: 1876, description: 'Automatic working directory setup for components with dependencies and generated files.', benefits: 'Components are ready to run immediately. Dependencies and generated files are handled automatically.' },
       ],
       issues: [],
@@ -312,7 +313,7 @@ export const roadmapConfig = {
       tagline: 'Familiar concepts for Terragrunt users',
       description:
         'Users migrating from Terragrunt expect code generation, backend provisioning for cold-start scenarios, and other familiar patterns.',
-      progress: 60,
+      progress: 70,
       status: 'in-progress',
       milestones: [
         { label: 'File-scoped locals', status: 'shipped', quarter: 'q4-2025', docs: '/stacks/locals', changelog: 'file-scoped-locals', description: 'Define local variables at the file level for DRY configuration—familiar to Terragrunt users.', category: 'featured', priority: 'high', benefits: 'Avoid repetition with local variables. Terragrunt users can apply the same patterns they know.' },
@@ -321,7 +322,7 @@ export const roadmapConfig = {
         { label: 'Automatic backend provisioning', status: 'shipped', quarter: 'q4-2025', docs: '/components/terraform/backend-provisioning', description: 'Provision the backend itself (S3 bucket with native state locking) for cold-start scenarios and one-shot Terraform deployments.', category: 'featured', priority: 'high', benefits: 'Bootstrap new environments without a chicken-and-egg problem. State backends are provisioned automatically.' },
         { label: 'AWS context YAML functions', status: 'shipped', quarter: 'q4-2025', docs: '/functions/yaml/aws.account-id', changelog: 'aws-yaml-functions', description: 'Access AWS caller identity in stack configuration.', codeExample: 'account_id: !aws.account-id', category: 'featured', priority: 'high', benefits: 'Reference the current account, region, or identity in configuration dynamically.' },
         { label: '`plan --all` and `apply --all`', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/terraform/terraform-apply', description: 'Plan or apply all affected components in a single command with dependency ordering.', benefits: 'Deploy entire environments with one command. Dependencies are respected automatically.' },
-        { label: 'Automatic source provisioning', status: 'planned', quarter: 'q1-2026', pr: 1877, description: 'Automatically fetch component sources without explicit vendoring—just reference and deploy.', category: 'featured', priority: 'high', benefits: 'Components are fetched on demand like Terraform modules. No vendor step to remember.' },
+        { label: 'Automatic source provisioning', status: 'shipped', quarter: 'q4-2025', pr: 1877, docs: '/cli/commands/terraform/source/source', description: 'Automatically fetch component sources without explicit vendoring—just reference and deploy.', category: 'featured', priority: 'high', benefits: 'Components are fetched on demand like Terraform modules. No vendor step to remember.' },
         { label: 'Concurrent component provisioning', status: 'planned', quarter: 'q1-2026', pr: 1876, description: 'Deploy multiple components in parallel with dependency-aware orchestration.', category: 'featured', priority: 'high', benefits: 'Large deployments complete faster. Independent components run in parallel.' },
         { label: 'Automatic provider caching', status: 'planned', quarter: 'q1-2026', pr: 1882, description: 'Cache Terraform providers across components to speed up init and reduce bandwidth.', category: 'featured', priority: 'high', benefits: 'Faster terraform init. Providers are downloaded once and shared across components.' },
         { label: 'Provider auto-generation', status: 'shipped', quarter: 'q3-2025', docs: '/components/terraform/providers', description: 'Generate provider.tf with proper credentials and region configuration from stack metadata.', category: 'featured', priority: 'high', benefits: 'Providers are configured automatically from stack context. No manual provider blocks.' },

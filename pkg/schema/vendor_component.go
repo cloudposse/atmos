@@ -3,11 +3,12 @@ package schema
 // Component vendoring (`component.yaml` file)
 
 type VendorComponentSource struct {
-	Type          string   `yaml:"type" json:"type" mapstructure:"type"`
-	Uri           string   `yaml:"uri" json:"uri" mapstructure:"uri"`
-	Version       string   `yaml:"version" json:"version" mapstructure:"version"`
-	IncludedPaths []string `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
-	ExcludedPaths []string `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
+	Type          string       `yaml:"type" json:"type" mapstructure:"type"`
+	Uri           string       `yaml:"uri" json:"uri" mapstructure:"uri"`
+	Version       string       `yaml:"version" json:"version" mapstructure:"version"`
+	IncludedPaths []string     `yaml:"included_paths" json:"included_paths" mapstructure:"included_paths"`
+	ExcludedPaths []string     `yaml:"excluded_paths" json:"excluded_paths" mapstructure:"excluded_paths"`
+	Retry         *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 }
 
 type VendorComponentMixins struct {

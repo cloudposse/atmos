@@ -75,6 +75,7 @@ const (
 	RemoteStateBackendSectionName     = "remote_state_backend"
 	RemoteStateBackendTypeSectionName = "remote_state_backend_type"
 	MetadataSectionName               = "metadata"
+	SourceSectionName                 = "source"
 	ComponentSectionName              = "component"
 	ComponentsSectionName             = "components"
 	CommandSectionName                = "command"

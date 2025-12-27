@@ -1,0 +1,107 @@
+---
+title: atmos terraform generate
+sidebar_label: generate
+sidebar_class_name: command
+id: generate
+description: Generate Terraform backend configuration and variable files
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use these commands to generate Terraform configuration files including backend configurations and variable files for Atmos components and stacks.
+</Intro>
+
+<ActionCard title="Backend Configuration">
+    Learn how to configure Terraform backends for state management in Atmos.
+    <div>
+      <PrimaryCTA to="/components/terraform/backend-provisioning">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<Screengrab title="atmos terraform generate --help" slug="atmos-terraform-generate--help" />
+
+## Usage
+
+```shell
+atmos terraform generate <subcommand> [options]
+```
+
+## Subcommands
+
+<DocCardList />
+
+## Overview
+
+The `generate` commands help you create Terraform configuration files without running Terraform directly. This is useful for:
+
+- **CI/CD pipelines** - Pre-generate configuration files for review or caching
+- **Debugging** - Inspect the generated backend and variable configurations
+- **Bulk operations** - Generate files for all components across all stacks
+
+## Examples
+
+### Generate Backend Config
+
+Generate a backend configuration file for a single component:
+
+```shell
+atmos terraform generate backend vpc -s dev-us-east-1
+```
+
+### Generate All Backends
+
+Generate backend configuration files for all components in all stacks:
+
+```shell
+atmos terraform generate backends
+```
+
+### Generate Variable File
+
+Generate a `.tfvar.json` file for a component:
+
+```shell
+atmos terraform generate varfile vpc -s dev-us-east-1
+```
+
+### Generate All Variable Files
+
+Generate variable files for all components in all stacks:
+
+```shell
+atmos terraform generate varfiles
+```
+
+### Generate Plan File
+
+Generate and convert a Terraform plan to JSON or YAML:
+
+```shell
+atmos terraform generate planfile vpc -s dev-us-east-1 --format=json
+```
+
+## Common Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Atmos stack name (required for single-component commands).</dd>
+
+  <dt>`--dry-run`</dt>
+  <dd>Show what would be generated without writing files.</dd>
+
+  <dt>`--process-templates`</dt>
+  <dd>Enable/disable Go template processing (default: enabled).</dd>
+
+  <dt>`--process-functions`</dt>
+  <dd>Enable/disable YAML function processing (default: enabled).</dd>
+</dl>
+
+## See Also
+
+- [Backend Provisioning](/components/terraform/backend-provisioning) - Configure Terraform backends
+- [Stack Configuration](/learn/stacks) - Learn about Atmos stacks
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Run Terraform plan

@@ -368,6 +368,7 @@ var (
 	ErrInvalidTerraformRemoteStateType    = errors.New("invalid terraform remote_state_backend_type")
 	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
 	ErrInvalidTerraformAuth               = errors.New("invalid terraform auth section")
+	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
 
 	// Helmfile-specific subsection errors.
 	ErrInvalidHelmfileCommand  = errors.New("invalid helmfile command")
@@ -665,6 +666,16 @@ var (
 	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
 	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
 	ErrLocalsResolution        = errors.New("failed to resolve local")
+
+	// Source provisioner errors.
+	ErrSourceProvision       = errors.New("source provisioning failed")
+	ErrSourceNotFound        = errors.New("source not found")
+	ErrSourceAccessDenied    = errors.New("source access denied")
+	ErrSourceInvalidSpec     = errors.New("invalid source specification")
+	ErrSourceAlreadyVendored = errors.New("source already vendored")
+	ErrSourceCacheOperation  = errors.New("source cache operation failed")
+	ErrSourceCopyFailed      = errors.New("failed to copy source files")
+	ErrMetadataSourceMissing = errors.New("source not configured for component")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

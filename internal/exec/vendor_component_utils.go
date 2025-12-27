@@ -465,7 +465,11 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 	case pkgTypeRemote:
 		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
 
-		if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(p.uri, tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
+		opts := []downloader.GoGetterOption{}
+		if p.vendorComponentSpec != nil && p.vendorComponentSpec.Source.Retry != nil {
+			opts = append(opts, downloader.WithRetryConfig(p.vendorComponentSpec.Source.Retry))
+		}
+		if err := downloader.NewGoGetterDownloader(atmosConfig, opts...).Fetch(p.uri, tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package %s error %w", p.name, err)
 		}
 
@@ -521,7 +525,11 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		if err = downloader.NewGoGetterDownloader(atmosConfig).Fetch(p.uri, filepath.Join(tempDir, p.mixinFilename), downloader.ClientModeFile, 10*time.Minute); err != nil {
+		opts := []downloader.GoGetterOption{}
+		if p.vendorComponentSpec != nil && p.vendorComponentSpec.Source.Retry != nil {
+			opts = append(opts, downloader.WithRetryConfig(p.vendorComponentSpec.Source.Retry))
+		}
+		if err = downloader.NewGoGetterDownloader(atmosConfig, opts...).Fetch(p.uri, filepath.Join(tempDir, p.mixinFilename), downloader.ClientModeFile, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package %s error %w", p.name, err)
 		}
 

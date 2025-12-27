@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	"github.com/cloudposse/atmos/cmd/terraform/generate"
+	"github.com/cloudposse/atmos/cmd/terraform/source"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -62,6 +63,9 @@ func init() {
 
 	// Add backend subcommand from the backend subpackage.
 	terraformCmd.AddCommand(backend.GetBackendCommand())
+
+	// Add source subcommand from the source subpackage.
+	terraformCmd.AddCommand(source.GetSourceCommand())
 
 	// Register other completion functions (component args, identity).
 	RegisterTerraformCompletions(terraformCmd)
