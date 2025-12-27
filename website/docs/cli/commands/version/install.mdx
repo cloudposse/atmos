@@ -1,0 +1,114 @@
+---
+title: atmos version install
+sidebar_label: install
+sidebar_class_name: command
+id: install
+description: Install a specific version of Atmos
+---
+
+import Intro from '@site/src/components/Intro'
+import CodeBlock from '@theme/CodeBlock'
+import LatestRelease from '@site/src/components/LatestRelease'
+
+<Intro>
+    Install a specific version of Atmos for use with version pinning or manual version switching.
+</Intro>
+
+## Usage
+
+Execute the `version install` command like this:
+
+```shell
+atmos version install <version>
+```
+
+This command downloads and installs the specified version of Atmos to `~/.atmos/bin/cloudposse/atmos/<version>/`.
+
+:::tip
+Use `atmos version list` to see available versions on GitHub before installing.
+:::
+
+## Arguments
+
+<dl>
+    <dt>`version` <em>(required)</em></dt>
+    <dd>The version to install. Can be a specific version (e.g., `1.194.0`) or `latest`.</dd>
+</dl>
+
+## Examples
+
+Install a specific version:
+
+<CodeBlock language="shell">atmos version install <LatestRelease /></CodeBlock>
+
+Install the latest version:
+
+```shell
+atmos version install latest
+```
+
+## How It Works
+
+The `version install` command is a convenience wrapper around the Atmos toolchain installer:
+
+```shell
+# These are equivalent:
+atmos version install 1.160.0
+atmos toolchain install atmos@1.160.0
+```
+
+Installed versions are stored in:
+
+```
+~/.atmos/bin/cloudposse/atmos/<version>/atmos
+```
+
+## Use Cases
+
+### Pin Version Per Project
+
+Install the version specified in your project's `atmos.yaml`:
+
+```yaml
+version:
+  use: 1.160.0
+```
+
+Then install it:
+
+```shell
+atmos version install 1.160.0
+```
+
+### Prepare for Upgrade
+
+Install a new version before switching to it:
+
+```shell
+# Install new version
+atmos version install latest
+
+# Test it manually
+~/.atmos/bin/cloudposse/atmos/1.195.0/atmos version
+
+# Update your atmos.yaml to use it
+```
+
+### Team Standardization
+
+Ensure everyone on your team has the required version:
+
+```shell
+# Check what's installed
+atmos version installed
+
+# Install any missing versions
+atmos version install 1.160.0
+```
+
+## Related Commands
+
+- [`atmos version list`](/cli/commands/version/list) - List available versions on GitHub
+- [`atmos version list --installed`](/cli/commands/version/list) - List locally installed versions
+- [`atmos version uninstall`](/cli/commands/version/uninstall) - Remove an installed version
+- [`atmos toolchain install`](/cli/commands/toolchain/install) - Install any tool from the registry

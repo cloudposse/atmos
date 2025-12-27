@@ -1,0 +1,71 @@
+---
+slug: atmos-version-manager
+title: "Introducing the Atmos Version Manager"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports automatic version switching, making it easy to pin projects to specific Atmos versions and ensure consistency across teams.
+
+<!--truncate-->
+
+## What Changed
+
+Atmos can now automatically switch to a specific version when running commands. This works through three mechanisms:
+
+1. **`--use-version` flag**: Run any command with a specific version
+   ```bash
+   atmos --use-version 1.199.0 terraform plan -s mystack
+   ```
+
+2. **`ATMOS_VERSION` environment variable**: Set the version for all commands
+   ```bash
+   export ATMOS_VERSION=1.199.0
+   atmos terraform plan -s mystack
+   ```
+
+3. **`version.use` in atmos.yaml**: Pin your project to a specific version
+   ```yaml
+   version:
+     use: "1.199.0"
+   ```
+
+When a version is specified, Atmos will:
+- Check if that version is installed
+- Install it automatically if needed (using the toolchain installer)
+- Re-execute itself with the specified version
+
+## Why This Matters
+
+**Team Consistency**: Everyone on your team uses the same Atmos version, eliminating "works on my machine" issues.
+
+**CI/CD Reliability**: Pin your pipelines to specific versions for reproducible builds.
+
+**Gradual Upgrades**: Test new versions in development before rolling them out to production workflows.
+
+## How to Use It
+
+The simplest approach is adding `version.use` to your `atmos.yaml`:
+
+```yaml
+version:
+  use: "1.199.0"
+```
+
+Now every `atmos` command in that project will use version 1.199.0, regardless of which version is installed globally.
+
+You can also combine this with [Atmos profiles](/cli/configuration/profiles) for environment-specific versions:
+
+```yaml
+# .atmos.d/dev.yaml
+version:
+  use: "1.201.0"  # Latest in dev
+
+# .atmos.d/prod.yaml
+version:
+  use: "1.199.0"  # Stable in prod
+```
+
+## Get Involved
+
+We'd love to hear how you're using version management in your workflows. Join the discussion on [Slack](https://slack.cloudposse.com) or open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

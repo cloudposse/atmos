@@ -10,7 +10,7 @@ import (
 )
 
 func TestMainHooksAndStoreIntegration(t *testing.T) {
-	// Run the miniredis server so we can store values across calls to main()
+	// Run the miniredis server so we can store values across calls to main().
 	s := miniredis.RunT(t)
 	defer s.Close()
 
@@ -25,19 +25,25 @@ func TestMainHooksAndStoreIntegration(t *testing.T) {
 
 	t.Chdir("tests/fixtures/scenarios/hooks-test")
 
-	// This integration test calls main() directly which reads os.Args internally.
-	// Using os.Args is necessary for testing the complete main() execution path.
-	// main() has no parameters and must read os.Args to get command-line arguments.
+	// This integration test calls run() (not main()) to avoid os.Exit() which panics in Go 1.25+.
+	// run() returns an exit code instead of calling os.Exit().
+	// We manipulate os.Args since run() uses cmd.Execute() which reads os.Args internally.
 	origArgs := os.Args
 	defer func() { os.Args = origArgs }()
 
-	// Set the arguments for the first call to main() to deploy the `component1` component, which uses a `hook` to set a
-	// value in Redis
+	// Set the arguments for the first call to run() to deploy the `component1` component, which uses a `hook` to set a
+	// value in Redis.
 	os.Args = []string{"atmos", "terraform", "deploy", "component1", "-s", "test"}
-	main()
+	exitCode := run()
+	if exitCode != 0 {
+		t.Fatalf("first run() returned non-zero exit code: %d", exitCode)
+	}
 
-	// Set the arguments for the second call to main() to deploy the `component2` component, which uses a `store` to read a
-	// value  that was set in the first apply.
+	// Set the arguments for the second call to run() to deploy the `component2` component, which uses a `store` to read a
+	// value that was set in the first apply.
 	os.Args = []string{"atmos", "terraform", "deploy", "component2", "-s", "test"}
-	main()
+	exitCode = run()
+	if exitCode != 0 {
+		t.Fatalf("second run() returned non-zero exit code: %d", exitCode)
+	}
 }

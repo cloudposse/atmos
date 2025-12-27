@@ -1,0 +1,140 @@
+---
+title: Using Profiles for Atmos Version Management
+sidebar_label: Atmos Versions
+sidebar_position: 11
+description: How to use Atmos profiles to manage different Atmos versions across environments
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Learn how to use Atmos profiles to pin specific Atmos versions for different environments, enabling safe upgrades and team consistency.
+</Intro>
+
+## Overview
+
+Atmos can automatically switch to a specific version when running commands. Combined with [profiles](/cli/configuration/profiles), this enables:
+
+- Different Atmos versions per environment (dev/staging/prod)
+- Safe testing of new versions before production rollout
+- Consistent versions across team members
+
+## Configuration Methods
+
+### Project-Wide Version
+
+Pin your entire project to a specific Atmos version in `atmos.yaml`:
+
+```yaml title="atmos.yaml"
+version:
+  use: "1.199.0"
+```
+
+Every `atmos` command will now use version 1.199.0, installing it automatically if needed.
+
+### Environment-Specific Versions with Profiles
+
+Use profiles to specify different versions per environment. Create a directory for each profile:
+
+```yaml title="profiles/developer/atmos.yaml"
+version:
+  use: "1.201.0"  # Latest version for development
+```
+
+```yaml title="profiles/stable/atmos.yaml"
+version:
+  use: "1.199.0"  # Stable version for production
+```
+
+Activate a profile using the `--profile` flag or environment variable:
+
+```bash
+# Use development version
+atmos --profile developer terraform plan -s mystack
+
+# Or via environment variable
+export ATMOS_PROFILE=developer
+atmos terraform plan -s mystack
+
+# Or specify inline
+ATMOS_PROFILE=stable atmos terraform apply -s mystack
+```
+
+## Command-Line Override
+
+Override the configured version for a single command:
+
+```bash
+# Test with a specific version
+atmos --use-version 1.201.0 terraform plan -s mystack
+```
+
+## Environment Variables
+
+Set the version via environment variable:
+
+```bash
+# Set for current shell session
+export ATMOS_VERSION=1.199.0
+
+# Or for a single command
+ATMOS_VERSION=1.199.0 atmos terraform plan -s mystack
+```
+
+### Precedence
+
+Version sources are evaluated in this order (highest to lowest priority):
+
+1. `--use-version` flag
+2. `ATMOS_VERSION_USE` environment variable
+3. `ATMOS_VERSION` environment variable
+4. `version.use` in atmos.yaml (including profiles)
+
+## CI/CD Integration
+
+### GitHub Actions
+
+```yaml title=".github/workflows/deploy.yml"
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      ATMOS_VERSION: "1.199.0"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        run: atmos terraform apply -s production/mystack --auto-approve
+```
+
+### GitLab CI
+
+```yaml title=".gitlab-ci.yml"
+variables:
+  ATMOS_VERSION: "1.199.0"
+
+deploy:
+  script:
+    - atmos terraform apply -s production/mystack --auto-approve
+```
+
+## Upgrade Workflow
+
+A safe approach to upgrading Atmos versions:
+
+1. **Update developer profile** with the new version
+2. **Test in development** environment
+3. **Update stable profile** after validation
+
+```bash
+# Step 1: Test new version in development
+atmos --profile developer terraform plan -s mystack
+
+# Step 2: After validation, update stable profile and deploy
+atmos --profile stable terraform apply -s mystack
+```
+
+## See Also
+
+- [Profiles Configuration](/cli/configuration/profiles)
+- [Version Command](/cli/commands/version/usage)
+- [Toolchain Commands](/cli/commands/toolchain/usage)

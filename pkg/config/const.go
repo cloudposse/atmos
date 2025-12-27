@@ -70,6 +70,7 @@ const (
 	SettingsSectionName               = "settings"
 	LocalsSectionName                 = "locals"
 	EnvSectionName                    = "env"
+	DependenciesSectionName           = "dependencies"
 	BackendSectionName                = "backend"
 	BackendTypeSectionName            = "backend_type"
 	RemoteStateBackendSectionName     = "remote_state_backend"

@@ -11,15 +11,21 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const (
+	// ComponentTypeHelmfile is the component type identifier for helmfile.
+	componentTypeHelmfile = "helmfile"
+)
+
 // ExecuteHelmfileCmd parses the provided arguments and flags and executes helmfile commands.
 func ExecuteHelmfileCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
-	info, err := ProcessCommandLineArgs("helmfile", cmd, args, additionalArgsAndFlags)
+	info, err := ProcessCommandLineArgs(componentTypeHelmfile, cmd, args, additionalArgsAndFlags)
 	if err != nil {
 		return err
 	}
@@ -73,7 +79,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Check if the component exists as a helmfile component.
-	componentPath, err := u.GetComponentPath(&atmosConfig, "helmfile", info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath, err := u.GetComponentPath(&atmosConfig, componentTypeHelmfile, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component path: %w", err)
 	}
@@ -81,7 +87,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		// Get the base path for the error message, respecting the user's actual config.
-		basePath, _ := u.GetComponentBasePath(&atmosConfig, "helmfile")
+		basePath, _ := u.GetComponentBasePath(&atmosConfig, componentTypeHelmfile)
 		return fmt.Errorf("'%s' points to the Helmfile component '%s', but it does not exist in '%s'",
 			info.ComponentFromArg,
 			info.FinalComponent,
@@ -103,6 +109,31 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 			return fmt.Errorf("component `%s` is locked and cannot be modified (metadata.locked = true)",
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
 		}
+	}
+
+	// Resolve and install component dependencies.
+	resolver := dependencies.NewResolver(&atmosConfig)
+	deps, err := resolver.ResolveComponentDependencies(componentTypeHelmfile, info.StackSection, info.ComponentSection)
+	if err != nil {
+		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+	}
+
+	if len(deps) > 0 {
+		log.Debug("Installing component dependencies", "component", info.ComponentFromArg, "stack", info.Stack, "tools", deps)
+		installer := dependencies.NewInstaller(&atmosConfig)
+		if err := installer.EnsureTools(deps); err != nil {
+			return fmt.Errorf("failed to install component dependencies: %w", err)
+		}
+
+		// Build PATH with toolchain binaries and add to component environment.
+		// This does NOT modify the global process environment - only the subprocess environment.
+		toolchainPATH, err := dependencies.BuildToolchainPATH(&atmosConfig, deps)
+		if err != nil {
+			return fmt.Errorf("failed to build toolchain PATH: %w", err)
+		}
+
+		// Propagate toolchain PATH into environment for subprocess.
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
 	}
 
 	// Print component variables.
