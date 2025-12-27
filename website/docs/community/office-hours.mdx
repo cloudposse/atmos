@@ -1,19 +1,11 @@
 ---
 title: Office Hours
+hide_title: true
 sidebar_position: 3
 sidebar_label: Office Hours
 description: Office Hours with Cloud Posse
 id: office-hours
 ---
-import HubspotForm from 'react-hubspot-form'
+import CloudPosseOfficeHoursEmbed from '@site/src/components/CloudPosseOfficeHoursEmbed';
 
-# Office Hours Registration
-
-<HubspotForm
-    portalId='2197148'
-    region="na1"
-    formId='bbcd46fe-0b11-43aa-9214-33f319e52a01'
-    onSubmit={() => console.log('Submit!')}
-    onReady={(form) => console.log('Form ready!')}
-    loading={<div>Loading...</div>}
-/>
+<CloudPosseOfficeHoursEmbed />
