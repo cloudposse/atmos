@@ -193,7 +193,7 @@ For example:
 
 - Specify a string default value.
   Read the `username` output from the `config` component in the current stack.
-  If the `config` component has not been provisioned yet, return the default value `default-user`
+  If the `config` component has not been provisioned yet, return the default value `default-user`.
 
 ```yaml
 username: !terraform.state config ".username // ""default-user"""
@@ -201,7 +201,7 @@ username: !terraform.state config ".username // ""default-user"""
 
 - Specify a list default value.
   Read the `private_subnet_ids` output from the `vpc` component in the current stack.
-  If the `vpc` component has not been provisioned yet, return the default value `["mock-subnet1", "mock-subnet2"]`
+  If the `vpc` component has not been provisioned yet, return the default value `["mock-subnet1", "mock-subnet2"]`.
 
 ```yaml
 subnet_ids: !terraform.state vpc ".private_subnet_ids // [""mock-subnet1"", ""mock-subnet2""]"
@@ -209,7 +209,7 @@ subnet_ids: !terraform.state vpc ".private_subnet_ids // [""mock-subnet1"", ""mo
 
 - Specify a map default value.
   Read the `config_map` output from the `config` component in the current stack.
-  If the `config` component has not been provisioned yet, return the default value `{"api_endpoint": "localhost:3000", "user": "test"}`
+  If the `config` component has not been provisioned yet, return the default value `{"api_endpoint": "localhost:3000", "user": "test"}`.
 
 ```yaml
 config_map: !terraform.state 'config ".config_map // {""api_endpoint"": ""localhost:3000"", ""user"": ""test""}"'
