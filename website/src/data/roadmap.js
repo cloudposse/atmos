@@ -270,12 +270,12 @@ export const roadmapConfig = {
       tagline: 'Purpose-built engine with retry and resilience',
       description:
         'Terraform users expect to declare module sources inline. The source provisioner brings this pattern to stack configuration—declare where components come from and let vendoring handle the rest with retries, concurrency, and graceful failure recovery.',
-      progress: 40,
+      progress: 50,
       status: 'in-progress',
       milestones: [
         { label: 'Retry with exponential backoff', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/vendor/vendor-pull', description: 'Automatic retries with increasing delays for transient network failures and rate limits.', category: 'featured', priority: 'high', benefits: 'Vendoring succeeds despite flaky networks or GitHub rate limits. CI doesn\'t fail on transient errors.' },
         { label: 'Version constraints for vendor updates', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/vendor', changelog: 'version-constraint-validation', description: 'Semantic versioning constraints to control which versions are pulled during vendor updates.', benefits: 'Control upgrade behavior. Pin to major versions or allow patches automatically.' },
-        { label: 'Vendor registry pattern migration', status: 'in-progress', quarter: 'q4-2025', pr: 1889, description: 'Refactoring vendoring to use a pluggable registry pattern for different source types.', benefits: 'Add new source types (OCI, custom registries) without modifying core vendoring code.' },
+        { label: 'Vendor registry pattern + `--stack` flag', status: 'shipped', quarter: 'q4-2025', pr: 1889, changelog: 'vendor-stack-flag', description: 'Refactored vendoring to registry pattern and added --stack flag to vendor all components in a stack at once.', benefits: 'Vendor all components for a specific stack with one command. No need to vendor components individually.' },
         { label: 'Just-in-time vendoring', status: 'planned', quarter: 'q1-2026', pr: 1877, description: 'Automatically vendor components on first use—no separate vendor step needed.', category: 'featured', priority: 'high', benefits: 'Reference a component and deploy. No manual vendor step or CI job required.' },
         { label: 'Component workdir provisioning', status: 'planned', quarter: 'q1-2026', pr: 1876, description: 'Automatic working directory setup for components with dependencies and generated files.', benefits: 'Components are ready to run immediately. Dependencies and generated files are handled automatically.' },
       ],
