@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -36,7 +37,10 @@ func TestDescribeCmd_DisableFlagParsing(t *testing.T) {
 }
 
 func TestMockWorkdirManager_DescribeWorkdir(t *testing.T) {
-	mock := NewMockWorkdirManager()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
 
 	expectedManifest := `components:
   terraform:
@@ -48,40 +52,36 @@ func TestMockWorkdirManager_DescribeWorkdir(t *testing.T) {
           path: .workdir/terraform/dev-vpc
 `
 
-	mock.DescribeWorkdirFunc = func(atmosConfig *schema.AtmosConfiguration, component, stack string) (string, error) {
-		assert.Equal(t, "vpc", component)
-		assert.Equal(t, "dev", stack)
-		return expectedManifest, nil
-	}
+	mock.EXPECT().DescribeWorkdir(gomock.Any(), "vpc", "dev").Return(expectedManifest, nil)
 
 	// Save and restore.
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	result, err := mock.DescribeWorkdir(nil, "vpc", "dev")
+	result, err := mock.DescribeWorkdir(&schema.AtmosConfiguration{}, "vpc", "dev")
 	assert.NoError(t, err)
 	assert.Equal(t, expectedManifest, result)
-	assert.Equal(t, 1, mock.DescribeWorkdirCalls)
 }
 
 func TestMockWorkdirManager_DescribeWorkdir_NotFound(t *testing.T) {
-	mock := NewMockWorkdirManager()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
 
 	expectedErr := errUtils.Build(errUtils.ErrWorkdirMetadata).
 		WithExplanation("Workdir not found").
 		Err()
 
-	mock.DescribeWorkdirFunc = func(atmosConfig *schema.AtmosConfiguration, component, stack string) (string, error) {
-		return "", expectedErr
-	}
+	mock.EXPECT().DescribeWorkdir(gomock.Any(), "nonexistent", "dev").Return("", expectedErr)
 
 	// Save and restore.
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	result, err := mock.DescribeWorkdir(nil, "nonexistent", "dev")
+	result, err := mock.DescribeWorkdir(&schema.AtmosConfiguration{}, "nonexistent", "dev")
 	assert.Error(t, err)
 	assert.Empty(t, result)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirMetadata)
@@ -172,18 +172,17 @@ func TestDescribeCmd_VariousComponentNames(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.component, func(t *testing.T) {
-			mock := NewMockWorkdirManager()
-			mock.DescribeWorkdirFunc = func(atmosConfig *schema.AtmosConfiguration, component, stack string) (string, error) {
-				assert.Equal(t, tc.component, component)
-				assert.Equal(t, tc.stack, stack)
-				return "manifest", nil
-			}
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := NewMockWorkdirManager(ctrl)
+			mock.EXPECT().DescribeWorkdir(gomock.Any(), tc.component, tc.stack).Return("manifest", nil)
 
 			original := workdirManager
 			defer func() { workdirManager = original }()
 			SetWorkdirManager(mock)
 
-			result, err := mock.DescribeWorkdir(nil, tc.component, tc.stack)
+			result, err := mock.DescribeWorkdir(&schema.AtmosConfiguration{}, tc.component, tc.stack)
 			assert.NoError(t, err)
 			assert.NotEmpty(t, result)
 		})
@@ -193,38 +192,42 @@ func TestDescribeCmd_VariousComponentNames(t *testing.T) {
 // Test error scenarios.
 
 func TestDescribeCmd_WorkdirNotFoundError(t *testing.T) {
-	mock := NewMockWorkdirManager()
-	mock.DescribeWorkdirFunc = func(atmosConfig *schema.AtmosConfiguration, component, stack string) (string, error) {
-		return "", errUtils.Build(errUtils.ErrWorkdirMetadata).
-			WithExplanation("Workdir not found for component 'vpc' in stack 'dev'").
-			WithHint("Run 'atmos terraform init' to create the workdir").
-			Err()
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	expectedErr := errUtils.Build(errUtils.ErrWorkdirMetadata).
+		WithExplanation("Workdir not found for component 'vpc' in stack 'dev'").
+		WithHint("Run 'atmos terraform init' to create the workdir").
+		Err()
+	mock.EXPECT().DescribeWorkdir(gomock.Any(), "vpc", "dev").Return("", expectedErr)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	result, err := mock.DescribeWorkdir(nil, "vpc", "dev")
+	result, err := mock.DescribeWorkdir(&schema.AtmosConfiguration{}, "vpc", "dev")
 	assert.Error(t, err)
 	assert.Empty(t, result)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirMetadata)
 }
 
 func TestDescribeCmd_MarshalError(t *testing.T) {
-	mock := NewMockWorkdirManager()
-	mock.DescribeWorkdirFunc = func(atmosConfig *schema.AtmosConfiguration, component, stack string) (string, error) {
-		return "", errUtils.Build(errUtils.ErrWorkdirMetadata).
-			WithCause(errors.New("yaml marshal failed")).
-			WithExplanation("Failed to marshal workdir manifest").
-			Err()
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	expectedErr := errUtils.Build(errUtils.ErrWorkdirMetadata).
+		WithCause(errors.New("yaml marshal failed")).
+		WithExplanation("Failed to marshal workdir manifest").
+		Err()
+	mock.EXPECT().DescribeWorkdir(gomock.Any(), "vpc", "dev").Return("", expectedErr)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	result, err := mock.DescribeWorkdir(nil, "vpc", "dev")
+	result, err := mock.DescribeWorkdir(&schema.AtmosConfiguration{}, "vpc", "dev")
 	assert.Error(t, err)
 	assert.Empty(t, result)
 }
@@ -232,17 +235,17 @@ func TestDescribeCmd_MarshalError(t *testing.T) {
 // Test nil handling.
 
 func TestDescribeCmd_NilConfig(t *testing.T) {
-	mock := NewMockWorkdirManager()
-	mock.DescribeWorkdirFunc = func(atmosConfig *schema.AtmosConfiguration, component, stack string) (string, error) {
-		// Should handle nil config gracefully.
-		return "manifest", nil
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().DescribeWorkdir(gomock.Any(), "vpc", "dev").Return("manifest", nil)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	result, err := mock.DescribeWorkdir(nil, "vpc", "dev")
+	result, err := mock.DescribeWorkdir(&schema.AtmosConfiguration{}, "vpc", "dev")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, result)
 }

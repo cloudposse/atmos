@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -248,10 +249,11 @@ func TestListCmd_Args(t *testing.T) {
 }
 
 func TestMockWorkdirManager_ListWorkdirs(t *testing.T) {
-	mock := NewMockWorkdirManager()
-	mock.ListWorkdirsFunc = func(atmosConfig *schema.AtmosConfiguration) ([]WorkdirInfo, error) {
-		return CreateSampleWorkdirList(), nil
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().ListWorkdirs(gomock.Any()).Return(CreateSampleWorkdirList(), nil)
 
 	// Save and restore the workdir manager.
 	original := workdirManager
@@ -260,13 +262,21 @@ func TestMockWorkdirManager_ListWorkdirs(t *testing.T) {
 
 	// Verify mock is set.
 	assert.Equal(t, mock, GetWorkdirManager())
+
+	// Call to verify expectation.
+	result, err := mock.ListWorkdirs(&schema.AtmosConfiguration{})
+	assert.NoError(t, err)
+	assert.Len(t, result, 3)
 }
 
 func TestSetAndGetWorkdirManager(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	original := GetWorkdirManager()
 	defer SetWorkdirManager(original)
 
-	mock := NewMockWorkdirManager()
+	mock := NewMockWorkdirManager(ctrl)
 	SetWorkdirManager(mock)
 
 	assert.Equal(t, mock, GetWorkdirManager())

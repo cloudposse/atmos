@@ -47,6 +47,8 @@ type WorkdirInfo struct {
 
 // WorkdirManager defines the interface for workdir operations.
 // This interface enables dependency injection for testing.
+//
+//go:generate go run go.uber.org/mock/mockgen -destination=mock_workdir_manager_test.go -package=workdir -source=workdir_helpers.go WorkdirManager
 type WorkdirManager interface {
 	// ListWorkdirs returns all workdirs in the project.
 	ListWorkdirs(atmosConfig *schema.AtmosConfiguration) ([]WorkdirInfo, error)

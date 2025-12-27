@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -66,23 +67,23 @@ func createTestWorkdir(t *testing.T, basePath, component, stack string) {
 
 // TestListCmd_RunE_WithMock tests the list command with a mock manager.
 func TestListCmd_RunE_WithMock(t *testing.T) {
-	mock := NewMockWorkdirManager()
-	mock.ListWorkdirsFunc = func(atmosConfig *schema.AtmosConfiguration) ([]WorkdirInfo, error) {
-		return []WorkdirInfo{
-			{Name: "dev-vpc", Component: "vpc", Stack: "dev"},
-			{Name: "prod-vpc", Component: "vpc", Stack: "prod"},
-		}, nil
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().ListWorkdirs(gomock.Any()).Return([]WorkdirInfo{
+		{Name: "dev-vpc", Component: "vpc", Stack: "dev"},
+		{Name: "prod-vpc", Component: "vpc", Stack: "prod"},
+	}, nil)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
 	// Verify mock is called when ListWorkdirs is invoked directly.
-	workdirs, err := workdirManager.ListWorkdirs(nil)
+	workdirs, err := workdirManager.ListWorkdirs(&schema.AtmosConfiguration{})
 	require.NoError(t, err)
 	assert.Len(t, workdirs, 2)
-	assert.Equal(t, 1, mock.ListWorkdirsCalls)
 }
 
 // TestShowCmd_RunE_ValidationMissingStack tests the show command validation.
@@ -265,118 +266,122 @@ func TestListCmd_Integration_NoWorkdirs(t *testing.T) {
 	require.NoError(t, os.Chdir(tmpDir))
 
 	// Create mock to avoid actual config loading.
-	mock := NewMockWorkdirManager()
-	mock.ListWorkdirsFunc = func(atmosConfig *schema.AtmosConfiguration) ([]WorkdirInfo, error) {
-		return []WorkdirInfo{}, nil
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().ListWorkdirs(gomock.Any()).Return([]WorkdirInfo{}, nil)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
 	// Verify the mock is working.
-	result, err := workdirManager.ListWorkdirs(nil)
+	result, err := workdirManager.ListWorkdirs(&schema.AtmosConfiguration{})
 	require.NoError(t, err)
 	assert.Empty(t, result)
 }
 
 // TestListCmd_Integration_WithWorkdirs tests list command with workdirs.
 func TestListCmd_Integration_WithWorkdirs(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	tmpDir := t.TempDir()
 	createTestAtmosConfig(t, tmpDir)
 	createTestWorkdir(t, tmpDir, "vpc", "dev")
 	createTestWorkdir(t, tmpDir, "s3", "prod")
 
-	mock := NewMockWorkdirManager()
-	mock.ListWorkdirsFunc = func(atmosConfig *schema.AtmosConfiguration) ([]WorkdirInfo, error) {
-		return []WorkdirInfo{
-			{Name: "dev-vpc", Component: "vpc", Stack: "dev", CreatedAt: time.Now()},
-			{Name: "prod-s3", Component: "s3", Stack: "prod", CreatedAt: time.Now()},
-		}, nil
-	}
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().ListWorkdirs(gomock.Any()).Return([]WorkdirInfo{
+		{Name: "dev-vpc", Component: "vpc", Stack: "dev", CreatedAt: time.Now()},
+		{Name: "prod-s3", Component: "s3", Stack: "prod", CreatedAt: time.Now()},
+	}, nil)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	result, err := workdirManager.ListWorkdirs(nil)
+	result, err := workdirManager.ListWorkdirs(&schema.AtmosConfiguration{})
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
 }
 
 // TestShowCmd_Integration_WorkdirExists tests show command with existing workdir.
 func TestShowCmd_Integration_WorkdirExists(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	tmpDir := t.TempDir()
 	createTestAtmosConfig(t, tmpDir)
 	createTestWorkdir(t, tmpDir, "vpc", "dev")
 
-	mock := NewMockWorkdirManager()
-	mock.GetWorkdirInfoFunc = func(atmosConfig *schema.AtmosConfiguration, component, stack string) (*WorkdirInfo, error) {
-		return &WorkdirInfo{
-			Name:        "dev-vpc",
-			Component:   "vpc",
-			Stack:       "dev",
-			Source:      "components/terraform/vpc",
-			Path:        ".workdir/terraform/dev-vpc",
-			ContentHash: "abc123",
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
-		}, nil
-	}
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "vpc", "dev").Return(&WorkdirInfo{
+		Name:        "dev-vpc",
+		Component:   "vpc",
+		Stack:       "dev",
+		Source:      "components/terraform/vpc",
+		Path:        ".workdir/terraform/dev-vpc",
+		ContentHash: "abc123",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}, nil)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	result, err := workdirManager.GetWorkdirInfo(nil, "vpc", "dev")
+	result, err := workdirManager.GetWorkdirInfo(&schema.AtmosConfiguration{}, "vpc", "dev")
 	require.NoError(t, err)
 	assert.Equal(t, "dev-vpc", result.Name)
 }
 
 // TestCleanCmd_Integration_All tests clean --all command.
 func TestCleanCmd_Integration_All(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	tmpDir := t.TempDir()
 	createTestAtmosConfig(t, tmpDir)
 	createTestWorkdir(t, tmpDir, "vpc", "dev")
 
-	mock := NewMockWorkdirManager()
-	mock.CleanAllWorkdirsFunc = func(atmosConfig *schema.AtmosConfiguration) error {
-		return nil
-	}
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().CleanAllWorkdirs(gomock.Any()).Return(nil)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	err := workdirManager.CleanAllWorkdirs(nil)
+	err := workdirManager.CleanAllWorkdirs(&schema.AtmosConfiguration{})
 	require.NoError(t, err)
-	assert.Equal(t, 1, mock.CleanAllWorkdirsCalls)
 }
 
 // TestCleanCmd_Integration_Specific tests clean specific workdir.
 func TestCleanCmd_Integration_Specific(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	tmpDir := t.TempDir()
 	createTestAtmosConfig(t, tmpDir)
 	createTestWorkdir(t, tmpDir, "vpc", "dev")
 
-	mock := NewMockWorkdirManager()
-	mock.CleanWorkdirFunc = func(atmosConfig *schema.AtmosConfiguration, component, stack string) error {
-		assert.Equal(t, "vpc", component)
-		assert.Equal(t, "dev", stack)
-		return nil
-	}
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().CleanWorkdir(gomock.Any(), "vpc", "dev").Return(nil)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	err := workdirManager.CleanWorkdir(nil, "vpc", "dev")
+	err := workdirManager.CleanWorkdir(&schema.AtmosConfiguration{}, "vpc", "dev")
 	require.NoError(t, err)
-	assert.Equal(t, 1, mock.CleanWorkdirCalls)
 }
 
 // TestDescribeCmd_Integration_WorkdirExists tests describe command.
 func TestDescribeCmd_Integration_WorkdirExists(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	tmpDir := t.TempDir()
 	createTestAtmosConfig(t, tmpDir)
 	createTestWorkdir(t, tmpDir, "vpc", "dev")
@@ -389,16 +394,14 @@ func TestDescribeCmd_Integration_WorkdirExists(t *testing.T) {
           name: dev-vpc
 `
 
-	mock := NewMockWorkdirManager()
-	mock.DescribeWorkdirFunc = func(atmosConfig *schema.AtmosConfiguration, component, stack string) (string, error) {
-		return expectedManifest, nil
-	}
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().DescribeWorkdir(gomock.Any(), "vpc", "dev").Return(expectedManifest, nil)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	result, err := workdirManager.DescribeWorkdir(nil, "vpc", "dev")
+	result, err := workdirManager.DescribeWorkdir(&schema.AtmosConfiguration{}, "vpc", "dev")
 	require.NoError(t, err)
 	assert.Contains(t, result, "components:")
 }

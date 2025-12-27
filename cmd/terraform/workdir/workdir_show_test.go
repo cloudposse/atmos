@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -119,14 +120,13 @@ func TestShowCmd_DisableFlagParsing(t *testing.T) {
 // Integration test helper.
 
 func TestMockWorkdirManager_GetWorkdirInfo(t *testing.T) {
-	mock := NewMockWorkdirManager()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
 	expectedInfo := CreateSampleWorkdirInfo("vpc", "dev")
 
-	mock.GetWorkdirInfoFunc = func(atmosConfig *schema.AtmosConfiguration, component, stack string) (*WorkdirInfo, error) {
-		assert.Equal(t, "vpc", component)
-		assert.Equal(t, "dev", stack)
-		return expectedInfo, nil
-	}
+	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "vpc", "dev").Return(expectedInfo, nil)
 
 	// Save and restore.
 	original := workdirManager
@@ -134,10 +134,9 @@ func TestMockWorkdirManager_GetWorkdirInfo(t *testing.T) {
 	SetWorkdirManager(mock)
 
 	// Call through manager.
-	result, err := mock.GetWorkdirInfo(nil, "vpc", "dev")
+	result, err := mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "vpc", "dev")
 	assert.NoError(t, err)
 	assert.Equal(t, expectedInfo, result)
-	assert.Equal(t, 1, mock.GetWorkdirInfoCalls)
 }
 
 func TestShowCmd_RequiresStack(t *testing.T) {
