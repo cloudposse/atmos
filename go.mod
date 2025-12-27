@@ -45,6 +45,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/editorconfig-checker/editorconfig-checker/v3 v3.6.0
 	github.com/elewis787/boa v0.1.3
+	github.com/epiclabs-io/diff3 v0.0.0-20241115194849-280ec18688b6
 	github.com/fatih/color v1.18.0
 	github.com/getsentry/sentry-go v0.40.0
 	github.com/go-git/go-git/v5 v5.16.4
