@@ -119,6 +119,37 @@ func Test_processArgsAndFlags2(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		// --cluster-name flag tests for EKS/Helmfile integration.
+		{
+			name:              "cluster-name flag with space separator",
+			componentType:     "helmfile",
+			inputArgsAndFlags: []string{"sync", "--cluster-name", "my-eks-cluster"},
+			want: schema.ArgsAndFlagsInfo{
+				SubCommand:  "sync",
+				ClusterName: "my-eks-cluster",
+			},
+			wantErr: false,
+		},
+		{
+			name:              "cluster-name flag with equals syntax",
+			componentType:     "helmfile",
+			inputArgsAndFlags: []string{"sync", "--cluster-name=prod-eks-cluster"},
+			want: schema.ArgsAndFlagsInfo{
+				SubCommand:  "sync",
+				ClusterName: "prod-eks-cluster",
+			},
+			wantErr: false,
+		},
+		{
+			name:              "cluster-name flag with hyphenated value",
+			componentType:     "helmfile",
+			inputArgsAndFlags: []string{"apply", "--cluster-name", "tenant1-dev-us-east-2-eks"},
+			want: schema.ArgsAndFlagsInfo{
+				SubCommand:  "apply",
+				ClusterName: "tenant1-dev-us-east-2-eks",
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -459,6 +490,19 @@ func Test_processArgsAndFlags_errorPaths(t *testing.T) {
 			componentType:     "terraform",
 			inputArgsAndFlags: []string{"plan", "--workflows-dir=/path=extra"},
 			expectedError:     "--workflows-dir=/path=extra",
+		},
+		// --cluster-name flag error cases for EKS/Helmfile integration.
+		{
+			name:              "cluster-name flag without value",
+			componentType:     "helmfile",
+			inputArgsAndFlags: []string{"sync", "--cluster-name"},
+			expectedError:     "--cluster-name",
+		},
+		{
+			name:              "cluster-name with multiple equals",
+			componentType:     "helmfile",
+			inputArgsAndFlags: []string{"sync", "--cluster-name=cluster=extra"},
+			expectedError:     "--cluster-name=cluster=extra",
 		},
 	}
 
