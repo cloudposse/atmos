@@ -17,6 +17,8 @@ import (
 // 2. Local config can add more commands.
 // 3. If local has a duplicate name, local should win.
 func TestCommandMergingBehavior(t *testing.T) {
+	setupTestAdapters()
+
 	tests := []struct {
 		name          string
 		setupFiles    map[string]string
@@ -332,6 +334,8 @@ commands:
 
 // TestCommandStructurePreservation verifies that complex command structures are preserved through merging.
 func TestCommandStructurePreservation(t *testing.T) {
+	setupTestAdapters()
+
 	// Create temp directory.
 	tempDir := t.TempDir()
 
