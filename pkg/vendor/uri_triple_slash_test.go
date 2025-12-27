@@ -1,4 +1,4 @@
-package exec
+package vendor
 
 import (
 	"os"
@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -15,6 +17,9 @@ import (
 // The pattern indicates cloning from the root of a repository (e.g., github.com/repo.git///?ref=v1.0).
 // This pattern was broken after go-getter v1.7.9 due to changes in subdirectory path handling.
 func TestVendorPullWithTripleSlashPattern(t *testing.T) {
+	// Skip long tests in short mode.
+	tests.SkipIfShort(t)
+
 	// Check for GitHub access with rate limit check.
 	rateLimits := tests.RequireGitHubAccess(t)
 	if rateLimits != nil && rateLimits.Remaining < 10 {
@@ -32,18 +37,11 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 	// Change to the test directory.
 	t.Chdir(testDir)
 
-	// Set up the command with global flags.
-	cmd := newTestCommandWithGlobalFlags("pull")
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err, "Failed to initialize config")
 
-	flags := cmd.Flags()
-	flags.String("component", "s3-bucket", "")
-	flags.String("stack", "", "")
-	flags.String("tags", "", "")
-	flags.Bool("dry-run", false, "")
-	flags.Bool("everything", false, "")
-
-	// Execute vendor pull command.
-	err := ExecuteVendorPullCommand(cmd, []string{})
+	// Execute vendor pull command with specific component.
+	err = Pull(&atmosConfig, WithComponent("s3-bucket"))
 	require.NoError(t, err, "Vendor pull command should execute without error")
 
 	// Check that the target directory was created.
@@ -92,6 +90,9 @@ func TestVendorPullWithTripleSlashPattern(t *testing.T) {
 // This could be a potential cause of the issue where the vendor process
 // gets confused by multiple configuration files.
 func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
+	// Skip long tests in short mode.
+	tests.SkipIfShort(t)
+
 	// Check for GitHub access with rate limit check.
 	rateLimits := tests.RequireGitHubAccess(t)
 	if rateLimits != nil && rateLimits.Remaining < 10 {
@@ -115,18 +116,11 @@ func TestVendorPullWithMultipleVendorFiles(t *testing.T) {
 		assert.FileExists(t, file, "Vendor file should exist: %s", file)
 	}
 
-	// Set up the command with global flags.
-	cmd := newTestCommandWithGlobalFlags("pull")
-
-	flags := cmd.Flags()
-	flags.String("component", "", "")
-	flags.String("stack", "", "")
-	flags.String("tags", "aws", "")
-	flags.Bool("dry-run", false, "")
-	flags.Bool("everything", false, "")
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err, "Failed to initialize config")
 
 	// Execute vendor pull command with tags filter.
-	err := ExecuteVendorPullCommand(cmd, []string{})
+	err = Pull(&atmosConfig, WithTags([]string{"aws"}))
 	require.NoError(t, err, "Vendor pull command should execute without error even with multiple vendor files")
 
 	// Check that the s3-bucket component was pulled (it has the 'aws' tag).

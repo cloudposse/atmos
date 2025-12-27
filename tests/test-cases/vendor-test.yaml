@@ -10,7 +10,7 @@ tests:
     expect:
       stderr:
         - "# Error"
-        - "\\*\\*Error:\\*\\* Vendoring is not configured"
+        - "\\*\\*Error:\\*\\* vendoring is not configured"
       exit_code: 1
 
   - name: atmos_vendor_pull
