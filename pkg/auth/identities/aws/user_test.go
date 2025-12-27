@@ -11,10 +11,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	ststypes "github.com/aws/aws-sdk-go-v2/service/sts/types"
+	"github.com/aws/smithy-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zalando/go-keyring"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	atmosCreds "github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -168,6 +170,12 @@ func TestUserIdentity_Authenticate_GeneratesNewWhenExpired(t *testing.T) {
 		return "", errors.New("mock: should not call MFA prompt in this test")
 	}
 
+	// Mock credential prompt to avoid interactive UI blocking on Windows.
+	// When STS returns InvalidClientTokenId, the error handler tries to prompt for new credentials.
+	originalCredPromptFunc := PromptCredentialsFunc
+	defer func() { PromptCredentialsFunc = originalCredPromptFunc }()
+	PromptCredentialsFunc = nil // Disable prompting to avoid blocking.
+
 	// Create identity without MFA to avoid prompt.
 	identity, err := NewUserIdentity("test-user", &schema.Identity{
 		Kind: "aws/user",
@@ -196,7 +204,10 @@ func TestUserIdentity_Authenticate_GeneratesNewWhenExpired(t *testing.T) {
 
 	// Test: Call Authenticate() - it should detect expired credentials and attempt to generate new ones.
 	// Since we can't actually call AWS STS in tests, we expect this to fail at the generateSessionToken step.
-	ctx := context.Background()
+	// Use short timeout so SDK calls fail fast in tests (especially important on Windows where network
+	// operations may hang longer due to IMDS checks or different TCP timeout behavior).
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	_, err = userIdent.Authenticate(ctx, nil)
 
 	// Verify: Authentication attempted to generate new token (would fail because no real AWS creds).
@@ -270,6 +281,8 @@ func TestUser_credentialsFromStore(t *testing.T) {
 }
 
 func TestUser_resolveLongLivedCredentials_Order(t *testing.T) {
+	ctx := context.Background()
+
 	// When config has full credentials, prefer those.
 	id, err := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user", Credentials: map[string]any{
 		"access_key_id":     "AKIA",
@@ -277,7 +290,7 @@ func TestUser_resolveLongLivedCredentials_Order(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	ui := id.(*userIdentity)
-	creds, err := ui.resolveLongLivedCredentials()
+	creds, err := ui.resolveLongLivedCredentials(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "AKIA", creds.AccessKeyID)
 
@@ -287,13 +300,14 @@ func TestUser_resolveLongLivedCredentials_Order(t *testing.T) {
 	_ = store.Store("dev2", &types.AWSCredentials{AccessKeyID: "AK2", SecretAccessKey: "SEC2"})
 	id, _ = NewUserIdentity("dev2", &schema.Identity{Kind: "aws/user"})
 	ui = id.(*userIdentity)
-	creds, err = ui.resolveLongLivedCredentials()
+	creds, err = ui.resolveLongLivedCredentials(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, "AK2", creds.AccessKeyID)
 }
 
 // TestUser_resolveLongLivedCredentials_DeepMerge validates the deep merge precedence rules.
 func TestUser_resolveLongLivedCredentials_DeepMerge(t *testing.T) {
+	ctx := context.Background()
 	store := atmosCreds.NewCredentialStore()
 
 	tests := []struct {
@@ -420,7 +434,7 @@ func TestUser_resolveLongLivedCredentials_DeepMerge(t *testing.T) {
 			ui := id.(*userIdentity)
 
 			// Resolve credentials.
-			creds, err := ui.resolveLongLivedCredentials()
+			creds, err := ui.resolveLongLivedCredentials(ctx)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -1072,4 +1086,1190 @@ func TestUserIdentity_Paths(t *testing.T) {
 	paths, err := id.Paths()
 	assert.NoError(t, err)
 	assert.Empty(t, paths, "AWS user identities should not return additional paths")
+}
+
+// mockAPIError implements smithy.APIError for testing.
+type mockAPIError struct {
+	code    string
+	message string
+}
+
+func (e *mockAPIError) Error() string                 { return e.message }
+func (e *mockAPIError) ErrorCode() string             { return e.code }
+func (e *mockAPIError) ErrorMessage() string          { return e.message }
+func (e *mockAPIError) ErrorFault() smithy.ErrorFault { return smithy.FaultClient }
+
+// TestUserIdentity_HandleSTSError_InvalidClientTokenId tests the handling of InvalidClientTokenId error.
+// This error occurs when AWS access keys have been rotated or revoked.
+func TestUserIdentity_HandleSTSError_InvalidClientTokenId(t *testing.T) {
+	// Setup: Prime the keyring with credentials that should be cleared.
+	store := atmosCreds.NewCredentialStore()
+	err := store.Store("test-invalid-creds", &types.AWSCredentials{
+		AccessKeyID:     "AKIA_STALE",
+		SecretAccessKey: "SECRET_STALE",
+		Region:          "us-east-1",
+	})
+	require.NoError(t, err)
+
+	// Verify credentials exist before the test.
+	_, err = store.Retrieve("test-invalid-creds")
+	require.NoError(t, err, "Credentials should exist before test")
+
+	// Create identity.
+	identity, err := NewUserIdentity("test-invalid-creds", &schema.Identity{
+		Kind: "aws/user",
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	// Create mock InvalidClientTokenId error.
+	mockErr := &mockAPIError{
+		code:    "InvalidClientTokenId",
+		message: "The security token included in the request is invalid",
+	}
+
+	// Ensure PromptCredentialsFunc is nil (no prompting in test).
+	originalPromptFunc := PromptCredentialsFunc
+	PromptCredentialsFunc = nil
+	defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+	// Call handleSTSError (isRetry=false for first attempt, nil longLivedCreds since we're testing InvalidClientTokenId).
+	newCreds, resultErr := userIdent.handleSTSError(context.Background(), mockErr, nil, false)
+
+	// Verify: Error should contain the sentinel error.
+	require.Error(t, resultErr)
+	assert.Nil(t, newCreds, "No new credentials should be returned when prompting is disabled")
+	assert.Contains(t, resultErr.Error(), "credentials are invalid or have been revoked")
+
+	// Verify: Stale credentials should be cleared from keyring.
+	_, err = store.Retrieve("test-invalid-creds")
+	assert.Error(t, err, "Stale credentials should be cleared from keyring")
+}
+
+// TestUserIdentity_HandleSTSError_ExpiredTokenException tests the handling of ExpiredTokenException error.
+func TestUserIdentity_HandleSTSError_ExpiredTokenException(t *testing.T) {
+	// Create identity.
+	identity, err := NewUserIdentity("test-expired", &schema.Identity{
+		Kind: "aws/user",
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	// Create mock ExpiredTokenException error.
+	mockErr := &mockAPIError{
+		code:    "ExpiredTokenException",
+		message: "The security token has expired",
+	}
+
+	// Call handleSTSError (isRetry=false for first attempt).
+	newCreds, resultErr := userIdent.handleSTSError(context.Background(), mockErr, nil, false)
+
+	// Verify: Error should contain the authentication failed sentinel.
+	require.Error(t, resultErr)
+	assert.Nil(t, newCreds, "No new credentials should be returned for ExpiredTokenException")
+	assert.Contains(t, resultErr.Error(), "authentication failed")
+}
+
+// TestUserIdentity_HandleSTSError_AccessDenied tests the handling of AccessDenied error.
+func TestUserIdentity_HandleSTSError_AccessDenied(t *testing.T) {
+	// Create identity.
+	identity, err := NewUserIdentity("test-denied", &schema.Identity{
+		Kind: "aws/user",
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	// Create mock AccessDenied error (non-MFA related).
+	mockErr := &mockAPIError{
+		code:    "AccessDenied",
+		message: "User is not authorized to perform sts:GetSessionToken",
+	}
+
+	// Call handleSTSError (isRetry=false for first attempt, nil longLivedCreds).
+	newCreds, resultErr := userIdent.handleSTSError(context.Background(), mockErr, nil, false)
+
+	// Verify: Error should contain the authentication failed sentinel.
+	require.Error(t, resultErr)
+	assert.Nil(t, newCreds, "No new credentials should be returned for AccessDenied")
+	assert.Contains(t, resultErr.Error(), "authentication failed")
+}
+
+// TestUserIdentity_HandleSTSError_GenericError tests handling of non-AWS errors.
+func TestUserIdentity_HandleSTSError_GenericError(t *testing.T) {
+	// Create identity.
+	identity, err := NewUserIdentity("test-generic", &schema.Identity{
+		Kind: "aws/user",
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	// Create a generic error (not an AWS API error).
+	genericErr := errors.New("network connection failed")
+
+	// Call handleSTSError (isRetry=false for first attempt).
+	newCreds, resultErr := userIdent.handleSTSError(context.Background(), genericErr, nil, false)
+
+	// Verify: Error should wrap the original error with ErrAuthenticationFailed.
+	require.Error(t, resultErr)
+	assert.Nil(t, newCreds, "No new credentials should be returned for generic errors")
+	assert.Contains(t, resultErr.Error(), "network connection failed")
+}
+
+// TestUserIdentity_HandleSTSError_WithPromptFunc tests that PromptCredentialsFunc is called when set.
+func TestUserIdentity_HandleSTSError_WithPromptFunc(t *testing.T) {
+	// Setup: Prime the keyring with credentials that should be cleared.
+	store := atmosCreds.NewCredentialStore()
+	err := store.Store("test-prompt-creds", &types.AWSCredentials{
+		AccessKeyID:     "AKIA_STALE",
+		SecretAccessKey: "SECRET_STALE",
+		Region:          "us-east-1",
+	})
+	require.NoError(t, err)
+
+	// Verify credentials exist before the test.
+	_, err = store.Retrieve("test-prompt-creds")
+	require.NoError(t, err, "Credentials should exist before test")
+
+	// Create identity with MFA ARN in YAML config.
+	identity, err := NewUserIdentity("test-prompt-creds", &schema.Identity{
+		Kind: "aws/user",
+		Credentials: map[string]any{
+			"mfa_arn": "arn:aws:iam::123456789012:mfa/user",
+		},
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	// Create mock InvalidClientTokenId error.
+	mockErr := &mockAPIError{
+		code:    "InvalidClientTokenId",
+		message: "The security token included in the request is invalid",
+	}
+
+	// Set up mock PromptCredentialsFunc that returns new credentials.
+	promptCalled := false
+	var capturedIdentityName, capturedMfaArn string
+	newCredentials := &types.AWSCredentials{
+		AccessKeyID:     "AKIA_NEW",
+		SecretAccessKey: "SECRET_NEW",
+		MfaArn:          "arn:aws:iam::123456789012:mfa/user",
+		SessionDuration: "36h",
+	}
+
+	originalPromptFunc := PromptCredentialsFunc
+	PromptCredentialsFunc = func(identityName string, mfaArn string) (*types.AWSCredentials, error) {
+		promptCalled = true
+		capturedIdentityName = identityName
+		capturedMfaArn = mfaArn
+		return newCredentials, nil
+	}
+	defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+	// Call handleSTSError (isRetry=false for first attempt, nil longLivedCreds for InvalidClientTokenId).
+	resultCreds, resultErr := userIdent.handleSTSError(context.Background(), mockErr, nil, false)
+
+	// Verify: No error because prompting succeeded.
+	require.NoError(t, resultErr)
+	require.NotNil(t, resultCreds, "New credentials should be returned when prompting succeeds")
+
+	// Verify: PromptCredentialsFunc was called with correct parameters.
+	assert.True(t, promptCalled, "PromptCredentialsFunc should have been called")
+	assert.Equal(t, "test-prompt-creds", capturedIdentityName)
+	assert.Equal(t, "arn:aws:iam::123456789012:mfa/user", capturedMfaArn)
+
+	// Verify: Returned credentials match what prompt returned.
+	assert.Equal(t, "AKIA_NEW", resultCreds.AccessKeyID)
+	assert.Equal(t, "SECRET_NEW", resultCreds.SecretAccessKey)
+	assert.Equal(t, "36h", resultCreds.SessionDuration)
+
+	// Verify: Stale credentials should still be cleared from keyring.
+	_, err = store.Retrieve("test-prompt-creds")
+	assert.Error(t, err, "Stale credentials should be cleared from keyring")
+}
+
+// TestUserIdentity_HandleSTSError_PromptFuncFails tests error when PromptCredentialsFunc fails.
+func TestUserIdentity_HandleSTSError_PromptFuncFails(t *testing.T) {
+	// Create identity.
+	identity, err := NewUserIdentity("test-prompt-fails", &schema.Identity{
+		Kind: "aws/user",
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	// Create mock InvalidClientTokenId error.
+	mockErr := &mockAPIError{
+		code:    "InvalidClientTokenId",
+		message: "The security token included in the request is invalid",
+	}
+
+	// Set up mock PromptCredentialsFunc that returns an error.
+	originalPromptFunc := PromptCredentialsFunc
+	PromptCredentialsFunc = func(identityName string, mfaArn string) (*types.AWSCredentials, error) {
+		return nil, errors.New("user cancelled input")
+	}
+	defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+	// Call handleSTSError (isRetry=false for first attempt, nil longLivedCreds for InvalidClientTokenId).
+	resultCreds, resultErr := userIdent.handleSTSError(context.Background(), mockErr, nil, false)
+
+	// Verify: Error should be returned when prompting fails.
+	require.Error(t, resultErr)
+	assert.Nil(t, resultCreds, "No credentials should be returned when prompting fails")
+	assert.Contains(t, resultErr.Error(), "credentials are invalid or have been revoked")
+	// Note: Hints are stored in ErrorBuilder structure, not in the main error message.
+	// The hint "Credential prompting was cancelled or failed" is added but won't appear in Error().
+}
+
+// TestUser_resolveLongLivedCredentials_SessionDurationPreserved tests that SessionDuration is copied from keyring.
+func TestUser_resolveLongLivedCredentials_SessionDurationPreserved(t *testing.T) {
+	ctx := context.Background()
+	store := atmosCreds.NewCredentialStore()
+
+	// Store credentials with SessionDuration in keyring.
+	err := store.Store("test-session-duration", &types.AWSCredentials{
+		AccessKeyID:     "KEYRING_ACCESS",
+		SecretAccessKey: "KEYRING_SECRET",
+		MfaArn:          "arn:aws:iam::123456789012:mfa/user",
+		SessionDuration: "36h",
+	})
+	require.NoError(t, err)
+
+	// Create identity with no YAML credentials (uses keyring).
+	identity, err := NewUserIdentity("test-session-duration", &schema.Identity{
+		Kind:        "aws/user",
+		Credentials: map[string]any{},
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	// Ensure PromptCredentialsFunc is nil.
+	originalPromptFunc := PromptCredentialsFunc
+	PromptCredentialsFunc = nil
+	defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+	// Resolve credentials.
+	creds, err := userIdent.resolveLongLivedCredentials(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+
+	// Verify SessionDuration is preserved from keyring.
+	assert.Equal(t, "KEYRING_ACCESS", creds.AccessKeyID)
+	assert.Equal(t, "KEYRING_SECRET", creds.SecretAccessKey)
+	assert.Equal(t, "arn:aws:iam::123456789012:mfa/user", creds.MfaArn)
+	assert.Equal(t, "36h", creds.SessionDuration, "SessionDuration should be preserved from keyring")
+}
+
+// TestUser_resolveLongLivedCredentials_DetectsSessionCredentials tests that session credentials in keyring trigger re-prompt.
+func TestUser_resolveLongLivedCredentials_DetectsSessionCredentials(t *testing.T) {
+	ctx := context.Background()
+	store := atmosCreds.NewCredentialStore()
+
+	// Store session credentials (with SessionToken) in keyring - this is an error state.
+	err := store.Store("test-session-creds-in-keyring", &types.AWSCredentials{
+		AccessKeyID:     "ASIASESSION",
+		SecretAccessKey: "SESSION_SECRET",
+		SessionToken:    "SESSION_TOKEN_SHOULD_NOT_BE_HERE",
+		MfaArn:          "arn:aws:iam::123456789012:mfa/user",
+	})
+	require.NoError(t, err)
+
+	// Create identity with no YAML credentials (uses keyring).
+	identity, err := NewUserIdentity("test-session-creds-in-keyring", &schema.Identity{
+		Kind:        "aws/user",
+		Credentials: map[string]any{},
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	t.Run("prompts for new credentials when session credentials detected", func(t *testing.T) {
+		promptCalled := false
+		newCredentials := &types.AWSCredentials{
+			AccessKeyID:     "AKIA_LONG_LIVED",
+			SecretAccessKey: "LONG_LIVED_SECRET",
+			MfaArn:          "arn:aws:iam::123456789012:mfa/user",
+		}
+
+		originalPromptFunc := PromptCredentialsFunc
+		PromptCredentialsFunc = func(identityName string, mfaArn string) (*types.AWSCredentials, error) {
+			promptCalled = true
+			return newCredentials, nil
+		}
+		defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+		// Resolve credentials - should detect session credentials and prompt.
+		creds, err := userIdent.resolveLongLivedCredentials(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, creds)
+
+		// Verify: PromptCredentialsFunc was called because keyring had session credentials.
+		assert.True(t, promptCalled, "PromptCredentialsFunc should be called when keyring has session credentials")
+
+		// Verify: Returned credentials are the new long-lived ones.
+		assert.Equal(t, "AKIA_LONG_LIVED", creds.AccessKeyID)
+		assert.Equal(t, "", creds.SessionToken, "New credentials should not have SessionToken")
+	})
+
+	t.Run("returns error when session credentials detected and no prompt func", func(t *testing.T) {
+		// Disable prompting.
+		originalPromptFunc := PromptCredentialsFunc
+		PromptCredentialsFunc = nil
+		defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+		// Resolve credentials - should detect session credentials and return error.
+		creds, err := userIdent.resolveLongLivedCredentials(ctx)
+		require.Error(t, err)
+		assert.Nil(t, creds)
+		assert.Contains(t, err.Error(), "session credentials")
+	})
+}
+
+// TestUser_resolveLongLivedCredentials_PromptWhenMissing tests credential prompting when credentials are not found.
+func TestUser_resolveLongLivedCredentials_PromptWhenMissing(t *testing.T) {
+	ctx := context.Background()
+
+	// Create identity with no YAML credentials and no keyring credentials.
+	identity, err := NewUserIdentity("test-prompt-missing", &schema.Identity{
+		Kind:        "aws/user",
+		Credentials: map[string]any{},
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	// Set up mock PromptCredentialsFunc that returns new credentials.
+	promptCalled := false
+	newCredentials := &types.AWSCredentials{
+		AccessKeyID:     "AKIA_PROMPTED",
+		SecretAccessKey: "SECRET_PROMPTED",
+		MfaArn:          "arn:aws:iam::123456789012:mfa/prompted",
+		SessionDuration: "24h",
+	}
+
+	originalPromptFunc := PromptCredentialsFunc
+	PromptCredentialsFunc = func(identityName string, mfaArn string) (*types.AWSCredentials, error) {
+		promptCalled = true
+		return newCredentials, nil
+	}
+	defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+	// Resolve credentials.
+	creds, err := userIdent.resolveLongLivedCredentials(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+
+	// Verify: PromptCredentialsFunc was called.
+	assert.True(t, promptCalled, "PromptCredentialsFunc should have been called when credentials are missing")
+
+	// Verify: Returned credentials match what prompt returned.
+	assert.Equal(t, "AKIA_PROMPTED", creds.AccessKeyID)
+	assert.Equal(t, "SECRET_PROMPTED", creds.SecretAccessKey)
+	assert.Equal(t, "24h", creds.SessionDuration)
+}
+
+// TestUser_resolveLongLivedCredentials_ErrorWhenMissingAndNoPrompt tests error when credentials missing and no prompt.
+func TestUser_resolveLongLivedCredentials_ErrorWhenMissingAndNoPrompt(t *testing.T) {
+	ctx := context.Background()
+
+	// Create identity with no YAML credentials and no keyring credentials.
+	identity, err := NewUserIdentity("test-missing-no-prompt", &schema.Identity{
+		Kind:        "aws/user",
+		Credentials: map[string]any{},
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	// Ensure PromptCredentialsFunc is nil.
+	originalPromptFunc := PromptCredentialsFunc
+	PromptCredentialsFunc = nil
+	defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+	// Resolve credentials - should fail.
+	creds, err := userIdent.resolveLongLivedCredentials(ctx)
+
+	// Verify: Error should be returned.
+	require.Error(t, err)
+	assert.Nil(t, creds)
+	assert.Contains(t, err.Error(), "AWS User credentials not found")
+	assert.Contains(t, err.Error(), "atmos auth user configure")
+}
+
+// TestUserIdentity_ClearStaleCredentials tests the clearStaleCredentials helper.
+func TestUserIdentity_ClearStaleCredentials(t *testing.T) {
+	t.Run("clears existing credentials", func(t *testing.T) {
+		store := atmosCreds.NewCredentialStore()
+
+		// Store credentials first.
+		err := store.Store("test-clear-creds", &types.AWSCredentials{
+			AccessKeyID:     "AKIATEST",
+			SecretAccessKey: "SECRET",
+		})
+		require.NoError(t, err)
+
+		// Create identity.
+		identity, err := NewUserIdentity("test-clear-creds", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		// Clear credentials (should not panic).
+		userIdent.clearStaleCredentials()
+
+		// Verify credentials are gone.
+		_, err = store.Retrieve("test-clear-creds")
+		assert.Error(t, err, "Credentials should be deleted")
+	})
+
+	t.Run("handles missing credentials gracefully", func(t *testing.T) {
+		// Create identity with non-existent credentials.
+		identity, err := NewUserIdentity("test-nonexistent-creds", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		// Should not panic even if credentials don't exist.
+		userIdent.clearStaleCredentials()
+	})
+}
+
+// TestUserIdentity_PromptForNewCredentials tests the promptForNewCredentials helper.
+func TestUserIdentity_PromptForNewCredentials(t *testing.T) {
+	t.Run("returns credentials on success", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-prompt-success", &schema.Identity{
+			Kind: "aws/user",
+			Credentials: map[string]any{
+				"mfa_arn": "arn:aws:iam::123456789012:mfa/yaml-user",
+			},
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		// Set up mock prompt function.
+		originalPromptFunc := PromptCredentialsFunc
+		PromptCredentialsFunc = func(identityName string, mfaArn string) (*types.AWSCredentials, error) {
+			assert.Equal(t, "test-prompt-success", identityName)
+			assert.Equal(t, "arn:aws:iam::123456789012:mfa/yaml-user", mfaArn)
+			return &types.AWSCredentials{
+				AccessKeyID:     "PROMPTED_KEY",
+				SecretAccessKey: "PROMPTED_SECRET",
+			}, nil
+		}
+		defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+		creds, err := userIdent.promptForNewCredentials("InvalidClientTokenId")
+		require.NoError(t, err)
+		assert.Equal(t, "PROMPTED_KEY", creds.AccessKeyID)
+	})
+
+	t.Run("returns error on prompt failure", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-prompt-fail", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		// Set up mock prompt function that fails.
+		originalPromptFunc := PromptCredentialsFunc
+		PromptCredentialsFunc = func(identityName string, mfaArn string) (*types.AWSCredentials, error) {
+			return nil, errors.New("user cancelled")
+		}
+		defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+		creds, err := userIdent.promptForNewCredentials("InvalidClientTokenId")
+		require.Error(t, err)
+		assert.Nil(t, creds)
+		assert.Contains(t, err.Error(), "credentials are invalid")
+	})
+}
+
+// TestUserIdentity_HandleExpiredToken tests the handleExpiredToken helper directly.
+func TestUserIdentity_HandleExpiredToken(t *testing.T) {
+	identity, err := NewUserIdentity("test-expired", &schema.Identity{
+		Kind: "aws/user",
+	})
+	require.NoError(t, err)
+
+	userIdent := identity.(*userIdentity)
+
+	mockErr := &mockAPIError{
+		code:    "ExpiredTokenException",
+		message: "Token expired",
+	}
+
+	creds, err := userIdent.handleExpiredToken(mockErr)
+	require.Error(t, err)
+	assert.Nil(t, creds)
+	// Error message contains the base error; hints are stored separately in ErrorBuilder.
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+}
+
+// TestUserIdentity_HandleAccessDenied tests the handleAccessDenied helper directly.
+func TestUserIdentity_HandleAccessDenied(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("non-MFA related AccessDenied", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-denied", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		mockErr := &mockAPIError{
+			code:    "AccessDenied",
+			message: "User is not authorized to perform sts:GetSessionToken",
+		}
+
+		// Non-MFA related error should return error immediately.
+		creds, err := userIdent.handleAccessDenied(ctx, mockErr, nil, false)
+		require.Error(t, err)
+		assert.Nil(t, creds)
+		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	})
+
+	t.Run("MFA token failure returns credentials for retry", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-mfa-retry", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		mockErr := &mockAPIError{
+			code:    "AccessDenied",
+			message: "MultiFactorAuthentication failed with invalid MFA one time pass code",
+		}
+
+		longLivedCreds := &types.AWSCredentials{
+			AccessKeyID:     "AKIAEXAMPLE",
+			SecretAccessKey: "secret",
+			MfaArn:          "arn:aws:iam::123456789012:mfa/user",
+		}
+
+		// MFA failure should return long-lived credentials for retry.
+		creds, err := userIdent.handleAccessDenied(ctx, mockErr, longLivedCreds, false)
+		require.NoError(t, err)
+		require.NotNil(t, creds)
+		assert.Equal(t, "AKIAEXAMPLE", creds.AccessKeyID)
+	})
+
+	t.Run("MFA token failure on retry returns error", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-mfa-retry-fail", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		mockErr := &mockAPIError{
+			code:    "AccessDenied",
+			message: "MultiFactorAuthentication failed with invalid MFA one time pass code",
+		}
+
+		longLivedCreds := &types.AWSCredentials{
+			AccessKeyID:     "AKIAEXAMPLE",
+			SecretAccessKey: "secret",
+			MfaArn:          "arn:aws:iam::123456789012:mfa/user",
+		}
+
+		// On retry, MFA failure should return error to prevent infinite loop.
+		creds, err := userIdent.handleAccessDenied(ctx, mockErr, longLivedCreds, true)
+		require.Error(t, err)
+		assert.Nil(t, creds)
+		// Error wraps ErrAuthenticationFailed sentinel. Hints are stored in ErrorBuilder.
+		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+	})
+}
+
+// TestUserIdentity_HandleInvalidClientTokenId tests the handleInvalidClientTokenId helper directly.
+func TestUserIdentity_HandleInvalidClientTokenId(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("without prompt function", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-invalid-token-no-prompt", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		mockErr := &mockAPIError{
+			code:    "InvalidClientTokenId",
+			message: "Invalid token",
+		}
+
+		// Ensure PromptCredentialsFunc is nil.
+		originalPromptFunc := PromptCredentialsFunc
+		PromptCredentialsFunc = nil
+		defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+		// isRetry=false for first attempt.
+		creds, err := userIdent.handleInvalidClientTokenId(ctx, mockErr, false)
+		require.Error(t, err)
+		assert.Nil(t, creds)
+		assert.Contains(t, err.Error(), "credentials are invalid")
+	})
+
+	t.Run("with prompt function success", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-invalid-token-prompt-ok", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		mockErr := &mockAPIError{
+			code:    "InvalidClientTokenId",
+			message: "Invalid token",
+		}
+
+		// Set up mock prompt function.
+		originalPromptFunc := PromptCredentialsFunc
+		PromptCredentialsFunc = func(identityName string, mfaArn string) (*types.AWSCredentials, error) {
+			return &types.AWSCredentials{
+				AccessKeyID:     "NEW_KEY",
+				SecretAccessKey: "NEW_SECRET",
+			}, nil
+		}
+		defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+		// isRetry=false for first attempt.
+		creds, err := userIdent.handleInvalidClientTokenId(ctx, mockErr, false)
+		require.NoError(t, err)
+		assert.NotNil(t, creds)
+		assert.Equal(t, "NEW_KEY", creds.AccessKeyID)
+	})
+
+	t.Run("on retry skips prompting", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-invalid-token-retry", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		mockErr := &mockAPIError{
+			code:    "InvalidClientTokenId",
+			message: "Invalid token",
+		}
+
+		// Set up mock prompt function that should NOT be called on retry.
+		promptCalled := false
+		originalPromptFunc := PromptCredentialsFunc
+		PromptCredentialsFunc = func(identityName string, mfaArn string) (*types.AWSCredentials, error) {
+			promptCalled = true
+			return &types.AWSCredentials{
+				AccessKeyID:     "SHOULD_NOT_BE_USED",
+				SecretAccessKey: "SHOULD_NOT_BE_USED",
+			}, nil
+		}
+		defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+		// isRetry=true - prompting should be skipped.
+		creds, err := userIdent.handleInvalidClientTokenId(ctx, mockErr, true)
+		require.Error(t, err)
+		assert.Nil(t, creds)
+		assert.False(t, promptCalled, "PromptCredentialsFunc should NOT be called on retry")
+		// The error wraps ErrCredentialsInvalid which has the message "credentials are invalid or have been revoked".
+		// The explanation "newly-entered AWS credentials are also invalid" is stored in error metadata.
+		assert.Contains(t, err.Error(), "credentials are invalid")
+	})
+}
+
+// TestIsMfaRelatedError tests the isMfaRelatedError helper function.
+func TestIsMfaRelatedError(t *testing.T) {
+	tests := []struct {
+		name     string
+		message  string
+		expected bool
+	}{
+		{
+			name:     "MultiFactorAuthentication failed message",
+			message:  "MultiFactorAuthentication failed with invalid MFA one time pass code",
+			expected: true,
+		},
+		{
+			name:     "invalid MFA lowercase",
+			message:  "The request has invalid MFA token",
+			expected: true,
+		},
+		{
+			name:     "MFA token message",
+			message:  "MFA token is required but was not provided",
+			expected: true,
+		},
+		{
+			name:     "one time pass code message",
+			message:  "Invalid one time pass code for MFA device",
+			expected: true,
+		},
+		{
+			name:     "case insensitive match",
+			message:  "MULTIFACTORAUTHENTICATION FAILED",
+			expected: true,
+		},
+		{
+			name:     "not MFA related - permission error",
+			message:  "User is not authorized to perform sts:GetSessionToken",
+			expected: false,
+		},
+		{
+			name:     "not MFA related - generic access denied",
+			message:  "Access Denied",
+			expected: false,
+		},
+		{
+			name:     "not MFA related - empty message",
+			message:  "",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isMfaRelatedError(tt.message)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestUserIdentity_ProcessSTSResult tests the processSTSResult function.
+func TestUserIdentity_ProcessSTSResult(t *testing.T) {
+	t.Run("nil result returns error", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-process-nil", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		creds, err := userIdent.processSTSResult(nil, "us-east-1")
+		require.Error(t, err)
+		assert.Nil(t, creds)
+		assert.Contains(t, err.Error(), "STS returned empty credentials")
+	})
+
+	t.Run("nil credentials in result returns error", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-process-nil-creds", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		result := &sts.GetSessionTokenOutput{
+			Credentials: nil,
+		}
+
+		creds, err := userIdent.processSTSResult(result, "us-east-1")
+		require.Error(t, err)
+		assert.Nil(t, creds)
+		assert.Contains(t, err.Error(), "STS returned empty credentials")
+	})
+
+	t.Run("valid result returns credentials", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-process-valid", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		expTime := time.Now().Add(1 * time.Hour)
+		result := &sts.GetSessionTokenOutput{
+			Credentials: &ststypes.Credentials{
+				AccessKeyId:     aws.String("ASIAEXAMPLE"),
+				SecretAccessKey: aws.String("secret"),
+				SessionToken:    aws.String("token"),
+				Expiration:      &expTime,
+			},
+		}
+
+		creds, err := userIdent.processSTSResult(result, "us-west-2")
+		require.NoError(t, err)
+		require.NotNil(t, creds)
+		assert.Equal(t, "ASIAEXAMPLE", creds.AccessKeyID)
+		assert.Equal(t, "secret", creds.SecretAccessKey)
+		assert.Equal(t, "token", creds.SessionToken)
+		assert.Equal(t, "us-west-2", creds.Region)
+		assert.NotEmpty(t, creds.Expiration)
+	})
+
+	t.Run("result without expiration", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-process-no-exp", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		result := &sts.GetSessionTokenOutput{
+			Credentials: &ststypes.Credentials{
+				AccessKeyId:     aws.String("ASIAEXAMPLE"),
+				SecretAccessKey: aws.String("secret"),
+				SessionToken:    aws.String("token"),
+				Expiration:      nil, // No expiration.
+			},
+		}
+
+		creds, err := userIdent.processSTSResult(result, "us-east-1")
+		require.NoError(t, err)
+		require.NotNil(t, creds)
+		assert.Equal(t, "", creds.Expiration, "Expiration should be empty when not provided")
+	})
+}
+
+// TestUserIdentity_PrepareEnvironment tests the PrepareEnvironment function.
+func TestUserIdentity_PrepareEnvironment(t *testing.T) {
+	t.Run("prepares environment variables", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-prepare-env", &schema.Identity{
+			Kind: "aws/user",
+			Credentials: map[string]any{
+				"region": "eu-west-1",
+			},
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		// Call PrepareEnvironment with empty environ.
+		environ := make(map[string]string)
+		result, err := userIdent.PrepareEnvironment(context.Background(), environ)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		// Verify environment variables are set.
+		assert.NotEmpty(t, result["AWS_SHARED_CREDENTIALS_FILE"], "Credentials file should be set")
+		assert.NotEmpty(t, result["AWS_CONFIG_FILE"], "Config file should be set")
+		assert.Equal(t, "test-prepare-env", result["AWS_PROFILE"], "Profile should match identity name")
+		assert.Equal(t, "eu-west-1", result["AWS_REGION"], "Region should be set from config")
+		assert.Equal(t, "eu-west-1", result["AWS_DEFAULT_REGION"], "Default region should be set")
+	})
+
+	t.Run("uses default region when not configured", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-prepare-default-region", &schema.Identity{
+			Kind:        "aws/user",
+			Credentials: map[string]any{},
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		environ := make(map[string]string)
+		result, err := userIdent.PrepareEnvironment(context.Background(), environ)
+		require.NoError(t, err)
+
+		assert.Equal(t, "us-east-1", result["AWS_REGION"], "Should use default region")
+	})
+
+	t.Run("preserves existing environ values", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-prepare-preserve", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		// Pre-populate environ with some values.
+		environ := map[string]string{
+			"EXISTING_VAR": "existing_value",
+		}
+		result, err := userIdent.PrepareEnvironment(context.Background(), environ)
+		require.NoError(t, err)
+
+		// Existing value should be preserved.
+		assert.Equal(t, "existing_value", result["EXISTING_VAR"])
+		// AWS vars should also be set.
+		assert.NotEmpty(t, result["AWS_PROFILE"])
+	})
+}
+
+// TestUserIdentity_PostAuthenticate tests the PostAuthenticate function.
+func TestUserIdentity_PostAuthenticate(t *testing.T) {
+	t.Run("nil params returns error", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-post-nil", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		err = userIdent.PostAuthenticate(context.Background(), nil)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cannot be nil")
+	})
+
+	t.Run("nil credentials returns error", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-post-nil-creds", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		params := &types.PostAuthenticateParams{
+			Credentials: nil,
+		}
+
+		err = userIdent.PostAuthenticate(context.Background(), params)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "credentials are required")
+	})
+}
+
+// TestUserIdentity_WriteAWSFiles tests the writeAWSFiles function.
+func TestUserIdentity_WriteAWSFiles(t *testing.T) {
+	t.Run("writes credentials and config files", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-write-files", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		creds := &types.AWSCredentials{
+			AccessKeyID:     "AKIATEST",
+			SecretAccessKey: "secrettest",
+			SessionToken:    "tokentest",
+		}
+
+		err = userIdent.writeAWSFiles(creds, "us-east-1")
+		require.NoError(t, err)
+
+		// Verify files were created by checking they exist.
+		env, err := identity.Environment()
+		require.NoError(t, err)
+
+		credsFile := env["AWS_SHARED_CREDENTIALS_FILE"]
+		assert.NotEmpty(t, credsFile, "credentials file path should be set")
+		_, err = os.Stat(credsFile)
+		assert.NoError(t, err, "credentials file should exist")
+
+		configFile := env["AWS_CONFIG_FILE"]
+		assert.NotEmpty(t, configFile, "config file path should be set")
+		_, err = os.Stat(configFile)
+		assert.NoError(t, err, "config file should exist")
+	})
+}
+
+// TestUserIdentity_Logout_EdgeCases tests edge cases for the Logout function.
+func TestUserIdentity_Logout_EdgeCases(t *testing.T) {
+	t.Run("handles logout when no files exist", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-logout-no-files", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		// Logout should succeed even if credential files don't exist.
+		// This tests graceful handling of missing files.
+		err = userIdent.Logout(context.Background())
+		assert.NoError(t, err, "logout should succeed even when no files exist")
+	})
+
+	t.Run("removes credential files on logout", func(t *testing.T) {
+		// Create a temp identity and write some files first.
+		identity, err := NewUserIdentity("test-logout-remove", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		// Write some credentials first.
+		creds := &types.AWSCredentials{
+			AccessKeyID:     "AKIALOGOUT",
+			SecretAccessKey: "secretlogout",
+		}
+		err = userIdent.writeAWSFiles(creds, "us-east-1")
+		require.NoError(t, err, "writing credentials should succeed")
+
+		// Now logout - should remove credential files.
+		err = userIdent.Logout(context.Background())
+		assert.NoError(t, err, "logout should succeed after writing files")
+	})
+}
+
+// TestUserIdentity_CredentialsExist_EdgeCases tests edge cases for CredentialsExist.
+func TestUserIdentity_CredentialsExist_EdgeCases(t *testing.T) {
+	t.Run("returns false for empty access key section", func(t *testing.T) {
+		// Create identity and write a credentials file with empty access key.
+		identity, err := NewUserIdentity("test-creds-empty-key", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		// Write credentials with empty access key.
+		creds := &types.AWSCredentials{
+			AccessKeyID:     "", // Empty.
+			SecretAccessKey: "secret",
+		}
+		_ = userIdent.writeAWSFiles(creds, "us-east-1")
+
+		exists, err := userIdent.CredentialsExist()
+		require.NoError(t, err)
+		assert.False(t, exists, "Should return false for empty access key")
+	})
+}
+
+// TestUserIdentity_HandleSTSErrorWithRetry_EdgeCases tests edge cases in handleSTSErrorWithRetry.
+func TestUserIdentity_HandleSTSErrorWithRetry_EdgeCases(t *testing.T) {
+	t.Run("returns error when handleSTSError returns error", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-sts-retry-error", &schema.Identity{
+			Kind: "aws/user",
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		// Create a generic error that will cause handleSTSError to return an error.
+		genericErr := errors.New("network error")
+
+		// Disable prompting.
+		originalPromptFunc := PromptCredentialsFunc
+		PromptCredentialsFunc = nil
+		defer func() { PromptCredentialsFunc = originalPromptFunc }()
+
+		_, err = userIdent.handleSTSErrorWithRetry(context.Background(), genericErr, nil, "us-east-1", false)
+		require.Error(t, err)
+	})
+}
+
+// TestUserIdentity_IsStandaloneAWSUserChain tests the IsStandaloneAWSUserChain function.
+func TestUserIdentity_IsStandaloneAWSUserChain(t *testing.T) {
+	tests := []struct {
+		name       string
+		chain      []string
+		identities map[string]schema.Identity
+		expected   bool
+	}{
+		{
+			name:       "empty chain",
+			chain:      []string{},
+			identities: map[string]schema.Identity{},
+			expected:   false,
+		},
+		{
+			name:  "single aws/user identity",
+			chain: []string{"my-user"},
+			identities: map[string]schema.Identity{
+				"my-user": {Kind: "aws/user"},
+			},
+			expected: true,
+		},
+		{
+			name:  "single non-user identity",
+			chain: []string{"my-role"},
+			identities: map[string]schema.Identity{
+				"my-role": {Kind: "aws/assume-role"},
+			},
+			expected: false,
+		},
+		{
+			name:  "multiple identities in chain",
+			chain: []string{"user", "role"},
+			identities: map[string]schema.Identity{
+				"user": {Kind: "aws/user"},
+				"role": {Kind: "aws/assume-role"},
+			},
+			expected: false,
+		},
+		{
+			name:       "identity not found",
+			chain:      []string{"missing"},
+			identities: map[string]schema.Identity{},
+			expected:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsStandaloneAWSUserChain(tt.chain, tt.identities)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestUserIdentity_AuthenticateStandaloneAWSUser tests the AuthenticateStandaloneAWSUser function.
+func TestUserIdentity_AuthenticateStandaloneAWSUser(t *testing.T) {
+	t.Run("returns error when identity not found", func(t *testing.T) {
+		identities := make(map[string]types.Identity)
+
+		_, err := AuthenticateStandaloneAWSUser(context.Background(), "missing", identities)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "not found")
+	})
+}
+
+// TestUserIdentity_CredentialsFromConfig tests the credentialsFromConfig function.
+func TestUserIdentity_CredentialsFromConfig(t *testing.T) {
+	t.Run("returns nil when no access key", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-config-empty", &schema.Identity{
+			Kind:        "aws/user",
+			Credentials: map[string]any{},
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		creds, err := userIdent.credentialsFromConfig()
+		require.NoError(t, err)
+		assert.Nil(t, creds)
+	})
+
+	t.Run("returns error when access key set but no secret", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-config-partial", &schema.Identity{
+			Kind: "aws/user",
+			Credentials: map[string]any{
+				"access_key_id": "AKIATEST",
+				// No secret_access_key.
+			},
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		creds, err := userIdent.credentialsFromConfig()
+		require.Error(t, err)
+		assert.Nil(t, creds)
+		assert.Contains(t, err.Error(), "secret_access_key is missing")
+	})
+
+	t.Run("returns credentials when both keys present", func(t *testing.T) {
+		identity, err := NewUserIdentity("test-config-full", &schema.Identity{
+			Kind: "aws/user",
+			Credentials: map[string]any{
+				"access_key_id":     "AKIATEST",
+				"secret_access_key": "secrettest",
+				"mfa_arn":           "arn:aws:iam::123:mfa/test",
+			},
+		})
+		require.NoError(t, err)
+
+		userIdent := identity.(*userIdentity)
+
+		creds, err := userIdent.credentialsFromConfig()
+		require.NoError(t, err)
+		require.NotNil(t, creds)
+		assert.Equal(t, "AKIATEST", creds.AccessKeyID)
+		assert.Equal(t, "secrettest", creds.SecretAccessKey)
+		assert.Equal(t, "arn:aws:iam::123:mfa/test", creds.MfaArn)
+	})
 }

@@ -330,7 +330,7 @@ func (m *manager) GetCachedCredentials(ctx context.Context, identityName string)
 // Whoami returns information about the specified identity's credentials.
 // First checks for cached credentials via GetCachedCredentials, then falls back
 // to chain authentication (using cached provider credentials to derive identity credentials).
-// This does NOT trigger interactive authentication flows (no SSO prompts).
+// This does NOT trigger interactive authentication flows (no SSO prompts, no credential prompts).
 func (m *manager) Whoami(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	defer perf.Track(nil, "auth.Manager.Whoami")()
 
@@ -345,7 +345,9 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 	// If cached credentials aren't available, try to authenticate through the chain.
 	// This handles cases where provider credentials exist (e.g., in AWS files)
 	// and can be used to derive the identity credentials without interactive prompts.
-	authInfo, authErr := m.Authenticate(ctx, identityName)
+	// Use a non-interactive context to prevent credential prompts during whoami.
+	nonInteractiveCtx := types.WithAllowPrompts(ctx, false)
+	authInfo, authErr := m.Authenticate(nonInteractiveCtx, identityName)
 	if authErr == nil {
 		log.Debug("Successfully authenticated through chain", logKeyIdentity, identityName)
 		return authInfo, nil
@@ -959,11 +961,16 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 		return nil, fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
 	}
 
-	// Cache provider credentials.
-	if err := m.credentialStore.Store(providerName, credentials); err != nil {
-		log.Debug("Failed to cache provider credentials", "error", err)
+	// Cache provider credentials, but skip session tokens.
+	// Session tokens are temporary and should not overwrite long-lived credentials.
+	if isSessionToken(credentials) {
+		log.Debug("Skipping keyring cache for session token provider credentials", logKeyProvider, providerName)
 	} else {
-		log.Debug("Cached provider credentials", "providerName", providerName)
+		if err := m.credentialStore.Store(providerName, credentials); err != nil {
+			log.Debug("Failed to cache provider credentials", "error", err)
+		} else {
+			log.Debug("Cached provider credentials", "providerName", providerName)
+		}
 	}
 
 	// Run provisioning if provider supports it (non-fatal).
