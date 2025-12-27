@@ -115,6 +115,15 @@ html[data-theme="dark"] .landing-page .section__description > h2 {
   font-weight: 400;
 }
 
+/* Desktop/mobile text variants for eyebrow */
+.hero__eyebrow-desktop {
+  display: inline;
+}
+
+.hero__eyebrow-mobile {
+  display: none;
+}
+
 html[data-theme="dark"] .hero__eyebrow {
   color: #999;
 }
@@ -542,11 +551,20 @@ html[data-theme="dark"] .feature-card p {
     padding: 1.5rem;
   }
 
-  /* Title sized to fit on 2 lines */
+  /* Show short version of eyebrow on mobile */
+  .hero__eyebrow-desktop {
+    display: none;
+  }
+
+  .hero__eyebrow-mobile {
+    display: inline;
+  }
+
+  /* Title sized larger on mobile for better impact */
   .landing-page .intro h1 {
-    font-size: 2.25rem;
-    line-height: 1.2;
-    padding: 0 1rem;
+    font-size: 3.25rem;
+    line-height: 1.15;
+    padding: 0 0.5rem;
   }
 
   /* Keep typing container block with min-width to prevent layout shift */
@@ -565,7 +583,7 @@ html[data-theme="dark"] .feature-card p {
   .hero__cta {
     flex-direction: column;
     align-items: center;
-    gap: 1rem;
+    gap: 0.5rem;
   }
 
   /* Remove main-wrapper margins on mobile */
