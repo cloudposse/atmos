@@ -45,7 +45,7 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 		return fmt.Errorf("%w: no config files found from command line arguments (--config or --config-path)", errUtils.ErrAtmosArgConfigNotFound)
 	}
 
-	if err := v.Unmarshal(atmosConfig); err != nil {
+	if err := v.Unmarshal(atmosConfig, atmosDecodeHook()); err != nil {
 		return err
 	}
 
