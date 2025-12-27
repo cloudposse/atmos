@@ -685,6 +685,9 @@ var (
 	ErrNoVersionsAvailable        = errors.New("no versions available")
 	ErrNoVersionsMatchConstraints = errors.New("no versions match the specified constraints")
 	ErrInvalidSemverConstraint    = errors.New("invalid semantic version constraint")
+	ErrInvalidVendorSource        = errors.New("invalid vendor source configuration")
+	ErrVersionConstraintsFailed   = errors.New("failed to apply version constraints")
+	ErrVendorPullFailed           = errors.New("vendor pull operation failed")
 
 	// Vendor pull errors.
 	ErrVendorConfigNotExist              = errors.New("the '--everything' flag is set, but vendor config file does not exist")
