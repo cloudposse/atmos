@@ -223,6 +223,11 @@ type AuthManager interface {
 	// ListIdentities returns all available identity names.
 	ListIdentities() []string
 
+	// GetIdentityDisplayName returns the display name for an identity, preserving original case.
+	// The lowercaseKey parameter is the internal key (lowercase due to Viper).
+	// Returns the original case name from IdentityCaseMap if available, otherwise returns lowercaseKey.
+	GetIdentityDisplayName(lowercaseKey string) string
+
 	// GetProviderForIdentity returns the root provider name for the given identity.
 	// Recursively resolves through identity chains to find the root provider.
 	GetProviderForIdentity(identityName string) string

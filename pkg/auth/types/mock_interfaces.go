@@ -114,6 +114,20 @@ func (mr *MockProviderMockRecorder) Logout(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockProvider)(nil).Logout), ctx)
 }
 
+// Name mocks base method.
+func (m *MockProvider) Name() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Name")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Name indicates an expected call of Name.
+func (mr *MockProviderMockRecorder) Name() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockProvider)(nil).Name))
+}
+
 // Paths mocks base method.
 func (m *MockProvider) Paths() ([]Path, error) {
 	m.ctrl.T.Helper()
@@ -127,20 +141,6 @@ func (m *MockProvider) Paths() ([]Path, error) {
 func (mr *MockProviderMockRecorder) Paths() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Paths", reflect.TypeOf((*MockProvider)(nil).Paths))
-}
-
-// Name mocks base method.
-func (m *MockProvider) Name() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Name")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// Name indicates an expected call of Name.
-func (mr *MockProviderMockRecorder) Name() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockProvider)(nil).Name))
 }
 
 // PreAuthenticate mocks base method.
@@ -549,6 +549,20 @@ func (m *MockAuthManager) GetIdentities() map[string]schema.Identity {
 func (mr *MockAuthManagerMockRecorder) GetIdentities() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIdentities", reflect.TypeOf((*MockAuthManager)(nil).GetIdentities))
+}
+
+// GetIdentityDisplayName mocks base method.
+func (m *MockAuthManager) GetIdentityDisplayName(lowercaseKey string) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetIdentityDisplayName", lowercaseKey)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetIdentityDisplayName indicates an expected call of GetIdentityDisplayName.
+func (mr *MockAuthManagerMockRecorder) GetIdentityDisplayName(lowercaseKey any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIdentityDisplayName", reflect.TypeOf((*MockAuthManager)(nil).GetIdentityDisplayName), lowercaseKey)
 }
 
 // GetProviderForIdentity mocks base method.
