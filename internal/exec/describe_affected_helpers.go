@@ -167,15 +167,15 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	}
 
 	/*
-		Do not use `defer removeTempDir(tempDir)` right after the temp dir is created, instead call `removeTempDir(tempDir)` at the end of the main function:
+		Do not use `defer RemoveTempDir(tempDir)` right after the temp dir is created, instead call `RemoveTempDir(tempDir)` at the end of the main function:
 		 - On Windows, there are race conditions when using `defer` and goroutines
-		 - We defer removeTempDir(tempDir) right after creating the temp dir
+		 - We defer RemoveTempDir(tempDir) right after creating the temp dir
 		 - We `git clone` a repo into it
 		 - We then start goroutines that read files from the temp dir
-		 - Meanwhile, when the main function exits, defer removeTempDir(...) runs
+		 - Meanwhile, when the main function exits, defer RemoveTempDir(...) runs
 		 - On Windows, open file handles in goroutines make directory deletion flaky or fail entirely (and possibly prematurely delete files while goroutines are mid-read)
 	*/
-	removeTempDir(tempDir)
+	RemoveTempDir(tempDir)
 
 	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
 }
@@ -267,7 +267,7 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 // cleanupWorktree removes a git worktree and its parent temp directory.
 func cleanupWorktree(repoPath, worktreePath string) {
 	g.RemoveWorktree(repoPath, worktreePath)
-	removeTempDir(g.GetWorktreeParentDir(worktreePath))
+	RemoveTempDir(g.GetWorktreeParentDir(worktreePath))
 }
 
 // ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, and processes stack configs

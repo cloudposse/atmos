@@ -955,14 +955,22 @@ type ConfigSources map[string]map[string]ConfigSourcesItem
 // Atmos vendoring (`vendor.yaml` file)
 
 type AtmosVendorSource struct {
-	Component     string   `yaml:"component" json:"component" mapstructure:"component"`
-	Source        string   `yaml:"source" json:"source" mapstructure:"source"`
-	Version       string   `yaml:"version" json:"version" mapstructure:"version"`
-	File          string   `yaml:"file" json:"file" mapstructure:"file"`
-	Targets       []string `yaml:"targets" json:"targets" mapstructure:"targets"`
-	IncludedPaths []string `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
-	ExcludedPaths []string `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
-	Tags          []string `yaml:"tags" json:"tags" mapstructure:"tags"`
+	Component     string             `yaml:"component" json:"component" mapstructure:"component"`
+	Source        string             `yaml:"source" json:"source" mapstructure:"source"`
+	Version       string             `yaml:"version" json:"version" mapstructure:"version"`
+	Constraints   *VendorConstraints `yaml:"constraints,omitempty" json:"constraints,omitempty" mapstructure:"constraints"`
+	File          string             `yaml:"file" json:"file" mapstructure:"file"`
+	Targets       []string           `yaml:"targets" json:"targets" mapstructure:"targets"`
+	IncludedPaths []string           `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
+	ExcludedPaths []string           `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
+	Tags          []string           `yaml:"tags" json:"tags" mapstructure:"tags"`
+}
+
+// VendorConstraints defines version constraints for vendor updates.
+type VendorConstraints struct {
+	Version          string   `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`
+	ExcludedVersions []string `yaml:"excluded_versions,omitempty" json:"excluded_versions,omitempty" mapstructure:"excluded_versions"`
+	NoPrereleases    bool     `yaml:"no_prereleases,omitempty" json:"no_prereleases,omitempty" mapstructure:"no_prereleases"`
 }
 
 type AtmosVendorSpec struct {
