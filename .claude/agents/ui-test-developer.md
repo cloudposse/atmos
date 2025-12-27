@@ -164,7 +164,7 @@ func TestSpinnerModel_View(t *testing.T) {
 **Key points:**
 - Always strip ANSI codes with `ansi.Strip()`
 - Use `strings.Contains()` for flexible matching
-- Test observable behavior, not implementation
+- Test observable behavior, not implementation.
 
 ### Pattern 3: Output Buffering
 
@@ -572,15 +572,11 @@ func TestGenerateSuggestedDirectoryWithTemplateInfo(t *testing.T) {
 ## Relevant Files
 
 **Source:**
-- `/Users/erik/conductor/atmos/.conductor/jakarta/pkg/generator/ui/ui.go` - Main UI code
+- `pkg/generator/ui/ui.go` - Main UI code
 
 **Existing Tests:**
-- `/Users/erik/conductor/atmos/.conductor/jakarta/pkg/generator/ui/ui_test.go` - Helper: `createTestUI(t)`
-- `/Users/erik/conductor/atmos/.conductor/jakarta/pkg/generator/ui/ui_tea_test.go` - TeaTest patterns
-
-**Research:**
-- `/tmp/charmbracelet_research/CHEATSHEET.md` - Quick reference patterns
-- `/tmp/charmbracelet_research/testing_summary.md` - Comprehensive guide
+- `pkg/generator/ui/ui_test.go` - Helper: `createTestUI(t)`
+- `pkg/generator/ui/ui_tea_test.go` - TeaTest patterns
 
 ## Relevant PRDs
 

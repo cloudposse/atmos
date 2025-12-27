@@ -87,10 +87,14 @@ func (ui *ProductionUI) PromptForValue(prompt PromptConfig, defaultValue interfa
 		return ui.promptForInput(prompt, defaultValue)
 	case "confirm":
 		return ui.promptForConfirm(prompt, defaultValue)
+	case "select":
+		return ui.promptForSelect(prompt, defaultValue)
+	case "multiselect":
+		return ui.promptForMultiselect(prompt, defaultValue)
 	default:
 		return nil, errUtils.Build(errUtils.ErrScaffoldInvalidPrompt).
 			WithExplanationf("Unsupported prompt type: %s", prompt.Type).
-			WithHint("Valid types: input, confirm").
+			WithHint("Valid types: input, select, confirm, multiselect").
 			WithContext("type", prompt.Type).
 			Err()
 	}
@@ -165,6 +169,110 @@ func (ui *ProductionUI) promptForConfirm(prompt PromptConfig, defaultValue inter
 	}
 
 	return result, nil
+}
+
+// promptForSelect prompts the user to select one option using huh.
+func (ui *ProductionUI) promptForSelect(prompt PromptConfig, defaultValue interface{}) (interface{}, error) {
+	options := ui.extractOptions(prompt.Options)
+	if len(options) == 0 {
+		return nil, errUtils.Build(errUtils.ErrScaffoldInvalidPrompt).
+			WithExplanation("Select prompt requires options").
+			WithHint("Add options to the prompt configuration").
+			WithContext("prompt", prompt.Name).
+			Err()
+	}
+
+	var result string
+	title := prompt.Name
+	if prompt.Description != "" {
+		title = prompt.Description
+	}
+
+	// Set default value if provided.
+	if defaultValue != nil {
+		result = fmt.Sprintf("%v", defaultValue)
+	}
+
+	selectField := huh.NewSelect[string]().
+		Title(title).
+		Options(huh.NewOptions(options...)...).
+		Value(&result)
+
+	form := huh.NewForm(huh.NewGroup(selectField))
+	if err := form.Run(); err != nil {
+		return nil, errUtils.Build(errUtils.ErrPromptFailed).
+			WithCause(err).
+			WithExplanation("Failed to prompt for selection").
+			WithHint("Interactive prompts require a TTY (terminal)").
+			WithContext("prompt", prompt.Name).
+			Err()
+	}
+
+	return result, nil
+}
+
+// promptForMultiselect prompts the user to select multiple options using huh.
+func (ui *ProductionUI) promptForMultiselect(prompt PromptConfig, defaultValue interface{}) (interface{}, error) {
+	options := ui.extractOptions(prompt.Options)
+	if len(options) == 0 {
+		return nil, errUtils.Build(errUtils.ErrScaffoldInvalidPrompt).
+			WithExplanation("Multiselect prompt requires options").
+			WithHint("Add options to the prompt configuration").
+			WithContext("prompt", prompt.Name).
+			Err()
+	}
+
+	var result []string
+	title := prompt.Name
+	if prompt.Description != "" {
+		title = prompt.Description
+	}
+
+	// Set default values if provided as a slice.
+	if defaultValue != nil {
+		if defaults, ok := defaultValue.([]interface{}); ok {
+			for _, d := range defaults {
+				result = append(result, fmt.Sprintf("%v", d))
+			}
+		} else if defaults, ok := defaultValue.([]string); ok {
+			result = defaults
+		}
+	}
+
+	multiselect := huh.NewMultiSelect[string]().
+		Title(title).
+		Options(huh.NewOptions(options...)...).
+		Value(&result)
+
+	form := huh.NewForm(huh.NewGroup(multiselect))
+	if err := form.Run(); err != nil {
+		return nil, errUtils.Build(errUtils.ErrPromptFailed).
+			WithCause(err).
+			WithExplanation("Failed to prompt for multi-selection").
+			WithHint("Interactive prompts require a TTY (terminal)").
+			WithContext("prompt", prompt.Name).
+			Err()
+	}
+
+	return result, nil
+}
+
+// extractOptions converts prompt options to string slice.
+// Options can be strings or objects with value/label fields.
+func (ui *ProductionUI) extractOptions(rawOptions []interface{}) []string {
+	var options []string
+	for _, opt := range rawOptions {
+		switch v := opt.(type) {
+		case string:
+			options = append(options, v)
+		case map[string]interface{}:
+			// Handle object format: {value: "x", label: "X"}
+			if val, ok := v["value"].(string); ok {
+				options = append(options, val)
+			}
+		}
+	}
+	return options
 }
 
 // Complex rendering.
