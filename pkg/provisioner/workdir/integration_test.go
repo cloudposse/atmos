@@ -80,7 +80,8 @@ func TestProvisionWorkdir_WithProvisionWorkdirEnabled(t *testing.T) {
 	}
 
 	componentConfig := map[string]any{
-		"component": "test-component",
+		"component":   "test-component",
+		"atmos_stack": "dev",
 		"provision": map[string]any{
 			"workdir": map[string]any{
 				"enabled": true,
@@ -92,11 +93,11 @@ func TestProvisionWorkdir_WithProvisionWorkdirEnabled(t *testing.T) {
 	err = ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil)
 	require.NoError(t, err)
 
-	// Verify workdir path was set.
+	// Verify workdir path was set with stack-component naming.
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	assert.True(t, ok, "workdir path should be set")
 	assert.Contains(t, workdirPath, ".workdir")
-	assert.Contains(t, workdirPath, "test-component")
+	assert.Contains(t, workdirPath, "dev-test-component")
 
 	// Verify the workdir was created.
 	_, err = os.Stat(workdirPath)
@@ -128,7 +129,8 @@ func TestService_Provision_WithMockFileSystem(t *testing.T) {
 	}
 
 	componentConfig := map[string]any{
-		"component": "vpc",
+		"component":   "vpc",
+		"atmos_stack": "dev",
 		"provision": map[string]any{
 			"workdir": map[string]any{
 				"enabled": true,
@@ -136,7 +138,8 @@ func TestService_Provision_WithMockFileSystem(t *testing.T) {
 		},
 	}
 
-	expectedWorkdir := filepath.Join(tempDir, ".workdir", "terraform", "vpc")
+	// Expected workdir uses stack-component naming (dev-vpc).
+	expectedWorkdir := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
 	componentPath := filepath.Join(tempDir, "components", "terraform", "vpc")
 
 	// Set up mock expectations.
@@ -154,7 +157,7 @@ func TestService_Provision_WithMockFileSystem(t *testing.T) {
 	err := service.Provision(ctx, atmosConfig, componentConfig)
 	require.NoError(t, err)
 
-	// Verify workdir path was set.
+	// Verify workdir path was set with stack-component naming.
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	assert.True(t, ok)
 	assert.Equal(t, expectedWorkdir, workdirPath)

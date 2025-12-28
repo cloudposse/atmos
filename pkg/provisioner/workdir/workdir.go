@@ -96,16 +96,25 @@ func (s *Service) Provision(
 			Err()
 	}
 
+	// Get stack name for stack-specific workdir path.
+	stack, _ := componentConfig["atmos_stack"].(string)
+	if stack == "" {
+		return errUtils.Build(errUtils.ErrWorkdirProvision).
+			WithExplanation("stack name not found in configuration").
+			WithHint("The 'atmos_stack' field is required for workdir provisioning").
+			Err()
+	}
+
 	_ = ui.Info(fmt.Sprintf("Provisioning workdir for component '%s'", component))
 
-	// 1. Create .workdir/terraform/<component>/ directory.
-	workdirPath, err := s.createWorkdirDirectory(atmosConfig, component)
+	// 1. Create .workdir/terraform/<stack>-<component>/ directory.
+	workdirPath, err := s.createWorkdirDirectory(atmosConfig, stack, component)
 	if err != nil {
 		return err
 	}
 
 	// 2. Copy local component files to workdir.
-	metadata, err := s.copyLocalToWorkdir(atmosConfig, componentConfig, workdirPath, component)
+	metadata, err := s.copyLocalToWorkdir(atmosConfig, componentConfig, workdirPath, component, stack)
 	if err != nil {
 		return err
 	}
@@ -123,7 +132,8 @@ func (s *Service) Provision(
 }
 
 // createWorkdirDirectory creates the workdir directory structure.
-func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration, component string) (string, error) {
+// Uses stack-component naming (e.g., "dev-vpc") for isolation between stacks.
+func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration, stack, component string) (string, error) {
 	defer perf.Track(atmosConfig, "workdir.Service.createWorkdirDirectory")()
 
 	basePath := atmosConfig.BasePath
@@ -131,7 +141,9 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 		basePath = "."
 	}
 
-	workdirPath := filepath.Join(basePath, WorkdirPath, "terraform", component)
+	// Use stack-component naming for proper isolation between stacks.
+	workdirName := fmt.Sprintf("%s-%s", stack, component)
+	workdirPath := filepath.Join(basePath, WorkdirPath, "terraform", workdirName)
 
 	if err := s.fs.MkdirAll(workdirPath, DirPermissions); err != nil {
 		return "", errUtils.Build(errUtils.ErrWorkdirCreation).
@@ -148,7 +160,7 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 func (s *Service) copyLocalToWorkdir(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
-	workdirPath, component string,
+	workdirPath, component, stack string,
 ) (*WorkdirMetadata, error) {
 	defer perf.Track(atmosConfig, "workdir.Service.copyLocalToWorkdir")()
 
@@ -191,6 +203,7 @@ func (s *Service) copyLocalToWorkdir(
 	now := time.Now()
 	return &WorkdirMetadata{
 		Component:   component,
+		Stack:       stack,
 		SourceType:  SourceTypeLocal,
 		Source:      componentPath,
 		CreatedAt:   now,

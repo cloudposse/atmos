@@ -1,8 +1,8 @@
 # PRD: Component Working Directory (Workdir) Provisioner
 
 **Status:** Implemented
-**Version:** 1.1
-**Last Updated:** 2025-12-17
+**Version:** 1.2
+**Last Updated:** 2025-12-28
 **Author:** Erik Osterman
 
 ---
@@ -59,8 +59,9 @@ The Workdir Provisioner is a self-registering provisioner that runs before `terr
 │     │           Workdir Provisioner                    │         │
 │     │                                                  │         │
 │     │  • Check activation (provision.workdir.enabled)  │         │
-│     │  • Create .workdir/terraform/<component>/        │         │
+│     │  • Create .workdir/terraform/<stack>-<component>/│         │
 │     │  • Copy local component to workdir               │         │
+│     │  • Compute content hash for change detection     │         │
 │     │  • Set _workdir_path in componentConfig          │         │
 │     └─────────────────────────────────────────────────┘         │
 │          ↓                                                       │
@@ -71,11 +72,40 @@ The Workdir Provisioner is a self-registering provisioner that runs before `terr
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### Component Architecture
+
+The implementation follows a two-layer architecture:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         CLI Layer                                │
+│                  cmd/terraform/workdir/                          │
+├─────────────────────────────────────────────────────────────────┤
+│  workdir.go          │ Root command and helpers                  │
+│  workdir_list.go     │ List all workdirs                         │
+│  workdir_show.go     │ Show workdir details                      │
+│  workdir_describe.go │ Output workdir as manifest                │
+│  workdir_clean.go    │ Clean workdir(s)                          │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Business Logic Layer                        │
+│                  pkg/provisioner/workdir/                        │
+├─────────────────────────────────────────────────────────────────┤
+│  workdir.go     │ Provisioner with Service pattern              │
+│  clean.go       │ Clean operations                              │
+│  types.go       │ WorkdirMetadata, constants                    │
+│  interfaces.go  │ FileSystem, Hasher, WorkdirManager            │
+│  fs.go          │ Default implementations                       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ### Directory Structure
 
 | Location | Purpose |
 |----------|---------|
-| `.workdir/terraform/<component>/` | Per-project isolated execution directory |
+| `.workdir/terraform/<stack>-<component>/` | Per-stack isolated execution directory |
 
 ---
 
@@ -127,12 +157,77 @@ project/
 │           └── main.tf
 ├── .workdir/                       # Workdir location (gitignored)
 │   └── terraform/
-│       └── vpc/                    # Isolated copy of component
+│       └── dev-vpc/                # Isolated copy for stack 'dev', component 'vpc'
 │           ├── main.tf             # Copied from components/terraform/vpc/
 │           ├── .terraform/         # Isolated terraform directory
 │           └── .workdir-metadata.json
 └── stacks/
     └── dev.yaml
+```
+
+---
+
+## CLI Commands
+
+The workdir feature includes a full CLI for managing working directories:
+
+### Command Overview
+
+```bash
+atmos terraform workdir <subcommand> [options]
+```
+
+### Subcommands
+
+#### List Workdirs
+
+List all working directories in the project.
+
+```bash
+# List in table format (default)
+atmos terraform workdir list
+
+# List in JSON format
+atmos terraform workdir list --format json
+
+# List in YAML format
+atmos terraform workdir list --format yaml
+```
+
+#### Show Workdir Details
+
+Display detailed information about a component's working directory.
+
+```bash
+atmos terraform workdir show vpc --stack dev
+```
+
+Output includes:
+- Component name
+- Stack
+- Source path
+- Workdir path
+- Content hash
+- Created/Updated timestamps
+
+#### Describe Workdir as Manifest
+
+Output the workdir configuration as a valid Atmos stack manifest snippet.
+
+```bash
+atmos terraform workdir describe vpc --stack dev
+```
+
+#### Clean Workdirs
+
+Remove component working directories.
+
+```bash
+# Clean a specific workdir
+atmos terraform workdir clean vpc --stack dev
+
+# Clean all workdirs
+atmos terraform workdir clean --all
 ```
 
 ---
@@ -143,14 +238,53 @@ project/
 
 ```
 pkg/provisioner/workdir/
-├── types.go               # WorkdirMetadata, WorkdirConfig
-├── interfaces.go          # FileSystem, Hasher, PathFilter interfaces
-├── workdir.go             # Main provisioner with init() self-registration
-├── fs.go                  # FileSystem and Hasher implementations
-├── clean.go               # Clean operations for terraform clean command
-├── workdir_test.go        # Unit tests
+├── types.go               # WorkdirMetadata, constants, source types
+├── interfaces.go          # FileSystem, Hasher, WorkdirManager interfaces
+├── workdir.go             # Main provisioner with Service pattern and init() self-registration
+├── fs.go                  # FileSystem and Hasher default implementations
+├── clean.go               # Clean operations (CleanWorkdir, CleanAllWorkdirs, Clean)
+├── workdir_test.go        # Unit tests for provisioner
+├── clean_test.go          # Unit tests for clean operations
 ├── integration_test.go    # Integration tests
-└── mock_interfaces_test.go # Generated mocks
+└── mock_interfaces_test.go # Generated mocks for testing
+
+cmd/terraform/workdir/
+├── workdir.go             # Root command and helpers
+├── workdir_list.go        # List subcommand
+├── workdir_show.go        # Show subcommand
+├── workdir_describe.go    # Describe subcommand
+├── workdir_clean.go       # Clean subcommand
+├── workdir_helpers.go     # Shared helper functions
+├── *_test.go              # Unit tests for each command
+└── mock_workdir_manager_test.go # Generated mocks
+```
+
+### Key Interfaces
+
+```go
+// FileSystem abstracts filesystem operations for testability.
+type FileSystem interface {
+    MkdirAll(path string, perm os.FileMode) error
+    CopyDir(src, dst string) error
+    WriteFile(path string, data []byte, perm os.FileMode) error
+    Exists(path string) bool
+    ReadDir(path string) ([]os.DirEntry, error)
+    ReadFile(path string) ([]byte, error)
+}
+
+// Hasher abstracts hash computation for testability.
+type Hasher interface {
+    HashDir(path string) (string, error)
+}
+
+// WorkdirManager provides workdir operations for CLI commands.
+type WorkdirManager interface {
+    ListWorkdirs(atmosConfig *schema.AtmosConfiguration) ([]WorkdirInfo, error)
+    GetWorkdirInfo(atmosConfig *schema.AtmosConfiguration, component, stack string) (*WorkdirInfo, error)
+    DescribeWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack string) (map[string]any, error)
+    CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack string) error
+    CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error
+}
 ```
 
 ### Self-Registration
@@ -158,13 +292,40 @@ pkg/provisioner/workdir/
 ```go
 // pkg/provisioner/workdir/workdir.go
 
+const HookEventBeforeTerraformInit = provisioner.HookEvent("before.terraform.init")
+
 func init() {
     _ = provisioner.RegisterProvisioner(provisioner.Provisioner{
         Type:      "workdir",
-        HookEvent: provisioner.HookEvent("before.terraform.init"),
+        HookEvent: HookEventBeforeTerraformInit,
         Func:      ProvisionWorkdir,
     })
 }
+```
+
+### Service Pattern
+
+The provisioner uses a Service pattern for dependency injection and testability:
+
+```go
+// Service coordinates workdir provisioning operations.
+type Service struct {
+    fs     FileSystem
+    hasher Hasher
+}
+
+// NewService creates a new workdir service with default implementations.
+func NewService() *Service
+
+// NewServiceWithDeps creates a new workdir service with injected dependencies.
+func NewServiceWithDeps(fs FileSystem, hasher Hasher) *Service
+
+// Provision creates an isolated working directory and populates it with component files.
+func (s *Service) Provision(
+    ctx context.Context,
+    atmosConfig *schema.AtmosConfiguration,
+    componentConfig map[string]any,
+) error
 ```
 
 ### Provisioner Function
@@ -177,9 +338,11 @@ func ProvisionWorkdir(
     authContext *schema.AuthContext,
 ) error {
     // 1. Check activation (provision.workdir.enabled: true)
-    // 2. Create .workdir/terraform/<component>/
+    // 2. Create .workdir/terraform/<stack>-<component>/
     // 3. Copy local component to workdir
-    // 4. Set componentConfig["_workdir_path"]
+    // 4. Compute content hash for change detection
+    // 5. Write metadata file
+    // 6. Set componentConfig["_workdir_path"]
 }
 ```
 
@@ -192,29 +355,6 @@ func ProvisionWorkdir(
 if workdirPath, ok := info.ComponentSection["_workdir_path"].(string); ok && workdirPath != "" {
     componentPath = workdirPath  // Use workdir instead of component path
 }
-```
-
----
-
-## Terraform Clean Command
-
-### Usage
-
-```bash
-# Clean workdir for specific component
-atmos terraform clean vpc -s dev
-
-# Clean all workdirs in project
-atmos terraform clean --all
-```
-
-### Implementation
-
-```go
-// pkg/provisioner/workdir/clean.go
-
-func CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component string) error
-func CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error
 ```
 
 ---
@@ -250,6 +390,10 @@ terraform:
 | `ErrWorkdirMetadata` | Failed to read/write workdir metadata |
 | `ErrWorkdirProvision` | Workdir provisioning failed |
 | `ErrWorkdirClean` | Failed to clean working directory |
+| `ErrSourceDownload` | Failed to download component source |
+| `ErrSourceCacheRead` | Failed to read source cache |
+| `ErrSourceCacheWrite` | Failed to write source cache |
+| `ErrInvalidSource` | Invalid metadata.source configuration |
 
 ---
 
@@ -257,17 +401,27 @@ terraform:
 
 ### Unit Tests
 
-- `TestIsWorkdirEnabled` - Activation detection
-- `TestCleanOptions_Structure` - Options struct validation
-- `TestClean_AllTakesPrecedence` - Precedence behavior
+- `TestIsWorkdirEnabled` - Activation detection from component config
+- `TestExtractComponentName` - Component name extraction priority
+- `TestExtractComponentPath` - Component path resolution
+- `TestCleanWorkdir_Success` - Single workdir cleanup
+- `TestCleanAllWorkdirs_Success` - All workdirs cleanup
+- `TestClean_AllTakesPrecedence` - Precedence behavior when both flags set
 
 ### Integration Tests
 
-- `TestWorkdirProvisionerRegistration` - Provisioner registration
+- `TestWorkdirProvisionerRegistration` - Provisioner registration with registry
 - `TestProvisionWorkdir_NoActivation` - No-op when not activated
 - `TestProvisionWorkdir_WithProvisionWorkdirEnabled` - Local component with workdir
 - `TestService_Provision_WithMockFileSystem` - Mock-based provisioning
-- `TestCleanWorkdir` / `TestCleanAllWorkdirs` - Clean operations
+- `TestCleanWorkdir` / `TestCleanAllWorkdirs` - Clean operations with permission tests
+
+### CLI Command Tests
+
+- `TestListCmd_*` - List command output formats (table, JSON, YAML)
+- `TestShowCmd_*` - Show command output and error handling
+- `TestDescribeCmd_*` - Describe command manifest output
+- `TestCleanCmd_*` - Clean command validation and execution
 
 ---
 
@@ -285,7 +439,7 @@ terraform:
 
 - [ ] `--refresh-workdir` flag to force re-copy
 - [ ] Workdir lock files for concurrent access
-- [ ] Content hash comparison to skip unchanged files
+- [ ] Skip unchanged files using content hash comparison (hash infrastructure implemented)
 
 ### Not Planned
 
@@ -298,4 +452,3 @@ terraform:
 ## References
 
 - [Backend Provisioner PRD](backend-provisioner.md)
-- [Source Provisioner](https://github.com/osterman/source-provisioner) (for remote source downloading)

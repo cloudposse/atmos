@@ -269,6 +269,7 @@ var (
 	ErrInvalidComponentProviders              = errors.New("invalid component providers section")
 	ErrInvalidComponentHooks                  = errors.New("invalid component hooks section")
 	ErrInvalidComponentAuth                   = errors.New("invalid component auth section")
+	ErrInvalidComponentProvision              = errors.New("invalid component provision section")
 	ErrInvalidComponentMetadata               = errors.New("invalid component metadata section")
 	ErrInvalidComponentBackendType            = errors.New("invalid component backend_type attribute")
 	ErrInvalidComponentBackend                = errors.New("invalid component backend section")

@@ -85,7 +85,7 @@ components:
 
 When `provision.workdir.enabled: true` is set, Atmos:
 
-1. Creates `.workdir/terraform/<component>/` before `terraform init`
+1. Creates `.workdir/terraform/<stack>-<component>/` before `terraform init`
 2. Copies the component files to the workdir
 3. Runs all Terraform commands in the isolated directory
 4. Keeps the original component directory pristine
@@ -126,13 +126,10 @@ Workdirs are ephemeral and can be cleaned up at any time:
 
 ```bash
 # Clean workdir for a specific component
-atmos terraform clean vpc -s dev
+atmos terraform workdir clean vpc --stack dev
 
 # Clean all workdirs in the project
-atmos terraform clean --all
-
-# Clean the source cache (for remote sources)
-atmos terraform clean --cache
+atmos terraform workdir clean --all
 ```
 
 The `.workdir/` directory should be added to your `.gitignore`:

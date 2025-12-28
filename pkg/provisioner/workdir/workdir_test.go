@@ -301,7 +301,8 @@ func TestServiceProvision_MkdirFails(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	componentConfig := map[string]any{
-		"component": "vpc",
+		"component":   "vpc",
+		"atmos_stack": "dev",
 		"provision": map[string]any{
 			"workdir": map[string]any{
 				"enabled": true,
@@ -328,7 +329,8 @@ func TestServiceProvision_SourceNotExists(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	componentConfig := map[string]any{
-		"component": "vpc",
+		"component":   "vpc",
+		"atmos_stack": "dev",
 		"provision": map[string]any{
 			"workdir": map[string]any{
 				"enabled": true,
@@ -356,7 +358,8 @@ func TestServiceProvision_CopyDirFails(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	componentConfig := map[string]any{
-		"component": "vpc",
+		"component":   "vpc",
+		"atmos_stack": "dev",
 		"provision": map[string]any{
 			"workdir": map[string]any{
 				"enabled": true,
@@ -386,7 +389,8 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	componentConfig := map[string]any{
-		"component": "vpc",
+		"component":   "vpc",
+		"atmos_stack": "dev",
 		"provision": map[string]any{
 			"workdir": map[string]any{
 				"enabled": true,
@@ -418,7 +422,8 @@ func TestServiceProvision_WriteMetadataFails(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	componentConfig := map[string]any{
-		"component": "vpc",
+		"component":   "vpc",
+		"atmos_stack": "dev",
 		"provision": map[string]any{
 			"workdir": map[string]any{
 				"enabled": true,
@@ -448,7 +453,8 @@ func TestServiceProvision_Success(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	componentConfig := map[string]any{
-		"component": "vpc",
+		"component":   "vpc",
+		"atmos_stack": "dev",
 		"provision": map[string]any{
 			"workdir": map[string]any{
 				"enabled": true,
@@ -479,6 +485,7 @@ func TestServiceProvision_ComponentPathFromConfig(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
 	componentConfig := map[string]any{
 		"component":      "vpc",
+		"atmos_stack":    "dev",
 		"component_path": "/custom/path/to/component",
 		"provision": map[string]any{
 			"workdir": map[string]any{
@@ -509,7 +516,8 @@ func TestServiceProvision_EmptyBasePath(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: ""}
 	componentConfig := map[string]any{
-		"component": "vpc",
+		"component":   "vpc",
+		"atmos_stack": "dev",
 		"provision": map[string]any{
 			"workdir": map[string]any{
 				"enabled": true,
@@ -851,4 +859,273 @@ func TestDefaultHasher_HashDir_Deterministic(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, hash1, hash2)
+}
+
+// TestServiceProvision_ComponentNameSources tests component name extraction from
+// different sources (metadata vs vars).
+func TestServiceProvision_ComponentNameSources(t *testing.T) {
+	tests := []struct {
+		name            string
+		componentConfig map[string]any
+		expectedInPath  string
+	}{
+		{
+			name: "component from metadata",
+			componentConfig: map[string]any{
+				"metadata": map[string]any{
+					"component": "vpc-from-metadata",
+				},
+				"atmos_stack": "dev",
+				"provision": map[string]any{
+					"workdir": map[string]any{
+						"enabled": true,
+					},
+				},
+			},
+			expectedInPath: "dev-vpc-from-metadata",
+		},
+		{
+			name: "component from vars fallback",
+			componentConfig: map[string]any{
+				"vars": map[string]any{
+					"component": "vpc-from-vars",
+				},
+				"atmos_stack": "dev",
+				"provision": map[string]any{
+					"workdir": map[string]any{
+						"enabled": true,
+					},
+				},
+			},
+			expectedInPath: "dev-vpc-from-vars",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockFS := NewMockFileSystem(ctrl)
+			mockHasher := NewMockHasher(ctrl)
+
+			mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
+			mockFS.EXPECT().Exists(gomock.Any()).Return(true)
+			mockFS.EXPECT().CopyDir(gomock.Any(), gomock.Any()).Return(nil)
+			mockHasher.EXPECT().HashDir(gomock.Any()).Return("abc123", nil)
+			mockFS.EXPECT().WriteFile(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+
+			service := NewServiceWithDeps(mockFS, mockHasher)
+			atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
+
+			err := service.Provision(context.Background(), atmosConfig, tt.componentConfig)
+			require.NoError(t, err)
+			assert.Contains(t, tt.componentConfig[WorkdirPathKey], tt.expectedInPath)
+		})
+	}
+}
+
+// TestServiceProvision_MissingStackName tests error when atmos_stack is missing.
+func TestServiceProvision_MissingStackName(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
+	componentConfig := map[string]any{
+		"component": "vpc",
+		// Missing atmos_stack
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
+}
+
+// TestServiceProvision_ComponentKeyNotString tests when component key exists but is not a string.
+func TestServiceProvision_ComponentKeyNotString(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+
+	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().Exists(gomock.Any()).Return(true)
+	mockFS.EXPECT().CopyDir(gomock.Any(), gomock.Any()).Return(nil)
+	mockHasher.EXPECT().HashDir(gomock.Any()).Return("abc123", nil)
+	mockFS.EXPECT().WriteFile(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
+	// Component key is an int, not string - should fallback to metadata.
+	componentConfig := map[string]any{
+		"component": 123, // Not a string.
+		"metadata": map[string]any{
+			"component": "vpc-fallback",
+		},
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	require.NoError(t, err)
+	assert.Contains(t, componentConfig[WorkdirPathKey], "dev-vpc-fallback")
+}
+
+// TestDefaultHasher_HashDir_WithSubdirectories tests hashing with nested directories.
+func TestDefaultHasher_HashDir_WithSubdirectories(t *testing.T) {
+	tmpDir := t.TempDir()
+	hasher := NewDefaultHasher()
+
+	// Create nested directory structure.
+	require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, "sub1", "sub2"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "root.txt"), []byte("root"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "sub1", "file1.txt"), []byte("file1"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "sub1", "sub2", "file2.txt"), []byte("file2"), 0o644))
+
+	hash, err := hasher.HashDir(tmpDir)
+	require.NoError(t, err)
+	assert.NotEmpty(t, hash)
+	assert.Len(t, hash, 64) // SHA256 hex is 64 chars.
+}
+
+// TestExtractComponentName_EmptyStrings tests extraction with empty string values.
+func TestExtractComponentName_EmptyStrings(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   map[string]any
+		expected string
+	}{
+		{
+			name: "empty component string in root",
+			config: map[string]any{
+				"component": "",
+				"metadata": map[string]any{
+					"component": "from-metadata",
+				},
+			},
+			expected: "from-metadata",
+		},
+		{
+			name: "empty component in metadata, falls back to vars",
+			config: map[string]any{
+				"metadata": map[string]any{
+					"component": "",
+				},
+				"vars": map[string]any{
+					"component": "from-vars",
+				},
+			},
+			expected: "from-vars",
+		},
+		{
+			name: "all empty returns empty",
+			config: map[string]any{
+				"component": "",
+				"metadata": map[string]any{
+					"component": "",
+				},
+				"vars": map[string]any{
+					"component": "",
+				},
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractComponentName(tt.config)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestExtractComponentName_InvalidTypes tests extraction with wrong types.
+func TestExtractComponentName_InvalidTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   map[string]any
+		expected string
+	}{
+		{
+			name: "metadata is not a map",
+			config: map[string]any{
+				"metadata": "not-a-map",
+				"vars": map[string]any{
+					"component": "from-vars",
+				},
+			},
+			expected: "from-vars",
+		},
+		{
+			name: "vars is not a map",
+			config: map[string]any{
+				"vars": "not-a-map",
+			},
+			expected: "",
+		},
+		{
+			name: "component in metadata is not a string",
+			config: map[string]any{
+				"metadata": map[string]any{
+					"component": 123,
+				},
+				"vars": map[string]any{
+					"component": "from-vars",
+				},
+			},
+			expected: "from-vars",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractComponentName(tt.config)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestDefaultFileSystem_CopyDir_NotFound tests CopyDir with non-existent source.
+func TestDefaultFileSystem_CopyDir_NotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	fs := NewDefaultFileSystem()
+
+	err := fs.CopyDir("/nonexistent/source", filepath.Join(tmpDir, "dst"))
+	assert.Error(t, err)
+}
+
+// TestDefaultFileSystem_Walk_Error tests Walk with error callback.
+func TestDefaultFileSystem_Walk_Error(t *testing.T) {
+	tmpDir := t.TempDir()
+	fs := NewDefaultFileSystem()
+
+	// Create some files.
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte("test"), 0o644))
+
+	// Walk with an error-returning callback.
+	expectedErr := errors.New("walk error")
+	err := fs.Walk(tmpDir, func(path string, d os.DirEntry, err error) error {
+		if !d.IsDir() {
+			return expectedErr
+		}
+		return nil
+	})
+	assert.ErrorIs(t, err, expectedErr)
 }

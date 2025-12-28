@@ -28,6 +28,10 @@ that matches the stack manifest structure.`,
 		component := args[0]
 
 		v := viper.GetViper()
+		// Bind flags to viper at runtime to ensure flag values are available.
+		if err := describeParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
 		stack := v.GetString("stack")
 
 		if stack == "" {

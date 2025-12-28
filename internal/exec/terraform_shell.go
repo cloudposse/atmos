@@ -2,9 +2,9 @@ package exec
 
 import (
 	"context"
-	"fmt"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
@@ -67,7 +67,10 @@ func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfigur
 
 	err = provisioner.ExecuteProvisioners(ctx, provisioner.HookEvent(beforeTerraformInitEvent), atmosConfig, info.ComponentSection, info.AuthContext)
 	if err != nil {
-		return fmt.Errorf("provisioner execution failed: %w", err)
+		return errUtils.Build(errUtils.ErrProvisionerFailed).
+			WithCause(err).
+			WithExplanation("provisioner execution failed before terraform shell").
+			Err()
 	}
 
 	// Check if workdir provisioner set a workdir path - if so, use it instead of the component path.

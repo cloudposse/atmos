@@ -30,6 +30,10 @@ var listCmd = &cobra.Command{
 		defer perf.Track(atmosConfigPtr, "workdir.list.RunE")()
 
 		v := viper.GetViper()
+		// Bind flags to viper at runtime to ensure flag values are available.
+		if err := listParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
 		format := v.GetString("format")
 
 		// Initialize config with global flags (--base-path, --config, etc.).

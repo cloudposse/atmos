@@ -71,6 +71,7 @@ type ComponentProcessorResult struct {
 	ComponentProviders                     map[string]any
 	ComponentHooks                         map[string]any
 	ComponentAuth                          map[string]any
+	ComponentProvision                     map[string]any
 	ComponentBackendType                   string
 	ComponentBackendSection                map[string]any
 	ComponentRemoteStateBackendType        string
