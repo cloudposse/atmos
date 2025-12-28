@@ -1,4 +1,4 @@
-package cmd
+package auth
 
 import (
 	"context"
@@ -9,12 +9,14 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -24,6 +26,9 @@ import (
 
 //go:embed markdown/atmos_auth_logout_usage.md
 var authLogoutUsageMarkdown string
+
+// logoutParser handles flags for the logout command.
+var logoutParser *flags.StandardParser
 
 // authLogoutCmd logs out by removing local credentials.
 var authLogoutCmd = &cobra.Command{
@@ -41,8 +46,32 @@ may still be active. Works with all cloud providers (AWS, Azure, GCP, etc.).`,
 
 	Example:            authLogoutUsageMarkdown,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	ValidArgsFunction:  identityArgCompletion,
+	ValidArgsFunction:  IdentityArgCompletion,
 	RunE:               executeAuthLogoutCommand,
+}
+
+func init() {
+	defer perf.Track(nil, "auth.logout.init")()
+
+	// Create parser with logout-specific flags.
+	logoutParser = flags.NewStandardParser(
+		flags.WithStringFlag("provider", "", "", "Logout from specific provider"),
+		flags.WithBoolFlag("all", "", false, "Logout from all identities and providers"),
+		flags.WithBoolFlag("dry-run", "", false, "Preview what would be removed without deleting"),
+		flags.WithBoolFlag("keychain", "", false, "Also remove credentials from system keychain (destructive, requires confirmation)"),
+		flags.WithBoolFlag("force", "", false, "Skip confirmation prompts (useful for CI/CD)"),
+	)
+
+	// Register flags with the command.
+	logoutParser.RegisterFlags(authLogoutCmd)
+
+	// Bind to Viper for environment variable support.
+	if err := logoutParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Add to parent command.
+	authCmd.AddCommand(authLogoutCmd)
 }
 
 func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
@@ -54,26 +83,32 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
 
-	defer perf.Track(&atmosConfig, "cmd.executeAuthLogoutCommand")()
+	defer perf.Track(&atmosConfig, "auth.executeAuthLogoutCommand")()
+
+	// Bind parsed flags to Viper for precedence.
+	v := viper.GetViper()
+	if err := logoutParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
 
 	// Create auth manager.
-	authManager, err := createAuthManager(&atmosConfig.Auth)
+	authManager, err := CreateAuthManager(&atmosConfig.Auth)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthManager, err)
 	}
 
 	// Get flags.
-	providerFlag, _ := cmd.Flags().GetString("provider")
-	allFlag, _ := cmd.Flags().GetBool("all")
-	dryRun, _ := cmd.Flags().GetBool("dry-run")
-	deleteKeychain, _ := cmd.Flags().GetBool("keychain")
-	force, _ := cmd.Flags().GetBool("force")
+	providerFlag := v.GetString("provider")
+	allFlag := v.GetBool("all")
+	dryRun := v.GetBool("dry-run")
+	deleteKeychain := v.GetBool("keychain")
+	force := v.GetBool("force")
 
 	// Get identity from flag or positional argument.
 	// Note: "identity" is a persistent flag on parent authCmd, so it's automatically available.
-	identityFlag := ""
-	if flag := cmd.Flag("identity"); flag != nil {
-		identityFlag = flag.Value.String()
+	identityFlag := GetIdentityFromFlags(cmd)
+	if identityFlag == "" {
+		identityFlag = v.GetString(IdentityFlagName)
 	}
 
 	ctx := context.Background()
@@ -124,6 +159,8 @@ func buildKeychainDeletionMessage(identityOrProvider string) string {
 // confirmKeychainDeletion shows interactive Huh confirmation when --keychain is used in TTY.
 // Returns true if user confirms, false if cancelled or in non-TTY without --force.
 func confirmKeychainDeletion(identityOrProvider string, force bool, isTTY bool) (bool, error) {
+	defer perf.Track(nil, "auth.confirmKeychainDeletion")()
+
 	// If force flag is set, skip confirmation.
 	if force {
 		return true, nil
@@ -169,6 +206,8 @@ func confirmKeychainDeletion(identityOrProvider string, force bool, isTTY bool) 
 // Note: These are external provider-specific env vars (GCP, Azure, AWS), not Atmos configuration.
 // They are checked read-only to detect if external credentials are still in use.
 func detectExternalCredentials() []string {
+	defer perf.Track(nil, "auth.detectExternalCredentials")()
+
 	var warnings []string
 
 	//nolint:forbidigo // Check for external provider env vars that may still be active.
@@ -194,6 +233,8 @@ func detectExternalCredentials() []string {
 
 // displayExternalCredentialWarnings shows warnings about external credentials.
 func displayExternalCredentialWarnings() {
+	defer perf.Track(nil, "auth.displayExternalCredentialWarnings")()
+
 	warnings := detectExternalCredentials()
 
 	if len(warnings) == 0 {
@@ -211,6 +252,8 @@ func displayExternalCredentialWarnings() {
 
 // performIdentityLogout removes credentials for a specific identity.
 func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, identityName string, dryRun bool, deleteKeychain bool, force bool) error { //nolint:gocognit,revive
+	defer perf.Track(nil, "auth.performIdentityLogout")()
+
 	// Validate identity exists.
 	identities := authManager.GetIdentities()
 	if _, exists := identities[identityName]; !exists {
@@ -283,6 +326,8 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 
 // performProviderLogout removes credentials for a specific provider.
 func performProviderLogout(ctx context.Context, authManager auth.AuthManager, providerName string, dryRun bool, deleteKeychain bool, force bool) error { //nolint:funlen,revive
+	defer perf.Track(nil, "auth.performProviderLogout")()
+
 	// Validate provider exists.
 	providers := authManager.GetProviders()
 	if _, exists := providers[providerName]; !exists {
@@ -366,6 +411,8 @@ type logoutOption struct {
 // buildLogoutOptions creates the list of logout options from identities and providers.
 // This is a pure function that can be easily tested.
 func buildLogoutOptions(identities map[string]schema.Identity, providers map[string]schema.Provider) []logoutOption {
+	defer perf.Track(nil, "auth.buildLogoutOptions")()
+
 	var options []logoutOption
 
 	// Add identity options.
@@ -399,6 +446,8 @@ func buildLogoutOptions(identities map[string]schema.Identity, providers map[str
 // executeLogoutOption executes the selected logout action.
 // This is a pure routing function that can be easily tested.
 func executeLogoutOption(ctx context.Context, authManager auth.AuthManager, option logoutOption, dryRun bool, deleteKeychain bool, force bool) error { //nolint:revive
+	defer perf.Track(nil, "auth.executeLogoutOption")()
+
 	switch option.typ {
 	case "identity":
 		return performIdentityLogout(ctx, authManager, option.target, dryRun, deleteKeychain, force)
@@ -413,6 +462,8 @@ func executeLogoutOption(ctx context.Context, authManager auth.AuthManager, opti
 
 // performInteractiveLogout prompts user to choose what to logout.
 func performInteractiveLogout(ctx context.Context, authManager auth.AuthManager, dryRun bool, deleteKeychain bool, force bool) error {
+	defer perf.Track(nil, "auth.performInteractiveLogout")()
+
 	identities := authManager.GetIdentities()
 	providers := authManager.GetProviders()
 
@@ -449,6 +500,8 @@ func performInteractiveLogout(ctx context.Context, authManager auth.AuthManager,
 }
 
 func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun bool, deleteKeychain bool, force bool) error {
+	defer perf.Track(nil, "auth.performLogoutAll")()
+
 	if dryRun {
 		u.PrintfMarkdownToTUI("**Dry run mode:** No credentials will be removed\n\n")
 		u.PrintfMarkdownToTUI("**Would remove:**\n")
@@ -511,6 +564,8 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 
 // displayBrowserWarning shows a warning about browser sessions.
 func displayBrowserWarning() {
+	defer perf.Track(nil, "auth.displayBrowserWarning")()
+
 	// Check if warning has been shown before using cache.
 	cache, err := cfg.LoadCache()
 	if err == nil && cache.BrowserSessionWarningShown {
@@ -526,13 +581,4 @@ func displayBrowserWarning() {
 	if err := cfg.SaveCache(cache); err != nil {
 		log.Debug("Failed to save browser warning shown flag to cache", "error", err)
 	}
-}
-
-func init() {
-	authLogoutCmd.Flags().String("provider", "", "Logout from specific provider")
-	authLogoutCmd.Flags().Bool("all", false, "Logout from all identities and providers")
-	authLogoutCmd.Flags().Bool("dry-run", false, "Preview what would be removed without deleting")
-	authLogoutCmd.Flags().Bool("keychain", false, "Also remove credentials from system keychain (destructive, requires confirmation)")
-	authLogoutCmd.Flags().Bool("force", false, "Skip confirmation prompts (useful for CI/CD)")
-	authCmd.AddCommand(authLogoutCmd)
 }

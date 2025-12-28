@@ -1,4 +1,4 @@
-package cmd
+package auth
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsAuth "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -17,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -27,18 +29,13 @@ import (
 
 const (
 	// ConsoleLabelWidth is the width for label styling in console output.
-	consoleLabelWidth = 18
+	ConsoleLabelWidth = 18
 	// ConsoleOutputFormat is the format string for label-value pairs.
-	consoleOutputFormat = "%s %s\n"
+	ConsoleOutputFormat = "%s %s\n"
 )
 
-var (
-	consoleDestination string
-	consoleDuration    time.Duration
-	consoleIssuer      string
-	consolePrintOnly   bool
-	consoleSkipOpen    bool
-)
+// consoleParser handles flags for the console command.
+var consoleParser *flags.StandardParser
 
 //go:embed markdown/atmos_auth_console_usage.md
 var authConsoleUsageMarkdown string
@@ -57,10 +54,61 @@ that implement console access.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 }
 
+func init() {
+	defer perf.Track(nil, "auth.console.init")()
+
+	// Create parser with console-specific flags.
+	consoleParser = flags.NewStandardParser(
+		flags.WithStringFlag("destination", "", "", "Console page to navigate to. Supports full URLs or shorthand aliases like 's3', 'ec2', 'lambda', etc."),
+		flags.WithStringFlag("duration", "", "1h", "Console session duration (provider may have max limits)"),
+		flags.WithStringFlag("issuer", "", "atmos", "Issuer identifier for the console session (AWS only)"),
+		flags.WithBoolFlag("print-only", "", false, "Print the console URL to stdout without opening browser"),
+		flags.WithBoolFlag("no-open", "", false, "Generate URL but don't open browser automatically"),
+	)
+
+	// Register flags with the command.
+	consoleParser.RegisterFlags(authConsoleCmd)
+
+	// Bind to Viper for environment variable support.
+	if err := consoleParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Register autocomplete for destination flag (AWS service aliases).
+	if err := authConsoleCmd.RegisterFlagCompletionFunc("destination", destinationFlagCompletion); err != nil {
+		log.Trace("Failed to register destination flag completion", "error", err)
+	}
+
+	// Register autocomplete for identity flag.
+	AddIdentityCompletion(authConsoleCmd)
+
+	// Add to parent command.
+	authCmd.AddCommand(authConsoleCmd)
+}
+
 func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
-	defer perf.Track(nil, "cmd.executeAuthConsoleCommand")()
+	defer perf.Track(nil, "auth.executeAuthConsoleCommand")()
 
 	handleHelpRequest(cmd, args)
+
+	// Bind parsed flags to Viper for precedence.
+	v := viper.GetViper()
+	if err := consoleParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
+	// Get flag values.
+	destination := v.GetString("destination")
+	durationStr := v.GetString("duration")
+	issuer := v.GetString("issuer")
+	printOnly := v.GetBool("print-only")
+	skipOpen := v.GetBool("no-open")
+
+	// Parse duration.
+	duration, err := time.ParseDuration(durationStr)
+	if err != nil {
+		return fmt.Errorf("%w: invalid duration: %w", errUtils.ErrAuthConsole, err)
+	}
 
 	// Initialize auth manager.
 	authManager, err := initializeAuthManager()
@@ -69,7 +117,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get identity name.
-	identityName, err := resolveIdentityName(cmd, authManager)
+	identityName, err := resolveIdentityName(cmd, v, authManager)
 	if err != nil {
 		return err
 	}
@@ -104,40 +152,42 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Resolve session duration (flag takes precedence over provider config).
-	sessionDuration, err := resolveConsoleDuration(cmd, authManager, whoami.Provider)
+	sessionDuration, err := resolveConsoleDuration(cmd, authManager, whoami.Provider, duration)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthConsole, err)
 	}
 
 	// Generate console URL.
 	options := types.ConsoleURLOptions{
-		Destination:     consoleDestination,
+		Destination:     destination,
 		SessionDuration: sessionDuration,
-		Issuer:          consoleIssuer,
-		OpenInBrowser:   !consoleSkipOpen && !consolePrintOnly,
+		Issuer:          issuer,
+		OpenInBrowser:   !skipOpen && !printOnly,
 	}
 
-	consoleURL, duration, err := consoleProvider.GetConsoleURL(ctx, creds, options)
+	consoleURL, consoleDuration, err := consoleProvider.GetConsoleURL(ctx, creds, options)
 	if err != nil {
 		return fmt.Errorf("%w: failed to generate console URL for identity %q: %w", errUtils.ErrAuthConsole, identityName, err)
 	}
 
-	if consolePrintOnly {
+	if printOnly {
 		// Print to stdout for piping.
 		fmt.Println(consoleURL)
 		return nil
 	}
 
 	// Print formatted output and handle browser opening.
-	printConsoleInfo(whoami, duration, false, "")
-	handleBrowserOpen(consoleURL)
+	printConsoleInfo(whoami, consoleDuration, false, "")
+	handleBrowserOpen(consoleURL, skipOpen)
 
 	return nil
 }
 
 // handleBrowserOpen handles opening the console URL in the browser or displaying it.
-func handleBrowserOpen(consoleURL string) {
-	if !consoleSkipOpen && !telemetry.IsCI() {
+func handleBrowserOpen(consoleURL string, skipOpen bool) {
+	defer perf.Track(nil, "auth.handleBrowserOpen")()
+
+	if !skipOpen && !telemetry.IsCI() {
 		fmt.Fprintf(os.Stderr, "\n")
 		if err := u.OpenUrl(consoleURL); err != nil {
 			// Show URL on error so user can manually open it.
@@ -158,27 +208,29 @@ func handleBrowserOpen(consoleURL string) {
 
 // printConsoleInfo prints formatted console information using lipgloss.
 func printConsoleInfo(whoami *types.WhoamiInfo, duration time.Duration, showURL bool, consoleURL string) {
+	defer perf.Track(nil, "auth.printConsoleInfo")()
+
 	// Define styles.
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan)).Bold(true)
-	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)).Width(consoleLabelWidth)
+	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)).Width(ConsoleLabelWidth)
 	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorWhite))
 
 	// Print header.
 	fmt.Fprintf(os.Stderr, "\n%s\n\n", headerStyle.Render("Console URL Generated"))
 
 	// Print fields.
-	fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Provider:"), valueStyle.Render(whoami.Provider))
-	fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Identity:"), valueStyle.Render(whoami.Identity))
+	fmt.Fprintf(os.Stderr, ConsoleOutputFormat, labelStyle.Render("Provider:"), valueStyle.Render(whoami.Provider))
+	fmt.Fprintf(os.Stderr, ConsoleOutputFormat, labelStyle.Render("Identity:"), valueStyle.Render(whoami.Identity))
 
 	if whoami.Account != "" {
-		fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Account:"), valueStyle.Render(whoami.Account))
+		fmt.Fprintf(os.Stderr, ConsoleOutputFormat, labelStyle.Render("Account:"), valueStyle.Render(whoami.Account))
 	}
 
 	if duration > 0 {
 		// Calculate expiration time.
 		expiresAt := time.Now().Add(duration)
-		fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Session Duration:"), valueStyle.Render(duration.String()))
-		fmt.Fprintf(os.Stderr, consoleOutputFormat, labelStyle.Render("Session Expires:"), valueStyle.Render(expiresAt.Format("2006-01-02 15:04:05 MST")))
+		fmt.Fprintf(os.Stderr, ConsoleOutputFormat, labelStyle.Render("Session Duration:"), valueStyle.Render(duration.String()))
+		fmt.Fprintf(os.Stderr, ConsoleOutputFormat, labelStyle.Render("Session Expires:"), valueStyle.Render(expiresAt.Format("2006-01-02 15:04:05 MST")))
 	}
 
 	// Only print URL if requested (for error cases or --no-open).
@@ -189,6 +241,8 @@ func printConsoleInfo(whoami *types.WhoamiInfo, duration time.Duration, showURL 
 
 // printConsoleURL prints the console URL in a formatted way.
 func printConsoleURL(consoleURL string) {
+	defer perf.Track(nil, "auth.printConsoleURL")()
+
 	labelStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
 	urlStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
 	fmt.Fprintf(os.Stderr, "\n%s\n%s\n", labelStyle.Render("Console URL:"), urlStyle.Render(consoleURL))
@@ -196,7 +250,7 @@ func printConsoleURL(consoleURL string) {
 
 // getConsoleProvider returns a ConsoleAccessProvider for the given identity.
 func getConsoleProvider(authManager types.AuthManager, identityName string) (types.ConsoleAccessProvider, error) {
-	defer perf.Track(nil, "cmd.getConsoleProvider")()
+	defer perf.Track(nil, "auth.getConsoleProvider")()
 
 	// Get provider kind for the identity.
 	providerKind, err := authManager.GetProviderKindForIdentity(identityName)
@@ -223,14 +277,14 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 
 // initializeAuthManager loads config and creates the auth manager.
 func initializeAuthManager() (types.AuthManager, error) {
-	defer perf.Track(nil, "cmd.initializeAuthManager")()
+	defer perf.Track(nil, "auth.initializeAuthManager")()
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
 	}
 
-	authManager, err := createAuthManager(&atmosConfig.Auth)
+	authManager, err := CreateAuthManager(&atmosConfig.Auth)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrAuthConsole, err)
 	}
@@ -239,15 +293,16 @@ func initializeAuthManager() (types.AuthManager, error) {
 }
 
 // resolveIdentityName gets identity from flag or uses default.
-func resolveIdentityName(cmd *cobra.Command, authManager types.AuthManager) (string, error) {
-	defer perf.Track(nil, "cmd.resolveIdentityName")()
+func resolveIdentityName(cmd *cobra.Command, v *viper.Viper, authManager types.AuthManager) (string, error) {
+	defer perf.Track(nil, "auth.resolveIdentityName")()
 
 	// Get identity from flag or use default.
-	// Use GetIdentityFromFlags which handles Cobra's NoOptDefVal quirk correctly.
-	// When --identity flag has NoOptDefVal set, using "--identity value" (space-separated)
-	// causes Cobra to interpret it as "--identity" (with NoOptDefVal) plus "value" as positional arg.
-	// GetIdentityFromFlags works around this by also parsing os.Args directly.
-	identityName := GetIdentityFromFlags(cmd, os.Args)
+	identityName := GetIdentityFromFlags(cmd)
+
+	// If flag wasn't provided, check Viper for env var fallback.
+	if identityName == "" {
+		identityName = v.GetString(IdentityFlagName)
+	}
 
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue
@@ -270,7 +325,7 @@ func resolveIdentityName(cmd *cobra.Command, authManager types.AuthManager) (str
 
 // retrieveCredentials retrieves credentials from whoami info.
 func retrieveCredentials(whoami *types.WhoamiInfo) (types.ICredentials, error) {
-	defer perf.Track(nil, "cmd.retrieveCredentials")()
+	defer perf.Track(nil, "auth.retrieveCredentials")()
 
 	switch {
 	case whoami.Credentials != nil:
@@ -289,12 +344,12 @@ func retrieveCredentials(whoami *types.WhoamiInfo) (types.ICredentials, error) {
 
 // resolveConsoleDuration resolves console session duration from flag or provider config.
 // Flag takes precedence over provider configuration.
-func resolveConsoleDuration(cmd *cobra.Command, authManager types.AuthManager, providerName string) (time.Duration, error) {
-	defer perf.Track(nil, "cmd.resolveConsoleDuration")()
+func resolveConsoleDuration(cmd *cobra.Command, authManager types.AuthManager, providerName string, flagDuration time.Duration) (time.Duration, error) {
+	defer perf.Track(nil, "auth.resolveConsoleDuration")()
 
 	// Check if flag was explicitly set by user.
 	if cmd.Flags().Changed("duration") {
-		return consoleDuration, nil
+		return flagDuration, nil
 	}
 
 	// Get provider configuration.
@@ -302,13 +357,13 @@ func resolveConsoleDuration(cmd *cobra.Command, authManager types.AuthManager, p
 	provider, exists := providers[providerName]
 	if !exists {
 		// No provider config found, use default from flag.
-		return consoleDuration, nil
+		return flagDuration, nil
 	}
 
 	// Check if provider has console configuration.
 	if provider.Console == nil || provider.Console.SessionDuration == "" {
 		// No console config, use default from flag.
-		return consoleDuration, nil
+		return flagDuration, nil
 	}
 
 	// Parse provider's session duration.
@@ -318,29 +373,6 @@ func resolveConsoleDuration(cmd *cobra.Command, authManager types.AuthManager, p
 	}
 
 	return duration, nil
-}
-
-func init() {
-	authConsoleCmd.Flags().StringVar(&consoleDestination, "destination", "",
-		"Console page to navigate to. Supports full URLs or shorthand aliases like 's3', 'ec2', 'lambda', etc.")
-	authConsoleCmd.Flags().DurationVar(&consoleDuration, "duration", 1*time.Hour,
-		"Console session duration (provider may have max limits)")
-	authConsoleCmd.Flags().StringVar(&consoleIssuer, "issuer", "atmos",
-		"Issuer identifier for the console session (AWS only)")
-	authConsoleCmd.Flags().BoolVar(&consolePrintOnly, "print-only", false,
-		"Print the console URL to stdout without opening browser")
-	authConsoleCmd.Flags().BoolVar(&consoleSkipOpen, "no-open", false,
-		"Generate URL but don't open browser automatically")
-
-	// Register autocomplete for destination flag (AWS service aliases).
-	if err := authConsoleCmd.RegisterFlagCompletionFunc("destination", destinationFlagCompletion); err != nil {
-		log.Trace("Failed to register destination flag completion", "error", err)
-	}
-
-	// Register autocomplete for identity flag.
-	AddIdentityCompletion(authConsoleCmd)
-
-	authCmd.AddCommand(authConsoleCmd)
 }
 
 // destinationFlagCompletion provides shell completion for the --destination flag.

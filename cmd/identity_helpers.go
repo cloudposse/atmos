@@ -8,7 +8,15 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+const (
+	// IdentityFlagName is the name of the identity flag.
+	IdentityFlagName = "identity"
+	// IdentityFlagSelectValue is imported from cfg.IdentityFlagSelectValue.
+	IdentityFlagSelectValue = cfg.IdentityFlagSelectValue
 )
 
 // GetIdentityFromFlags retrieves the identity value from command-line flags and environment variables.
@@ -33,6 +41,8 @@ import (
 //	    // Use explicit identity
 //	}
 func GetIdentityFromFlags(cmd *cobra.Command, osArgs []string) string {
+	defer perf.Track(nil, "cmd.GetIdentityFromFlags")()
+
 	// Check if flag was set via Cobra first (handles both SetArgs in tests and real CLI).
 	// For commands without positional args, this is reliable.
 	// For commands with positional args, we'll use os.Args parsing as a fallback.
@@ -62,6 +72,8 @@ func GetIdentityFromFlags(cmd *cobra.Command, osArgs []string) string {
 // Recognizes: false, False, FALSE, 0, no, No, NO, off, Off, OFF.
 // All other values are returned unchanged.
 func normalizeIdentityValue(value string) string {
+	defer perf.Track(nil, "cmd.normalizeIdentityValue")()
+
 	if value == "" {
 		return ""
 	}
@@ -86,6 +98,8 @@ func normalizeIdentityValue(value string) string {
 //
 // Returns empty string if --identity flag is not present in args.
 func extractIdentityFromArgs(args []string) string {
+	defer perf.Track(nil, "cmd.extractIdentityFromArgs")()
+
 	for i, arg := range args {
 		// Handle --identity=value format.
 		if strings.HasPrefix(arg, cfg.IdentityFlag+"=") {
@@ -137,6 +151,8 @@ func CreateAuthManagerFromIdentity(
 	identityName string,
 	authConfig *schema.AuthConfig,
 ) (auth.AuthManager, error) {
+	defer perf.Track(nil, "cmd.CreateAuthManagerFromIdentity")()
+
 	return auth.CreateAndAuthenticateManager(identityName, authConfig, IdentityFlagSelectValue)
 }
 
@@ -157,5 +173,7 @@ func CreateAuthManagerFromIdentityWithAtmosConfig(
 	authConfig *schema.AuthConfig,
 	atmosConfig *schema.AtmosConfiguration,
 ) (auth.AuthManager, error) {
+	defer perf.Track(nil, "cmd.CreateAuthManagerFromIdentityWithAtmosConfig")()
+
 	return auth.CreateAndAuthenticateManagerWithAtmosConfig(identityName, authConfig, IdentityFlagSelectValue, atmosConfig)
 }

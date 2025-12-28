@@ -1,4 +1,4 @@
-package cmd
+package auth
 
 import (
 	_ "embed"
@@ -8,12 +8,14 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authList "github.com/cloudposse/atmos/pkg/auth/list"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -25,7 +27,12 @@ var authListUsageMarkdown string
 const (
 	providersKey  = "providers"
 	identitiesKey = "identities"
+	// ListFormatFlagName is the name of the format flag for list command.
+	ListFormatFlagName = "format"
 )
+
+// listParser handles flags for the list command.
+var listParser *flags.StandardParser
 
 // authListCmd lists authentication providers and identities.
 var authListCmd = &cobra.Command{
@@ -47,38 +54,48 @@ Supports multiple output formats:
 }
 
 func init() {
-	defer perf.Track(nil, "cmd.init.authListCmd")()
+	defer perf.Track(nil, "auth.list.init")()
 
-	// Format flag.
-	authListCmd.Flags().StringP("format", "f", "tree", "Output format: tree, table, json, yaml, graphviz, mermaid, markdown")
+	// Create parser with list-specific flags.
+	listParser = flags.NewStandardParser(
+		flags.WithStringFlag("format", "f", "tree", "Output format: tree, table, json, yaml, graphviz, mermaid, markdown"),
+		flags.WithStringFlag("providers", "", "", "Show only providers (optionally filter by name: --providers=aws-sso,okta)"),
+		flags.WithStringFlag("identities", "", "", "Show only identities (optionally filter by name: --identities=admin,dev)"),
+		flags.WithValidValues("format", "tree", "table", "json", "yaml", "graphviz", "dot", "mermaid", "markdown", "md"),
+	)
 
-	// Filter flags with optional string values.
-	authListCmd.Flags().String("providers", "", "Show only providers (optionally filter by name: --providers=aws-sso,okta)")
-	authListCmd.Flags().String("identities", "", "Show only identities (optionally filter by name: --identities=admin,dev)")
+	// Register flags with the command.
+	listParser.RegisterFlags(authListCmd)
+
+	// Bind to Viper for environment variable support.
+	if err := listParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
 	// Register flag completion functions.
-	if err := authListCmd.RegisterFlagCompletionFunc("format", formatFlagCompletion); err != nil {
+	if err := authListCmd.RegisterFlagCompletionFunc("format", listFormatFlagCompletion); err != nil {
 		log.Trace("Failed to register format flag completion", "error", err)
 	}
 
-	if err := authListCmd.RegisterFlagCompletionFunc("providers", providersFlagCompletion); err != nil {
+	if err := authListCmd.RegisterFlagCompletionFunc("providers", listProvidersFlagCompletion); err != nil {
 		log.Trace("Failed to register providers flag completion", "error", err)
 	}
 
-	if err := authListCmd.RegisterFlagCompletionFunc("identities", identitiesFlagCompletion); err != nil {
+	if err := authListCmd.RegisterFlagCompletionFunc("identities", listIdentitiesFlagCompletion); err != nil {
 		log.Trace("Failed to register identities flag completion", "error", err)
 	}
 
+	// Add to parent command.
 	authCmd.AddCommand(authListCmd)
 }
 
-// formatFlagCompletion provides shell completion for the format flag.
-func formatFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+// listFormatFlagCompletion provides shell completion for the format flag.
+func listFormatFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	return []string{"tree", "table", "json", "yaml", "graphviz", "mermaid", "markdown"}, cobra.ShellCompDirectiveNoFileComp
 }
 
-// providersFlagCompletion provides shell completion for the providers flag.
-func providersFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+// listProvidersFlagCompletion provides shell completion for the providers flag.
+func listProvidersFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -96,8 +113,8 @@ func providersFlagCompletion(cmd *cobra.Command, args []string, toComplete strin
 	return providers, cobra.ShellCompDirectiveNoFileComp
 }
 
-// identitiesFlagCompletion provides shell completion for the identities flag.
-func identitiesFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+// listIdentitiesFlagCompletion provides shell completion for the identities flag.
+func listIdentitiesFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -125,9 +142,15 @@ type filterConfig struct {
 
 // executeAuthListCommand executes the auth list command.
 func executeAuthListCommand(cmd *cobra.Command, args []string) error {
-	defer perf.Track(nil, "cmd.executeAuthListCommand")()
+	defer perf.Track(nil, "auth.executeAuthListCommand")()
 
 	handleHelpRequest(cmd, args)
+
+	// Bind parsed flags to Viper for precedence.
+	v := viper.GetViper()
+	if err := listParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
 
 	// Parse and validate filters.
 	filters, err := parseFilterFlags(cmd)
@@ -152,7 +175,7 @@ func executeAuthListCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get output format.
-	format, _ := cmd.Flags().GetString("format")
+	format := v.GetString(ListFormatFlagName)
 
 	// Route to appropriate formatter.
 	output, err := renderOutput(authManager, filteredProviders, filteredIdentities, format)
@@ -167,10 +190,11 @@ func executeAuthListCommand(cmd *cobra.Command, args []string) error {
 
 // parseFilterFlags parses and validates filter flags.
 func parseFilterFlags(cmd *cobra.Command) (*filterConfig, error) {
-	defer perf.Track(nil, "cmd.parseFilterFlags")()
+	defer perf.Track(nil, "auth.parseFilterFlags")()
 
-	providersFlag, _ := cmd.Flags().GetString(providersKey)
-	identitiesFlag, _ := cmd.Flags().GetString(identitiesKey)
+	v := viper.GetViper()
+	providersFlag := v.GetString(providersKey)
+	identitiesFlag := v.GetString(identitiesKey)
 
 	hasProvidersFlag := cmd.Flags().Changed(providersKey)
 	hasIdentitiesFlag := cmd.Flags().Changed(identitiesKey)
@@ -221,7 +245,7 @@ func applyFilters(
 	identities map[string]schema.Identity,
 	filters *filterConfig,
 ) (map[string]schema.Provider, map[string]schema.Identity, error) {
-	defer perf.Track(nil, "cmd.applyFilters")()
+	defer perf.Track(nil, "auth.applyFilters")()
 
 	// Show only providers.
 	if filters.showProvidersOnly {
@@ -242,7 +266,7 @@ func filterProviders(
 	providers map[string]schema.Provider,
 	names []string,
 ) (map[string]schema.Provider, map[string]schema.Identity, error) {
-	defer perf.Track(nil, "cmd.filterProviders")()
+	defer perf.Track(nil, "auth.filterProviders")()
 
 	filtered := make(map[string]schema.Provider)
 	empty := make(map[string]schema.Identity)
@@ -269,7 +293,7 @@ func filterIdentities(
 	identities map[string]schema.Identity,
 	names []string,
 ) (map[string]schema.Provider, map[string]schema.Identity, error) {
-	defer perf.Track(nil, "cmd.filterIdentities")()
+	defer perf.Track(nil, "auth.filterIdentities")()
 
 	empty := make(map[string]schema.Provider)
 	filtered := make(map[string]schema.Identity)
@@ -298,7 +322,7 @@ func renderOutput(
 	identities map[string]schema.Identity,
 	format string,
 ) (string, error) {
-	defer perf.Track(nil, "cmd.renderOutput")()
+	defer perf.Track(nil, "auth.renderOutput")()
 
 	switch format {
 	case "table":
@@ -322,7 +346,7 @@ func renderOutput(
 
 // renderJSON renders providers and identities as JSON.
 func renderJSON(providers map[string]schema.Provider, identities map[string]schema.Identity) (string, error) {
-	defer perf.Track(nil, "cmd.renderJSON")()
+	defer perf.Track(nil, "auth.renderJSON")()
 
 	output := map[string]interface{}{}
 
@@ -344,7 +368,7 @@ func renderJSON(providers map[string]schema.Provider, identities map[string]sche
 
 // renderYAML renders providers and identities as YAML.
 func renderYAML(providers map[string]schema.Provider, identities map[string]schema.Identity) (string, error) {
-	defer perf.Track(nil, "cmd.renderYAML")()
+	defer perf.Track(nil, "auth.renderYAML")()
 
 	output := map[string]interface{}{}
 
@@ -364,16 +388,16 @@ func renderYAML(providers map[string]schema.Provider, identities map[string]sche
 	return string(data), nil
 }
 
-// loadAuthManager loads the auth manager (helper from auth_whoami.go).
+// loadAuthManagerForList loads the auth manager.
 func loadAuthManagerForList() (authTypes.AuthManager, error) {
-	defer perf.Track(nil, "cmd.loadAuthManagerForList")()
+	defer perf.Track(nil, "auth.loadAuthManagerForList")()
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
-	manager, err := createAuthManager(&atmosConfig.Auth)
+	manager, err := CreateAuthManager(&atmosConfig.Auth)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
