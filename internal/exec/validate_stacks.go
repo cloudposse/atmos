@@ -19,7 +19,7 @@ import (
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -29,29 +29,27 @@ const atmosManifestDefaultFileName = "schemas/atmos/atmos-manifest/1.0/atmos-man
 func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteValidateStacksCmd")()
 
-	// Initialize spinner
-	message := "Validating Atmos Stacks..."
-	p := NewSpinner(message)
-	spinnerDone := make(chan struct{})
-	// Run spinner in a goroutine
-	RunSpinner(p, spinnerDone, message)
-	// Ensure the spinner is stopped before returning
-	defer StopSpinner(p, spinnerDone)
+	// Initialize spinner.
+	s := spinner.New("Validating Atmos Stacks...")
+	s.Start()
 
-	// Process CLI arguments
+	// Process CLI arguments.
 	info, err := ProcessCommandLineArgs("", cmd, args, nil)
 	if err != nil {
+		s.Stop()
 		return err
 	}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
+		s.Stop()
 		return err
 	}
 
 	flags := cmd.Flags()
 	schemasAtmosManifestFlag, err := flags.GetString("schemas-atmos-manifest")
 	if err != nil {
+		s.Stop()
 		return err
 	}
 
@@ -63,12 +61,10 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 
 	err = ValidateStacks(&atmosConfig)
 	if err != nil {
-		_ = ui.ClearLine()
-		_ = ui.Error("Stack validation failed")
+		s.Error("Stack validation failed")
 		return err
 	}
-	_ = ui.ClearLine()
-	_ = ui.Success("All stacks validated successfully")
+	s.Success("All stacks validated successfully")
 	log.Debug("Stack validation completed")
 	return nil
 }

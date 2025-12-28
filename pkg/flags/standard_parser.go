@@ -39,6 +39,15 @@ func NewStandardParser(opts ...Option) *StandardParser {
 	}
 }
 
+// Registry returns the underlying flag registry.
+// This allows access to the registry for operations like SetCompletionFunc()
+// that need to modify flags after parser creation.
+func (p *StandardParser) Registry() *FlagRegistry {
+	defer perf.Track(nil, "flags.StandardParser.Registry")()
+
+	return p.parser.Registry()
+}
+
 // SetPositionalArgs configures positional argument extraction and validation.
 // Delegates to the underlying StandardFlagParser.
 func (p *StandardParser) SetPositionalArgs(

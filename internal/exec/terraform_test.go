@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -74,28 +75,40 @@ func TestExecuteTerraform_ExportEnvVar(t *testing.T) {
 		SubCommand:       "apply",
 	}
 
-	// Create a pipe to capture stdout to check if terraform is executed correctly
+	// Create a pipe to capture stdout to check if terraform is executed correctly.
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+
+	// Ensure stdout is restored even if test fails.
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
+	// Read from pipe concurrently to avoid deadlock when output exceeds pipe buffer.
+	var buf bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		_, _ = buf.ReadFrom(r)
+		close(done)
+	}()
+
 	err = ExecuteTerraform(info)
+
+	// Close writer and restore stdout before checking error.
+	w.Close()
+	os.Stdout = oldStdout
+
+	// Wait for the reader goroutine to finish.
+	<-done
+
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-	// Restore stdout
-	err = w.Close()
-	assert.NoError(t, err)
-	os.Stdout = oldStdout
 
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
 	output := buf.String()
 
-	// Check the output ATMOS_CLI_CONFIG_PATH  ATMOS_BASE_PATH exists
+	// Check the output ATMOS_CLI_CONFIG_PATH  ATMOS_BASE_PATH exists.
 	if !strings.Contains(output, "ATMOS_BASE_PATH") {
 		t.Errorf("ATMOS_BASE_PATH not found in the output")
 	}
@@ -154,28 +167,40 @@ func TestExecuteTerraform_TerraformPlanWithProcessingTemplates(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	// Create a pipe to capture stdout to check if terraform is executed correctly
+	// Create a pipe to capture stdout to check if terraform is executed correctly.
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+
+	// Ensure stdout is restored even if test fails.
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
+	// Read from pipe concurrently to avoid deadlock when output exceeds pipe buffer.
+	var buf bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		_, _ = buf.ReadFrom(r)
+		close(done)
+	}()
+
 	err := ExecuteTerraform(info)
+
+	// Close writer and restore stdout before checking error.
+	w.Close()
+	os.Stdout = oldStdout
+
+	// Wait for the reader goroutine to finish.
+	<-done
+
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-	// Restore stdout
-	err = w.Close()
-	assert.NoError(t, err)
-	os.Stdout = oldStdout
 
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
 	output := buf.String()
 
-	// Check the output
+	// Check the output.
 	if !strings.Contains(output, "component-1-a") {
 		t.Errorf("'foo' variable should be 'component-1-a'")
 	}
@@ -206,25 +231,37 @@ func TestExecuteTerraform_TerraformPlanWithoutProcessingTemplates(t *testing.T) 
 		ProcessFunctions: true,
 	}
 
-	// Create a pipe to capture stdout to check if terraform is executed correctly
+	// Create a pipe to capture stdout to check if terraform is executed correctly.
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+
+	// Ensure stdout is restored even if test fails.
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
+	// Read from pipe concurrently to avoid deadlock when output exceeds pipe buffer.
+	var buf bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		_, _ = buf.ReadFrom(r)
+		close(done)
+	}()
+
 	err := ExecuteTerraform(info)
+
+	// Close writer and restore stdout before checking error.
+	w.Close()
+	os.Stdout = oldStdout
+
+	// Wait for the reader goroutine to finish.
+	<-done
+
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-	// Restore stdout
-	err = w.Close()
-	assert.NoError(t, err)
-	os.Stdout = oldStdout
 
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
 	output := buf.String()
 
 	t.Cleanup(func() {
@@ -265,20 +302,27 @@ func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	// Create a pipe to capture stdout to check if terraform is executed correctly
+	// Create a pipe to capture stdout to check if terraform is executed correctly.
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+
+	// Ensure stdout is restored even if test fails.
+	defer func() {
+		os.Stdout = oldStdout
+	}()
+
 	err := ExecuteTerraform(info)
+
+	// Close writer and restore stdout before checking error.
+	w.Close()
+	os.Stdout = oldStdout
+
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-	// Restore stdout
-	err = w.Close()
-	assert.NoError(t, err)
-	os.Stdout = oldStdout
 
-	// Read the captured output
+	// Read the captured output.
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(r)
 	if err != nil {
@@ -286,7 +330,7 @@ func TestExecuteTerraform_TerraformWorkspace(t *testing.T) {
 	}
 	output := buf.String()
 
-	// Check the output
+	// Check the output.
 	if !strings.Contains(output, "workspace \"nonprod-component-1\"") {
 		t.Errorf("The output should contain 'nonprod-component-1'")
 	}
@@ -340,27 +384,40 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
+	// Ensure stderr is restored even if test fails.
+	defer func() {
+		os.Stderr = oldStderr
+	}()
+
 	log.SetLevel(log.DebugLevel)
 	log.SetOutput(w)
 
+	// Read from pipe concurrently to avoid deadlock when output exceeds pipe buffer.
+	// The pipe buffer is limited (typically 64KB), and if ExecuteTerraform produces
+	// more output than the buffer can hold, it will block waiting for a reader.
+	var buf bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		_, _ = buf.ReadFrom(r)
+		close(done)
+	}()
+
 	err := ExecuteTerraform(info)
+
+	// Close writer and restore stderr before checking error.
+	w.Close()
+	os.Stderr = oldStderr
+
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-	// Restore stderr
-	err = w.Close()
-	assert.NoError(t, err)
-	os.Stderr = oldStderr
 
-	// Read the captured output
-	var buf bytes.Buffer
-	_, err = buf.ReadFrom(r)
-	if err != nil {
-		t.Fatalf("Failed to read from pipe: %v", err)
-	}
+	// Wait for the reader goroutine to finish.
+	<-done
+
 	output := buf.String()
 
-	// Check the output
+	// Check the output.
 	expected := "init -reconfigure -var-file nonprod-component-1.terraform.tfvars.json"
 	if !strings.Contains(output, expected) {
 		t.Logf("TestExecuteTerraform_TerraformInitWithVarfile output:\n%s", output)
@@ -369,6 +426,9 @@ func TestExecuteTerraform_TerraformInitWithVarfile(t *testing.T) {
 }
 
 func TestExecuteTerraform_OpaValidation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows: OPA validation uses Unix-specific commands")
+	}
 	// Skip if terraform is not installed
 	tests.RequireTerraform(t)
 
@@ -452,29 +512,35 @@ func TestExecuteTerraform_TerraformPlanWithSkipPlanfile(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
+	// Ensure stderr is restored even if test fails.
+	defer func() {
+		os.Stderr = oldStderr
+	}()
+
 	log.SetLevel(log.DebugLevel)
 
-	// Create a buffer to capture the output
+	// Create a buffer to capture the output.
 	var buf bytes.Buffer
 	log.SetOutput(&buf)
 
 	err := ExecuteTerraform(info)
+
+	// Close writer and restore stderr before checking error.
+	w.Close()
+	os.Stderr = oldStderr
+
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
-	// Restore stderr
-	err = w.Close()
-	assert.NoError(t, err)
-	os.Stderr = oldStderr
 
-	// Read the captured output
+	// Read the captured output.
 	_, err = buf.ReadFrom(r)
 	if err != nil {
 		t.Fatalf("Failed to read from pipe: %v", err)
 	}
 	output := buf.String()
 
-	// Check the output
+	// Check the output.
 	expected := "plan -var-file nonprod-cmp-1.terraform.tfvars.json"
 	notExpected := "-out nonprod-cmp-1.planfile"
 
@@ -613,21 +679,27 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 				info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, "--upload-status=false")
 			}
 
-			// Create a pipe to capture stdout and stderr
+			// Create a pipe to capture stdout and stderr.
 			oldStdout := os.Stdout
 			oldStderr := os.Stderr
 			r, w, _ := os.Pipe()
 			os.Stdout = w
 			os.Stderr = w
 
-			// Save original logger and set up test logger
+			// Ensure stdout/stderr are restored even if test fails.
+			defer func() {
+				os.Stdout = oldStdout
+				os.Stderr = oldStderr
+			}()
+
+			// Save original logger and set up test logger.
 			originalLogger := log.Default()
 			logger := log.New()
 			logger.SetOutput(w)
 			log.SetDefault(logger)
 			defer log.SetDefault(originalLogger)
 
-			// Create a channel to signal when the pipe is closed
+			// Create a channel to signal when the pipe is closed.
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
@@ -635,7 +707,7 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 				_ = ExecuteTerraform(info)
 			}()
 
-			// Read the output
+			// Read the output.
 			var buf bytes.Buffer
 			_, err := buf.ReadFrom(r)
 			if err != nil {
@@ -643,7 +715,7 @@ func TestExecuteTerraform_DeploymentStatus(t *testing.T) {
 			}
 			output := buf.String()
 
-			// Restore stdout, stderr, and logger
+			// Restore stdout, stderr, and logger.
 			os.Stdout = oldStdout
 			os.Stderr = oldStderr
 			log.SetDefault(log.Default())
@@ -699,6 +771,9 @@ func extractKeyValuePairs(input string) map[string]string {
 
 // TestExecuteTerraform_OpaValidationFunctionality tests the OPA validation functionality by using validate component directly.
 func TestExecuteTerraform_OpaValidationFunctionality(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows: OPA validation uses Unix-specific commands")
+	}
 	// Define the working directory.
 	workDir := "../../tests/fixtures/scenarios/atmos-stacks-validation"
 	t.Chdir(workDir)
@@ -839,6 +914,11 @@ components:
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
+
+	// Ensure stderr is restored even if test fails.
+	defer func() {
+		os.Stderr = oldStderr
+	}()
 
 	err = ExecuteTerraform(info)
 

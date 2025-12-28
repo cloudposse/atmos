@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
 
 func TestIsTruthy(t *testing.T) {
@@ -852,6 +853,161 @@ func TestPrintSubcommandAliases(t *testing.T) {
 	}
 }
 
+func TestPrintConfigAliases(t *testing.T) {
+	tests := []struct {
+		name        string
+		subcommands []*cobra.Command
+		shouldPrint bool
+		contains    []string
+	}{
+		{
+			name: "with config aliases",
+			subcommands: []*cobra.Command{
+				{
+					Use:   "tp",
+					Short: "alias for `terraform plan`",
+					Annotations: map[string]string{
+						"configAlias": "terraform plan",
+					},
+					Run: func(cmd *cobra.Command, args []string) {},
+				},
+				{
+					Use:   "ta",
+					Short: "alias for `terraform apply`",
+					Annotations: map[string]string{
+						"configAlias": "terraform apply",
+					},
+					Run: func(cmd *cobra.Command, args []string) {},
+				},
+			},
+			shouldPrint: true,
+			contains:    []string{"ALIASES", "tp", "ta", "alias for"},
+		},
+		{
+			name: "no config aliases",
+			subcommands: []*cobra.Command{
+				{Use: "apply", Short: "Apply changes", Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "destroy", Short: "Destroy resources", Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: false,
+			contains:    []string{},
+		},
+		{
+			name: "mixed - some with config aliases, some without",
+			subcommands: []*cobra.Command{
+				{Use: "apply", Short: "Apply changes", Run: func(cmd *cobra.Command, args []string) {}},
+				{
+					Use:   "tp",
+					Short: "alias for `terraform plan`",
+					Annotations: map[string]string{
+						"configAlias": "terraform plan",
+					},
+					Run: func(cmd *cobra.Command, args []string) {},
+				},
+			},
+			shouldPrint: true,
+			contains:    []string{"ALIASES", "tp"},
+		},
+		{
+			name:        "no subcommands",
+			subcommands: []*cobra.Command{},
+			shouldPrint: false,
+			contains:    []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderer := lipgloss.NewRenderer(&buf)
+			styles := createHelpStyles(renderer)
+
+			cmd := &cobra.Command{
+				Use:   "test",
+				Short: "Test command",
+			}
+
+			for _, subcmd := range tt.subcommands {
+				cmd.AddCommand(subcmd)
+			}
+
+			ctx := &helpRenderContext{
+				writer: &buf,
+				styles: &styles,
+			}
+
+			printConfigAliases(ctx, cmd)
+
+			output := buf.String()
+			if tt.shouldPrint && output == "" {
+				t.Error("Expected config aliases to be printed")
+			}
+			if !tt.shouldPrint && output != "" {
+				t.Errorf("Expected no output, got: %q", output)
+			}
+
+			for _, expected := range tt.contains {
+				if !strings.Contains(output, expected) {
+					t.Errorf("Expected output to contain %q, got: %q", expected, output)
+				}
+			}
+		})
+	}
+}
+
+func TestIsConfigAlias(t *testing.T) {
+	tests := []struct {
+		name     string
+		cmd      *cobra.Command
+		expected bool
+	}{
+		{
+			name: "command with configAlias annotation",
+			cmd: &cobra.Command{
+				Use: "tp",
+				Annotations: map[string]string{
+					"configAlias": "terraform plan",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "command without annotations",
+			cmd: &cobra.Command{
+				Use: "apply",
+			},
+			expected: false,
+		},
+		{
+			name: "command with different annotation",
+			cmd: &cobra.Command{
+				Use: "plan",
+				Annotations: map[string]string{
+					"nativeCommand": "true",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "command with nil annotations",
+			cmd: &cobra.Command{
+				Use:         "destroy",
+				Annotations: nil,
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isConfigAlias(tt.cmd)
+			if result != tt.expected {
+				t.Errorf("isConfigAlias() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}
+
 func TestFormatCommandLine(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -904,7 +1060,7 @@ func TestFormatCommandLine(t *testing.T) {
 				styles: &styles,
 			}
 
-			formatCommandLine(ctx, tt.cmd, tt.maxWidth)
+			formatCommandLine(ctx, tt.cmd, tt.maxWidth, nil)
 
 			output := buf.String()
 			for _, expected := range tt.contains {
@@ -1066,6 +1222,138 @@ func TestPrintFlags(t *testing.T) {
 			output := buf.String()
 			if tt.shouldPrint && output == "" && len(tt.contains) > 0 {
 				t.Error("Expected flags to be printed")
+			}
+
+			for _, expected := range tt.contains {
+				if !strings.Contains(output, expected) {
+					t.Errorf("Expected output to contain %q, got: %q", expected, output)
+				}
+			}
+		})
+	}
+}
+
+func TestFormatCommandLineWithMarkdownRenderer(t *testing.T) {
+	tests := []struct {
+		name     string
+		cmd      *cobra.Command
+		maxWidth int
+		contains []string
+	}{
+		{
+			name: "simple command with markdown renderer",
+			cmd: &cobra.Command{
+				Use:   "apply",
+				Short: "Apply changes to infrastructure",
+			},
+			maxWidth: 20,
+			contains: []string{"apply", "Apply changes"},
+		},
+		{
+			name: "command with markdown in description",
+			cmd: &cobra.Command{
+				Use:   "validate",
+				Short: "Validate `stack` configuration files",
+			},
+			maxWidth: 20,
+			contains: []string{"validate", "Validate"},
+		},
+		{
+			name: "command with bold markdown",
+			cmd: &cobra.Command{
+				Use:   "plan",
+				Short: "Plan **infrastructure** changes",
+			},
+			maxWidth: 15,
+			contains: []string{"plan", "Plan"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderer := lipgloss.NewRenderer(&buf)
+			styles := createHelpStyles(renderer)
+
+			ctx := &helpRenderContext{
+				writer: &buf,
+				styles: &styles,
+			}
+
+			// Create a markdown renderer.
+			atmosConfig := schema.AtmosConfiguration{}
+			mdRenderer, err := markdown.NewTerminalMarkdownRenderer(atmosConfig)
+			if err != nil {
+				t.Fatalf("Failed to create markdown renderer: %v", err)
+			}
+
+			formatCommandLine(ctx, tt.cmd, tt.maxWidth, mdRenderer)
+
+			output := buf.String()
+			for _, expected := range tt.contains {
+				if !strings.Contains(output, expected) {
+					t.Errorf("Expected output to contain %q, got: %q", expected, output)
+				}
+			}
+		})
+	}
+}
+
+func TestPrintAvailableCommandsWithAtmosConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		subcommands []*cobra.Command
+		shouldPrint bool
+		contains    []string
+	}{
+		{
+			name: "with available subcommands and atmosConfig",
+			subcommands: []*cobra.Command{
+				{Use: "apply", Short: "Apply changes", Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "plan", Short: "Plan changes", Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: true,
+			contains:    []string{"AVAILABLE COMMANDS", "apply", "plan"},
+		},
+		{
+			name: "with markdown in command descriptions",
+			subcommands: []*cobra.Command{
+				{Use: "validate", Short: "Validate `stack` files", Run: func(cmd *cobra.Command, args []string) {}},
+				{Use: "describe", Short: "Describe **components**", Run: func(cmd *cobra.Command, args []string) {}},
+			},
+			shouldPrint: true,
+			contains:    []string{"AVAILABLE COMMANDS", "validate", "describe"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderer := lipgloss.NewRenderer(&buf)
+			styles := createHelpStyles(renderer)
+
+			cmd := &cobra.Command{
+				Use:   "test",
+				Short: "Test command",
+			}
+
+			for _, subcmd := range tt.subcommands {
+				cmd.AddCommand(subcmd)
+			}
+
+			// Create context with atmosConfig to trigger markdown renderer creation.
+			atmosConfig := &schema.AtmosConfiguration{}
+			ctx := &helpRenderContext{
+				writer:      &buf,
+				styles:      &styles,
+				atmosConfig: atmosConfig,
+			}
+
+			printAvailableCommands(ctx, cmd)
+
+			output := buf.String()
+			if tt.shouldPrint && output == "" {
+				t.Error("Expected available commands to be printed")
 			}
 
 			for _, expected := range tt.contains {

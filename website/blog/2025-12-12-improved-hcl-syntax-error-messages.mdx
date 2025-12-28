@@ -1,0 +1,63 @@
+---
+slug: improved-hcl-syntax-error-messages
+title: "Improved Error Messages for Terraform HCL Syntax Errors"
+authors:
+  - osterman
+tags:
+  - bugfix
+  - dx
+---
+
+Atmos now provides clear, actionable error messages when your Terraform components contain HCL syntax errors, instead of the misleading "component not found" message.
+
+<!--truncate-->
+
+## The Problem
+
+Previously, when a Terraform component had invalid HCL syntax, Atmos would display a confusing error:
+
+```
+Error: invalid component
+
+Could not find the component `testme` in the stack `prod`.
+Check that all the context variables are correctly defined in the stack manifests.
+Are the component and stack names correct? Did you forget an import?
+```
+
+This was misleading because the component *was* defined in the stack manifest and would even appear in the TUI menu. The real issue was that the Terraform files contained a syntax error that prevented Atmos from parsing them.
+
+## The Solution
+
+Atmos now correctly identifies HCL parsing failures and provides helpful, actionable feedback:
+
+```
+# Error
+
+**Error:** failed to load terraform module: Argument or block definition
+required: An argument or block definition is required here.
+
+## Explanation
+
+The Terraform component 'testme' contains invalid HCL code at
+components/terraform/testme/main.tf:7.
+
+## Hints
+
+💡 Run 'atmos terraform validate' to see more details:
+
+ atmos terraform validate testme -s prod
+```
+
+The new error message includes:
+
+- **The actual HCL parsing error** from the Terraform parser
+- **The exact file and line number** where the error occurred
+- **A copy-pasteable command** to run `atmos terraform validate` for more details
+
+## Why This Matters
+
+HCL syntax errors are easy to make—a mismatched bracket, a typo in a block name, or a missing quote. When these errors produce misleading messages, developers waste time looking in the wrong places. Now you'll know immediately that the issue is in your Terraform code and exactly where to look.
+
+## Get Involved
+
+Found an error message that could be more helpful? [Open an issue](https://github.com/cloudposse/atmos/issues) and let us know!

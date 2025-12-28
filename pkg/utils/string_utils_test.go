@@ -833,3 +833,50 @@ func BenchmarkInternStringsInMap_TypicalAtmosConfig(b *testing.B) {
 	b.ReportMetric(hitRate, "hit_rate_%")
 	b.ReportMetric(float64(stats.SavedBytes), "saved_bytes")
 }
+
+// TestFormatList tests the FormatList function.
+func TestFormatList(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []string
+		expected string
+	}{
+		{
+			name:     "empty list",
+			input:    []string{},
+			expected: "",
+		},
+		{
+			name:     "single item",
+			input:    []string{"item1"},
+			expected: "- `item1`\n",
+		},
+		{
+			name:     "multiple items",
+			input:    []string{"item1", "item2", "item3"},
+			expected: "- `item1`\n- `item2`\n- `item3`\n",
+		},
+		{
+			name:     "items with spaces",
+			input:    []string{"item with spaces", "another item"},
+			expected: "- `item with spaces`\n- `another item`\n",
+		},
+		{
+			name:     "items with special characters",
+			input:    []string{"item-1", "item_2", "item.3"},
+			expected: "- `item-1`\n- `item_2`\n- `item.3`\n",
+		},
+		{
+			name:     "empty string item",
+			input:    []string{""},
+			expected: "- ``\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FormatList(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

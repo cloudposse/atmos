@@ -13,6 +13,7 @@ tests:
       - "test/test-component"
       - "-s"
       - "tenant1-ue2-dev"
+      - "--force"
     expect:
       exit_code: 0
       # Verify checkmark appears whether files are deleted or directory is already clean

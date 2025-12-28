@@ -31,6 +31,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -49,11 +50,16 @@ import (
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
+	_ "github.com/cloudposse/atmos/cmd/env"
 	"github.com/cloudposse/atmos/cmd/internal"
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/profile"
+	_ "github.com/cloudposse/atmos/cmd/terraform"
+	"github.com/cloudposse/atmos/cmd/terraform/backend"
+	"github.com/cloudposse/atmos/cmd/terraform/workdir"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
 	"github.com/cloudposse/atmos/cmd/version"
+	_ "github.com/cloudposse/atmos/cmd/workflow"
 )
 
 const (
@@ -291,8 +297,8 @@ func processChdirFlag(cmd *cobra.Command) error {
 // RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
 	Use:   "atmos",
-	Short: "Universal Tool for DevOps and Cloud Automation",
-	Long:  `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
+	Short: "Framework for Infrastructure Orchestration",
+	Long:  `Atmos is a framework for orchestrating and operating infrastructure workflows across multiple cloud and DevOps toolchains.`,
 	// Note: FParseErrWhitelist is NOT set on RootCmd to allow proper flag validation.
 	// Individual commands that need to pass through flags (terraform, helmfile, packer)
 	// set FParseErrWhitelist{UnknownFlags: true} explicitly.
@@ -1222,6 +1228,8 @@ func Execute() error {
 	version.SetAtmosConfig(&atmosConfig)
 	devcontainer.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
+	backend.SetAtmosConfig(&atmosConfig)
+	workdir.SetAtmosConfig(&atmosConfig)
 
 	if initErr != nil {
 		// Handle config initialization errors based on command context.
@@ -1268,6 +1276,10 @@ func Execute() error {
 	// Boa styling is already applied via RootCmd.SetHelpFunc() which is inherited by all subcommands.
 	// No need to recursively set UsageFunc as that would override Boa's handling.
 
+	// Preprocess args for commands with compatibility flags.
+	// This separates Atmos flags from pass-through flags BEFORE Cobra parses.
+	preprocessCompatibilityFlags()
+
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
 	cmd, err := RootCmd.ExecuteC()
@@ -1280,6 +1292,51 @@ func Execute() error {
 		}
 	}
 	return err
+}
+
+// preprocessCompatibilityFlags separates Atmos flags from pass-through flags.
+// This is called BEFORE Cobra parses, allowing us to filter out terraform/helmfile
+// native flags that would otherwise be dropped by FParseErrWhitelist.
+//
+// The separated args are stored globally via compat.SetSeparated() and can be
+// retrieved in RunE via compat.GetSeparated().
+func preprocessCompatibilityFlags() {
+	osArgs := os.Args[1:]
+	if len(osArgs) == 0 {
+		return
+	}
+
+	// Find target command without parsing flags.
+	targetCmd, _, _ := RootCmd.Find(osArgs)
+	if targetCmd == nil {
+		return
+	}
+
+	// Get the top-level command name (e.g., "terraform").
+	// Walk up the command tree to find the first non-root command.
+	cmdName := ""
+	for c := targetCmd; c != nil && c != RootCmd; c = c.Parent() {
+		cmdName = c.Name()
+	}
+	if cmdName == "" {
+		return
+	}
+
+	// Get compatibility flags from the command registry.
+	compatFlags := internal.GetCompatFlagsForCommand(cmdName)
+	if len(compatFlags) == 0 {
+		return
+	}
+
+	// Translate args: separate Atmos flags from pass-through flags.
+	translator := compat.NewCompatibilityFlagTranslator(compatFlags)
+	atmosArgs, separatedArgs := translator.Translate(osArgs)
+
+	// Give Cobra only the Atmos args.
+	RootCmd.SetArgs(atmosArgs)
+
+	// Store separated args globally via compat package.
+	compat.SetSeparated(separatedArgs)
 }
 
 // getInvalidCommandName extracts the invalid command name from an error message.
@@ -1477,7 +1534,14 @@ func initCobraConfig() {
 			command.Example = exampleContent.Content
 		}
 
-		if !(Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")) {
+		// Check if help was explicitly requested via os.Args, args parameter, or via the help flag.
+		helpRequested := Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h") ||
+			Contains(args, "help") || Contains(args, "--help") || Contains(args, "-h")
+		if helpFlag := command.Flag("help"); helpFlag != nil && helpFlag.Changed {
+			helpRequested = true
+		}
+
+		if !helpRequested {
 			// Get actual arguments (handles DisableFlagParsing=true case).
 			arguments := flags.GetActualArgs(command, os.Args)
 			showUsageAndExit(command, arguments)

@@ -7,6 +7,7 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/cloudposse/atmos/pkg/config/casemap"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -88,6 +89,8 @@ type AtmosConfiguration struct {
 	Import          []string            `yaml:"import" json:"import" mapstructure:"import"`
 	Docs            Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Auth            AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	Env             map[string]string   `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
+	CaseMaps        *casemap.CaseMaps   `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
 	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
 	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
 	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
@@ -214,6 +217,24 @@ func (a *AtmosConfiguration) processResourceSchema(key string) {
 		return
 	}
 	a.Schemas[key] = resource
+}
+
+// GetCaseSensitiveMap returns the specified map with original key casing restored.
+// This compensates for Viper lowercasing all YAML map keys.
+// Supported paths: "env".
+func (a *AtmosConfiguration) GetCaseSensitiveMap(path string) map[string]string {
+	var source map[string]string
+	switch path {
+	case "env":
+		source = a.Env
+	default:
+		return nil
+	}
+
+	if a.CaseMaps == nil {
+		return source
+	}
+	return a.CaseMaps.ApplyCase(path, source)
 }
 
 type Validate struct {
@@ -346,7 +367,7 @@ type TemplatesSettings struct {
 	Gomplate    TemplatesSettingsGomplate `yaml:"gomplate" json:"gomplate" mapstructure:"gomplate"`
 	Delimiters  []string                  `yaml:"delimiters,omitempty" json:"delimiters,omitempty" mapstructure:"delimiters"`
 	Evaluations int                       `yaml:"evaluations,omitempty" json:"evaluations,omitempty" mapstructure:"evaluations"`
-	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
+	Env         map[string]string         `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
 }
 
 type TemplatesSettingsSprig struct {
@@ -641,6 +662,18 @@ type AzureAuthContext struct {
 
 	// Location is the Azure region/location (optional, e.g., "eastus").
 	Location string `json:"location,omitempty" yaml:"location,omitempty"`
+
+	// UseOIDC indicates whether to use OIDC authentication instead of CLI auth.
+	// When true, Terraform will use ARM_USE_OIDC=true instead of ARM_USE_CLI=true.
+	UseOIDC bool `json:"use_oidc,omitempty" yaml:"use_oidc,omitempty"`
+
+	// ClientID is the Azure AD application (client) ID for OIDC authentication.
+	// Required when UseOIDC is true.
+	ClientID string `json:"client_id,omitempty" yaml:"client_id,omitempty"`
+
+	// TokenFilePath is the path to the OIDC token file (e.g., from GitHub Actions).
+	// Optional - if not set, AZURE_FEDERATED_TOKEN_FILE env var will be used.
+	TokenFilePath string `json:"token_file_path,omitempty" yaml:"token_file_path,omitempty"`
 }
 
 type ConfigAndStacksInfo struct {

@@ -73,6 +73,8 @@ var excludedReceivers = []string{
 	"DescribeConfigFormatError", // Error types.
 	"DefaultStacksProcessor",    // Processor implementations.
 	"AtmosFuncs",                // Template function wrappers (high-frequency).
+	"ExecutionContext",          // Trivial With* mutators in pkg/function.
+	"Phase",                     // Trivial String() method in pkg/function.
 }
 
 // Functions to exclude from perf.Track() checks (by name).
@@ -113,6 +115,9 @@ func (r *PerfTrackRule) Check(pass *analysis.Pass, file *ast.File) error {
 	}
 
 	// Check if package is in exclusion list.
+	if pass.Pkg == nil {
+		return nil
+	}
 	pkgPath := pass.Pkg.Path()
 	for _, excluded := range excludedPackages {
 		// Match only complete path segments to avoid false positives.

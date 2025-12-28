@@ -291,6 +291,116 @@ func WithProvenanceFlag(options *[]flags.Option) {
 	)
 }
 
+// WithAffectedColumnsFlag adds column selection flag for list affected command.
+// Used by: affected.
+func WithAffectedColumnsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithAffectedColumnsFlag")()
+
+	*options = append(*options,
+		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
+		flags.WithEnvVars(flagColumns, envListColumns),
+	)
+}
+
+// WithRefFlag adds git reference flag for comparing branches.
+// Used by: affected.
+func WithRefFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithRefFlag")()
+
+	*options = append(*options,
+		flags.WithStringFlag("ref", "", "", "Git reference with which to compare the current branch"),
+		flags.WithEnvVars("ref", "ATMOS_AFFECTED_REF"),
+	)
+}
+
+// WithSHAFlag adds git commit SHA flag for comparing branches.
+// Used by: affected.
+func WithSHAFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithSHAFlag")()
+
+	*options = append(*options,
+		flags.WithStringFlag("sha", "", "", "Git commit SHA with which to compare the current branch"),
+		flags.WithEnvVars("sha", "ATMOS_AFFECTED_SHA"),
+	)
+}
+
+// WithRepoPathFlag adds repository path flag for comparing with a cloned repo.
+// Used by: affected.
+func WithRepoPathFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithRepoPathFlag")()
+
+	*options = append(*options,
+		flags.WithStringFlag("repo-path", "", "", "Filesystem path to the already cloned target repository"),
+		flags.WithEnvVars("repo-path", "ATMOS_AFFECTED_REPO_PATH"),
+	)
+}
+
+// WithSSHKeyFlag adds SSH key path flag for cloning private repos.
+// Used by: affected.
+func WithSSHKeyFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithSSHKeyFlag")()
+
+	*options = append(*options,
+		flags.WithStringFlag("ssh-key", "", "", "Path to PEM-encoded private key to clone private repos using SSH"),
+		flags.WithEnvVars("ssh-key", "ATMOS_AFFECTED_SSH_KEY"),
+	)
+}
+
+// WithSSHKeyPasswordFlag adds SSH key password flag.
+// Used by: affected.
+func WithSSHKeyPasswordFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithSSHKeyPasswordFlag")()
+
+	*options = append(*options,
+		flags.WithStringFlag("ssh-key-password", "", "", "Encryption password for the PEM-encoded private key"),
+		flags.WithEnvVars("ssh-key-password", "ATMOS_AFFECTED_SSH_KEY_PASSWORD"),
+	)
+}
+
+// WithCloneTargetRefFlag adds clone target ref flag.
+// Used by: affected.
+func WithCloneTargetRefFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithCloneTargetRefFlag")()
+
+	*options = append(*options,
+		flags.WithBoolFlag("clone-target-ref", "", false, "Clone the target reference instead of checking it out"),
+		flags.WithEnvVars("clone-target-ref", "ATMOS_AFFECTED_CLONE_TARGET_REF"),
+	)
+}
+
+// WithIncludeDependentsFlag adds include dependents flag.
+// Used by: affected.
+func WithIncludeDependentsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithIncludeDependentsFlag")()
+
+	*options = append(*options,
+		flags.WithBoolFlag("include-dependents", "", false, "Include dependent components and stacks"),
+		flags.WithEnvVars("include-dependents", "ATMOS_AFFECTED_INCLUDE_DEPENDENTS"),
+	)
+}
+
+// WithExcludeLockedFlag adds exclude locked components flag.
+// Used by: affected.
+func WithExcludeLockedFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithExcludeLockedFlag")()
+
+	*options = append(*options,
+		flags.WithBoolFlag("exclude-locked", "", false, "Exclude locked components (metadata.locked: true)"),
+		flags.WithEnvVars("exclude-locked", "ATMOS_AFFECTED_EXCLUDE_LOCKED"),
+	)
+}
+
+// WithSkipFlag adds skip YAML functions flag.
+// Used by: affected.
+func WithSkipFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithSkipFlag")()
+
+	*options = append(*options,
+		flags.WithStringSliceFlag("skip", "", nil, "Skip executing specific YAML functions"),
+		flags.WithEnvVars("skip", "ATMOS_AFFECTED_SKIP"),
+	)
+}
+
 // NewListParser creates a StandardParser with specified flag builders.
 // Each command composes only the flags it needs by passing the appropriate With* functions.
 //

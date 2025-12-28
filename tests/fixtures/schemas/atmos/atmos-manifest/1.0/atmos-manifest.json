@@ -28,6 +28,9 @@
     "settings": {
       "$ref": "#/definitions/settings"
     },
+    "locals": {
+      "$ref": "#/definitions/locals"
+    },
     "components": {
       "$ref": "#/definitions/components"
     },
@@ -164,7 +167,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "terraform": {
               "$ref": "#/definitions/terraform_components"
@@ -203,6 +206,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             },
             "command": {
               "$ref": "#/definitions/command"
@@ -276,6 +282,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
             },
@@ -296,6 +305,9 @@
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
             }
           },
           "required": []
@@ -322,6 +334,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             },
             "command": {
               "$ref": "#/definitions/command"
@@ -380,8 +395,14 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
             }
           },
           "required": []
@@ -408,6 +429,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             },
             "command": {
               "$ref": "#/definitions/command"
@@ -466,8 +490,14 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
             }
           },
           "required": []
@@ -503,17 +533,13 @@
                 "real"
               ]
             },
-            "name": {
-              "type": "string",
-              "description": "Logical component identity used for workspace key prefix auto-generation. Inheritable from base components."
-            },
             "enabled": {
               "type": "boolean",
               "description": "Flag to enable or disable the component"
             },
             "component": {
               "type": "string",
-              "description": "Terraform/OpenTofu/Helmfile/Packer component"
+              "description": "Terraform/OpenTofu/Helmfile component"
             },
             "inherits": {
               "oneOf": [
@@ -547,7 +573,7 @@
                 },
                 {
                   "type": "object",
-                  "description": "Custom configuration per component. Inherited when stacks.inherit.metadata is enabled (default).",
+                  "description": "Custom configuration per component, not inherited by derived components",
                   "additionalProperties": true,
                   "title": "custom"
                 }
@@ -678,6 +704,20 @@
     "env": {
       "title": "env",
       "description": "Env section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
+    },
+    "locals": {
+      "title": "locals",
+      "description": "File-scoped local variables for use within templates. Locals are resolved before other sections and can reference each other within the same file. Unlike vars and settings, locals do NOT inherit across file boundaries.",
       "oneOf": [
         {
           "type": "string",
@@ -920,9 +960,6 @@
         {
           "type": "object",
           "properties": {
-            "stack": {
-              "type": "string"
-            },
             "namespace": {
               "type": "string"
             },
@@ -1187,6 +1224,47 @@
         {
           "type": "object",
           "additionalProperties": true
+        }
+      ]
+    },
+    "provision": {
+      "title": "provision",
+      "description": "Provision section for component provisioning configuration",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workdir": {
+              "$ref": "#/definitions/provision_workdir"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "provision_workdir": {
+      "title": "provision_workdir",
+      "description": "Workdir provisioner configuration for isolated component execution directories",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable isolated working directory for this component"
+            }
+          },
+          "required": []
         }
       ]
     }

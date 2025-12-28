@@ -1,6 +1,8 @@
 package flags
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -56,6 +58,9 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		// Authentication.
 		Identity: parseIdentityFlag(cmd, v),
 
+		// Profiles.
+		Profile: v.GetStringSlice("profile"),
+
 		// Profiling configuration.
 		ProfilerEnabled: v.GetBool("profiler-enabled"),
 		ProfilerPort:    v.GetInt("profiler-port"),
@@ -78,6 +83,9 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 //  1. Not provided → IdentitySelector{provided: false}
 //  2. --identity (alone) → IdentitySelector{value: "__SELECT__", provided: true}
 //  3. --identity=value → IdentitySelector{value: "value", provided: true}
+//
+// Values like "false", "0", "no", "off" are normalized to the disabled sentinel
+// value to allow users to disable authentication via --identity=false or ATMOS_IDENTITY=false.
 func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelector {
 	defer perf.Track(nil, "flags.parseIdentityFlag")()
 
@@ -90,16 +98,33 @@ func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelect
 	// Check if flag was explicitly set on command line.
 	if cmd.Flags().Changed(identityFlagName) {
 		value := v.GetString(identityFlagName)
-		return global.NewIdentitySelector(value, true)
+		return global.NewIdentitySelector(normalizeIdentityValue(value), true)
 	}
 
 	// Fall back to env/config via Viper.
 	if v.IsSet(identityFlagName) {
 		value := v.GetString(identityFlagName)
-		return global.NewIdentitySelector(value, true)
+		return global.NewIdentitySelector(normalizeIdentityValue(value), true)
 	}
 
 	return global.NewIdentitySelector("", false)
+}
+
+// normalizeIdentityValue converts boolean false representations to the disabled sentinel value.
+// Recognizes: false, False, FALSE, 0, no, No, NO, off, Off, OFF.
+// All other values are returned unchanged.
+// This allows users to disable authentication via --identity=false or ATMOS_IDENTITY=false.
+func normalizeIdentityValue(value string) string {
+	if value == "" {
+		return ""
+	}
+
+	switch strings.ToLower(value) {
+	case "false", "0", "no", "off":
+		return cfg.IdentityFlagDisabledValue
+	default:
+		return value
+	}
 }
 
 // parsePagerFlag handles the pager flag's NoOptDefVal pattern.
