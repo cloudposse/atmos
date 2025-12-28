@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -98,14 +99,17 @@ func Clean(atmosConfig *schema.AtmosConfiguration, opts CleanOptions) error {
 	var errs []error
 
 	// Clean workdirs.
-	if opts.All {
+	switch {
+	case opts.All:
 		if err := CleanAllWorkdirs(atmosConfig); err != nil {
 			errs = append(errs, err)
 		}
-	} else if opts.Component != "" && opts.Stack != "" {
+	case opts.Component != "" && opts.Stack != "":
 		if err := CleanWorkdir(atmosConfig, opts.Component, opts.Stack); err != nil {
 			errs = append(errs, err)
 		}
+	default:
+		log.Debug("Clean called without --all flag or component/stack, no action taken")
 	}
 
 	if len(errs) > 0 {

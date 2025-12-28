@@ -128,40 +128,45 @@ func testWorkdirListAfterProvisioning(t *testing.T) {
 
 // testWorkdirShow tests the show command.
 func testWorkdirShow(t *testing.T) {
-	// Ensure workdir exists from previous test.
-	workdirPath := filepath.Join(".workdir", "terraform", "vpc")
-	if _, err := os.Stat(workdirPath); os.IsNotExist(err) {
-		t.Skip("workdir not created, skipping show test")
-	}
+	// Create self-contained workdir with proper structure using stack-component naming.
+	workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-show")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
-	stdout, stderr, err := runWorkdirCommand(t, "show", "vpc", "--stack", "dev")
+	// Create metadata file.
+	metadata := `{"component":"vpc-show","stack":"dev","source_type":"local","source":"components/terraform/vpc","created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z","content_hash":"abc123"}`
+	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, ".workdir-metadata.json"), []byte(metadata), 0o644))
+
+	// Create main.tf.
+	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, "main.tf"), []byte("# vpc component"), 0o644))
+
+	stdout, stderr, err := runWorkdirCommand(t, "show", "vpc-show", "--stack", "dev")
 	if err != nil {
 		t.Logf("stdout: %s", stdout)
 		t.Logf("stderr: %s", stderr)
-		// Show command may require actual workdir to exist with proper structure.
-		// For this test, we just verify the command runs.
-		t.Skip("show command requires complete workdir setup")
 	}
 
 	// Should show component details.
 	output := stdout + stderr
-	assert.Contains(t, output, "vpc", "expected vpc in show output")
+	assert.Contains(t, output, "vpc-show", "expected vpc-show in show output")
 }
 
 // testWorkdirDescribe tests the describe command.
 func testWorkdirDescribe(t *testing.T) {
-	// Ensure workdir exists.
-	workdirPath := filepath.Join(".workdir", "terraform", "vpc")
-	if _, err := os.Stat(workdirPath); os.IsNotExist(err) {
-		t.Skip("workdir not created, skipping describe test")
-	}
+	// Create self-contained workdir with proper structure using stack-component naming.
+	workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-describe")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
-	stdout, stderr, err := runWorkdirCommand(t, "describe", "vpc", "--stack", "dev")
+	// Create metadata file.
+	metadata := `{"component":"vpc-describe","stack":"dev","source_type":"local","source":"components/terraform/vpc","created_at":"2025-01-01T00:00:00Z","updated_at":"2025-01-01T00:00:00Z","content_hash":"def456"}`
+	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, ".workdir-metadata.json"), []byte(metadata), 0o644))
+
+	// Create main.tf.
+	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, "main.tf"), []byte("# vpc component"), 0o644))
+
+	stdout, stderr, err := runWorkdirCommand(t, "describe", "vpc-describe", "--stack", "dev")
 	if err != nil {
 		t.Logf("stdout: %s", stdout)
 		t.Logf("stderr: %s", stderr)
-		// Describe command may require actual workdir to exist with proper structure.
-		t.Skip("describe command requires complete workdir setup")
 	}
 
 	// Should output manifest format.
@@ -171,8 +176,8 @@ func testWorkdirDescribe(t *testing.T) {
 
 // testWorkdirCleanSpecific tests cleaning a specific workdir.
 func testWorkdirCleanSpecific(t *testing.T) {
-	// Create a workdir to clean.
-	workdirPath := filepath.Join(".workdir", "terraform", "test-clean")
+	// Create a workdir to clean using stack-component naming.
+	workdirPath := filepath.Join(".workdir", "terraform", "dev-test-clean")
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, "main.tf"), []byte("# test"), 0o644))
 
@@ -184,16 +189,16 @@ func testWorkdirCleanSpecific(t *testing.T) {
 	_, err := os.Stat(workdirPath)
 	require.NoError(t, err, "workdir should exist before clean")
 
-	// Clean the workdir.
+	// Clean the workdir using component and stack.
 	stdout, stderr, err := runWorkdirCommand(t, "clean", "test-clean", "--stack", "dev")
 	if err != nil {
 		t.Logf("stdout: %s", stdout)
 		t.Logf("stderr: %s", stderr)
 	}
 
-	// Note: The clean command may or may not find the workdir depending on
-	// how it resolves the component/stack to workdir path.
-	// We verify at least the command executes.
+	// Verify workdir was removed.
+	_, err = os.Stat(workdirPath)
+	assert.True(t, os.IsNotExist(err), "workdir should be removed after clean")
 }
 
 // testWorkdirCleanAll tests cleaning all workdirs.
