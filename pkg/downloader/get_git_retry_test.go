@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -334,12 +335,8 @@ func readCounter(t *testing.T, counterFile string) int {
 	data, err := os.ReadFile(counterFile)
 	require.NoError(t, err)
 	countStr := strings.TrimSpace(string(data))
-	count := 0
-	for _, c := range countStr {
-		if c >= '0' && c <= '9' {
-			count = count*10 + int(c-'0')
-		}
-	}
+	count, err := strconv.Atoi(countStr)
+	require.NoError(t, err)
 	return count
 }
 

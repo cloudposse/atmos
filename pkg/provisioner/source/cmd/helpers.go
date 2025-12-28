@@ -114,7 +114,7 @@ func InitConfigAndAuth(component, stack, identity string, globalFlags *global.Fl
 	// Create AuthManager with merged config (auto-selects component's default identity if present).
 	authManager, err := createAuthFunc(identity, mergedAuthConfig, cfg.IdentityFlagSelectValue)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to create auth manager: %w", err)
 	}
 
 	// Get AuthContext from AuthManager.

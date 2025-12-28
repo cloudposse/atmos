@@ -73,7 +73,7 @@ func executeDelete(cmd *cobra.Command, args []string, config *Config, parser *fl
 	}
 
 	// Determine and delete the target directory.
-	return deleteSourceDirectory(atmosConfig, config.ComponentType, component, componentConfig, deleteOpts.Stack)
+	return deleteSourceDirectory(atmosConfig, config.ComponentType, component, componentConfig)
 }
 
 // parseDeleteFlags parses delete command flags and validates them.
@@ -144,7 +144,7 @@ func initDeleteContext(component, stack string, globalFlags *global.Flags) (*sch
 }
 
 // deleteSourceDirectory deletes the vendored source directory.
-func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, componentType, component string, componentConfig map[string]any, _ string) error {
+func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, componentType, component string, componentConfig map[string]any) error {
 	targetDir, err := source.DetermineTargetDirectory(atmosConfig, componentType, component, componentConfig)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).

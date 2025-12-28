@@ -1,6 +1,7 @@
 package httpmock
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -94,7 +95,7 @@ func (g *githubInterceptor) RoundTrip(req *http.Request) (*http.Response, error)
 	if strings.Contains(req.URL.Host, "raw.githubusercontent.com") {
 		mockURL, err := url.Parse(g.mockServerURL)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to parse mock server URL: %w", err)
 		}
 		// Clone the request to avoid modifying the original.
 		newReq := req.Clone(req.Context())

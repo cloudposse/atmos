@@ -1079,7 +1079,7 @@ git checkout
 
 **Worktree Naming Convention:**
 Since the same version might need different subpaths for different components, we include the path in the worktree name:
-```
+```text
 worktrees/v1.2.3--modules-vpc/      # vpc component at v1.2.3
 worktrees/v1.2.3--modules-eks/      # eks component at v1.2.3 (same version, different path)
 worktrees/v1.3.0--modules-vpc/      # vpc component at v1.3.0
