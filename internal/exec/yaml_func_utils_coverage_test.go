@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // TestProcessCustomTags_Coverage tests the coverage of processCustomTags function
@@ -146,7 +146,7 @@ func TestProcessCustomTags_UnsupportedTagPath(t *testing.T) {
 			// Check that the tag would not match any supported prefix
 			// Use matchesSupportedTagCoverage which checks for exact tag followed by whitespace
 			testInput := tag + " test"
-			isSupported := matchesSupportedTagCoverage(testInput, u.AllSupportedYamlTags)
+			isSupported := matchesSupportedTagCoverage(testInput, fntag.AllYAML())
 			assert.False(t, isSupported, "Tag %s should not be recognized as supported", tag)
 		})
 	}

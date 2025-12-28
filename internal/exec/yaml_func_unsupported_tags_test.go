@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // Note: We cannot directly test unsupported tag errors because they call
@@ -149,7 +149,7 @@ func TestProcessCustomTags_UnsupportedTagDetection(t *testing.T) {
 			// We need to test that the function would detect this as unsupported
 			// Check if the tag would be recognized as unsupported
 			// Use matchesSupportedTag which checks for exact tag followed by space/whitespace
-			isSupportedTag := matchesSupportedTag(tt.input, u.AllSupportedYamlTags)
+			isSupportedTag := matchesSupportedTag(tt.input, fntag.AllYAML())
 
 			assert.False(t, isSupportedTag, "%s: Tag '%s' should not be recognized as supported", tt.description, tt.tag)
 			assert.True(t, strings.HasPrefix(tt.input, "!"), "Input should start with ! to be recognized as a tag")
@@ -180,18 +180,18 @@ func TestProcessCustomTags_ErrorMessageFormat(t *testing.T) {
 			name:             "error message lists supported tags",
 			unsupportedTag:   "!custom",
 			stack:            "prod-stack",
-			expectedContains: u.AllSupportedYamlTags,
+			expectedContains: fntag.AllYAML(),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create the expected error using the central list of supported tags
+			// Create the expected error using the central list of supported tags.
 			err := fmt.Errorf("%w: '%s' in stack '%s'. Supported tags are: %s",
 				errUtils.ErrUnsupportedYamlTag,
 				tt.unsupportedTag,
 				tt.stack,
-				strings.Join(u.AllSupportedYamlTags, ", "))
+				strings.Join(fntag.AllYAML(), ", "))
 
 			errMsg := err.Error()
 
@@ -227,7 +227,7 @@ func TestProcessCustomTags_ValidTagsNotReportedAsUnsupported(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Check that valid tags are recognized as supported
 			// Use matchesSupportedTag which checks for exact tag followed by space/whitespace
-			isSupportedTag := matchesSupportedTag(tt.input, u.AllSupportedYamlTags)
+			isSupportedTag := matchesSupportedTag(tt.input, fntag.AllYAML())
 
 			assert.True(t, isSupportedTag, "Tag in '%s' should be recognized as supported", tt.input)
 		})

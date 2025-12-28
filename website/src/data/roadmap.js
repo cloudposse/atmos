@@ -182,6 +182,7 @@ export const roadmapConfig = {
         { label: 'Configuration provenance tracking', status: 'shipped', quarter: 'q4-2025', changelog: 'provenance-tracking', description: 'Track where every configuration value comes from—which file, which import, which override.', benefits: 'Debug complex inheritance chains. Understand exactly how configuration was assembled.' },
         { label: 'Global environment variables', status: 'shipped', quarter: 'q4-2025', changelog: 'global-env-section', description: 'Define environment variables globally in atmos.yaml that apply to all commands.', benefits: 'Set common environment variables once. No repetition across components.' },
         { label: 'Metadata inheritance', status: 'shipped', quarter: 'q4-2025', changelog: 'metadata-inheritance', description: 'Metadata section now supports full inheritance from base stacks.', benefits: 'Define metadata patterns once and inherit everywhere. Consistent naming across stacks.' },
+        { label: 'Unsupported YAML function validation', status: 'shipped', quarter: 'q4-2025', pr: 1515, description: 'Detect and report unsupported or misspelled YAML tags with clear error messages listing valid options.', codeExample: '# !envv HOME → Error: unsupported tag "!envv". Supported: !env, !exec, ...', benefits: 'Catch typos and invalid YAML functions immediately. No silent failures or confusing behavior from unsupported tags.' },
       ],
       issues: [],
       prs: [

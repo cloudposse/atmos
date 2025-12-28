@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
 
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -233,16 +234,19 @@ parent:
 func TestIncludeTagsAreRecognizedAsSupported(t *testing.T) {
 	// Test that !include and !include.raw are recognized as supported tags
 	// even though we can't test their processing without actual files
-	assert.Contains(t, AllSupportedYamlTags, "!include", "!include should be in AllSupportedYamlTags")
-	assert.Contains(t, AllSupportedYamlTags, "!include.raw", "!include.raw should be in AllSupportedYamlTags")
+	allYAMLTags := fntag.AllYAML()
+	assert.Contains(t, allYAMLTags, "!include", "!include should be in AllYAML()")
+	assert.Contains(t, allYAMLTags, "!include.raw", "!include.raw should be in AllYAML()")
 
-	// Verify that these tags would pass the "is supported" check
-	assert.True(t, SliceContainsString(AllSupportedYamlTags, "!include"), "!include should be recognized as supported")
-	assert.True(t, SliceContainsString(AllSupportedYamlTags, "!include.raw"), "!include.raw should be recognized as supported")
+	// Verify that these tags would pass the "is supported" check using IsValidYAML
+	assert.True(t, fntag.IsValidYAML("!include"), "!include should be recognized as supported")
+	assert.True(t, fntag.IsValidYAML("!include.raw"), "!include.raw should be recognized as supported")
 }
 
 func TestAllSupportedYamlTagsList(t *testing.T) {
-	// Test that AllSupportedYamlTags contains all expected tags
+	// Test that fntag.AllYAML() contains all expected tags.
+	// Note: The registry has more tags than originally supported in yaml_utils.go.
+	// This test verifies all the originally expected tags are present.
 	expectedTags := []string{
 		"!exec",
 		"!store",
@@ -254,21 +258,22 @@ func TestAllSupportedYamlTagsList(t *testing.T) {
 		"!include",
 		"!include.raw",
 		"!repo-root",
+		"!cwd",
+		"!random",
+		"!literal",
+		"!aws.account_id",
+		"!aws.caller_identity_arn",
+		"!aws.caller_identity_user_id",
+		"!aws.region",
 	}
 
+	allYAMLTags := fntag.AllYAML()
 	for _, expectedTag := range expectedTags {
-		found := false
-		for _, tag := range AllSupportedYamlTags {
-			if tag == expectedTag {
-				found = true
-				break
-			}
-		}
-		assert.True(t, found, "AllSupportedYamlTags should contain %s", expectedTag)
+		assert.True(t, fntag.IsValidYAML(expectedTag), "fntag.AllYAML() should contain %s", expectedTag)
 	}
 
-	// Ensure AllSupportedYamlTags has exactly the expected number of tags
-	assert.Equal(t, len(expectedTags), len(AllSupportedYamlTags), "AllSupportedYamlTags should have exactly %d tags", len(expectedTags))
+	// Ensure AllYAML() has exactly the expected number of tags.
+	assert.Equal(t, len(expectedTags), len(allYAMLTags), "fntag.AllYAML() should have exactly %d tags", len(expectedTags))
 }
 
 func TestProcessCustomTagsWithMixedValidAndInvalid(t *testing.T) {

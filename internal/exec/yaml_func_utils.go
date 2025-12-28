@@ -1,9 +1,12 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
+	fn "github.com/cloudposse/atmos/pkg/function"
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -168,6 +171,7 @@ func processContextAwareTags(
 
 // processSimpleTags processes tags that don't need cycle detection.
 // Returns (result, handled, error) where handled indicates if a matching tag was found.
+// This function uses the function registry for most tags.
 func processSimpleTags(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
@@ -175,60 +179,9 @@ func processSimpleTags(
 	skip []string,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, bool, error) {
-	// Check tags in order of specificity (more specific first).
-	if shouldProcess, handled := matchesPrefixOrSkipped(input, u.AtmosYamlFuncTemplate, skip); handled {
-		if shouldProcess {
-			return processTagTemplate(input), true, nil
-		}
-		return input, true, nil
-	}
-	if shouldProcess, handled := matchesPrefixOrSkipped(input, u.AtmosYamlFuncExec, skip); handled {
-		if shouldProcess {
-			res, err := u.ProcessTagExec(input)
-			if err != nil {
-				return nil, true, err
-			}
-			return res, true, nil
-		}
-		return input, true, nil
-	}
-	// Check !store.get before !store (more specific first).
-	if shouldProcess, handled := matchesPrefixOrSkipped(input, u.AtmosYamlFuncStoreGet, skip); handled {
-		if shouldProcess {
-			return processTagStoreGet(atmosConfig, input, currentStack), true, nil
-		}
-		return input, true, nil
-	}
-	if shouldProcess, handled := matchesPrefixOrSkipped(input, u.AtmosYamlFuncStore, skip); handled {
-		if shouldProcess {
-			return processTagStore(atmosConfig, input, currentStack), true, nil
-		}
-		return input, true, nil
-	}
-	if shouldProcess, handled := matchesPrefixOrSkipped(input, u.AtmosYamlFuncEnv, skip); handled {
-		if shouldProcess {
-			res, err := u.ProcessTagEnv(input, stackInfo)
-			if err != nil {
-				return nil, true, err
-			}
-			return res, true, nil
-		}
-		return input, true, nil
-	}
-	// AWS YAML functions - note these check for exact match since they take no arguments.
-	if input == u.AtmosYamlFuncAwsAccountID && !skipFunc(skip, u.AtmosYamlFuncAwsAccountID) {
-		return processTagAwsAccountID(atmosConfig, input, stackInfo), true, nil
-	}
-	if input == u.AtmosYamlFuncAwsCallerIdentityArn && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityArn) {
-		return processTagAwsCallerIdentityArn(atmosConfig, input, stackInfo), true, nil
-	}
-	if input == u.AtmosYamlFuncAwsCallerIdentityUserID && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityUserID) {
-		return processTagAwsCallerIdentityUserID(atmosConfig, input, stackInfo), true, nil
-	}
-	if input == u.AtmosYamlFuncAwsRegion && !skipFunc(skip, u.AtmosYamlFuncAwsRegion) {
-		return processTagAwsRegion(atmosConfig, input, stackInfo), true, nil
-	}
-	return nil, false, nil
+	// Use the function registry to process tags.
+	// The registry handles: env, exec, template, store, store.get, aws.*, random, literal, etc.
+	return executeRegistryFunction(atmosConfig, input, currentStack, skip, stackInfo)
 }
 
 func processCustomTagsWithContext(
@@ -269,4 +222,74 @@ func getStringAfterTag(input string, tag string) (string, error) {
 	}
 
 	return str, nil
+}
+
+// extractTagAndArgs extracts the tag name and arguments from a YAML function string.
+// For example, "!env HOME" returns ("env", "HOME").
+// For "!aws.account_id" returns ("aws.account_id", "").
+func extractTagAndArgs(input string) (tagName, args string, ok bool) {
+	if !strings.HasPrefix(input, "!") {
+		return "", "", false
+	}
+
+	// Find the first whitespace (space, tab, or newline) to separate tag from args.
+	whitespaceIdx := strings.IndexAny(input, " \t\n")
+	if whitespaceIdx == -1 {
+		// No whitespace means the entire string is the tag (e.g., "!aws.account_id").
+		return fntag.FromYAML(input), "", true
+	}
+
+	tagPart := input[:whitespaceIdx]
+	argsPart := strings.TrimSpace(input[whitespaceIdx+1:])
+	return fntag.FromYAML(tagPart), argsPart, true
+}
+
+// createExecutionContext creates a fn.ExecutionContext from the current parameters.
+func createExecutionContext(
+	atmosConfig *schema.AtmosConfiguration,
+	currentStack string,
+	stackInfo *schema.ConfigAndStacksInfo,
+) *fn.ExecutionContext {
+	return &fn.ExecutionContext{
+		AtmosConfig: atmosConfig,
+		Stack:       currentStack,
+		StackInfo:   stackInfo,
+	}
+}
+
+// executeRegistryFunction looks up a function in the registry and executes it.
+// Returns (result, handled, error) where handled indicates if a matching function was found.
+func executeRegistryFunction(
+	atmosConfig *schema.AtmosConfiguration,
+	input string,
+	currentStack string,
+	skip []string,
+	stackInfo *schema.ConfigAndStacksInfo,
+) (any, bool, error) {
+	tagName, args, ok := extractTagAndArgs(input)
+	if !ok {
+		return nil, false, nil
+	}
+
+	// Check if this tag should be skipped.
+	if skipFunc(skip, "!"+tagName) {
+		return input, true, nil
+	}
+
+	// Look up the function in the registry.
+	registry := fn.DefaultRegistry()
+	if !registry.Has(tagName) {
+		// Function not found in registry - not handled.
+		return nil, false, nil
+	}
+	regFn, _ := registry.Get(tagName)
+
+	// Create execution context and execute the function.
+	execCtx := createExecutionContext(atmosConfig, currentStack, stackInfo)
+	result, err := regFn.Execute(context.Background(), args, execCtx)
+	if err != nil {
+		return nil, true, err
+	}
+
+	return result, true, nil
 }

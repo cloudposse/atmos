@@ -15,6 +15,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -48,43 +49,6 @@ const (
 )
 
 var (
-	AtmosYamlTags = []string{
-		AtmosYamlFuncExec,
-		AtmosYamlFuncStore,
-		AtmosYamlFuncStoreGet,
-		AtmosYamlFuncTemplate,
-		AtmosYamlFuncTerraformOutput,
-		AtmosYamlFuncTerraformState,
-		AtmosYamlFuncEnv,
-		AtmosYamlFuncCwd,
-		AtmosYamlFuncRandom,
-		AtmosYamlFuncLiteral,
-		AtmosYamlFuncAwsAccountID,
-		AtmosYamlFuncAwsCallerIdentityArn,
-		AtmosYamlFuncAwsCallerIdentityUserID,
-		AtmosYamlFuncAwsRegion,
-	}
-
-	// AtmosYamlTagsMap provides O(1) lookup for custom tag checking.
-	// This optimization replaces the O(n) SliceContainsString calls that were previously
-	// called 75M+ times, causing significant performance overhead.
-	atmosYamlTagsMap = map[string]bool{
-		AtmosYamlFuncExec:                    true,
-		AtmosYamlFuncStore:                   true,
-		AtmosYamlFuncStoreGet:                true,
-		AtmosYamlFuncTemplate:                true,
-		AtmosYamlFuncTerraformOutput:         true,
-		AtmosYamlFuncTerraformState:          true,
-		AtmosYamlFuncEnv:                     true,
-		AtmosYamlFuncCwd:                     true,
-		AtmosYamlFuncRandom:                  true,
-		AtmosYamlFuncLiteral:                 true,
-		AtmosYamlFuncAwsAccountID:            true,
-		AtmosYamlFuncAwsCallerIdentityArn:    true,
-		AtmosYamlFuncAwsCallerIdentityUserID: true,
-		AtmosYamlFuncAwsRegion:               true,
-	}
-
 	// ParsedYAMLCache stores parsed yaml.Node objects and their position information
 	// to avoid re-parsing the same files multiple times.
 	// Cache key: file path + content hash.
@@ -108,20 +72,6 @@ var (
 	}{
 		uniqueFiles:  make(map[string]int),
 		uniqueHashes: make(map[string]int),
-	}
-
-	// AllSupportedYamlTags contains all YAML tags that Atmos supports.
-	AllSupportedYamlTags = []string{
-		AtmosYamlFuncExec,
-		AtmosYamlFuncStore,
-		AtmosYamlFuncStoreGet,
-		AtmosYamlFuncTemplate,
-		AtmosYamlFuncTerraformOutput,
-		AtmosYamlFuncTerraformState,
-		AtmosYamlFuncEnv,
-		AtmosYamlFuncInclude,
-		AtmosYamlFuncIncludeRaw,
-		AtmosYamlFuncGitRoot,
 	}
 
 	ErrIncludeYamlFunctionInvalidArguments    = errors.New("invalid number of arguments in the !include function")
@@ -678,17 +628,18 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 
 		// Check if a tag is present and if it's unsupported.
 		// Standard YAML tags (!!str, !!int, etc.) are allowed.
+		// Use the fntag package as the single source of truth for supported tags.
 		if tag != "" && !strings.HasPrefix(tag, "!!") {
-			if !SliceContainsString(AllSupportedYamlTags, tag) {
-				supportedTags := strings.Join(AllSupportedYamlTags, ", ")
+			if !fntag.IsValidYAML(tag) {
+				supportedTags := strings.Join(fntag.AllYAML(), ", ")
 				return fmt.Errorf("%w: '%s' found in file '%s'. Supported tags are: %s",
 					errUtils.ErrUnsupportedYamlTag, tag, file, supportedTags)
 			}
 		}
 
-		// Use O(1) map lookup instead of O(n) slice search for performance.
-		// This optimization reduces 75M+ linear searches to constant-time lookups.
-		if atmosYamlTagsMap[tag] {
+		// Use fntag package O(1) lookup instead of local map.
+		// This ensures we use the fntag package as the single source of truth.
+		if fntag.IsValidYAML(tag) {
 			n.Value = getValueWithTag(n)
 			// Clear the custom tag to prevent the YAML decoder from processing it again.
 			// We keep the value as is since it will be processed later by processCustomTags.
