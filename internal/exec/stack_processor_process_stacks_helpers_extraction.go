@@ -88,6 +88,19 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentAuth = make(map[string]any, componentSmallMapCapacity)
 	}
 
+	// Terraform-specific: extract provision section (for workdir provisioning).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.ProvisionSectionName]; ok {
+			componentProvision, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.provision' in the file '%s'", errUtils.ErrInvalidComponentProvision, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentProvision = componentProvision
+		} else {
+			result.ComponentProvision = make(map[string]any, componentSmallMapCapacity)
+		}
+	}
+
 	// Extract metadata section.
 	if i, ok := opts.ComponentMap[cfg.MetadataSectionName]; ok {
 		componentMetadata, ok := i.(map[string]any)
