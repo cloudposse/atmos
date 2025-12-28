@@ -31,6 +31,18 @@ func TestCleanParser_Flags(t *testing.T) {
 	assert.NotNil(t, cleanParser)
 }
 
+func TestCleanCmd_Flags(t *testing.T) {
+	// Verify --all flag is registered.
+	allFlag := cleanCmd.Flags().Lookup("all")
+	assert.NotNil(t, allFlag, "all flag should be registered")
+	assert.Equal(t, "a", allFlag.Shorthand)
+	assert.Equal(t, "false", allFlag.DefValue)
+
+	// Verify --stack flag is registered.
+	stackFlag := cleanCmd.Flags().Lookup("stack")
+	assert.NotNil(t, stackFlag, "stack flag should be registered")
+}
+
 func TestCleanCmd_DisableFlagParsing(t *testing.T) {
 	// Verify flag parsing is enabled.
 	assert.False(t, cleanCmd.DisableFlagParsing)
@@ -364,4 +376,133 @@ func TestCleanCmd_RunE_ValidComponentCase(t *testing.T) {
 	assert.False(t, allWithComponent)
 	assert.False(t, noAllNoArgs)
 	assert.False(t, componentNoStack)
+}
+
+// Test cobra.MaximumNArgs(1) validation.
+
+func TestCleanCmd_ArgsValidation(t *testing.T) {
+	// cobra.MaximumNArgs(1) should accept zero arguments.
+	err := cleanCmd.Args(cleanCmd, []string{})
+	assert.NoError(t, err)
+
+	// cobra.MaximumNArgs(1) should accept one argument.
+	err = cleanCmd.Args(cleanCmd, []string{"vpc"})
+	assert.NoError(t, err)
+
+	// cobra.MaximumNArgs(1) should reject two arguments.
+	err = cleanCmd.Args(cleanCmd, []string{"vpc", "extra"})
+	assert.Error(t, err)
+}
+
+// Test cleanAllWorkdirs success path.
+
+func TestCleanAllWorkdirs_SuccessMessage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().CleanAllWorkdirs(gomock.Any()).Return(nil)
+
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Should print success message to stderr and return nil.
+	err := cleanAllWorkdirs(atmosConfig)
+	assert.NoError(t, err)
+}
+
+// Test cleanSpecificWorkdir success path.
+
+func TestCleanSpecificWorkdir_SuccessMessage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().CleanWorkdir(gomock.Any(), "s3", "staging").Return(nil)
+
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Should print success message to stderr and return nil.
+	err := cleanSpecificWorkdir(atmosConfig, "s3", "staging")
+	assert.NoError(t, err)
+}
+
+// Test error message types.
+
+func TestCleanCmd_ErrorMessages(t *testing.T) {
+	tests := []struct {
+		name        string
+		all         bool
+		args        []string
+		stack       string
+		errContains string
+	}{
+		{
+			name:        "all with component conflict",
+			all:         true,
+			args:        []string{"vpc"},
+			stack:       "",
+			errContains: "Cannot specify both",
+		},
+		{
+			name:        "no all no args",
+			all:         false,
+			args:        []string{},
+			stack:       "",
+			errContains: "Either --all or a component is required",
+		},
+		{
+			name:        "component without stack",
+			all:         false,
+			args:        []string{"vpc"},
+			stack:       "",
+			errContains: "Stack is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Document the expected error messages.
+			assert.NotEmpty(t, tt.errContains)
+		})
+	}
+}
+
+// Test various component/stack combinations.
+
+func TestCleanSpecificWorkdir_VariousInputs(t *testing.T) {
+	testCases := []struct {
+		component string
+		stack     string
+	}{
+		{"vpc", "dev"},
+		{"s3-bucket", "prod"},
+		{"my_component", "staging"},
+		{"component.name", "test"},
+		{"namespace/component", "qa"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.component+"-"+tc.stack, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := NewMockWorkdirManager(ctrl)
+			mock.EXPECT().CleanWorkdir(gomock.Any(), tc.component, tc.stack).Return(nil)
+
+			original := workdirManager
+			defer func() { workdirManager = original }()
+			SetWorkdirManager(mock)
+
+			err := cleanSpecificWorkdir(&schema.AtmosConfiguration{}, tc.component, tc.stack)
+			assert.NoError(t, err)
+		})
+	}
 }

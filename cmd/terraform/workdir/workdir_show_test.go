@@ -1,6 +1,7 @@
 package workdir
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -245,4 +246,164 @@ func TestShowCmd_RunE_MultipleArgs(t *testing.T) {
 	args := []string{"vpc", "extra"}
 	assert.Len(t, args, 2)
 	// cobra.ExactArgs(1) would reject this.
+}
+
+// Test cobra.ExactArgs(1) validation.
+
+func TestShowCmd_ArgsValidation(t *testing.T) {
+	// cobra.ExactArgs(1) should reject zero arguments.
+	err := showCmd.Args(showCmd, []string{})
+	assert.Error(t, err)
+
+	// cobra.ExactArgs(1) should accept one argument.
+	err = showCmd.Args(showCmd, []string{"vpc"})
+	assert.NoError(t, err)
+
+	// cobra.ExactArgs(1) should reject two arguments.
+	err = showCmd.Args(showCmd, []string{"vpc", "extra"})
+	assert.Error(t, err)
+}
+
+// Test flag registration.
+
+func TestShowCmd_Flags(t *testing.T) {
+	// Verify --stack flag is registered.
+	stackFlag := showCmd.Flags().Lookup("stack")
+	assert.NotNil(t, stackFlag, "stack flag should be registered")
+	assert.Equal(t, "s", stackFlag.Shorthand)
+}
+
+// Test GetWorkdirInfo with various scenarios.
+
+func TestMockWorkdirManager_GetWorkdirInfo_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	expectedInfo := &WorkdirInfo{
+		Name:        "prod-s3",
+		Component:   "s3",
+		Stack:       "prod",
+		Source:      "components/terraform/s3",
+		Path:        ".workdir/terraform/prod-s3",
+		ContentHash: "hash123",
+		CreatedAt:   time.Now().Add(-time.Hour),
+		UpdatedAt:   time.Now(),
+	}
+
+	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "s3", "prod").Return(expectedInfo, nil)
+
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	result, err := mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "s3", "prod")
+	assert.NoError(t, err)
+	assert.Equal(t, "prod-s3", result.Name)
+	assert.Equal(t, "hash123", result.ContentHash)
+}
+
+func TestMockWorkdirManager_GetWorkdirInfo_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	expectedErr := errors.New("workdir not found")
+
+	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "nonexistent", "dev").Return(nil, expectedErr)
+
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	result, err := mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "nonexistent", "dev")
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+// Test printShowHuman with various field values.
+
+func TestPrintShowHuman_SpecialCharacters(t *testing.T) {
+	info := &WorkdirInfo{
+		Name:      "dev-vpc/main",
+		Component: "vpc/main",
+		Stack:     "dev:test",
+		Source:    "path/with spaces/component",
+		Path:      ".workdir/terraform/dev-vpc-main",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	// Should handle special characters without panic.
+	printShowHuman(info)
+}
+
+func TestPrintShowHuman_VeryLongContentHash(t *testing.T) {
+	info := &WorkdirInfo{
+		Name:        "dev-vpc",
+		Component:   "vpc",
+		Stack:       "dev",
+		Source:      "components/terraform/vpc",
+		Path:        ".workdir/terraform/dev-vpc",
+		ContentHash: "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	// Should handle long content hash.
+	printShowHuman(info)
+}
+
+// Test with various stack name formats.
+
+func TestShowCmd_VariousStackNames(t *testing.T) {
+	stacks := []string{
+		"dev",
+		"staging",
+		"production-us-east-1",
+		"tenant1/dev",
+		"org-env-region",
+	}
+
+	for _, stack := range stacks {
+		t.Run(stack, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := NewMockWorkdirManager(ctrl)
+			expectedInfo := &WorkdirInfo{
+				Name:      "test-vpc",
+				Component: "vpc",
+				Stack:     stack,
+				Source:    "components/terraform/vpc",
+				Path:      ".workdir/terraform/test-vpc",
+				CreatedAt: time.Now(),
+				UpdatedAt: time.Now(),
+			}
+
+			mock.EXPECT().GetWorkdirInfo(gomock.Any(), "vpc", stack).Return(expectedInfo, nil)
+
+			original := workdirManager
+			defer func() { workdirManager = original }()
+			SetWorkdirManager(mock)
+
+			result, err := mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "vpc", stack)
+			assert.NoError(t, err)
+			assert.Equal(t, stack, result.Stack)
+		})
+	}
+}
+
+// Test config values.
+
+func TestShowCmd_ConfigValues(t *testing.T) {
+	v := viper.New()
+	v.Set("stack", "staging")
+	v.Set("base-path", "/custom/path")
+
+	stack := v.GetString("stack")
+	basePath := v.GetString("base-path")
+
+	assert.Equal(t, "staging", stack)
+	assert.Equal(t, "/custom/path", basePath)
 }

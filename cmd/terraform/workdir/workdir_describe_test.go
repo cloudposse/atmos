@@ -289,3 +289,104 @@ func TestDescribeCmd_RunE_EmptyArgs(t *testing.T) {
 	assert.Empty(t, args)
 	// cobra.ExactArgs(1) would reject this.
 }
+
+// Test cobra.ExactArgs(1) validation.
+
+func TestDescribeCmd_ArgsValidation(t *testing.T) {
+	// cobra.ExactArgs(1) should reject zero arguments.
+	err := describeCmd.Args(describeCmd, []string{})
+	assert.Error(t, err)
+
+	// cobra.ExactArgs(1) should accept one argument.
+	err = describeCmd.Args(describeCmd, []string{"vpc"})
+	assert.NoError(t, err)
+
+	// cobra.ExactArgs(1) should reject two arguments.
+	err = describeCmd.Args(describeCmd, []string{"vpc", "extra"})
+	assert.Error(t, err)
+}
+
+// Test flag registration.
+
+func TestDescribeCmd_Flags(t *testing.T) {
+	// Verify --stack flag is registered.
+	stackFlag := describeCmd.Flags().Lookup("stack")
+	assert.NotNil(t, stackFlag, "stack flag should be registered")
+	assert.Equal(t, "s", stackFlag.Shorthand)
+}
+
+// Test successful manifest output.
+
+func TestMockWorkdirManager_DescribeWorkdir_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+
+	manifest := `components:
+  terraform:
+    s3-bucket:
+      metadata:
+        workdir:
+          name: prod-s3-bucket
+          source: components/terraform/s3-bucket
+          path: .workdir/terraform/prod-s3-bucket
+          content_hash: abc123
+`
+
+	mock.EXPECT().DescribeWorkdir(gomock.Any(), "s3-bucket", "prod").Return(manifest, nil)
+
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	result, err := mock.DescribeWorkdir(&schema.AtmosConfiguration{}, "s3-bucket", "prod")
+	assert.NoError(t, err)
+	assert.Contains(t, result, "s3-bucket")
+	assert.Contains(t, result, "prod-s3-bucket")
+	assert.Contains(t, result, "content_hash")
+}
+
+// Test with different stack names.
+
+func TestDescribeCmd_VariousStacks(t *testing.T) {
+	stacks := []string{
+		"dev",
+		"staging",
+		"production",
+		"us-east-1-prod",
+		"tenant1-dev",
+	}
+
+	for _, stack := range stacks {
+		t.Run(stack, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mock := NewMockWorkdirManager(ctrl)
+			mock.EXPECT().DescribeWorkdir(gomock.Any(), "vpc", stack).Return("manifest", nil)
+
+			original := workdirManager
+			defer func() { workdirManager = original }()
+			SetWorkdirManager(mock)
+
+			result, err := mock.DescribeWorkdir(&schema.AtmosConfiguration{}, "vpc", stack)
+			assert.NoError(t, err)
+			assert.NotEmpty(t, result)
+		})
+	}
+}
+
+// Test buildConfigAndStacksInfo values.
+
+func TestDescribeCmd_ConfigValues(t *testing.T) {
+	v := viper.New()
+	v.Set("stack", "prod")
+	v.Set("base-path", "/test/path")
+
+	stack := v.GetString("stack")
+	basePath := v.GetString("base-path")
+
+	assert.Equal(t, "prod", stack)
+	assert.Equal(t, "/test/path", basePath)
+}

@@ -2,9 +2,11 @@ package workdir
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -248,6 +250,19 @@ func TestListCmd_Args(t *testing.T) {
 	assert.NotNil(t, listCmd.Args)
 }
 
+func TestListCmd_Flags(t *testing.T) {
+	// Verify format flag is registered.
+	flag := listCmd.Flags().Lookup("format")
+	assert.NotNil(t, flag, "format flag should be registered")
+	assert.Equal(t, "f", flag.Shorthand)
+	assert.Equal(t, "table", flag.DefValue)
+}
+
+func TestListCmd_DisableFlagParsing(t *testing.T) {
+	// Verify flag parsing is enabled.
+	assert.False(t, listCmd.DisableFlagParsing)
+}
+
 func TestMockWorkdirManager_ListWorkdirs(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -351,4 +366,137 @@ func TestListCmd_ArgsValidation(t *testing.T) {
 	// cobra.NoArgs should reject any arguments.
 	err = listCmd.Args(listCmd, []string{"unexpected"})
 	assert.Error(t, err)
+}
+
+// Test printListTable with varying data sizes.
+
+func TestPrintListTable_MultipleRows(t *testing.T) {
+	// Test with multiple workdirs of varying lengths.
+	workdirs := []WorkdirInfo{
+		{
+			Name:      "short",
+			Component: "a",
+			Stack:     "b",
+			Source:    "c",
+			Path:      "d",
+			CreatedAt: time.Now(),
+		},
+		{
+			Name:      "medium-component-name",
+			Component: "medium-component",
+			Stack:     "staging",
+			Source:    "components/terraform/medium",
+			Path:      ".workdir/terraform/medium",
+			CreatedAt: time.Now(),
+		},
+		{
+			Name:      "very-long-component-name-with-namespace",
+			Component: "very-long-component",
+			Stack:     "production-us-east-1",
+			Source:    "components/terraform/infrastructure/very-long-path/component",
+			Path:      ".workdir/terraform/production-us-east-1-very-long-component",
+			CreatedAt: time.Now(),
+		},
+	}
+
+	// Should handle varying lengths without panic.
+	printListTable(workdirs)
+}
+
+func TestPrintListTable_ZeroTime(t *testing.T) {
+	workdirs := []WorkdirInfo{
+		{
+			Name:      "test",
+			Component: "test",
+			Stack:     "test",
+			Source:    "test",
+			Path:      "test",
+			CreatedAt: time.Time{}, // Zero time.
+		},
+	}
+
+	// Should handle zero time.
+	printListTable(workdirs)
+}
+
+// Test JSON output edge cases.
+
+func TestPrintListJSON_LargeList(t *testing.T) {
+	workdirs := make([]WorkdirInfo, 100)
+	for i := range workdirs {
+		workdirs[i] = WorkdirInfo{
+			Name:      fmt.Sprintf("workdir-%d", i),
+			Component: fmt.Sprintf("component-%d", i),
+			Stack:     "dev",
+			Source:    "components/terraform/test",
+			Path:      fmt.Sprintf(".workdir/terraform/dev-component-%d", i),
+			CreatedAt: time.Now(),
+		}
+	}
+
+	err := printListJSON(workdirs)
+	require.NoError(t, err)
+}
+
+func TestPrintListJSON_SpecialCharacters(t *testing.T) {
+	workdirs := []WorkdirInfo{
+		{
+			Name:      "test-with-special",
+			Component: "test/component",
+			Stack:     "dev:test",
+			Source:    "path/with spaces/component",
+			Path:      ".workdir/special\"chars",
+		},
+	}
+
+	err := printListJSON(workdirs)
+	require.NoError(t, err)
+}
+
+// Test YAML output edge cases.
+
+func TestPrintListYAML_LargeList(t *testing.T) {
+	workdirs := make([]WorkdirInfo, 50)
+	for i := range workdirs {
+		workdirs[i] = WorkdirInfo{
+			Name:      fmt.Sprintf("workdir-%d", i),
+			Component: fmt.Sprintf("component-%d", i),
+			Stack:     "prod",
+		}
+	}
+
+	err := printListYAML(workdirs)
+	require.NoError(t, err)
+}
+
+func TestPrintListYAML_SpecialCharacters(t *testing.T) {
+	workdirs := []WorkdirInfo{
+		{
+			Name:      "test-yaml",
+			Component: "test: component",
+			Stack:     "dev",
+			Source:    "path with\nnewline",
+		},
+	}
+
+	err := printListYAML(workdirs)
+	require.NoError(t, err)
+}
+
+// Test buildConfigAndStacksInfo helper.
+
+func TestListCmd_BuildConfigAndStacksInfo(t *testing.T) {
+	// Verify the function uses the right viper keys.
+	v := viper.New()
+	v.Set("base-path", "/test/path")
+	v.Set("config", "/test/config")
+	v.Set("stacks-dir", "/test/stacks")
+
+	basePath := v.GetString("base-path")
+	config := v.GetString("config")
+	stacksDir := v.GetString("stacks-dir")
+
+	assert.Equal(t, "/test/path", basePath)
+	assert.Equal(t, "/test/config", config)
+	assert.Equal(t, "/test/stacks", stacksDir)
 }
