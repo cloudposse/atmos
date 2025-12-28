@@ -3,9 +3,11 @@
 /* Main Container */
 .roadmap {
   max-width: 1200px;
+  width: 100%;
   margin: 0 auto;
   padding: 2rem;
   overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 /* Section Styles */
@@ -444,12 +446,6 @@
   justify-content: center;
 }
 
-@media screen and (max-width: 480px) {
-  .statsBreakdown {
-    gap: 1rem;
-  }
-}
-
 .statItem {
   display: flex;
   align-items: center;
@@ -518,17 +514,20 @@
   font-size: 3rem;
   font-weight: 700;
   margin: 0 0 1.5rem 0;
-  background: linear-gradient(135deg, #1e5bb8 0%, #538ce9 100%);
+  background: linear-gradient(-45deg, #eb1a1a, #583ce7, #2ec8ff, #23d5ab);
+  background-size: 300% 300%;
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
   background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradient 15s ease infinite;
 }
 
-:global(html[data-theme='dark']) .heroTitle {
-  background: linear-gradient(135deg, #538ce9 0%, #90cdf4 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+@media (prefers-reduced-motion: reduce) {
+  .heroTitle {
+    animation: none;
+    background: var(--ifm-color-primary);
+    -webkit-text-fill-color: currentColor;
+  }
 }
 
 .heroVision {
@@ -571,12 +570,16 @@
 .quarterTimeline {
   padding: 1rem 0;
   overflow: hidden;
+  width: 100%;
+  max-width: 100%;
 }
 
 .quarterTimelineWrapper {
   position: relative;
   display: flex;
   align-items: center;
+  width: 100%;
+  max-width: 100%;
 }
 
 .quarterTimelineScroll {
@@ -585,6 +588,7 @@
   scrollbar-width: none;
   -ms-overflow-style: none;
   flex: 1;
+  max-width: 100%;
 }
 
 .quarterTimelineScroll::-webkit-scrollbar {
@@ -1541,7 +1545,7 @@
   }
 
   .heroTitle {
-    font-size: 2.25rem;
+    font-size: 2rem;
   }
 
   .heroVision {
@@ -1560,6 +1564,130 @@
 
   .highlightsGrid {
     grid-template-columns: 1fr;
+  }
+
+  .statsBreakdown {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .featuredGrid {
+    gap: 1rem;
+  }
+
+  .sectionTitle {
+    font-size: 1.5rem;
+  }
+
+  .quarterTimelineTrack {
+    padding: 0.5rem 0.5rem;
+  }
+
+  .quarterNode {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .quarterConnector {
+    width: 24px;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .roadmap {
+    padding: 0.75rem;
+  }
+
+  .heroVision {
+    font-size: 1rem;
+  }
+
+  .hero {
+    padding: 1rem 0.5rem 0.5rem 0.5rem;
+  }
+
+  .sectionTitle {
+    font-size: 1.25rem;
+  }
+
+  .sectionDescription {
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .statsBreakdown {
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .statItem {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .featuredCard {
+    padding: 1rem;
+  }
+
+  .initiativeCard {
+    padding: 1rem;
+  }
+
+  .initiativeTitle {
+    font-size: 1rem;
+  }
+
+  .initiativeTagline {
+    font-size: 0.85rem;
+  }
+
+  .quarterNode {
+    padding: 0.35rem 0.5rem;
+  }
+
+  .quarterIcon {
+    width: 32px;
+    height: 32px;
+    font-size: 1rem;
+  }
+
+  .quarterLabel {
+    font-size: 0.75rem;
+  }
+
+  .quarterConnector {
+    width: 16px;
+  }
+
+  .quarterDetailGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .heroTheme {
+    padding: 1rem;
+  }
+
+  .heroThemeTitle {
+    font-size: 1.1rem;
+  }
+
+  .heroThemeDescription {
+    font-size: 0.9rem;
+  }
+
+  .milestoneList {
+    margin-left: 0;
+    margin-right: 0;
+    padding: 0;
+  }
+
+  .milestoneItem {
+    padding: 0.5rem 0.5rem;
+  }
+
+  .milestoneRight {
+    flex-wrap: wrap;
+    gap: 0.35rem;
   }
 }
 
