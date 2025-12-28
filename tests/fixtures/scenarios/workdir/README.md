@@ -45,7 +45,7 @@ ls -la .workdir/terraform/
 
 ## Directory Structure
 
-```
+```tree
 workdir/
 ├── atmos.yaml                 # Main config
 ├── .gitignore                 # Ignore .workdir/

@@ -215,56 +215,6 @@ func TestCleanAllWorkdirs(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "all workdirs should be removed")
 }
 
-// TestWorkdirPathOverride tests that the WorkdirPathKey is correctly used
-// to override the component path in terraform execution.
-func TestWorkdirPathOverride(t *testing.T) {
-	// This test verifies the logic that checks for WorkdirPathKey.
-	componentConfig := map[string]any{
-		"component":    "vpc",
-		WorkdirPathKey: "/path/to/workdir/terraform/vpc",
-	}
-
-	// Simulate the check from terraform.go.
-	componentPath := "/original/components/terraform/vpc"
-
-	if workdirPath, ok := componentConfig[WorkdirPathKey].(string); ok && workdirPath != "" {
-		componentPath = workdirPath
-	}
-
-	assert.Equal(t, "/path/to/workdir/terraform/vpc", componentPath)
-}
-
-// TestWorkdirPathOverride_NotSet verifies the original path is used when
-// WorkdirPathKey is not set.
-func TestWorkdirPathOverride_NotSet(t *testing.T) {
-	componentConfig := map[string]any{
-		"component": "vpc",
-	}
-
-	// Simulate the check from terraform.go.
-	componentPath := "/original/components/terraform/vpc"
-
-	if workdirPath, ok := componentConfig[WorkdirPathKey].(string); ok && workdirPath != "" {
-		componentPath = workdirPath
-	}
-
-	assert.Equal(t, "/original/components/terraform/vpc", componentPath)
-}
-
-// TestWorkdirPathOverride_EmptyString verifies the original path is used when
-// WorkdirPathKey is an empty string.
-func TestWorkdirPathOverride_EmptyString(t *testing.T) {
-	componentConfig := map[string]any{
-		"component":    "vpc",
-		WorkdirPathKey: "",
-	}
-
-	// Simulate the check from terraform.go.
-	componentPath := "/original/components/terraform/vpc"
-
-	if workdirPath, ok := componentConfig[WorkdirPathKey].(string); ok && workdirPath != "" {
-		componentPath = workdirPath
-	}
-
-	assert.Equal(t, "/original/components/terraform/vpc", componentPath)
-}
+// Note: Tests for WorkdirPathKey extraction logic (used to override component path
+// in terraform execution) are in internal/exec/terraform_shell_test.go:TestWorkdirPathKeyExtraction.
+// That test covers all edge cases: path set, not set, empty string, nil, and wrong type.

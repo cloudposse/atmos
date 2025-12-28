@@ -29,9 +29,9 @@ func TestCLIWorkdirCommands(t *testing.T) {
 		t.Skipf("Skipping test: %s", skipReason)
 	}
 
-	// Clear environment variables.
-	require.NoError(t, os.Unsetenv("ATMOS_CLI_CONFIG_PATH"))
-	require.NoError(t, os.Unsetenv("ATMOS_BASE_PATH"))
+	// Clear environment variables with automatic cleanup.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	// Change to workdir fixture.
 	workDir := "fixtures/scenarios/workdir"
@@ -243,9 +243,9 @@ func TestCLIWorkdirListFormats(t *testing.T) {
 		t.Skipf("Skipping test: %s", skipReason)
 	}
 
-	// Clear environment variables.
-	require.NoError(t, os.Unsetenv("ATMOS_CLI_CONFIG_PATH"))
-	require.NoError(t, os.Unsetenv("ATMOS_BASE_PATH"))
+	// Clear environment variables with automatic cleanup.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	// Change to workdir fixture.
 	workDir := "fixtures/scenarios/workdir"
