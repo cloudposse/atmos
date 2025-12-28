@@ -1,7 +1,7 @@
 package httpmock
 
 import (
-	"fmt"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/hashicorp/go-getter"
+
+	atmosErrors "github.com/cloudposse/atmos/errors"
 )
 
 // GitHubMockServer intercepts GitHub requests and serves mock content.
@@ -95,7 +97,7 @@ func (g *githubInterceptor) RoundTrip(req *http.Request) (*http.Response, error)
 	if strings.Contains(req.URL.Host, "raw.githubusercontent.com") {
 		mockURL, err := url.Parse(g.mockServerURL)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse mock server URL: %w", err)
+			return nil, errors.Join(atmosErrors.ErrParseURL, err)
 		}
 		// Clone the request to avoid modifying the original.
 		newReq := req.Clone(req.Context())
