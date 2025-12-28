@@ -62,6 +62,8 @@ The output is formatted for human readability, similar to 'kubectl describe'.`,
 }
 
 func printShowHuman(info *WorkdirInfo) {
+	defer perf.Track(nil, "workdir.printShowHuman")()
+
 	// Display status indicator with colored checkmark.
 	statusIndicator := theme.Styles.Checkmark.String()
 	_ = ui.Writef("%s Workdir Status\n\n", statusIndicator)

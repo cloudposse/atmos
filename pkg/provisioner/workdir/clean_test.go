@@ -241,8 +241,6 @@ func TestErrorWrapping(t *testing.T) {
 		Err()
 
 	assert.ErrorIs(t, wrappedErr, errUtils.ErrWorkdirClean)
-	// The error should be based on the sentinel error.
-	assert.NotNil(t, wrappedErr)
 }
 
 // Test Clean error accumulation - the missing coverage in Clean function.

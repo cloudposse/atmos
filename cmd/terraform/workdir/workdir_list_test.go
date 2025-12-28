@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -343,41 +342,6 @@ func TestPrintListTable_DateFormatting(t *testing.T) {
 	printListTable(workdirs)
 }
 
-// Test JSON indentation.
-
-func TestPrintListJSON_Indentation(t *testing.T) {
-	workdirs := []WorkdirInfo{
-		{Name: "test", Component: "test", Stack: "test"},
-	}
-
-	// Marshal with same indentation as function.
-	data, err := json.MarshalIndent(workdirs, "", "  ")
-	require.NoError(t, err)
-
-	// Verify indentation.
-	assert.Contains(t, string(data), "\n  ")
-}
-
-// Test YAML format structure.
-
-func TestPrintListYAML_Structure(t *testing.T) {
-	workdirs := []WorkdirInfo{
-		{
-			Name:      "dev-vpc",
-			Component: "vpc",
-			Stack:     "dev",
-		},
-	}
-
-	data, err := yaml.Marshal(workdirs)
-	require.NoError(t, err)
-
-	// YAML list format.
-	assert.Contains(t, string(data), "- name: dev-vpc")
-	assert.Contains(t, string(data), "  component: vpc")
-	assert.Contains(t, string(data), "  stack: dev")
-}
-
 // Test that list command properly validates arguments using cobra.NoArgs.
 
 func TestListCmd_ArgsValidation(t *testing.T) {
@@ -509,22 +473,4 @@ func TestPrintListYAML_SpecialCharacters(t *testing.T) {
 
 	err := printListYAML(workdirs)
 	require.NoError(t, err)
-}
-
-// Test buildConfigAndStacksInfo helper.
-
-func TestListCmd_BuildConfigAndStacksInfo(t *testing.T) {
-	// Verify the function uses the right viper keys.
-	v := viper.New()
-	v.Set("base-path", "/test/path")
-	v.Set("config", "/test/config")
-	v.Set("stacks-dir", "/test/stacks")
-
-	basePath := v.GetString("base-path")
-	config := v.GetString("config")
-	stacksDir := v.GetString("stacks-dir")
-
-	assert.Equal(t, "/test/path", basePath)
-	assert.Equal(t, "/test/config", config)
-	assert.Equal(t, "/test/stacks", stacksDir)
 }
