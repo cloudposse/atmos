@@ -90,10 +90,11 @@ func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
 	totalSteps := len(steps)
 	progressRenderer := NewProgressRenderer(params.WorkflowDefinition, totalSteps)
 
+	// Render header before first step (if enabled).
+	showRenderer.RenderHeaderIfNeeded(params.WorkflowDefinition, params.Workflow, flags)
+
 	// Execute each step.
 	for stepIdx, step := range steps {
-		// Render header before first step (if enabled).
-		showRenderer.RenderHeaderIfNeeded(params.WorkflowDefinition, params.Workflow, flags)
 
 		// Update and render progress (if enabled).
 		if progressRenderer.IsEnabled() {

@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"sync"
 
 	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -25,6 +26,8 @@ type OutputModeWriter struct {
 
 // NewOutputModeWriter creates a new OutputModeWriter.
 func NewOutputModeWriter(mode OutputMode, stepName string, viewport *schema.ViewportConfig) *OutputModeWriter {
+	defer perf.Track(nil, "step.NewOutputModeWriter")()
+
 	return &OutputModeWriter{
 		mode:     mode,
 		stepName: stepName,
@@ -89,9 +92,13 @@ func (w *OutputModeWriter) executeRaw(cmd *exec.Cmd) (string, string, error) {
 	// Create writers that capture and forward output.
 	var stdout, stderr bytes.Buffer
 
+	// Get I/O context for stream access.
+	ioCtx := iolib.GetContext()
+
 	// Use MultiWriter to both capture and forward output.
-	cmd.Stdout = io.MultiWriter(&stdout, os.Stdout)
-	cmd.Stderr = io.MultiWriter(&stderr, os.Stderr)
+	// Data() returns stdout for pipeable output, UI() returns stderr for human messages.
+	cmd.Stdout = io.MultiWriter(&stdout, ioCtx.Data())
+	cmd.Stderr = io.MultiWriter(&stderr, ioCtx.UI())
 
 	err := cmd.Run()
 	return stdout.String(), stderr.String(), err
@@ -173,6 +180,8 @@ func (w *OutputModeWriter) executeNone(cmd *exec.Cmd) (string, string, error) {
 // GetOutputMode returns the effective output mode for a step.
 // Checks step-level, workflow-level, and defaults.
 func GetOutputMode(step *schema.WorkflowStep, workflow *schema.WorkflowDefinition) OutputMode {
+	defer perf.Track(nil, "step.GetOutputMode")()
+
 	// Step-level override.
 	if step.Output != "" {
 		return OutputMode(step.Output)
@@ -206,6 +215,8 @@ func GetViewportConfig(step *schema.WorkflowStep, workflow *schema.WorkflowDefin
 // If show.count is enabled, returns "[1/3] stepname" with stepname in muted style.
 // Otherwise returns just "stepname" in muted style.
 func FormatStepLabel(step *schema.WorkflowStep, workflow *schema.WorkflowDefinition, stepIndex, totalSteps int) string {
+	defer perf.Track(nil, "step.FormatStepLabel")()
+
 	showCfg := GetShowConfig(step, workflow)
 	styles := theme.GetCurrentStyles()
 
