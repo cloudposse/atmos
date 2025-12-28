@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 	"go.yaml.in/yaml/v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -356,7 +357,7 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 			u.AtmosYamlFuncRandom,
 		}, ", ")
 		return fmt.Errorf("%w: '%s' at path '%s'. Supported tags for atmos.yaml are: %s",
-			ErrExecuteYamlFunctions, node.Tag, currentPath, supportedTags)
+			errUtils.ErrUnsupportedYamlTag, node.Tag, currentPath, supportedTags)
 	}
 }
 
