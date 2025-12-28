@@ -1,8 +1,10 @@
 package workdir
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	stdio "io"
 	"testing"
 	"time"
 
@@ -17,6 +19,25 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// testStreams is a simple streams implementation for testing.
+type testStreams struct {
+	stdin  stdio.Reader
+	stdout stdio.Writer
+	stderr stdio.Writer
+}
+
+func (ts *testStreams) Input() stdio.Reader     { return ts.stdin }
+func (ts *testStreams) Output() stdio.Writer    { return ts.stdout }
+func (ts *testStreams) Error() stdio.Writer     { return ts.stderr }
+func (ts *testStreams) RawOutput() stdio.Writer { return ts.stdout }
+func (ts *testStreams) RawError() stdio.Writer  { return ts.stderr }
+
+// testIOContext holds buffers for capturing I/O output during tests.
+type testIOContext struct {
+	stdout *bytes.Buffer
+	stderr *bytes.Buffer
+}
+
 // initTestIO initializes the I/O and UI contexts for testing.
 // This must be called before tests that use printListJSON, printListYAML, or printListTable.
 func initTestIO(t *testing.T) {
@@ -29,8 +50,27 @@ func initTestIO(t *testing.T) {
 	data.InitWriter(ioCtx)
 }
 
+// initTestIOWithCapture initializes I/O contexts with buffers for capturing output.
+func initTestIOWithCapture(t *testing.T) *testIOContext {
+	t.Helper()
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	streams := &testStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: stdout,
+		stderr: stderr,
+	}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	if err != nil {
+		t.Fatalf("failed to initialize I/O context: %v", err)
+	}
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+	return &testIOContext{stdout: stdout, stderr: stderr}
+}
+
 func TestPrintListJSON(t *testing.T) {
-	initTestIO(t)
+	ioCtx := initTestIOWithCapture(t)
 	workdirs := []WorkdirInfo{
 		{
 			Name:        "dev-vpc",
@@ -54,18 +94,18 @@ func TestPrintListJSON(t *testing.T) {
 		},
 	}
 
-	// Capture stdout.
+	// Call printListJSON and capture output.
 	err := printListJSON(workdirs)
 	require.NoError(t, err)
 
-	// Verify output is valid JSON by marshaling the same data.
-	jsonData, err := json.MarshalIndent(workdirs, "", "  ")
-	require.NoError(t, err)
+	// Verify actual output from printListJSON.
+	actualOutput := ioCtx.stdout.String()
+	require.NotEmpty(t, actualOutput, "printListJSON should produce output")
 
-	// Parse to verify structure.
+	// Parse actual output to verify it's valid JSON.
 	var parsed []WorkdirInfo
-	err = json.Unmarshal(jsonData, &parsed)
-	require.NoError(t, err)
+	err = json.Unmarshal([]byte(actualOutput), &parsed)
+	require.NoError(t, err, "printListJSON output should be valid JSON")
 	assert.Len(t, parsed, 2)
 	assert.Equal(t, "dev-vpc", parsed[0].Name)
 	assert.Equal(t, "prod-vpc", parsed[1].Name)
@@ -92,7 +132,7 @@ func TestPrintListJSON_SingleItem(t *testing.T) {
 }
 
 func TestPrintListYAML(t *testing.T) {
-	initTestIO(t)
+	ioCtx := initTestIOWithCapture(t)
 	workdirs := []WorkdirInfo{
 		{
 			Name:        "dev-vpc",
@@ -106,16 +146,18 @@ func TestPrintListYAML(t *testing.T) {
 		},
 	}
 
+	// Call printListYAML and capture output.
 	err := printListYAML(workdirs)
 	require.NoError(t, err)
 
-	// Verify output is valid YAML.
-	yamlData, err := yaml.Marshal(workdirs)
-	require.NoError(t, err)
+	// Verify actual output from printListYAML.
+	actualOutput := ioCtx.stdout.String()
+	require.NotEmpty(t, actualOutput, "printListYAML should produce output")
 
+	// Parse actual output to verify it's valid YAML.
 	var parsed []WorkdirInfo
-	err = yaml.Unmarshal(yamlData, &parsed)
-	require.NoError(t, err)
+	err = yaml.Unmarshal([]byte(actualOutput), &parsed)
+	require.NoError(t, err, "printListYAML output should be valid YAML")
 	assert.Len(t, parsed, 1)
 	assert.Equal(t, "dev-vpc", parsed[0].Name)
 }

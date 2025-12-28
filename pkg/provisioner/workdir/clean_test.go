@@ -203,9 +203,8 @@ func TestCleanWorkdir_ErrorType(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
 	err := CleanWorkdir(atmosConfig, "vpc")
-	if err != nil {
-		assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
-	}
+	require.Error(t, err, "expected permission error to occur")
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
 }
 
 func TestCleanAllWorkdirs_ErrorType(t *testing.T) {
@@ -225,9 +224,8 @@ func TestCleanAllWorkdirs_ErrorType(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
 	err := CleanAllWorkdirs(atmosConfig)
-	if err != nil {
-		assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
-	}
+	require.Error(t, err, "expected permission error to occur")
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
 }
 
 // Helper to verify error wrapping.
@@ -263,10 +261,9 @@ func TestClean_ErrorAccumulation_AllFails(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
 	err := Clean(atmosConfig, CleanOptions{All: true})
-	if err != nil {
-		// When errors occur, they should be accumulated.
-		assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
-	}
+	require.Error(t, err, "expected permission error to occur during cleanup")
+	// When errors occur, they should be accumulated.
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
 }
 
 func TestClean_ErrorAccumulation_ComponentFails(t *testing.T) {
@@ -287,8 +284,7 @@ func TestClean_ErrorAccumulation_ComponentFails(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
 	err := Clean(atmosConfig, CleanOptions{Component: "vpc"})
-	if err != nil {
-		// When errors occur, they should be accumulated.
-		assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
-	}
+	require.Error(t, err, "expected permission error to occur during cleanup")
+	// When errors occur, they should be accumulated.
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
 }
