@@ -1,4 +1,4 @@
-package cmd
+package user
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authUtils "github.com/cloudposse/atmos/pkg/auth/utils"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -21,6 +22,8 @@ type awsUserIdentityInfo struct {
 
 // selectAWSUserIdentities filters identities to find aws/user types.
 func selectAWSUserIdentities(identities map[string]schema.Identity) ([]string, string, error) {
+	defer perf.Track(nil, "auth.user.selectAWSUserIdentities")()
+
 	if identities == nil {
 		return nil, "", fmt.Errorf("%w: no auth identities configured in atmos.yaml", errUtils.ErrInvalidAuthConfig)
 	}
@@ -47,6 +50,8 @@ func selectAWSUserIdentities(identities map[string]schema.Identity) ([]string, s
 
 // extractAWSUserInfo extracts credential information from YAML identity config.
 func extractAWSUserInfo(identity schema.Identity) awsUserIdentityInfo {
+	defer perf.Track(nil, "auth.user.extractAWSUserInfo")()
+
 	var info awsUserIdentityInfo
 
 	// Extract credentials from YAML.
@@ -73,7 +78,7 @@ func extractAWSUserInfo(identity schema.Identity) awsUserIdentityInfo {
 	return info
 }
 
-// buildFormField creates a form field for a credential, either as a note (if in YAML) or input (if editable).
+// formFieldConfig defines configuration for building credential form fields.
 type formFieldConfig struct {
 	YAMLValue      string
 	InputTitle     string
@@ -88,6 +93,8 @@ type formFieldConfig struct {
 
 // buildCredentialFormField creates appropriate form field based on whether value is in YAML.
 func buildCredentialFormField(cfg formFieldConfig, valuePtr *string) huh.Field {
+	defer perf.Track(nil, "auth.user.buildCredentialFormField")()
+
 	if cfg.YAMLValue != "" {
 		// Value is in YAML config - show as informational note.
 		*valuePtr = cfg.YAMLValue
@@ -130,8 +137,10 @@ func buildCredentialFormField(cfg formFieldConfig, valuePtr *string) huh.Field {
 
 // validateSessionDuration validates session duration format.
 func validateSessionDuration(s string) error {
+	defer perf.Track(nil, "auth.user.validateSessionDuration")()
+
 	if s == "" {
-		return nil // Optional field
+		return nil // Optional field.
 	}
 	// Validate duration format using flexible parser.
 	_, err := authUtils.ParseDurationFlexible(s)

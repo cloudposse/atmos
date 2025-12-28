@@ -1,4 +1,4 @@
-package cmd
+package auth
 
 import (
 	"context"
@@ -17,7 +17,9 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -25,7 +27,12 @@ import (
 
 const (
 	logKeyIdentity = "identity"
+	// OutputFlagName is the name of the output flag for whoami command.
+	OutputFlagName = "output"
 )
+
+// whoamiParser handles flags for the whoami command.
+var whoamiParser *flags.StandardParser
 
 // authWhoamiCmd shows current authentication status.
 var authWhoamiCmd = &cobra.Command{
@@ -37,8 +44,45 @@ var authWhoamiCmd = &cobra.Command{
 	RunE:               executeAuthWhoamiCommand,
 }
 
+func init() {
+	defer perf.Track(nil, "auth.whoami.init")()
+
+	// Create parser with whoami-specific flags.
+	whoamiParser = flags.NewStandardParser(
+		flags.WithStringFlag(OutputFlagName, "o", "", "Output format (json)"),
+		flags.WithEnvVars(OutputFlagName, "ATMOS_AUTH_WHOAMI_OUTPUT"),
+		flags.WithValidValues(OutputFlagName, "", "json"),
+	)
+
+	// Register flags with the command.
+	whoamiParser.RegisterFlags(authWhoamiCmd)
+
+	// Bind to Viper for environment variable support.
+	if err := whoamiParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Register output flag completion.
+	if err := authWhoamiCmd.RegisterFlagCompletionFunc(OutputFlagName, func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"json"}, cobra.ShellCompDirectiveNoFileComp
+	}); err != nil {
+		log.Trace("Failed to register output flag completion", "error", err)
+	}
+
+	// Add to parent command.
+	authCmd.AddCommand(authWhoamiCmd)
+}
+
 func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
+
+	defer perf.Track(nil, "auth.executeAuthWhoamiCommand")()
+
+	// Bind parsed flags to Viper for precedence.
+	v := viper.GetViper()
+	if err := whoamiParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
 
 	// Load atmos config and auth manager.
 	authManager, err := loadAuthManager()
@@ -63,7 +107,7 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	isValid := validateCredentials(ctx, whoami)
 
 	// Output.
-	if viper.GetString("auth.whoami.output") == "json" {
+	if v.GetString(OutputFlagName) == "json" {
 		return printWhoamiJSON(whoami)
 	}
 	printWhoamiHuman(whoami, isValid)
@@ -73,6 +117,8 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 // validateCredentials attempts to validate the credentials and returns true if valid.
 // If validation succeeds, it populates whoami with additional info (principal, expiration, etc.).
 func validateCredentials(ctx context.Context, whoami *authTypes.WhoamiInfo) bool {
+	defer perf.Track(nil, "auth.validateCredentials")()
+
 	if whoami.Credentials == nil {
 		log.Debug("Validation failed: no credentials in WhoamiInfo", "identity", whoami.Identity)
 		return false
@@ -107,6 +153,8 @@ func validateCredentials(ctx context.Context, whoami *authTypes.WhoamiInfo) bool
 
 // populateWhoamiFromValidation populates whoami info from validation results.
 func populateWhoamiFromValidation(whoami *authTypes.WhoamiInfo, validationInfo *authTypes.ValidationInfo) {
+	defer perf.Track(nil, "auth.populateWhoamiFromValidation")()
+
 	if validationInfo == nil {
 		return
 	}
@@ -122,11 +170,13 @@ func populateWhoamiFromValidation(whoami *authTypes.WhoamiInfo, validationInfo *
 }
 
 func loadAuthManager() (authTypes.AuthManager, error) {
+	defer perf.Track(nil, "auth.loadAuthManager")()
+
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load atmos config: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
-	manager, err := createAuthManager(&atmosConfig.Auth)
+	manager, err := CreateAuthManager(&atmosConfig.Auth)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
@@ -134,9 +184,16 @@ func loadAuthManager() (authTypes.AuthManager, error) {
 }
 
 func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthManager) (string, error) {
+	defer perf.Track(nil, "auth.identityFromFlagOrDefault")()
+
 	// Get identity from flag or use default.
 	// Use GetIdentityFromFlags which handles Cobra's NoOptDefVal quirk correctly.
-	identityName := GetIdentityFromFlags(cmd, os.Args)
+	identityName := GetIdentityFromFlags(cmd)
+
+	// If flag wasn't provided, check Viper for env var fallback.
+	if identityName == "" {
+		identityName = viper.GetString(IdentityFlagName)
+	}
 
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue
@@ -153,6 +210,8 @@ func identityFromFlagOrDefault(cmd *cobra.Command, authManager authTypes.AuthMan
 }
 
 func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
+	defer perf.Track(nil, "auth.printWhoamiJSON")()
+
 	// Redact home directory in environment variable values before output.
 	redactedWhoami := *whoami
 	// Never emit credentials in JSON output.
@@ -168,6 +227,8 @@ func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
 }
 
 func printWhoamiHuman(whoami *authTypes.WhoamiInfo, isValid bool) {
+	defer perf.Track(nil, "auth.printWhoamiHuman")()
+
 	// Display status indicator with colored checkmark or X.
 	statusIndicator := theme.Styles.XMark.String()
 	if isValid {
@@ -192,6 +253,8 @@ func printWhoamiHuman(whoami *authTypes.WhoamiInfo, isValid bool) {
 
 // buildWhoamiTableRows builds table rows for whoami output.
 func buildWhoamiTableRows(whoami *authTypes.WhoamiInfo) [][]string {
+	defer perf.Track(nil, "auth.buildWhoamiTableRows")()
+
 	const expiringThresholdMinutes = 15
 
 	var rows [][]string
@@ -222,6 +285,8 @@ func buildWhoamiTableRows(whoami *authTypes.WhoamiInfo) [][]string {
 
 // formatExpiration formats expiration time with duration and styling.
 func formatExpiration(expiration *time.Time, thresholdMinutes int) string {
+	defer perf.Track(nil, "auth.formatExpiration")()
+
 	expiresStr := expiration.Format("2006-01-02 15:04:05 MST")
 	duration := formatDuration(time.Until(*expiration))
 
@@ -238,6 +303,8 @@ func formatExpiration(expiration *time.Time, thresholdMinutes int) string {
 
 // createWhoamiTable creates a formatted table for whoami output.
 func createWhoamiTable(rows [][]string) *table.Table {
+	defer perf.Track(nil, "auth.createWhoamiTable")()
+
 	return table.New().
 		Rows(rows...).
 		BorderTop(false).
@@ -273,6 +340,8 @@ func redactHomeDir(v string, homeDir string) string {
 
 // sanitizeEnvMap redacts secrets and user paths from environment variables.
 func sanitizeEnvMap(in map[string]string, homeDir string) map[string]string {
+	defer perf.Track(nil, "auth.sanitizeEnvMap")()
+
 	out := make(map[string]string, len(in))
 	sensitive := []string{"SECRET", "TOKEN", "PASSWORD", "PRIVATE", "ACCESS_KEY", "SESSION"}
 	for k, v := range in {
@@ -287,20 +356,4 @@ func sanitizeEnvMap(in map[string]string, homeDir string) map[string]string {
 		out[k] = redacted
 	}
 	return out
-}
-
-func init() {
-	authWhoamiCmd.Flags().StringP("output", "o", "", "Output format (json)")
-	if err := viper.BindPFlag("auth.whoami.output", authWhoamiCmd.Flags().Lookup("output")); err != nil {
-		log.Trace("Failed to bind auth.whoami.output flag", "error", err)
-	}
-	if err := viper.BindEnv("auth.whoami.output", "ATMOS_AUTH_WHOAMI_OUTPUT"); err != nil {
-		log.Trace("Failed to bind auth.whoami.output environment variable", "error", err)
-	}
-	if err := authWhoamiCmd.RegisterFlagCompletionFunc("output", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-		return []string{"json"}, cobra.ShellCompDirectiveNoFileComp
-	}); err != nil {
-		log.Trace("Failed to register output flag completion", "error", err)
-	}
-	authCmd.AddCommand(authWhoamiCmd)
 }

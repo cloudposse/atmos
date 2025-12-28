@@ -1,4 +1,4 @@
-package cmd
+package auth
 
 import (
 	"fmt"
@@ -8,10 +8,14 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// validateParser handles flags for the validate command.
+var validateParser *flags.StandardParser
 
 // authValidateCmd validates the auth configuration.
 var authValidateCmd = &cobra.Command{
@@ -23,24 +27,54 @@ var authValidateCmd = &cobra.Command{
 	RunE:               executeAuthValidateCommand,
 }
 
+func init() {
+	defer perf.Track(nil, "auth.validate.init")()
+
+	// Create parser with validate-specific flags.
+	validateParser = flags.NewStandardParser(
+		flags.WithBoolFlag("verbose", "v", false, "Enable verbose output"),
+		flags.WithEnvVars("verbose", "ATMOS_AUTH_VALIDATE_VERBOSE"),
+	)
+
+	// Register flags with the command.
+	validateParser.RegisterFlags(authValidateCmd)
+
+	// Bind to Viper for environment variable support.
+	if err := validateParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Add to parent command.
+	authCmd.AddCommand(authValidateCmd)
+}
+
 func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
-	// Get verbose flag
-	verbose := viper.GetBool("auth.validate.verbose")
+
+	defer perf.Track(nil, "auth.executeAuthValidateCommand")()
+
+	// Bind parsed flags to Viper for precedence.
+	v := viper.GetViper()
+	if err := validateParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
+	// Get verbose flag.
+	verbose := v.GetBool("verbose")
 	if verbose {
 		u.PrintfMarkdown("**Validating authentication configuration...**\n")
 	}
 
-	// Load atmos config
+	// Load atmos config.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return fmt.Errorf("failed to load atmos config: %w", err)
 	}
 
-	// Create validator
+	// Create validator.
 	validator := validation.NewValidator()
 
-	// Validate auth configuration
+	// Validate auth configuration.
 	if err := validator.ValidateAuthConfig(&atmosConfig.Auth); err != nil {
 		u.PrintfMarkdown("**❌ Authentication configuration validation failed:**\n")
 		u.PrintfMarkdown("%s\n", err.Error())
@@ -49,16 +83,4 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 
 	u.PrintfMarkdown("**✅ Authentication configuration is valid**\n")
 	return nil
-}
-
-func init() {
-	authValidateCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
-	if err := viper.BindPFlag("auth.validate.verbose", authValidateCmd.Flags().Lookup("verbose")); err != nil {
-		log.Trace("Failed to bind auth.validate.verbose flag", "error", err)
-	}
-	viper.SetEnvPrefix("ATMOS")
-	if err := viper.BindEnv("auth.validate.verbose"); err != nil {
-		log.Trace("Failed to bind auth.validate.verbose environment variable", "error", err)
-	}
-	authCmd.AddCommand(authValidateCmd)
 }
