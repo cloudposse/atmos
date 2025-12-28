@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -17,6 +18,8 @@ type StepExecutor struct {
 
 // NewStepExecutor creates a new step executor.
 func NewStepExecutor() *StepExecutor {
+	defer perf.Track(nil, "step.NewStepExecutor")()
+
 	return &StepExecutor{
 		vars: NewVariables(),
 	}
@@ -41,6 +44,8 @@ func (e *StepExecutor) Variables() *Variables {
 
 // Execute runs a single step and stores the result.
 func (e *StepExecutor) Execute(ctx context.Context, step *schema.WorkflowStep) (*StepResult, error) {
+	defer perf.Track(nil, "step.StepExecutor.Execute")()
+
 	// Default step name if not provided.
 	if step.Name == "" {
 		step.Name = "unnamed_step"
@@ -150,6 +155,8 @@ func IsExtendedStepType(stepType string) bool {
 
 // ValidateStep validates a step configuration.
 func ValidateStep(step *schema.WorkflowStep) error {
+	defer perf.Track(nil, "step.ValidateStep")()
+
 	stepType := step.Type
 	if stepType == "" {
 		stepType = "shell"
@@ -184,6 +191,8 @@ func ListTypes() map[StepCategory][]string {
 
 // ValidateWorkflow validates all steps in a workflow definition.
 func ValidateWorkflow(workflow *schema.WorkflowDefinition) []error {
+	defer perf.Track(nil, "step.ValidateWorkflow")()
+
 	var errs []error
 
 	for i := range workflow.Steps {
