@@ -524,6 +524,7 @@ providers:
       namespace: cp
       stage: dev
       tenant: tenant1
+provision: {}
 remote_state_backend:
   acl: bucket-owner-full-control
   bucket: cp-ue2-root-tfstate

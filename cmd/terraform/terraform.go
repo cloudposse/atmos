@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	"github.com/cloudposse/atmos/cmd/terraform/generate"
 	"github.com/cloudposse/atmos/cmd/terraform/source"
+	"github.com/cloudposse/atmos/cmd/terraform/workdir"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -66,6 +67,9 @@ func init() {
 
 	// Add source subcommand from the source subpackage.
 	terraformCmd.AddCommand(source.GetSourceCommand())
+
+	// Add workdir subcommand from the workdir subpackage.
+	terraformCmd.AddCommand(workdir.GetWorkdirCommand())
 
 	// Register other completion functions (component args, identity).
 	RegisterTerraformCompletions(terraformCmd)
