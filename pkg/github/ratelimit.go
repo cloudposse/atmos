@@ -79,6 +79,10 @@ func CheckRateLimitWithService(ctx context.Context, service RateLimitService) (*
 	return checker.checkRateLimit(ctx)
 }
 
+// RateLimitWaiter is the function used to wait for rate limits.
+// Tests can override this to skip the actual wait.
+var RateLimitWaiter = waitForRateLimitImpl
+
 // WaitForRateLimit checks GitHub rate limits and waits if necessary.
 // If remaining requests are below minRemaining, it waits until the rate limit resets.
 // Uses a spinner UI in TTY mode, otherwise simple output.
@@ -87,6 +91,11 @@ func CheckRateLimitWithService(ctx context.Context, service RateLimitService) (*
 func WaitForRateLimit(ctx context.Context, minRemaining int) error {
 	defer perf.Track(nil, "github.WaitForRateLimit")()
 
+	return RateLimitWaiter(ctx, minRemaining)
+}
+
+// waitForRateLimitImpl is the actual implementation of WaitForRateLimit.
+func waitForRateLimitImpl(ctx context.Context, minRemaining int) error {
 	status, err := CheckRateLimit(ctx)
 	if err != nil {
 		// Don't block on rate limit check failures.
