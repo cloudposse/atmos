@@ -362,7 +362,7 @@ func TestSetAndGetWorkdirManager(t *testing.T) {
 // Test date formatting in table output.
 
 func TestPrintListTable_DateFormatting(t *testing.T) {
-	initTestIO(t)
+	ioCtx := initTestIOWithCapture(t)
 	// Test that dates are formatted correctly.
 	workdirs := []WorkdirInfo{
 		{
@@ -375,13 +375,13 @@ func TestPrintListTable_DateFormatting(t *testing.T) {
 		},
 	}
 
-	// Format should be "2006-01-02 15:04".
 	expected := "2024-06-15 14:30"
-	formatted := workdirs[0].CreatedAt.Format("2006-01-02 15:04")
-	assert.Equal(t, expected, formatted)
 
-	// Verify table output doesn't panic.
 	printListTable(workdirs)
+
+	// Verify table contains the formatted date.
+	output := ioCtx.stderr.String()
+	assert.Contains(t, output, expected)
 }
 
 // Test that list command properly validates arguments using cobra.NoArgs.

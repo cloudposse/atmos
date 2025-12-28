@@ -145,16 +145,6 @@ func TestClean_NoOptions(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCleanOptions_Structure(t *testing.T) {
-	opts := CleanOptions{
-		Component: "vpc",
-		All:       true,
-	}
-
-	assert.Equal(t, "vpc", opts.Component)
-	assert.True(t, opts.All)
-}
-
 func TestClean_AllTakesPrecedence(t *testing.T) {
 	// When both Component and All are set, All takes precedence
 	// based on the if/else structure in Clean().
