@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -289,10 +290,10 @@ func TestExecuteAuthLoginCommand(t *testing.T) {
 		errorContains string
 	}{
 		{
-			name:          "no identity configured - uses GetDefaultIdentity",
+			name:          "no identity or provider configured - falls back to provider then fails",
 			identityFlag:  "",
 			expectError:   true,
-			errorContains: "no default identity configured",
+			errorContains: "no providers available", // Changed: now falls back to provider auth first.
 		},
 		{
 			name:          "explicit identity but no auth config",
@@ -496,4 +497,83 @@ func TestIdentitySelectorBehavior(t *testing.T) {
 			require.NoError(t, err, "Test command should not error")
 		})
 	}
+}
+
+// TestGetProviderForFallback tests the provider fallback logic when no identities are configured.
+func TestGetProviderForFallback(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tests := []struct {
+		name           string
+		providers      []string
+		expectedResult string
+		expectError    bool
+		errorIs        error
+		description    string
+	}{
+		{
+			name:           "single provider auto-selects",
+			providers:      []string{"sso-prod"},
+			expectedResult: "sso-prod",
+			expectError:    false,
+			description:    "When only one provider is configured, it should be auto-selected",
+		},
+		{
+			name:        "no providers returns error",
+			providers:   []string{},
+			expectError: true,
+			errorIs:     errUtils.ErrNoProvidersAvailable,
+			description: "When no providers are configured, should return ErrNoProvidersAvailable",
+		},
+		{
+			name:        "multiple providers in non-interactive mode returns error",
+			providers:   []string{"sso-prod", "sso-dev"},
+			expectError: true,
+			errorIs:     errUtils.ErrNoDefaultProvider,
+			description: "When multiple providers exist and not interactive, should return ErrNoDefaultProvider",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			// Create a mock auth manager that returns the configured providers.
+			mockManager := &mockAuthManagerForProviderFallback{
+				providers: tt.providers,
+			}
+
+			result, err := getProviderForFallback(mockManager)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorIs != nil {
+					assert.ErrorIs(t, err, tt.errorIs)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedResult, result)
+			}
+		})
+	}
+}
+
+// mockAuthManagerForProviderFallback is a minimal mock for testing getProviderForFallback.
+type mockAuthManagerForProviderFallback struct {
+	providers []string
+}
+
+func (m *mockAuthManagerForProviderFallback) ListProviders() []string {
+	return m.providers
+}
+
+// TestPromptForProvider tests the provider prompt function.
+func TestPromptForProvider(t *testing.T) {
+	_ = NewTestKit(t)
+
+	t.Run("empty providers list returns error", func(t *testing.T) {
+		_, err := promptForProvider("Select a provider:", []string{})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrNoProvidersAvailable)
+	})
 }
