@@ -128,7 +128,8 @@ func (h *DefaultHasher) HashDir(path string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		hash.Write([]byte(relPath))
+		// Normalize to forward slashes for cross-platform consistency.
+		hash.Write([]byte(filepath.ToSlash(relPath)))
 
 		// Hash file contents.
 		fileHash, err := h.HashFile(file)

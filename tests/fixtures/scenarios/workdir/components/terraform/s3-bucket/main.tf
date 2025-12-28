@@ -36,3 +36,8 @@ output "versioning_enabled" {
   value       = var.versioning_enabled
   description = "Whether versioning is enabled"
 }
+
+output "encryption_enabled" {
+  value       = var.encryption_enabled
+  description = "Whether encryption is enabled"
+}

@@ -16,14 +16,14 @@ import (
 func TestCleanWorkdir_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create workdir structure.
-	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "vpc")
+	// Create workdir structure using stack-component naming.
+	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "dev-vpc")
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(workdirPath, "main.tf"), []byte("# test"), 0o644))
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := CleanWorkdir(atmosConfig, "vpc")
+	err := CleanWorkdir(atmosConfig, "vpc", "dev")
 	require.NoError(t, err)
 
 	// Verify workdir removed.
@@ -36,15 +36,15 @@ func TestCleanWorkdir_NotFound(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
 	// Should not error when workdir doesn't exist.
-	err := CleanWorkdir(atmosConfig, "nonexistent")
+	err := CleanWorkdir(atmosConfig, "nonexistent", "dev")
 	require.NoError(t, err)
 }
 
 func TestCleanWorkdir_EmptyBasePath(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create workdir in current dir pattern.
-	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "vpc")
+	// Create workdir in current dir pattern using stack-component naming.
+	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "dev-vpc")
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	// Change to tmpDir and test with empty BasePath.
@@ -52,7 +52,7 @@ func TestCleanWorkdir_EmptyBasePath(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: ""}
 
-	err := CleanWorkdir(atmosConfig, "vpc")
+	err := CleanWorkdir(atmosConfig, "vpc", "dev")
 	require.NoError(t, err)
 }
 
@@ -104,13 +104,13 @@ func TestCleanAllWorkdirs_EmptyBasePath(t *testing.T) {
 func TestClean_WithComponent(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create workdir.
-	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "vpc")
+	// Create workdir using stack-component naming.
+	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "dev-vpc")
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := Clean(atmosConfig, CleanOptions{Component: "vpc"})
+	err := Clean(atmosConfig, CleanOptions{Component: "vpc", Stack: "dev"})
 	require.NoError(t, err)
 
 	// Verify workdir removed.
@@ -150,9 +150,9 @@ func TestClean_AllTakesPrecedence(t *testing.T) {
 	// based on the if/else structure in Clean().
 	tmpDir := t.TempDir()
 
-	// Create specific workdir.
-	vpcPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "vpc")
-	s3Path := filepath.Join(tmpDir, WorkdirPath, "terraform", "s3")
+	// Create specific workdirs using stack-component naming.
+	vpcPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "dev-vpc")
+	s3Path := filepath.Join(tmpDir, WorkdirPath, "terraform", "dev-s3")
 	require.NoError(t, os.MkdirAll(vpcPath, 0o755))
 	require.NoError(t, os.MkdirAll(s3Path, 0o755))
 
@@ -161,6 +161,7 @@ func TestClean_AllTakesPrecedence(t *testing.T) {
 	// All=true should clean all, not just component.
 	err := Clean(atmosConfig, CleanOptions{
 		Component: "vpc",
+		Stack:     "dev",
 		All:       true,
 	})
 	require.NoError(t, err)
@@ -182,7 +183,7 @@ func TestCleanWorkdir_ErrorType(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "vpc")
+	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "dev-vpc")
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	// Make parent non-writable to cause RemoveAll to fail.
@@ -192,7 +193,7 @@ func TestCleanWorkdir_ErrorType(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := CleanWorkdir(atmosConfig, "vpc")
+	err := CleanWorkdir(atmosConfig, "vpc", "dev")
 	require.Error(t, err, "expected permission error to occur")
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
 }
@@ -263,7 +264,7 @@ func TestClean_ErrorAccumulation_ComponentFails(t *testing.T) {
 	}
 
 	tmpDir := t.TempDir()
-	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "vpc")
+	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "dev-vpc")
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	// Make parent non-writable to cause removal to fail.
@@ -273,7 +274,7 @@ func TestClean_ErrorAccumulation_ComponentFails(t *testing.T) {
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
 
-	err := Clean(atmosConfig, CleanOptions{Component: "vpc"})
+	err := Clean(atmosConfig, CleanOptions{Component: "vpc", Stack: "dev"})
 	require.Error(t, err, "expected permission error to occur during cleanup")
 	// When errors occur, they should be accumulated.
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)

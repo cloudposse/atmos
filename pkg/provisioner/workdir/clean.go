@@ -12,8 +12,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-// CleanWorkdir removes the working directory for a specific component.
-func CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component string) error {
+// CleanWorkdir removes the working directory for a specific component in a stack.
+// The workdir name follows the stack-component naming convention (e.g., "dev-vpc").
+func CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack string) error {
 	defer perf.Track(atmosConfig, "workdir.CleanWorkdir")()
 
 	basePath := atmosConfig.BasePath
@@ -21,21 +22,24 @@ func CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component string) erro
 		basePath = "."
 	}
 
-	workdirPath := filepath.Join(basePath, WorkdirPath, "terraform", component)
+	// Construct workdir name using stack-component naming convention.
+	workdirName := fmt.Sprintf("%s-%s", stack, component)
+	workdirPath := filepath.Join(basePath, WorkdirPath, "terraform", workdirName)
 
 	// Check if workdir exists.
 	if _, err := os.Stat(workdirPath); os.IsNotExist(err) {
-		_ = ui.Info(fmt.Sprintf("No workdir found for component '%s'", component))
+		_ = ui.Info(fmt.Sprintf("No workdir found for component '%s' in stack '%s'", component, stack))
 		return nil
 	}
 
-	_ = ui.Info(fmt.Sprintf("Cleaning workdir for component '%s'", component))
+	_ = ui.Info(fmt.Sprintf("Cleaning workdir for component '%s' in stack '%s'", component, stack))
 
 	if err := os.RemoveAll(workdirPath); err != nil {
 		return errUtils.Build(errUtils.ErrWorkdirClean).
 			WithCause(err).
 			WithExplanation("failed to remove component workdir").
 			WithContext("component", component).
+			WithContext("stack", stack).
 			WithContext("path", workdirPath).
 			Err()
 	}
@@ -80,6 +84,9 @@ type CleanOptions struct {
 	// Component is the specific component to clean (empty for all).
 	Component string
 
+	// Stack is the stack name (required when Component is specified).
+	Stack string
+
 	// All cleans all workdirs in the project.
 	All bool
 }
@@ -95,8 +102,8 @@ func Clean(atmosConfig *schema.AtmosConfiguration, opts CleanOptions) error {
 		if err := CleanAllWorkdirs(atmosConfig); err != nil {
 			errs = append(errs, err)
 		}
-	} else if opts.Component != "" {
-		if err := CleanWorkdir(atmosConfig, opts.Component); err != nil {
+	} else if opts.Component != "" && opts.Stack != "" {
+		if err := CleanWorkdir(atmosConfig, opts.Component, opts.Stack); err != nil {
 			errs = append(errs, err)
 		}
 	}

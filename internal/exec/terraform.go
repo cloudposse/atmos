@@ -408,6 +408,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		// Check if workdir provisioner set a workdir path - if so, use it instead of the component path.
 		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
 			componentPath = workdirPath
+			log.Debug("Using workdir path", "workdirPath", workdirPath)
 		}
 
 		err = ExecuteShellCommand(
@@ -515,6 +516,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		// Check if workdir provisioner set a workdir path - if so, use it instead of the component path.
 		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
 			componentPath = workdirPath
+			log.Debug("Using workdir path for terraform command", "workdirPath", workdirPath)
 		}
 
 		if atmosConfig.Components.Terraform.InitRunReconfigure {
