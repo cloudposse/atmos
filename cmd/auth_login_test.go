@@ -717,6 +717,50 @@ func TestIsInteractive(t *testing.T) {
 	assert.IsType(t, true, result)
 }
 
+// TestCreateAuthManagerExported tests the exported CreateAuthManager wrapper function.
+func TestCreateAuthManagerExported(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tests := []struct {
+		name        string
+		config      *schema.AuthConfig
+		expectError bool
+	}{
+		{
+			name: "valid config",
+			config: &schema.AuthConfig{
+				Providers: map[string]schema.Provider{
+					"test-provider": {
+						Kind:     "aws/iam-identity-center",
+						Region:   "us-east-1",
+						StartURL: "https://test.awsapps.com/start",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:        "nil config returns error",
+			config:      nil,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager, err := CreateAuthManager(tt.config)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, manager)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, manager)
+			}
+		})
+	}
+}
+
 // TestAuthenticateIdentity tests the authenticateIdentity function.
 // Note: This test covers the default identity and provider fallback paths.
 // The --identity flag path is covered by TestResolveIdentityName_PersistentFlag_WithNoOptDefVal
