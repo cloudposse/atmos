@@ -86,18 +86,19 @@ spec:
         initial_delay: 2s
 ```
 
-### Global Defaults
+### Default Behavior
 
-Set global retry defaults in `atmos.yaml`:
+When no `retry` configuration is specified, sensible defaults are used:
 
-```yaml
-vendor:
-  retry:
-    max_attempts: 5
-    initial_delay: 2s
-    max_delay: 60s
-    backoff_strategy: exponential
-```
+| Field | Default |
+|-------|---------|
+| `max_attempts` | 3 |
+| `initial_delay` | 2s |
+| `max_delay` | 30s |
+| `backoff_strategy` | exponential |
+| `multiplier` | 2.0 |
+| `random_jitter` | 0.1 (10%) |
+| `max_elapsed_time` | 5m |
 
 ## Retryable Errors
 

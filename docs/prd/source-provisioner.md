@@ -1,8 +1,8 @@
 # PRD: Source Provisioner (Just-in-Time Vendoring)
 
-**Status:** Draft
-**Version:** 1.1
-**Last Updated:** 2025-12-16
+**Status:** Implemented
+**Version:** 1.2
+**Last Updated:** 2025-12-28
 **Author:** Claude Code
 
 ---
@@ -55,11 +55,15 @@ components:
 
 ### How It Works
 
-1. **Source Provisioner** registers for `before.terraform.init` hook event
-2. When triggered, checks if `source` is defined
-3. If source exists and component directory is missing (or outdated), vendors the component
-4. Vendors to component directory (or `workdir` when that feature merges)
-5. Terraform execution proceeds with vendored component
+The source provisioner is invoked via CLI commands:
+
+1. User runs `atmos terraform source pull <component> --stack <stack>`
+2. Provisioner extracts `source` configuration from component config
+3. If source exists and component directory is missing (or `--force` specified), vendors the component
+4. Component is vendored to the target directory
+5. User can then run `atmos terraform plan/apply` as usual
+
+**Note:** The current implementation is CLI-driven. Hook-based automatic provisioning (before `terraform init`) is planned for a future release.
 
 ### Integration with Workdir
 
@@ -82,14 +86,18 @@ Following the vendor pattern (`atmos vendor pull`), the source provisioner provi
 ### Terraform Source Commands
 
 ```bash
-# Core operations
+# Core operations (Implemented)
 atmos terraform source pull <component> --stack <stack>           # Vendor if missing or outdated
 atmos terraform source pull <component> --stack <stack> --force   # Force re-vendor
 atmos terraform source list --stack <stack>
 atmos terraform source describe <component> --stack <stack>
 atmos terraform source delete <component> --stack <stack> --force
+```
 
-# Cache management (operates on shared cache, but scoped under terraform for CLI consistency)
+**Planned (Phase 2) - Cache Management:**
+
+```bash
+# Cache management commands (not yet implemented)
 atmos terraform source cache list
 atmos terraform source cache prune --older-than 30d
 atmos terraform source cache clear
@@ -99,25 +107,22 @@ atmos terraform source cache refresh <uri>
 ### Helmfile Source Commands
 
 ```bash
-# Core operations
+# Core operations (Implemented)
 atmos helmfile source pull <component> --stack <stack>
 atmos helmfile source pull <component> --stack <stack> --force
 atmos helmfile source list --stack <stack>
 atmos helmfile source describe <component> --stack <stack>
 atmos helmfile source delete <component> --stack <stack> --force
-
-# Cache management
-atmos helmfile source cache list
-atmos helmfile source cache prune --older-than 30d
-atmos helmfile source cache clear
-atmos helmfile source cache refresh <uri>
 ```
 
-### Packer Source Commands (Future)
+### Packer Source Commands
 
 ```bash
+# Core operations (Implemented)
 atmos packer source pull <component> --stack <stack>
-# etc.
+atmos packer source list --stack <stack>
+atmos packer source describe <component> --stack <stack>
+atmos packer source delete <component> --stack <stack> --force
 ```
 
 ### Why Component-Type Scoped?
@@ -131,208 +136,101 @@ Source commands follow the same pattern for consistency:
 - `atmos terraform source pull`
 - `atmos helmfile source list`
 
-**Note:** While the cache is shared infrastructure under the hood (all component types share the same XDG cache directory), the CLI commands are scoped per-type for consistency. Each component type that wants source provisioning must implement the `SourceProvider` interface.
+**Note:** While a future cache would be shared infrastructure under the hood (all component types share the same XDG cache directory), the CLI commands are scoped per-type for consistency.
 
 ---
 
-## Component Registry Integration
+## Implementation Architecture
 
-### Optional SourceProvider Interface
+### Shared Command Package
 
-The source provisioner is implemented as an **optional interface** in the component registry. Component types that want to support source provisioning implement this interface.
-
-```go
-// pkg/component/source_provider.go
-
-// SourceProvider is an optional interface that component providers can implement
-// to enable source provisioning (JIT vendoring) for their component type.
-//
-// Component providers that do NOT implement this interface will not have
-// source commands available (e.g., `atmos <type> source pull` will not exist).
-type SourceProvider interface {
-    // SourcePull vendors a component from source configuration.
-    // If force is true, re-vendors even if already exists.
-    SourcePull(ctx context.Context, atmosConfig *schema.AtmosConfiguration, component, stack string, force bool) error
-
-    // SourceList returns all components with source in a stack.
-    SourceList(ctx context.Context, atmosConfig *schema.AtmosConfiguration, stack string) ([]SourceInfo, error)
-
-    // SourceDescribe returns source configuration for a component.
-    SourceDescribe(ctx context.Context, atmosConfig *schema.AtmosConfiguration, component, stack string) (*SourceInfo, error)
-
-    // SourceDelete removes a vendored source (requires force=true).
-    SourceDelete(ctx context.Context, atmosConfig *schema.AtmosConfiguration, component, stack string, force bool) error
-
-    // SourceCacheList returns cached repositories.
-    SourceCacheList(ctx context.Context, atmosConfig *schema.AtmosConfiguration) ([]CacheEntry, error)
-
-    // SourceCachePrune removes old worktrees from the cache.
-    SourceCachePrune(ctx context.Context, atmosConfig *schema.AtmosConfiguration, olderThan time.Duration) error
-
-    // SourceCacheClear clears the entire source cache.
-    SourceCacheClear(ctx context.Context, atmosConfig *schema.AtmosConfiguration) error
-
-    // SourceCacheRefresh force-refreshes a specific cached repository.
-    SourceCacheRefresh(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri string) error
-
-    // GetSourceHookEvent returns the hook event that triggers source provisioning.
-    // Example: hooks.BeforeTerraformInit, hooks.BeforeHelmfileSync
-    GetSourceHookEvent() hooks.HookEvent
-}
-
-// SourceInfo contains information about a component's source configuration.
-type SourceInfo struct {
-    Component     string
-    Stack         string
-    Source        *schema.VendorComponentSource
-    TargetPath    string
-    CachedAt      time.Time
-    IsVendored    bool
-}
-
-// CacheEntry represents a cached repository.
-type CacheEntry struct {
-    URI         string
-    Path        string
-    Worktrees   []WorktreeInfo
-    LastFetched time.Time
-    Size        int64
-}
-
-// WorktreeInfo represents a git worktree in the cache.
-type WorktreeInfo struct {
-    Version   string
-    Subpath   string
-    Path      string
-    CreatedAt time.Time
-}
-```
-
-### Checking for SourceProvider Support
+The source provisioner uses a shared command package (`pkg/provisioner/source/cmd/`) that provides reusable command implementations. Each component type (terraform, helmfile, packer) registers its own source subcommand with a type-specific configuration:
 
 ```go
-// pkg/component/source.go
+// cmd/terraform/source/source.go
 
-// GetSourceProvider returns the SourceProvider for a component type, if implemented.
-// Returns nil, false if the component type does not support source provisioning.
-func GetSourceProvider(componentType string) (SourceProvider, bool) {
-    provider, ok := GetProvider(componentType)
-    if !ok {
-        return nil, false
-    }
+package source
 
-    sourceProvider, ok := provider.(SourceProvider)
-    return sourceProvider, ok
-}
+import (
+    "github.com/spf13/cobra"
+    sourcecmd "github.com/cloudposse/atmos/pkg/provisioner/source/cmd"
+)
 
-// SupportsSource returns true if the component type supports source provisioning.
-func SupportsSource(componentType string) bool {
-    _, ok := GetSourceProvider(componentType)
-    return ok
-}
-```
-
-### Command Registration
-
-Commands are only registered for component types that implement `SourceProvider`:
-
-```go
-// cmd/terraform/source.go
-
-func init() {
-    // Only register source commands if terraform provider implements SourceProvider
-    if component.SupportsSource("terraform") {
-        terraformCmd.AddCommand(sourceCmd)
-    }
+// terraformConfig holds the component-type-specific configuration.
+var terraformConfig = &sourcecmd.Config{
+    ComponentType: "terraform",
+    TypeLabel:     "Terraform",
 }
 
 var sourceCmd = &cobra.Command{
     Use:   "source",
-    Short: "Manage terraform component sources (JIT vendoring)",
-    Long: `Manage terraform component sources defined in the source field.
+    Short: "Manage Terraform component sources (JIT vendoring)",
+}
 
-Commands:
-  pull      Vendor component source (use --force to re-vendor)
-  list      List sources in a stack
-  describe  Show source configuration
-  delete    Remove vendored source
-  cache     Manage source cache`,
+func init() {
+    // Add subcommands from shared package.
+    sourceCmd.AddCommand(sourcecmd.PullCommand(terraformConfig))
+    sourceCmd.AddCommand(sourcecmd.ListCommand(terraformConfig))
+    sourceCmd.AddCommand(sourcecmd.DescribeCommand(terraformConfig))
+    sourceCmd.AddCommand(sourcecmd.DeleteCommand(terraformConfig))
+}
+
+func GetSourceCommand() *cobra.Command {
+    return sourceCmd
 }
 ```
 
-### Default Implementation
+### Core Provisioner Package
 
-A default `SourceProvider` implementation is provided that component types can embed:
+The business logic resides in `pkg/provisioner/source/`:
 
 ```go
-// pkg/provisioner/source/default_provider.go
+// pkg/provisioner/source/source.go
 
-// DefaultSourceProvider provides a default implementation of SourceProvider
-// that component types can embed to get source provisioning support.
-type DefaultSourceProvider struct {
-    componentType string
-    hookEvent     hooks.HookEvent
+// ProvisionParams contains parameters for source provisioning.
+type ProvisionParams struct {
+    AtmosConfig     *schema.AtmosConfiguration
+    ComponentType   string // "terraform", "helmfile", etc.
+    Component       string
+    Stack           string
+    ComponentConfig map[string]any
+    AuthContext     *schema.AuthContext
+    Force           bool
 }
 
-// NewDefaultSourceProvider creates a new DefaultSourceProvider.
-func NewDefaultSourceProvider(componentType string, hookEvent hooks.HookEvent) *DefaultSourceProvider {
-    return &DefaultSourceProvider{
-        componentType: componentType,
-        hookEvent:     hookEvent,
-    }
-}
-
-// SourcePull implements SourceProvider.
-func (p *DefaultSourceProvider) SourcePull(ctx context.Context, atmosConfig *schema.AtmosConfiguration, component, stack string, force bool) error {
-    return Pull(ctx, atmosConfig, p.componentType, component, stack, force)
-}
-
-// ... other methods delegate to pkg/provisioner/source functions
+// Provision vendors a component source based on source configuration.
+func Provision(ctx context.Context, params *ProvisionParams) error
 ```
 
-### Terraform Provider Example
+### Source Field Location
 
-```go
-// pkg/component/terraform/provider.go
+The source provisioner checks for `source` configuration in two locations (in order of precedence):
 
-type TerraformProvider struct {
-    *source.DefaultSourceProvider // Embed default source provider
-}
+1. **Top-level `source` field** (preferred):
+   ```yaml
+   components:
+     terraform:
+       vpc:
+         source: "github.com/org/repo//module?ref=v1.0.0"
+   ```
 
-func NewTerraformProvider() *TerraformProvider {
-    return &TerraformProvider{
-        DefaultSourceProvider: source.NewDefaultSourceProvider(
-            "terraform",
-            hooks.BeforeTerraformInit,
-        ),
-    }
-}
+2. **`metadata.source` field** (deprecated, for backward compatibility):
+   ```yaml
+   components:
+     terraform:
+       vpc:
+         metadata:
+           source: "github.com/org/repo//module?ref=v1.0.0"
+   ```
 
-// GetType implements ComponentProvider.
-func (p *TerraformProvider) GetType() string {
-    return "terraform"
-}
-
-// ... other ComponentProvider methods
-
-// Note: SourceProvider methods are provided by embedded DefaultSourceProvider
-```
+**Recommendation:** Use the top-level `source` field for new configurations.
 
 ---
 
-## When to Use CLI vs Automatic
+## Using the CLI Commands
 
-**Automatic (via hooks):**
-```bash
-# Source vendored automatically if source defined and component missing
-atmos terraform apply vpc --stack dev
-# → BeforeTerraformInit hook triggers
-# → Source provisioner checks source configuration
-# → Vendors if component directory missing
-# → Terraform runs
-```
+**Current implementation (CLI-driven):**
 
-**Manual (explicit commands):**
 ```bash
 # Vendor component source (downloads if missing or outdated)
 atmos terraform source pull vpc --stack dev
@@ -340,12 +238,27 @@ atmos terraform source pull vpc --stack dev
 # Force re-vendor to get latest
 atmos terraform source pull vpc --stack dev --force
 
-# Check what would be vendored
+# List components with source configuration
 atmos terraform source list --stack dev
 
-# Manage cache
-atmos terraform source cache list
-atmos terraform source cache prune --older-than 30d
+# Describe source configuration for a component
+atmos terraform source describe vpc --stack dev
+
+# Delete vendored source (requires --force)
+atmos terraform source delete vpc --stack dev --force
+```
+
+**Future: Automatic vendoring (planned):**
+
+A future enhancement may add hook-based automatic provisioning:
+
+```bash
+# Source would be vendored automatically before terraform init
+atmos terraform apply vpc --stack dev
+# → BeforeTerraformInit hook triggers
+# → Source provisioner checks source configuration
+# → Vendors if component directory missing
+# → Terraform runs
 ```
 
 ---
