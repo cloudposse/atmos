@@ -1,13 +1,12 @@
 package workdir
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -55,7 +54,7 @@ that matches the stack manifest structure.`,
 		}
 
 		// Output the manifest.
-		fmt.Print(manifest)
+		_ = data.Write(manifest)
 		return nil
 	},
 }

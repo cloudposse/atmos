@@ -12,10 +12,26 @@ import (
 	"go.uber.org/mock/gomock"
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+// initTestIO initializes the I/O and UI contexts for testing.
+// This must be called before tests that use printListJSON, printListYAML, or printListTable.
+func initTestIO(t *testing.T) {
+	t.Helper()
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		t.Fatalf("failed to initialize I/O context: %v", err)
+	}
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+}
+
 func TestPrintListJSON(t *testing.T) {
+	initTestIO(t)
 	workdirs := []WorkdirInfo{
 		{
 			Name:        "dev-vpc",
@@ -57,11 +73,13 @@ func TestPrintListJSON(t *testing.T) {
 }
 
 func TestPrintListJSON_Empty(t *testing.T) {
+	initTestIO(t)
 	err := printListJSON([]WorkdirInfo{})
 	require.NoError(t, err)
 }
 
 func TestPrintListJSON_SingleItem(t *testing.T) {
+	initTestIO(t)
 	workdirs := []WorkdirInfo{
 		{
 			Name:      "dev-vpc",
@@ -75,6 +93,7 @@ func TestPrintListJSON_SingleItem(t *testing.T) {
 }
 
 func TestPrintListYAML(t *testing.T) {
+	initTestIO(t)
 	workdirs := []WorkdirInfo{
 		{
 			Name:        "dev-vpc",
@@ -103,11 +122,13 @@ func TestPrintListYAML(t *testing.T) {
 }
 
 func TestPrintListYAML_Empty(t *testing.T) {
+	initTestIO(t)
 	err := printListYAML([]WorkdirInfo{})
 	require.NoError(t, err)
 }
 
 func TestPrintListTable(t *testing.T) {
+	initTestIO(t)
 	workdirs := []WorkdirInfo{
 		{
 			Name:        "dev-vpc",
@@ -136,11 +157,13 @@ func TestPrintListTable(t *testing.T) {
 }
 
 func TestPrintListTable_Empty(t *testing.T) {
+	initTestIO(t)
 	// Should print "No workdirs found" message.
 	printListTable([]WorkdirInfo{})
 }
 
 func TestPrintListTable_SingleItem(t *testing.T) {
+	initTestIO(t)
 	workdirs := []WorkdirInfo{
 		{
 			Name:      "dev-vpc",
@@ -230,7 +253,7 @@ func TestWorkdirInfo_EmptyContentHash(t *testing.T) {
 		// ContentHash is empty.
 	}
 
-	// JSON should omit empty content_hash.
+	// JSON should omit empty content_hash due to omitempty tag.
 	data, err := json.Marshal(info)
 	require.NoError(t, err)
 
@@ -238,11 +261,9 @@ func TestWorkdirInfo_EmptyContentHash(t *testing.T) {
 	err = json.Unmarshal(data, &parsed)
 	require.NoError(t, err)
 
-	// Check if content_hash is present (it will be empty string).
-	contentHash, exists := parsed["content_hash"]
-	if exists {
-		assert.Empty(t, contentHash)
-	}
+	// content_hash should NOT be present due to omitempty.
+	_, exists := parsed["content_hash"]
+	assert.False(t, exists, "content_hash should be omitted when empty")
 }
 
 func TestListCmd_Args(t *testing.T) {
@@ -300,6 +321,7 @@ func TestSetAndGetWorkdirManager(t *testing.T) {
 // Test date formatting in table output.
 
 func TestPrintListTable_DateFormatting(t *testing.T) {
+	initTestIO(t)
 	// Test that dates are formatted correctly.
 	workdirs := []WorkdirInfo{
 		{
@@ -371,6 +393,7 @@ func TestListCmd_ArgsValidation(t *testing.T) {
 // Test printListTable with varying data sizes.
 
 func TestPrintListTable_MultipleRows(t *testing.T) {
+	initTestIO(t)
 	// Test with multiple workdirs of varying lengths.
 	workdirs := []WorkdirInfo{
 		{
@@ -404,6 +427,7 @@ func TestPrintListTable_MultipleRows(t *testing.T) {
 }
 
 func TestPrintListTable_ZeroTime(t *testing.T) {
+	initTestIO(t)
 	workdirs := []WorkdirInfo{
 		{
 			Name:      "test",
@@ -422,6 +446,7 @@ func TestPrintListTable_ZeroTime(t *testing.T) {
 // Test JSON output edge cases.
 
 func TestPrintListJSON_LargeList(t *testing.T) {
+	initTestIO(t)
 	workdirs := make([]WorkdirInfo, 100)
 	for i := range workdirs {
 		workdirs[i] = WorkdirInfo{
@@ -439,6 +464,7 @@ func TestPrintListJSON_LargeList(t *testing.T) {
 }
 
 func TestPrintListJSON_SpecialCharacters(t *testing.T) {
+	initTestIO(t)
 	workdirs := []WorkdirInfo{
 		{
 			Name:      "test-with-special",
@@ -456,6 +482,7 @@ func TestPrintListJSON_SpecialCharacters(t *testing.T) {
 // Test YAML output edge cases.
 
 func TestPrintListYAML_LargeList(t *testing.T) {
+	initTestIO(t)
 	workdirs := make([]WorkdirInfo, 50)
 	for i := range workdirs {
 		workdirs[i] = WorkdirInfo{
@@ -470,6 +497,7 @@ func TestPrintListYAML_LargeList(t *testing.T) {
 }
 
 func TestPrintListYAML_SpecialCharacters(t *testing.T) {
+	initTestIO(t)
 	workdirs := []WorkdirInfo{
 		{
 			Name:      "test-yaml",

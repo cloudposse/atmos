@@ -1,9 +1,6 @@
 package workdir
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
@@ -13,6 +10,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -66,7 +64,7 @@ The output is formatted for human readability, similar to 'kubectl describe'.`,
 func printShowHuman(info *WorkdirInfo) {
 	// Display status indicator with colored checkmark.
 	statusIndicator := theme.Styles.Checkmark.String()
-	fmt.Fprintf(os.Stderr, "%s Workdir Status\n\n", statusIndicator)
+	_ = ui.Writef("%s Workdir Status\n\n", statusIndicator)
 
 	// Build table rows.
 	rows := [][]string{
@@ -102,7 +100,7 @@ func printShowHuman(info *WorkdirInfo) {
 			return lipgloss.NewStyle().Padding(0, 1)
 		})
 
-	fmt.Fprintf(os.Stderr, "%s\n", t)
+	_ = ui.Writef("%s\n", t)
 }
 
 func init() {

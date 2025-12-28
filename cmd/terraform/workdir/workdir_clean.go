@@ -1,9 +1,6 @@
 package workdir
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -12,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -84,7 +82,7 @@ func cleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error {
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "%s All workdirs cleaned\n", theme.Styles.Checkmark.String())
+	_ = ui.Writef("%s All workdirs cleaned\n", theme.Styles.Checkmark.String())
 	return nil
 }
 
@@ -93,7 +91,7 @@ func cleanSpecificWorkdir(atmosConfig *schema.AtmosConfiguration, component, sta
 		return err
 	}
 
-	fmt.Fprintf(os.Stderr, "%s Workdir cleaned for %s in %s\n", theme.Styles.Checkmark.String(), component, stack)
+	_ = ui.Writef("%s Workdir cleaned for %s in %s\n", theme.Styles.Checkmark.String(), component, stack)
 	return nil
 }
 

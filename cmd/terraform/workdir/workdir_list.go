@@ -2,8 +2,6 @@ package workdir
 
 import (
 	"encoding/json"
-	"fmt"
-	"os"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
@@ -13,8 +11,10 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -69,7 +69,7 @@ func printListJSON(workdirs []WorkdirInfo) error {
 			WithExplanation("Failed to marshal workdirs to JSON").
 			Err()
 	}
-	fmt.Println(string(jsonData))
+	_ = data.Writeln(string(jsonData))
 	return nil
 }
 
@@ -81,13 +81,13 @@ func printListYAML(workdirs []WorkdirInfo) error {
 			WithExplanation("Failed to marshal workdirs to YAML").
 			Err()
 	}
-	fmt.Print(string(yamlData))
+	_ = data.Write(string(yamlData))
 	return nil
 }
 
 func printListTable(workdirs []WorkdirInfo) {
 	if len(workdirs) == 0 {
-		fmt.Fprintln(os.Stderr, "No workdirs found")
+		_ = ui.Writeln("No workdirs found")
 		return
 	}
 
@@ -125,7 +125,7 @@ func printListTable(workdirs []WorkdirInfo) {
 			return lipgloss.NewStyle().Padding(0, 2, 0, 0)
 		})
 
-	fmt.Fprintln(os.Stderr, t)
+	_ = ui.Writeln(t.String())
 }
 
 func init() {

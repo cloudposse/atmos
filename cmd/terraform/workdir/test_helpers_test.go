@@ -3,8 +3,8 @@ package workdir
 import "time"
 
 // CreateSampleWorkdirInfo creates a sample WorkdirInfo for testing.
-func CreateSampleWorkdirInfo(component, stack string) *WorkdirInfo {
-	return &WorkdirInfo{
+func CreateSampleWorkdirInfo(component, stack string) WorkdirInfo {
+	return WorkdirInfo{
 		Name:        stack + "-" + component,
 		Component:   component,
 		Stack:       stack,
@@ -19,8 +19,8 @@ func CreateSampleWorkdirInfo(component, stack string) *WorkdirInfo {
 // CreateSampleWorkdirList creates a sample list of workdirs for testing.
 func CreateSampleWorkdirList() []WorkdirInfo {
 	return []WorkdirInfo{
-		*CreateSampleWorkdirInfo("vpc", "dev"),
-		*CreateSampleWorkdirInfo("vpc", "prod"),
-		*CreateSampleWorkdirInfo("s3", "dev"),
+		CreateSampleWorkdirInfo("vpc", "dev"),
+		CreateSampleWorkdirInfo("vpc", "prod"),
+		CreateSampleWorkdirInfo("s3", "dev"),
 	}
 }

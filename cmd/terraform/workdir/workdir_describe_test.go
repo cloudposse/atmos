@@ -137,26 +137,6 @@ func TestDescribeWorkdir_ManifestStructure(t *testing.T) {
 	assert.False(t, info.UpdatedAt.IsZero())
 }
 
-func TestDescribeWorkdir_ManifestKeys(t *testing.T) {
-	// Document the expected manifest structure keys.
-	expectedKeys := []string{
-		"components",
-		"terraform",
-		"metadata",
-		"workdir",
-		"name",
-		"source",
-		"path",
-		"content_hash",
-		"created_at",
-		"updated_at",
-	}
-
-	for _, key := range expectedKeys {
-		assert.NotEmpty(t, key)
-	}
-}
-
 // Test with various component names.
 
 func TestDescribeCmd_VariousComponentNames(t *testing.T) {
@@ -248,46 +228,6 @@ func TestDescribeCmd_NilConfig(t *testing.T) {
 	result, err := mock.DescribeWorkdir(&schema.AtmosConfiguration{}, "vpc", "dev")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, result)
-}
-
-// Test RunE validation scenarios.
-
-func TestDescribeCmd_RunE_MissingStack(t *testing.T) {
-	// Test the validation that stack is required.
-	v := viper.New()
-	v.Set("stack", "")
-
-	stack := v.GetString("stack")
-	if stack == "" {
-		// This is the expected validation failure path.
-		assert.True(t, true, "validation correctly identifies missing stack")
-	}
-}
-
-func TestDescribeCmd_RunE_ValidStack(t *testing.T) {
-	// Test valid stack passes validation.
-	v := viper.New()
-	v.Set("stack", "prod")
-
-	stack := v.GetString("stack")
-	assert.NotEmpty(t, stack)
-	assert.Equal(t, "prod", stack)
-}
-
-func TestDescribeCmd_RunE_ComponentParsing(t *testing.T) {
-	// Test that component is correctly parsed from args.
-	args := []string{"s3-bucket"}
-	if len(args) == 1 {
-		component := args[0]
-		assert.Equal(t, "s3-bucket", component)
-	}
-}
-
-func TestDescribeCmd_RunE_EmptyArgs(t *testing.T) {
-	// The describe command expects exactly one argument.
-	args := []string{}
-	assert.Empty(t, args)
-	// cobra.ExactArgs(1) would reject this.
 }
 
 // Test cobra.ExactArgs(1) validation.

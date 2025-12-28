@@ -242,6 +242,7 @@ func isWorkdirEnabled(componentConfig map[string]any) bool {
 }
 
 // extractComponentName extracts the component name from config.
+// Priority: 1) top-level "component" key, 2) metadata.component, 3) vars.component.
 func extractComponentName(componentConfig map[string]any) string {
 	defer perf.Track(nil, "workdir.extractComponentName")()
 

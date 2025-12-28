@@ -48,14 +48,11 @@ func TestCleanWorkdir_EmptyBasePath(t *testing.T) {
 	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
 
 	// Change to tmpDir and test with empty BasePath.
-	oldWd, err := os.Getwd()
-	require.NoError(t, err)
-	require.NoError(t, os.Chdir(tmpDir))
-	defer func() { _ = os.Chdir(oldWd) }()
+	t.Chdir(tmpDir)
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: ""}
 
-	err = CleanWorkdir(atmosConfig, "vpc")
+	err := CleanWorkdir(atmosConfig, "vpc")
 	require.NoError(t, err)
 }
 
@@ -96,14 +93,11 @@ func TestCleanAllWorkdirs_EmptyBasePath(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(workdirBase, "terraform", "vpc"), 0o755))
 
 	// Change to tmpDir.
-	oldWd, err := os.Getwd()
-	require.NoError(t, err)
-	require.NoError(t, os.Chdir(tmpDir))
-	defer func() { _ = os.Chdir(oldWd) }()
+	t.Chdir(tmpDir)
 
 	atmosConfig := &schema.AtmosConfiguration{BasePath: ""}
 
-	err = CleanAllWorkdirs(atmosConfig)
+	err := CleanAllWorkdirs(atmosConfig)
 	require.NoError(t, err)
 }
 

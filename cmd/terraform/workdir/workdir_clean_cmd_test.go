@@ -165,67 +165,6 @@ func TestMockWorkdirManager_MultipleMethodCalls(t *testing.T) {
 	_ = mock.CleanAllWorkdirs(&schema.AtmosConfiguration{})
 }
 
-// Test validation scenarios.
-
-func TestCleanCmd_ValidationScenarios(t *testing.T) {
-	tests := []struct {
-		name        string
-		all         bool
-		hasArgs     bool
-		hasStack    bool
-		shouldError bool
-		errorMsg    string
-	}{
-		{
-			name:        "all flag only",
-			all:         true,
-			hasArgs:     false,
-			hasStack:    false,
-			shouldError: false,
-		},
-		{
-			name:        "component with stack",
-			all:         false,
-			hasArgs:     true,
-			hasStack:    true,
-			shouldError: false,
-		},
-		{
-			name:        "all with args - conflict",
-			all:         true,
-			hasArgs:     true,
-			hasStack:    false,
-			shouldError: true,
-			errorMsg:    "Cannot specify both --all and a component",
-		},
-		{
-			name:        "no all and no args",
-			all:         false,
-			hasArgs:     false,
-			hasStack:    false,
-			shouldError: true,
-			errorMsg:    "Either --all or a component is required",
-		},
-		{
-			name:        "component without stack",
-			all:         false,
-			hasArgs:     true,
-			hasStack:    false,
-			shouldError: true,
-			errorMsg:    "Stack is required when cleaning a specific workdir",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Document the expected validation behavior.
-			if tt.shouldError {
-				assert.NotEmpty(t, tt.errorMsg)
-			}
-		})
-	}
-}
-
 // Test error types.
 
 func TestCleanCmd_ErrorTypes(t *testing.T) {
@@ -432,47 +371,6 @@ func TestCleanSpecificWorkdir_SuccessMessage(t *testing.T) {
 	// Should print success message to stderr and return nil.
 	err := cleanSpecificWorkdir(atmosConfig, "s3", "staging")
 	assert.NoError(t, err)
-}
-
-// Test error message types.
-
-func TestCleanCmd_ErrorMessages(t *testing.T) {
-	tests := []struct {
-		name        string
-		all         bool
-		args        []string
-		stack       string
-		errContains string
-	}{
-		{
-			name:        "all with component conflict",
-			all:         true,
-			args:        []string{"vpc"},
-			stack:       "",
-			errContains: "Cannot specify both",
-		},
-		{
-			name:        "no all no args",
-			all:         false,
-			args:        []string{},
-			stack:       "",
-			errContains: "Either --all or a component is required",
-		},
-		{
-			name:        "component without stack",
-			all:         false,
-			args:        []string{"vpc"},
-			stack:       "",
-			errContains: "Stack is required",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Document the expected error messages.
-			assert.NotEmpty(t, tt.errContains)
-		})
-	}
 }
 
 // Test various component/stack combinations.

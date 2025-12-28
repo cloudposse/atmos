@@ -257,13 +257,8 @@ func TestListCmd_Integration_NoWorkdirs(t *testing.T) {
 	tmpDir := t.TempDir()
 	createTestAtmosConfig(t, tmpDir)
 
-	// Save current directory.
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	defer func() { _ = os.Chdir(originalDir) }()
-
-	// Change to test directory.
-	require.NoError(t, os.Chdir(tmpDir))
+	// Change to test directory (auto-restored by testing framework).
+	t.Chdir(tmpDir)
 
 	// Create mock to avoid actual config loading.
 	ctrl := gomock.NewController(t)

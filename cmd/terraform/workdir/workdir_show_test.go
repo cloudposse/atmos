@@ -1,7 +1,6 @@
 package workdir
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -9,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -125,7 +125,8 @@ func TestMockWorkdirManager_GetWorkdirInfo(t *testing.T) {
 	defer ctrl.Finish()
 
 	mock := NewMockWorkdirManager(ctrl)
-	expectedInfo := CreateSampleWorkdirInfo("vpc", "dev")
+	info := CreateSampleWorkdirInfo("vpc", "dev")
+	expectedInfo := &info
 
 	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "vpc", "dev").Return(expectedInfo, nil)
 
@@ -308,7 +309,9 @@ func TestMockWorkdirManager_GetWorkdirInfo_NotFound(t *testing.T) {
 	defer ctrl.Finish()
 
 	mock := NewMockWorkdirManager(ctrl)
-	expectedErr := errors.New("workdir not found")
+	expectedErr := errUtils.Build(errUtils.ErrWorkdirMetadata).
+		WithExplanation("workdir not found").
+		Err()
 
 	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "nonexistent", "dev").Return(nil, expectedErr)
 
@@ -319,6 +322,7 @@ func TestMockWorkdirManager_GetWorkdirInfo_NotFound(t *testing.T) {
 	result, err := mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "nonexistent", "dev")
 	assert.Error(t, err)
 	assert.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirMetadata)
 }
 
 // Test printShowHuman with various field values.
