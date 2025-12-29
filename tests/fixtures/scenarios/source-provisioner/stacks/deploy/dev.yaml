@@ -6,7 +6,7 @@ vars:
 import:
   - catalog/vpc-source-string
   - catalog/vpc-source-map
-  - catalog/vpc-metadata-source
+  - catalog/vpc-source-retry
   - catalog/vpc-no-source
 
 # Override vars for dev environment
@@ -15,4 +15,3 @@ components:
     vpc-string:
       vars:
         environment: "dev-override"
-    # vpc-retry is imported from vpc-metadata-source (renamed component)

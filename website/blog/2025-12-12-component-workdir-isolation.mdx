@@ -92,14 +92,13 @@ When `provision.workdir.enabled: true` is set, Atmos:
 
 ### Automatic for Remote Sources (Coming Soon)
 
-When we introduce JIT (Just-In-Time) vendoring support, workdir isolation will be automatic for any component with a `metadata.source`:
+When we introduce JIT (Just-In-Time) vendoring support, workdir isolation will be automatic for any component with a `source`:
 
 ```yaml
 components:
   terraform:
     vpc:
-      metadata:
-        source: "github.com/cloudposse/terraform-aws-vpc?ref=v1.0.0"
+      source: "github.com/cloudposse/terraform-aws-vpc?ref=v1.0.0"
       vars:
         cidr_block: "10.0.0.0/16"
 ```

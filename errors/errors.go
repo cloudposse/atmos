@@ -682,7 +682,7 @@ var (
 	ErrSourceDownload   = errors.New("failed to download component source")
 	ErrSourceCacheRead  = errors.New("failed to read source cache")
 	ErrSourceCacheWrite = errors.New("failed to write source cache")
-	ErrInvalidSource    = errors.New("invalid metadata.source configuration")
+	ErrInvalidSource    = errors.New("invalid source configuration")
 	ErrWorkdirCreation  = errors.New("failed to create working directory")
 	ErrWorkdirSync      = errors.New("failed to sync files to working directory")
 	ErrWorkdirMetadata  = errors.New("failed to read/write workdir metadata")

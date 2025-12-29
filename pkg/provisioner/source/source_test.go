@@ -289,7 +289,7 @@ func TestProvision_NoMetadataSource(t *testing.T) {
 		ComponentType:   "terraform",
 		Component:       "vpc",
 		Stack:           "dev",
-		ComponentConfig: map[string]any{}, // No metadata.source.
+		ComponentConfig: map[string]any{}, // No source configured.
 		Force:           false,
 	}
 

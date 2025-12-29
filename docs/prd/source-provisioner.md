@@ -204,26 +204,16 @@ func Provision(ctx context.Context, params *ProvisionParams) error
 
 ### Source Field Location
 
-The source provisioner checks for `source` configuration in two locations (in order of precedence):
+The source provisioner uses the top-level `source` field in component configuration:
 
-1. **Top-level `source` field** (preferred):
-   ```yaml
-   components:
-     terraform:
-       vpc:
-         source: "github.com/org/repo//module?ref=v1.0.0"
-   ```
+```yaml
+components:
+  terraform:
+    vpc:
+      source: "github.com/org/repo//module?ref=v1.0.0"
+```
 
-2. **`metadata.source` field** (deprecated, for backward compatibility):
-   ```yaml
-   components:
-     terraform:
-       vpc:
-         metadata:
-           source: "github.com/org/repo//module?ref=v1.0.0"
-   ```
-
-**Recommendation:** Use the top-level `source` field for new configurations.
+This follows Atmos's consistent configuration hierarchy where `source` is a first-class field at the same level as `backend`, `vars`, and other component configuration.
 
 ---
 
@@ -789,7 +779,7 @@ tests/fixtures/scenarios/source-provisioner/
     ├── catalog/
     │   ├── vpc-source-string.yaml      # Source with URI containing ref
     │   ├── vpc-source-map.yaml         # Full source spec with included/excluded paths
-    │   ├── vpc-metadata-source.yaml    # Source with retry configuration
+    │   ├── vpc-source-retry.yaml       # Source with retry configuration
     │   └── vpc-no-source.yaml          # Component without source (for error tests)
     └── deploy/
         └── dev.yaml                    # Stack that imports all catalog files

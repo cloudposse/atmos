@@ -12,7 +12,6 @@ import (
 )
 
 // ExtractSource extracts the source specification from component config.
-// It checks for top-level source first (preferred), then falls back to metadata.source (deprecated).
 // Supports both string form (go-getter URI) and map form (VendorComponentSource).
 // Returns nil, nil if no source is configured (not an error).
 func ExtractSource(componentConfig map[string]any) (*schema.VendorComponentSource, error) {
@@ -21,27 +20,12 @@ func ExtractSource(componentConfig map[string]any) (*schema.VendorComponentSourc
 		return nil, nil
 	}
 
-	// Check top-level source first (preferred).
+	// Check top-level source.
 	if source, ok := componentConfig[cfg.SourceSectionName]; ok && source != nil {
 		return parseSource(source, cfg.SourceSectionName)
 	}
 
-	// Fall back to metadata.source (deprecated).
-	if metadata, ok := componentConfig[cfg.MetadataSectionName].(map[string]any); ok {
-		if source, ok := metadata[cfg.SourceSectionName]; ok && source != nil {
-			return parseSource(source, "metadata."+cfg.SourceSectionName)
-		}
-	}
-
 	return nil, nil // No source configured.
-}
-
-// ExtractMetadataSource extracts the source specification from component config.
-// Deprecated: Use ExtractSource instead, which checks top-level source first.
-// This function is kept for backward compatibility.
-func ExtractMetadataSource(componentConfig map[string]any) (*schema.VendorComponentSource, error) {
-	defer perf.Track(nil, "source.ExtractMetadataSource")()
-	return ExtractSource(componentConfig)
 }
 
 // parseSource parses source from either string or map form.
@@ -153,7 +137,7 @@ func parseRetryConfig(m map[string]any) *schema.RetryConfig {
 	return cfg
 }
 
-// HasSource checks if component config has source defined (either top-level or metadata.source).
+// HasSource checks if component config has source defined.
 func HasSource(componentConfig map[string]any) bool {
 	defer perf.Track(nil, "source.HasSource")()
 	if componentConfig == nil {
@@ -163,19 +147,5 @@ func HasSource(componentConfig map[string]any) bool {
 	if source, ok := componentConfig[cfg.SourceSectionName]; ok && source != nil {
 		return true
 	}
-	// Check metadata.source (deprecated).
-	if metadata, ok := componentConfig[cfg.MetadataSectionName].(map[string]any); ok {
-		if source, ok := metadata[cfg.SourceSectionName]; ok && source != nil {
-			return true
-		}
-	}
 	return false
-}
-
-// HasMetadataSource checks if component config has metadata.source defined.
-// Deprecated: Use HasSource instead, which checks both top-level source and metadata.source.
-// This function is kept for backward compatibility.
-func HasMetadataSource(componentConfig map[string]any) bool {
-	defer perf.Track(nil, "source.HasMetadataSource")()
-	return HasSource(componentConfig)
 }

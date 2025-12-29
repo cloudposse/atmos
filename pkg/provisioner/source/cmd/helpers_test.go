@@ -84,8 +84,8 @@ func TestParseCommonFlags_WithAllFlags(t *testing.T) {
 	assert.True(t, opts.Force)
 }
 
-// TestProvisionSource_NoMetadataSource tests that ProvisionSource returns nil when no source is configured.
-func TestProvisionSource_NoMetadataSource(t *testing.T) {
+// TestProvisionSource_NoSource tests that ProvisionSource returns nil when no source is configured.
+func TestProvisionSource_NoSource(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a temp directory for the base path.
@@ -102,7 +102,7 @@ func TestProvisionSource_NoMetadataSource(t *testing.T) {
 		ComponentType:   "terraform",
 		Component:       "vpc",
 		Stack:           "dev",
-		ComponentConfig: map[string]any{}, // No metadata.source.
+		ComponentConfig: map[string]any{}, // No source configured.
 		AuthContext:     nil,
 		Force:           false,
 	}
@@ -135,50 +135,6 @@ func TestProvisionSource_TargetExists(t *testing.T) {
 		Component:     "vpc",
 		Stack:         "dev",
 		ComponentConfig: map[string]any{
-			"metadata": map[string]any{
-				"source": map[string]any{
-					"uri": "github.com/example/terraform-aws-vpc",
-				},
-			},
-		},
-		AuthContext: nil,
-		Force:       false, // Not forcing.
-	}
-
-	err = ProvisionSource(ctx, opts)
-	assert.NoError(t, err, "ProvisionSource should skip when target exists and force=false")
-
-	// Verify existing file was not modified.
-	content, err := os.ReadFile(filepath.Join(componentDir, "main.tf"))
-	require.NoError(t, err)
-	assert.Equal(t, "# existing", string(content))
-}
-
-// TestProvisionSource_TopLevelSource tests that ProvisionSource works with top-level source.
-func TestProvisionSource_TopLevelSource(t *testing.T) {
-	ctx := context.Background()
-
-	// Create a temp directory with existing component.
-	tempDir := t.TempDir()
-	componentDir := filepath.Join(tempDir, "vpc")
-	err := os.MkdirAll(componentDir, 0o755)
-	require.NoError(t, err)
-	err = os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# existing"), 0o644)
-	require.NoError(t, err)
-
-	opts := &ProvisionSourceOptions{
-		AtmosConfig: &schema.AtmosConfiguration{
-			Components: schema.Components{
-				Terraform: schema.Terraform{
-					BasePath: tempDir,
-				},
-			},
-		},
-		ComponentType: "terraform",
-		Component:     "vpc",
-		Stack:         "dev",
-		ComponentConfig: map[string]any{
-			// Using top-level source instead of metadata.source.
 			"source": map[string]any{
 				"uri": "github.com/example/terraform-aws-vpc",
 			},
