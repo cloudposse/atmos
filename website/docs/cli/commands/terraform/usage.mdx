@@ -515,13 +515,16 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
     <dd>
         Specify the identity to authenticate before running Terraform commands. This flag has four modes:
 
-        - **With identity name** (`--identity admin`): Use the specified identity
+        - **With identity name** (`--identity admin` or `--identity=admin`): Use the specified identity
         - **Without value** (`--identity`): Show interactive selector to choose identity
         - **With `false`** (`--identity=false`): Disable Atmos authentication and use AWS SDK defaults
         - **Omitted**: Use the default identity configured in `atmos.yaml`, or prompt if no default is set
 
         ```shell
-        # Use specific identity
+        # Use specific identity (equals syntax recommended)
+        atmos terraform plan <component> -s <stack> --identity=admin
+
+        # Use specific identity (space syntax)
         atmos terraform plan <component> -s <stack> --identity admin
 
         # Interactively select identity
@@ -533,6 +536,17 @@ atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent 
         # Use default identity (or prompt if none configured)
         atmos terraform plan <component> -s <stack>
         ```
+
+:::tip Flag Placement Best Practice
+When using `--identity` with a value, place it **after the stack flag** and **before the `--` separator** (if passing Terraform-native flags):
+
+```shell
+# Recommended: --identity before -- separator
+atmos terraform plan <component> -s <stack> --identity=admin -- -var-file=extra.tfvars
+
+# The equals syntax (--identity=admin) is unambiguous and works in all contexts
+```
+:::
 
         When set to `false` (or `0`, `no`, `off`), Atmos skips identity authentication entirely and uses standard cloud provider SDK credential resolution (e.g., environment variables, shared credentials file, instance metadata, OIDC). This is useful in CI/CD environments using external authentication mechanisms.
 
