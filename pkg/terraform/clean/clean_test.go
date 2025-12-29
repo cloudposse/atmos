@@ -273,7 +273,7 @@ func TestInitializeFilesToClear(t *testing.T) {
 				ComponentFromArg: "",
 			},
 			atmosConfig:      &schema.AtmosConfiguration{},
-			expectedContains: []string{".terraform", ".terraform.lock.hcl", "*.tfvar.json", "terraform.tfstate.d"},
+			expectedContains: []string{".terraform", ".terraform.lock.hcl", "*.tfvars.json", "terraform.tfstate.d"},
 		},
 		{
 			name: "With component - includes varfile and planfile",

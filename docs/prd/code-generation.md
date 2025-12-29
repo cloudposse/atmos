@@ -123,11 +123,12 @@ generate:
 ```
 
 **YAML Block Scalar Reference:**
+
 | Style | Syntax | Behavior |
 |-------|--------|----------|
-| Literal | `|` | Preserves newlines exactly |
-| Literal strip | `|-` | Preserves newlines, strips trailing |
-| Literal keep | `|+` | Preserves newlines, keeps trailing |
+| Literal | `\|` | Preserves newlines exactly |
+| Literal strip | `\|-` | Preserves newlines, strips trailing |
+| Literal keep | `\|+` | Preserves newlines, keeps trailing |
 | Folded | `>` | Folds newlines to spaces |
 | Folded strip | `>-` | Folds newlines, strips trailing |
 
@@ -157,7 +158,7 @@ Plus all standard Atmos template functions: `atmos.Component()`, `atmos.Stack()`
 
 Files are always written relative to the component's directory:
 
-```
+```text
 components/terraform/<component>/<filename>
 ```
 

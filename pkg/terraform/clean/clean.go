@@ -218,7 +218,7 @@ func buildRelativePath(basePath, componentPath string, baseComponent string) (st
 //nolint:gocritic // hugeParam: value type is required as info is modified within the function
 func (s *Service) initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) []string {
 	if info.ComponentFromArg == "" {
-		return []string{".terraform", ".terraform.lock.hcl", "*.tfvar.json", "terraform.tfstate.d"}
+		return []string{".terraform", ".terraform.lock.hcl", "*.tfvars.json", "terraform.tfstate.d"}
 	}
 	varFile := s.processor.ConstructTerraformComponentVarfileName(&info)
 	planFile := s.processor.ConstructTerraformComponentPlanfileName(&info)
