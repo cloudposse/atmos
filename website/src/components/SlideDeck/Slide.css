@@ -24,7 +24,8 @@
 
 /* Title Layout - Large centered title */
 .slide--title {
-  background: linear-gradient(135deg, var(--ifm-color-primary-lightest) 0%, var(--ifm-background-color) 100%);
+  /* Subtle warm gradient for light mode */
+  background: linear-gradient(135deg, #f8f5f2 0%, var(--ifm-background-color) 100%);
 }
 
 html[data-theme='dark'] .slide--title {

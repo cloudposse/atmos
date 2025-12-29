@@ -9,23 +9,26 @@ interface MetallicIconProps {
 }
 
 export function MetallicIcon({ src, alt = '', size = 200, className = '' }: MetallicIconProps) {
+  // Use CSS mask-image technique - gradient background with SVG as mask
+  // Exactly matches apps repo implementation
   return (
     <div
       className={`metallic-icon ${className}`}
-      style={{ width: size, height: size }}
+      style={{
+        width: size,
+        height: size,
+        WebkitMaskImage: `url(${src})`,
+        WebkitMaskSize: 'contain',
+        WebkitMaskRepeat: 'no-repeat',
+        WebkitMaskPosition: 'center',
+        maskImage: `url(${src})`,
+        maskSize: 'contain',
+        maskRepeat: 'no-repeat',
+        maskPosition: 'center',
+      }}
       role="img"
       aria-label={alt}
-    >
-      <img
-        src={src}
-        alt={alt}
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'contain',
-        }}
-      />
-    </div>
+    />
   );
 }
 

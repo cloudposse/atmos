@@ -41,4 +41,7 @@
   height: 100%;
   object-fit: contain;
   display: block;
+  /* Add padding so alien isn't flush against edges */
+  padding: 1rem;
+  box-sizing: border-box;
 }
