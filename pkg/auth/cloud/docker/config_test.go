@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -231,6 +232,6 @@ func TestConfigManager_GetConfigPath(t *testing.T) {
 	manager, err := NewConfigManager()
 	require.NoError(t, err)
 
-	path := manager.GetConfigPath()
-	assert.Equal(t, tmpDir+"/config.json", path)
+	expectedPath := filepath.Join(tmpDir, "config.json")
+	assert.Equal(t, expectedPath, manager.GetConfigPath())
 }
