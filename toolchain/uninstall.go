@@ -311,7 +311,7 @@ func processToolUninstalls(installedTools []uninstallToolInfo, installer *Instal
 	var result uninstallResult
 	for i, tool := range installedTools {
 		msg := processToolUninstall(tool, installer, &result)
-		showToolUninstallProgress(i, len(installedTools), msg, &spinner, progressBar)
+		showToolUninstallProgress(i, len(installedTools), msg, &spinner, &progressBar)
 	}
 	resetLine()
 	_ = ui.Writeln("")
@@ -338,7 +338,7 @@ func processToolUninstall(tool uninstallToolInfo, installer *Installer, result *
 }
 
 // showToolUninstallProgress displays progress for the current tool uninstall.
-func showToolUninstallProgress(index, total int, msg string, spinner *bspinner.Model, progressBar progress.Model) {
+func showToolUninstallProgress(index, total int, msg string, spinner *bspinner.Model, progressBar *progress.Model) {
 	percent := float64(index+1) / float64(total)
 	bar := progressBar.ViewAs(percent)
 	resetLine()

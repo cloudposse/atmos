@@ -24,6 +24,8 @@ import (
 
 	// Import backend provisioner to register S3 provisioner.
 	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
+	// Import workdir provisioner to register workdir provisioner.
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 
 	"github.com/cloudposse/atmos/toolchain"
 )
@@ -447,6 +449,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			return fmt.Errorf("provisioner execution failed: %w", err)
 		}
 
+		// Check if workdir provisioner set a workdir path - if so, use it instead of the component path.
+		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+			componentPath = workdirPath
+			log.Debug("Using workdir path", "workdirPath", workdirPath)
+		}
+
 		err = ExecuteShellCommand(
 			atmosConfig,
 			info.Command,
@@ -547,6 +555,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		err = provisioner.ExecuteProvisioners(initCtx, provisioner.HookEvent(beforeTerraformInitEvent), &atmosConfig, info.ComponentSection, info.AuthContext)
 		if err != nil {
 			return fmt.Errorf("provisioner execution failed: %w", err)
+		}
+
+		// Check if workdir provisioner set a workdir path - if so, use it instead of the component path.
+		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+			componentPath = workdirPath
+			log.Debug("Using workdir path for terraform command", "workdirPath", workdirPath)
 		}
 
 		if atmosConfig.Components.Terraform.InitRunReconfigure {

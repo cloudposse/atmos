@@ -57,6 +57,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/profile"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
+	"github.com/cloudposse/atmos/cmd/terraform/workdir"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
 	toolchainCmd "github.com/cloudposse/atmos/cmd/toolchain"
 	"github.com/cloudposse/atmos/cmd/version"
@@ -1297,6 +1298,7 @@ func Execute() error {
 	backend.SetAtmosConfig(&atmosConfig)
 	toolchainCmd.SetAtmosConfig(&atmosConfig)
 	toolchain.SetAtmosConfig(&atmosConfig)
+	workdir.SetAtmosConfig(&atmosConfig)
 
 	if initErr != nil {
 		// Handle config initialization errors based on command context.
