@@ -52,7 +52,9 @@ func executeDescribe(cmd *cobra.Command, args []string, cfg *Config, parser *fla
 	// Parse flags.
 	v := viper.GetViper()
 	if err := parser.BindFlagsToViper(cmd, v); err != nil {
-		return err
+		return errUtils.Build(errUtils.ErrInvalidFlag).
+			WithCause(err).
+			Err()
 	}
 
 	stack := v.GetString("stack")
