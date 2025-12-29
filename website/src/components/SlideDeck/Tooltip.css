@@ -1,0 +1,124 @@
+/* Tooltip Styles */
+.tooltip-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 1000;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.85);
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+html[data-theme='dark'] .tooltip {
+  background: rgba(255, 255, 255, 0.9);
+  color: #1a1a2e;
+}
+
+/* Fullscreen mode tooltip */
+.slide-deck--fullscreen .tooltip {
+  background: rgba(255, 255, 255, 0.95);
+  color: #1a1a2e;
+}
+
+/* Position variants */
+.tooltip--top {
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.tooltip--bottom {
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.tooltip--left {
+  right: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tooltip--right {
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+/* Arrow indicator */
+.tooltip::after {
+  content: '';
+  position: absolute;
+  border: 5px solid transparent;
+}
+
+.tooltip--top::after {
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-top-color: rgba(0, 0, 0, 0.85);
+}
+
+.tooltip--bottom::after {
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-bottom-color: rgba(0, 0, 0, 0.85);
+}
+
+.tooltip--left::after {
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left-color: rgba(0, 0, 0, 0.85);
+}
+
+.tooltip--right::after {
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border-right-color: rgba(0, 0, 0, 0.85);
+}
+
+/* Dark mode arrows */
+html[data-theme='dark'] .tooltip--top::after {
+  border-top-color: rgba(255, 255, 255, 0.9);
+}
+
+html[data-theme='dark'] .tooltip--bottom::after {
+  border-bottom-color: rgba(255, 255, 255, 0.9);
+}
+
+html[data-theme='dark'] .tooltip--left::after {
+  border-left-color: rgba(255, 255, 255, 0.9);
+}
+
+html[data-theme='dark'] .tooltip--right::after {
+  border-right-color: rgba(255, 255, 255, 0.9);
+}
+
+/* Fullscreen mode arrows */
+.slide-deck--fullscreen .tooltip--top::after {
+  border-top-color: rgba(255, 255, 255, 0.95);
+}
+
+.slide-deck--fullscreen .tooltip--bottom::after {
+  border-bottom-color: rgba(255, 255, 255, 0.95);
+}
+
+.slide-deck--fullscreen .tooltip--left::after {
+  border-left-color: rgba(255, 255, 255, 0.95);
+}
+
+.slide-deck--fullscreen .tooltip--right::after {
+  border-right-color: rgba(255, 255, 255, 0.95);
+}
