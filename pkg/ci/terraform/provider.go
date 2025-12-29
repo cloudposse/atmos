@@ -138,6 +138,9 @@ func (p *Provider) GetOutputVariables(result *ci.OutputResult, command string) m
 }
 
 // GetArtifactKey generates the artifact storage key for a command.
+// TODO: Consider changing ComponentCIProvider interface to return (string, error)
+// to align with planfile.GenerateKey validation pattern. Currently uses defensive
+// placeholders since the key is only used for debug logging.
 func (p *Provider) GetArtifactKey(info *schema.ConfigAndStacksInfo, command string) string {
 	defer perf.Track(nil, "terraform.Provider.GetArtifactKey")()
 
