@@ -163,6 +163,7 @@ func TestParseIdentityFlag_FlagChanged(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 // TestParsePagerFlag_WithInheritedFlags tests that parsePagerFlag correctly handles
 // persistent flags inherited from parent commands.
 // This is a regression test for the bug where pager flag didn't work on subcommands.
@@ -449,4 +450,62 @@ func TestParsePagerFlag_NoFlagRegistered(t *testing.T) {
 	assert.False(t, result.IsProvided(), "Should not be provided")
 	assert.Equal(t, "", result.Value(), "Value should be empty")
 	assert.False(t, result.IsEnabled(), "Should not be enabled")
+}
+
+func TestGlobalFlagsRegistry_ContainsNoOptDefValFlags(t *testing.T) {
+	registry := GlobalFlagsRegistry()
+
+	// Verify identity flag is registered with NoOptDefVal.
+	identityFlag := registry.Get("identity")
+	assert.NotNil(t, identityFlag, "identity flag should be registered")
+	assert.Equal(t, cfg.IdentityFlagSelectValue, identityFlag.GetNoOptDefVal(), "identity should have NoOptDefVal set")
+	assert.Equal(t, "i", identityFlag.GetShorthand(), "identity should have shorthand 'i'")
+
+	// Verify pager flag is registered with NoOptDefVal.
+	pagerFlag := registry.Get("pager")
+	assert.NotNil(t, pagerFlag, "pager flag should be registered")
+	assert.Equal(t, "true", pagerFlag.GetNoOptDefVal(), "pager should have NoOptDefVal set")
+}
+
+func TestGlobalFlagsRegistry_PreprocessesIdentityFlag(t *testing.T) {
+	registry := GlobalFlagsRegistry()
+
+	tests := []struct {
+		name     string
+		input    []string
+		expected []string
+	}{
+		{
+			name:     "identity with space-separated value",
+			input:    []string{"auth", "login", "--identity", "prod-admin"},
+			expected: []string{"auth", "login", "--identity=prod-admin"},
+		},
+		{
+			name:     "identity shorthand with space-separated value",
+			input:    []string{"auth", "login", "-i", "prod-admin"},
+			expected: []string{"auth", "login", "-i=prod-admin"},
+		},
+		{
+			name:     "identity with equals syntax unchanged",
+			input:    []string{"auth", "login", "--identity=prod-admin"},
+			expected: []string{"auth", "login", "--identity=prod-admin"},
+		},
+		{
+			name:     "identity at end unchanged",
+			input:    []string{"auth", "login", "--identity"},
+			expected: []string{"auth", "login", "--identity"},
+		},
+		{
+			name:     "identity followed by another flag unchanged",
+			input:    []string{"auth", "login", "--identity", "--verbose"},
+			expected: []string{"auth", "login", "--identity", "--verbose"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := registry.PreprocessNoOptDefValArgs(tc.input)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
 }
