@@ -480,21 +480,30 @@ type CIConfig struct {
 // CIOutputConfig configures CI output variables for downstream jobs.
 // GitHub: $GITHUB_OUTPUT, GitLab: dotenv artifacts.
 type CIOutputConfig struct {
-	Enabled   bool     `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// Enabled controls whether output variables are written.
+	// When nil (not set), defaults to true (enabled).
+	// When explicitly set to false, output is disabled.
+	Enabled   *bool    `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Variables []string `yaml:"variables,omitempty" json:"variables,omitempty" mapstructure:"variables"`
 }
 
 // CISummaryConfig configures CI job summary output.
 // GitHub: $GITHUB_STEP_SUMMARY, GitLab: job artifacts.
 type CISummaryConfig struct {
-	Enabled  bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// Enabled controls whether job summaries are written.
+	// When nil (not set), defaults to true (enabled).
+	// When explicitly set to false, summaries are disabled.
+	Enabled  *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	Template string `yaml:"template,omitempty" json:"template,omitempty" mapstructure:"template"`
 }
 
 // CIChecksConfig configures CI commit status checks.
 // GitHub: Check Runs API, GitLab: Commit Status API.
 type CIChecksConfig struct {
-	Enabled       bool   `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// Enabled controls whether commit status checks are created.
+	// When nil (not set), defaults to false (disabled) as checks require extra permissions.
+	// When explicitly set to true, checks are enabled.
+	Enabled       *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	ContextPrefix string `yaml:"context_prefix,omitempty" json:"context_prefix,omitempty" mapstructure:"context_prefix"`
 }
 

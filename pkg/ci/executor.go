@@ -172,14 +172,25 @@ func isActionEnabled(cfg *schema.AtmosConfiguration, action HookAction) bool {
 	switch action {
 	case ActionSummary:
 		// Summary is enabled by default. Only skip if explicitly disabled.
-		// We check if the CI config exists and Summary is explicitly set.
-		return cfg.CI.Summary.Enabled
+		// nil means "not set" = use default (enabled).
+		if cfg.CI.Summary.Enabled == nil {
+			return true
+		}
+		return *cfg.CI.Summary.Enabled
 	case ActionOutput:
 		// Output is enabled by default. Only skip if explicitly disabled.
-		return cfg.CI.Output.Enabled
+		// nil means "not set" = use default (enabled).
+		if cfg.CI.Output.Enabled == nil {
+			return true
+		}
+		return *cfg.CI.Output.Enabled
 	case ActionCheck:
 		// Checks are disabled by default (require extra permissions).
-		return cfg.CI.Checks.Enabled
+		// nil means "not set" = use default (disabled).
+		if cfg.CI.Checks.Enabled == nil {
+			return false
+		}
+		return *cfg.CI.Checks.Enabled
 	case ActionUpload, ActionDownload:
 		// Upload/Download are always enabled (controlled by planfile config).
 		return true

@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/cloudposse/atmos/pkg/ci"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -140,6 +141,23 @@ func (p *Provider) GetOutputVariables(result *ci.OutputResult, command string) m
 func (p *Provider) GetArtifactKey(info *schema.ConfigAndStacksInfo, command string) string {
 	defer perf.Track(nil, "terraform.Provider.GetArtifactKey")()
 
+	// Validate required fields.
+	if info == nil {
+		log.Warn("GetArtifactKey called with nil info, using placeholder key")
+		return "unknown/unknown.tfplan"
+	}
+
+	stack := info.Stack
+	component := info.ComponentFromArg
+	if stack == "" {
+		log.Warn("GetArtifactKey called with empty Stack", "component", component)
+		stack = "unknown"
+	}
+	if component == "" {
+		log.Warn("GetArtifactKey called with empty ComponentFromArg", "stack", stack)
+		component = "unknown"
+	}
+
 	// Default pattern: stack/component.tfplan
-	return fmt.Sprintf("%s/%s.tfplan", info.Stack, info.ComponentFromArg)
+	return fmt.Sprintf("%s/%s.tfplan", stack, component)
 }
