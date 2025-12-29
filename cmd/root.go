@@ -1366,7 +1366,8 @@ func Execute() error {
 	return err
 }
 
-// preprocessCompatibilityFlags separates Atmos flags from pass-through flags.
+// preprocessCompatibilityFlags separates Atmos flags from pass-through flags
+// and rewrites NoOptDefVal flags from space-separated to equals syntax.
 // This is called BEFORE Cobra parses, allowing us to filter out terraform/helmfile
 // native flags that would otherwise be dropped by FParseErrWhitelist.
 //
@@ -1378,9 +1379,16 @@ func preprocessCompatibilityFlags() {
 		return
 	}
 
+	// Step 1: Preprocess NoOptDefVal flags FIRST (identity, pager).
+	// This rewrites --identity value → --identity=value before Cobra parses.
+	// This is necessary because Cobra's NoOptDefVal only works with equals syntax.
+	processedArgs := preprocessNoOptDefValFlags(osArgs)
+
 	// Find target command without parsing flags.
-	targetCmd, _, _ := RootCmd.Find(osArgs)
+	targetCmd, _, _ := RootCmd.Find(processedArgs)
 	if targetCmd == nil {
+		// No target command found, but still apply NoOptDefVal preprocessing.
+		RootCmd.SetArgs(processedArgs)
 		return
 	}
 
@@ -1391,24 +1399,43 @@ func preprocessCompatibilityFlags() {
 		cmdName = c.Name()
 	}
 	if cmdName == "" {
+		// No command name found, but still apply NoOptDefVal preprocessing.
+		RootCmd.SetArgs(processedArgs)
 		return
 	}
 
-	// Get compatibility flags from the command registry.
+	// Step 2: Get compatibility flags from the command registry.
 	compatFlags := internal.GetCompatFlagsForCommand(cmdName)
 	if len(compatFlags) == 0 {
+		// No compat flags, just apply NoOptDefVal preprocessing.
+		RootCmd.SetArgs(processedArgs)
 		return
 	}
 
 	// Translate args: separate Atmos flags from pass-through flags.
 	translator := compat.NewCompatibilityFlagTranslator(compatFlags)
-	atmosArgs, separatedArgs := translator.Translate(osArgs)
+	atmosArgs, separatedArgs := translator.Translate(processedArgs)
 
 	// Give Cobra only the Atmos args.
 	RootCmd.SetArgs(atmosArgs)
 
 	// Store separated args globally via compat package.
 	compat.SetSeparated(separatedArgs)
+}
+
+// preprocessNoOptDefValFlags rewrites space-separated NoOptDefVal flags to equals syntax.
+// This is necessary because Cobra's NoOptDefVal feature only works with equals syntax:
+//   - --identity=value works correctly
+//   - --identity value treats "value" as a positional argument (broken)
+//
+// This function rewrites: --identity value → --identity=value
+// So that Cobra properly assigns "value" to the identity flag.
+func preprocessNoOptDefValFlags(args []string) []string {
+	registry := flags.GlobalFlagsRegistry()
+	if registry == nil {
+		return args
+	}
+	return registry.PreprocessNoOptDefValArgs(args)
 }
 
 // getInvalidCommandName extracts the invalid command name from an error message.
