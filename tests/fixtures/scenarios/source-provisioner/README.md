@@ -19,7 +19,7 @@ This allows components to be vendored on-demand without requiring separate `vend
 
 | Component | Source Configuration | Description |
 |-----------|---------------------|-------------|
-| `vpc-string` | URI with inline ref | Simple string form with version in query string |
+| `vpc-inline-ref` | URI with inline ref | Map form with version in URI via `?ref=` query param |
 | `vpc-map` | Full source spec | Map form with included/excluded paths |
 | `vpc-retry` | Retry configuration | Map form with retry options for transient failures |
 | `vpc-no-source` | None | Component without source (for error testing) |
@@ -34,8 +34,8 @@ cd tests/fixtures/scenarios/source-provisioner
 # Describe source with full spec (included/excluded paths)
 atmos terraform source describe vpc-map --stack dev
 
-# Describe source with URI containing ref
-atmos terraform source describe vpc-string --stack dev
+# Describe source with URI containing inline ref
+atmos terraform source describe vpc-inline-ref --stack dev
 
 # Describe source with retry configuration
 atmos terraform source describe vpc-retry --stack dev
@@ -96,7 +96,7 @@ atmos terraform source pull vpc-map --stack dev --identity my-identity
 ```bash
 # Delete vendored components
 rm -rf components/terraform/vpc-map/
-rm -rf components/terraform/vpc-string/
+rm -rf components/terraform/vpc-inline-ref/
 rm -rf components/terraform/vpc-retry/
 ```
 
@@ -111,11 +111,11 @@ tests/fixtures/scenarios/source-provisioner/
 │   ├── mock/                           # Local mock component
 │   │   └── main.tf
 │   ├── vpc-map/                        # Vendored (ignored)
-│   ├── vpc-string/                     # Vendored (ignored)
+│   ├── vpc-inline-ref/                 # Vendored (ignored)
 │   └── vpc-retry/                      # Vendored (ignored)
 └── stacks/
     ├── catalog/
-    │   ├── vpc-source-string.yaml      # Source with URI containing ref
+    │   ├── vpc-source-inline-ref.yaml  # Source with version inline via ?ref=
     │   ├── vpc-source-map.yaml         # Full source spec with paths
     │   ├── vpc-source-retry.yaml       # Source with retry configuration
     │   └── vpc-no-source.yaml          # Component without source

@@ -112,9 +112,9 @@ func TestExecuteDescribe_NoSource(t *testing.T) {
 	err = executeDescribe(cmd, args, cfg, parser)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrMetadataSourceMissing)
+	assert.ErrorIs(t, err, errUtils.ErrSourceMissing)
 }
 
-// Note: TestExecuteDescribe_Success and TestExecuteDescribe_MetadataSource are skipped
+// Note: TestExecuteDescribe_Success and TestExecuteDescribe_Source are skipped
 // because they require data.InitWriter() to be called, which is done in root.go.
 // The error path tests above provide sufficient coverage for the command logic.

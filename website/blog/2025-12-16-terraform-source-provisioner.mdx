@@ -141,9 +141,9 @@ The `source` provisioner works seamlessly with the [workdir provisioner](/change
 When running `terraform plan` on the same component across multiple stacks concurrently, you need isolation to prevent conflicts in `.terraform/` directories and state files. The workdir provisioner provides this isolation.
 
 With remote sources, different stacks might use different versions of the same component. The combination ensures:
-- Each stack gets the correct component version
-- Each execution runs in its own isolated directory
-- No conflicts between concurrent operations
+- Each stack gets the correct component version.
+- Each execution runs in its own isolated directory.
+- No conflicts between concurrent operations.
 
 ### Configuration Example
 

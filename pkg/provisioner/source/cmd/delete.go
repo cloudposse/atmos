@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -118,7 +117,7 @@ func initDeleteContext(component, stack string, globalFlags *global.Flags) (*sch
 		configInfo.ProfilesFromArg = globalFlags.Profile
 	}
 
-	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	atmosConfig, err := initCliConfigFunc(configInfo, false)
 	if err != nil {
 		return nil, nil, errUtils.Build(errUtils.ErrFailedToInitConfig).WithCause(err).Err()
 	}
@@ -133,7 +132,7 @@ func initDeleteContext(component, stack string, globalFlags *global.Flags) (*sch
 	}
 
 	if !source.HasSource(componentConfig) {
-		return nil, nil, errUtils.Build(errUtils.ErrMetadataSourceMissing).
+		return nil, nil, errUtils.Build(errUtils.ErrSourceMissing).
 			WithContext("component", component).
 			WithContext("stack", stack).
 			WithHint("Only components with source can be deleted via this command").

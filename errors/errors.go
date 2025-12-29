@@ -676,7 +676,7 @@ var (
 	ErrSourceAlreadyVendored = errors.New("source already vendored")
 	ErrSourceCacheOperation  = errors.New("source cache operation failed")
 	ErrSourceCopyFailed      = errors.New("failed to copy source files")
-	ErrMetadataSourceMissing = errors.New("source not configured for component")
+	ErrSourceMissing         = errors.New("source not configured for component")
 
 	// Workdir provisioner errors.
 	ErrSourceDownload   = errors.New("failed to download component source")

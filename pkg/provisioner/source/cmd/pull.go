@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -81,16 +80,15 @@ func executePull(cmd *cobra.Command, args []string, cfg *Config, parser *flags.S
 
 	// Check if source is configured.
 	if !source.HasSource(componentConfig) {
-		return errUtils.Build(errUtils.ErrMetadataSourceMissing).
+		return errUtils.Build(errUtils.ErrSourceMissing).
 			WithContext("component", component).
 			WithContext("stack", opts.Stack).
 			WithHint("Add source to the component configuration in your stack manifest").
 			Err()
 	}
 
-	// Provision the source.
-	ctx := context.Background()
-	return ProvisionSource(ctx, &ProvisionSourceOptions{
+	// Provision the source using command context for cancellation propagation.
+	return ProvisionSource(cmd.Context(), &ProvisionSourceOptions{
 		AtmosConfig:     atmosConfig,
 		ComponentType:   cfg.ComponentType,
 		Component:       component,

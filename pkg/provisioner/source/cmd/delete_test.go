@@ -169,7 +169,7 @@ func TestInitDeleteContext_NoSource(t *testing.T) {
 	atmosConfig, componentConfig, err := initDeleteContext("vpc", "dev", nil)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrMetadataSourceMissing)
+	assert.ErrorIs(t, err, errUtils.ErrSourceMissing)
 	assert.Nil(t, atmosConfig)
 	assert.Nil(t, componentConfig)
 }
@@ -260,4 +260,66 @@ func TestExecuteDelete_MissingForce(t *testing.T) {
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrForceRequired)
+}
+
+// TestExecuteDelete_Success tests that executeDelete completes successfully.
+func TestExecuteDelete_Success(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigFunc
+	origDescribeFunc := describeComponentFunc
+	defer func() {
+		initCliConfigFunc = origInitFunc
+		describeComponentFunc = origDescribeFunc
+	}()
+
+	// Create temp directory with existing component.
+	tempDir := t.TempDir()
+	targetDir := filepath.Join(tempDir, "vpc")
+	err := os.MkdirAll(targetDir, 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(targetDir, "main.tf"), []byte("# test"), 0o644)
+	require.NoError(t, err)
+
+	// Mock config init to return config with temp directory as base path.
+	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{BasePath: tempDir},
+			},
+		}, nil
+	}
+
+	// Mock describe component to return config with source.
+	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+		return map[string]any{
+			"source": map[string]any{
+				"uri": "github.com/example/vpc",
+			},
+		}, nil
+	}
+
+	cfg := &Config{
+		ComponentType: "terraform",
+		TypeLabel:     "Terraform",
+	}
+
+	cmd := &cobra.Command{Use: "test"}
+	parser := flags.NewStandardParser(
+		flags.WithStackFlag(),
+		flags.WithBoolFlag("force", "f", false, "Force"),
+	)
+	parser.RegisterFlags(cmd)
+
+	err = cmd.ParseFlags([]string{"--stack", "dev", "--force"})
+	require.NoError(t, err)
+
+	args := []string{"vpc"}
+
+	err = executeDelete(cmd, args, cfg, parser)
+
+	require.NoError(t, err)
+
+	// Verify the directory was deleted.
+	_, err = os.Stat(targetDir)
+	assert.True(t, os.IsNotExist(err), "Directory should be deleted")
 }

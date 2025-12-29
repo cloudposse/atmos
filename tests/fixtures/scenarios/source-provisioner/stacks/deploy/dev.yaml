@@ -4,7 +4,7 @@ vars:
   stage: dev
 
 import:
-  - catalog/vpc-source-string
+  - catalog/vpc-source-inline-ref
   - catalog/vpc-source-map
   - catalog/vpc-source-retry
   - catalog/vpc-no-source
@@ -12,6 +12,6 @@ import:
 # Override vars for dev environment
 components:
   terraform:
-    vpc-string:
+    vpc-inline-ref:
       vars:
         environment: "dev-override"

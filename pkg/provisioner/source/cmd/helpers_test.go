@@ -10,9 +10,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
@@ -154,14 +154,20 @@ func TestProvisionSource_TargetExists(t *testing.T) {
 
 // TestInitConfigAndAuth_ConfigError tests that InitConfigAndAuth returns error when config init fails.
 func TestInitConfigAndAuth_ConfigError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
 	// Save original and restore after test.
 	origFunc := initCliConfigFunc
 	defer func() { initCliConfigFunc = origFunc }()
 
-	// Mock config init to fail.
-	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
-		return schema.AtmosConfiguration{}, errors.New("mock config error")
-	}
+	// Create mock and set expectation.
+	mockLoader := NewMockConfigLoader(ctrl)
+	mockLoader.EXPECT().
+		InitCliConfig(gomock.Any(), gomock.Any()).
+		Return(schema.AtmosConfiguration{}, errors.New("mock config error"))
+
+	// Wire mock to function variable.
+	initCliConfigFunc = mockLoader.InitCliConfig
 
 	atmosConfig, authContext, err := InitConfigAndAuth("vpc", "dev", "", nil)
 
@@ -173,18 +179,26 @@ func TestInitConfigAndAuth_ConfigError(t *testing.T) {
 
 // TestInitConfigAndAuth_WithGlobalFlags tests that global flags are passed to config loader.
 func TestInitConfigAndAuth_WithGlobalFlags(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
 	// Save original and restore after test.
 	origFunc := initCliConfigFunc
 	defer func() { initCliConfigFunc = origFunc }()
 
 	var capturedInfo schema.ConfigAndStacksInfo
 
-	// Mock config init to capture the config info.
-	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
-		capturedInfo = configInfo
-		// Return error to short-circuit the rest of the function.
-		return schema.AtmosConfiguration{}, errors.New("test stop")
-	}
+	// Create mock and capture config info.
+	mockLoader := NewMockConfigLoader(ctrl)
+	mockLoader.EXPECT().
+		InitCliConfig(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+			capturedInfo = configInfo
+			// Return error to short-circuit the rest of the function.
+			return schema.AtmosConfiguration{}, errors.New("test stop")
+		})
+
+	// Wire mock to function variable.
+	initCliConfigFunc = mockLoader.InitCliConfig
 
 	globalFlags := &global.Flags{
 		BasePath:   "/custom/base",
@@ -206,6 +220,8 @@ func TestInitConfigAndAuth_WithGlobalFlags(t *testing.T) {
 
 // TestInitConfigAndAuth_DescribeComponentError tests that InitConfigAndAuth handles describe component errors.
 func TestInitConfigAndAuth_DescribeComponentError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
 	origDescribeFunc := describeComponentFunc
@@ -214,15 +230,23 @@ func TestInitConfigAndAuth_DescribeComponentError(t *testing.T) {
 		describeComponentFunc = origDescribeFunc
 	}()
 
-	// Mock config init to succeed.
-	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
-		return schema.AtmosConfiguration{}, nil
-	}
+	// Create mocks.
+	mockLoader := NewMockConfigLoader(ctrl)
+	mockDescriber := NewMockComponentDescriber(ctrl)
 
-	// Mock describe component to fail.
-	describeComponentFunc = func(component, stack string) (map[string]any, error) {
-		return nil, errors.New("mock describe error")
-	}
+	// Config init succeeds.
+	mockLoader.EXPECT().
+		InitCliConfig(gomock.Any(), gomock.Any()).
+		Return(schema.AtmosConfiguration{}, nil)
+
+	// Describe component fails.
+	mockDescriber.EXPECT().
+		DescribeComponent(gomock.Any(), gomock.Any()).
+		Return(nil, errors.New("mock describe error"))
+
+	// Wire mocks to function variables.
+	initCliConfigFunc = mockLoader.InitCliConfig
+	describeComponentFunc = mockDescriber.DescribeComponent
 
 	atmosConfig, authContext, err := InitConfigAndAuth("vpc", "dev", "", nil)
 
@@ -234,6 +258,8 @@ func TestInitConfigAndAuth_DescribeComponentError(t *testing.T) {
 
 // TestInitConfigAndAuth_AuthMergeError tests that InitConfigAndAuth handles auth merge errors.
 func TestInitConfigAndAuth_AuthMergeError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
 	origDescribeFunc := describeComponentFunc
@@ -244,20 +270,30 @@ func TestInitConfigAndAuth_AuthMergeError(t *testing.T) {
 		mergeAuthFunc = origMergeFunc
 	}()
 
-	// Mock config init to succeed.
-	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
-		return schema.AtmosConfiguration{}, nil
-	}
+	// Create mocks.
+	mockLoader := NewMockConfigLoader(ctrl)
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockMerger := NewMockAuthMerger(ctrl)
 
-	// Mock describe component to succeed.
-	describeComponentFunc = func(component, stack string) (map[string]any, error) {
-		return map[string]any{"component": "vpc"}, nil
-	}
+	// Config init succeeds.
+	mockLoader.EXPECT().
+		InitCliConfig(gomock.Any(), gomock.Any()).
+		Return(schema.AtmosConfiguration{}, nil)
 
-	// Mock auth merge to fail.
-	mergeAuthFunc = func(globalAuth *schema.AuthConfig, componentConfig map[string]any, atmosConfig *schema.AtmosConfiguration, sectionName string) (*schema.AuthConfig, error) {
-		return nil, errors.New("mock merge error")
-	}
+	// Describe component succeeds.
+	mockDescriber.EXPECT().
+		DescribeComponent(gomock.Any(), gomock.Any()).
+		Return(map[string]any{"component": "vpc"}, nil)
+
+	// Auth merge fails.
+	mockMerger.EXPECT().
+		MergeComponentAuth(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, errors.New("mock merge error"))
+
+	// Wire mocks to function variables.
+	initCliConfigFunc = mockLoader.InitCliConfig
+	describeComponentFunc = mockDescriber.DescribeComponent
+	mergeAuthFunc = mockMerger.MergeComponentAuth
 
 	atmosConfig, authContext, err := InitConfigAndAuth("vpc", "dev", "", nil)
 
@@ -269,6 +305,8 @@ func TestInitConfigAndAuth_AuthMergeError(t *testing.T) {
 
 // TestInitConfigAndAuth_AuthCreateError tests that InitConfigAndAuth handles auth creation errors.
 func TestInitConfigAndAuth_AuthCreateError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
 	origDescribeFunc := describeComponentFunc
@@ -281,25 +319,37 @@ func TestInitConfigAndAuth_AuthCreateError(t *testing.T) {
 		createAuthFunc = origCreateFunc
 	}()
 
-	// Mock config init to succeed.
-	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
-		return schema.AtmosConfiguration{}, nil
-	}
+	// Create mocks.
+	mockLoader := NewMockConfigLoader(ctrl)
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockMerger := NewMockAuthMerger(ctrl)
+	mockCreator := NewMockAuthCreator(ctrl)
 
-	// Mock describe component to succeed.
-	describeComponentFunc = func(component, stack string) (map[string]any, error) {
-		return map[string]any{"component": "vpc"}, nil
-	}
+	// Config init succeeds.
+	mockLoader.EXPECT().
+		InitCliConfig(gomock.Any(), gomock.Any()).
+		Return(schema.AtmosConfiguration{}, nil)
 
-	// Mock auth merge to succeed.
-	mergeAuthFunc = func(globalAuth *schema.AuthConfig, componentConfig map[string]any, atmosConfig *schema.AtmosConfiguration, sectionName string) (*schema.AuthConfig, error) {
-		return &schema.AuthConfig{}, nil
-	}
+	// Describe component succeeds.
+	mockDescriber.EXPECT().
+		DescribeComponent(gomock.Any(), gomock.Any()).
+		Return(map[string]any{"component": "vpc"}, nil)
 
-	// Mock auth create to fail.
-	createAuthFunc = func(identity string, authConfig *schema.AuthConfig, flagValue string) (auth.AuthManager, error) {
-		return nil, errors.New("mock auth create error")
-	}
+	// Auth merge succeeds.
+	mockMerger.EXPECT().
+		MergeComponentAuth(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&schema.AuthConfig{}, nil)
+
+	// Auth create fails.
+	mockCreator.EXPECT().
+		CreateAuthManager(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, errors.New("mock auth create error"))
+
+	// Wire mocks to function variables.
+	initCliConfigFunc = mockLoader.InitCliConfig
+	describeComponentFunc = mockDescriber.DescribeComponent
+	mergeAuthFunc = mockMerger.MergeComponentAuth
+	createAuthFunc = mockCreator.CreateAuthManager
 
 	atmosConfig, authContext, err := InitConfigAndAuth("vpc", "dev", "", nil)
 
@@ -311,6 +361,8 @@ func TestInitConfigAndAuth_AuthCreateError(t *testing.T) {
 
 // TestInitConfigAndAuth_Success tests the successful path of InitConfigAndAuth.
 func TestInitConfigAndAuth_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigFunc
 	origDescribeFunc := describeComponentFunc
@@ -323,29 +375,41 @@ func TestInitConfigAndAuth_Success(t *testing.T) {
 		createAuthFunc = origCreateFunc
 	}()
 
-	// Mock config init to succeed.
-	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
-		return schema.AtmosConfiguration{
+	// Create mocks.
+	mockLoader := NewMockConfigLoader(ctrl)
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockMerger := NewMockAuthMerger(ctrl)
+	mockCreator := NewMockAuthCreator(ctrl)
+
+	// Config init succeeds.
+	mockLoader.EXPECT().
+		InitCliConfig(gomock.Any(), gomock.Any()).
+		Return(schema.AtmosConfiguration{
 			Components: schema.Components{
 				Terraform: schema.Terraform{BasePath: "components/terraform"},
 			},
-		}, nil
-	}
+		}, nil)
 
-	// Mock describe component to succeed.
-	describeComponentFunc = func(component, stack string) (map[string]any, error) {
-		return map[string]any{"component": "vpc"}, nil
-	}
+	// Describe component succeeds.
+	mockDescriber.EXPECT().
+		DescribeComponent(gomock.Any(), gomock.Any()).
+		Return(map[string]any{"component": "vpc"}, nil)
 
-	// Mock auth merge to succeed.
-	mergeAuthFunc = func(globalAuth *schema.AuthConfig, componentConfig map[string]any, atmosConfig *schema.AtmosConfiguration, sectionName string) (*schema.AuthConfig, error) {
-		return &schema.AuthConfig{}, nil
-	}
+	// Auth merge succeeds.
+	mockMerger.EXPECT().
+		MergeComponentAuth(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&schema.AuthConfig{}, nil)
 
-	// Mock auth create to return nil (no auth manager).
-	createAuthFunc = func(identity string, authConfig *schema.AuthConfig, flagValue string) (auth.AuthManager, error) {
-		return nil, nil
-	}
+	// Auth create returns nil (no auth manager).
+	mockCreator.EXPECT().
+		CreateAuthManager(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, nil)
+
+	// Wire mocks to function variables.
+	initCliConfigFunc = mockLoader.InitCliConfig
+	describeComponentFunc = mockDescriber.DescribeComponent
+	mergeAuthFunc = mockMerger.MergeComponentAuth
+	createAuthFunc = mockCreator.CreateAuthManager
 
 	atmosConfig, authContext, err := InitConfigAndAuth("vpc", "dev", "", nil)
 
@@ -357,18 +421,24 @@ func TestInitConfigAndAuth_Success(t *testing.T) {
 
 // TestDescribeComponent tests the DescribeComponent wrapper function.
 func TestDescribeComponent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
 	// Save original and restore after test.
 	origDescribeFunc := describeComponentFunc
 	defer func() { describeComponentFunc = origDescribeFunc }()
 
-	// Mock describe component.
-	describeComponentFunc = func(component, stack string) (map[string]any, error) {
-		return map[string]any{
-			"component": component,
-			"stack":     stack,
+	// Create mock and set expectation.
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockDescriber.EXPECT().
+		DescribeComponent("vpc", "dev").
+		Return(map[string]any{
+			"component": "vpc",
+			"stack":     "dev",
 			"vars":      map[string]any{"foo": "bar"},
-		}, nil
-	}
+		}, nil)
+
+	// Wire mock to function variable.
+	describeComponentFunc = mockDescriber.DescribeComponent
 
 	result, err := DescribeComponent("vpc", "dev")
 
@@ -378,7 +448,4 @@ func TestDescribeComponent(t *testing.T) {
 }
 
 // Ensure package imports are used.
-var (
-	_ = cfg.InitCliConfig
-	_ = auth.CreateAndAuthenticateManager
-)
+var _ = cfg.InitCliConfig

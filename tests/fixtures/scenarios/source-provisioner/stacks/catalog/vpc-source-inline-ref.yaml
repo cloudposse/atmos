@@ -1,10 +1,10 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
-# Component with source as map form with URI containing ref (top-level)
+# Component with source as map form with version inline in URI via ?ref= query param
 components:
   terraform:
-    vpc-string:
-      # Map form with inline version in URI
+    vpc-inline-ref:
+      # Map form with inline version in URI via ?ref= query param
       source:
         uri: "github.com/cloudposse/terraform-null-label//exports?ref=0.25.0"
       vars:

@@ -121,8 +121,11 @@ func parseRetryConfig(m map[string]any) *schema.RetryConfig {
 		MaxElapsedTime: parseDuration(m, "max_elapsed_time"),
 	}
 
-	if v, ok := m["max_attempts"].(int); ok {
+	switch v := m["max_attempts"].(type) {
+	case int:
 		cfg.MaxAttempts = v
+	case float64:
+		cfg.MaxAttempts = int(v)
 	}
 	if v, ok := m["backoff_strategy"].(string); ok {
 		cfg.BackoffStrategy = schema.BackoffStrategy(v)

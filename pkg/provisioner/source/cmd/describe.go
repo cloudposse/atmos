@@ -77,7 +77,7 @@ func executeDescribe(cmd *cobra.Command, args []string, cfg *Config, parser *fla
 	}
 
 	if sourceSpec == nil {
-		return errUtils.Build(errUtils.ErrMetadataSourceMissing).
+		return errUtils.Build(errUtils.ErrSourceMissing).
 			WithContext("component", component).
 			WithContext("stack", stack).
 			WithHint("Add source to the component configuration in your stack manifest").

@@ -1365,6 +1365,7 @@
             },
             "multiplier": {
               "type": "number",
+              "minimum": 1,
               "description": "Multiplier for exponential/linear backoff"
             },
             "random_jitter": {

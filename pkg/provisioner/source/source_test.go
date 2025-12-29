@@ -274,8 +274,8 @@ func TestProvision_NilParams(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrNilParam)
 }
 
-// TestProvision_NoMetadataSource tests that Provision returns nil when no source is configured.
-func TestProvision_NoMetadataSource(t *testing.T) {
+// TestProvision_NoSource tests that Provision returns nil when no source is configured.
+func TestProvision_NoSource(t *testing.T) {
 	ctx := context.Background()
 
 	params := &ProvisionParams{

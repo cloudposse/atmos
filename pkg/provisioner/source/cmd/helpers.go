@@ -25,6 +25,7 @@ var (
 	mergeAuthFunc         = auth.MergeComponentAuthFromConfig
 	createAuthFunc        = auth.CreateAndAuthenticateManager
 	describeComponentFunc = executeDescribeComponentDefault
+	provisionSourceFunc   = source.Provision
 )
 
 // executeDescribeComponentDefault is the default implementation for describing components.
@@ -151,7 +152,7 @@ type ProvisionSourceOptions struct {
 func ProvisionSource(ctx context.Context, opts *ProvisionSourceOptions) error {
 	defer perf.Track(opts.AtmosConfig, "source.cmd.ProvisionSource")()
 
-	return source.Provision(ctx, &source.ProvisionParams{
+	return provisionSourceFunc(ctx, &source.ProvisionParams{
 		AtmosConfig:     opts.AtmosConfig,
 		ComponentType:   opts.ComponentType,
 		Component:       opts.Component,
