@@ -6,58 +6,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudposse/atmos/pkg/schema"
+	"go.uber.org/mock/gomock"
 )
 
-// mockComponentProvider is a test implementation of ComponentCIProvider.
-type mockComponentProvider struct {
-	componentType string
-	bindings      []HookBinding
-}
-
-func (m *mockComponentProvider) GetType() string {
-	return m.componentType
-}
-
-func (m *mockComponentProvider) GetHookBindings() []HookBinding {
-	return m.bindings
-}
-
-func (m *mockComponentProvider) GetDefaultTemplates() embed.FS {
-	return embed.FS{}
-}
-
-func (m *mockComponentProvider) BuildTemplateContext(
-	info *schema.ConfigAndStacksInfo,
-	ciCtx *Context,
-	output string,
-	command string,
-) (any, error) {
-	return &TemplateContext{
-		Component:     info.ComponentFromArg,
-		ComponentType: m.componentType,
-		Stack:         info.Stack,
-		Command:       command,
-	}, nil
-}
-
-func (m *mockComponentProvider) ParseOutput(output string, command string) (*OutputResult, error) {
-	return &OutputResult{
-		ExitCode:   0,
-		HasChanges: false,
-		HasErrors:  false,
-	}, nil
-}
-
-func (m *mockComponentProvider) GetOutputVariables(result *OutputResult, command string) map[string]string {
-	return map[string]string{
-		"test": "value",
-	}
-}
-
-func (m *mockComponentProvider) GetArtifactKey(info *schema.ConfigAndStacksInfo, command string) string {
-	return info.Stack + "/" + info.ComponentFromArg + ".tfplan"
+// createMockProvider creates a MockComponentCIProvider with the given type and bindings.
+func createMockProvider(ctrl *gomock.Controller, componentType string, bindings []HookBinding) *MockComponentCIProvider {
+	mock := NewMockComponentCIProvider(ctrl)
+	mock.EXPECT().GetType().Return(componentType).AnyTimes()
+	mock.EXPECT().GetHookBindings().Return(bindings).AnyTimes()
+	mock.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
+	return mock
 }
 
 func TestRegisterComponentProvider(t *testing.T) {
@@ -65,7 +23,8 @@ func TestRegisterComponentProvider(t *testing.T) {
 	ClearComponentProviders()
 
 	t.Run("successful registration", func(t *testing.T) {
-		provider := &mockComponentProvider{componentType: "test-type"}
+		ctrl := gomock.NewController(t)
+		provider := createMockProvider(ctrl, "test-type", nil)
 		err := RegisterComponentProvider(provider)
 		require.NoError(t, err)
 
@@ -82,14 +41,16 @@ func TestRegisterComponentProvider(t *testing.T) {
 
 	t.Run("empty type", func(t *testing.T) {
 		ClearComponentProviders()
-		provider := &mockComponentProvider{componentType: ""}
+		ctrl := gomock.NewController(t)
+		provider := createMockProvider(ctrl, "", nil)
 		err := RegisterComponentProvider(provider)
 		require.Error(t, err)
 	})
 
 	t.Run("duplicate registration", func(t *testing.T) {
 		ClearComponentProviders()
-		provider := &mockComponentProvider{componentType: "duplicate-type"}
+		ctrl := gomock.NewController(t)
+		provider := createMockProvider(ctrl, "duplicate-type", nil)
 		err := RegisterComponentProvider(provider)
 		require.NoError(t, err)
 
@@ -101,14 +62,13 @@ func TestRegisterComponentProvider(t *testing.T) {
 
 func TestGetComponentProviderForEvent(t *testing.T) {
 	ClearComponentProviders()
+	ctrl := gomock.NewController(t)
 
-	provider := &mockComponentProvider{
-		componentType: "test-terraform",
-		bindings: []HookBinding{
-			{Event: "after.test-terraform.plan", Actions: []HookAction{ActionSummary}},
-			{Event: "after.test-terraform.apply", Actions: []HookAction{ActionSummary}},
-		},
+	bindings := []HookBinding{
+		{Event: "after.test-terraform.plan", Actions: []HookAction{ActionSummary}},
+		{Event: "after.test-terraform.apply", Actions: []HookAction{ActionSummary}},
 	}
+	provider := createMockProvider(ctrl, "test-terraform", bindings)
 	err := RegisterComponentProvider(provider)
 	require.NoError(t, err)
 
@@ -126,11 +86,13 @@ func TestGetComponentProviderForEvent(t *testing.T) {
 
 func TestListComponentProviders(t *testing.T) {
 	ClearComponentProviders()
+	ctrl := gomock.NewController(t)
 
 	// Register multiple providers.
-	providers := []string{"alpha", "beta", "gamma"}
-	for _, name := range providers {
-		err := RegisterComponentProvider(&mockComponentProvider{componentType: name})
+	providerNames := []string{"alpha", "beta", "gamma"}
+	for _, name := range providerNames {
+		provider := createMockProvider(ctrl, name, nil)
+		err := RegisterComponentProvider(provider)
 		require.NoError(t, err)
 	}
 

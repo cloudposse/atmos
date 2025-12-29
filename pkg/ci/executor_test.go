@@ -9,6 +9,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// boolPtr returns a pointer to a bool value.
+func boolPtr(b bool) *bool {
+	return &b
+}
+
 func TestExecute(t *testing.T) {
 	t.Run("returns nil when platform not detected and force mode disabled", func(t *testing.T) {
 		// Clear any registered providers to ensure no detection.
@@ -322,7 +327,7 @@ func TestIsActionEnabled(t *testing.T) {
 			name: "summary explicitly enabled",
 			config: &schema.AtmosConfiguration{
 				CI: schema.CIConfig{
-					Summary: schema.CISummaryConfig{Enabled: true},
+					Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
 				},
 			},
 			action:   ActionSummary,
@@ -332,7 +337,7 @@ func TestIsActionEnabled(t *testing.T) {
 			name: "summary explicitly disabled",
 			config: &schema.AtmosConfiguration{
 				CI: schema.CIConfig{
-					Summary: schema.CISummaryConfig{Enabled: false},
+					Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
 				},
 			},
 			action:   ActionSummary,
@@ -342,7 +347,7 @@ func TestIsActionEnabled(t *testing.T) {
 			name: "output explicitly enabled",
 			config: &schema.AtmosConfiguration{
 				CI: schema.CIConfig{
-					Output: schema.CIOutputConfig{Enabled: true},
+					Output: schema.CIOutputConfig{Enabled: boolPtr(true)},
 				},
 			},
 			action:   ActionOutput,
@@ -352,7 +357,7 @@ func TestIsActionEnabled(t *testing.T) {
 			name: "output explicitly disabled",
 			config: &schema.AtmosConfiguration{
 				CI: schema.CIConfig{
-					Output: schema.CIOutputConfig{Enabled: false},
+					Output: schema.CIOutputConfig{Enabled: boolPtr(false)},
 				},
 			},
 			action:   ActionOutput,
@@ -362,7 +367,7 @@ func TestIsActionEnabled(t *testing.T) {
 			name: "check explicitly enabled",
 			config: &schema.AtmosConfiguration{
 				CI: schema.CIConfig{
-					Checks: schema.CIChecksConfig{Enabled: true},
+					Checks: schema.CIChecksConfig{Enabled: boolPtr(true)},
 				},
 			},
 			action:   ActionCheck,
@@ -372,7 +377,7 @@ func TestIsActionEnabled(t *testing.T) {
 			name: "check explicitly disabled",
 			config: &schema.AtmosConfiguration{
 				CI: schema.CIConfig{
-					Checks: schema.CIChecksConfig{Enabled: false},
+					Checks: schema.CIChecksConfig{Enabled: boolPtr(false)},
 				},
 			},
 			action:   ActionCheck,

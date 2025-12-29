@@ -36,8 +36,13 @@ func Get(name string) (Provider, error) {
 	return p, nil
 }
 
-// Detect returns the first provider that detects it is active in the current environment.
+// Detect returns a provider that detects it is active in the current environment.
 // Returns nil if no provider is detected.
+//
+// Note: Provider detection order is non-deterministic (map iteration order).
+// In practice, only one provider should detect as active in any given CI environment
+// (e.g., GitHub Actions environment variables are only present in GitHub Actions).
+// If multiple providers could match, use Get() with an explicit provider name instead.
 func Detect() Provider {
 	defer perf.Track(nil, "ci.Detect")()
 

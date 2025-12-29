@@ -10,6 +10,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
 	_ "github.com/cloudposse/atmos/pkg/ci/terraform" // Register terraform CI provider.
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -102,6 +103,8 @@ func (h Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, i
 // The output parameter is the command output to process (e.g., terraform plan output).
 // The forceCIMode parameter forces CI mode even when environment detection fails (--ci flag).
 func RunCIHooks(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, output string, forceCIMode bool) error {
+	defer perf.Track(atmosConfig, "hooks.RunCIHooks")()
+
 	log.Debug("Running CI hooks", "event", event, "force_ci", forceCIMode)
 
 	// Check if CI is enabled in config or forced via flag.

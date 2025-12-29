@@ -138,13 +138,47 @@ func TestProvider_GetOutputVariables(t *testing.T) {
 
 func TestProvider_GetArtifactKey(t *testing.T) {
 	p := &Provider{}
-	info := &schema.ConfigAndStacksInfo{
-		ComponentFromArg: "vpc",
-		Stack:            "dev-us-east-1",
-	}
 
-	key := p.GetArtifactKey(info, "plan")
-	assert.Equal(t, "dev-us-east-1/vpc.tfplan", key)
+	t.Run("valid stack and component", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "vpc",
+			Stack:            "dev-us-east-1",
+		}
+		key := p.GetArtifactKey(info, "plan")
+		assert.Equal(t, "dev-us-east-1/vpc.tfplan", key)
+	})
+
+	t.Run("nil info returns placeholder", func(t *testing.T) {
+		key := p.GetArtifactKey(nil, "plan")
+		assert.Equal(t, "unknown/unknown.tfplan", key)
+	})
+
+	t.Run("empty stack uses placeholder", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "vpc",
+			Stack:            "",
+		}
+		key := p.GetArtifactKey(info, "plan")
+		assert.Equal(t, "unknown/vpc.tfplan", key)
+	})
+
+	t.Run("empty component uses placeholder", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "",
+			Stack:            "dev-us-east-1",
+		}
+		key := p.GetArtifactKey(info, "plan")
+		assert.Equal(t, "dev-us-east-1/unknown.tfplan", key)
+	})
+
+	t.Run("both empty uses placeholders", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "",
+			Stack:            "",
+		}
+		key := p.GetArtifactKey(info, "plan")
+		assert.Equal(t, "unknown/unknown.tfplan", key)
+	})
 }
 
 // Helper function to find a binding by event.

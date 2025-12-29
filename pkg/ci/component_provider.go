@@ -1,6 +1,8 @@
 // Package ci provides CI/CD provider abstractions and integrations.
 package ci
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=component_provider.go -destination=mock_component_provider_test.go -package=ci
+
 import (
 	"embed"
 
