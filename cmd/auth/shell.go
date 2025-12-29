@@ -19,7 +19,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -88,8 +87,11 @@ func executeAuthShellCommand(cmd *cobra.Command, args []string) error {
 	// Cobra's ArgsLenAtDash() tells us where "--" was, and ParseFlags populates this.
 	shellArgs := getSeparatedArgs(cmd)
 
+	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
+	configAndStacksInfo := BuildConfigAndStacksInfo(cmd, v)
+
 	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests).
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}

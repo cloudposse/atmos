@@ -10,7 +10,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -65,8 +64,11 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 		u.PrintfMarkdown("**Validating authentication configuration...**\n")
 	}
 
+	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
+	configAndStacksInfo := BuildConfigAndStacksInfo(cmd, v)
+
 	// Load atmos config.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return fmt.Errorf("failed to load atmos config: %w", err)
 	}

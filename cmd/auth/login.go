@@ -13,7 +13,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // loginParser handles flags for the login command.
@@ -53,18 +52,21 @@ func init() {
 func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
-	// Load atmos config.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
-	}
-	defer perf.Track(&atmosConfig, "auth.executeAuthLoginCommand")()
-
-	// Bind parsed flags to Viper for precedence.
+	// Bind parsed flags to Viper for precedence (must be done before parsing global flags).
 	v := viper.GetViper()
 	if err := loginParser.BindFlagsToViper(cmd, v); err != nil {
 		return err
 	}
+
+	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
+	configAndStacksInfo := BuildConfigAndStacksInfo(cmd, v)
+
+	// Load atmos config.
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
+	}
+	defer perf.Track(&atmosConfig, "auth.executeAuthLoginCommand")()
 
 	// Create auth manager.
 	authManager, err := CreateAuthManager(&atmosConfig.Auth)

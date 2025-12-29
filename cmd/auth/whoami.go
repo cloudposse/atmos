@@ -20,7 +20,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -85,7 +84,7 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load atmos config and auth manager.
-	authManager, err := loadAuthManager()
+	authManager, err := loadAuthManager(cmd, v)
 	if err != nil {
 		return err
 	}
@@ -169,10 +168,13 @@ func populateWhoamiFromValidation(whoami *authTypes.WhoamiInfo, validationInfo *
 	}
 }
 
-func loadAuthManager() (authTypes.AuthManager, error) {
+func loadAuthManager(cmd *cobra.Command, v *viper.Viper) (authTypes.AuthManager, error) {
 	defer perf.Track(nil, "auth.loadAuthManager")()
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
+	configAndStacksInfo := BuildConfigAndStacksInfo(cmd, v)
+
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load atmos config: %v", errUtils.ErrInvalidAuthConfig, err)
 	}

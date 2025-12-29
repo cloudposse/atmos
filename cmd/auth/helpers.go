@@ -8,11 +8,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -23,6 +25,15 @@ const (
 	secondsPerMinute = 60
 	minutesPerHour   = 60
 )
+
+// BuildConfigAndStacksInfo parses global flags and builds ConfigAndStacksInfo.
+// This ensures auth commands honor global flags like --base-path, --config, --config-path, and --profile.
+// Wraps flags.BuildConfigAndStacksInfo for convenience.
+func BuildConfigAndStacksInfo(cmd *cobra.Command, v *viper.Viper) schema.ConfigAndStacksInfo {
+	defer perf.Track(nil, "auth.BuildConfigAndStacksInfo")()
+
+	return flags.BuildConfigAndStacksInfo(cmd, v)
+}
 
 // CreateAuthManager creates a new auth manager with all required dependencies.
 // Exported for use by command packages (e.g., terraform package).

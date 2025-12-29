@@ -5,14 +5,15 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // authUserConfigureCmd prompts for static AWS user credentials and stores them in keyring.
@@ -33,8 +34,12 @@ func init() {
 func executeAuthUserConfigureCommand(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "auth.user.executeAuthUserConfigureCommand")()
 
+	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
+	v := viper.GetViper()
+	configAndStacksInfo := flags.BuildConfigAndStacksInfo(cmd, v)
+
 	// Load atmos config.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrInvalidAuthConfig, err)
 	}
@@ -43,6 +48,11 @@ func executeAuthUserConfigureCommand(cmd *cobra.Command, args []string) error {
 	selectable, _, err := selectAWSUserIdentities(atmosConfig.Auth.Identities)
 	if err != nil {
 		return err
+	}
+
+	// Guard: ensure there are identities to configure.
+	if len(selectable) == 0 {
+		return fmt.Errorf("%w: no AWS user identities found in configuration", errUtils.ErrNoIdentitiesAvailable)
 	}
 
 	// Choose identity.

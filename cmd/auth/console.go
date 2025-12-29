@@ -21,7 +21,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -111,7 +110,7 @@ func executeAuthConsoleCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Initialize auth manager.
-	authManager, err := initializeAuthManager()
+	authManager, err := initializeAuthManager(cmd, v)
 	if err != nil {
 		return err
 	}
@@ -276,10 +275,13 @@ func getConsoleProvider(authManager types.AuthManager, identityName string) (typ
 }
 
 // initializeAuthManager loads config and creates the auth manager.
-func initializeAuthManager() (types.AuthManager, error) {
+func initializeAuthManager(cmd *cobra.Command, v *viper.Viper) (types.AuthManager, error) {
 	defer perf.Track(nil, "auth.initializeAuthManager")()
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
+	configAndStacksInfo := BuildConfigAndStacksInfo(cmd, v)
+
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
 	}
