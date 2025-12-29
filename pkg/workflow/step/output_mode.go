@@ -37,6 +37,8 @@ func NewOutputModeWriter(mode OutputMode, stepName string, viewport *schema.View
 
 // Execute runs the command with the configured output mode.
 func (w *OutputModeWriter) Execute(cmd *exec.Cmd) (string, string, error) {
+	defer perf.Track(nil, "step.OutputModeWriter.Execute")()
+
 	switch w.mode {
 	case OutputModeViewport:
 		return w.executeViewport(cmd)
@@ -239,6 +241,8 @@ func FormatStepLabel(step *schema.WorkflowStep, workflow *schema.WorkflowDefinit
 // RenderCommand renders the command before execution if show.command is enabled.
 // Displays the command with a $ prefix for shell-like appearance.
 func RenderCommand(step *schema.WorkflowStep, workflow *schema.WorkflowDefinition, command string) {
+	defer perf.Track(nil, "step.RenderCommand")()
+
 	showCfg := GetShowConfig(step, workflow)
 	if !ShowCommand(showCfg) || command == "" {
 		return

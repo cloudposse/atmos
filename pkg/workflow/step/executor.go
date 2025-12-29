@@ -27,6 +27,8 @@ func NewStepExecutor() *StepExecutor {
 
 // NewStepExecutorWithVars creates a new executor with pre-populated variables.
 func NewStepExecutorWithVars(vars *Variables) *StepExecutor {
+	defer perf.Track(nil, "step.NewStepExecutorWithVars")()
+
 	return &StepExecutor{
 		vars: vars,
 	}
@@ -107,6 +109,8 @@ func (e *StepExecutor) executeWithWorkflowContext(ctx context.Context, handler S
 
 // RunAll executes all steps in order.
 func (e *StepExecutor) RunAll(ctx context.Context, workflow *schema.WorkflowDefinition) error {
+	defer perf.Track(nil, "step.StepExecutor.RunAll")()
+
 	e.workflow = workflow
 
 	for i := range workflow.Steps {
