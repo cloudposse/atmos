@@ -1,0 +1,163 @@
+---
+slug: component-workdir-isolation
+title: "Component Workdir Isolation: The Foundation for Concurrent Terraform Operations"
+authors: [osterman]
+tags: [feature]
+date: 2025-12-12
+---
+
+If you've ever had two component instances pointing to the same base component, you've likely encountered the frustration: file conflicts, unexpected overwrites, and mysterious errors when running Terraform operations. Today, we're introducing **Component Workdir Isolation**—a foundational feature that eliminates these conflicts and unlocks powerful new capabilities for Atmos.
+
+<!--truncate-->
+
+## The Problem: Shared Component Directories
+
+Atmos allows you to create multiple instances of the same component across different stacks. For example, you might have a `vpc` component deployed to both `dev` and `prod` environments:
+
+```yaml
+# stacks/dev.yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+
+# stacks/prod.yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.1.0.0/16"
+```
+
+Both instances point to the same component directory: `components/terraform/vpc/`. When you run `atmos terraform plan vpc -s dev`, Atmos generates a `dev-vpc.terraform.tfvars.json` file in that directory. Run `atmos terraform plan vpc -s prod` in another terminal, and it generates `prod-vpc.terraform.tfvars.json` in the same place.
+
+**Here's where things get messy:**
+
+- The `.terraform/` directory is shared between both operations
+- Lock files can conflict
+- Running `terraform init` for one stack can interfere with another
+- Parallel CI/CD pipelines stepping on each other
+
+This isn't just an inconvenience—it's a fundamental limitation that prevents concurrent Terraform operations.
+
+## The Solution: Isolated Working Directories
+
+With Component Workdir Isolation, each component instance can now run in its own isolated directory:
+
+```
+project/
+├── components/terraform/vpc/      # Original component (untouched)
+│   └── main.tf
+└── .workdir/terraform/            # Isolated execution directories
+    ├── dev-vpc/                   # Instance 1
+    │   ├── main.tf               # Copied from component
+    │   ├── .terraform/           # Isolated state
+    │   └── dev-vpc.terraform.tfvars.json
+    └── prod-vpc/                  # Instance 2
+        ├── main.tf
+        ├── .terraform/
+        └── prod-vpc.terraform.tfvars.json
+```
+
+Each instance gets its own:
+- `.terraform/` directory with isolated provider state
+- Terraform lock files
+- Generated varfiles and planfiles
+- Complete isolation from other instances
+
+## How It Works
+
+### Opt-In for Local Components
+
+For local components, enable workdir isolation with the provision config:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      provision:
+        workdir:
+          enabled: true  # Enable isolated workdir
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+
+When `provision.workdir.enabled: true` is set, Atmos:
+
+1. Creates `.workdir/terraform/<stack>-<component>/` before `terraform init`
+2. Copies the component files to the workdir
+3. Runs all Terraform commands in the isolated directory
+4. Keeps the original component directory pristine
+
+### Automatic for Remote Sources (Coming Soon)
+
+When we introduce JIT (Just-In-Time) vendoring support, workdir isolation will be automatic for any component with a `metadata.source`:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        source: "github.com/cloudposse/terraform-aws-vpc?ref=v1.0.0"
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+
+Remote sources **require** workdir isolation because different component instances might reference different versions of the same source.
+
+## Why This Matters
+
+### Concurrent Terraform Operations
+
+With isolated workdirs, you can finally run multiple Terraform operations in parallel without conflicts. This is essential for CI/CD pipelines where multiple jobs may operate on the same component simultaneously.
+
+### Concurrent Workflows
+
+This unlocks the ability to run workflow steps in parallel, dramatically reducing deployment times when you need to apply changes across multiple environments.
+
+### Foundation for JIT Vendoring
+
+This is the prerequisite for our upcoming JIT vendoring feature, which will allow you to reference remote component sources directly in your stack configuration—no upfront vendoring required.
+
+## Cleaning Up
+
+Workdirs are ephemeral and can be cleaned up at any time:
+
+```bash
+# Clean workdir for a specific component
+atmos terraform workdir clean vpc --stack dev
+
+# Clean all workdirs in the project
+atmos terraform workdir clean --all
+```
+
+The `.workdir/` directory should be added to your `.gitignore`:
+
+```gitignore
+# Atmos workdirs
+.workdir/
+```
+
+## What's Next
+
+Component Workdir Isolation is the foundation for several exciting features on our roadmap:
+
+- **JIT Vendoring**: Reference components directly from GitHub, S3, or any go-getter-supported source
+- **Concurrent Workflows**: Run workflow steps in parallel for faster deployments
+- **Improved CI/CD**: Native support for parallel Terraform operations in pipelines
+
+## Get Started
+
+Workdir isolation is available now. Simply add `provision.workdir.enabled: true` to any component that needs isolation:
+
+```yaml
+components:
+  terraform:
+    my-component:
+      provision:
+        workdir:
+          enabled: true
+```
+
+For more details, see the [Component Configuration documentation](/cli/configuration/components).

@@ -266,6 +266,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.RemoteStateBackendTypeSectionName] = finalComponentRemoteStateBackendType
 		comp[cfg.RemoteStateBackendSectionName] = finalComponentRemoteStateBackend
 		comp[cfg.AuthSectionName] = mergedAuth
+		comp[cfg.ProvisionSectionName] = result.ComponentProvision
 	}
 
 	// Add base component name if present.
