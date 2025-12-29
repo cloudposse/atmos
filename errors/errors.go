@@ -722,10 +722,6 @@ var (
 	// Config errors.
 	ErrInvalidConfig = errors.New("invalid configuration")
 
-	// Locals errors.
-	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
-	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
-
 	// Git errors (additional).
 	ErrGitRefNotFound = errors.New("git reference not found on local filesystem")
 
@@ -763,20 +759,14 @@ var (
 	ErrDeleteBucket      = errors.New("failed to delete bucket")
 	ErrListObjects       = errors.New("failed to list bucket objects")
 
-	// Path resolution errors.
-	ErrPathNotInComponentDir      = errors.New("path is not within Atmos component directories")
-	ErrPathResolutionFailed       = errors.New("failed to resolve component from path")
-	ErrPathIsComponentBase        = errors.New("must specify a component directory, not the base directory")
+	// Path resolution errors (additional).
 	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
 
 	// Provisioner errors.
 	ErrDeleteNotImplemented = errors.New("delete not implemented for backend type")
 	ErrProvisionerFailed    = errors.New("provisioner failed")
 
-	// Component errors.
-	ErrComponentTypeMismatch     = errors.New("path component type does not match command")
-	ErrComponentNotInStack       = errors.New("component not found in stack configuration")
-	ErrAmbiguousComponentPath    = errors.New("ambiguous component path")
+	// Component errors (additional).
 	ErrInvalidStackConfiguration = errors.New("invalid stack configuration")
 
 	// List/discovery errors.
@@ -815,13 +805,8 @@ var (
 	// Config errors (additional).
 	ErrMissingAtmosConfig = errors.New("atmos configuration not found or invalid")
 
-	// Interactive mode errors.
-	ErrInteractiveModeNotAvailable = errors.New("interactive mode not available")
-	ErrNoOptionsAvailable          = errors.New("no options available")
-	ErrInteractiveNotAvailable     = errors.New("interactive mode not available")
-
-	// Locals errors (additional).
-	ErrLocalsInvalidType = errors.New("locals must be of type map[string]any")
+	// Interactive mode errors (additional).
+	ErrInteractiveNotAvailable = errors.New("interactive mode not available")
 
 	// Terraform backend generation errors.
 	ErrMissingTerraformBackendType        = errors.New("missing backend type for the component")
