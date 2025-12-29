@@ -185,7 +185,10 @@ func outputEnvAsExport(envVars map[string]string) error {
 		value := envVars[key]
 		// Escape single quotes for safe single-quoted shell literals: ' -> '\''
 		safe := strings.ReplaceAll(value, "'", "'\\''")
-		// #nosec G104 -- intentional: this command's purpose is to output credentials for shell sourcing
+		// The purpose of this command is to output credentials for shell sourcing.
+		// This is intentional - similar to `aws configure export-credentials`.
+		// #nosec G104 -- intentional credential output
+		// codeql[go/clear-text-logging]: intentional - this command exports credentials for shell sourcing
 		fmt.Printf("export %s='%s'\n", key, safe)
 	}
 	return nil
@@ -205,7 +208,10 @@ func outputEnvAsDotenv(envVars map[string]string) error {
 		value := envVars[key]
 		// Use the same safe single-quoted escaping as bash output.
 		safe := strings.ReplaceAll(value, "'", "'\\''")
-		// #nosec G104 -- intentional: this command's purpose is to output credentials for shell sourcing
+		// The purpose of this command is to output credentials for shell sourcing.
+		// This is intentional - similar to `aws configure export-credentials`.
+		// #nosec G104 -- intentional credential output
+		// codeql[go/clear-text-logging]: intentional - this command exports credentials for shell sourcing
 		fmt.Printf("%s='%s'\n", key, safe)
 	}
 	return nil
