@@ -86,6 +86,7 @@ const (
 	AuthSectionName                   = "auth"
 	RequiredVersionSectionName        = "required_version"
 	RequiredProvidersSectionName      = "required_providers"
+	ProvisionSectionName              = "provision"
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"

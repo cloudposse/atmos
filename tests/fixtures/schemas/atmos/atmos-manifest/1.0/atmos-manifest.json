@@ -305,6 +305,9 @@
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
             }
           },
           "required": []
@@ -397,6 +400,9 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
             }
           },
           "required": []
@@ -489,6 +495,9 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
             }
           },
           "required": []
@@ -1215,6 +1224,47 @@
         {
           "type": "object",
           "additionalProperties": true
+        }
+      ]
+    },
+    "provision": {
+      "title": "provision",
+      "description": "Provision section for component provisioning configuration",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workdir": {
+              "$ref": "#/definitions/provision_workdir"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "provision_workdir": {
+      "title": "provision_workdir",
+      "description": "Workdir provisioner configuration for isolated component execution directories",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable isolated working directory for this component"
+            }
+          },
+          "required": []
         }
       ]
     }

@@ -70,11 +70,13 @@ type ComponentProcessorResult struct {
 	BaseComponents             []string
 
 	// Terraform-specific fields.
-	ComponentProviders                     map[string]any
-	ComponentRequiredProviders             map[string]any
-	ComponentRequiredVersion               string
-	ComponentHooks                         map[string]any
-	ComponentAuth                          map[string]any
+	ComponentProviders         map[string]any
+	ComponentRequiredProviders map[string]any
+	ComponentRequiredVersion   string
+	ComponentHooks             map[string]any
+	ComponentAuth              map[string]any
+	// ComponentProvision holds provisioning configuration for the component (e.g., workdir settings).
+	ComponentProvision                     map[string]any
 	ComponentBackendType                   string
 	ComponentBackendSection                map[string]any
 	ComponentRemoteStateBackendType        string
