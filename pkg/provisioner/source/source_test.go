@@ -397,3 +397,45 @@ func TestProvision_AlreadyExists(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "# existing", string(content), "Existing file should not be modified")
 }
+
+// TestProvision_ForceOverwritesExisting tests that Provision re-vendors when Force=true.
+func TestProvision_ForceOverwritesExisting(t *testing.T) {
+	ctx := context.Background()
+
+	// Create a temp directory with existing content.
+	tempDir := t.TempDir()
+	targetDir := filepath.Join(tempDir, "vpc")
+	err := os.MkdirAll(targetDir, 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(targetDir, "main.tf"), []byte("# old content"), 0o644)
+	require.NoError(t, err)
+
+	params := &ProvisionParams{
+		AtmosConfig: &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					BasePath: tempDir,
+				},
+			},
+		},
+		ComponentType: "terraform",
+		Component:     "vpc",
+		Stack:         "dev",
+		ComponentConfig: map[string]any{
+			"source": map[string]any{
+				"uri": "github.com/cloudposse/terraform-aws-vpc",
+			},
+		},
+		Force: true, // Force re-vendor even if target exists.
+	}
+
+	// Provision will attempt to download (which will fail in tests without network).
+	// The key validation is that it doesn't skip due to existing directory.
+	err = Provision(ctx, params)
+
+	// We expect an error because go-getter can't actually download in unit tests.
+	// But the error should be a download error, not a "skipped" situation.
+	// This confirms Force=true triggers the download path instead of skipping.
+	require.Error(t, err, "Expected error from download attempt, not skip")
+	assert.ErrorIs(t, err, errUtils.ErrSourceProvision, "Error should be from provisioning attempt")
+}

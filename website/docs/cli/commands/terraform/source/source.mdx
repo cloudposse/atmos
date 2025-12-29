@@ -59,7 +59,7 @@ components:
 When you run `atmos terraform source pull vpc --stack dev`, Atmos:
 
 1. **Reads Configuration** - Extracts `source` from the component's stack manifest.
-2. **Resolves Source** - Parses the go-getter compatible URI with optional version.
+2. **Resolves Source** - Parses the go-getter-compatible URI with optional version.
 3. **Downloads Content** - Fetches the source using go-getter (supports git, s3, http, oci, etc.).
 4. **Filters Files** - Applies `included_paths` and `excluded_paths` patterns.
 5. **Copies to Target** - Places files in the component directory.

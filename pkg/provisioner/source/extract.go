@@ -8,6 +8,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // ExtractSource extracts the source specification from component config.
@@ -121,6 +122,8 @@ func parseDuration(m map[string]any, key string) time.Duration {
 	if v, ok := m[key].(string); ok {
 		if d, err := time.ParseDuration(v); err == nil {
 			return d
+		} else {
+			_ = ui.Warningf("invalid duration for %s: %q", key, v)
 		}
 	}
 	return 0
