@@ -297,8 +297,8 @@ func TestProvision_NoMetadataSource(t *testing.T) {
 	assert.NoError(t, err, "Provision should return nil when no source is configured")
 }
 
-// TestProvision_InvalidMetadataSource tests that Provision returns an error for invalid source spec.
-func TestProvision_InvalidMetadataSource(t *testing.T) {
+// TestProvision_InvalidSource tests that Provision returns an error for invalid source spec.
+func TestProvision_InvalidSource(t *testing.T) {
 	ctx := context.Background()
 
 	params := &ProvisionParams{
@@ -313,8 +313,8 @@ func TestProvision_InvalidMetadataSource(t *testing.T) {
 		Component:     "vpc",
 		Stack:         "dev",
 		ComponentConfig: map[string]any{
-			"metadata": map[string]any{
-				"source": "invalid-not-a-map", // Invalid: should be a map.
+			"source": map[string]any{
+				// Invalid: missing required "uri" field.
 			},
 		},
 		Force: false,
@@ -341,10 +341,8 @@ func TestProvision_TargetDirectoryError(t *testing.T) {
 		Component:     "vpc",
 		Stack:         "dev",
 		ComponentConfig: map[string]any{
-			"metadata": map[string]any{
-				"source": map[string]any{
-					"uri": "github.com/cloudposse/terraform-aws-vpc",
-				},
+			"source": map[string]any{
+				"uri": "github.com/cloudposse/terraform-aws-vpc",
 			},
 		},
 		Force: false,
@@ -379,10 +377,8 @@ func TestProvision_AlreadyExists(t *testing.T) {
 		Component:     "vpc",
 		Stack:         "dev",
 		ComponentConfig: map[string]any{
-			"metadata": map[string]any{
-				"source": map[string]any{
-					"uri": "github.com/cloudposse/terraform-aws-vpc",
-				},
+			"source": map[string]any{
+				"uri": "github.com/cloudposse/terraform-aws-vpc",
 			},
 		},
 		Force: false, // Not forcing re-vendor.
