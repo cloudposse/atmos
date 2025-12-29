@@ -12,13 +12,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-const (
-	// IdentityFlagName is the name of the identity flag (from pkg/config/const.go).
-	IdentityFlagName = cfg.IdentityFlagName
-	// IdentityFlagSelectValue is the sentinel value for interactive selection (from pkg/config/const.go).
-	IdentityFlagSelectValue = cfg.IdentityFlagSelectValue
-)
-
 // GetIdentityFromFlags retrieves the identity value from command-line flags and environment variables.
 // This function handles the Cobra NoOptDefVal quirk where --identity <value> with positional args
 // can be misinterpreted as --identity (without value).
@@ -46,8 +39,8 @@ func GetIdentityFromFlags(cmd *cobra.Command, osArgs []string) string {
 	// Check if flag was set via Cobra first (handles both SetArgs in tests and real CLI).
 	// For commands without positional args, this is reliable.
 	// For commands with positional args, we'll use os.Args parsing as a fallback.
-	if cmd.Flags().Changed(IdentityFlagName) {
-		value, _ := cmd.Flags().GetString(IdentityFlagName)
+	if cmd.Flags().Changed(cfg.IdentityFlagName) {
+		value, _ := cmd.Flags().GetString(cfg.IdentityFlagName)
 		// Only trust this value if it's not the NoOptDefVal issue.
 		// If we got "__SELECT__" but there might be a real value in os.Args, check os.Args.
 		if value != cfg.IdentityFlagSelectValue {
@@ -64,7 +57,7 @@ func GetIdentityFromFlags(cmd *cobra.Command, osArgs []string) string {
 	}
 
 	// Flag not changed - fall back to environment variable.
-	envValue := viper.GetString(IdentityFlagName)
+	envValue := viper.GetString(cfg.IdentityFlagName)
 	return normalizeIdentityValue(envValue)
 }
 
@@ -153,7 +146,7 @@ func CreateAuthManagerFromIdentity(
 ) (auth.AuthManager, error) {
 	defer perf.Track(nil, "cmd.CreateAuthManagerFromIdentity")()
 
-	return auth.CreateAndAuthenticateManager(identityName, authConfig, IdentityFlagSelectValue)
+	return auth.CreateAndAuthenticateManager(identityName, authConfig, cfg.IdentityFlagSelectValue)
 }
 
 // CreateAuthManagerFromIdentityWithAtmosConfig creates and authenticates an AuthManager from an identity name.
@@ -175,5 +168,5 @@ func CreateAuthManagerFromIdentityWithAtmosConfig(
 ) (auth.AuthManager, error) {
 	defer perf.Track(nil, "cmd.CreateAuthManagerFromIdentityWithAtmosConfig")()
 
-	return auth.CreateAndAuthenticateManagerWithAtmosConfig(identityName, authConfig, IdentityFlagSelectValue, atmosConfig)
+	return auth.CreateAndAuthenticateManagerWithAtmosConfig(identityName, authConfig, cfg.IdentityFlagSelectValue, atmosConfig)
 }
