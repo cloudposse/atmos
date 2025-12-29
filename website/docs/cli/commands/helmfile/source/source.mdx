@@ -109,7 +109,7 @@ source:
 
   <dt>`retry`</dt>
   <dd>
-  Optional retry configuration for handling transient network errors during download.
+  Optional retry configuration for handling transient network errors during download. Useful for unreliable networks or when hitting rate limits.
 
   ```yaml
   retry:
@@ -118,6 +118,8 @@ source:
     max_delay: 60s
     backoff_strategy: exponential
   ```
+
+  Required: `max_attempts`, `initial_delay`, `max_delay`, `backoff_strategy` (`exponential`, `linear`, `constant`). Optional: `multiplier`, `random_jitter`, `max_elapsed_time`.
   </dd>
 </dl>
 
@@ -147,6 +149,14 @@ Display the source configuration for a component:
 atmos helmfile source describe ingress-nginx --stack dev
 ```
 
+### List Components with Sources
+
+List all components that have source configured:
+
+```shell
+atmos helmfile source list --stack dev
+```
+
 ### Delete Vendored Source
 
 Remove the vendored component directory (requires --force for safety):
@@ -174,6 +184,185 @@ atmos helmfile source delete ingress-nginx --stack dev --force
   <dt>`--force` / `-f`</dt>
   <dd>Force re-vendor even if component directory exists (pull command), or confirm deletion (delete command).</dd>
 </dl>
+
+## Authentication
+
+Source commands support authentication for accessing private repositories or cloud storage.
+
+### Component-Level Identity
+
+Components can specify their own authentication identity:
+
+```yaml
+components:
+  helmfile:
+    ingress-nginx:
+      source:
+        uri: github.com/my-org/private-helmfiles//releases/ingress-nginx
+        version: v1.0.0
+      auth:
+        identities:
+          github-deployer:
+            default: true
+            kind: github/app
+            via:
+              provider: github-app
+```
+
+### Identity Flag Override
+
+Override the component's default identity:
+
+```shell
+atmos helmfile source pull ingress-nginx --stack dev --identity admin
+```
+
+For more details on configuring authentication identities, see the [Authentication Guide](/cli/configuration/auth).
+
+## Configuration Patterns
+
+### Inheritance with source
+
+Use stack inheritance to share source configurations:
+
+```yaml
+# stacks/catalog/ingress-nginx/defaults.yaml
+components:
+  helmfile:
+    ingress-nginx/defaults:
+      source:
+        uri: github.com/cloudposse/helmfiles//releases/ingress-nginx
+        version: 1.0.0
+
+# stacks/dev.yaml
+components:
+  helmfile:
+    ingress-nginx:
+      metadata:
+        inherits: [ingress-nginx/defaults]
+      # Inherits source configuration
+      vars:
+        namespace: ingress-nginx
+```
+
+### Version Override per Environment
+
+Override the version per environment:
+
+```yaml
+# stacks/dev.yaml
+components:
+  helmfile:
+    ingress-nginx:
+      metadata:
+        inherits: [ingress-nginx/defaults]
+      source:
+        version: 1.1.0  # Override version for dev
+
+# stacks/prod.yaml
+components:
+  helmfile:
+    ingress-nginx:
+      metadata:
+        inherits: [ingress-nginx/defaults]
+      source:
+        version: 1.0.0  # Pin to stable version for prod
+```
+
+## Supported Source Types
+
+The source provisioner uses go-getter and supports multiple protocols:
+
+### Git Sources
+
+```yaml
+source:
+  uri: github.com/cloudposse/helmfiles//releases/ingress-nginx
+  version: 1.0.0
+
+# Also supports:
+# - git::https://github.com/org/repo.git//path
+# - git::ssh://git@github.com/org/repo.git//path
+```
+
+### S3 Sources
+
+```yaml
+source:
+  uri: s3::https://s3-us-east-1.amazonaws.com/my-bucket/helmfiles/ingress-nginx.tar.gz
+```
+
+### HTTP/HTTPS Sources
+
+```yaml
+source:
+  uri: https://releases.example.com/helmfiles/ingress-nginx-1.0.0.tar.gz
+```
+
+### OCI Registry Sources
+
+```yaml
+source:
+  uri: oci::registry.example.com/helmfiles/ingress-nginx:v1.0.0
+```
+
+## Error Handling
+
+### Missing source
+
+```
+Error: source not configured
+
+Hint: Add source to the component configuration in your stack manifest
+
+Example:
+  components:
+    helmfile:
+      ingress-nginx:
+        source:
+          uri: github.com/cloudposse/helmfiles//releases/ingress-nginx
+          version: 1.0.0
+```
+
+### Component Directory Exists
+
+```
+Error: component directory already exists
+
+Hint: Use --force to overwrite the existing directory
+```
+
+### Download Failed
+
+```
+Error: failed to download source
+
+Cause: failed to clone repository: authentication required
+
+Hint: Check credentials or use --identity to specify authentication
+```
+
+## Comparison with Vendoring
+
+| Feature | source | component.yaml |
+|---------|--------|----------------|
+| Configuration location | Inline in stack | Separate file |
+| Version per environment | Yes | Single version |
+| JIT download | Yes | Pre-vendored |
+| Path filtering | Yes | Yes |
+| Mixins support | No | Yes |
+
+*Mixins allow combining multiple source configurations into a single component. See [Vendoring](/vendor) for details.*
+
+Use `source` when:
+- You want version control per environment
+- You prefer configuration colocation in stacks
+- You need just-in-time vendoring
+
+Use `component.yaml` when:
+- You need mixin support
+- You want pre-vendored components
+- You have complex vendoring requirements
 
 ## See Also
 
