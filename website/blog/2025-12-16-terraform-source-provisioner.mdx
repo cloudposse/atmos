@@ -129,6 +129,86 @@ The source provisioner uses go-getter and supports:
 - HTTP/HTTPS URLs
 - OCI registries
 
+## Combining with Workdir Isolation
+
+The `source` provisioner works seamlessly with the [workdir provisioner](/blog/component-workdir-isolation) for concurrent Terraform operations. When both are enabled, you get the best of both worlds:
+
+1. **Source provisioner** vendors the component from a remote location
+2. **Workdir provisioner** creates an isolated execution directory
+
+### Why Combine Them?
+
+When running `terraform plan` on the same component across multiple stacks concurrently, you need isolation to prevent conflicts in `.terraform/` directories and state files. The workdir provisioner provides this isolation.
+
+With remote sources, different stacks might use different versions of the same component. The combination ensures:
+- Each stack gets the correct component version
+- Each execution runs in its own isolated directory
+- No conflicts between concurrent operations
+
+### Configuration Example
+
+Enable both `source` and `provision.workdir` for a component:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      source:
+        uri: github.com/cloudposse/terraform-aws-components//modules/vpc
+        version: 1.450.0
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        cidr_block: "10.0.0.0/16"
+```
+
+### Workflow
+
+The combined workflow operates in two steps:
+
+```shell
+# Step 1: Vendor the component (downloads to components/terraform/vpc/)
+atmos terraform source pull vpc --stack dev
+
+# Step 2: Run terraform (workdir provisioner copies to .workdir/terraform/dev-vpc/)
+atmos terraform plan vpc -s dev
+```
+
+When you run `terraform plan`, the workdir provisioner automatically:
+1. Creates `.workdir/terraform/dev-vpc/`
+2. Copies the vendored component files
+3. Runs Terraform in the isolated directory
+
+This means you can safely run multiple stacks in parallel:
+
+```shell
+# These can run concurrently without conflicts
+atmos terraform plan vpc -s dev &
+atmos terraform plan vpc -s staging &
+atmos terraform plan vpc -s prod &
+wait
+```
+
+### Directory Structure
+
+After running the above commands, your project looks like:
+
+```
+project/
+├── components/terraform/
+│   └── vpc/                    # Vendored by source pull
+│       └── *.tf
+├── .workdir/terraform/         # Created by workdir provisioner
+│   ├── dev-vpc/               # Isolated for dev stack
+│   ├── staging-vpc/           # Isolated for staging stack
+│   └── prod-vpc/              # Isolated for prod stack
+└── stacks/
+    ├── dev.yaml
+    ├── staging.yaml
+    └── prod.yaml
+```
+
 ## Get Involved
 
 We'd love to hear your feedback on this feature! Please [open an issue](https://github.com/cloudposse/atmos/issues) if you have questions or suggestions.

@@ -1,0 +1,32 @@
+# Test fixture for combined source provisioner + workdir integration
+# Tests JIT vendoring with workdir isolation for concurrent terraform operations
+#
+# Workflow:
+# 1. Source provisioner vendors remote source to components/terraform/<component>/
+# 2. Workdir provisioner copies to .workdir/terraform/<stack>-<component>/
+# 3. Terraform runs in the isolated workdir
+#
+# Manual testing:
+#   cd tests/fixtures/scenarios/source-provisioner-workdir
+#   atmos terraform source pull vpc-remote --stack dev     # Vendors to components/terraform/vpc-remote/
+#   atmos terraform plan vpc-remote -s dev                 # Copies to .workdir/terraform/dev-vpc-remote/
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info

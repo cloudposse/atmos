@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: dev
+
+import:
+  - catalog/source-only
+  - catalog/source-with-workdir
+  - catalog/local-with-workdir
+
+# Override vars for dev environment
+components:
+  terraform:
+    vpc-remote:
+      vars:
+        environment: "dev-source-only"
+
+    vpc-remote-workdir:
+      vars:
+        environment: "dev-source-workdir"
+
+    mock-workdir:
+      vars:
+        environment: "dev-local-workdir"
