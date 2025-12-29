@@ -96,13 +96,13 @@ export const roadmapConfig = {
       id: 'native-ci',
       icon: 'RiGitBranchLine',
       title: 'Native CI/CD Support',
-      tagline: 'Local = CI, no configuration drift',
-      description: 'PR comments with formatted plans, cost estimates, and approval buttons. Commands behave identically locally and in CI.',
-      benefits: 'PR reviewers see formatted plans directly in GitHub. No clicking through to CI logs. Get started with a few lines of workflow YAML.',
+      tagline: 'Local = CI. Same command, run everywhere',
+      description: 'Rich plan summaries directly in GitHub without wrapper scripts or extra actions. Commands auto-detect CI and produce beautiful output.',
+      benefits: 'Eliminate glue code from your workflows. No bash parsing, no separate actions—just run the same command you use locally. Ships with GitHub Actions support; provider architecture enables future GitLab and Azure DevOps support.',
       status: 'in-progress',
       quarter: 'q1-2026',
       pr: 1891,
-      prd: 'terraform-registry-migration',
+      prd: 'native-ci-integration',
     },
   ],
 
@@ -298,7 +298,7 @@ export const roadmapConfig = {
       milestones: [
         { label: 'Native GitHub OIDC enables automatic role assumptions', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', description: 'Secretless CI/CD with native OIDC—no AWS access keys stored in GitHub secrets.', category: 'featured', priority: 'high', benefits: 'No long-lived credentials to rotate. Security posture improves and audit burden decreases.' },
         { label: 'Easily sharing outputs between GitHub Actions steps', status: 'planned', quarter: 'q1-2026', description: 'Pass Terraform outputs between GitHub Actions workflow steps without manual JSON parsing.', category: 'featured', priority: 'high', benefits: 'Use Terraform outputs in subsequent steps naturally. No jq parsing or file juggling.' },
-        { label: 'Simplified GitHub Actions with native CI mode', status: 'in-progress', quarter: 'q1-2026', pr: 1891, docs: '/integrations/github-actions/github-actions', description: 'Pre-built GitHub Actions with automatic CI environment detection, formatted PR comments with plans, and minimal configuration.', category: 'featured', priority: 'high', benefits: 'Get started with a few lines of workflow YAML. Atmos handles CI detection and formatting.' },
+        { label: 'Simplified GitHub Actions with native CI mode', status: 'in-progress', quarter: 'q1-2026', pr: 1891, docs: '/integrations/github-actions/github-actions', description: 'CLI auto-detects CI environments and generates rich job summaries with resource badges, collapsible diffs, and status checks. Replaces separate actions like github-action-atmos-terraform-plan.', category: 'featured', priority: 'high', benefits: 'No wrapper scripts needed. Same command works locally and in CI. Ships with GitHub Actions support; provider architecture enables future GitLab and Azure DevOps support.' },
       ],
       issues: [],
       prs: [
