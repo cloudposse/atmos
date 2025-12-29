@@ -117,13 +117,13 @@ components:
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `max_attempts` | 3 | Maximum number of download attempts |
-| `initial_delay` | 2s | Initial delay before first retry |
-| `max_delay` | 30s | Maximum delay between retries |
+| `max_attempts` | 1 | Maximum number of download attempts |
+| `initial_delay` | 100ms | Initial delay before first retry |
+| `max_delay` | 5s | Maximum delay between retries |
 | `backoff_strategy` | exponential | Strategy: `constant`, `linear`, or `exponential` |
 | `multiplier` | 2.0 | Backoff multiplier for exponential/linear strategies |
-| `random_jitter` | 0.1 | Randomness added to delays (0.1 = 10%) |
-| `max_elapsed_time` | 5m | Maximum total time for all retries |
+| `random_jitter` | 0.0 | Randomness added to delays (0.1 = 10%) |
+| `max_elapsed_time` | 30m | Maximum total time for all retries |
 
 ### Version Inheritance
 

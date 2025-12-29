@@ -101,7 +101,7 @@ source:
   <dd>Go-getter compatible source URI. Supports git, s3, http, gcs, oci, and other protocols.</dd>
 
   <dt>`version`</dt>
-  <dd>Version tag, branch, or commit. Appended as `?ref=<version>` for git sources.</dd>
+  <dd>Version tag, branch, or commit. Appended as `?ref=<version>` for git sources. For non-git sources (S3, HTTP, OCI), the version should be embedded in the URI itself.</dd>
 
   <dt>`included_paths`</dt>
   <dd>Glob patterns for files to include. If specified, only matching files are copied.</dd>

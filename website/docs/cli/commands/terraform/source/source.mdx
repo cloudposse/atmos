@@ -101,7 +101,7 @@ source:
   <dd>Go-getter compatible source URI. Supports git, s3, http, gcs, oci, and other protocols.</dd>
 
   <dt>`version`</dt>
-  <dd>Version tag, branch, or commit. Appended as `?ref=<version>` for git sources.</dd>
+  <dd>Version tag, branch, or commit. Appended as `?ref=<version>` for git sources. For non-git sources (S3, HTTP, OCI), the version should be embedded in the URI itself.</dd>
 
   <dt>`included_paths`</dt>
   <dd>Glob patterns for files to include. If specified, only matching files are copied.</dd>
@@ -121,7 +121,7 @@ source:
     backoff_strategy: exponential
   ```
 
-  Options: `max_attempts`, `initial_delay`, `max_delay`, `backoff_strategy` (`exponential`, `linear`, `constant`), `multiplier`, `random_jitter`, `max_elapsed_time`.
+  Required: `max_attempts`, `initial_delay`, `max_delay`, `backoff_strategy` (`exponential`, `linear`, `constant`). Optional: `multiplier`, `random_jitter`, `max_elapsed_time`.
   </dd>
 </dl>
 
@@ -241,6 +241,8 @@ Override the component's default identity:
 ```shell
 atmos terraform source pull vpc --stack dev --identity admin
 ```
+
+For more details on configuring authentication identities, see the [Authentication Guide](/core-concepts/projects/configuration/auth).
 
 ## Configuration Patterns
 
@@ -374,6 +376,8 @@ Hint: Check credentials or use --identity to specify authentication
 | JIT download | Yes | Pre-vendored |
 | Path filtering | Yes | Yes |
 | Mixins support | No | Yes |
+
+*Mixins allow combining multiple source configurations into a single component. See [Vendoring](/core-concepts/vendor/vendor-manifest) for details.*
 
 Use `source` when:
 - You want version control per environment

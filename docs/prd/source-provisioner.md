@@ -1,8 +1,8 @@
 # PRD: Source Provisioner (Just-in-Time Vendoring)
 
 **Status:** Implemented
-**Version:** 1.2
-**Last Updated:** 2025-12-28
+**Version:** 1.3
+**Last Updated:** 2025-12-29
 **Author:** Claude Code
 
 ---
@@ -771,6 +771,135 @@ func TestSourceProvisioner_OciSource(t *testing.T)
 func TestSourceProvisioner_LocalFileSource(t *testing.T)
 func TestSourceProvisioner_WorkdirIntegration(t *testing.T)
 func TestSourceProvisioner_InheritanceChain(t *testing.T)
+```
+
+### Test Fixture
+
+A dedicated test fixture is available at `tests/fixtures/scenarios/source-provisioner/` for both automated and manual testing.
+
+**Fixture Structure:**
+
+```text
+tests/fixtures/scenarios/source-provisioner/
+├── .gitignore                          # Ignores vendored component directories
+├── atmos.yaml                          # Base Atmos configuration
+├── components/terraform/mock/          # Mock component for testing
+│   └── main.tf
+└── stacks/
+    ├── catalog/
+    │   ├── vpc-source-string.yaml      # Source with URI containing ref
+    │   ├── vpc-source-map.yaml         # Full source spec with included/excluded paths
+    │   ├── vpc-metadata-source.yaml    # Source with retry configuration
+    │   └── vpc-no-source.yaml          # Component without source (for error tests)
+    └── deploy/
+        └── dev.yaml                    # Stack that imports all catalog files
+```
+
+**Components Available for Testing:**
+
+| Component | Description | Source Configuration |
+|-----------|-------------|---------------------|
+| `vpc-string` | URI with inline ref | `uri: "github.com/cloudposse/terraform-null-label//exports?ref=0.25.0"` |
+| `vpc-map` | Full source spec | URI, version, included_paths, excluded_paths |
+| `vpc-retry` | Retry configuration | URI, version, retry options |
+| `vpc-no-source` | No source configured | Used for error testing |
+
+### Manual Testing Steps
+
+To manually test the source provisioner commands:
+
+**1. Navigate to the test fixture:**
+
+```bash
+cd tests/fixtures/scenarios/source-provisioner
+```
+
+**2. Test `source describe` command:**
+
+```bash
+# Describe source with full spec (included/excluded paths)
+atmos terraform source describe vpc-map --stack dev
+
+# Describe source with URI containing ref
+atmos terraform source describe vpc-string --stack dev
+
+# Describe source with retry configuration
+atmos terraform source describe vpc-retry --stack dev
+
+# Test error case: component without source
+atmos terraform source describe vpc-no-source --stack dev
+# Expected: Error about missing source configuration
+```
+
+**3. Test `source pull` command:**
+
+```bash
+# Pull component source (vendors to components/terraform/vpc-map/)
+atmos terraform source pull vpc-map --stack dev
+
+# Force re-pull even if already exists
+atmos terraform source pull vpc-map --stack dev --force
+
+# Verify the component was vendored
+ls -la components/terraform/vpc-map/
+```
+
+**4. Test `source delete` command:**
+
+```bash
+# Delete requires --force flag
+atmos terraform source delete vpc-map --stack dev
+# Expected: Error about missing --force flag
+
+# Delete with --force
+atmos terraform source delete vpc-map --stack dev --force
+
+# Verify deletion
+ls components/terraform/vpc-map/
+# Expected: Directory not found
+```
+
+**5. Test `source list` command:**
+
+```bash
+# List components with source configuration
+atmos terraform source list --stack dev
+# Note: Currently returns "not implemented"
+```
+
+**6. Test with authentication (for private repos):**
+
+```bash
+# Set authentication for private repos
+export GITHUB_TOKEN="your-token"
+
+# Or use identity flag
+atmos terraform source pull vpc-map --stack dev --identity my-identity
+```
+
+### CLI Integration Tests
+
+Automated integration tests are in `tests/cli_source_provisioner_test.go`:
+
+```go
+// tests/cli_source_provisioner_test.go
+
+func TestSourceProvisionerDescribe_Success(t *testing.T)      // Full source spec
+func TestSourceProvisionerDescribe_URIWithRef(t *testing.T)   // URI with inline ref
+func TestSourceProvisionerDescribe_WithRetry(t *testing.T)    // Retry configuration
+func TestSourceProvisionerDescribe_NoSource(t *testing.T)     // Error: no source
+func TestSourceProvisionerList(t *testing.T)                  // Not implemented error
+func TestSourceProvisionerDelete_MissingForce(t *testing.T)   // Error: missing --force
+```
+
+**Running the integration tests:**
+
+```bash
+# Run all source provisioner tests
+go test ./tests -run TestSourceProvisioner -v
+
+# Run specific test
+go test ./tests -run TestSourceProvisionerDescribe_Success -v
 ```
 
 ---
