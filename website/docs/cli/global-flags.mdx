@@ -301,6 +301,52 @@ These flags are available for every Atmos command:
 
 These flags are available across multiple commands but not universally:
 
+### Authentication Flags
+
+<dl>
+    <dt>`--identity` / `-i`</dt>
+    <dd>
+        Specify the identity to use for cloud authentication.
+        - Available in: `auth`, `terraform`, `describe` commands
+        - Can also use `ATMOS_IDENTITY` environment variable
+
+        **Modes:**
+        - **With identity name** (`--identity admin` or `--identity=admin`): Use the specified identity
+        - **Without value** (`--identity`): Show interactive selector to choose identity
+        - **With `false`** (`--identity=false`): Disable Atmos authentication and use cloud SDK defaults
+        - **Omitted**: Use the default identity configured in `atmos.yaml`
+
+        **Examples:**
+        ```bash
+        # Use specific identity (equals syntax recommended)
+        atmos terraform plan vpc -s prod --identity=admin
+
+        # Use specific identity (space syntax)
+        atmos terraform plan vpc -s prod --identity admin
+
+        # Interactively select identity
+        atmos auth login --identity
+
+        # Disable Atmos authentication
+        atmos terraform plan vpc -s prod --identity=false
+        ```
+
+        :::tip Flag Placement Best Practice
+        When using `--identity` with a value, place it **after other flags** and **before the `--` separator**:
+
+        ```bash
+        # Recommended: --identity before -- separator
+        atmos terraform plan vpc -s prod --identity=admin -- -var-file=extra.tfvars
+
+        # Also recommended: use equals syntax for clarity
+        atmos auth exec --identity=admin -- terraform plan
+        ```
+
+        Using the equals syntax (`--identity=admin`) is unambiguous and works in all contexts.
+        :::
+    </dd>
+</dl>
+
 ### Processing Flags
 
 <dl>
@@ -503,6 +549,15 @@ All global flags can be set using environment variables. The precedence order is
         Configure pager settings.
         - `PAGER` is a standard Unix environment variable maintained for portability
         - Both `ATMOS_PAGER` and `PAGER` are supported to ensure compatibility across different systems
+    </dd>
+
+    <dt>`ATMOS_IDENTITY`</dt>
+    <dd>
+        Set the identity for cloud authentication.
+        - Equivalent to the `--identity` / `-i` flag
+        - CLI flag takes precedence over this environment variable
+        - Set to `false` or `__DISABLED__` to skip Atmos authentication
+        - Example: `ATMOS_IDENTITY=admin atmos terraform plan vpc -s prod`
     </dd>
 
     <dt>`ATMOS_PROFILER_ENABLED`</dt>
