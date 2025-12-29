@@ -91,8 +91,11 @@ func executeAuthEnvCommand(cmd *cobra.Command, args []string) error {
 	// Get login flag.
 	login := v.GetBool("login")
 
+	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
+	configAndStacksInfo := BuildConfigAndStacksInfo(cmd, v)
+
 	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests).
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return fmt.Errorf("failed to load atmos config: %w", err)
 	}
@@ -182,6 +185,7 @@ func outputEnvAsExport(envVars map[string]string) error {
 		value := envVars[key]
 		// Escape single quotes for safe single-quoted shell literals: ' -> '\''
 		safe := strings.ReplaceAll(value, "'", "'\\''")
+		// #nosec G104 -- intentional: this command's purpose is to output credentials for shell sourcing
 		fmt.Printf("export %s='%s'\n", key, safe)
 	}
 	return nil
@@ -201,6 +205,7 @@ func outputEnvAsDotenv(envVars map[string]string) error {
 		value := envVars[key]
 		// Use the same safe single-quoted escaping as bash output.
 		safe := strings.ReplaceAll(value, "'", "'\\''")
+		// #nosec G104 -- intentional: this command's purpose is to output credentials for shell sourcing
 		fmt.Printf("%s='%s'\n", key, safe)
 	}
 	return nil

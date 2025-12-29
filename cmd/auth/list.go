@@ -159,7 +159,7 @@ func executeAuthListCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load auth manager.
-	authManager, err := loadAuthManagerForList()
+	authManager, err := loadAuthManagerForList(cmd, v)
 	if err != nil {
 		return err
 	}
@@ -389,10 +389,13 @@ func renderYAML(providers map[string]schema.Provider, identities map[string]sche
 }
 
 // loadAuthManagerForList loads the auth manager.
-func loadAuthManagerForList() (authTypes.AuthManager, error) {
+func loadAuthManagerForList(cmd *cobra.Command, v *viper.Viper) (authTypes.AuthManager, error) {
 	defer perf.Track(nil, "auth.loadAuthManagerForList")()
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
+	configAndStacksInfo := BuildConfigAndStacksInfo(cmd, v)
+
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}

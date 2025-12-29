@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	// IdentityFlagName is the name of the identity flag.
-	IdentityFlagName = "identity"
-	// IdentityFlagSelectValue is imported from cfg.IdentityFlagSelectValue.
+	// IdentityFlagName is the name of the identity flag (from pkg/config/const.go).
+	IdentityFlagName = cfg.IdentityFlagName
+	// IdentityFlagSelectValue is the sentinel value for interactive selection (from pkg/config/const.go).
 	IdentityFlagSelectValue = cfg.IdentityFlagSelectValue
 )
 

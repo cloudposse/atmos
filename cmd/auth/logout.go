@@ -77,19 +77,22 @@ func init() {
 func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	handleHelpRequest(cmd, args)
 
+	// Bind parsed flags to Viper for precedence (must be done before parsing global flags).
+	v := viper.GetViper()
+	if err := logoutParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
+	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
+	configAndStacksInfo := BuildConfigAndStacksInfo(cmd, v)
+
 	// Load atmos config.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
 
 	defer perf.Track(&atmosConfig, "auth.executeAuthLogoutCommand")()
-
-	// Bind parsed flags to Viper for precedence.
-	v := viper.GetViper()
-	if err := logoutParser.BindFlagsToViper(cmd, v); err != nil {
-		return err
-	}
 
 	// Create auth manager.
 	authManager, err := CreateAuthManager(&atmosConfig.Auth)
