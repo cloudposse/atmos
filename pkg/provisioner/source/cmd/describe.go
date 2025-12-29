@@ -57,7 +57,9 @@ func executeDescribe(cmd *cobra.Command, args []string, cfg *Config, parser *fla
 
 	stack := v.GetString("stack")
 	if stack == "" {
-		return errUtils.ErrRequiredFlagNotProvided
+		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+			WithExplanation("--stack flag is required").
+			Err()
 	}
 
 	// Get component configuration.
@@ -73,7 +75,11 @@ func executeDescribe(cmd *cobra.Command, args []string, cfg *Config, parser *fla
 	// Extract source configuration.
 	sourceSpec, err := source.ExtractSource(componentConfig)
 	if err != nil {
-		return err
+		return errUtils.Build(errUtils.ErrSourceInvalidSpec).
+			WithCause(err).
+			WithContext("component", component).
+			WithContext("stack", stack).
+			Err()
 	}
 
 	if sourceSpec == nil {

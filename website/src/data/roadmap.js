@@ -92,6 +92,7 @@ export const roadmapConfig = {
       pr: 1877,
       prd: 'provisioner-system',
       docs: '/cli/commands/terraform/source',
+      changelog: 'terraform-source-provisioner',
     },
     {
       id: 'native-ci',

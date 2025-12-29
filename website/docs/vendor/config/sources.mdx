@@ -94,11 +94,15 @@ spec:
   <dd>
   Optional retry configuration for handling transient network errors during download operations. This is useful for unreliable networks or when hitting rate limits.
 
+  :::note
+  When no retry configuration is provided, defaults apply. When a partial configuration is provided, only the specified fields are set—unspecified fields use zero values (e.g., `0` for attempts, `0s` for durations), not defaults.
+  :::
+
   ```yaml
   retry:
-    max_attempts: 5
-    initial_delay: 2s
-    max_delay: 60s
+    max_attempts: 3
+    initial_delay: 1s
+    max_delay: 10s
     backoff_strategy: exponential
     multiplier: 2.0
     random_jitter: 0.1
@@ -107,13 +111,13 @@ spec:
 
   <dl>
     <dt>`max_attempts`</dt>
-    <dd>Maximum number of retry attempts. Default: `3`</dd>
+    <dd>Maximum number of retry attempts. Default: `1` (no retries)</dd>
 
     <dt>`initial_delay`</dt>
-    <dd>Initial delay before the first retry. Default: `2s`</dd>
+    <dd>Initial delay before the first retry. Default: `100ms`</dd>
 
     <dt>`max_delay`</dt>
-    <dd>Maximum delay between retries. Default: `30s`</dd>
+    <dd>Maximum delay between retries. Default: `5s`</dd>
 
     <dt>`backoff_strategy`</dt>
     <dd>Strategy for increasing delay between retries. Values: `exponential`, `linear`, `constant`. Default: `exponential`</dd>
@@ -122,10 +126,10 @@ spec:
     <dd>Multiplier for exponential backoff. Default: `2.0`</dd>
 
     <dt>`random_jitter`</dt>
-    <dd>Random jitter factor (0.0-1.0) to add randomness to delays. Default: `0.1`</dd>
+    <dd>Random jitter factor (0.0-1.0) to add randomness to delays. Default: `0.0` (no jitter)</dd>
 
     <dt>`max_elapsed_time`</dt>
-    <dd>Maximum total time for all retry attempts. Default: `5m`</dd>
+    <dd>Maximum total time for all retry attempts. Default: `30m`</dd>
   </dl>
   </dd>
 </dl>

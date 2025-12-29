@@ -300,14 +300,25 @@ The source provisioner uses go-getter and supports multiple protocols:
 
 ### Git Sources
 
+Shortened GitHub syntax (recommended):
 ```yaml
 source:
   uri: github.com/cloudposse/terraform-aws-components//modules/vpc
   version: 1.450.0
+```
 
-# Also supports:
-# - git::https://github.com/org/repo.git//path
-# - git::ssh://git@github.com/org/repo.git//path
+Explicit HTTPS:
+```yaml
+source:
+  uri: git::https://github.com/org/repo.git//path
+  version: main
+```
+
+Explicit SSH:
+```yaml
+source:
+  uri: git::ssh://git@github.com/org/repo.git//path
+  version: main
 ```
 
 ### S3 Sources

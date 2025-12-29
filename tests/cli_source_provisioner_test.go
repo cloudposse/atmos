@@ -24,7 +24,7 @@ func TestSourceProvisionerDescribe_Success(t *testing.T) {
 func TestSourceProvisionerDescribe_URIWithRef(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/source-provisioner")
 
-	cmd.RootCmd.SetArgs([]string{"terraform", "source", "describe", "vpc-string", "--stack", "dev"})
+	cmd.RootCmd.SetArgs([]string{"terraform", "source", "describe", "vpc-inline-ref", "--stack", "dev"})
 
 	err := cmd.Execute()
 	require.NoError(t, err)
