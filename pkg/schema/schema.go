@@ -478,6 +478,10 @@ type StacksInherit struct {
 	// When true (default), all metadata fields except 'inherits' are inherited.
 	// When false, metadata is per-component only (legacy behavior).
 	Metadata *bool `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+	// Source controls whether source configuration is inherited from base components.
+	// When true (default), source configuration is inherited and deep merged.
+	// When false, source is per-component only.
+	Source *bool `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 }
 
 // IsMetadataInheritanceEnabled returns whether metadata inheritance is enabled.
@@ -487,6 +491,15 @@ func (s *StacksInherit) IsMetadataInheritanceEnabled() bool {
 		return true // Default to true.
 	}
 	return *s.Metadata
+}
+
+// IsSourceInheritanceEnabled returns whether source inheritance is enabled.
+// Defaults to true if not explicitly set.
+func (s *StacksInherit) IsSourceInheritanceEnabled() bool {
+	if s.Source == nil {
+		return true // Default to true.
+	}
+	return *s.Source
 }
 
 type Workflows struct {
@@ -890,6 +903,7 @@ type BaseComponentConfig struct {
 	BaseComponentBackendSection            AtmosSectionMapType
 	BaseComponentRemoteStateBackendType    string
 	BaseComponentRemoteStateBackendSection AtmosSectionMapType
+	BaseComponentSourceSection             AtmosSectionMapType
 	ComponentInheritanceChain              []string
 }
 
@@ -964,6 +978,7 @@ type AtmosVendorSource struct {
 	IncludedPaths []string           `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
 	ExcludedPaths []string           `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
 	Tags          []string           `yaml:"tags" json:"tags" mapstructure:"tags"`
+	Retry         *RetryConfig       `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 }
 
 // VendorConstraints defines version constraints for vendor updates.
@@ -1000,10 +1015,13 @@ type ComponentManifest struct {
 }
 
 type Vendor struct {
-	// Path to vendor configuration file or directory containing vendor files
-	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order
-	BasePath string     `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	List     ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
+	// Path to vendor configuration file or directory containing vendor files.
+	// If a directory is specified, all .yaml files in the directory will be processed in lexicographical order.
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	// List configuration for vendor list output.
+	List ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
+	// Retry configuration for vendor operations (global default).
+	Retry *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 }
 
 type ChromaStyle struct {

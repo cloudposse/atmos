@@ -433,7 +433,7 @@ func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName stri
 		s.File = vendorConfigFileName
 	}
 	if s.Source == "" {
-		return fmt.Errorf("%w `%s`", errUtils.ErrSourceMissing, s.File)
+		return fmt.Errorf("%w `%s`", errUtils.ErrVendorSourceMissing, s.File)
 	}
 	if len(s.Targets) == 0 {
 		return fmt.Errorf("%w for source '%s' in file '%s'", errUtils.ErrTargetsMissing, s.Source, s.File)

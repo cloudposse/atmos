@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Component with BOTH source AND workdir enabled
+# This demonstrates the combined workflow:
+# 1. Source provisioner vendors to components/terraform/vpc-remote-workdir/
+# 2. Workdir provisioner copies to .workdir/terraform/<stack>-vpc-remote-workdir/
+# 3. Terraform runs in the isolated workdir
+
+components:
+  terraform:
+    vpc-remote-workdir:
+      source:
+        uri: "github.com/cloudposse/terraform-null-label//exports"
+        version: "0.25.0"
+        included_paths:
+          - "*.tf"
+        excluded_paths:
+          - "*.md"
+          - "examples/**"
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        enabled: true
+        environment: "source-with-workdir"
