@@ -12,7 +12,7 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Use these commands to manage Helmfile component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using the top-level `source` field without requiring a separate `component.yaml` file.
+Use these commands to manage Helmfile component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using the top-level `source` field without requiring a separate `component.yaml` file. Sources are automatically provisioned when running helmfile commands—just run `atmos helmfile sync` and the source is downloaded on first use.
 </Intro>
 
 <ActionCard title="Source-Based Version Pinning">
@@ -33,6 +33,28 @@ atmos helmfile source <subcommand> [options]
 ## Subcommands
 
 <DocCardList />
+
+## Automatic Provisioning
+
+Sources are automatically provisioned when running any helmfile command. If a component has `source` configured and the target directory doesn't exist, Atmos downloads the source before running helmfile:
+
+```shell
+# Source is automatically provisioned on first use
+atmos helmfile sync ingress-nginx --stack dev
+# → Auto-provisioning source for component 'ingress-nginx'
+# → Auto-provisioned source to components/helmfile/ingress-nginx
+# → Helmfile runs
+```
+
+This means you can simply configure your component's source and run helmfile—no explicit vendor step needed.
+
+## CLI Commands
+
+The explicit CLI commands are useful for fine-grained control:
+- Force re-vendor to get the latest version
+- Describe source configuration
+- Delete vendored sources
+- List components with sources
 
 ## How It Works
 

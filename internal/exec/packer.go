@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -75,14 +77,37 @@ func ExecutePacker(
 
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		// Get the base path for the error message, respecting the user's actual config.
-		basePath, _ := u.GetComponentBasePath(&atmosConfig, "packer")
-		return fmt.Errorf("%w: Atmos component `%s` points to the Packer component `%s`, but it does not exist in `%s`",
-			errUtils.ErrInvalidComponent,
-			info.ComponentFromArg,
-			info.FinalComponent,
-			basePath,
-		)
+		// Check if component has source configured for JIT provisioning.
+		if provSource.HasSource(info.ComponentSection) {
+			// Run JIT source provisioning before path validation.
+			ctx := context.Background()
+			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, info.ComponentSection, info.AuthContext); err != nil {
+				return fmt.Errorf("failed to auto-provision component source: %w", err)
+			}
+
+			// Check if source provisioner set a workdir path (source + workdir case).
+			// If so, use that path instead of the component path.
+			if workdirPath, ok := info.ComponentSection[provSource.WorkdirPathKey].(string); ok {
+				componentPath = workdirPath
+				componentPathExists = true
+				err = nil // Clear any previous error since we have a valid workdir path.
+			} else {
+				// Re-check if component path now exists after provisioning (source only case).
+				componentPathExists, err = u.IsDirectory(componentPath)
+			}
+		}
+
+		// If still doesn't exist, return the error.
+		if err != nil || !componentPathExists {
+			// Get the base path for the error message, respecting the user's actual config.
+			basePath, _ := u.GetComponentBasePath(&atmosConfig, "packer")
+			return fmt.Errorf("%w: Atmos component `%s` points to the Packer component `%s`, but it does not exist in `%s`",
+				errUtils.ErrInvalidComponent,
+				info.ComponentFromArg,
+				info.FinalComponent,
+				basePath,
+			)
+		}
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute).
