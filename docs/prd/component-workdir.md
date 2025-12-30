@@ -393,7 +393,7 @@ terraform:
 | `ErrSourceDownload` | Failed to download component source |
 | `ErrSourceCacheRead` | Failed to read source cache |
 | `ErrSourceCacheWrite` | Failed to write source cache |
-| `ErrInvalidSource` | Invalid metadata.source configuration |
+| `ErrInvalidSource` | Invalid source configuration |
 
 ---
 

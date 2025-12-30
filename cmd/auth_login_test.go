@@ -2,14 +2,20 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"os"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -289,10 +295,10 @@ func TestExecuteAuthLoginCommand(t *testing.T) {
 		errorContains string
 	}{
 		{
-			name:          "no identity configured - uses GetDefaultIdentity",
+			name:          "no identity or provider configured - falls back to provider then fails",
 			identityFlag:  "",
 			expectError:   true,
-			errorContains: "no default identity configured",
+			errorContains: "no providers available", // Changed: now falls back to provider auth first.
 		},
 		{
 			name:          "explicit identity but no auth config",
@@ -494,6 +500,386 @@ func TestIdentitySelectorBehavior(t *testing.T) {
 
 			// Should not error in test (we're just validating selector logic).
 			require.NoError(t, err, "Test command should not error")
+		})
+	}
+}
+
+// TestGetProviderForFallback tests the provider fallback logic when no identities are configured.
+func TestGetProviderForFallback(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tests := []struct {
+		name           string
+		providers      []string
+		expectedResult string
+		expectError    bool
+		errorIs        error
+		description    string
+	}{
+		{
+			name:           "single provider auto-selects",
+			providers:      []string{"sso-prod"},
+			expectedResult: "sso-prod",
+			expectError:    false,
+			description:    "When only one provider is configured, it should be auto-selected",
+		},
+		{
+			name:        "no providers returns error",
+			providers:   []string{},
+			expectError: true,
+			errorIs:     errUtils.ErrNoProvidersAvailable,
+			description: "When no providers are configured, should return ErrNoProvidersAvailable",
+		},
+		{
+			name:        "multiple providers in non-interactive mode returns error",
+			providers:   []string{"sso-prod", "sso-dev"},
+			expectError: true,
+			errorIs:     errUtils.ErrNoDefaultProvider,
+			description: "When multiple providers exist and not interactive, should return ErrNoDefaultProvider",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			// Create a mock auth manager that returns the configured providers.
+			mockManager := &mockAuthManagerForProviderFallback{
+				providers: tt.providers,
+			}
+
+			result, err := getProviderForFallback(mockManager)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorIs != nil {
+					assert.ErrorIs(t, err, tt.errorIs)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedResult, result)
+			}
+		})
+	}
+}
+
+// mockAuthManagerForProviderFallback is a minimal mock for testing getProviderForFallback.
+type mockAuthManagerForProviderFallback struct {
+	providers []string
+}
+
+func (m *mockAuthManagerForProviderFallback) ListProviders() []string {
+	return m.providers
+}
+
+// TestPromptForProvider tests the provider prompt function.
+func TestPromptForProvider(t *testing.T) {
+	_ = NewTestKit(t)
+
+	t.Run("empty providers list returns error", func(t *testing.T) {
+		_, err := promptForProvider("Select a provider:", []string{})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrNoProvidersAvailable)
+	})
+}
+
+// TestFormatDuration tests the formatDuration function with various duration values.
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration time.Duration
+		expected string
+	}{
+		{
+			name:     "expired (negative duration)",
+			duration: -1 * time.Hour,
+			expected: "expired",
+		},
+		{
+			name:     "hours and minutes",
+			duration: 2*time.Hour + 30*time.Minute,
+			expected: "2h 30m",
+		},
+		{
+			name:     "only hours",
+			duration: 3 * time.Hour,
+			expected: "3h 0m",
+		},
+		{
+			name:     "only minutes",
+			duration: 45 * time.Minute,
+			expected: "45m 0s",
+		},
+		{
+			name:     "minutes and seconds",
+			duration: 5*time.Minute + 30*time.Second,
+			expected: "5m 30s",
+		},
+		{
+			name:     "only seconds",
+			duration: 45 * time.Second,
+			expected: "45s",
+		},
+		{
+			name:     "zero duration",
+			duration: 0,
+			expected: "0s",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatDuration(tt.duration)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestDisplayAuthSuccess tests the displayAuthSuccess function output formatting.
+func TestDisplayAuthSuccess(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Capture stderr output.
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	// Create test whoami info with all fields.
+	expiration := time.Now().Add(1 * time.Hour)
+	whoami := &authTypes.WhoamiInfo{
+		Provider:   "test-provider",
+		Identity:   "test-identity",
+		Account:    "123456789012",
+		Region:     "us-east-1",
+		Expiration: &expiration,
+	}
+
+	// Call the function.
+	displayAuthSuccess(whoami)
+
+	// Restore stderr and read output.
+	w.Close()
+	os.Stderr = oldStderr
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+	output := buf.String()
+
+	// Verify output contains expected content.
+	assert.Contains(t, output, "Authentication successful")
+	assert.Contains(t, output, "test-provider")
+	assert.Contains(t, output, "test-identity")
+	assert.Contains(t, output, "123456789012")
+	assert.Contains(t, output, "us-east-1")
+}
+
+// TestDisplayAuthSuccessMinimalFields tests displayAuthSuccess with minimal fields.
+func TestDisplayAuthSuccessMinimalFields(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Capture stderr output.
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	// Create test whoami info with only required fields.
+	whoami := &authTypes.WhoamiInfo{
+		Provider: "minimal-provider",
+		Identity: "minimal-identity",
+		// Account, Region, and Expiration are empty/nil.
+	}
+
+	// Call the function.
+	displayAuthSuccess(whoami)
+
+	// Restore stderr and read output.
+	w.Close()
+	os.Stderr = oldStderr
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+	output := buf.String()
+
+	// Verify output contains expected content.
+	assert.Contains(t, output, "Authentication successful")
+	assert.Contains(t, output, "minimal-provider")
+	assert.Contains(t, output, "minimal-identity")
+}
+
+// TestIsInteractive tests the isInteractive function.
+// Note: This test may behave differently in CI vs local environments.
+func TestIsInteractive(t *testing.T) {
+	// The function checks term.IsTTYSupportForStdin() && !telemetry.IsCI().
+	// In CI environments, this should return false.
+	// In local terminal environments, it depends on stdin TTY status.
+	result := isInteractive()
+
+	// We can't assert a specific value since it depends on the environment,
+	// but we can verify the function doesn't panic and returns a boolean.
+	assert.IsType(t, true, result)
+}
+
+// TestCreateAuthManagerExported tests the exported CreateAuthManager wrapper function.
+func TestCreateAuthManagerExported(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tests := []struct {
+		name        string
+		config      *schema.AuthConfig
+		expectError bool
+	}{
+		{
+			name: "valid config",
+			config: &schema.AuthConfig{
+				Providers: map[string]schema.Provider{
+					"test-provider": {
+						Kind:     "aws/iam-identity-center",
+						Region:   "us-east-1",
+						StartURL: "https://test.awsapps.com/start",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:        "nil config returns error",
+			config:      nil,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager, err := CreateAuthManager(tt.config)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Nil(t, manager)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, manager)
+			}
+		})
+	}
+}
+
+// TestAuthenticateIdentity tests the authenticateIdentity function.
+// Note: This test covers the default identity and provider fallback paths.
+// The --identity flag path is covered by TestResolveIdentityName_PersistentFlag_WithNoOptDefVal
+// in auth_console_test.go which properly tests GetIdentityFromFlags behavior.
+func TestAuthenticateIdentity(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Test cases that don't depend on os.Args parsing.
+	// These cover the default identity fallback and error paths.
+	tests := []struct {
+		name                   string
+		mockDefaultIdentity    string
+		mockDefaultErr         error
+		mockAuthenticateResult *authTypes.WhoamiInfo
+		mockAuthenticateErr    error
+		expectWhoami           bool
+		expectNeedsFallback    bool
+		expectError            bool
+		errorContains          string
+	}{
+		{
+			name:                "falls back to default identity when no flag",
+			mockDefaultIdentity: "default-identity",
+			mockAuthenticateResult: &authTypes.WhoamiInfo{
+				Provider: "test-provider",
+				Identity: "default-identity",
+			},
+			expectWhoami:        true,
+			expectNeedsFallback: false,
+			expectError:         false,
+		},
+		{
+			name:                "no identities available triggers provider fallback",
+			mockDefaultIdentity: "",
+			mockDefaultErr:      errUtils.ErrNoIdentitiesAvailable,
+			expectWhoami:        false,
+			expectNeedsFallback: true,
+			expectError:         false,
+		},
+		{
+			name:                "no default identity triggers provider fallback",
+			mockDefaultIdentity: "",
+			mockDefaultErr:      errUtils.ErrNoDefaultIdentity,
+			expectWhoami:        false,
+			expectNeedsFallback: true,
+			expectError:         false,
+		},
+		{
+			name:                   "authentication failure returns error",
+			mockDefaultIdentity:    "default-identity",
+			mockAuthenticateResult: nil,
+			mockAuthenticateErr:    fmt.Errorf("authentication failed"),
+			expectWhoami:           false,
+			expectNeedsFallback:    false,
+			expectError:            true,
+			errorContains:          "authentication failed",
+		},
+		{
+			name:                "other GetDefaultIdentity error returns error",
+			mockDefaultIdentity: "",
+			mockDefaultErr:      fmt.Errorf("unexpected error"),
+			expectWhoami:        false,
+			expectNeedsFallback: false,
+			expectError:         true,
+			errorContains:       "unexpected error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			// Ensure Viper doesn't have stale identity value.
+			viper.GetViper().Set("identity", "")
+
+			// Create command with identity flag (but no flag value set).
+			cmd := &cobra.Command{Use: "login"}
+			cmd.Flags().StringP("identity", "i", "", "identity name")
+
+			// Create gomock controller and mock auth manager.
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockManager := authTypes.NewMockAuthManager(ctrl)
+
+			// No identity flag - will call GetDefaultIdentity.
+			// Since os.Args won't have --identity, GetIdentityFromFlags returns "".
+			if tt.mockDefaultErr != nil {
+				mockManager.EXPECT().GetDefaultIdentity(false).Return("", tt.mockDefaultErr)
+			} else {
+				mockManager.EXPECT().GetDefaultIdentity(false).Return(tt.mockDefaultIdentity, nil)
+				// Will then call Authenticate.
+				if tt.mockAuthenticateErr != nil {
+					mockManager.EXPECT().Authenticate(gomock.Any(), tt.mockDefaultIdentity).Return(nil, tt.mockAuthenticateErr)
+				} else {
+					mockManager.EXPECT().Authenticate(gomock.Any(), tt.mockDefaultIdentity).Return(tt.mockAuthenticateResult, nil)
+				}
+			}
+
+			// Call authenticateIdentity.
+			ctx := context.Background()
+			whoami, needsFallback, err := authenticateIdentity(ctx, cmd, mockManager)
+
+			// Verify expectations.
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorContains != "" {
+					assert.Contains(t, err.Error(), tt.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+
+			assert.Equal(t, tt.expectNeedsFallback, needsFallback)
+
+			if tt.expectWhoami {
+				assert.NotNil(t, whoami)
+			} else {
+				assert.Nil(t, whoami)
+			}
 		})
 	}
 }
