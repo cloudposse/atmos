@@ -12,11 +12,11 @@ USAGE
 
 FLAGS
 
-  -f, --format string  Output format: bash, json, dotenv. (default bash)
+  -f, --format string  Output format: bash, json, dotenv (default bash)
 
   -h, --help           help for env
 
-      --login          Trigger authentication if credentials are missing or expired (default: false)
+      --login          Trigger authentication if credentials are missing or expired
 
 
 GLOBAL FLAGS
