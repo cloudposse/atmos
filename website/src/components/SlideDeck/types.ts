@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import React, { ReactNode } from 'react';
 
 // Slide layout variants.
 export type SlideLayout = 'title' | 'content' | 'split' | 'code' | 'quote';
@@ -82,6 +82,10 @@ export interface SlideDeckContextValue {
   prevSlide: () => void;
   isFullscreen: boolean;
   toggleFullscreen: () => void;
+  showNotes: boolean;
+  toggleNotes: () => void;
+  currentNotes: React.ReactNode | null;
+  setCurrentNotes: (notes: React.ReactNode | null) => void;
 }
 
 // Metadata for slide deck index page.
@@ -98,4 +102,15 @@ export interface SlideDeckMeta {
 export interface SlideIndexProps {
   decks: SlideDeckMeta[];
   className?: string;
+}
+
+// Props for SlideNotes component.
+export interface SlideNotesProps {
+  children: ReactNode;
+}
+
+// Props for SlideNotesPanel component.
+export interface SlideNotesPanelProps {
+  isOpen: boolean;
+  onClose: () => void;
 }

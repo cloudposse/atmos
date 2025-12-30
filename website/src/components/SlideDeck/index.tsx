@@ -2,6 +2,7 @@
 import './SlideContent.css';
 import './SlideDrawer.css';
 import './SlideImage.css';
+import './SlideNotes.css';
 import './Tooltip.css';
 
 export { SlideDeck } from './SlideDeck';
@@ -15,6 +16,8 @@ export { SlideImage } from './SlideImage';
 export { SlideSplit } from './SlideSplit';
 export { SlideIndex } from './SlideIndex';
 export { SlideDrawer } from './SlideDrawer';
+export { SlideNotes } from './SlideNotes';
+export { SlideNotesPanel } from './SlideNotesPanel';
 export { Tooltip } from './Tooltip';
 
 // Context exports for advanced usage.
@@ -35,4 +38,6 @@ export type {
   SlideDeckContextValue,
   SlideDeckMeta,
   SlideIndexProps,
+  SlideNotesProps,
+  SlideNotesPanelProps,
 } from './types';

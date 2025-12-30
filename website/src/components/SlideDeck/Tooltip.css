@@ -2,6 +2,7 @@
 .tooltip-wrapper {
   position: relative;
   display: inline-flex;
+  align-self: center;
 }
 
 .tooltip {

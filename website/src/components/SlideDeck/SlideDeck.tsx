@@ -1,11 +1,24 @@
-import React, { useEffect, useCallback, useState, useRef, Children, isValidElement } from 'react';
+import React, { useEffect, useCallback, useState, useRef, Children, isValidElement, ReactElement } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RiArrowLeftSLine, RiArrowRightSLine, RiFullscreenLine, RiFullscreenExitLine, RiMenuLine } from 'react-icons/ri';
+import { RiArrowLeftSLine, RiArrowRightSLine, RiFullscreenLine, RiFullscreenExitLine, RiMenuLine, RiSpeakLine } from 'react-icons/ri';
 import { SlideDeckProvider, useSlideDeck } from './SlideDeckContext';
 import { SlideDrawer } from './SlideDrawer';
+import { SlideNotesPanel } from './SlideNotesPanel';
+import { SlideNotes } from './SlideNotes';
 import { Tooltip } from './Tooltip';
 import type { SlideDeckProps } from './types';
 import './SlideDeck.css';
+
+// Helper to extract SlideNotes content from a slide's children.
+function extractNotesFromSlide(slideElement: ReactElement): React.ReactNode | null {
+  const slideChildren = Children.toArray(slideElement.props?.children);
+  for (const child of slideChildren) {
+    if (isValidElement(child) && child.type === SlideNotes) {
+      return child.props.children;
+    }
+  }
+  return null;
+}
 
 interface SlideDeckInnerProps {
   children: React.ReactNode;
@@ -33,6 +46,9 @@ function SlideDeckInner({
     prevSlide,
     isFullscreen,
     toggleFullscreen,
+    showNotes,
+    toggleNotes,
+    setCurrentNotes,
   } = useSlideDeck();
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -96,11 +112,23 @@ function SlideDeckInner({
     // Show controls on any key press.
     showControlsTemporarily();
 
-    // Close drawer on Escape.
-    if (e.key === 'Escape' && isDrawerOpen) {
-      e.preventDefault();
-      closeDrawer();
-      return;
+    // Close drawer or notes panel on Escape.
+    if (e.key === 'Escape') {
+      if (isDrawerOpen) {
+        e.preventDefault();
+        closeDrawer();
+        return;
+      }
+      if (showNotes) {
+        e.preventDefault();
+        toggleNotes();
+        return;
+      }
+      if (isFullscreen) {
+        e.preventDefault();
+        toggleFullscreen();
+        return;
+      }
     }
 
     if (e.key === 'ArrowRight' || e.key === ' ') {
@@ -109,17 +137,17 @@ function SlideDeckInner({
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
       prevSlide();
-    } else if (e.key === 'Escape' && isFullscreen) {
-      e.preventDefault();
-      toggleFullscreen();
     } else if (e.key === 'f' || e.key === 'F') {
       e.preventDefault();
       toggleFullscreen();
     } else if (e.key === 'g' || e.key === 'G') {
       e.preventDefault();
       setIsDrawerOpen(prev => !prev);
+    } else if (e.key === 'n' || e.key === 'N') {
+      e.preventDefault();
+      toggleNotes();
     }
-  }, [nextSlide, prevSlide, isFullscreen, toggleFullscreen, isDrawerOpen, closeDrawer, showControlsTemporarily]);
+  }, [nextSlide, prevSlide, isFullscreen, toggleFullscreen, isDrawerOpen, closeDrawer, showControlsTemporarily, showNotes, toggleNotes]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -139,10 +167,20 @@ function SlideDeckInner({
   }, []);
 
   // Convert children to array and get current slide.
-  const slides = Children.toArray(children).filter(isValidElement);
+  const slides = Children.toArray(children).filter(isValidElement) as ReactElement[];
   const currentSlideElement = slides[currentSlide - 1];
 
-  const controlsVisible = showControls || isDrawerOpen;
+  // Extract and set notes when slide changes.
+  useEffect(() => {
+    if (currentSlideElement) {
+      const notes = extractNotesFromSlide(currentSlideElement);
+      setCurrentNotes(notes);
+    } else {
+      setCurrentNotes(null);
+    }
+  }, [currentSlide, currentSlideElement, setCurrentNotes]);
+
+  const controlsVisible = showControls || isDrawerOpen || showNotes;
 
   return (
     <div
@@ -218,6 +256,16 @@ function SlideDeckInner({
           </Tooltip>
         )}
 
+        <Tooltip content={showNotes ? 'Hide Notes (N)' : 'Speaker Notes (N)'} position="top">
+          <button
+            className={`slide-deck__tool-button ${showNotes ? 'slide-deck__tool-button--active' : ''}`}
+            onClick={toggleNotes}
+            aria-label={showNotes ? 'Hide speaker notes' : 'Show speaker notes'}
+          >
+            <RiSpeakLine />
+          </button>
+        </Tooltip>
+
         {showProgress && (
           <div className="slide-deck__progress">
             {currentSlide} / {totalSlides}
@@ -251,6 +299,9 @@ function SlideDeckInner({
           {children}
         </SlideDrawer>
       )}
+
+      {/* Speaker notes panel */}
+      <SlideNotesPanel isOpen={showNotes} onClose={toggleNotes} />
     </div>
   );
 }

@@ -9,6 +9,45 @@
   overflow: hidden;
 }
 
+/* Break out of Docusaurus content container to use full viewport width */
+.markdown .slide-deck,
+.theme-doc-markdown .slide-deck {
+  width: 100vw;
+  max-width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  margin-right: calc(-50vw + 50%);
+  /* Limit height to keep controls visible - navbar ~60px, toolbar ~50px */
+  height: calc(100vh - 110px);
+  max-height: calc(100vh - 110px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Constrain the main area when in page mode */
+.markdown .slide-deck .slide-deck__main,
+.theme-doc-markdown .slide-deck .slide-deck__main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.markdown .slide-deck .slide-deck__container,
+.theme-doc-markdown .slide-deck .slide-deck__container {
+  padding-top: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.markdown .slide-deck .slide-deck__slide-wrapper,
+.theme-doc-markdown .slide-deck .slide-deck__slide-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: calc((100vh - 160px) * 16 / 9);
+  aspect-ratio: 16 / 9;
+}
+
 html[data-theme='dark'] .slide-deck {
   /* No extra styling needed - inherits page background */
 }
@@ -217,6 +256,21 @@ html[data-theme='dark'] .slide-deck__toolbar {
 
 html[data-theme='dark'] .slide-deck__tool-button:hover:not(:disabled) {
   background: var(--ifm-color-emphasis-200);
+}
+
+/* Active state for toggle buttons */
+.slide-deck__tool-button--active {
+  color: var(--ifm-color-primary);
+  background: var(--ifm-color-primary-lightest);
+}
+
+html[data-theme='dark'] .slide-deck__tool-button--active {
+  background: rgba(30, 91, 184, 0.2);
+}
+
+.slide-deck--fullscreen .slide-deck__tool-button--active {
+  color: var(--ifm-color-primary-light);
+  background: rgba(30, 91, 184, 0.3);
 }
 
 .slide-deck__progress {

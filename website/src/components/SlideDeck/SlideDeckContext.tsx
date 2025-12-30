@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo } from 'react';
 import type { SlideDeckContextValue } from './types';
 
 const SlideDeckContext = createContext<SlideDeckContextValue | null>(null);
@@ -16,6 +16,8 @@ export function SlideDeckProvider({
 }: SlideDeckProviderProps) {
   const [currentSlide, setCurrentSlide] = useState(startSlide);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const [currentNotes, setCurrentNotes] = useState<React.ReactNode | null>(null);
 
   // Sync with URL hash on mount.
   useEffect(() => {
@@ -93,7 +95,11 @@ export function SlideDeckProvider({
     }
   }, []);
 
-  const value: SlideDeckContextValue = {
+  const toggleNotes = useCallback(() => {
+    setShowNotes(prev => !prev);
+  }, []);
+
+  const value: SlideDeckContextValue = useMemo(() => ({
     currentSlide,
     totalSlides,
     goToSlide,
@@ -101,7 +107,11 @@ export function SlideDeckProvider({
     prevSlide,
     isFullscreen,
     toggleFullscreen,
-  };
+    showNotes,
+    toggleNotes,
+    currentNotes,
+    setCurrentNotes,
+  }), [currentSlide, totalSlides, goToSlide, nextSlide, prevSlide, isFullscreen, toggleFullscreen, showNotes, toggleNotes, currentNotes]);
 
   return (
     <SlideDeckContext.Provider value={value}>
