@@ -101,7 +101,7 @@ func ExecutePacker(
 		if err != nil || !componentPathExists {
 			// Get the base path for the error message, respecting the user's actual config.
 			basePath, _ := u.GetComponentBasePath(&atmosConfig, "packer")
-			return fmt.Errorf("%w: Atmos component `%s` points to the Packer component `%s`, but it does not exist in `%s`",
+			return fmt.Errorf("%w: '%s' points to the Packer component '%s', but it does not exist in '%s'",
 				errUtils.ErrInvalidComponent,
 				info.ComponentFromArg,
 				info.FinalComponent,
@@ -112,7 +112,7 @@ func ExecutePacker(
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute).
 	if (info.SubCommand == "build") && info.ComponentIsAbstract {
-		return fmt.Errorf("%w: component `%s` is abstract and cannot be provisioned (`metadata.type = abstract`)",
+		return fmt.Errorf("%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
 			errUtils.ErrAbstractComponentCantBeProvisioned,
 			filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
@@ -122,7 +122,7 @@ func ExecutePacker(
 		// Allow read-only commands, block modification commands.
 		switch info.SubCommand {
 		case "build":
-			return fmt.Errorf("%w: component `%s` is locked and cannot be modified (`metadata.locked = true`)",
+			return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
 				errUtils.ErrLockedComponentCantBeProvisioned,
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
 		}

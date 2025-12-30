@@ -126,7 +126,8 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		// Allow read-only commands, block modification commands.
 		switch info.SubCommand {
 		case "sync", "apply", "deploy", "delete", "destroy":
-			return fmt.Errorf("component `%s` is locked and cannot be modified (metadata.locked = true)",
+			return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
+				errUtils.ErrLockedComponentCantBeProvisioned,
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
 		}
 	}
