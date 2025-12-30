@@ -31,6 +31,7 @@ Valid subcommands are:
 • refresh
 • shell
 • show
+• source
 • state
 • taint
 • test

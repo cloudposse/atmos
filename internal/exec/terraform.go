@@ -24,6 +24,8 @@ import (
 
 	// Import backend provisioner to register S3 provisioner.
 	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
+	// Import source provisioner for JIT source provisioning.
+	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	// Import workdir provisioner to register workdir provisioner.
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 
@@ -214,14 +216,38 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		// Get the base path for the error message, respecting the user's actual config.
-		basePath, _ := u.GetComponentBasePath(&atmosConfig, "terraform")
-		return fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
-			errUtils.ErrInvalidTerraformComponent,
-			info.ComponentFromArg,
-			info.FinalComponent,
-			basePath,
-		)
+		// Check if component has source configured for JIT provisioning.
+		if provSource.HasSource(info.ComponentSection) {
+			// Run JIT source provisioning before path validation.
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.TerraformComponentType, info.ComponentSection, info.AuthContext); err != nil {
+				return fmt.Errorf("failed to auto-provision component source: %w", err)
+			}
+
+			// Check if source provisioner set a workdir path (source + workdir case).
+			// If so, use that path instead of the component path.
+			if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
+				componentPath = workdirPath
+				componentPathExists = true
+				err = nil // Clear any previous error since we have a valid workdir path.
+			} else {
+				// Re-check if component path now exists after provisioning (source only case).
+				componentPathExists, err = u.IsDirectory(componentPath)
+			}
+		}
+
+		// If still doesn't exist, return the error.
+		if err != nil || !componentPathExists {
+			// Get the base path for the error message, respecting the user's actual config.
+			basePath, _ := u.GetComponentBasePath(&atmosConfig, "terraform")
+			return fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
+				errUtils.ErrInvalidTerraformComponent,
+				info.ComponentFromArg,
+				info.FinalComponent,
+				basePath,
+			)
+		}
 	}
 
 	// Check if the component is allowed to be provisioned (the `metadata.type` attribute is not set to `abstract`).

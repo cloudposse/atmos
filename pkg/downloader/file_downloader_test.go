@@ -131,7 +131,7 @@ func TestFileDownloader_FetchAndAutoParse_DownloadError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "failed to download file")
+	assert.ErrorIs(t, err, errUtils.ErrDownloadFile)
 }
 
 func TestFileDownloader_FetchAndParseByExtension(t *testing.T) {
@@ -199,7 +199,7 @@ func TestFileDownloader_FetchAndParseByExtension_DownloadError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "failed to download file")
+	assert.ErrorIs(t, err, errUtils.ErrDownloadFile)
 }
 
 func TestFileDownloader_FetchAndParseRaw(t *testing.T) {
@@ -242,7 +242,7 @@ func TestFileDownloader_FetchAndParseRaw_DownloadError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "failed to download file")
+	assert.ErrorIs(t, err, errUtils.ErrDownloadFile)
 }
 
 func TestFileDownloader_FetchData_DownloadError(t *testing.T) {
@@ -258,7 +258,7 @@ func TestFileDownloader_FetchData_DownloadError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, data)
-	assert.Contains(t, err.Error(), "failed to download file")
+	assert.ErrorIs(t, err, errUtils.ErrDownloadFile)
 }
 
 func TestFileDownloader_FetchData_ReadError(t *testing.T) {

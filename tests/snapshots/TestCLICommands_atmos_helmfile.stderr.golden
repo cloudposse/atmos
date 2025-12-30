@@ -8,6 +8,7 @@ Valid subcommands are:
 • destroy
 • diff
 • generate
+• source
 • sync
 • version
 
