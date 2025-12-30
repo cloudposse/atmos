@@ -24,6 +24,15 @@ Vendoring gives teams local control over external dependencies by bringing compo
 - The pragmatic approach that emerged from countless projects
 </KeyPoints>
 
+:::tip Alternative: Source-Based Versioning
+For simpler per-environment version pinning without managing vendor manifests, consider [source-based versioning](/design-patterns/version-management/source-based-versioning). Use vendoring when you need:
+- Immutable audit trail of vendored code in Git
+- Code review of dependency changes before deployment
+- Offline/air-gapped deployment capability
+- Local modifications to vendored components
+- Full context for AI coding assistants (Claude Code, Cursor, Copilot)
+:::
+
 ## Philosophy: Explicit Over Implicit
 
 Most tools that "pin to remote sources" actually do this behind the scenes:
@@ -609,6 +618,7 @@ Vendoring is about taking ownership of your dependencies. Use it when external c
 
 ## Related Patterns
 
+- [Source-Based Version Pinning](./source-based-versioning) - JIT versioning via stack configuration
 - [Versioning Schemes](./versioning-schemes) - Works with any scheme - vendor to SemVer folders, maturity tracks, etc.
 - [Folder-Based Versioning](./folder-based-versioning) - Version through repository structure
 - [Release Tracks/Channels](./release-tracks-channels) - Abstract version management
