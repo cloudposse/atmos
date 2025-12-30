@@ -8,15 +8,7 @@ import { Tooltip } from './Tooltip';
 import type { SlideDeckProps } from './types';
 import './SlideDeck.css';
 
-interface SlideDeckInnerProps {
-  children: React.ReactNode;
-  title?: string;
-  showProgress?: boolean;
-  showNavigation?: boolean;
-  showFullscreen?: boolean;
-  showDrawer?: boolean;
-  className?: string;
-}
+type SlideDeckInnerProps = Omit<SlideDeckProps, 'startSlide'>;
 
 function SlideDeckInner({
   children,
@@ -96,6 +88,14 @@ function SlideDeckInner({
 
   // Keyboard navigation.
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // Don't intercept keys when user is typing in form elements.
+    const target = e.target as HTMLElement;
+    const isEditable =
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.isContentEditable;
+    if (isEditable) return;
+
     // Show controls on any key press.
     showControlsTemporarily();
 
@@ -163,6 +163,8 @@ function SlideDeckInner({
     <div
       className={`slide-deck ${isFullscreen ? 'slide-deck--fullscreen' : ''} ${controlsVisible ? '' : 'slide-deck--controls-hidden'} ${className}`}
       data-slide-deck
+      role="region"
+      aria-label={title}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >

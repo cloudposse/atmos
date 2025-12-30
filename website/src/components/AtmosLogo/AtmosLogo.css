@@ -16,8 +16,8 @@
   bottom: 0;
   right: 0;
   /* Exact gradient from custom.css */
-  background: linear-gradient(-45deg, rgba(235, 26, 26, 0.5), rgba(88, 60, 231, 0.5), rgba(46, 200, 255, 0.5), rgba(35, 213, 171, 0.5));
   background: -webkit-linear-gradient(-45deg, rgba(235, 26, 26, 0.5), rgba(88, 60, 231, 0.5), rgba(46, 200, 255, 0.5), rgba(35, 213, 171, 0.5));
+  background: linear-gradient(-45deg, rgba(235, 26, 26, 0.5), rgba(88, 60, 231, 0.5), rgba(46, 200, 255, 0.5), rgba(35, 213, 171, 0.5));
   background-size: 300% 300%;
   mix-blend-mode: color;
   animation: gradient 15s ease infinite;
