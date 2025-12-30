@@ -93,12 +93,11 @@ Two new events are logged:
 |----|-------------|----------|
 | FR-1 | Support browser-based OAuth2 authentication flow | P0 |
 | FR-2 | Support headless/remote mode with manual code entry | P0 |
-| FR-3 | Cache credentials following AWS CLI conventions | P0 |
-| FR-4 | Validate AWS CLI version >= 2.32.0 | P0 |
-| FR-5 | Integrate with existing `aws/assume-role` identity for role chaining | P0 |
-| FR-6 | Support multiple profiles/providers | P1 |
-| FR-7 | Display authentication status with spinner UI | P1 |
-| FR-8 | Auto-detect non-TTY and switch to remote mode | P2 |
+| FR-3 | Cache credentials in atmos credential store | P0 |
+| FR-4 | Integrate with existing `aws/assume-role` identity for role chaining | P0 |
+| FR-5 | Support multiple identities with browser auth fallback | P1 |
+| FR-6 | Display authentication status with spinner UI | P1 |
+| FR-7 | Auto-detect non-TTY and switch to remote mode | P2 |
 
 ### Non-Functional Requirements
 
