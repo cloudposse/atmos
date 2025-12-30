@@ -428,6 +428,8 @@ func TestWrapProvisionError(t *testing.T) {
 			require.Error(t, result)
 			// Verify error is of expected type.
 			assert.ErrorIs(t, result, errUtils.ErrSourceProvision)
+			// Note: Explanation and context are stored in ErrorBuilder enrichments
+			// but not included in the .Error() string representation.
 		})
 	}
 }
