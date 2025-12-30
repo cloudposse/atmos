@@ -720,6 +720,7 @@ var (
 	ErrPathResolutionFailed   = errors.New("failed to resolve component from path")
 	ErrPathIsComponentBase    = errors.New("must specify a component directory, not the base directory")
 	ErrAmbiguousComponentPath = errors.New("ambiguous component path")
+	ErrComponentPathNotFound  = errors.New("component path does not exist")
 
 	// Interactive prompt errors.
 	ErrInteractiveModeNotAvailable = errors.New("interactive mode not available")

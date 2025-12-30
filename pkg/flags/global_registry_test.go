@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 )
 
 func TestParseIdentityFlag_NormalizesDisabledValues(t *testing.T) {
@@ -470,6 +471,16 @@ func TestGlobalFlagsRegistry_ContainsNoOptDefValFlags(t *testing.T) {
 func TestGlobalFlagsRegistry_PreprocessesIdentityFlag(t *testing.T) {
 	registry := GlobalFlagsRegistry()
 
+	// Convert flags to preprocess.FlagInfo interface.
+	allFlags := registry.All()
+	flagInfos := make([]preprocess.FlagInfo, len(allFlags))
+	for i, f := range allFlags {
+		flagInfos[i] = f
+	}
+
+	// Create the preprocessor.
+	preprocessor := preprocess.NewNoOptDefValPreprocessor(flagInfos)
+
 	tests := []struct {
 		name     string
 		input    []string
@@ -504,7 +515,7 @@ func TestGlobalFlagsRegistry_PreprocessesIdentityFlag(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := registry.PreprocessNoOptDefValArgs(tc.input)
+			result := preprocessor.Preprocess(tc.input)
 			assert.Equal(t, tc.expected, result)
 		})
 	}

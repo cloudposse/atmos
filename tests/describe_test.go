@@ -1,13 +1,20 @@
 package tests
 
 import (
+	"os"
 	"testing"
 
 	"github.com/cloudposse/atmos/cmd"
 )
 
 func TestDescribeComponentJSON(t *testing.T) {
-	// Set up the environment variables
+	// Skip in CI environments without TTY.
+	// The pager functionality requires /dev/tty to be accessible.
+	if _, err := os.Open("/dev/tty"); err != nil {
+		t.Skipf("Skipping test: TTY not available (/dev/tty): %v", err)
+	}
+
+	// Set up the environment variables.
 	t.Chdir("./fixtures/scenarios/atmos-providers-section")
 
 	t.Setenv("ATMOS_PAGER", "more")
@@ -22,7 +29,13 @@ func TestDescribeComponentJSON(t *testing.T) {
 }
 
 func TestDescribeComponentYAML(t *testing.T) {
-	// Set up the environment variables
+	// Skip in CI environments without TTY.
+	// The pager functionality requires /dev/tty to be accessible.
+	if _, err := os.Open("/dev/tty"); err != nil {
+		t.Skipf("Skipping test: TTY not available (/dev/tty): %v", err)
+	}
+
+	// Set up the environment variables.
 	t.Chdir("./fixtures/scenarios/atmos-providers-section")
 
 	t.Setenv("ATMOS_PAGER", "more")
