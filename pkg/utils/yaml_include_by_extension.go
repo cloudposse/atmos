@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// TestHTTPClient allows tests to inject a custom HTTP client for remote file fetching.
+// This is used to mock GitHub requests in tests.
+var TestHTTPClient *http.Client
 
 // ProcessIncludeTag processes the !include tag with extension-based parsing.
 // It parses files based on their extension, not their content.
@@ -209,7 +214,13 @@ func processLocalFile(localFile string, forceRaw bool) (any, error) {
 func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile string, forceRaw bool) (any, error) {
 	defer perf.Track(atmosConfig, "utils.processRemoteFile")()
 
-	dl := downloader.NewGoGetterDownloader(atmosConfig)
+	// Build options, including test HTTP client if set.
+	var opts []downloader.GoGetterOption
+	if TestHTTPClient != nil {
+		opts = append(opts, downloader.WithHTTPClient(TestHTTPClient))
+	}
+
+	dl := downloader.NewGoGetterDownloader(atmosConfig, opts...)
 
 	if forceRaw {
 		// Always return raw content for !include.raw

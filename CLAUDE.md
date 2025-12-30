@@ -127,6 +127,12 @@ Maintain aliases: `cfg`, `log`, `u`, `errUtils`
 ### Performance Tracking (MANDATORY)
 Add `defer perf.Track(atmosConfig, "pkg.FuncName")()` + blank line to all public functions. Use `nil` if no atmosConfig param.
 
+**Exceptions (do NOT add perf.Track):**
+- Trivial getters/setters (e.g., `GetName()`, `SetValue()`)
+- Command constructor functions (e.g., `DescribeCommand()`, `ListCommand()`)
+- Simple factory functions that just return structs
+- Functions that only delegate to another tracked function
+
 ### Configuration Loading
 Precedence: CLI flags → ENV vars → config files → defaults (use Viper)
 
