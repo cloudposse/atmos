@@ -18,8 +18,8 @@ function SlideCard({ deck }: { deck: SlideDeckMeta }) {
           <span className="slide-index__slide-count">{deck.slideCount} slides</span>
           {deck.tags && deck.tags.length > 0 && (
             <div className="slide-index__tags">
-              {deck.tags.map((tag) => (
-                <span key={tag} className="slide-index__tag">{tag}</span>
+              {deck.tags.map((tag, index) => (
+                <span key={`${deck.slug}-tag-${index}`} className="slide-index__tag">{tag}</span>
               ))}
             </div>
           )}

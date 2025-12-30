@@ -38,7 +38,7 @@ html[data-theme='dark'] .slide-drawer {
 
 .slide-deck--fullscreen .slide-drawer {
   position: fixed;
-  background: #1a1a2e;
+  background: var(--slide-drawer-fullscreen-bg, #1a1a2e);
   border-right-color: rgba(255, 255, 255, 0.1);
 }
 
@@ -213,7 +213,7 @@ html[data-theme='dark'] .slide-drawer__thumbnail-preview {
   overflow: hidden;
 }
 
-/* Hide complex elements in thumbnail for performance */
+/* Reduce code block size in thumbnails for better visibility and performance */
 .slide-drawer__thumbnail-content .prism-code,
 .slide-drawer__thumbnail-content pre {
   font-size: 0.5rem !important;

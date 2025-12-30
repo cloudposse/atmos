@@ -12,7 +12,7 @@ export function Slide({
 
   return (
     <div
-      className={`slide slide--${layout} ${className}`}
+      className={['slide', `slide--${layout}`, className].filter(Boolean).join(' ')}
       style={style}
     >
       <div className="slide__inner">

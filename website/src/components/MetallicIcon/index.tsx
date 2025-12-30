@@ -1,7 +1,7 @@
 import React from 'react';
 import './MetallicIcon.css';
 
-interface MetallicIconProps {
+export interface MetallicIconProps {
   src: string;
   alt?: string;
   size?: number;

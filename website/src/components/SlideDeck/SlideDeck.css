@@ -316,9 +316,9 @@ html[data-theme='dark'] .slide-deck__progress-bar {
   }
 
   .slide-deck__tool-button {
-    width: 28px;
-    height: 28px;
-    font-size: 1rem;
+    width: 44px;
+    height: 44px;
+    font-size: 1.125rem;
   }
 
   .slide-deck__progress {

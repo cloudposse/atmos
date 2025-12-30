@@ -9,10 +9,10 @@ interface AtmosLogoProps {
 export function AtmosLogo({ size = 200, className = '' }: AtmosLogoProps) {
   return (
     <div
-      className={`atmos-logo-animated ${className}`}
+      className={`atmos-logo-animated ${className}`.trim()}
       style={{ width: size, height: size }}
     >
-      <img src="/img/atmos-logo.svg" alt="Atmos" />
+      <img src="/img/atmos-logo.svg" alt="Atmos" width={size} height={size} />
     </div>
   );
 }

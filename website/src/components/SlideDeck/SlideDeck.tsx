@@ -4,21 +4,9 @@ import { RiArrowLeftSLine, RiArrowRightSLine, RiFullscreenLine, RiFullscreenExit
 import { SlideDeckProvider, useSlideDeck } from './SlideDeckContext';
 import { SlideDrawer } from './SlideDrawer';
 import { SlideNotesPanel } from './SlideNotesPanel';
-import { SlideNotes } from './SlideNotes';
 import { Tooltip } from './Tooltip';
 import type { SlideDeckProps } from './types';
 import './SlideDeck.css';
-
-// Helper to extract SlideNotes content from a slide's children.
-function extractNotesFromSlide(slideElement: ReactElement): React.ReactNode | null {
-  const slideChildren = Children.toArray(slideElement.props?.children);
-  for (const child of slideChildren) {
-    if (isValidElement(child) && child.type === SlideNotes) {
-      return child.props.children;
-    }
-  }
-  return null;
-}
 
 interface SlideDeckInnerProps {
   children: React.ReactNode;
@@ -48,14 +36,13 @@ function SlideDeckInner({
     toggleFullscreen,
     showNotes,
     toggleNotes,
-    setCurrentNotes,
   } = useSlideDeck();
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const [showControls, setShowControls] = useState(true);
-  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const drawerHoverTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const drawerHoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const openDrawer = useCallback(() => setIsDrawerOpen(true), []);
   const closeDrawer = useCallback(() => setIsDrawerOpen(false), []);
@@ -169,16 +156,6 @@ function SlideDeckInner({
   // Convert children to array and get current slide.
   const slides = Children.toArray(children).filter(isValidElement) as ReactElement[];
   const currentSlideElement = slides[currentSlide - 1];
-
-  // Extract and set notes when slide changes.
-  useEffect(() => {
-    if (currentSlideElement) {
-      const notes = extractNotesFromSlide(currentSlideElement);
-      setCurrentNotes(notes);
-    } else {
-      setCurrentNotes(null);
-    }
-  }, [currentSlide, currentSlideElement, setCurrentNotes]);
 
   const controlsVisible = showControls || isDrawerOpen || showNotes;
 
