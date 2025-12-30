@@ -14,8 +14,9 @@ import (
 func constructTerraformComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
 	// Check if a provisioner (source or workdir) set a workdir path.
 	// This takes precedence over the standard component path.
+	// Use filepath.FromSlash to normalize path separators for cross-platform compatibility.
 	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
-		return workdirPath
+		return filepath.FromSlash(workdirPath)
 	}
 
 	// If we have a resolved absolute path, use GetComponentPath.
@@ -83,8 +84,9 @@ func constructTerraformComponentPlanfilePath(atmosConfig *schema.AtmosConfigurat
 func constructHelmfileComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
 	// Check if a provisioner (source or workdir) set a workdir path.
 	// This takes precedence over the standard component path.
+	// Use filepath.FromSlash to normalize path separators for cross-platform compatibility.
 	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
-		return workdirPath
+		return filepath.FromSlash(workdirPath)
 	}
 
 	// If we have a resolved absolute path, use GetComponentPath.
@@ -150,8 +152,9 @@ func constructPackerComponentVarfilePath(atmosConfig *schema.AtmosConfiguration,
 func constructPackerComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
 	// Check if a provisioner (source or workdir) set a workdir path.
 	// This takes precedence over the standard component path.
+	// Use filepath.FromSlash to normalize path separators for cross-platform compatibility.
 	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
-		return workdirPath
+		return filepath.FromSlash(workdirPath)
 	}
 
 	// If we have a resolved absolute path, use GetComponentPath.
