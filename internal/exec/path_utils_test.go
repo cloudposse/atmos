@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -77,7 +78,7 @@ func TestConstructTerraformComponentWorkingDir_WithWorkdirPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := constructTerraformComponentWorkingDir(&tt.atmosConfig, &tt.info)
-			assert.Equal(t, tt.want, got)
+			assert.Equal(t, filepath.FromSlash(tt.want), got)
 		})
 	}
 }
@@ -101,7 +102,7 @@ func TestConstructHelmfileComponentWorkingDir_WithWorkdirPath(t *testing.T) {
 		},
 	}
 	got := constructHelmfileComponentWorkingDir(&atmosConfig, &info)
-	assert.Equal(t, "/workdir/helmfile/dev-nginx", got)
+	assert.Equal(t, filepath.FromSlash("/workdir/helmfile/dev-nginx"), got)
 
 	// Test standard path when no workdir.
 	info2 := schema.ConfigAndStacksInfo{
@@ -110,7 +111,7 @@ func TestConstructHelmfileComponentWorkingDir_WithWorkdirPath(t *testing.T) {
 		ComponentSection:      map[string]any{},
 	}
 	got2 := constructHelmfileComponentWorkingDir(&atmosConfig, &info2)
-	assert.Equal(t, "/base/components/helmfile/nginx", got2)
+	assert.Equal(t, filepath.FromSlash("/base/components/helmfile/nginx"), got2)
 }
 
 // TestConstructPackerComponentWorkingDir_WithWorkdirPath tests workdir path resolution for packer.
@@ -132,7 +133,7 @@ func TestConstructPackerComponentWorkingDir_WithWorkdirPath(t *testing.T) {
 		},
 	}
 	got := constructPackerComponentWorkingDir(&atmosConfig, &info)
-	assert.Equal(t, "/workdir/packer/dev-ami", got)
+	assert.Equal(t, filepath.FromSlash("/workdir/packer/dev-ami"), got)
 
 	// Test standard path when no workdir.
 	info2 := schema.ConfigAndStacksInfo{
@@ -141,7 +142,7 @@ func TestConstructPackerComponentWorkingDir_WithWorkdirPath(t *testing.T) {
 		ComponentSection:      map[string]any{},
 	}
 	got2 := constructPackerComponentWorkingDir(&atmosConfig, &info2)
-	assert.Equal(t, "/base/components/packer/ami", got2)
+	assert.Equal(t, filepath.FromSlash("/base/components/packer/ami"), got2)
 }
 
 func TestConstructPackerComponentVarfileName(t *testing.T) {
@@ -221,7 +222,7 @@ func TestConstructPackerComponentWorkingDir(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := constructPackerComponentWorkingDir(&tt.atmosConfig, &tt.info)
-			assert.Equal(t, tt.want, got)
+			assert.Equal(t, filepath.FromSlash(tt.want), got)
 		})
 	}
 }
@@ -275,7 +276,7 @@ func TestConstructPackerComponentVarfilePath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := constructPackerComponentVarfilePath(&tt.atmosConfig, &tt.info)
-			assert.Equal(t, tt.want, got)
+			assert.Equal(t, filepath.FromSlash(tt.want), got)
 		})
 	}
 }

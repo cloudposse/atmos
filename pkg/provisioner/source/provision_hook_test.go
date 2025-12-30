@@ -1,6 +1,7 @@
 package source
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -314,7 +315,7 @@ func TestDetermineSourceTargetDirectory(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tt.expectedDir, dir)
+				assert.Equal(t, filepath.FromSlash(tt.expectedDir), dir)
 				assert.Equal(t, tt.expectedWorkdir, isWorkdir)
 			}
 		})
