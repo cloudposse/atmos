@@ -4,7 +4,7 @@
 
 This document defines the implementation of native Okta authentication as a first-class identity provider in Atmos. Unlike the existing SAML-based Okta integration (which uses Okta as a SAML IdP for AWS), this PRD introduces a dedicated `okta/*` identity provider that enables direct Okta API access, token management, and integration with Okta-centric workflows.
 
-**Status:** 🚧 **Planned** - This PRD defines the implementation plan for native Okta identity support.
+**Status:** Planned - This PRD defines the implementation plan for native Okta identity support.
 
 **Goal:** Enable organizations using Okta as their primary identity platform to authenticate directly with Okta, obtain access tokens, and use those credentials for downstream operations such as AWS OIDC federation, API access, and Terraform provider authentication.
 
@@ -411,301 +411,12 @@ The following are **cleared** to prevent conflicts:
 
 ### Code Architecture
 
-#### File Manager (`pkg/auth/cloud/okta/files.go`)
+The implementation follows the [Universal Identity Provider File Isolation Pattern](./auth-file-isolation-pattern.md). See `pkg/auth/cloud/aws/` and `pkg/auth/cloud/azure/` for reference implementations.
 
+#### Key Types
+
+**Token Storage (`pkg/auth/cloud/okta/types.go`):**
 ```go
-package okta
-
-import (
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"os"
-	"path/filepath"
-	"sync"
-	"time"
-
-	"github.com/gofrs/flock"
-
-	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/config/homedir"
-	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/xdg"
-)
-
-const (
-	PermissionRWX = 0o700
-	PermissionRW  = 0o600
-
-	// File locking timeouts.
-	fileLockTimeout = 10 * time.Second
-	fileLockRetry   = 50 * time.Millisecond
-
-	// Logging keys.
-	logKeyProvider = "provider"
-)
-
-var (
-	ErrGetHomeDir           = errors.New("failed to get home directory")
-	ErrWriteTokensFile      = errors.New("failed to write tokens file")
-	ErrLoadTokensFile       = errors.New("failed to load tokens file")
-	ErrCleanupOktaFiles     = errors.New("failed to cleanup Okta files")
-	ErrFileLockTimeout      = errors.New("failed to acquire file lock within timeout")
-)
-
-// OktaFileManager provides helpers to manage Okta config/token files.
-type OktaFileManager struct {
-	baseDir string
-	mu      sync.Mutex
-}
-
-// NewOktaFileManager creates a new Okta file manager instance.
-// If basePath is empty, uses default XDG config path ~/.config/atmos/okta.
-func NewOktaFileManager(basePath string) (*OktaFileManager, error) {
-	defer perf.Track(nil, "okta.NewOktaFileManager")()
-
-	var baseDir string
-
-	if basePath != "" {
-		expanded, err := homedir.Expand(basePath)
-		if err != nil {
-			return nil, fmt.Errorf("%w: invalid base_path %q: %w", errUtils.ErrInvalidProviderConfig, basePath, err)
-		}
-		baseDir = expanded
-	} else {
-		var err error
-		baseDir, err = xdg.GetXDGConfigDir("okta", PermissionRWX)
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to get XDG config directory for Okta: %w", ErrGetHomeDir, err)
-		}
-	}
-
-	return &OktaFileManager{baseDir: baseDir}, nil
-}
-
-// GetBaseDir returns the base directory path.
-func (m *OktaFileManager) GetBaseDir() string {
-	return m.baseDir
-}
-
-// GetDisplayPath returns user-friendly display path (with ~ if under home directory).
-func (m *OktaFileManager) GetDisplayPath() string {
-	homeDir, err := homedir.Dir()
-	if err != nil {
-		return m.baseDir
-	}
-	if len(m.baseDir) > len(homeDir) && m.baseDir[:len(homeDir)] == homeDir {
-		return "~" + m.baseDir[len(homeDir):]
-	}
-	return m.baseDir
-}
-
-// GetProviderDir returns the provider-specific directory path.
-func (m *OktaFileManager) GetProviderDir(providerName string) string {
-	return filepath.Join(m.baseDir, providerName)
-}
-
-// GetTokensPath returns the path to the tokens file.
-func (m *OktaFileManager) GetTokensPath(providerName string) string {
-	return filepath.Join(m.GetProviderDir(providerName), "tokens.json")
-}
-
-// GetConfigPath returns the path to the config file.
-func (m *OktaFileManager) GetConfigPath(providerName string) string {
-	return filepath.Join(m.GetProviderDir(providerName), "config.json")
-}
-
-// acquireFileLock attempts to acquire an exclusive file lock with timeout.
-func acquireFileLock(lockPath string) (*flock.Flock, error) {
-	lock := flock.New(lockPath)
-	ctx, cancel := context.WithTimeout(context.Background(), fileLockTimeout)
-	defer cancel()
-
-	ticker := time.NewTicker(fileLockRetry)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("%w: %s", ErrFileLockTimeout, lockPath)
-		case <-ticker.C:
-			locked, err := lock.TryLock()
-			if err != nil {
-				return nil, fmt.Errorf("failed to acquire lock: %w", err)
-			}
-			if locked {
-				log.Debug("Acquired file lock", "lock_file", lockPath)
-				return lock, nil
-			}
-			log.Debug("Waiting for file lock", "lock_file", lockPath)
-		}
-	}
-}
-
-// WriteTokens writes Okta tokens to a JSON file with proper locking.
-func (m *OktaFileManager) WriteTokens(providerName string, tokens *OktaTokens) error {
-	defer perf.Track(nil, "okta.WriteTokens")()
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	tokenPath := m.GetTokensPath(providerName)
-	tokenDir := filepath.Dir(tokenPath)
-
-	// Create directory.
-	if err := os.MkdirAll(tokenDir, PermissionRWX); err != nil {
-		return errors.Join(ErrWriteTokensFile, err)
-	}
-
-	// Acquire file lock.
-	lockPath := tokenPath + ".lock"
-	lock, err := acquireFileLock(lockPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock tokens file", "lock_file", lockPath, "error", unlockErr)
-		}
-	}()
-
-	// Marshal tokens to JSON.
-	data, err := json.MarshalIndent(tokens, "", "  ")
-	if err != nil {
-		return fmt.Errorf("%w: failed to marshal tokens: %w", ErrWriteTokensFile, err)
-	}
-
-	// Write tokens file.
-	if err := os.WriteFile(tokenPath, data, PermissionRW); err != nil {
-		return errors.Join(ErrWriteTokensFile, err)
-	}
-
-	log.Debug("Wrote Okta tokens",
-		logKeyProvider, providerName,
-		"tokens_path", tokenPath,
-	)
-
-	return nil
-}
-
-// LoadTokens loads Okta tokens from a JSON file.
-func (m *OktaFileManager) LoadTokens(providerName string) (*OktaTokens, error) {
-	defer perf.Track(nil, "okta.LoadTokens")()
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	tokenPath := m.GetTokensPath(providerName)
-
-	// Check if file exists.
-	if _, err := os.Stat(tokenPath); err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("%w: tokens file does not exist: %s", errUtils.ErrAuthenticationFailed, tokenPath)
-		}
-		return nil, errors.Join(ErrLoadTokensFile, err)
-	}
-
-	// Acquire file lock for reading.
-	lockPath := tokenPath + ".lock"
-	lock, err := acquireFileLock(lockPath)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock tokens file", "lock_file", lockPath, "error", unlockErr)
-		}
-	}()
-
-	// Read tokens file.
-	data, err := os.ReadFile(tokenPath)
-	if err != nil {
-		return nil, errors.Join(ErrLoadTokensFile, err)
-	}
-
-	// Unmarshal tokens.
-	var tokens OktaTokens
-	if err := json.Unmarshal(data, &tokens); err != nil {
-		return nil, fmt.Errorf("%w: failed to unmarshal tokens: %w", ErrLoadTokensFile, err)
-	}
-
-	log.Debug("Loaded Okta tokens",
-		logKeyProvider, providerName,
-		"tokens_path", tokenPath,
-	)
-
-	return &tokens, nil
-}
-
-// Cleanup removes Okta files for the provider.
-func (m *OktaFileManager) Cleanup(providerName string) error {
-	defer perf.Track(nil, "okta.Cleanup")()
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	providerDir := m.GetProviderDir(providerName)
-
-	if _, err := os.Stat(providerDir); err != nil {
-		if os.IsNotExist(err) {
-			log.Debug("Okta files directory does not exist, nothing to cleanup",
-				logKeyProvider, providerName,
-				"dir", providerDir,
-			)
-			return nil
-		}
-		return errors.Join(ErrCleanupOktaFiles, err)
-	}
-
-	if err := os.RemoveAll(providerDir); err != nil {
-		return errors.Join(ErrCleanupOktaFiles, err)
-	}
-
-	log.Debug("Cleaned up Okta files",
-		logKeyProvider, providerName,
-		"dir", providerDir,
-	)
-
-	return nil
-}
-
-// CleanupAll removes entire base directory (all providers).
-func (m *OktaFileManager) CleanupAll() error {
-	defer perf.Track(nil, "okta.CleanupAll")()
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if err := os.RemoveAll(m.baseDir); err != nil {
-		return errors.Join(ErrCleanupOktaFiles, err)
-	}
-
-	log.Debug("Cleaned up all Okta files", "dir", m.baseDir)
-	return nil
-}
-
-// DeleteIdentity removes the Okta config directory for a specific identity.
-func (m *OktaFileManager) DeleteIdentity(ctx context.Context, providerName, identityName string) error {
-	return m.Cleanup(providerName)
-}
-
-// TokensExist checks if tokens file exists for the given provider.
-func (m *OktaFileManager) TokensExist(providerName string) bool {
-	tokenPath := m.GetTokensPath(providerName)
-	_, err := os.Stat(tokenPath)
-	return err == nil
-}
-```
-
-#### Token Types (`pkg/auth/cloud/okta/types.go`)
-
-```go
-package okta
-
-import "time"
-
 // OktaTokens holds OAuth tokens returned by Okta.
 type OktaTokens struct {
 	AccessToken           string    `json:"access_token"`
@@ -718,37 +429,13 @@ type OktaTokens struct {
 	Scope                 string    `json:"scope,omitempty"`
 }
 
-// IsExpired returns true if the access token is expired.
-func (t *OktaTokens) IsExpired() bool {
-	return time.Now().After(t.ExpiresAt)
-}
-
-// CanRefresh returns true if we have a valid refresh token.
-func (t *OktaTokens) CanRefresh() bool {
-	if t.RefreshToken == "" {
-		return false
-	}
-	if t.RefreshTokenExpiresAt.IsZero() {
-		return true // No expiration set, assume valid.
-	}
-	return time.Now().Before(t.RefreshTokenExpiresAt)
-}
+func (t *OktaTokens) IsExpired() bool
+func (t *OktaTokens) CanRefresh() bool
 ```
 
-#### Credentials Type (`pkg/auth/types/okta_credentials.go`)
-
+**Credentials (`pkg/auth/types/okta_credentials.go`):**
 ```go
-package types
-
-import (
-	"context"
-	"fmt"
-	"time"
-
-	errUtils "github.com/cloudposse/atmos/errors"
-)
-
-// OktaCredentials defines Okta-specific credential fields.
+// OktaCredentials implements ICredentials for Okta.
 type OktaCredentials struct {
 	OrgURL       string    `json:"org_url"`
 	AccessToken  string    `json:"access_token"`
@@ -758,105 +445,51 @@ type OktaCredentials struct {
 	Scope        string    `json:"scope,omitempty"`
 }
 
-// IsExpired returns true if the credentials are expired.
-func (c *OktaCredentials) IsExpired() bool {
-	return time.Now().After(c.ExpiresAt)
-}
-
-// GetExpiration implements ICredentials for OktaCredentials.
-func (c *OktaCredentials) GetExpiration() (*time.Time, error) {
-	if c.ExpiresAt.IsZero() {
-		return nil, nil
-	}
-	// Convert to local timezone for display.
-	localTime := c.ExpiresAt.Local()
-	return &localTime, nil
-}
-
-// BuildWhoamiInfo implements ICredentials for OktaCredentials.
-func (c *OktaCredentials) BuildWhoamiInfo(info *WhoamiInfo) {
-	if t, _ := c.GetExpiration(); t != nil {
-		info.Expiration = t
-	}
-	// OrgURL can be used to identify the Okta organization.
-	if c.OrgURL != "" {
-		info.Account = c.OrgURL
-	}
-}
-
-// Validate validates Okta credentials by calling Okta userinfo endpoint.
-// Returns validation info including user identity and expiration.
-func (c *OktaCredentials) Validate(ctx context.Context) (*ValidationInfo, error) {
-	if c.AccessToken == "" {
-		return nil, fmt.Errorf("%w: access token is required", errUtils.ErrInvalidAuthConfig)
-	}
-
-	// TODO: Implement userinfo endpoint call to validate token.
-	// For now, return basic info.
-	info := &ValidationInfo{
-		Account: c.OrgURL,
-	}
-
-	if expTime, err := c.GetExpiration(); err == nil && expTime != nil {
-		info.Expiration = expTime
-	}
-
-	return info, nil
-}
+// Implements ICredentials interface.
+func (c *OktaCredentials) IsExpired() bool
+func (c *OktaCredentials) GetExpiration() (*time.Time, error)
+func (c *OktaCredentials) BuildWhoamiInfo(info *WhoamiInfo)
+func (c *OktaCredentials) Validate(ctx context.Context) (*ValidationInfo, error)
 ```
 
-#### Auth Context (`pkg/schema/schema.go`)
-
+**Auth Context (`pkg/schema/schema.go`):**
 ```go
 // OktaAuthContext holds Okta-specific authentication context.
 type OktaAuthContext struct {
-	// ConfigDir is the absolute path to the Okta config directory managed by Atmos.
-	ConfigDir string `json:"config_dir" yaml:"config_dir"`
-
-	// TokensFile is the absolute path to the tokens file.
-	TokensFile string `json:"tokens_file" yaml:"tokens_file"`
-
-	// OrgURL is the Okta organization URL.
-	OrgURL string `json:"org_url" yaml:"org_url"`
-
-	// AccessToken is the OAuth 2.0 access token (cached for in-process SDK calls).
+	ConfigDir   string `json:"config_dir" yaml:"config_dir"`
+	TokensFile  string `json:"tokens_file" yaml:"tokens_file"`
+	OrgURL      string `json:"org_url" yaml:"org_url"`
 	AccessToken string `json:"access_token,omitempty" yaml:"access_token,omitempty"`
-
-	// IDToken is the OIDC ID token (used for federation).
-	IDToken string `json:"id_token,omitempty" yaml:"id_token,omitempty"`
+	IDToken     string `json:"id_token,omitempty" yaml:"id_token,omitempty"`
 }
+```
+
+#### File Manager (`pkg/auth/cloud/okta/files.go`)
+
+```go
+// OktaFileManager provides helpers to manage Okta config/token files.
+// Uses sync.Mutex for thread safety and flock for file locking.
+type OktaFileManager struct {
+	baseDir string
+	mu      sync.Mutex
+}
+
+func NewOktaFileManager(basePath string) (*OktaFileManager, error)
+func (m *OktaFileManager) GetBaseDir() string
+func (m *OktaFileManager) GetDisplayPath() string
+func (m *OktaFileManager) GetProviderDir(providerName string) string
+func (m *OktaFileManager) GetTokensPath(providerName string) string
+func (m *OktaFileManager) WriteTokens(providerName string, tokens *OktaTokens) error
+func (m *OktaFileManager) LoadTokens(providerName string) (*OktaTokens, error)
+func (m *OktaFileManager) Cleanup(providerName string) error
+func (m *OktaFileManager) CleanupAll() error
+func (m *OktaFileManager) TokensExist(providerName string) bool
 ```
 
 #### Device Code Provider (`pkg/auth/providers/okta/device_code.go`)
 
 ```go
-package okta
-
-import (
-	"context"
-	"fmt"
-	"net/url"
-	"time"
-
-	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
-	oktaCloud "github.com/cloudposse/atmos/pkg/auth/cloud/okta"
-	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
-	log "github.com/cloudposse/atmos/pkg/logger"
-	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
-)
-
-const (
-	// Default timeout for device code authentication.
-	deviceCodeTimeout = 15 * time.Minute
-
-	// Default polling interval (Okta minimum is 5 seconds).
-	defaultPollingInterval = 5 * time.Second
-)
-
-// deviceCodeProvider implements Okta device code authentication.
+// deviceCodeProvider implements the Provider interface for Okta device code flow.
 type deviceCodeProvider struct {
 	name                string
 	config              *schema.Provider
@@ -864,517 +497,64 @@ type deviceCodeProvider struct {
 	clientID            string
 	scopes              []string
 	authorizationServer string
-	basePath            string
 	fileManager         *oktaCloud.OktaFileManager
 }
 
-// deviceCodeConfig holds extracted Okta configuration from provider spec.
-type deviceCodeConfig struct {
-	OrgURL              string
-	ClientID            string
-	Scopes              []string
-	AuthorizationServer string
-	BasePath            string
-}
+// Provider interface implementation.
+func NewDeviceCodeProvider(name string, config *schema.Provider) (*deviceCodeProvider, error)
+func (p *deviceCodeProvider) Kind() string
+func (p *deviceCodeProvider) Name() string
+func (p *deviceCodeProvider) PreAuthenticate(_ authTypes.AuthManager) error
+func (p *deviceCodeProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error)
+func (p *deviceCodeProvider) Validate() error
+func (p *deviceCodeProvider) Environment() (map[string]string, error)
+func (p *deviceCodeProvider) Paths() ([]authTypes.Path, error)
+func (p *deviceCodeProvider) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error)
+func (p *deviceCodeProvider) Logout(ctx context.Context) error
+func (p *deviceCodeProvider) GetFilesDisplayPath() string
 
-// extractDeviceCodeConfig extracts Okta config from provider spec.
-func extractDeviceCodeConfig(spec map[string]interface{}) deviceCodeConfig {
-	config := deviceCodeConfig{
-		Scopes:              []string{"openid", "profile", "offline_access"},
-		AuthorizationServer: "default",
-	}
-
-	if spec == nil {
-		return config
-	}
-
-	if orgURL, ok := spec["org_url"].(string); ok {
-		config.OrgURL = orgURL
-	}
-	if clientID, ok := spec["client_id"].(string); ok {
-		config.ClientID = clientID
-	}
-	if as, ok := spec["authorization_server"].(string); ok && as != "" {
-		config.AuthorizationServer = as
-	}
-	if configuredScopes, ok := spec["scopes"].([]interface{}); ok {
-		config.Scopes = make([]string, len(configuredScopes))
-		for i, s := range configuredScopes {
-			config.Scopes[i] = s.(string)
-		}
-	}
-	if files, ok := spec["files"].(map[string]interface{}); ok {
-		if bp, ok := files["base_path"].(string); ok {
-			config.BasePath = bp
-		}
-	}
-
-	return config
-}
-
-// NewDeviceCodeProvider creates a new Okta device code provider.
-func NewDeviceCodeProvider(name string, config *schema.Provider) (*deviceCodeProvider, error) {
-	if config == nil {
-		return nil, fmt.Errorf("%w: provider config is required", errUtils.ErrInvalidProviderConfig)
-	}
-	if config.Kind != "okta/device-code" {
-		return nil, fmt.Errorf("%w: invalid provider kind for Okta device code provider: %s", errUtils.ErrInvalidProviderKind, config.Kind)
-	}
-
-	cfg := extractDeviceCodeConfig(config.Spec)
-
-	if cfg.OrgURL == "" {
-		return nil, fmt.Errorf("%w: org_url is required in spec for Okta device code provider", errUtils.ErrInvalidProviderConfig)
-	}
-	if cfg.ClientID == "" {
-		return nil, fmt.Errorf("%w: client_id is required in spec for Okta device code provider", errUtils.ErrInvalidProviderConfig)
-	}
-
-	// Create file manager for token storage.
-	fileManager, err := oktaCloud.NewOktaFileManager(cfg.BasePath)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create file manager: %w", errUtils.ErrInvalidProviderConfig, err)
-	}
-
-	return &deviceCodeProvider{
-		name:                name,
-		config:              config,
-		orgURL:              cfg.OrgURL,
-		clientID:            cfg.ClientID,
-		scopes:              cfg.Scopes,
-		authorizationServer: cfg.AuthorizationServer,
-		basePath:            cfg.BasePath,
-		fileManager:         fileManager,
-	}, nil
-}
-
-// Kind returns the provider kind.
-func (p *deviceCodeProvider) Kind() string {
-	return "okta/device-code"
-}
-
-// Name returns the configured provider name.
-func (p *deviceCodeProvider) Name() string {
-	return p.name
-}
-
-// PreAuthenticate is a no-op for device code provider.
-func (p *deviceCodeProvider) PreAuthenticate(_ authTypes.AuthManager) error {
-	return nil
-}
-
-// Authenticate performs Okta device code authentication.
-func (p *deviceCodeProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error) {
-	defer perf.Track(nil, "okta.deviceCodeProvider.Authenticate")()
-
-	// Check if we're in a headless environment.
-	if !term.IsTTYSupportForStderr() {
-		return nil, fmt.Errorf("%w: Okta device code flow requires an interactive terminal", errUtils.ErrAuthenticationFailed)
-	}
-
-	// Try to load cached tokens first.
-	tokens, err := p.tryCachedTokens(ctx)
-	if err == nil && tokens != nil {
-		log.Debug("Using cached Okta tokens", "provider", p.name)
-		return p.tokensToCredentials(tokens), nil
-	}
-
-	log.Debug("Starting Okta device code authentication",
-		"provider", p.name,
-		"org_url", p.orgURL,
-		"client_id", p.clientID,
-	)
-
-	// Start device authorization flow.
-	deviceAuth, err := p.startDeviceAuthorization(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Display verification URL to user.
-	ui.Writef("\nTo authenticate, open this URL in a browser:\n  %s\n\n", deviceAuth.VerificationURI)
-	ui.Writef("And enter this code: %s\n\n", deviceAuth.UserCode)
-
-	// Poll for token (honoring the interval from Okta).
-	interval := defaultPollingInterval
-	if deviceAuth.Interval > 0 {
-		interval = time.Duration(deviceAuth.Interval) * time.Second
-	}
-
-	tokens, err = p.pollForToken(ctx, deviceAuth, interval)
-	if err != nil {
-		return nil, err
-	}
-
-	// Save tokens to file for caching.
-	if err := p.fileManager.WriteTokens(p.name, tokens); err != nil {
-		log.Debug("Failed to cache Okta tokens", "error", err)
-		// Continue anyway - authentication succeeded.
-	}
-
-	return p.tokensToCredentials(tokens), nil
-}
-
-// tryCachedTokens attempts to load and refresh cached tokens.
-func (p *deviceCodeProvider) tryCachedTokens(ctx context.Context) (*oktaCloud.OktaTokens, error) {
-	tokens, err := p.fileManager.LoadTokens(p.name)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if access token is still valid.
-	if !tokens.IsExpired() {
-		return tokens, nil
-	}
-
-	// Try to refresh if we have a refresh token.
-	if tokens.CanRefresh() {
-		refreshed, err := p.refreshToken(ctx, tokens.RefreshToken)
-		if err != nil {
-			log.Debug("Failed to refresh Okta token, will re-authenticate", "error", err)
-			return nil, err
-		}
-		// Save refreshed tokens.
-		if err := p.fileManager.WriteTokens(p.name, refreshed); err != nil {
-			log.Debug("Failed to save refreshed tokens", "error", err)
-		}
-		return refreshed, nil
-	}
-
-	return nil, fmt.Errorf("cached tokens expired and cannot be refreshed")
-}
-
-// tokensToCredentials converts OktaTokens to OktaCredentials.
-func (p *deviceCodeProvider) tokensToCredentials(tokens *oktaCloud.OktaTokens) *authTypes.OktaCredentials {
-	return &authTypes.OktaCredentials{
-		OrgURL:       p.orgURL,
-		AccessToken:  tokens.AccessToken,
-		IDToken:      tokens.IDToken,
-		RefreshToken: tokens.RefreshToken,
-		ExpiresAt:    tokens.ExpiresAt,
-		Scope:        tokens.Scope,
-	}
-}
-
-// Validate validates the provider configuration.
-func (p *deviceCodeProvider) Validate() error {
-	if p.orgURL == "" {
-		return fmt.Errorf("%w: org_url is required", errUtils.ErrInvalidProviderConfig)
-	}
-	if p.clientID == "" {
-		return fmt.Errorf("%w: client_id is required", errUtils.ErrInvalidProviderConfig)
-	}
-
-	// Validate URL format.
-	if _, err := url.ParseRequestURI(p.orgURL); err != nil {
-		return fmt.Errorf("%w: invalid org_url: %w", errUtils.ErrInvalidProviderConfig, err)
-	}
-
-	return nil
-}
-
-// Environment returns Okta-specific environment variables for this provider.
-func (p *deviceCodeProvider) Environment() (map[string]string, error) {
-	env := make(map[string]string)
-	if p.orgURL != "" {
-		env["OKTA_ORG_URL"] = p.orgURL
-	}
-	return env, nil
-}
-
-// Paths returns credential files/directories used by this provider.
-func (p *deviceCodeProvider) Paths() ([]authTypes.Path, error) {
-	paths := []authTypes.Path{
-		{
-			Location: p.fileManager.GetTokensPath(p.name),
-			Type:     authTypes.PathTypeFile,
-			Required: true,
-			Purpose:  fmt.Sprintf("Okta tokens file for provider %s", p.name),
-			Metadata: map[string]string{
-				"read_only": "true",
-			},
-		},
-	}
-	return paths, nil
-}
-
-// PrepareEnvironment prepares environment variables for external processes.
-func (p *deviceCodeProvider) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
-	return oktaCloud.PrepareEnvironment(oktaCloud.PrepareEnvironmentConfig{
-		Environ:   environ,
-		ConfigDir: p.fileManager.GetProviderDir(p.name),
-		OrgURL:    p.orgURL,
-	}), nil
-}
-
-// Logout removes cached device code tokens from disk.
-func (p *deviceCodeProvider) Logout(ctx context.Context) error {
-	log.Debug("Logout Okta device code provider", "provider", p.name)
-	return p.fileManager.Cleanup(p.name)
-}
-
-// GetFilesDisplayPath returns the display path for credential files.
-func (p *deviceCodeProvider) GetFilesDisplayPath() string {
-	return p.fileManager.GetDisplayPath() + "/" + p.name
-}
-
-// startDeviceAuthorization initiates the device authorization flow.
-// Returns device authorization response containing user_code, verification_uri, etc.
-func (p *deviceCodeProvider) startDeviceAuthorization(ctx context.Context) (*deviceAuthorizationResponse, error) {
-	// Implementation calls Okta's /oauth2/{server}/v1/device/authorize endpoint.
-	// ...
-	return nil, fmt.Errorf("not implemented")
-}
-
-// pollForToken polls for token completion with backoff.
-func (p *deviceCodeProvider) pollForToken(ctx context.Context, deviceAuth *deviceAuthorizationResponse, interval time.Duration) (*oktaCloud.OktaTokens, error) {
-	// Implementation polls Okta's /oauth2/{server}/v1/token endpoint.
-	// Must honor the interval to avoid rate limiting.
-	// ...
-	return nil, fmt.Errorf("not implemented")
-}
-
-// refreshToken exchanges a refresh token for new tokens.
-func (p *deviceCodeProvider) refreshToken(ctx context.Context, refreshToken string) (*oktaCloud.OktaTokens, error) {
-	// Implementation calls Okta's /oauth2/{server}/v1/token with grant_type=refresh_token.
-	// ...
-	return nil, fmt.Errorf("not implemented")
-}
-
-// deviceAuthorizationResponse holds the response from Okta's device authorization endpoint.
-type deviceAuthorizationResponse struct {
-	DeviceCode      string `json:"device_code"`
-	UserCode        string `json:"user_code"`
-	VerificationURI string `json:"verification_uri"`
-	ExpiresIn       int    `json:"expires_in"`
-	Interval        int    `json:"interval"` // Polling interval in seconds.
-}
+// Internal methods.
+func (p *deviceCodeProvider) tryCachedTokens(ctx context.Context) (*oktaCloud.OktaTokens, error)
+func (p *deviceCodeProvider) startDeviceAuthorization(ctx context.Context) (*deviceAuthorizationResponse, error)
+func (p *deviceCodeProvider) pollForToken(ctx context.Context, deviceAuth *deviceAuthorizationResponse, interval time.Duration) (*oktaCloud.OktaTokens, error)
+func (p *deviceCodeProvider) refreshToken(ctx context.Context, refreshToken string) (*oktaCloud.OktaTokens, error)
 ```
 
 #### Setup Functions (`pkg/auth/cloud/okta/setup.go`)
 
 ```go
-package okta
-
-import (
-	"fmt"
-
-	errUtils "github.com/cloudposse/atmos/errors"
-	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
-)
-
-// SetupFilesParams contains parameters for SetupFiles.
-type SetupFilesParams struct {
-	ProviderName string
-	IdentityName string
-	Credentials  authTypes.ICredentials
-	BasePath     string
-}
-
-// SetupFiles sets up credential files for the given identity.
-func SetupFiles(params *SetupFilesParams) error {
-	defer perf.Track(nil, "okta.SetupFiles")()
-
-	if params == nil {
-		return fmt.Errorf("%w: SetupFilesParams is required", errUtils.ErrInvalidAuthConfig)
-	}
-
-	if params.Credentials == nil {
-		return fmt.Errorf("%w: credentials are required", errUtils.ErrInvalidCredentials)
-	}
-
-	oktaCreds, ok := params.Credentials.(*authTypes.OktaCredentials)
-	if !ok {
-		return fmt.Errorf("%w: expected OktaCredentials, got %T", errUtils.ErrInvalidCredentials, params.Credentials)
-	}
-
-	fileManager, err := NewOktaFileManager(params.BasePath)
-	if err != nil {
-		return err
-	}
-
-	tokens := &OktaTokens{
-		AccessToken:  oktaCreds.AccessToken,
-		IDToken:      oktaCreds.IDToken,
-		RefreshToken: oktaCreds.RefreshToken,
-		ExpiresAt:    oktaCreds.ExpiresAt,
-		Scope:        oktaCreds.Scope,
-	}
-
-	return fileManager.WriteTokens(params.ProviderName, tokens)
-}
-
-// SetAuthContextParams contains parameters for SetAuthContext.
-type SetAuthContextParams struct {
-	AuthContext  *schema.AuthContext
-	StackInfo    *schema.ConfigAndStacksInfo
-	ProviderName string
-	IdentityName string
-	Credentials  authTypes.ICredentials
-	BasePath     string
-}
-
-// SetAuthContext populates the Okta-specific auth context.
-func SetAuthContext(params *SetAuthContextParams) error {
-	defer perf.Track(nil, "okta.SetAuthContext")()
-
-	if params == nil {
-		return fmt.Errorf("%w: SetAuthContextParams is required", errUtils.ErrInvalidAuthConfig)
-	}
-
-	if params.AuthContext == nil {
-		return nil // No auth context to populate.
-	}
-
-	oktaCreds, ok := params.Credentials.(*authTypes.OktaCredentials)
-	if !ok {
-		return fmt.Errorf("%w: expected OktaCredentials, got %T", errUtils.ErrInvalidCredentials, params.Credentials)
-	}
-
-	fileManager, err := NewOktaFileManager(params.BasePath)
-	if err != nil {
-		return err
-	}
-
-	params.AuthContext.Okta = &schema.OktaAuthContext{
-		ConfigDir:   fileManager.GetProviderDir(params.ProviderName),
-		TokensFile:  fileManager.GetTokensPath(params.ProviderName),
-		OrgURL:      oktaCreds.OrgURL,
-		AccessToken: oktaCreds.AccessToken,
-		IDToken:     oktaCreds.IDToken,
-	}
-
-	return nil
-}
-
-// SetEnvironmentVariables derives environment variables from AuthContext.
-// It converts ComponentEnvSection (map[string]any) to string map, applies Okta env vars,
-// then converts back.
-func SetEnvironmentVariables(authContext *schema.AuthContext, stackInfo *schema.ConfigAndStacksInfo) error {
-	defer perf.Track(nil, "okta.SetEnvironmentVariables")()
-
-	if authContext == nil || authContext.Okta == nil {
-		return nil
-	}
-
-	// Convert ComponentEnvSection (map[string]any) to map[string]string.
-	environ := make(map[string]string)
-	for k, v := range stackInfo.ComponentEnvSection {
-		if strVal, ok := v.(string); ok {
-			environ[k] = strVal
-		}
-	}
-
-	// Apply Okta environment preparation.
-	env := PrepareEnvironment(PrepareEnvironmentConfig{
-		Environ:     environ,
-		ConfigDir:   authContext.Okta.ConfigDir,
-		OrgURL:      authContext.Okta.OrgURL,
-		AccessToken: authContext.Okta.AccessToken,
-	})
-
-	// Convert back to map[string]any for ComponentEnvSection.
-	result := make(schema.AtmosSectionMapType, len(env))
-	for k, v := range env {
-		result[k] = v
-	}
-	stackInfo.ComponentEnvSection = result
-
-	return nil
-}
+func SetupFiles(params *SetupFilesParams) error
+func SetAuthContext(params *SetAuthContextParams) error
+func SetEnvironmentVariables(authContext *schema.AuthContext, stackInfo *schema.ConfigAndStacksInfo) error
 ```
 
 #### Environment Preparation (`pkg/auth/cloud/okta/env.go`)
 
 ```go
-package okta
-
-import "github.com/cloudposse/atmos/pkg/perf"
-
 // problematicOktaEnvVars are cleared to prevent credential conflicts.
 var problematicOktaEnvVars = []string{
-	"OKTA_API_TOKEN",      // Conflicts with OAuth mode.
-	"OKTA_CLIENT_ID",      // Prevents ambient credentials.
-	"OKTA_PRIVATE_KEY",    // Prevents ambient credentials.
-	"OKTA_PRIVATE_KEY_ID", // Prevents ambient credentials.
-	"OKTA_SCOPES",         // Controlled by provider config.
+	"OKTA_API_TOKEN",
+	"OKTA_CLIENT_ID",
+	"OKTA_PRIVATE_KEY",
+	"OKTA_PRIVATE_KEY_ID",
+	"OKTA_SCOPES",
 }
 
-// PrepareEnvironmentConfig holds configuration for Okta environment preparation.
-type PrepareEnvironmentConfig struct {
-	Environ     map[string]string
-	ConfigDir   string
-	OrgURL      string
-	AccessToken string
-	IDToken     string
-}
-
-// PrepareEnvironment configures environment variables for Okta SDK.
-// Returns a NEW map with modifications - does not mutate the input.
-func PrepareEnvironment(cfg PrepareEnvironmentConfig) map[string]string {
-	defer perf.Track(nil, "okta.PrepareEnvironment")()
-
-	result := make(map[string]string, len(cfg.Environ)+10)
-	for k, v := range cfg.Environ {
-		result[k] = v
-	}
-
-	// Clear conflicting environment variables.
-	for _, key := range problematicOktaEnvVars {
-		delete(result, key)
-	}
-
-	// Set Okta configuration.
-	if cfg.OrgURL != "" {
-		result["OKTA_ORG_URL"] = cfg.OrgURL
-		result["OKTA_BASE_URL"] = cfg.OrgURL
-	}
-
-	if cfg.ConfigDir != "" {
-		result["OKTA_CONFIG_DIR"] = cfg.ConfigDir
-	}
-
-	if cfg.AccessToken != "" {
-		result["OKTA_OAUTH2_ACCESS_TOKEN"] = cfg.AccessToken
-	}
-
-	return result
-}
+func PrepareEnvironment(cfg PrepareEnvironmentConfig) map[string]string
 ```
 
 ### AWS OIDC Federation Integration
 
-When using Okta as an OIDC provider for AWS:
+When using Okta as an OIDC provider for AWS, the identity calls `AssumeRoleWithWebIdentity` with the Okta ID token:
 
 ```go
 // In pkg/auth/identities/aws/assume_role.go
-
-// When provider is okta/*, use the ID token for AssumeRoleWithWebIdentity.
-func (i *assumeRoleIdentity) authenticateWithOIDC(ctx context.Context, oktaCreds *types.OktaCredentials) (*types.AWSCredentials, error) {
-    // Use ID token (not access token) for AWS federation.
-    idToken := oktaCreds.IDToken
-
-    // Call AssumeRoleWithWebIdentity.
-    input := &sts.AssumeRoleWithWebIdentityInput{
-        RoleArn:          aws.String(i.roleArn),
-        RoleSessionName:  aws.String(i.sessionName),
-        WebIdentityToken: aws.String(idToken),
-        DurationSeconds:  aws.Int32(i.sessionDuration),
-    }
-
-    result, err := i.stsClient.AssumeRoleWithWebIdentity(ctx, input)
-    if err != nil {
-        return nil, err
-    }
-
-    return &types.AWSCredentials{
-        AccessKeyID:     aws.ToString(result.Credentials.AccessKeyId),
-        SecretAccessKey: aws.ToString(result.Credentials.SecretAccessKey),
-        SessionToken:    aws.ToString(result.Credentials.SessionToken),
-        Expiration:      result.Credentials.Expiration.Format(time.RFC3339),
-    }, nil
+// When provider is okta/*, use ID token for AssumeRoleWithWebIdentity.
+input := &sts.AssumeRoleWithWebIdentityInput{
+    RoleArn:          aws.String(roleArn),
+    RoleSessionName:  aws.String(sessionName),
+    WebIdentityToken: aws.String(oktaCreds.IDToken),  // ID token, not access token
+    DurationSeconds:  aws.Int32(sessionDuration),
 }
 ```
 
@@ -1572,15 +752,15 @@ func TestOktaToAWS_OIDCFederation(t *testing.T) {
 ### Attack Surface Reduction
 
 **Before (ambient credentials):**
-- ❌ `OKTA_API_TOKEN` in shell environment
-- ❌ API tokens in plain text files
-- ❌ No credential isolation
+- `OKTA_API_TOKEN` in shell environment
+- API tokens in plain text files
+- No credential isolation
 
 **After (Atmos-managed):**
-- ✅ OAuth tokens in XDG-compliant location
-- ✅ Automatic token refresh
-- ✅ Clean logout removes all tokens
-- ✅ No ambient credentials leak
+- OAuth tokens in XDG-compliant location
+- Automatic token refresh
+- Clean logout removes all tokens
+- No ambient credentials leak
 
 ### Credential Lifecycle
 
@@ -1628,16 +808,16 @@ This implementation follows the [Universal Identity Provider File Isolation Patt
 
 | Requirement | Okta Implementation | Status |
 |-------------|---------------------|--------|
-| XDG Compliance | `~/.config/atmos/okta/` | 🚧 Planned |
-| Provider Scoping | `{provider-name}/` subdirectories | 🚧 Planned |
-| File Permissions | `0o700` dirs, `0o600` files | 🚧 Planned |
-| Primary Isolation Var | `OKTA_CONFIG_DIR`, `OKTA_ORG_URL` | 🚧 Planned |
-| Credential Clearing | Clears `OKTA_API_TOKEN`, etc. | 🚧 Planned |
-| File Manager | `pkg/auth/cloud/okta/files.go` | 🚧 Planned |
-| Setup Functions | `pkg/auth/cloud/okta/setup.go` | 🚧 Planned |
-| Environment Prep | `pkg/auth/cloud/okta/env.go` | 🚧 Planned |
-| Auth Context | `OktaAuthContext` | 🚧 Planned |
-| Test Coverage | >80% coverage | 🚧 Planned |
+| XDG Compliance | `~/.config/atmos/okta/` | Planned |
+| Provider Scoping | `{provider-name}/` subdirectories | Planned |
+| File Permissions | `0o700` dirs, `0o600` files | Planned |
+| Primary Isolation Var | `OKTA_CONFIG_DIR`, `OKTA_ORG_URL` | Planned |
+| Credential Clearing | Clears `OKTA_API_TOKEN`, etc. | Planned |
+| File Manager | `pkg/auth/cloud/okta/files.go` | Planned |
+| Setup Functions | `pkg/auth/cloud/okta/setup.go` | Planned |
+| Environment Prep | `pkg/auth/cloud/okta/env.go` | Planned |
+| Auth Context | `OktaAuthContext` | Planned |
+| Test Coverage | >80% coverage | Planned |
 
 ## Success Metrics
 
