@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -31,13 +32,27 @@ func init() {
 	_ = provisioner.RegisterProvisioner(provisioner.Provisioner{
 		Type:      "source",
 		HookEvent: HookEventBeforeTerraformInit,
-		Func:      AutoProvisionSource,
+		Func:      autoProvisionSourceTerraform,
 	})
+}
+
+// autoProvisionSourceTerraform is a wrapper for the hook system that always uses terraform as component type.
+// This matches the HookEventBeforeTerraformInit event.
+func autoProvisionSourceTerraform(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	componentConfig map[string]any,
+	authContext *schema.AuthContext,
+) error {
+	return AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, componentConfig, authContext)
 }
 
 // AutoProvisionSource automatically vendors component source on first use.
 // This enables JIT (Just-in-Time) vendoring - sources are fetched automatically
-// when running terraform commands if the target directory doesn't exist.
+// when running terraform/helmfile/packer commands if the target directory doesn't exist.
+//
+// Parameters:
+// - componentType: the type of component ("terraform", "helmfile", or "packer").
 //
 // Behavior:
 // - If component has no source configured: skip (not an error).
@@ -47,6 +62,7 @@ func init() {
 func AutoProvisionSource(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
+	componentType string,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
 ) error {
@@ -60,7 +76,7 @@ func AutoProvisionSource(
 		return nil // No source configured - skip.
 	}
 
-	targetDir, isWorkdir, err := determineSourceTargetDirectory(atmosConfig, component, componentConfig)
+	targetDir, isWorkdir, err := determineSourceTargetDirectory(atmosConfig, componentType, component, componentConfig)
 	if err != nil {
 		return wrapProvisionError(err, "Failed to determine target directory", component)
 	}
@@ -147,10 +163,11 @@ func wrapProvisionError(err error, explanation, component string) error {
 // Returns the target directory path and whether it's a workdir path.
 //
 // Priority:
-// 1. If workdir is enabled: .workdir/terraform/<stack>-<component>/.
-// 2. Otherwise: components/terraform/<component>/.
+// 1. If workdir is enabled: .workdir/<componentType>/<stack>-<component>/.
+// 2. Otherwise: components/<componentType>/<component>/.
 func determineSourceTargetDirectory(
 	atmosConfig *schema.AtmosConfiguration,
+	componentType string,
 	component string,
 	componentConfig map[string]any,
 ) (string, bool, error) {
@@ -170,14 +187,14 @@ func determineSourceTargetDirectory(
 				Err()
 		}
 
-		// Build workdir path: .workdir/terraform/<stack>-<component>/
+		// Build workdir path: .workdir/<componentType>/<stack>-<component>/
 		workdirName := fmt.Sprintf("%s-%s", stack, component)
-		workdirPath := filepath.Join(basePath, WorkdirPath, "terraform", workdirName)
+		workdirPath := filepath.Join(basePath, WorkdirPath, componentType, workdirName)
 		return workdirPath, true, nil
 	}
 
 	// No workdir - use standard component path.
-	targetDir, err := DetermineTargetDirectory(atmosConfig, "terraform", component, componentConfig)
+	targetDir, err := DetermineTargetDirectory(atmosConfig, componentType, component, componentConfig)
 	if err != nil {
 		return "", false, err
 	}

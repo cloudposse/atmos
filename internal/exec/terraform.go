@@ -183,7 +183,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if provSource.HasSource(info.ComponentSection) {
 			// Run JIT source provisioning before path validation.
 			ctx := context.Background()
-			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, info.ComponentSection, info.AuthContext); err != nil {
+			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.TerraformComponentType, info.ComponentSection, info.AuthContext); err != nil {
 				return fmt.Errorf("failed to auto-provision component source: %w", err)
 			}
 
