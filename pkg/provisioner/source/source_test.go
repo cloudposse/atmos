@@ -313,9 +313,8 @@ func TestProvision_InvalidSource(t *testing.T) {
 		Component:     "vpc",
 		Stack:         "dev",
 		ComponentConfig: map[string]any{
-			"source": map[string]any{
-				// Invalid: missing required "uri" field.
-			},
+			// Invalid: source is a number, not a string or map.
+			"source": 12345,
 		},
 		Force: false,
 	}

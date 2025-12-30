@@ -90,24 +90,22 @@ func TestExtractSource(t *testing.T) {
 			expectNil:       true,
 		},
 		{
-			name: "map without uri field returns error",
+			name: "map without uri field returns nil (no source configured)",
 			componentConfig: map[string]any{
 				"source": map[string]any{
 					"version": "v1.0.0",
 				},
 			},
-			expectError: errUtils.ErrSourceInvalidSpec,
+			expectError: nil,
 			expectNil:   true,
 		},
 		{
-			name: "empty string URI returns valid spec with empty URI",
+			name: "empty string URI returns nil (no source configured)",
 			componentConfig: map[string]any{
 				"source": "",
 			},
-			expectError:     nil,
-			expectNil:       false,
-			expectedURI:     "",
-			expectedVersion: "",
+			expectError: nil,
+			expectNil:   true,
 		},
 		{
 			name: "invalid type returns error",
@@ -197,11 +195,11 @@ func TestHasSource(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "empty source string is still considered present",
+			name: "empty source string is not considered valid source",
 			componentConfig: map[string]any{
 				"source": "",
 			},
-			expected: true,
+			expected: false,
 		},
 		{
 			name:            "nil config",

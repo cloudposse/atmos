@@ -32,6 +32,10 @@ func ExtractSource(componentConfig map[string]any) (*schema.VendorComponentSourc
 func parseSource(source any, location string) (*schema.VendorComponentSource, error) {
 	// Handle string form: "github.com/org/repo//path?ref=v1.0.0".
 	if sourceStr, ok := source.(string); ok {
+		// Empty string means no source configured.
+		if sourceStr == "" {
+			return nil, nil
+		}
 		return &schema.VendorComponentSource{
 			Uri: sourceStr,
 		}, nil
@@ -39,7 +43,7 @@ func parseSource(source any, location string) (*schema.VendorComponentSource, er
 
 	// Handle map form: full VendorComponentSource.
 	if sourceMap, ok := source.(map[string]any); ok {
-		return parseSourceMap(sourceMap, location)
+		return parseSourceMap(sourceMap)
 	}
 
 	return nil, errUtils.Build(errUtils.ErrSourceInvalidSpec).
@@ -49,16 +53,14 @@ func parseSource(source any, location string) (*schema.VendorComponentSource, er
 }
 
 // parseSourceMap parses a map into VendorComponentSource.
-func parseSourceMap(sourceMap map[string]any, location string) (*schema.VendorComponentSource, error) {
+func parseSourceMap(sourceMap map[string]any) (*schema.VendorComponentSource, error) {
 	spec := &schema.VendorComponentSource{}
 
-	// Required: uri.
+	// Required: uri. If empty or missing, treat as no source configured.
 	uri, ok := sourceMap["uri"].(string)
-	if !ok {
-		return nil, errUtils.Build(errUtils.ErrSourceInvalidSpec).
-			WithExplanation(fmt.Sprintf("%s.uri is required", location)).
-			WithHint("Specify a valid go-getter URI").
-			Err()
+	if !ok || uri == "" {
+		// Empty source map or missing uri means no source configured.
+		return nil, nil
 	}
 	spec.Uri = uri
 
@@ -140,15 +142,29 @@ func parseRetryConfig(m map[string]any) *schema.RetryConfig {
 	return cfg
 }
 
-// HasSource checks if component config has source defined.
+// HasSource checks if component config has a valid source defined.
+// Returns true only if the source has a valid URI.
 func HasSource(componentConfig map[string]any) bool {
 	defer perf.Track(nil, "source.HasSource")()
 	if componentConfig == nil {
 		return false
 	}
 	// Check top-level source.
-	if source, ok := componentConfig[cfg.SourceSectionName]; ok && source != nil {
-		return true
+	source, ok := componentConfig[cfg.SourceSectionName]
+	if !ok || source == nil {
+		return false
 	}
+
+	// String form: must be non-empty.
+	if sourceStr, ok := source.(string); ok {
+		return sourceStr != ""
+	}
+
+	// Map form: must have uri field.
+	if sourceMap, ok := source.(map[string]any); ok {
+		uri, hasUri := sourceMap["uri"].(string)
+		return hasUri && uri != ""
+	}
+
 	return false
 }
