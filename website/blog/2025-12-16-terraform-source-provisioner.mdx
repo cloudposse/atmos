@@ -5,13 +5,13 @@ authors: [osterman]
 tags: [feature]
 ---
 
-Atmos now supports just-in-time (JIT) vendoring of Terraform components directly from stack configuration using the top-level `source` field. This enables you to declare component sources inline without requiring separate `component.yaml` files. Components are automatically downloaded on first use—just run `atmos terraform plan` and the source is provisioned for you.
+Atmos now supports just-in-time (JIT) vendoring of components directly from stack configuration using the top-level `source` field. This works for **Terraform**, **Helmfile**, and **Packer** components. Declare component sources inline without requiring separate `component.yaml` files—components are automatically downloaded on first use.
 
 <!--truncate-->
 
 ## What Changed
 
-We've added automatic JIT source provisioning and a new `atmos terraform source` command group. When you run any terraform command, Atmos automatically provisions the component source if the directory doesn't exist:
+We've added automatic JIT source provisioning and new `source` command groups for terraform, helmfile, and packer. When you run any command, Atmos automatically provisions the component source if the directory doesn't exist:
 
 ```yaml
 components:
@@ -25,13 +25,43 @@ components:
         excluded_paths:
           - "*.md"
           - "tests/**"
+
+  helmfile:
+    nginx:
+      source:
+        uri: github.com/cloudposse/helmfiles//releases/nginx-ingress
+        version: 0.126.0
+        included_paths:
+          - "*.yaml"
+
+  packer:
+    eks-ami:
+      source:
+        uri: github.com/aws-samples/amazon-eks-custom-amis
+        version: main
+        included_paths:
+          - "*.pkr.hcl"
 ```
 
-The new commands include:
+The new commands are available for each component type:
+
+**Terraform:**
 - `atmos terraform source pull` - Vendor a component from source configuration (use `--force` to re-vendor)
 - `atmos terraform source list` - List components with source configured
 - `atmos terraform source describe` - View source configuration
 - `atmos terraform source delete` - Remove vendored source directory
+
+**Helmfile:**
+- `atmos helmfile source pull`
+- `atmos helmfile source list`
+- `atmos helmfile source describe`
+- `atmos helmfile source delete`
+
+**Packer:**
+- `atmos packer source pull`
+- `atmos packer source list`
+- `atmos packer source describe`
+- `atmos packer source delete`
 
 ## Why This Matters
 
@@ -142,7 +172,7 @@ The source provisioner uses go-getter and supports:
 
 ## Combining with Workdir Isolation
 
-The `source` provisioner works seamlessly with the [workdir provisioner](/changelog/component-workdir-isolation) for concurrent Terraform operations. When both are enabled, you get the best of both worlds:
+The `source` provisioner works seamlessly with the [workdir provisioner](/changelog/component-workdir-isolation) for concurrent operations across all component types (terraform, helmfile, and packer). When both are enabled, you get the best of both worlds:
 
 1. **Source provisioner** vendors the component from a remote location
 2. **Workdir provisioner** creates an isolated execution directory
@@ -210,13 +240,22 @@ After running the above commands, your project looks like:
 
 ```
 project/
-├── components/terraform/
-│   └── vpc/                    # Vendored by source pull
-│       └── *.tf
-├── .workdir/terraform/         # Created by workdir provisioner
-│   ├── dev-vpc/               # Isolated for dev stack
-│   ├── staging-vpc/           # Isolated for staging stack
-│   └── prod-vpc/              # Isolated for prod stack
+├── components/
+│   ├── terraform/
+│   │   └── vpc/                    # Vendored by source pull
+│   ├── helmfile/
+│   │   └── nginx/                  # Vendored by source pull
+│   └── packer/
+│       └── eks-ami/                # Vendored by source pull
+├── .workdir/                       # Created when workdir enabled
+│   ├── terraform/
+│   │   ├── dev-vpc/               # Isolated for dev stack
+│   │   ├── staging-vpc/           # Isolated for staging stack
+│   │   └── prod-vpc/              # Isolated for prod stack
+│   ├── helmfile/
+│   │   └── dev-nginx/             # Isolated for dev stack
+│   └── packer/
+│       └── dev-eks-ami/           # Isolated for dev stack
 └── stacks/
     ├── dev.yaml
     ├── staging.yaml
@@ -227,4 +266,4 @@ project/
 
 We'd love to hear your feedback on this feature! Please [open an issue](https://github.com/cloudposse/atmos/issues) if you have questions or suggestions.
 
-For more details, see the [terraform source documentation](/cli/commands/terraform/source) and the [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) design pattern.
+For more details, see the source documentation for [terraform](/cli/commands/terraform/source), [helmfile](/cli/commands/helmfile/source), and [packer](/cli/commands/packer/source), as well as the [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) design pattern.
