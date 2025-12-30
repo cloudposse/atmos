@@ -116,8 +116,9 @@ func needsVendoring(targetDir string) bool {
 
 // DetermineTargetDirectory determines where to vendor the component source.
 // Priority:
-// 1. Working_directory if specified in component config.
-// 2. Default component path: <base_path>/<component>.
+// 1. Working_directory if specified in component config (metadata or settings).
+// 2. Workdir path if provision.workdir.enabled is true: .workdir/<type>/<stack>-<component>/.
+// 3. Default component path: <base_path>/<component>.
 func DetermineTargetDirectory(
 	atmosConfig *schema.AtmosConfiguration,
 	componentType string,
@@ -129,6 +130,11 @@ func DetermineTargetDirectory(
 	// Check for working_directory override in metadata or settings.
 	if workdir := getWorkingDirectoryOverride(componentConfig); workdir != "" {
 		return workdir, nil
+	}
+
+	// Check if workdir is enabled - if so, use workdir path.
+	if isWorkdirEnabled(componentConfig) {
+		return buildWorkdirPath(atmosConfig, componentType, component, componentConfig)
 	}
 
 	// Get component base path using resolved paths from atmosConfig.
@@ -226,4 +232,30 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentType 
 	default:
 		return ""
 	}
+}
+
+// buildWorkdirPath constructs the workdir path: .workdir/<componentType>/<stack>-<component>/.
+func buildWorkdirPath(
+	atmosConfig *schema.AtmosConfiguration,
+	componentType string,
+	component string,
+	componentConfig map[string]any,
+) (string, error) {
+	// Get stack name from component config.
+	stack, _ := componentConfig["atmos_stack"].(string)
+	if stack == "" {
+		return "", errUtils.Build(errUtils.ErrSourceProvision).
+			WithExplanation("Stack name required when workdir is enabled").
+			WithHint("The 'atmos_stack' field must be present in component config for workdir provisioning").
+			Err()
+	}
+
+	basePath := atmosConfig.BasePath
+	if basePath == "" {
+		basePath = "."
+	}
+
+	// Build workdir path: .workdir/<componentType>/<stack>-<component>/
+	workdirName := fmt.Sprintf("%s-%s", stack, component)
+	return filepath.Join(basePath, WorkdirPath, componentType, workdirName), nil
 }
