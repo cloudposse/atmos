@@ -16,6 +16,9 @@
   max-width: 100vw;
   margin-left: calc(-50vw + 50%);
   margin-right: calc(-50vw + 50%);
+  padding-left: 2rem;
+  padding-right: 2rem;
+  box-sizing: border-box;
   /* Limit height to keep controls visible - navbar ~60px, toolbar ~50px */
   height: calc(100vh - 110px);
   max-height: calc(100vh - 110px);
@@ -34,6 +37,8 @@
 .markdown .slide-deck .slide-deck__container,
 .theme-doc-markdown .slide-deck .slide-deck__container {
   padding-top: 0;
+  padding-left: 2rem;
+  padding-right: 2rem;
   height: 100%;
   display: flex;
   align-items: center;
@@ -122,6 +127,7 @@ html[data-theme='dark'] .slide-deck {
   align-items: stretch;
   flex-shrink: 0;
   cursor: pointer;
+  min-width: 40px;
 }
 
 /* Controls Hidden State */
@@ -210,8 +216,8 @@ html[data-theme='dark'] .slide-deck__side-nav:disabled {
 .slide-deck__slide-wrapper {
   position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
+  left: 2rem;
+  right: 2rem;
   bottom: 0;
   display: flex;
   align-items: center;

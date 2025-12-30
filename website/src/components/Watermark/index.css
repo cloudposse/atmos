@@ -44,3 +44,8 @@ html[data-theme='dark'] .cloudposse-logo__dark {
     display: none;
   }
 }
+
+/* Hide watermark when slide deck is active (progress bar would overlap) */
+body:has(.slide-deck) .cloudposse-logo {
+  display: none;
+}

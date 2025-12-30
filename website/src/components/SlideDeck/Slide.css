@@ -5,7 +5,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem 3rem;
+  padding: 2rem 4rem !important;
   box-sizing: border-box;
   background: var(--ifm-background-color);
   color: var(--ifm-font-color-base);
