@@ -5,13 +5,13 @@ authors: [osterman]
 tags: [feature]
 ---
 
-Atmos now supports just-in-time (JIT) vendoring of Terraform components directly from stack configuration using the top-level `source` field. This enables you to declare component sources inline without requiring separate `component.yaml` files.
+Atmos now supports just-in-time (JIT) vendoring of Terraform components directly from stack configuration using the top-level `source` field. This enables you to declare component sources inline without requiring separate `component.yaml` files. Components are automatically downloaded on first use—just run `atmos terraform plan` and the source is provisioned for you.
 
 <!--truncate-->
 
 ## What Changed
 
-We've added a new `atmos terraform source` command group that enables JIT vendoring based on `source` configuration in your stack manifests:
+We've added automatic JIT source provisioning and a new `atmos terraform source` command group. When you run any terraform command, Atmos automatically provisions the component source if the directory doesn't exist:
 
 ```yaml
 components:
@@ -67,7 +67,7 @@ For teams that value having vendored code committed for audit trails, code revie
 
 ## How to Use It
 
-### Basic Usage
+### Automatic Provisioning (Default)
 
 Add `source` to your component configuration:
 
@@ -83,7 +83,18 @@ components:
         cidr_block: "10.0.0.0/16"
 ```
 
-Then vendor the component:
+Then just run terraform—the source is provisioned automatically:
+
+```shell
+atmos terraform plan vpc --stack dev
+# → Auto-provisions source for component 'vpc'
+# → Successfully auto-provisioned source to components/terraform/vpc
+# → Terraform runs
+```
+
+### Explicit CLI Commands
+
+For fine-grained control, use the source CLI commands:
 
 ```shell
 atmos terraform source pull vpc --stack dev
@@ -165,20 +176,23 @@ components:
 
 ### Workflow
 
-The combined workflow operates in two steps:
+With both source and workdir enabled, everything happens automatically:
 
 ```shell
-# Step 1: Vendor the component (downloads to components/terraform/vpc/)
-atmos terraform source pull vpc --stack dev
-
-# Step 2: Run terraform (workdir provisioner copies to .workdir/terraform/dev-vpc/)
+# Just run terraform - both source and workdir are provisioned automatically
 atmos terraform plan vpc -s dev
+# → Source provisioner: downloads to .workdir/terraform/dev-vpc/ (directly to workdir)
+# → Terraform runs in isolated workdir
 ```
 
-When you run `terraform plan`, the workdir provisioner automatically:
-1. Creates `.workdir/terraform/dev-vpc/`
-2. Copies the vendored component files
-3. Runs Terraform in the isolated directory
+When source and workdir are both configured, the source provisioner downloads directly to the workdir location (`.workdir/terraform/<stack>-<component>/`), skipping the intermediate component directory.
+
+For explicit control, you can still use the CLI:
+
+```shell
+# Explicit source pull (without workdir, goes to components/terraform/vpc/)
+atmos terraform source pull vpc --stack dev
+```
 
 This means you can safely run multiple stacks in parallel:
 

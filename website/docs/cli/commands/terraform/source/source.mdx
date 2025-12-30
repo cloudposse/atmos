@@ -12,7 +12,7 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Use these commands to manage Terraform component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using the top-level `source` field without requiring a separate `component.yaml` file.
+Use these commands to manage Terraform component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using the top-level `source` field without requiring a separate `component.yaml` file. Sources are automatically provisioned when running terraform commands—just run `atmos terraform plan` and the source is downloaded on first use.
 </Intro>
 
 <ActionCard title="Source-Based Version Pinning">
@@ -33,6 +33,28 @@ atmos terraform source <subcommand> [options]
 ## Subcommands
 
 <DocCardList />
+
+## Automatic Provisioning
+
+Sources are automatically provisioned when running any terraform command. If a component has `source` configured and the target directory doesn't exist, Atmos downloads the source before running terraform:
+
+```shell
+# Source is automatically provisioned on first use
+atmos terraform plan vpc --stack dev
+# → Auto-provisioning source for component 'vpc'
+# → Auto-provisioned source to components/terraform/vpc
+# → Terraform runs
+```
+
+This means you can simply configure your component's source and run terraform—no explicit vendor step needed.
+
+## CLI Commands
+
+The explicit CLI commands are useful for fine-grained control:
+- Force re-vendor to get the latest version
+- Describe source configuration
+- Delete vendored sources
+- List components with sources
 
 ## How It Works
 

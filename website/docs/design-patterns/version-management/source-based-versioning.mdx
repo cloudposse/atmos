@@ -189,14 +189,27 @@ components:
 
 ## How It Works
 
+Sources are automatically provisioned when running terraform commands:
+
+```shell
+# Just run terraform - source is provisioned automatically
+atmos terraform plan vpc --stack dev
+# → Auto-provisioning source for component 'vpc'
+# → Auto-provisioned source to components/terraform/vpc
+# → Terraform runs
+```
+
+**Under the hood:**
+
 1. **Source Provisioner Hook**: Registers for `before.terraform.init` event
 2. **Configuration Check**: Extracts `source` from component configuration
-3. **Download**: Uses go-getter to fetch component at specified version
-4. **Path Filtering**: Applies `included_paths` and `excluded_paths` patterns
-5. **Target Directory**: Places component in the configured component path
-6. **Execution**: Terraform runs against the vendored component
+3. **Skip if Exists**: If target directory exists and is non-empty, skip provisioning
+4. **Download**: Uses go-getter to fetch component at specified version
+5. **Path Filtering**: Applies `included_paths` and `excluded_paths` patterns
+6. **Target Directory**: Places component in the configured component path
+7. **Execution**: Terraform runs against the vendored component
 
-The source provisioner only downloads if the component directory doesn't exist or is outdated.
+The source provisioner only downloads if the component directory doesn't exist or is empty.
 
 ## CLI Commands
 

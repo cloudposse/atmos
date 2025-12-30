@@ -55,15 +55,23 @@ components:
 
 ### How It Works
 
-The source provisioner is invoked via CLI commands:
+The source provisioner operates in two modes:
+
+**Automatic (JIT) Mode** - Sources are provisioned automatically when running terraform commands:
+
+1. User runs `atmos terraform plan/apply/init <component> --stack <stack>`
+2. Before terraform init, the source provisioner hook is triggered
+3. If source is configured and component directory is missing, source is vendored automatically
+4. Terraform runs against the vendored component
+
+**Explicit CLI Mode** - CRUD commands for explicit source management:
 
 1. User runs `atmos terraform source pull <component> --stack <stack>`
 2. Provisioner extracts `source` configuration from component config
 3. If source exists and component directory is missing (or `--force` specified), vendors the component
 4. Component is vendored to the target directory
-5. User can then run `atmos terraform plan/apply` as usual
 
-**Note:** The current implementation is CLI-driven. Hook-based automatic provisioning (before `terraform init`) is planned for a future release.
+The automatic mode is the default behavior - simply run terraform commands and sources are provisioned on first use. Use the explicit CLI commands when you need fine-grained control (e.g., force re-vendor, delete, describe).
 
 ### Integration with Workdir
 
@@ -217,9 +225,27 @@ This follows Atmos's consistent configuration hierarchy where `source` is a firs
 
 ---
 
-## Using the CLI Commands
+## Using the Source Provisioner
 
-**Current implementation (CLI-driven):**
+### Automatic JIT Mode (Default)
+
+Sources are automatically provisioned when running terraform commands:
+
+```bash
+# Source is vendored automatically before terraform init
+atmos terraform apply vpc --stack dev
+# → BeforeTerraformInit hook triggers
+# → Source provisioner checks source configuration
+# → Vendors if component directory missing
+# → Terraform runs
+
+# Same automatic behavior for plan, init, etc.
+atmos terraform plan vpc --stack dev
+```
+
+### Explicit CLI Mode
+
+Use the CLI commands for fine-grained control:
 
 ```bash
 # Vendor component source (downloads if missing or outdated)
@@ -236,19 +262,6 @@ atmos terraform source describe vpc --stack dev
 
 # Delete vendored source (requires --force)
 atmos terraform source delete vpc --stack dev --force
-```
-
-**Future: Automatic vendoring (planned):**
-
-A future enhancement may add hook-based automatic provisioning:
-
-```bash
-# Source would be vendored automatically before terraform init
-atmos terraform apply vpc --stack dev
-# → BeforeTerraformInit hook triggers
-# → Source provisioner checks source configuration
-# → Vendors if component directory missing
-# → Terraform runs
 ```
 
 ---
