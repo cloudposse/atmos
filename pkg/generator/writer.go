@@ -4,8 +4,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// defaultFileMode is the default permission mode for generated files.
+const defaultFileMode os.FileMode = 0o600
 
 // Writer handles file output for generators.
 type Writer interface {
@@ -22,8 +26,10 @@ type FileWriter struct {
 
 // NewFileWriter creates a new file writer with optional configuration.
 func NewFileWriter(opts ...WriterOption) *FileWriter {
+	defer perf.Track(nil, "generator.NewFileWriter")()
+
 	w := &FileWriter{
-		fileMode: 0o600,
+		fileMode: defaultFileMode,
 	}
 	for _, opt := range opts {
 		opt(w)
@@ -33,12 +39,16 @@ func NewFileWriter(opts ...WriterOption) *FileWriter {
 
 // WriteJSON writes content as JSON to the specified directory and filename.
 func (w *FileWriter) WriteJSON(dir, filename string, data map[string]any) error {
+	defer perf.Track(nil, "generator.FileWriter.WriteJSON")()
+
 	path := filepath.Join(dir, filename)
 	return u.WriteToFileAsJSON(path, data, w.fileMode)
 }
 
 // WriteHCL writes content as HCL to the specified directory and filename.
 func (w *FileWriter) WriteHCL(dir, filename string, data map[string]any) error {
+	defer perf.Track(nil, "generator.FileWriter.WriteHCL")()
+
 	path := filepath.Join(dir, filename)
 	return u.WriteToFileAsHcl(path, data, w.fileMode)
 }
@@ -53,6 +63,8 @@ type MockWriter struct {
 
 // NewMockWriter creates a new mock writer for testing.
 func NewMockWriter() *MockWriter {
+	defer perf.Track(nil, "generator.NewMockWriter")()
+
 	return &MockWriter{
 		Written: make(map[string]map[string]any),
 	}

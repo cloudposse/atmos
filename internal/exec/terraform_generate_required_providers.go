@@ -2,17 +2,52 @@ package exec
 
 import (
 	"context"
-	"errors"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/generator"
 	rp "github.com/cloudposse/atmos/pkg/generator/required_providers"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// requiredProvidersFlags holds the parsed flags for the generate required-providers command.
+type requiredProvidersFlags struct {
+	stack                string
+	processTemplates     bool
+	processYamlFunctions bool
+	skip                 []string
+	file                 string
+}
+
+// parseRequiredProvidersFlags extracts flags from the cobra command.
+func parseRequiredProvidersFlags(cmd *cobra.Command) (requiredProvidersFlags, error) {
+	defer perf.Track(nil, "exec.parseRequiredProvidersFlags")()
+
+	flags := cmd.Flags()
+	var f requiredProvidersFlags
+	var err error
+
+	if f.stack, err = flags.GetString("stack"); err != nil {
+		return f, err
+	}
+	if f.processTemplates, err = flags.GetBool("process-templates"); err != nil {
+		return f, err
+	}
+	if f.processYamlFunctions, err = flags.GetBool("process-functions"); err != nil {
+		return f, err
+	}
+	if f.skip, err = flags.GetStringSlice("skip"); err != nil {
+		return f, err
+	}
+	f.file, _ = flags.GetString("file") // Ignore error, optional flag.
+
+	return f, nil
+}
 
 // ExecuteTerraformGenerateRequiredProvidersCmd executes `terraform generate required-providers` command.
 // This generates a terraform_override.tf.json file with required_version and required_providers
@@ -21,40 +56,22 @@ func ExecuteTerraformGenerateRequiredProvidersCmd(cmd *cobra.Command, args []str
 	defer perf.Track(nil, "exec.ExecuteTerraformGenerateRequiredProvidersCmd")()
 
 	if len(args) != 1 {
-		return errors.New("invalid arguments. The command requires one argument `component`")
+		return errUtils.ErrInvalidComponentArgument
 	}
 
-	flags := cmd.Flags()
-
-	stack, err := flags.GetString("stack")
-	if err != nil {
-		return err
-	}
-
-	processTemplates, err := flags.GetBool("process-templates")
-	if err != nil {
-		return err
-	}
-
-	processYamlFunctions, err := flags.GetBool("process-functions")
-	if err != nil {
-		return err
-	}
-
-	skip, err := flags.GetStringSlice("skip")
+	f, err := parseRequiredProvidersFlags(cmd)
 	if err != nil {
 		return err
 	}
 
 	component := args[0]
-
 	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}
 
 	info.ComponentFromArg = component
-	info.Stack = stack
+	info.Stack = f.stack
 	info.ComponentType = "terraform"
 	info.CliArgs = []string{"terraform", "generate", "required-providers"}
 
@@ -63,26 +80,17 @@ func ExecuteTerraformGenerateRequiredProvidersCmd(cmd *cobra.Command, args []str
 		return err
 	}
 
-	info, err = ProcessStacks(&atmosConfig, info, true, processTemplates, processYamlFunctions, skip, nil)
+	info, err = ProcessStacks(&atmosConfig, info, true, f.processTemplates, f.processYamlFunctions, f.skip, nil)
 	if err != nil {
 		return err
 	}
 
-	// Get the output file path.
-	var filePath string
-	fileFromArg, err := flags.GetString("file")
-	if err != nil {
-		fileFromArg = ""
-	}
+	return generateRequiredProvidersFile(&atmosConfig, &info, f.file)
+}
 
-	// Determine working directory.
-	workingDir := constructTerraformComponentWorkingDir(&atmosConfig, &info)
-
-	if len(fileFromArg) > 0 {
-		filePath = fileFromArg
-	} else {
-		filePath = filepath.Join(workingDir, rp.DefaultFilenameConst)
-	}
+// generateRequiredProvidersFile creates the required_providers file using the generator.
+func generateRequiredProvidersFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, fileFromArg string) error {
+	defer perf.Track(nil, "exec.generateRequiredProvidersFile")()
 
 	// Check if there's anything to generate.
 	if info.RequiredVersion == "" && len(info.RequiredProviders) == 0 {
@@ -91,30 +99,30 @@ func ExecuteTerraformGenerateRequiredProvidersCmd(cmd *cobra.Command, args []str
 		return nil
 	}
 
+	workingDir := constructTerraformComponentWorkingDir(atmosConfig, info)
+	genCtx := generator.NewGeneratorContext(atmosConfig, info, workingDir)
+	configureCustomFilePath(genCtx, fileFromArg)
+
 	log.Debug("Generating required_providers file",
 		"component", info.ComponentFromArg,
 		"stack", info.Stack,
 		"required_version", info.RequiredVersion,
 		"required_providers", info.RequiredProviders)
 
-	log.Debug("Writing the required_providers to file", "file", filePath)
-
 	if info.DryRun {
 		return nil
 	}
 
-	// Create generator context and generate.
-	genCtx := generator.NewGeneratorContext(&atmosConfig, &info, workingDir)
-
-	// If custom file path was specified, extract just the filename for the generator.
-	// The generator writes to WorkingDir + filename.
-	if len(fileFromArg) > 0 {
-		genCtx.CustomFilename = filepath.Base(fileFromArg)
-		// If the user specified a full path, update working dir to match.
-		if dir := filepath.Dir(fileFromArg); dir != "." && dir != "" {
-			genCtx.WorkingDir = dir
-		}
-	}
-
 	return generator.Generate(context.Background(), rp.Name, genCtx, generator.NewFileWriter())
+}
+
+// configureCustomFilePath sets up the generator context for a custom file path.
+func configureCustomFilePath(genCtx *generator.GeneratorContext, fileFromArg string) {
+	if fileFromArg == "" {
+		return
+	}
+	genCtx.CustomFilename = filepath.Base(fileFromArg)
+	if dir := filepath.Dir(fileFromArg); dir != "." && dir != "" {
+		genCtx.WorkingDir = dir
+	}
 }

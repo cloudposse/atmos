@@ -30,6 +30,29 @@ const (
 	terraformConfigKey = "terraform_config"
 )
 
+// extractRequiredProviders extracts required_providers from a component section.
+// It handles both map[string]map[string]any and map[string]any formats.
+func extractRequiredProviders(componentSection map[string]any) map[string]map[string]any {
+	// Try direct type assertion first.
+	if section, ok := componentSection[cfg.RequiredProvidersSectionName].(map[string]map[string]any); ok {
+		return section
+	}
+
+	// Try map[string]any and convert each value.
+	rawProviders, ok := componentSection[cfg.RequiredProvidersSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	result := make(map[string]map[string]any)
+	for k, v := range rawProviders {
+		if providerConfig, ok := v.(map[string]any); ok {
+			result[k] = providerConfig
+		}
+	}
+	return result
+}
+
 // ProcessComponentConfig processes component config sections.
 func ProcessComponentConfig(
 	atmosConfig *schema.AtmosConfiguration,
@@ -99,19 +122,7 @@ func ProcessComponentConfig(
 	}
 
 	// Extract required_providers section (DEV-3124: pin provider versions).
-	if componentRequiredProvidersSection, ok = componentSection[cfg.RequiredProvidersSectionName].(map[string]map[string]any); !ok {
-		// Try alternative extraction for map[string]any and convert.
-		if rawRequiredProviders, ok2 := componentSection[cfg.RequiredProvidersSectionName].(map[string]any); ok2 {
-			componentRequiredProvidersSection = make(map[string]map[string]any)
-			for k, v := range rawRequiredProviders {
-				if providerConfig, ok3 := v.(map[string]any); ok3 {
-					componentRequiredProvidersSection[k] = providerConfig
-				}
-			}
-		} else {
-			componentRequiredProvidersSection = nil
-		}
-	}
+	componentRequiredProvidersSection = extractRequiredProviders(componentSection)
 
 	// Extract required_version section (DEV-3124: pin Terraform version).
 	if componentRequiredVersion, ok = componentSection[cfg.RequiredVersionSectionName].(string); !ok {

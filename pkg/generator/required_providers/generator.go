@@ -37,16 +37,22 @@ func init() {
 
 // Name returns the unique identifier for this generator.
 func (g *Generator) Name() string {
+	defer perf.Track(nil, "generator.required_providers.Name")()
+
 	return Name
 }
 
 // DefaultFilename returns the default output filename.
 func (g *Generator) DefaultFilename() string {
+	defer perf.Track(nil, "generator.required_providers.DefaultFilename")()
+
 	return DefaultFilenameConst
 }
 
 // ShouldGenerate returns true if RequiredVersion or RequiredProviders has data.
 func (g *Generator) ShouldGenerate(genCtx *generator.GeneratorContext) bool {
+	defer perf.Track(nil, "generator.required_providers.ShouldGenerate")()
+
 	if genCtx == nil {
 		return false
 	}

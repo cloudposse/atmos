@@ -10,6 +10,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	// LogKeyGenerator is the log key for generator names.
+	logKeyGenerator = "generator"
+)
+
 var (
 	registry     *GeneratorRegistry
 	registryOnce sync.Once
@@ -23,6 +28,8 @@ type GeneratorRegistry struct {
 
 // GetRegistry returns the global generator registry singleton.
 func GetRegistry() *GeneratorRegistry {
+	defer perf.Track(nil, "generator.GetRegistry")()
+
 	registryOnce.Do(func() {
 		registry = &GeneratorRegistry{
 			generators: make(map[string]Generator),
@@ -34,6 +41,8 @@ func GetRegistry() *GeneratorRegistry {
 // Register adds a generator to the registry.
 // This is typically called from a generator's init() function.
 func Register(gen Generator) {
+	defer perf.Track(nil, "generator.Register")()
+
 	GetRegistry().mu.Lock()
 	defer GetRegistry().mu.Unlock()
 	GetRegistry().generators[gen.Name()] = gen
@@ -42,6 +51,8 @@ func Register(gen Generator) {
 
 // Get retrieves a generator by name.
 func (r *GeneratorRegistry) Get(name string) (Generator, error) {
+	defer perf.Track(nil, "generator.GeneratorRegistry.Get")()
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -54,6 +65,8 @@ func (r *GeneratorRegistry) Get(name string) (Generator, error) {
 
 // List returns all registered generator names in sorted order.
 func (r *GeneratorRegistry) List() []string {
+	defer perf.Track(nil, "generator.GeneratorRegistry.List")()
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -82,12 +95,12 @@ func GenerateAll(ctx context.Context, genCtx *GeneratorContext, writer Writer) e
 		log.Debug("Running generator", "generator", name)
 
 		if err := gen.Validate(genCtx); err != nil {
-			return fmt.Errorf("%w: generator %s: %v", ErrValidationFailed, name, err)
+			return fmt.Errorf("%w: %s: %w", ErrValidationFailed, name, err)
 		}
 
 		content, err := gen.Generate(ctx, genCtx)
 		if err != nil {
-			return fmt.Errorf("%w: generator %s: %v", ErrGenerationFailed, name, err)
+			return fmt.Errorf("%w: %s: %w", ErrGenerationFailed, name, err)
 		}
 
 		if content == nil {
@@ -97,9 +110,9 @@ func GenerateAll(ctx context.Context, genCtx *GeneratorContext, writer Writer) e
 
 		if !genCtx.DryRun {
 			filename := gen.DefaultFilename()
-			log.Debug("Writing generated file", "generator", name, "file", filename)
+			log.Debug("Writing generated file", logKeyGenerator, name, "file", filename)
 			if err := writer.WriteJSON(genCtx.WorkingDir, filename, content); err != nil {
-				return fmt.Errorf("%w: generator %s: %v", ErrWriteFailed, name, err)
+				return fmt.Errorf("%w: %s: %w", ErrWriteFailed, name, err)
 			}
 		}
 	}
@@ -117,17 +130,17 @@ func Generate(ctx context.Context, name string, genCtx *GeneratorContext, writer
 	}
 
 	if !gen.ShouldGenerate(genCtx) {
-		log.Debug("Generator has no relevant config, skipping", "generator", name)
+		log.Debug("Generator has no relevant config, skipping", logKeyGenerator, name)
 		return nil
 	}
 
 	if err := gen.Validate(genCtx); err != nil {
-		return fmt.Errorf("%w: %v", ErrValidationFailed, err)
+		return fmt.Errorf("%w: %w", ErrValidationFailed, err)
 	}
 
 	content, err := gen.Generate(ctx, genCtx)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrGenerationFailed, err)
+		return fmt.Errorf("%w: %w", ErrGenerationFailed, err)
 	}
 
 	if content == nil {
@@ -141,7 +154,7 @@ func Generate(ctx context.Context, name string, genCtx *GeneratorContext, writer
 			filename = gen.DefaultFilename()
 		}
 		if err := writer.WriteJSON(genCtx.WorkingDir, filename, content); err != nil {
-			return fmt.Errorf("%w: %v", ErrWriteFailed, err)
+			return fmt.Errorf("%w: %w", ErrWriteFailed, err)
 		}
 	}
 

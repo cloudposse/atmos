@@ -26,6 +26,8 @@ func init() {
 
 // Name returns the unique identifier for this generator.
 func (g *Generator) Name() string {
+	defer perf.Track(nil, "generator.varfile.Name")()
+
 	return Name
 }
 
@@ -34,6 +36,8 @@ func (g *Generator) Name() string {
 // component and stack context. This returns a placeholder that should be
 // overridden by the calling code.
 func (g *Generator) DefaultFilename() string {
+	defer perf.Track(nil, "generator.varfile.DefaultFilename")()
+
 	// Varfile names are dynamic: {context}-{component}.terraform.tfvars.json
 	// The actual filename is constructed in the calling code based on StackInfo.
 	return "terraform.tfvars.json"
@@ -41,6 +45,8 @@ func (g *Generator) DefaultFilename() string {
 
 // ShouldGenerate returns true if the VarsSection has data.
 func (g *Generator) ShouldGenerate(genCtx *generator.GeneratorContext) bool {
+	defer perf.Track(nil, "generator.varfile.ShouldGenerate")()
+
 	if genCtx == nil {
 		return false
 	}
@@ -85,6 +91,8 @@ func (g *Generator) Generate(ctx context.Context, genCtx *generator.GeneratorCon
 // This follows the pattern: {context}-{component}.terraform.tfvars.json
 // or: {context}-{folder}-{component}.terraform.tfvars.json if folder prefix exists.
 func ConstructFilename(genCtx *generator.GeneratorContext) string {
+	defer perf.Track(nil, "generator.varfile.ConstructFilename")()
+
 	if genCtx == nil {
 		return "terraform.tfvars.json"
 	}

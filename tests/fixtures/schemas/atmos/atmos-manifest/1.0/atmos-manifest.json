@@ -273,6 +273,9 @@
             "component": {
               "$ref": "#/definitions/component"
             },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
             "vars": {
               "$ref": "#/definitions/vars"
             },
@@ -386,6 +389,9 @@
             "component": {
               "$ref": "#/definitions/component"
             },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
             "vars": {
               "$ref": "#/definitions/vars"
             },
@@ -480,6 +486,9 @@
             },
             "component": {
               "$ref": "#/definitions/component"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
             },
             "vars": {
               "$ref": "#/definitions/vars"
@@ -1262,6 +1271,112 @@
             "enabled": {
               "type": "boolean",
               "description": "Enable isolated working directory for this component"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "source": {
+      "title": "source",
+      "description": "Component source configuration for Just-in-Time (JIT) vendoring. Specifies where to fetch component code from. Supports go-getter compatible URIs.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "string",
+          "description": "Go-getter compatible URI with optional version in query string (e.g., 'github.com/org/repo//path?ref=v1.0.0')"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "description": "Source type hint for go-getter (e.g., 'git', 's3', 'gcs')"
+            },
+            "uri": {
+              "type": "string",
+              "description": "Go-getter compatible URI (e.g., 'github.com/org/repo//path')"
+            },
+            "version": {
+              "type": "string",
+              "description": "Version tag, branch, or commit hash to checkout"
+            },
+            "included_paths": {
+              "type": "array",
+              "description": "Glob patterns for files to include when vendoring",
+              "items": {
+                "type": "string"
+              }
+            },
+            "excluded_paths": {
+              "type": "array",
+              "description": "Glob patterns for files to exclude when vendoring",
+              "items": {
+                "type": "string"
+              }
+            },
+            "retry": {
+              "$ref": "#/definitions/source_retry"
+            }
+          },
+          "required": [
+            "uri"
+          ]
+        }
+      ]
+    },
+    "source_retry": {
+      "title": "source_retry",
+      "description": "Retry configuration for source vendoring operations",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum number of retry attempts"
+            },
+            "initial_delay": {
+              "type": "string",
+              "description": "Initial delay between retries (e.g., '1s', '500ms')"
+            },
+            "max_delay": {
+              "type": "string",
+              "description": "Maximum delay between retries (e.g., '30s', '1m')"
+            },
+            "backoff_strategy": {
+              "type": "string",
+              "enum": [
+                "constant",
+                "linear",
+                "exponential"
+              ],
+              "description": "Strategy for increasing delay between retries"
+            },
+            "multiplier": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Multiplier for exponential/linear backoff"
+            },
+            "random_jitter": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Random jitter factor (0-1) to add to delays"
+            },
+            "max_elapsed_time": {
+              "type": "string",
+              "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
             }
           },
           "required": []

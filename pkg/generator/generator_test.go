@@ -145,7 +145,6 @@ func TestMockWriter(t *testing.T) {
 func TestGeneratorRegistry(t *testing.T) {
 	// Save and restore registry state.
 	originalRegistry := registry
-	registryOnce = registryOnce // Reset for testing.
 	defer func() {
 		registry = originalRegistry
 	}()
