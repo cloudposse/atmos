@@ -7,6 +7,7 @@ import:
   - catalog/vpc-source-inline-ref
   - catalog/vpc-source-map
   - catalog/vpc-source-retry
+  - catalog/vpc-source-workdir
   - catalog/vpc-no-source
 
 # Override vars for dev environment

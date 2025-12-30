@@ -125,30 +125,89 @@ func DetermineTargetDirectory(
 	componentConfig map[string]any,
 ) (string, error) {
 	defer perf.Track(atmosConfig, "source.DetermineTargetDirectory")()
-	// Check for working_directory override.
+
+	// Check for working_directory override in metadata or settings.
+	if workdir := getWorkingDirectoryOverride(componentConfig); workdir != "" {
+		return workdir, nil
+	}
+
+	// Get component base path using resolved paths from atmosConfig.
+	componentBasePath, err := resolveComponentBasePath(atmosConfig, componentType)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(componentBasePath, component), nil
+}
+
+// getWorkingDirectoryOverride checks for working_directory in metadata or settings.
+func getWorkingDirectoryOverride(componentConfig map[string]any) string {
 	if metadata, ok := componentConfig["metadata"].(map[string]any); ok {
 		if workdir, ok := metadata["working_directory"].(string); ok && workdir != "" {
-			return workdir, nil
+			return workdir
 		}
 	}
-
-	// Check component settings for working_directory.
 	if settings, ok := componentConfig["settings"].(map[string]any); ok {
 		if workdir, ok := settings["working_directory"].(string); ok && workdir != "" {
-			return workdir, nil
+			return workdir
 		}
 	}
+	return ""
+}
 
-	// Default: use component base path.
-	basePath := getComponentBasePath(atmosConfig, componentType)
-	if basePath == "" {
+// resolveComponentBasePath resolves the component base path for a given component type.
+func resolveComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentType string) (string, error) {
+	if atmosConfig == nil {
+		return "", errUtils.Build(errUtils.ErrInvalidConfig).
+			WithExplanation("AtmosConfiguration is nil").
+			Err()
+	}
+
+	// Use pre-resolved absolute path if available.
+	absPath := getResolvedAbsPath(atmosConfig, componentType)
+	if absPath != "" {
+		return absPath, nil
+	}
+
+	// Fall back to building path from config.
+	return buildComponentPath(atmosConfig, componentType)
+}
+
+// getResolvedAbsPath returns the pre-resolved absolute path for a component type.
+func getResolvedAbsPath(atmosConfig *schema.AtmosConfiguration, componentType string) string {
+	switch componentType {
+	case "terraform":
+		return atmosConfig.TerraformDirAbsolutePath
+	case "helmfile":
+		return atmosConfig.HelmfileDirAbsolutePath
+	case "packer":
+		return atmosConfig.PackerDirAbsolutePath
+	default:
+		return ""
+	}
+}
+
+// buildComponentPath builds the component path from config base paths.
+func buildComponentPath(atmosConfig *schema.AtmosConfiguration, componentType string) (string, error) {
+	configBasePath := getComponentBasePath(atmosConfig, componentType)
+	if configBasePath == "" {
 		return "", errUtils.Build(errUtils.ErrInvalidConfig).
 			WithExplanation("Component base path not configured").
 			WithContext("component_type", componentType).
 			Err()
 	}
 
-	return filepath.Join(basePath, component), nil
+	// Use configured path directly if absolute.
+	if filepath.IsAbs(configBasePath) {
+		return configBasePath, nil
+	}
+
+	// Join with atmos base path.
+	basePath := atmosConfig.BasePath
+	if basePath == "" {
+		basePath = "."
+	}
+	return filepath.Join(basePath, configBasePath), nil
 }
 
 // getComponentBasePath returns the base path for a component type.
