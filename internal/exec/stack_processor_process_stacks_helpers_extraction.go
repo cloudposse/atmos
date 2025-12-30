@@ -88,8 +88,10 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentAuth = make(map[string]any, componentSmallMapCapacity)
 	}
 
-	// Terraform-specific: extract provision section (for workdir provisioning).
-	if opts.ComponentType == cfg.TerraformComponentType {
+	// Extract provision section (for workdir provisioning) for terraform, helmfile, and packer.
+	if opts.ComponentType == cfg.TerraformComponentType ||
+		opts.ComponentType == cfg.HelmfileComponentType ||
+		opts.ComponentType == cfg.PackerComponentType {
 		if i, ok := opts.ComponentMap[cfg.ProvisionSectionName]; ok {
 			componentProvision, ok := i.(map[string]any)
 			if !ok {

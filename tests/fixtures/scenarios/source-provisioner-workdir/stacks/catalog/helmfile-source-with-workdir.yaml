@@ -10,7 +10,7 @@ components:
     nginx-workdir:
       source:
         uri: "github.com/cloudposse/helmfiles//releases/nginx-ingress"
-        version: "0.195.0"
+        version: "0.126.0"
         included_paths:
           - "*.yaml"
         excluded_paths:

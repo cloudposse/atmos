@@ -9,11 +9,11 @@ components:
   packer:
     ami-workdir:
       source:
-        uri: "github.com/cloudposse/packer-templates//templates/amazon-linux-2"
+        uri: "github.com/aws-samples/amazon-eks-custom-amis"
         version: "main"
         included_paths:
           - "*.pkr.hcl"
-          - "*.json"
+          - "*.pkrvars.hcl"
         excluded_paths:
           - "*.md"
       provision:

@@ -266,10 +266,9 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.RemoteStateBackendTypeSectionName] = finalComponentRemoteStateBackendType
 		comp[cfg.RemoteStateBackendSectionName] = finalComponentRemoteStateBackend
 		comp[cfg.AuthSectionName] = mergedAuth
-		comp[cfg.ProvisionSectionName] = result.ComponentProvision
 	}
 
-	// Process source configuration for terraform, helmfile, and packer components.
+	// Process source and provision configuration for terraform, helmfile, and packer components.
 	if opts.ComponentType == cfg.TerraformComponentType ||
 		opts.ComponentType == cfg.HelmfileComponentType ||
 		opts.ComponentType == cfg.PackerComponentType {
@@ -284,6 +283,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			return nil, err
 		}
 		comp[cfg.SourceSectionName] = finalComponentSource
+		comp[cfg.ProvisionSectionName] = result.ComponentProvision
 	}
 
 	// Add base component name if present.
