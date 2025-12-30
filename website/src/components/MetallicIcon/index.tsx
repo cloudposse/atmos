@@ -9,8 +9,9 @@ interface MetallicIconProps {
 }
 
 export function MetallicIcon({ src, alt = '', size = 200, className = '' }: MetallicIconProps) {
-  // Use CSS mask-image technique - gradient background with SVG as mask
-  // Exactly matches apps repo implementation
+  // Use CSS mask-image technique - gradient background with SVG as mask.
+  // Exactly matches apps repo implementation.
+  const isDecorative = !alt;
   return (
     <div
       className={`metallic-icon ${className}`}
@@ -26,8 +27,9 @@ export function MetallicIcon({ src, alt = '', size = 200, className = '' }: Meta
         maskRepeat: 'no-repeat',
         maskPosition: 'center',
       }}
-      role="img"
-      aria-label={alt}
+      role={isDecorative ? 'presentation' : 'img'}
+      aria-label={isDecorative ? undefined : alt}
+      aria-hidden={isDecorative ? 'true' : undefined}
     />
   );
 }
