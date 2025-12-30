@@ -152,8 +152,10 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
-	// Terraform-specific: extract source configuration.
-	if opts.ComponentType == cfg.TerraformComponentType {
+	// Extract source configuration for terraform, helmfile, and packer components.
+	if opts.ComponentType == cfg.TerraformComponentType ||
+		opts.ComponentType == cfg.HelmfileComponentType ||
+		opts.ComponentType == cfg.PackerComponentType {
 		if i, ok := opts.ComponentMap[cfg.SourceSectionName]; ok {
 			componentSourceSection, ok := i.(map[string]any)
 			if !ok {

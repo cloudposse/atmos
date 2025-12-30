@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Packer component with BOTH source AND workdir enabled
+# This demonstrates the combined workflow for packer:
+# 1. When workdir enabled, vendors directly to .workdir/packer/<stack>-ami-workdir/
+# 2. Packer runs in the isolated workdir
+
+components:
+  packer:
+    ami-workdir:
+      source:
+        uri: "github.com/cloudposse/packer-templates//templates/amazon-linux-2"
+        version: "main"
+        included_paths:
+          - "*.pkr.hcl"
+          - "*.json"
+        excluded_paths:
+          - "*.md"
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        enabled: true
+        environment: "packer-source-with-workdir"

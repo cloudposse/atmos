@@ -1,16 +1,19 @@
 # Source Provisioner + Workdir Integration Test Fixture
 
-This test fixture demonstrates the integration between the source provisioner and workdir provisioner features.
+This test fixture demonstrates the integration between the source provisioner and workdir provisioner features for **Terraform**, **Helmfile**, and **Packer** components.
 
 ## Overview
 
 When both `source` and `provision.workdir.enabled` are configured for a component:
 
-1. **Source Provisioner** (CLI-driven): Vendors remote source to `components/terraform/<component>/`
-2. **Workdir Provisioner** (hook-based): Copies from local component to `.workdir/terraform/<stack>-<component>/`
-3. **Terraform**: Runs in the isolated workdir
+1. **Source Provisioner**: Vendors remote source directly to `.workdir/<type>/<stack>-<component>/`
+2. **Commands**: Run in the isolated workdir
+
+When workdir is NOT enabled, source is vendored to `components/<type>/<component>/`.
 
 ## Components
+
+### Terraform
 
 | Component | Source | Workdir | Description |
 |-----------|--------|---------|-------------|
@@ -18,69 +21,73 @@ When both `source` and `provision.workdir.enabled` are configured for a componen
 | `vpc-remote-workdir` | Yes | Yes | Remote source WITH workdir isolation |
 | `mock-workdir` | No | Yes | Local component with workdir isolation |
 
+### Helmfile
+
+| Component | Source | Workdir | Description |
+|-----------|--------|---------|-------------|
+| `nginx-workdir` | Yes | Yes | Remote source WITH workdir isolation |
+
+### Packer
+
+| Component | Source | Workdir | Description |
+|-----------|--------|---------|-------------|
+| `ami-workdir` | Yes | Yes | Remote source WITH workdir isolation |
+
 ## Manual Testing
 
-### Test 1: Source Only (no workdir)
+### Terraform: Source + Workdir
 
 ```bash
 cd tests/fixtures/scenarios/source-provisioner-workdir
 
-# Describe source configuration
-atmos terraform source describe vpc-remote --stack dev
-
-# Vendor the source
-atmos terraform source pull vpc-remote --stack dev
-
-# Verify vendored location
-ls -la components/terraform/vpc-remote/
-
-# Run terraform (directly in vendored directory)
-atmos terraform plan vpc-remote -s dev --dry-run
-```
-
-### Test 2: Source + Workdir (combined)
-
-```bash
-# Describe source configuration
-atmos terraform source describe vpc-remote-workdir --stack dev
-
-# Vendor the source
+# Vendor the source (should go to .workdir/terraform/dev-vpc-remote-workdir/)
 atmos terraform source pull vpc-remote-workdir --stack dev
 
-# Verify vendored location
-ls -la components/terraform/vpc-remote-workdir/
-
-# Run terraform (workdir provisioner will copy to .workdir/)
-atmos terraform plan vpc-remote-workdir -s dev --dry-run
-
-# Verify workdir was created
+# Verify workdir location
 ls -la .workdir/terraform/dev-vpc-remote-workdir/
+
+# Run terraform plan (uses same workdir)
+atmos terraform plan vpc-remote-workdir -s dev
 ```
 
-### Test 3: Local + Workdir (for comparison)
+### Helmfile: Source + Workdir
 
 ```bash
-# No source pull needed - component is local
+# Vendor the source (should go to .workdir/helmfile/dev-nginx-workdir/)
+atmos helmfile source pull nginx-workdir --stack dev
 
-# Run terraform (workdir provisioner copies local component)
-atmos terraform plan mock-workdir -s dev --dry-run
+# Verify workdir location
+ls -la .workdir/helmfile/dev-nginx-workdir/
+```
 
-# Verify workdir was created
-ls -la .workdir/terraform/dev-mock-workdir/
+### Packer: Source + Workdir
+
+```bash
+# Vendor the source (should go to .workdir/packer/dev-ami-workdir/)
+atmos packer source pull ami-workdir --stack dev
+
+# Verify workdir location
+ls -la .workdir/packer/dev-ami-workdir/
+```
+
+### Terraform: Source Only (no workdir)
+
+```bash
+# Vendor the source (should go to components/terraform/vpc-remote/)
+atmos terraform source pull vpc-remote --stack dev
+
+# Verify component location
+ls -la components/terraform/vpc-remote/
 ```
 
 ## Cleanup
 
 ```bash
-# Clean vendored components
-rm -rf components/terraform/vpc-remote/
-rm -rf components/terraform/vpc-remote-workdir/
-
 # Clean all workdirs
-atmos terraform workdir clean --all
-
-# Or manually
 rm -rf .workdir/
+
+# Clean vendored components (source-only)
+rm -rf components/terraform/vpc-remote/
 ```
 
 ## Directory Structure After Testing
@@ -90,25 +97,27 @@ tests/fixtures/scenarios/source-provisioner-workdir/
 ├── atmos.yaml
 ├── .gitignore
 ├── README.md
-├── components/terraform/
-│   ├── mock/                          # Local component
-│   │   └── main.tf
-│   ├── vpc-remote/                    # Vendored by source pull (ignored)
-│   │   └── *.tf
-│   └── vpc-remote-workdir/            # Vendored by source pull (ignored)
-│       └── *.tf
-├── .workdir/terraform/                # Created by workdir provisioner (ignored)
-│   ├── dev-vpc-remote-workdir/        # Isolated execution directory
-│   │   ├── *.tf
-│   │   └── .workdir-metadata.json
-│   └── dev-mock-workdir/              # Isolated execution directory
-│       ├── *.tf
-│       └── .workdir-metadata.json
+├── components/
+│   ├── terraform/
+│   │   ├── mock/                          # Local component
+│   │   │   └── main.tf
+│   │   └── vpc-remote/                    # Vendored (source-only, ignored)
+│   ├── helmfile/                          # Empty - workdir-enabled components go to .workdir/
+│   └── packer/                            # Empty - workdir-enabled components go to .workdir/
+├── .workdir/                              # Created by source provisioner when workdir enabled
+│   ├── terraform/
+│   │   └── dev-vpc-remote-workdir/
+│   ├── helmfile/
+│   │   └── dev-nginx-workdir/
+│   └── packer/
+│       └── dev-ami-workdir/
 └── stacks/
     ├── catalog/
-    │   ├── source-only.yaml           # Remote source, no workdir
-    │   ├── source-with-workdir.yaml   # Remote source + workdir
-    │   └── local-with-workdir.yaml    # Local component + workdir
+    │   ├── source-only.yaml               # Terraform: remote source, no workdir
+    │   ├── source-with-workdir.yaml       # Terraform: remote source + workdir
+    │   ├── local-with-workdir.yaml        # Terraform: local component + workdir
+    │   ├── helmfile-source-with-workdir.yaml  # Helmfile: remote source + workdir
+    │   └── packer-source-with-workdir.yaml    # Packer: remote source + workdir
     └── deploy/
-        └── dev.yaml                   # Stack configuration
+        └── dev.yaml                       # Stack configuration
 ```

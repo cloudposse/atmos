@@ -1,15 +1,23 @@
 # Test fixture for combined source provisioner + workdir integration
-# Tests JIT vendoring with workdir isolation for concurrent terraform operations
+# Tests JIT vendoring with workdir isolation for terraform, helmfile, and packer
 #
 # Workflow:
-# 1. Source provisioner vendors remote source to components/terraform/<component>/
-# 2. Workdir provisioner copies to .workdir/terraform/<stack>-<component>/
-# 3. Terraform runs in the isolated workdir
+# 1. Source provisioner vendors remote source to components/<type>/<component>/
+# 2. When workdir enabled, vendors directly to .workdir/<type>/<stack>-<component>/
+# 3. Commands run in the isolated workdir
 #
 # Manual testing:
 #   cd tests/fixtures/scenarios/source-provisioner-workdir
-#   atmos terraform source pull vpc-remote --stack dev     # Vendors to components/terraform/vpc-remote/
-#   atmos terraform plan vpc-remote -s dev                 # Copies to .workdir/terraform/dev-vpc-remote/
+#
+#   # Terraform
+#   atmos terraform source pull vpc-remote-workdir --stack dev
+#   atmos terraform plan vpc-remote-workdir -s dev
+#
+#   # Helmfile
+#   atmos helmfile source pull nginx-workdir --stack dev
+#
+#   # Packer
+#   atmos packer source pull ami-workdir --stack dev
 
 base_path: "./"
 
@@ -20,6 +28,10 @@ components:
     deploy_run_init: true
     init_run_reconfigure: true
     auto_generate_backend_file: false
+  helmfile:
+    base_path: "components/helmfile"
+  packer:
+    base_path: "components/packer"
 
 stacks:
   base_path: "stacks"

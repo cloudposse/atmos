@@ -4,9 +4,14 @@ vars:
   stage: dev
 
 import:
+  # Terraform
   - catalog/source-only
   - catalog/source-with-workdir
   - catalog/local-with-workdir
+  # Helmfile
+  - catalog/helmfile-source-with-workdir
+  # Packer
+  - catalog/packer-source-with-workdir
 
 # Override vars for dev environment
 components:
@@ -22,3 +27,13 @@ components:
     mock-workdir:
       vars:
         environment: "dev-local-workdir"
+
+  helmfile:
+    nginx-workdir:
+      vars:
+        environment: "dev-helmfile-workdir"
+
+  packer:
+    ami-workdir:
+      vars:
+        environment: "dev-packer-workdir"
