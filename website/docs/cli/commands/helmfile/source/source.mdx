@@ -1,0 +1,394 @@
+---
+title: atmos helmfile source
+sidebar_label: source
+sidebar_class_name: command
+id: source
+description: Manage helmfile component sources with JIT vendoring
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use these commands to manage Helmfile component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using the top-level `source` field without requiring a separate `component.yaml` file. Sources are automatically provisioned when running helmfile commands—just run `atmos helmfile sync` and the source is downloaded on first use.
+</Intro>
+
+<ActionCard title="Source-Based Version Pinning">
+    Learn how to use the source field for native per-environment version control directly in stack configuration.
+    <div>
+      <PrimaryCTA to="/design-patterns/version-management/source-based-versioning">Design Pattern</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<Screengrab title="atmos helmfile source --help" slug="atmos-helmfile-source--help" />
+
+## Usage
+
+```shell
+atmos helmfile source <subcommand> [options]
+```
+
+## Subcommands
+
+<DocCardList />
+
+## Automatic Provisioning
+
+Sources are automatically provisioned when running any helmfile command. If a component has `source` configured and the target directory doesn't exist, Atmos downloads the source before running helmfile:
+
+```shell
+# Source is automatically provisioned on first use
+atmos helmfile sync ingress-nginx --stack dev
+# → Auto-provisioning source for component 'ingress-nginx'
+# → Auto-provisioned source to components/helmfile/ingress-nginx
+# → Helmfile runs
+```
+
+This means you can simply configure your component's source and run helmfile—no explicit vendor step needed.
+
+## CLI Commands
+
+The explicit CLI commands are useful for fine-grained control:
+- Force re-vendor to get the latest version
+- Describe source configuration
+- Delete vendored sources
+- List components with sources
+
+## How It Works
+
+The source provisioner enables just-in-time vendoring of Helmfile components directly from stack configuration. Instead of pre-vendoring components or maintaining separate `component.yaml` files, you can declare the source inline:
+
+```yaml
+# stacks/dev.yaml
+components:
+  helmfile:
+    ingress-nginx:
+      source:
+        uri: github.com/cloudposse/helmfiles//releases/ingress-nginx
+        version: 1.0.0
+        included_paths:
+          - "*.yaml"
+          - "values/**"
+        excluded_paths:
+          - "*.md"
+          - "tests/**"
+      vars:
+        namespace: ingress-nginx
+```
+
+When you run `atmos helmfile source pull ingress-nginx --stack dev`, Atmos:
+
+1. **Reads Configuration** - Extracts `source` from the component's stack manifest.
+2. **Resolves Source** - Parses the go-getter-compatible URI with optional version.
+3. **Downloads Content** - Fetches the source using go-getter (supports git, s3, http, oci, etc.).
+4. **Filters Files** - Applies `included_paths` and `excluded_paths` patterns.
+5. **Copies to Target** - Places files in the component directory.
+
+## Source Specification
+
+The `source` field supports two formats:
+
+### String Format (Simple)
+
+For simple cases, use a go-getter URI string:
+
+```yaml
+source: "github.com/cloudposse/helmfiles//releases/ingress-nginx?ref=1.0.0"
+```
+
+### Map Format (Full Control)
+
+For more control, use a map with explicit fields:
+
+```yaml
+source:
+  uri: github.com/cloudposse/helmfiles//releases/ingress-nginx
+  version: 1.0.0
+  included_paths:
+    - "*.yaml"
+    - "values/**"
+  excluded_paths:
+    - "*.md"
+    - "tests/**"
+```
+
+### Source Fields
+
+<dl>
+  <dt>`uri`</dt>
+  <dd>Go-getter compatible source URI. Supports git, s3, http, gcs, oci, and other protocols.</dd>
+
+  <dt>`version`</dt>
+  <dd>Version tag, branch, or commit. Appended as `?ref=<version>` for git sources. For non-git sources (S3, HTTP, OCI), the version should be embedded in the URI itself.</dd>
+
+  <dt>`included_paths`</dt>
+  <dd>Glob patterns for files to include. If specified, only matching files are copied.</dd>
+
+  <dt>`excluded_paths`</dt>
+  <dd>Glob patterns for files to exclude. Applied after included_paths filtering.</dd>
+
+  <dt>`retry`</dt>
+  <dd>
+  Optional retry configuration for handling transient network errors during download. Useful for unreliable networks or when hitting rate limits.
+
+  ```yaml
+  retry:
+    max_attempts: 5
+    initial_delay: 2s
+    max_delay: 60s
+    backoff_strategy: exponential
+  ```
+
+  All fields are optional. Recommended: `max_attempts`, `initial_delay`, `max_delay`, `backoff_strategy` (`exponential`, `linear`, `constant`). Additional options: `multiplier`, `random_jitter`, `max_elapsed_time`.
+  </dd>
+</dl>
+
+## Examples
+
+### Vendor a Component
+
+Download and vendor a component source:
+
+```shell
+atmos helmfile source pull ingress-nginx --stack dev
+```
+
+### Force Re-vendor
+
+Force re-download even if the component directory exists:
+
+```shell
+atmos helmfile source pull ingress-nginx --stack dev --force
+```
+
+### View Source Configuration
+
+Display the source configuration for a component:
+
+```shell
+atmos helmfile source describe ingress-nginx --stack dev
+```
+
+### List Components with Sources
+
+List all components that have source configured:
+
+```shell
+atmos helmfile source list --stack dev
+```
+
+### Delete Vendored Source
+
+Remove the vendored component directory (requires --force for safety):
+
+```shell
+atmos helmfile source delete ingress-nginx --stack dev --force
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>The Atmos component name (required for pull, describe, delete)</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Atmos stack name (required). Can also be set via `ATMOS_STACK` environment variable.</dd>
+
+  <dt>`--identity` / `-i`</dt>
+  <dd>Identity to use for authentication when downloading from protected sources.</dd>
+
+  <dt>`--force` / `-f`</dt>
+  <dd>Force re-vendor even if component directory exists (pull command), or confirm deletion (delete command).</dd>
+</dl>
+
+## Authentication
+
+Source commands support authentication for accessing private repositories or cloud storage.
+
+### Component-Level Identity
+
+Components can specify their own authentication identity:
+
+```yaml
+components:
+  helmfile:
+    ingress-nginx:
+      source:
+        uri: github.com/my-org/private-helmfiles//releases/ingress-nginx
+        version: v1.0.0
+      auth:
+        identities:
+          github-deployer:
+            default: true
+            kind: github/app
+            via:
+              provider: github-app
+```
+
+### Identity Flag Override
+
+Override the component's default identity:
+
+```shell
+atmos helmfile source pull ingress-nginx --stack dev --identity admin
+```
+
+For more details on configuring authentication identities, see the [Authentication Guide](/cli/configuration/auth).
+
+## Configuration Patterns
+
+### Inheritance with source
+
+Use stack inheritance to share source configurations:
+
+```yaml
+# stacks/catalog/ingress-nginx/defaults.yaml
+components:
+  helmfile:
+    ingress-nginx/defaults:
+      source:
+        uri: github.com/cloudposse/helmfiles//releases/ingress-nginx
+        version: 1.0.0
+
+# stacks/dev.yaml
+components:
+  helmfile:
+    ingress-nginx:
+      metadata:
+        inherits: [ingress-nginx/defaults]
+      # Inherits source configuration
+      vars:
+        namespace: ingress-nginx
+```
+
+### Version Override per Environment
+
+Override the version per environment:
+
+```yaml
+# stacks/dev.yaml
+components:
+  helmfile:
+    ingress-nginx:
+      metadata:
+        inherits: [ingress-nginx/defaults]
+      source:
+        version: 1.1.0  # Override version for dev
+
+# stacks/prod.yaml
+components:
+  helmfile:
+    ingress-nginx:
+      metadata:
+        inherits: [ingress-nginx/defaults]
+      source:
+        version: 1.0.0  # Pin to stable version for prod
+```
+
+## Supported Source Types
+
+The source provisioner uses go-getter and supports multiple protocols:
+
+### Git Sources
+
+```yaml
+source:
+  uri: github.com/cloudposse/helmfiles//releases/ingress-nginx
+  version: 1.0.0
+
+# Also supports:
+# - git::https://github.com/org/repo.git//path
+# - git::ssh://git@github.com/org/repo.git//path
+```
+
+### S3 Sources
+
+```yaml
+source:
+  uri: s3::https://s3-us-east-1.amazonaws.com/my-bucket/helmfiles/ingress-nginx.tar.gz
+```
+
+### HTTP/HTTPS Sources
+
+```yaml
+source:
+  uri: https://releases.example.com/helmfiles/ingress-nginx-1.0.0.tar.gz
+```
+
+### OCI Registry Sources
+
+```yaml
+source:
+  uri: oci::registry.example.com/helmfiles/ingress-nginx:v1.0.0
+```
+
+## Error Handling
+
+### Missing source
+
+```
+Error: source not configured
+
+Hint: Add source to the component configuration in your stack manifest
+
+Example:
+  components:
+    helmfile:
+      ingress-nginx:
+        source:
+          uri: github.com/cloudposse/helmfiles//releases/ingress-nginx
+          version: 1.0.0
+```
+
+### Component Directory Exists
+
+```
+Error: component directory already exists
+
+Hint: Use --force to overwrite the existing directory
+```
+
+### Download Failed
+
+```
+Error: failed to download source
+
+Cause: failed to clone repository: authentication required
+
+Hint: Check credentials or use --identity to specify authentication
+```
+
+## Comparison with Vendoring
+
+| Feature | source | component.yaml |
+|---------|--------|----------------|
+| Configuration location | Inline in stack | Separate file |
+| Version per environment | Yes | Single version |
+| JIT download | Yes | Pre-vendored |
+| Path filtering | Yes | Yes |
+| Mixins support | No | Yes |
+
+*Mixins allow combining multiple source configurations into a single component. See [Vendoring](/vendor) for details.*
+
+Use `source` when:
+- You want version control per environment
+- You prefer configuration colocation in stacks
+- You need just-in-time vendoring
+
+Use `component.yaml` when:
+- You need mixin support
+- You want pre-vendored components
+- You have complex vendoring requirements
+
+## See Also
+
+- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) — Design pattern for per-environment version management
+- [Stack Configuration](/learn/stacks) — Learn about Atmos stacks
+- [Vendoring](/vendor) — Pre-vendor components for immutability and audit trails
+- [`atmos vendor pull`](/cli/commands/vendor/pull) — Traditional component vendoring
