@@ -95,7 +95,7 @@ spec:
   Optional retry configuration for handling transient network errors during download operations. This is useful for unreliable networks or when hitting rate limits.
 
   :::note
-  When no retry configuration is provided, defaults apply. When a partial configuration is provided, only the specified fields are set—unspecified fields use zero values (e.g., `0` for attempts, `0s` for durations), not defaults.
+  When no retry configuration is provided, no retries are performed. All retry fields are optional—unspecified fields use zero values (e.g., `0` for attempts, `0s` for durations).
   :::
 
   ```yaml
@@ -111,25 +111,25 @@ spec:
 
   <dl>
     <dt>`max_attempts`</dt>
-    <dd>Maximum number of retry attempts. Default: `1` (no retries)</dd>
+    <dd>Maximum number of retry attempts. Set to `1` or higher to enable retries.</dd>
 
     <dt>`initial_delay`</dt>
-    <dd>Initial delay before the first retry. Default: `100ms`</dd>
+    <dd>Initial delay before the first retry (e.g., `1s`, `500ms`).</dd>
 
     <dt>`max_delay`</dt>
-    <dd>Maximum delay between retries. Default: `5s`</dd>
+    <dd>Maximum delay between retries (e.g., `30s`, `1m`).</dd>
 
     <dt>`backoff_strategy`</dt>
-    <dd>Strategy for increasing delay between retries. Values: `exponential`, `linear`, `constant`. Default: `exponential`</dd>
+    <dd>Strategy for increasing delay between retries. Values: `exponential`, `linear`, `constant`.</dd>
 
     <dt>`multiplier`</dt>
-    <dd>Multiplier for exponential backoff. Default: `2.0`</dd>
+    <dd>Multiplier for exponential/linear backoff (e.g., `2.0`).</dd>
 
     <dt>`random_jitter`</dt>
-    <dd>Random jitter factor (0.0-1.0) to add randomness to delays. Default: `0.0` (no jitter)</dd>
+    <dd>Random jitter factor (0.0-1.0) to add randomness to delays.</dd>
 
     <dt>`max_elapsed_time`</dt>
-    <dd>Maximum total time for all retry attempts. Default: `30m`</dd>
+    <dd>Maximum total time for all retry attempts (e.g., `5m`, `1h`).</dd>
   </dl>
   </dd>
 </dl>

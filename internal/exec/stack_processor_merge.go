@@ -305,7 +305,7 @@ func processAuthConfig(atmosConfig *schema.AtmosConfiguration, globalAuthConfig 
 			authConfig,
 		})
 	if err != nil {
-		return nil, fmt.Errorf("%w: merge auth config: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: merge auth config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	// Apply deferred merges (without YAML processing - already done earlier).

@@ -97,7 +97,7 @@ func InitConfigAndAuth(component, stack, identity string, globalFlags *global.Fl
 	// Load atmos configuration.
 	atmosConfig, err := initCliConfigFunc(configInfo, false)
 	if err != nil {
-		return nil, nil, errors.Join(errUtils.ErrFailedToInitConfig, err)
+		return nil, nil, fmt.Errorf("component=%s stack=%s: %w", component, stack, errors.Join(errUtils.ErrFailedToInitConfig, err))
 	}
 
 	// Load component configuration to get component-level auth settings.

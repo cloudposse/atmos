@@ -1436,7 +1436,7 @@ func processBaseComponentConfigInternal(
 			if i, ok2 := baseComponentMap[cfg.SourceSectionName]; ok2 {
 				baseComponentSourceSection, ok = i.(map[string]any)
 				if !ok {
-					return fmt.Errorf("%w '%s.source' in the stack '%s'", errUtils.ErrInvalidTerraformSource, baseComponent, stack)
+					return fmt.Errorf("%w '%s.source' in the stack '%s'", errUtils.ErrInvalidComponentSource, baseComponent, stack)
 				}
 			}
 		}

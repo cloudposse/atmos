@@ -1,4 +1,4 @@
-# Mock component for testing components without source
+# Mock component for testing local provisioning without remote source
 
 variable "enabled" {
   type        = bool

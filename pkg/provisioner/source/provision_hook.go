@@ -10,6 +10,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -19,9 +20,6 @@ const HookEventBeforeTerraformInit = provisioner.HookEvent("before.terraform.ini
 
 // WorkdirPath is the standard workdir directory name.
 const WorkdirPath = ".workdir"
-
-// WorkdirPathKey is the key used to store/retrieve the workdir path in component configuration.
-const WorkdirPathKey = "_workdir_path"
 
 // DirPermissions is the default permission mode for directories.
 const DirPermissions = 0o755
@@ -84,7 +82,7 @@ func AutoProvisionSource(
 	// Skip if target exists - set workdir path if needed and return.
 	if !needsProvisioning(targetDir) {
 		if isWorkdir {
-			componentConfig[WorkdirPathKey] = targetDir
+			componentConfig[workdir.WorkdirPathKey] = targetDir
 		}
 		return nil
 	}
@@ -96,7 +94,7 @@ func AutoProvisionSource(
 
 	// Set workdir path for terraform execution if applicable.
 	if isWorkdir {
-		componentConfig[WorkdirPathKey] = targetDir
+		componentConfig[workdir.WorkdirPathKey] = targetDir
 	}
 	return nil
 }
@@ -240,13 +238,14 @@ func needsProvisioning(targetDir string) bool {
 }
 
 // extractComponentName extracts the component name from config.
+// Priority: componentConfig["component"] > componentConfig["metadata"]["component"].
 func extractComponentName(componentConfig map[string]any) string {
-	// Try component field.
+	// Try component field first (highest priority).
 	if component, ok := componentConfig["component"].(string); ok && component != "" {
 		return component
 	}
 
-	// Try metadata.component.
+	// Fall back to metadata.component.
 	if metadata, ok := componentConfig["metadata"].(map[string]any); ok {
 		if component, ok := metadata["component"].(string); ok && component != "" {
 			return component

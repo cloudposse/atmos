@@ -6,12 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -80,14 +82,15 @@ func ExecutePacker(
 		// Check if component has source configured for JIT provisioning.
 		if provSource.HasSource(info.ComponentSection) {
 			// Run JIT source provisioning before path validation.
-			ctx := context.Background()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
 			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.PackerComponentType, info.ComponentSection, info.AuthContext); err != nil {
 				return fmt.Errorf("failed to auto-provision component source: %w", err)
 			}
 
 			// Check if source provisioner set a workdir path (source + workdir case).
 			// If so, use that path instead of the component path.
-			if workdirPath, ok := info.ComponentSection[provSource.WorkdirPathKey].(string); ok {
+			if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
 				componentPath = workdirPath
 				componentPathExists = true
 				err = nil // Clear any previous error since we have a valid workdir path.

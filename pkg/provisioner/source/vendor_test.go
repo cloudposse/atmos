@@ -502,3 +502,117 @@ func TestVendorSource_EmptyURI(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrSourceInvalidSpec)
 }
+
+// TestCopyToTarget_WithIncludedPaths tests copying with inclusion patterns.
+func TestCopyToTarget_WithIncludedPaths(t *testing.T) {
+	// Create source directory with files.
+	srcDir := t.TempDir()
+	err := os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("# main terraform"), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(srcDir, "variables.tf"), []byte("# variables"), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(srcDir, "README.md"), []byte("# readme"), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(srcDir, "test.txt"), []byte("test file"), 0o644)
+	require.NoError(t, err)
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+
+	sourceSpec := &schema.VendorComponentSource{
+		Uri:           "github.com/example/repo",
+		IncludedPaths: []string{"*.tf"},
+	}
+
+	err = copyToTarget(srcDir, targetDir, sourceSpec)
+	require.NoError(t, err)
+
+	// .tf files should be copied.
+	_, err = os.Stat(filepath.Join(targetDir, "main.tf"))
+	assert.NoError(t, err, "main.tf should be copied")
+
+	_, err = os.Stat(filepath.Join(targetDir, "variables.tf"))
+	assert.NoError(t, err, "variables.tf should be copied")
+
+	// README.md and test.txt should NOT be copied (not in included paths).
+	_, err = os.Stat(filepath.Join(targetDir, "README.md"))
+	assert.True(t, os.IsNotExist(err), "README.md should not be copied")
+
+	_, err = os.Stat(filepath.Join(targetDir, "test.txt"))
+	assert.True(t, os.IsNotExist(err), "test.txt should not be copied")
+}
+
+// TestCreateSkipFunc_CombinedPatterns tests skip function with both included and excluded paths.
+func TestCreateSkipFunc_CombinedPatterns(t *testing.T) {
+	sourceSpec := &schema.VendorComponentSource{
+		Uri:           "github.com/example/repo",
+		IncludedPaths: []string{"*.tf", "*.md"},
+		ExcludedPaths: []string{"README.md"},
+	}
+
+	skipFunc := createSkipFunc("/tmp/src", sourceSpec)
+
+	// main.tf should NOT be skipped (matches included, not in excluded).
+	info := &mockFileInfo{name: "main.tf", isDir: false}
+	skip, err := skipFunc(info, "/tmp/src/main.tf", "/tmp/dst/main.tf")
+	assert.NoError(t, err)
+	assert.False(t, skip, "main.tf should not be skipped")
+
+	// README.md SHOULD be skipped (matches excluded, even though it matches included).
+	info = &mockFileInfo{name: "README.md", isDir: false}
+	skip, err = skipFunc(info, "/tmp/src/README.md", "/tmp/dst/README.md")
+	assert.NoError(t, err)
+	assert.True(t, skip, "README.md should be skipped (excluded)")
+
+	// CHANGELOG.md should NOT be skipped (matches included, not in excluded).
+	info = &mockFileInfo{name: "CHANGELOG.md", isDir: false}
+	skip, err = skipFunc(info, "/tmp/src/CHANGELOG.md", "/tmp/dst/CHANGELOG.md")
+	assert.NoError(t, err)
+	assert.False(t, skip, "CHANGELOG.md should not be skipped")
+
+	// main.go SHOULD be skipped (doesn't match included).
+	info = &mockFileInfo{name: "main.go", isDir: false}
+	skip, err = skipFunc(info, "/tmp/src/main.go", "/tmp/dst/main.go")
+	assert.NoError(t, err)
+	assert.True(t, skip, "main.go should be skipped (not in included)")
+}
+
+// TestCopyToTarget_WithCombinedPatterns tests copying with both include and exclude patterns.
+func TestCopyToTarget_WithCombinedPatterns(t *testing.T) {
+	// Create source directory with files.
+	srcDir := t.TempDir()
+	err := os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("# main"), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(srcDir, "test.tf"), []byte("# test"), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(srcDir, "README.md"), []byte("# readme"), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(srcDir, "CHANGELOG.md"), []byte("# changelog"), 0o644)
+	require.NoError(t, err)
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+
+	sourceSpec := &schema.VendorComponentSource{
+		Uri:           "github.com/example/repo",
+		IncludedPaths: []string{"*.tf", "*.md"},
+		ExcludedPaths: []string{"test.tf", "README.md"},
+	}
+
+	err = copyToTarget(srcDir, targetDir, sourceSpec)
+	require.NoError(t, err)
+
+	// main.tf should be copied (included, not excluded).
+	_, err = os.Stat(filepath.Join(targetDir, "main.tf"))
+	assert.NoError(t, err, "main.tf should be copied")
+
+	// CHANGELOG.md should be copied (included, not excluded).
+	_, err = os.Stat(filepath.Join(targetDir, "CHANGELOG.md"))
+	assert.NoError(t, err, "CHANGELOG.md should be copied")
+
+	// test.tf should NOT be copied (excluded).
+	_, err = os.Stat(filepath.Join(targetDir, "test.tf"))
+	assert.True(t, os.IsNotExist(err), "test.tf should not be copied")
+
+	// README.md should NOT be copied (excluded).
+	_, err = os.Stat(filepath.Join(targetDir, "README.md"))
+	assert.True(t, os.IsNotExist(err), "README.md should not be copied")
+}

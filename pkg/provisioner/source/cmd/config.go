@@ -5,6 +5,8 @@ package cmd
 
 // Config holds component-type-specific configuration for source commands.
 type Config struct {
-	ComponentType string // "terraform", "helmfile", "packer"
-	TypeLabel     string // "Terraform", "Helmfile", "Packer" (for display)
+	// ComponentType identifies the component type (e.g., "terraform", "helmfile", "packer").
+	ComponentType string
+	// TypeLabel is the display name for the component type (e.g., "Terraform", "Helmfile", "Packer").
+	TypeLabel string
 }

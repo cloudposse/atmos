@@ -276,6 +276,7 @@ var (
 	ErrInvalidComponentRemoteStateBackendType = errors.New("invalid component remote_state_backend_type attribute")
 	ErrInvalidComponentRemoteStateBackend     = errors.New("invalid component remote_state_backend section")
 	ErrInvalidComponentCommand                = errors.New("invalid component command attribute")
+	ErrInvalidComponentSource                 = errors.New("invalid component source section")
 	ErrInvalidComponentOverrides              = errors.New("invalid component overrides section")
 	ErrInvalidComponentOverridesVars          = errors.New("invalid component overrides vars section")
 	ErrInvalidComponentOverridesSettings      = errors.New("invalid component overrides settings section")

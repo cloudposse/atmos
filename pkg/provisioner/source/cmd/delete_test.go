@@ -262,6 +262,64 @@ func TestExecuteDelete_MissingForce(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrForceRequired)
 }
 
+// TestInitDeleteContext_ConfigInitError tests that initDeleteContext returns error when config init fails.
+func TestInitDeleteContext_ConfigInitError(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigFunc
+	defer func() {
+		initCliConfigFunc = origInitFunc
+	}()
+
+	// Mock config init to fail.
+	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, assert.AnError
+	}
+
+	atmosConfig, componentConfig, err := initDeleteContext("vpc", "dev", nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToInitConfig)
+	assert.Nil(t, atmosConfig)
+	assert.Nil(t, componentConfig)
+}
+
+// TestInitDeleteContext_DescribeComponentError tests that initDeleteContext returns error when describe component fails.
+func TestInitDeleteContext_DescribeComponentError(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigFunc
+	origDescribeFunc := describeComponentFunc
+	defer func() {
+		initCliConfigFunc = origInitFunc
+		describeComponentFunc = origDescribeFunc
+	}()
+
+	// Mock config init to succeed.
+	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+
+	// Mock describe component to fail.
+	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+		return nil, assert.AnError
+	}
+
+	atmosConfig, componentConfig, err := initDeleteContext("vpc", "dev", nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDescribeComponent)
+	assert.Nil(t, atmosConfig)
+	assert.Nil(t, componentConfig)
+}
+
+// TestDeleteSourceDirectory_DetermineTargetError tests that deleteSourceDirectory returns error when target cannot be determined.
+func TestDeleteSourceDirectory_DetermineTargetError(t *testing.T) {
+	// Pass nil atmosConfig to trigger an error.
+	err := deleteSourceDirectory(nil, "terraform", "vpc", map[string]any{})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrSourceProvision)
+}
+
 // TestExecuteDelete_Success tests that executeDelete completes successfully.
 func TestExecuteDelete_Success(t *testing.T) {
 	// Save originals and restore after test.

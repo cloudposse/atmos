@@ -143,7 +143,7 @@ source:
     backoff_strategy: exponential
   ```
 
-  Required: `max_attempts`, `initial_delay`, `max_delay`, `backoff_strategy` (`exponential`, `linear`, `constant`). Optional: `multiplier`, `random_jitter`, `max_elapsed_time`.
+  All fields are optional. Recommended: `max_attempts`, `initial_delay`, `max_delay`, `backoff_strategy` (`exponential`, `linear`, `constant`). Additional options: `multiplier`, `random_jitter`, `max_elapsed_time`.
   </dd>
 </dl>
 

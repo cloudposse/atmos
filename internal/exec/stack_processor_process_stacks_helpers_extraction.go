@@ -161,7 +161,7 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		if i, ok := opts.ComponentMap[cfg.SourceSectionName]; ok {
 			componentSourceSection, ok := i.(map[string]any)
 			if !ok {
-				return fmt.Errorf("%w: 'components.%s.%s.source' in the file '%s'", errUtils.ErrInvalidTerraformSource, opts.ComponentType, opts.Component, opts.StackName)
+				return fmt.Errorf("%w: 'components.%s.%s.source' in the file '%s'", errUtils.ErrInvalidComponentSource, opts.ComponentType, opts.Component, opts.StackName)
 			}
 			result.ComponentSourceSection = componentSourceSection
 		} else {

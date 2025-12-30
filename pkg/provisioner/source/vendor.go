@@ -28,8 +28,10 @@ const (
 // It uses go-getter via the existing downloader infrastructure.
 // Note: Authentication is not yet supported - credentials must be configured
 // via environment variables or cloud provider credential chains.
+// Note: The context parameter is currently unused but kept for API compatibility
+// with future cancellation support when the downloader is updated.
 func VendorSource(
-	_ context.Context,
+	_ context.Context, // Context kept for future cancellation support.
 	atmosConfig *schema.AtmosConfiguration,
 	sourceSpec *schema.VendorComponentSource,
 	targetDir string,

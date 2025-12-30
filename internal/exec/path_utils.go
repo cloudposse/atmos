@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
-	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -13,13 +12,8 @@ import (
 
 // constructTerraformComponentWorkingDir constructs the working dir for a terraform component in a stack.
 func constructTerraformComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-	// Check if source provisioner set a workdir path (source + workdir case).
+	// Check if a provisioner (source or workdir) set a workdir path.
 	// This takes precedence over the standard component path.
-	if workdirPath, ok := info.ComponentSection[provSource.WorkdirPathKey].(string); ok && workdirPath != "" {
-		return workdirPath
-	}
-
-	// Check if workdir provisioner set a workdir path (workdir only case).
 	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
 		return workdirPath
 	}
@@ -87,13 +81,8 @@ func constructTerraformComponentPlanfilePath(atmosConfig *schema.AtmosConfigurat
 
 // constructHelmfileComponentWorkingDir constructs the working dir for a helmfile component in a stack.
 func constructHelmfileComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-	// Check if source provisioner set a workdir path (source + workdir case).
+	// Check if a provisioner (source or workdir) set a workdir path.
 	// This takes precedence over the standard component path.
-	if workdirPath, ok := info.ComponentSection[provSource.WorkdirPathKey].(string); ok && workdirPath != "" {
-		return workdirPath
-	}
-
-	// Check if workdir provisioner set a workdir path (workdir only case).
 	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
 		return workdirPath
 	}
@@ -159,13 +148,8 @@ func constructPackerComponentVarfilePath(atmosConfig *schema.AtmosConfiguration,
 
 // constructPackerComponentWorkingDir constructs the working dir for a Packer component in a stack.
 func constructPackerComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
-	// Check if source provisioner set a workdir path (source + workdir case).
+	// Check if a provisioner (source or workdir) set a workdir path.
 	// This takes precedence over the standard component path.
-	if workdirPath, ok := info.ComponentSection[provSource.WorkdirPathKey].(string); ok && workdirPath != "" {
-		return workdirPath
-	}
-
-	// Check if workdir provisioner set a workdir path (workdir only case).
 	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
 		return workdirPath
 	}

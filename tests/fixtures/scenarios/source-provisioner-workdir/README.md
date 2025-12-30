@@ -11,6 +11,28 @@ When both `source` and `provision.workdir.enabled` are configured for a componen
 
 When workdir is NOT enabled, source is vendored to `components/<type>/<component>/`.
 
+## Prerequisites
+
+### Remote Sources Used
+
+This fixture uses the following public GitHub repositories as remote sources:
+
+| Component Type | Repository | Version |
+|----------------|------------|---------|
+| Terraform | `github.com/cloudposse/terraform-null-label//exports` | `0.25.0` |
+| Helmfile | `github.com/cloudposse-archives/helmfiles//releases/nginx-ingress` | `0.126.0` |
+| Packer | `github.com/aws-samples/amazon-eks-custom-amis` | `main` |
+
+### Authentication
+
+All sources are public repositories and require no authentication for read access. If you need to test with private repositories, set the `GITHUB_TOKEN` environment variable or use the `--identity` flag.
+
+### Environment
+
+- **Atmos CLI**: Must be built and available (run `make build` from the repository root)
+- **Network Access**: Required to download remote sources
+- **Working Directory**: Tests should be run from `tests/fixtures/scenarios/source-provisioner-workdir/`
+
 ## Components
 
 ### Terraform

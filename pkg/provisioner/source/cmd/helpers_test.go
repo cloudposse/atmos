@@ -13,7 +13,6 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -49,8 +48,7 @@ func TestParseCommonFlags_WithStack(t *testing.T) {
 	)
 	parser.RegisterFlags(cmd)
 
-	// Set the flags via command line parsing.
-	cmd.SetArgs([]string{"--stack", "dev-us-east-1"})
+	// Parse flags.
 	err := cmd.ParseFlags([]string{"--stack", "dev-us-east-1"})
 	require.NoError(t, err)
 
@@ -446,6 +444,3 @@ func TestDescribeComponent(t *testing.T) {
 	assert.Equal(t, "vpc", result["component"])
 	assert.Equal(t, "dev", result["stack"])
 }
-
-// Ensure package imports are used.
-var _ = cfg.InitCliConfig
