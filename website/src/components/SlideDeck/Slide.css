@@ -167,6 +167,16 @@ html[data-theme='dark'] .slide--title {
     width: 100%;
   }
 
+  /* Override content layout's flex-start alignment for mobile fullscreen */
+  .slide-deck--fullscreen .slide--content {
+    align-items: center;
+    justify-content: center;
+  }
+
+  .slide-deck--fullscreen .slide--content .slide__inner {
+    text-align: left;
+  }
+
   /* Scale text for mobile fullscreen */
   .slide-deck--fullscreen .slide-title {
     font-size: clamp(1.25rem, 6vw, 2rem);

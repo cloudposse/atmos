@@ -401,8 +401,7 @@ html[data-theme='dark'] .slide-deck__progress-bar {
 
   .slide-deck--fullscreen .slide-deck__slide-wrapper .slide {
     width: 100%;
-    height: auto;
-    min-height: 100%;
+    height: 100%;
     padding: 1.5rem 2rem;
     padding-bottom: 4rem;
     overflow-y: auto;
