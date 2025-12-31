@@ -22,7 +22,8 @@ var cleanCmd = &cobra.Command{
 		toolsDir := toolchain.GetInstallPath()
 
 		// Use XDG-compliant cache directory.
-		cacheDir, err := xdg.GetXDGCacheDir("atmos/toolchain", 0o755)
+		// Note: GetXDGCacheDir already prepends "atmos/" to the subpath.
+		cacheDir, err := xdg.GetXDGCacheDir("toolchain", 0o755)
 		if err != nil {
 			// Fallback to legacy path if XDG fails.
 			homeDir, homeErr := homedir.Dir()

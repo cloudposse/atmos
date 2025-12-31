@@ -48,10 +48,6 @@ func GetCacheFilePath() (string, error) {
 // It is set during init() in cache_lock_unix.go or cache_lock_windows.go.
 var withCacheFileLock func(cacheFile string, fn func() error) error
 
-// writeFileAtomic is a platform-specific function for atomic file writing.
-// It is set during init() in cache_atomic_unix.go or cache_atomic_windows.go.
-var writeFileAtomic func(filename string, data []byte, perm os.FileMode) error
-
 // loadCacheWithReadLock is a platform-specific function for loading cache with read locks.
 // It is set during init() in cache_lock_unix.go.
 var loadCacheWithReadLock func(cacheFile string) (CacheConfig, error)

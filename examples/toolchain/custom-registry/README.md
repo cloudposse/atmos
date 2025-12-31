@@ -4,7 +4,7 @@ This directory demonstrates how to create a custom Aqua-format registry for Atmo
 
 ## Structure
 
-```
+```text
 custom-registry/
 ├── README.md
 └── registry.yaml     # Single index file with all tool definitions

@@ -832,8 +832,10 @@ func TestBuildSingleToolRow_WithToolVersions(t *testing.T) {
 func TestGetTerminalWidthOrDefault(t *testing.T) {
 	// In test environments, terminal width detection often fails.
 	// The function should return either the actual terminal width or the default.
+	// We only assert width > 0 since actual terminal width can be narrower than
+	// defaultTerminalWidth (e.g., 80-column terminals).
 	width := getTerminalWidthOrDefault()
-	assert.GreaterOrEqual(t, width, defaultTerminalWidth, "should return at least default width")
+	assert.Greater(t, width, 0, "should return a positive width")
 }
 
 // TestBuildToolRows_WithToolVersions tests buildToolRows with actual toolVersions.

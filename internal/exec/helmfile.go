@@ -114,7 +114,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		// If still doesn't exist, return the error.
 		if err != nil || !componentPathExists {
 			// Get the base path for the error message, respecting the user's actual config.
-			basePath, _ := u.GetComponentBasePath(&atmosConfig, "helmfile")
+			basePath, _ := u.GetComponentBasePath(&atmosConfig, componentTypeHelmfile)
 			return fmt.Errorf("%w: '%s' points to the Helmfile component '%s', but it does not exist in '%s'",
 				errUtils.ErrInvalidComponent,
 				info.ComponentFromArg,

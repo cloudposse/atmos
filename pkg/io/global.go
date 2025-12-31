@@ -284,6 +284,10 @@ func GetContext() Context {
 // Reset clears the global I/O context and resets the initialization state.
 // This is primarily used in tests to ensure clean state between test executions.
 // The next call to Initialize() will pick up the current os.Stdout/os.Stderr values.
+//
+// Concurrency: While this function is internally thread-safe (uses globalMu), the caller
+// MUST ensure no concurrent I/O operations are in progress when calling Reset().
+// Calling Reset() during active writes can cause undefined behavior or lost output.
 func Reset() {
 	defer perf.Track(nil, "io.Reset")()
 

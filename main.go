@@ -67,6 +67,9 @@ func run() int {
 
 	err := cmd.Execute()
 	if err != nil {
+		// Capture error to Sentry if configured (safe to call even if Sentry not initialized).
+		errUtils.CaptureError(err)
+
 		// Format and print error using centralized formatter.
 		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
 		os.Stderr.WriteString(formatted + "\n")

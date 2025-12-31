@@ -3,6 +3,9 @@ package toolchain
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/toolchain"
 )
 
@@ -35,9 +38,21 @@ func (d *DuCommandProvider) GetGroup() string {
 	return "Toolchain Commands"
 }
 
-func (d *DuCommandProvider) GetFlagsBuilder() interface{} {
+func (d *DuCommandProvider) GetFlagsBuilder() flags.Builder {
 	return nil // No flags for du command.
 }
 
-// Provider instance for automatic registration.
-var _ interface{} = (*DuCommandProvider)(nil)
+func (d *DuCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	return nil
+}
+
+func (d *DuCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
+}
+
+func (d *DuCommandProvider) GetAliases() []internal.CommandAlias {
+	return nil
+}
+
+// Compile-time check that DuCommandProvider implements CommandProvider.
+var _ internal.CommandProvider = (*DuCommandProvider)(nil)
