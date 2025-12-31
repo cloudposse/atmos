@@ -58,10 +58,9 @@ function SlideDeckInner({
   const autoPlayRef = useRef(false);
   const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Configurable delays between slides during auto-play (in milliseconds).
-  // Split into two parts: delay after audio ends, delay before next audio starts.
-  const AUTO_ADVANCE_DELAY_AFTER = 1000;  // 1 second after audio ends.
-  const AUTO_ADVANCE_DELAY_BEFORE = 1000; // 1 second before next audio starts.
+  // Configurable delays during auto-play (in milliseconds).
+  const AUTO_ADVANCE_DELAY = 1000; // Delay before advancing to next slide.
+  const AUTO_PLAY_DELAY = 1000;    // Delay before starting audio on new slide.
 
   // TTS hook for audio playback.
   const tts = useTTS({
@@ -73,7 +72,7 @@ function SlideDeckInner({
         // Add delay after audio ends before advancing to next slide.
         autoAdvanceTimerRef.current = setTimeout(() => {
           nextSlide();
-        }, AUTO_ADVANCE_DELAY_AFTER);
+        }, AUTO_ADVANCE_DELAY);
       } else {
         // Reached last slide - disable auto-play.
         autoPlayRef.current = false;
@@ -105,7 +104,7 @@ function SlideDeckInner({
       // Add delay before starting next audio.
       autoAdvanceTimerRef.current = setTimeout(() => {
         tts.play(currentSlide);
-      }, AUTO_ADVANCE_DELAY_BEFORE);
+      }, AUTO_PLAY_DELAY);
     }
   }, [currentSlide]); // eslint-disable-line react-hooks/exhaustive-deps
 
