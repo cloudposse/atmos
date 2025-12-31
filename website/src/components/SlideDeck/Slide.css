@@ -9,6 +9,7 @@
   box-sizing: border-box;
   background: var(--ifm-background-color);
   color: var(--ifm-font-color-base);
+  overflow-y: auto;
 }
 
 .slide__inner {
@@ -158,7 +159,7 @@ html[data-theme='dark'] .slide--title {
     align-items: center;
     justify-content: center;
     padding: 1rem 1.5rem;
-    overflow: hidden;
+    overflow-y: auto;
   }
 
   .slide-deck--fullscreen .slide__inner {
