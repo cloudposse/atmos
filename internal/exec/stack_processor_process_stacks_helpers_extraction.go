@@ -88,8 +88,10 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentAuth = make(map[string]any, componentSmallMapCapacity)
 	}
 
-	// Terraform-specific: extract provision section (for workdir provisioning).
-	if opts.ComponentType == cfg.TerraformComponentType {
+	// Extract provision section (for workdir provisioning) for terraform, helmfile, and packer.
+	if opts.ComponentType == cfg.TerraformComponentType ||
+		opts.ComponentType == cfg.HelmfileComponentType ||
+		opts.ComponentType == cfg.PackerComponentType {
 		if i, ok := opts.ComponentMap[cfg.ProvisionSectionName]; ok {
 			componentProvision, ok := i.(map[string]any)
 			if !ok {
@@ -149,6 +151,21 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 			result.ComponentRemoteStateBackendSection = componentRemoteStateBackendSection
 		} else {
 			result.ComponentRemoteStateBackendSection = make(map[string]any, componentSmallMapCapacity)
+		}
+	}
+
+	// Extract source configuration for terraform, helmfile, and packer components.
+	if opts.ComponentType == cfg.TerraformComponentType ||
+		opts.ComponentType == cfg.HelmfileComponentType ||
+		opts.ComponentType == cfg.PackerComponentType {
+		if i, ok := opts.ComponentMap[cfg.SourceSectionName]; ok {
+			componentSourceSection, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.source' in the file '%s'", errUtils.ErrInvalidComponentSource, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentSourceSection = componentSourceSection
+		} else {
+			result.ComponentSourceSection = make(map[string]any, componentSmallMapCapacity)
 		}
 	}
 

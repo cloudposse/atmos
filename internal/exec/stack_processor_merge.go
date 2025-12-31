@@ -266,6 +266,23 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.RemoteStateBackendTypeSectionName] = finalComponentRemoteStateBackendType
 		comp[cfg.RemoteStateBackendSectionName] = finalComponentRemoteStateBackend
 		comp[cfg.AuthSectionName] = mergedAuth
+	}
+
+	// Process source and provision configuration for terraform, helmfile, and packer components.
+	if opts.ComponentType == cfg.TerraformComponentType ||
+		opts.ComponentType == cfg.HelmfileComponentType ||
+		opts.ComponentType == cfg.PackerComponentType {
+		finalComponentSource, err := m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				opts.GlobalSourceSection,
+				result.BaseComponentSourceSection,
+				result.ComponentSourceSection,
+			})
+		if err != nil {
+			return nil, err
+		}
+		comp[cfg.SourceSectionName] = finalComponentSource
 		comp[cfg.ProvisionSectionName] = result.ComponentProvision
 	}
 
@@ -288,7 +305,7 @@ func processAuthConfig(atmosConfig *schema.AtmosConfiguration, globalAuthConfig 
 			authConfig,
 		})
 	if err != nil {
-		return nil, fmt.Errorf("%w: merge auth config: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: merge auth config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	// Apply deferred merges (without YAML processing - already done earlier).
