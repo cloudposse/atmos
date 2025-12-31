@@ -12,7 +12,7 @@ type Hook struct {
 	Name    string            `yaml:"name,omitempty"`    // for store command
 	Outputs map[string]string `yaml:"outputs,omitempty"` // for store command
 
-	// CI commands.
-	PlanFile string `yaml:"plan_file,omitempty"` // for ci.upload/ci.download commands
-	Content  string `yaml:"content,omitempty"`   // for ci.summary command
+	// Note: CI commands (ci.upload, ci.download, ci.summary) are deprecated.
+	// Use RunCIHooks which automatically triggers CI actions based on
+	// component provider bindings. See pkg/ci/ for the modern implementation.
 }
