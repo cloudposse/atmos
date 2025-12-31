@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/toolchain"
 	toolchainregistry "github.com/cloudposse/atmos/toolchain/registry"
 )
 
@@ -365,4 +366,373 @@ func TestListConstants(t *testing.T) {
 	assert.Equal(t, 2, columnPaddingPerSide)
 	assert.Equal(t, 4, totalColumnPadding)
 	assert.Equal(t, "●", statusIndicator)
+}
+
+// TestGetStatusIndicator tests the getStatusIndicator function.
+func TestGetStatusIndicator(t *testing.T) {
+	tests := []struct {
+		name        string
+		isInstalled bool
+		isInConfig  bool
+		want        string
+	}{
+		{
+			name:        "installed returns dot",
+			isInstalled: true,
+			isInConfig:  true,
+			want:        statusIndicator,
+		},
+		{
+			name:        "in config but not installed returns dot",
+			isInstalled: false,
+			isInConfig:  true,
+			want:        statusIndicator,
+		},
+		{
+			name:        "not in config returns space",
+			isInstalled: false,
+			isInConfig:  false,
+			want:        " ",
+		},
+		{
+			name:        "installed takes precedence",
+			isInstalled: true,
+			isInConfig:  false,
+			want:        statusIndicator,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := getStatusIndicator(tt.isInstalled, tt.isInConfig)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestUpdateColumnWidths tests the updateColumnWidths function.
+func TestUpdateColumnWidths(t *testing.T) {
+	tests := []struct {
+		name         string
+		initialWidth columnWidths
+		tool         *toolchainregistry.Tool
+		wantOwner    int
+		wantRepo     int
+		wantType     int
+	}{
+		{
+			name: "updates owner width when longer",
+			initialWidth: columnWidths{
+				owner: 5,
+				repo:  5,
+				tType: 5,
+			},
+			tool: &toolchainregistry.Tool{
+				RepoOwner: "verylongowner",
+				RepoName:  "repo",
+				Type:      "http",
+			},
+			wantOwner: 13,
+			wantRepo:  5,
+			wantType:  5,
+		},
+		{
+			name: "updates repo width when longer",
+			initialWidth: columnWidths{
+				owner: 5,
+				repo:  5,
+				tType: 5,
+			},
+			tool: &toolchainregistry.Tool{
+				RepoOwner: "own",
+				RepoName:  "verylongreponame",
+				Type:      "http",
+			},
+			wantOwner: 5,
+			wantRepo:  16,
+			wantType:  5,
+		},
+		{
+			name: "updates type width when longer",
+			initialWidth: columnWidths{
+				owner: 5,
+				repo:  5,
+				tType: 5,
+			},
+			tool: &toolchainregistry.Tool{
+				RepoOwner: "own",
+				RepoName:  "repo",
+				Type:      "github_release",
+			},
+			wantOwner: 5,
+			wantRepo:  5,
+			wantType:  14,
+		},
+		{
+			name: "keeps original width when tool is shorter",
+			initialWidth: columnWidths{
+				owner: 20,
+				repo:  20,
+				tType: 20,
+			},
+			tool: &toolchainregistry.Tool{
+				RepoOwner: "own",
+				RepoName:  "repo",
+				Type:      "http",
+			},
+			wantOwner: 20,
+			wantRepo:  20,
+			wantType:  20,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := updateColumnWidths(tt.initialWidth, tt.tool)
+			assert.Equal(t, tt.wantOwner, got.owner)
+			assert.Equal(t, tt.wantRepo, got.repo)
+			assert.Equal(t, tt.wantType, got.tType)
+		})
+	}
+}
+
+// TestApplyColumnPaddingAndTruncation tests column padding and width truncation.
+func TestApplyColumnPaddingAndTruncation(t *testing.T) {
+	tests := []struct {
+		name      string
+		widths    columnWidths
+		termWidth int
+		checkFunc func(t *testing.T, result columnWidths)
+	}{
+		{
+			name: "adds padding to columns",
+			widths: columnWidths{
+				status: 1,
+				owner:  10,
+				repo:   10,
+				tType:  10,
+			},
+			termWidth: 200, // Wide terminal, no truncation needed.
+			checkFunc: func(t *testing.T, result columnWidths) {
+				assert.Equal(t, 3, result.status) // status + 2
+				assert.Equal(t, 14, result.owner) // 10 + 4
+				assert.Equal(t, 14, result.repo)  // 10 + 4
+				assert.Equal(t, 14, result.tType) // 10 + 4
+			},
+		},
+		{
+			name: "truncates columns when terminal is narrow",
+			widths: columnWidths{
+				status: 1,
+				owner:  50,
+				repo:   50,
+				tType:  50,
+			},
+			termWidth: 100, // Narrow terminal, truncation needed.
+			checkFunc: func(t *testing.T, result columnWidths) {
+				// Should truncate but maintain minimum widths.
+				assert.GreaterOrEqual(t, result.owner, minColumnWidthOwner)
+				assert.GreaterOrEqual(t, result.repo, minColumnWidthRepo)
+				assert.GreaterOrEqual(t, result.tType, minColumnWidthType)
+			},
+		},
+		{
+			name: "respects minimum column widths",
+			widths: columnWidths{
+				status: 1,
+				owner:  100,
+				repo:   100,
+				tType:  100,
+			},
+			termWidth: 50, // Very narrow terminal.
+			checkFunc: func(t *testing.T, result columnWidths) {
+				// Should not go below minimum widths.
+				assert.GreaterOrEqual(t, result.owner, minColumnWidthOwner)
+				assert.GreaterOrEqual(t, result.repo, minColumnWidthRepo)
+				assert.GreaterOrEqual(t, result.tType, minColumnWidthType)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := applyColumnPaddingAndTruncation(tt.widths, tt.termWidth)
+			tt.checkFunc(t, result)
+		})
+	}
+}
+
+// TestGetToolVersion tests the getToolVersion function.
+func TestGetToolVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		fullName  string
+		repoName  string
+		tools     map[string][]string
+		foundFull bool
+		foundRepo bool
+		want      string
+	}{
+		{
+			name:      "returns version from full name",
+			fullName:  "hashicorp/terraform",
+			repoName:  "terraform",
+			tools:     map[string][]string{"hashicorp/terraform": {"1.5.0", "1.4.0"}},
+			foundFull: true,
+			foundRepo: false,
+			want:      "1.5.0",
+		},
+		{
+			name:      "returns version from repo name when full not found",
+			fullName:  "hashicorp/terraform",
+			repoName:  "terraform",
+			tools:     map[string][]string{"terraform": {"1.5.0"}},
+			foundFull: false,
+			foundRepo: true,
+			want:      "1.5.0",
+		},
+		{
+			name:      "returns empty when no versions",
+			fullName:  "hashicorp/terraform",
+			repoName:  "terraform",
+			tools:     map[string][]string{"hashicorp/terraform": {}},
+			foundFull: true,
+			foundRepo: false,
+			want:      "",
+		},
+		{
+			name:      "returns empty when not found",
+			fullName:  "hashicorp/terraform",
+			repoName:  "terraform",
+			tools:     map[string][]string{},
+			foundFull: false,
+			foundRepo: false,
+			want:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			toolVersions := &toolchain.ToolVersions{
+				Tools: tt.tools,
+			}
+			got := getToolVersion(tt.fullName, tt.repoName, toolVersions, tt.foundFull, tt.foundRepo)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestRenderToolsTable tests the renderToolsTable function.
+func TestRenderToolsTable(t *testing.T) {
+	rows := []toolRow{
+		{
+			status:      statusIndicator,
+			owner:       "hashicorp",
+			repo:        "terraform",
+			toolType:    "github_release",
+			isInstalled: true,
+			isInConfig:  true,
+		},
+		{
+			status:      " ",
+			owner:       "kubernetes",
+			repo:        "kubectl",
+			toolType:    "github_release",
+			isInstalled: false,
+			isInConfig:  false,
+		},
+	}
+
+	widths := columnWidths{
+		status: 3,
+		owner:  15,
+		repo:   15,
+		tType:  15,
+	}
+
+	result := renderToolsTable(rows, widths)
+
+	// Should contain table output.
+	assert.NotEmpty(t, result)
+	assert.Contains(t, result, "OWNER")
+	assert.Contains(t, result, "REPO")
+	assert.Contains(t, result, "TYPE")
+	assert.Contains(t, result, "hashicorp")
+	assert.Contains(t, result, "terraform")
+	assert.Contains(t, result, "kubernetes")
+	assert.Contains(t, result, "kubectl")
+}
+
+// TestBuildToolRows tests the buildToolRows function.
+func TestBuildToolRows(t *testing.T) {
+	tools := []*toolchainregistry.Tool{
+		{
+			RepoOwner: "hashicorp",
+			RepoName:  "terraform",
+			Type:      "github_release",
+		},
+		{
+			RepoOwner: "kubernetes",
+			RepoName:  "kubectl",
+			Type:      "github_release",
+		},
+	}
+
+	// Test with nil toolVersions.
+	rows, widths := buildToolRows(tools, nil, nil)
+
+	assert.Len(t, rows, 2)
+	assert.Equal(t, "hashicorp", rows[0].owner)
+	assert.Equal(t, "terraform", rows[0].repo)
+	assert.Equal(t, "kubernetes", rows[1].owner)
+	assert.Equal(t, "kubectl", rows[1].repo)
+
+	// Check widths were calculated.
+	assert.GreaterOrEqual(t, widths.owner, len("hashicorp"))
+	assert.GreaterOrEqual(t, widths.repo, len("terraform"))
+}
+
+// TestBuildSingleToolRow tests the buildSingleToolRow function.
+func TestBuildSingleToolRow(t *testing.T) {
+	tool := &toolchainregistry.Tool{
+		RepoOwner: "hashicorp",
+		RepoName:  "terraform",
+		Type:      "github_release",
+	}
+
+	// Test with nil toolVersions.
+	row := buildSingleToolRow(tool, nil, nil)
+
+	assert.Equal(t, "hashicorp", row.owner)
+	assert.Equal(t, "terraform", row.repo)
+	assert.Equal(t, "github_release", row.toolType)
+	assert.False(t, row.isInstalled)
+	assert.False(t, row.isInConfig)
+	assert.Equal(t, " ", row.status) // Not in config, should be space.
+}
+
+// TestColumnWidths tests the columnWidths struct.
+func TestColumnWidths(t *testing.T) {
+	widths := columnWidths{
+		status: 1,
+		owner:  10,
+		repo:   15,
+		tType:  20,
+	}
+
+	assert.Equal(t, 1, widths.status)
+	assert.Equal(t, 10, widths.owner)
+	assert.Equal(t, 15, widths.repo)
+	assert.Equal(t, 20, widths.tType)
+}
+
+// TestDisplayTableParams tests the displayTableParams struct.
+func TestDisplayTableParams(t *testing.T) {
+	params := &displayTableParams{
+		registryName: "aqua",
+		pagerEnabled: true,
+	}
+
+	assert.Equal(t, "aqua", params.registryName)
+	assert.True(t, params.pagerEnabled)
 }

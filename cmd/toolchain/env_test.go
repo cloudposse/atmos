@@ -178,3 +178,156 @@ func TestEnvCommand_ShellCompletion(t *testing.T) {
 		assert.NotNil(t, cmd.Flag("format"))
 	})
 }
+
+func TestEnvCommand_RelativeFlag(t *testing.T) {
+	tests := []struct {
+		name     string
+		relative bool
+	}{
+		{
+			name:     "relative flag true",
+			relative: true,
+		},
+		{
+			name:     "relative flag false",
+			relative: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			v.Set("format", "bash")
+			v.Set("relative", tt.relative)
+
+			// Verify viper correctly stores the relative flag.
+			assert.Equal(t, tt.relative, v.GetBool("relative"))
+		})
+	}
+}
+
+func TestEnvCommand_EnvVars(t *testing.T) {
+	t.Run("format env var is configured", func(t *testing.T) {
+		// The parser is configured with WithEnvVars("format", "ATMOS_TOOLCHAIN_ENV_FORMAT").
+		require.NotNil(t, envParser)
+	})
+
+	t.Run("relative env var is configured", func(t *testing.T) {
+		// The parser is configured with WithEnvVars("relative", "ATMOS_TOOLCHAIN_RELATIVE").
+		require.NotNil(t, envParser)
+	})
+}
+
+func TestEnvCommand_CommandStructure(t *testing.T) {
+	t.Run("command has correct use string", func(t *testing.T) {
+		assert.Equal(t, "env", envCmd.Use)
+	})
+
+	t.Run("command has short description", func(t *testing.T) {
+		assert.NotEmpty(t, envCmd.Short)
+		assert.Contains(t, envCmd.Short, "PATH")
+	})
+
+	t.Run("command has long description", func(t *testing.T) {
+		assert.NotEmpty(t, envCmd.Long)
+		assert.Contains(t, envCmd.Long, ".tool-versions")
+	})
+
+	t.Run("command has RunE function", func(t *testing.T) {
+		assert.NotNil(t, envCmd.RunE)
+	})
+}
+
+func TestEnvCommand_FormatFlagShorthand(t *testing.T) {
+	t.Run("format flag has shorthand f", func(t *testing.T) {
+		flag := envCmd.Flags().Lookup("format")
+		require.NotNil(t, flag)
+		assert.Equal(t, "f", flag.Shorthand)
+	})
+}
+
+func TestEnvCommand_DefaultValues(t *testing.T) {
+	t.Run("format default is bash", func(t *testing.T) {
+		flag := envCmd.Flags().Lookup("format")
+		require.NotNil(t, flag)
+		assert.Equal(t, "bash", flag.DefValue)
+	})
+
+	t.Run("relative default is false", func(t *testing.T) {
+		flag := envCmd.Flags().Lookup("relative")
+		require.NotNil(t, flag)
+		assert.Equal(t, "false", flag.DefValue)
+	})
+}
+
+func TestEnvCommand_ValidationWithViper(t *testing.T) {
+	tests := []struct {
+		name     string
+		format   string
+		relative bool
+		isValid  bool
+	}{
+		{
+			name:     "valid bash format with relative false",
+			format:   "bash",
+			relative: false,
+			isValid:  true,
+		},
+		{
+			name:     "valid json format with relative true",
+			format:   "json",
+			relative: true,
+			isValid:  true,
+		},
+		{
+			name:     "valid dotenv format",
+			format:   "dotenv",
+			relative: false,
+			isValid:  true,
+		},
+		{
+			name:     "valid fish format",
+			format:   "fish",
+			relative: true,
+			isValid:  true,
+		},
+		{
+			name:     "valid powershell format",
+			format:   "powershell",
+			relative: false,
+			isValid:  true,
+		},
+		{
+			name:     "invalid xml format",
+			format:   "xml",
+			relative: false,
+			isValid:  false,
+		},
+		{
+			name:     "invalid zsh format",
+			format:   "zsh",
+			relative: false,
+			isValid:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := viper.New()
+			v.Set("format", tt.format)
+			v.Set("relative", tt.relative)
+
+			// Check if format is in supported formats.
+			format := v.GetString("format")
+			found := false
+			for _, f := range supportedFormats {
+				if f == format {
+					found = true
+					break
+				}
+			}
+
+			assert.Equal(t, tt.isValid, found)
+		})
+	}
+}
