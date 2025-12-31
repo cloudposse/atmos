@@ -119,6 +119,36 @@ html[data-theme='dark'] .slide-subtitle {
   flex: 1;
 }
 
+/* Desktop fullscreen - scale text to fill larger slide area */
+.slide-deck--fullscreen .slide-title {
+  font-size: clamp(2.5rem, 4vw, 4rem);
+}
+
+.slide-deck--fullscreen .slide--title .slide-title {
+  font-size: clamp(3.5rem, 5vw, 5.5rem);
+}
+
+.slide-deck--fullscreen .slide-subtitle {
+  font-size: clamp(1.5rem, 2.5vw, 2.5rem);
+}
+
+.slide-deck--fullscreen .slide--title .slide-subtitle {
+  font-size: clamp(1.75rem, 3vw, 3rem);
+}
+
+.slide-deck--fullscreen .slide-content,
+.slide-deck--fullscreen .slide-list {
+  font-size: clamp(1.25rem, 2vw, 2rem);
+}
+
+.slide-deck--fullscreen .slide-list li {
+  margin-bottom: 1rem;
+}
+
+.slide-deck--fullscreen .slide-code {
+  font-size: clamp(0.9rem, 1.2vw, 1.3rem);
+}
+
 /* Responsive */
 @media screen and (max-width: 996px) {
   .slide-title {

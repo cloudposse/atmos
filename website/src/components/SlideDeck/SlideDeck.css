@@ -91,9 +91,11 @@
   left: auto;
   right: auto;
   bottom: auto;
-  max-width: 1600px;
-  max-height: calc(100vh - 60px);
-  width: 100%;
+  /* Size based on viewport height to fill screen while maintaining 16:9 */
+  height: calc(100vh - 60px);
+  width: calc((100vh - 60px) * 16 / 9);
+  max-width: calc(100vw - 80px);
+  max-height: calc((100vw - 80px) * 9 / 16);
   aspect-ratio: 16 / 9;
 }
 

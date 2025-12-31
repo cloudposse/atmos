@@ -89,6 +89,19 @@ html[data-theme='dark'] .slide--title {
 
 /* Fullscreen adjustments - slides inherit normal theme styling */
 
+/* Desktop fullscreen - scale content to fill the larger slide area */
+.slide-deck--fullscreen .slide__inner {
+  max-width: 85%;
+}
+
+.slide-deck--fullscreen .slide--split .slide__inner {
+  max-width: 90%;
+}
+
+.slide-deck--fullscreen .slide--code .slide__inner {
+  max-width: 90%;
+}
+
 /* Responsive */
 @media screen and (max-width: 996px) {
   .slide {
