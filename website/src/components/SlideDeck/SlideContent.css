@@ -165,3 +165,42 @@ html[data-theme='dark'] .slide-subtitle {
     font-size: 0.8rem;
   }
 }
+
+/* Small Mobile */
+@media screen and (max-width: 480px) {
+  .slide-title {
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .slide--title .slide-title {
+    font-size: 1.5rem;
+  }
+
+  .slide-subtitle {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .slide-content,
+  .slide-list {
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .slide-list {
+    padding-left: 1rem;
+  }
+
+  .slide-list li {
+    margin-bottom: 0.5rem;
+  }
+
+  .slide-code {
+    font-size: 0.7rem;
+  }
+
+  .slide-image img {
+    border-radius: 4px;
+  }
+}
