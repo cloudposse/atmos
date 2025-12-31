@@ -373,25 +373,23 @@ function SlideDeckInner({
           </button>
         </Tooltip>
 
-        {/* TTS Play/Pause button - only show when slide has notes */}
-        {currentNotes && (
-          <Tooltip content={tts.isPlaying ? 'Pause (P)' : tts.isPaused ? 'Resume (P)' : 'Play Notes (P)'} position="top">
-            <button
-              className={`slide-deck__tool-button ${tts.isPlaying ? 'slide-deck__tool-button--active' : ''}`}
-              onClick={handleTTSPlayPause}
-              disabled={tts.isLoading}
-              aria-label={tts.isPlaying ? 'Pause' : 'Play notes'}
-            >
-              {tts.isLoading ? (
-                <RiLoader4Line className="slide-deck__spin" />
-              ) : tts.isPlaying ? (
-                <RiPauseLine />
-              ) : (
-                <RiPlayLine />
-              )}
-            </button>
-          </Tooltip>
-        )}
+        {/* TTS Play/Pause button - always show, use isAutoPlaying for state during transitions */}
+        <Tooltip content={tts.isPlaying ? 'Pause (P)' : tts.isPaused ? 'Resume (P)' : isAutoPlaying ? 'Stop (P)' : 'Play Notes (P)'} position="top">
+          <button
+            className={`slide-deck__tool-button ${tts.isPlaying || isAutoPlaying ? 'slide-deck__tool-button--active' : ''}`}
+            onClick={handleTTSPlayPause}
+            disabled={tts.isLoading || (!currentNotes && !isAutoPlaying)}
+            aria-label={tts.isPlaying || isAutoPlaying ? 'Pause' : 'Play notes'}
+          >
+            {tts.isLoading || (isAutoPlaying && !tts.isPlaying && !tts.isPaused) ? (
+              <RiLoader4Line className="slide-deck__spin" />
+            ) : tts.isPlaying ? (
+              <RiPauseLine />
+            ) : (
+              <RiPlayLine />
+            )}
+          </button>
+        </Tooltip>
 
         {showProgress && (
           <div className="slide-deck__progress">
