@@ -115,9 +115,9 @@ toolchain:
 ```yaml
 # atmos.yaml
 toolchain:
-  # Legacy format (still supported)
-  file_path: .tool-versions
-  tools_dir: .tools
+  # Configuration options
+  versions_file: .tool-versions
+  install_path: .tools
 
   # New multi-registry configuration
   registries:

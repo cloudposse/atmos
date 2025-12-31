@@ -1,5 +1,13 @@
 # PRD: Toolchain Registry Search and Discovery
 
+## Status: Shipped
+
+**Last Updated**: 2025-11-09
+
+**Related PRDs**: [Toolchain Implementation](./toolchain-implementation.md) | [Lock File Support](./toolchain-lock-file.md)
+
+---
+
 ## Overview
 
 Users need the ability to discover available tools across configured registries without manually browsing registry URLs. This PRD defines commands for searching and listing tools in toolchain registries.

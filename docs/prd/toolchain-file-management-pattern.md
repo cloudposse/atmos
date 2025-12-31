@@ -1,5 +1,13 @@
 # Design Pattern: Toolchain File Management
 
+## Status: Approved
+
+**Last Updated**: 2025-11-09
+
+**Related PRDs**: [Toolchain Implementation](./toolchain-implementation.md) | [Lock File Support](./toolchain-lock-file.md)
+
+---
+
 ## Problem
 
 Multiple toolchain commands need to update both `.tool-versions` and `toolchain.lock.yaml`:

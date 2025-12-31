@@ -1,5 +1,13 @@
 # PRD: Toolchain Lock File Support
 
+## Status: Planned
+
+**Last Updated**: 2025-11-09
+
+**Related PRDs**: [Toolchain Implementation](./toolchain-implementation.md) | [File Management Pattern](./toolchain-file-management-pattern.md)
+
+---
+
 ## Overview
 
 Add native lock file support for the Atmos toolchain to provide deterministic, cryptographically verifiable tool installations. While `.tool-versions` (ASDF format) is useful for version tracking, a native lock file enables stronger guarantees around reproducibility, security, and multi-platform support.

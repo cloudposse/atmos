@@ -1,7 +1,10 @@
 # Tool Dependencies Integration
 
-**Status**: 🚧 In Progress
-**Last Updated**: 2025-10-23
+**Status**: 🚧 Planned
+
+**Last Updated**: 2025-11-09
+
+**Related PRDs**: [Toolchain Implementation](./toolchain-implementation.md) | [Lock File Support](./toolchain-lock-file.md)
 
 ## Overview
 
