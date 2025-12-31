@@ -84,20 +84,31 @@ function extractSlideNotes(mdxContent) {
       // Remove JSX comments first.
       text = text.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
 
-      // Repeatedly strip HTML/JSX tags until none remain.
-      // This handles cases where incomplete tags like "<script" might remain
-      // after a single pass (e.g., nested or malformed tags).
-      let previousText;
-      do {
-        previousText = text;
-        text = text.replace(/<[^>]*>/g, '');    // Remove complete tags.
-        text = text.replace(/<[^>]*$/g, '');    // Remove incomplete opening tags at end.
-        text = text.replace(/^[^<]*>/g, match => // Remove incomplete closing tags at start.
-          match.includes('<') ? match : '');
-      } while (text !== previousText);
+      // Use a simple, secure approach: extract only text content.
+      // Replace all HTML/JSX tags with spaces (to preserve word boundaries),
+      // then clean up. This avoids multi-character sanitization issues.
+      //
+      // Strategy: Rather than trying to strip tags iteratively (which can
+      // leave fragments), we extract text between tags and join with spaces.
+      const textParts = [];
+      let lastIndex = 0;
+      const tagRegex = /<[^>]*>/g;
+      let tagMatch;
 
-      // Final safety: remove any remaining < or > characters.
-      text = text.replace(/[<>]/g, '');
+      while ((tagMatch = tagRegex.exec(text)) !== null) {
+        // Extract text before this tag.
+        if (tagMatch.index > lastIndex) {
+          textParts.push(text.slice(lastIndex, tagMatch.index));
+        }
+        lastIndex = tagMatch.index + tagMatch[0].length;
+      }
+      // Extract remaining text after last tag.
+      if (lastIndex < text.length) {
+        textParts.push(text.slice(lastIndex));
+      }
+
+      // Join parts and clean up any stray angle brackets (from malformed input).
+      text = textParts.join(' ').replace(/[<>]/g, '');
 
       // Normalize whitespace.
       text = text.replace(/\s+/g, ' ').trim();
