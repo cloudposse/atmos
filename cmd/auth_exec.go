@@ -17,6 +17,7 @@ import (
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // authExecCmd executes a command with authentication environment variables.
@@ -251,9 +252,9 @@ func extractIdentityFlag(args []string) (identityValue string, commandArgs []str
 
 // printAuthExecTip prints a helpful tip when auth exec fails.
 func printAuthExecTip(identityName string) {
-	fmt.Fprintf(os.Stderr, "\n")
-	fmt.Fprintf(os.Stderr, " Tip  If credentials are expired, refresh with:\n")
-	fmt.Fprintf(os.Stderr, "      atmos auth login --identity %s\n", identityName)
+	_ = ui.Writeln("")
+	_ = ui.Info("Tip: If credentials are expired, refresh with:")
+	_ = ui.Writef("     atmos auth login --identity %s\n", identityName)
 }
 
 func init() {

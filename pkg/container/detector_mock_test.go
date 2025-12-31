@@ -28,6 +28,7 @@ func failCmd() *exec.Cmd {
 }
 
 // echoCmd returns a command that outputs the given string on any platform.
+// Note: On Windows, output must not contain cmd.exe metacharacters (&, |, etc.).
 func echoCmd(output string) *exec.Cmd {
 	if runtime.GOOS == "windows" {
 		if output == "" {
