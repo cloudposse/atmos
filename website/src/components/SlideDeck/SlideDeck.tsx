@@ -56,6 +56,10 @@ function SlideDeckInner({
 
   // Track auto-play mode - stays true across slide transitions until user stops.
   const autoPlayRef = useRef(false);
+  const autoAdvanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Configurable delay between slides during auto-play (in milliseconds).
+  const AUTO_ADVANCE_DELAY = 2000;
 
   // TTS hook for audio playback.
   const tts = useTTS({
@@ -64,7 +68,10 @@ function SlideDeckInner({
       // Auto-advance to next slide if not on last slide.
       if (currentSlide < totalSlides) {
         // Keep autoPlayRef true - we want to continue playing.
-        nextSlide();
+        // Add delay before advancing to next slide.
+        autoAdvanceTimerRef.current = setTimeout(() => {
+          nextSlide();
+        }, AUTO_ADVANCE_DELAY);
       } else {
         // Reached last slide - disable auto-play.
         autoPlayRef.current = false;
@@ -82,6 +89,11 @@ function SlideDeckInner({
   // Disable auto-play when user explicitly stops.
   const handleStop = useCallback(() => {
     autoPlayRef.current = false;
+    // Clear any pending auto-advance timer.
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
     tts.stop();
   }, [tts]);
 
@@ -92,10 +104,24 @@ function SlideDeckInner({
     }
   }, [currentSlide]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Cleanup auto-advance timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+      }
+    };
+  }, []);
+
   // Handle TTS play/pause toggle.
   const handleTTSPlayPause = useCallback(() => {
     if (tts.isPlaying) {
       autoPlayRef.current = false; // Disable auto-play on pause.
+      // Clear any pending auto-advance timer.
+      if (autoAdvanceTimerRef.current) {
+        clearTimeout(autoAdvanceTimerRef.current);
+        autoAdvanceTimerRef.current = null;
+      }
       tts.pause();
     } else if (tts.isPaused) {
       autoPlayRef.current = true; // Re-enable auto-play on resume.
@@ -383,6 +409,11 @@ function SlideDeckInner({
           onStop={handleStop}
           onPause={() => {
             autoPlayRef.current = false;
+            // Clear any pending auto-advance timer.
+            if (autoAdvanceTimerRef.current) {
+              clearTimeout(autoAdvanceTimerRef.current);
+              autoAdvanceTimerRef.current = null;
+            }
             tts.pause();
           }}
           onResume={() => {
