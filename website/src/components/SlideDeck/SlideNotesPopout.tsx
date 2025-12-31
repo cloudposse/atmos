@@ -1,5 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useRef } from 'react';
 import { useSlideDeck } from './SlideDeckContext';
 
 // Channel name for cross-window communication.
@@ -70,6 +69,7 @@ export function SlideNotesPopout() {
   }, [currentSlide, notesPreferences.isPopout]);
 
   // Open popout window when isPopout becomes true.
+  // Only depends on isPopout - content updates happen in a separate effect.
   useEffect(() => {
     if (!notesPreferences.isPopout) {
       // Close the popout window if it exists.
@@ -103,7 +103,7 @@ export function SlideNotesPopout() {
     // Set up the popout window content.
     popout.document.title = 'Speaker Notes';
 
-    // Write initial HTML structure.
+    // Write initial HTML structure (content will be updated by separate effect).
     popout.document.write(`
       <!DOCTYPE html>
       <html>
@@ -203,16 +203,16 @@ export function SlideNotesPopout() {
           <div class="header">
             <div class="title">
               <span>📝 Speaker Notes</span>
-              <span class="slide-num" id="slide-num">Slide ${currentSlide} / ${totalSlides}</span>
+              <span class="slide-num" id="slide-num">Loading...</span>
             </div>
             <button class="close-btn" id="close-btn" title="Close and return to inline">×</button>
           </div>
           <div class="nav-buttons" style="padding: 8px 16px; background: rgba(255, 255, 255, 0.02);">
-            <button class="nav-btn" id="prev-btn" ${currentSlide === 1 ? 'disabled' : ''}>← Previous</button>
-            <button class="nav-btn" id="next-btn" ${currentSlide === totalSlides ? 'disabled' : ''}>Next →</button>
+            <button class="nav-btn" id="prev-btn">← Previous</button>
+            <button class="nav-btn" id="next-btn">Next →</button>
           </div>
           <div class="content" id="notes-content">
-            ${currentNotes ? '<div id="notes-text"></div>' : '<div class="empty">No notes for this slide.</div>'}
+            <div class="empty">Loading notes...</div>
           </div>
           <script>
             const channel = new BroadcastChannel('${CHANNEL_NAME}');
@@ -221,7 +221,7 @@ export function SlideNotesPopout() {
             channel.onmessage = (event) => {
               const { type, slide } = event.data;
               if (type === 'slide-change') {
-                // Content will be updated by React portal.
+                // Content will be updated by React.
               }
             };
 
@@ -261,7 +261,7 @@ export function SlideNotesPopout() {
     return () => {
       clearInterval(checkClosed);
     };
-  }, [notesPreferences.isPopout, setNotesPopout, currentSlide, totalSlides, currentNotes]);
+  }, [notesPreferences.isPopout, setNotesPopout]);
 
   // Update the popout window content when notes change.
   useEffect(() => {
@@ -290,12 +290,22 @@ export function SlideNotesPopout() {
     if (notesContentEl) {
       if (currentNotes) {
         // Convert React node to string if possible.
+        // Use textContent for safety to prevent XSS.
         const notesText = typeof currentNotes === 'string'
           ? currentNotes
           : (currentNotes as React.ReactElement)?.props?.children || 'Notes available';
-        notesContentEl.innerHTML = `<div>${notesText}</div>`;
+        // Clear existing content and create new div safely.
+        notesContentEl.textContent = '';
+        const div = popout.document.createElement('div');
+        div.textContent = typeof notesText === 'string' ? notesText : String(notesText);
+        notesContentEl.appendChild(div);
       } else {
-        notesContentEl.innerHTML = '<div class="empty">No notes for this slide.</div>';
+        // Clear and create empty state safely.
+        notesContentEl.textContent = '';
+        const empty = popout.document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'No notes for this slide.';
+        notesContentEl.appendChild(empty);
       }
     }
   }, [currentSlide, totalSlides, currentNotes, notesPreferences.isPopout]);

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo, useRef } from 'react';
 import type { SlideDeckContextValue, NotesPreferences, NotesPosition, NotesDisplayMode } from './types';
 
 const SlideDeckContext = createContext<SlideDeckContextValue | null>(null);
@@ -58,16 +58,25 @@ export function SlideDeckProvider({
   startSlide = 1
 }: SlideDeckProviderProps) {
   const [currentSlide, setCurrentSlide] = useState(startSlide);
-  // Start in fullscreen mode on mobile devices.
-  const [isFullscreen, setIsFullscreen] = useState(() => isMobileDevice());
+  // Initialize fullscreen to false to avoid hydration mismatch (server always renders false).
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [currentNotes, setCurrentNotes] = useState<React.ReactNode | null>(null);
-  const [isMobile, setIsMobile] = useState(() => isMobileDevice());
+  const [isMobile, setIsMobile] = useState(false);
   const [notesPreferences, setNotesPreferences] = useState<NotesPreferences>(defaultNotesPreferences);
 
-  // Load notes preferences from localStorage on mount.
+  // Ref to track current fullscreen state for resize handler (avoids stale closure).
+  const isFullscreenRef = useRef(isFullscreen);
+  isFullscreenRef.current = isFullscreen;
+
+  // Load notes preferences and set mobile/fullscreen state after mount (client-side only).
   useEffect(() => {
     setNotesPreferences(loadNotesPreferences());
+    // Auto-enter fullscreen on mobile after hydration.
+    if (isMobileDevice()) {
+      setIsMobile(true);
+      setIsFullscreen(true);
+    }
   }, []);
 
   // Sync with URL hash on mount.
@@ -121,11 +130,12 @@ export function SlideDeckProvider({
 
     const handleResize = () => {
       // Auto-enter fullscreen mode on mobile, exit on desktop (unless native fullscreen).
+      // Use ref to get current fullscreen state (avoids stale closure).
       const mobile = isMobileDevice();
       setIsMobile(mobile);
-      if (mobile && !isFullscreen) {
+      if (mobile && !isFullscreenRef.current) {
         setIsFullscreen(true);
-      } else if (!mobile && !document.fullscreenElement && isFullscreen) {
+      } else if (!mobile && !document.fullscreenElement && isFullscreenRef.current) {
         setIsFullscreen(false);
       }
     };
@@ -136,7 +146,7 @@ export function SlideDeckProvider({
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       window.removeEventListener('resize', handleResize);
     };
-  }, [isFullscreen]);
+  }, []);
 
   const goToSlide = useCallback((index: number) => {
     if (index >= 1 && index <= totalSlides) {
