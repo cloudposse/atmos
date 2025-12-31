@@ -137,7 +137,7 @@ toolchain:
   registries:
     - name: my-custom-registry
       type: aqua
-      source: file://./custom-registry/pkgs
+      source: file://./custom-registry/registry.yaml
       priority: 100
 ```
 

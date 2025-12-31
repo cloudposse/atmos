@@ -84,7 +84,9 @@ func run() int {
 }
 
 // hasVersionFlag checks if --version flag is present in args.
-// Only checks for --version as the first argument after the program name.
+// Only checks for --version as the first argument after the program name
+// to catch the simple "atmos --version" case for early exit; other flag
+// combinations go through normal Cobra processing.
 func hasVersionFlag(args []string) bool {
 	return len(args) > 1 && args[1] == "--version"
 }

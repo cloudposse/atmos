@@ -1139,105 +1139,105 @@ This section provides commands to manually test toolchain functionality.
 
 ### Prerequisites
 
-Build Atmos from source:
-```bash
-make build
-```
-
-Navigate to a test directory with stack configuration or create a test `.tool-versions` file.
+Ensure Atmos is installed and available in your PATH. Navigate to a test directory with stack configuration or create a test `.tool-versions` file.
 
 ### Basic Tool Management
 
 ```bash
 # List configured tools (shows status and installed versions)
-./build/atmos toolchain list
+atmos toolchain list
 
 # Add a tool to .tool-versions
-./build/atmos toolchain add terraform@1.9.8
-./build/atmos toolchain add opentofu@1.10.3
-./build/atmos toolchain add kubectl@1.28.0
+atmos toolchain add terraform@1.9.8
+atmos toolchain add opentofu@1.10.3
+atmos toolchain add kubectl@1.28.0
+atmos toolchain add k9s@0.32.7
 
 # Verify .tool-versions was created/updated
 cat .tool-versions
 
 # Install all tools from .tool-versions
-./build/atmos toolchain install
+atmos toolchain install
 
 # Install a specific tool version
-./build/atmos toolchain install hashicorp/terraform@1.9.8
-./build/atmos toolchain install terraform@1.10.3
+atmos toolchain install hashicorp/terraform@1.9.8
+atmos toolchain install terraform@1.10.3
 ```
 
 ### Version Discovery and Information
 
 ```bash
 # Get available versions for a tool
-./build/atmos toolchain get terraform
-./build/atmos toolchain get terraform --all --limit 20
+atmos toolchain get terraform
+atmos toolchain get terraform --all --limit 20
 
 # Show tool metadata and information
-./build/atmos toolchain info terraform
-./build/atmos toolchain info opentofu
+atmos toolchain info terraform
+atmos toolchain info opentofu
+atmos toolchain info k9s
 
 # Show which binary would be used
-./build/atmos toolchain which terraform
-./build/atmos toolchain which kubectl
+atmos toolchain which terraform
+atmos toolchain which kubectl
+atmos toolchain which k9s
 ```
 
 ### Tool Execution
 
 ```bash
 # Execute a tool directly (auto-installs if missing)
-./build/atmos toolchain exec terraform -- version
-./build/atmos toolchain exec terraform@1.9.8 -- version
+atmos toolchain exec terraform -- version
+atmos toolchain exec terraform@1.9.8 -- version
 
 # Execute with arguments
-./build/atmos toolchain exec terraform -- init -help
-./build/atmos toolchain exec kubectl -- get pods --help
+atmos toolchain exec terraform -- init -help
+atmos toolchain exec kubectl -- get pods --help
+atmos toolchain exec k9s -- version
 ```
 
 ### Registry Search and Discovery
 
 ```bash
 # List available registries
-./build/atmos toolchain registry list
+atmos toolchain registry list
 
 # Search for tools in the registry
-./build/atmos toolchain registry search terraform
-./build/atmos toolchain registry search kubernetes
-./build/atmos toolchain registry search helm
+atmos toolchain registry search terraform
+atmos toolchain registry search kubernetes
+atmos toolchain registry search helm
+atmos toolchain registry search k9s
 
 # List tools from Aqua registry
-./build/atmos toolchain registry list aqua --limit 50
+atmos toolchain registry list aqua --limit 50
 ```
 
 ### Alias Resolution
 
 ```bash
 # Show configured aliases
-./build/atmos toolchain aliases
+atmos toolchain aliases
 
 # Test alias resolution (these should resolve to same tool)
-./build/atmos toolchain info terraform
-./build/atmos toolchain info hashicorp/terraform
-./build/atmos toolchain info tf  # if alias configured
+atmos toolchain info terraform
+atmos toolchain info hashicorp/terraform
+atmos toolchain info tf  # if alias configured
 ```
 
 ### PATH and Environment Integration
 
 ```bash
 # Print PATH entries for installed tools
-./build/atmos toolchain path
-./build/atmos toolchain path --relative
-./build/atmos toolchain path --export
+atmos toolchain path
+atmos toolchain path --relative
+atmos toolchain path --export
 
 # Export environment variables for shell
-./build/atmos toolchain env
-./build/atmos toolchain env --format bash
-./build/atmos toolchain env --format json
+atmos toolchain env
+atmos toolchain env --format bash
+atmos toolchain env --format json
 
 # Test PATH integration
-export PATH="$(./build/atmos toolchain path):$PATH"
+export PATH="$(atmos toolchain path):$PATH"
 terraform version
 ```
 
@@ -1245,35 +1245,35 @@ terraform version
 
 ```bash
 # Add multiple versions of the same tool
-./build/atmos toolchain add terraform@1.9.8
-./build/atmos toolchain add terraform@1.10.3
+atmos toolchain add terraform@1.9.8
+atmos toolchain add terraform@1.10.3
 
 # Set default version
-./build/atmos toolchain set terraform 1.10.3
+atmos toolchain set terraform 1.10.3
 
 # List shows all versions
-./build/atmos toolchain list
+atmos toolchain list
 
 # Execute specific versions
-./build/atmos toolchain exec terraform@1.9.8 -- version
-./build/atmos toolchain exec terraform@1.10.3 -- version
+atmos toolchain exec terraform@1.9.8 -- version
+atmos toolchain exec terraform@1.10.3 -- version
 ```
 
 ### Cleanup and Maintenance
 
 ```bash
 # Show disk usage
-./build/atmos toolchain du
+atmos toolchain du
 
 # Uninstall specific version
-./build/atmos toolchain uninstall terraform@1.9.8
+atmos toolchain uninstall terraform@1.9.8
 
 # Remove tool from .tool-versions
-./build/atmos toolchain remove terraform
+atmos toolchain remove terraform
 
 # Clean cache and unused tools
-./build/atmos toolchain clean
-./build/atmos toolchain clean --all
+atmos toolchain clean
+atmos toolchain clean --all
 ```
 
 ### Testing Different Scenarios
@@ -1282,10 +1282,10 @@ terraform version
 ```bash
 cd /tmp/test-toolchain
 rm -rf .tool-versions .tools
-./build/atmos toolchain list  # Should show helpful onboarding message
-./build/atmos toolchain add terraform@1.9.8  # Creates .tool-versions
-./build/atmos toolchain install
-./build/atmos toolchain exec terraform -- version
+atmos toolchain list  # Should show helpful onboarding message
+atmos toolchain add terraform@1.9.8  # Creates .tool-versions
+atmos toolchain install
+atmos toolchain exec terraform -- version
 ```
 
 #### Testing with Existing .tool-versions
@@ -1295,26 +1295,54 @@ cat > .tool-versions << 'EOF'
 terraform 1.9.8
 opentofu 1.10.3
 kubectl 1.28.0
+k9s 0.32.7
 EOF
 
-./build/atmos toolchain list  # Shows configured tools
-./build/atmos toolchain install  # Installs all tools
-./build/atmos toolchain list  # Shows installed status
+atmos toolchain list  # Shows configured tools
+atmos toolchain install  # Installs all tools
+atmos toolchain list  # Shows installed status
 ```
 
 #### Testing Registry Fallback
 ```bash
 # Test tool that requires registry lookup
-./build/atmos toolchain info tflint
-./build/atmos toolchain install tflint@0.54.0
-./build/atmos toolchain exec tflint -- --version
+atmos toolchain info tflint
+atmos toolchain install tflint@0.54.0
+atmos toolchain exec tflint -- --version
+```
+
+#### Installing k9s (Kubernetes CLI Dashboard)
+```bash
+# Search for k9s in the registry
+atmos toolchain registry search k9s
+
+# Get available versions
+atmos toolchain get k9s
+atmos toolchain get derailed/k9s --all --limit 10
+
+# View tool information
+atmos toolchain info k9s
+
+# Add to .tool-versions
+atmos toolchain add k9s@0.32.7
+
+# Or install directly without adding to .tool-versions
+atmos toolchain install k9s@0.32.7
+atmos toolchain install derailed/k9s@0.32.7  # Using full owner/repo format
+
+# Verify installation
+atmos toolchain which k9s
+atmos toolchain exec k9s -- version
+
+# List to confirm status
+atmos toolchain list
 ```
 
 ### Debugging and Troubleshooting
 
 ```bash
 # Enable debug logging
-ATMOS_LOGS_LEVEL=Debug ./build/atmos toolchain install terraform@1.9.8
+ATMOS_LOGS_LEVEL=Debug atmos toolchain install terraform@1.9.8
 
 # Check cache directory
 ls -la ~/.cache/atmos/toolchain/

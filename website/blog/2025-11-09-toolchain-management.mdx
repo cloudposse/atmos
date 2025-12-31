@@ -3,20 +3,26 @@ slug: toolchain-management
 title: "Native Toolchain Management with Aqua Registry Integration"
 authors: [osterman]
 tags: [feature]
-date: 2025-11-09
+date: 2025-12-31
 ---
 
-Atmos now includes native toolchain management that seamlessly integrates with the Aqua registry ecosystem—giving you access to hundreds of pre-configured CLI tools without the overhead of external tool managers.
+Atmos now includes native toolchain management that seamlessly integrates with the Aqua registry ecosystem—giving you
+access to hundreds of pre-configured CLI tools without the overhead of external tool managers.
 
 <!--truncate-->
 
 ## What's New
 
-Atmos now includes **built-in toolchain management** commands that let you install, manage, and version control CLI tools directly within your infrastructure projects. This feature integrates natively with the [Aqua registry](https://aquaproj.github.io/), leveraging its extensive ecosystem of package definitions while providing deep integration with Atmos workflows and components.
+Atmos now includes **built-in toolchain management** commands that let you install, manage, and version control CLI
+tools directly within your infrastructure projects. This feature integrates natively with the [Aqua registry](https://aquaproj.github.io/),
+leveraging its extensive ecosystem of package definitions while providing deep integration with Atmos workflows
+and components.
 
 ### Why This Matters
 
-Managing tool versions across infrastructure teams has always been a challenge. Different developers use different versions of terraform, kubectl, helm, and dozens of other CLIs—leading to "works on my machine" problems and deployment inconsistencies.
+Managing tool versions across infrastructure teams has always been a challenge. Different developers use different
+versions of terraform, kubectl, helm, and dozens of other CLIs—leading to "works on my machine" problems and
+deployment inconsistencies.
 
 Traditional solutions require:
 - Installing separate tool managers (asdf, aqua, tfenv, etc.)
@@ -24,7 +30,8 @@ Traditional solutions require:
 - Context switching between your infrastructure tool and your tool manager
 - No integration with your infrastructure automation workflows
 
-**Now you can manage all your CLI tools directly from Atmos**—with zero external dependencies and seamless integration with your infrastructure workflows.
+**Now you can manage all your CLI tools directly from Atmos**—with zero external dependencies and seamless integration
+with your infrastructure workflows.
 
 ## How It Works
 
@@ -57,10 +64,12 @@ Install tools with simple commands:
 atmos toolchain install terraform@1.9.8
 atmos toolchain install opentofu@1.10.3
 atmos toolchain install kubectl@1.28.0
+atmos toolchain install k9s@0.32.7
 
 # Install using canonical registry paths
 atmos toolchain install hashicorp/terraform@1.9.8
 atmos toolchain install opentofu/opentofu@1.10.3
+atmos toolchain install derailed/k9s@0.32.7
 
 # Install all tools from .tool-versions file
 atmos toolchain install
@@ -75,11 +84,13 @@ terraform 1.9.8
 opentofu 1.10.3
 kubectl 1.28.0
 helm 3.13.0
+k9s 0.32.7
 ```
 
 ```bash
-# Add a tool to .tool-versions
+# Add tools to .tool-versions
 atmos toolchain add terraform@1.9.8
+atmos toolchain add k9s@0.32.7
 
 # Remove a tool from .tool-versions
 atmos toolchain remove terraform
@@ -108,9 +119,14 @@ atmos toolchain exec terraform@1.9.8 -- plan
 # Use the version from .tool-versions
 atmos toolchain exec terraform -- plan
 
+# Execute k9s for Kubernetes cluster management
+atmos toolchain exec k9s -- version
+atmos toolchain exec k9s@0.32.7 -- info
+
 # Get tool paths for integration
 atmos toolchain path
 atmos toolchain which terraform
+atmos toolchain which k9s
 ```
 
 ### Registry Discovery
@@ -124,18 +140,25 @@ atmos toolchain registry list aqua
 # Search for specific tools
 atmos toolchain registry search terraform
 atmos toolchain registry search kubectl
+atmos toolchain registry search k9s
 
 # Get detailed information about a tool
 atmos toolchain info terraform
+atmos toolchain info k9s
+
+# Get available versions for a tool
+atmos toolchain get k9s
+atmos toolchain get terraform --all --limit 10
 ```
 
 ## Aqua Registry Integration
 
-The power of Atmos toolchain comes from its integration with the [Aqua registry](https://github.com/aquaproj/aqua-registry)—a community-maintained collection of over 1,000 CLI tool definitions.
+The power of Atmos toolchain comes from its integration with the [Aqua registry](https://github.com/aquaproj/aqua-registry)—a community-maintained collection
+of over 1,000 CLI tool definitions.
 
 ### Benefits of Aqua Registry
 
-- **Extensive Coverage**: Pre-configured definitions for terraform, kubectl, helm, aws-cli, and hundreds more
+- **Extensive Coverage**: Pre-configured definitions for terraform, kubectl, helm, k9s, aws-cli, and hundreds more
 - **Community Maintained**: Regular updates and new tools added by the community
 - **Proven Format**: Battle-tested YAML format used by thousands of teams
 - **No Vendor Lock-in**: Compatible with asdf `.tool-versions` files
@@ -148,7 +171,8 @@ Atmos automatically resolves tool names using a smart resolution system:
 2. **Alias resolution**: `terraform` → `hashicorp/terraform`
 3. **Registry lookup**: Searches Aqua registry for canonical paths
 
-This means you can use short, friendly names like `terraform` or `kubectl` without needing to remember full registry paths.
+This means you can use short, friendly names like `terraform`, `kubectl`, or `k9s` without needing to remember full
+registry paths like `derailed/k9s`.
 
 ## Component Dependencies
 
@@ -160,6 +184,7 @@ dependencies:
   tools:
     aws-cli: "2.0.0"
     jq: "latest"
+    k9s: "0.32.7"
 
 # Component type dependencies (applies to all terraform components)
 terraform:
@@ -176,6 +201,12 @@ components:
         tools:
           terraform: "1.9.8"
           checkov: "latest"
+    eks-cluster:
+      dependencies:
+        tools:
+          terraform: "1.9.8"
+          kubectl: "1.28.0"
+          k9s: "0.32.7"
 ```
 
 When you provision a component, Atmos automatically:
@@ -333,8 +364,10 @@ Key architectural decisions:
 Try it now:
 
 ```bash
-# Add a tool
+# Add tools to your project
 atmos toolchain add terraform@1.9.8
+atmos toolchain add kubectl@1.28.0
+atmos toolchain add k9s@0.32.7
 
 # List your tools
 atmos toolchain list
@@ -342,8 +375,14 @@ atmos toolchain list
 # Install everything
 atmos toolchain install
 
-# Use in your components
+# Use tools directly
 atmos toolchain exec terraform -- version
+atmos toolchain exec k9s -- version
+
+# Or add tools to your PATH
+export PATH="$(atmos toolchain path):$PATH"
+terraform version
+k9s version
 ```
 
 No configuration required—just start using it!
