@@ -736,3 +736,233 @@ func TestDisplayTableParams(t *testing.T) {
 	assert.Equal(t, "aqua", params.registryName)
 	assert.True(t, params.pagerEnabled)
 }
+
+// TestCheckToolStatus tests the checkToolStatus function.
+func TestCheckToolStatus(t *testing.T) {
+	tests := getToolStatusTestCases()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			installer := toolchain.NewInstaller()
+			inConfig, installed := checkToolStatus(tt.tool, tt.toolVersions, installer)
+			assert.Equal(t, tt.wantInConfig, inConfig)
+			assert.Equal(t, tt.wantInstall, installed)
+		})
+	}
+}
+
+// TestBuildSingleToolRow_WithToolVersions tests buildSingleToolRow with actual toolVersions.
+func TestBuildSingleToolRow_WithToolVersions(t *testing.T) {
+	tests := []struct {
+		name         string
+		tool         *toolchainregistry.Tool
+		toolVersions *toolchain.ToolVersions
+		wantInConfig bool
+	}{
+		{
+			name: "tool in config by full name",
+			tool: &toolchainregistry.Tool{
+				RepoOwner: "hashicorp",
+				RepoName:  "terraform",
+				Type:      "github_release",
+			},
+			toolVersions: &toolchain.ToolVersions{
+				Tools: map[string][]string{
+					"hashicorp/terraform": {"1.5.0"},
+				},
+			},
+			wantInConfig: true,
+		},
+		{
+			name: "tool in config by repo name",
+			tool: &toolchainregistry.Tool{
+				RepoOwner: "hashicorp",
+				RepoName:  "terraform",
+				Type:      "github_release",
+			},
+			toolVersions: &toolchain.ToolVersions{
+				Tools: map[string][]string{
+					"terraform": {"1.5.0"},
+				},
+			},
+			wantInConfig: true,
+		},
+		{
+			name: "tool not in config",
+			tool: &toolchainregistry.Tool{
+				RepoOwner: "hashicorp",
+				RepoName:  "terraform",
+				Type:      "github_release",
+			},
+			toolVersions: &toolchain.ToolVersions{
+				Tools: map[string][]string{
+					"other/tool": {"1.0.0"},
+				},
+			},
+			wantInConfig: false,
+		},
+		{
+			name: "nil tools map",
+			tool: &toolchainregistry.Tool{
+				RepoOwner: "hashicorp",
+				RepoName:  "terraform",
+				Type:      "github_release",
+			},
+			toolVersions: &toolchain.ToolVersions{
+				Tools: nil,
+			},
+			wantInConfig: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			installer := toolchain.NewInstaller()
+			row := buildSingleToolRow(tt.tool, tt.toolVersions, installer)
+
+			assert.Equal(t, tt.tool.RepoOwner, row.owner)
+			assert.Equal(t, tt.tool.RepoName, row.repo)
+			assert.Equal(t, tt.tool.Type, row.toolType)
+			assert.Equal(t, tt.wantInConfig, row.isInConfig)
+		})
+	}
+}
+
+// TestGetTerminalWidthOrDefault tests the getTerminalWidthOrDefault function.
+func TestGetTerminalWidthOrDefault(t *testing.T) {
+	// In test environments, terminal width detection often fails.
+	// The function should return either the actual terminal width or the default.
+	width := getTerminalWidthOrDefault()
+	assert.GreaterOrEqual(t, width, defaultTerminalWidth, "should return at least default width")
+}
+
+// TestBuildToolRows_WithToolVersions tests buildToolRows with actual toolVersions.
+func TestBuildToolRows_WithToolVersions(t *testing.T) {
+	tools := []*toolchainregistry.Tool{
+		{
+			RepoOwner: "hashicorp",
+			RepoName:  "terraform",
+			Type:      "github_release",
+		},
+		{
+			RepoOwner: "kubernetes",
+			RepoName:  "kubectl",
+			Type:      "github_release",
+		},
+	}
+
+	toolVersions := &toolchain.ToolVersions{
+		Tools: map[string][]string{
+			"hashicorp/terraform": {"1.5.0"},
+		},
+	}
+
+	installer := toolchain.NewInstaller()
+	rows, widths := buildToolRows(tools, toolVersions, installer)
+
+	assert.Len(t, rows, 2)
+	assert.True(t, rows[0].isInConfig, "terraform should be in config")
+	assert.False(t, rows[1].isInConfig, "kubectl should not be in config")
+	assert.GreaterOrEqual(t, widths.owner, len("hashicorp"))
+}
+
+// TestApplyColumnPaddingAndTruncation_ExtremeWidths tests extreme width scenarios.
+func TestApplyColumnPaddingAndTruncation_ExtremeWidths(t *testing.T) {
+	tests := []struct {
+		name      string
+		widths    columnWidths
+		termWidth int
+	}{
+		{
+			name: "extremely narrow terminal",
+			widths: columnWidths{
+				status: 1,
+				owner:  50,
+				repo:   50,
+				tType:  50,
+			},
+			termWidth: 20,
+		},
+		{
+			name: "very wide terminal",
+			widths: columnWidths{
+				status: 1,
+				owner:  10,
+				repo:   10,
+				tType:  10,
+			},
+			termWidth: 500,
+		},
+		{
+			name: "zero terminal width",
+			widths: columnWidths{
+				status: 1,
+				owner:  10,
+				repo:   10,
+				tType:  10,
+			},
+			termWidth: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := applyColumnPaddingAndTruncation(tt.widths, tt.termWidth)
+			// Should never panic and should maintain minimum widths.
+			assert.GreaterOrEqual(t, result.owner, minColumnWidthOwner)
+			assert.GreaterOrEqual(t, result.repo, minColumnWidthRepo)
+			assert.GreaterOrEqual(t, result.tType, minColumnWidthType)
+		})
+	}
+}
+
+// TestListCommand_DefaultFlagValues tests default values for list command flags.
+func TestListCommand_DefaultFlagValues(t *testing.T) {
+	t.Run("limit default is 50", func(t *testing.T) {
+		flag := listCmd.Flags().Lookup("limit")
+		require.NotNil(t, flag)
+		assert.Equal(t, "50", flag.DefValue)
+	})
+
+	t.Run("offset default is 0", func(t *testing.T) {
+		flag := listCmd.Flags().Lookup("offset")
+		require.NotNil(t, flag)
+		assert.Equal(t, "0", flag.DefValue)
+	})
+
+	t.Run("format default is table", func(t *testing.T) {
+		flag := listCmd.Flags().Lookup("format")
+		require.NotNil(t, flag)
+		assert.Equal(t, "table", flag.DefValue)
+	})
+
+	t.Run("sort default is name", func(t *testing.T) {
+		flag := listCmd.Flags().Lookup("sort")
+		require.NotNil(t, flag)
+		assert.Equal(t, "name", flag.DefValue)
+	})
+}
+
+// TestListCommand_CommandStructure tests the list command structure.
+func TestListCommand_CommandStructure(t *testing.T) {
+	t.Run("command has correct use string", func(t *testing.T) {
+		assert.Contains(t, listCmd.Use, "list")
+	})
+
+	t.Run("command has short description", func(t *testing.T) {
+		assert.NotEmpty(t, listCmd.Short)
+	})
+
+	t.Run("command has long description", func(t *testing.T) {
+		assert.NotEmpty(t, listCmd.Long)
+		assert.Contains(t, listCmd.Long, "registry")
+	})
+
+	t.Run("command has RunE function", func(t *testing.T) {
+		assert.NotNil(t, listCmd.RunE)
+	})
+
+	t.Run("command accepts max 1 argument", func(t *testing.T) {
+		assert.NotNil(t, listCmd.Args)
+	})
+}

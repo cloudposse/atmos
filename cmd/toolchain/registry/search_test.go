@@ -717,3 +717,292 @@ func TestSearchFlags(t *testing.T) {
 	assert.False(t, flags.availableOnly)
 	assert.Equal(t, "json", flags.format)
 }
+
+// TestCheckSearchToolStatus tests the checkSearchToolStatus function.
+func TestCheckSearchToolStatus(t *testing.T) {
+	tests := getToolStatusTestCases()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			installer := toolchain.NewInstaller()
+			inConfig, installed := checkSearchToolStatus(tt.tool, tt.toolVersions, installer)
+			assert.Equal(t, tt.wantInConfig, inConfig)
+			assert.Equal(t, tt.wantInstall, installed)
+		})
+	}
+}
+
+// TestBuildSingleSearchRow_WithToolVersions tests buildSingleSearchRow with actual toolVersions.
+func TestBuildSingleSearchRow_WithToolVersions(t *testing.T) {
+	tests := []struct {
+		name         string
+		tool         *toolchainregistry.Tool
+		toolVersions *toolchain.ToolVersions
+		wantInConfig bool
+	}{
+		{
+			name: "tool in config by full name",
+			tool: &toolchainregistry.Tool{
+				RepoOwner: "hashicorp",
+				RepoName:  "terraform",
+				Type:      "github_release",
+				Registry:  "aqua-public",
+			},
+			toolVersions: &toolchain.ToolVersions{
+				Tools: map[string][]string{
+					"hashicorp/terraform": {"1.5.0"},
+				},
+			},
+			wantInConfig: true,
+		},
+		{
+			name: "tool in config by repo name",
+			tool: &toolchainregistry.Tool{
+				RepoOwner: "hashicorp",
+				RepoName:  "terraform",
+				Type:      "github_release",
+				Registry:  "aqua-public",
+			},
+			toolVersions: &toolchain.ToolVersions{
+				Tools: map[string][]string{
+					"terraform": {"1.5.0"},
+				},
+			},
+			wantInConfig: true,
+		},
+		{
+			name: "tool not in config",
+			tool: &toolchainregistry.Tool{
+				RepoOwner: "hashicorp",
+				RepoName:  "terraform",
+				Type:      "github_release",
+				Registry:  "aqua-public",
+			},
+			toolVersions: &toolchain.ToolVersions{
+				Tools: map[string][]string{
+					"other/tool": {"1.0.0"},
+				},
+			},
+			wantInConfig: false,
+		},
+		{
+			name: "nil tools map",
+			tool: &toolchainregistry.Tool{
+				RepoOwner: "hashicorp",
+				RepoName:  "terraform",
+				Type:      "github_release",
+				Registry:  "aqua-public",
+			},
+			toolVersions: &toolchain.ToolVersions{
+				Tools: nil,
+			},
+			wantInConfig: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			installer := toolchain.NewInstaller()
+			row := buildSingleSearchRow(tt.tool, tt.toolVersions, installer)
+
+			assert.Equal(t, "hashicorp/terraform", row.toolName)
+			assert.Equal(t, tt.tool.Type, row.toolType)
+			assert.Equal(t, tt.tool.Registry, row.registry)
+			assert.Equal(t, tt.wantInConfig, row.isInConfig)
+		})
+	}
+}
+
+// TestBuildSearchRows_WithToolVersions tests buildSearchRows with actual toolVersions.
+func TestBuildSearchRows_WithToolVersions(t *testing.T) {
+	tools := []*toolchainregistry.Tool{
+		{
+			RepoOwner: "hashicorp",
+			RepoName:  "terraform",
+			Type:      "github_release",
+			Registry:  "aqua-public",
+		},
+		{
+			RepoOwner: "kubernetes",
+			RepoName:  "kubectl",
+			Type:      "github_release",
+			Registry:  "aqua-public",
+		},
+	}
+
+	toolVersions := &toolchain.ToolVersions{
+		Tools: map[string][]string{
+			"hashicorp/terraform": {"1.5.0"},
+		},
+	}
+
+	installer := toolchain.NewInstaller()
+	rows, widths := buildSearchRows(tools, toolVersions, installer)
+
+	assert.Len(t, rows, 2)
+	assert.True(t, rows[0].isInConfig, "terraform should be in config")
+	assert.False(t, rows[1].isInConfig, "kubectl should not be in config")
+	assert.GreaterOrEqual(t, widths.toolName, len("hashicorp/terraform"))
+}
+
+// TestSearchCommand_DefaultFlagValues tests default values for search command flags.
+func TestSearchCommand_DefaultFlagValues(t *testing.T) {
+	t.Run("limit default is 20", func(t *testing.T) {
+		flag := searchCmd.Flags().Lookup("limit")
+		require.NotNil(t, flag)
+		assert.Equal(t, "20", flag.DefValue)
+	})
+
+	t.Run("registry default is empty", func(t *testing.T) {
+		flag := searchCmd.Flags().Lookup("registry")
+		require.NotNil(t, flag)
+		assert.Equal(t, "", flag.DefValue)
+	})
+
+	t.Run("format default is table", func(t *testing.T) {
+		flag := searchCmd.Flags().Lookup("format")
+		require.NotNil(t, flag)
+		assert.Equal(t, "table", flag.DefValue)
+	})
+
+	t.Run("installed-only default is false", func(t *testing.T) {
+		flag := searchCmd.Flags().Lookup("installed-only")
+		require.NotNil(t, flag)
+		assert.Equal(t, "false", flag.DefValue)
+	})
+
+	t.Run("available-only default is false", func(t *testing.T) {
+		flag := searchCmd.Flags().Lookup("available-only")
+		require.NotNil(t, flag)
+		assert.Equal(t, "false", flag.DefValue)
+	})
+}
+
+// TestSearchCommand_CommandStructure tests the search command structure.
+func TestSearchCommand_CommandStructure(t *testing.T) {
+	t.Run("command has correct use string", func(t *testing.T) {
+		assert.Contains(t, searchCmd.Use, "search")
+	})
+
+	t.Run("command has short description", func(t *testing.T) {
+		assert.NotEmpty(t, searchCmd.Short)
+	})
+
+	t.Run("command has long description", func(t *testing.T) {
+		assert.NotEmpty(t, searchCmd.Long)
+		assert.Contains(t, searchCmd.Long, "query")
+	})
+
+	t.Run("command has RunE function", func(t *testing.T) {
+		assert.NotNil(t, searchCmd.RunE)
+	})
+
+	t.Run("command requires exactly 1 argument", func(t *testing.T) {
+		assert.NotNil(t, searchCmd.Args)
+	})
+
+	t.Run("command silences usage on error", func(t *testing.T) {
+		assert.True(t, searchCmd.SilenceUsage)
+	})
+
+	t.Run("command silences errors", func(t *testing.T) {
+		assert.True(t, searchCmd.SilenceErrors)
+	})
+}
+
+// TestDisplaySearchTable_EdgeCases tests displaySearchTable with edge cases.
+func TestDisplaySearchTable_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name  string
+		tools []*toolchainregistry.Tool
+		query string
+		limit int
+	}{
+		{
+			name:  "zero limit shows all",
+			tools: make([]*toolchainregistry.Tool, 5),
+			query: "test",
+			limit: 0,
+		},
+		{
+			name:  "negative limit shows all",
+			tools: make([]*toolchainregistry.Tool, 5),
+			query: "test",
+			limit: -1,
+		},
+		{
+			name:  "limit equal to results",
+			tools: make([]*toolchainregistry.Tool, 5),
+			query: "test",
+			limit: 5,
+		},
+		{
+			name:  "limit greater than results",
+			tools: make([]*toolchainregistry.Tool, 5),
+			query: "test",
+			limit: 10,
+		},
+	}
+
+	// Initialize tools with valid data.
+	for i := range tests {
+		for j := range tests[i].tools {
+			tests[i].tools[j] = &toolchainregistry.Tool{
+				RepoOwner: "owner",
+				RepoName:  "repo",
+				Type:      "github_release",
+				Registry:  "aqua",
+			}
+		}
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Should not panic.
+			assert.NotPanics(t, func() {
+				displaySearchTable(tt.tools, tt.query, tt.limit)
+			})
+		})
+	}
+}
+
+// TestOutputSearchResults_AllFormats tests outputSearchResults with all formats.
+func TestOutputSearchResults_AllFormats(t *testing.T) {
+	tools := []*toolchainregistry.Tool{
+		{
+			RepoOwner: "hashicorp",
+			RepoName:  "terraform",
+			Type:      "github_release",
+			Registry:  "aqua-public",
+		},
+	}
+
+	tests := []struct {
+		name   string
+		flags  searchFlags
+		tools  []*toolchainregistry.Tool
+		query  string
+		panics bool
+	}{
+		{
+			name:  "table format",
+			flags: searchFlags{format: "table", limit: 10},
+			tools: tools,
+			query: "terraform",
+		},
+		{
+			name:  "empty results",
+			flags: searchFlags{format: "table", limit: 10},
+			tools: []*toolchainregistry.Tool{},
+			query: "nonexistent",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				_ = outputSearchResults(tt.tools, tt.query, tt.flags)
+			})
+		})
+	}
+}

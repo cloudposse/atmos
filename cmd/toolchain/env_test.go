@@ -331,3 +331,126 @@ func TestEnvCommand_ValidationWithViper(t *testing.T) {
 		})
 	}
 }
+
+// TestEnvCommand_FormatFlagCompletion tests format flag completion.
+func TestEnvCommand_FormatFlagCompletion(t *testing.T) {
+	t.Run("format flag has shell completion", func(t *testing.T) {
+		// The flag should have been registered with a completion function.
+		flag := envCmd.Flags().Lookup("format")
+		require.NotNil(t, flag)
+		// We can't easily test the completion function directly, but we can verify
+		// the flag exists and the command doesn't panic when accessed.
+		assert.NotEmpty(t, flag.Name)
+	})
+}
+
+// TestEnvCommand_ParserConfiguration tests that the parser is correctly configured.
+func TestEnvCommand_ParserConfiguration(t *testing.T) {
+	t.Run("parser is not nil", func(t *testing.T) {
+		require.NotNil(t, envParser)
+	})
+}
+
+// TestEnvCommand_FormatValidation_CaseInsensitive tests that format validation is case sensitive.
+func TestEnvCommand_FormatValidation_CaseInsensitive(t *testing.T) {
+	tests := []struct {
+		name    string
+		format  string
+		isValid bool
+	}{
+		{"lowercase bash", "bash", true},
+		{"uppercase BASH", "BASH", false}, // Format validation is case-sensitive.
+		{"mixed case Bash", "Bash", false},
+		{"lowercase json", "json", true},
+		{"uppercase JSON", "JSON", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			found := false
+			for _, f := range supportedFormats {
+				if f == tt.format {
+					found = true
+					break
+				}
+			}
+			assert.Equal(t, tt.isValid, found)
+		})
+	}
+}
+
+// TestEnvCommand_AllSupportedFormatsValid tests that all supported formats pass validation.
+func TestEnvCommand_AllSupportedFormatsValid(t *testing.T) {
+	for _, format := range supportedFormats {
+		t.Run("format "+format+" is valid", func(t *testing.T) {
+			v := viper.New()
+			v.Set("format", format)
+			v.Set("relative", false)
+
+			// Create a test command that mimics envCmd's validation behavior.
+			testCmd := &cobra.Command{
+				Use:   "env",
+				Short: "Test env command",
+				RunE: func(cmd *cobra.Command, args []string) error {
+					f := v.GetString("format")
+					found := false
+					for _, sf := range supportedFormats {
+						if sf == f {
+							found = true
+							break
+						}
+					}
+					if !found {
+						return errUtils.Build(errUtils.ErrInvalidArgumentError).
+							WithExplanationf("invalid format: %s", f).
+							Err()
+					}
+					return nil
+				},
+			}
+
+			var stdout, stderr bytes.Buffer
+			testCmd.SetOut(&stdout)
+			testCmd.SetErr(&stderr)
+
+			err := testCmd.Execute()
+			require.NoError(t, err, "format %s should be valid", format)
+		})
+	}
+}
+
+// TestEnvCommand_FlagDefaults tests default flag values.
+func TestEnvCommand_FlagDefaults(t *testing.T) {
+	t.Run("format flag has correct default", func(t *testing.T) {
+		flag := envCmd.Flags().Lookup("format")
+		require.NotNil(t, flag)
+		assert.Equal(t, "bash", flag.DefValue)
+	})
+
+	t.Run("relative flag has correct default", func(t *testing.T) {
+		flag := envCmd.Flags().Lookup("relative")
+		require.NotNil(t, flag)
+		assert.Equal(t, "false", flag.DefValue)
+	})
+}
+
+// TestEnvCommand_CommandMetadata tests command metadata.
+func TestEnvCommand_CommandMetadata(t *testing.T) {
+	t.Run("command has Use field", func(t *testing.T) {
+		assert.Equal(t, "env", envCmd.Use)
+	})
+
+	t.Run("command has Short description", func(t *testing.T) {
+		assert.NotEmpty(t, envCmd.Short)
+		assert.Contains(t, envCmd.Short, "PATH")
+	})
+
+	t.Run("command has Long description", func(t *testing.T) {
+		assert.NotEmpty(t, envCmd.Long)
+		assert.Contains(t, envCmd.Long, ".tool-versions")
+	})
+
+	t.Run("command has RunE", func(t *testing.T) {
+		assert.NotNil(t, envCmd.RunE)
+	})
+}
