@@ -15,6 +15,9 @@ import './TTSPlayer.css';
 interface TTSPlayerProps {
   tts: UseTTSReturn;
   currentSlide: number;
+  onStop?: () => void;
+  onPause?: () => void;
+  onResume?: () => void;
 }
 
 const VOICES: { value: TTSVoice; label: string }[] = [
@@ -38,7 +41,7 @@ const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
  * - Speed selector
  * - Voice selector
  */
-export function TTSPlayer({ tts, currentSlide }: TTSPlayerProps) {
+export function TTSPlayer({ tts, currentSlide, onStop, onPause, onResume }: TTSPlayerProps) {
   const {
     isPlaying,
     isLoading,
@@ -62,12 +65,16 @@ export function TTSPlayer({ tts, currentSlide }: TTSPlayerProps) {
 
   const handlePlayPause = () => {
     if (isPlaying) {
-      pause();
+      onPause ? onPause() : pause();
     } else if (isPaused) {
-      resume();
+      onResume ? onResume() : resume();
     } else {
       play(currentSlide);
     }
+  };
+
+  const handleStop = () => {
+    onStop ? onStop() : stop();
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -134,7 +141,7 @@ export function TTSPlayer({ tts, currentSlide }: TTSPlayerProps) {
           <Tooltip content="Stop" position="top">
             <button
               className="tts-player__btn"
-              onClick={stop}
+              onClick={handleStop}
               aria-label="Stop"
             >
               <RiStopLine />

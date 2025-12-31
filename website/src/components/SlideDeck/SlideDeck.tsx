@@ -54,26 +54,40 @@ function SlideDeckInner({
     ? window.location.pathname.split('/slides/').pop()?.split('/')[0] || 'unknown'
     : 'unknown';
 
+  // Track auto-play mode - stays true across slide transitions until user stops.
+  const autoPlayRef = useRef(false);
+
   // TTS hook for audio playback.
   const tts = useTTS({
     deckName,
     onEnded: () => {
       // Auto-advance to next slide if not on last slide.
       if (currentSlide < totalSlides) {
+        // Keep autoPlayRef true - we want to continue playing.
         nextSlide();
+      } else {
+        // Reached last slide - disable auto-play.
+        autoPlayRef.current = false;
       }
     },
   });
 
-  // Track if TTS was playing for auto-continue on slide change.
-  const wasPlayingRef = useRef(false);
+  // Enable auto-play when user starts playing.
   useEffect(() => {
-    wasPlayingRef.current = tts.isPlaying;
+    if (tts.isPlaying) {
+      autoPlayRef.current = true;
+    }
   }, [tts.isPlaying]);
 
-  // Auto-play notes when slide changes if TTS was playing.
+  // Disable auto-play when user explicitly stops.
+  const handleStop = useCallback(() => {
+    autoPlayRef.current = false;
+    tts.stop();
+  }, [tts]);
+
+  // Auto-play notes when slide changes if in auto-play mode.
   useEffect(() => {
-    if (wasPlayingRef.current && currentNotes) {
+    if (autoPlayRef.current && currentNotes) {
       tts.play(currentSlide);
     }
   }, [currentSlide]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -81,8 +95,10 @@ function SlideDeckInner({
   // Handle TTS play/pause toggle.
   const handleTTSPlayPause = useCallback(() => {
     if (tts.isPlaying) {
+      autoPlayRef.current = false; // Disable auto-play on pause.
       tts.pause();
     } else if (tts.isPaused) {
+      autoPlayRef.current = true; // Re-enable auto-play on resume.
       tts.resume();
     } else if (currentNotes) {
       tts.play(currentSlide);
@@ -361,7 +377,19 @@ function SlideDeckInner({
 
       {/* TTS Player bar - shows when playing or paused */}
       {(tts.isPlaying || tts.isPaused) && (
-        <TTSPlayer tts={tts} currentSlide={currentSlide} />
+        <TTSPlayer
+          tts={tts}
+          currentSlide={currentSlide}
+          onStop={handleStop}
+          onPause={() => {
+            autoPlayRef.current = false;
+            tts.pause();
+          }}
+          onResume={() => {
+            autoPlayRef.current = true;
+            tts.resume();
+          }}
+        />
       )}
 
       {/* Progress bar */}
