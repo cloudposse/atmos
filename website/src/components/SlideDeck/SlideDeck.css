@@ -359,6 +359,11 @@ html[data-theme='dark'] .slide-deck__progress-bar {
     background: var(--ifm-background-color);
   }
 
+  /* Hide the left area container since nav buttons are fixed positioned */
+  .slide-deck--fullscreen .slide-deck__left-area {
+    display: none;
+  }
+
   .slide-deck--fullscreen .slide-deck__main {
     flex: 1;
     display: flex;
