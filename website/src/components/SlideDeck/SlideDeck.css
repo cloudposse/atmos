@@ -405,11 +405,15 @@ html[data-theme='dark'] .slide-deck__progress-bar {
     padding: 1.5rem 2rem;
     padding-bottom: 4rem;
     overflow-y: auto;
-    /* Keep flexbox for centering, use align-items: safe center for scroll */
+    /* Use flexbox with flex-start, let margin:auto on inner handle centering */
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: safe center;
+  }
+
+  .slide-deck--fullscreen .slide-deck__slide-wrapper .slide .slide__inner {
+    margin: auto;
+    flex-shrink: 0;
   }
 
   /* Ensure controls are visible on mobile */
