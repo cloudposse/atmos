@@ -1,9 +1,23 @@
 import React, { useEffect, useCallback, useState, useRef, Children, isValidElement, ReactElement } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RiArrowLeftSLine, RiArrowRightSLine, RiFullscreenLine, RiFullscreenExitLine, RiMenuLine, RiSpeakLine } from 'react-icons/ri';
+import {
+  RiArrowLeftSLine,
+  RiArrowRightSLine,
+  RiFullscreenLine,
+  RiFullscreenExitLine,
+  RiMenuLine,
+  RiSpeakLine,
+  RiLayoutRightLine,
+  RiLayoutBottomLine,
+  RiStackLine,
+  RiSplitCellsHorizontal,
+  RiExternalLinkLine,
+  RiArrowGoBackLine,
+} from 'react-icons/ri';
 import { SlideDeckProvider, useSlideDeck } from './SlideDeckContext';
 import { SlideDrawer } from './SlideDrawer';
 import { SlideNotesPanel } from './SlideNotesPanel';
+import { SlideNotesPopout } from './SlideNotesPopout';
 import { Tooltip } from './Tooltip';
 import type { SlideDeckProps } from './types';
 import './SlideDeck.css';
@@ -28,7 +42,29 @@ function SlideDeckInner({
     toggleFullscreen,
     showNotes,
     toggleNotes,
+    notesPreferences,
+    setNotesPosition,
+    setNotesDisplayMode,
+    setNotesPopout,
+    isMobile,
   } = useSlideDeck();
+
+  const { position: notesPosition, displayMode: notesDisplayMode, isPopout: notesPopout } = notesPreferences;
+
+  // Toggle notes position between right and bottom.
+  const toggleNotesPosition = useCallback(() => {
+    setNotesPosition(notesPosition === 'right' ? 'bottom' : 'right');
+  }, [notesPosition, setNotesPosition]);
+
+  // Toggle notes display mode between overlay and shrink.
+  const toggleNotesDisplayMode = useCallback(() => {
+    setNotesDisplayMode(notesDisplayMode === 'overlay' ? 'shrink' : 'overlay');
+  }, [notesDisplayMode, setNotesDisplayMode]);
+
+  // Toggle popout mode.
+  const toggleNotesPopout = useCallback(() => {
+    setNotesPopout(!notesPopout);
+  }, [notesPopout, setNotesPopout]);
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
@@ -159,9 +195,14 @@ function SlideDeckInner({
 
   const controlsVisible = showControls || isDrawerOpen || showNotes;
 
+  // Build class names for notes position and display mode.
+  const notesClasses = showNotes
+    ? `slide-deck--notes-${notesPosition} slide-deck--notes-${notesDisplayMode}`
+    : '';
+
   return (
     <div
-      className={`slide-deck ${isFullscreen ? 'slide-deck--fullscreen' : ''} ${controlsVisible ? '' : 'slide-deck--controls-hidden'} ${className}`}
+      className={`slide-deck ${isFullscreen ? 'slide-deck--fullscreen' : ''} ${controlsVisible ? '' : 'slide-deck--controls-hidden'} ${notesClasses} ${className}`}
       data-slide-deck
       role="region"
       aria-label={title}
@@ -245,6 +286,59 @@ function SlideDeckInner({
           </button>
         </Tooltip>
 
+        {/* Notes preference controls - only visible when notes are open and not popped out */}
+        {showNotes && !notesPopout && (
+          <>
+            {/* Position toggle */}
+            <Tooltip content={notesPosition === 'right' ? 'Move to Bottom' : 'Move to Right'} position="top">
+              <button
+                className="slide-deck__tool-button"
+                onClick={toggleNotesPosition}
+                aria-label={notesPosition === 'right' ? 'Move notes to bottom' : 'Move notes to right'}
+              >
+                {notesPosition === 'right' ? <RiLayoutBottomLine /> : <RiLayoutRightLine />}
+              </button>
+            </Tooltip>
+
+            {/* Display mode toggle */}
+            <Tooltip content={notesDisplayMode === 'overlay' ? 'Shrink Slides' : 'Overlay on Slides'} position="top">
+              <button
+                className="slide-deck__tool-button"
+                onClick={toggleNotesDisplayMode}
+                aria-label={notesDisplayMode === 'overlay' ? 'Shrink slides for notes' : 'Overlay notes on slides'}
+              >
+                {notesDisplayMode === 'overlay' ? <RiSplitCellsHorizontal /> : <RiStackLine />}
+              </button>
+            </Tooltip>
+
+            {/* Popout button - desktop only */}
+            {!isMobile && (
+              <Tooltip content="Pop Out Notes" position="top">
+                <button
+                  className="slide-deck__tool-button"
+                  onClick={toggleNotesPopout}
+                  aria-label="Pop out notes to separate window"
+                >
+                  <RiExternalLinkLine />
+                </button>
+              </Tooltip>
+            )}
+          </>
+        )}
+
+        {/* When notes are popped out, show bring back button (desktop only) */}
+        {notesPopout && !isMobile && (
+          <Tooltip content="Bring Notes Back" position="top">
+            <button
+              className="slide-deck__tool-button slide-deck__tool-button--active"
+              onClick={toggleNotesPopout}
+              aria-label="Bring notes back from popup"
+            >
+              <RiArrowGoBackLine />
+            </button>
+          </Tooltip>
+        )}
+
         {showProgress && (
           <div className="slide-deck__progress">
             {currentSlide} / {totalSlides}
@@ -279,8 +373,11 @@ function SlideDeckInner({
         </SlideDrawer>
       )}
 
-      {/* Speaker notes panel */}
-      <SlideNotesPanel isOpen={showNotes} onClose={toggleNotes} />
+      {/* Speaker notes panel - hide when popped out */}
+      <SlideNotesPanel isOpen={showNotes && !notesPopout} onClose={toggleNotes} />
+
+      {/* Speaker notes popout window manager */}
+      <SlideNotesPopout />
     </div>
   );
 }

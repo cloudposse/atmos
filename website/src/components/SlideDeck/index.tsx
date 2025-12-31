@@ -18,6 +18,7 @@ export { SlideIndex } from './SlideIndex';
 export { SlideDrawer } from './SlideDrawer';
 export { SlideNotes } from './SlideNotes';
 export { SlideNotesPanel } from './SlideNotesPanel';
+export { SlideNotesPopout } from './SlideNotesPopout';
 export { Tooltip } from './Tooltip';
 
 // Context exports for advanced usage.
@@ -40,4 +41,7 @@ export type {
   SlideIndexProps,
   SlideNotesProps,
   SlideNotesPanelProps,
+  NotesPosition,
+  NotesDisplayMode,
+  NotesPreferences,
 } from './types';

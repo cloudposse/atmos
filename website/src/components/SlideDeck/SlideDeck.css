@@ -157,6 +157,9 @@
   cursor: pointer;
   transition: all 0.2s ease, opacity 0.3s ease, transform 0.3s ease;
   opacity: 1;
+  /* Ensure nav buttons are above notes panel backdrop (z-index: 100) and panel (z-index: 101) */
+  z-index: 102;
+  position: relative;
 }
 
 .slide-deck__side-nav:hover:not(:disabled) {
@@ -266,6 +269,27 @@ html[data-theme='dark'] .slide-deck__progress-bar {
   height: 100%;
   background: var(--ifm-color-primary);
   transition: width 0.3s ease;
+}
+
+/* Notes Shrink Mode - Resize slide container to make room for notes panel */
+.slide-deck--notes-shrink.slide-deck--notes-right .slide-deck__main {
+  padding-right: 320px;
+  transition: padding-right 0.3s ease;
+}
+
+.slide-deck--notes-shrink.slide-deck--notes-bottom {
+  padding-bottom: 25vh;
+  transition: padding-bottom 0.3s ease;
+}
+
+/* Fullscreen shrink mode adjustments */
+.slide-deck--fullscreen.slide-deck--notes-shrink.slide-deck--notes-right .slide-deck__slide-wrapper {
+  max-width: calc((100vh - 60px) * 16 / 9 - 320px);
+}
+
+.slide-deck--fullscreen.slide-deck--notes-shrink.slide-deck--notes-bottom .slide-deck__slide-wrapper {
+  height: calc(100vh - 60px - 25vh);
+  max-height: calc((100vw - 80px) * 9 / 16 - 25vh);
 }
 
 /* Responsive - Tablet */
@@ -402,13 +426,11 @@ html[data-theme='dark'] .slide-deck__progress-bar {
     left: 0;
     right: 0;
     bottom: 0;
-    padding: 0 2rem;
-    padding-bottom: 4rem;
+    padding: 0 2rem 4rem;
     overflow-y: auto;
-    /* Use flexbox with flex-start, let margin:auto on inner handle centering */
+    /* Flexbox with min-height allows centering when short, scrolling when tall */
     display: flex;
     flex-direction: column;
-    align-items: center;
   }
 
   .slide-deck--fullscreen .slide-deck__slide-wrapper .slide .slide__inner {

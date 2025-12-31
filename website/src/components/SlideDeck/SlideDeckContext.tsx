@@ -1,7 +1,41 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo } from 'react';
-import type { SlideDeckContextValue } from './types';
+import type { SlideDeckContextValue, NotesPreferences, NotesPosition, NotesDisplayMode } from './types';
 
 const SlideDeckContext = createContext<SlideDeckContextValue | null>(null);
+
+// localStorage key for notes preferences.
+const NOTES_PREFS_KEY = 'slide-deck-notes-preferences';
+
+// Default notes preferences.
+const defaultNotesPreferences: NotesPreferences = {
+  position: 'right',
+  displayMode: 'overlay',
+  isPopout: false,
+};
+
+// Load preferences from localStorage.
+const loadNotesPreferences = (): NotesPreferences => {
+  if (typeof window === 'undefined') return defaultNotesPreferences;
+  try {
+    const stored = localStorage.getItem(NOTES_PREFS_KEY);
+    if (stored) {
+      return { ...defaultNotesPreferences, ...JSON.parse(stored) };
+    }
+  } catch (e) {
+    console.error('Failed to load notes preferences:', e);
+  }
+  return defaultNotesPreferences;
+};
+
+// Save preferences to localStorage.
+const saveNotesPreferences = (prefs: NotesPreferences) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(NOTES_PREFS_KEY, JSON.stringify(prefs));
+  } catch (e) {
+    console.error('Failed to save notes preferences:', e);
+  }
+};
 
 interface SlideDeckProviderProps {
   children: ReactNode;
@@ -28,6 +62,13 @@ export function SlideDeckProvider({
   const [isFullscreen, setIsFullscreen] = useState(() => isMobileDevice());
   const [showNotes, setShowNotes] = useState(false);
   const [currentNotes, setCurrentNotes] = useState<React.ReactNode | null>(null);
+  const [isMobile, setIsMobile] = useState(() => isMobileDevice());
+  const [notesPreferences, setNotesPreferences] = useState<NotesPreferences>(defaultNotesPreferences);
+
+  // Load notes preferences from localStorage on mount.
+  useEffect(() => {
+    setNotesPreferences(loadNotesPreferences());
+  }, []);
 
   // Sync with URL hash on mount.
   useEffect(() => {
@@ -81,6 +122,7 @@ export function SlideDeckProvider({
     const handleResize = () => {
       // Auto-enter fullscreen mode on mobile, exit on desktop (unless native fullscreen).
       const mobile = isMobileDevice();
+      setIsMobile(mobile);
       if (mobile && !isFullscreen) {
         setIsFullscreen(true);
       } else if (!mobile && !document.fullscreenElement && isFullscreen) {
@@ -129,6 +171,30 @@ export function SlideDeckProvider({
     setShowNotes(prev => !prev);
   }, []);
 
+  const setNotesPosition = useCallback((position: NotesPosition) => {
+    setNotesPreferences(prev => {
+      const updated = { ...prev, position };
+      saveNotesPreferences(updated);
+      return updated;
+    });
+  }, []);
+
+  const setNotesDisplayMode = useCallback((displayMode: NotesDisplayMode) => {
+    setNotesPreferences(prev => {
+      const updated = { ...prev, displayMode };
+      saveNotesPreferences(updated);
+      return updated;
+    });
+  }, []);
+
+  const setNotesPopout = useCallback((isPopout: boolean) => {
+    setNotesPreferences(prev => {
+      const updated = { ...prev, isPopout };
+      saveNotesPreferences(updated);
+      return updated;
+    });
+  }, []);
+
   const value: SlideDeckContextValue = useMemo(() => ({
     currentSlide,
     totalSlides,
@@ -141,7 +207,12 @@ export function SlideDeckProvider({
     toggleNotes,
     currentNotes,
     setCurrentNotes,
-  }), [currentSlide, totalSlides, goToSlide, nextSlide, prevSlide, isFullscreen, toggleFullscreen, showNotes, toggleNotes, currentNotes]);
+    notesPreferences,
+    setNotesPosition,
+    setNotesDisplayMode,
+    setNotesPopout,
+    isMobile,
+  }), [currentSlide, totalSlides, goToSlide, nextSlide, prevSlide, isFullscreen, toggleFullscreen, showNotes, toggleNotes, currentNotes, notesPreferences, setNotesPosition, setNotesDisplayMode, setNotesPopout, isMobile]);
 
   return (
     <SlideDeckContext.Provider value={value}>
