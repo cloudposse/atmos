@@ -6,10 +6,9 @@ import (
 	"strings"
 	"syscall"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
-
 	"github.com/cloudposse/atmos/cmd"
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 func main() {

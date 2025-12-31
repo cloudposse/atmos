@@ -13,9 +13,16 @@ import (
 )
 
 var execCmd = &cobra.Command{
-	Use:          "exec <tool@version> [-- args...]",
-	Short:        "Execute a tool with specified version",
-	Long:         `Execute a tool with a specific version, installing it if necessary.`,
+	Use:   "exec <tool@version> [-- args...]",
+	Short: "Execute a tool with specified version",
+	Long: `Execute a tool with a specific version, installing it if necessary.
+
+Examples:
+  # Execute terraform with version 1.5.0
+  atmos toolchain exec terraform@1.5.0 -- version
+
+  # Execute kubectl with version 1.28.0, passing additional arguments
+  atmos toolchain exec kubectl@1.28.0 -- get pods -n default`,
 	Args:         cobra.MinimumNArgs(1),
 	SilenceUsage: true, // Don't show usage on error (tool's output is sufficient).
 	RunE: func(cmd *cobra.Command, args []string) error {
