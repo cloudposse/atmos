@@ -402,7 +402,7 @@ html[data-theme='dark'] .slide-deck__progress-bar {
     left: 0;
     right: 0;
     bottom: 0;
-    padding: 1.5rem 2rem;
+    padding: 0 2rem;
     padding-bottom: 4rem;
     overflow-y: auto;
     /* Use flexbox with flex-start, let margin:auto on inner handle centering */
