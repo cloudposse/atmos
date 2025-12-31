@@ -2,7 +2,9 @@
 
 ## Executive Summary
 
-Enable Atmos to automatically recover from credential invalidation scenarios, providing a seamless single-command authentication experience. When credentials become invalid (rotated, revoked, or expired), Atmos should detect the issue, clean up stale state, and guide users through recovery inline—all within the same `atmos auth login` command.
+Enable Atmos to automatically recover from credential invalidation scenarios, providing a seamless single-command
+authentication experience. When credentials become invalid (rotated, revoked, or expired), Atmos should detect the issue,
+clean up stale state, and guide users through recovery inline—all within the same `atmos auth login` command.
 
 ## 1. Goals
 
@@ -74,6 +76,34 @@ The `whoami` command should never prompt for credentials:
 $ atmos auth whoami dev-admin
 # If credentials are valid: shows identity info
 # If credentials are missing/invalid: returns error with guidance, no prompts
+```
+
+### Whoami with Invalid Credentials Warning
+
+When credentials are invalid or expired, `whoami` shows a warning with recovery instructions:
+
+```shell
+$ atmos auth whoami dev-admin
+✗ Current Authentication Status
+
+  Provider      aws-user
+  Identity      dev-admin
+  Last Updated  2025-12-30 09:55:34 EST
+
+⚠ Credentials may be expired or invalid.
+  Run 'atmos auth login --identity dev-admin' to refresh.
+```
+
+### Auth Exec Failure Guidance
+
+When `auth exec` subprocess fails (e.g., due to expired token), a helpful tip is shown:
+
+```shell
+$ atmos auth exec --identity dev-admin -- aws sts get-caller-identity
+An error occurred (ExpiredToken) when calling the GetCallerIdentity operation: The security token included in the request is expired
+
+ Tip  If credentials are expired, refresh with:
+      atmos auth login --identity dev-admin
 ```
 
 ### Error Detection and Response
@@ -308,7 +338,92 @@ func promptForAWSCredentials(identityName string, mfaArn string) (*types.AWSCred
 }
 ```
 
-### 3.9 Session Token Caching Prevention
+### 3.9 Session Credential Preference for Whoami
+
+When loading credentials for `whoami`, prefer session credentials from files over long-lived credentials from keyring. This ensures the `Expires` field displays the actual session token expiration:
+
+```go
+// loadCredentialsWithFallback retrieves credentials with keyring → identity storage fallback.
+// For AWS credentials, session tokens (with expiration) are stored in files but NOT in keyring.
+// Keyring stores long-lived IAM credentials for re-authentication. This method prefers
+// session credentials from files when they exist and are not expired, so users can see
+// accurate expiration times in whoami output.
+func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName string) (types.ICredentials, error) {
+    keyringCreds, keyringErr := m.credentialStore.Retrieve(identityName)
+    if keyringErr == nil {
+        // For AWS credentials without session token, also check files for session credentials.
+        if awsCreds, ok := keyringCreds.(*types.AWSCredentials); ok && awsCreds.SessionToken == "" {
+            fileCreds := m.loadSessionCredsFromFiles(ctx, identityName)
+            if fileCreds != nil {
+                return fileCreds, nil
+            }
+        }
+        return keyringCreds, nil
+    }
+    // ... fallback to identity storage
+}
+
+// loadSessionCredsFromFiles attempts to load session credentials from identity storage files.
+func (m *manager) loadSessionCredsFromFiles(ctx context.Context, identityName string) types.ICredentials {
+    identity, exists := m.identities[identityName]
+    if !exists {
+        return nil
+    }
+
+    fileCreds, err := identity.LoadCredentials(ctx)
+    if err != nil || fileCreds == nil || fileCreds.IsExpired() {
+        return nil
+    }
+
+    // Only return if these are session credentials (have session token).
+    if awsCreds, ok := fileCreds.(*types.AWSCredentials); ok && awsCreds.SessionToken != "" {
+        return fileCreds
+    }
+    return nil
+}
+```
+
+### 3.10 Whoami Invalid Credentials Warning
+
+When credentials fail validation, display a warning with recovery instructions in `cmd/auth_whoami.go`:
+
+```go
+func printWhoamiHuman(whoami *authTypes.WhoamiInfo, isValid bool) {
+    // ... display status table ...
+
+    // Show warning with tip if credentials are invalid.
+    if !isValid {
+        warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorYellow))
+        fmt.Fprintf(os.Stderr, "\n%s Credentials may be expired or invalid.\n", warningStyle.Render("⚠"))
+        fmt.Fprintf(os.Stderr, "  Run 'atmos auth login --identity %s' to refresh.\n", whoami.Identity)
+    }
+}
+```
+
+### 3.11 Auth Exec Failure Tip
+
+When subprocess execution fails, display a helpful tip about refreshing credentials in `cmd/auth_exec.go`:
+
+```go
+func executeAuthExecCommandCore(atmosConfig *schema.AtmosConfiguration, identityName string, commandArgs []string) error {
+    // ... execute command ...
+    err = executeCommandWithEnv(commandArgs, envMap)
+    if err != nil {
+        // For any subprocess error, provide a tip about refreshing credentials.
+        printAuthExecTip(identityName)
+        return err
+    }
+    return nil
+}
+
+func printAuthExecTip(identityName string) {
+    fmt.Fprintf(os.Stderr, "\n")
+    fmt.Fprintf(os.Stderr, " Tip  If credentials are expired, refresh with:\n")
+    fmt.Fprintf(os.Stderr, "      atmos auth login --identity %s\n", identityName)
+}
+```
+
+### 3.12 Session Token Caching Prevention
 
 **CRITICAL:** Session tokens must NEVER be cached in keyring as they would overwrite long-lived credentials that are needed for future authentication.
 
@@ -387,6 +502,10 @@ if !isSessionToken(creds) {
 - `TestSessionTokenDoesNotOverwriteLongLivedCredentialsInKeyring` — Verify session tokens not cached
 - `TestManager_Whoami_NonInteractive` — Verify Whoami doesn't trigger prompts
 - `TestAllowPrompts_ContextHelpers` — Verify context flag propagation
+- `TestLoadCredentialsWithFallback_PrefersSessionCredsFromFiles` — Verify session credentials with expiration are preferred
+- `TestLoadSessionCredsFromFiles_ReturnsNilWhenExpired` — Verify expired session credentials are not returned
+- `TestPrintWhoamiHuman_ShowsWarningWhenInvalid` — Verify warning displayed for invalid credentials
+- `TestPrintAuthExecTip` — Verify tip is displayed after subprocess failure
 
 ### Mock Implementation
 
@@ -409,12 +528,14 @@ func (e *mockAPIError) ErrorFault() smithy.ErrorFault { return smithy.FaultClien
 | `errors/errors.go` | Add `ErrCredentialsInvalid` sentinel error |
 | `pkg/auth/types/credential_prompt.go` | New file with generic credential prompting interface |
 | `pkg/auth/types/context.go` | **New file** with context helpers for non-interactive prompting control |
-| `pkg/auth/manager.go` | Add session token check in `authenticateWithProvider`, pass context through error handlers |
+| `pkg/auth/manager.go` | Add session token check, session credential preference in `loadCredentialsWithFallback`, add `loadSessionCredsFromFiles` helper |
 | `pkg/auth/manager_whoami.go` | Add session token check in `buildWhoamiInfo`, use non-interactive context in `Whoami` |
 | `pkg/auth/identities/aws/user.go` | Update error handling with context, fix session duration, add MFA retry flow, add session credentials detection |
 | `pkg/auth/identities/aws/user_test.go` | Add tests for new functionality, update existing tests for context parameter |
 | `pkg/auth/identities/aws/credential_prompt.go` | New file with AWS credential prompting implementation |
 | `pkg/auth/identities/aws/credential_prompt_test.go` | Tests for credential validation and form building |
+| `cmd/auth_whoami.go` | Add warning message when credentials are invalid/expired |
+| `cmd/auth_exec.go` | Add helpful tip when subprocess fails with potential auth errors |
 | `cmd/auth_shell_test.go` | Disable credential prompting in tests to prevent blocking |
 
 ## 6. Success Metrics
@@ -427,6 +548,9 @@ func (e *mockAPIError) ErrorFault() smithy.ErrorFault { return smithy.FaultClien
 - **Session Credentials Detection**: Accidentally stored session credentials are detected and user is prompted to reconfigure
 - **Non-Interactive Whoami**: `atmos auth whoami` never triggers credential prompts
 - **Session Token Protection**: Session tokens are never cached in keyring, protecting long-lived credentials
+- **Whoami Expiration Display**: `atmos auth whoami` shows session token expiration from files (not keyring long-lived creds)
+- **Invalid Credentials Warning**: `atmos auth whoami` displays actionable warning when credentials are invalid/expired
+- **Auth Exec Guidance**: `atmos auth exec` provides helpful tip when subprocess fails due to potential auth issues
 - **Test Coverage**: All error scenarios have unit test coverage
 
 ## 7. Manual Testing Guide
@@ -667,6 +791,74 @@ ATMOS_LOGS_LEVEL=Debug ./build/atmos auth login test-user
 # - "Retrieved credentials from keyring"
 # - "Skipping keyring cache for session tokens"
 # - "Cached credentials" or "Skipping keyring cache"
+# - "Using session credentials from files (have expiration)"
+```
+
+### Test 11: Whoami Shows Session Expiration
+
+**Purpose:** Verify `whoami` displays session token expiration from files.
+
+```shell
+# Step 1: Login to get session credentials
+./build/atmos auth login test-user
+
+# Step 2: Run whoami - should show Expires field
+./build/atmos auth whoami test-user
+
+# Expected:
+# ✓ Current Authentication Status
+#
+#   Provider      aws-user
+#   Identity      test-user
+#   Expires       2025-12-30 10:15:00 EST (14m 30s)   <-- Session expiration
+#   Last Updated  2025-12-30 10:00:30 EST
+```
+
+### Test 12: Whoami Invalid Credentials Warning
+
+**Purpose:** Verify `whoami` shows warning when credentials are invalid/expired.
+
+```shell
+# Step 1: Login normally
+./build/atmos auth login test-user
+
+# Step 2: Wait for session to expire (or manually corrupt credentials file)
+
+# Step 3: Run whoami - should show warning
+./build/atmos auth whoami test-user
+
+# Expected:
+# ✗ Current Authentication Status
+#
+#   Provider      aws-user
+#   Identity      test-user
+#   Last Updated  2025-12-30 09:55:34 EST
+#
+# ⚠ Credentials may be expired or invalid.
+#   Run 'atmos auth login --identity test-user' to refresh.
+```
+
+### Test 13: Auth Exec Shows Recovery Tip
+
+**Purpose:** Verify `auth exec` shows helpful tip when subprocess fails.
+
+```shell
+# Step 1: Login to get credentials
+./build/atmos auth login test-user
+
+# Step 2: Wait for session to expire
+
+# Step 3: Run auth exec with AWS command
+./build/atmos auth exec --identity test-user -- aws sts get-caller-identity
+
+# Expected:
+# An error occurred (ExpiredToken) when calling the GetCallerIdentity operation: The security token included in the request is expired
+#
+#  Tip  If credentials are expired, refresh with:
+#       atmos auth login --identity test-user
+#
+#  Error
+#  Error: subcommand exited with code 254
 ```
 
 ### Troubleshooting

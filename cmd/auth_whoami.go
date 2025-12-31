@@ -183,6 +183,13 @@ func printWhoamiHuman(whoami *authTypes.WhoamiInfo, isValid bool) {
 	t := createWhoamiTable(rows)
 
 	fmt.Fprintf(os.Stderr, "%s\n", t)
+
+	// Show warning with tip if credentials are invalid.
+	if !isValid {
+		warningStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorYellow))
+		fmt.Fprintf(os.Stderr, "\n%s Credentials may be expired or invalid.\n", warningStyle.Render("⚠"))
+		fmt.Fprintf(os.Stderr, "  Run 'atmos auth login --identity %s' to refresh.\n", whoami.Identity)
+	}
 }
 
 // buildWhoamiTableRows builds table rows for whoami output.

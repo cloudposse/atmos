@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"errors"
+	"os"
 	"runtime"
 	"testing"
 
@@ -279,6 +280,47 @@ func TestExecuteCommandWithEnv(t *testing.T) {
 			default:
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestPrintAuthExecTip(t *testing.T) {
+	tests := []struct {
+		name         string
+		identityName string
+	}{
+		{
+			name:         "shows tip with identity name",
+			identityName: "test-identity",
+		},
+		{
+			name:         "shows tip with different identity name",
+			identityName: "dev-admin",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Capture stderr.
+			oldStderr := os.Stderr
+			r, w, _ := os.Pipe()
+			os.Stderr = w
+
+			// Call the function.
+			printAuthExecTip(tt.identityName)
+
+			// Restore stderr and read captured output.
+			w.Close()
+			os.Stderr = oldStderr
+
+			var buf bytes.Buffer
+			_, _ = buf.ReadFrom(r)
+			output := buf.String()
+
+			// Verify tip message is shown with correct identity.
+			assert.Contains(t, output, "Tip")
+			assert.Contains(t, output, "If credentials are expired, refresh with")
+			assert.Contains(t, output, "atmos auth login --identity "+tt.identityName)
 		})
 	}
 }

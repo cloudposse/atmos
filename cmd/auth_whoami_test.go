@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
@@ -243,4 +244,72 @@ func TestWhoamiJSONOutput(t *testing.T) {
 	assert.Contains(t, string(jsonData), `"identity": "test-identity"`)
 	assert.Contains(t, string(jsonData), `"provider": "test-provider"`)
 	assert.Contains(t, string(jsonData), `"account": "123456789012"`)
+}
+
+func TestPrintWhoamiHuman_ShowsWarningWhenInvalid(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Capture stderr.
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	// Create whoami info with expired credentials.
+	expTime := time.Now().Add(-1 * time.Hour) // Expired 1 hour ago.
+	whoamiInfo := &authTypes.WhoamiInfo{
+		Identity:   "test-identity",
+		Provider:   "aws-user",
+		Account:    "123456789012",
+		Principal:  "TestUser",
+		Expiration: &expTime,
+	}
+
+	// Call the function with isValid=false.
+	printWhoamiHuman(whoamiInfo, false)
+
+	// Restore stderr and read captured output.
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+	output := buf.String()
+
+	// Verify warning message is shown.
+	assert.Contains(t, output, "Credentials may be expired or invalid")
+	assert.Contains(t, output, "atmos auth login --identity test-identity")
+}
+
+func TestPrintWhoamiHuman_NoWarningWhenValid(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Capture stderr.
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	// Create whoami info with valid credentials.
+	expTime := time.Now().Add(1 * time.Hour) // Expires in 1 hour.
+	whoamiInfo := &authTypes.WhoamiInfo{
+		Identity:   "test-identity",
+		Provider:   "aws-user",
+		Account:    "123456789012",
+		Principal:  "TestUser",
+		Expiration: &expTime,
+	}
+
+	// Call the function with isValid=true.
+	printWhoamiHuman(whoamiInfo, true)
+
+	// Restore stderr and read captured output.
+	w.Close()
+	os.Stderr = oldStderr
+
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+	output := buf.String()
+
+	// Verify warning message is NOT shown.
+	assert.NotContains(t, output, "Credentials may be expired or invalid")
+	assert.NotContains(t, output, "atmos auth login --identity")
 }

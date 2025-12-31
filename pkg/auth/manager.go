@@ -889,17 +889,32 @@ func (m *manager) determineStartingIndex(startIndex int) int {
 // loadCredentialsWithFallback retrieves credentials with keyring → identity storage fallback.
 // This is the single source of truth for credential retrieval across all auth operations.
 // It ensures consistent behavior whether credentials are in keyring or identity storage.
+//
+// For AWS credentials, session tokens (with expiration) are stored in files but NOT in keyring.
+// Keyring stores long-lived IAM credentials for re-authentication. This method prefers
+// session credentials from files when they exist and are not expired, so users can see
+// accurate expiration times in whoami output.
 func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName string) (types.ICredentials, error) {
 	// Fast path: Try keyring cache first.
-	creds, err := m.credentialStore.Retrieve(identityName)
-	if err == nil {
+	keyringCreds, keyringErr := m.credentialStore.Retrieve(identityName)
+	if keyringErr == nil {
 		log.Debug("Retrieved credentials from keyring", logKeyIdentity, identityName)
-		return creds, nil
+
+		// For AWS credentials without session token, also check files for session credentials.
+		// Session tokens have expiration info that users want to see in whoami.
+		if awsCreds, ok := keyringCreds.(*types.AWSCredentials); ok && awsCreds.SessionToken == "" {
+			fileCreds := m.loadSessionCredsFromFiles(ctx, identityName)
+			if fileCreds != nil {
+				log.Debug("Using session credentials from files (have expiration)", logKeyIdentity, identityName)
+				return fileCreds, nil
+			}
+		}
+		return keyringCreds, nil
 	}
 
 	// If keyring returned an error other than "not found", propagate it.
-	if !errors.Is(err, credentials.ErrCredentialsNotFound) {
-		return nil, fmt.Errorf("keyring error for identity %q: %w", identityName, err)
+	if !errors.Is(keyringErr, credentials.ErrCredentialsNotFound) {
+		return nil, fmt.Errorf("keyring error for identity %q: %w", identityName, keyringErr)
 	}
 
 	// Slow path: Fall back to identity storage (AWS files, etc.).
@@ -931,6 +946,34 @@ func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName 
 
 	log.Debug("Successfully loaded credentials from identity storage", logKeyIdentity, identityName)
 	return loadedCreds, nil
+}
+
+// loadSessionCredsFromFiles attempts to load session credentials from identity storage files.
+// Returns nil if loading fails or credentials are expired.
+func (m *manager) loadSessionCredsFromFiles(ctx context.Context, identityName string) types.ICredentials {
+	identity, exists := m.identities[identityName]
+	if !exists {
+		return nil
+	}
+
+	_ = m.ensureIdentityHasManager(identityName)
+
+	fileCreds, err := identity.LoadCredentials(ctx)
+	if err != nil {
+		log.Debug("Could not load credentials from files", logKeyIdentity, identityName, "error", err)
+		return nil
+	}
+
+	if fileCreds == nil || fileCreds.IsExpired() {
+		return nil
+	}
+
+	// Only return if these are session credentials (have session token).
+	if awsCreds, ok := fileCreds.(*types.AWSCredentials); ok && awsCreds.SessionToken != "" {
+		return fileCreds
+	}
+
+	return nil
 }
 
 // getChainCredentials retrieves cached credentials from the specified starting point.
