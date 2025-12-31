@@ -77,6 +77,24 @@ export function TTSPlayer({ tts, currentSlide }: TTSPlayerProps) {
     seek(pct * duration);
   };
 
+  const handleProgressKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (duration <= 0) return;
+    const step = 5; // Seek 5 seconds per key press.
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      seek(Math.min(currentTime + step, duration));
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      seek(Math.max(currentTime - step, 0));
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      seek(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      seek(duration);
+    }
+  };
+
   const formatTime = (s: number) => {
     if (!isFinite(s) || s < 0) return '0:00';
     const mins = Math.floor(s / 60);
@@ -139,6 +157,7 @@ export function TTSPlayer({ tts, currentSlide }: TTSPlayerProps) {
         <div
           className="tts-player__progress"
           onClick={handleProgressClick}
+          onKeyDown={handleProgressKeyDown}
           role="slider"
           aria-valuemin={0}
           aria-valuemax={100}

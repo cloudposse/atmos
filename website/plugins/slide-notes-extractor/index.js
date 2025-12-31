@@ -79,11 +79,29 @@ function extractSlideNotes(mdxContent) {
 
     if (notesMatch) {
       // Strip JSX/HTML tags, normalize whitespace for plain text output.
-      const text = notesMatch[1]
-        .replace(/<[^>]+>/g, '')              // Remove any nested HTML/JSX tags.
-        .replace(/\{\/\*[\s\S]*?\*\/\}/g, '') // Remove JSX comments.
-        .replace(/\s+/g, ' ')                 // Normalize whitespace.
-        .trim();
+      let text = notesMatch[1];
+
+      // Remove JSX comments first.
+      text = text.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+
+      // Repeatedly strip HTML/JSX tags until none remain.
+      // This handles cases where incomplete tags like "<script" might remain
+      // after a single pass (e.g., nested or malformed tags).
+      let previousText;
+      do {
+        previousText = text;
+        text = text.replace(/<[^>]*>/g, '');    // Remove complete tags.
+        text = text.replace(/<[^>]*$/g, '');    // Remove incomplete opening tags at end.
+        text = text.replace(/^[^<]*>/g, match => // Remove incomplete closing tags at start.
+          match.includes('<') ? match : '');
+      } while (text !== previousText);
+
+      // Final safety: remove any remaining < or > characters.
+      text = text.replace(/[<>]/g, '');
+
+      // Normalize whitespace.
+      text = text.replace(/\s+/g, ' ').trim();
+
       notes.push(text);
     } else {
       notes.push(''); // Empty string for slides without notes.
