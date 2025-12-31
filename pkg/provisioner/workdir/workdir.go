@@ -85,6 +85,14 @@ func (s *Service) Provision(
 		return nil
 	}
 
+	// Check if source provisioner already handled the workdir.
+	// When source + workdir are both enabled, source downloads directly to workdir,
+	// so we skip the workdir copy step.
+	if _, ok := componentConfig[WorkdirPathKey].(string); ok {
+		// Source provisioner already set the workdir path - skip workdir provisioning.
+		return nil
+	}
+
 	// Get component name.
 	component, ok := componentConfig[ComponentKey].(string)
 	if !ok {

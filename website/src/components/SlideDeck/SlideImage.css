@@ -1,0 +1,52 @@
+/* SlideImage styles */
+.slide-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Metallic gradient effect for logos */
+.slide-image--metallic {
+  position: relative;
+}
+
+.slide-image--metallic img {
+  /* Apply metallic gradient directly to the image */
+  filter: drop-shadow(0 0 20px rgba(192, 192, 192, 0.3));
+}
+
+.slide-image--metallic::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(180, 180, 220, 0.4) 0%,
+    rgba(255, 255, 255, 0.6) 20%,
+    rgba(160, 160, 200, 0.4) 40%,
+    rgba(255, 255, 255, 0.7) 60%,
+    rgba(180, 180, 220, 0.4) 80%,
+    rgba(255, 255, 255, 0.5) 100%
+  );
+  background-size: 300% 300%;
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+  animation: metallic-shimmer 6s ease-in-out infinite;
+  border-radius: 8px;
+  z-index: 1;
+}
+
+@keyframes metallic-shimmer {
+  0% {
+    background-position: 0% 0%;
+  }
+  50% {
+    background-position: 100% 100%;
+  }
+  100% {
+    background-position: 0% 0%;
+  }
+}

@@ -2,17 +2,39 @@ package downloader
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/google/uuid"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filetype"
-	"github.com/google/uuid"
+	"github.com/cloudposse/atmos/pkg/github"
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
-const errDownloadFileFormat = "%w: '%s': %v"
+const (
+	// MinRateLimitRemaining is the minimum remaining rate limit before pre-check waits.
+	MinRateLimitRemaining = 5
+)
+
+// isGitHubHTTPURL checks if the given URL is a GitHub HTTP URL that uses rate-limited APIs.
+// This includes raw.githubusercontent.com for file downloads and github.com archive/release URLs.
+func isGitHubHTTPURL(src string) bool {
+	src = strings.ToLower(src)
+	// Raw GitHub content (used for mixins, imports, templates).
+	if strings.Contains(src, "raw.githubusercontent.com") {
+		return true
+	}
+	// GitHub archive downloads (tarballs, zipballs).
+	if strings.Contains(src, "github.com") &&
+		(strings.Contains(src, "/archive/") || strings.Contains(src, "/releases/")) {
+		return true
+	}
+	return false
+}
 
 // fileDownloader handles downloading files and directories from various sources
 // without exposing the underlying implementation.
@@ -36,9 +58,21 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	// Pre-check GitHub rate limits for GitHub HTTP URLs.
+	if isGitHubHTTPURL(src) {
+		if err := github.WaitForRateLimit(ctx, MinRateLimitRemaining); err != nil {
+			log.Warn("Rate limit wait interrupted", "error", err)
+			// Continue anyway - don't block on rate limit check failures.
+		}
+	}
+
 	client, err := fd.clientFactory.NewClient(ctx, src, dest, mode)
 	if err != nil {
-		return fmt.Errorf("%w: %v", errUtils.ErrCreateDownloadClient, err)
+		return errUtils.Build(errUtils.ErrCreateDownloadClient).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Check that the URL format is valid").
+			Err()
 	}
 
 	return client.Get()
@@ -50,12 +84,20 @@ func (fd *fileDownloader) FetchAndAutoParse(src string) (any, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
+		return nil, errUtils.Build(errUtils.ErrDownloadFile).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Check network connectivity and verify the URL is accessible").
+			Err()
 	}
 
 	v, err := filetype.DetectFormatAndParseFile(fd.fileReader, filePath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+		return nil, errUtils.Build(errUtils.ErrParseFile).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Verify the file format matches the expected type").
+			Err()
 	}
 	return v, nil
 }
@@ -66,19 +108,27 @@ func (fd *fileDownloader) FetchAndParseByExtension(src string) (any, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
+		return nil, errUtils.Build(errUtils.ErrDownloadFile).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Check network connectivity and verify the URL is accessible").
+			Err()
 	}
 
-	// Create a custom reader that reads the downloaded file but uses the original URL for extension detection
+	// Create a custom reader that reads the downloaded file but uses the original URL for extension detection.
 	readFunc := func(filename string) ([]byte, error) {
-		// Read the actual downloaded file, not the URL
+		// Read the actual downloaded file, not the URL.
 		return fd.fileReader(filePath)
 	}
 
-	// Pass the original source URL for extension detection
+	// Pass the original source URL for extension detection.
 	v, err := filetype.ParseFileByExtension(readFunc, src)
 	if err != nil {
-		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+		return nil, errUtils.Build(errUtils.ErrParseFile).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Verify the file format matches the expected type").
+			Err()
 	}
 	return v, nil
 }
@@ -89,12 +139,20 @@ func (fd *fileDownloader) FetchAndParseRaw(src string) (any, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
+		return nil, errUtils.Build(errUtils.ErrDownloadFile).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Check network connectivity and verify the URL is accessible").
+			Err()
 	}
 
 	v, err := filetype.ParseFileRaw(fd.fileReader, filePath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: '%s': %v", errUtils.ErrParseFile, src, err)
+		return nil, errUtils.Build(errUtils.ErrParseFile).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Verify the file format matches the expected type").
+			Err()
 	}
 	return v, nil
 }
@@ -105,7 +163,11 @@ func (fd *fileDownloader) FetchData(src string) ([]byte, error) {
 	defer os.Remove(filePath)
 
 	if err := fd.Fetch(src, filePath, ClientModeFile, 30*time.Second); err != nil {
-		return nil, fmt.Errorf(errDownloadFileFormat, errUtils.ErrDownloadFile, src, err)
+		return nil, errUtils.Build(errUtils.ErrDownloadFile).
+			WithCause(err).
+			WithContext("url", src).
+			WithHint("Check network connectivity and verify the URL is accessible").
+			Err()
 	}
 
 	return fd.fileReader(filePath)

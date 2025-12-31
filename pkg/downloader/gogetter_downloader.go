@@ -2,10 +2,13 @@ package downloader
 
 import (
 	"context"
+	"net/http"
 	"sync"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/hashicorp/go-getter"
+
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // detectorsMutex guards modifications to getter.Detectors.
@@ -22,6 +25,8 @@ func (c *goGetterClient) Get() error {
 
 type goGetterClientFactory struct {
 	atmosConfig *schema.AtmosConfiguration
+	retryConfig *schema.RetryConfig
+	httpClient  *http.Client // Optional custom HTTP client for testing.
 }
 
 // NewClient creates a new `go-getter` client.
@@ -37,6 +42,12 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		clientMode = getter.ClientModeFile
 	}
 
+	// Create HTTP getter with optional custom client.
+	httpGetter := &getter.HttpGetter{}
+	if f.httpClient != nil {
+		httpGetter.Client = f.httpClient
+	}
+
 	client := &getter.Client{
 		Ctx:             ctx,
 		Src:             src,
@@ -44,13 +55,13 @@ func (f *goGetterClientFactory) NewClient(ctx context.Context, src, dest string,
 		Mode:            clientMode,
 		DisableSymlinks: false,
 		Getters: map[string]getter.Getter{
-			// Overriding 'git'
-			"git":   &CustomGitGetter{},
+			// Overriding 'git'.
+			"git":   &CustomGitGetter{RetryConfig: f.retryConfig},
 			"file":  &getter.FileGetter{},
 			"hg":    &getter.HgGetter{},
-			"http":  &getter.HttpGetter{},
-			"https": &getter.HttpGetter{},
-			// "s3": &getter.S3Getter{}, // add as needed
+			"http":  httpGetter,
+			"https": httpGetter,
+			// "s3": &getter.S3Getter{}, // add as needed.
 			// "gcs": &getter.GCSGetter{},
 		},
 	}
@@ -72,8 +83,33 @@ func registerCustomDetectors(atmosConfig *schema.AtmosConfiguration, src string)
 	)
 }
 
-func NewGoGetterDownloader(atmosConfig *schema.AtmosConfiguration) FileDownloader {
-	return NewFileDownloader(&goGetterClientFactory{
+// GoGetterOption configures the go-getter downloader.
+type GoGetterOption func(*goGetterClientFactory)
+
+// WithRetryConfig sets the retry configuration for git operations.
+func WithRetryConfig(retryConfig *schema.RetryConfig) GoGetterOption {
+	return func(f *goGetterClientFactory) {
+		f.retryConfig = retryConfig
+	}
+}
+
+// WithHTTPClient sets a custom HTTP client for HTTP/HTTPS requests.
+// This is useful for testing with mock servers or custom transport configurations.
+func WithHTTPClient(client *http.Client) GoGetterOption {
+	return func(f *goGetterClientFactory) {
+		f.httpClient = client
+	}
+}
+
+// NewGoGetterDownloader creates a new go-getter based downloader.
+func NewGoGetterDownloader(atmosConfig *schema.AtmosConfiguration, opts ...GoGetterOption) FileDownloader {
+	defer perf.Track(atmosConfig, "pkg.downloader.NewGoGetterDownloader")()
+
+	factory := &goGetterClientFactory{
 		atmosConfig: atmosConfig,
-	})
+	}
+	for _, opt := range opts {
+		opt(factory)
+	}
+	return NewFileDownloader(factory)
 }
