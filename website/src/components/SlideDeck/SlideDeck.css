@@ -376,18 +376,17 @@ html[data-theme='dark'] .slide-deck__progress-bar {
   }
 
   .slide-deck--fullscreen .slide-deck__slide-wrapper {
-    /* Change from absolute to relative positioning */
+    /* Fill entire viewport on mobile - no 16:9 constraint */
     position: relative !important;
     top: auto !important;
     left: auto !important;
     right: auto !important;
     bottom: auto !important;
-    /* Size based on available height, constrained to 16:9 */
-    height: calc(100vh - 60px);
-    width: calc((100vh - 60px) * 16 / 9);
-    max-width: calc(100vw - 60px);
-    max-height: calc((100vw - 60px) * 9 / 16);
-    aspect-ratio: 16 / 9;
+    width: 100vw;
+    height: calc(100vh - 50px);
+    max-width: 100vw;
+    max-height: none;
+    aspect-ratio: auto;
   }
 
   .slide-deck--fullscreen .slide-deck__slide-wrapper .slide {
