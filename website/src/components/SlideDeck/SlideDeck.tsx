@@ -7,11 +7,6 @@ import {
   RiFullscreenExitLine,
   RiMenuLine,
   RiSpeakLine,
-  RiLayoutRightLine,
-  RiLayoutBottomLine,
-  RiStackLine,
-  RiSplitCellsHorizontal,
-  RiExternalLinkLine,
   RiArrowGoBackLine,
 } from 'react-icons/ri';
 import { SlideDeckProvider, useSlideDeck } from './SlideDeckContext';
@@ -43,25 +38,12 @@ function SlideDeckInner({
     showNotes,
     toggleNotes,
     notesPreferences,
-    setNotesPosition,
-    setNotesDisplayMode,
     setNotesPopout,
-    isMobile,
   } = useSlideDeck();
 
   const { position: notesPosition, displayMode: notesDisplayMode, isPopout: notesPopout } = notesPreferences;
 
-  // Toggle notes position between right and bottom.
-  const toggleNotesPosition = useCallback(() => {
-    setNotesPosition(notesPosition === 'right' ? 'bottom' : 'right');
-  }, [notesPosition, setNotesPosition]);
-
-  // Toggle notes display mode between overlay and shrink.
-  const toggleNotesDisplayMode = useCallback(() => {
-    setNotesDisplayMode(notesDisplayMode === 'overlay' ? 'shrink' : 'overlay');
-  }, [notesDisplayMode, setNotesDisplayMode]);
-
-  // Toggle popout mode.
+  // Toggle popout mode (bring notes back from popout).
   const toggleNotesPopout = useCallback(() => {
     setNotesPopout(!notesPopout);
   }, [notesPopout, setNotesPopout]);
@@ -278,66 +260,13 @@ function SlideDeckInner({
 
         <Tooltip content={showNotes ? 'Hide Notes (N)' : 'Speaker Notes (N)'} position="top">
           <button
-            className={`slide-deck__tool-button ${showNotes ? 'slide-deck__tool-button--active' : ''}`}
-            onClick={toggleNotes}
-            aria-label={showNotes ? 'Hide speaker notes' : 'Show speaker notes'}
+            className={`slide-deck__tool-button ${showNotes || notesPopout ? 'slide-deck__tool-button--active' : ''}`}
+            onClick={notesPopout ? toggleNotesPopout : toggleNotes}
+            aria-label={notesPopout ? 'Bring notes back' : showNotes ? 'Hide speaker notes' : 'Show speaker notes'}
           >
-            <RiSpeakLine />
+            {notesPopout ? <RiArrowGoBackLine /> : <RiSpeakLine />}
           </button>
         </Tooltip>
-
-        {/* Notes preference controls - only visible when notes are open and not popped out */}
-        {showNotes && !notesPopout && (
-          <>
-            {/* Position toggle */}
-            <Tooltip content={notesPosition === 'right' ? 'Move to Bottom' : 'Move to Right'} position="top">
-              <button
-                className="slide-deck__tool-button"
-                onClick={toggleNotesPosition}
-                aria-label={notesPosition === 'right' ? 'Move notes to bottom' : 'Move notes to right'}
-              >
-                {notesPosition === 'right' ? <RiLayoutBottomLine /> : <RiLayoutRightLine />}
-              </button>
-            </Tooltip>
-
-            {/* Display mode toggle */}
-            <Tooltip content={notesDisplayMode === 'overlay' ? 'Shrink Slides' : 'Overlay on Slides'} position="top">
-              <button
-                className="slide-deck__tool-button"
-                onClick={toggleNotesDisplayMode}
-                aria-label={notesDisplayMode === 'overlay' ? 'Shrink slides for notes' : 'Overlay notes on slides'}
-              >
-                {notesDisplayMode === 'overlay' ? <RiSplitCellsHorizontal /> : <RiStackLine />}
-              </button>
-            </Tooltip>
-
-            {/* Popout button - desktop only */}
-            {!isMobile && (
-              <Tooltip content="Pop Out Notes" position="top">
-                <button
-                  className="slide-deck__tool-button"
-                  onClick={toggleNotesPopout}
-                  aria-label="Pop out notes to separate window"
-                >
-                  <RiExternalLinkLine />
-                </button>
-              </Tooltip>
-            )}
-          </>
-        )}
-
-        {/* When notes are popped out, show bring back button (desktop only) */}
-        {notesPopout && !isMobile && (
-          <Tooltip content="Bring Notes Back" position="top">
-            <button
-              className="slide-deck__tool-button slide-deck__tool-button--active"
-              onClick={toggleNotesPopout}
-              aria-label="Bring notes back from popup"
-            >
-              <RiArrowGoBackLine />
-            </button>
-          </Tooltip>
-        )}
 
         {showProgress && (
           <div className="slide-deck__progress">
