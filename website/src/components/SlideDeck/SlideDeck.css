@@ -405,9 +405,12 @@ html[data-theme='dark'] .slide-deck__progress-bar {
     padding: 1.5rem 2rem;
     padding-bottom: 4rem;
     overflow-y: auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    /* Use block layout for scrolling - flexbox centering breaks overflow */
+  }
+
+  /* For short content, center it vertically using flexbox on the inner container */
+  .slide-deck--fullscreen .slide-deck__slide-wrapper .slide .slide__inner {
+    margin: auto;
   }
 
   /* Ensure controls are visible on mobile */
