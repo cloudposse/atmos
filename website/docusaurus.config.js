@@ -365,6 +365,9 @@ const config = {
                     'cli/*',
                 ],
             },
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'slide-notes-extractor'), {}
         ]
     ],
 
