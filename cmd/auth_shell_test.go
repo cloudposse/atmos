@@ -10,11 +10,22 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 )
+
+// disableAWSCredentialPrompting disables interactive credential prompting during tests.
+// This prevents huh forms from blocking test execution waiting for user input.
+func disableAWSCredentialPrompting(t *testing.T) {
+	t.Helper()
+	original := aws.PromptCredentialsFunc
+	aws.PromptCredentialsFunc = nil
+	t.Cleanup(func() { aws.PromptCredentialsFunc = original })
+}
 
 func TestAuthShellCmd_FlagParsing(t *testing.T) {
 	// Use TestKit to ensure proper test isolation.
 	_ = NewTestKit(t)
+	disableAWSCredentialPrompting(t)
 
 	tests := []struct {
 		name                string
@@ -109,6 +120,7 @@ func TestAuthShellCmd_CommandStructure(t *testing.T) {
 
 func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
 	_ = NewTestKit(t)
+	disableAWSCredentialPrompting(t)
 
 	// Set up test fixture.
 	testDir := "../tests/fixtures/scenarios/atmos-auth"
@@ -127,6 +139,8 @@ func TestAuthShellCmd_InvalidFlagHandling(t *testing.T) {
 }
 
 func TestAuthShellCmd_EmptyEnvVars(t *testing.T) {
+	disableAWSCredentialPrompting(t)
+
 	// Test that the command handles nil environment variables gracefully.
 	// This tests the path where envVars is nil and gets initialized to empty map.
 	testDir, err := filepath.Abs("../tests/fixtures/scenarios/atmos-auth")
