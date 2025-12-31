@@ -242,9 +242,8 @@ func (ur *URLRegistry) fetchFromURL(url string) (*Tool, error) {
 		VersionOverrides: pkg.VersionOverrides,
 	}
 
-	// Handle github_release vs http type.
-	if pkg.Type == "github_release" {
-		// Use URL as Asset for github_release.
+	// Handle github_release and http type - both use URL as Asset.
+	if pkg.Type == "github_release" || pkg.Type == "http" {
 		tool.Asset = pkg.URL
 	}
 
@@ -311,8 +310,8 @@ func (ur *URLRegistry) cachePackages(packages []AquaPackage) {
 			VersionOverrides: pkg.VersionOverrides,
 		}
 
-		// Handle github_release vs http type.
-		if pkg.Type == "github_release" {
+		// Handle github_release and http type - both use URL as Asset.
+		if pkg.Type == "github_release" || pkg.Type == "http" {
 			tool.Asset = pkg.URL
 		}
 

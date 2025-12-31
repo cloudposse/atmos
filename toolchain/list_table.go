@@ -61,7 +61,7 @@ func calculateColumnWidths(rows []toolRow, terminalWidth int) columnWidths {
 // calculateContentWidths finds the maximum width needed for each column based on row content.
 func calculateContentWidths(rows []toolRow) columnWidths {
 	widths := columnWidths{
-		status: 2, // Just enough for dot indicator.
+		status: 2, // Space for " ●" indicator (space + dot = 2 visual chars).
 	}
 
 	for _, row := range rows {
@@ -101,7 +101,7 @@ func ensureMinimumHeaderWidths(widths columnWidths) columnWidths {
 		headerRegistryWidth    = len("REGISTRY")
 		headerBinaryWidth      = len("BINARY")
 		headerVersionWidth     = len("VERSION")
-		headerStatusWidth      = 2 // Empty header, just need space for dot.
+		headerStatusWidth      = 2 // Space for " ●" indicator (space + dot = 2 visual chars).
 		headerInstallDateWidth = len("INSTALL DATE")
 		headerSizeWidth        = len("SIZE")
 	)
@@ -135,6 +135,7 @@ func ensureMinimumHeaderWidths(widths columnWidths) columnWidths {
 func addColumnBuffers(widths columnWidths) columnWidths {
 	const bufferSize = 4
 
+	widths.status += 1 // Small buffer for status column.
 	widths.alias += bufferSize
 	widths.registry += bufferSize
 	widths.binary += bufferSize
@@ -182,7 +183,7 @@ func truncateColumnsProportionally(widths columnWidths, excess int) columnWidths
 // createTableColumns creates Bubble Tea table columns from calculated widths.
 func createTableColumns(widths columnWidths) []table.Column {
 	return []table.Column{
-		{Title: "", Width: widths.status}, // Status indicator column (dots).
+		{Title: "  ", Width: widths.status}, // Status indicator column (dots), 2-char header to match data.
 		{Title: "ALIAS", Width: widths.alias},
 		{Title: "REGISTRY", Width: widths.registry},
 		{Title: "BINARY", Width: widths.binary},
@@ -193,12 +194,11 @@ func createTableColumns(widths columnWidths) []table.Column {
 }
 
 // convertRowsToTableFormat converts toolRow structs to Bubble Tea table.Row format.
+// Note: Status indicators are NOT pre-styled here because ANSI escape codes
+// would confuse the table's width calculation. Styling is applied in
+// renderTableWithConditionalStyling after the table is rendered.
 func convertRowsToTableFormat(rows []toolRow) []table.Row {
 	var tableRows []table.Row
-
-	// Styles for status indicators.
-	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))   // Green for active/default.
-	installedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("8")) // Gray for installed non-default.
 
 	for i, row := range rows {
 		// Debug: log the row data.
@@ -218,19 +218,9 @@ func convertRowsToTableFormat(rows []toolRow) []table.Row {
 			log.Debug("WARNING: Empty size for row", "index", i, "tool", row.alias)
 		}
 
-		// Style the status indicator based on install state and default status.
-		styledStatus := row.status
-		if row.isInstalled {
-			if row.isDefault {
-				styledStatus = activeStyle.Render(row.status) // Green dot for active/default.
-			} else {
-				styledStatus = installedStyle.Render(row.status) // Gray dot for installed non-default.
-			}
-		}
-		// If not installed, status is empty string (no dot).
-
+		// Pass unstyled status indicator - styling applied in renderTableWithConditionalStyling.
 		tableRows = append(tableRows, table.Row{
-			styledStatus, // Status indicator first.
+			row.status, // Status indicator first (unstyled).
 			row.alias,
 			row.registry,
 			row.binary,
@@ -260,8 +250,8 @@ func createAndConfigureTable(columns []table.Column, tableRows []table.Row) tabl
 
 	// Create custom styles for different states.
 	defaultStyle := table.DefaultStyles()
-	defaultStyle.Header = defaultStyle.Header.Bold(true)
-	defaultStyle.Cell = defaultStyle.Cell.PaddingLeft(1).PaddingRight(1)
+	defaultStyle.Header = defaultStyle.Header.Bold(true).Align(lipgloss.Left).PaddingLeft(0).PaddingRight(1)
+	defaultStyle.Cell = defaultStyle.Cell.PaddingLeft(0).PaddingRight(1)
 	defaultStyle.Selected = defaultStyle.Cell
 
 	// Set the default styles.
@@ -270,35 +260,63 @@ func createAndConfigureTable(columns []table.Column, tableRows []table.Row) tabl
 	return t
 }
 
-// renderTableWithConditionalStyling renders the table with proper conditional styling.
-func renderTableWithConditionalStyling(t *table.Model, rows []toolRow) string {
-	// Get the base table view.
-	tableView := t.View()
+// tableStyles holds the styles used for table rendering.
+type tableStyles struct {
+	active      lipgloss.Style
+	installed   lipgloss.Style
+	uninstalled lipgloss.Style
+}
 
-	// Split into lines.
+// newTableStyles creates the default styles for table rendering.
+func newTableStyles() tableStyles {
+	return tableStyles{
+		active:      lipgloss.NewStyle().Foreground(lipgloss.Color("42")),  // Green for active/default.
+		installed:   lipgloss.NewStyle().Foreground(lipgloss.Color("8")),   // Gray for installed non-default.
+		uninstalled: lipgloss.NewStyle().Foreground(lipgloss.Color("240")), // Gray for uninstalled rows.
+	}
+}
+
+// styleRowLine applies styling to a single row line based on the row data.
+func styleRowLine(line string, rowData *toolRow, styles *tableStyles) string {
+	if !rowData.isInstalled {
+		return styles.uninstalled.Render(line)
+	}
+	return styleInstalledRowLine(line, rowData, styles)
+}
+
+// styleInstalledRowLine applies status indicator styling to an installed row.
+func styleInstalledRowLine(line string, rowData *toolRow, styles *tableStyles) string {
+	paddedIndicator := " " + activeIndicatorChar
+	if !strings.Contains(line, paddedIndicator) {
+		return line
+	}
+
+	var styledIndicator string
+	if rowData.isDefault {
+		styledIndicator = " " + styles.active.Render(activeIndicatorChar)
+	} else {
+		styledIndicator = " " + styles.installed.Render(installedIndicatorChar)
+	}
+	return strings.Replace(line, paddedIndicator, styledIndicator, 1)
+}
+
+// renderTableWithConditionalStyling renders the table with proper conditional styling.
+// This applies both status indicator coloring and row-level styling based on install state.
+func renderTableWithConditionalStyling(t *table.Model, rows []toolRow) string {
+	tableView := t.View()
+	styles := newTableStyles()
 	lines := strings.Split(tableView, "\n")
 
-	// Apply conditional styling to each row.
 	for i, line := range lines {
-		if i == 0 {
-			// Header line - keep as is.
-			continue
-		}
-
-		// Skip empty lines.
-		if strings.TrimSpace(line) == "" {
+		// Skip header line and empty lines.
+		if i == 0 || strings.TrimSpace(line) == "" {
 			continue
 		}
 
 		// Apply styling based on row data (adjust index for header).
 		rowIndex := i - 1
 		if rowIndex < len(rows) {
-			rowData := rows[rowIndex]
-			if !rowData.isInstalled {
-				// Gray for uninstalled - preserve the exact line structure.
-				lines[i] = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(line)
-			}
-			// Default and installed non-default stay white (default color).
+			lines[i] = styleRowLine(line, &rows[rowIndex], &styles)
 		}
 	}
 

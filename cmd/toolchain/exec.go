@@ -1,21 +1,35 @@
 package toolchain
 
 import (
+	"errors"
+	"os/exec"
+
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/toolchain"
 )
 
 var execCmd = &cobra.Command{
-	Use:   "exec <tool@version> [args...]",
-	Short: "Execute a tool with specified version",
-	Long:  `Execute a tool with a specific version, installing it if necessary.`,
-	Args:  cobra.MinimumNArgs(1),
+	Use:          "exec <tool@version> [-- args...]",
+	Short:        "Execute a tool with specified version",
+	Long:         `Execute a tool with a specific version, installing it if necessary.`,
+	Args:         cobra.MinimumNArgs(1),
+	SilenceUsage: true, // Don't show usage on error (tool's output is sufficient).
 	RunE: func(cmd *cobra.Command, args []string) error {
 		installer := toolchain.NewInstaller()
-		return toolchain.RunExecCommand(installer, args)
+		err := toolchain.RunExecCommand(installer, args)
+		if err != nil {
+			// If the executed tool returned a non-zero exit code, exit with
+			// that code without showing any error message.
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				errUtils.OsExit(exitErr.ExitCode())
+			}
+		}
+		return err
 	},
 }
 

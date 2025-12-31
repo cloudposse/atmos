@@ -60,7 +60,10 @@ func run() int {
 		}
 		err := cmd.ExecuteVersion()
 		if err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", "")
+			errUtils.CaptureError(err)
+			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+			os.Stderr.WriteString(formatted + "\n")
+			return errUtils.GetExitCode(err)
 		}
 		return 0 // Exit normally after printing version
 	}

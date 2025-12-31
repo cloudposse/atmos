@@ -148,9 +148,9 @@ func buildToolRow(installer *Installer, info toolRowInfo) toolRow {
 }
 
 // getInstallationMetadata retrieves status, install date, and size for a binary.
-// Status is empty string for not installed (no indicator shown).
+// Status uses consistent 2-char width: "  " for not installed, " ●" for installed.
 func getInstallationMetadata(binaryPath string, isInstalled bool) (status, installDate, size string) {
-	status = "" // Empty for not installed - no dot shown.
+	status = "  " // Two spaces for not installed - maintains column width.
 	installDate = notAvailablePlaceholder
 	size = notAvailablePlaceholder
 
@@ -158,7 +158,7 @@ func getInstallationMetadata(binaryPath string, isInstalled bool) (status, insta
 		return status, installDate, size
 	}
 
-	status = installedIndicatorChar // Will be styled later based on isDefault.
+	status = " " + installedIndicatorChar // Space + dot for consistent 2-char visual width.
 	fileInfo, err := os.Stat(binaryPath)
 	if err != nil {
 		// Debug: log the error.

@@ -173,10 +173,13 @@ func (ar *AquaRegistry) GetToolWithVersion(owner, repo, version string) (*regist
 		return nil, err
 	}
 
-	// If the tool has version overrides, we need to fetch the full registry file
-	// and resolve the correct asset template for this version
-	if tool.Type == "github_release" {
-		return ar.resolveVersionOverrides(owner, repo, version)
+	// Both github_release and http type tools can have version overrides
+	// that need to be resolved (e.g., kubectl has version-specific URLs).
+	if tool.Type == "github_release" || tool.Type == "http" {
+		// Use the SourceURL from GetTool to fetch the same registry file
+		// for version override resolution. This handles nested paths like
+		// kubernetes/kubernetes/kubectl correctly.
+		return ar.resolveVersionOverrides(tool.SourceURL, version)
 	}
 
 	return tool, nil
@@ -186,6 +189,7 @@ func (ar *AquaRegistry) GetToolWithVersion(owner, repo, version string) (*regist
 type versionOverride struct {
 	VersionConstraint string `yaml:"version_constraint"`
 	Asset             string `yaml:"asset"`
+	URL               string `yaml:"url"` // Alternative to Asset for http type tools.
 	Format            string `yaml:"format"`
 	Files             []struct {
 		Name string `yaml:"name"`
@@ -193,9 +197,12 @@ type versionOverride struct {
 }
 
 // applyVersionOverride applies a version override to the tool.
-func applyVersionOverride(tool *registry.Tool, override versionOverride, version string) {
+func applyVersionOverride(tool *registry.Tool, override *versionOverride, version string) {
+	// Use Asset if specified, otherwise fall back to URL (used by http type tools).
 	if override.Asset != "" {
 		tool.Asset = override.Asset
+	} else if override.URL != "" {
+		tool.Asset = override.URL
 	}
 	if override.Format != "" {
 		tool.Format = override.Format
@@ -217,19 +224,25 @@ type registryPackage struct {
 }
 
 // resolveVersionOverrides fetches the full registry file and resolves version-specific overrides.
-func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*registry.Tool, error) {
-	registryURL := fmt.Sprintf("https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs/%s/%s/registry.yaml", owner, repo)
+// The sourceURL parameter should be the exact URL where the tool's registry.yaml was found,
+// which handles nested paths like kubernetes/kubernetes/kubectl correctly.
+func (ar *AquaRegistry) resolveVersionOverrides(sourceURL, version string) (*registry.Tool, error) {
+	if sourceURL == "" {
+		return nil, fmt.Errorf("%w: source URL is required for version override resolution", registry.ErrToolNotFound)
+	}
 
-	pkgDef, err := ar.fetchRegistryPackage(registryURL)
+	pkgDef, err := ar.fetchRegistryPackage(sourceURL)
 	if err != nil {
 		return nil, err
 	}
 
 	tool := &registry.Tool{
-		Name:      repo,
+		Name:      pkgDef.RepoName,
 		Type:      pkgDef.Type,
 		RepoOwner: pkgDef.RepoOwner,
 		RepoName:  pkgDef.RepoName,
+		Asset:     pkgDef.URL,
+		SourceURL: sourceURL,
 	}
 
 	selectedIdx := findMatchingOverride(pkgDef.VersionOverrides, version)
@@ -238,7 +251,7 @@ func (ar *AquaRegistry) resolveVersionOverrides(owner, repo, version string) (*r
 		return tool, nil
 	}
 
-	applyVersionOverride(tool, pkgDef.VersionOverrides[selectedIdx], version)
+	applyVersionOverride(tool, &pkgDef.VersionOverrides[selectedIdx], version)
 	return tool, nil
 }
 
@@ -323,7 +336,12 @@ func (ar *AquaRegistry) fetchRegistryFile(url string) (*registry.Tool, error) {
 
 	// Check cache first
 	if data, err := os.ReadFile(cacheFile); err == nil {
-		return ar.parseRegistryFile(data)
+		tool, err := ar.parseRegistryFile(data)
+		if err != nil {
+			return nil, err
+		}
+		tool.SourceURL = url
+		return tool, nil
 	}
 
 	// Fetch from remote
@@ -349,7 +367,12 @@ func (ar *AquaRegistry) fetchRegistryFile(url string) (*registry.Tool, error) {
 		log.Debug("Failed to cache registry file", "error", err)
 	}
 
-	return ar.parseRegistryFile(data)
+	tool, err := ar.parseRegistryFile(data)
+	if err != nil {
+		return nil, err
+	}
+	tool.SourceURL = url
+	return tool, nil
 }
 
 // parseRegistryFile parses Aqua registry YAML data.

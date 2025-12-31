@@ -154,6 +154,23 @@ atmos toolchain install yq@4.44.1
 atmos toolchain which jq
 ```
 
+### Troubleshooting
+
+If tool installation fails, check for these common issues:
+
+| Error Message | Cause | Solution |
+|--------------|-------|----------|
+| `tool not found in registry` | Tool name not matching registry entry | Verify `name` field in registry.yaml matches the tool name you're installing |
+| `no matching asset found` | Asset pattern doesn't match release | Check `asset` field template against actual GitHub release asset names |
+| `failed to fetch registry` | Registry source unreachable | Verify `source` URL is accessible; check network/firewall settings |
+| `unsupported platform` | Missing OS/arch in replacements | Add `replacements` for your platform in the package definition |
+
+Use verbose logging to debug issues:
+
+```bash
+ATMOS_LOGS_LEVEL=Debug atmos toolchain install tool@version
+```
+
 ## Creating Your Own Registry
 
 1. **Create registry file** (`my-registry/registry.yaml`):
@@ -214,7 +231,23 @@ source: https://gitlab.com/org/registry/-/tree/main/pkgs
 1. **Version Constraints**: Use semantic version constraints to limit allowed versions
 2. **Testing**: Test tool definitions across platforms (Linux, macOS, Windows)
 3. **Documentation**: Document custom tools and their purpose in your registry
-4. **Priority**: Set appropriate priority (higher = checked first)
+4. **Priority**: Set appropriate priority (higher = checked first). Example:
+   ```yaml
+   toolchain:
+     registries:
+       # Corporate registry checked first (highest priority)
+       - name: corporate
+         priority: 100
+         source: https://registry.corp.com/registry.yaml
+       # Team overrides checked second
+       - name: team-overrides
+         priority: 50
+         source: file://./team-registry/registry.yaml
+       # Public Aqua registry as fallback (lowest priority)
+       - name: aqua-public
+         priority: 1
+         source: https://github.com/aquaproj/aqua-registry
+   ```
 5. **Fallback**: Always include aqua-public registry as fallback
 6. **Security**: For corporate registries, use authentication and HTTPS
 7. **Mirroring**: Consider mirroring public registries for reliability
