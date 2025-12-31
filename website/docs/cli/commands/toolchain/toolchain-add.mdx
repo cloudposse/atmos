@@ -3,6 +3,7 @@ title: atmos toolchain add
 sidebar_label: add
 sidebar_class_name: command
 id: add
+description: Add tool dependencies to your .tool-versions file for version-controlled toolchain management.
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
@@ -32,13 +33,17 @@ atmos toolchain add hashicorp/terraform 1.5.0
 ## Arguments
 
 <dl>
-    <dt>`package` <em>(required)</em></dt>
+    <dt>`tool` <em>(required)</em></dt>
     <dd>
-        Package to install from the aqua repository
+        Tool to add from the registry. Can be a short name (alias) or full `owner/repo` format.
+
+        Examples: `terraform`, `kubectl`, `hashicorp/terraform`, `kubernetes-sigs/kubectl`
     </dd>
     <dt>`version` <em>(required)</em></dt>
     <dd>
-        The version to add and update
+        The version to add. Use semantic versioning without the `v` prefix.
+
+        Examples: `1.9.8`, `1.28.0`, `latest`
     </dd>
 </dl>
 

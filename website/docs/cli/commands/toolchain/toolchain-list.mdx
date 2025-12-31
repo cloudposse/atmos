@@ -3,13 +3,14 @@ title: atmos toolchain list
 sidebar_label: list
 sidebar_class_name: command
 id: list
+description: Display all CLI tools configured in your .tool-versions file with installation status.
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Display all CLI tools registered in your toolchain configuration. This gives you a quick overview of which tool versions are available for use in your components, commands, and workflows.
+Display all CLI tools registered in your toolchain configuration. This gives you a quick overview of which tool versions are available for use in your components, commands, and workflows, along with their installation status.
 </Intro>
 
 <Screengrab title="atmos toolchain list --help" slug="atmos-toolchain-list--help" />
@@ -24,6 +25,177 @@ atmos toolchain list
 
 ## Examples
 
+### List All Tools
+
 ```shell
 atmos toolchain list
 ```
+
+Example output:
+```
+Toolchain Tools:
+
+  STATUS  TOOL                      VERSION   SIZE      INSTALLED
+  ●       hashicorp/terraform       1.9.8     85.2 MB   2024-01-15
+  ●       opentofu/opentofu         1.10.3    92.1 MB   2024-01-15
+  ○       kubernetes-sigs/kubectl   1.28.0    -         Not installed
+  ●       helm/helm                 3.13.0    48.5 MB   2024-01-14
+
+3 installed, 1 pending (225.8 MB total)
+```
+
+### List with JSON Output
+
+```shell
+atmos toolchain list --format json
+```
+
+Example output:
+```json
+{
+  "tools": [
+    {
+      "name": "hashicorp/terraform",
+      "version": "1.9.8",
+      "installed": true,
+      "size": 85200000,
+      "installed_at": "2024-01-15T10:30:00Z"
+    }
+  ],
+  "summary": {
+    "installed": 3,
+    "pending": 1,
+    "total_size": 225800000
+  }
+}
+```
+
+### Filter by Status
+
+```shell
+# Show only installed tools
+atmos toolchain list --installed-only
+
+# Show only pending (not installed) tools
+atmos toolchain list --pending-only
+```
+
+## Flags
+
+<dl>
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `table`, `json`, or `yaml`. Default: `table`
+
+        Environment variable: `ATMOS_TOOLCHAIN_FORMAT`
+    </dd>
+
+    <dt>`--installed-only` <em>(optional)</em></dt>
+    <dd>
+        Show only installed tools.
+
+        Environment variable: `ATMOS_TOOLCHAIN_INSTALLED_ONLY`
+    </dd>
+
+    <dt>`--pending-only` <em>(optional)</em></dt>
+    <dd>
+        Show only tools that are in `.tool-versions` but not yet installed.
+
+        Environment variable: `ATMOS_TOOLCHAIN_PENDING_ONLY`
+    </dd>
+</dl>
+
+## Status Indicators
+
+The table output shows visual indicators for each tool's status:
+
+| Indicator | Meaning | Description |
+|-----------|---------|-------------|
+| Green dot (●) | Installed | Tool is installed and ready to use |
+| Gray dot (○) | Pending | Tool is in `.tool-versions` but not installed yet |
+
+## Use Cases
+
+### Verify Installation Status
+
+Check which tools are ready to use:
+
+```shell
+# See all tools with status
+atmos toolchain list
+
+# Find tools that need installation
+atmos toolchain list --pending-only
+```
+
+### Check Disk Usage
+
+Review installed tools and their sizes:
+
+```shell
+# List with sizes
+atmos toolchain list
+
+# Get detailed usage
+atmos toolchain du
+```
+
+### Export Tool Inventory
+
+Generate a report of your toolchain:
+
+```shell
+# Export as JSON for automation
+atmos toolchain list --format json > toolchain-inventory.json
+
+# Export as YAML for documentation
+atmos toolchain list --format yaml > toolchain-inventory.yaml
+```
+
+### CI/CD Verification
+
+Verify tools are installed in CI pipelines:
+
+```shell
+# Check installation status
+atmos toolchain list --pending-only
+
+# If any pending, install them
+if [ -n "$(atmos toolchain list --pending-only)" ]; then
+  atmos toolchain install
+fi
+```
+
+## Comparison with Related Commands
+
+| Command | Purpose | Shows |
+|---------|---------|-------|
+| `list` | Installation status | Tools from `.tool-versions` with install status, sizes, dates |
+| `get` | Version info | Configured versions (no installation details) |
+| `registry list` | Registry browsing | All available tools in a registry |
+
+```shell
+# list shows installation details
+atmos toolchain list
+# Output: Table with status, sizes, dates
+
+# get shows version info
+atmos toolchain get terraform
+# Output: terraform: 1.9.8
+
+# registry list shows available tools
+atmos toolchain registry list aqua
+# Output: All tools in Aqua registry
+```
+
+## Related Commands
+
+- [`atmos toolchain get`](/cli/commands/toolchain/get) - Get version for a specific tool
+- [`atmos toolchain install`](/cli/commands/toolchain/install) - Install pending tools
+- [`atmos toolchain du`](/cli/commands/toolchain/du) - View disk usage details
+- [`atmos toolchain registry list`](/cli/commands/toolchain/registry/registry-list) - Browse registry tools
+
+## Related Documentation
+
+- [Toolchain Overview](/cli/commands/toolchain/usage) - Complete toolchain documentation
+- [Version Management](/cli/commands/toolchain/usage#version-management) - Managing tool versions

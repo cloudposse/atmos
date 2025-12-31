@@ -3,6 +3,7 @@ title: atmos toolchain set
 sidebar_label: set
 sidebar_class_name: command
 id: set
+description: Set or update the default version for a tool in your toolchain configuration.
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
@@ -34,13 +35,17 @@ atmos toolchain set --file /path/to/.tool-versions kubectl 1.28.0
 ## Arguments
 
 <dl>
-    <dt>`package` <em>(required)</em></dt>
+    <dt>`tool` <em>(required)</em></dt>
     <dd>
-        Package to set in the toolchain configuration
+        Tool to set the version for. Can be a short name (alias) or full `owner/repo` format.
+
+        Examples: `terraform`, `kubectl`, `hashicorp/terraform`
     </dd>
     <dt>`version` <em>(optional)</em></dt>
     <dd>
-        The version to set (if omitted, interactive version selection is used)
+        The version to set as default. If omitted, interactive version selection is used.
+
+        Examples: `1.9.8`, `1.28.0`
     </dd>
 </dl>
 

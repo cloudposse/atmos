@@ -3,6 +3,7 @@ title: atmos toolchain remove
 sidebar_label: remove
 sidebar_class_name: command
 id: remove
+description: Remove tool entries from your .tool-versions file when they are no longer needed.
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
@@ -29,15 +30,18 @@ atmos toolchain remove terraform
 atmos toolchain remove hashicorp/terraform
 atmos toolchain remove terraform@1.11.4
 atmos toolchain remove hashicorp/terraform@1.11.4
-atmos toolchain remove --file /path/to/.tool-versions kubectl@1.28.0`,
+atmos toolchain remove --file /path/to/.tool-versions kubectl@1.28.0
 ```
 
 ## Arguments
 
 <dl>
-    <dt>`package` <em>(required)</em></dt>
+    <dt>`tool` <em>(required)</em></dt>
     <dd>
-        Package to remove from the toolchain configuration
+        Tool to remove from the toolchain configuration. Can be a short name (alias) or full `owner/repo` format.
+        Optionally include `@version` to remove only a specific version.
+
+        Examples: `terraform`, `hashicorp/terraform`, `terraform@1.9.8`
     </dd>
 </dl>
 

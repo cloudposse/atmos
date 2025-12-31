@@ -3,6 +3,7 @@ title: atmos toolchain versions
 sidebar_label: versions
 sidebar_class_name: command
 id: versions
+description: Browse available versions of any toolchain tool from configured registries.
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
@@ -34,9 +35,11 @@ atmos toolchain versions terraform --file path-to-config
 ## Arguments
 
 <dl>
-    <dt>`package` <em>(required)</em></dt>
+    <dt>`tool` <em>(required)</em></dt>
     <dd>
-        Package to get versions for
+        Tool to get versions for. Can be a short name (alias) or full `owner/repo` format.
+
+        Examples: `terraform`, `kubectl`, `hashicorp/terraform`
     </dd>
 </dl>
 

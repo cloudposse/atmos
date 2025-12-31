@@ -3,6 +3,7 @@ title: atmos toolchain install
 sidebar_label: install
 sidebar_class_name: command
 id: install
+description: Install CLI tools required by your Atmos components, commands, and workflows.
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
@@ -25,17 +26,21 @@ atmos toolchain install
 ## Examples
 
 ```shell
-atmos toolchain install suzuki-shunsuke/github-comment@v3.5.0
-atmos toolchain install hashicorp/terraform@v1.5.0
+atmos toolchain install suzuki-shunsuke/github-comment@3.5.0
+atmos toolchain install hashicorp/terraform@1.5.0
+atmos toolchain install terraform@1.9.8    # Using alias
 atmos toolchain install                    # Install from .tool-versions file
 ```
 
 ## Arguments
 
 <dl>
-    <dt>`package@version` <em>(optional)</em></dt>
+    <dt>`tool@version` <em>(optional)</em></dt>
     <dd>
-        Package to install from the aqua repository
+        Tool to install from the registry. Can be a short name (alias) or full `owner/repo` format.
+        If omitted, installs all tools from `.tool-versions` file.
+
+        Examples: `terraform@1.9.8`, `hashicorp/terraform@1.5.0`, `kubectl@1.28.0`
     </dd>
 </dl>
 

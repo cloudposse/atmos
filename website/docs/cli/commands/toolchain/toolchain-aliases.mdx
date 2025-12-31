@@ -3,10 +3,12 @@ title: atmos toolchain aliases
 sidebar_label: aliases
 sidebar_class_name: command
 id: aliases
+description: View all configured toolchain aliases for convenient shorthand tool names.
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
 
 <Intro>
 View all configured toolchain aliases to quickly identify which shorthand commands are available for your tools. This helps you discover convenient aliases when working with your components and workflows.
@@ -24,6 +26,139 @@ atmos toolchain aliases
 
 ## Examples
 
+### List All Aliases
+
 ```shell
 atmos toolchain aliases
 ```
+
+Example output:
+```
+Configured Aliases:
+
+  ALIAS        TOOL
+  terraform    hashicorp/terraform
+  tf           hashicorp/terraform
+  tofu         opentofu/opentofu
+  kubectl      kubernetes-sigs/kubectl
+  helm         helm/helm
+  tflint       terraform-linters/tflint
+
+6 aliases configured
+```
+
+### Use with JSON Output
+
+```shell
+atmos toolchain aliases --format json
+```
+
+Example output:
+```json
+{
+  "aliases": {
+    "terraform": "hashicorp/terraform",
+    "tf": "hashicorp/terraform",
+    "tofu": "opentofu/opentofu",
+    "kubectl": "kubernetes-sigs/kubectl"
+  }
+}
+```
+
+## Flags
+
+<dl>
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `table`, `json`, or `yaml`. Default: `table`
+
+        Environment variable: `ATMOS_TOOLCHAIN_FORMAT`
+    </dd>
+</dl>
+
+## Configuration
+
+Aliases are configured in your `atmos.yaml` file:
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  aliases:
+    # HashiCorp tools
+    terraform: hashicorp/terraform
+    tf: hashicorp/terraform
+    packer: hashicorp/packer
+    vault: hashicorp/vault
+
+    # OpenTofu
+    opentofu: opentofu/opentofu
+    tofu: opentofu/opentofu
+
+    # Kubernetes tools
+    kubectl: kubernetes-sigs/kubectl
+    helm: helm/helm
+    k9s: derailed/k9s
+
+    # Terraform ecosystem
+    tflint: terraform-linters/tflint
+    tfsec: aquasecurity/tfsec
+```
+</File>
+
+## Use Cases
+
+### Discover Available Shortcuts
+
+See which aliases are configured before running commands:
+
+```shell
+# Check available aliases
+atmos toolchain aliases
+
+# Use the alias
+atmos toolchain install tf@1.9.8
+```
+
+### Verify Alias Configuration
+
+After modifying `atmos.yaml`, verify aliases are configured correctly:
+
+```shell
+# Check aliases loaded properly
+atmos toolchain aliases
+
+# Test with a command
+atmos toolchain info tf
+```
+
+### Export for Documentation
+
+Generate alias documentation for your team:
+
+```shell
+# Export as YAML for documentation
+atmos toolchain aliases --format yaml > docs/tool-aliases.yaml
+
+# Export as JSON for scripts
+atmos toolchain aliases --format json > .toolchain-aliases.json
+```
+
+## How Aliases Work
+
+Aliases provide shorthand names that map to full `owner/repo` tool identifiers:
+
+1. **Resolution order**: Aliases are resolved before registry lookups
+2. **Multiple mappings**: Multiple aliases can point to the same tool (e.g., `tf` and `terraform`)
+3. **Universal usage**: Aliases work with all toolchain commands (`install`, `exec`, `which`, etc.)
+4. **Registry agnostic**: Works with all registry types (Aqua, inline, custom)
+
+## Related Commands
+
+- [`atmos toolchain install`](/cli/commands/toolchain/install) - Install tools using aliases
+- [`atmos toolchain info`](/cli/commands/toolchain/info) - View tool information using aliases
+- [`atmos toolchain exec`](/cli/commands/toolchain/exec) - Execute tools using aliases
+
+## Related Documentation
+
+- [Toolchain Overview](/cli/commands/toolchain/usage) - Complete toolchain documentation
+- [Tool Aliases Configuration](/cli/commands/toolchain/usage#tool-aliases) - Alias configuration details

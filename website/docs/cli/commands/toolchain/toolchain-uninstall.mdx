@@ -3,6 +3,7 @@ title: atmos toolchain uninstall
 sidebar_label: uninstall
 sidebar_class_name: command
 id: uninstall
+description: Uninstall specific tool versions or all tools from your local toolchain cache.
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
@@ -16,16 +17,193 @@ Uninstall specific tool versions or all tools from your local toolchain cache. T
 
 ## Usage
 
-Execute the `toolchain uninstall` command like this:
+Execute the `atmos toolchain uninstall` command like this:
 
 ```shell
-atmos toolchain uninstall <tool> <version>
+atmos toolchain uninstall [tool@version]
 ```
+
+If no tool is specified, uninstalls all tools from `.tool-versions`.
 
 ## Examples
 
+### Uninstall Specific Version
+
 ```shell
 atmos toolchain uninstall terraform@1.9.8
-atmos toolchain uninstall hashicorp/terraform@1.11.4
-atmos toolchain uninstall                    # Uninstall all tools from .tool-versions
 ```
+
+Example output:
+```
+Uninstalling terraform@1.9.8...
+  Removed: .tools/bin/hashicorp/terraform/1.9.8/terraform (85.2 MB)
+
+Successfully uninstalled terraform@1.9.8
+```
+
+### Uninstall Tool (All Versions)
+
+```shell
+atmos toolchain uninstall terraform
+```
+
+Removes all installed versions of terraform.
+
+### Uninstall Using Full Path
+
+```shell
+atmos toolchain uninstall hashicorp/terraform@1.9.8
+```
+
+### Uninstall All Tools
+
+```shell
+atmos toolchain uninstall
+```
+
+Uninstalls all tools listed in `.tool-versions`. Prompts for confirmation.
+
+### Force Uninstall
+
+```shell
+atmos toolchain uninstall --force terraform@1.9.8
+```
+
+Skips confirmation prompt.
+
+## Arguments
+
+<dl>
+    <dt>`tool[@version]` <em>(optional)</em></dt>
+    <dd>
+        Tool to uninstall. Can be a short name (alias) or full `owner/repo` format.
+        Include `@version` to uninstall a specific version.
+        If omitted, uninstalls all tools from `.tool-versions`.
+
+        Examples: `terraform`, `terraform@1.9.8`, `hashicorp/terraform@1.9.8`
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--force` <em>(optional)</em></dt>
+    <dd>
+        Skip confirmation prompt and immediately uninstall.
+
+        Environment variable: `ATMOS_TOOLCHAIN_FORCE`
+    </dd>
+
+    <dt>`--keep-config` <em>(optional)</em></dt>
+    <dd>
+        Keep the tool entry in `.tool-versions` after uninstalling. Default: true
+
+        Use `--keep-config=false` to also remove from `.tool-versions`.
+
+        Environment variable: `ATMOS_TOOLCHAIN_KEEP_CONFIG`
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be uninstalled without actually removing anything.
+
+        Environment variable: `ATMOS_TOOLCHAIN_DRY_RUN`
+    </dd>
+</dl>
+
+## Use Cases
+
+### Free Up Space for Specific Tool
+
+Remove old versions to save disk space:
+
+```shell
+# Check what's installed
+atmos toolchain list
+
+# Remove old version
+atmos toolchain uninstall terraform@1.8.5
+
+# Keep only current version
+atmos toolchain list
+```
+
+### Switch Between Versions
+
+Uninstall before installing a different version:
+
+```shell
+# Remove current version
+atmos toolchain uninstall opentofu@1.9.0
+
+# Install new version
+atmos toolchain install opentofu@1.10.3
+```
+
+### Clean Up After Testing
+
+Remove tools installed for testing:
+
+```shell
+# Uninstall test tools
+atmos toolchain uninstall tflint@0.44.0
+atmos toolchain uninstall tfsec@1.28.0
+
+# Or remove from config too
+atmos toolchain uninstall --keep-config=false tflint
+```
+
+### Preview Before Uninstalling
+
+Check what would be removed:
+
+```shell
+# Dry run
+atmos toolchain uninstall --dry-run terraform@1.8.5
+
+# If satisfied, actually uninstall
+atmos toolchain uninstall terraform@1.8.5
+```
+
+### CI/CD Cleanup
+
+Clean up after pipeline runs:
+
+```shell
+# Uninstall all without prompts
+atmos toolchain uninstall --force
+```
+
+## Difference from Clean
+
+| Command | Purpose | Keeps `.tool-versions` | Selective |
+|---------|---------|------------------------|-----------|
+| `uninstall` | Remove specific tools | Yes (default) | Yes |
+| `clean` | Remove all tools and cache | Yes | No |
+
+```shell
+# uninstall - selective removal
+atmos toolchain uninstall terraform@1.8.5
+
+# clean - removes everything
+atmos toolchain clean
+```
+
+## Notes
+
+- By default, the tool entry remains in `.tool-versions` for easy reinstallation
+- Use `--keep-config=false` to also remove from `.tool-versions`
+- Running `atmos toolchain install` will reinstall any tools still in `.tool-versions`
+- Use `atmos toolchain remove` to only remove from `.tool-versions` without uninstalling
+
+## Related Commands
+
+- [`atmos toolchain remove`](/cli/commands/toolchain/remove) - Remove from `.tool-versions` only
+- [`atmos toolchain clean`](/cli/commands/toolchain/clean) - Clean all tools and cache
+- [`atmos toolchain install`](/cli/commands/toolchain/install) - Reinstall tools
+- [`atmos toolchain list`](/cli/commands/toolchain/list) - View installed tools
+
+## Related Documentation
+
+- [Toolchain Overview](/cli/commands/toolchain/usage) - Complete toolchain documentation
+- [Installation Commands](/cli/commands/toolchain/usage#installation-commands) - Install/uninstall workflow
