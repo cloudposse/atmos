@@ -299,6 +299,10 @@ func TestPrintAuthExecTip(t *testing.T) {
 			name:         "shows tip with different identity name",
 			identityName: "dev-admin",
 		},
+		{
+			name:         "handles empty identity name",
+			identityName: "",
+		},
 	}
 
 	for _, tt := range tests {
