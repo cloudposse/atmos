@@ -247,6 +247,21 @@ html[data-theme='dark'] .slide-deck__tool-button--active {
   background: rgba(30, 91, 184, 0.2);
 }
 
+.slide-deck__tool-button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+/* Spinning animation for loading states */
+.slide-deck__spin {
+  animation: slide-deck-spin 1s linear infinite;
+}
+
+@keyframes slide-deck-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
 .slide-deck__progress {
   font-size: 0.8125rem;
   color: var(--ifm-color-emphasis-500);

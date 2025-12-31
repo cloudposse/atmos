@@ -8,11 +8,16 @@ import {
   RiMenuLine,
   RiSpeakLine,
   RiArrowGoBackLine,
+  RiPlayLine,
+  RiPauseLine,
+  RiLoader4Line,
 } from 'react-icons/ri';
 import { SlideDeckProvider, useSlideDeck } from './SlideDeckContext';
 import { SlideDrawer } from './SlideDrawer';
 import { SlideNotesPanel } from './SlideNotesPanel';
 import { SlideNotesPopout } from './SlideNotesPopout';
+import { TTSPlayer } from './TTSPlayer';
+import { useTTS } from './useTTS';
 import { Tooltip } from './Tooltip';
 import type { SlideDeckProps } from './types';
 import './SlideDeck.css';
@@ -39,9 +44,50 @@ function SlideDeckInner({
     toggleNotes,
     notesPreferences,
     setNotesPopout,
+    currentNotes,
   } = useSlideDeck();
 
   const { position: notesPosition, displayMode: notesDisplayMode, isPopout: notesPopout } = notesPreferences;
+
+  // Extract deck name from URL for TTS.
+  const deckName = typeof window !== 'undefined'
+    ? window.location.pathname.split('/slides/').pop()?.split('/')[0] || 'unknown'
+    : 'unknown';
+
+  // TTS hook for audio playback.
+  const tts = useTTS({
+    deckName,
+    onEnded: () => {
+      // Auto-advance to next slide if not on last slide.
+      if (currentSlide < totalSlides) {
+        nextSlide();
+      }
+    },
+  });
+
+  // Track if TTS was playing for auto-continue on slide change.
+  const wasPlayingRef = useRef(false);
+  useEffect(() => {
+    wasPlayingRef.current = tts.isPlaying;
+  }, [tts.isPlaying]);
+
+  // Auto-play notes when slide changes if TTS was playing.
+  useEffect(() => {
+    if (wasPlayingRef.current && currentNotes) {
+      tts.play(currentSlide);
+    }
+  }, [currentSlide]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Handle TTS play/pause toggle.
+  const handleTTSPlayPause = useCallback(() => {
+    if (tts.isPlaying) {
+      tts.pause();
+    } else if (tts.isPaused) {
+      tts.resume();
+    } else if (currentNotes) {
+      tts.play(currentSlide);
+    }
+  }, [tts, currentNotes, currentSlide]);
 
   // Toggle popout mode (bring notes back from popout).
   const toggleNotesPopout = useCallback(() => {
@@ -151,8 +197,14 @@ function SlideDeckInner({
     } else if (e.key === 'n' || e.key === 'N') {
       e.preventDefault();
       toggleNotes();
+    } else if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault();
+      handleTTSPlayPause();
+    } else if (e.key === 'm' || e.key === 'M') {
+      e.preventDefault();
+      tts.toggleMute();
     }
-  }, [nextSlide, prevSlide, isFullscreen, toggleFullscreen, isDrawerOpen, closeDrawer, showControlsTemporarily, showNotes, toggleNotes]);
+  }, [nextSlide, prevSlide, isFullscreen, toggleFullscreen, isDrawerOpen, closeDrawer, showControlsTemporarily, showNotes, toggleNotes, handleTTSPlayPause, tts]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -268,6 +320,26 @@ function SlideDeckInner({
           </button>
         </Tooltip>
 
+        {/* TTS Play/Pause button - only show when slide has notes */}
+        {currentNotes && (
+          <Tooltip content={tts.isPlaying ? 'Pause (P)' : tts.isPaused ? 'Resume (P)' : 'Play Notes (P)'} position="top">
+            <button
+              className={`slide-deck__tool-button ${tts.isPlaying ? 'slide-deck__tool-button--active' : ''}`}
+              onClick={handleTTSPlayPause}
+              disabled={tts.isLoading}
+              aria-label={tts.isPlaying ? 'Pause' : 'Play notes'}
+            >
+              {tts.isLoading ? (
+                <RiLoader4Line className="slide-deck__spin" />
+              ) : tts.isPlaying ? (
+                <RiPauseLine />
+              ) : (
+                <RiPlayLine />
+              )}
+            </button>
+          </Tooltip>
+        )}
+
         {showProgress && (
           <div className="slide-deck__progress">
             {currentSlide} / {totalSlides}
@@ -286,6 +358,11 @@ function SlideDeckInner({
           </Tooltip>
         )}
       </div>
+
+      {/* TTS Player bar - shows when playing or paused */}
+      {(tts.isPlaying || tts.isPaused) && (
+        <TTSPlayer tts={tts} currentSlide={currentSlide} />
+      )}
 
       {/* Progress bar */}
       <div className="slide-deck__progress-bar">
