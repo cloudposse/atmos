@@ -21,6 +21,7 @@ acme-platform-dev:
         remote_state_backend: {}
         remote_state_backend_type: ""
         settings: {}
+        source: {}
         stack: acme-platform-dev
         vars:
           bar: bar dev override
@@ -53,6 +54,7 @@ acme-platform-prod:
         remote_state_backend: {}
         remote_state_backend_type: ""
         settings: {}
+        source: {}
         stack: acme-platform-prod
         vars:
           bar: bar prod override
@@ -85,6 +87,7 @@ acme-platform-staging:
         remote_state_backend: {}
         remote_state_backend_type: ""
         settings: {}
+        source: {}
         stack: acme-platform-staging
         vars:
           bar: bar staging override

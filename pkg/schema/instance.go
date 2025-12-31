@@ -9,5 +9,6 @@ type Instance struct {
 	Vars          AtmosSectionMapType `yaml:"vars" json:"vars" mapstructure:"vars"`
 	Env           AtmosSectionMapType `yaml:"env" json:"env" mapstructure:"env"`
 	Backend       AtmosSectionMapType `yaml:"backend" json:"backend" mapstructure:"backend"`
+	Source        AtmosSectionMapType `yaml:"source" json:"source" mapstructure:"source"`
 	Metadata      AtmosSectionMapType `yaml:"metadata" json:"metadata" mapstructure:"metadata"`
 }

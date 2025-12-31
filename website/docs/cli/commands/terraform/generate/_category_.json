@@ -1,0 +1,8 @@
+{
+  "label": "generate",
+  "className": "command",
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/terraform/generate/generate"
+  }
+}
