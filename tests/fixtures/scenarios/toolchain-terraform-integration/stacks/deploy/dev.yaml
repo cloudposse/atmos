@@ -13,7 +13,7 @@ components:
         environment: "dev"
         test_var: "test-value"
 
-    # Component WITHOUT toolchain dependencies (to reproduce the issue)
+    # Component WITHOUT toolchain dependencies
     test-component-no-deps:
       vars:
         environment: "dev"
