@@ -261,6 +261,13 @@ html[data-theme='dark'] .slide-deck__tool-button--active {
   transition: opacity 0.3s ease;
 }
 
+/* Extend progress bar to full width in page mode */
+.markdown .slide-deck__progress-bar,
+.theme-doc-markdown .slide-deck__progress-bar {
+  margin-left: -2rem;
+  margin-right: -2rem;
+}
+
 html[data-theme='dark'] .slide-deck__progress-bar {
   background: var(--ifm-color-emphasis-700);
 }
