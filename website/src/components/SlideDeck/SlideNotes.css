@@ -55,8 +55,15 @@ html[data-theme='dark'] .slide-notes--bottom {
   box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.5);
 }
 
+.slide-notes--bottom .slide-notes__header {
+  padding-left: 2rem;
+  padding-right: 1rem;
+}
+
 .slide-notes--bottom .slide-notes__content {
   min-height: 0;
+  padding-left: 2rem;
+  padding-right: 2rem;
 }
 
 /* Fullscreen mode adjustments */
