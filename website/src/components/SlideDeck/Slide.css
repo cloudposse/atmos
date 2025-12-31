@@ -156,13 +156,15 @@ html[data-theme='dark'] .slide--title {
 @media screen and (max-width: 996px) and (max-height: 500px),
        screen and (max-width: 768px) {
   .slide-deck--fullscreen .slide {
-    padding: 1rem 1.5rem;
+    padding: 0 1.5rem !important;
     overflow-y: auto;
   }
 
   .slide-deck--fullscreen .slide__inner {
     max-width: 95vw;
     width: 100%;
+    margin: auto;
+    padding: 0;
   }
 
   /* Override content layout for mobile fullscreen */
