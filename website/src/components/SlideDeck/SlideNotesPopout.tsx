@@ -32,6 +32,62 @@ export function SlideNotesPopout() {
   const popoutWindowRef = useRef<Window | null>(null);
   const channelRef = useRef<BroadcastChannel | null>(null);
 
+  // Refs to track current values for use in popout initialization.
+  const currentSlideRef = useRef(currentSlide);
+  const totalSlidesRef = useRef(totalSlides);
+  const currentNotesRef = useRef(currentNotes);
+
+  // Keep refs in sync with state.
+  currentSlideRef.current = currentSlide;
+  totalSlidesRef.current = totalSlides;
+  currentNotesRef.current = currentNotes;
+
+  // Helper function to update popout content (used by both init and update effects).
+  const updatePopoutContent = (popout: Window) => {
+    const slideNumEl = popout.document.getElementById('slide-num');
+    const notesContentEl = popout.document.getElementById('notes-content');
+    const prevBtn = popout.document.getElementById('prev-btn') as HTMLButtonElement;
+    const nextBtn = popout.document.getElementById('next-btn') as HTMLButtonElement;
+
+    const slide = currentSlideRef.current;
+    const total = totalSlidesRef.current;
+    const notes = currentNotesRef.current;
+
+    if (slideNumEl) {
+      slideNumEl.textContent = `Slide ${slide} / ${total}`;
+    }
+
+    if (prevBtn) {
+      prevBtn.disabled = slide === 1;
+    }
+
+    if (nextBtn) {
+      nextBtn.disabled = slide === total;
+    }
+
+    if (notesContentEl) {
+      if (notes) {
+        // Convert React node to string if possible.
+        // Use textContent for safety to prevent XSS.
+        const notesText = typeof notes === 'string'
+          ? notes
+          : (notes as React.ReactElement)?.props?.children || 'Notes available';
+        // Clear existing content and create new div safely.
+        notesContentEl.textContent = '';
+        const div = popout.document.createElement('div');
+        div.textContent = typeof notesText === 'string' ? notesText : String(notesText);
+        notesContentEl.appendChild(div);
+      } else {
+        // Clear and create empty state safely.
+        notesContentEl.textContent = '';
+        const empty = popout.document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = 'No notes for this slide.';
+        notesContentEl.appendChild(empty);
+      }
+    }
+  };
+
   // Initialize BroadcastChannel for cross-window sync.
   useEffect(() => {
     if (typeof BroadcastChannel !== 'undefined') {
@@ -81,6 +137,8 @@ export function SlideNotesPopout() {
     }
 
     // Open the popout window.
+    // Note: Some browsers (like Arc) may open this as a tab instead of a popup.
+    // Adding popup=yes helps signal intent but behavior varies by browser.
     const width = 400;
     const height = 500;
     const left = window.screenX + window.outerWidth - width - 50;
@@ -89,7 +147,7 @@ export function SlideNotesPopout() {
     const popout = window.open(
       '',
       'SlideNotesPopout',
-      `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no`
+      `popup=yes,width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no`
     );
 
     if (!popout) {
@@ -250,6 +308,14 @@ export function SlideNotesPopout() {
     `);
     popout.document.close();
 
+    // Immediately update with current slide state (avoids "Loading..." flash).
+    // Use setTimeout to ensure DOM is ready after document.close().
+    setTimeout(() => {
+      if (popout && !popout.closed) {
+        updatePopoutContent(popout);
+      }
+    }, 0);
+
     // Handle popout window being closed by user.
     const checkClosed = setInterval(() => {
       if (popout.closed) {
@@ -269,45 +335,7 @@ export function SlideNotesPopout() {
       return;
     }
 
-    const popout = popoutWindowRef.current;
-    const slideNumEl = popout.document.getElementById('slide-num');
-    const notesContentEl = popout.document.getElementById('notes-content');
-    const prevBtn = popout.document.getElementById('prev-btn') as HTMLButtonElement;
-    const nextBtn = popout.document.getElementById('next-btn') as HTMLButtonElement;
-
-    if (slideNumEl) {
-      slideNumEl.textContent = `Slide ${currentSlide} / ${totalSlides}`;
-    }
-
-    if (prevBtn) {
-      prevBtn.disabled = currentSlide === 1;
-    }
-
-    if (nextBtn) {
-      nextBtn.disabled = currentSlide === totalSlides;
-    }
-
-    if (notesContentEl) {
-      if (currentNotes) {
-        // Convert React node to string if possible.
-        // Use textContent for safety to prevent XSS.
-        const notesText = typeof currentNotes === 'string'
-          ? currentNotes
-          : (currentNotes as React.ReactElement)?.props?.children || 'Notes available';
-        // Clear existing content and create new div safely.
-        notesContentEl.textContent = '';
-        const div = popout.document.createElement('div');
-        div.textContent = typeof notesText === 'string' ? notesText : String(notesText);
-        notesContentEl.appendChild(div);
-      } else {
-        // Clear and create empty state safely.
-        notesContentEl.textContent = '';
-        const empty = popout.document.createElement('div');
-        empty.className = 'empty';
-        empty.textContent = 'No notes for this slide.';
-        notesContentEl.appendChild(empty);
-      }
-    }
+    updatePopoutContent(popoutWindowRef.current);
   }, [currentSlide, totalSlides, currentNotes, notesPreferences.isPopout]);
 
   // This component doesn't render anything in the main window.
