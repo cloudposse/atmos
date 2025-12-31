@@ -164,7 +164,7 @@ html[data-theme='dark'] .slide--title {
     max-width: 95vw;
     width: 100%;
     margin: auto;
-    padding: 0;
+    padding: 0 1rem;
   }
 
   /* Override content layout for mobile fullscreen */
