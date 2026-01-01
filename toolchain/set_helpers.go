@@ -7,6 +7,9 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 )
 
 // toolSpec holds resolved owner, repo, and key for a tool.
@@ -99,7 +102,13 @@ func createVersionListModel(owner, repo string, items []versionItem, scrollSpeed
 }
 
 // runInteractiveSelection runs the interactive version selection UI and returns the selected version.
+// Requires a TTY for interactive input; returns an error in non-TTY environments (CI, piped input).
 func runInteractiveSelection(m *versionListModel) (string, error) {
+	// Check if we have a TTY for interactive selection.
+	if !term.IsTTYSupportForStdin() {
+		return "", fmt.Errorf("%w: interactive version selection requires a TTY. Please specify a version explicitly", errUtils.ErrTTYRequired)
+	}
+
 	p := tea.NewProgram(m)
 	finalModel, err := p.Run()
 	if err != nil {

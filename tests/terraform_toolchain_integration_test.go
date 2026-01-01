@@ -141,6 +141,11 @@ func TestTerraformToolchain_WithDependencies(t *testing.T) {
 func TestTerraformToolchain_WithoutDependencies(t *testing.T) {
 	defer perf.Track(nil, "tests.TestTerraformToolchain_WithoutDependencies")()
 
+	// Skip if running in short mode (CI without terraform).
+	if testing.Short() {
+		t.Skip("Skipping toolchain integration test in short mode")
+	}
+
 	workDir := "fixtures/scenarios/toolchain-terraform-integration"
 	t.Chdir(workDir)
 
