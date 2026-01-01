@@ -462,7 +462,8 @@ func TestSetAWSProfileEnv(t *testing.T) {
 	})
 
 	t.Run("Profile set when none existed", func(t *testing.T) {
-		// Don't set AWS_PROFILE - it will be unset by default in subtest
+		// Ensure AWS_PROFILE is unset in this test's environment.
+		t.Setenv("AWS_PROFILE", "")
 		cleanup := setAWSProfileEnv("test-profile")
 		assert.Equal(t, "test-profile", os.Getenv("AWS_PROFILE"))
 		cleanup()

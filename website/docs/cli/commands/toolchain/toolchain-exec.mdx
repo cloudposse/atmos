@@ -1,0 +1,220 @@
+---
+title: atmos toolchain exec
+sidebar_label: exec
+sidebar_class_name: command
+id: exec
+description: Execute toolchain-managed CLI tools directly without modifying your PATH.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Execute toolchain-managed CLI tools directly from your Atmos commands and workflows without modifying your PATH. This ensures you always use the correct tool versions specified in your toolchain configuration.
+</Intro>
+
+<Screengrab title="atmos toolchain exec --help" slug="atmos-toolchain-exec--help" />
+
+## Usage
+
+Execute the `atmos toolchain exec` command like this:
+
+```shell
+atmos toolchain exec <tool>[@version] [-- <arguments>]
+```
+
+Use `--` to separate tool arguments from Atmos flags.
+
+## Examples
+
+### Execute Default Version
+
+```shell
+# Uses version from .tool-versions
+atmos toolchain exec terraform -- --version
+atmos toolchain exec kubectl -- get pods
+atmos toolchain exec helm -- list
+```
+
+### Execute Specific Version
+
+```shell
+# Specify exact version
+atmos toolchain exec terraform@1.9.8 -- --version
+atmos toolchain exec opentofu@1.10.3 -- init
+atmos toolchain exec kubectl@1.28.0 -- get nodes
+```
+
+### Execute with Arguments
+
+```shell
+# Terraform plan with variables
+atmos toolchain exec terraform -- plan -var-file=prod.tfvars
+
+# Kubectl with namespace
+atmos toolchain exec kubectl -- get pods -n kube-system
+
+# Helm install
+atmos toolchain exec helm -- install myapp ./charts/myapp
+```
+
+### Execute Using Alias
+
+```shell
+# Using configured alias
+atmos toolchain exec tf -- plan
+atmos toolchain exec tofu -- apply
+```
+
+## Arguments
+
+<dl>
+    <dt>`tool` <em>(required)</em></dt>
+    <dd>
+        Tool to execute. Can be a short name (alias) or full `owner/repo` format.
+        Optionally include `@version` to use a specific version.
+
+        Examples: `terraform`, `tf`, `terraform@1.9.8`, `hashicorp/terraform@1.9.8`
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--` <em>(separator)</em></dt>
+    <dd>
+        Separates Atmos flags from tool arguments. Everything after `--` is passed to the tool.
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show the command that would be executed without actually running it.
+
+        Environment variable: `ATMOS_TOOLCHAIN_DRY_RUN`
+    </dd>
+</dl>
+
+## Version Resolution
+
+The `exec` command resolves tool versions in this order:
+
+1. **Explicit version**: If `@version` is specified, use that exact version
+2. **`.tool-versions` file**: Use the version configured in `.tool-versions`
+3. **Error**: Fail if no version can be determined
+
+```shell
+# 1. Explicit version (highest priority)
+atmos toolchain exec terraform@1.9.8 -- plan
+
+# 2. From .tool-versions
+atmos toolchain exec terraform -- plan
+
+# 3. Error if not found
+atmos toolchain exec nonexistent-tool -- --version
+# Error: tool 'nonexistent-tool' not found in .tool-versions
+```
+
+## Use Cases
+
+### Run Different Versions
+
+Test with multiple Terraform versions:
+
+```shell
+# Test with 1.8.x
+atmos toolchain exec terraform@1.8.5 -- plan
+
+# Test with 1.9.x
+atmos toolchain exec terraform@1.9.8 -- plan
+
+# Compare results
+```
+
+### CI/CD Pipeline Integration
+
+Execute tools in CI without modifying PATH:
+
+```yaml
+# GitHub Actions example
+- name: Plan Infrastructure
+  run: |
+    atmos toolchain exec terraform -- plan -out=tfplan
+    atmos toolchain exec terraform -- show tfplan
+
+- name: Validate Kubernetes Manifests
+  run: |
+    atmos toolchain exec kubectl -- apply --dry-run=client -f manifests/
+```
+
+### Script Integration
+
+Use in shell scripts:
+
+```bash
+#!/bin/bash
+
+# Ensure correct tool versions
+atmos toolchain exec terraform -- init
+atmos toolchain exec terraform -- validate
+atmos toolchain exec tflint -- --recursive
+atmos toolchain exec terraform -- plan -out=plan.tfplan
+```
+
+### Interactive Sessions
+
+Run interactive tool commands:
+
+```shell
+# Terraform console
+atmos toolchain exec terraform -- console
+
+# Kubectl exec into pod
+atmos toolchain exec kubectl -- exec -it pod/myapp -- /bin/sh
+```
+
+### Version Pinning in Workflows
+
+Ensure exact versions in Atmos workflows:
+
+```yaml
+# stacks/workflows/deploy.yaml
+workflows:
+  deploy:
+    steps:
+      - name: Validate with specific TFLint version
+        command: toolchain exec tflint@0.44.1 -- --recursive
+
+      - name: Plan with Terraform 1.9
+        command: toolchain exec terraform@1.9.8 -- plan
+```
+
+## Process Execution
+
+The `exec` command **replaces** the current process (using `execve`):
+
+- The tool runs as a direct child of your shell
+- Signals (Ctrl+C) are properly forwarded
+- Exit codes are preserved
+- Environment is inherited
+
+This is different from running a subprocess, ensuring proper tool behavior.
+
+## Notes
+
+- The tool must be installed before execution (use `atmos toolchain install`)
+- Use `--` to clearly separate tool arguments from Atmos flags
+- Aliases work with exec just like other commands
+- For one-time execution without installation, the tool will be auto-installed if not present
+
+## Related Commands
+
+- [`atmos toolchain install`](/cli/commands/toolchain/install) - Install tools before execution
+- [`atmos toolchain which`](/cli/commands/toolchain/which) - Find tool binary path
+- [`atmos toolchain path`](/cli/commands/toolchain/path) - Get PATH for shell integration
+- [`atmos toolchain env`](/cli/commands/toolchain/env) - Export PATH in shell format
+
+## Related Documentation
+
+- [Toolchain Overview](/cli/commands/toolchain/usage) - Complete toolchain documentation
+- [Execution Commands](/cli/commands/toolchain/usage#execution-commands) - Command execution details
+- [Workflow Integration](/cli/commands/toolchain/usage#workflow-integration) - Using with Atmos workflows

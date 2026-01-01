@@ -51,9 +51,11 @@ export const roadmapConfig = {
       tagline: 'Automatic tool installation',
       description: 'Automatically install and manage the correct versions of Terraform, OpenTofu, Helmfile, and other tools based on component requirements.',
       benefits: 'The correct tool versions are installed automatically. No tfenv, tgswitch, or manual version management required.',
-      status: 'in-progress',
-      quarter: 'q1-2026',
+      status: 'shipped',
+      quarter: 'q4-2025',
       pr: 1686,
+      docs: '/cli/commands/toolchain/usage',
+      changelog: 'toolchain-management',
     },
     {
       id: 'cloud-auth',

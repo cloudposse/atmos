@@ -198,6 +198,7 @@ func ProcessComponentConfig(
 	configAndStacksInfo.ComponentProvidersSection = componentProvidersSection
 	configAndStacksInfo.RequiredProviders = componentRequiredProvidersSection
 	configAndStacksInfo.RequiredVersion = componentRequiredVersion
+	configAndStacksInfo.StackSection = stackSection
 	configAndStacksInfo.ComponentHooksSection = componentHooksSection
 	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
 	configAndStacksInfo.ComponentAuthSection = componentAuthSection

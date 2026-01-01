@@ -39,6 +39,9 @@
     },
     "workflows": {
       "$ref": "#/definitions/workflows"
+    },
+    "dependencies": {
+      "$ref": "#/definitions/dependencies"
     }
   },
   "additionalProperties": true,
@@ -230,6 +233,9 @@
             },
             "providers": {
               "$ref": "#/definitions/providers"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
             }
           },
           "required": []
@@ -311,6 +317,9 @@
             },
             "provision": {
               "$ref": "#/definitions/provision"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
             }
           },
           "required": []
@@ -346,6 +355,9 @@
             },
             "overrides": {
               "$ref": "#/definitions/overrides"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
             }
           },
           "required": []
@@ -409,6 +421,9 @@
             },
             "provision": {
               "$ref": "#/definitions/provision"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
             }
           },
           "required": []
@@ -444,6 +459,9 @@
             },
             "overrides": {
               "$ref": "#/definitions/overrides"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
             }
           },
           "required": []
@@ -507,6 +525,9 @@
             },
             "provision": {
               "$ref": "#/definitions/provision"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
             }
           },
           "required": []
@@ -1380,6 +1401,43 @@
             }
           },
           "required": []
+        }
+      ]
+    },
+    "dependencies": {
+      "title": "dependencies",
+      "description": "Dependencies section for declaring tool dependencies. Tools specified here will be automatically installed and made available when the component is provisioned.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tools": {
+              "$ref": "#/definitions/dependencies_tools"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "dependencies_tools": {
+      "title": "dependencies_tools",
+      "description": "Tool dependencies with version specifications. Keys are tool names (e.g., 'terraform', 'kubectl', 'k9s') and values are version strings (e.g., '1.9.8', 'latest').",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "description": "Tool version (e.g., '1.9.8', '0.32.7', 'latest')"
+          }
         }
       ]
     }

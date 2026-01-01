@@ -1,0 +1,547 @@
+---
+title: "Scale Terraform Workflows with Atmos"
+sidebar_label: "Atmos Introduction"
+sidebar_position: 1
+description: "Learn how Atmos helps teams manage Terraform configurations at scale with hierarchical YAML, inheritance, and workflow automation."
+hide_table_of_contents: true
+hide_title: true
+---
+
+import {
+  SlideDeck,
+  Slide,
+  SlideTitle,
+  SlideSubtitle,
+  SlideContent,
+  SlideList,
+  SlideCode,
+  SlideImage,
+  SlideSplit,
+  SlideNotes,
+} from '@site/src/components/SlideDeck';
+import { AtmosLogo } from '@site/src/components/AtmosLogo';
+import { MetallicIcon } from '@site/src/components/MetallicIcon';
+
+<SlideDeck title="Scale Terraform Workflows with Atmos">
+
+{/* Slide 1: Title */}
+<Slide layout="title">
+  <SlideTitle>Scale Terraform Workflows with Atmos</SlideTitle>
+  <SlideNotes>
+    Today I want to share with you a little bit about how you can scale
+    terraform workflows using a tool we wrote called Atmos.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 2: Philosophy */}
+<Slide layout="title">
+  <SlideTitle>Businesses succeed because of their processes.</SlideTitle>
+  <SlideNotes>
+    But first. I want to tell a story. It's about business and what differentiates
+    great businesses from the rest. In order to understand Atmos, we first need to
+    understand the problem it solves.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 3: Workflows */}
+<Slide layout="title">
+  <SlideTitle>Those processes are captured through workflows</SlideTitle>
+  <SlideNotes>
+    The success of every business hinges on how well it's able to capture its
+    processes and improve them over time. Whether it's lead generation, sales,
+    marketing, or engineering - it doesn't matter. The best companies have the
+    best processes.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 4: Superpowers */}
+<Slide layout="title">
+  <SlideTitle>Workflows give teams superpowers</SlideTitle>
+  <SlideSubtitle>(without needing to be superheroes)</SlideSubtitle>
+  <SlideNotes>
+    Those processes are captured by workflows. These effective, proven workflows
+    are what give teams super powers, without needing to be super heroes to use them.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 5: Best Workflows */}
+<Slide layout="content">
+  <SlideTitle>The best workflows…</SlideTitle>
+  <SlideList>
+    <li>Can be run by anyone, anywhere (locally and in CI)</li>
+    <li>Are easily understood</li>
+    <li>Ensure less mistakes are made</li>
+    <li>Are written down</li>
+    <li>Iterated on and optimized</li>
+  </SlideList>
+  <SlideNotes>
+    The best workflows can be run by anyone, anywhere - both locally and in CI.
+    They are easily understood by the team. They ensure fewer mistakes are made.
+    They are written down and documented. And they are constantly iterated on
+    and optimized over time.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 6: Atmos Intro */}
+<Slide layout="title">
+  <SlideTitle>Atmos is a workflow automation tool.</SlideTitle>
+  <SlideNotes>
+    Atmos is the tool that DevOps teams use to capture their workflows. It's
+    designed specifically for infrastructure automation and helps teams codify
+    their processes in a repeatable, shareable way.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 7: Why Atmos */}
+<Slide layout="title">
+  <SlideTitle>But there are so many of these tools today, so why Atmos?</SlideTitle>
+  <SlideNotes>
+    It's the differentiator for businesses who succeed at implementing DevOps
+    from those who don't. There are many tools out there, but Atmos was built
+    from real-world experience helping hundreds of companies scale their
+    infrastructure.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 8: Cloud Posse */}
+<Slide layout="split">
+  <SlideContent>
+    <SlideTitle>Cloud Posse is DevOps Accelerator for AWS Infrastructure</SlideTitle>
+    <SlideSubtitle>(focused on enterprise and funded startups)</SlideSubtitle>
+    <p>We help our customers own their infrastructure by building it together with their teams and showing them the ropes</p>
+  </SlideContent>
+  <MetallicIcon src="/img/slides/atmos-intro/cloudposse-logo.svg" alt="Cloud Posse" size={350} />
+  <SlideNotes>
+    Cloud Posse is a DevOps Accelerator that helps enterprise and funded startups
+    build and own their AWS infrastructure. We work alongside their teams, building
+    infrastructure together and teaching them best practices along the way.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 9: Built to Solve Problems */}
+<Slide layout="content">
+  <SlideTitle>Built to solve our problems</SlideTitle>
+  <SlideList>
+    <li>Needed to support many teams concurrently</li>
+    <li>Needed to automate the deliverables so teams could own them</li>
+    <li>Needed to be extensible and handle unknown requirements</li>
+    <li>Needed it to be easy to use and stable (aka testable)</li>
+  </SlideList>
+  <SlideNotes>
+    In our quest for scalable infrastructure solutions, we built Atmos to solve
+    our own problems. We needed to support many customer teams concurrently. We
+    needed to automate our deliverables so teams could own them after we left.
+    We needed something extensible that could handle unknown requirements. And
+    we needed it to be easy to use and stable - which means testable.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 10: Atmos CLI */}
+<Slide layout="split">
+  <SlideContent>
+    <SlideTitle>Atmos CLI: Configuration @ Scale</SlideTitle>
+    <SlideList>
+      <li>Hierarchical configurations reduce complexity with inheritance</li>
+      <li>Enable teams to import DRY configurations from catalogs</li>
+      <li>Run your workflows anywhere you can run a command</li>
+      <li>Combine multiple tools into one command with custom workflows</li>
+      <li>Single binary, cross compiled for every architecture</li>
+    </SlideList>
+    <p><a href="https://github.com/cloudposse/atmos">github.com/cloudposse/atmos</a> (golang)</p>
+  </SlideContent>
+  <AtmosLogo size={280} />
+  <SlideNotes>
+    Atmos solves the problem of terraliths - those massive, monolithic Terraform
+    configurations that become unmaintainable. Stacks are defined in YAML, which
+    enables hierarchical configurations that reduce complexity through inheritance.
+    Teams can import DRY configurations from catalogs. You can run workflows
+    anywhere you can run a command. And it's a single binary, cross-compiled
+    for every architecture.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 11: Why YAML */}
+<Slide layout="content">
+  <SlideTitle>So, Why YAML?</SlideTitle>
+  <SlideList>
+    <li>Everyone knows YAML</li>
+    <li>Simple extensible markup language for defining a declarative DSL</li>
+    <li>Easily support imports, inheritance, deep merging, policies</li>
+    <li>Tool agnostic (unlike HCL); Not tied to Terraform</li>
+    <li>Every language can read it (even remotely, e.g. via http)</li>
+    <li>Every language can write it (e.g. generate it)</li>
+    <li>YAML Anchors</li>
+  </SlideList>
+  <SlideNotes>
+    So why did we choose YAML? It's a universal language that everyone knows.
+    It's a simple, extensible markup language perfect for defining a declarative
+    DSL. It easily supports imports, inheritance, deep merging, and policies.
+    Unlike HCL, it's tool agnostic - not tied to Terraform. Every language can
+    read it, even remotely via HTTP. Every language can write it, so you can
+    generate configurations. And YAML anchors provide additional reusability.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 12: Guardrails */}
+<Slide layout="content">
+  <SlideTitle>We Need Guardrails</SlideTitle>
+  <SlideSubtitle>Configuration at Scale Requires Policies & Validation</SlideSubtitle>
+  <p>Use OPA to lay down the law and enforce it</p>
+  <SlideSubtitle>Examples:</SlideSubtitle>
+  <SlideList>
+    <li>Never allow some value in a particular environment</li>
+    <li>Never allow two things to be deployed in staging</li>
+    <li>Never allow a team to deploy some component</li>
+    <li>Never allow production to use unstable</li>
+  </SlideList>
+  <SlideNotes>
+    We need guardrails for large-scale configuration. Policies and validation
+    are essential when you have many teams and environments. Use OPA to lay
+    down the law and enforce it. For example: never allow certain values in
+    production, never allow two conflicting things in staging, restrict which
+    teams can deploy which components, and ensure production never uses
+    unstable component versions.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 13: Inheritance */}
+<Slide layout="content">
+  <SlideTitle>Inheritance is powerful.</SlideTitle>
+  <SlideList>
+    <li>Make configuration hierarchical with imports and deep merging</li>
+    <li>Organize it any way that makes sense for your organization</li>
+    <li>Define logical groups of configuration</li>
+    <li>Define something once and reuse it</li>
+    <li>Know exactly where configuration differs</li>
+  </SlideList>
+  <SlideNotes>
+    Inheritance in configuration brings immense power. You can make configuration
+    hierarchical with imports and deep merging. Organize it any way that makes
+    sense for your organization. Define logical groups of configuration. Define
+    something once and reuse it everywhere. And most importantly, you can know
+    exactly where configuration differs between environments.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 14: Generalized Tools */}
+<Slide layout="content">
+  <SlideTitle>But, Generalized Tools Still Suffer</SlideTitle>
+  <SlideContent>
+    <p>However, a general tool will always suffer for a specialized use case, even atmos and its custom workflows</p>
+    <p>So that's why we wrote it in Golang</p>
+    <p>And implemented opinionated workflows for the tools we use like terraform and helmfile</p>
+    <p>We also acknowledged that not everyone knows go, so...</p>
+  </SlideContent>
+  <SlideNotes>
+    However, a general tool will always suffer for a specialized use case, even
+    Atmos and its custom workflows. So that's why we wrote it in Golang - for
+    performance and portability. And we implemented opinionated workflows for
+    the tools we use like Terraform and Helmfile. We also acknowledged that not
+    everyone knows Go, so we made it extensible through YAML configuration.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 15: Terraform Doesn't Scale */}
+<Slide layout="title">
+  <SlideTitle>
+    Terraform by itself does not scale
+    <SlideImage src="/img/slides/atmos-intro/strikethrough.png" alt="crossed out - this is a controversial statement" width={200} />
+  </SlideTitle>
+  <SlideNotes>
+    Terraform, on its own, falls short in scaling for enterprise needs. This is
+    a controversial statement, but it's true. Terraform is an amazing tool, but
+    it wasn't designed for the scale and complexity that modern organizations
+    require.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 16: Terraform Challenges */}
+<Slide layout="split">
+  <SlideContent>
+    <SlideTitle>Terraform Challenges</SlideTitle>
+    <SlideList>
+      <li>Terraform GitOps (CI/CD) for teams is non-trivial</li>
+      <li>Terraform configuration is not DRY</li>
+      <li>Terraliths are a terraform anti-pattern, yet…</li>
+      <li>Terraform "Root Modules" are not easily shared</li>
+      <li>Terraform has no native support for multiple root modules (dependency ordering)</li>
+      <li>Terraform Backend Configurations Cannot be Parameterized</li>
+      <li>Terraform lacks built-in guardrails & policy controls that enterprises need</li>
+    </SlideList>
+  </SlideContent>
+  <SlideImage src="/img/slides/atmos-intro/bomb.png" alt="Bomb" width={180} />
+  <SlideNotes>
+    Let me enumerate the specific challenges with Terraform. GitOps and CI/CD
+    for teams is non-trivial to set up correctly. Configuration is not DRY -
+    you end up copying and pasting everywhere. Terraliths are an anti-pattern,
+    yet teams keep creating them. Root modules aren't easily shared. There's no
+    native support for multiple root modules or dependency ordering. Backend
+    configurations can't be parameterized. And Terraform lacks built-in
+    guardrails and policy controls that enterprises need.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 17: Terraform + Atmos */}
+<Slide layout="content">
+  <SlideTitle>Terraform + Atmos is the answer</SlideTitle>
+  <SlideList>
+    <li>Opinionated workflows for terraform</li>
+    <li>Established conventions and patterns to manage terraform @ scale</li>
+    <li>Break terraliths into smaller pieces ("components")</li>
+    <li>Enable team collaboration with catalogs and libraries</li>
+    <li>Enforce guardrails with OPA and JSON Schema</li>
+    <li>Zero Vendor Lock-in</li>
+  </SlideList>
+  <SlideNotes>
+    Terraform plus Atmos is the answer to these challenges. Atmos provides
+    opinionated workflows for Terraform. It establishes conventions and patterns
+    to manage Terraform at scale. It helps you break terraliths into smaller,
+    manageable pieces called components. It enables team collaboration through
+    catalogs and libraries. It enforces guardrails with OPA and JSON Schema
+    validation. And there's zero vendor lock-in - it's all open source.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 18: Terminology */}
+<Slide layout="content">
+  <SlideTitle>Terminology</SlideTitle>
+  <SlideList>
+    <li><strong>Components:</strong> opinionated terraform "root modules"</li>
+    <li><strong>Child modules:</strong> modules called by other modules (e.g. components)</li>
+    <li><strong>Stacks:</strong> the combination of components into an architecture</li>
+    <li><strong>Catalogs:</strong> collections of reusable configurations</li>
+  </SlideList>
+  <SlideNotes>
+    Before I go on, let's define our terminology. Components are opinionated
+    Terraform root modules - the deployable units of infrastructure. Child
+    modules are modules called by other modules, like the building blocks that
+    components use. Stacks are the combination of components into an architecture -
+    they represent an environment or deployment target. And catalogs are
+    collections of reusable configurations that teams can import and customize.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 19: Super Powers */}
+<Slide layout="content">
+  <SlideTitle>It Gives Terraform Super Powers</SlideTitle>
+  <SlideList>
+    <li>Write components (root modules) once, reuse any number of times</li>
+    <li>Vanilla HCL without customizations</li>
+    <li>Use our terraform provider to read YAML configurations from anywhere</li>
+    <li>Easily deploy across any number of regions without touching a line of HCL</li>
+    <li>Duplicate entire stacks by just copying a single YAML file</li>
+    <li>Generate YAML configurations</li>
+  </SlideList>
+  <SlideNotes>
+    With Atmos, we supercharge Terraform in several key ways. You can write
+    components once and reuse them any number of times. It's vanilla Terraform
+    HCL without customizations - no proprietary syntax. Use our Terraform
+    provider to read YAML configurations from anywhere. Easily deploy across
+    any number of regions without touching a line of HCL. Duplicate entire
+    stacks by just copying a single YAML file. And you can generate YAML
+    configurations programmatically.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 20: Sample Stack Layout */}
+<Slide layout="code">
+  <SlideTitle>Sample Stack Layout</SlideTitle>
+  <SlideCode language="bash">
+{`stacks/
+├── catalog/                      # Reusable imports
+│   └── example-component.yaml    # Example default configuration
+├── mixins/                       # Mixins set defaults
+│   ├── us-east-1.yaml           # Example regional configuration
+│   └── us-east-2.yaml
+├── teams/                        # Break configurations down by team
+│   ├── frontend/web.yaml
+│   ├── backend/api.yaml
+│   └── sre/datadog.yaml
+└── orgs/                         # Some cloud organization
+    └── acme/                     # ACME stacks (e.g. some AWS)
+        ├── ue1-prod.yaml
+        └── ue1-staging.yaml`}
+  </SlideCode>
+  <SlideNotes>
+    So now let's go a little bit deeper. Here's an example filesystem layout
+    for organizing stacks. The catalog folder contains reusable imports with
+    default configurations. Mixins set defaults for things like regions. You
+    can break configurations down by team. And the orgs folder contains the
+    actual stack definitions for each environment - like production and staging.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 21: Sample Component Layout */}
+<Slide layout="code">
+  <SlideTitle>Sample Component Layout</SlideTitle>
+  <SlideCode language="bash">
+{`components/
+├── terraform/
+│   ├── stable/
+│   │   ├── vpc/
+│   │   │   ├── main.tf
+│   │   │   ├── variables.tf
+│   │   │   ├── outputs.tf
+│   │   │   └── README.md
+│   │   ├── eks/
+│   │   ├── ecr/
+│   │   └── ...
+│   └── edge/
+├── helmfile/
+├── ...
+└── packer/`}
+  </SlideCode>
+  <SlideNotes>
+    Here's how the components, also known as Terraform root modules, can be
+    organized. We recommend separating stable components from edge components.
+    Each component is a self-contained Terraform root module with its own
+    main.tf, variables.tf, outputs.tf, and README. You can also have components
+    for other tools like Helmfile and Packer.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 22: Stack Configurations */}
+<Slide layout="code">
+  <SlideTitle>Atmos "stack" configurations</SlideTitle>
+  <SlideCode language="yaml">
+{`import:                          # DRY configurations
+  - catalog/baseline             # Shared catalogs of configuration
+  - catalog/aws/account          # 100% declarative
+  - catalog/aws/vpc              # Supports deep-merging &
+  - catalog/aws/eks              # multiple-inheritance
+  - catalog/aws/rds-aurora
+
+components:                      # Stacks composed of many components
+  terraform:                     # Easily override settings at any level
+    vpc:
+      component: stable/vpc
+      vars:
+        cidr: 10.120.0.0/22`}
+  </SlideCode>
+  <SlideNotes>
+    This is what it looks like. Imports allow us to pull in configuration from
+    catalogs - keeping things DRY. The configurations are 100% declarative and
+    support deep merging with multiple inheritance. Then you define your
+    components and can easily override settings at any level. Here we're
+    overriding just the CIDR block for the VPC.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 23: Validation */}
+<Slide layout="code">
+  <SlideTitle>Atmos "stack" configurations</SlideTitle>
+  <SlideCode language="yaml">
+{`components:                      # Stacks composed of many components
+  terraform:                     # Easily override settings at any level
+    vpc:
+      component: stable/vpc
+      settings:                  # Validation: Supports JSON Schema and OPA policies
+        validation:              # All validation steps must succeed
+          check-akamai-property-component-with-opa-policy:
+            schema_type: opa
+            schema_path: validate-akamai-property-component.rego
+            description: Check 'akamai-property' against OPA policy
+      vars:
+        cidr: 10.120.0.0/22`}
+  </SlideCode>
+  <SlideNotes>
+    Atmos also supports validation at the component level. You can define
+    validation rules using JSON Schema or OPA policies. All validation steps
+    must succeed before the component can be deployed. This is how you enforce
+    those guardrails we talked about earlier - right in the stack configuration.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 24: Workflows */}
+<Slide layout="code">
+  <SlideTitle>Atmos "workflows" configurations</SlideTitle>
+  <SlideCode language="yaml">
+{`# User would run: atmos workflow eks-up -s acme-ue1-dev
+
+workflows:
+  eks-up:
+    description: |
+      Run 'terraform apply' to bring up EKS
+    steps:
+      - command: terraform apply vpc
+      - command: terraform apply eks
+      - command: terraform apply eks/alb-controller`}
+  </SlideCode>
+  <SlideNotes>
+    Remember those workflows we talked about at the beginning? Here's what they
+    look like in Atmos. You define a workflow with a description and a series
+    of steps. Each step is a command that Atmos will execute in order. This
+    example brings up an EKS cluster by first applying the VPC, then EKS, then
+    the ALB controller. Users run it with a simple command.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 25: Custom Commands */}
+<Slide layout="code">
+  <SlideTitle>Atmos "subcommand" configurations</SlideTitle>
+  <SlideCode language="yaml">
+{`# Custom CLI commands
+# This adds: atmos terraform generate graph vpc -s acme-ue1-staging
+
+commands:
+  - name: terraform
+    description: Terraform commands
+    commands:
+      - name: generate graph
+        description: Generate a PNG graph of the terraform resources
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Stack name
+            required: true`}
+  </SlideCode>
+  <SlideNotes>
+    You can also extend Atmos with custom subcommands. This example adds a
+    command to generate a PNG graph of Terraform resources. You define the
+    command name, description, arguments, and flags - all in YAML. This is
+    how teams can capture their unique workflows and tooling within Atmos,
+    making it available to everyone on the team.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 26: Summary */}
+<Slide layout="content">
+  <SlideTitle>Summary</SlideTitle>
+  <SlideList>
+    <li>Businesses need to capture their processes as workflows</li>
+    <li>Terraform configuration is difficult to manage at scale</li>
+    <li>Terraform by itself is not enough to be successful</li>
+    <li>Atmos makes managing those configurations easier</li>
+  </SlideList>
+  <SlideNotes>
+    Businesses must encapsulate their processes into efficient workflows to
+    succeed. Terraform alone isn't the silver bullet for infrastructure at
+    scale - it needs help. Terraform configuration becomes difficult to manage
+    as you grow. Atmos provides the conventions, patterns, and tooling to make
+    managing those configurations easier and more maintainable.
+  </SlideNotes>
+</Slide>
+
+{/* Slide 27: Open Source */}
+<Slide layout="content">
+  <SlideTitle>It's Open Source (APACHE2)</SlideTitle>
+  <SlideContent>
+    <p>Best of all it's open source and has a community.</p>
+    <p>It's Open Source too, with no strings attached and under active development and hundreds of stars.</p>
+    <p>We have built an ecosystem of tools and modules downloaded tens of millions of times.</p>
+    <p>We invite you to join us!</p>
+  </SlideContent>
+  <SlideNotes>
+    With Atmos, you're not alone. You're backed by a passionate community of
+    DevOps practitioners. It's open source under the Apache 2 license with no
+    strings attached. It's under active development with hundreds of GitHub
+    stars. We've built an ecosystem of tools and modules that have been
+    downloaded tens of millions of times. Visit atmos.tools to learn more,
+    and join us on Slack at slack.cloudposse.com. We invite you to join us!
+  </SlideNotes>
+</Slide>
+
+</SlideDeck>
