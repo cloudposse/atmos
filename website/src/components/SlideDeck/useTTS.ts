@@ -22,6 +22,7 @@ export interface UseTTSReturn {
 
   // Actions.
   play: (slideNumber: number) => Promise<void>;
+  prefetch: (slideNumber: number) => Promise<() => Promise<void>>;  // Returns playPrefetched function.
   pause: () => void;
   resume: () => void;
   stop: () => void;
@@ -210,6 +211,80 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
     }
   }, [getAudioElement, getTextUrl, voice, playbackRate, isMuted]);
 
+  // Prefetch audio for a slide without playing it.
+  // Returns a function that plays the prefetched audio.
+  // This allows starting the API call in parallel with a delay.
+  const prefetch = useCallback(async (slideNumber: number): Promise<() => Promise<void>> => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const textUrl = getTextUrl(slideNumber);
+      const apiUrl = `https://cloudposse.com/api/tts?url=${encodeURIComponent(textUrl)}&voice=${voice}`;
+
+      const response = await fetch(apiUrl);
+      if (!response.ok) {
+        let errorMsg = 'TTS failed';
+        try {
+          const err = await response.json();
+          errorMsg = err.error || errorMsg;
+        } catch {
+          // Ignore JSON parse errors.
+        }
+        throw new Error(errorMsg);
+      }
+
+      const data = await response.json();
+      const audioDataUrl = `data:${data.mimeType};base64,${data.audio}`;
+
+      // Return a function that plays the prefetched audio.
+      return async () => {
+        const audio = getAudioElement();
+        if (!audio) return;
+
+        // Stop current playback.
+        audio.pause();
+        audio.currentTime = 0;
+
+        setProgress(0);
+        setCurrentTime(0);
+        setDuration(0);
+
+        // Set the prefetched audio source.
+        audio.src = audioDataUrl;
+        audio.playbackRate = playbackRate;
+        audio.muted = isMuted;
+
+        // Wait for audio to be ready.
+        await new Promise<void>((resolve, reject) => {
+          const onCanPlay = () => {
+            audio.removeEventListener('canplaythrough', onCanPlay);
+            audio.removeEventListener('error', onError);
+            resolve();
+          };
+          const onError = () => {
+            audio.removeEventListener('canplaythrough', onCanPlay);
+            audio.removeEventListener('error', onError);
+            reject(new Error('Failed to load audio'));
+          };
+          audio.addEventListener('canplaythrough', onCanPlay);
+          audio.addEventListener('error', onError);
+          audio.load();
+        });
+
+        setIsLoading(false);
+        setIsPlaying(true);
+        setIsPaused(false);
+        await audio.play();
+      };
+    } catch (err) {
+      setIsLoading(false);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      // Return a no-op function on error.
+      return async () => {};
+    }
+  }, [getAudioElement, getTextUrl, voice, playbackRate, isMuted]);
+
   const pause = useCallback(() => {
     const audio = audioRef.current;
     if (audio) {
@@ -273,6 +348,7 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
     voice,
     playbackRate,
     play,
+    prefetch,
     pause,
     resume,
     stop,

@@ -104,12 +104,27 @@ function SlideDeckInner({
   }, [tts]);
 
   // Auto-play notes when slide changes if in auto-play mode.
+  // Start prefetching audio immediately while delay runs in parallel.
   useEffect(() => {
     if (autoPlayRef.current && currentNotes) {
-      // Add delay before starting next audio.
-      autoAdvanceTimerRef.current = setTimeout(() => {
-        tts.play(currentSlide);
-      }, AUTO_PLAY_DELAY);
+      let cancelled = false;
+
+      // Start prefetch and delay in parallel.
+      const prefetchPromise = tts.prefetch(currentSlide);
+      const delayPromise = new Promise<void>(resolve =>
+        autoAdvanceTimerRef.current = setTimeout(resolve, AUTO_PLAY_DELAY)
+      );
+
+      // Wait for both, then play.
+      Promise.all([prefetchPromise, delayPromise]).then(([playPrefetched]) => {
+        if (!cancelled && autoPlayRef.current) {
+          playPrefetched();
+        }
+      });
+
+      return () => {
+        cancelled = true;
+      };
     }
   }, [currentSlide]); // eslint-disable-line react-hooks/exhaustive-deps
 
