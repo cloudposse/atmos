@@ -40,7 +40,7 @@ Examples:
 	},
 }
 
-// ExecCommandProvider implements the CommandProvider interface.
+// ExecCommandProvider implements CommandProvider for the toolchain exec command.
 type ExecCommandProvider struct{}
 
 func (e *ExecCommandProvider) GetCommand() *cobra.Command {

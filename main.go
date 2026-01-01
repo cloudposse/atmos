@@ -64,7 +64,7 @@ func run() int {
 			os.Stderr.WriteString(formatted + "\n")
 			return errUtils.GetExitCode(err)
 		}
-		return 0 // Exit normally after printing version
+		return 0 // Exit normally after printing version.
 	}
 
 	err := cmd.Execute()
