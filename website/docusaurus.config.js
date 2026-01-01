@@ -497,6 +497,10 @@ const config = {
                 // https://docsearch.algolia.com/docs/v4/askai/
                 askAi: {
                     assistantId: process.env.ALGOLIA_ASKAI_ASSISTANT_ID || 'xzgtsIXZSf7V',
+                    appId: process.env.ALGOLIA_APP_ID || '32YOERUX83',
+                    apiKey: process.env.ALGOLIA_SEARCH_API_KEY || '557985309adf0e4df9dcf3cb29c61928',
+                    indexName: process.env.ALGOLIA_INDEX_NAME || 'atmos.tools',
+                    suggestedQuestions: true,
                 }
             },
             zoom: {
