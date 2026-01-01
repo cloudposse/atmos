@@ -46,6 +46,9 @@ const defaultPrefs: TTSPrefs = { voice: 'nova', rate: 1, muted: false };
  *
  * Uses the Cloud Posse TTS API to convert slide notes to speech.
  * Supports voice selection, speed control, muting, and progress tracking.
+ *
+ * IMPORTANT: This hook reuses a single Audio element to maintain user-activation
+ * state on iOS. Creating new Audio elements breaks autoplay on mobile Safari.
  */
 export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
   // Load saved preferences.
@@ -70,9 +73,37 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
 
+  // Persistent audio element - reused across plays to maintain iOS user-activation.
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
+
+  // Get or create the persistent audio element.
+  const getAudioElement = useCallback(() => {
+    if (!audioRef.current && typeof window !== 'undefined') {
+      const audio = new Audio();
+      audio.onloadedmetadata = () => setDuration(audio.duration);
+      audio.ontimeupdate = () => {
+        setCurrentTime(audio.currentTime);
+        if (audio.duration > 0) {
+          setProgress((audio.currentTime / audio.duration) * 100);
+        }
+      };
+      audio.onended = () => {
+        setIsPlaying(false);
+        setIsPaused(false);
+        setProgress(100);
+        onEndedRef.current?.();
+      };
+      audio.onerror = () => {
+        setError('Playback failed');
+        setIsPlaying(false);
+        setIsLoading(false);
+      };
+      audioRef.current = audio;
+    }
+    return audioRef.current;
+  }, []);
 
   // Load prefs on mount.
   useEffect(() => {
@@ -95,14 +126,16 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
 
   const setPlaybackRate = useCallback((r: number) => {
     setPlaybackRateState(r);
-    if (audioRef.current) audioRef.current.playbackRate = r;
+    const audio = audioRef.current;
+    if (audio) audio.playbackRate = r;
     savePrefs(voice, r, isMuted);
   }, [voice, isMuted, savePrefs]);
 
   const toggleMute = useCallback(() => {
     const newMuted = !isMuted;
     setIsMuted(newMuted);
-    if (audioRef.current) audioRef.current.muted = newMuted;
+    const audio = audioRef.current;
+    if (audio) audio.muted = newMuted;
     savePrefs(voice, playbackRate, newMuted);
   }, [isMuted, voice, playbackRate, savePrefs]);
 
@@ -112,11 +145,12 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
   }, [deckName]);
 
   const play = useCallback(async (slideNumber: number) => {
-    // Stop current audio.
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
+    const audio = getAudioElement();
+    if (!audio) return;
+
+    // Stop current playback.
+    audio.pause();
+    audio.currentTime = 0;
 
     setIsLoading(true);
     setError(null);
@@ -141,29 +175,29 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
       }
 
       const data = await response.json();
-      const audio = new Audio(`data:${data.mimeType};base64,${data.audio}`);
+
+      // Update the existing audio element's source instead of creating a new one.
+      // This preserves the user-activation state on iOS.
+      audio.src = `data:${data.mimeType};base64,${data.audio}`;
       audio.playbackRate = playbackRate;
       audio.muted = isMuted;
-      audioRef.current = audio;
 
-      audio.onloadedmetadata = () => setDuration(audio.duration);
-      audio.ontimeupdate = () => {
-        setCurrentTime(audio.currentTime);
-        if (audio.duration > 0) {
-          setProgress((audio.currentTime / audio.duration) * 100);
-        }
-      };
-      audio.onended = () => {
-        setIsPlaying(false);
-        setIsPaused(false);
-        setProgress(100);
-        onEndedRef.current?.();
-      };
-      audio.onerror = () => {
-        setError('Playback failed');
-        setIsPlaying(false);
-        setIsLoading(false);
-      };
+      // Wait for audio to be ready.
+      await new Promise<void>((resolve, reject) => {
+        const onCanPlay = () => {
+          audio.removeEventListener('canplaythrough', onCanPlay);
+          audio.removeEventListener('error', onError);
+          resolve();
+        };
+        const onError = () => {
+          audio.removeEventListener('canplaythrough', onCanPlay);
+          audio.removeEventListener('error', onError);
+          reject(new Error('Failed to load audio'));
+        };
+        audio.addEventListener('canplaythrough', onCanPlay);
+        audio.addEventListener('error', onError);
+        audio.load();
+      });
 
       setIsLoading(false);
       setIsPlaying(true);
@@ -174,28 +208,32 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
       setIsPlaying(false);
       setError(err instanceof Error ? err.message : 'Unknown error');
     }
-  }, [getTextUrl, voice, playbackRate, isMuted]);
+  }, [getAudioElement, getTextUrl, voice, playbackRate, isMuted]);
 
   const pause = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
       setIsPaused(true);
       setIsPlaying(false);
     }
   }, []);
 
   const resume = useCallback(() => {
-    if (audioRef.current && isPaused) {
-      audioRef.current.play();
+    const audio = audioRef.current;
+    if (audio && isPaused) {
+      audio.play();
       setIsPaused(false);
       setIsPlaying(true);
     }
   }, [isPaused]);
 
   const stop = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
+    const audio = audioRef.current;
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.src = ''; // Clear the source.
     }
     setIsPlaying(false);
     setIsPaused(false);
@@ -205,16 +243,19 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
   }, []);
 
   const seek = useCallback((time: number) => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = time;
+    const audio = audioRef.current;
+    if (audio) {
+      audio.currentTime = time;
     }
   }, []);
 
   // Cleanup on unmount.
   useEffect(() => {
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.src = '';
         audioRef.current = null;
       }
     };
