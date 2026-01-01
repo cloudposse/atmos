@@ -23,6 +23,7 @@ export interface UseTTSReturn {
   // Actions.
   play: (slideNumber: number) => Promise<void>;
   prefetch: (slideNumber: number) => Promise<() => Promise<void>>;  // Returns playPrefetched function.
+  prefetchInBackground: (slideNumber: number) => void;  // Prefetch next slide while current plays.
   pause: () => void;
   resume: () => void;
   stop: () => void;
@@ -78,6 +79,9 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const onEndedRef = useRef(onEnded);
   onEndedRef.current = onEnded;
+
+  // Cache for prefetched audio data URLs, keyed by slide number and voice.
+  const prefetchCacheRef = useRef<Map<string, string>>(new Map());
 
   // Get or create the persistent audio element.
   const getAudioElement = useCallback(() => {
@@ -145,6 +149,32 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
     return `${origin}/slides/${deckName}/slide${slideNumber}.txt`;
   }, [deckName]);
 
+  // Generate cache key for a slide/voice combination.
+  const getCacheKey = useCallback((slideNumber: number, v: TTSVoice) => {
+    return `${slideNumber}-${v}`;
+  }, []);
+
+  // Fetch audio data from API (internal helper).
+  const fetchAudioData = useCallback(async (slideNumber: number): Promise<string> => {
+    const textUrl = getTextUrl(slideNumber);
+    const apiUrl = `https://cloudposse.com/api/tts?url=${encodeURIComponent(textUrl)}&voice=${voice}`;
+
+    const response = await fetch(apiUrl);
+    if (!response.ok) {
+      let errorMsg = 'TTS failed';
+      try {
+        const err = await response.json();
+        errorMsg = err.error || errorMsg;
+      } catch {
+        // Ignore JSON parse errors.
+      }
+      throw new Error(errorMsg);
+    }
+
+    const data = await response.json();
+    return `data:${data.mimeType};base64,${data.audio}`;
+  }, [getTextUrl, voice]);
+
   const play = useCallback(async (slideNumber: number) => {
     const audio = getAudioElement();
     if (!audio) return;
@@ -160,26 +190,21 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
     setDuration(0);
 
     try {
-      const textUrl = getTextUrl(slideNumber);
-      const apiUrl = `https://cloudposse.com/api/tts?url=${encodeURIComponent(textUrl)}&voice=${voice}`;
+      // Check cache first.
+      const cacheKey = getCacheKey(slideNumber, voice);
+      let audioDataUrl = prefetchCacheRef.current.get(cacheKey);
 
-      const response = await fetch(apiUrl);
-      if (!response.ok) {
-        let errorMsg = 'TTS failed';
-        try {
-          const err = await response.json();
-          errorMsg = err.error || errorMsg;
-        } catch {
-          // Ignore JSON parse errors.
-        }
-        throw new Error(errorMsg);
+      if (!audioDataUrl) {
+        // Not cached, fetch from API.
+        audioDataUrl = await fetchAudioData(slideNumber);
+      } else {
+        // Remove from cache after use.
+        prefetchCacheRef.current.delete(cacheKey);
       }
-
-      const data = await response.json();
 
       // Update the existing audio element's source instead of creating a new one.
       // This preserves the user-activation state on iOS.
-      audio.src = `data:${data.mimeType};base64,${data.audio}`;
+      audio.src = audioDataUrl;
       audio.playbackRate = playbackRate;
       audio.muted = isMuted;
 
@@ -209,7 +234,7 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
       setIsPlaying(false);
       setError(err instanceof Error ? err.message : 'Unknown error');
     }
-  }, [getAudioElement, getTextUrl, voice, playbackRate, isMuted]);
+  }, [getAudioElement, getCacheKey, fetchAudioData, voice, playbackRate, isMuted]);
 
   // Prefetch audio for a slide without playing it.
   // Returns a function that plays the prefetched audio.
@@ -219,23 +244,17 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
     setError(null);
 
     try {
-      const textUrl = getTextUrl(slideNumber);
-      const apiUrl = `https://cloudposse.com/api/tts?url=${encodeURIComponent(textUrl)}&voice=${voice}`;
+      // Check cache first.
+      const cacheKey = getCacheKey(slideNumber, voice);
+      let audioDataUrl = prefetchCacheRef.current.get(cacheKey);
 
-      const response = await fetch(apiUrl);
-      if (!response.ok) {
-        let errorMsg = 'TTS failed';
-        try {
-          const err = await response.json();
-          errorMsg = err.error || errorMsg;
-        } catch {
-          // Ignore JSON parse errors.
-        }
-        throw new Error(errorMsg);
+      if (!audioDataUrl) {
+        // Not cached, fetch from API.
+        audioDataUrl = await fetchAudioData(slideNumber);
+      } else {
+        // Remove from cache after use.
+        prefetchCacheRef.current.delete(cacheKey);
       }
-
-      const data = await response.json();
-      const audioDataUrl = `data:${data.mimeType};base64,${data.audio}`;
 
       // Return a function that plays the prefetched audio.
       return async () => {
@@ -283,7 +302,27 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
       // Return a no-op function on error.
       return async () => {};
     }
-  }, [getAudioElement, getTextUrl, voice, playbackRate, isMuted]);
+  }, [getAudioElement, getCacheKey, fetchAudioData, voice, playbackRate, isMuted]);
+
+  // Prefetch audio in the background (doesn't affect loading state).
+  // Use this to prefetch the next slide while current slide plays.
+  const prefetchInBackground = useCallback((slideNumber: number): void => {
+    const cacheKey = getCacheKey(slideNumber, voice);
+
+    // Skip if already cached.
+    if (prefetchCacheRef.current.has(cacheKey)) {
+      return;
+    }
+
+    // Fetch in background, don't await.
+    fetchAudioData(slideNumber)
+      .then(audioDataUrl => {
+        prefetchCacheRef.current.set(cacheKey, audioDataUrl);
+      })
+      .catch(() => {
+        // Silently ignore background prefetch errors.
+      });
+  }, [getCacheKey, fetchAudioData, voice]);
 
   const pause = useCallback(() => {
     const audio = audioRef.current;
@@ -349,6 +388,7 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
     playbackRate,
     play,
     prefetch,
+    prefetchInBackground,
     pause,
     resume,
     stop,

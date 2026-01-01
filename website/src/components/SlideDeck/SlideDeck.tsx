@@ -84,12 +84,18 @@ function SlideDeckInner({
   });
 
   // Enable auto-play when user starts playing.
+  // Also prefetch the next slide's audio in the background.
   useEffect(() => {
     if (tts.isPlaying) {
       autoPlayRef.current = true;
       setIsAutoPlaying(true);
+
+      // Prefetch next slide in background while current plays.
+      if (currentSlide < totalSlides) {
+        tts.prefetchInBackground(currentSlide + 1);
+      }
     }
-  }, [tts.isPlaying]);
+  }, [tts.isPlaying, currentSlide, totalSlides, tts]);
 
   // Disable auto-play when user explicitly stops.
   const handleStop = useCallback(() => {
