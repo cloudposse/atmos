@@ -27,8 +27,15 @@ type installResult struct {
 }
 
 // startSpinner starts a spinner with the given message.
+// Spinner is only started if we're in a TTY environment.
 func (sc *spinnerControl) start(message string) {
 	if !sc.showingSpinner {
+		return
+	}
+
+	// Don't start Bubble Tea spinner in non-TTY environments (CI, piped output).
+	// This prevents potential hangs when tea.Program.Run() blocks on terminal init.
+	if !isTTY() {
 		return
 	}
 
