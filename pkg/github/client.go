@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
@@ -35,6 +36,8 @@ const (
 	githubAPIStatus422 = 422
 	// GithubAPIMinRateLimitThreshold is the minimum number of remaining requests before warning.
 	githubAPIMinRateLimitThreshold = 5
+	// DefaultHTTPTimeout is the timeout for HTTP requests to prevent hangs in CI environments.
+	defaultHTTPTimeout = 30 * time.Second
 	// Logging field name constants.
 	logFieldOwner = "owner"
 	logFieldRepo  = "repo"
@@ -48,15 +51,23 @@ func newGitHubClient(ctx context.Context) *github.Client {
 	// Get GitHub token (bound to check ATMOS_GITHUB_TOKEN then GITHUB_TOKEN).
 	githubToken := viper.GetString("ATMOS_GITHUB_TOKEN")
 
-	if githubToken == "" {
-		return github.NewClient(nil)
+	// Create HTTP client with timeout to prevent hangs in CI environments
+	// when network is unavailable or DNS resolution fails.
+	httpClient := &http.Client{
+		Timeout: defaultHTTPTimeout,
 	}
 
-	// Token found, create an authenticated client.
+	if githubToken == "" {
+		return github.NewClient(httpClient)
+	}
+
+	// Token found, create an authenticated client with timeout.
 	ts := oauth2.StaticTokenSource(
 		&oauth2.Token{AccessToken: githubToken},
 	)
+	// Create oauth2 client with our timeout-configured base transport.
 	tc := oauth2.NewClient(ctx, ts)
+	tc.Timeout = defaultHTTPTimeout
 
 	return github.NewClient(tc)
 }

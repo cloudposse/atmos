@@ -86,7 +86,17 @@ func TestSetAndResetGitHubAPI(t *testing.T) {
 	// Reset to default
 	ResetGitHubAPI()
 
-	// The default API should now be used (this might make real HTTP calls)
-	// We'll just test that it doesn't panic
-	_, _ = fetchAllGitHubVersions("test", "repo", 10)
+	// Verify the API was reset by checking we can set a new mock.
+	// We intentionally do NOT make real HTTP calls here as they can hang
+	// indefinitely in CI environments without network access.
+	newMock := NewMockGitHubAPI()
+	newMock.SetReleases("verify", "reset", []string{"2.0.0"})
+	SetGitHubAPI(newMock)
+
+	releases, err = fetchAllGitHubVersions("verify", "reset", 10)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"2.0.0"}, releases)
+
+	// Clean up
+	ResetGitHubAPI()
 }

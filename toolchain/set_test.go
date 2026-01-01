@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -23,6 +24,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/toolchain/registry"
 )
+
+// TestHTTPTimeout is the timeout for HTTP requests in tests to prevent hangs.
+const testHTTPTimeout = 10 * time.Second
 
 // Test data structures.
 type mockInstallerSet struct {
@@ -423,7 +427,9 @@ func TestFetchGitHubVersions(t *testing.T) {
 func fetchGitHubVersionsWithCustomURL(apiURL string) ([]versionItem, error) {
 	token := viper.GetString("github-token")
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: testHTTPTimeout,
+	}
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -1370,7 +1376,9 @@ func (c *RealGitHubClient) FetchVersions(owner, repo string) ([]versionItem, err
 
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=100", baseURL, owner, repo)
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: testHTTPTimeout,
+	}
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)

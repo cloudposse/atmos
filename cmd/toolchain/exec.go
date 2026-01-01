@@ -41,28 +41,35 @@ Examples:
 }
 
 // ExecCommandProvider implements CommandProvider for the toolchain exec command.
+// It provides the ability to execute tools with specific versions, installing them if necessary.
 type ExecCommandProvider struct{}
 
+// GetCommand returns the Cobra command for toolchain exec.
 func (e *ExecCommandProvider) GetCommand() *cobra.Command {
 	return execCmd
 }
 
+// GetName returns the command name.
 func (e *ExecCommandProvider) GetName() string {
 	return "exec"
 }
 
+// GetGroup returns the command group for help display.
 func (e *ExecCommandProvider) GetGroup() string {
 	return "Toolchain Commands"
 }
 
+// GetFlagsBuilder returns nil as this command has no flags.
 func (e *ExecCommandProvider) GetFlagsBuilder() flags.Builder {
 	return nil
 }
 
+// GetPositionalArgsBuilder returns nil as positional args are handled by Cobra validation.
 func (e *ExecCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
 	return nil
 }
 
+// GetCompatibilityFlags returns nil as this command has no compatibility flags.
 func (e *ExecCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
 	return nil
 }

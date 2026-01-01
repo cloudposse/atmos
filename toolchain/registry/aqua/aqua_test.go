@@ -9,12 +9,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/toolchain/registry"
 )
+
+// TestHTTPTimeout is the timeout for HTTP requests in tests to prevent hangs.
+const testHTTPTimeout = 10 * time.Second
 
 func TestNewAquaRegistry(t *testing.T) {
 	ar := NewAquaRegistry()
@@ -171,8 +175,11 @@ packages:
 	ar := NewAquaRegistry()
 	ar.cache.baseDir = t.TempDir()
 
-	// Mock the resolveVersionOverrides method by setting up the registry URL
-	ar.client = &http.Client{}
+	// Mock the resolveVersionOverrides method by setting up the registry URL.
+	// Use timeout to prevent hangs in CI environments with network issues.
+	ar.client = &http.Client{
+		Timeout: testHTTPTimeout,
+	}
 
 	// Test getting tool with version (this will test the version override logic)
 	tool, err := ar.GetToolWithVersion("hashicorp", "terraform", "1.0.0")
