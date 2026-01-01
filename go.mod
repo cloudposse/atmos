@@ -47,6 +47,7 @@ require (
 	github.com/editorconfig-checker/editorconfig-checker/v3 v3.6.0
 	github.com/elewis787/boa v0.1.3
 	github.com/fatih/color v1.18.0
+	github.com/gabriel-vasile/mimetype v1.4.11
 	github.com/getsentry/sentry-go v0.40.0
 	github.com/go-git/go-git/v5 v5.16.4
 	github.com/go-viper/mapstructure/v2 v2.4.0
@@ -219,7 +220,6 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/forPelevin/gomoji v1.3.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.11 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.6.2 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
