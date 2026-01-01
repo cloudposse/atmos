@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -28,6 +29,9 @@ const (
 
 	// FocusViewport indicates the viewport pane has focus in the version selector UI.
 	focusViewport = "viewport"
+
+	// DefaultHTTPTimeout is the timeout for HTTP requests to prevent hangs.
+	defaultHTTPTimeout = 30 * time.Second
 )
 
 type versionItem struct {
@@ -376,7 +380,9 @@ func fetchGitHubVersions(owner, repo string) ([]versionItem, error) {
 
 func makeGitHubRequest(apiURL string) (*http.Response, error) {
 	token := viper.GetString("github-token")
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: defaultHTTPTimeout,
+	}
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
