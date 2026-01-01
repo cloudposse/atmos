@@ -183,6 +183,21 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
+	// Merge dependencies (base component dependencies + component dependencies).
+	// Component dependencies take precedence over base component dependencies.
+	var finalComponentDependencies map[string]any
+	if len(result.BaseComponentDependencies) > 0 || len(result.ComponentDependencies) > 0 {
+		finalComponentDependencies, err = m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				result.BaseComponentDependencies,
+				result.ComponentDependencies,
+			})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Build final component map.
 	comp := map[string]any{
 		cfg.VarsSectionName:        finalComponentVars,
@@ -193,6 +208,11 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		cfg.InheritanceSectionName: result.ComponentInheritanceChain,
 		cfg.MetadataSectionName:    finalComponentMetadata,
 		cfg.OverridesSectionName:   result.ComponentOverrides,
+	}
+
+	// Add dependencies if present.
+	if len(finalComponentDependencies) > 0 {
+		comp[cfg.DependenciesSectionName] = finalComponentDependencies
 	}
 
 	// Terraform-specific: process backends and add Terraform-specific fields.

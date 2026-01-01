@@ -3,13 +3,13 @@ title: atmos version list
 sidebar_label: list
 sidebar_class_name: command
 id: list
-description: List recent Atmos releases with pagination and filtering options
+description: List Atmos releases or locally installed versions
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-List recent Atmos releases with pagination and filtering options.
+List Atmos releases from GitHub or locally installed versions.
 </Intro>
 
 <Screengrab title="atmos version list --help" slug="atmos-version-list--help" />
@@ -34,6 +34,12 @@ List the last 10 releases (default):
 
 ```shell
 atmos version list
+```
+
+List locally installed versions:
+
+```shell
+atmos version list --installed
 ```
 
 List the last 20 releases:
@@ -81,6 +87,9 @@ atmos version list --limit 5 --include-prereleases --format json
 ## Flags
 
 <dl>
+  <dt>`--installed`</dt>
+  <dd>List locally installed versions instead of GitHub releases. Default: `false`</dd>
+
   <dt>`--limit`</dt>
   <dd>Maximum number of releases to display (1-100). Default: `10`</dd>
 
