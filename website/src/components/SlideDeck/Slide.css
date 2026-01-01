@@ -248,9 +248,10 @@ html[data-theme='dark'] .slide--title {
 /* Mobile Portrait Fullscreen - adjust layout for narrow tall viewports */
 @media screen and (max-width: 768px) and (orientation: portrait) {
   .slide-deck--fullscreen .slide {
-    padding: 1rem 1.5rem 5rem !important;
-    align-items: flex-start;
-    justify-content: flex-start;
+    padding: 2rem 1.5rem 5rem !important;
+    /* Center content vertically */
+    align-items: center;
+    justify-content: center;
   }
 
   .slide-deck--fullscreen .slide__inner {
@@ -260,13 +261,7 @@ html[data-theme='dark'] .slide--title {
     padding: 0;
   }
 
-  /* Title slides can be centered */
-  .slide-deck--fullscreen .slide--title {
-    align-items: center;
-    justify-content: center;
-  }
-
-  /* Content slides align to top */
+  /* Content slides keep left text alignment */
   .slide-deck--fullscreen .slide--content .slide__inner {
     text-align: left;
     align-items: flex-start;
