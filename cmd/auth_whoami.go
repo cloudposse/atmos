@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -161,13 +161,10 @@ func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
 	if whoami.Environment != nil {
 		redactedWhoami.Environment = sanitizeEnvMap(whoami.Environment, homeDir)
 	}
-	jsonData, err := json.MarshalIndent(redactedWhoami, "", "  ")
-	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "Failed to marshal JSON", "")
-		return errUtils.ErrInvalidAuthConfig
-	}
-	fmt.Println(string(jsonData))
-	return nil
+	// Use data.WriteJSON() to write to the data channel (stdout) with proper I/O handling.
+	// This ensures output goes through the I/O layer with automatic masking and respects
+	// stream redirection in tests.
+	return data.WriteJSON(redactedWhoami)
 }
 
 func printWhoamiHuman(whoami *authTypes.WhoamiInfo, isValid bool) {

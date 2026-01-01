@@ -1,0 +1,83 @@
+# yaml-language-server: $schema=schema.json
+# Tests for --chdir/-C flag behavior
+# Note: The --use-version + --chdir combination is tested in pkg/version/reexec_test.go
+# because testing it end-to-end requires downloading different Atmos versions.
+tests:
+  - name: "atmos --chdir with long flag"
+    enabled: true
+    snapshot: false
+    description: "Verify --chdir flag changes working directory before running command"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "--chdir"
+      - "examples/demo-stacks"
+      - "version"
+    expect:
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      exit_code: 0
+
+  - name: "atmos --chdir=value syntax"
+    enabled: true
+    snapshot: false
+    description: "Verify --chdir=value syntax works correctly"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "--chdir=examples/demo-stacks"
+      - "version"
+    expect:
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      exit_code: 0
+
+  - name: "atmos -C short flag"
+    enabled: true
+    snapshot: false
+    description: "Verify -C short flag changes working directory"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "-C"
+      - "examples/demo-stacks"
+      - "version"
+    expect:
+      stdout:
+        - '👽 Atmos (\d+\.\d+\.\d+|test) on [a-z]+/[a-z0-9]+'
+      exit_code: 0
+
+  - name: "atmos --chdir to invalid directory"
+    enabled: true
+    snapshot: false
+    description: "Verify --chdir with non-existent directory shows error"
+    workdir: "../examples/demo-stacks"
+    command: "atmos"
+    args:
+      - "--chdir"
+      - "bad"
+      - "version"
+    expect:
+      stderr:
+        - "workdir does not exist"
+        - "bad"
+      exit_code: 1
+
+  - name: "atmos --chdir with describe config"
+    enabled: true
+    snapshot: false
+    description: "Verify --chdir affects config loading by changing to demo-stacks"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "--chdir"
+      - "examples/demo-stacks"
+      - "describe"
+      - "config"
+      - "-f"
+      - "yaml"
+    expect:
+      stdout:
+        - "stacks:"
+        - "base_path: stacks"
+      exit_code: 0

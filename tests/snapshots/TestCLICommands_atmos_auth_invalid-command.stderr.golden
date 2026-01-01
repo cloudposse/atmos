@@ -1,4 +1,3 @@
-
 # Incorrect Usage
 
 **Error:** Unknown command invalid-command for atmos auth
@@ -20,5 +19,3 @@ Valid subcommands are:
 ## Hints
 
 💡 Run atmos auth --help for usage
-
-

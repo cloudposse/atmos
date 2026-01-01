@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
@@ -129,6 +130,31 @@ func ExecutePacker(
 				errUtils.ErrLockedComponentCantBeProvisioned,
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
 		}
+	}
+
+	// Resolve and install component dependencies.
+	resolver := dependencies.NewResolver(&atmosConfig)
+	deps, err := resolver.ResolveComponentDependencies("packer", info.StackSection, info.ComponentSection)
+	if err != nil {
+		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+	}
+
+	if len(deps) > 0 {
+		log.Debug("Installing component dependencies", "component", info.ComponentFromArg, "stack", info.Stack, "tools", deps)
+		installer := dependencies.NewInstaller(&atmosConfig)
+		if err := installer.EnsureTools(deps); err != nil {
+			return fmt.Errorf("failed to install component dependencies: %w", err)
+		}
+
+		// Build PATH with toolchain binaries and add to component environment.
+		// This does NOT modify the global process environment - only the subprocess environment.
+		toolchainPATH, err := dependencies.BuildToolchainPATH(&atmosConfig, deps)
+		if err != nil {
+			return fmt.Errorf("failed to build toolchain PATH: %w", err)
+		}
+
+		// Propagate toolchain PATH into environment for subprocess.
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
 	}
 
 	// Check if the component 'settings.validation' section is specified and validate the component.
