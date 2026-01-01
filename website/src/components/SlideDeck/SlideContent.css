@@ -234,3 +234,49 @@ html[data-theme='dark'] .slide-subtitle {
     border-radius: 4px;
   }
 }
+
+/* Mobile Portrait Fullscreen - use smaller font sizes for narrow viewports */
+@media screen and (max-width: 768px) and (orientation: portrait) {
+  .slide-deck--fullscreen .slide-title {
+    font-size: clamp(1.25rem, 5vw, 1.75rem);
+    margin-bottom: 0.5rem;
+  }
+
+  .slide-deck--fullscreen .slide--title .slide-title {
+    font-size: clamp(1.5rem, 6vw, 2.25rem);
+  }
+
+  .slide-deck--fullscreen .slide-subtitle {
+    font-size: clamp(1rem, 4vw, 1.25rem);
+    margin-bottom: 0.5rem;
+  }
+
+  .slide-deck--fullscreen .slide--title .slide-subtitle {
+    font-size: clamp(1rem, 4.5vw, 1.5rem);
+  }
+
+  .slide-deck--fullscreen .slide-content,
+  .slide-deck--fullscreen .slide-list {
+    font-size: clamp(0.875rem, 3.5vw, 1.1rem);
+    line-height: 1.5;
+  }
+
+  .slide-deck--fullscreen .slide-list li {
+    margin-bottom: 0.5rem;
+  }
+
+  .slide-deck--fullscreen .slide-code {
+    font-size: clamp(0.7rem, 2.5vw, 0.9rem);
+  }
+
+  /* Split layouts in portrait - stack vertically */
+  .slide-deck--fullscreen .slide--split .slide__inner {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .slide-deck--fullscreen .slide--split .slide-image img,
+  .slide-deck--fullscreen .slide--split img {
+    max-height: 30vh;
+  }
+}

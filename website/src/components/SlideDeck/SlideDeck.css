@@ -522,6 +522,31 @@ html[data-theme='dark'] .slide-deck__progress-bar {
   }
 }
 
+/* Mobile Portrait - specific handling for tall narrow viewports */
+@media screen and (max-width: 768px) and (orientation: portrait) {
+  .slide-deck--fullscreen {
+    /* Account for mobile browser UI (URL bar, etc.) using dvh */
+    height: 100dvh;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .slide-deck--fullscreen .slide-deck__main {
+    /* Leave room for toolbar at bottom */
+    height: calc(100dvh - 50px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+
+  .slide-deck--fullscreen .slide-deck__slide-wrapper .slide {
+    /* Add top padding to account for any browser UI overlap */
+    padding-top: 1rem;
+    padding-bottom: 5rem;
+  }
+
+  .slide-deck--fullscreen .slide-deck__toolbar {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  }
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .slide-deck__side-nav,
