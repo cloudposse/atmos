@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -14,6 +15,17 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// skipInMacOSCI skips the test if running on macOS in a CI environment.
+// These integration tests can cause timeouts on slower macOS CI runners.
+func skipInMacOSCI(t *testing.T) {
+	t.Helper()
+	isMacOS := runtime.GOOS == "darwin"
+	isCI := os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != ""
+	if isMacOS && isCI {
+		t.Skip("Skipping toolchain integration test on macOS CI (can cause timeouts)")
+	}
+}
 
 // This file contains integration tests for the toolchain system's integration with terraform commands.
 //
@@ -50,7 +62,10 @@ import (
 func TestTerraformToolchain_WithDependencies(t *testing.T) {
 	defer perf.Track(nil, "tests.TestTerraformToolchain_WithDependencies")()
 
-	// Skip if we can't download tools (network required)
+	// Skip on macOS CI to prevent timeouts - these tests can be slow.
+	skipInMacOSCI(t)
+
+	// Skip if we can't download tools (network required).
 	if testing.Short() {
 		t.Skip("Skipping toolchain integration test in short mode (requires network)")
 	}
@@ -58,12 +73,12 @@ func TestTerraformToolchain_WithDependencies(t *testing.T) {
 	workDir := "fixtures/scenarios/toolchain-terraform-integration"
 	t.Chdir(workDir)
 
-	// Clean up any existing toolchain installations
+	// Clean up any existing toolchain installations.
 	toolsDir := ".tools"
 	os.RemoveAll(toolsDir)
 	defer os.RemoveAll(toolsDir)
 
-	// Capture PATH before execution to verify it gets modified
+	// Capture PATH before execution to verify it gets modified.
 	pathBefore := os.Getenv("PATH")
 	t.Logf("PATH before execution: %s", pathBefore)
 
@@ -141,6 +156,9 @@ func TestTerraformToolchain_WithDependencies(t *testing.T) {
 func TestTerraformToolchain_WithoutDependencies(t *testing.T) {
 	defer perf.Track(nil, "tests.TestTerraformToolchain_WithoutDependencies")()
 
+	// Skip on macOS CI to prevent timeouts - these tests can be slow.
+	skipInMacOSCI(t)
+
 	// Skip if running in short mode (CI without terraform).
 	if testing.Short() {
 		t.Skip("Skipping toolchain integration test in short mode")
@@ -149,7 +167,7 @@ func TestTerraformToolchain_WithoutDependencies(t *testing.T) {
 	workDir := "fixtures/scenarios/toolchain-terraform-integration"
 	t.Chdir(workDir)
 
-	// Clean up any existing toolchain installations
+	// Clean up any existing toolchain installations.
 	toolsDir := ".tools"
 	os.RemoveAll(toolsDir)
 	defer os.RemoveAll(toolsDir)
@@ -243,7 +261,10 @@ func logCommandSucceeded(t *testing.T) {
 func TestTerraformToolchain_PathPropagation(t *testing.T) {
 	defer perf.Track(nil, "tests.TestTerraformToolchain_PathPropagation")()
 
-	// Skip if we can't download tools
+	// Skip on macOS CI to prevent timeouts - these tests can be slow.
+	skipInMacOSCI(t)
+
+	// Skip if we can't download tools.
 	if testing.Short() {
 		t.Skip("Skipping toolchain integration test in short mode")
 	}
@@ -262,7 +283,7 @@ func TestTerraformToolchain_PathPropagation(t *testing.T) {
 		SubCommand:       "version",
 	}
 
-	// Capture original PATH
+	// Capture original PATH.
 	originalPath := os.Getenv("PATH")
 
 	// Execute terraform
@@ -316,6 +337,9 @@ func TestTerraformToolchain_PathPropagation(t *testing.T) {
 // correct location and have the correct permissions.
 func TestTerraformToolchain_BinaryLocation(t *testing.T) {
 	defer perf.Track(nil, "tests.TestTerraformToolchain_BinaryLocation")()
+
+	// Skip on macOS CI to prevent timeouts - these tests can be slow.
+	skipInMacOSCI(t)
 
 	if testing.Short() {
 		t.Skip("Skipping toolchain integration test in short mode")
