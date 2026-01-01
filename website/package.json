@@ -17,6 +17,7 @@
     "build:site": "npm run build"
   },
   "dependencies": {
+    "@docsearch/react": "^4.2.0",
     "@docusaurus/core": "^3.9.2",
     "@docusaurus/plugin-client-redirects": "^3.9.2",
     "@docusaurus/plugin-content-blog": "^3.9.2",

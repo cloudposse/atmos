@@ -492,7 +492,12 @@ const config = {
                 appId: process.env.ALGOLIA_APP_ID || '32YOERUX83',
                 apiKey: process.env.ALGOLIA_SEARCH_API_KEY || '557985309adf0e4df9dcf3cb29c61928', // this is SEARCH ONLY API key and is not sensitive information
                 indexName: process.env.ALGOLIA_INDEX_NAME || 'atmos.tools',
-                contextualSearch: false
+                contextualSearch: false,
+                // DocSearch v4 Ask AI integration
+                // https://docsearch.algolia.com/docs/v4/askai/
+                askAi: {
+                    assistantId: process.env.ALGOLIA_ASKAI_ASSISTANT_ID || '0ad3822f-e071-402e-bc54-b2d89f3c32d1',
+                }
             },
             zoom: {
                 selector: '.markdown :not(em) > img',
