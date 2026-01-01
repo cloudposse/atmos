@@ -496,7 +496,7 @@ const config = {
                 // DocSearch v4 Ask AI integration
                 // https://docsearch.algolia.com/docs/v4/askai/
                 askAi: {
-                    assistantId: process.env.ALGOLIA_ASKAI_ASSISTANT_ID || '0ad3822f-e071-402e-bc54-b2d89f3c32d1',
+                    assistantId: process.env.ALGOLIA_ASKAI_ASSISTANT_ID || 'xzgtsIXZSf7V',
                 }
             },
             zoom: {
