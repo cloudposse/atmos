@@ -1,7 +1,41 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo } from 'react';
-import type { SlideDeckContextValue } from './types';
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo, useRef } from 'react';
+import type { SlideDeckContextValue, NotesPreferences, NotesPosition, NotesDisplayMode } from './types';
 
 const SlideDeckContext = createContext<SlideDeckContextValue | null>(null);
+
+// localStorage key for notes preferences.
+const NOTES_PREFS_KEY = 'slide-deck-notes-preferences';
+
+// Default notes preferences.
+const defaultNotesPreferences: NotesPreferences = {
+  position: 'right',
+  displayMode: 'overlay',
+  isPopout: false,
+};
+
+// Load preferences from localStorage.
+const loadNotesPreferences = (): NotesPreferences => {
+  if (typeof window === 'undefined') return defaultNotesPreferences;
+  try {
+    const stored = localStorage.getItem(NOTES_PREFS_KEY);
+    if (stored) {
+      return { ...defaultNotesPreferences, ...JSON.parse(stored) };
+    }
+  } catch (e) {
+    console.error('Failed to load notes preferences:', e);
+  }
+  return defaultNotesPreferences;
+};
+
+// Save preferences to localStorage.
+const saveNotesPreferences = (prefs: NotesPreferences) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(NOTES_PREFS_KEY, JSON.stringify(prefs));
+  } catch (e) {
+    console.error('Failed to save notes preferences:', e);
+  }
+};
 
 interface SlideDeckProviderProps {
   children: ReactNode;
@@ -9,15 +43,41 @@ interface SlideDeckProviderProps {
   startSlide?: number;
 }
 
+// Check if device is mobile/tablet (touch device or small screen).
+const isMobileDevice = () => {
+  if (typeof window === 'undefined') return false;
+  // Check for touch capability or small screen.
+  const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  const isSmallScreen = window.innerWidth <= 1024;
+  return hasTouch && isSmallScreen;
+};
+
 export function SlideDeckProvider({
   children,
   totalSlides,
   startSlide = 1
 }: SlideDeckProviderProps) {
   const [currentSlide, setCurrentSlide] = useState(startSlide);
+  // Initialize fullscreen to false to avoid hydration mismatch (server always renders false).
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [currentNotes, setCurrentNotes] = useState<React.ReactNode | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  const [notesPreferences, setNotesPreferences] = useState<NotesPreferences>(defaultNotesPreferences);
+
+  // Ref to track current fullscreen state for resize handler (avoids stale closure).
+  const isFullscreenRef = useRef(isFullscreen);
+  isFullscreenRef.current = isFullscreen;
+
+  // Load notes preferences and set mobile/fullscreen state after mount (client-side only).
+  useEffect(() => {
+    setNotesPreferences(loadNotesPreferences());
+    // Auto-enter fullscreen on mobile after hydration.
+    if (isMobileDevice()) {
+      setIsMobile(true);
+      setIsFullscreen(true);
+    }
+  }, []);
 
   // Sync with URL hash on mount.
   useEffect(() => {
@@ -56,14 +116,36 @@ export function SlideDeckProvider({
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, [totalSlides]);
 
-  // Handle fullscreen change events.
+  // Handle fullscreen change events and mobile detection.
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      // If native fullscreen changed, sync state.
+      // But keep fullscreen on if we're on mobile.
+      if (document.fullscreenElement) {
+        setIsFullscreen(true);
+      } else if (!isMobileDevice()) {
+        setIsFullscreen(false);
+      }
+    };
+
+    const handleResize = () => {
+      // Auto-enter fullscreen mode on mobile, exit on desktop (unless native fullscreen).
+      // Use ref to get current fullscreen state (avoids stale closure).
+      const mobile = isMobileDevice();
+      setIsMobile(mobile);
+      if (mobile && !isFullscreenRef.current) {
+        setIsFullscreen(true);
+      } else if (!mobile && !document.fullscreenElement && isFullscreenRef.current) {
+        setIsFullscreen(false);
+      }
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   const goToSlide = useCallback((index: number) => {
@@ -99,6 +181,30 @@ export function SlideDeckProvider({
     setShowNotes(prev => !prev);
   }, []);
 
+  const setNotesPosition = useCallback((position: NotesPosition) => {
+    setNotesPreferences(prev => {
+      const updated = { ...prev, position };
+      saveNotesPreferences(updated);
+      return updated;
+    });
+  }, []);
+
+  const setNotesDisplayMode = useCallback((displayMode: NotesDisplayMode) => {
+    setNotesPreferences(prev => {
+      const updated = { ...prev, displayMode };
+      saveNotesPreferences(updated);
+      return updated;
+    });
+  }, []);
+
+  const setNotesPopout = useCallback((isPopout: boolean) => {
+    setNotesPreferences(prev => {
+      const updated = { ...prev, isPopout };
+      saveNotesPreferences(updated);
+      return updated;
+    });
+  }, []);
+
   const value: SlideDeckContextValue = useMemo(() => ({
     currentSlide,
     totalSlides,
@@ -111,7 +217,12 @@ export function SlideDeckProvider({
     toggleNotes,
     currentNotes,
     setCurrentNotes,
-  }), [currentSlide, totalSlides, goToSlide, nextSlide, prevSlide, isFullscreen, toggleFullscreen, showNotes, toggleNotes, currentNotes]);
+    notesPreferences,
+    setNotesPosition,
+    setNotesDisplayMode,
+    setNotesPopout,
+    isMobile,
+  }), [currentSlide, totalSlides, goToSlide, nextSlide, prevSlide, isFullscreen, toggleFullscreen, showNotes, toggleNotes, currentNotes, notesPreferences, setNotesPosition, setNotesDisplayMode, setNotesPopout, isMobile]);
 
   return (
     <SlideDeckContext.Provider value={value}>
