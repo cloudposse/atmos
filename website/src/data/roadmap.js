@@ -32,6 +32,17 @@ export const roadmapConfig = {
 
   featured: [
     {
+      id: 'ask-ai',
+      icon: 'RiRobot2Line',
+      title: 'Ask AI Search',
+      tagline: 'Conversational documentation search',
+      description: 'AI-powered search that understands natural language questions about Atmos. Get intelligent, contextual answers drawn directly from the documentation.',
+      benefits: 'Ask questions in plain English instead of searching for keywords. Get answers with source citations and direct links to relevant docs.',
+      status: 'shipped',
+      quarter: 'q4-2025',
+      changelog: 'ask-ai-search',
+    },
+    {
       id: 'devcontainer',
       icon: 'RiCodeBoxLine',
       title: 'Dev Container Support',
@@ -381,6 +392,7 @@ export const roadmapConfig = {
         { label: 'New learning section', status: 'shipped', quarter: 'q4-2025', docs: '/learn/concepts-overview', changelog: 'documentation-reorganization', description: 'Step-by-step tutorials for getting started with Atmos from scratch.', category: 'featured', priority: 'high', benefits: 'New users have a clear path from zero to productive. Concepts build on each other logically.' },
         { label: 'Added migration guides', status: 'shipped', quarter: 'q4-2025', docs: '/migration/terragrunt', changelog: 'migration-guides', description: 'Detailed guides for migrating from Terragrunt, Terraform workspaces, and native Terraform to Atmos.', category: 'featured', priority: 'high', benefits: 'Migrate from your current tool with step-by-step guidance. Understand the mapping between concepts.' },
         { label: 'Roadmap', status: 'shipped', quarter: 'q4-2025', docs: '/roadmap', changelog: 'product-roadmap', description: 'Public roadmap showing past accomplishments and future plans.', category: 'featured', priority: 'high', benefits: 'See what\'s coming and plan accordingly. Understand the direction of the project.' },
+        { label: 'Ask AI conversational search', status: 'shipped', quarter: 'q4-2025', changelog: 'ask-ai-search', description: 'AI-powered conversational search using Algolia DocSearch v4 with Ask AI. Ask natural language questions and get intelligent, contextual answers from the documentation.', category: 'featured', priority: 'high', benefits: 'Find answers faster with natural language queries. No need to guess the right keywords.' },
       ],
       issues: [],
       prs: [],
