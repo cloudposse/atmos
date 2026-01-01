@@ -336,9 +336,17 @@ export function useTTS({ deckName, onEnded }: UseTTSOptions): UseTTSReturn {
   const resume = useCallback(() => {
     const audio = audioRef.current;
     if (audio && isPaused) {
-      audio.play();
-      setIsPaused(false);
-      setIsPlaying(true);
+      audio.play()
+        .then(() => {
+          setIsPaused(false);
+          setIsPlaying(true);
+        })
+        .catch((err) => {
+          // Handle autoplay blocked or other playback errors.
+          setError(err instanceof Error ? err.message : 'Resume failed');
+          setIsPaused(true);
+          setIsPlaying(false);
+        });
     }
   }, [isPaused]);
 
