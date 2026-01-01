@@ -120,7 +120,7 @@ func isURL(path string) bool {
 func fetchURL(ctx context.Context, url string) ([]byte, error) {
 	defer perf.Track(nil, "function.fetchURL")()
 
-	client := atmoshttp.NewDefaultClient(defaultHTTPTimeout)
+	client := atmoshttp.NewDefaultClient(atmoshttp.WithTimeout(defaultHTTPTimeout))
 	content, err := atmoshttp.Get(ctx, url, client)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to fetch URL %s: %w", ErrInvalidArguments, url, err)
