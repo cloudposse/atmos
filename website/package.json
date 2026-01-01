@@ -17,13 +17,13 @@
     "build:site": "npm run build"
   },
   "dependencies": {
-    "@docusaurus/core": "^3.6.3",
-    "@docusaurus/plugin-client-redirects": "^3.6.3",
-    "@docusaurus/plugin-content-blog": "^3.6.3",
-    "@docusaurus/plugin-google-tag-manager": "^3.6.3",
-    "@docusaurus/preset-classic": "^3.6.3",
-    "@docusaurus/theme-common": "^3.6.3",
-    "@docusaurus/theme-mermaid": "^3.6.3",
+    "@docusaurus/core": "^3.9.2",
+    "@docusaurus/plugin-client-redirects": "^3.9.2",
+    "@docusaurus/plugin-content-blog": "^3.9.2",
+    "@docusaurus/plugin-google-tag-manager": "^3.9.2",
+    "@docusaurus/preset-classic": "^3.9.2",
+    "@docusaurus/theme-common": "^3.9.2",
+    "@docusaurus/theme-mermaid": "^3.9.2",
     "@excalidraw/excalidraw": "^0.17.6",
     "@fortawesome/fontawesome-svg-core": "^6.7.2",
     "@fortawesome/free-brands-svg-icons": "^6.7.2",
@@ -58,7 +58,7 @@
     "unified": "^11.0.5"
   },
   "devDependencies": {
-    "@docusaurus/module-type-aliases": "^3.6.3",
+    "@docusaurus/module-type-aliases": "^3.9.2",
     "prettier": "^3.4.2"
   },
   "browserslist": {

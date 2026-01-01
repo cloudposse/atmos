@@ -9,25 +9,25 @@ importers:
   .:
     dependencies:
       '@docusaurus/core':
-        specifier: ^3.6.3
+        specifier: ^3.9.2
         version: 3.9.2(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@docusaurus/plugin-client-redirects':
-        specifier: ^3.6.3
+        specifier: ^3.9.2
         version: 3.9.2(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@docusaurus/plugin-content-blog':
-        specifier: ^3.6.3
+        specifier: ^3.9.2
         version: 3.9.2(@docusaurus/plugin-content-docs@3.9.2(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@docusaurus/plugin-google-tag-manager':
-        specifier: ^3.6.3
+        specifier: ^3.9.2
         version: 3.9.2(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@docusaurus/preset-classic':
-        specifier: ^3.6.3
+        specifier: ^3.9.2
         version: 3.9.2(@algolia/client-search@5.41.0)(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(@types/react@19.2.2)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(search-insights@2.17.3)
       '@docusaurus/theme-common':
-        specifier: ^3.6.3
+        specifier: ^3.9.2
         version: 3.9.2(@docusaurus/plugin-content-docs@3.9.2(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@docusaurus/theme-mermaid':
-        specifier: ^3.6.3
+        specifier: ^3.9.2
         version: 3.9.2(@docusaurus/plugin-content-docs@3.9.2(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@mdx-js/react@3.1.1(@types/react@19.2.2)(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@excalidraw/excalidraw':
         specifier: ^0.17.6
@@ -127,7 +127,7 @@ importers:
         version: 11.0.5
     devDependencies:
       '@docusaurus/module-type-aliases':
-        specifier: ^3.6.3
+        specifier: ^3.9.2
         version: 3.9.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       prettier:
         specifier: ^3.4.2
@@ -8402,7 +8402,7 @@ snapshots:
 
   '@types/sax@1.2.7':
     dependencies:
-      '@types/node': 17.0.45
+      '@types/node': 24.9.1
 
   '@types/send@0.17.5':
     dependencies:
