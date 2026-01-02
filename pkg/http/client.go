@@ -149,12 +149,12 @@ func GetGitHubTokenFromEnv() string {
 
 	// Fall back to direct environment variable lookup for non-toolchain commands.
 	// Check ATMOS_GITHUB_TOKEN first (Atmos-specific), then GITHUB_TOKEN (standard).
-	//nolint:forbidigo // Direct env lookup required for non-toolchain commands
+	//nolint:forbidigo // Direct env lookup required for non-toolchain commands.
 	if token := os.Getenv("ATMOS_GITHUB_TOKEN"); token != "" {
 		return token
 	}
 
-	//nolint:forbidigo // Direct env lookup required for non-toolchain commands
+	//nolint:forbidigo // Direct env lookup required for non-toolchain commands.
 	return os.Getenv("GITHUB_TOKEN")
 }
 

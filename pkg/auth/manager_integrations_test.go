@@ -492,13 +492,11 @@ func TestManager_findIntegrationsForIdentity_NilVia(t *testing.T) {
 }
 
 func TestManager_GetIntegration_NilConfig(t *testing.T) {
+	// Test with non-nil config but nil integrations map.
 	m := &manager{
-		config: nil,
-	}
-
-	// This would panic, so we test with non-nil config but nil integrations.
-	m.config = &schema.AuthConfig{
-		Integrations: nil,
+		config: &schema.AuthConfig{
+			Integrations: nil,
+		},
 	}
 
 	integration, err := m.GetIntegration("test")

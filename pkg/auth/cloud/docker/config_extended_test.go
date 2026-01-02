@@ -2,12 +2,15 @@ package docker
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestGetDockerConfigDir_WithDOCKER_CONFIG(t *testing.T) {
@@ -56,6 +59,7 @@ func TestConfigManager_LoadConfig_InvalidJSON(t *testing.T) {
 	// Should return error for invalid JSON.
 	_, err = manager.GetAuthenticatedRegistries()
 	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDockerConfigRead)
 	assert.Contains(t, err.Error(), "invalid JSON")
 }
 
@@ -137,18 +141,23 @@ func TestConfigManager_ConcurrentWrites(t *testing.T) {
 	require.NoError(t, err)
 
 	// Perform concurrent writes (testing mutex).
-	done := make(chan bool, 10)
+	type result struct {
+		registry string
+		err      error
+	}
+	results := make(chan result, 10)
 	for i := 0; i < 10; i++ {
 		go func(idx int) {
-			registry := "registry" + string(rune('0'+idx)) + ".example.com"
-			_ = manager.WriteAuth(registry, "user", "pass")
-			done <- true
+			registry := fmt.Sprintf("registry%d.example.com", idx)
+			writeErr := manager.WriteAuth(registry, "user", "pass")
+			results <- result{registry, writeErr}
 		}(i)
 	}
 
-	// Wait for all goroutines.
+	// Wait for all goroutines and verify no errors.
 	for i := 0; i < 10; i++ {
-		<-done
+		res := <-results
+		require.NoError(t, res.err, "WriteAuth failed for %s", res.registry)
 	}
 
 	// Should have all 10 registries.

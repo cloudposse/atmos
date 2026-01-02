@@ -143,6 +143,16 @@ func TestManager_GetChainStepName(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+
+	// Test that negative index panics (documents current behavior).
+	t.Run("negative index panics", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf("expected panic for negative index")
+			}
+		}()
+		_ = mgr.getChainStepName(-1)
+	})
 }
 
 func TestManager_IsCredentialValid(t *testing.T) {

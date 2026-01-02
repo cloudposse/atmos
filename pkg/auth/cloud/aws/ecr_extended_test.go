@@ -25,52 +25,48 @@ func TestBuildAWSConfigFromCreds_InvalidCredentialsType(t *testing.T) {
 	assert.Contains(t, err.Error(), "expected AWS credentials")
 }
 
-func TestBuildAWSConfigFromCreds_UsesProvidedRegion(t *testing.T) {
-	ctx := context.Background()
-
-	awsCreds := &types.AWSCredentials{
-		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
-		SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-		SessionToken:    "token123",
-		Region:          "eu-west-1", // Credentials have eu-west-1.
+func TestBuildAWSConfigFromCreds_RegionHandling(t *testing.T) {
+	tests := []struct {
+		name              string
+		credentialsRegion string
+		providedRegion    string
+		expectedRegion    string
+	}{
+		{
+			name:              "uses provided region",
+			credentialsRegion: "eu-west-1",
+			providedRegion:    "us-east-1",
+			expectedRegion:    "us-east-1",
+		},
+		{
+			name:              "falls back to credentials region",
+			credentialsRegion: "ap-southeast-1",
+			providedRegion:    "",
+			expectedRegion:    "ap-southeast-1",
+		},
+		{
+			name:              "success with matching regions",
+			credentialsRegion: "us-west-2",
+			providedRegion:    "us-west-2",
+			expectedRegion:    "us-west-2",
+		},
 	}
 
-	// Provide different region - should use provided region, not credential's region.
-	cfg, err := buildAWSConfigFromCreds(ctx, awsCreds, "us-east-1")
-	require.NoError(t, err)
-	assert.Equal(t, "us-east-1", cfg.Region) // Should use provided region.
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			awsCreds := &types.AWSCredentials{
+				AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+				SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+				Region:          tt.credentialsRegion,
+			}
 
-func TestBuildAWSConfigFromCreds_FallsBackToCredentialsRegion(t *testing.T) {
-	ctx := context.Background()
-
-	awsCreds := &types.AWSCredentials{
-		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
-		SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-		SessionToken:    "token123",
-		Region:          "ap-southeast-1",
+			cfg, err := buildAWSConfigFromCreds(ctx, awsCreds, tt.providedRegion)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedRegion, cfg.Region)
+			assert.NotNil(t, cfg.Credentials)
+		})
 	}
-
-	// Empty provided region - should fall back to credential's region.
-	cfg, err := buildAWSConfigFromCreds(ctx, awsCreds, "")
-	require.NoError(t, err)
-	assert.Equal(t, "ap-southeast-1", cfg.Region) // Should use credentials' region.
-}
-
-func TestBuildAWSConfigFromCreds_Success(t *testing.T) {
-	ctx := context.Background()
-
-	awsCreds := &types.AWSCredentials{
-		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
-		SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-		SessionToken:    "",
-		Region:          "us-west-2",
-	}
-
-	cfg, err := buildAWSConfigFromCreds(ctx, awsCreds, "us-west-2")
-	require.NoError(t, err)
-	assert.NotNil(t, cfg.Credentials)
-	assert.Equal(t, "us-west-2", cfg.Region)
 }
 
 // mockNonAWSCredentials is a mock that implements ICredentials but isn't AWSCredentials.
@@ -90,20 +86,4 @@ func (m *mockNonAWSCredentials) BuildWhoamiInfo(_ *types.WhoamiInfo) {
 
 func (m *mockNonAWSCredentials) Validate(_ context.Context) (*types.ValidationInfo, error) {
 	return nil, nil
-}
-
-func TestECRAuthResult_Fields(t *testing.T) {
-	// Test ECRAuthResult struct fields.
-	expiresAt := time.Now().Add(12 * time.Hour)
-	result := &ECRAuthResult{
-		Username:  "AWS",
-		Password:  "test-token-123",
-		Registry:  "123456789012.dkr.ecr.us-east-1.amazonaws.com",
-		ExpiresAt: expiresAt,
-	}
-
-	assert.Equal(t, "AWS", result.Username)
-	assert.Equal(t, "test-token-123", result.Password)
-	assert.Equal(t, "123456789012.dkr.ecr.us-east-1.amazonaws.com", result.Registry)
-	assert.Equal(t, expiresAt, result.ExpiresAt)
 }

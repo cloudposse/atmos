@@ -83,77 +83,95 @@ func TestEnvironToMapFiltered(t *testing.T) {
 	}
 }
 
-func TestGetTerraformOutputVariable_SimpleKey(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
-	outputs := map[string]any{
-		"vpc_id":      "vpc-12345",
-		"subnet_ids":  []string{"subnet-1", "subnet-2"},
-		"null_output": nil,
+func TestGetTerraformOutputVariable(t *testing.T) {
+	tests := []struct {
+		name           string
+		outputs        map[string]any
+		key            string
+		expectedValue  any
+		expectedExists bool
+	}{
+		{
+			name:           "simple key exists",
+			outputs:        map[string]any{"vpc_id": "vpc-12345", "subnet_ids": []string{"subnet-1", "subnet-2"}},
+			key:            "vpc_id",
+			expectedValue:  "vpc-12345",
+			expectedExists: true,
+		},
+		{
+			name:           "simple key missing",
+			outputs:        map[string]any{"vpc_id": "vpc-12345"},
+			key:            "nonexistent",
+			expectedValue:  nil,
+			expectedExists: false,
+		},
+		{
+			name:           "key with nil value",
+			outputs:        map[string]any{"null_output": nil},
+			key:            "null_output",
+			expectedValue:  nil,
+			expectedExists: true,
+		},
+		{
+			name:           "with dot prefix",
+			outputs:        map[string]any{"vpc_id": "vpc-12345"},
+			key:            ".vpc_id",
+			expectedValue:  "vpc-12345",
+			expectedExists: true,
+		},
 	}
 
-	// Test simple key that exists.
-	value, exists, err := getTerraformOutputVariable(atmosConfig, "vpc", "dev-us-east-1", outputs, "vpc_id")
-	require.NoError(t, err)
-	assert.True(t, exists)
-	assert.Equal(t, "vpc-12345", value)
-
-	// Test simple key that doesn't exist.
-	value, exists, err = getTerraformOutputVariable(atmosConfig, "vpc", "dev-us-east-1", outputs, "nonexistent")
-	require.NoError(t, err)
-	assert.False(t, exists)
-	assert.Nil(t, value)
-
-	// Test key with nil value.
-	value, exists, err = getTerraformOutputVariable(atmosConfig, "vpc", "dev-us-east-1", outputs, "null_output")
-	require.NoError(t, err)
-	assert.True(t, exists)
-	assert.Nil(t, value)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+			value, exists, err := getTerraformOutputVariable(atmosConfig, "vpc", "dev-us-east-1", tt.outputs, tt.key)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedExists, exists)
+			assert.Equal(t, tt.expectedValue, value)
+		})
+	}
 }
 
-func TestGetTerraformOutputVariable_WithDotPrefix(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
-	outputs := map[string]any{
-		"vpc_id": "vpc-12345",
+func TestGetStaticRemoteStateOutput_KeyVariants(t *testing.T) {
+	tests := []struct {
+		name           string
+		remoteState    map[string]any
+		key            string
+		expectedValue  any
+		expectedExists bool
+	}{
+		{
+			name:           "simple key exists",
+			remoteState:    map[string]any{"vpc_id": "vpc-67890", "cidr_block": "10.0.0.0/16"},
+			key:            "vpc_id",
+			expectedValue:  "vpc-67890",
+			expectedExists: true,
+		},
+		{
+			name:           "simple key missing",
+			remoteState:    map[string]any{"vpc_id": "vpc-67890"},
+			key:            "nonexistent",
+			expectedValue:  nil,
+			expectedExists: false,
+		},
+		{
+			name:           "with dot prefix",
+			remoteState:    map[string]any{"vpc_id": "vpc-67890"},
+			key:            ".vpc_id",
+			expectedValue:  "vpc-67890",
+			expectedExists: true,
+		},
 	}
 
-	// Test with dot prefix.
-	value, exists, err := getTerraformOutputVariable(atmosConfig, "vpc", "dev-us-east-1", outputs, ".vpc_id")
-	require.NoError(t, err)
-	assert.True(t, exists)
-	assert.Equal(t, "vpc-12345", value)
-}
-
-func TestGetStaticRemoteStateOutput_SimpleKey(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
-	remoteState := map[string]any{
-		"vpc_id":     "vpc-67890",
-		"cidr_block": "10.0.0.0/16",
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+			value, exists, err := GetStaticRemoteStateOutput(atmosConfig, "vpc", "prod-us-west-2", tt.remoteState, tt.key)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedExists, exists)
+			assert.Equal(t, tt.expectedValue, value)
+		})
 	}
-
-	// Test simple key that exists.
-	value, exists, err := GetStaticRemoteStateOutput(atmosConfig, "vpc", "prod-us-west-2", remoteState, "vpc_id")
-	require.NoError(t, err)
-	assert.True(t, exists)
-	assert.Equal(t, "vpc-67890", value)
-
-	// Test simple key that doesn't exist.
-	value, exists, err = GetStaticRemoteStateOutput(atmosConfig, "vpc", "prod-us-west-2", remoteState, "nonexistent")
-	require.NoError(t, err)
-	assert.False(t, exists)
-	assert.Nil(t, value)
-}
-
-func TestGetStaticRemoteStateOutput_WithDotPrefix(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
-	remoteState := map[string]any{
-		"vpc_id": "vpc-67890",
-	}
-
-	// Test with dot prefix.
-	value, exists, err := GetStaticRemoteStateOutput(atmosConfig, "vpc", "prod-us-west-2", remoteState, ".vpc_id")
-	require.NoError(t, err)
-	assert.True(t, exists)
-	assert.Equal(t, "vpc-67890", value)
 }
 
 func TestProhibitedEnvVars(t *testing.T) {
