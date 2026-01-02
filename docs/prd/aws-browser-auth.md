@@ -335,10 +335,10 @@ Modify `pkg/auth/identities/aws/user.go` to add browser authentication as a thir
 ## Testing Strategy
 
 ### Unit Tests
-- Provider configuration validation
-- AWS CLI version detection and validation
-- Cache file parsing (valid, expired, malformed)
-- Error handling for CLI failures
+- Identity configuration validation
+- OAuth2 PKCE flow (mocked HTTP server)
+- Credential cache parsing (valid, expired, malformed)
+- Error handling for authentication failures
 
 ### Integration Tests
 - Manual testing with real AWS account
