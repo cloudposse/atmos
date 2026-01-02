@@ -122,3 +122,89 @@ func TestParseRegistryURL(t *testing.T) {
 		})
 	}
 }
+
+func TestIsECRRegistry(t *testing.T) {
+	tests := []struct {
+		name     string
+		url      string
+		expected bool
+	}{
+		{
+			name:     "valid ECR URL",
+			url:      "123456789012.dkr.ecr.us-east-1.amazonaws.com",
+			expected: true,
+		},
+		{
+			name:     "valid ECR URL with https prefix",
+			url:      "https://123456789012.dkr.ecr.us-east-1.amazonaws.com",
+			expected: true,
+		},
+		{
+			name:     "valid ECR URL - different region",
+			url:      "999999999999.dkr.ecr.eu-west-1.amazonaws.com",
+			expected: true,
+		},
+		{
+			name:     "valid ECR URL - gov-cloud region",
+			url:      "123456789012.dkr.ecr.us-gov-west-1.amazonaws.com",
+			expected: true,
+		},
+		{
+			name:     "valid ECR URL - ap region",
+			url:      "123456789012.dkr.ecr.ap-southeast-1.amazonaws.com",
+			expected: true,
+		},
+		{
+			name:     "invalid - Docker Hub",
+			url:      "docker.io/library/nginx",
+			expected: false,
+		},
+		{
+			name:     "invalid - GitHub Container Registry",
+			url:      "ghcr.io/owner/repo",
+			expected: false,
+		},
+		{
+			name:     "invalid - empty string",
+			url:      "",
+			expected: false,
+		},
+		{
+			name:     "invalid - malformed ECR URL (wrong suffix)",
+			url:      "123456789012.dkr.ecr.us-east-1.amazonaws.org",
+			expected: false,
+		},
+		{
+			name:     "invalid - wrong account ID format (11 digits)",
+			url:      "12345678901.dkr.ecr.us-east-1.amazonaws.com",
+			expected: false,
+		},
+		{
+			name:     "invalid - wrong account ID format (13 digits)",
+			url:      "1234567890123.dkr.ecr.us-east-1.amazonaws.com",
+			expected: false,
+		},
+		{
+			name:     "invalid - trailing slash",
+			url:      "123456789012.dkr.ecr.us-east-1.amazonaws.com/",
+			expected: false,
+		},
+		{
+			name:     "invalid - with path",
+			url:      "123456789012.dkr.ecr.us-east-1.amazonaws.com/my-repo",
+			expected: false,
+		},
+		{
+			name:     "invalid - ECR public",
+			url:      "public.ecr.aws/abcdefgh/my-image",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := IsECRRegistry(tt.url)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

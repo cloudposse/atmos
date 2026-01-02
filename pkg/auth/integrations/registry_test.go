@@ -181,3 +181,90 @@ func TestIntegrationConfig_Fields(t *testing.T) {
 	assert.NotNil(t, config.Config.Spec)
 	assert.Equal(t, "123456789012", config.Config.Spec.Registry.AccountID)
 }
+
+func TestListKinds(t *testing.T) {
+	// Clear the registry for this test.
+	registryMu.Lock()
+	originalRegistry := make(map[string]IntegrationFactory)
+	for k, v := range registry {
+		originalRegistry[k] = v
+	}
+	registry = make(map[string]IntegrationFactory)
+	registryMu.Unlock()
+
+	// Restore the original registry after the test.
+	t.Cleanup(func() {
+		registryMu.Lock()
+		registry = originalRegistry
+		registryMu.Unlock()
+	})
+
+	// Verify empty registry returns empty slice.
+	kinds := ListKinds()
+	assert.Empty(t, kinds)
+
+	// Register some test factories.
+	Register("kind-a", func(config *IntegrationConfig) (Integration, error) {
+		return &mockIntegration{kind: "kind-a"}, nil
+	})
+	Register("kind-b", func(config *IntegrationConfig) (Integration, error) {
+		return &mockIntegration{kind: "kind-b"}, nil
+	})
+	Register("kind-c", func(config *IntegrationConfig) (Integration, error) {
+		return &mockIntegration{kind: "kind-c"}, nil
+	})
+
+	// Verify all kinds are returned.
+	kinds = ListKinds()
+	assert.Len(t, kinds, 3)
+	assert.Contains(t, kinds, "kind-a")
+	assert.Contains(t, kinds, "kind-b")
+	assert.Contains(t, kinds, "kind-c")
+}
+
+func TestIsRegistered(t *testing.T) {
+	// Clear the registry for this test.
+	registryMu.Lock()
+	originalRegistry := make(map[string]IntegrationFactory)
+	for k, v := range registry {
+		originalRegistry[k] = v
+	}
+	registry = make(map[string]IntegrationFactory)
+	registryMu.Unlock()
+
+	// Restore the original registry after the test.
+	t.Cleanup(func() {
+		registryMu.Lock()
+		registry = originalRegistry
+		registryMu.Unlock()
+	})
+
+	// Verify non-existent kind returns false.
+	assert.False(t, IsRegistered("non-existent"))
+
+	// Register a test factory.
+	Register("my-kind", func(config *IntegrationConfig) (Integration, error) {
+		return &mockIntegration{kind: "my-kind"}, nil
+	})
+
+	// Verify registered kind returns true.
+	assert.True(t, IsRegistered("my-kind"))
+	assert.False(t, IsRegistered("other-kind"))
+}
+
+func TestCreate_NilConfig(t *testing.T) {
+	_, err := Create(nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrIntegrationNotFound)
+}
+
+func TestCreate_NilInnerConfig(t *testing.T) {
+	config := &IntegrationConfig{
+		Name:   "test",
+		Config: nil,
+	}
+
+	_, err := Create(config)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrIntegrationNotFound)
+}

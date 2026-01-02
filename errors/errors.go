@@ -10,6 +10,14 @@ const (
 	// Use with fmt.Errorf to wrap a sentinel error with an underlying error:
 	//   fmt.Errorf(ErrWrapFormat, errUtils.ErrSentinel, underlyingErr)
 	ErrWrapFormat = "%w: %w"
+	// ErrWrapWithNameFormat is the format string for wrapping errors with a name context.
+	// Use with fmt.Errorf to wrap a sentinel error with a name:
+	//   fmt.Errorf(ErrWrapWithNameFormat, errUtils.ErrSentinel, name)
+	ErrWrapWithNameFormat = "%w: %s"
+	// ErrWrapWithNameAndCauseFormat is the format string for wrapping errors with a name and cause.
+	// Use with fmt.Errorf to wrap a sentinel error with a name and underlying error:
+	//   fmt.Errorf(ErrWrapWithNameAndCauseFormat, errUtils.ErrSentinel, name, underlyingErr)
+	ErrWrapWithNameAndCauseFormat = "%w '%s': %w"
 )
 
 var (
@@ -736,8 +744,13 @@ var (
 	ErrECRTokenExpired     = errors.New("ECR authorization token expired")
 	ErrECRRegistryNotFound = errors.New("ECR registry not found")
 	ErrECRInvalidRegistry  = errors.New("invalid ECR registry URL")
+	ErrECRLoginNoArgs      = errors.New("specify an integration name, --identity, or --registry")
 	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
 	ErrDockerConfigRead    = errors.New("failed to read Docker config")
+
+	// Identity authentication errors.
+	ErrIdentityAuthFailed      = errors.New("failed to authenticate identity")
+	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

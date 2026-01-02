@@ -9,19 +9,21 @@ import (
 	"sync"
 
 	"github.com/gofrs/flock"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const (
-	// dockerConfigPerm is the permission mode for Docker config directory.
+	// Permission mode for Docker config directory.
 	dockerConfigPerm = 0o700
-	// dockerConfigFilePerm is the permission mode for Docker config.json file.
+	// Permission mode for Docker config.json file.
 	dockerConfigFilePerm = 0o600
-	// configFileName is the Docker config file name.
+	// Docker config file name.
 	configFileName = "config.json"
-	// lockFileSuffix is the suffix for lock files.
+	// Suffix for lock files.
 	lockFileSuffix = ".lock"
 )
 
@@ -66,11 +68,13 @@ func NewConfigManager() (*ConfigManager, error) {
 // getDockerConfigDir returns the Docker config directory.
 // Uses DOCKER_CONFIG environment variable if set, otherwise defaults to ~/.docker.
 func getDockerConfigDir() string {
-	if dockerConfig := os.Getenv("DOCKER_CONFIG"); dockerConfig != "" {
+	// Bind and read DOCKER_CONFIG environment variable via viper.
+	_ = viper.BindEnv("DOCKER_CONFIG")
+	if dockerConfig := viper.GetString("DOCKER_CONFIG"); dockerConfig != "" {
 		return dockerConfig
 	}
 
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := homedir.Dir()
 	if err != nil {
 		// Fall back to current directory if home cannot be determined.
 		return ".docker"

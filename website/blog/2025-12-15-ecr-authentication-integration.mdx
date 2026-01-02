@@ -6,6 +6,7 @@ authors:
   - Benbentwo
 tags:
   - feature
+  - dx
 date: 2025-12-15T00:00:00.000Z
 ---
 
@@ -119,7 +120,9 @@ Integrations are things that **use** an identity to materialize client-side cred
 
 ### Zero Configuration
 
-ECR credentials are written to `~/.docker/config.json`, the standard Docker config location. This means Docker commands work immediately after login—no additional environment variables or configuration required.
+ECR credentials are written to the standard Docker config location (`~/.docker/config.json` or `$DOCKER_CONFIG/config.json` if set). This means Docker commands work immediately after login—no additional environment variables or configuration required.
+
+The token expiration time is displayed so you know when to re-authenticate.
 
 ### Non-Blocking Errors
 
@@ -171,6 +174,30 @@ atmos auth login prod-deployer
 docker pull 111111111111.dkr.ecr.us-east-1.amazonaws.com/my-app:latest
 ```
 
+## Implementation Details
+
+### AWS SDK v2 Compatibility
+
+The implementation uses AWS SDK for Go v2 and follows AWS best practices:
+
+- **Universal Token**: ECR authorization tokens work for any registry your credentials can access. The deprecated `RegistryIds` parameter is no longer used.
+- **12-Hour Expiry**: Tokens expire after 12 hours (AWS-enforced). The expiration time is displayed so you know when to re-authenticate.
+
+### Cross-Platform Support
+
+- Uses `homedir.Dir()` for reliable home directory resolution across platforms
+- Environment variables read through Viper for consistent configuration handling
+- File locking via `gofrs/flock` prevents concurrent modification of Docker config
+
+### Error Handling
+
+All errors use sentinel errors for consistent error checking:
+
+```go
+errors.Is(err, errUtils.ErrECRAuthFailed)
+errors.Is(err, errUtils.ErrIntegrationNotFound)
+```
+
 ## What's Next
 
 The integration pattern extends naturally to other client-only credential materializations:
@@ -181,9 +208,8 @@ The integration pattern extends naturally to other client-only credential materi
 
 ## Documentation
 
-- [ECR Authentication Tutorial](/tutorials/ecr-authentication)
-- [Auth Login Command](/cli/commands/auth/login)
-- [ECR Login Command](/cli/commands/auth/ecr-login)
+- [Auth Command Overview](/cli/commands/auth/)
+- [Identity Authentication](/core-concepts/authentication/)
 
 ## Get Involved
 

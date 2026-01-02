@@ -407,23 +407,47 @@ func (e *ECRIntegration) Execute(ctx context.Context, creds *types.AWSCredential
 **File:** `pkg/auth/cloud/docker/config.go`
 
 ```go
-import "github.com/cloudposse/atmos/pkg/xdg"
-
 // ConfigManager manages Docker config.json for ECR authentication.
+// It uses file locking to prevent concurrent modification.
 type ConfigManager struct {
+    configDir  string
     configPath string
+    mu         sync.Mutex
 }
 
-// NewConfigManager creates a new Docker config manager using XDG paths.
+// NewConfigManager creates a new Docker config manager using the default Docker config path.
+// The config is stored in ~/.docker/config.json by default (or $DOCKER_CONFIG/config.json
+// if DOCKER_CONFIG is set). This ensures compatibility with Docker CLI without requiring
+// additional environment variable configuration.
 func NewConfigManager() (*ConfigManager, error) {
-    // Use pkg/xdg to get the config path, respecting XDG environment variables.
-    configDir, err := xdg.GetXDGConfigDir("docker", 0700)
-    if err != nil {
-        return nil, fmt.Errorf("failed to get docker config directory: %w", err)
+    configDir := getDockerConfigDir()
+
+    // Ensure directory exists with secure permissions.
+    if err := os.MkdirAll(configDir, 0700); err != nil {
+        return nil, fmt.Errorf("failed to create docker config directory: %w", err)
     }
+
     return &ConfigManager{
+        configDir:  configDir,
         configPath: filepath.Join(configDir, "config.json"),
     }, nil
+}
+
+// getDockerConfigDir returns the Docker config directory.
+// Uses DOCKER_CONFIG environment variable if set, otherwise defaults to ~/.docker.
+func getDockerConfigDir() string {
+    // Bind and read DOCKER_CONFIG environment variable via viper.
+    _ = viper.BindEnv("DOCKER_CONFIG")
+    if dockerConfig := viper.GetString("DOCKER_CONFIG"); dockerConfig != "" {
+        return dockerConfig
+    }
+
+    homeDir, err := homedir.Dir()
+    if err != nil {
+        return ".docker"
+    }
+
+    return filepath.Join(homeDir, ".docker")
 }
 
 // WriteAuth writes ECR authorization to Docker config.
@@ -696,11 +720,11 @@ var (
 
 ### 6. Environment Variables
 
-When ECR login succeeds, set:
+ECR credentials are written directly to the standard Docker config location, so no additional environment variables are required. Docker commands work immediately after ECR login.
 
-| Variable | Value | Purpose |
-|----------|-------|---------|
-| `DOCKER_CONFIG` | `~/.config/atmos/docker` | Points Docker to Atmos-managed config |
+| Variable | When Set | Purpose |
+|----------|----------|---------|
+| `DOCKER_CONFIG` | User-defined | If set, ECR credentials are written to `$DOCKER_CONFIG/config.json` instead of `~/.docker/config.json` |
 
 ### 7. File Locking
 
@@ -853,32 +877,32 @@ jobs:
 ## Implementation Checklist
 
 ### Phase 1: Core Infrastructure
-- [ ] Add integration type system (`pkg/auth/integrations/types.go`)
-- [ ] Add integration registry (`pkg/auth/integrations/registry.go`)
-- [ ] Add Docker config manager (`pkg/auth/cloud/docker/config.go`)
-- [ ] Add ECR token fetcher (`pkg/auth/cloud/aws/ecr.go`)
-- [ ] Add sentinel errors (`errors/errors.go`)
+- [x] Add integration type system (`pkg/auth/integrations/types.go`)
+- [x] Add integration registry (`pkg/auth/integrations/registry.go`)
+- [x] Add Docker config manager (`pkg/auth/cloud/docker/config.go`)
+- [x] Add ECR token fetcher (`pkg/auth/cloud/aws/ecr.go`)
+- [x] Add sentinel errors (`errors/errors.go`)
 
 ### Phase 2: ECR Integration
-- [ ] Add ECR integration (`pkg/auth/integrations/aws/ecr.go`)
-- [ ] Register ECR integration in registry
+- [x] Add ECR integration (`pkg/auth/integrations/aws/ecr.go`)
+- [x] Register ECR integration in registry
 
 ### Phase 3: Identity Integration Linking
-- [ ] Update schema for `auth.integrations` section
-- [ ] Update schema for `identity.integrations` list
-- [ ] Modify identity PostAuthenticate to trigger integrations
+- [x] Update schema for `auth.integrations` section
+- [x] Implement `findIntegrationsForIdentity()` to find integrations referencing an identity
+- [x] Modify manager to trigger integrations after authentication
 
 ### Phase 4: Standalone Command
-- [ ] Add `cmd/auth/ecr_login.go`
-- [ ] Add `pkg/auth/ecr_login.go`
+- [x] Add `cmd/auth_ecr_login.go`
+- [x] Implement `executeExplicitRegistries()` for ad-hoc registry login
 
 ### Phase 5: Testing
-- [ ] Unit tests for integration registry
-- [ ] Unit tests for Docker config manager
-- [ ] Unit tests for ECR token fetcher (mocked)
-- [ ] Unit tests for ECR integration
-- [ ] Unit tests for PostAuthenticate integration trigger
-- [ ] Integration tests for `atmos auth ecr-login` command
+- [x] Unit tests for integration registry (`pkg/auth/integrations/registry_test.go`)
+- [x] Unit tests for Docker config manager (`pkg/auth/cloud/docker/config_test.go`)
+- [x] Unit tests for ECR token fetcher (`pkg/auth/cloud/aws/ecr_test.go`)
+- [x] Unit tests for ECR integration (`pkg/auth/integrations/aws/ecr_test.go`)
+- [x] Unit tests for manager integration methods (`pkg/auth/manager_integrations_test.go`)
+- [x] Unit tests for `atmos auth ecr-login` command (`cmd/auth_ecr_login_test.go`)
 
 ### Phase 6: Documentation
 - [ ] Update `website/docs/cli/commands/auth/login.mdx`
@@ -900,12 +924,58 @@ jobs:
 
 ## Security Considerations
 
-1. **Credential Isolation**: Docker config stored in Atmos XDG config directory (via `pkg/xdg.GetXDGConfigDir("docker", 0700)`), separate from user's default `~/.docker/config.json`. This respects `ATMOS_XDG_CONFIG_HOME` and `XDG_CONFIG_HOME` environment variables.
-2. **File Permissions**: Docker config created with `0600` permissions.
-3. **Token Lifetime**: ECR tokens expire after 12 hours (AWS-enforced).
-4. **Non-Fatal Errors**: Integration failures in PostAuthenticate don't expose errors that could leak information.
-5. **No Secrets in Logs**: Authorization tokens are never logged.
-6. **Secret Masking**: ECR tokens follow Atmos secret masking patterns.
+1. **Standard Docker Config**: ECR credentials are written to the standard Docker config location (`~/.docker/config.json` or `$DOCKER_CONFIG/config.json`), ensuring compatibility with Docker CLI and container tools without additional configuration.
+2. **File Permissions**: Docker config directory created with `0700` permissions, config file with `0600` permissions.
+3. **File Locking**: Uses `gofrs/flock` for concurrent access safety to prevent race conditions.
+4. **Token Lifetime**: ECR tokens expire after 12 hours (AWS-enforced). Expiration time is displayed to users.
+5. **Non-Fatal Errors**: Integration failures during identity authentication are logged as warnings but don't block the identity authentication flow.
+6. **No Secrets in Logs**: Authorization tokens are never logged.
+7. **Secret Masking**: ECR tokens follow Atmos secret masking patterns via Gitleaks integration.
+
+## Code Quality & Implementation Notes
+
+The implementation follows Atmos codebase standards and linter requirements:
+
+### AWS SDK v2 Migration
+
+- Uses AWS SDK for Go v2 (`github.com/aws/aws-sdk-go-v2`)
+- **RegistryIds Deprecation**: The `GetAuthorizationToken` API's `RegistryIds` parameter is deprecated. The implementation no longer specifies registry IDs - the returned token works for any ECR registry the IAM credentials have access to.
+
+### Package Organization
+
+- AWS SDK imports are restricted to `pkg/auth/cloud/aws/` packages (enforced by depguard)
+- `cmd/` packages use helper functions from `pkg/auth/cloud/aws/` rather than importing AWS SDK directly
+- Environment variable access uses `viper.BindEnv()` instead of direct `os.Getenv()` calls
+- Home directory resolution uses `homedir.Dir()` from `pkg/config/homedir` for cross-platform support
+
+### Error Handling
+
+Sentinel errors defined in `errors/errors.go`:
+
+```go
+// ECR authentication errors.
+ErrECRAuthFailed       = errors.New("ECR authentication failed")
+ErrECRTokenExpired     = errors.New("ECR authorization token expired")
+ErrECRRegistryNotFound = errors.New("ECR registry not found")
+ErrECRInvalidRegistry  = errors.New("invalid ECR registry URL")
+ErrECRLoginNoArgs      = errors.New("specify an integration name, --identity, or --registry")
+
+// Identity authentication errors (used by integrations).
+ErrIdentityAuthFailed      = errors.New("failed to authenticate identity")
+ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
+
+// Integration errors.
+ErrIntegrationNotFound    = errors.New("integration not found")
+ErrUnknownIntegrationKind = errors.New("unknown integration kind")
+ErrIntegrationFailed      = errors.New("integration execution failed")
+ErrNoLinkedIntegrations   = errors.New("identity has no linked integrations")
+```
+
+### Code Style
+
+- All comments end with periods (godot linter)
+- Functions use wrapped static errors (err113 linter)
+- File locking uses `gofrs/flock` for concurrent access safety
 
 ## Future Extensions
 

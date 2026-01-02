@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -13,7 +12,6 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/cloud/docker"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
-	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -90,7 +88,7 @@ func executeAuthECRLoginCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// No arguments provided.
-	return fmt.Errorf("specify an integration name, --identity, or --registry")
+	return errUtils.ErrECRLoginNoArgs
 }
 
 // executeExplicitRegistries performs ECR login for explicit registry URLs.
@@ -98,23 +96,10 @@ func executeAuthECRLoginCommand(cmd *cobra.Command, args []string) error {
 func executeExplicitRegistries(ctx context.Context, registries []string) error {
 	defer perf.Track(nil, "cmd.executeExplicitRegistries")()
 
-	// Load AWS config from environment.
-	awsCfg, err := config.LoadDefaultConfig(ctx)
+	// Load AWS credentials from environment.
+	creds, err := awsCloud.LoadDefaultAWSCredentials(ctx)
 	if err != nil {
-		return fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrECRAuthFailed, err)
-	}
-
-	// Create credentials object for ECR token fetcher.
-	awsCreds, err := awsCfg.Credentials.Retrieve(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: failed to retrieve AWS credentials: %w", errUtils.ErrECRAuthFailed, err)
-	}
-
-	creds := &types.AWSCredentials{
-		AccessKeyID:     awsCreds.AccessKeyID,
-		SecretAccessKey: awsCreds.SecretAccessKey,
-		SessionToken:    awsCreds.SessionToken,
-		Region:          awsCfg.Region,
+		return err
 	}
 
 	// Create Docker config manager.

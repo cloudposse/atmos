@@ -27,15 +27,16 @@ type ECRAuthResult struct {
 }
 
 // ecrRegistryPattern matches ECR private registry URLs.
-// Format: {account_id}.dkr.ecr.{region}.amazonaws.com
+// Format: {account_id}.dkr.ecr.{region}.amazonaws.com.
 // Note: This pattern does not support:
-// - ECR Public (public.ecr.aws)
-// - China regions (dkr.ecr.cn-*)
-// - GovCloud regions with different suffixes
+// - ECR Public (public.ecr.aws),
+// - China regions (dkr.ecr.cn-*),
+// - GovCloud regions with different suffixes.
 var ecrRegistryPattern = regexp.MustCompile(`^(\d{12})\.dkr\.ecr\.([a-z0-9-]+)\.amazonaws\.com$`)
 
 // GetAuthorizationToken retrieves ECR credentials using AWS credentials.
-// The accountID parameter is optional - if empty, uses the caller's account.
+// The accountID and region parameters are used to build the target registry URL.
+// Note: The returned token works for any ECR registry the credentials have access to.
 func GetAuthorizationToken(ctx context.Context, creds types.ICredentials, accountID, region string) (*ECRAuthResult, error) {
 	defer perf.Track(nil, "aws.GetAuthorizationToken")()
 
@@ -48,14 +49,10 @@ func GetAuthorizationToken(ctx context.Context, creds types.ICredentials, accoun
 	// Create ECR client.
 	client := ecr.NewFromConfig(cfg)
 
-	// Build input.
-	input := &ecr.GetAuthorizationTokenInput{}
-	if accountID != "" {
-		input.RegistryIds = []string{accountID}
-	}
-
 	// Get authorization token.
-	result, err := client.GetAuthorizationToken(ctx, input)
+	// Note: RegistryIds is deprecated - the token works for any ECR registry
+	// the IAM credentials have access to. We no longer specify accountID here.
+	result, err := client.GetAuthorizationToken(ctx, &ecr.GetAuthorizationTokenInput{})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrECRAuthFailed, err)
 	}
@@ -160,4 +157,30 @@ func buildAWSConfigFromCreds(ctx context.Context, creds types.ICredentials, regi
 	}
 
 	return cfg, nil
+}
+
+// LoadDefaultAWSCredentials loads AWS credentials from environment and returns
+// them as Atmos credentials. This is used for explicit registry mode where
+// the caller wants to use ambient AWS credentials instead of Atmos identities.
+func LoadDefaultAWSCredentials(ctx context.Context) (*types.AWSCredentials, error) {
+	defer perf.Track(nil, "aws.LoadDefaultAWSCredentials")()
+
+	// Load AWS config from environment.
+	awsCfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to load AWS config: %w", errUtils.ErrECRAuthFailed, err)
+	}
+
+	// Retrieve credentials.
+	awsCreds, err := awsCfg.Credentials.Retrieve(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to retrieve AWS credentials: %w", errUtils.ErrECRAuthFailed, err)
+	}
+
+	return &types.AWSCredentials{
+		AccessKeyID:     awsCreds.AccessKeyID,
+		SecretAccessKey: awsCreds.SecretAccessKey,
+		SessionToken:    awsCreds.SessionToken,
+		Region:          awsCfg.Region,
+	}, nil
 }
