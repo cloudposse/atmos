@@ -3,6 +3,8 @@ package ui
 import (
 	"sync"
 	"time"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // ResourceTracker manages all resource operations.
@@ -29,6 +31,8 @@ func NewResourceTracker() *ResourceTracker {
 
 // HandleMessage processes a Terraform JSON message and updates state.
 func (rt *ResourceTracker) HandleMessage(msg any) {
+	defer perf.Track(nil, "terraform.ui.ResourceTracker.HandleMessage")()
+
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 

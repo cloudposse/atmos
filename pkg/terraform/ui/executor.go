@@ -68,7 +68,7 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 	// Get stdout pipe for streaming.
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("failed to get stdout pipe: %w", err)
+		return fmt.Errorf("%w: %w", errUtils.ErrStdoutPipe, err)
 	}
 
 	// Stderr passes through to the real stderr (for terraform warnings/prompts).
@@ -76,7 +76,7 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 
 	// Start command.
 	if err := cmd.Start(); err != nil {
-		return err
+		return fmt.Errorf("%w: %w", errUtils.ErrCommandStart, err)
 	}
 
 	// Create and run TUI model.
@@ -93,7 +93,7 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 	if err != nil {
 		// Kill the process if TUI failed.
 		_ = cmd.Process.Kill()
-		return fmt.Errorf("TUI error: %w", err)
+		return fmt.Errorf("%w: %w", errUtils.ErrTUIRun, err)
 	}
 
 	// Wait for command to finish.
@@ -243,7 +243,7 @@ func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
 
 	// Start command.
 	if err := cmd.Start(); err != nil {
-		return err
+		return fmt.Errorf("%w: %w", errUtils.ErrCommandStart, err)
 	}
 
 	// Capture exit code from the goroutine.
@@ -269,7 +269,7 @@ func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
 	if err != nil {
 		// Kill the process if TUI failed.
 		_ = cmd.Process.Kill()
-		return fmt.Errorf("TUI error: %w", err)
+		return fmt.Errorf("%w: %w", errUtils.ErrTUIRun, err)
 	}
 
 	// Wait for command to finish (should already be done since pipe closed).

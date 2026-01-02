@@ -44,6 +44,8 @@ var (
 	ErrValidPackage                          = errors.New("no valid installer package provided for")
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
 	ErrTUIRun                                = errors.New("failed to run TUI")
+	ErrStdoutPipe                            = errors.New("failed to get stdout pipe")
+	ErrCommandStart                          = errors.New("failed to start command")
 	ErrUIFormatterNotInitialized             = errors.New("ui formatter not initialized")
 	ErrIOContextNotInitialized               = errors.New("global I/O context is nil after initialization")
 	ErrNoFilesFound                          = errors.New("no files found in directory")
