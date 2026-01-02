@@ -113,12 +113,12 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 	for _, registry := range registries {
 		accountID, region, err := awsCloud.ParseRegistryURL(registry)
 		if err != nil {
-			return fmt.Errorf("%w: invalid registry URL %s: %w", errUtils.ErrECRInvalidRegistry, registry, err)
+			return err // ParseRegistryURL already wraps with ErrECRInvalidRegistry
 		}
 
 		result, err := awsCloud.GetAuthorizationToken(ctx, creds, accountID, region)
 		if err != nil {
-			return fmt.Errorf("%w: ECR login failed for %s: %w", errUtils.ErrECRAuthFailed, registry, err)
+			return fmt.Errorf("ECR login failed for %s: %w", registry, err)
 		}
 
 		if err := dockerConfig.WriteAuth(registry, result.Username, result.Password); err != nil {
