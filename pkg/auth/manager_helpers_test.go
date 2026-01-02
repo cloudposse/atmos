@@ -336,18 +336,16 @@ func TestCreateAndAuthenticateManager_ErrorMessageClarity(t *testing.T) {
 	// Test that error messages are clear and helpful.
 
 	tests := []struct {
-		name          string
-		identityName  string
-		authConfig    *schema.AuthConfig
-		selectValue   string
-		expectedError string
+		name         string
+		identityName string
+		authConfig   *schema.AuthConfig
+		selectValue  string
 	}{
 		{
-			name:          "nil config error mentions requirement",
-			identityName:  "test",
-			authConfig:    nil,
-			selectValue:   "__SELECT__",
-			expectedError: "authentication requires at least one identity",
+			name:         "nil config error mentions requirement",
+			identityName: "test",
+			authConfig:   nil,
+			selectValue:  "__SELECT__",
 		},
 		{
 			name:         "empty identities error mentions requirement",
@@ -355,8 +353,7 @@ func TestCreateAndAuthenticateManager_ErrorMessageClarity(t *testing.T) {
 			authConfig: &schema.AuthConfig{
 				Identities: map[string]schema.Identity{},
 			},
-			selectValue:   "__SELECT__",
-			expectedError: "authentication requires at least one identity",
+			selectValue: "__SELECT__",
 		},
 	}
 
@@ -365,7 +362,8 @@ func TestCreateAndAuthenticateManager_ErrorMessageClarity(t *testing.T) {
 			manager, err := CreateAndAuthenticateManager(tt.identityName, tt.authConfig, tt.selectValue)
 
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.expectedError, "error message should be clear")
+			// Use errors.Is to check for the sentinel error.
+			assert.ErrorIs(t, err, errUtils.ErrAuthNotConfigured)
 			assert.Nil(t, manager)
 		})
 	}

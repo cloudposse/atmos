@@ -30,10 +30,16 @@ const hookOpTerraformPreHook = "TerraformPreHook"
 // TerraformPreHook runs before Terraform commands to set up authentication.
 func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) error {
 	if stackInfo == nil {
-		return fmt.Errorf("%w: stack info is nil", errUtils.ErrInvalidAuthConfig)
+		return errUtils.Build(errUtils.ErrInvalidAuthConfig).
+			WithExplanation("Stack info is nil - this is an internal error").
+			WithHint("Please report this issue at https://github.com/cloudposse/atmos/issues").
+			Err()
 	}
 	if atmosConfig == nil {
-		return fmt.Errorf("%w: atmos configuration is nil", errUtils.ErrInvalidAuthConfig)
+		return errUtils.Build(errUtils.ErrInvalidAuthConfig).
+			WithExplanation("Atmos configuration is nil - this is an internal error").
+			WithHint("Please report this issue at https://github.com/cloudposse/atmos/issues").
+			Err()
 	}
 
 	atmosLevel, authLevel := getConfigLogLevels(atmosConfig)
@@ -60,8 +66,12 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 
 	authManager, err := newAuthManager(&authConfig, stackInfo)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrAuthManager, hookOpTerraformPreHook, "failed to create auth manager")
-		return errUtils.ErrAuthManager
+		return errUtils.Build(errUtils.ErrAuthManager).
+			WithCause(err).
+			WithExplanation("Failed to create auth manager").
+			WithHint("Check your auth configuration in atmos.yaml").
+			WithContext("profile", FormatProfile(stackInfo.ProfilesFromArg)).
+			Err()
 	}
 
 	// Determine target identity and authenticate.
@@ -79,8 +89,12 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 func decodeAuthConfigFromStack(stackInfo *schema.ConfigAndStacksInfo) (schema.AuthConfig, error) {
 	var authConfig schema.AuthConfig
 	if err := mapstructure.Decode(stackInfo.ComponentAuthSection, &authConfig); err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, hookOpTerraformPreHook, "failed to decode component auth config - check atmos.yaml or component auth section")
-		return schema.AuthConfig{}, errUtils.ErrInvalidAuthConfig
+		return schema.AuthConfig{}, errUtils.Build(errUtils.ErrInvalidAuthConfig).
+			WithCause(err).
+			WithExplanation("Failed to decode component auth config").
+			WithHint("Check your auth configuration in atmos.yaml or component auth section").
+			WithContext("profile", FormatProfile(stackInfo.ProfilesFromArg)).
+			Err()
 	}
 	return authConfig, nil
 }
@@ -92,12 +106,15 @@ func resolveTargetIdentityName(stackInfo *schema.ConfigAndStacksInfo, authManage
 	// Hooks don't have CLI flags, so never force selection here.
 	name, err := authManager.GetDefaultIdentity(false)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrDefaultIdentity, hookOpTerraformPreHook, "failed to get default identity")
-		return "", errUtils.ErrDefaultIdentity
+		// Return error directly - it already has ErrorBuilder context with hints.
+		return "", err
 	}
 	if name == "" {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNoDefaultIdentity, hookOpTerraformPreHook, "Use the identity flag or specify an identity as default.")
-		return "", errUtils.ErrNoDefaultIdentity
+		return "", errUtils.Build(errUtils.ErrNoDefaultIdentity).
+			WithExplanation("No default identity is configured for authentication").
+			WithHint("Use --identity flag to specify an identity").
+			WithHint("Or set default: true on an identity in your auth configuration").
+			Err()
 	}
 	return name, nil
 }
@@ -111,7 +128,8 @@ func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager,
 	log.Debug("Authenticating with identity", "identity", identityName)
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
-		return fmt.Errorf("failed to authenticate with identity %q: %w", identityName, err)
+		// Return error directly - it already has ErrorBuilder context.
+		return err
 	}
 	log.Debug("Authentication successful", "identity", whoami.Identity, "expiration", whoami.Expiration)
 
@@ -123,7 +141,8 @@ func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager,
 	// This configures file-based credentials (AWS_SHARED_CREDENTIALS_FILE, AWS_PROFILE, etc.).
 	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, baseEnvList)
 	if err != nil {
-		return fmt.Errorf("failed to prepare environment variables: %w", err)
+		// Return error directly - it already has ErrorBuilder context.
+		return err
 	}
 
 	// Convert back to ComponentEnvSection map for downstream processing.
@@ -139,7 +158,13 @@ func authenticateAndWriteEnv(ctx context.Context, authManager types.AuthManager,
 	}
 
 	if err := utils.PrintAsYAMLToFileDescriptor(atmosConfig, stackInfo.ComponentEnvSection); err != nil {
-		return fmt.Errorf("failed to print component env section: %w", err)
+		return errUtils.Build(errUtils.ErrAuthManager).
+			WithCause(err).
+			WithExplanation("Failed to print component env section").
+			WithHint("This is an internal error - please report at https://github.com/cloudposse/atmos/issues").
+			WithContext("profile", FormatProfile(stackInfo.ProfilesFromArg)).
+			WithContext("identity", identityName).
+			Err()
 	}
 	return nil
 }
@@ -168,7 +193,12 @@ func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndSt
 		stackInfo,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("%v: failed to create auth manager: %w", errUtils.ErrAuthManager, err)
+		return nil, errUtils.Build(errUtils.ErrAuthManager).
+			WithCause(err).
+			WithExplanation("Failed to create auth manager").
+			WithHint("Check your auth configuration in atmos.yaml").
+			WithContext("profile", FormatProfile(stackInfo.ProfilesFromArg)).
+			Err()
 	}
 	return authManager, nil
 }

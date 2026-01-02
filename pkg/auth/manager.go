@@ -126,16 +126,24 @@ func NewAuthManager(
 
 	// Initialize providers.
 	if err := m.initializeProviders(); err != nil {
-		wrappedErr := fmt.Errorf("failed to initialize providers: %w", err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Initialize Providers", "")
-		return nil, wrappedErr
+		return nil, errUtils.Build(errUtils.ErrAuthManager).
+			WithCause(err).
+			WithExplanation("Failed to initialize authentication providers").
+			WithHint("Check your auth provider configuration in atmos.yaml").
+			WithHint("Run `atmos auth --help` for troubleshooting").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			Err()
 	}
 
 	// Initialize identities.
 	if err := m.initializeIdentities(); err != nil {
-		wrappedErr := fmt.Errorf("failed to initialize identities: %w", err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Initialize Identities", "")
-		return nil, wrappedErr
+		return nil, errUtils.Build(errUtils.ErrAuthManager).
+			WithCause(err).
+			WithExplanation("Failed to initialize authentication identities").
+			WithHint("Check your auth identity configuration in atmos.yaml").
+			WithHint("Run `atmos auth --help` for troubleshooting").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			Err()
 	}
 
 	return m, nil
@@ -154,15 +162,25 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 
 	// We expect the identity name to be provided by the caller.
 	if identityName == "" {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, identityNameKey, "no identity specified")
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrNilParam, identityNameKey)
+		return nil, errUtils.Build(errUtils.ErrNilParam).
+			WithExplanation("No identity specified for authentication").
+			WithHint("Run `atmos auth --help` for troubleshooting").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", "(not specified)").
+			Err()
 	}
 
 	// Resolve identity name case-insensitively
 	resolvedName, found := m.resolveIdentityName(identityName)
 	if !found {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
+		return nil, errUtils.Build(errUtils.ErrIdentityNotFound).
+			WithExplanation(fmt.Sprintf("Identity %q not found in the current configuration", identityName)).
+			WithHint("Run `atmos list identities` to see available identities").
+			WithHint("Check that the identity is defined in your auth configuration").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("provider", "(not set)").
+			WithContext("identity", identityName).
+			Err()
 	}
 	// Use the resolved lowercase name for internal lookups
 	identityName = resolvedName
@@ -170,9 +188,16 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	// Build the complete authentication chain.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		wrappedErr := fmt.Errorf("failed to build authentication chain for identity %q: %w", identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
-		return nil, wrappedErr
+		providerName := m.getProviderForIdentity(identityName)
+		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("Failed to build authentication chain for identity %q", identityName)).
+			WithHint("Run `atmos auth --help` for troubleshooting").
+			WithHint("Check identity chain configuration for cycles").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("provider", providerName).
+			WithContext("identity", identityName).
+			Err()
 	}
 	// Persist the chain for later retrieval by providers or callers.
 	m.chain = chain
@@ -181,9 +206,18 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	// Perform credential chain authentication (bottom-up).
 	finalCreds, err := m.authenticateChain(ctx, identityName)
 	if err != nil {
-		wrappedErr := fmt.Errorf("%w: failed to authenticate via credential chain for identity %q: %w", errUtils.ErrAuthenticationFailed, identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Credential Chain", "")
-		return nil, wrappedErr
+		providerName := ""
+		if len(chain) > 0 {
+			providerName = chain[0]
+		}
+		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("Failed to authenticate via credential chain for identity %q", identityName)).
+			WithHint("Run `atmos auth --help` for troubleshooting").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("provider", providerName).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	// Call post-authentication hook on the identity (now part of Identity interface).
@@ -211,9 +245,14 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 			Credentials:  finalCreds,
 			Manager:      m,
 		}); err != nil {
-			wrappedErr := fmt.Errorf("%w: post-authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
-			errUtils.CheckErrorAndPrint(wrappedErr, "Post Authenticate", "")
-			return nil, wrappedErr
+			return nil, errUtils.Build(errUtils.ErrPostAuthenticationHookFailed).
+				WithCause(err).
+				WithExplanation(fmt.Sprintf("Post-authentication hook failed for identity %q", identityName)).
+				WithHint("Run `atmos auth --help` for troubleshooting").
+				WithContext("profile", FormatProfile(m.getProfiles())).
+				WithContext("provider", rootProviderName).
+				WithContext("identity", identityName).
+				Err()
 		}
 	}
 
@@ -238,7 +277,12 @@ func (m *manager) AuthenticateProvider(ctx context.Context, providerName string)
 	}
 
 	if resolvedProviderName == "" {
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrProviderNotFound, fmt.Sprintf(backtickedFmt, providerName))
+		return nil, errUtils.Build(errUtils.ErrProviderNotFound).
+			WithExplanation(fmt.Sprintf("Provider %q not found in configuration", providerName)).
+			WithHint("Run `atmos list providers` to see available providers").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("provider", providerName).
+			Err()
 	}
 
 	// Use resolved name for authentication.
@@ -297,7 +341,13 @@ func (m *manager) GetCachedCredentials(ctx context.Context, identityName string)
 	// Resolve identity name case-insensitively
 	resolvedName, found := m.resolveIdentityName(identityName)
 	if !found {
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
+		return nil, errUtils.Build(errUtils.ErrIdentityNotFound).
+			WithExplanation(fmt.Sprintf("Identity %q not found in the current configuration", identityName)).
+			WithHint("Run `atmos list identities` to see available identities").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("provider", "(not set)").
+			WithContext("identity", identityName).
+			Err()
 	}
 	// Use the resolved lowercase name for internal lookups
 	identityName = resolvedName
@@ -306,22 +356,40 @@ func (m *manager) GetCachedCredentials(ctx context.Context, identityName string)
 	creds, err := m.loadCredentialsWithFallback(ctx, identityName)
 	if err != nil {
 		// Credentials not found or error occurred.
-		providerName := "unknown"
-		if prov, provErr := m.identities[identityName].GetProviderName(); provErr == nil {
-			providerName = prov
+		providerName := "(not set)"
+		if identity, exists := m.identities[identityName]; exists {
+			if prov, provErr := identity.GetProviderName(); provErr == nil {
+				providerName = prov
+			}
 		}
-		return nil, fmt.Errorf("%w: identity=%s, provider=%s, credential_store=%s: %w",
-			errUtils.ErrNoCredentialsFound,
-			identityName,
-			providerName,
-			m.credentialStore.Type(),
-			err)
+		return nil, errUtils.Build(errUtils.ErrNoCredentialsFound).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("No credentials found for identity %q", identityName)).
+			WithHint("Run `atmos auth login` to authenticate").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("provider", providerName).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	// Check if credentials are expired.
 	if creds.IsExpired() {
 		log.Debug("Cached credentials are expired", logKeyIdentity, identityName)
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrExpiredCredentials, fmt.Sprintf(backtickedFmt, identityName))
+		providerName := "(not set)"
+		if identity, exists := m.identities[identityName]; exists {
+			if prov, provErr := identity.GetProviderName(); provErr == nil {
+				providerName = prov
+			}
+		}
+		expTime, _ := creds.GetExpiration()
+		return nil, errUtils.Build(errUtils.ErrExpiredCredentials).
+			WithExplanation(fmt.Sprintf("Cached credentials for identity %q have expired", identityName)).
+			WithHint("Run `atmos auth login` to refresh credentials").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("provider", providerName).
+			WithContext("identity", identityName).
+			WithContext("expiration", FormatExpiration(expTime)).
+			Err()
 	}
 
 	return m.buildWhoamiInfo(identityName, creds), nil
@@ -364,7 +432,13 @@ func (m *manager) Validate() error {
 	defer perf.Track(nil, "auth.Manager.Validate")()
 
 	if err := m.validator.ValidateAuthConfig(m.config); err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
+		return errUtils.Build(errUtils.ErrInvalidAuthConfig).
+			WithCause(err).
+			WithExplanation("Auth configuration validation failed").
+			WithHint("Check your auth configuration in atmos.yaml").
+			WithHint("Run `atmos validate stacks` for detailed validation").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			Err()
 	}
 	return nil
 }
@@ -379,7 +453,12 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 		// Check if we're in interactive mode (have TTY).
 		if !isInteractive() {
 			// User requested interactive selection but we don't have a TTY.
-			return "", errUtils.ErrIdentitySelectionRequiresTTY
+			return "", errUtils.Build(errUtils.ErrIdentitySelectionRequiresTTY).
+				WithExplanation("Interactive identity selection requires a terminal").
+				WithHint("Use --identity flag to specify an identity").
+				WithHint("Or set a default identity in your auth configuration").
+				WithContext("profile", FormatProfile(m.getProfiles())).
+				Err()
 		}
 		// We have a TTY - show selector.
 		return m.promptForIdentity("Select an identity:", m.ListIdentities())
@@ -398,7 +477,12 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	case 0:
 		// No default identities found.
 		if !isInteractive() {
-			return "", errUtils.ErrNoDefaultIdentity
+			return "", errUtils.Build(errUtils.ErrNoDefaultIdentity).
+				WithExplanation("No default identity is configured for authentication").
+				WithHint("Use --identity flag to specify an identity").
+				WithHint("Or set default: true on an identity in your auth configuration").
+				WithContext("profile", FormatProfile(m.getProfiles())).
+				Err()
 		}
 		// In interactive mode, prompt user to choose from all identities.
 		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
@@ -410,7 +494,13 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	default:
 		// Multiple default identities found.
 		if !isInteractive() {
-			return "", fmt.Errorf(errFormatWithString, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedFmt, defaultIdentities))
+			return "", errUtils.Build(errUtils.ErrMultipleDefaultIdentities).
+				WithExplanation("Multiple identities are marked as default").
+				WithHint("Use --identity flag to specify which identity to use").
+				WithHint("Or ensure only one identity has default: true").
+				WithContext("profile", FormatProfile(m.getProfiles())).
+				WithContext("defaults", strings.Join(defaultIdentities, ", ")).
+				Err()
 		}
 		// In interactive mode, prompt user to choose from default identities.
 		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
@@ -420,7 +510,12 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 // promptForIdentity prompts the user to select an identity from the given list.
 func (m *manager) promptForIdentity(message string, identities []string) (string, error) {
 	if len(identities) == 0 {
-		return "", errUtils.ErrNoIdentitiesAvailable
+		return "", errUtils.Build(errUtils.ErrNoIdentitiesAvailable).
+			WithExplanation("No identities are configured for authentication").
+			WithHint("Add identities to your auth configuration in atmos.yaml").
+			WithHint("Run `atmos auth --help` for configuration examples").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			Err()
 	}
 
 	// Sort identities alphabetically for consistent ordering.
@@ -452,8 +547,13 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 		if errors.Is(err, huh.ErrUserAborted) {
 			return "", errUtils.ErrUserAborted
 		}
-		errUtils.CheckErrorAndPrint(err, "Prompt for Identity", "")
-		return "", fmt.Errorf("%w: %w", errUtils.ErrUnsupportedInputType, err)
+		return "", errUtils.Build(errUtils.ErrUnsupportedInputType).
+			WithCause(err).
+			WithExplanation("Failed to run identity selection prompt").
+			WithHint("Ensure you are running in an interactive terminal").
+			WithHint("Use --identity flag to specify an identity non-interactively").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			Err()
 	}
 
 	return selectedIdentity, nil
@@ -497,8 +597,14 @@ func (m *manager) initializeProviders() error {
 	for name, providerConfig := range m.config.Providers {
 		provider, err := factory.NewProvider(name, &providerConfig)
 		if err != nil {
-			errUtils.CheckErrorAndPrint(err, "Initialize Providers", "")
-			return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrInvalidProviderConfig, name, err)
+			return errUtils.Build(errUtils.ErrInvalidProviderConfig).
+				WithCause(err).
+				WithExplanation(fmt.Sprintf("Failed to initialize provider %q", name)).
+				WithHint("Check the provider configuration in your auth settings").
+				WithHint("Run `atmos auth --help` for troubleshooting").
+				WithContext("profile", FormatProfile(m.getProfiles())).
+				WithContext("provider", name).
+				Err()
 		}
 		m.providers[name] = provider
 	}
@@ -510,8 +616,14 @@ func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
 		identity, err := factory.NewIdentity(name, &identityConfig)
 		if err != nil {
-			errUtils.CheckErrorAndPrint(err, "Initialize Identities", "")
-			return fmt.Errorf("%w: identity=%s: %w", errUtils.ErrInvalidIdentityConfig, name, err)
+			return errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+				WithCause(err).
+				WithExplanation(fmt.Sprintf("Failed to initialize identity %q", name)).
+				WithHint("Check the identity configuration in your auth settings").
+				WithHint("Run `atmos auth --help` for troubleshooting").
+				WithContext("profile", FormatProfile(m.getProfiles())).
+				WithContext("identity", name).
+				Err()
 		}
 		m.identities[name] = identity
 	}
@@ -584,14 +696,24 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 	// Build the complete authentication chain.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		wrappedErr := fmt.Errorf("failed to get provider kind for identity %q: %w", identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
-		return "", wrappedErr
+		return "", errUtils.Build(errUtils.ErrInvalidAuthConfig).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("Failed to get provider kind for identity %q", identityName)).
+			WithHint("Check the identity configuration and its provider chain").
+			WithHint("Run `atmos auth --help` for troubleshooting").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	if len(chain) == 0 {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "")
-		return "", fmt.Errorf("%w: empty chain", errUtils.ErrInvalidAuthConfig)
+		return "", errUtils.Build(errUtils.ErrInvalidAuthConfig).
+			WithExplanation(fmt.Sprintf("Empty authentication chain for identity %q", identityName)).
+			WithHint("Check the identity configuration has a valid provider chain").
+			WithHint("Run `atmos auth --help` for troubleshooting").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	// The first element in the chain is the root provider name.
@@ -606,8 +728,14 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 		return identity.Kind, nil
 	}
 
-	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetProviderKindForIdentity", fmt.Sprintf("provider %q not found in configuration", providerName))
-	return "", fmt.Errorf("%w: provider %q not found in configuration", errUtils.ErrInvalidAuthConfig, providerName)
+	return "", errUtils.Build(errUtils.ErrProviderNotFound).
+		WithExplanation(fmt.Sprintf("Provider %q from chain not found in configuration", providerName)).
+		WithHint("Check that the provider is defined in your auth configuration").
+		WithHint("Run `atmos auth --help` for troubleshooting").
+		WithContext("profile", FormatProfile(m.getProfiles())).
+		WithContext("provider", providerName).
+		WithContext("identity", identityName).
+		Err()
 }
 
 // ensureIdentityHasManager ensures the identity has the authentication chain context.
@@ -654,7 +782,14 @@ func (m *manager) ensureIdentityHasManager(identityName string) error {
 	// Build the authentication chain so GetProviderForIdentity() can resolve the root provider.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		return fmt.Errorf("failed to build authentication chain: %w", err)
+		return errUtils.Build(errUtils.ErrInvalidAuthConfig).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("Failed to build authentication chain for identity %q", identityName)).
+			WithHint("Check the identity configuration and its provider chain").
+			WithHint("Run `atmos auth --help` for troubleshooting").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	// Store the chain in the manager so GetProviderForIdentity() can use it.
@@ -828,8 +963,14 @@ func (m *manager) authenticateProviderChain(ctx context.Context, startIndex int)
 		// Allow provider to inspect the chain and prepare pre-auth preferences.
 		if provider, exists := m.providers[m.chain[0]]; exists {
 			if err := provider.PreAuthenticate(m); err != nil {
-				errUtils.CheckErrorAndPrint(err, "Pre Authenticate", "")
-				return nil, fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, m.chain[0], err)
+				return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+					WithCause(err).
+					WithExplanation(fmt.Sprintf("Pre-authentication failed for provider %q", m.chain[0])).
+					WithHint("Check your provider configuration").
+					WithHint("Run `atmos auth --help` for troubleshooting").
+					WithContext("profile", FormatProfile(m.getProfiles())).
+					WithContext("provider", m.chain[0]).
+					Err()
 			}
 		}
 		currentCreds, err = m.authenticateWithProvider(ctx, m.chain[0])
@@ -914,7 +1055,14 @@ func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName 
 
 	// If keyring returned an error other than "not found", propagate it.
 	if !errors.Is(keyringErr, credentials.ErrCredentialsNotFound) {
-		return nil, fmt.Errorf("keyring error for identity %q: %w", identityName, keyringErr)
+		return nil, errUtils.Build(errUtils.ErrAuthManager).
+			WithCause(keyringErr).
+			WithExplanation(fmt.Sprintf("Keyring error while retrieving credentials for identity %q", identityName)).
+			WithHint("Check your system keyring configuration").
+			WithHint("Run `atmos auth login` to re-authenticate").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	// Slow path: Fall back to identity storage (AWS files, etc.).
@@ -924,7 +1072,13 @@ func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName 
 
 	identity, exists := m.identities[identityName]
 	if !exists {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrIdentityNotInConfig, identityName)
+		return nil, errUtils.Build(errUtils.ErrIdentityNotInConfig).
+			WithExplanation(fmt.Sprintf("Identity %q not found in configuration", identityName)).
+			WithHint("Run `atmos list identities` to see available identities").
+			WithHint("Check your auth configuration in atmos.yaml").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	// Ensure the identity has access to manager for resolving provider information.
@@ -937,11 +1091,24 @@ func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName 
 	// Each identity type knows how to load its own credentials from storage.
 	loadedCreds, loadErr := identity.LoadCredentials(ctx)
 	if loadErr != nil {
-		return nil, fmt.Errorf("failed to load credentials from identity storage for %q: %w", identityName, loadErr)
+		return nil, errUtils.Build(errUtils.ErrNoCredentialsFound).
+			WithCause(loadErr).
+			WithExplanation(fmt.Sprintf("Failed to load credentials from identity storage for %q", identityName)).
+			WithHint("Run `atmos auth login` to authenticate").
+			WithHint("Check that your credentials are valid and not expired").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	if loadedCreds == nil {
-		return nil, fmt.Errorf("%w: credentials loaded from storage are nil for identity %q", errUtils.ErrNoCredentialsFound, identityName)
+		return nil, errUtils.Build(errUtils.ErrNoCredentialsFound).
+			WithExplanation(fmt.Sprintf("No credentials found in storage for identity %q", identityName)).
+			WithHint("Run `atmos auth login` to authenticate").
+			WithHint("Check that your credentials are valid and not expired").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	log.Debug("Successfully loaded credentials from identity storage", logKeyIdentity, identityName)
@@ -992,16 +1159,26 @@ func (m *manager) getChainCredentials(chain []string, startIndex int) (types.ICr
 func (m *manager) authenticateWithProvider(ctx context.Context, providerName string) (types.ICredentials, error) {
 	provider, exists := m.providers[providerName]
 	if !exists {
-		wrappedErr := fmt.Errorf("provider %q not registered: %w", providerName, errUtils.ErrInvalidAuthConfig)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate with Provider", "")
-		return nil, wrappedErr
+		return nil, errUtils.Build(errUtils.ErrProviderNotFound).
+			WithExplanation(fmt.Sprintf("Provider %q is not registered in the current configuration", providerName)).
+			WithHint("Run `atmos list providers` to see available providers").
+			WithHint("Check that the provider is defined in your auth configuration").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("provider", providerName).
+			Err()
 	}
 
 	log.Debug("Authenticating with provider", "provider", providerName)
 	credentials, err := provider.Authenticate(ctx)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(err, "Authenticate with Provider", "")
-		return nil, fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
+		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("Failed to authenticate with provider %q", providerName)).
+			WithHint("Check your provider configuration and credentials").
+			WithHint("Run `atmos auth --help` for troubleshooting").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("provider", providerName).
+			Err()
 	}
 
 	// Cache provider credentials, but skip session tokens.
@@ -1118,12 +1295,24 @@ func (m *manager) writeProvisionedIdentities(result *types.ProvisioningResult) e
 
 	writer, err := types.NewProvisioningWriter()
 	if err != nil {
-		return fmt.Errorf("failed to create provisioning writer: %w", err)
+		return errUtils.Build(errUtils.ErrAuthManager).
+			WithCause(err).
+			WithExplanation("Failed to create provisioning writer").
+			WithHint("Check that the cache directory is writable").
+			WithHint("Run `atmos auth --help` for troubleshooting").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			Err()
 	}
 
 	filePath, err := writer.Write(result)
 	if err != nil {
-		return fmt.Errorf("failed to write provisioned identities: %w", err)
+		return errUtils.Build(errUtils.ErrAuthManager).
+			WithCause(err).
+			WithExplanation("Failed to write provisioned identities to cache").
+			WithHint("Check that the cache directory is writable").
+			WithHint("Run `atmos auth --help` for troubleshooting").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			Err()
 	}
 
 	log.Debug("Wrote provisioned identities to cache", "path", filePath)
@@ -1160,9 +1349,13 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		identityStep := m.chain[i]
 		identity, exists := m.identities[identityStep]
 		if !exists {
-			wrappedErr := fmt.Errorf("%w: identity %q not found in chain step %d", errUtils.ErrInvalidAuthConfig, identityStep, i)
-			errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Identity Chain", "")
-			return nil, wrappedErr
+			return nil, errUtils.Build(errUtils.ErrIdentityNotFound).
+				WithExplanation(fmt.Sprintf("Identity %q not found in chain step %d", identityStep, i)).
+				WithHint("Check your identity chain configuration").
+				WithHint("Run `atmos list identities` to see available identities").
+				WithContext("profile", FormatProfile(m.getProfiles())).
+				WithContext("identity", identityStep).
+				Err()
 		}
 
 		log.Debug("Authenticating identity step", "step", i, logKeyIdentity, identityStep, "kind", identity.Kind())
@@ -1170,7 +1363,20 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		// Each identity receives credentials from the previous step.
 		nextCreds, err := identity.Authenticate(ctx, currentCreds)
 		if err != nil {
-			return nil, fmt.Errorf("%w: identity=%s step=%d: %w", errUtils.ErrAuthenticationFailed, identityStep, i, err)
+			// Get provider name from chain if available.
+			providerName := ""
+			if len(m.chain) > 0 {
+				providerName = m.chain[0]
+			}
+			return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+				WithCause(err).
+				WithExplanation(fmt.Sprintf("Failed to authenticate identity %q at step %d", identityStep, i)).
+				WithHint("Check your identity configuration and credentials").
+				WithHint("Run `atmos auth --help` for troubleshooting").
+				WithContext("profile", FormatProfile(m.getProfiles())).
+				WithContext("provider", providerName).
+				WithContext("identity", identityStep).
+				Err()
 		}
 
 		currentCreds = nextCreds
@@ -1205,9 +1411,14 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 	// Recursively build the chain.
 	err := m.buildChainRecursive(identityName, &chain, visited)
 	if err != nil {
-		wrappedErr := fmt.Errorf("failed to build authentication chain for identity %q: %w", identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
-		return nil, wrappedErr
+		return nil, errUtils.Build(errUtils.ErrInvalidAuthConfig).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("Failed to build authentication chain for identity %q", identityName)).
+			WithHint("Check the identity configuration and its provider chain").
+			WithHint("Run `atmos auth --help` for troubleshooting").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	// Reverse the chain so provider is first, then identities in authentication order.
@@ -1223,8 +1434,13 @@ func (m *manager) buildAuthenticationChain(identityName string) ([]string, error
 func (m *manager) buildChainRecursive(identityName string, chain *[]string, visited map[string]bool) error {
 	// Check for circular dependencies.
 	if visited[identityName] {
-		errUtils.CheckErrorAndPrint(errUtils.ErrCircularDependency, buildChainRecursive, fmt.Sprintf("circular dependency detected in identity chain involving %q", identityName))
-		return fmt.Errorf("%w: circular dependency detected in identity chain involving %q", errUtils.ErrCircularDependency, identityName)
+		return errUtils.Build(errUtils.ErrCircularDependency).
+			WithExplanation(fmt.Sprintf("Circular dependency detected in identity chain involving %q", identityName)).
+			WithHint("Check that your identity chain does not have circular references").
+			WithHint("Run `atmos auth --help` for troubleshooting").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", identityName).
+			Err()
 	}
 	visited[identityName] = true
 
@@ -1232,8 +1448,13 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 	identity, exists := m.config.Identities[identityName]
 
 	if !exists {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildChainRecursive, fmt.Sprintf("identity %q not found", identityName))
-		return fmt.Errorf("%w: identity %q not found", errUtils.ErrInvalidAuthConfig, identityName)
+		return errUtils.Build(errUtils.ErrIdentityNotFound).
+			WithExplanation(fmt.Sprintf("Identity %q not found in configuration", identityName)).
+			WithHint("Run `atmos list identities` to see available identities").
+			WithHint("Check your auth configuration in atmos.yaml").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	// AWS User identities don't require via configuration - they are standalone.
@@ -1243,8 +1464,13 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 			*chain = append(*chain, identityName)
 			return nil
 		}
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, buildChainRecursive, fmt.Sprintf("identity %q has no via configuration", identityName))
-		return fmt.Errorf("%w: identity %q has no via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
+		return errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+			WithExplanation(fmt.Sprintf("Identity %q has no via configuration", identityName)).
+			WithHint("Non-user identities must have a via.provider or via.identity configured").
+			WithHint("Check the identity configuration in atmos.yaml").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	// Add current identity to chain.
@@ -1261,8 +1487,13 @@ func (m *manager) buildChainRecursive(identityName string, chain *[]string, visi
 		return m.buildChainRecursive(identity.Via.Identity, chain, visited)
 	}
 
-	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidIdentityConfig, buildChainRecursive, fmt.Sprintf("identity %q has invalid via configuration", identityName))
-	return fmt.Errorf("%w: identity %q has invalid via configuration", errUtils.ErrInvalidIdentityConfig, identityName)
+	return errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+		WithExplanation(fmt.Sprintf("Identity %q has invalid via configuration", identityName)).
+		WithHint("Via configuration must specify either provider or identity").
+		WithHint("Check the identity configuration in atmos.yaml").
+		WithContext("profile", FormatProfile(m.getProfiles())).
+		WithContext("identity", identityName).
+		Err()
 }
 
 // GetEnvironmentVariables returns the environment variables for an identity
@@ -1273,7 +1504,13 @@ func (m *manager) GetEnvironmentVariables(identityName string) (map[string]strin
 	// Verify identity exists.
 	identity, exists := m.identities[identityName]
 	if !exists {
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
+		return nil, errUtils.Build(errUtils.ErrIdentityNotFound).
+			WithExplanation(fmt.Sprintf("Identity %q not found in the current configuration", identityName)).
+			WithHint("Run `atmos list identities` to see available identities").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("provider", "(not set)").
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	// Ensure the identity has access to manager for resolving provider information.
@@ -1285,7 +1522,14 @@ func (m *manager) GetEnvironmentVariables(identityName string) (map[string]strin
 	// Get environment variables from the identity.
 	env, err := identity.Environment()
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get environment variables: %w", errUtils.ErrAuthManager, err)
+		return nil, errUtils.Build(errUtils.ErrAuthManager).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("Failed to get environment variables for identity %q", identityName)).
+			WithHint("Check the identity configuration").
+			WithHint("Run `atmos auth --help` for troubleshooting").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	return env, nil
@@ -1300,7 +1544,13 @@ func (m *manager) PrepareShellEnvironment(ctx context.Context, identityName stri
 	// Verify identity exists.
 	identity, exists := m.identities[identityName]
 	if !exists {
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
+		return nil, errUtils.Build(errUtils.ErrIdentityNotFound).
+			WithExplanation(fmt.Sprintf("Identity %q not found in the current configuration", identityName)).
+			WithHint("Run `atmos list identities` to see available identities").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("provider", "(not set)").
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	// Ensure the identity has access to manager for resolving provider information.
@@ -1314,7 +1564,14 @@ func (m *manager) PrepareShellEnvironment(ctx context.Context, identityName stri
 	// This is provider-specific (AWS sets AWS_SHARED_CREDENTIALS_FILE, AWS_PROFILE, etc.).
 	preparedEnvMap, err := identity.PrepareEnvironment(ctx, envMap)
 	if err != nil {
-		return nil, fmt.Errorf("failed to prepare shell environment for identity %q: %w", identityName, err)
+		return nil, errUtils.Build(errUtils.ErrAuthManager).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("Failed to prepare shell environment for identity %q", identityName)).
+			WithHint("Check the identity configuration and credentials").
+			WithHint("Run `atmos auth login` to re-authenticate").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	// Convert map back to list for subprocess execution.
@@ -1345,4 +1602,13 @@ func mapToEnvironList(envMap map[string]string) []string {
 		envList = append(envList, fmt.Sprintf("%s=%s", key, value))
 	}
 	return envList
+}
+
+// getProfiles returns the current profiles from stackInfo for error context.
+// Returns nil if stackInfo is not set or has no profiles.
+func (m *manager) getProfiles() []string {
+	if m.stackInfo == nil {
+		return nil
+	}
+	return m.stackInfo.ProfilesFromArg
 }

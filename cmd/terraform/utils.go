@@ -333,7 +333,8 @@ func handleInteractiveIdentitySelection(info *schema.ConfigAndStacksInfo) {
 			// Note: We bypass error formatting as user abort is not an error condition.
 			errUtils.Exit(errUtils.ExitCodeSIGINT)
 		}
-		errUtils.CheckErrorPrintAndExit(fmt.Errorf(errWrapFormat, errUtils.ErrDefaultIdentity, err), "", "")
+		// Print error directly - it already has ErrorBuilder context with hints.
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	info.Identity = selectedIdentity

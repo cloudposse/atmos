@@ -20,7 +20,13 @@ func (m *manager) Logout(ctx context.Context, identityName string, deleteKeychai
 	// Validate identity exists in configuration.
 	identity, exists := m.identities[identityName]
 	if !exists {
-		return fmt.Errorf("%w: identity %q", errUtils.ErrIdentityNotInConfig, identityName)
+		return errUtils.Build(errUtils.ErrIdentityNotInConfig).
+			WithExplanation(fmt.Sprintf("Identity %q not found in configuration", identityName)).
+			WithHint("Run `atmos list identities` to see available identities").
+			WithHint("Check your auth configuration in atmos.yaml").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("identity", identityName).
+			Err()
 	}
 
 	log.Debug("Logout identity", logKeyIdentity, identityName, "deleteKeychain", deleteKeychain)
@@ -111,7 +117,13 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string, delet
 	// Validate provider exists in configuration.
 	provider, exists := m.providers[providerName]
 	if !exists {
-		return fmt.Errorf("%w: provider %q", errUtils.ErrProviderNotInConfig, providerName)
+		return errUtils.Build(errUtils.ErrProviderNotInConfig).
+			WithExplanation(fmt.Sprintf("Provider %q not found in configuration", providerName)).
+			WithHint("Run `atmos list providers` to see available providers").
+			WithHint("Check your auth configuration in atmos.yaml").
+			WithContext("profile", FormatProfile(m.getProfiles())).
+			WithContext("provider", providerName).
+			Err()
 	}
 
 	log.Debug("Logout provider", logKeyProvider, providerName, "deleteKeychain", deleteKeychain)

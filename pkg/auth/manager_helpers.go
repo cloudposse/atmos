@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
@@ -251,7 +250,13 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 
 	// Validate auth is configured when we have an identity to use.
 	if !isAuthConfigured(authConfig) {
-		return nil, fmt.Errorf("%w: authentication requires at least one identity configured in atmos.yaml", errUtils.ErrAuthNotConfigured)
+		return nil, errUtils.Build(errUtils.ErrAuthNotConfigured).
+			WithExplanation("Authentication requires at least one identity configured").
+			WithHint("Add identity configuration to your atmos.yaml file").
+			WithHint("Run `atmos auth --help` for configuration examples").
+			WithContext("profile", FormatProfile(nil)).
+			WithContext("identity", resolvedIdentity).
+			Err()
 	}
 
 	// Create AuthManager instance.
