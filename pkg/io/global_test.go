@@ -462,3 +462,210 @@ func resetGlobals() {
 	// This ensures each test starts with clean viper state.
 	viper.Reset()
 }
+
+func TestReset(t *testing.T) {
+	// First initialize.
+	err := Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() error = %v", err)
+	}
+
+	// Verify initialized.
+	if globalContext == nil {
+		t.Error("globalContext should not be nil after Initialize()")
+	}
+
+	// Call Reset.
+	Reset()
+
+	// Verify reset cleared the context.
+	if globalContext != nil {
+		t.Error("globalContext should be nil after Reset()")
+	}
+
+	// Can re-initialize after reset.
+	err = Initialize()
+	if err != nil {
+		t.Fatalf("Initialize() after Reset() error = %v", err)
+	}
+
+	if globalContext == nil {
+		t.Error("globalContext should not be nil after re-Initialize()")
+	}
+}
+
+func TestRegisterSecret_Empty(t *testing.T) {
+	resetGlobals()
+	Initialize()
+
+	// Empty secret should not cause issues.
+	RegisterSecret("")
+
+	buf := &bytes.Buffer{}
+	masked := MaskWriter(buf)
+
+	fmt.Fprintf(masked, "Test output\n")
+
+	output := buf.String()
+	if output != "Test output\n" {
+		t.Errorf("Output modified unexpectedly: %s", output)
+	}
+}
+
+func TestRegisterSecret_BeforeInitialize(t *testing.T) {
+	resetGlobals()
+
+	// Register secret before initialize - should auto-initialize.
+	RegisterSecret("test_secret")
+
+	// Should have auto-initialized.
+	if globalContext == nil {
+		t.Error("RegisterSecret should auto-initialize global context")
+	}
+}
+
+func TestRegisterValue_BeforeInitialize(t *testing.T) {
+	resetGlobals()
+
+	// Register value before initialize - should auto-initialize.
+	RegisterValue("test_value")
+
+	// Should have auto-initialized.
+	if globalContext == nil {
+		t.Error("RegisterValue should auto-initialize global context")
+	}
+}
+
+func TestRegisterPattern_BeforeInitialize(t *testing.T) {
+	resetGlobals()
+
+	// Register pattern before initialize - should auto-initialize.
+	err := RegisterPattern(`test_pattern`)
+	if err != nil {
+		t.Fatalf("RegisterPattern() error = %v", err)
+	}
+
+	// Should have auto-initialized.
+	if globalContext == nil {
+		t.Error("RegisterPattern should auto-initialize global context")
+	}
+}
+
+func TestMaskWriter_NilWriter(t *testing.T) {
+	resetGlobals()
+	Initialize()
+
+	// Pass nil writer - should handle gracefully.
+	masked := MaskWriter(nil)
+
+	// Should return a masked writer, even if underlying is nil.
+	if masked == nil {
+		t.Error("MaskWriter(nil) should not return nil")
+	}
+}
+
+func TestGlobalWritersAfterReset(t *testing.T) {
+	resetGlobals()
+	Initialize()
+
+	// Store references.
+	oldData := Data
+
+	// Reset.
+	Reset()
+
+	// Writers should still be non-nil (Reset doesn't clear them).
+	if Data == nil && oldData != nil {
+		t.Log("Data was set to nil by Reset() - this is expected if Data was reset")
+	}
+
+	// Re-initialize.
+	Initialize()
+
+	// New writers should be set.
+	if Data == nil {
+		t.Error("Data should not be nil after re-Initialize()")
+	}
+	if UI == nil {
+		t.Error("UI should not be nil after re-Initialize()")
+	}
+}
+
+func TestRegisterCommonPatterns(t *testing.T) {
+	resetGlobals()
+	Initialize()
+
+	// Create a buffer with masking.
+	buf := &bytes.Buffer{}
+	masked := MaskWriter(buf)
+
+	// Test GitHub PAT pattern (ghp_...).
+	githubPat := "ghp_" + strings.Repeat("a", 36)
+	fmt.Fprintf(masked, "Token: %s\n", githubPat)
+
+	output := buf.String()
+	if strings.Contains(output, githubPat) {
+		t.Errorf("GitHub PAT not masked: %s", output)
+	}
+}
+
+func TestRegisterEnvSecrets_AWSCredentials(t *testing.T) {
+	resetGlobals()
+
+	// Set AWS credentials.
+	t.Setenv("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
+	t.Setenv("AWS_SESSION_TOKEN", "AQoDYXdzEJr...test-session-token")
+
+	Initialize()
+
+	buf := &bytes.Buffer{}
+	masked := MaskWriter(buf)
+
+	fmt.Fprintf(masked, "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\n")
+	fmt.Fprintf(masked, "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n")
+
+	output := buf.String()
+
+	// Access key ID should be masked (it's registered with withEncodings=false).
+	if strings.Contains(output, "AKIAIOSFODNN7EXAMPLE") {
+		t.Errorf("AWS_ACCESS_KEY_ID not masked: %s", output)
+	}
+
+	// Secret access key should be masked.
+	if strings.Contains(output, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY") {
+		t.Errorf("AWS_SECRET_ACCESS_KEY not masked: %s", output)
+	}
+}
+
+func TestInitialize_ConcurrentCalls(t *testing.T) {
+	resetGlobals()
+
+	var wg sync.WaitGroup
+	errors := make(chan error, 100)
+
+	// Make many concurrent calls.
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := Initialize()
+			if err != nil {
+				errors <- err
+			}
+		}()
+	}
+
+	wg.Wait()
+	close(errors)
+
+	// All should succeed.
+	for err := range errors {
+		t.Errorf("Initialize() error = %v", err)
+	}
+
+	// Should only be initialized once.
+	if globalContext == nil {
+		t.Error("globalContext is nil after concurrent Initialize() calls")
+	}
+}

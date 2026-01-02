@@ -183,6 +183,21 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
+	// Merge dependencies (base component dependencies + component dependencies).
+	// Component dependencies take precedence over base component dependencies.
+	var finalComponentDependencies map[string]any
+	if len(result.BaseComponentDependencies) > 0 || len(result.ComponentDependencies) > 0 {
+		finalComponentDependencies, err = m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				result.BaseComponentDependencies,
+				result.ComponentDependencies,
+			})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Build final component map.
 	comp := map[string]any{
 		cfg.VarsSectionName:        finalComponentVars,
@@ -193,6 +208,11 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		cfg.InheritanceSectionName: result.ComponentInheritanceChain,
 		cfg.MetadataSectionName:    finalComponentMetadata,
 		cfg.OverridesSectionName:   result.ComponentOverrides,
+	}
+
+	// Add dependencies if present.
+	if len(finalComponentDependencies) > 0 {
+		comp[cfg.DependenciesSectionName] = finalComponentDependencies
 	}
 
 	// Terraform-specific: process backends and add Terraform-specific fields.
@@ -268,6 +288,24 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		comp[cfg.AuthSectionName] = mergedAuth
 	}
 
+	// Process source and provision configuration for terraform, helmfile, and packer components.
+	if opts.ComponentType == cfg.TerraformComponentType ||
+		opts.ComponentType == cfg.HelmfileComponentType ||
+		opts.ComponentType == cfg.PackerComponentType {
+		finalComponentSource, err := m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				opts.GlobalSourceSection,
+				result.BaseComponentSourceSection,
+				result.ComponentSourceSection,
+			})
+		if err != nil {
+			return nil, err
+		}
+		comp[cfg.SourceSectionName] = finalComponentSource
+		comp[cfg.ProvisionSectionName] = result.ComponentProvision
+	}
+
 	// Add base component name if present.
 	if result.BaseComponentName != "" {
 		comp[cfg.ComponentSectionName] = result.BaseComponentName
@@ -287,7 +325,7 @@ func processAuthConfig(atmosConfig *schema.AtmosConfiguration, globalAuthConfig 
 			authConfig,
 		})
 	if err != nil {
-		return nil, fmt.Errorf("%w: merge auth config: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: merge auth config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	// Apply deferred merges (without YAML processing - already done earlier).

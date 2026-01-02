@@ -71,6 +71,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/retry"
 )
 
 // Constants for git operations.
@@ -292,6 +293,66 @@ func getRunCommand(cmd *exec.Cmd) error {
 	return fmt.Errorf("%w: %s: %s", errUtils.ErrGitCommandFailed, cmd.Path, buf.String())
 }
 
+// getRunCommandWithRetry wraps getRunCommand with retry logic for transient errors.
+func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.Cmd) error {
+	if g.RetryConfig == nil || g.RetryConfig.MaxAttempts <= 1 {
+		return getRunCommand(cmd)
+	}
+
+	attempt := 0
+	return retry.WithPredicate(ctx, g.RetryConfig, func() error {
+		attempt++
+		// exec.Cmd can only run once, so we need to recreate it for retries.
+		if attempt > 1 {
+			// Recreate the command for retry - cmd.Path and cmd.Args are from the original git command.
+			//nolint:gosec // G204: cmd.Path is the git binary path, cmd.Args are git arguments - both from trusted sources
+			newCmd := exec.CommandContext(ctx, cmd.Path, cmd.Args[1:]...)
+			newCmd.Dir = cmd.Dir
+			newCmd.Env = cmd.Env
+			log.Info("Retrying git command", "attempt", attempt, "command", cmd.Path)
+			return getRunCommand(newCmd)
+		}
+		return getRunCommand(cmd)
+	}, isRetryableGitError)
+}
+
+// isRetryableGitError determines if a git error should trigger a retry.
+// It checks for transient network errors, rate limiting, and other recoverable failures.
+func isRetryableGitError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+
+	// Transient network and git errors that should be retried.
+	transientPatterns := []string{
+		"connection reset",
+		"connection refused",
+		"timeout",
+		"timed out",
+		"eof",
+		"temporary failure",
+		"could not read from remote",
+		"the remote end hung up",
+		"ssl",
+		"tls",
+		"rate limit",
+		"too many requests",
+		"service unavailable",
+		"internal server error",
+		"bad gateway",
+		"gateway timeout",
+	}
+
+	for _, pattern := range transientPatterns {
+		if strings.Contains(errStr, pattern) {
+			log.Warn("Retryable git error detected", "error", err)
+			return true
+		}
+	}
+	return false
+}
+
 // removeCaseInsensitiveGitDirectory removes all .git directory variations.
 func removeCaseInsensitiveGitDirectory(dst string) error {
 	files, err := os.ReadDir(dst)
@@ -368,7 +429,7 @@ func checkGitVersion(ctx context.Context, min string) error {
 func (g *CustomGitGetter) checkout(ctx context.Context, dst string, ref string) error {
 	cmd := exec.CommandContext(ctx, gitCommand, "checkout", ref)
 	cmd.Dir = dst
-	return getRunCommand(cmd)
+	return g.getRunCommandWithRetry(ctx, cmd)
 }
 
 func (g *CustomGitGetter) clone(params *gitOperationParams) error {
@@ -393,7 +454,7 @@ func (g *CustomGitGetter) clone(params *gitOperationParams) error {
 
 	cmd := exec.CommandContext(ctx, gitCommand, args...)
 	setupGitEnv(cmd, sshKeyFile)
-	err := getRunCommand(cmd)
+	err := g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		if depth > 0 && originalRef != "" {
 			// If we're creating a shallow clone then the given ref must be
@@ -441,7 +502,7 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 	// Initialize the git repository
 	cmd := exec.CommandContext(ctx, gitCommand, "init")
 	cmd.Dir = dst
-	err = getRunCommand(cmd)
+	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
 	}
@@ -450,7 +511,7 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 	// #nosec G204 -- The URL is validated and we use "--" separator to prevent command injection.
 	cmd = exec.CommandContext(ctx, gitCommand, "remote", "add", originRemote, gitArgSeparator, u.String())
 	cmd.Dir = dst
-	err = getRunCommand(cmd)
+	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
 	}
@@ -458,7 +519,7 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 	// Fetch the remote ref
 	cmd = exec.CommandContext(ctx, gitCommand, "fetch", "--tags")
 	cmd.Dir = dst
-	err = getRunCommand(cmd)
+	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
 	}
@@ -466,7 +527,7 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 	// Fetch the remote ref
 	cmd = exec.CommandContext(ctx, gitCommand, "fetch", originRemote, gitArgSeparator, ref)
 	cmd.Dir = dst
-	err = getRunCommand(cmd)
+	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
 	}
@@ -474,7 +535,7 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 	// Reset the branch to the fetched ref
 	cmd = exec.CommandContext(ctx, gitCommand, "reset", "--hard", "FETCH_HEAD")
 	cmd.Dir = dst
-	err = getRunCommand(cmd)
+	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
 	}
@@ -495,7 +556,7 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 
 	cmd.Dir = dst
 	setupGitEnv(cmd, sshKeyFile)
-	return getRunCommand(cmd)
+	return g.getRunCommandWithRetry(ctx, cmd)
 }
 
 // fetchSubmodules downloads any configured submodules recursively.
@@ -507,5 +568,5 @@ func (g *CustomGitGetter) fetchSubmodules(ctx context.Context, dst, sshKeyFile s
 	cmd := exec.CommandContext(ctx, gitCommand, args...)
 	cmd.Dir = dst
 	setupGitEnv(cmd, sshKeyFile)
-	return getRunCommand(cmd)
+	return g.getRunCommandWithRetry(ctx, cmd)
 }

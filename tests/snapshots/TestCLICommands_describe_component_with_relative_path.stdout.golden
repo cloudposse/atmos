@@ -498,6 +498,7 @@ providers:
       namespace: cp
       stage: dev
       tenant: tenant1
+provision: {}
 remote_state_backend:
   acl: bucket-owner-full-control
   bucket: cp-ue2-root-tfstate
@@ -589,6 +590,7 @@ settings:
             url: https://api.ipify.org?format=json
         timeout: 20
       sprig: {}
+source: {}
 sources:
   backend:
     acl:

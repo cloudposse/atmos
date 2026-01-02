@@ -1,0 +1,60 @@
+---
+title: atmos toolchain install
+sidebar_label: install
+sidebar_class_name: command
+id: install
+description: Install CLI tools required by your Atmos components, commands, and workflows.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Install CLI tools required by your Atmos components, commands, and workflows. This command downloads and sets up the exact tool versions specified in your toolchain configuration, ensuring consistent execution across your team.
+</Intro>
+
+<Screengrab title="atmos toolchain install --help" slug="atmos-toolchain-install--help" />
+
+## Usage
+
+Execute the `toolchain install` command like this:
+
+```shell
+atmos toolchain install
+```
+
+## Examples
+
+```shell
+atmos toolchain install suzuki-shunsuke/github-comment@3.5.0
+atmos toolchain install hashicorp/terraform@1.5.0
+atmos toolchain install terraform@1.9.8    # Using alias
+atmos toolchain install                    # Install from .tool-versions file
+```
+
+## Arguments
+
+<dl>
+    <dt>`tool@version` <em>(optional)</em></dt>
+    <dd>
+        Tool to install from the registry. Can be a short name (alias) or full `owner/repo` format.
+        If omitted, installs all tools from `.tool-versions` file.
+
+        Examples: `terraform@1.9.8`, `hashicorp/terraform@1.5.0`, `kubectl@1.28.0`
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--default`  <em>(optional)</em></dt>
+    <dd>
+        Set installed version as default (front of .tool-versions)
+    </dd>
+
+    <dt>`--reinstall` <em>(optional)</em></dt>
+
+    <dd>
+        Reinstall even if already installed
+    </dd>
+</dl>
