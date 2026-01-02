@@ -9,6 +9,12 @@
  * 2. Move milestones from "planned" to "in-progress" to "shipped"
  * 3. Update quarters as time progresses
  * 4. Add new GitHub issue numbers as they're created
+ *
+ * Version metadata:
+ * - The optional `version` field indicates which release a shipped milestone was included in
+ * - Versions are sourced from blog post `release:` fields and git tag research
+ * - Not all shipped milestones have versions; older features pre-date version tracking
+ * - When adding a new shipped milestone, include the version if known
  */
 
 export const roadmapConfig = {
