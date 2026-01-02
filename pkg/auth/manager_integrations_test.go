@@ -446,3 +446,140 @@ func TestManager_triggerIntegrations_NoLinkedIntegrations(t *testing.T) {
 	// This is a no-op test - just verifying no panic occurs.
 	m.triggerIntegrations(ctx, "dev-admin", nil)
 }
+
+func TestManager_executeIntegration_NilIntegrations(t *testing.T) {
+	m := &manager{
+		config: &schema.AuthConfig{
+			Integrations: nil,
+		},
+	}
+
+	ctx := context.Background()
+	err := m.executeIntegration(ctx, "non-existent", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrIntegrationNotFound)
+}
+
+func TestManager_executeIntegration_NotFound(t *testing.T) {
+	m := &manager{
+		config: &schema.AuthConfig{
+			Integrations: map[string]schema.Integration{
+				"other-integration": {Kind: "aws/ecr"},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	err := m.executeIntegration(ctx, "non-existent", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrIntegrationNotFound)
+}
+
+func TestManager_findIntegrationsForIdentity_NilVia(t *testing.T) {
+	m := &manager{
+		config: &schema.AuthConfig{
+			Integrations: map[string]schema.Integration{
+				"no-via": {
+					Kind: "aws/ecr",
+					Via:  nil, // No Via configured.
+				},
+			},
+		},
+	}
+
+	result := m.findIntegrationsForIdentity("dev-admin", true)
+	assert.Nil(t, result) // Should not match because Via is nil.
+}
+
+func TestManager_GetIntegration_NilConfig(t *testing.T) {
+	m := &manager{
+		config: nil,
+	}
+
+	// This would panic, so we test with non-nil config but nil integrations.
+	m.config = &schema.AuthConfig{
+		Integrations: nil,
+	}
+
+	integration, err := m.GetIntegration("test")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrIntegrationNotFound)
+	assert.Nil(t, integration)
+}
+
+func TestManager_triggerIntegrations_NilIntegrations(t *testing.T) {
+	m := &manager{
+		config: &schema.AuthConfig{
+			Integrations: nil,
+		},
+	}
+
+	ctx := context.Background()
+
+	// Should return immediately without panicking when integrations is nil.
+	m.triggerIntegrations(ctx, "dev-admin", nil)
+}
+
+func TestManager_findIntegrationsForIdentity_WithAutoProvisionNil(t *testing.T) {
+	// Test that auto_provision defaults to true when Spec.AutoProvision is nil.
+	m := &manager{
+		config: &schema.AuthConfig{
+			Integrations: map[string]schema.Integration{
+				"ecr1": {
+					Kind: "aws/ecr",
+					Via: &schema.IntegrationVia{
+						Identity: "dev-admin",
+					},
+					Spec: &schema.IntegrationSpec{
+						AutoProvision: nil, // nil should default to true.
+						Registry: &schema.ECRRegistry{
+							AccountID: "123456789012",
+							Region:    "us-east-1",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result := m.findIntegrationsForIdentity("dev-admin", true)
+	assert.Equal(t, []string{"ecr1"}, result)
+}
+
+func TestManager_ExecuteIntegration_EmptyIntegrationsMap(t *testing.T) {
+	credStore := credentials.NewCredentialStore()
+	validator := validation.NewValidator()
+
+	m, err := NewAuthManager(&schema.AuthConfig{
+		Providers:    map[string]schema.Provider{},
+		Identities:   map[string]schema.Identity{},
+		Integrations: map[string]schema.Integration{}, // Empty map.
+	}, credStore, validator, nil)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	err = m.ExecuteIntegration(ctx, "test")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrIntegrationNotFound)
+}
+
+func TestManager_ExecuteIdentityIntegrations_EmptyIntegrationsMap(t *testing.T) {
+	credStore := credentials.NewCredentialStore()
+	validator := validation.NewValidator()
+
+	m, err := NewAuthManager(&schema.AuthConfig{
+		Providers: map[string]schema.Provider{},
+		Identities: map[string]schema.Identity{
+			"dev-admin": {
+				Kind: "aws/user",
+			},
+		},
+		Integrations: map[string]schema.Integration{}, // Empty map.
+	}, credStore, validator, nil)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	err = m.ExecuteIdentityIntegrations(ctx, "dev-admin")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNoLinkedIntegrations)
+}

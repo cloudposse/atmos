@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/spf13/viper"
@@ -132,16 +133,29 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 
 // GetGitHubTokenFromEnv retrieves GitHub token from the global configuration.
 // This function respects the standard Atmos precedence order:
-//  1. --github-token CLI flag
+//  1. --github-token CLI flag (via viper, only available for toolchain commands)
 //  2. ATMOS_GITHUB_TOKEN environment variable
 //  3. GITHUB_TOKEN environment variable
 //
-// The token binding is configured globally in pkg/flags/global_builder.go
-// via the GlobalOptionsBuilder.registerAuthenticationFlags() method.
+// The viper binding is configured in cmd/toolchain/toolchain.go for toolchain commands.
+// For non-toolchain commands, we fall back to direct environment variable lookup.
 func GetGitHubTokenFromEnv() string {
 	defer perf.Track(nil, "http.GetGitHubTokenFromEnv")()
 
-	return viper.GetString("github-token")
+	// First try viper (for toolchain commands with --github-token flag).
+	if token := viper.GetString("github-token"); token != "" {
+		return token
+	}
+
+	// Fall back to direct environment variable lookup for non-toolchain commands.
+	// Check ATMOS_GITHUB_TOKEN first (Atmos-specific), then GITHUB_TOKEN (standard).
+	//nolint:forbidigo // Direct env lookup required for non-toolchain commands
+	if token := os.Getenv("ATMOS_GITHUB_TOKEN"); token != "" {
+		return token
+	}
+
+	//nolint:forbidigo // Direct env lookup required for non-toolchain commands
+	return os.Getenv("GITHUB_TOKEN")
 }
 
 // Do implements Client.Do.
