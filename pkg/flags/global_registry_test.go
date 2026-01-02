@@ -164,7 +164,6 @@ func TestParseIdentityFlag_FlagChanged(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 // TestParsePagerFlag_WithInheritedFlags tests that parsePagerFlag correctly handles
 // persistent flags inherited from parent commands.
 // This is a regression test for the bug where pager flag didn't work on subcommands.
