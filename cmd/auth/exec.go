@@ -83,25 +83,39 @@ func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
 	}
 
+	// Prepare the authenticated environment.
+	envMap, err := prepareAuthenticatedEnv(cmd, v)
+	if err != nil {
+		return err
+	}
+
+	// Execute the command with authentication environment.
+	return executeCommandWithEnv(commandArgs, envMap)
+}
+
+// prepareAuthenticatedEnv loads config, authenticates, and prepares the shell environment.
+func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (map[string]string, error) {
+	defer perf.Track(nil, "auth.exec.prepareAuthenticatedEnv")()
+
 	// Parse global flags and build ConfigAndStacksInfo to honor --base-path, --config, --config-path, --profile.
 	configAndStacksInfo := BuildConfigAndStacksInfo(cmd, v)
 
 	// Load atmos configuration (processStacks=false since auth commands don't require stack manifests).
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
+		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
 
 	// Create auth manager.
 	authManager, err := CreateAuthManager(&atmosConfig.Auth)
 	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
+		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
 	// Get identity from flag or use default.
 	identityName, err := resolveIdentityNameForExec(cmd, v, authManager)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Try to use cached credentials first (passive check, no prompts).
@@ -115,9 +129,9 @@ func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			// Check for user cancellation - return clean error without wrapping.
 			if errors.Is(err, errUtils.ErrUserAborted) {
-				return errUtils.ErrUserAborted
+				return nil, errUtils.ErrUserAborted
 			}
-			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthenticationFailed, err)
+			return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthenticationFailed, err)
 		}
 	}
 
@@ -126,21 +140,18 @@ func executeAuthExecCommand(cmd *cobra.Command, args []string) error {
 	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, baseEnv)
 	if err != nil {
-		return fmt.Errorf("failed to prepare command environment: %w", err)
+		return nil, fmt.Errorf("failed to prepare command environment: %w", err)
 	}
 
-	// Convert environment list to map for executeCommandWithEnv.
+	// Convert environment list to map.
 	envMap := make(map[string]string)
 	for _, envVar := range envList {
 		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
-			key := envVar[:idx]
-			value := envVar[idx+1:]
-			envMap[key] = value
+			envMap[envVar[:idx]] = envVar[idx+1:]
 		}
 	}
 
-	// Execute the command with authentication environment.
-	return executeCommandWithEnv(commandArgs, envMap)
+	return envMap, nil
 }
 
 // resolveIdentityNameForExec resolves the identity name from flags, viper, or prompts for selection.
@@ -220,7 +231,8 @@ func executeCommandWithEnv(args []string, envVars map[string]string) error {
 	err = execCmd.Run()
 	if err != nil {
 		// If it's an exit error, propagate as a typed error so the root can exit with the same code.
-		if exitError, ok := err.(*exec.ExitError); ok {
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
 			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
 				// Return a typed error so the root can os.Exit(status.ExitStatus()).
 				return errUtils.ExitCodeError{Code: status.ExitStatus()}
