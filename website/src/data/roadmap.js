@@ -69,7 +69,7 @@ export const roadmapConfig = {
       quarter: 'q3-2025',
       version: 'v1.196.0',
       docs: '/cli/configuration/auth/providers',
-      changelog: 'introducing-atmos-auth', version: 'v1.196.0',
+      changelog: 'introducing-atmos-auth',
       prd: 'keyring-backends',
     },
     {
