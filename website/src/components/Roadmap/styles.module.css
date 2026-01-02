@@ -1922,6 +1922,21 @@
   color: var(--ifm-color-emphasis-600);
 }
 
+.drawerMetaVersion {
+  font-size: 0.8rem;
+  font-weight: 500;
+  font-family: var(--ifm-font-family-monospace);
+  padding: 0.2rem 0.6rem;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+  color: var(--ifm-color-emphasis-700);
+}
+
+:global(html[data-theme='dark']) .drawerMetaVersion {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--ifm-color-emphasis-500);
+}
+
 .drawerMetaStatus {
   font-size: 0.8rem;
   font-weight: 500;

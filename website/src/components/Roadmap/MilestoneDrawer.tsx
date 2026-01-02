@@ -173,6 +173,11 @@ export default function MilestoneDrawer({
                 <span className={styles.drawerMetaItem}>
                   {milestone.quarter.replace('q', 'Q').replace('-', ' ')}
                 </span>
+                {milestone.version && (
+                  <span className={styles.drawerMetaVersion}>
+                    {milestone.version}
+                  </span>
+                )}
                 <span
                   className={`${styles.drawerMetaStatus} ${styles[statusClassMap[milestone.status] || 'drawerMetaStatusPlanned']}`}
                 >
