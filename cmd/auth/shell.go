@@ -16,9 +16,11 @@ import (
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -111,7 +113,7 @@ func executeAuthShellCommand(cmd *cobra.Command, args []string) error {
 
 	// Authenticate and prepare shell environment.
 	shell := v.GetString(shellFlagName)
-	envMap, providerName, err := prepareShellEnvironment(cmd, authManager, identityName)
+	envMap, providerName, err := prepareShellEnvironment(authManager, identityName, atmosConfigPtr)
 	if err != nil {
 		return err
 	}
@@ -146,7 +148,7 @@ func resolveIdentityNameForShell(cmd *cobra.Command, v *viper.Viper, authManager
 }
 
 // prepareShellEnvironment authenticates and prepares the shell environment.
-func prepareShellEnvironment(_ *cobra.Command, authManager auth.AuthManager, identityName string) (map[string]string, string, error) {
+func prepareShellEnvironment(authManager auth.AuthManager, identityName string, atmosConfig *schema.AtmosConfiguration) (map[string]string, string, error) {
 	defer perf.Track(nil, "auth.shell.prepareShellEnvironment")()
 
 	// Try to use cached credentials first (passive check, no prompts).
@@ -167,8 +169,9 @@ func prepareShellEnvironment(_ *cobra.Command, authManager auth.AuthManager, ide
 	}
 
 	// Prepare shell environment with file-based credentials.
-	// Start with current OS environment and let PrepareShellEnvironment configure auth.
-	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, os.Environ())
+	// Start with current OS environment + global env from atmos.yaml (consistent with exec.go).
+	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, baseEnv)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to prepare shell environment: %w", err)
 	}

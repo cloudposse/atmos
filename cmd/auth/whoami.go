@@ -176,11 +176,11 @@ func loadAuthManager(cmd *cobra.Command, v *viper.Viper) (authTypes.AuthManager,
 
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load atmos config: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	manager, err := CreateAuthManager(&atmosConfig.Auth)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	return manager, nil
 }
