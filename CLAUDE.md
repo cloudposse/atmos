@@ -316,6 +316,14 @@ ALWAYS build the website after documentation changes: `cd website && npm run bui
 ### Git (MANDATORY)
 Don't commit: todos, research, scratch files. Do commit: code, tests, requested docs, schemas. Update `.gitignore` for patterns only.
 
+**NEVER run destructive git commands without explicit user confirmation:**
+- `git reset HEAD` or `git reset --hard` - discards staged/committed changes
+- `git checkout HEAD -- .` or `git checkout -- .` - discards all working changes
+- `git clean -fd` - deletes untracked files
+- `git stash drop` - permanently deletes stashed changes
+
+Always ask first: "This will discard uncommitted changes. Proceed? [y/N]"
+
 ### Test Coverage (MANDATORY)
 80% minimum (CodeCov enforced). All features need tests. `make testacc-coverage` for reports.
 

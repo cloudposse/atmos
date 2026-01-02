@@ -487,6 +487,7 @@ func TestIdentitySelectorBehavior(t *testing.T) {
 			// will check flag first, then fall back to viper.
 
 			// Set viper value if needed to simulate config/env values.
+			// Clean up viper value after subtest to prevent pollution.
 			if tt.setViperValue {
 				viper.Set(IdentityFlagName, tt.viperIdentityValue)
 				t.Cleanup(func() {

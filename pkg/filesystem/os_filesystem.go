@@ -4,8 +4,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // OSFileSystem is the default implementation that uses the os package.
@@ -81,6 +79,11 @@ func (o *OSFileSystem) Getwd() (string, error) {
 	return os.Getwd()
 }
 
+// WriteFileAtomic writes data to a file atomically using platform-specific implementations.
+func (o *OSFileSystem) WriteFileAtomic(name string, data []byte, perm os.FileMode) error {
+	return writeFileAtomicImpl(name, data, perm)
+}
+
 // OSGlobMatcher is the default implementation that uses pkg/utils.
 type OSGlobMatcher struct{}
 
@@ -91,12 +94,12 @@ func NewOSGlobMatcher() *OSGlobMatcher {
 
 // GetGlobMatches returns all files matching the glob pattern.
 func (o *OSGlobMatcher) GetGlobMatches(pattern string) ([]string, error) {
-	return u.GetGlobMatches(pattern)
+	return GetGlobMatches(pattern)
 }
 
 // PathMatch returns true if name matches the pattern.
 func (o *OSGlobMatcher) PathMatch(pattern, name string) (bool, error) {
-	return u.PathMatch(pattern, name)
+	return PathMatch(pattern, name)
 }
 
 // OSIOCopier is the default implementation that uses io.Copy.

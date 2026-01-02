@@ -4,6 +4,7 @@ import './SlideDrawer.css';
 import './SlideImage.css';
 import './SlideNotes.css';
 import './Tooltip.css';
+import './TTSPlayer.css';
 
 export { SlideDeck } from './SlideDeck';
 export { Slide } from './Slide';
@@ -18,10 +19,15 @@ export { SlideIndex } from './SlideIndex';
 export { SlideDrawer } from './SlideDrawer';
 export { SlideNotes } from './SlideNotes';
 export { SlideNotesPanel } from './SlideNotesPanel';
+export { SlideNotesPopout } from './SlideNotesPopout';
+export { TTSPlayer } from './TTSPlayer';
 export { Tooltip } from './Tooltip';
 
 // Context exports for advanced usage.
 export { SlideDeckProvider, useSlideDeck } from './SlideDeckContext';
+
+// Hook exports.
+export { useTTS } from './useTTS';
 
 // Type exports.
 export type {
@@ -40,4 +46,9 @@ export type {
   SlideIndexProps,
   SlideNotesProps,
   SlideNotesPanelProps,
+  NotesPosition,
+  NotesDisplayMode,
+  NotesPreferences,
 } from './types';
+
+export type { TTSVoice, UseTTSReturn } from './useTTS';

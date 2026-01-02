@@ -1,6 +1,6 @@
 //go:build windows
 
-package config
+package filesystem
 
 import (
 	"fmt"
@@ -10,15 +10,10 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-func init() {
-	// Set the platform-specific atomic write function for Windows.
-	writeFileAtomic = writeFileAtomicWindows
-}
-
-// writeFileAtomicWindows provides atomic-like file writing on Windows.
+// WriteFileAtomicWindows provides atomic-like file writing on Windows.
 // Since renameio doesn't work well on Windows due to file locking issues,
 // we use a simple write with a temporary file and rename approach.
-func writeFileAtomicWindows(filename string, data []byte, perm os.FileMode) error {
+func WriteFileAtomicWindows(filename string, data []byte, perm os.FileMode) error {
 	// Create a temporary file in the same directory.
 	dir := filepath.Dir(filename)
 	tmpFile, err := os.CreateTemp(dir, ".tmp-")
@@ -47,10 +42,10 @@ func writeFileAtomicWindows(filename string, data []byte, perm os.FileMode) erro
 	tmpFile = nil // Mark as closed for defer cleanup.
 
 	// Apply the requested permissions to the temporary file.
-	// Treat chmod failures as fatal to ensure cache files have correct permissions.
+	// Treat chmod failures as fatal to ensure files have correct permissions.
 	if err := os.Chmod(tmpName, perm); err != nil {
 		os.Remove(tmpName) // Clean up temp file.
-		return fmt.Errorf("%w: failed to chmod temp cache file %s: %v", errUtils.ErrCacheWrite, tmpName, err)
+		return fmt.Errorf("%w: failed to chmod temp file %s: %v", errUtils.ErrFileOperation, tmpName, err)
 	}
 
 	// On Windows, we need to remove the target file first if it exists.
