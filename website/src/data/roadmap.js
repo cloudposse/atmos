@@ -120,7 +120,7 @@ export const roadmapConfig = {
       tagline: 'Replace a dozen auth tools with one identity layer',
       description:
         'The way humans login with SSO is different from how automation systems authenticate with OIDC. Yet most teams implement this with fragmented approaches. Atmos brings authentication into the core with native support for identity profiles configurable by runtime.',
-      progress: 85,
+      progress: 83,
       status: 'in-progress',
       milestones: [
         { label: 'Added `atmos auth` command framework', status: 'shipped', quarter: 'q2-2025', docs: '/cli/commands/auth/usage', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Unified command for managing authentication across cloud providers and CI systems.', benefits: 'One command replaces aws-vault, saml2aws, gcloud auth, and azure login. Credentials are managed consistently across all providers.' },
@@ -138,7 +138,7 @@ export const roadmapConfig = {
         { label: 'Identity flag for describe commands', status: 'shipped', quarter: 'q4-2025', changelog: 'describe-commands-identity-flag', version: 'v1.197.0', description: 'Use --identity flag with describe commands to see configuration as it would appear under a specific identity.', benefits: 'Debug identity-specific configurations without switching credentials.' },
         { label: 'Seamless first login with provider fallback', status: 'shipped', quarter: 'q4-2025', pr: 1918, changelog: 'auth-login-provider-fallback', description: 'Automatic provider fallback when no identities are configured, enabling seamless first-time login with auto_provision_identities.', benefits: 'Just run atmos auth login on first use. No need to know about --provider flag.' },
         { label: 'Automatic EKS kubeconfig tied to identities', status: 'in-progress', quarter: 'q4-2025', pr: 1884, description: 'Automatic kubeconfig generation for EKS clusters using Atmos-managed AWS credentials.', benefits: 'No aws eks update-kubeconfig commands. Kubectl works immediately after Atmos auth.' },
-        { label: 'Automatic ECR authentication tied to identities', status: 'planned', quarter: 'q1-2026', pr: 1859, description: 'Native ECR login for container image operations without external tooling.', benefits: 'Docker push/pull to ECR works without aws ecr get-login-password or external credential helpers.' },
+        { label: 'Automatic ECR authentication tied to identities', status: 'shipped', quarter: 'q4-2025', pr: 1859, docs: '/tutorials/ecr-authentication', changelog: 'ecr-authentication-integration', description: 'Native ECR login for container image operations without external tooling.', benefits: 'Docker push/pull to ECR works without aws ecr get-login-password or external credential helpers.' },
         { label: 'GCP Workload Identity', status: 'planned', quarter: 'q1-2026', description: 'Google Cloud authentication using Workload Identity Federation for secretless CI/CD.', benefits: 'GCP deployments use the same secretless CI/CD pattern as AWS OIDC.' },
         { label: 'Support for `atmos auth` with GitHub Apps', status: 'planned', quarter: 'q1-2026', pr: 1683, description: 'GitHub App authentication for fine-grained repository access and elevated rate limits.', benefits: 'Higher API rate limits and granular permissions for automation that interacts with GitHub.' },
       ],
