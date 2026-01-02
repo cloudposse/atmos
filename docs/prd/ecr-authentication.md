@@ -946,7 +946,7 @@ The implementation follows Atmos codebase standards and linter requirements:
 - AWS SDK imports are restricted to `pkg/auth/cloud/aws/` packages (enforced by depguard)
 - `cmd/` packages use helper functions from `pkg/auth/cloud/aws/` rather than importing AWS SDK directly
 - Environment variable access uses `viper.BindEnv()` instead of direct `os.Getenv()` calls
-- Home directory resolution uses `homedir.Dir()` from `pkg/config/homedir` for cross-platform support
+- Home directory resolution uses `homedir.Dir()` from `pkg/config/homedir` for cross-platform support.
 
 ### Error Handling
 

@@ -2,6 +2,7 @@ package integrations
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -15,7 +16,14 @@ var (
 
 // Register adds an integration factory for a kind.
 // This should be called from init() functions in integration packages.
+// Panics if kind is empty or factory is nil to catch configuration errors early.
 func Register(kind string, factory IntegrationFactory) {
+	if kind == "" {
+		panic("integration kind cannot be empty")
+	}
+	if factory == nil {
+		panic("integration factory cannot be nil")
+	}
 	registryMu.Lock()
 	defer registryMu.Unlock()
 	registry[kind] = factory
@@ -40,7 +48,7 @@ func Create(config *IntegrationConfig) (Integration, error) {
 	return factory(config)
 }
 
-// ListKinds returns all registered integration kinds.
+// ListKinds returns all registered integration kinds in sorted order.
 func ListKinds() []string {
 	registryMu.RLock()
 	defer registryMu.RUnlock()
@@ -49,6 +57,7 @@ func ListKinds() []string {
 	for kind := range registry {
 		kinds = append(kinds, kind)
 	}
+	sort.Strings(kinds)
 	return kinds
 }
 

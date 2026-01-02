@@ -190,7 +190,7 @@ func (m *manager) ExecuteIdentityIntegrations(ctx context.Context, identityName 
 	// Execute each linked integration.
 	for _, integrationName := range linkedIntegrations {
 		if err := m.executeIntegration(ctx, integrationName, whoami.Credentials); err != nil {
-			return fmt.Errorf("integration '%s' failed: %w", integrationName, err)
+			return fmt.Errorf(errUtils.ErrWrapWithNameAndCauseFormat, errUtils.ErrIntegrationFailed, integrationName, err)
 		}
 	}
 

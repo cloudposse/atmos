@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/gofrs/flock"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
@@ -67,17 +66,19 @@ func NewConfigManager() (*ConfigManager, error) {
 
 // getDockerConfigDir returns the Docker config directory.
 // Uses DOCKER_CONFIG environment variable if set, otherwise defaults to ~/.docker.
+// Returns empty string if home directory cannot be determined (caller should handle error).
 func getDockerConfigDir() string {
-	// Bind and read DOCKER_CONFIG environment variable via viper.
-	_ = viper.BindEnv("DOCKER_CONFIG")
-	if dockerConfig := viper.GetString("DOCKER_CONFIG"); dockerConfig != "" {
+	// Check DOCKER_CONFIG environment variable (standard Docker behavior).
+	//nolint:forbidigo // DOCKER_CONFIG is a standard Docker env var, not Atmos config
+	if dockerConfig := os.Getenv("DOCKER_CONFIG"); dockerConfig != "" {
 		return dockerConfig
 	}
 
 	homeDir, err := homedir.Dir()
 	if err != nil {
-		// Fall back to current directory if home cannot be determined.
-		return ".docker"
+		// Return empty string - caller will get a clear error when mkdir fails.
+		// This is more predictable than silently using cwd.
+		return ""
 	}
 
 	return filepath.Join(homeDir, ".docker")

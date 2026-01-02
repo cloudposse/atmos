@@ -58,7 +58,7 @@ func (m *manager) PrepareShellEnvironment(ctx context.Context, identityName stri
 	// This is provider-specific (AWS sets AWS_SHARED_CREDENTIALS_FILE, AWS_PROFILE, etc.).
 	preparedEnvMap, err := identity.PrepareEnvironment(ctx, envMap)
 	if err != nil {
-		return nil, fmt.Errorf("failed to prepare shell environment for identity %q: %w", identityName, err)
+		return nil, fmt.Errorf("%w: failed to prepare shell environment for identity %q: %w", errUtils.ErrAuthManager, identityName, err)
 	}
 
 	// Convert map back to list for subprocess execution.

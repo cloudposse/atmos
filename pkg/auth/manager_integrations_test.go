@@ -3,14 +3,12 @@ package auth
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
-	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -448,28 +446,3 @@ func TestManager_triggerIntegrations_NoLinkedIntegrations(t *testing.T) {
 	// This is a no-op test - just verifying no panic occurs.
 	m.triggerIntegrations(ctx, "dev-admin", nil)
 }
-
-// mockCredentials implements types.ICredentials for testing.
-type mockCredentials struct {
-	expired    bool
-	expiration *time.Time
-}
-
-func (m *mockCredentials) IsExpired() bool {
-	return m.expired
-}
-
-func (m *mockCredentials) GetExpiration() (*time.Time, error) {
-	return m.expiration, nil
-}
-
-func (m *mockCredentials) BuildWhoamiInfo(info *types.WhoamiInfo) {
-	// No-op for mock.
-}
-
-func (m *mockCredentials) Validate(ctx context.Context) (*types.ValidationInfo, error) {
-	return nil, nil
-}
-
-// Verify mockCredentials implements ICredentials.
-var _ types.ICredentials = (*mockCredentials)(nil)

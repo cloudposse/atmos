@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -128,6 +129,10 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 		expiresIn := time.Until(result.ExpiresAt).Round(time.Minute)
 		_ = ui.Success(fmt.Sprintf("ECR login: %s (expires in %s)", registry, expiresIn))
 	}
+
+	// Set DOCKER_CONFIG so downstream Docker commands use the same config location.
+	// This ensures Docker CLI and container tools find the ECR credentials.
+	_ = os.Setenv("DOCKER_CONFIG", dockerConfig.GetConfigDir())
 
 	return nil
 }

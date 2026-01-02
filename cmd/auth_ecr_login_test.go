@@ -12,8 +12,9 @@ import (
 func TestCreateECRAuthManager_Success(t *testing.T) {
 	// Test that createECRAuthManager can be created with valid config.
 	authConfig := &schema.AuthConfig{
-		Providers:  map[string]schema.Provider{},
-		Identities: map[string]schema.Identity{},
+		Providers:    map[string]schema.Provider{},
+		Identities:   map[string]schema.Identity{},
+		Integrations: map[string]schema.Integration{},
 	}
 
 	manager, err := createECRAuthManager(authConfig)

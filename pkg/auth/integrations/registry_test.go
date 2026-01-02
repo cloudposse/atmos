@@ -27,8 +27,10 @@ func (m *mockIntegration) Execute(ctx context.Context, creds types.ICredentials)
 	return m.executeErr
 }
 
-func TestRegister(t *testing.T) {
-	// Clear the registry for this test.
+// setupRegistryTest clears the registry for testing and registers cleanup.
+func setupRegistryTest(t *testing.T) {
+	t.Helper()
+
 	registryMu.Lock()
 	originalRegistry := make(map[string]IntegrationFactory)
 	for k, v := range registry {
@@ -37,12 +39,15 @@ func TestRegister(t *testing.T) {
 	registry = make(map[string]IntegrationFactory)
 	registryMu.Unlock()
 
-	// Restore the original registry after the test.
 	t.Cleanup(func() {
 		registryMu.Lock()
 		registry = originalRegistry
 		registryMu.Unlock()
 	})
+}
+
+func TestRegister(t *testing.T) {
+	setupRegistryTest(t)
 
 	// Register a test factory.
 	testFactory := func(config *IntegrationConfig) (Integration, error) {
@@ -59,21 +64,7 @@ func TestRegister(t *testing.T) {
 }
 
 func TestCreate_Success(t *testing.T) {
-	// Clear the registry for this test.
-	registryMu.Lock()
-	originalRegistry := make(map[string]IntegrationFactory)
-	for k, v := range registry {
-		originalRegistry[k] = v
-	}
-	registry = make(map[string]IntegrationFactory)
-	registryMu.Unlock()
-
-	// Restore the original registry after the test.
-	t.Cleanup(func() {
-		registryMu.Lock()
-		registry = originalRegistry
-		registryMu.Unlock()
-	})
+	setupRegistryTest(t)
 
 	// Register a test factory.
 	Register("test/kind", func(config *IntegrationConfig) (Integration, error) {
@@ -94,21 +85,7 @@ func TestCreate_Success(t *testing.T) {
 }
 
 func TestCreate_UnknownKind(t *testing.T) {
-	// Clear the registry for this test.
-	registryMu.Lock()
-	originalRegistry := make(map[string]IntegrationFactory)
-	for k, v := range registry {
-		originalRegistry[k] = v
-	}
-	registry = make(map[string]IntegrationFactory)
-	registryMu.Unlock()
-
-	// Restore the original registry after the test.
-	t.Cleanup(func() {
-		registryMu.Lock()
-		registry = originalRegistry
-		registryMu.Unlock()
-	})
+	setupRegistryTest(t)
 
 	config := &IntegrationConfig{
 		Name: "test-integration",
@@ -123,21 +100,7 @@ func TestCreate_UnknownKind(t *testing.T) {
 }
 
 func TestCreate_FactoryError(t *testing.T) {
-	// Clear the registry for this test.
-	registryMu.Lock()
-	originalRegistry := make(map[string]IntegrationFactory)
-	for k, v := range registry {
-		originalRegistry[k] = v
-	}
-	registry = make(map[string]IntegrationFactory)
-	registryMu.Unlock()
-
-	// Restore the original registry after the test.
-	t.Cleanup(func() {
-		registryMu.Lock()
-		registry = originalRegistry
-		registryMu.Unlock()
-	})
+	setupRegistryTest(t)
 
 	// Register a factory that returns an error.
 	Register("error/kind", func(config *IntegrationConfig) (Integration, error) {
@@ -183,21 +146,7 @@ func TestIntegrationConfig_Fields(t *testing.T) {
 }
 
 func TestListKinds(t *testing.T) {
-	// Clear the registry for this test.
-	registryMu.Lock()
-	originalRegistry := make(map[string]IntegrationFactory)
-	for k, v := range registry {
-		originalRegistry[k] = v
-	}
-	registry = make(map[string]IntegrationFactory)
-	registryMu.Unlock()
-
-	// Restore the original registry after the test.
-	t.Cleanup(func() {
-		registryMu.Lock()
-		registry = originalRegistry
-		registryMu.Unlock()
-	})
+	setupRegistryTest(t)
 
 	// Verify empty registry returns empty slice.
 	kinds := ListKinds()
@@ -223,21 +172,7 @@ func TestListKinds(t *testing.T) {
 }
 
 func TestIsRegistered(t *testing.T) {
-	// Clear the registry for this test.
-	registryMu.Lock()
-	originalRegistry := make(map[string]IntegrationFactory)
-	for k, v := range registry {
-		originalRegistry[k] = v
-	}
-	registry = make(map[string]IntegrationFactory)
-	registryMu.Unlock()
-
-	// Restore the original registry after the test.
-	t.Cleanup(func() {
-		registryMu.Lock()
-		registry = originalRegistry
-		registryMu.Unlock()
-	})
+	setupRegistryTest(t)
 
 	// Verify non-existent kind returns false.
 	assert.False(t, IsRegistered("non-existent"))

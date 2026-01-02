@@ -12,7 +12,7 @@ date: 2025-12-15T00:00:00.000Z
 
 We're introducing ECR authentication integration - automatic Docker login for AWS Elastic Container Registry as part of your Atmos authentication workflow. Configure once, authenticate everywhere.
 
-{/* truncate */}
+<!--truncate-->
 
 ## The Problem
 
@@ -185,9 +185,9 @@ The implementation uses AWS SDK for Go v2 and follows AWS best practices:
 
 ### Cross-Platform Support
 
-- Uses `homedir.Dir()` for reliable home directory resolution across platforms
-- Environment variables read through Viper for consistent configuration handling
-- File locking via `gofrs/flock` prevents concurrent modification of Docker config
+- Uses `homedir.Dir()` for reliable home directory resolution across platforms.
+- Environment variables read through Viper for consistent configuration handling.
+- File locking via `gofrs/flock` prevents concurrent modification of Docker config.
 
 ### Error Handling
 
@@ -208,8 +208,8 @@ The integration pattern extends naturally to other client-only credential materi
 
 ## Documentation
 
-- [Auth Command Overview](/cli/commands/auth/)
-- [Identity Authentication](/core-concepts/authentication/)
+- [Auth Command Overview](/cli/commands/auth/usage)
+- [Authentication Configuration](/cli/configuration/auth)
 
 ## Get Involved
 
