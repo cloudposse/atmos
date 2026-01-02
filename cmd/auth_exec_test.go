@@ -11,6 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 func TestAuthExecCmd_FlagParsing(t *testing.T) {
@@ -279,6 +282,43 @@ func TestExecuteCommandWithEnv(t *testing.T) {
 			default:
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestPrintAuthExecTip(t *testing.T) {
+	tests := []struct {
+		name         string
+		identityName string
+	}{
+		{
+			name:         "shows tip with identity name",
+			identityName: "test-identity",
+		},
+		{
+			name:         "shows tip with different identity name",
+			identityName: "dev-admin",
+		},
+		{
+			name:         "handles empty identity name",
+			identityName: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Initialize I/O context for UI layer.
+			ioCtx, err := iolib.NewContext()
+			require.NoError(t, err)
+			data.InitWriter(ioCtx)
+			ui.InitFormatter(ioCtx)
+
+			// Call the function - it should not panic.
+			// The actual output formatting is tested by the UI layer tests.
+			// We verify the function executes without error with the identity name.
+			assert.NotPanics(t, func() {
+				printAuthExecTip(tt.identityName)
+			})
 		})
 	}
 }

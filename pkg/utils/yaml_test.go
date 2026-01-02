@@ -1,13 +1,16 @@
 package utils
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
 func TestYAMLToMapOfInterfaces(t *testing.T) {
@@ -25,6 +28,38 @@ func TestYAMLToMapOfInterfacesRedPath(t *testing.T) {
 }
 
 func TestUnmarshalYAMLFromFile(t *testing.T) {
+	// Mock rate limit check to always pass (no waiting).
+	// This avoids the 24+ minute wait when GitHub rate limit is exhausted on CI.
+	oldWaiter := github.RateLimitWaiter
+	github.RateLimitWaiter = func(ctx context.Context, minRemaining int) error {
+		return nil // Always pass, never wait.
+	}
+	t.Cleanup(func() { github.RateLimitWaiter = oldWaiter })
+
+	// Create mock server to intercept GitHub requests.
+	// This avoids network dependencies and GitHub rate limiting in CI.
+	mock := httpmock.NewGitHubMockServer(t)
+
+	// Register the remote file content that the fixture expects.
+	// The fixture uses: !include https://raw.githubusercontent.com/.../stack-templates-2/stacks/deploy/nonprod.yaml .components.terraform.component-1.settings.
+	mock.RegisterFile("stack-templates-2/stacks/deploy/nonprod.yaml", `
+components:
+  terraform:
+    component-1:
+      settings:
+        config:
+          a: component-1-a
+          b: component-1-b
+          c: component-1-c
+`)
+
+	// Inject mock HTTP client for go-getter.
+	// go-getter uses cleanhttp.DefaultClient() which doesn't respect http.DefaultTransport,
+	// so we need to inject the client directly.
+	oldClient := TestHTTPClient
+	TestHTTPClient = mock.HTTPClient()
+	t.Cleanup(func() { TestHTTPClient = oldClient })
+
 	stacksPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-include-yaml-function")
 	file := filepath.Join(stacksPath, "stacks", "deploy", "nonprod.yaml")
 

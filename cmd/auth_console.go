@@ -10,7 +10,6 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsAuth "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
@@ -244,15 +243,11 @@ func resolveIdentityName(cmd *cobra.Command, authManager types.AuthManager) (str
 	defer perf.Track(nil, "cmd.resolveIdentityName")()
 
 	// Get identity from flag or use default.
-	// Check if flag was explicitly set by user to ensure command-line precedence.
-	var identityName string
-	if cmd.Flags().Changed(IdentityFlagName) {
-		// Flag was explicitly provided on command line (either with or without value).
-		identityName, _ = cmd.Flags().GetString(IdentityFlagName)
-	} else {
-		// Flag not provided on command line - fall back to viper (config/env).
-		identityName = viper.GetString(IdentityFlagName)
-	}
+	// Use GetIdentityFromFlags which handles Cobra's NoOptDefVal quirk correctly.
+	// When --identity flag has NoOptDefVal set, using "--identity value" (space-separated)
+	// causes Cobra to interpret it as "--identity" (with NoOptDefVal) plus "value" as positional arg.
+	// GetIdentityFromFlags works around this by also parsing os.Args directly.
+	identityName := GetIdentityFromFlags(cmd, os.Args)
 
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue
