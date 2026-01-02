@@ -207,6 +207,45 @@ auth:
 
 ## Technical Specification
 
+### Multi-Cloud Compatibility Design
+
+This section clarifies how the Okta implementation supports future Azure and GCP federation without requiring changes to the Okta provider itself.
+
+#### Abstraction Strategy
+
+The existing `aws/assume-role` identity already supports OIDC federation via the `OIDCCredentials` interface (see `pkg/auth/identities/aws/assume_role.go:152-155`). The same pattern applies for Azure and GCP:
+
+| Cloud | Future Identity Kind | Federation Method | Existing Pattern Reference |
+|-------|---------------------|-------------------|---------------------------|
+| **AWS** | `aws/assume-role` | `AssumeRoleWithWebIdentity` | ✅ Already implemented |
+| **Azure** | `azure/federated` | Federated Identity Credentials | Same `OIDCCredentials` interface |
+| **GCP** | `gcp/workload-identity` | Workload Identity Federation | Same `OIDCCredentials` interface |
+
+#### How It Works
+
+1. **Okta provider authenticates** → Returns `OktaCredentials` (with ID token, access token, refresh token)
+2. **For cloud federation**: The Okta provider's ID token is passed to cloud identities as `OIDCCredentials`
+3. **Cloud identity authenticates**: Uses `AssumeRoleWithWebIdentity` (AWS), federated credentials (Azure), or workload identity (GCP)
+
+The cloud identities detect `OIDCCredentials` and handle the federation automatically. This enables the same Okta configuration to work with any cloud provider that implements OIDC federation support.
+
+#### Future Azure/GCP Implementation
+
+When implementing Azure or GCP federation, the cloud identity (not the Okta provider) will handle the token exchange:
+
+```go
+// Future: pkg/auth/identities/azure/federated.go
+func (i *federatedIdentity) Authenticate(ctx context.Context, baseCreds types.ICredentials) (types.ICredentials, error) {
+    if oidcCreds, ok := baseCreds.(*types.OIDCCredentials); ok {
+        // Exchange OIDC token for Azure credentials
+        return i.exchangeOIDCForAzureToken(ctx, oidcCreds)
+    }
+    // ... handle other credential types
+}
+```
+
+This means the Okta provider implementation in this PRD requires **no changes** to support future Azure/GCP federation.
+
 ### Implementation Mapping (AWS/Azure → Okta)
 
 This table shows the direct parallels between existing implementations and the new Okta implementation:
