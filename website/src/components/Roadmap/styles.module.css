@@ -1930,11 +1930,24 @@
   background: rgba(0, 0, 0, 0.06);
   border-radius: 12px;
   color: var(--ifm-color-emphasis-700);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.drawerMetaVersion:hover {
+  background: rgba(30, 91, 184, 0.15);
+  color: #1e5bb8;
+  text-decoration: none;
 }
 
 :global(html[data-theme='dark']) .drawerMetaVersion {
   background: rgba(255, 255, 255, 0.1);
   color: var(--ifm-color-emphasis-500);
+}
+
+:global(html[data-theme='dark']) .drawerMetaVersion:hover {
+  background: rgba(83, 140, 233, 0.2);
+  color: #538ce9;
 }
 
 .drawerMetaStatus {

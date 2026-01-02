@@ -174,9 +174,14 @@ export default function MilestoneDrawer({
                   {milestone.quarter.replace('q', 'Q').replace('-', ' ')}
                 </span>
                 {milestone.version && (
-                  <span className={styles.drawerMetaVersion}>
+                  <Link
+                    to={`https://github.com/cloudposse/atmos/releases/tag/${milestone.version}`}
+                    className={styles.drawerMetaVersion}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     {milestone.version}
-                  </span>
+                  </Link>
                 )}
                 <span
                   className={`${styles.drawerMetaStatus} ${styles[statusClassMap[milestone.status] || 'drawerMetaStatusPlanned']}`}
