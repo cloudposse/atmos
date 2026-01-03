@@ -7,6 +7,9 @@ import (
 )
 
 func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
+	// This test uses a fixture that downloads from GitHub, so check rate limits first.
+	RequireGitHubAccess(t)
+
 	t.Chdir("./fixtures/scenarios/atmos-include-yaml-function")
 
 	// Use SetArgs for Cobra command testing.

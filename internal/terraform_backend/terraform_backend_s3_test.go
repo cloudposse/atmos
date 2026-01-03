@@ -270,6 +270,116 @@ func Test_ReadTerraformBackendS3Internal_Errors(t *testing.T) {
 	}
 }
 
+// mockS3ClientForDefaultWorkspace is a mock that captures the requested key
+// to verify path construction for default workspace.
+type mockS3ClientForDefaultWorkspace struct {
+	requestedKey string
+}
+
+func (m *mockS3ClientForDefaultWorkspace) GetObject(ctx context.Context, input *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	m.requestedKey = *input.Key
+	// Return valid state for the expected key.
+	body := `{
+		"version": 4,
+		"terraform_version": "1.4.0",
+		"outputs": {
+			"vpc_id": {
+				"value": "vpc-12345",
+				"type": "string"
+			}
+		}
+	}`
+	return &s3.GetObjectOutput{
+		Body: io.NopCloser(strings.NewReader(body)),
+	}, nil
+}
+
+// TestReadTerraformBackendS3Internal_DefaultWorkspace verifies that when workspace
+// is "default" (meaning workspaces are disabled), the state file path should be
+// just the key, not workspace_key_prefix/default/key.
+//
+// This is based on Terraform S3 backend documentation:
+// - workspace_key_prefix is only used for non-default workspaces
+// - For the default workspace, state is stored directly at the key path.
+//
+// See: https://github.com/cloudposse/atmos/issues/1920
+func TestReadTerraformBackendS3Internal_DefaultWorkspace(t *testing.T) {
+	tests := []struct {
+		name               string
+		workspace          string
+		workspaceKeyPrefix string
+		key                string
+		expectedPath       string
+	}{
+		{
+			name:               "default workspace - should use key only",
+			workspace:          "default",
+			workspaceKeyPrefix: "my-component",
+			key:                "terraform.tfstate",
+			expectedPath:       "terraform.tfstate",
+		},
+		{
+			name:               "default workspace with env prefix - should use key only",
+			workspace:          "default",
+			workspaceKeyPrefix: "env:",
+			key:                "state/terraform.tfstate",
+			expectedPath:       "state/terraform.tfstate",
+		},
+		{
+			name:               "named workspace - should use full path",
+			workspace:          "prod-us-east-1",
+			workspaceKeyPrefix: "my-component",
+			key:                "terraform.tfstate",
+			expectedPath:       "my-component/prod-us-east-1/terraform.tfstate",
+		},
+		{
+			name:               "named workspace with env prefix - should use full path",
+			workspace:          "staging",
+			workspaceKeyPrefix: "env:",
+			key:                "terraform.tfstate",
+			expectedPath:       "env:/staging/terraform.tfstate",
+		},
+		{
+			name:               "empty workspace_key_prefix with named workspace",
+			workspace:          "prod",
+			workspaceKeyPrefix: "",
+			key:                "terraform.tfstate",
+			expectedPath:       "prod/terraform.tfstate",
+		},
+		{
+			name:               "empty workspace_key_prefix with default workspace",
+			workspace:          "default",
+			workspaceKeyPrefix: "",
+			key:                "terraform.tfstate",
+			expectedPath:       "terraform.tfstate",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &mockS3ClientForDefaultWorkspace{}
+			componentSections := map[string]any{
+				"workspace": tt.workspace,
+			}
+			backend := map[string]any{
+				"bucket":               "test-bucket",
+				"region":               "us-east-1",
+				"key":                  tt.key,
+				"workspace_key_prefix": tt.workspaceKeyPrefix,
+			}
+
+			// Call the function.
+			_, err := tb.ReadTerraformBackendS3Internal(client, &componentSections, &backend)
+			assert.NoError(t, err)
+
+			// Verify the requested path matches the expected path.
+			assert.Equal(t, tt.expectedPath, client.requestedKey,
+				"For workspace '%s' with workspace_key_prefix '%s', expected path '%s' but got '%s'",
+				tt.workspace, tt.workspaceKeyPrefix, tt.expectedPath, client.requestedKey)
+		})
+	}
+}
+
 func TestGetS3BackendAssumeRoleArn(t *testing.T) {
 	tests := []struct {
 		name     string

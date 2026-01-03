@@ -622,7 +622,7 @@ func executeCustomCommand(
 
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step, data, false)
+		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step.Command, data, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
 		// Execute the command step

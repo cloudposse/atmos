@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/google/go-github/v59/github"
-	"github.com/spf13/viper"
 	"golang.org/x/oauth2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -48,17 +48,20 @@ const (
 func newGitHubClient(ctx context.Context) *github.Client {
 	defer perf.Track(nil, "github.newGitHubClient")()
 
-	// Get GitHub token (bound to check ATMOS_GITHUB_TOKEN then GITHUB_TOKEN).
-	githubToken := viper.GetString("ATMOS_GITHUB_TOKEN")
+	// Get GitHub token using the standard Atmos precedence order:
+	// 1. --github-token CLI flag
+	// 2. ATMOS_GITHUB_TOKEN environment variable
+	// 3. GITHUB_TOKEN environment variable
+	githubToken := httpClient.GetGitHubTokenFromEnv()
 
 	// Create HTTP client with timeout to prevent hangs in CI environments
 	// when network is unavailable or DNS resolution fails.
-	httpClient := &http.Client{
+	baseClient := &http.Client{
 		Timeout: defaultHTTPTimeout,
 	}
 
 	if githubToken == "" {
-		return github.NewClient(httpClient)
+		return github.NewClient(baseClient)
 	}
 
 	// Token found, create an authenticated client with timeout.

@@ -193,6 +193,24 @@ func (a *authContextWrapper) PrepareShellEnvironment(ctx context.Context, identi
 	panic("authContextWrapper.PrepareShellEnvironment should not be called")
 }
 
+func (a *authContextWrapper) ExecuteIntegration(ctx context.Context, integrationName string) error {
+	defer perf.Track(nil, "exec.authContextWrapper.ExecuteIntegration")()
+
+	panic("authContextWrapper.ExecuteIntegration should not be called")
+}
+
+func (a *authContextWrapper) ExecuteIdentityIntegrations(ctx context.Context, identityName string) error {
+	defer perf.Track(nil, "exec.authContextWrapper.ExecuteIdentityIntegrations")()
+
+	panic("authContextWrapper.ExecuteIdentityIntegrations should not be called")
+}
+
+func (a *authContextWrapper) GetIntegration(integrationName string) (*schema.Integration, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.GetIntegration")()
+
+	panic("authContextWrapper.GetIntegration should not be called")
+}
+
 // newAuthContextWrapper creates an AuthManager wrapper that returns the given AuthContext.
 func newAuthContextWrapper(authContext *schema.AuthContext) *authContextWrapper {
 	if authContext == nil {
