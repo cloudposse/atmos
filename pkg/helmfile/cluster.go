@@ -92,6 +92,9 @@ func ResolveClusterName(
 
 	// 4. cluster_name_pattern (deprecated token replacement).
 	if input.Pattern != "" {
+		if context == nil {
+			return nil, fmt.Errorf("ResolveClusterName: context is required for cluster_name_pattern expansion: %w", errUtils.ErrNilParam)
+		}
 		clusterName := cfg.ReplaceContextTokens(*context, input.Pattern)
 		return &ClusterNameResult{
 			ClusterName:  clusterName,
