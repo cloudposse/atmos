@@ -1,0 +1,169 @@
+---
+slug: custom-commands-step-types
+title: "Introducing 25+ Interactive Step Types for Workflows and Custom Commands"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Atmos now includes 25+ interactive step types for both workflows and custom commands. Build interactive CLI wizards, collect user input, display rich output, and control execution flow—all directly in your `atmos.yaml` without external scripts.
+
+<!--truncate-->
+
+## What's New
+
+We've built a unified execution engine (`pkg/runner`) that powers both workflows and custom commands with the same rich step types:
+
+- **Interactive**: `input`, `confirm`, `choose`, `filter`, `file`, `write`
+- **UI Messages**: `success`, `info`, `warn`, `error`, `markdown`
+- **Output**: `spin`, `table`, `pager`, `format`, `join`, `style`, `linebreak`, `log`
+- **Terminal**: `alert`, `title`, `clear`, `env`, `exit`
+- **Command**: `shell`, `atmos`
+
+The `shell` and `atmos` types continue to work exactly as before—this is purely additive.
+
+## Why This Matters
+
+Previously, building interactive CLI experiences required shell scripts and external tools like `gum` or `fzf`. Now you can create guided deployment wizards, configuration tools, and interactive runbooks natively in Atmos.
+
+**For workflows:** Define multi-step automation with user prompts, confirmations, and rich feedback.
+
+**For custom commands:** Users discover your interactive commands via `atmos help` and get a polished experience.
+
+## How to Use It
+
+### Workflow Example
+
+```yaml title="stacks/workflows/deploy.yaml"
+workflows:
+  deploy:
+    description: Interactive deployment workflow
+    steps:
+      - name: env
+        type: choose
+        prompt: "Select target environment"
+        options: [dev, staging, prod]
+        default: dev
+
+      - name: confirm
+        type: confirm
+        prompt: "Deploy to {{ .steps.env.value }}?"
+
+      - name: deploy
+        type: atmos
+        command: terraform apply vpc -s {{ .steps.env.value }}
+
+      - type: success
+        content: "Deployment to {{ .steps.env.value }} completed!"
+```
+
+Run with: `atmos workflow deploy -f deploy`
+
+### Custom Command Example
+
+```yaml title="atmos.yaml"
+commands:
+  - name: deploy-wizard
+    description: Interactive deployment wizard
+    steps:
+      - name: env
+        type: choose
+        prompt: "Select target environment"
+        options: [dev, staging, prod]
+        default: dev
+
+      - name: prod_warning
+        type: warn
+        content: "You are about to deploy to PRODUCTION!"
+
+      - name: confirm
+        type: confirm
+        prompt: "Deploy to {{ .steps.env.value }}?"
+        default: false
+
+      - name: deploy
+        type: atmos
+        command: terraform apply vpc -s {{ .steps.env.value }}
+
+      - name: done
+        type: success
+        content: "Deployment to {{ .steps.env.value }} completed!"
+```
+
+Run with: `atmos deploy-wizard`
+
+### Multi-Select Components
+
+```yaml
+commands:
+  - name: deploy-components
+    description: Select and deploy multiple components
+    steps:
+      - name: components
+        type: filter
+        prompt: "Select components to deploy"
+        multiple: true
+        options: [vpc, eks, rds, s3, lambda]
+
+      - name: summary
+        type: markdown
+        content: |
+          ## Deployment Summary
+          You selected **{{ len .steps.components.values }}** components:
+          {{ range .steps.components.values }}
+          - {{ . }}
+          {{ end }}
+
+      - name: confirm
+        type: confirm
+        prompt: "Proceed with deployment?"
+
+      - type: shell
+        command: |
+          {{ range .steps.components.values }}
+          echo "Deploying {{ . }}..."
+          {{ end }}
+```
+
+### Input Collection
+
+```yaml
+commands:
+  - name: create-ticket
+    description: Create a deployment ticket
+    steps:
+      - name: title
+        type: input
+        prompt: "Ticket title"
+        placeholder: "Brief description of the change"
+
+      - name: description
+        type: write
+        prompt: "Detailed description"
+
+      - name: priority
+        type: choose
+        prompt: "Priority level"
+        options: [low, medium, high, critical]
+        default: medium
+
+      - type: success
+        content: |
+          Ticket created:
+          Title: {{ .steps.title.value }}
+          Priority: {{ .steps.priority.value }}
+```
+
+## Variable Passing
+
+Access previous step results using Go templates:
+
+- `{{ .steps.<name>.value }}` - Primary value (string)
+- `{{ .steps.<name>.values }}` - Multiple values (for multi-select)
+- `{{ .steps.<name>.metadata.<key> }}` - Metadata like `exit_code`, `stdout`, `stderr`
+- `{{ .env.<VAR> }}` - Environment variables
+
+## Get Involved
+
+For the complete step types reference, see the [Custom Commands documentation](/cli/configuration/commands#extended-step-types) and [Workflows documentation](/workflows#step-types).
+
+Have feedback or ideas? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) or join our [Slack community](https://slack.cloudposse.com).
