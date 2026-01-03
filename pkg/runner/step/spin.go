@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"os/exec"
 	"time"
 
@@ -84,7 +85,14 @@ func (h *SpinHandler) prepareExecution(ctx context.Context, step *schema.Workflo
 	}
 
 	// Build environment from Variables.Env (which includes prepared merged environment).
-	envVars := make([]string, 0, len(vars.Env)+len(step.Env))
+	// Guard against integer overflow when computing capacity.
+	varsEnvLen := len(vars.Env)
+	stepEnvLen := len(step.Env)
+	capacity := varsEnvLen
+	if varsEnvLen <= math.MaxInt-stepEnvLen {
+		capacity = varsEnvLen + stepEnvLen
+	}
+	envVars := make([]string, 0, capacity)
 	for k, v := range vars.Env {
 		envVars = append(envVars, k+"="+v)
 	}
