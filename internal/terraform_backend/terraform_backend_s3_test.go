@@ -369,7 +369,8 @@ func TestReadTerraformBackendS3Internal_DefaultWorkspace(t *testing.T) {
 			}
 
 			// Call the function.
-			_, _ = tb.ReadTerraformBackendS3Internal(client, &componentSections, &backend)
+			_, err := tb.ReadTerraformBackendS3Internal(client, &componentSections, &backend)
+			assert.NoError(t, err)
 
 			// Verify the requested path matches the expected path.
 			assert.Equal(t, tt.expectedPath, client.requestedKey,
