@@ -5,10 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/xdg"
-	"github.com/stretchr/testify/require"
 )
 
 // verifyFileExists checks that all files in the list exist.
@@ -514,7 +515,8 @@ func TestBuildCleanPath(t *testing.T) {
 				require.ErrorIs(t, err, tt.expectedError)
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, tt.expectedPath, result)
+				// Normalize path separators for cross-platform comparison.
+				require.Equal(t, tt.expectedPath, filepath.ToSlash(result))
 			}
 		})
 	}
@@ -554,7 +556,8 @@ func TestBuildRelativePath(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				require.Equal(t, tt.expectedPath, result)
+				// Normalize path separators for cross-platform comparison.
+				require.Equal(t, tt.expectedPath, filepath.ToSlash(result))
 			}
 		})
 	}
@@ -800,10 +803,8 @@ func TestCollectTFDataDirFolders(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.tfDataDir != "" {
 				t.Setenv(EnvTFDataDir, tt.tfDataDir)
-			} else {
-				// Explicitly unset the env var.
-				os.Unsetenv(EnvTFDataDir)
 			}
+			// If tt.tfDataDir is empty, don't set it - t.Setenv provides isolation.
 
 			folders, _ := collectTFDataDirFolders("/tmp/test")
 			require.Len(t, folders, tt.expectedLength)
