@@ -106,9 +106,9 @@ func (h *ChooseHandler) createChooseKeyMap() *huh.KeyMap {
 func (h *ChooseHandler) runSelectForm(stepName, prompt string, options []string, defaultVal string) (*StepResult, error) {
 	var choice string
 	huhOptions := huh.NewOptions(options...)
-	for _, opt := range huhOptions {
-		if opt.Value == defaultVal {
-			opt.Selected(true)
+	for i := range huhOptions {
+		if huhOptions[i].Value == defaultVal {
+			huhOptions[i] = huhOptions[i].Selected(true)
 			break
 		}
 	}
