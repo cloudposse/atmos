@@ -187,6 +187,24 @@ func TestConfigurePluginCache(t *testing.T) {
 			expectEnvVars:   true, // Root is invalid, so we use our default.
 			expectCustomDir: false,
 		},
+		{
+			name:            "empty OS env var is set but invalid",
+			pluginCache:     true,
+			pluginCacheDir:  "",
+			osEnvVar:        "SET_BUT_EMPTY", // Special marker.
+			globalEnvDir:    "",
+			expectEnvVars:   true, // Empty is invalid, so we use our default.
+			expectCustomDir: false,
+		},
+		{
+			name:            "empty global env var is invalid",
+			pluginCache:     true,
+			pluginCacheDir:  "",
+			osEnvVar:        "",
+			globalEnvDir:    "SET_BUT_EMPTY", // Special marker.
+			expectEnvVars:   true,            // Empty is invalid, so we use our default.
+			expectCustomDir: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -196,7 +214,9 @@ func TestConfigurePluginCache(t *testing.T) {
 			t.Setenv("XDG_CACHE_HOME", tmpDir)
 
 			// Set up OS environment variable.
-			if tt.osEnvVar != "" {
+			if tt.osEnvVar == "SET_BUT_EMPTY" {
+				t.Setenv("TF_PLUGIN_CACHE_DIR", "")
+			} else if tt.osEnvVar != "" {
 				t.Setenv("TF_PLUGIN_CACHE_DIR", tt.osEnvVar)
 			}
 
@@ -210,7 +230,9 @@ func TestConfigurePluginCache(t *testing.T) {
 				},
 				Env: make(map[string]string),
 			}
-			if tt.globalEnvDir != "" {
+			if tt.globalEnvDir == "SET_BUT_EMPTY" {
+				atmosConfig.Env["TF_PLUGIN_CACHE_DIR"] = ""
+			} else if tt.globalEnvDir != "" {
 				atmosConfig.Env["TF_PLUGIN_CACHE_DIR"] = tt.globalEnvDir
 			}
 
