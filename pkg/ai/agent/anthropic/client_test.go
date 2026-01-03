@@ -5,14 +5,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/ai/agent/base"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestExtractSimpleAIConfig(t *testing.T) {
+func TestExtractConfig(t *testing.T) {
 	tests := []struct {
 		name           string
 		atmosConfig    *schema.AtmosConfiguration
-		expectedConfig *SimpleAIConfig
+		expectedConfig *base.Config
 	}{
 		{
 			name: "Default configuration",
@@ -21,14 +22,11 @@ func TestExtractSimpleAIConfig(t *testing.T) {
 					AI: schema.AISettings{},
 				},
 			},
-			expectedConfig: &SimpleAIConfig{
+			expectedConfig: &base.Config{
 				Enabled:   false,
 				Model:     "claude-sonnet-4-20250514",
 				APIKeyEnv: "ANTHROPIC_API_KEY",
 				MaxTokens: 4096,
-			CacheEnabled:        true, // Default
-			CacheSystemPrompt:   true, // Default
-			CacheProjectMemory:  true, // Default
 			},
 		},
 		{
@@ -47,14 +45,11 @@ func TestExtractSimpleAIConfig(t *testing.T) {
 					},
 				},
 			},
-			expectedConfig: &SimpleAIConfig{
+			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "claude-4-20250514",
 				APIKeyEnv: "CUSTOM_API_KEY",
 				MaxTokens: 8192,
-				CacheEnabled:        true, // Default
-				CacheSystemPrompt:   true, // Default
-				CacheProjectMemory:  true, // Default
 			},
 		},
 		{
@@ -71,21 +66,22 @@ func TestExtractSimpleAIConfig(t *testing.T) {
 					},
 				},
 			},
-			expectedConfig: &SimpleAIConfig{
+			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "claude-3-haiku-20240307",
 				APIKeyEnv: "ANTHROPIC_API_KEY",
 				MaxTokens: 4096,
-				CacheEnabled:        true, // Default
-				CacheSystemPrompt:   true, // Default
-				CacheProjectMemory:  true, // Default
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := extractSimpleAIConfig(tt.atmosConfig)
+			config := base.ExtractConfig(tt.atmosConfig, ProviderName, base.ProviderDefaults{
+				Model:     DefaultModel,
+				APIKeyEnv: DefaultAPIKeyEnv,
+				MaxTokens: DefaultMaxTokens,
+			})
 			assert.Equal(t, tt.expectedConfig, config)
 		})
 	}
@@ -107,7 +103,7 @@ func TestNewSimpleClient_Disabled(t *testing.T) {
 }
 
 func TestSimpleClientGetters(t *testing.T) {
-	config := &SimpleAIConfig{
+	config := &base.Config{
 		Enabled:   true,
 		Model:     "claude-sonnet-4-20250514",
 		APIKeyEnv: "ANTHROPIC_API_KEY",
@@ -115,7 +111,7 @@ func TestSimpleClientGetters(t *testing.T) {
 	}
 
 	client := &SimpleClient{
-		client: nil, // We don't need a real client for testing getters
+		client: nil, // We don't need a real client for testing getters.
 		config: config,
 	}
 
@@ -124,7 +120,7 @@ func TestSimpleClientGetters(t *testing.T) {
 }
 
 func TestConvertToolsToAnthropicFormat(t *testing.T) {
-	// Create a mock tool
+	// Create a mock tool.
 	mockTool := &mockTool{
 		name:        "test_tool",
 		description: "A test tool for verification",
@@ -150,12 +146,12 @@ func TestConvertToolsToAnthropicFormat(t *testing.T) {
 		},
 	}
 
-	// Verify the mock tool structure
+	// Verify the mock tool structure.
 	assert.Equal(t, "test_tool", mockTool.name)
 	assert.Equal(t, "A test tool for verification", mockTool.description)
 	assert.Len(t, mockTool.parameters, 3)
 
-	// Verify parameter types match JSON Schema spec
+	// Verify parameter types match JSON Schema spec.
 	assert.Equal(t, "string", mockTool.parameters[0].paramType)
 	assert.Equal(t, "integer", mockTool.parameters[1].paramType, "Should be 'integer', not 'int'")
 	assert.Equal(t, "boolean", mockTool.parameters[2].paramType, "Should be 'boolean', not 'bool'")
@@ -176,7 +172,7 @@ type mockParameter struct {
 }
 
 func TestToolSchema_JSONSchemaCompliance(t *testing.T) {
-	// Verify that our tool schema structure matches JSON Schema draft 2020-12 requirements
+	// Verify that our tool schema structure matches JSON Schema draft 2020-12 requirements.
 	tests := []struct {
 		name          string
 		schemaType    string
@@ -240,7 +236,7 @@ func TestToolSchema_JSONSchemaCompliance(t *testing.T) {
 }
 
 func TestAnthropicClient_ToolDescriptionRequired(t *testing.T) {
-	// This test verifies that tool descriptions are critical for AI decision-making
+	// This test verifies that tool descriptions are critical for AI decision-making.
 	tests := []struct {
 		name                  string
 		toolDescription       string
@@ -274,13 +270,13 @@ func TestAnthropicClient_ToolDescriptionRequired(t *testing.T) {
 	}
 }
 
-// Token Caching Tests
+// Token Caching Tests.
 
-func TestExtractSimpleAIConfig_CacheDefaults(t *testing.T) {
+func TestExtractCacheConfig(t *testing.T) {
 	tests := []struct {
-		name           string
-		atmosConfig    *schema.AtmosConfiguration
-		expectedConfig *SimpleAIConfig
+		name          string
+		atmosConfig   *schema.AtmosConfiguration
+		expectedCache *cacheConfig
 	}{
 		{
 			name: "Default cache enabled",
@@ -296,14 +292,10 @@ func TestExtractSimpleAIConfig_CacheDefaults(t *testing.T) {
 					},
 				},
 			},
-			expectedConfig: &SimpleAIConfig{
-				Enabled:             true,
-				Model:               "claude-sonnet-4-20250514",
-				APIKeyEnv:           "ANTHROPIC_API_KEY",
-				MaxTokens:           4096,
-				CacheEnabled:        true, // Default
-				CacheSystemPrompt:   true, // Default
-				CacheProjectMemory:  true, // Default
+			expectedCache: &cacheConfig{
+				enabled:            true,
+				cacheSystemPrompt:  true,
+				cacheProjectMemory: true,
 			},
 		},
 		{
@@ -323,14 +315,10 @@ func TestExtractSimpleAIConfig_CacheDefaults(t *testing.T) {
 					},
 				},
 			},
-			expectedConfig: &SimpleAIConfig{
-				Enabled:             true,
-				Model:               "claude-sonnet-4-20250514",
-				APIKeyEnv:           "ANTHROPIC_API_KEY",
-				MaxTokens:           4096,
-				CacheEnabled:        false,
-				CacheSystemPrompt:   false,
-				CacheProjectMemory:  false,
+			expectedCache: &cacheConfig{
+				enabled:            false,
+				cacheSystemPrompt:  false,
+				cacheProjectMemory: false,
 			},
 		},
 		{
@@ -343,40 +331,39 @@ func TestExtractSimpleAIConfig_CacheDefaults(t *testing.T) {
 							"anthropic": {
 								Model: "claude-sonnet-4-20250514",
 								Cache: &schema.AICacheSettings{
-									Enabled:             true,
-									CacheSystemPrompt:   true,
-									CacheProjectMemory:  false, // Only cache system prompt
+									Enabled:            true,
+									CacheSystemPrompt:  true,
+									CacheProjectMemory: false, // Only cache system prompt.
 								},
 							},
 						},
 					},
 				},
 			},
-			expectedConfig: &SimpleAIConfig{
-				Enabled:             true,
-				Model:               "claude-sonnet-4-20250514",
-				APIKeyEnv:           "ANTHROPIC_API_KEY",
-				MaxTokens:           4096,
-				CacheEnabled:        true,
-				CacheSystemPrompt:   true,
-				CacheProjectMemory:  false,
+			expectedCache: &cacheConfig{
+				enabled:            true,
+				cacheSystemPrompt:  true,
+				cacheProjectMemory: false,
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := extractSimpleAIConfig(tt.atmosConfig)
-			assert.Equal(t, tt.expectedConfig, config)
+			cache := extractCacheConfig(tt.atmosConfig)
+			assert.Equal(t, tt.expectedCache, cache)
 		})
 	}
 }
 
 func TestBuildSystemPrompt_NoCaching(t *testing.T) {
 	client := &SimpleClient{
-		config: &SimpleAIConfig{
-			CacheEnabled:      false,
-			CacheSystemPrompt: true, // Ignored when CacheEnabled is false
+		config: &base.Config{
+			Enabled: true,
+		},
+		cache: &cacheConfig{
+			enabled:           false,
+			cacheSystemPrompt: true, // Ignored when enabled is false.
 		},
 	}
 
@@ -389,9 +376,12 @@ func TestBuildSystemPrompt_NoCaching(t *testing.T) {
 
 func TestBuildSystemPrompt_WithCaching(t *testing.T) {
 	client := &SimpleClient{
-		config: &SimpleAIConfig{
-			CacheEnabled:      true,
-			CacheSystemPrompt: true,
+		config: &base.Config{
+			Enabled: true,
+		},
+		cache: &cacheConfig{
+			enabled:           true,
+			cacheSystemPrompt: true,
 		},
 	}
 
@@ -404,9 +394,12 @@ func TestBuildSystemPrompt_WithCaching(t *testing.T) {
 
 func TestBuildSystemPrompt_CachingDisabledPerPrompt(t *testing.T) {
 	client := &SimpleClient{
-		config: &SimpleAIConfig{
-			CacheEnabled:      true,
-			CacheSystemPrompt: true, // Global caching enabled
+		config: &base.Config{
+			Enabled: true,
+		},
+		cache: &cacheConfig{
+			enabled:           true,
+			cacheSystemPrompt: true, // Global caching enabled.
 		},
 	}
 
@@ -416,41 +409,6 @@ func TestBuildSystemPrompt_CachingDisabledPerPrompt(t *testing.T) {
 	assert.Equal(t, "Test system prompt", textBlock.Text)
 	// Cache control should NOT be set when explicitly disabled for this prompt.
 	assert.Empty(t, textBlock.CacheControl.Type, "Cache control should not be set when disabled per-prompt")
-}
-
-func TestBuildSystemPrompts_Multiple(t *testing.T) {
-	client := &SimpleClient{
-		config: &SimpleAIConfig{
-			CacheEnabled:        true,
-			CacheSystemPrompt:   true,
-			CacheProjectMemory:  true,
-		},
-	}
-
-	prompts := []struct {
-		content string
-		cache   bool
-	}{
-		{content: "System prompt for agent", cache: true},
-		{content: "Project memory (ATMOS.md)", cache: true},
-		{content: "Additional context", cache: false},
-	}
-
-	textBlocks := client.buildSystemPrompts(prompts)
-
-	assert.Len(t, textBlocks, 3)
-
-	// First prompt (agent system prompt) - cached.
-	assert.Equal(t, "System prompt for agent", textBlocks[0].Text)
-	assert.NotEmpty(t, textBlocks[0].CacheControl.Type, "Agent system prompt should be cached")
-
-	// Second prompt (project memory) - cached.
-	assert.Equal(t, "Project memory (ATMOS.md)", textBlocks[1].Text)
-	assert.NotEmpty(t, textBlocks[1].CacheControl.Type, "Project memory should be cached")
-
-	// Third prompt (additional context) - not cached.
-	assert.Equal(t, "Additional context", textBlocks[2].Text)
-	assert.Empty(t, textBlocks[2].CacheControl.Type, "Additional context should NOT be cached")
 }
 
 func TestCacheConfiguration_CostSavings(t *testing.T) {

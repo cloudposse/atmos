@@ -20,6 +20,7 @@ SUBCOMMAND ALIASES
 AVAILABLE COMMANDS
 
       about                   Learn about Atmos
+      ai [command]            AI-powered assistant for Atmos operations
       atlantis [command]      Generate and manage Atlantis configurations
       auth [command]          Authenticate with cloud providers and identity services.
       aws [command]           Run AWS-specific commands for interacting with cloud resources
@@ -31,6 +32,8 @@ AVAILABLE COMMANDS
       helmfile [command]      Manage Helmfile-based Kubernetes deployments
       help                    Help about any command
       list [command]          List available stacks and components
+      lsp [command]           Language Server Protocol commands
+      mcp-server              Start Atmos MCP (Model Context Protocol) server
       packer [command]        Manage packer-based machine images for multiple platforms
       pro [command]           Access premium features integrated with atmos-pro.com
       profile [command]       Manage configuration profiles

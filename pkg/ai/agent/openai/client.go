@@ -2,55 +2,61 @@ package openai
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/agent/base"
+	"github.com/cloudposse/atmos/pkg/ai/agent/base/openaicompat"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
+	// ProviderName is the name of this provider for configuration lookup.
+	ProviderName = "openai"
 	// DefaultMaxTokens is the default maximum number of tokens in AI responses.
 	DefaultMaxTokens = 4096
+	// DefaultModel is the default OpenAI model.
+	DefaultModel = "gpt-4o"
+	// DefaultAPIKeyEnv is the default environment variable for the API key.
+	DefaultAPIKeyEnv = "OPENAI_API_KEY"
 )
 
 // Client provides a simplified interface to the OpenAI API for Atmos.
 type Client struct {
 	client *openai.Client
-	config *Config
-}
-
-// Config holds basic configuration for the OpenAI client.
-type Config struct {
-	Enabled   bool
-	Model     string
-	APIKeyEnv string
-	MaxTokens int
+	config *base.Config
 }
 
 // NewClient creates a new OpenAI client from Atmos configuration.
 func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
-	// Extract AI configuration
-	config := extractConfig(atmosConfig)
+	defer perf.Track(atmosConfig, "openai.NewClient")()
+
+	// Extract AI configuration using shared utility.
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		APIKeyEnv: DefaultAPIKeyEnv,
+		MaxTokens: DefaultMaxTokens,
+	})
 
 	if !config.Enabled {
 		return nil, errUtils.ErrAIDisabledInConfiguration
 	}
 
-	// Get API key from environment using viper
-	_ = viper.BindEnv(config.APIKeyEnv, config.APIKeyEnv)
-	apiKey := viper.GetString(config.APIKeyEnv)
+	// Get API key from environment using shared utility (replaces viper.BindEnv).
+	apiKey := base.GetAPIKey(config.APIKeyEnv)
 	if apiKey == "" {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrAIAPIKeyNotFound, config.APIKeyEnv)
+		return nil, errUtils.Build(errUtils.ErrAIAPIKeyNotFound).
+			WithContext("env_var", config.APIKeyEnv).
+			WithHint("Set the " + config.APIKeyEnv + " environment variable").
+			Err()
 	}
 
-	// Create OpenAI client
+	// Create OpenAI client.
 	client := openai.NewClient(
 		option.WithAPIKey(apiKey),
 	)
@@ -61,42 +67,10 @@ func NewClient(atmosConfig *schema.AtmosConfiguration) (*Client, error) {
 	}, nil
 }
 
-// extractConfig extracts AI configuration from AtmosConfiguration.
-func extractConfig(atmosConfig *schema.AtmosConfiguration) *Config {
-	// Set defaults.
-	config := &Config{
-		Enabled:   false,
-		Model:     "gpt-4o",
-		APIKeyEnv: "OPENAI_API_KEY",
-		MaxTokens: DefaultMaxTokens,
-	}
-
-	// Check if AI is enabled.
-	if atmosConfig.Settings.AI.Enabled {
-		config.Enabled = atmosConfig.Settings.AI.Enabled
-	}
-
-	// Get provider-specific configuration from Providers map.
-	if atmosConfig.Settings.AI.Providers != nil {
-		if providerConfig, exists := atmosConfig.Settings.AI.Providers["openai"]; exists && providerConfig != nil {
-			// Override defaults with provider-specific configuration.
-			if providerConfig.Model != "" {
-				config.Model = providerConfig.Model
-			}
-			if providerConfig.ApiKeyEnv != "" {
-				config.APIKeyEnv = providerConfig.ApiKeyEnv
-			}
-			if providerConfig.MaxTokens > 0 {
-				config.MaxTokens = providerConfig.MaxTokens
-			}
-		}
-	}
-
-	return config
-}
-
 // SendMessage sends a message to the AI and returns the response.
 func (c *Client) SendMessage(ctx context.Context, message string) (string, error) {
+	defer perf.Track(nil, "openai.Client.SendMessage")()
+
 	params := openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage(message),
@@ -105,11 +79,15 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 	}
 
 	// Set the appropriate token limit parameter based on the model.
-	c.setTokenLimit(&params)
+	openaicompat.SetTokenLimit(&params, c.config.Model, c.config.MaxTokens)
 
 	response, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {
-		return "", fmt.Errorf("failed to send message: %w", err)
+		return "", errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			Err()
 	}
 
 	// Extract text from response.
@@ -122,8 +100,10 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 
 // SendMessageWithTools sends a message with available tools.
 func (c *Client) SendMessageWithTools(ctx context.Context, message string, availableTools []tools.Tool) (*types.Response, error) {
-	// Convert our tools to OpenAI's format.
-	openaiTools := convertToolsToOpenAIFormat(availableTools)
+	defer perf.Track(nil, "openai.Client.SendMessageWithTools")()
+
+	// Convert our tools to OpenAI's format using shared utility.
+	openaiTools := openaicompat.ConvertToolsToOpenAIFormat(availableTools)
 
 	// Send message with tools.
 	params := openai.ChatCompletionNewParams{
@@ -135,21 +115,28 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 	}
 
 	// Set the appropriate token limit parameter based on the model.
-	c.setTokenLimit(&params)
+	openaicompat.SetTokenLimit(&params, c.config.Model, c.config.MaxTokens)
 
 	response, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send message with tools: %w", err)
+		return nil, errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("tools_count", len(availableTools)).
+			Err()
 	}
 
-	// Parse response.
-	return parseOpenAIResponse(response)
+	// Parse response using shared utility.
+	return openaicompat.ParseOpenAIResponse(response)
 }
 
 // SendMessageWithHistory sends messages with full conversation history.
 func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
-	// Convert messages to OpenAI format.
-	openaiMessages := convertMessagesToOpenAIFormat(messages)
+	defer perf.Track(nil, "openai.Client.SendMessageWithHistory")()
+
+	// Convert messages to OpenAI format using shared utility.
+	openaiMessages := openaicompat.ConvertMessagesToOpenAIFormat(messages)
 
 	params := openai.ChatCompletionNewParams{
 		Messages: openaiMessages,
@@ -157,11 +144,16 @@ func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Me
 	}
 
 	// Set the appropriate token limit parameter based on the model.
-	c.setTokenLimit(&params)
+	openaicompat.SetTokenLimit(&params, c.config.Model, c.config.MaxTokens)
 
 	response, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {
-		return "", fmt.Errorf("failed to send messages with history: %w", err)
+		return "", errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("messages_count", len(messages)).
+			Err()
 	}
 
 	// Extract text from response.
@@ -174,11 +166,13 @@ func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Me
 
 // SendMessageWithToolsAndHistory sends messages with full conversation history and available tools.
 func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
-	// Convert messages to OpenAI format.
-	openaiMessages := convertMessagesToOpenAIFormat(messages)
+	defer perf.Track(nil, "openai.Client.SendMessageWithToolsAndHistory")()
 
-	// Convert tools to OpenAI format.
-	openaiTools := convertToolsToOpenAIFormat(availableTools)
+	// Convert messages to OpenAI format using shared utility.
+	openaiMessages := openaicompat.ConvertMessagesToOpenAIFormat(messages)
+
+	// Convert tools to OpenAI format using shared utility.
+	openaiTools := openaicompat.ConvertToolsToOpenAIFormat(availableTools)
 
 	params := openai.ChatCompletionNewParams{
 		Messages: openaiMessages,
@@ -187,15 +181,21 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 	}
 
 	// Set the appropriate token limit parameter based on the model.
-	c.setTokenLimit(&params)
+	openaicompat.SetTokenLimit(&params, c.config.Model, c.config.MaxTokens)
 
 	response, err := c.client.Chat.Completions.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send messages with history and tools: %w", err)
+		return nil, errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("messages_count", len(messages)).
+			WithContext("tools_count", len(availableTools)).
+			Err()
 	}
 
-	// Parse response.
-	return parseOpenAIResponse(response)
+	// Parse response using shared utility.
+	return openaicompat.ParseOpenAIResponse(response)
 }
 
 // SendMessageWithSystemPromptAndTools sends messages with system prompt, conversation history, and available tools.
@@ -208,183 +208,14 @@ func (c *Client) SendMessageWithSystemPromptAndTools(
 	messages []types.Message,
 	availableTools []tools.Tool,
 ) (*types.Response, error) {
-	// Build messages with system prompts prepended.
-	systemMessages := make([]types.Message, 0, 2+len(messages))
+	defer perf.Track(nil, "openai.Client.SendMessageWithSystemPromptAndTools")()
 
-	// Add system prompt if provided.
-	if systemPrompt != "" {
-		systemMessages = append(systemMessages, types.Message{
-			Role:    types.RoleSystem,
-			Content: systemPrompt,
-		})
-	}
-
-	// Add ATMOS.md content if provided.
-	if atmosMemory != "" {
-		systemMessages = append(systemMessages, types.Message{
-			Role:    types.RoleSystem,
-			Content: atmosMemory,
-		})
-	}
-
-	// Add conversation history.
-	systemMessages = append(systemMessages, messages...)
+	// Build messages with system prompts prepended using shared utility.
+	systemMessages := base.PrependSystemMessages(systemPrompt, atmosMemory, messages)
 
 	// Call existing method with system messages prepended.
 	// OpenAI automatically caches repeated content (>= 1024 tokens) with 50% discount.
 	return c.SendMessageWithToolsAndHistory(ctx, systemMessages, availableTools)
-}
-
-// setTokenLimit sets the appropriate token limit parameter based on the model.
-// Newer models (gpt-5, o1-preview, o1-mini, chatgpt-4o-latest) use max_completion_tokens,
-// while older models use max_tokens.
-func (c *Client) setTokenLimit(params *openai.ChatCompletionNewParams) {
-	// Models that require max_completion_tokens instead of max_tokens.
-	usesMaxCompletionTokens := c.requiresMaxCompletionTokens()
-
-	if usesMaxCompletionTokens {
-		params.MaxCompletionTokens = openai.Int(int64(c.config.MaxTokens))
-	} else {
-		params.MaxTokens = openai.Int(int64(c.config.MaxTokens))
-	}
-}
-
-// requiresMaxCompletionTokens returns true if the model requires max_completion_tokens parameter.
-func (c *Client) requiresMaxCompletionTokens() bool {
-	model := c.config.Model
-
-	// Check for models that use max_completion_tokens.
-	// These include: gpt-5*, o1-preview, o1-mini, chatgpt-4o-latest.
-	if len(model) >= 5 && model[:5] == "gpt-5" {
-		return true
-	}
-	if model == "o1-preview" || model == "o1-mini" || model == "chatgpt-4o-latest" {
-		return true
-	}
-
-	return false
-}
-
-// convertMessagesToOpenAIFormat converts our Message slice to OpenAI's message format.
-func convertMessagesToOpenAIFormat(messages []types.Message) []openai.ChatCompletionMessageParamUnion {
-	openaiMessages := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages))
-
-	for _, msg := range messages {
-		switch msg.Role {
-		case types.RoleUser:
-			openaiMessages = append(openaiMessages, openai.UserMessage(msg.Content))
-		case types.RoleAssistant:
-			openaiMessages = append(openaiMessages, openai.AssistantMessage(msg.Content))
-		case types.RoleSystem:
-			openaiMessages = append(openaiMessages, openai.SystemMessage(msg.Content))
-		}
-	}
-
-	return openaiMessages
-}
-
-// convertToolsToOpenAIFormat converts our Tool interface to OpenAI's function format.
-func convertToolsToOpenAIFormat(availableTools []tools.Tool) []openai.ChatCompletionToolParam {
-	openaiTools := make([]openai.ChatCompletionToolParam, 0, len(availableTools))
-
-	for _, tool := range availableTools {
-		// Build properties and required fields from parameters.
-		properties := make(map[string]interface{})
-		required := make([]string, 0)
-
-		for _, param := range tool.Parameters() {
-			properties[param.Name] = map[string]interface{}{
-				"type":        string(param.Type),
-				"description": param.Description,
-			}
-			if param.Required {
-				required = append(required, param.Name)
-			}
-		}
-
-		// Create function parameters.
-		params := openai.FunctionParameters{
-			"type":       "object",
-			"properties": properties,
-			"required":   required,
-		}
-
-		// Create tool param with function definition.
-		toolParam := openai.ChatCompletionToolParam{
-			Function: openai.FunctionDefinitionParam{
-				Name:        tool.Name(),
-				Description: openai.String(tool.Description()),
-				Parameters:  params,
-			},
-		}
-
-		openaiTools = append(openaiTools, toolParam)
-	}
-
-	return openaiTools
-}
-
-// parseOpenAIResponse parses an OpenAI response into our Response format.
-func parseOpenAIResponse(response *openai.ChatCompletion) (*types.Response, error) {
-	result := &types.Response{
-		Content:   "",
-		ToolCalls: make([]types.ToolCall, 0),
-	}
-
-	// Check if we have choices.
-	if len(response.Choices) == 0 {
-		return nil, errUtils.ErrAINoResponseChoices
-	}
-
-	choice := response.Choices[0]
-
-	// Map finish reason to stop reason.
-	switch choice.FinishReason {
-	case "stop":
-		result.StopReason = types.StopReasonEndTurn
-	case "tool_calls":
-		result.StopReason = types.StopReasonToolUse
-	case "length":
-		result.StopReason = types.StopReasonMaxTokens
-	default:
-		result.StopReason = types.StopReasonEndTurn
-	}
-
-	// Extract text content.
-	result.Content = choice.Message.Content
-
-	// Extract tool calls if present.
-	if len(choice.Message.ToolCalls) > 0 {
-		for _, toolCall := range choice.Message.ToolCalls {
-			// Parse function arguments.
-			var args map[string]interface{}
-			if toolCall.Function.Arguments != "" {
-				if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
-					return nil, fmt.Errorf("failed to parse tool arguments: %w", err)
-				}
-			}
-
-			result.ToolCalls = append(result.ToolCalls, types.ToolCall{
-				ID:    toolCall.ID,
-				Name:  toolCall.Function.Name,
-				Input: args,
-			})
-		}
-	}
-
-	// Extract usage information.
-	if response.Usage.PromptTokens > 0 || response.Usage.CompletionTokens > 0 {
-		result.Usage = &types.Usage{
-			InputTokens:  response.Usage.PromptTokens,
-			OutputTokens: response.Usage.CompletionTokens,
-			TotalTokens:  response.Usage.TotalTokens,
-			// OpenAI doesn't provide cache tokens in standard responses.
-			CacheReadTokens:     0,
-			CacheCreationTokens: 0,
-		}
-	}
-
-	return result, nil
 }
 
 // GetModel returns the configured model name.

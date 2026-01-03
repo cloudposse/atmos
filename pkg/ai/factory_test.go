@@ -1,9 +1,19 @@
 package ai
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	// Import providers to register them.
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/anthropic"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/azureopenai"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/bedrock"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/gemini"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/grok"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/ollama"
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/openai"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -165,11 +175,10 @@ func TestNewClient(t *testing.T) {
 
 			// Check for expected errors when API key is not set.
 			errMsg := err.Error()
-			if errMsg == "AI features are disabled in configuration" ||
-				errMsg == "API key not found in environment variable: ANTHROPIC_API_KEY" ||
-				errMsg == "API key not found in environment variable: OPENAI_API_KEY" ||
-				errMsg == "API key not found in environment variable: GEMINI_API_KEY" ||
-				errMsg == "API key not found in environment variable: XAI_API_KEY" {
+			if strings.Contains(errMsg, "AI features are disabled") ||
+				strings.Contains(errMsg, "API key not found") ||
+				strings.Contains(errMsg, "base URL is required") ||
+				strings.Contains(errMsg, "failed to load AWS configuration") {
 				t.Skipf("Skipping test: %s (expected for factory test without API key)", errMsg)
 				return
 			}

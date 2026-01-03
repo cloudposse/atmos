@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/ai/agent/base"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -12,7 +13,7 @@ func TestExtractConfig(t *testing.T) {
 	tests := []struct {
 		name           string
 		atmosConfig    *schema.AtmosConfiguration
-		expectedConfig *Config
+		expectedConfig *base.Config
 	}{
 		{
 			name: "Default configuration",
@@ -21,7 +22,7 @@ func TestExtractConfig(t *testing.T) {
 					AI: schema.AISettings{},
 				},
 			},
-			expectedConfig: &Config{
+			expectedConfig: &base.Config{
 				Enabled:   false,
 				Model:     "llama3.3:70b",
 				APIKeyEnv: "OLLAMA_API_KEY",
@@ -46,7 +47,7 @@ func TestExtractConfig(t *testing.T) {
 					},
 				},
 			},
-			expectedConfig: &Config{
+			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "llama3.1:8b",
 				APIKeyEnv: "CUSTOM_API_KEY",
@@ -68,7 +69,7 @@ func TestExtractConfig(t *testing.T) {
 					},
 				},
 			},
-			expectedConfig: &Config{
+			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "codellama:13b",
 				APIKeyEnv: "OLLAMA_API_KEY",
@@ -90,7 +91,7 @@ func TestExtractConfig(t *testing.T) {
 					},
 				},
 			},
-			expectedConfig: &Config{
+			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "llama3.3:70b",
 				APIKeyEnv: "OLLAMA_API_KEY",
@@ -115,7 +116,7 @@ func TestExtractConfig(t *testing.T) {
 					},
 				},
 			},
-			expectedConfig: &Config{
+			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "llama3.3:70b",
 				APIKeyEnv: "OLLAMA_REMOTE_KEY",
@@ -127,7 +128,12 @@ func TestExtractConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := extractConfig(tt.atmosConfig)
+			config := base.ExtractConfig(tt.atmosConfig, ProviderName, base.ProviderDefaults{
+				Model:     DefaultModel,
+				APIKeyEnv: DefaultAPIKeyEnv,
+				MaxTokens: DefaultMaxTokens,
+				BaseURL:   DefaultBaseURL,
+			})
 			assert.Equal(t, tt.expectedConfig, config)
 		})
 	}
@@ -149,7 +155,7 @@ func TestNewClient_Disabled(t *testing.T) {
 }
 
 func TestClientGetters(t *testing.T) {
-	config := &Config{
+	config := &base.Config{
 		Enabled:   true,
 		Model:     "llama3.3:70b",
 		APIKeyEnv: "OLLAMA_API_KEY",
@@ -158,7 +164,7 @@ func TestClientGetters(t *testing.T) {
 	}
 
 	client := &Client{
-		client: nil, // We don't need a real client for testing getters
+		client: nil, // We don't need a real client for testing getters.
 		config: config,
 	}
 
@@ -174,7 +180,7 @@ func TestDefaultConstants(t *testing.T) {
 }
 
 func TestConfig_AllFields(t *testing.T) {
-	config := &Config{
+	config := &base.Config{
 		Enabled:   true,
 		Model:     "test-model",
 		APIKeyEnv: "TEST_KEY",

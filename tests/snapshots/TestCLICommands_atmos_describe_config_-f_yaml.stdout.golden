@@ -1,4 +1,4 @@
-base_path: /absolute/path/to/repo/examples/demo-stacks
+base_path: ./
 components:
   terraform:
     base_path: components/terraform

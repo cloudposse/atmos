@@ -2,50 +2,56 @@ package gemini
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/spf13/viper"
 	"google.golang.org/genai"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/agent/base"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
+	// ProviderName is the name of this provider for configuration lookup.
+	ProviderName = "gemini"
 	// DefaultMaxTokens is the default maximum number of tokens in AI responses.
 	DefaultMaxTokens = 8192
+	// DefaultModel is the default Gemini model.
+	DefaultModel = "gemini-2.0-flash-exp"
+	// DefaultAPIKeyEnv is the default environment variable for the API key.
+	DefaultAPIKeyEnv = "GEMINI_API_KEY"
 )
 
 // Client provides a simplified interface to the Google Gemini API for Atmos.
 type Client struct {
 	client *genai.Client
-	config *Config
-}
-
-// Config holds basic configuration for the Gemini client.
-type Config struct {
-	Enabled   bool
-	Model     string
-	APIKeyEnv string
-	MaxTokens int
+	config *base.Config
 }
 
 // NewClient creates a new Gemini client from Atmos configuration.
 func NewClient(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Client, error) {
-	// Extract AI configuration.
-	config := extractConfig(atmosConfig)
+	defer perf.Track(atmosConfig, "gemini.NewClient")()
+
+	// Extract AI configuration using shared utility.
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		APIKeyEnv: DefaultAPIKeyEnv,
+		MaxTokens: DefaultMaxTokens,
+	})
 
 	if !config.Enabled {
 		return nil, errUtils.ErrAIDisabledInConfiguration
 	}
 
-	// Get API key from environment using viper.
-	_ = viper.BindEnv(config.APIKeyEnv, config.APIKeyEnv)
-	apiKey := viper.GetString(config.APIKeyEnv)
+	// Get API key from environment using shared utility (replaces viper.BindEnv).
+	apiKey := base.GetAPIKey(config.APIKeyEnv)
 	if apiKey == "" {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrAIAPIKeyNotFound, config.APIKeyEnv)
+		return nil, errUtils.Build(errUtils.ErrAIAPIKeyNotFound).
+			WithContext("env_var", config.APIKeyEnv).
+			WithHint("Set the " + config.APIKeyEnv + " environment variable").
+			Err()
 	}
 
 	// Create Gemini client.
@@ -53,7 +59,10 @@ func NewClient(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Cl
 		APIKey: apiKey,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Gemini client: %w", err)
+		return nil, errUtils.Build(errUtils.ErrAIClientCreation).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			Err()
 	}
 
 	return &Client{
@@ -62,48 +71,20 @@ func NewClient(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Cl
 	}, nil
 }
 
-// extractConfig extracts AI configuration from AtmosConfiguration.
-func extractConfig(atmosConfig *schema.AtmosConfiguration) *Config {
-	// Set defaults.
-	config := &Config{
-		Enabled:   false,
-		Model:     "gemini-2.0-flash-exp",
-		APIKeyEnv: "GEMINI_API_KEY",
-		MaxTokens: DefaultMaxTokens,
-	}
-
-	// Check if AI is enabled.
-	if atmosConfig.Settings.AI.Enabled {
-		config.Enabled = atmosConfig.Settings.AI.Enabled
-	}
-
-	// Get provider-specific configuration from Providers map.
-	if atmosConfig.Settings.AI.Providers != nil {
-		if providerConfig, exists := atmosConfig.Settings.AI.Providers["gemini"]; exists && providerConfig != nil {
-			// Override defaults with provider-specific configuration.
-			if providerConfig.Model != "" {
-				config.Model = providerConfig.Model
-			}
-			if providerConfig.ApiKeyEnv != "" {
-				config.APIKeyEnv = providerConfig.ApiKeyEnv
-			}
-			if providerConfig.MaxTokens > 0 {
-				config.MaxTokens = providerConfig.MaxTokens
-			}
-		}
-	}
-
-	return config
-}
-
 // SendMessage sends a message to the AI and returns the response.
 func (c *Client) SendMessage(ctx context.Context, message string) (string, error) {
+	defer perf.Track(nil, "gemini.Client.SendMessage")()
+
 	// Use the convenience function to create content from text.
 	content := genai.NewContentFromText(message, genai.RoleUser)
 
 	response, err := c.client.Models.GenerateContent(ctx, c.config.Model, []*genai.Content{content}, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to send message: %w", err)
+		return "", errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			Err()
 	}
 
 	// Extract text from response.
@@ -126,6 +107,8 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 
 // SendMessageWithTools sends a message with available tools.
 func (c *Client) SendMessageWithTools(ctx context.Context, message string, availableTools []tools.Tool) (*types.Response, error) {
+	defer perf.Track(nil, "gemini.Client.SendMessageWithTools")()
+
 	// Convert our tools to Gemini's format.
 	geminiTools := convertToolsToGeminiFormat(availableTools)
 
@@ -140,7 +123,12 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 	// Send message with tools.
 	response, err := c.client.Models.GenerateContent(ctx, c.config.Model, []*genai.Content{content}, config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send message with tools: %w", err)
+		return nil, errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("tools_count", len(availableTools)).
+			Err()
 	}
 
 	// Parse response.
@@ -149,13 +137,20 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 
 // SendMessageWithHistory sends messages with full conversation history.
 func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
+	defer perf.Track(nil, "gemini.Client.SendMessageWithHistory")()
+
 	// Convert messages to Gemini format.
 	geminiContents := convertMessagesToGeminiFormat(messages)
 
 	// Send messages.
 	response, err := c.client.Models.GenerateContent(ctx, c.config.Model, geminiContents, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to send messages with history: %w", err)
+		return "", errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("messages_count", len(messages)).
+			Err()
 	}
 
 	// Extract text from response.
@@ -178,6 +173,8 @@ func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Me
 
 // SendMessageWithToolsAndHistory sends messages with full conversation history and available tools.
 func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	defer perf.Track(nil, "gemini.Client.SendMessageWithToolsAndHistory")()
+
 	// Convert messages to Gemini format.
 	geminiContents := convertMessagesToGeminiFormat(messages)
 
@@ -192,7 +189,13 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 	// Send messages with tools.
 	response, err := c.client.Models.GenerateContent(ctx, c.config.Model, geminiContents, config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send messages with history and tools: %w", err)
+		return nil, errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("messages_count", len(messages)).
+			WithContext("tools_count", len(availableTools)).
+			Err()
 	}
 
 	// Parse response.
@@ -209,27 +212,10 @@ func (c *Client) SendMessageWithSystemPromptAndTools(
 	messages []types.Message,
 	availableTools []tools.Tool,
 ) (*types.Response, error) {
-	// Build messages with system prompts prepended.
-	systemMessages := make([]types.Message, 0, 2+len(messages))
+	defer perf.Track(nil, "gemini.Client.SendMessageWithSystemPromptAndTools")()
 
-	// Add system prompt if provided.
-	if systemPrompt != "" {
-		systemMessages = append(systemMessages, types.Message{
-			Role:    types.RoleSystem,
-			Content: systemPrompt,
-		})
-	}
-
-	// Add ATMOS.md content if provided.
-	if atmosMemory != "" {
-		systemMessages = append(systemMessages, types.Message{
-			Role:    types.RoleSystem,
-			Content: atmosMemory,
-		})
-	}
-
-	// Add conversation history.
-	systemMessages = append(systemMessages, messages...)
+	// Build messages with system prompts prepended using shared utility.
+	systemMessages := base.PrependSystemMessages(systemPrompt, atmosMemory, messages)
 
 	// Call existing method with system messages prepended.
 	// Gemini automatically caches content (free, any length).

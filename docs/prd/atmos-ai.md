@@ -111,13 +111,23 @@ Compared to industry-leading AI systems:
 ```
 pkg/ai/
 ├── agent/                  # AI provider implementations
+│   ├── base/              # Shared provider utilities
+│   │   ├── config.go      # Shared Config struct and extraction
+│   │   ├── messages.go    # Message conversion utilities
+│   │   └── openaicompat/  # OpenAI-compatible API utilities
+│   │       ├── tools.go   # Tool conversion (OpenAI format)
+│   │       ├── messages.go # Message conversion
+│   │       ├── response.go # Response parsing
+│   │       └── tokens.go  # Token limit handling
 │   ├── anthropic/         # Claude via Anthropic API
 │   ├── openai/            # GPT via OpenAI API
 │   ├── gemini/            # Gemini via Google AI
-│   ├── grok/              # Grok via xAI API
-│   ├── ollama/            # Local LLMs via Ollama
+│   ├── grok/              # Grok via xAI API (OpenAI-compatible)
+│   ├── ollama/            # Local LLMs via Ollama (OpenAI-compatible)
 │   ├── bedrock/           # Claude via AWS Bedrock
-│   └── azureopenai/       # GPT via Azure OpenAI
+│   └── azureopenai/       # GPT via Azure OpenAI (OpenAI-compatible)
+├── registry/              # Provider registration system
+│   └── registry.go        # Client interface and factory registry
 ├── agents/                # Agent system
 │   ├── agent.go           # Agent interface
 │   ├── registry.go        # Agent registry
@@ -158,6 +168,54 @@ cmd/
 ├── ai_sessions.go         # Session management commands
 └── mcp_server.go          # MCP server command
 ```
+
+### Provider Architecture
+
+The AI provider system uses a **registry pattern** for extensibility and clean separation of concerns:
+
+**1. Client Interface** (`pkg/ai/registry/registry.go`):
+```go
+type Client interface {
+    SendMessage(ctx context.Context, message string) (string, error)
+    SendMessageWithTools(ctx context.Context, message string, tools []tools.Tool) (*types.Response, error)
+    SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error)
+    SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, tools []tools.Tool) (*types.Response, error)
+    SendMessageWithSystemPromptAndTools(ctx context.Context, systemPrompt, atmosMemory string, messages []types.Message, tools []tools.Tool) (*types.Response, error)
+    GetModel() string
+    GetMaxTokens() int
+}
+```
+
+**2. Self-Registration Pattern**:
+Each provider registers itself via `init()`:
+```go
+// In pkg/ai/agent/openai/register.go
+func init() {
+    registry.Register("openai", func(ctx context.Context, cfg *schema.AtmosConfiguration) (registry.Client, error) {
+        return NewClient(cfg)
+    })
+}
+```
+
+**3. Shared Base Package** (`pkg/ai/agent/base/`):
+- `Config` struct - Unified configuration across all providers
+- `ExtractConfig()` - Configuration extraction with defaults
+- `GetAPIKey()` - Environment variable lookup
+- `PrependSystemMessages()` - System prompt handling
+
+**4. OpenAI-Compatible Utilities** (`pkg/ai/agent/base/openaicompat/`):
+Shared utilities for providers using OpenAI-compatible APIs (OpenAI, Grok, Ollama, Azure OpenAI):
+- `ConvertToolsToOpenAIFormat()` - Tool schema conversion
+- `ConvertMessagesToOpenAIFormat()` - Message format conversion
+- `ParseOpenAIResponse()` - Response parsing
+- `SetTokenLimit()` - Model-aware token limit handling
+
+**Benefits:**
+- **Extensibility** - Add new providers without modifying factory
+- **Code Reuse** - ~2,900 LOC reduction through shared utilities
+- **Type Safety** - Consistent interface across all providers
+- **Performance** - `perf.Track()` on all public methods
+- **Error Handling** - Sentinel errors with ErrorBuilder pattern
 
 ---
 
@@ -1028,7 +1086,8 @@ settings:
 #### 3. Google Gemini
 
 **Models:**
-- `gemini-1.5-pro` (default) - Most capable
+- `gemini-2.0-flash-exp` (default) - Latest experimental model
+- `gemini-1.5-pro` - Most capable stable model
 - `gemini-1.5-flash` - Fast and efficient
 
 **Configuration:**
@@ -1036,8 +1095,8 @@ settings:
 settings:
   ai:
     provider: gemini
-    model: gemini-1.5-pro
-    api_key_env: GOOGLE_API_KEY
+    model: gemini-2.0-flash-exp
+    api_key_env: GEMINI_API_KEY
 ```
 
 **Best For:** Large context windows, document analysis
@@ -1045,15 +1104,15 @@ settings:
 #### 4. xAI Grok
 
 **Models:**
-- `grok-2-latest` (default)
-- `grok-vision-beta`
+- `grok-4-latest` (default) - Latest Grok model
+- `grok-2-latest` - Previous generation
 
 **Configuration:**
 ```yaml
 settings:
   ai:
     provider: grok
-    model: grok-2-latest
+    model: grok-4-latest
     api_key_env: XAI_API_KEY
 ```
 
@@ -1177,12 +1236,12 @@ settings:
         max_tokens: 4096
 
       gemini:
-        model: gemini-1.5-pro
+        model: gemini-2.0-flash-exp
         api_key_env: GOOGLE_API_KEY
         max_tokens: 4096
 
       grok:
-        model: grok-2-latest
+        model: grok-4-latest
         api_key_env: XAI_API_KEY
         max_tokens: 4096
 
@@ -1507,12 +1566,12 @@ settings:
         max_tokens: 4096
 
       gemini:
-        model: gemini-1.5-pro
+        model: gemini-2.0-flash-exp
         api_key_env: GOOGLE_API_KEY
         max_tokens: 4096
 
       grok:
-        model: grok-2-latest
+        model: grok-4-latest
         api_key_env: XAI_API_KEY
         max_tokens: 4096
 

@@ -3,19 +3,22 @@ package bedrock
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/bedrockruntime"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/agent/base"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
+	// ProviderName is the name of this provider for configuration lookup.
+	ProviderName = "bedrock"
 	// DefaultMaxTokens is the default maximum number of tokens in AI responses.
 	DefaultMaxTokens = 4096
 	// DefaultModel is the default Bedrock model.
@@ -27,30 +30,40 @@ const (
 // Client provides an interface to AWS Bedrock for Atmos.
 type Client struct {
 	client *bedrockruntime.Client
-	config *Config
-}
-
-// Config holds configuration for the AWS Bedrock client.
-type Config struct {
-	Enabled   bool
-	Model     string
-	Region    string
-	MaxTokens int
+	config *base.Config
+	region string
 }
 
 // NewClient creates a new AWS Bedrock client from Atmos configuration.
 func NewClient(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Client, error) {
-	// Extract Bedrock configuration.
-	cfg := extractConfig(atmosConfig)
+	defer perf.Track(atmosConfig, "bedrock.NewClient")()
+
+	// Extract AI configuration using shared utility.
+	// Note: Bedrock uses BaseURL to specify the AWS region.
+	cfg := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		MaxTokens: DefaultMaxTokens,
+		BaseURL:   DefaultRegion, // Region is stored in BaseURL.
+	})
 
 	if !cfg.Enabled {
 		return nil, errUtils.ErrAIDisabledInConfiguration
 	}
 
+	// Get region from BaseURL (Bedrock-specific mapping).
+	region := cfg.BaseURL
+	if region == "" {
+		region = DefaultRegion
+	}
+
 	// Load AWS configuration.
-	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(cfg.Region))
+	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
 	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS configuration: %w", err)
+		return nil, errUtils.Build(errUtils.ErrAILoadAWSConfig).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("region", region).
+			Err()
 	}
 
 	// Create Bedrock Runtime client.
@@ -59,46 +72,14 @@ func NewClient(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Cl
 	return &Client{
 		client: client,
 		config: cfg,
+		region: region,
 	}, nil
-}
-
-// extractConfig extracts Bedrock configuration from AtmosConfiguration.
-func extractConfig(atmosConfig *schema.AtmosConfiguration) *Config {
-	// Set defaults.
-	cfg := &Config{
-		Enabled:   false,
-		Model:     DefaultModel,
-		Region:    DefaultRegion,
-		MaxTokens: DefaultMaxTokens,
-	}
-
-	// Check if AI is enabled.
-	if atmosConfig.Settings.AI.Enabled {
-		cfg.Enabled = atmosConfig.Settings.AI.Enabled
-	}
-
-	// Get provider-specific configuration from Providers map.
-	if atmosConfig.Settings.AI.Providers != nil {
-		if providerConfig, exists := atmosConfig.Settings.AI.Providers["bedrock"]; exists && providerConfig != nil {
-			// Override defaults with provider-specific configuration.
-			if providerConfig.Model != "" {
-				cfg.Model = providerConfig.Model
-			}
-			if providerConfig.MaxTokens > 0 {
-				cfg.MaxTokens = providerConfig.MaxTokens
-			}
-			if providerConfig.BaseURL != "" {
-				// BaseURL is used to specify region for Bedrock.
-				cfg.Region = providerConfig.BaseURL
-			}
-		}
-	}
-
-	return cfg
 }
 
 // SendMessage sends a message to AWS Bedrock and returns the response.
 func (c *Client) SendMessage(ctx context.Context, message string) (string, error) {
+	defer perf.Track(nil, "bedrock.Client.SendMessage")()
+
 	// Prepare request body for Claude models on Bedrock.
 	requestBody := map[string]interface{}{
 		"anthropic_version": "bedrock-2023-05-31",
@@ -113,7 +94,10 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", errUtils.Build(errUtils.ErrAIMarshalRequest).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			Err()
 	}
 
 	// Invoke model.
@@ -123,7 +107,11 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 		ContentType: aws.String("application/json"),
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to invoke Bedrock model: %w", err)
+		return "", errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			Err()
 	}
 
 	// Parse response.
@@ -135,7 +123,10 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 	}
 
 	if err := json.Unmarshal(response.Body, &responseBody); err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+		return "", errUtils.Build(errUtils.ErrAIUnmarshalResponse).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			Err()
 	}
 
 	// Extract text from response.
@@ -151,6 +142,8 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 
 // SendMessageWithTools sends a message with available tools.
 func (c *Client) SendMessageWithTools(ctx context.Context, message string, availableTools []tools.Tool) (*types.Response, error) {
+	defer perf.Track(nil, "bedrock.Client.SendMessageWithTools")()
+
 	// Convert our tools to Bedrock/Anthropic's format.
 	bedrockTools := convertToolsToBedrockFormat(availableTools)
 
@@ -169,7 +162,10 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, errUtils.Build(errUtils.ErrAIMarshalRequest).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			Err()
 	}
 
 	// Invoke model.
@@ -179,7 +175,12 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 		ContentType: aws.String("application/json"),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to invoke Bedrock model with tools: %w", err)
+		return nil, errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("tools_count", len(availableTools)).
+			Err()
 	}
 
 	// Parse response.
@@ -188,6 +189,8 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 
 // SendMessageWithHistory sends messages with full conversation history.
 func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
+	defer perf.Track(nil, "bedrock.Client.SendMessageWithHistory")()
+
 	// Convert messages to Bedrock/Anthropic format.
 	bedrockMessages := convertMessagesToBedrockFormat(messages)
 
@@ -200,7 +203,10 @@ func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Me
 
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
+		return "", errUtils.Build(errUtils.ErrAIMarshalRequest).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			Err()
 	}
 
 	// Invoke model.
@@ -210,7 +216,12 @@ func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Me
 		ContentType: aws.String("application/json"),
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to invoke Bedrock model with history: %w", err)
+		return "", errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("messages_count", len(messages)).
+			Err()
 	}
 
 	// Unmarshal response.
@@ -222,7 +233,10 @@ func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Me
 	}
 
 	if err := json.Unmarshal(response.Body, &responseBody); err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+		return "", errUtils.Build(errUtils.ErrAIUnmarshalResponse).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			Err()
 	}
 
 	// Extract text from response.
@@ -238,6 +252,8 @@ func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Me
 
 // SendMessageWithToolsAndHistory sends messages with full conversation history and available tools.
 func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	defer perf.Track(nil, "bedrock.Client.SendMessageWithToolsAndHistory")()
+
 	// Convert messages to Bedrock/Anthropic format.
 	bedrockMessages := convertMessagesToBedrockFormat(messages)
 
@@ -254,7 +270,10 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return nil, errUtils.Build(errUtils.ErrAIMarshalRequest).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			Err()
 	}
 
 	// Invoke model.
@@ -264,7 +283,13 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 		ContentType: aws.String("application/json"),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to invoke Bedrock model with history and tools: %w", err)
+		return nil, errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("messages_count", len(messages)).
+			WithContext("tools_count", len(availableTools)).
+			Err()
 	}
 
 	// Parse response.
@@ -281,27 +306,10 @@ func (c *Client) SendMessageWithSystemPromptAndTools(
 	messages []types.Message,
 	availableTools []tools.Tool,
 ) (*types.Response, error) {
-	// Build messages with system prompts prepended.
-	systemMessages := make([]types.Message, 0, 2+len(messages))
+	defer perf.Track(nil, "bedrock.Client.SendMessageWithSystemPromptAndTools")()
 
-	// Add system prompt if provided.
-	if systemPrompt != "" {
-		systemMessages = append(systemMessages, types.Message{
-			Role:    types.RoleSystem,
-			Content: systemPrompt,
-		})
-	}
-
-	// Add ATMOS.md content if provided.
-	if atmosMemory != "" {
-		systemMessages = append(systemMessages, types.Message{
-			Role:    types.RoleSystem,
-			Content: atmosMemory,
-		})
-	}
-
-	// Add conversation history.
-	systemMessages = append(systemMessages, messages...)
+	// Build messages with system prompts prepended using shared utility.
+	systemMessages := base.PrependSystemMessages(systemPrompt, atmosMemory, messages)
 
 	// Call existing method with system messages prepended.
 	// Bedrock automatically caches content with up to 90% discount (simplified auto mode).
@@ -326,7 +334,7 @@ func convertMessagesToBedrockFormat(messages []types.Message) []map[string]strin
 				"role":    "assistant",
 				"content": msg.Content,
 			})
-			// Skip system messages as they should be sent via the "system" parameter
+			// Skip system messages as they should be sent via the "system" parameter.
 		}
 	}
 
@@ -338,28 +346,17 @@ func convertToolsToBedrockFormat(availableTools []tools.Tool) []map[string]inter
 	bedrockTools := make([]map[string]interface{}, 0, len(availableTools))
 
 	for _, tool := range availableTools {
-		// Build input schema with properties and required fields.
-		properties := make(map[string]interface{})
-		required := make([]string, 0)
-
-		for _, param := range tool.Parameters() {
-			properties[param.Name] = map[string]interface{}{
-				"type":        string(param.Type),
-				"description": param.Description,
-			}
-			if param.Required {
-				required = append(required, param.Name)
-			}
-		}
+		// Build input schema using shared utility.
+		info := base.ExtractToolInfo(tool)
 
 		// Create tool definition in Anthropic/Bedrock format.
 		toolDef := map[string]interface{}{
-			"name":        tool.Name(),
-			"description": tool.Description(),
+			"name":        info.Name,
+			"description": info.Description,
 			"input_schema": map[string]interface{}{
 				"type":       "object",
-				"properties": properties,
-				"required":   required,
+				"properties": info.Properties,
+				"required":   info.Required,
 			},
 		}
 
@@ -388,7 +385,10 @@ func parseBedrockResponse(responseBody []byte) (*types.Response, error) {
 	}
 
 	if err := json.Unmarshal(responseBody, &apiResponse); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal Bedrock response: %w", err)
+		return nil, errUtils.Build(errUtils.ErrAIUnmarshalResponse).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			Err()
 	}
 
 	result := &types.Response{
@@ -426,11 +426,10 @@ func parseBedrockResponse(responseBody []byte) (*types.Response, error) {
 	// Extract usage information.
 	if apiResponse.Usage.InputTokens > 0 || apiResponse.Usage.OutputTokens > 0 {
 		result.Usage = &types.Usage{
-			InputTokens:  apiResponse.Usage.InputTokens,
-			OutputTokens: apiResponse.Usage.OutputTokens,
-			TotalTokens:  apiResponse.Usage.InputTokens + apiResponse.Usage.OutputTokens,
-			// Bedrock/Anthropic doesn't provide cache tokens in this format.
-			CacheReadTokens:     0,
+			InputTokens:         apiResponse.Usage.InputTokens,
+			OutputTokens:        apiResponse.Usage.OutputTokens,
+			TotalTokens:         apiResponse.Usage.InputTokens + apiResponse.Usage.OutputTokens,
+			CacheReadTokens:     0, // Bedrock/Anthropic doesn't provide cache tokens in this format.
 			CacheCreationTokens: 0,
 		}
 	}
@@ -450,5 +449,5 @@ func (c *Client) GetMaxTokens() int {
 
 // GetRegion returns the configured AWS region.
 func (c *Client) GetRegion() string {
-	return c.config.Region
+	return c.region
 }

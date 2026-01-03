@@ -796,6 +796,13 @@ var (
 	ErrAIAgentAlreadyRegistered     = errors.New("AI agent already registered")
 	ErrAIPromptRequired             = errors.New("prompt is required")
 	ErrAIExecutionFailed            = errors.New("AI execution failed")
+	ErrAISendMessage                = errors.New("failed to send message to AI provider")
+	ErrAIClientCreation             = errors.New("failed to create AI client")
+	ErrAIMarshalRequest             = errors.New("failed to marshal AI request")
+	ErrAIUnmarshalResponse          = errors.New("failed to unmarshal AI response")
+	ErrAIParseToolInput             = errors.New("failed to parse tool input")
+	ErrAILoadAWSConfig              = errors.New("failed to load AWS configuration for AI")
+	ErrAIBaseURLRequired            = errors.New("base URL is required for AI provider")
 
 	// Web search errors.
 	ErrWebSearchFailed      = errors.New("web search request failed")

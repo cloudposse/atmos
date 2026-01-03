@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/ai/agent/base"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -12,7 +13,7 @@ func TestExtractConfig(t *testing.T) {
 	tests := []struct {
 		name           string
 		atmosConfig    *schema.AtmosConfiguration
-		expectedConfig *Config
+		expectedConfig *base.Config
 	}{
 		{
 			name: "Default configuration",
@@ -21,7 +22,7 @@ func TestExtractConfig(t *testing.T) {
 					AI: schema.AISettings{},
 				},
 			},
-			expectedConfig: &Config{
+			expectedConfig: &base.Config{
 				Enabled:   false,
 				Model:     "gpt-4o",
 				APIKeyEnv: "OPENAI_API_KEY",
@@ -44,7 +45,7 @@ func TestExtractConfig(t *testing.T) {
 					},
 				},
 			},
-			expectedConfig: &Config{
+			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "gpt-4-turbo",
 				APIKeyEnv: "CUSTOM_API_KEY",
@@ -65,7 +66,7 @@ func TestExtractConfig(t *testing.T) {
 					},
 				},
 			},
-			expectedConfig: &Config{
+			expectedConfig: &base.Config{
 				Enabled:   true,
 				Model:     "gpt-3.5-turbo",
 				APIKeyEnv: "OPENAI_API_KEY",
@@ -76,7 +77,11 @@ func TestExtractConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := extractConfig(tt.atmosConfig)
+			config := base.ExtractConfig(tt.atmosConfig, ProviderName, base.ProviderDefaults{
+				Model:     DefaultModel,
+				APIKeyEnv: DefaultAPIKeyEnv,
+				MaxTokens: DefaultMaxTokens,
+			})
 			assert.Equal(t, tt.expectedConfig, config)
 		})
 	}
@@ -98,7 +103,7 @@ func TestNewClient_Disabled(t *testing.T) {
 }
 
 func TestClientGetters(t *testing.T) {
-	config := &Config{
+	config := &base.Config{
 		Enabled:   true,
 		Model:     "gpt-4o",
 		APIKeyEnv: "OPENAI_API_KEY",
@@ -106,7 +111,7 @@ func TestClientGetters(t *testing.T) {
 	}
 
 	client := &Client{
-		client: nil, // We don't need a real client for testing getters
+		client: nil, // We don't need a real client for testing getters.
 		config: config,
 	}
 

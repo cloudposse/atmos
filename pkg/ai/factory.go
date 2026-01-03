@@ -5,44 +5,28 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ai/agent/anthropic"
-	"github.com/cloudposse/atmos/pkg/ai/agent/azureopenai"
-	"github.com/cloudposse/atmos/pkg/ai/agent/bedrock"
-	"github.com/cloudposse/atmos/pkg/ai/agent/gemini"
-	"github.com/cloudposse/atmos/pkg/ai/agent/grok"
-	"github.com/cloudposse/atmos/pkg/ai/agent/ollama"
-	"github.com/cloudposse/atmos/pkg/ai/agent/openai"
+	"github.com/cloudposse/atmos/pkg/ai/registry"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // NewClient creates a new AI client based on the provider configuration.
 func NewClient(atmosConfig *schema.AtmosConfiguration) (Client, error) {
+	return NewClientWithContext(context.Background(), atmosConfig)
+}
+
+// NewClientWithContext creates a new AI client with the given context.
+func NewClientWithContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (Client, error) {
 	// Get provider from config.
 	provider := getProvider(atmosConfig)
 
-	// Create client based on provider.
-	switch provider {
-	case "anthropic":
-		return anthropic.NewSimpleClient(atmosConfig)
-	case "openai":
-		return openai.NewClient(atmosConfig)
-	case "gemini":
-		// Gemini client requires context for initialization.
-		ctx := context.Background()
-		return gemini.NewClient(ctx, atmosConfig)
-	case "grok":
-		return grok.NewClient(atmosConfig)
-	case "ollama":
-		return ollama.NewClient(atmosConfig)
-	case "bedrock":
-		// Bedrock client requires context for AWS SDK initialization.
-		ctx := context.Background()
-		return bedrock.NewClient(ctx, atmosConfig)
-	case "azureopenai":
-		return azureopenai.NewClient(atmosConfig)
-	default:
-		return nil, fmt.Errorf("%w: %s (supported: anthropic, openai, gemini, grok, ollama, bedrock, azureopenai)", errUtils.ErrAIUnsupportedProvider, provider)
+	// Get factory for provider.
+	factory, err := registry.GetFactory(provider)
+	if err != nil {
+		return nil, err
 	}
+
+	// Create client using factory.
+	return factory(ctx, atmosConfig)
 }
 
 // getProvider returns the active provider name.

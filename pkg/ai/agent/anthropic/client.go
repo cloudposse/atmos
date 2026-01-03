@@ -3,55 +3,69 @@ package anthropic
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/agent/base"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
+	// ProviderName is the name of this provider for configuration lookup.
+	ProviderName = "anthropic"
 	// DefaultMaxTokens is the default maximum number of tokens in AI responses.
 	DefaultMaxTokens = 4096
+	// DefaultModel is the default Anthropic model.
+	DefaultModel = "claude-sonnet-4-20250514"
+	// DefaultAPIKeyEnv is the default environment variable for the API key.
+	DefaultAPIKeyEnv = "ANTHROPIC_API_KEY"
 )
 
 // SimpleClient provides a simplified interface to the Anthropic API for Atmos.
 type SimpleClient struct {
 	client *anthropic.Client
-	config *SimpleAIConfig
+	config *base.Config
+	cache  *cacheConfig
 }
 
-// SimpleAIConfig holds basic configuration for the AI client.
-type SimpleAIConfig struct {
-	Enabled            bool
-	Model              string
-	APIKeyEnv          string
-	MaxTokens          int
-	CacheEnabled       bool
-	CacheSystemPrompt  bool
-	CacheProjectMemory bool
+// cacheConfig holds Anthropic-specific cache settings.
+type cacheConfig struct {
+	enabled            bool
+	cacheSystemPrompt  bool
+	cacheProjectMemory bool
 }
 
 // NewSimpleClient creates a new simple AI client from Atmos configuration.
 func NewSimpleClient(atmosConfig *schema.AtmosConfiguration) (*SimpleClient, error) {
-	// Extract simple AI configuration.
-	config := extractSimpleAIConfig(atmosConfig)
+	defer perf.Track(atmosConfig, "anthropic.NewSimpleClient")()
+
+	// Extract AI configuration using shared utility.
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		APIKeyEnv: DefaultAPIKeyEnv,
+		MaxTokens: DefaultMaxTokens,
+	})
 
 	if !config.Enabled {
 		return nil, errUtils.ErrAIDisabledInConfiguration
 	}
 
-	// Get API key from environment using viper.
-	_ = viper.BindEnv(config.APIKeyEnv, config.APIKeyEnv)
-	apiKey := viper.GetString(config.APIKeyEnv)
+	// Get API key from environment using shared utility (replaces viper.BindEnv).
+	apiKey := base.GetAPIKey(config.APIKeyEnv)
 	if apiKey == "" {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrAIAPIKeyNotFound, config.APIKeyEnv)
+		return nil, errUtils.Build(errUtils.ErrAIAPIKeyNotFound).
+			WithContext("env_var", config.APIKeyEnv).
+			WithHint("Set the " + config.APIKeyEnv + " environment variable").
+			Err()
 	}
+
+	// Extract Anthropic-specific cache settings.
+	cache := extractCacheConfig(atmosConfig)
 
 	// Create Anthropic client.
 	client := anthropic.NewClient(
@@ -61,77 +75,54 @@ func NewSimpleClient(atmosConfig *schema.AtmosConfiguration) (*SimpleClient, err
 	return &SimpleClient{
 		client: &client,
 		config: config,
+		cache:  cache,
 	}, nil
 }
 
-// extractSimpleAIConfig extracts AI configuration from AtmosConfiguration.
-func extractSimpleAIConfig(atmosConfig *schema.AtmosConfiguration) *SimpleAIConfig {
-	// Set defaults.
-	config := &SimpleAIConfig{
-		Enabled:            false,
-		Model:              "claude-sonnet-4-20250514",
-		APIKeyEnv:          "ANTHROPIC_API_KEY",
-		MaxTokens:          DefaultMaxTokens,
-		CacheEnabled:       true, // Enable caching by default
-		CacheSystemPrompt:  true, // Cache system prompt by default
-		CacheProjectMemory: true, // Cache project memory by default
-	}
-
-	// Check if AI is enabled.
-	if atmosConfig.Settings.AI.Enabled {
-		config.Enabled = atmosConfig.Settings.AI.Enabled
+// extractCacheConfig extracts Anthropic-specific cache settings from AtmosConfiguration.
+func extractCacheConfig(atmosConfig *schema.AtmosConfiguration) *cacheConfig {
+	// Default: caching enabled.
+	cache := &cacheConfig{
+		enabled:            true,
+		cacheSystemPrompt:  true,
+		cacheProjectMemory: true,
 	}
 
 	// Get provider-specific configuration from Providers map.
 	if atmosConfig.Settings.AI.Providers != nil {
-		if providerConfig, exists := atmosConfig.Settings.AI.Providers["anthropic"]; exists && providerConfig != nil {
-			// Override defaults with provider-specific configuration.
-			if providerConfig.Model != "" {
-				config.Model = providerConfig.Model
-			}
-			if providerConfig.ApiKeyEnv != "" {
-				config.APIKeyEnv = providerConfig.ApiKeyEnv
-			}
-			if providerConfig.MaxTokens > 0 {
-				config.MaxTokens = providerConfig.MaxTokens
-			}
-
+		if providerConfig, exists := atmosConfig.Settings.AI.Providers[ProviderName]; exists && providerConfig != nil {
 			// Extract cache settings.
-			// Default behavior: caching enabled (all true)
+			// Default behavior: caching enabled (all true).
 			// User can explicitly disable by setting cache.enabled: false in config.
-
-			// Cache is a pointer, so we can distinguish:
-			// - nil: User didn't configure caching → use defaults (all true)
-			// - non-nil: User explicitly configured caching → process settings.
-
 			if providerConfig.Cache != nil {
 				// User explicitly configured cache settings.
 				if !providerConfig.Cache.Enabled {
 					// Explicitly disabled.
-					config.CacheEnabled = false
-					config.CacheSystemPrompt = false
-					config.CacheProjectMemory = false
+					cache.enabled = false
+					cache.cacheSystemPrompt = false
+					cache.cacheProjectMemory = false
 				} else {
 					// Explicitly enabled - use fine-grained settings.
-					config.CacheSystemPrompt = providerConfig.Cache.CacheSystemPrompt
-					config.CacheProjectMemory = providerConfig.Cache.CacheProjectMemory
+					cache.cacheSystemPrompt = providerConfig.Cache.CacheSystemPrompt
+					cache.cacheProjectMemory = providerConfig.Cache.CacheProjectMemory
 
 					// If no fine-grained settings provided, default both to true.
-					if !config.CacheSystemPrompt && !config.CacheProjectMemory {
-						config.CacheSystemPrompt = true
-						config.CacheProjectMemory = true
+					if !cache.cacheSystemPrompt && !cache.cacheProjectMemory {
+						cache.cacheSystemPrompt = true
+						cache.cacheProjectMemory = true
 					}
 				}
 			}
-			// If Cache is nil, keep defaults (all true).
 		}
 	}
 
-	return config
+	return cache
 }
 
 // SendMessage sends a message to the AI and returns the response.
 func (c *SimpleClient) SendMessage(ctx context.Context, message string) (string, error) {
+	defer perf.Track(nil, "anthropic.SimpleClient.SendMessage")()
+
 	response, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
 		Model:     anthropic.Model(c.config.Model),
 		MaxTokens: int64(c.config.MaxTokens),
@@ -140,7 +131,11 @@ func (c *SimpleClient) SendMessage(ctx context.Context, message string) (string,
 		},
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to send message: %w", err)
+		return "", errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			Err()
 	}
 
 	// Extract text from response (use indexing to avoid copying large structs).
@@ -156,6 +151,8 @@ func (c *SimpleClient) SendMessage(ctx context.Context, message string) (string,
 
 // SendMessageWithTools sends a message with available tools and handles tool calls.
 func (c *SimpleClient) SendMessageWithTools(ctx context.Context, message string, availableTools []tools.Tool) (*types.Response, error) {
+	defer perf.Track(nil, "anthropic.SimpleClient.SendMessageWithTools")()
+
 	// Convert our tools to Anthropic's format.
 	anthropicTools := convertToolsToAnthropicFormat(availableTools)
 
@@ -169,7 +166,12 @@ func (c *SimpleClient) SendMessageWithTools(ctx context.Context, message string,
 		Tools: anthropicTools,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to send message with tools: %w", err)
+		return nil, errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("tools_count", len(availableTools)).
+			Err()
 	}
 
 	// Parse response.
@@ -178,6 +180,8 @@ func (c *SimpleClient) SendMessageWithTools(ctx context.Context, message string,
 
 // SendMessageWithHistory sends messages with full conversation history.
 func (c *SimpleClient) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
+	defer perf.Track(nil, "anthropic.SimpleClient.SendMessageWithHistory")()
+
 	// Convert messages to Anthropic format.
 	anthropicMessages := convertMessagesToAnthropicFormat(messages)
 
@@ -187,7 +191,12 @@ func (c *SimpleClient) SendMessageWithHistory(ctx context.Context, messages []ty
 		Messages:  anthropicMessages,
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to send messages with history: %w", err)
+		return "", errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("messages_count", len(messages)).
+			Err()
 	}
 
 	// Extract text from response.
@@ -203,6 +212,8 @@ func (c *SimpleClient) SendMessageWithHistory(ctx context.Context, messages []ty
 
 // SendMessageWithToolsAndHistory sends messages with full conversation history and available tools.
 func (c *SimpleClient) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	defer perf.Track(nil, "anthropic.SimpleClient.SendMessageWithToolsAndHistory")()
+
 	// Convert messages to Anthropic format.
 	anthropicMessages := convertMessagesToAnthropicFormat(messages)
 
@@ -217,7 +228,13 @@ func (c *SimpleClient) SendMessageWithToolsAndHistory(ctx context.Context, messa
 		Tools:     anthropicTools,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to send messages with history and tools: %w", err)
+		return nil, errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("messages_count", len(messages)).
+			WithContext("tools_count", len(availableTools)).
+			Err()
 	}
 
 	// Parse response.
@@ -250,33 +267,22 @@ func convertToolsToAnthropicFormat(availableTools []tools.Tool) []anthropic.Tool
 	anthropicTools := make([]anthropic.ToolUnionParam, 0, len(availableTools))
 
 	for _, tool := range availableTools {
-		// Build input schema from parameters.
-		properties := make(map[string]interface{})
-		required := make([]string, 0)
-
-		for _, param := range tool.Parameters() {
-			properties[param.Name] = map[string]interface{}{
-				"type":        string(param.Type),
-				"description": param.Description,
-			}
-			if param.Required {
-				required = append(required, param.Name)
-			}
-		}
+		// Build input schema using shared utility.
+		info := base.ExtractToolInfo(tool)
 
 		// Create tool input schema.
 		// IMPORTANT: JSON Schema draft 2020-12 requires the "type" field.
 		inputSchema := anthropic.ToolInputSchemaParam{
 			Type:       "object",
-			Properties: properties,
-			Required:   required,
+			Properties: info.Properties,
+			Required:   info.Required,
 		}
 
 		// Create tool param with description.
 		// IMPORTANT: The description field is crucial for Claude to know WHEN to call the tool.
 		toolParam := anthropic.ToolParam{
-			Name:        tool.Name(),
-			Description: anthropic.String(tool.Description()),
+			Name:        info.Name,
+			Description: anthropic.String(info.Description),
 			InputSchema: inputSchema,
 		}
 
@@ -320,7 +326,11 @@ func parseAnthropicResponse(response *anthropic.Message) (*types.Response, error
 			if toolUse.Input != nil {
 				// Convert RawJSON to map.
 				if err := json.Unmarshal(toolUse.Input, &input); err != nil {
-					return nil, fmt.Errorf("failed to parse tool input: %w", err)
+					return nil, errUtils.Build(errUtils.ErrAIParseToolInput).
+						WithCause(err).
+						WithContext("provider", "anthropic").
+						WithContext("tool_id", toolUse.ID).
+						Err()
 				}
 			}
 
@@ -364,27 +374,11 @@ func (c *SimpleClient) buildSystemPrompt(systemPrompt string, enableCache bool) 
 	}
 
 	// Add cache control if enabled.
-	if c.config.CacheEnabled && enableCache {
+	if c.cache.enabled && enableCache {
 		textBlock.CacheControl = anthropic.NewCacheControlEphemeralParam()
 	}
 
 	return textBlock
-}
-
-// buildSystemPrompts builds multiple system prompt text blocks with cache control.
-// This is useful when you have both agent system prompt and project memory.
-func (c *SimpleClient) buildSystemPrompts(prompts []struct {
-	content string
-	cache   bool
-},
-) []anthropic.TextBlockParam {
-	result := make([]anthropic.TextBlockParam, 0, len(prompts))
-
-	for _, prompt := range prompts {
-		result = append(result, c.buildSystemPrompt(prompt.content, prompt.cache))
-	}
-
-	return result
 }
 
 // SendMessageWithSystemPromptAndTools sends messages with system prompt, conversation history, and available tools.
@@ -397,6 +391,8 @@ func (c *SimpleClient) SendMessageWithSystemPromptAndTools(
 	messages []types.Message,
 	availableTools []tools.Tool,
 ) (*types.Response, error) {
+	defer perf.Track(nil, "anthropic.SimpleClient.SendMessageWithSystemPromptAndTools")()
+
 	// Convert messages to Anthropic format.
 	anthropicMessages := convertMessagesToAnthropicFormat(messages)
 
@@ -408,12 +404,12 @@ func (c *SimpleClient) SendMessageWithSystemPromptAndTools(
 
 	// Add agent system prompt (cached if enabled).
 	if systemPrompt != "" {
-		systemPrompts = append(systemPrompts, c.buildSystemPrompt(systemPrompt, c.config.CacheSystemPrompt))
+		systemPrompts = append(systemPrompts, c.buildSystemPrompt(systemPrompt, c.cache.cacheSystemPrompt))
 	}
 
 	// Add ATMOS.md content (cached if enabled).
 	if atmosMemory != "" {
-		systemPrompts = append(systemPrompts, c.buildSystemPrompt(atmosMemory, c.config.CacheProjectMemory))
+		systemPrompts = append(systemPrompts, c.buildSystemPrompt(atmosMemory, c.cache.cacheProjectMemory))
 	}
 
 	// Build request params.
@@ -432,7 +428,13 @@ func (c *SimpleClient) SendMessageWithSystemPromptAndTools(
 	// Send message.
 	response, err := c.client.Messages.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send message with system prompt and tools: %w", err)
+		return nil, errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("messages_count", len(messages)).
+			WithContext("tools_count", len(availableTools)).
+			Err()
 	}
 
 	// Parse response.
