@@ -2,10 +2,10 @@
 slug: unified-task-runner
 title: "Unified Task Runner for Custom Commands"
 authors: [osterman]
-tags: [core]
+tags: [feature]
 ---
 
-Custom commands now support structured task syntax with per-step configuration including timeouts, retry logic, and working directories.
+Custom commands now support structured task syntax with per-step configuration including timeouts, retry logic, working directories, and authentication identities.
 
 <!--truncate-->
 
@@ -48,14 +48,42 @@ commands:
       - "echo Build complete!"
 ```
 
+**With retry for flaky operations:**
+```yaml
+commands:
+  - name: sync
+    steps:
+      - name: upload
+        command: aws s3 sync ./dist s3://mybucket
+        retry:
+          max_attempts: 3
+          initial_delay: 1s
+          max_delay: 30s
+```
+
+**Using atmos commands with identity:**
+```yaml
+commands:
+  - name: deploy-all
+    steps:
+      - name: deploy-vpc
+        command: terraform apply vpc
+        type: atmos
+        stack: prod-us-east-1
+        identity: production-deployer
+        timeout: 15m
+```
+
 ## Why This Matters
 
 This change lays the groundwork for unifying custom commands and workflows under a shared execution model. The new `Task` type supports:
 
 - **Timeouts** - Prevent runaway commands with per-step time limits
 - **Working directories** - Execute steps in specific directories
-- **Task types** - Support for both `shell` and `atmos` command types
-- **Retry configuration** - Built-in retry support for flaky operations
+- **Task types** - `shell` (default) for shell commands, `atmos` for atmos CLI commands with stack support
+- **Retry configuration** - Built-in retry support with configurable attempts and backoff delays
+- **Identity** - Per-step authentication identity for multi-account deployments
+- **Stack** - Specify which stack to use for `atmos` type commands
 
 ## For Contributors
 
@@ -67,3 +95,5 @@ The new `pkg/runner` package provides:
 - Full mapstructure decode hook support for Viper integration
 
 This is an internal architectural improvement with full backward compatibility for existing custom command configurations.
+
+For more details, see the [Custom Commands documentation](/cli/configuration/commands).
