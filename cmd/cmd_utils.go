@@ -29,6 +29,7 @@ import (
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -776,11 +777,47 @@ func executeCustomCommand(
 		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step.Command, data, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
-		// Execute the command step
-		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+		// Determine step type - default to shell if not specified.
+		stepType := strings.TrimSpace(step.Type)
+		if stepType == "" {
+			stepType = "shell"
+		}
 
-		// Pass the prepared environment with custom variables to the subprocess
-		err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+		// Execute the step based on type.
+		switch stepType {
+		case "shell":
+			// Execute shell command (backward compatible).
+			commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
+			err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+		case "atmos":
+			// Execute atmos command.
+			args := strings.Fields(commandToRun)
+			err = e.ExecuteShellCommand(atmosConfig, "atmos", args, workDir, env, false, "")
+		default:
+			// Check if this is an extended step type (input, confirm, choose, etc.).
+			if stepPkg.IsExtendedStepType(stepType) {
+				// Convert Task to WorkflowStep for handler compatibility.
+				workflowStep := step.ToWorkflowStep()
+				// Update command with template-resolved value.
+				workflowStep.Command = commandToRun
+
+				// Initialize step executor for custom commands (creates fresh Variables instance).
+				executor := stepPkg.NewStepExecutor()
+
+				// Add environment variables to the executor.
+				for _, envVar := range env {
+					parts := strings.SplitN(envVar, "=", 2)
+					if len(parts) == 2 {
+						executor.SetEnv(parts[0], parts[1])
+					}
+				}
+
+				// Execute the extended step.
+				_, err = executor.Execute(context.Background(), &workflowStep)
+			} else {
+				err = fmt.Errorf("%w: unsupported step type %q for custom command step %d", errUtils.ErrInvalidWorkflowStepType, stepType, i)
+			}
+		}
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }

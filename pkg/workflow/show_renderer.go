@@ -5,10 +5,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	"github.com/cloudposse/atmos/pkg/workflow/step"
 )
 
 // ShowRenderer handles rendering of show features for workflows.

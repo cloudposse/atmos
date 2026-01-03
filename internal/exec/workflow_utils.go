@@ -28,12 +28,12 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	workflowPkg "github.com/cloudposse/atmos/pkg/workflow"
-	stepPkg "github.com/cloudposse/atmos/pkg/workflow/step"
 )
 
 // Workflow error title for formatted output.
