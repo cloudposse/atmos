@@ -244,6 +244,26 @@ func TestGetTerraformBackend(t *testing.T) {
 			expectError:     false,
 		},
 		{
+			name: "named workspace with state data",
+			componentData: map[string]any{
+				"component":    "sample-component",
+				"workspace":    "staging",
+				"backend_type": "",
+			},
+			stateJSON: `{
+				"version": 4,
+				"terraform_version": "1.3.0",
+				"outputs": {
+					"value": {
+						"value": "staging-output",
+						"type": "string"
+					}
+				}
+			}`,
+			expectedOutputs: map[string]any{"value": "staging-output"},
+			expectError:     false,
+		},
+		{
 			name: "unsupported backend type",
 			componentData: map[string]any{
 				"component":    "sample-component",
@@ -256,16 +276,29 @@ func TestGetTerraformBackend(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a temp directory and write the test state file to simulate local backend
+			// Create a temp directory and write the test state file to simulate local backend.
 			tmpDir := t.TempDir()
 			componentDir := filepath.Join(tmpDir, "terraform", tt.componentData["component"].(string))
-			stateDir := filepath.Join(componentDir, "terraform.tfstate.d", tt.componentData["workspace"].(string))
 
 			if tt.stateJSON != "" {
-				err := os.MkdirAll(stateDir, 0o755)
+				err := os.MkdirAll(componentDir, 0o755)
 				assert.NoError(t, err)
 
-				err = os.WriteFile(filepath.Join(stateDir, "terraform.tfstate"), []byte(tt.stateJSON), 0o644)
+				// Determine state file path based on workspace.
+				// For default workspace: terraform.tfstate
+				// For named workspaces: terraform.tfstate.d/<workspace>/terraform.tfstate
+				workspace := tt.componentData["workspace"].(string)
+				var stateFilePath string
+				if workspace == "" || workspace == "default" {
+					stateFilePath = filepath.Join(componentDir, "terraform.tfstate")
+				} else {
+					stateDir := filepath.Join(componentDir, "terraform.tfstate.d", workspace)
+					err = os.MkdirAll(stateDir, 0o755)
+					assert.NoError(t, err)
+					stateFilePath = filepath.Join(stateDir, "terraform.tfstate")
+				}
+
+				err = os.WriteFile(stateFilePath, []byte(tt.stateJSON), 0o644)
 				assert.NoError(t, err)
 			}
 
