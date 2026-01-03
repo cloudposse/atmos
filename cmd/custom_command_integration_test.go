@@ -15,6 +15,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// stepsFromStrings is a helper to convert []string to schema.Tasks for tests.
+func stepsFromStrings(commands ...string) schema.Tasks {
+	tasks := make(schema.Tasks, len(commands))
+	for i, cmd := range commands {
+		tasks[i] = schema.Task{Command: cmd, Type: "shell"}
+	}
+	return tasks
+}
+
 // TestCustomCommandIntegration_MockProviderEnvironment tests that custom commands with mock provider
 // actually set the correct environment variables for subprocesses.
 func TestCustomCommandIntegration_MockProviderEnvironment(t *testing.T) {
@@ -51,7 +60,7 @@ func TestCustomCommandIntegration_MockProviderEnvironment(t *testing.T) {
 		Name:        "test-env-capture",
 		Description: "Capture environment variables",
 		Identity:    "mock-identity",
-		Steps:       []string{dumpEnvCmd},
+		Steps:       stepsFromStrings(dumpEnvCmd),
 	}
 
 	// Add the test command to the config.
@@ -122,7 +131,7 @@ func TestCustomCommandIntegration_IdentityFlagOverride(t *testing.T) {
 		Name:        "test-identity-override",
 		Description: "Test identity override with flag",
 		Identity:    "mock-identity", // This should be overridden by --identity flag
-		Steps:       []string{dumpEnvCmd},
+		Steps:       stepsFromStrings(dumpEnvCmd),
 	}
 
 	// Add the test command to the config.
@@ -198,10 +207,7 @@ func TestCustomCommandIntegration_MultipleSteps(t *testing.T) {
 		Name:        "test-multi-step",
 		Description: "Test multiple steps share identity",
 		Identity:    "mock-identity-2",
-		Steps: []string{
-			getDumpCmd(envOutput1),
-			getDumpCmd(envOutput2),
-		},
+		Steps:       stepsFromStrings(getDumpCmd(envOutput1), getDumpCmd(envOutput2)),
 	}
 
 	// Add the test command to the config.
@@ -306,9 +312,9 @@ func TestCustomCommandIntegration_BooleanFlagDefaults(t *testing.T) {
 				// No default - should default to false.
 			},
 		},
-		Steps: []string{
+		Steps: stepsFromStrings(
 			"echo verbose={{ .Flags.verbose }} force={{ .Flags.force }} dry-run={{ index .Flags \"dry-run\" }} > " + outputFile,
-		},
+		),
 	}
 
 	// Add the test command to the config.
@@ -384,15 +390,15 @@ func TestCustomCommandIntegration_BooleanFlagTemplatePatterns(t *testing.T) {
 				Default: true,
 			},
 		},
-		Steps: []string{
+		Steps: stepsFromStrings(
 			// Test multiple patterns in a single step that writes to file.
-			`echo "PATTERN1={{ if .Flags.verbose }}VERBOSE_ON{{ end }}" >> ` + outputFile,
-			`echo "PATTERN2=Building{{ if .Flags.verbose }} with verbose{{ end }}" >> ` + outputFile,
-			`echo "PATTERN3={{ if .Flags.clean }}CLEAN_ON{{ else }}CLEAN_OFF{{ end }}" >> ` + outputFile,
-			`echo "PATTERN4={{ if not .Flags.verbose }}QUIET_MODE{{ end }}" >> ` + outputFile,
-			`echo "PATTERN5=verbose={{ .Flags.verbose }}" >> ` + outputFile,
-			`echo "PATTERN6=clean={{ printf "%t" .Flags.clean }}" >> ` + outputFile,
-		},
+			`echo "PATTERN1={{ if .Flags.verbose }}VERBOSE_ON{{ end }}" >> `+outputFile,
+			`echo "PATTERN2=Building{{ if .Flags.verbose }} with verbose{{ end }}" >> `+outputFile,
+			`echo "PATTERN3={{ if .Flags.clean }}CLEAN_ON{{ else }}CLEAN_OFF{{ end }}" >> `+outputFile,
+			`echo "PATTERN4={{ if not .Flags.verbose }}QUIET_MODE{{ end }}" >> `+outputFile,
+			`echo "PATTERN5=verbose={{ .Flags.verbose }}" >> `+outputFile,
+			`echo "PATTERN6=clean={{ printf "%t" .Flags.clean }}" >> `+outputFile,
+		),
 	}
 
 	// Add the test command to the config.
@@ -518,9 +524,9 @@ func TestCustomCommandIntegration_StringFlagDefaults(t *testing.T) {
 				Default: "json",
 			},
 		},
-		Steps: []string{
+		Steps: stepsFromStrings(
 			"echo environment={{ .Flags.environment }} region={{ .Flags.region }} format={{ .Flags.format }}",
-		},
+		),
 	}
 
 	// Add the test command to the config.
@@ -590,7 +596,7 @@ func TestCustomCommandIntegration_NoIdentity(t *testing.T) {
 		Name:        "test-no-identity",
 		Description: "Test command without identity",
 		// No Identity field
-		Steps: []string{dumpEnvCmd},
+		Steps: stepsFromStrings(dumpEnvCmd),
 	}
 
 	// Add the test command to the config.

@@ -46,7 +46,8 @@ commands:
       component: ""
       stack: ""
     steps:
-      - atmos describe config
+      - command: atmos describe config
+        type: shell
     commands: []
     verbose: false
 settings:
