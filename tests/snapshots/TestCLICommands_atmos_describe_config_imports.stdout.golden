@@ -77,7 +77,8 @@ commands:
           component: ""
           stack: ""
         steps:
-          - atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
+          - command: atmos terraform plan {{ .Arguments.component }} -s {{ .Flags.stack }}
+            type: shell
         commands: []
         verbose: false
     verbose: false
@@ -117,8 +118,10 @@ commands:
           component: ""
           stack: ""
         steps:
-          - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
-          - atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
+          - command: atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
+            type: shell
+          - command: atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
+            type: shell
         commands: []
         verbose: false
     verbose: false
@@ -170,20 +173,34 @@ commands:
           component: '{{ .Arguments.component }}'
           stack: '{{ .Flags.stack }}'
         steps:
-          - 'echo Atmos component from argument: "{{ .Arguments.component }}"'
-          - 'echo ATMOS_COMPONENT: "$ATMOS_COMPONENT"'
-          - 'echo Atmos stack: "{{ .Flags.stack }}"'
-          - 'echo Terraform component: "{{ .ComponentConfig.component }}"'
-          - 'echo Backend S3 bucket: "{{ .ComponentConfig.backend.bucket }}"'
-          - 'echo Terraform workspace: "{{ .ComponentConfig.workspace }}"'
-          - 'echo Namespace: "{{ .ComponentConfig.vars.namespace }}"'
-          - 'echo Tenant: "{{ .ComponentConfig.vars.tenant }}"'
-          - 'echo Environment: "{{ .ComponentConfig.vars.environment }}"'
-          - 'echo Stage: "{{ .ComponentConfig.vars.stage }}"'
-          - 'echo settings.spacelift.workspace_enabled: "{{ .ComponentConfig.settings.spacelift.workspace_enabled }}"'
-          - 'echo Dependencies: "{{ .ComponentConfig.deps }}"'
-          - 'echo settings.config.is_prod: "{{ .ComponentConfig.settings.config.is_prod }}"'
-          - 'echo ATMOS_IS_PROD: "$ATMOS_IS_PROD"'
+          - command: 'echo Atmos component from argument: "{{ .Arguments.component }}"'
+            type: shell
+          - command: 'echo ATMOS_COMPONENT: "$ATMOS_COMPONENT"'
+            type: shell
+          - command: 'echo Atmos stack: "{{ .Flags.stack }}"'
+            type: shell
+          - command: 'echo Terraform component: "{{ .ComponentConfig.component }}"'
+            type: shell
+          - command: 'echo Backend S3 bucket: "{{ .ComponentConfig.backend.bucket }}"'
+            type: shell
+          - command: 'echo Terraform workspace: "{{ .ComponentConfig.workspace }}"'
+            type: shell
+          - command: 'echo Namespace: "{{ .ComponentConfig.vars.namespace }}"'
+            type: shell
+          - command: 'echo Tenant: "{{ .ComponentConfig.vars.tenant }}"'
+            type: shell
+          - command: 'echo Environment: "{{ .ComponentConfig.vars.environment }}"'
+            type: shell
+          - command: 'echo Stage: "{{ .ComponentConfig.vars.stage }}"'
+            type: shell
+          - command: 'echo settings.spacelift.workspace_enabled: "{{ .ComponentConfig.settings.spacelift.workspace_enabled }}"'
+            type: shell
+          - command: 'echo Dependencies: "{{ .ComponentConfig.deps }}"'
+            type: shell
+          - command: 'echo settings.config.is_prod: "{{ .ComponentConfig.settings.config.is_prod }}"'
+            type: shell
+          - command: 'echo ATMOS_IS_PROD: "$ATMOS_IS_PROD"'
+            type: shell
         commands: []
         verbose: false
     verbose: false
@@ -196,7 +213,8 @@ commands:
       component: ""
       stack: ""
     steps:
-      - atmos describe config
+      - command: atmos describe config
+        type: shell
     commands: []
     verbose: false
 integrations:
