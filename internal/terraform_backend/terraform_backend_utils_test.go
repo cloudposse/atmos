@@ -244,6 +244,26 @@ func TestGetTerraformBackend(t *testing.T) {
 			expectError:     false,
 		},
 		{
+			name: "named workspace with state data",
+			componentData: map[string]any{
+				"component":    "sample-component",
+				"workspace":    "staging",
+				"backend_type": "",
+			},
+			stateJSON: `{
+				"version": 4,
+				"terraform_version": "1.3.0",
+				"outputs": {
+					"value": {
+						"value": "staging-output",
+						"type": "string"
+					}
+				}
+			}`,
+			expectedOutputs: map[string]any{"value": "staging-output"},
+			expectError:     false,
+		},
+		{
 			name: "unsupported backend type",
 			componentData: map[string]any{
 				"component":    "sample-component",
