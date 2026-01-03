@@ -101,6 +101,20 @@ These environment variables configure Atmos behavior and can override settings i
     - **YAML Path:** `components.terraform.auto_generate_backend_file`
   </dd>
 
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE`</dt>
+  <dd>
+    If set to `true`, enable Terraform provider plugin caching.
+
+    - **YAML Path:** `components.terraform.plugin_cache`
+  </dd>
+
+  <dt>`ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR`</dt>
+  <dd>
+    Custom directory for Terraform provider plugin cache. If not set, uses the XDG cache directory.
+
+    - **YAML Path:** `components.terraform.plugin_cache_dir`
+  </dd>
+
   <dt>`ATMOS_COMPONENTS_HELMFILE_COMMAND`</dt>
   <dd>
     The executable to be called by `atmos` when running Helmfile commands.

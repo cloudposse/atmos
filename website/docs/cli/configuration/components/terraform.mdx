@@ -50,6 +50,10 @@ components:
     plan:
       skip_planfile: false
 
+    # Provider plugin caching (enabled by default)
+    plugin_cache: true
+    plugin_cache_dir: ""  # Uses ~/.cache/atmos/terraform/plugins by default
+
     # Interactive shell configuration
     shell:
       prompt: "Terraform Shell"
@@ -132,6 +136,26 @@ components:
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_PLAN_SKIP_PLANFILE`
     **Command-line flag:** `--skip-planfile`
     **Default:** `false`
+  </dd>
+
+  <dt>`plugin_cache`</dt>
+  <dd>
+    When `true`, Atmos enables Terraform provider plugin caching by automatically setting `TF_PLUGIN_CACHE_DIR`. This improves performance by reusing downloaded providers across components, reducing init times and network bandwidth.
+
+    When caching is enabled, Atmos also sets `TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true` as required by Terraform.
+
+    If `TF_PLUGIN_CACHE_DIR` is already set in your environment or via the global `env:` section in `atmos.yaml`, Atmos does not override it—you manage your own cache.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE`
+    **Default:** `true`
+  </dd>
+
+  <dt>`plugin_cache_dir`</dt>
+  <dd>
+    Custom directory path for the Terraform plugin cache. If empty (default), Atmos uses the XDG cache directory: `~/.cache/atmos/terraform/plugins`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR`
+    **Default:** `""` (uses XDG cache directory)
   </dd>
 
   <dt>`shell.prompt`</dt>
