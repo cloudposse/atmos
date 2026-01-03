@@ -14,9 +14,10 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.3
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.6.0
 	github.com/HdrHistogram/hdrhistogram-go v1.2.0
+	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/adrg/xdg v0.5.3
-	github.com/agiledragon/gomonkey/v2 v2.13.0
+	github.com/agiledragon/gomonkey/v2 v2.14.0
 	github.com/alecthomas/chroma/v2 v2.21.1
 	github.com/alicebob/miniredis/v2 v2.35.0
 	github.com/arsham/figurine v1.3.0
@@ -24,8 +25,9 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.41.0
 	github.com/aws/aws-sdk-go-v2/config v1.32.6
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.6
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.17
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.94.0
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.18
+	github.com/aws/aws-sdk-go-v2/service/ecr v1.55.0
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.95.0
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.67.7
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.8
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.12
@@ -46,6 +48,7 @@ require (
 	github.com/editorconfig-checker/editorconfig-checker/v3 v3.6.0
 	github.com/elewis787/boa v0.1.3
 	github.com/fatih/color v1.18.0
+	github.com/gabriel-vasile/mimetype v1.4.12
 	github.com/getsentry/sentry-go v0.40.0
 	github.com/go-git/go-git/v5 v5.16.4
 	github.com/go-viper/mapstructure/v2 v2.4.0
@@ -60,7 +63,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.16.0
 	github.com/hairyhenderson/gomplate/v3 v3.11.8
 	github.com/hairyhenderson/gomplate/v4 v4.3.3
-	github.com/hashicorp/go-getter v1.8.3
+	github.com/hashicorp/go-getter v1.8.4
 	github.com/hashicorp/go-version v1.8.0
 	github.com/hashicorp/hcl v1.0.1-vault-7
 	github.com/hashicorp/hcl/v2 v2.24.0
@@ -84,7 +87,7 @@ require (
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/otiai10/copy v1.14.1
 	github.com/pkg/errors v0.9.1
-	github.com/posthog/posthog-go v1.6.13
+	github.com/posthog/posthog-go v1.8.2
 	github.com/redis/go-redis/v9 v9.12.1
 	github.com/samber/lo v1.52.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
@@ -104,7 +107,7 @@ require (
 	golang.org/x/term v0.38.0
 	golang.org/x/text v0.32.0
 	google.golang.org/api v0.258.0
-	google.golang.org/grpc v1.77.0
+	google.golang.org/grpc v1.78.0
 	gopkg.in/ini.v1 v1.67.0
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	gopkg.in/yaml.v2 v2.4.0
@@ -135,7 +138,6 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.54.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.54.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
-	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.1.6 // indirect
 	github.com/PuerkitoBio/goquery v1.9.2 // indirect
@@ -219,7 +221,6 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/forPelevin/gomoji v1.3.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
-	github.com/gabriel-vasile/mimetype v1.4.11 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.6.2 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
@@ -251,7 +252,7 @@ require (
 	github.com/hairyhenderson/toml v0.4.2-0.20210923231440-40456b8e66cf // indirect
 	github.com/hairyhenderson/xignore v0.3.3-0.20230403012150-95fe86932830 // indirect
 	github.com/hairyhenderson/yaml v0.0.0-20220618171115-2d35fca545ce // indirect
-	github.com/hashicorp/aws-sdk-go-base/v2 v2.0.0-beta.65 // indirect
+	github.com/hashicorp/aws-sdk-go-base/v2 v2.0.0-beta.70 // indirect
 	github.com/hashicorp/consul/api v1.32.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
@@ -290,7 +291,7 @@ require (
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/kevinburke/ssh_config v1.2.0 // indirect
-	github.com/klauspost/compress v1.18.1 // indirect
+	github.com/klauspost/compress v1.18.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
@@ -380,11 +381,11 @@ require (
 	go.opentelemetry.io/contrib/detectors/gcp v1.38.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.63.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0 // indirect
-	go.opentelemetry.io/otel v1.38.0 // indirect
-	go.opentelemetry.io/otel/metric v1.38.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.38.0 // indirect
-	go.opentelemetry.io/otel/sdk/metric v1.38.0 // indirect
-	go.opentelemetry.io/otel/trace v1.38.0 // indirect
+	go.opentelemetry.io/otel v1.39.0 // indirect
+	go.opentelemetry.io/otel/metric v1.39.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.39.0 // indirect
+	go.opentelemetry.io/otel/sdk/metric v1.39.0 // indirect
+	go.opentelemetry.io/otel/trace v1.39.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.3 // indirect
