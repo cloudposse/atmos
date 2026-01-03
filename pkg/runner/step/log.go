@@ -2,6 +2,7 @@ package step
 
 import (
 	"context"
+	"math"
 	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -65,7 +66,13 @@ func (h *LogHandler) buildKeyvals(step *schema.WorkflowStep, vars *Variables) []
 		return nil
 	}
 
-	keyvals := make([]interface{}, 0, len(step.Fields)*2)
+	// Guard against integer overflow when computing capacity.
+	fieldsLen := len(step.Fields)
+	capacity := fieldsLen
+	if fieldsLen <= math.MaxInt/2 {
+		capacity = fieldsLen * 2
+	}
+	keyvals := make([]interface{}, 0, capacity)
 	for key, value := range step.Fields {
 		// Resolve template variables in field values.
 		resolvedValue, err := vars.Resolve(value)
