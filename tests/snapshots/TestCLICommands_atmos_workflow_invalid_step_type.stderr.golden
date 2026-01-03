@@ -9,5 +9,3 @@
 
 💡 Each step must specify a valid type: 'atmos', 'shell', or an interactive type
 like 'input', 'confirm', 'choose'
-
-

@@ -15,9 +15,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	stepPkg "github.com/cloudposse/atmos/pkg/workflow/step"
 )
 
 // workflowErrorTitle is the standard title for workflow errors.
