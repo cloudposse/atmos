@@ -1,7 +1,5 @@
-
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-Executing command: `atmos terraform plan mock -s idontexist`
-
+ℹ Executing command: atmos terraform plan mock -s idontexist
 # Error
 
 **Error:** invalid component
@@ -11,25 +9,17 @@ Executing command: `atmos terraform plan mock -s idontexist`
 Could not find the component mock in the stack idontexist. Check that all the
 context variables are correctly defined in the stack manifests. Are the
 component and stack names correct? Did you forget an import?
-
-
-
 # Workflow Error
 
-**Error:** workflow step execution failed: subcommand exited with code 1
-
-## Explanation
-
-The following command failed to execute:
-
- atmos terraform plan mock -s idontexist
+**Error:** workflow step execution failed: max attempts (1) exceeded, last
+error: subcommand exited with code 1
 
 ## Hints
 
+💡 The following command failed to execute:
+
+ atmos terraform plan mock -s idontexist
+
 💡 To resume the workflow from this step, run:
 
- atmos workflow fail -f Users/andriyknysh/Documents/Projects/Go/src/github.
-com/cloudposse/atmos/tests/fixtures/scenarios/workflows/stacks/workflows/test --
-from-step step1
-
-
+ atmos workflow fail -f test --from-step 'step1'

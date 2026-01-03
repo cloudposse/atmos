@@ -10,11 +10,20 @@ const (
 	// Use with fmt.Errorf to wrap a sentinel error with an underlying error:
 	//   fmt.Errorf(ErrWrapFormat, errUtils.ErrSentinel, underlyingErr)
 	ErrWrapFormat = "%w: %w"
+	// ErrWrapWithNameFormat is the format string for wrapping errors with a name context.
+	// Use with fmt.Errorf to wrap a sentinel error with a name:
+	//   fmt.Errorf(ErrWrapWithNameFormat, errUtils.ErrSentinel, name)
+	ErrWrapWithNameFormat = "%w: %s"
+	// ErrWrapWithNameAndCauseFormat is the format string for wrapping errors with a name and cause.
+	// Use with fmt.Errorf to wrap a sentinel error with a name and underlying error:
+	//   fmt.Errorf(ErrWrapWithNameAndCauseFormat, errUtils.ErrSentinel, name, underlyingErr)
+	ErrWrapWithNameAndCauseFormat = "%w '%s': %w"
 )
 
 var (
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrDownloadFile                          = errors.New("failed to download file")
+	ErrInvalidClientMode                     = errors.New("invalid client mode for operation")
 	ErrParseFile                             = errors.New("failed to parse file")
 	ErrParseURL                              = errors.New("failed to parse URL")
 	ErrInvalidURL                            = errors.New("invalid URL")
@@ -107,9 +116,9 @@ var (
 	ErrTerraformBackendAPIError  = errors.New("terraform backend API error")
 	ErrUnsupportedBackendType    = errors.New("unsupported backend type")
 	ErrProcessTerraformStateFile = errors.New("error processing terraform state file")
-	ErrLoadAWSConfig             = errors.New("failed to load AWS config")
 	ErrGetObjectFromS3           = errors.New("failed to get object from S3")
 	ErrReadS3ObjectBody          = errors.New("failed to read S3 object body")
+	ErrS3BucketAccessDenied      = errors.New("access denied to S3 bucket")
 	ErrCreateGCSClient           = errors.New("failed to create GCS client")
 	ErrGetObjectFromGCS          = errors.New("failed to get object from GCS")
 	ErrReadGCSObjectBody         = errors.New("failed to read GCS object body")
@@ -154,6 +163,7 @@ var (
 	ErrFailedToGetLocalRepo = errors.New("failed to get local repository")
 	ErrFailedToGetRepoInfo  = errors.New("failed to get repository info")
 	ErrLocalRepoFetch       = errors.New("local repo unavailable")
+	ErrGitRefNotFound       = errors.New("git reference not found on local filesystem")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")
@@ -175,6 +185,31 @@ var (
 
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
+
+	// Dependency management errors.
+	ErrDependencyConstraint = errors.New("dependency constraint validation failed")
+	ErrDependencyResolution = errors.New("dependency resolution failed")
+	ErrToolInstall          = errors.New("tool installation failed")
+
+	// Toolchain errors.
+	ErrToolNotFound                 = errors.New("tool not found")
+	ErrInvalidToolSpec              = errors.New("invalid tool specification")
+	ErrToolAlreadyInstalled         = errors.New("tool already installed")
+	ErrDownloadFailed               = errors.New("download failed")
+	ErrExtractionFailed             = errors.New("extraction failed")
+	ErrChecksumMismatch             = errors.New("checksum mismatch")
+	ErrNoVersionsInstalled          = errors.New("no versions installed")
+	ErrLatestFileNotFound           = errors.New("latest version file not found")
+	ErrRegistryNotReachable         = errors.New("registry not reachable")
+	ErrToolNotInRegistry            = errors.New("tool not in registry")
+	ErrAliasNotFound                = errors.New("alias not found")
+	ErrBinaryNotExecutable          = errors.New("binary not executable")
+	ErrBinaryNotFound               = errors.New("binary not found")
+	ErrLockfileVersionMismatch      = errors.New("lockfile version mismatch")
+	ErrNoAssetTemplate              = errors.New("no asset template defined")
+	ErrAssetTemplateInvalid         = errors.New("asset template invalid")
+	ErrToolVersionsFileOperation    = errors.New("tool-versions file operation failed")
+	ErrUnsupportedVersionConstraint = errors.New("unsupported version constraint format")
 
 	// Flag validation errors.
 	ErrCompatibilityFlagMissingTarget = errors.New("compatibility flag references non-existent flag")
@@ -220,6 +255,7 @@ var (
 	ErrRequiredFlagNotProvided                    = errors.New("required flag not provided")
 	ErrRequiredFlagEmpty                          = errors.New("required flag cannot be empty")
 	ErrInvalidArguments                           = errors.New("invalid arguments")
+	ErrUnknownSubcommand                          = errors.New("unknown subcommand")
 	ErrInvalidComponent                           = errors.New("invalid component")
 	ErrInvalidComponentMapType                    = errors.New("invalid component map type")
 	ErrAbstractComponentCantBeProvisioned         = errors.New("abstract component cannot be provisioned")
@@ -232,12 +268,15 @@ var (
 	ErrInvalidTerraformComponent        = errors.New("invalid Terraform component")
 	ErrNoTty                            = errors.New("no TTY attached")
 	ErrNoSuitableShell                  = errors.New("no suitable shell found")
-	ErrFailedToLoadTerraformModule      = errors.New("failed to load terraform module")
+	ErrFailedToLoadTerraformComponent   = errors.New("failed to load terraform component")
 	ErrNoJSONOutput                     = errors.New("no JSON output found in terraform show output")
 	ErrOriginalPlanFileRequired         = errors.New("original plan file is required")
 	ErrOriginalPlanFileNotExist         = errors.New("original plan file does not exist")
 	ErrNewPlanFileNotExist              = errors.New("new plan file does not exist")
 	ErrTerraformGenerateBackendArgument = errors.New("invalid arguments")
+	ErrFileTemplateRequired             = errors.New("file-template is required")
+	ErrInteractiveNotAvailable          = errors.New("interactive confirmation not available in non-TTY environment")
+	ErrDeprecatedCmdNotCallable         = errors.New("deprecated command should not be called")
 
 	ErrMissingPackerTemplate = errors.New("packer template is required")
 	ErrMissingPackerManifest = errors.New("packer manifest is missing")
@@ -264,12 +303,15 @@ var (
 	ErrInvalidComponentProviders              = errors.New("invalid component providers section")
 	ErrInvalidComponentHooks                  = errors.New("invalid component hooks section")
 	ErrInvalidComponentAuth                   = errors.New("invalid component auth section")
+	ErrInvalidComponentProvision              = errors.New("invalid component provision section")
 	ErrInvalidComponentMetadata               = errors.New("invalid component metadata section")
+	ErrInvalidComponentDependencies           = errors.New("invalid component dependencies section")
 	ErrInvalidComponentBackendType            = errors.New("invalid component backend_type attribute")
 	ErrInvalidComponentBackend                = errors.New("invalid component backend section")
 	ErrInvalidComponentRemoteStateBackendType = errors.New("invalid component remote_state_backend_type attribute")
 	ErrInvalidComponentRemoteStateBackend     = errors.New("invalid component remote_state_backend section")
 	ErrInvalidComponentCommand                = errors.New("invalid component command attribute")
+	ErrInvalidComponentSource                 = errors.New("invalid component source section")
 	ErrInvalidComponentOverrides              = errors.New("invalid component overrides section")
 	ErrInvalidComponentOverridesVars          = errors.New("invalid component overrides vars section")
 	ErrInvalidComponentOverridesSettings      = errors.New("invalid component overrides settings section")
@@ -357,9 +399,13 @@ var (
 	ErrInvalidTerraformEnv                = errors.New("invalid terraform env section")
 	ErrInvalidTerraformProviders          = errors.New("invalid terraform providers section")
 	ErrInvalidTerraformBackendType        = errors.New("invalid terraform backend_type")
+	ErrMissingTerraformBackendType        = errors.New("'backend_type' is missing for the component")
+	ErrMissingTerraformBackendConfig      = errors.New("'backend' config is missing for the component")
+	ErrMissingTerraformWorkspaceKeyPrefix = errors.New("backend config is missing 'workspace_key_prefix'")
 	ErrInvalidTerraformRemoteStateType    = errors.New("invalid terraform remote_state_backend_type")
 	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
 	ErrInvalidTerraformAuth               = errors.New("invalid terraform auth section")
+	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
 
 	// Helmfile-specific subsection errors.
 	ErrInvalidHelmfileCommand  = errors.New("invalid helmfile command")
@@ -437,6 +483,9 @@ var (
 	ErrWorkflowNoWorkflow            = errors.New("no workflow found")
 	ErrWorkflowFileNotFound          = errors.New("workflow file not found")
 	ErrInvalidWorkflowManifest       = errors.New("invalid workflow manifest")
+	ErrWorkingDirNotFound            = errors.New("working directory does not exist")
+	ErrWorkingDirNotDirectory        = errors.New("working directory path is not a directory")
+	ErrWorkingDirAccessFailed        = errors.New("failed to access working directory")
 	ErrAuthProviderNotAvailable      = errors.New("auth provider is not available")
 	ErrInvalidComponentArgument      = errors.New("invalid arguments. The command requires one argument 'componentName'")
 	ErrValidation                    = errors.New("validation failed")
@@ -474,6 +523,7 @@ var (
 	ErrSetPermissions      = errors.New("failed to set permissions")
 	ErrReadDirectory       = errors.New("failed to read directory")
 	ErrComputeRelativePath = errors.New("failed to compute relative path")
+	ErrFileOperation       = errors.New("file operation failed")
 
 	// OCI/Container image errors.
 	ErrCreateTempDirectory   = ErrCreateTempDir // Alias to avoid duplicate sentinels
@@ -545,6 +595,10 @@ var (
 	ErrSSOProvisioningFailed  = errors.New("aws sso identity provisioning failed")
 	ErrSSOInvalidToken        = errors.New("invalid aws sso token")
 
+	// Credential errors.
+	ErrCredentialsInvalid = errors.New("credentials are invalid or have been revoked")
+	ErrInvalidDuration    = errors.New("invalid duration format")
+
 	// Auth manager and identity/provider resolution errors (centralized sentinels).
 	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")
 	ErrNoCredentialsFound            = errors.New("no credentials found for identity")
@@ -560,7 +614,10 @@ var (
 	ErrNoDefaultIdentity             = errors.New("no default identity configured for authentication")
 	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
 	ErrNoIdentitiesAvailable         = errors.New("no identities available")
+	ErrNoProvidersAvailable          = errors.New("no providers available")
+	ErrNoDefaultProvider             = errors.New("no default provider configured and multiple providers exist")
 	ErrIdentitySelectionRequiresTTY  = fmt.Errorf("interactive identity selection: %w", ErrTTYRequired)
+	ErrProviderSelectionRequiresTTY  = fmt.Errorf("interactive provider selection: %w", ErrTTYRequired)
 	ErrAuthenticationChainNotBuilt   = errors.New("authentication chain not built")
 	ErrInvalidStackConfig            = errors.New("invalid stack config")
 	ErrNoCommandSpecified            = errors.New("no command specified")
@@ -615,6 +672,28 @@ var (
 	ErrProviderNotInConfig                  = errors.New("provider not found in configuration")
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
 
+	// Backend provisioning errors.
+	ErrBucketRequired       = errors.New("backend.bucket is required")
+	ErrRegionRequired       = errors.New("backend.region is required")
+	ErrBackendNotFound      = errors.New("backend configuration not found")
+	ErrCreateNotImplemented = errors.New("create not implemented for backend type")
+	ErrDeleteNotImplemented = errors.New("delete not implemented for backend type")
+	ErrProvisionerFailed    = errors.New("provisioner failed")
+	ErrLoadAWSConfig        = errors.New("failed to load AWS config")
+	ErrCheckBucketExist     = errors.New("failed to check bucket existence")
+	ErrCreateBucket         = errors.New("failed to create bucket")
+	ErrApplyBucketDefaults  = errors.New("failed to apply bucket defaults")
+	ErrEnableVersioning     = errors.New("failed to enable versioning")
+	ErrEnableEncryption     = errors.New("failed to enable encryption")
+	ErrBlockPublicAccess    = errors.New("failed to block public access")
+	ErrApplyTags            = errors.New("failed to apply tags")
+	ErrForceRequired        = errors.New("--force flag required for backend deletion")
+	ErrBucketNotEmpty       = errors.New("bucket contains objects and cannot be deleted")
+	ErrStateFilesExist      = errors.New("bucket contains terraform state files")
+	ErrDeleteObjects        = errors.New("failed to delete objects from bucket")
+	ErrDeleteBucket         = errors.New("failed to delete bucket")
+	ErrListObjects          = errors.New("failed to list bucket objects")
+
 	// Component path resolution errors.
 	ErrPathNotInComponentDir  = errors.New("path is not within Atmos component directories")
 	ErrComponentTypeMismatch  = errors.New("path component type does not match command")
@@ -622,6 +701,56 @@ var (
 	ErrPathResolutionFailed   = errors.New("failed to resolve component from path")
 	ErrPathIsComponentBase    = errors.New("must specify a component directory, not the base directory")
 	ErrAmbiguousComponentPath = errors.New("ambiguous component path")
+
+	// Interactive prompt errors.
+	ErrInteractiveModeNotAvailable = errors.New("interactive mode not available")
+	ErrNoOptionsAvailable          = errors.New("no options available")
+
+	// Locals-related errors.
+	ErrLocalsInvalidType       = errors.New("locals must be a map")
+	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
+	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
+	ErrLocalsResolution        = errors.New("failed to resolve local")
+
+	// Source provisioner errors.
+	ErrSourceProvision       = errors.New("source provisioning failed")
+	ErrSourceNotFound        = errors.New("source not found")
+	ErrSourceAccessDenied    = errors.New("source access denied")
+	ErrSourceInvalidSpec     = errors.New("invalid source specification")
+	ErrSourceAlreadyVendored = errors.New("source already vendored")
+	ErrSourceCacheOperation  = errors.New("source cache operation failed")
+	ErrSourceCopyFailed      = errors.New("failed to copy source files")
+	ErrSourceMissing         = errors.New("source not configured for component")
+
+	// Workdir provisioner errors.
+	ErrSourceDownload   = errors.New("failed to download component source")
+	ErrSourceCacheRead  = errors.New("failed to read source cache")
+	ErrSourceCacheWrite = errors.New("failed to write source cache")
+	ErrInvalidSource    = errors.New("invalid source configuration")
+	ErrWorkdirCreation  = errors.New("failed to create working directory")
+	ErrWorkdirSync      = errors.New("failed to sync files to working directory")
+	ErrWorkdirMetadata  = errors.New("failed to read/write workdir metadata")
+	ErrWorkdirProvision = errors.New("workdir provisioning failed")
+	ErrWorkdirClean     = errors.New("failed to clean working directory")
+
+	// Integration errors.
+	ErrIntegrationNotFound    = errors.New("integration not found")
+	ErrUnknownIntegrationKind = errors.New("unknown integration kind")
+	ErrIntegrationFailed      = errors.New("integration execution failed")
+	ErrNoLinkedIntegrations   = errors.New("identity has no linked integrations")
+
+	// ECR authentication errors.
+	ErrECRAuthFailed       = errors.New("ECR authentication failed")
+	ErrECRTokenExpired     = errors.New("ECR authorization token expired")
+	ErrECRRegistryNotFound = errors.New("ECR registry not found")
+	ErrECRInvalidRegistry  = errors.New("invalid ECR registry URL")
+	ErrECRLoginNoArgs      = errors.New("specify an integration name, --identity, or --registry")
+	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
+	ErrDockerConfigRead    = errors.New("failed to read Docker config")
+
+	// Identity authentication errors.
+	ErrIdentityAuthFailed      = errors.New("failed to authenticate identity")
+	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
 
 	// AI-related errors.
 	ErrAINotEnabled                 = errors.New("AI features are not enabled")

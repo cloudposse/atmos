@@ -1,8 +1,8 @@
 
 👽 test linux/amd64
 
-Atmos is a universal tool for DevOps and cloud automation used for provisioning,
-managing and orchestrating workflows across various toolchains                  
+Atmos is a framework for orchestrating and operating infrastructure workflows
+across multiple cloud and DevOps toolchains.
 
 USAGE
 
@@ -27,6 +27,7 @@ AVAILABLE COMMANDS
       describe [command]      Show details about Atmos configurations and components
       devcontainer [command]  Manage development containers
       docs [command]          Open Atmos documentation or display component-specific docs
+      env                     Output environment variables configured in atmos.yaml
       helmfile [command]      Manage Helmfile-based Kubernetes deployments
       help                    Help about any command
       list [command]          List available stacks and components
@@ -34,8 +35,9 @@ AVAILABLE COMMANDS
       pro [command]           Access premium features integrated with atmos-pro.com
       profile [command]       Manage configuration profiles
       support                 Show Atmos support options
-      terraform [command]     Execute Terraform commands (e.g., plan, apply, destroy) using Atmos stack configurations
+      terraform [command]     Execute Terraform commands using Atmos stack configurations
       theme [command]         Manage terminal themes for Atmos CLI
+      toolchain [command]     Manage tool versions and installations
       validate [command]      Validate configurations against OPA policies and JSON schemas
       vendor [command]        Manage external dependencies for components or stacks
       version [command]       Display the version of Atmos you are running and check for updates
@@ -67,6 +69,10 @@ FLAGS
       --identity string         Identity to use for authentication. Use --identity to select interactively, --
                                 identity=NAME to specify
 
+      --interactive             Enable interactive prompts for missing required flags, optional value flags using the
+                                sentinel pattern, and missing positional arguments (requires TTY, disabled in CI)
+                                (default true)
+
       --logs-file string        The file to write Atmos logs to. Logs can be written to any file or any standard file
                                 descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
                                 /dev/stderr)
@@ -97,6 +103,8 @@ FLAGS
 
       --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                 standard file descriptor (including '/dev/null')
+
+      --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
 
   -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
 

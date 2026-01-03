@@ -68,6 +68,9 @@ linters:
             - "!**/pkg/auth/types/github_oidc_credentials.go"
             - "!**/pkg/ai/**"
             - "!**/internal/aws_utils/**"
+            - "!**/pkg/aws/identity/**"
+            - "!**/pkg/provisioner/backend/**"
+            - "!**/pkg/github/**"
             - "$test"
           deny:
             # AWS: Identity and auth-related SDKs

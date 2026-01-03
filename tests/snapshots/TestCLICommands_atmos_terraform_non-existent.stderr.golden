@@ -1,11 +1,16 @@
-
+**Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 # Incorrect Usage
 
-**Error:** Unknown command non-existent for atmos terraform
+**Error:** unknown subcommand
+
+## Explanation
+
+Unknown command non-existent for atmos terraform
 
 Valid subcommands are:
 
 • apply
+• backend
 • clean
 • console
 • deploy
@@ -15,6 +20,7 @@ Valid subcommands are:
 • generate
 • get
 • graph
+• help
 • import
 • init
 • login
@@ -29,6 +35,7 @@ Valid subcommands are:
 • refresh
 • shell
 • show
+• source
 • state
 • taint
 • test
@@ -36,6 +43,7 @@ Valid subcommands are:
 • validate
 • varfile
 • version
+• workdir
 • workspace
 • write
 
@@ -43,10 +51,8 @@ Valid subcommands are:
 
 – Execute a terraform subcommand
 
-  $ atmos terraform [subcommand] <component-name> -s <stack-name>
+$ atmos terraform [subcommand]  -s
 
 ## Hints
 
 💡 https://atmos.tools/cli/commands/terraform/usage
-
-

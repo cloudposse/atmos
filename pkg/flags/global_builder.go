@@ -100,6 +100,10 @@ func (b *GlobalOptionsBuilder) registerTerminalFlags(defaults *global.Flags) {
 	b.WithForceTTY()
 	b.WithMask()
 
+	// Interactive prompts configuration.
+	b.options = append(b.options, WithBoolFlag("interactive", "", defaults.Interactive, "Enable interactive prompts for missing required flags, optional value flags using the sentinel pattern, and missing positional arguments (requires TTY, disabled in CI)"))
+	b.options = append(b.options, WithEnvVars("interactive", "ATMOS_INTERACTIVE"))
+
 	// Output configuration - pager with NoOptDefVal.
 	b.options = append(b.options, WithStringFlag("pager", "", defaults.Pager.Value(), "Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --pager=less to use specific pager)"))
 	b.options = append(b.options, WithEnvVars("pager", "ATMOS_PAGER", "PAGER"))
@@ -114,6 +118,9 @@ func (b *GlobalOptionsBuilder) registerAuthenticationFlags(defaults *global.Flag
 	b.options = append(b.options, WithStringFlag("identity", "", defaults.Identity.Value(), "Identity to use for authentication. Use --identity to select interactively, --identity=NAME to specify"))
 	b.options = append(b.options, WithEnvVars("identity", "ATMOS_IDENTITY"))
 	b.options = append(b.options, WithNoOptDefVal("identity", "__SELECT__"))
+
+	// Note: --github-token is NOT a global flag. It's only used by toolchain commands
+	// and is registered as a persistent flag on the toolchain command in cmd/toolchain/toolchain.go.
 
 	// Profiles - configuration profiles.
 	b.options = append(b.options, func(cfg *parserConfig) {
@@ -171,7 +178,11 @@ func (b *GlobalOptionsBuilder) registerSystemFlags(defaults *global.Flags) {
 	b.WithVerbose()
 
 	b.options = append(b.options, WithBoolFlag("version", "", defaults.Version, "Display the Atmos CLI version"))
-	b.options = append(b.options, WithEnvVars("version", "ATMOS_VERSION"))
+
+	// Version management flag - specify which version of Atmos to use.
+	// Note: ATMOS_VERSION and ATMOS_VERSION_USE env vars are also checked in reexec.go.
+	b.options = append(b.options, WithStringFlag("use-version", "", defaults.UseVersion, "Use a specific version of Atmos (e.g., --use-version=1.160.0)"))
+	b.options = append(b.options, WithEnvVars("use-version", "ATMOS_USE_VERSION"))
 }
 
 // Build creates a StandardParser with all global flags configured.

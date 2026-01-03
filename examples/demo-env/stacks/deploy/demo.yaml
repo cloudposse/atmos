@@ -1,0 +1,8 @@
+vars:
+  stage: demo
+
+components:
+  terraform:
+    github-repo:
+      vars:
+        repository: cloudposse/atmos

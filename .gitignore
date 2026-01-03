@@ -95,14 +95,23 @@ tools/gomodcheck/.gomodcheck
 # Claude Code and Hive Mind development tools
 .claude-flow/
 .hive-mind/
+.claude/plans/
 
 performance-optimization/
+node_modules
+
+# Toolchain installed tools
+.tools/
+toolchain/.tools/
+toolchain/.tool-versions
 
 # Merge conflict artifacts and backup files
 *.orig
 *.rej
 .scratch
 *.bak
+*.bak[0-9]
+*.bak[0-9][0-9]
 *.go.bak
 **/*.go.bak
 
@@ -112,4 +121,10 @@ TEST_FAILURE_ANALYSIS.md
 scratch/
 COVERAGE_SUMMARY.md
 TESTABILITY_CHANGES_SUMMARY.md
+
+# Conductor scratch/temporary files
+*.log
+*_progress.txt
+*_summary.txt
+reply_to_*.sh
 *.ansi

@@ -114,6 +114,20 @@ func (mr *MockProviderMockRecorder) Logout(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Logout", reflect.TypeOf((*MockProvider)(nil).Logout), ctx)
 }
 
+// Name mocks base method.
+func (m *MockProvider) Name() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Name")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Name indicates an expected call of Name.
+func (mr *MockProviderMockRecorder) Name() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockProvider)(nil).Name))
+}
+
 // Paths mocks base method.
 func (m *MockProvider) Paths() ([]Path, error) {
 	m.ctrl.T.Helper()
@@ -127,20 +141,6 @@ func (m *MockProvider) Paths() ([]Path, error) {
 func (mr *MockProviderMockRecorder) Paths() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Paths", reflect.TypeOf((*MockProvider)(nil).Paths))
-}
-
-// Name mocks base method.
-func (m *MockProvider) Name() string {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Name")
-	ret0, _ := ret[0].(string)
-	return ret0
-}
-
-// Name indicates an expected call of Name.
-func (mr *MockProviderMockRecorder) Name() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockProvider)(nil).Name))
 }
 
 // PreAuthenticate mocks base method.
@@ -464,6 +464,34 @@ func (mr *MockAuthManagerMockRecorder) AuthenticateProvider(ctx, providerName an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthenticateProvider", reflect.TypeOf((*MockAuthManager)(nil).AuthenticateProvider), ctx, providerName)
 }
 
+// ExecuteIdentityIntegrations mocks base method.
+func (m *MockAuthManager) ExecuteIdentityIntegrations(ctx context.Context, identityName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecuteIdentityIntegrations", ctx, identityName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecuteIdentityIntegrations indicates an expected call of ExecuteIdentityIntegrations.
+func (mr *MockAuthManagerMockRecorder) ExecuteIdentityIntegrations(ctx, identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteIdentityIntegrations", reflect.TypeOf((*MockAuthManager)(nil).ExecuteIdentityIntegrations), ctx, identityName)
+}
+
+// ExecuteIntegration mocks base method.
+func (m *MockAuthManager) ExecuteIntegration(ctx context.Context, integrationName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecuteIntegration", ctx, integrationName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExecuteIntegration indicates an expected call of ExecuteIntegration.
+func (mr *MockAuthManagerMockRecorder) ExecuteIntegration(ctx, integrationName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteIntegration", reflect.TypeOf((*MockAuthManager)(nil).ExecuteIntegration), ctx, integrationName)
+}
+
 // GetCachedCredentials mocks base method.
 func (m *MockAuthManager) GetCachedCredentials(ctx context.Context, identityName string) (*WhoamiInfo, error) {
 	m.ctrl.T.Helper()
@@ -549,6 +577,21 @@ func (m *MockAuthManager) GetIdentities() map[string]schema.Identity {
 func (mr *MockAuthManagerMockRecorder) GetIdentities() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIdentities", reflect.TypeOf((*MockAuthManager)(nil).GetIdentities))
+}
+
+// GetIntegration mocks base method.
+func (m *MockAuthManager) GetIntegration(integrationName string) (*schema.Integration, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetIntegration", integrationName)
+	ret0, _ := ret[0].(*schema.Integration)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetIntegration indicates an expected call of GetIntegration.
+func (mr *MockAuthManagerMockRecorder) GetIntegration(integrationName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIntegration", reflect.TypeOf((*MockAuthManager)(nil).GetIntegration), integrationName)
 }
 
 // GetProviderForIdentity mocks base method.

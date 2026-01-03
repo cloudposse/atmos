@@ -74,13 +74,15 @@ var valuesCmd = &cobra.Command{
 			return ErrInvalidArguments
 		}
 
-		// Check Atmos configuration
-		if err := checkAtmosConfig(); err != nil {
+		// Get Viper instance for flag/env precedence.
+		v := viper.GetViper()
+
+		// Check Atmos configuration (honors --base-path, --config, --config-path, --profile).
+		if err := checkAtmosConfig(cmd, v); err != nil {
 			return err
 		}
 
-		// Parse flags using StandardParser with Viper precedence
-		v := viper.GetViper()
+		// Parse flags using StandardParser with Viper precedence.
 		if err := valuesParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}
@@ -121,13 +123,15 @@ var varsCmd = &cobra.Command{
 		"atmos list vars vpc --format csv",
 	Args: cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration
-		if err := checkAtmosConfig(); err != nil {
+		// Get Viper instance for flag/env precedence.
+		v := viper.GetViper()
+
+		// Check Atmos configuration (honors --base-path, --config, --config-path, --profile).
+		if err := checkAtmosConfig(cmd, v); err != nil {
 			return err
 		}
 
-		// Parse flags using StandardParser with Viper precedence
-		v := viper.GetViper()
+		// Parse flags using StandardParser with Viper precedence.
 		if err := varsParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}

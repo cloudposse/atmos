@@ -1,0 +1,289 @@
+---
+title: atmos toolchain get
+sidebar_label: get
+sidebar_class_name: command
+id: get
+description: Display version information for tools configured in your .tool-versions file.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Display version information for tools configured in your `.tool-versions` file. View the currently configured version or browse all available versions from the registry.
+</Intro>
+
+<Screengrab title="atmos toolchain get --help" slug="atmos-toolchain-get--help" />
+
+## Usage
+
+### Get Tool Version
+
+```shell
+atmos toolchain get [tool]
+```
+
+When a tool name is provided, displays the version configured in `.tool-versions` for that specific tool.
+
+When no tool name is provided, displays versions for all tools in `.tool-versions`.
+
+## Examples
+
+### Get Specific Tool Version
+
+```shell
+# Get configured Terraform version
+atmos toolchain get terraform
+
+# Get configured kubectl version
+atmos toolchain get kubectl
+
+# Get configured Helm version
+atmos toolchain get helm
+```
+
+Output shows the tool name and configured version:
+```
+terraform: 1.9.8
+```
+
+### Get All Tool Versions
+
+```shell
+# List all configured tool versions
+atmos toolchain get
+```
+
+Output shows all tools from `.tool-versions`:
+```
+terraform: 1.9.8
+kubectl: 1.28.0
+helm: 3.13.0
+tflint: 0.44.1
+```
+
+### Show All Available Versions
+
+```shell
+# Show all available versions for a tool
+atmos toolchain get terraform --all
+
+# Limit number of versions displayed
+atmos toolchain get terraform --all --limit 20
+```
+
+Output shows available versions from the registry:
+```
+terraform available versions (showing 10 of 150+):
+  1.9.8 (configured)
+  1.9.7
+  1.9.6
+  1.9.5
+  1.9.4
+  1.9.3
+  1.9.2
+  1.9.1
+  1.9.0
+  1.8.5
+```
+
+## Arguments
+
+<dl>
+    <dt>`tool` <em>(optional)</em></dt>
+    <dd>
+        Name of the tool to get version information for. Can be the short name (alias) or full `owner/repo` format.
+
+        Examples: `terraform`, `kubectl`, `hashicorp/terraform`, `kubernetes-sigs/kubectl`
+
+        If omitted, displays versions for all tools in `.tool-versions`.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--all` <em>(optional)</em></dt>
+    <dd>
+        Show all available versions from the registry, not just the configured version.
+
+        Useful for discovering which versions are available to install.
+
+        Environment variable: `ATMOS_TOOLCHAIN_ALL`
+    </dd>
+
+    <dt>`--limit` <em>(optional)</em></dt>
+    <dd>
+        Maximum number of versions to display when using `--all`. Default: `10`
+
+        Environment variable: `ATMOS_TOOLCHAIN_LIMIT`
+    </dd>
+</dl>
+
+## Use Cases
+
+### Check Configured Version
+
+Verify which version is configured before running commands:
+
+```shell
+# Check Terraform version before deployment
+atmos toolchain get terraform
+
+# Verify kubectl version before cluster operations
+atmos toolchain get kubectl
+```
+
+### Compare with Available Versions
+
+See if newer versions are available:
+
+```shell
+# Show latest Terraform versions
+atmos toolchain get terraform --all --limit 5
+
+# Browse available OpenTofu versions
+atmos toolchain get opentofu --all
+```
+
+### Audit Tool Versions
+
+Review all configured tool versions:
+
+```shell
+# Display all tool versions
+atmos toolchain get
+
+# Export to file for documentation
+atmos toolchain get > tool-versions.txt
+```
+
+### Script Integration
+
+Use in scripts to check tool versions:
+
+```shell
+#!/bin/bash
+
+# Get configured Terraform version
+TF_VERSION=$(atmos toolchain get terraform | cut -d' ' -f2)
+
+echo "Using Terraform version: $TF_VERSION"
+```
+
+### Update Workflow
+
+Check current version before updating:
+
+```shell
+# Check current version
+atmos toolchain get terraform
+
+# View available versions
+atmos toolchain get terraform --all --limit 10
+
+# Update to newer version
+atmos toolchain add terraform@1.9.8
+```
+
+## Comparison with Related Commands
+
+### `atmos toolchain get` vs `atmos toolchain list`
+
+| Command | Purpose | Shows |
+|---------|---------|-------|
+| `get` | Version information from `.tool-versions` | Configured versions (not installation status) |
+| `list` | Installation status of tools | Installed tools with sizes and dates |
+
+```shell
+# Get shows configured versions
+atmos toolchain get terraform
+# Output: terraform: 1.9.8
+
+# List shows installation details
+atmos toolchain list
+# Output: Table with installation status, size, date
+```
+
+### `atmos toolchain get` vs `atmos toolchain versions`
+
+| Command | Purpose | Output |
+|---------|---------|--------|
+| `get [tool]` | Version info for specific tool or all tools | Simple version display |
+| `versions` | All tools from `.tool-versions` | Formatted list of all configured versions |
+
+Both commands provide similar information but with different formatting and focus.
+
+### `atmos toolchain get` vs `atmos toolchain which`
+
+| Command | Purpose | Shows |
+|---------|---------|-------|
+| `get` | Version from `.tool-versions` | Version number |
+| `which` | Binary location on filesystem | Full path to executable |
+
+```shell
+# Get shows version
+atmos toolchain get terraform
+# Output: terraform: 1.9.8
+
+# Which shows path
+atmos toolchain which terraform
+# Output: /path/to/.tools/bin/hashicorp/terraform/1.9.8/terraform
+```
+
+## Error Handling
+
+### Tool Not in .tool-versions
+
+If the tool is not configured:
+
+```shell
+atmos toolchain get nonexistent-tool
+```
+
+Returns an error indicating the tool is not found in `.tool-versions`.
+
+**Solution**: Add the tool first:
+```shell
+atmos toolchain add nonexistent-tool@1.0.0
+atmos toolchain get nonexistent-tool
+```
+
+### Empty .tool-versions
+
+If no `.tool-versions` file exists:
+
+```shell
+atmos toolchain get
+```
+
+Returns an error indicating no tool versions are configured.
+
+**Solution**: Add some tools:
+```shell
+atmos toolchain add terraform@1.9.8
+atmos toolchain add kubectl@1.28.0
+```
+
+### Tool Not in Registry
+
+If requesting all versions for a tool not in the registry:
+
+```shell
+atmos toolchain get unknown-tool --all
+```
+
+Returns an error indicating the tool is not found in any registry.
+
+## Related Commands
+
+- [`atmos toolchain versions`](/cli/commands/toolchain/versions) - Display all configured tool versions
+- [`atmos toolchain list`](/cli/commands/toolchain/list) - List installed tools with details
+- [`atmos toolchain which`](/cli/commands/toolchain/which) - Show path to tool binary
+- [`atmos toolchain add`](/cli/commands/toolchain/add) - Add tool to `.tool-versions`
+- [`atmos toolchain registry search`](/cli/commands/toolchain/registry/registry-search) - Search for available tools
+
+## Related Documentation
+
+- [Toolchain Overview](/cli/commands/toolchain/usage) - Complete toolchain documentation
+- [Version Management](/cli/commands/toolchain/usage#version-management) - Managing tool versions

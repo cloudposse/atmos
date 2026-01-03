@@ -31,6 +31,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -44,6 +45,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
+	pkgversion "github.com/cloudposse/atmos/pkg/version"
 
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
@@ -51,13 +53,20 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/ai"
 	_ "github.com/cloudposse/atmos/cmd/ai/agent"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
+	_ "github.com/cloudposse/atmos/cmd/env"
 	"github.com/cloudposse/atmos/cmd/internal"
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/lsp"
 	_ "github.com/cloudposse/atmos/cmd/mcp-server"
 	_ "github.com/cloudposse/atmos/cmd/profile"
+	_ "github.com/cloudposse/atmos/cmd/terraform"
+	"github.com/cloudposse/atmos/cmd/terraform/backend"
+	"github.com/cloudposse/atmos/cmd/terraform/workdir"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
+	toolchainCmd "github.com/cloudposse/atmos/cmd/toolchain"
 	"github.com/cloudposse/atmos/cmd/version"
+	_ "github.com/cloudposse/atmos/cmd/workflow"
+	"github.com/cloudposse/atmos/toolchain"
 )
 
 const (
@@ -90,6 +99,36 @@ var chdirProcessed bool
 // If no chdir flag is found, it returns an empty string.
 func parseChdirFromArgs() string {
 	return parseChdirFromArgsInternal(os.Args)
+}
+
+// parseUseVersionFromArgs manually parses --use-version flag from os.Args.
+// This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
+// where Cobra doesn't parse flags automatically.
+// It recognizes `--use-version=value` and `--use-version value` forms.
+// If no --use-version flag is found, it returns an empty string.
+func parseUseVersionFromArgs() string {
+	return parseUseVersionFromArgsInternal(os.Args)
+}
+
+// parseUseVersionFromArgsInternal manually parses --use-version flag from the provided args.
+// This internal version accepts args as a parameter for testability.
+func parseUseVersionFromArgsInternal(args []string) string {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		// Check for --use-version=value format.
+		if strings.HasPrefix(arg, "--use-version=") {
+			return strings.TrimPrefix(arg, "--use-version=")
+		}
+
+		// Check for --use-version value format (next arg is the value).
+		if arg == "--use-version" {
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		}
+	}
+	return ""
 }
 
 // parseChdirFromArgsInternal manually parses --chdir or -C flag from the provided args.
@@ -295,8 +334,8 @@ func processChdirFlag(cmd *cobra.Command) error {
 // RootCmd represents the base command when called without any subcommands.
 var RootCmd = &cobra.Command{
 	Use:   "atmos",
-	Short: "Universal Tool for DevOps and Cloud Automation",
-	Long:  `Atmos is a universal tool for DevOps and cloud automation used for provisioning, managing and orchestrating workflows across various toolchains`,
+	Short: "Framework for Infrastructure Orchestration",
+	Long:  `Atmos is a framework for orchestrating and operating infrastructure workflows across multiple cloud and DevOps toolchains.`,
 	// Note: FParseErrWhitelist is NOT set on RootCmd to allow proper flag validation.
 	// Individual commands that need to pass through flags (terraform, helmfile, packer)
 	// set FParseErrWhitelist{UnknownFlags: true} explicitly.
@@ -313,6 +352,16 @@ var RootCmd = &cobra.Command{
 			// CLI flag not set - check environment variable via Viper.
 			verbose := viper.GetBool(verboseFlagName)
 			errUtils.SetVerboseFlag(verbose)
+		}
+
+		// Check for conflicting flags: --version and --use-version cannot be used together.
+		if cmd.Flags().Changed("version") && cmd.Flags().Changed("use-version") {
+			conflictErr := errUtils.Build(errUtils.ErrInvalidFlag).
+				WithExplanation("--version and --use-version cannot be used together").
+				WithHint("Use --version to display the current Atmos version").
+				WithHint("Use --use-version to run a command with a specific Atmos version").
+				Err()
+			errUtils.CheckErrorPrintAndExit(conflictErr, "", "")
 		}
 
 		// Determine if the command is a help command or if the help flag is set.
@@ -377,6 +426,30 @@ var RootCmd = &cobra.Command{
 					Err()
 				errUtils.CheckErrorPrintAndExit(enrichedErr, "", "")
 			}
+		}
+
+		// Check for version.use configuration and re-exec with specified version if needed.
+		// This runs after profiles are loaded, so version.use can be set via profiles.
+		// Skip re-exec for help commands and version management commands to avoid loops.
+		if !isHelpRequested && !isVersionManagementCommand(cmd) && err == nil {
+			// Set ATMOS_VERSION_USE env var from --use-version flag if specified.
+			// This allows CheckAndReexec to pick up the flag value.
+			// First try Cobra's parsed flag (works when DisableFlagParsing=false).
+			if cmd.Flags().Changed("use-version") {
+				if useVersion, flagErr := cmd.Flags().GetString("use-version"); flagErr == nil && useVersion != "" {
+					_ = os.Setenv(pkgversion.VersionUseEnvVar, useVersion)
+				}
+			} else {
+				// For commands with DisableFlagParsing=true (terraform, helmfile, packer),
+				// manually parse --use-version from os.Args.
+				if useVersion := parseUseVersionFromArgs(); useVersion != "" {
+					_ = os.Setenv(pkgversion.VersionUseEnvVar, useVersion)
+				}
+			}
+			// CheckAndReexec returns true only on successful syscall.Exec, which replaces
+			// the current process entirely. This means true is never returned in practice
+			// since exec doesn't return. We call it for its side effects.
+			_ = pkgversion.CheckAndReexec(&tmpConfig)
 		}
 
 		// Setup profiler before command execution (but skip for help commands).
@@ -756,7 +829,7 @@ func renderSingleFlag(w io.Writer, f *pflag.Flag, layout flagRenderLayout, style
 	if renderer != nil {
 		rendered, err := renderer.RenderWithoutWordWrap(wrapped)
 		if err == nil {
-			wrapped = strings.TrimSpace(rendered)
+			wrapped = ui.TrimLinesRight(rendered)
 		}
 	}
 
@@ -1226,6 +1299,10 @@ func Execute() error {
 	version.SetAtmosConfig(&atmosConfig)
 	devcontainer.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
+	backend.SetAtmosConfig(&atmosConfig)
+	toolchainCmd.SetAtmosConfig(&atmosConfig)
+	toolchain.SetAtmosConfig(&atmosConfig)
+	workdir.SetAtmosConfig(&atmosConfig)
 
 	if initErr != nil {
 		// Handle config initialization errors based on command context.
@@ -1272,6 +1349,10 @@ func Execute() error {
 	// Boa styling is already applied via RootCmd.SetHelpFunc() which is inherited by all subcommands.
 	// No need to recursively set UsageFunc as that would override Boa's handling.
 
+	// Preprocess args for commands with compatibility flags.
+	// This separates Atmos flags from pass-through flags BEFORE Cobra parses.
+	preprocessCompatibilityFlags()
+
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
 	cmd, err := RootCmd.ExecuteC()
@@ -1284,6 +1365,51 @@ func Execute() error {
 		}
 	}
 	return err
+}
+
+// preprocessCompatibilityFlags separates Atmos flags from pass-through flags.
+// This is called BEFORE Cobra parses, allowing us to filter out terraform/helmfile
+// native flags that would otherwise be dropped by FParseErrWhitelist.
+//
+// The separated args are stored globally via compat.SetSeparated() and can be
+// retrieved in RunE via compat.GetSeparated().
+func preprocessCompatibilityFlags() {
+	osArgs := os.Args[1:]
+	if len(osArgs) == 0 {
+		return
+	}
+
+	// Find target command without parsing flags.
+	targetCmd, _, _ := RootCmd.Find(osArgs)
+	if targetCmd == nil {
+		return
+	}
+
+	// Get the top-level command name (e.g., "terraform").
+	// Walk up the command tree to find the first non-root command.
+	cmdName := ""
+	for c := targetCmd; c != nil && c != RootCmd; c = c.Parent() {
+		cmdName = c.Name()
+	}
+	if cmdName == "" {
+		return
+	}
+
+	// Get compatibility flags from the command registry.
+	compatFlags := internal.GetCompatFlagsForCommand(cmdName)
+	if len(compatFlags) == 0 {
+		return
+	}
+
+	// Translate args: separate Atmos flags from pass-through flags.
+	translator := compat.NewCompatibilityFlagTranslator(compatFlags)
+	atmosArgs, separatedArgs := translator.Translate(osArgs)
+
+	// Give Cobra only the Atmos args.
+	RootCmd.SetArgs(atmosArgs)
+
+	// Store separated args globally via compat package.
+	compat.SetSeparated(separatedArgs)
 }
 
 // getInvalidCommandName extracts the invalid command name from an error message.
@@ -1414,11 +1540,12 @@ func init() {
 	// This must happen before initCobraConfig() creates Boa styles.
 	setupColorProfileFromEnv()
 
-	// Bind environment variables for GitHub authentication.
-	// ATMOS_GITHUB_TOKEN takes precedence over GITHUB_TOKEN.
-	if err := viper.BindEnv("ATMOS_GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"); err != nil {
-		log.Error("Failed to bind ATMOS_GITHUB_TOKEN environment variable", "error", err)
-	}
+	// Note: GitHub token is now bound via GlobalOptionsBuilder in pkg/flags/global_builder.go.
+	// It supports both ATMOS_GITHUB_TOKEN and GITHUB_TOKEN environment variables,
+	// and can be overridden with the --github-token CLI flag.
+
+	// Note: Toolchain command is now registered via the command registry pattern.
+	// The blank import of cmd/toolchain automatically registers it.
 
 	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)
@@ -1481,7 +1608,14 @@ func initCobraConfig() {
 			command.Example = exampleContent.Content
 		}
 
-		if !(Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h")) {
+		// Check if help was explicitly requested via os.Args, args parameter, or via the help flag.
+		helpRequested := Contains(os.Args, "help") || Contains(os.Args, "--help") || Contains(os.Args, "-h") ||
+			Contains(args, "help") || Contains(args, "--help") || Contains(args, "-h")
+		if helpFlag := command.Flag("help"); helpFlag != nil && helpFlag.Changed {
+			helpRequested = true
+		}
+
+		if !helpRequested {
 			// Get actual arguments (handles DisableFlagParsing=true case).
 			arguments := flags.GetActualArgs(command, os.Args)
 			showUsageAndExit(command, arguments)

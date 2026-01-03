@@ -337,7 +337,7 @@ components:
 
 :::note
 
-Since `Go` processes files ending in `.yaml.tmpl` text files with templates, we can parameterize the Atmos component name `eks-{{ .flavor }}/cluster` and any values in any sections (`vars`, `settings`, `env`, `backend`, etc.), and even the `import` section in the imported file (if the file imports other configurations).
+Since `Go` processes files ending in `.yaml.tmpl` text files with templates, we can parameterize the Atmos component name `eks-{{ .flavor }}/cluster` and any values in any sections (`vars`, `locals`, `settings`, `env`, `backend`, etc.), and even the `import` section in the imported file (if the file imports other configurations).
 
 :::
 

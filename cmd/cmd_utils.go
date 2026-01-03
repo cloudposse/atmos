@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -23,6 +24,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -42,6 +45,9 @@ var missingConfigFoundMarkdown string
 
 // Define a constant for the dot string that appears multiple times.
 const currentDirPath = "."
+
+// FlagStack is the name of the stack flag used across commands.
+const FlagStack = "stack"
 
 // ValidateConfig holds configuration options for Atmos validation.
 // CheckStack determines whether stack configuration validation should be performed.
@@ -237,6 +243,9 @@ func processCommandAliases(
 				Short:              aliasFor,
 				Long:               aliasFor,
 				FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
+				Annotations: map[string]string{
+					"configAlias": aliasCmd, // marks as CLI config alias, stores target command
+				},
 				Run: func(cmd *cobra.Command, args []string) {
 					err := cmd.ParseFlags(args)
 					errUtils.CheckErrorPrintAndExit(err, "", "")
@@ -257,9 +266,28 @@ func processCommandAliases(
 					// from re-applying the parent's chdir directive.
 					filteredEnv := filterChdirEnv(os.Environ())
 
-					commandToRun := fmt.Sprintf("%s %s %s", execPath, aliasCmd, strings.Join(filteredArgs, " "))
-					err = e.ExecuteShell(commandToRun, commandToRun, currentDirPath, filteredEnv, false)
-					errUtils.CheckErrorPrintAndExit(err, "", "")
+					// Build command arguments: split aliasCmd into parts and append filteredArgs.
+					// Use direct process execution instead of shell to avoid path escaping
+					// issues on Windows where backslashes in paths are misinterpreted.
+					cmdArgs := strings.Fields(aliasCmd)
+					cmdArgs = append(cmdArgs, filteredArgs...)
+
+					execCmd := exec.Command(execPath, cmdArgs...)
+					execCmd.Dir = currentDirPath
+					execCmd.Env = filteredEnv
+					execCmd.Stdin = os.Stdin
+					execCmd.Stdout = os.Stdout
+					execCmd.Stderr = os.Stderr
+
+					err = execCmd.Run()
+					if err != nil {
+						var exitErr *exec.ExitError
+						if errors.As(err, &exitErr) {
+							// Preserve the subprocess exit code.
+							err = errUtils.WithExitCode(err, exitErr.ExitCode())
+						}
+						errUtils.CheckErrorPrintAndExit(err, "", "")
+					}
 				},
 			}
 
@@ -403,6 +431,26 @@ func executeCustomCommand(
 		finalArgs = args
 	}
 
+	// Resolve and install command dependencies
+	resolver := dependencies.NewResolver(&atmosConfig)
+	deps, err := resolver.ResolveCommandDependencies(commandConfig)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to resolve dependencies for command '%s'", commandConfig.Name))
+	}
+
+	if len(deps) > 0 {
+		log.Debug("Installing command dependencies", "command", commandConfig.Name, "tools", deps)
+		installer := dependencies.NewInstaller(&atmosConfig)
+		if err := installer.EnsureTools(deps); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to install dependencies for command '%s'", commandConfig.Name))
+		}
+
+		// Update PATH to include installed tools
+		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to update PATH for command '%s'", commandConfig.Name))
+		}
+	}
+
 	// Create auth manager if identity is specified for this custom command.
 	// Check for --identity flag first (it overrides the config).
 	var authManager auth.AuthManager
@@ -448,6 +496,15 @@ func executeCustomCommand(
 		}
 
 		log.Debug("Authenticated with identity for custom command", "identity", commandIdentity, "command", commandConfig.Name)
+	}
+
+	// Determine working directory for command execution.
+	workDir, err := resolveWorkingDirectory(commandConfig.WorkingDirectory, atmosConfig.BasePath, currentDirPath)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "Invalid working_directory", "https://atmos.tools/cli/configuration/commands#working-directory")
+	}
+	if commandConfig.WorkingDirectory != "" {
+		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
 	}
 
 	// Execute custom command's steps
@@ -514,8 +571,8 @@ func executeCustomCommand(
 
 		// Prepare ENV vars
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		// Start with current environment to inherit PATH and other variables.
-		env := os.Environ()
+		// Start with current environment + global env from atmos.yaml to inherit PATH and other variables.
+		env := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
 			value := v.Value
@@ -531,7 +588,7 @@ func executeCustomCommand(
 			// If the command to get the value for the ENV var is provided, execute it
 			if valCommand != "" {
 				valCommandName := fmt.Sprintf("env-var-%s-valcommand", key)
-				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, currentDirPath, env, false)
+				res, err := u.ExecuteShellAndReturnOutput(valCommand, valCommandName, workDir, env, false)
 				errUtils.CheckErrorPrintAndExit(err, "", "")
 				value = strings.TrimRight(res, "\r\n")
 			} else {
@@ -541,7 +598,7 @@ func executeCustomCommand(
 			}
 
 			// Add or update the environment variable in the env slice
-			env = u.UpdateEnvVar(env, key, value)
+			env = envpkg.UpdateEnvVar(env, key, value)
 		}
 
 		if len(commandConfig.Env) > 0 && commandConfig.Verbose {
@@ -565,14 +622,14 @@ func executeCustomCommand(
 
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step, data, false)
+		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step.Command, data, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
 		// Execute the command step
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
 
 		// Pass the prepared environment with custom variables to the subprocess
-		err = e.ExecuteShell(commandToRun, commandName, currentDirPath, env, false)
+		err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }
@@ -770,6 +827,31 @@ func isVersionCommand() bool {
 	return len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version")
 }
 
+// isVersionManagementCommand checks if the current command is a version management command.
+// These commands should not trigger re-exec to avoid infinite loops.
+func isVersionManagementCommand(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+
+	// Check the command hierarchy.
+	cmdName := cmd.Name()
+
+	// Direct version subcommands that manage local installations (install, uninstall).
+	// Note: "list" is excluded because it can reasonably work with --use-version
+	// to list releases using a different Atmos version.
+	if cmd.Parent() != nil && cmd.Parent().Name() == "version" {
+		return cmdName == "install" || cmdName == "uninstall"
+	}
+
+	// The version command itself (shows current version).
+	if cmdName == "version" && cmd.Parent() != nil && cmd.Parent().Name() == "atmos" {
+		return true
+	}
+
+	return false
+}
+
 // handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h".
 func handleHelpRequest(cmd *cobra.Command, args []string) {
 	if (len(args) > 0 && args[0] == "help") || Contains(args, "--help") || Contains(args, "-h") {
@@ -802,6 +884,12 @@ func showFlagUsageAndExit(cmd *cobra.Command, err error) error {
 	}
 	showUsageExample(cmd, unknownCommand)
 	return errUtils.WithExitCode(err, 1)
+}
+
+// GetConfigAndStacksInfo processes the CLI config and stacks.
+// Exported for use by command packages (e.g., terraform package).
+func GetConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []string) (schema.ConfigAndStacksInfo, error) {
+	return getConfigAndStacksInfo(commandName, cmd, args)
 }
 
 // getConfigAndStacksInfo processes the CLI config and stacks.
@@ -976,7 +1064,10 @@ func showUsageExample(cmd *cobra.Command, details string) {
 	errUtils.CheckErrorPrintAndExit(errors.New(details), "Incorrect Usage", suggestion)
 }
 
-func stackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+// StackFlagCompletion provides shell completion for the --stack flag.
+// If a component was provided as the first positional argument, it filters stacks
+// to only those containing that component.
+func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// If a component was provided as the first argument, filter stacks by that component.
 	if len(args) > 0 && args[0] != "" {
 		component := args[0]
@@ -1115,10 +1206,10 @@ func listComponents(cmd *cobra.Command) ([]string, error) {
 }
 
 func AddStackCompletion(cmd *cobra.Command) {
-	if cmd.Flag("stack") == nil {
-		cmd.PersistentFlags().StringP("stack", "s", "", stackHint)
+	if cmd.Flag(FlagStack) == nil {
+		cmd.PersistentFlags().StringP(FlagStack, "s", "", stackHint)
 	}
-	cmd.RegisterFlagCompletionFunc("stack", stackFlagCompletion)
+	_ = cmd.RegisterFlagCompletionFunc(FlagStack, StackFlagCompletion)
 }
 
 // identityFlagCompletion provides shell completion for identity flags by fetching

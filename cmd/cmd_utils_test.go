@@ -428,7 +428,7 @@ func TestStackFlagCompletion(t *testing.T) {
 	}
 
 	// Call the completion function.
-	completions, directive := stackFlagCompletion(cmd, []string{}, "")
+	completions, directive := StackFlagCompletion(cmd, []string{}, "")
 
 	// Verify we got some completions.
 	assert.NotEmpty(t, completions, "Should have stack completions")
@@ -964,15 +964,19 @@ func TestCloneCommand(t *testing.T) {
 		{
 			name: "command with steps",
 			input: &schema.Command{
-				Name:  "multi-step",
-				Steps: []string{"step1", "step2", "step3"},
+				Name: "multi-step",
+				Steps: schema.Tasks{
+					{Command: "step1", Type: "shell"},
+					{Command: "step2", Type: "shell"},
+					{Command: "step3", Type: "shell"},
+				},
 			},
 			wantErr: false,
 			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
 				assert.Equal(t, len(orig.Steps), len(clone.Steps))
 				// Verify it's a deep copy - modifying clone doesn't affect original.
-				clone.Steps[0] = "modified"
-				assert.NotEqual(t, orig.Steps[0], clone.Steps[0])
+				clone.Steps[0].Command = "modified"
+				assert.NotEqual(t, orig.Steps[0].Command, clone.Steps[0].Command)
 			},
 		},
 		{
@@ -1311,32 +1315,6 @@ func TestListStacks_InvalidDirectory(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// TestStackFlagCompletion_NoArgs tests the stackFlagCompletion function without args.
-func TestStackFlagCompletion_NoArgs(t *testing.T) {
-	t.Chdir("../examples/demo-stacks")
-
-	cmd := &cobra.Command{Use: "test"}
-	cmd.Flags().String("stack", "", "Stack flag")
-
-	// Test without component arg.
-	stacks, directive := stackFlagCompletion(cmd, []string{}, "")
-	assert.NotNil(t, stacks)
-	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-}
-
-// TestStackFlagCompletion_WithComponent tests stackFlagCompletion with a component.
-func TestStackFlagCompletion_WithComponent(t *testing.T) {
-	t.Chdir("../examples/demo-stacks")
-
-	cmd := &cobra.Command{Use: "test"}
-	cmd.Flags().String("stack", "", "Stack flag")
-
-	// Test with component arg.
-	stacks, directive := stackFlagCompletion(cmd, []string{"myapp"}, "")
-	assert.NotNil(t, stacks)
-	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-}
-
 // TestGetConfigAndStacksInfo_PathResolution tests path resolution in getConfigAndStacksInfo.
 // These tests verify that path-based component arguments are properly detected and
 // the path resolution code path is triggered without panicking.
@@ -1435,4 +1413,168 @@ func TestGetConfigAndStacksInfo_PathResolutionWithValidPath(t *testing.T) {
 
 	// If we got here, verify the path was resolved.
 	assert.Equal(t, "top-level-component1", info.ComponentFromArg, "Path should be resolved to component name")
+}
+
+// TestProcessCommandAliases tests the processCommandAliases function.
+// NOTE: We use unique alias names (e.g., "test-alias-tp") to avoid conflicts
+// with existing RootCmd commands, since processCommandAliases internally checks
+// getTopLevelCommands() which reads from the global RootCmd.
+func TestProcessCommandAliases(t *testing.T) {
+	tests := []struct {
+		name            string
+		aliases         schema.CommandAliases
+		topLevel        bool
+		expectedAliases []string
+	}{
+		{
+			name: "single alias",
+			aliases: schema.CommandAliases{
+				"test-alias-tp": "terraform plan",
+			},
+			topLevel:        true,
+			expectedAliases: []string{"test-alias-tp"},
+		},
+		{
+			name: "multiple aliases",
+			aliases: schema.CommandAliases{
+				"test-alias-tp": "terraform plan",
+				"test-alias-ta": "terraform apply",
+				"test-alias-td": "terraform destroy",
+			},
+			topLevel:        true,
+			expectedAliases: []string{"test-alias-tp", "test-alias-ta", "test-alias-td"},
+		},
+		{
+			name:            "empty aliases",
+			aliases:         schema.CommandAliases{},
+			topLevel:        true,
+			expectedAliases: []string{},
+		},
+		{
+			name: "alias with whitespace",
+			aliases: schema.CommandAliases{
+				"  test-alias-ws  ": "  terraform plan  ",
+			},
+			topLevel:        true,
+			expectedAliases: []string{"test-alias-ws"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use test kit to reset RootCmd state.
+			_ = NewTestKit(t)
+
+			// Create a parent command.
+			parentCmd := &cobra.Command{
+				Use:   "atmos",
+				Short: "Test parent command",
+			}
+
+			// Process aliases.
+			err := processCommandAliases(schema.AtmosConfiguration{}, tt.aliases, parentCmd, tt.topLevel)
+			require.NoError(t, err)
+
+			// Verify the expected aliases were added.
+			for _, expectedAlias := range tt.expectedAliases {
+				found := false
+				for _, cmd := range parentCmd.Commands() {
+					if cmd.Name() != expectedAlias {
+						continue
+					}
+					found = true
+
+					// Verify the command has the configAlias annotation.
+					assert.NotNil(t, cmd.Annotations, "Alias command should have annotations")
+					_, hasConfigAlias := cmd.Annotations["configAlias"]
+					assert.True(t, hasConfigAlias, "Alias command should have configAlias annotation")
+
+					// Verify the Short description contains "alias for".
+					assert.Contains(t, cmd.Short, "alias for", "Alias command should have 'alias for' in Short")
+
+					// Verify DisableFlagParsing is true.
+					assert.True(t, cmd.DisableFlagParsing, "Alias command should have DisableFlagParsing=true")
+
+					break
+				}
+				assert.True(t, found, "Expected alias %q to be added to parent command", expectedAlias)
+			}
+		})
+	}
+}
+
+// TestProcessCommandAliases_DoesNotOverrideExistingCommands tests that aliases don't override existing RootCmd commands.
+// NOTE: The processCommandAliases function checks getTopLevelCommands() which reads from global RootCmd,
+// so we test that it doesn't add aliases that conflict with existing RootCmd commands like "version".
+func TestProcessCommandAliases_DoesNotOverrideExistingCommands(t *testing.T) {
+	_ = NewTestKit(t)
+
+	// Create a parent command to receive aliases.
+	parentCmd := &cobra.Command{
+		Use:   "atmos",
+		Short: "Test parent command",
+	}
+
+	// Try to add aliases - "version" should be skipped (exists in RootCmd),
+	// but "test-alias-new" should be added (unique name).
+	aliases := schema.CommandAliases{
+		"version":         "terraform version", // Should NOT be added (exists in RootCmd).
+		"test-alias-new2": "terraform plan",    // Should be added (unique name).
+	}
+
+	err := processCommandAliases(schema.AtmosConfiguration{}, aliases, parentCmd, true)
+	require.NoError(t, err)
+
+	// Verify "version" alias was NOT added to parentCmd (because it exists in RootCmd).
+	var versionFound bool
+	for _, cmd := range parentCmd.Commands() {
+		if cmd.Name() == "version" {
+			versionFound = true
+			break
+		}
+	}
+	assert.False(t, versionFound, "version alias should not be added because it conflicts with existing RootCmd command")
+
+	// Verify "test-alias-new2" alias was added.
+	var newAliasFound bool
+	for _, cmd := range parentCmd.Commands() {
+		if cmd.Name() == "test-alias-new2" {
+			newAliasFound = true
+			assert.Contains(t, cmd.Short, "alias for")
+			break
+		}
+	}
+	assert.True(t, newAliasFound, "test-alias-new2 should be added")
+}
+
+// TestProcessCommandAliases_NonTopLevel tests that non-top-level aliases are NOT added.
+// The processCommandAliases function only adds aliases when topLevel=true.
+func TestProcessCommandAliases_NonTopLevel(t *testing.T) {
+	_ = NewTestKit(t)
+
+	parentCmd := &cobra.Command{
+		Use:   "terraform",
+		Short: "Terraform commands",
+	}
+
+	aliases := schema.CommandAliases{
+		"p": "plan",
+		"a": "apply",
+	}
+
+	// Process as non-top-level (topLevel=false).
+	err := processCommandAliases(schema.AtmosConfiguration{}, aliases, parentCmd, false)
+	require.NoError(t, err)
+
+	// Verify aliases were NOT added (because topLevel=false).
+	// The condition `!exist && topLevel` prevents alias creation when topLevel=false.
+	// Check directly in Commands() list since Find() returns parent on not found.
+	hasAliases := false
+	for _, cmd := range parentCmd.Commands() {
+		if cmd.Name() == "p" || cmd.Name() == "a" {
+			hasAliases = true
+			break
+		}
+	}
+	assert.False(t, hasAliases, "Non-top-level aliases should not be added")
 }

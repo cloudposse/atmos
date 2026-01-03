@@ -66,9 +66,11 @@ inheritance: []
 metadata: {}
 overrides: {}
 providers: {}
+provision: {}
 remote_state_backend: {}
 remote_state_backend_type: ""
 settings: {}
+source: {}
 sources:
   backend: {}
   env: {}

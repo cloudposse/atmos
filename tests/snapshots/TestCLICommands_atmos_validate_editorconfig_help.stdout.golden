@@ -62,6 +62,10 @@ GLOBAL FLAGS
       --identity string         Identity to use for authentication. Use --identity to select interactively, --
                                 identity=NAME to specify
 
+      --interactive             Enable interactive prompts for missing required flags, optional value flags using the
+                                sentinel pattern, and missing positional arguments (requires TTY, disabled in CI)
+                                (default true)
+
       --logs-file string        The file to write Atmos logs to. Logs can be written to any file or any standard file
                                 descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
                                 /dev/stderr)
@@ -92,6 +96,8 @@ GLOBAL FLAGS
 
       --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                 standard file descriptor (including '/dev/null')
+
+      --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
 
   -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
 

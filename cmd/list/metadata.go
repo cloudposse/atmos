@@ -36,13 +36,15 @@ var metadataCmd = &cobra.Command{
 		"atmos list metadata --filter '.enabled == true'",
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check Atmos configuration.
-		if err := checkAtmosConfig(); err != nil {
+		// Get Viper instance for flag/env precedence.
+		v := viper.GetViper()
+
+		// Check Atmos configuration (honors --base-path, --config, --config-path, --profile).
+		if err := checkAtmosConfig(cmd, v); err != nil {
 			return err
 		}
 
 		// Parse flags using StandardParser with Viper precedence.
-		v := viper.GetViper()
 		if err := metadataParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
 		}

@@ -1,38 +1,92 @@
 package exec
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+
+	// Import backend provisioner to register S3 provisioner.
+	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
+	// Import source provisioner for JIT source provisioning.
+	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
+	// Import workdir provisioner to register workdir provisioner.
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
+
+	"github.com/cloudposse/atmos/toolchain"
 )
 
 const (
+	// BeforeTerraformInitEvent is the hook event name for provisioners that run before terraform init.
+	// This matches the hook event registered by backend provisioners in pkg/provisioner/backend/backend.go.
+	// See pkg/hooks/event.go (hooks.BeforeTerraformInit) for the canonical definition.
+	beforeTerraformInitEvent = "before.terraform.init"
+
 	autoApproveFlag           = "-auto-approve"
 	outFlag                   = "-out"
 	varFileFlag               = "-var-file"
 	skipTerraformLockFileFlag = "--skip-lock-file"
 	forceFlag                 = "--force"
+	everythingFlag            = "--everything"
 	detailedExitCodeFlag      = "-detailed-exitcode"
 	logFieldComponent         = "component"
 )
+
+// resolveAndInstallToolchainDeps resolves and installs toolchain dependencies for a terraform component.
+func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(atmosConfig, "exec.resolveAndInstallToolchainDeps")()
+
+	// Initialize toolchain with atmosConfig so it uses the configured install path.
+	toolchain.SetAtmosConfig(atmosConfig)
+	resolver := dependencies.NewResolver(atmosConfig)
+	deps, err := resolver.ResolveComponentDependencies("terraform", info.StackSection, info.ComponentSection)
+	if err != nil {
+		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+	}
+
+	if len(deps) == 0 {
+		return nil
+	}
+
+	log.Debug("Installing component dependencies", logFieldComponent, info.ComponentFromArg, "stack", info.Stack, "tools", deps)
+	installer := dependencies.NewInstaller(atmosConfig)
+	if err := installer.EnsureTools(deps); err != nil {
+		return fmt.Errorf("failed to install component dependencies: %w", err)
+	}
+
+	// Build PATH with toolchain binaries and add to component environment.
+	// This does NOT modify the global process environment - only the subprocess environment.
+	toolchainPATH, err := dependencies.BuildToolchainPATH(atmosConfig, deps)
+	if err != nil {
+		return fmt.Errorf("failed to build toolchain PATH: %w", err)
+	}
+
+	// Propagate toolchain PATH into environment for subprocess.
+	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
+	return nil
+}
 
 // ExecuteTerraform executes terraform commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
 
+	log.Debug("ExecuteTerraform entry", "SubCommand", info.SubCommand, "ComponentFromArg", info.ComponentFromArg, "FinalComponent", info.FinalComponent, "Stack", info.Stack, "StackFromArg", info.StackFromArg)
 	info.CliArgs = []string{"terraform", info.SubCommand, info.SubCommand2}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
@@ -64,15 +118,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.RedirectStdErr)
 	}
 
-	// Skip stack processing when cleaning with the `--force` flag to allow cleaning without requiring stack configuration.
-	shouldProcessStacks, shouldCheckStack := shouldProcessStacks(&info)
-
 	// Get component-specific auth config and merge with global auth config.
 	// This allows components to define their own auth identities and defaults in stack configurations.
 	// Start with global config.
 	mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
 
 	// If stack and component are specified, get component config and merge auth section.
+	log.Debug("Checking if should call ExecuteDescribeComponent", "Stack", info.Stack, "ComponentFromArg", info.ComponentFromArg, "SubCommand", info.SubCommand)
 	if info.Stack != "" && info.ComponentFromArg != "" {
 		// Get component configuration from stack.
 		// Use nil AuthManager and disable functions to avoid circular dependency.
@@ -131,18 +183,22 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// to access the same authenticated session without re-prompting for credentials.
 	info.AuthManager = authManager
 
-	if shouldProcessStacks {
+	// Determine whether to process stacks and check stack configuration.
+	shouldProcess, shouldCheckStack := shouldProcessStacks(&info)
+
+	if shouldProcess {
 		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
 		if err != nil {
 			return err
 		}
-
-		if len(info.Stack) < 1 && shouldCheckStack {
-			return errUtils.ErrMissingStack
-		}
 	}
 
-	if !info.ComponentIsEnabled && info.SubCommand != "clean" {
+	// Only enforce stack requirement if shouldCheckStack is true.
+	if shouldCheckStack && len(info.Stack) < 1 {
+		return errUtils.ErrMissingStack
+	}
+
+	if !info.ComponentIsEnabled {
 		log.Info("Component is not enabled and skipped", logFieldComponent, info.ComponentFromArg)
 		return nil
 	}
@@ -160,14 +216,38 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		// Get the base path for the error message, respecting the user's actual config.
-		basePath, _ := u.GetComponentBasePath(&atmosConfig, "terraform")
-		return fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
-			errUtils.ErrInvalidTerraformComponent,
-			info.ComponentFromArg,
-			info.FinalComponent,
-			basePath,
-		)
+		// Check if component has source configured for JIT provisioning.
+		if provSource.HasSource(info.ComponentSection) {
+			// Run JIT source provisioning before path validation.
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.TerraformComponentType, info.ComponentSection, info.AuthContext); err != nil {
+				return fmt.Errorf("failed to auto-provision component source: %w", err)
+			}
+
+			// Check if source provisioner set a workdir path (source + workdir case).
+			// If so, use that path instead of the component path.
+			if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
+				componentPath = workdirPath
+				componentPathExists = true
+				err = nil // Clear any previous error since we have a valid workdir path.
+			} else {
+				// Re-check if component path now exists after provisioning (source only case).
+				componentPathExists, err = u.IsDirectory(componentPath)
+			}
+		}
+
+		// If still doesn't exist, return the error.
+		if err != nil || !componentPathExists {
+			// Get the base path for the error message, respecting the user's actual config.
+			basePath, _ := u.GetComponentBasePath(&atmosConfig, "terraform")
+			return fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
+				errUtils.ErrInvalidTerraformComponent,
+				info.ComponentFromArg,
+				info.FinalComponent,
+				basePath,
+			)
+		}
 	}
 
 	// Check if the component is allowed to be provisioned (the `metadata.type` attribute is not set to `abstract`).
@@ -196,13 +276,11 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return errUtils.ErrHTTPBackendWorkspaces
 	}
 
-	if info.SubCommand == "clean" {
-		err = handleCleanSubCommand(info, componentPath, &atmosConfig)
-		if err != nil {
-			log.Debug("Error executing 'terraform clean'", logFieldComponent, componentPath, "error", err)
+	// Resolve and install component dependencies.
+	if shouldProcess {
+		if err := resolveAndInstallToolchainDeps(&atmosConfig, &info); err != nil {
 			return err
 		}
-		return nil
 	}
 
 	varFile := constructTerraformComponentVarfileName(&info)
@@ -221,23 +299,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 		// Write variables to a file (only if we are not using the previously generated terraform plan)
 		if !info.UseTerraformPlan {
-			var varFilePath, varFileNameFromArg string
-
-			// Handle `terraform varfile` and `terraform write varfile` legacy commands
-			if info.SubCommand == "varfile" || (info.SubCommand == "write" && info.SubCommand2 == "varfile") {
-				if len(info.AdditionalArgsAndFlags) == 2 {
-					fileFlag := info.AdditionalArgsAndFlags[0]
-					if fileFlag == "-f" || fileFlag == "--file" {
-						varFileNameFromArg = info.AdditionalArgsAndFlags[1]
-					}
-				}
-			}
-
-			if len(varFileNameFromArg) > 0 {
-				varFilePath = varFileNameFromArg
-			} else {
-				varFilePath = constructTerraformComponentVarfilePath(&atmosConfig, &info)
-			}
+			varFilePath := constructTerraformComponentVarfilePath(&atmosConfig, &info)
 
 			log.Debug("Writing the variables", "file", varFilePath)
 
@@ -267,11 +329,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 				}
 			}
 		}
-	}
-
-	// Handle `terraform varfile` and `terraform write varfile` legacy commands
-	if info.SubCommand == "varfile" || (info.SubCommand == "write" && info.SubCommand2 == "varfile") {
-		return nil
 	}
 
 	// Check if the component 'settings.validation' section is specified and validate the component
@@ -382,9 +439,9 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Run `terraform init` before running other commands.
+	// Note: 'clean' is no longer checked here since it doesn't route through ExecuteTerraform.
 	runTerraformInit := true
 	if info.SubCommand == "init" ||
-		info.SubCommand == "clean" ||
 		(info.SubCommand == "deploy" && !atmosConfig.Components.Terraform.DeployRunInit) {
 		runTerraformInit = false
 	}
@@ -407,6 +464,22 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory.
 		cleanTerraformWorkspace(atmosConfig, componentPath)
+
+		// Execute provisioners registered for before.terraform.init hook event.
+		// This runs backend provisioners to ensure backends exist before Terraform tries to configure them.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		err = provisioner.ExecuteProvisioners(ctx, provisioner.HookEvent(beforeTerraformInitEvent), &atmosConfig, info.ComponentSection, info.AuthContext)
+		if err != nil {
+			return fmt.Errorf("provisioner execution failed: %w", err)
+		}
+
+		// Check if workdir provisioner set a workdir path - if so, use it instead of the component path.
+		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+			componentPath = workdirPath
+			log.Debug("Using workdir path", "workdirPath", workdirPath)
+		}
 
 		err = ExecuteShellCommand(
 			atmosConfig,
@@ -500,6 +573,22 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		// Before executing `terraform init`, delete the `.terraform/environment` file from the component directory.
 		cleanTerraformWorkspace(atmosConfig, componentPath)
 
+		// Execute provisioners registered for before.terraform.init hook event.
+		// This runs backend provisioners to ensure backends exist before Terraform tries to configure them.
+		initCtx, initCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer initCancel()
+
+		err = provisioner.ExecuteProvisioners(initCtx, provisioner.HookEvent(beforeTerraformInitEvent), &atmosConfig, info.ComponentSection, info.AuthContext)
+		if err != nil {
+			return fmt.Errorf("provisioner execution failed: %w", err)
+		}
+
+		// Check if workdir provisioner set a workdir path - if so, use it instead of the component path.
+		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+			componentPath = workdirPath
+			log.Debug("Using workdir path for terraform command", "workdirPath", workdirPath)
+		}
+
 		if atmosConfig.Components.Terraform.InitRunReconfigure {
 			allArgsAndFlags = append(allArgsAndFlags, []string{"-reconfigure"}...)
 		}
@@ -529,11 +618,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			// Otherwise, use the planfile name what is autogenerated by Atmos
 			allArgsAndFlags = append(allArgsAndFlags, []string{planFile}...)
 		}
-	}
-
-	// Handle the plan-diff command.
-	if info.SubCommand == "plan-diff" {
-		return TerraformPlanDiff(&atmosConfig, &info)
 	}
 
 	// Run `terraform workspace` before executing other terraform commands
@@ -599,24 +683,6 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		if region, regionExist := info.ComponentVarsSection["region"].(string); regionExist {
 			info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("AWS_REGION=%s", region))
 		}
-	}
-
-	// Execute `terraform shell` command.
-	if info.SubCommand == "shell" {
-		err = execTerraformShellCommand(
-			&atmosConfig,
-			info.ComponentFromArg,
-			info.Stack,
-			info.ComponentEnvList,
-			varFile,
-			workingDir,
-			info.TerraformWorkspace,
-			componentPath,
-		)
-		if err != nil {
-			return err
-		}
-		return nil
 	}
 
 	// Execute the provided command (except for `terraform workspace` which was executed above).

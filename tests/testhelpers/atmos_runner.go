@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/utils"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 )
 
 const (
@@ -71,7 +71,8 @@ func (r *AtmosRunner) buildWithoutCoverage() error {
 		return fmt.Errorf("failed to find repository root: %w", err)
 	}
 
-	cmd := exec.Command("go", "build", "-o", tempBinary, ".")
+	// Use -buildvcs=false to support git worktrees where VCS stamping fails.
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", tempBinary, ".")
 	cmd.Dir = repoRoot
 
 	// Run the build command.
@@ -116,7 +117,8 @@ func (r *AtmosRunner) buildWithCoverage() error {
 		return fmt.Errorf("failed to find repository root: %w", err)
 	}
 
-	cmd := exec.Command("go", "build", "-cover", "-o", tempBinary, ".")
+	// Use -buildvcs=false to support git worktrees where VCS stamping fails.
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-cover", "-o", tempBinary, ".")
 	cmd.Dir = repoRoot
 
 	// Run the build command.
@@ -163,7 +165,7 @@ func (r *AtmosRunner) prepareEnvironment() []string {
 	env := os.Environ()
 
 	// Ensure test binary is in PATH using testable utility functions
-	updatedEnv := utils.EnsureBinaryInPath(env, r.binaryPath)
+	updatedEnv := envpkg.EnsureBinaryInPath(env, r.binaryPath)
 
 	// Handle GOCOVERDIR based on coverage settings
 	// First filter out any existing GOCOVERDIR entries
