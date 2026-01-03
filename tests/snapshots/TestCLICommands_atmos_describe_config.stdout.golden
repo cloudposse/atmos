@@ -17,7 +17,8 @@
       },
       "plan": {
         "skip_planfile": false
-      }
+      },
+      "plugin_cache": true
     },
     "helmfile": {
       "base_path": "",
