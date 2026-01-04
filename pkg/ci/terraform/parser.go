@@ -3,12 +3,14 @@ package terraform
 
 import (
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 
 	tfjson "github.com/hashicorp/terraform-json"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -42,7 +44,7 @@ func ParsePlanJSON(jsonData []byte) (*ci.OutputResult, error) {
 
 	var plan tfjson.Plan
 	if err := json.Unmarshal(jsonData, &plan); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: failed to unmarshal plan JSON: %w", errUtils.ErrParseFile, err)
 	}
 
 	result := newEmptyResult()
@@ -149,7 +151,7 @@ func ParseOutputJSON(jsonData []byte) (map[string]ci.TerraformOutput, error) {
 
 	var outputs OutputJSON
 	if err := json.Unmarshal(jsonData, &outputs); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: failed to unmarshal output JSON: %w", errUtils.ErrParseFile, err)
 	}
 
 	result := make(map[string]ci.TerraformOutput)
