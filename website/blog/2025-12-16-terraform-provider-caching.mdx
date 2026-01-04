@@ -1,0 +1,87 @@
+---
+slug: terraform-provider-caching
+title: 'Zero-Config Terraform Provider Caching'
+authors:
+  - osterman
+tags:
+  - feature
+  - dx
+date: 2025-12-16T00:00:00.000Z
+---
+
+Atmos now automatically caches Terraform providers across all components, dramatically reducing `terraform init` times and network bandwidth. This feature is enabled by default with zero configuration required.
+
+<!--truncate-->
+
+## Why Provider Caching Matters
+
+In large Atmos projects with many components, each `terraform init` downloads the same providers repeatedly. For the AWS provider alone, this can mean downloading 300+ MB per component. With provider caching, Atmos downloads each provider version once and reuses it across all components.
+
+## How It Works
+
+When you run any Terraform command, Atmos automatically:
+
+1. Sets `TF_PLUGIN_CACHE_DIR` to `~/.cache/atmos/terraform/plugins`
+2. Sets `TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true` (required by Terraform)
+
+Terraform then downloads providers to this shared cache and creates symlinks in each component's `.terraform` directory.
+
+## Zero Configuration
+
+Provider caching works out of the box. Just upgrade Atmos and run your commands as usual:
+
+```bash
+atmos terraform init mycomponent -s dev
+```
+
+The first init downloads providers to the cache. Subsequent inits for other components reuse the cached providers instantly.
+
+## Configuration Options
+
+While caching works with no configuration, you can customize its behavior in `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    # Disable automatic caching (default: true)
+    plugin_cache: false
+
+    # Use a custom cache directory (default: ~/.cache/atmos/terraform/plugins)
+    plugin_cache_dir: /shared/terraform/plugin-cache
+```
+
+Or via environment variables:
+
+```bash
+export ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE=false
+export ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR=/custom/path
+```
+
+## Respecting User Overrides
+
+If you already have `TF_PLUGIN_CACHE_DIR` set in your environment or in the `env:` section of `atmos.yaml`, Atmos respects your configuration and does not override it.
+
+## Cleaning the Cache
+
+To free disk space or force providers to be re-downloaded, use the new `--cache` flag:
+
+```bash
+# Clean the shared plugin cache
+atmos terraform clean --cache
+
+# Clean with force (no confirmation prompt)
+atmos terraform clean --cache --force
+```
+
+## Performance Impact
+
+In our testing with projects containing 50+ components:
+
+- **First init**: Same as before (downloads all providers)
+- **Subsequent inits**: 10-50x faster (symlinks from cache)
+- **Disk savings**: Significant reduction in duplicate provider binaries
+
+## Related Documentation
+
+- [Terraform Configuration](/cli/configuration/components/terraform) - Full configuration reference
+- [terraform clean](/cli/commands/terraform/clean) - Cache cleanup options

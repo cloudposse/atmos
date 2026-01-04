@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/required_providers"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -71,7 +72,7 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 		log.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
 
 		// Use retry logic on Windows to handle file locking
-		deleteErr := retryOnWindows(func() error {
+		deleteErr := tfoutput.RetryOnWindows(func() error {
 			return os.Remove(filePath)
 		})
 

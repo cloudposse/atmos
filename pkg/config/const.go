@@ -154,4 +154,7 @@ const (
 
 	// AtmosProfileFlag is the CLI flag for specifying Atmos profiles.
 	AtmosProfileFlag = "--profile"
+
+	// SliceSeparator is the separator used for splitting comma-separated strings into slices.
+	SliceSeparator = ","
 )

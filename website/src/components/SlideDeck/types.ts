@@ -3,6 +3,19 @@ import React, { ReactNode } from 'react';
 // Slide layout variants.
 export type SlideLayout = 'title' | 'content' | 'split' | 'code' | 'quote';
 
+// Notes panel position.
+export type NotesPosition = 'right' | 'bottom';
+
+// Notes display mode.
+export type NotesDisplayMode = 'overlay' | 'shrink';
+
+// Notes preferences stored in localStorage.
+export interface NotesPreferences {
+  position: NotesPosition;
+  displayMode: NotesDisplayMode;
+  isPopout: boolean;
+}
+
 // Props for the SlideDeck container component.
 export interface SlideDeckProps {
   children: ReactNode;
@@ -86,6 +99,12 @@ export interface SlideDeckContextValue {
   toggleNotes: () => void;
   currentNotes: React.ReactNode | null;
   setCurrentNotes: (notes: React.ReactNode | null) => void;
+  // Notes preferences.
+  notesPreferences: NotesPreferences;
+  setNotesPosition: (position: NotesPosition) => void;
+  setNotesDisplayMode: (mode: NotesDisplayMode) => void;
+  setNotesPopout: (isPopout: boolean) => void;
+  isMobile: boolean;
 }
 
 // Metadata for slide deck index page.
