@@ -20,7 +20,6 @@ AVAILABLE COMMANDS
       destroy             Destroy the Helm releases for the specified stack.
       diff                Show differences between the desired and actual state of Helm releases.
       generate [command]  Generate configurations for Helmfile components
-      source [command]    Manage Helmfile component sources (JIT vendoring)
       sync                Synchronize the state of Helm releases by reconciling the actual state with the desired state
                           (applies changes as needed).
       version             Get Helmfile version

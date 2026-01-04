@@ -9,5 +9,3 @@
 You ran: atmos helmfile <command> . The path points to: terraform component
 
 💡 Run the correct command for this component type
-
-
