@@ -1,12 +1,16 @@
-package exec
+package vendor
 
 import (
 	"net/url"
 	"regexp"
 	"strings"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hashicorp/go-getter"
 )
+
+// subdirSeparator is the separator used to separate the source from the subdirectory in a URI.
+const subdirSeparator = "//"
 
 // scpURLPattern matches SCP-style Git URLs (e.g., git@github.com:owner/repo.git).
 // This pattern is also used by CustomGitDetector.rewriteSCPURL in pkg/downloader/.
@@ -49,7 +53,7 @@ func hasSchemeSeparator(uri string) bool {
 //   - true: "github.com/repo//path", "git.company.com/repo//modules"
 //   - false: "github.com/repo", "https://github.com/repo", "./local/path"
 func hasSubdirectoryDelimiter(uri string) bool {
-	idx := strings.Index(uri, "//")
+	idx := strings.Index(uri, subdirSeparator)
 	if idx == -1 {
 		return false
 	}
@@ -57,7 +61,7 @@ func hasSubdirectoryDelimiter(uri string) bool {
 	if idx > 0 && uri[idx-1] == ':' {
 		// Check if there's another // after the scheme separator.
 		remaining := uri[idx+2:]
-		return strings.Contains(remaining, "//")
+		return strings.Contains(remaining, subdirSeparator)
 	}
 	return true
 }
@@ -263,9 +267,67 @@ func appendDoubleSlashDot(uri string) string {
 		queryPart = ""
 	}
 
-	// Remove trailing "//" if present to avoid creating "////"
-	base = strings.TrimSuffix(base, "//")
+	// Remove trailing "//" if present to avoid creating "////".
+	base = strings.TrimSuffix(base, subdirSeparator)
 
-	// Append //. and query parameters
-	return base + "//." + queryPart
+	// Append //. and query parameters.
+	return base + subdirSeparator + "." + queryPart
+}
+
+// normalizeVendorURI normalizes vendor source URIs to handle all patterns consistently.
+//
+// Examples:
+//   - "github.com/repo.git///?ref=v1.0.0" -> "github.com/repo.git//.?ref=v1.0.0"
+//   - "github.com/repo.git?ref=v1.0.0" -> "github.com/repo.git//.?ref=v1.0.0"
+//   - "github.com/repo.git///some/path?ref=v1.0.0" -> "github.com/repo.git//some/path?ref=v1.0.0"
+//   - "github.com/repo.git//some/path?ref=v1.0.0" -> unchanged
+func normalizeVendorURI(uri string) string {
+	// Skip normalization for special URI types
+	if isFileURI(uri) || isOCIURI(uri) || isS3URI(uri) || isLocalPath(uri) || isNonGitHTTPURI(uri) {
+		return uri
+	}
+
+	// Handle triple-slash pattern first
+	if containsTripleSlash(uri) {
+		uri = normalizeTripleSlash(uri)
+	}
+
+	// Add //. to Git URLs without subdirectory
+	if needsDoubleSlashDot(uri) {
+		uri = appendDoubleSlashDot(uri)
+		log.Debug("Added //. to Git URL without subdirectory", "normalized", uri)
+	}
+
+	return uri
+}
+
+// normalizeTripleSlash converts triple-slash patterns to appropriate double-slash patterns.
+// Uses go-getter's SourceDirSubdir for robust parsing across all Git platforms.
+func normalizeTripleSlash(uri string) string {
+	// Use go-getter to parse the URI and extract subdirectory
+	// Note: source will include query parameters from the original URI
+	source, subdir := parseSubdirFromTripleSlash(uri)
+
+	// Separate query parameters from source if present
+	var queryParams string
+	if queryPos := strings.Index(source, "?"); queryPos != -1 {
+		queryParams = source[queryPos:]
+		source = source[:queryPos]
+	}
+
+	// Determine the normalized form based on subdirectory.
+	var normalized string
+	if subdir == "" {
+		// Root of repository case: convert /// to //.
+		normalized = source + subdirSeparator + "." + queryParams
+		log.Debug("Normalized triple-slash to double-slash-dot for repository root",
+			"original", uri, "normalized", normalized)
+	} else {
+		// Path specified after triple slash: convert /// to //.
+		normalized = source + subdirSeparator + subdir + queryParams
+		log.Debug("Normalized triple-slash to double-slash with path",
+			"original", uri, "normalized", normalized)
+	}
+
+	return normalized
 }
