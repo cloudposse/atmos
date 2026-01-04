@@ -25,6 +25,15 @@ type ExecutionContext struct {
 
 	// StackInfo contains additional stack and component information.
 	StackInfo *schema.ConfigAndStacksInfo
+
+	// Env contains environment variables available for function execution.
+	Env map[string]string
+
+	// WorkingDir is the current working directory.
+	WorkingDir string
+
+	// SourceFile is the file containing this function call.
+	SourceFile string
 }
 
 // NewExecutionContext creates a new ExecutionContext with the given parameters.
@@ -57,4 +66,25 @@ func (ctx *ExecutionContext) WithStackInfo(stackInfo *schema.ConfigAndStacksInfo
 	newCtx := *ctx
 	newCtx.StackInfo = stackInfo
 	return &newCtx
+}
+
+// GetEnv returns the value of an environment variable, or empty string if not found.
+func (c *ExecutionContext) GetEnv(key string) string {
+	defer perf.Track(nil, "function.ExecutionContext.GetEnv")()
+
+	if c == nil || c.Env == nil {
+		return ""
+	}
+	return c.Env[key]
+}
+
+// HasEnv returns true if the environment variable is set.
+func (c *ExecutionContext) HasEnv(key string) bool {
+	defer perf.Track(nil, "function.ExecutionContext.HasEnv")()
+
+	if c == nil || c.Env == nil {
+		return false
+	}
+	_, ok := c.Env[key]
+	return ok
 }

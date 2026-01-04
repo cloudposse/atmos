@@ -1,0 +1,9 @@
+# Base catalog file in YAML format.
+# Defines the default component configuration.
+
+components:
+  terraform:
+    mock:
+      vars:
+        foo: "base foo"
+        bar: "base bar"
