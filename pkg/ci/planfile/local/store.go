@@ -16,6 +16,24 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// validateKey ensures the key doesn't escape the base path via path traversal.
+// This prevents malicious keys like "../../../etc/passwd" from accessing files
+// outside the planfile directory.
+func (s *Store) validateKey(key string) error {
+	// Clean the key and ensure it doesn't escape basePath.
+	fullPath := filepath.Join(s.basePath, key)
+	cleanPath := filepath.Clean(fullPath)
+	cleanBase := filepath.Clean(s.basePath)
+
+	// Ensure cleaned path is still under basePath.
+	// We check for the separator suffix to prevent matching partial directory names
+	// (e.g., /base matching /base-other).
+	if !strings.HasPrefix(cleanPath, cleanBase+string(filepath.Separator)) && cleanPath != cleanBase {
+		return fmt.Errorf("%w: key contains path traversal: %s", errUtils.ErrPlanfileKeyInvalid, key)
+	}
+	return nil
+}
+
 const (
 	storeName        = "local"
 	metadataSuffix   = ".metadata.json"
@@ -65,6 +83,10 @@ func (s *Store) Name() string {
 func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata *planfile.Metadata) error {
 	defer perf.Track(nil, "local.Upload")()
 
+	if err := s.validateKey(key); err != nil {
+		return err
+	}
+
 	fullPath := filepath.Join(s.basePath, key)
 
 	// Create parent directories.
@@ -102,6 +124,10 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *planfile.Metadata, error) {
 	defer perf.Track(nil, "local.Download")()
 
+	if err := s.validateKey(key); err != nil {
+		return nil, nil, err
+	}
+
 	fullPath := filepath.Join(s.basePath, key)
 
 	f, err := os.Open(fullPath)
@@ -121,6 +147,10 @@ func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *planf
 // Delete deletes a planfile from the local filesystem.
 func (s *Store) Delete(ctx context.Context, key string) error {
 	defer perf.Track(nil, "local.Delete")()
+
+	if err := s.validateKey(key); err != nil {
+		return err
+	}
 
 	fullPath := filepath.Join(s.basePath, key)
 
@@ -181,6 +211,10 @@ func (s *Store) List(_ context.Context, prefix string) ([]planfile.PlanfileInfo,
 func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 	defer perf.Track(nil, "local.Exists")()
 
+	if err := s.validateKey(key); err != nil {
+		return false, err
+	}
+
 	fullPath := filepath.Join(s.basePath, key)
 	_, err := os.Stat(fullPath)
 	if err != nil {
@@ -225,6 +259,10 @@ func (s *Store) addFileToList(files *[]planfile.PlanfileInfo, path string, d os.
 // GetMetadata retrieves metadata for a planfile.
 func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata, error) {
 	defer perf.Track(nil, "local.GetMetadata")()
+
+	if err := s.validateKey(key); err != nil {
+		return nil, err
+	}
 
 	fullPath := filepath.Join(s.basePath, key)
 

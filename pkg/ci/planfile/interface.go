@@ -171,7 +171,7 @@ func (p KeyPattern) GenerateKey(ctx *KeyContext) (string, error) {
 
 	for placeholder, value := range replacements {
 		// Replace all occurrences, even if value is empty (after validation).
-		key = replaceAll(key, placeholder, value)
+		key = strings.ReplaceAll(key, placeholder, value)
 	}
 
 	return key, nil
@@ -190,25 +190,4 @@ func validateKeyContext(pattern string, ctx *KeyContext) error {
 		return errUtils.ErrPlanfileKeyInvalid
 	}
 	return nil
-}
-
-// replaceAll replaces all occurrences of old with new in s.
-func replaceAll(s, old, new string) string {
-	for {
-		i := indexOf(s, old)
-		if i == -1 {
-			return s
-		}
-		s = s[:i] + new + s[i+len(old):]
-	}
-}
-
-// indexOf returns the index of substr in s, or -1 if not found.
-func indexOf(s, substr string) int {
-	for i := 0; i+len(substr) <= len(s); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }

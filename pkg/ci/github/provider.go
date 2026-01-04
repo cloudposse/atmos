@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/ci"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -174,8 +175,12 @@ func init() {
 	if p.Detect() {
 		// Create full provider with client for actual use.
 		fullProvider, err := NewProvider()
-		if err == nil {
-			ci.Register(fullProvider)
+		if err != nil {
+			// Log warning but don't fail - CI detection worked but client creation failed.
+			// This allows graceful degradation in environments where GitHub API is unavailable.
+			log.Debug("Failed to create GitHub provider", "error", err)
+			return
 		}
+		ci.Register(fullProvider)
 	}
 }

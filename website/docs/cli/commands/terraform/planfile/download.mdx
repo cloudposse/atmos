@@ -1,0 +1,102 @@
+---
+title: atmos terraform planfile download
+sidebar_label: download
+sidebar_class_name: command
+sidebar_position: 3
+id: download
+description: Download a Terraform planfile from remote storage.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Download a Terraform planfile from a storage backend. Use this in CI/CD pipelines to retrieve a planfile created in an earlier job.
+</Intro>
+
+## Usage
+
+```shell
+atmos terraform planfile download <key> [output-path] [options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`<key>`</dt>
+  <dd>Storage key of the planfile to download (required). Format: `{stack}/{component}/{sha}.tfplan`</dd>
+
+  <dt>`[output-path]`</dt>
+  <dd>Local path to save the planfile. Defaults to the basename of the key.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--store`</dt>
+  <dd>Storage backend to use: `local`, `s3`, or `github-artifacts`. Auto-detected from environment.</dd>
+</dl>
+
+## Examples
+
+### Download with default output path
+
+```shell
+atmos terraform planfile download dev-us-east-1/vpc/abc123.tfplan
+# Saves to: abc123.tfplan
+```
+
+### Download to specific path
+
+```shell
+atmos terraform planfile download dev-us-east-1/vpc/abc123.tfplan ./plans/vpc.planfile
+```
+
+### Download from specific store
+
+```shell
+atmos terraform planfile download dev-us-east-1/vpc/abc123.tfplan \
+  --store s3
+```
+
+### Download in GitHub Actions
+
+```yaml
+- name: Download planfile
+  run: |
+    atmos terraform planfile download \
+      "${{ matrix.stack }}/${{ matrix.component }}/${{ github.sha }}.tfplan" \
+      ${{ matrix.component }}.planfile
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+- name: Apply planfile
+  run: |
+    atmos terraform apply ${{ matrix.component }} \
+      -s ${{ matrix.stack }} \
+      --from-plan=${{ matrix.component }}.planfile
+```
+
+## Output
+
+On successful download, displays:
+- Source storage backend
+- Storage key
+- Output file path
+- Metadata (stack, component, SHA, changes summary)
+
+```
+✓ Downloaded planfile from s3: dev-us-east-1/vpc/abc123.tfplan -> vpc.planfile
+ℹ Stack: dev-us-east-1, Component: vpc, SHA: abc123
+```
+
+## Error Handling
+
+Returns an error if:
+- The planfile does not exist in storage
+- Storage backend is not accessible
+- Output path is not writable
+
+## Related
+
+- [`atmos terraform planfile upload`](/cli/commands/terraform/planfile/upload) - Upload planfiles
+- [`atmos terraform planfile list`](/cli/commands/terraform/planfile/list) - List stored planfiles
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply downloaded planfiles

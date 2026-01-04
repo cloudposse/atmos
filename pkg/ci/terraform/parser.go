@@ -14,6 +14,8 @@ import (
 )
 
 // Regular expressions for parsing terraform stdout (errors/warnings only).
+// These are compiled at package initialization and are safe for concurrent use
+// as regexp.Regexp is immutable after compilation.
 var (
 	// Matches error messages in terraform output.
 	errorRe = regexp.MustCompile(`(?m)^(?:[│|] )?Error:\s*(.+)$`)

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/planfile"
 )
 
@@ -432,4 +433,85 @@ func TestIntegration_FullLifecycle(t *testing.T) {
 	metaPath := filepath.Join(tmpDir, ".meta", key+".json")
 	_, err = os.Stat(metaPath)
 	assert.True(t, os.IsNotExist(err))
+}
+
+func TestStore_PathTraversal(t *testing.T) {
+	// Create temp directory.
+	tmpDir := t.TempDir()
+	store := &Store{basePath: tmpDir}
+	ctx := context.Background()
+
+	// Test that path traversal attempts are rejected for all operations.
+	maliciousKeys := []string{
+		"../escape",
+		"../../etc/passwd",
+		"valid/../../../escape",
+		"stack/../../../etc/passwd",
+	}
+
+	for _, key := range maliciousKeys {
+		t.Run("Upload_"+key, func(t *testing.T) {
+			err := store.Upload(ctx, key, strings.NewReader("malicious content"), nil)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrPlanfileKeyInvalid)
+			assert.Contains(t, err.Error(), "path traversal")
+		})
+
+		t.Run("Download_"+key, func(t *testing.T) {
+			_, _, err := store.Download(ctx, key)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrPlanfileKeyInvalid)
+		})
+
+		t.Run("Delete_"+key, func(t *testing.T) {
+			err := store.Delete(ctx, key)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrPlanfileKeyInvalid)
+		})
+
+		t.Run("Exists_"+key, func(t *testing.T) {
+			_, err := store.Exists(ctx, key)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrPlanfileKeyInvalid)
+		})
+
+		t.Run("GetMetadata_"+key, func(t *testing.T) {
+			_, err := store.GetMetadata(ctx, key)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrPlanfileKeyInvalid)
+		})
+	}
+}
+
+func TestStore_ValidateKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	store := &Store{basePath: tmpDir}
+
+	tests := []struct {
+		name    string
+		key     string
+		wantErr bool
+	}{
+		// Valid keys.
+		{name: "simple key", key: "test.tfplan", wantErr: false},
+		{name: "nested key", key: "stack/component/sha.tfplan", wantErr: false},
+		{name: "deeply nested", key: "a/b/c/d/e/f.tfplan", wantErr: false},
+		// Invalid keys (path traversal attempts).
+		{name: "parent escape", key: "../escape", wantErr: true},
+		{name: "double parent escape", key: "../../etc/passwd", wantErr: true},
+		{name: "hidden escape", key: "valid/../../../escape", wantErr: true},
+		{name: "mid-path escape", key: "stack/../../../escape", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := store.validateKey(tt.key)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrPlanfileKeyInvalid)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }

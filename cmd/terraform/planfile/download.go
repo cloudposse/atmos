@@ -2,7 +2,6 @@ package planfile
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -147,12 +146,12 @@ func downloadToFile(store planfile.Store, key, outputPath string) (*planfile.Met
 func writeToFile(outputPath string, reader io.Reader) error {
 	f, err := os.Create(outputPath)
 	if err != nil {
-		return errors.Join(errUtils.ErrPlanfileDownloadFailed, fmt.Errorf("failed to create output file %s: %w", outputPath, err))
+		return fmt.Errorf("%w: failed to create output file %s: %w", errUtils.ErrPlanfileDownloadFailed, outputPath, err)
 	}
 	defer f.Close()
 
 	if _, err := io.Copy(f, reader); err != nil {
-		return errors.Join(errUtils.ErrPlanfileDownloadFailed, fmt.Errorf("failed to write planfile: %w", err))
+		return fmt.Errorf("%w: failed to write planfile to %s: %w", errUtils.ErrPlanfileDownloadFailed, outputPath, err)
 	}
 	return nil
 }

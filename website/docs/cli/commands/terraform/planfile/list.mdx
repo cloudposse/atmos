@@ -1,0 +1,106 @@
+---
+title: atmos terraform planfile list
+sidebar_label: list
+sidebar_class_name: command
+sidebar_position: 4
+id: list
+description: List Terraform planfiles stored in a backend.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+List planfiles stored in a storage backend, optionally filtering by prefix. Useful for finding planfiles for a specific stack or component.
+</Intro>
+
+## Usage
+
+```shell
+atmos terraform planfile list [prefix] [options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`[prefix]`</dt>
+  <dd>Optional prefix to filter planfiles. Can be a stack name, stack/component path, or any prefix.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--store`</dt>
+  <dd>Storage backend to use: `local`, `s3`, or `github-artifacts`. Auto-detected from environment.</dd>
+
+  <dt>`--format`</dt>
+  <dd>Output format: `table` (default) or `json`.</dd>
+</dl>
+
+## Examples
+
+### List all planfiles
+
+```shell
+atmos terraform planfile list
+```
+
+### List by stack
+
+```shell
+atmos terraform planfile list dev-us-east-1
+```
+
+### List by stack and component
+
+```shell
+atmos terraform planfile list dev-us-east-1/vpc
+```
+
+### JSON output for scripting
+
+```shell
+atmos terraform planfile list --format json
+```
+
+### List from specific store
+
+```shell
+atmos terraform planfile list --store s3
+```
+
+## Output
+
+### Table format (default)
+
+```
+KEY                                    SIZE     MODIFIED              CHANGES
+dev-us-east-1/vpc/abc123.tfplan       12.4 KB  2024-01-15 10:30:00  +5 ~2 -1
+dev-us-east-1/vpc/def456.tfplan       11.2 KB  2024-01-14 15:45:00  +3 ~0 -0
+staging/rds/ghi789.tfplan             8.9 KB   2024-01-13 09:15:00  +1 ~1 -0
+```
+
+### JSON format
+
+```json
+[
+  {
+    "key": "dev-us-east-1/vpc/abc123.tfplan",
+    "size": 12698,
+    "last_modified": "2024-01-15T10:30:00Z",
+    "metadata": {
+      "stack": "dev-us-east-1",
+      "component": "vpc",
+      "sha": "abc123",
+      "has_changes": true,
+      "additions": 5,
+      "changes": 2,
+      "destructions": 1
+    }
+  }
+]
+```
+
+## Related
+
+- [`atmos terraform planfile upload`](/cli/commands/terraform/planfile/upload) - Upload planfiles
+- [`atmos terraform planfile download`](/cli/commands/terraform/planfile/download) - Download planfiles
+- [`atmos terraform planfile show`](/cli/commands/terraform/planfile/show) - Show planfile details

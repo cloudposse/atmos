@@ -170,50 +170,6 @@ func TestIsNotFoundError(t *testing.T) {
 	}
 }
 
-func TestErrorAs(t *testing.T) {
-	t.Run("finds NoSuchKey directly", func(t *testing.T) {
-		err := &types.NoSuchKey{}
-		var target *types.NoSuchKey
-		assert.True(t, errorAs(err, &target))
-		assert.NotNil(t, target)
-	})
-
-	t.Run("finds NotFound directly", func(t *testing.T) {
-		err := &types.NotFound{}
-		var target *types.NotFound
-		assert.True(t, errorAs(err, &target))
-		assert.NotNil(t, target)
-	})
-
-	t.Run("finds wrapped NoSuchKey", func(t *testing.T) {
-		err := &wrappedError{inner: &types.NoSuchKey{}}
-		var target *types.NoSuchKey
-		assert.True(t, errorAs(err, &target))
-		assert.NotNil(t, target)
-	})
-
-	t.Run("not found in different error", func(t *testing.T) {
-		err := errors.New("different error")
-		var target *types.NoSuchKey
-		assert.False(t, errorAs(err, &target))
-	})
-
-	t.Run("nil error returns false", func(t *testing.T) {
-		var target *types.NoSuchKey
-		assert.False(t, errorAs(nil, &target))
-	})
-
-	t.Run("deeply wrapped error", func(t *testing.T) {
-		err := &wrappedError{
-			inner: &wrappedError{
-				inner: &types.NoSuchKey{},
-			},
-		}
-		var target *types.NoSuchKey
-		assert.True(t, errorAs(err, &target))
-	})
-}
-
 // wrappedError is a helper type for testing error unwrapping.
 type wrappedError struct {
 	inner error

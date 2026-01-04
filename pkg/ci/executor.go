@@ -1,9 +1,17 @@
 package ci
 
 import (
+	"context"
+	"io"
+	"os"
 	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci/planfile"
+	_ "github.com/cloudposse/atmos/pkg/ci/planfile/github" // Register github store.
+	_ "github.com/cloudposse/atmos/pkg/ci/planfile/local"  // Register local store.
+	_ "github.com/cloudposse/atmos/pkg/ci/planfile/s3"     // Register s3 store.
 	"github.com/cloudposse/atmos/pkg/ci/templates"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -340,32 +348,138 @@ func filterVariables(vars map[string]string, allowed []string) map[string]string
 	return filtered
 }
 
-// executeUploadAction uploads an artifact.
+// executeUploadAction uploads a planfile to the configured storage backend.
+// This action is triggered after a terraform plan command completes.
 func executeUploadAction(ctx *actionContext) error {
 	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeUploadAction")()
 
-	// Artifact upload is handled separately by the planfile store.
-	// This action is a marker that upload should occur.
-	key := ctx.Provider.GetArtifactKey(ctx.Opts.Info, ctx.Command)
-	log.Debug("Artifact upload requested", "key", key)
+	planfilePath, key, skip := validateUploadPrerequisites(ctx)
+	if skip {
+		return nil
+	}
 
-	// The actual upload is performed by the planfile system.
-	// This action ensures the hook binding declares the intent.
+	store, err := createPlanfileStore(ctx)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPlanfileUploadFailed).WithCause(err).
+			WithExplanation("Failed to create planfile store").Err()
+	}
+
+	if err := uploadPlanfile(ctx, store, planfilePath, key); err != nil {
+		return err
+	}
+
+	logArtifactOperation("Uploaded", key, store.Name(), "", ctx.Opts.Info)
 	return nil
 }
 
-// executeDownloadAction downloads an artifact.
+// validateUploadPrerequisites checks if upload can proceed and returns the path and key.
+func validateUploadPrerequisites(ctx *actionContext) (path, key string, skip bool) {
+	path = ctx.Opts.Info.PlanFile
+	if path == "" {
+		log.Debug("No planfile path specified, skipping upload")
+		return "", "", true
+	}
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		log.Debug("Planfile does not exist, skipping upload", "path", path)
+		return "", "", true
+	}
+	key = ctx.Provider.GetArtifactKey(ctx.Opts.Info, ctx.Command)
+	if key == "" {
+		log.Debug("Could not generate artifact key, skipping upload")
+		return "", "", true
+	}
+	return path, key, false
+}
+
+// uploadPlanfile opens and uploads a planfile to the store.
+func uploadPlanfile(ctx *actionContext, store planfile.Store, path, key string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPlanfileUploadFailed).WithCause(err).
+			WithExplanation("Failed to open planfile for upload").WithContext("path", path).Err()
+	}
+	defer f.Close()
+
+	metadata := buildPlanfileMetadata(ctx)
+	if err := store.Upload(context.Background(), key, f, metadata); err != nil {
+		return errUtils.Build(errUtils.ErrPlanfileUploadFailed).WithCause(err).
+			WithExplanation("Failed to upload planfile to store").
+			WithContext("key", key).WithContext("store", store.Name()).Err()
+	}
+	return nil
+}
+
+// executeDownloadAction downloads a planfile from the configured storage backend.
+// This action is triggered before a terraform apply command runs.
 func executeDownloadAction(ctx *actionContext) error {
 	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeDownloadAction")()
 
-	// Artifact download is handled separately by the planfile store.
-	// This action is a marker that download should occur.
-	key := ctx.Provider.GetArtifactKey(ctx.Opts.Info, ctx.Command)
-	log.Debug("Artifact download requested", "key", key)
+	planfilePath, key, skip := validateDownloadPrerequisites(ctx)
+	if skip {
+		return nil
+	}
 
-	// The actual download is performed by the planfile system.
-	// This action ensures the hook binding declares the intent.
+	store, err := createPlanfileStore(ctx)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
+			WithExplanation("Failed to create planfile store").Err()
+	}
+
+	if err := downloadPlanfile(store, planfilePath, key); err != nil {
+		return err
+	}
+
+	logArtifactOperation("Downloaded", key, store.Name(), planfilePath, ctx.Opts.Info)
 	return nil
+}
+
+// validateDownloadPrerequisites checks if download can proceed and returns the path and key.
+func validateDownloadPrerequisites(ctx *actionContext) (path, key string, skip bool) {
+	path = ctx.Opts.Info.PlanFile
+	if path == "" {
+		log.Debug("No planfile path specified, skipping download")
+		return "", "", true
+	}
+	key = ctx.Provider.GetArtifactKey(ctx.Opts.Info, ctx.Command)
+	if key == "" {
+		log.Debug("Could not generate artifact key, skipping download")
+		return "", "", true
+	}
+	return path, key, false
+}
+
+// downloadPlanfile downloads a planfile from the store and writes it to disk.
+func downloadPlanfile(store planfile.Store, path, key string) error {
+	reader, _, err := store.Download(context.Background(), key)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
+			WithExplanation("Failed to download planfile from store").
+			WithContext("key", key).WithContext("store", store.Name()).Err()
+	}
+	defer reader.Close()
+
+	f, err := os.Create(path)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
+			WithExplanation("Failed to create local planfile").WithContext("path", path).Err()
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, reader); err != nil {
+		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
+			WithExplanation("Failed to write planfile to disk").WithContext("path", path).Err()
+	}
+	return nil
+}
+
+// logArtifactOperation logs details about a planfile upload/download operation.
+func logArtifactOperation(op, key, storeName, path string, info *schema.ConfigAndStacksInfo) {
+	args := []any{"key", key, "store", storeName}
+	if path != "" {
+		args = append(args, "path", path)
+	}
+	args = append(args, "stack", info.Stack, "component", info.ComponentFromArg)
+	log.Debug(op+" planfile", args...)
 }
 
 // executeCheckAction performs a validation/check.
@@ -376,6 +490,103 @@ func executeCheckAction(ctx *actionContext) error {
 	// For now, this is a placeholder for future drift detection, etc.
 	log.Debug("Check action not yet implemented")
 	return nil
+}
+
+// createPlanfileStore creates a planfile store from configuration.
+func createPlanfileStore(ctx *actionContext) (planfile.Store, error) {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.createPlanfileStore")()
+
+	opts := planfile.StoreOptions{
+		AtmosConfig: ctx.Opts.AtmosConfig,
+	}
+
+	// Use the default store from configuration if available.
+	if ctx.Opts.AtmosConfig != nil {
+		planfilesConfig := ctx.Opts.AtmosConfig.Components.Terraform.Planfiles
+		if planfilesConfig.Default != "" {
+			if storeSpec, ok := planfilesConfig.Stores[planfilesConfig.Default]; ok {
+				opts.Type = storeSpec.Type
+				opts.Options = storeSpec.Options
+				return planfile.NewStore(opts)
+			}
+		}
+	}
+
+	// Fall back to environment-based detection.
+	if storeOpts := detectStoreFromEnv(); storeOpts != nil {
+		storeOpts.AtmosConfig = ctx.Opts.AtmosConfig
+		return planfile.NewStore(*storeOpts)
+	}
+
+	// Default to local storage.
+	opts.Type = "local"
+	opts.Options = map[string]any{
+		"path": ".atmos/planfiles",
+	}
+	return planfile.NewStore(opts)
+}
+
+// detectStoreFromEnv detects the planfile store from environment variables.
+func detectStoreFromEnv() *planfile.StoreOptions {
+	defer perf.Track(nil, "ci.detectStoreFromEnv")()
+
+	// Check for S3 configuration.
+	if bucket := os.Getenv("ATMOS_PLANFILE_BUCKET"); bucket != "" {
+		return &planfile.StoreOptions{
+			Type: "s3",
+			Options: map[string]any{
+				"bucket": bucket,
+				"prefix": os.Getenv("ATMOS_PLANFILE_PREFIX"),
+				"region": os.Getenv("AWS_REGION"),
+			},
+		}
+	}
+
+	// Check for GitHub Actions.
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		return &planfile.StoreOptions{
+			Type:    "github-artifacts",
+			Options: map[string]any{},
+		}
+	}
+
+	return nil
+}
+
+// buildPlanfileMetadata builds metadata for a planfile from action context.
+func buildPlanfileMetadata(ctx *actionContext) *planfile.Metadata {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.buildPlanfileMetadata")()
+
+	metadata := &planfile.Metadata{
+		Stack:         ctx.Opts.Info.Stack,
+		Component:     ctx.Opts.Info.ComponentFromArg,
+		ComponentPath: ctx.Opts.Info.ComponentFolderPrefix,
+		CreatedAt:     time.Now(),
+	}
+
+	// Add CI context if available.
+	if ctx.CICtx != nil {
+		metadata.SHA = ctx.CICtx.SHA
+		metadata.Branch = ctx.CICtx.Branch
+		metadata.RunID = ctx.CICtx.RunID
+		metadata.Repository = ctx.CICtx.Repository
+		if ctx.CICtx.PullRequest != nil {
+			metadata.PRNumber = ctx.CICtx.PullRequest.Number
+		}
+	}
+
+	// Add plan result data if available.
+	if ctx.Result != nil {
+		metadata.HasChanges = ctx.Result.HasChanges
+		if tfData, ok := ctx.Result.Data.(*TerraformOutputData); ok {
+			metadata.Additions = tfData.ResourceCounts.Create
+			metadata.Changes = tfData.ResourceCounts.Change
+			metadata.Destructions = tfData.ResourceCounts.Destroy
+			metadata.PlanSummary = tfData.ChangedResult
+		}
+	}
+
+	return metadata
 }
 
 // extractComponentType extracts the component type from a hook event.

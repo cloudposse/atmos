@@ -183,49 +183,67 @@ func resolveUploadKey(opts *UploadOptions) (string, error) {
 }
 
 // getStoreOptions builds StoreOptions from atmos configuration.
+// Precedence: explicit --store flag > S3 env vars > GitHub Actions env > local default.
 func getStoreOptions(atmosConfig *schema.AtmosConfiguration, storeName string) (planfile.StoreOptions, error) {
 	defer perf.Track(atmosConfig, "planfile.getStoreOptions")()
 
-	// For now, use defaults. In a full implementation, this would read from
-	// atmosConfig.Terraform.Planfiles configuration.
-	var storeType string
-	var options map[string]any
-
-	// If explicit store name provided, use it.
+	// Explicit store name takes precedence.
 	if storeName != "" {
-		storeType = storeName
-		options = map[string]any{}
+		return planfile.StoreOptions{
+			Type:        storeName,
+			Options:     map[string]any{},
+			AtmosConfig: atmosConfig,
+		}, nil
 	}
 
-	// Check environment for S3 configuration (only if not explicitly set).
-	if storeType == "" {
-		if bucket := os.Getenv("ATMOS_PLANFILE_BUCKET"); bucket != "" {
-			storeType = "s3"
-			options = map[string]any{
-				"bucket": bucket,
-				"prefix": os.Getenv("ATMOS_PLANFILE_PREFIX"),
-				"region": os.Getenv("AWS_REGION"),
-			}
-		}
+	// Try environment-based detection in order of precedence.
+	if opts := detectS3FromEnv(); opts != nil {
+		opts.AtmosConfig = atmosConfig
+		return *opts, nil
 	}
-
-	// Check environment for GitHub configuration (only if not explicitly set).
-	if storeType == "" && os.Getenv("GITHUB_ACTIONS") == "true" {
-		storeType = "github-artifacts"
-		options = map[string]any{}
+	if opts := detectGitHubFromEnv(); opts != nil {
+		opts.AtmosConfig = atmosConfig
+		return *opts, nil
 	}
 
 	// Default to local storage.
-	if storeType == "" {
-		storeType = "local"
-		options = map[string]any{
-			"path": ".atmos/planfiles",
-		}
-	}
+	return defaultLocalStore(atmosConfig), nil
+}
 
+// detectS3FromEnv checks for S3 configuration in environment variables.
+func detectS3FromEnv() *planfile.StoreOptions {
+	bucket := os.Getenv("ATMOS_PLANFILE_BUCKET")
+	if bucket == "" {
+		return nil
+	}
+	return &planfile.StoreOptions{
+		Type: "s3",
+		Options: map[string]any{
+			"bucket": bucket,
+			"prefix": os.Getenv("ATMOS_PLANFILE_PREFIX"),
+			"region": os.Getenv("AWS_REGION"),
+		},
+	}
+}
+
+// detectGitHubFromEnv checks if running in GitHub Actions.
+func detectGitHubFromEnv() *planfile.StoreOptions {
+	if os.Getenv("GITHUB_ACTIONS") != "true" {
+		return nil
+	}
+	return &planfile.StoreOptions{
+		Type:    "github-artifacts",
+		Options: map[string]any{},
+	}
+}
+
+// defaultLocalStore returns the default local storage configuration.
+func defaultLocalStore(atmosConfig *schema.AtmosConfiguration) planfile.StoreOptions {
 	return planfile.StoreOptions{
-		Type:        storeType,
-		Options:     options,
+		Type: "local",
+		Options: map[string]any{
+			"path": ".atmos/planfiles",
+		},
 		AtmosConfig: atmosConfig,
-	}, nil
+	}
 }

@@ -1,0 +1,99 @@
+---
+title: atmos terraform planfile upload
+sidebar_label: upload
+sidebar_class_name: command
+sidebar_position: 2
+id: upload
+description: Upload a Terraform planfile to remote storage.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Upload a Terraform planfile to a storage backend for later use. This is useful in CI/CD pipelines where the plan and apply steps run in separate jobs.
+</Intro>
+
+## Usage
+
+```shell
+atmos terraform planfile upload <planfile> [options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`<planfile>`</dt>
+  <dd>Path to the local planfile to upload (required).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Stack name. Used for generating the storage key.</dd>
+
+  <dt>`--component`</dt>
+  <dd>Component name. Used for generating the storage key.</dd>
+
+  <dt>`--sha`</dt>
+  <dd>Git commit SHA. Used for generating the storage key. Defaults to current HEAD.</dd>
+
+  <dt>`--key`</dt>
+  <dd>Override the auto-generated storage key. Format: `{stack}/{component}/{sha}.tfplan`</dd>
+
+  <dt>`--store`</dt>
+  <dd>Storage backend to use: `local`, `s3`, or `github-artifacts`. Auto-detected from environment.</dd>
+</dl>
+
+## Examples
+
+### Upload with auto-generated key
+
+```shell
+atmos terraform planfile upload vpc.planfile \
+  --stack dev-us-east-1 \
+  --component vpc
+```
+
+### Upload with explicit key
+
+```shell
+atmos terraform planfile upload vpc.planfile \
+  --key "dev-us-east-1/vpc/abc123.tfplan"
+```
+
+### Upload to specific store
+
+```shell
+atmos terraform planfile upload vpc.planfile \
+  --stack dev-us-east-1 \
+  --component vpc \
+  --store s3
+```
+
+### Upload in GitHub Actions
+
+```yaml
+- name: Upload planfile
+  run: |
+    atmos terraform planfile upload ${{ steps.plan.outputs.planfile }} \
+      --stack ${{ matrix.stack }} \
+      --component ${{ matrix.component }} \
+      --sha ${{ github.sha }}
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+## Storage Key Generation
+
+When `--key` is not specified, the key is generated from:
+- Stack name (from `--stack`)
+- Component name (from `--component`)
+- Git SHA (from `--sha` or current HEAD)
+
+Pattern: `{stack}/{component}/{sha}.tfplan`
+
+## Related
+
+- [`atmos terraform planfile download`](/cli/commands/terraform/planfile/download) - Download planfiles
+- [`atmos terraform planfile list`](/cli/commands/terraform/planfile/list) - List stored planfiles
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate planfiles
