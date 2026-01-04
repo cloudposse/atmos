@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"os/exec"
+	"runtime"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -85,14 +85,9 @@ func (h *SpinHandler) prepareExecution(ctx context.Context, step *schema.Workflo
 	}
 
 	// Build environment from Variables.Env (which includes prepared merged environment).
-	// Guard against integer overflow when computing capacity.
-	varsEnvLen := len(vars.Env)
-	stepEnvLen := len(step.Env)
-	capacity := varsEnvLen
-	if varsEnvLen <= math.MaxInt-stepEnvLen {
-		capacity = varsEnvLen + stepEnvLen
-	}
-	envVars := make([]string, 0, capacity)
+	// Use safe capacity calculation to prevent integer overflow on 32-bit systems.
+	const maxEnvVars = 1 << 20 // 1M env vars is more than reasonable.
+	envVars := make([]string, 0, safeEnvCapacity(len(vars.Env), len(step.Env), maxEnvVars))
 	for k, v := range vars.Env {
 		envVars = append(envVars, k+"="+v)
 	}
@@ -135,8 +130,9 @@ func (h *SpinHandler) runCommand(ctx context.Context, opts *spinExecOptions, std
 		return errUtils.ErrStepEmptyCommand
 	}
 
-	// Use shell to interpret the command string, supporting pipes, &&, etc.
-	cmd := exec.CommandContext(ctx, "sh", "-c", opts.command) //nolint:gosec // User-provided command in workflow step
+	// Use platform-specific shell to interpret the command string.
+	shell, shellArg := getShellCommand()
+	cmd := exec.CommandContext(ctx, shell, shellArg, opts.command)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
@@ -148,6 +144,30 @@ func (h *SpinHandler) runCommand(ctx context.Context, opts *spinExecOptions, std
 	cmd.Env = opts.envVars
 
 	return cmd.Run()
+}
+
+// getShellCommand returns the platform-specific shell and argument for command execution.
+func getShellCommand() (shell string, arg string) {
+	if runtime.GOOS == "windows" {
+		return "cmd", "/C"
+	}
+	return "sh", "-c"
+}
+
+// safeEnvCapacity computes a safe capacity for environment variable slices.
+// It clamps both lengths to maxEnvVars before adding to prevent overflow.
+func safeEnvCapacity(len1, len2, maxEnvVars int) int {
+	if len1 > maxEnvVars {
+		len1 = maxEnvVars
+	}
+	if len2 > maxEnvVars {
+		len2 = maxEnvVars
+	}
+	total := len1 + len2
+	if total > maxEnvVars {
+		total = maxEnvVars
+	}
+	return total
 }
 
 // buildResult creates a step result from command output.
