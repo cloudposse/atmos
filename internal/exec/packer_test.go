@@ -55,23 +55,28 @@ func TestExecutePacker_Validate(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
+	// Ensure stdout is restored even if test fails.
+	defer func() {
+		os.Stdout = oldStd
+	}()
+
 	log.SetOutput(w)
 
 	err = ExecutePacker(&info, &packerFlags)
-	assert.NoError(t, err)
 
-	// Restore std
-	err = w.Close()
-	assert.NoError(t, err)
+	// Restore stdout before assertions.
+	w.Close()
 	os.Stdout = oldStd
 
-	// Read the captured output
+	assert.NoError(t, err)
+
+	// Read the captured output.
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(r)
 	assert.NoError(t, err)
 	output := buf.String()
 
-	// Check the output
+	// Check the output.
 	expected := "The configuration is valid"
 
 	if !strings.Contains(output, expected) {
@@ -103,24 +108,29 @@ func TestExecutePacker_Inspect(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
+	// Ensure stdout is restored even if test fails.
+	defer func() {
+		os.Stdout = oldStd
+	}()
+
 	log.SetOutput(w)
 	packerFlags := PackerFlags{}
 
 	err := ExecutePacker(&info, &packerFlags)
-	assert.NoError(t, err)
 
-	// Restore std
-	err = w.Close()
-	assert.NoError(t, err)
+	// Restore stdout before assertions.
+	w.Close()
 	os.Stdout = oldStd
 
-	// Read the captured output
+	assert.NoError(t, err)
+
+	// Read the captured output.
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(r)
 	assert.NoError(t, err)
 	output := buf.String()
 
-	// Check the output
+	// Check the output.
 	expected := "var.source_ami: \"ami-0013ceeff668b979b\""
 
 	if !strings.Contains(output, expected) {
@@ -146,24 +156,29 @@ func TestExecutePacker_Version(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
+	// Ensure stdout is restored even if test fails.
+	defer func() {
+		os.Stdout = oldStd
+	}()
+
 	log.SetOutput(w)
 	packerFlags := PackerFlags{}
 
 	err := ExecutePacker(&info, &packerFlags)
-	assert.NoError(t, err)
 
-	// Restore std
-	err = w.Close()
-	assert.NoError(t, err)
+	// Restore stdout before assertions.
+	w.Close()
 	os.Stdout = oldStd
 
-	// Read the captured output
+	assert.NoError(t, err)
+
+	// Read the captured output.
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(r)
 	assert.NoError(t, err)
 	output := buf.String()
 
-	// Check the output
+	// Check the output.
 	expected := "Packer v"
 
 	if !strings.Contains(output, expected) {

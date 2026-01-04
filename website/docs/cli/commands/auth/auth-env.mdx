@@ -27,7 +27,7 @@ atmos auth env [--identity <name>] [--format bash|json|dotenv] [--login]
 
 **Important:** This command **outputs environment variables** and does **not perform authentication by default**. It generates export statements pointing to credential files that are populated during login events. Use the `--login` flag to trigger authentication if credentials are missing or expired. Since commands cannot modify their parent shell's environment, you must use `eval` to apply these variables to your current shell.
 
-**Typical Workflow:**
+**Typical Workflow (AWS):**
 
 ```bash
 # 1. Set environment variables for an identity
@@ -41,7 +41,33 @@ aws s3 ls
 terraform plan vpc -s prod
 ```
 
-**The commands fail gracefully:** If you run AWS CLI or Terraform commands before logging in, they will fail with standard credential errors, prompting you to run `atmos auth login`.
+**Typical Workflow (Azure with device-code):**
+
+```bash
+# 1. Set environment variables for an Azure identity
+eval $(atmos auth env --identity azure-dev)
+
+# 2. Authenticate (when needed) - displays device code for browser login
+atmos auth login --identity azure-dev
+
+# 3. Use Azure CLI, Terraform, or other tools
+az group list
+terraform plan -var-file=azure.tfvars
+```
+
+**CI/CD Workflow (Azure OIDC):**
+
+In CI/CD environments like GitHub Actions, Azure OIDC authentication happens automatically without interactive login:
+
+```bash
+# In GitHub Actions workflow - credentials are obtained from the platform
+eval $(atmos auth env --identity azure-prod --login)
+
+# Run Terraform with Azure OIDC credentials
+atmos terraform apply mycomponent -s prod
+```
+
+**The commands fail gracefully:** If you run cloud CLI or Terraform commands before logging in, they will fail with standard credential errors, prompting you to run `atmos auth login`.
 
 This separation allows you to add `eval $(atmos auth env)` to your shell profile without triggering login prompts every time you open a terminal.
 
@@ -239,6 +265,18 @@ AWS_PROFILE                  # Profile name for the identity
 AWS_REGION                   # Default region (if configured)
 ```
 
+**Azure identities:**
+```bash
+AZURE_SUBSCRIPTION_ID        # Azure subscription ID
+AZURE_TENANT_ID              # Azure AD tenant ID
+AZURE_LOCATION               # Azure region (if configured)
+ARM_SUBSCRIPTION_ID          # Terraform provider subscription ID
+ARM_TENANT_ID                # Terraform provider tenant ID
+ARM_USE_OIDC                 # Set to "true" for OIDC authentication
+ARM_USE_CLI                  # Set to "true" for CLI/device-code authentication
+ARM_CLIENT_ID                # Azure AD application (client) ID for OIDC
+```
+
 **GitHub OIDC identities:**
 ```bash
 GITHUB_TOKEN                 # GitHub authentication token
@@ -246,7 +284,7 @@ GITHUB_APP_ID                # GitHub App ID (if applicable)
 GITHUB_INSTALLATION_ID       # GitHub App installation ID (if applicable)
 ```
 
-These environment variables configure cloud provider SDKs and tools (Terraform, AWS CLI, GitHub CLI, kubectl) to use the correct credentials without exposing them directly in the environment.
+These environment variables configure cloud provider SDKs and tools (Terraform, AWS CLI, Azure CLI, GitHub CLI, kubectl) to use the correct credentials without exposing them directly in the environment.
 
 ## Notes
 

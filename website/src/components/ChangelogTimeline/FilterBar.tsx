@@ -40,44 +40,44 @@ export default function FilterBar({
     <div className={styles.filterBarWrapper}>
       <div className={styles.filterBar}>
         <div className={styles.filterSection}>
-        <span className={styles.filterLabel}>Year</span>
-        <div className={styles.pillGroup}>
-          {years.map((year) => (
-            <button
-              key={year}
-              onClick={() => toggleYear(year)}
-              className={`${styles.filterPill} ${selectedYears.includes(year) ? styles.filterPillActive : ''}`}
-            >
-              {year}
-            </button>
-          ))}
+          <span className={styles.filterLabel}>Tag</span>
+          <div className={styles.pillGroup}>
+            {tags.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => toggleTag(tag)}
+                className={`${styles.filterPill} ${selectedTags.includes(tag) ? styles.filterPillActive : ''}`}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-      <div className={styles.filterSection}>
-        <span className={styles.filterLabel}>Tag</span>
-        <div className={styles.pillGroup}>
-          {tags.map((tag) => (
-            <button
-              key={tag}
-              onClick={() => toggleTag(tag)}
-              className={`${styles.filterPill} ${selectedTags.includes(tag) ? styles.filterPillActive : ''}`}
-            >
-              {tag}
-            </button>
-          ))}
+        <div className={styles.filterSection}>
+          <span className={styles.filterLabel}>Year</span>
+          <div className={styles.pillGroup}>
+            {years.map((year) => (
+              <button
+                key={year}
+                onClick={() => toggleYear(year)}
+                className={`${styles.filterPill} ${selectedYears.includes(year) ? styles.filterPillActive : ''}`}
+              >
+                {year}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-      {hasActiveFilters && (
-        <button
-          className={styles.clearButton}
-          onClick={() => {
-            onYearsChange([]);
-            onTagsChange([]);
-          }}
-        >
-          Clear all
-        </button>
-      )}
+        {hasActiveFilters && (
+          <button
+            className={styles.clearButton}
+            onClick={() => {
+              onYearsChange([]);
+              onTagsChange([]);
+            }}
+          >
+            Clear all
+          </button>
+        )}
       </div>
     </div>
   );

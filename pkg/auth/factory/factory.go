@@ -31,6 +31,8 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 		return azureProviders.NewCLIProvider(name, config)
 	case "azure/device-code":
 		return azureProviders.NewDeviceCodeProvider(name, config)
+	case "azure/oidc":
+		return azureProviders.NewOIDCProvider(name, config)
 	case "github/oidc":
 		return githubProviders.NewOIDCProvider(name, config)
 	case "mock":
@@ -53,6 +55,8 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 		return awsIdentities.NewPermissionSetIdentity(name, config)
 	case "aws/assume-role":
 		return awsIdentities.NewAssumeRoleIdentity(name, config)
+	case "aws/assume-root":
+		return awsIdentities.NewAssumeRootIdentity(name, config)
 	case "aws/user":
 		return awsIdentities.NewUserIdentity(name, config)
 	case "azure/subscription":

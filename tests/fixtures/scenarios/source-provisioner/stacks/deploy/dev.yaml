@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: dev
+
+import:
+  - catalog/vpc-source-inline-ref
+  - catalog/vpc-source-map
+  - catalog/vpc-source-retry
+  - catalog/vpc-source-workdir
+  - catalog/vpc-no-source
+
+# Override vars for dev environment
+components:
+  terraform:
+    vpc-inline-ref:
+      vars:
+        environment: "dev-override"

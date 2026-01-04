@@ -16,7 +16,7 @@ import (
 	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	awsUtils "github.com/cloudposse/atmos/internal/aws_utils"
+	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -82,7 +82,7 @@ func getCachedS3Client(backend *map[string]any, authContext *schema.AuthContext)
 	}
 
 	// The minimum `assume role` duration allowed by AWS is 15 minutes.
-	cfg, err := awsUtils.LoadAWSConfigWithAuth(ctx, region, roleArn, 15*time.Minute, awsAuthContext)
+	cfg, err := awsIdentity.LoadConfigWithAuth(ctx, region, roleArn, 15*time.Minute, awsAuthContext)
 	if err != nil {
 		return nil, err
 	}
@@ -120,13 +120,27 @@ func ReadTerraformBackendS3Internal(
 	defer perf.Track(nil, "terraform_backend.ReadTerraformBackendS3Internal")()
 
 	// Path to the tfstate file in the s3 bucket.
-	// S3 paths always use forward slashes, so path.Join is appropriate here.
-	//nolint:forbidigo // S3 paths require forward slashes regardless of OS
-	tfStateFilePath := path.Join(
-		GetBackendAttribute(backend, "workspace_key_prefix"),
-		GetTerraformWorkspace(componentSections),
-		GetBackendAttribute(backend, "key"),
-	)
+	// According to Terraform S3 backend documentation:
+	// - workspace_key_prefix is only used for non-default workspaces
+	// - For the default workspace, state is stored directly at the key path
+	// See: https://github.com/cloudposse/atmos/issues/1920
+	workspace := GetTerraformWorkspace(componentSections)
+	key := GetBackendAttribute(backend, "key")
+
+	var tfStateFilePath string
+	if workspace == "" || workspace == "default" {
+		// Default workspace: state is stored directly at the key path.
+		tfStateFilePath = key
+	} else {
+		// Named workspace: state is stored at workspace_key_prefix/workspace/key.
+		// S3 paths always use forward slashes, so path.Join is appropriate here.
+		//nolint:forbidigo // S3 paths require forward slashes regardless of OS
+		tfStateFilePath = path.Join(
+			GetBackendAttribute(backend, "workspace_key_prefix"),
+			workspace,
+			key,
+		)
+	}
 
 	bucket := GetBackendAttribute(backend, "bucket")
 
