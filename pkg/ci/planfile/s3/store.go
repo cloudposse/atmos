@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -301,36 +302,14 @@ func (s *Store) loadMetadata(ctx context.Context, planfileKey string) (*planfile
 
 // isNoSuchKeyError checks if the error is a NoSuchKey error.
 func isNoSuchKeyError(err error) bool {
-	if err == nil {
-		return false
-	}
 	var noSuchKey *types.NoSuchKey
-	return errorAs(err, &noSuchKey)
+	return errors.As(err, &noSuchKey)
 }
 
 // isNotFoundError checks if the error is a NotFound error.
 func isNotFoundError(err error) bool {
-	if err == nil {
-		return false
-	}
 	var notFound *types.NotFound
-	return errorAs(err, &notFound)
-}
-
-// errorAs is a helper that wraps errors.As for AWS SDK error types.
-func errorAs[T any](err error, target *T) bool {
-	for err != nil {
-		if t, ok := err.(T); ok {
-			*target = t
-			return true
-		}
-		unwrapper, ok := err.(interface{ Unwrap() error })
-		if !ok {
-			return false
-		}
-		err = unwrapper.Unwrap()
-	}
-	return false
+	return errors.As(err, &notFound)
 }
 
 func init() {

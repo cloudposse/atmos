@@ -465,6 +465,7 @@ func writeMatrixOutput(affected []schema.Affected, outputFile string) error {
 
 	if outputFile != "" {
 		// Write to file in key=value format for $GITHUB_OUTPUT.
+		// Using 0644 permissions - matrix contains only stack/component names, not secrets.
 		f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFilePermissions)
 		if err != nil {
 			return fmt.Errorf("failed to open output file %s: %w", outputFile, err)

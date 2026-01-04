@@ -1,0 +1,9 @@
+{
+  "label": "planfile",
+  "position": 15,
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/terraform/planfile/planfile"
+  }
+}

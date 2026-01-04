@@ -45,7 +45,15 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 		return &Hooks{}, fmt.Errorf("failed to execute describe component: %w", err)
 	}
 
-	hooksSection := sections["hooks"].(map[string]any)
+	hooksSection, ok := sections["hooks"].(map[string]any)
+	if !ok {
+		// No hooks defined or wrong type, return empty hooks.
+		return &Hooks{
+			config: atmosConfig,
+			info:   info,
+			items:  nil,
+		}, nil
+	}
 
 	yamlData, err := yaml.Marshal(hooksSection)
 	if err != nil {

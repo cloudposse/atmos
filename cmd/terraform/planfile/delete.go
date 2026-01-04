@@ -95,7 +95,10 @@ func runDelete(cmd *cobra.Command, args []string) error {
 
 	// Require --force flag for deletion.
 	if !opts.Force {
-		return fmt.Errorf("%w: %s", errUtils.ErrPlanfileDeleteRequireForce, opts.Key)
+		return errUtils.Build(errUtils.ErrPlanfileDeleteRequireForce).
+			WithContext("key", opts.Key).
+			WithHint("Use --force to confirm deletion").
+			Err()
 	}
 
 	// Delete.
