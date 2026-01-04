@@ -1,0 +1,133 @@
+---
+slug: terraform-output-format
+title: "New --format Flag for Terraform Output"
+authors: [osterman]
+tags: [feature]
+---
+
+The `atmos terraform output` command now supports a `--format` flag, making it easy to export Terraform outputs in various formats for use in CI/CD workflows, scripts, and configuration files.
+
+<!--truncate-->
+
+## The Problem
+
+Previously, extracting multiple Terraform outputs for use in GitHub Actions required repetitive, verbose commands:
+
+```yaml
+- name: Get Terraform outputs
+  run: |
+    echo "url=$(atmos terraform output app -s preview --skip-init -- -raw url)" >> $GITHUB_OUTPUT
+    echo "bucket=$(atmos terraform output app -s preview --skip-init -- -raw bucket)" >> $GITHUB_OUTPUT
+    echo "api_key=$(atmos terraform output app -s preview --skip-init -- -raw api_key)" >> $GITHUB_OUTPUT
+```
+
+Each output required a separate command invocation, which was slow and cumbersome.
+
+## The Solution
+
+With the new `--format` flag, you can export all outputs in a single command:
+
+```yaml
+- name: Get Terraform outputs
+  run: atmos terraform output app -s preview --skip-init --format=env --output-file=$GITHUB_OUTPUT
+```
+
+## Supported Formats
+
+| Format | Output Style | Use Case |
+|--------|--------------|----------|
+| `json` | `{"key": "value"}` | Machine parsing, piping to `jq` |
+| `yaml` | `key: value` | Human-readable, config files |
+| `hcl` | `key = "value"` | Terraform locals or tfvars files |
+| `env` | `key=value` | GitHub Actions `$GITHUB_OUTPUT` |
+| `dotenv` | `key='value'` | `.env` files with quoting |
+| `bash` | `export key='value'` | Shell sourcing with `eval $(...)` |
+| `csv` | `key,value` | Spreadsheets, data processing |
+| `tsv` | `key<tab>value` | Tab-delimited for easy parsing |
+
+## Examples
+
+### GitHub Actions Workflow
+
+Share outputs between steps:
+
+```yaml
+jobs:
+  deploy:
+    steps:
+      - name: Deploy infrastructure
+        run: atmos terraform apply app -s preview --auto-approve
+
+      - name: Export outputs
+        id: terraform
+        run: atmos terraform output app -s preview --skip-init --format=env --output-file=$GITHUB_OUTPUT
+
+      - name: Use outputs
+        run: |
+          echo "Deployed to: ${{ steps.terraform.outputs.url }}"
+          curl ${{ steps.terraform.outputs.url }}/health
+```
+
+### Shell Script Integration
+
+Source outputs directly in bash:
+
+```bash
+# Export outputs as environment variables
+eval $(atmos terraform output vpc -s prod --format=bash)
+
+# Now use them
+echo "VPC ID: $vpc_id"
+aws ec2 describe-subnets --filters "Name=vpc-id,Values=$vpc_id"
+
+# Use --uppercase for standard ENV_VAR naming convention
+eval $(atmos terraform output vpc -s prod --format=bash --uppercase)
+echo "VPC ID: $VPC_ID"
+```
+
+### Flatten Nested Outputs
+
+Use `--flatten` to expand nested maps and arrays into individual key/value pairs:
+
+```bash
+# Without --flatten: {"config": {"host": "localhost", "port": 3000}}
+# Output: config={"host":"localhost","port":3000}
+
+# With --flatten: expands nested maps
+atmos terraform output app -s prod --format=env --flatten
+# Output: config_host=localhost
+#         config_port=3000
+
+# Arrays are flattened with numeric indices
+# Input: {"subnets": [{"id": "subnet-1"}, {"id": "subnet-2"}]}
+# Output: subnets_0_id=subnet-1
+#         subnets_1_id=subnet-2
+
+# Combine --flatten with --uppercase for standard ENV_VAR naming
+eval $(atmos terraform output app -s prod --format=bash --flatten --uppercase)
+echo "Config host: $CONFIG_HOST"
+echo "Config port: $CONFIG_PORT"
+```
+
+### Write to File
+
+Save outputs to a file for later use:
+
+```bash
+# Save as .env file
+atmos terraform output app -s staging --format=dotenv --output-file=.env
+
+# Save as JSON for processing
+atmos terraform output app -s staging --format=json --output-file=outputs.json
+
+# Save as HCL for Terraform locals
+atmos terraform output vpc -s prod --format=hcl --output-file=vpc_outputs.auto.tfvars
+```
+
+## Backward Compatibility
+
+When `--format` is not specified, the command passes through to native Terraform/OpenTofu, preserving existing behavior. The `-json` and `-raw` flags continue to work as before.
+
+## Get Started
+
+The `--format` flag is available now. See the [terraform output documentation](/cli/commands/terraform/output) for more details.
