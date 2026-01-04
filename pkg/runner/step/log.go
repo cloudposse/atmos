@@ -2,7 +2,6 @@ package step
 
 import (
 	"context"
-	"math"
 	"strings"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -66,10 +65,14 @@ func (h *LogHandler) buildKeyvals(step *schema.WorkflowStep, vars *Variables) []
 		return nil
 	}
 
-	// Guard against integer overflow when computing capacity.
+	// Cap at reasonable maximum to avoid overflow on 32-bit systems.
+	const maxCapacity = 1 << 20 // 1M capacity is more than reasonable.
 	fieldsLen := len(step.Fields)
-	capacity := fieldsLen
-	if fieldsLen <= math.MaxInt/2 {
+	// If doubling fieldsLen would exceed maxCapacity (or overflow), clamp to maxCapacity.
+	var capacity int
+	if fieldsLen >= maxCapacity/2 {
+		capacity = maxCapacity
+	} else {
 		capacity = fieldsLen * 2
 	}
 	keyvals := make([]interface{}, 0, capacity)
