@@ -140,7 +140,6 @@ func getConfigFiles(path string) ([]string, error) {
 	}
 
 	if fileInfo.IsDir() {
-		path = filepath.ToSlash(path)
 		matches, err := doublestar.Glob(os.DirFS(path), "*.{yaml,yml}")
 		if err != nil {
 			return nil, err
@@ -360,7 +359,7 @@ func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 		if err != nil {
 			return nil, err
 		}
-		targetPath := filepath.Join(filepath.ToSlash(params.VendorConfigFilePath), filepath.ToSlash(target))
+		targetPath := filepath.Join(params.VendorConfigFilePath, target)
 		pkgName := params.Source.Component
 		if pkgName == "" {
 			pkgName = params.URI
@@ -535,7 +534,7 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 	}
 
-	absPath, err := u.JoinPathAndValidate(filepath.ToSlash(vendorConfigFilePath), *uri)
+	absPath, err := u.JoinPathAndValidate(vendorConfigFilePath, *uri)
 	// if URI contain path traversal is path should be resolved
 	if err != nil && strings.Contains(*uri, "..") && !strings.HasPrefix(*uri, "file://") {
 		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
