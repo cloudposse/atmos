@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 // Flags for clean options.
@@ -77,6 +78,7 @@ type Options struct {
 	Everything   bool
 	SkipLockFile bool
 	DryRun       bool
+	Cache        bool
 }
 
 // Execute cleans up Terraform state and artifacts for a component.
@@ -94,7 +96,13 @@ func (s *Service) Execute(opts *Options, atmosConfig *schema.AtmosConfiguration)
 		"everything", opts.Everything,
 		"skipLockFile", opts.SkipLockFile,
 		"dryRun", opts.DryRun,
+		"cache", opts.Cache,
 	)
+
+	// Handle --cache flag: clean the plugin cache directory.
+	if opts.Cache {
+		return s.cleanPluginCache(opts, atmosConfig)
+	}
 
 	// Build ConfigAndStacksInfo for HandleSubCommand.
 	info := schema.ConfigAndStacksInfo{
@@ -135,6 +143,63 @@ func (s *Service) Execute(opts *Options, atmosConfig *schema.AtmosConfiguration)
 	}
 
 	return s.HandleSubCommand(&info, componentPath, atmosConfig)
+}
+
+// cleanPluginCache cleans the Terraform plugin cache directory.
+func (s *Service) cleanPluginCache(opts *Options, atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "clean.cleanPluginCache")()
+
+	// Get the plugin cache directory path.
+	// First check if user has a custom plugin cache configured.
+	pluginCacheDir := atmosConfig.Components.Terraform.PluginCacheDir
+
+	// Use XDG cache directory if no custom path configured.
+	if pluginCacheDir == "" {
+		cacheDir, err := xdg.GetXDGCacheDir("terraform/plugins", xdg.DefaultCacheDirPerm)
+		if err != nil {
+			return fmt.Errorf("failed to get plugin cache directory: %w", err)
+		}
+		pluginCacheDir = cacheDir
+	}
+
+	// Check if the directory exists.
+	if _, err := os.Stat(pluginCacheDir); os.IsNotExist(err) {
+		_ = ui.Writeln("")
+		_ = ui.Success("Plugin cache directory does not exist, nothing to clean")
+		_ = ui.Writeln("")
+		return nil
+	}
+
+	// Dry run mode.
+	if opts.DryRun {
+		_ = ui.Writeln("Dry run mode: the following directory would be deleted:")
+		_ = ui.Writeln(fmt.Sprintf("  %s", pluginCacheDir))
+		return nil
+	}
+
+	// Prompt for confirmation unless --force is set.
+	if !opts.Force {
+		message := fmt.Sprintf("This will delete the Terraform plugin cache directory: %s", pluginCacheDir)
+		_ = ui.Writeln(message)
+		_ = ui.Writeln("")
+		confirmed, err := confirmDeletion()
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			return nil
+		}
+	}
+
+	// Delete the plugin cache directory.
+	if err := os.RemoveAll(pluginCacheDir); err != nil {
+		return fmt.Errorf("failed to delete plugin cache directory: %w", err)
+	}
+
+	_ = ui.Writeln("")
+	_ = ui.Success(fmt.Sprintf("Deleted plugin cache directory: %s", pluginCacheDir))
+	_ = ui.Writeln("")
+	return nil
 }
 
 // HandleSubCommand handles the 'clean' subcommand logic.
@@ -208,7 +273,7 @@ func buildRelativePath(basePath, componentPath string, baseComponent string) (st
 	}
 	if baseComponent != "" {
 		relativePath = strings.Replace(relativePath, baseComponent, "", 1)
-		relativePath = strings.TrimPrefix(relativePath, "/")
+		relativePath = strings.TrimPrefix(relativePath, string(filepath.Separator))
 	}
 	return relativePath, nil
 }

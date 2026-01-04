@@ -98,7 +98,7 @@ func handleTFDataDir(componentPath string, relativePath string) {
 // executeCleanDeletion performs the actual deletion of folders.
 func executeCleanDeletion(folders []Directory, tfDataDirFolders []Directory, relativePath string, atmosConfig *schema.AtmosConfiguration) {
 	deleteFolders(folders, relativePath, atmosConfig)
-	if len(tfDataDirFolders) > 0 {
-		handleTFDataDir(tfDataDirFolders[0].FullPath, relativePath)
+	for _, tfDataDirFolder := range tfDataDirFolders {
+		handleTFDataDir(tfDataDirFolder.FullPath, relativePath)
 	}
 }

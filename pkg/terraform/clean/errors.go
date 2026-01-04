@@ -6,10 +6,10 @@ import "errors"
 var (
 	ErrParseTerraformComponents  = errors.New("could not parse Terraform components")
 	ErrParseComponentsAttributes = errors.New("could not parse component attributes")
-	ErrDescribeStack             = errors.New("error describe stacks")
+	ErrDescribeStack             = errors.New("error describing stacks")
 	ErrEmptyPath                 = errors.New("path cannot be empty")
-	ErrPathNotExist              = errors.New("path not exist")
-	ErrFileStat                  = errors.New("error get file stat")
+	ErrPathNotExist              = errors.New("path does not exist")
+	ErrFileStat                  = errors.New("error getting file stat")
 	ErrMatchPattern              = errors.New("error matching pattern")
 	ErrReadDir                   = errors.New("error reading directory")
 	ErrFailedFoundStack          = errors.New("failed to find stack folders")

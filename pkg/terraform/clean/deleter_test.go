@@ -318,3 +318,160 @@ func TestHandleTFDataDir_DeletesExistingDir(t *testing.T) {
 	// Verify directory is deleted.
 	assert.NoDirExists(t, tfDataDirPath)
 }
+
+// TestDeleteFolders_WithMixedFiles tests deleting folders with both files and directories.
+func TestDeleteFolders_WithMixedFiles(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create component folder.
+	componentDir := filepath.Join(tempDir, "component")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Create a regular file.
+	lockFile := filepath.Join(componentDir, ".terraform.lock.hcl")
+	require.NoError(t, os.WriteFile(lockFile, []byte("lock"), 0o644))
+
+	// Create a directory.
+	tfDir := filepath.Join(componentDir, ".terraform")
+	require.NoError(t, os.MkdirAll(tfDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tfDir, "providers.json"), []byte("{}"), 0o644))
+
+	folders := []Directory{
+		{
+			Name:         "component",
+			FullPath:     componentDir,
+			RelativePath: "component",
+			Files: []ObjectInfo{
+				{FullPath: lockFile, RelativePath: ".terraform.lock.hcl", Name: ".terraform.lock.hcl", IsDir: false},
+				{FullPath: tfDir, RelativePath: ".terraform", Name: ".terraform", IsDir: true},
+			},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+	}
+
+	deleteFolders(folders, "component", atmosConfig)
+
+	// Both file and directory should be deleted.
+	assert.NoFileExists(t, lockFile)
+	assert.NoDirExists(t, tfDir)
+}
+
+// TestExecuteCleanDeletion_WithTFDataDirFolders tests deletion with TF_DATA_DIR folders.
+func TestExecuteCleanDeletion_WithTFDataDirFolders(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create component folder.
+	componentDir := filepath.Join(tempDir, "component")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Create a file to delete in regular folders.
+	lockFile := filepath.Join(componentDir, ".terraform.lock.hcl")
+	require.NoError(t, os.WriteFile(lockFile, []byte("lock"), 0o644))
+
+	// Create a TF_DATA_DIR folder.
+	tfDataDir := filepath.Join(componentDir, ".custom-terraform")
+	require.NoError(t, os.MkdirAll(tfDataDir, 0o755))
+
+	folders := []Directory{
+		{
+			Name:         "component",
+			FullPath:     componentDir,
+			RelativePath: "component",
+			Files: []ObjectInfo{
+				{FullPath: lockFile, RelativePath: ".terraform.lock.hcl", Name: ".terraform.lock.hcl", IsDir: false},
+			},
+		},
+	}
+
+	// Set TF_DATA_DIR.
+	t.Setenv(EnvTFDataDir, ".custom-terraform")
+
+	tfDataDirFolders := []Directory{
+		{
+			Name:     ".custom-terraform",
+			FullPath: componentDir,
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+	}
+
+	executeCleanDeletion(folders, tfDataDirFolders, "component", atmosConfig)
+
+	// Regular file should be deleted.
+	assert.NoFileExists(t, lockFile)
+
+	// TF_DATA_DIR should also be deleted.
+	assert.NoDirExists(t, tfDataDir)
+}
+
+// TestDeleteFolders_HandlesRelativePathError tests handling when relative path fails.
+func TestDeleteFolders_HandlesRelativePathError(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create folder and file.
+	folder := filepath.Join(tempDir, "folder")
+	require.NoError(t, os.MkdirAll(folder, 0o755))
+	testFile := filepath.Join(folder, "test.txt")
+	require.NoError(t, os.WriteFile(testFile, []byte("content"), 0o644))
+
+	folders := []Directory{
+		{
+			Name:         "folder",
+			FullPath:     folder,
+			RelativePath: "folder",
+			Files: []ObjectInfo{
+				{FullPath: testFile, RelativePath: "folder/test.txt", Name: "test.txt", IsDir: false},
+			},
+		},
+	}
+
+	// Use an invalid base path to trigger relative path fallback.
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: "/nonexistent/path",
+	}
+
+	// Should not panic and should still attempt deletion.
+	deleteFolders(folders, "test", atmosConfig)
+
+	// File should be deleted regardless of relative path error.
+	assert.NoFileExists(t, testFile)
+}
+
+// TestExecuteCleanDeletion_MultipleTFDataDirFolders tests deletion with multiple TF_DATA_DIR folders.
+func TestExecuteCleanDeletion_MultipleTFDataDirFolders(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create multiple component folders.
+	comp1Dir := filepath.Join(tempDir, "component1")
+	comp2Dir := filepath.Join(tempDir, "component2")
+	require.NoError(t, os.MkdirAll(comp1Dir, 0o755))
+	require.NoError(t, os.MkdirAll(comp2Dir, 0o755))
+
+	// Create TF_DATA_DIR in each component.
+	tfDataDir1 := filepath.Join(comp1Dir, ".tf-data")
+	tfDataDir2 := filepath.Join(comp2Dir, ".tf-data")
+	require.NoError(t, os.MkdirAll(tfDataDir1, 0o755))
+	require.NoError(t, os.MkdirAll(tfDataDir2, 0o755))
+
+	t.Setenv(EnvTFDataDir, ".tf-data")
+
+	tfDataDirFolders := []Directory{
+		{Name: ".tf-data", FullPath: comp1Dir},
+		{Name: ".tf-data", FullPath: comp2Dir},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+	}
+
+	executeCleanDeletion([]Directory{}, tfDataDirFolders, "test", atmosConfig)
+
+	// Both TF_DATA_DIR folders should be deleted.
+	assert.NoDirExists(t, tfDataDir1)
+	assert.NoDirExists(t, tfDataDir2)
+}

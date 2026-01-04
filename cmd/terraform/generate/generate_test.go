@@ -185,3 +185,72 @@ func TestPlanfileCmd(t *testing.T) {
 type PlanfileCmd struct {
 	*cobra.Command
 }
+
+// TestFilesParserSetup verifies that the files parser is properly configured.
+func TestFilesParserSetup(t *testing.T) {
+	require.NotNil(t, filesParser, "filesParser should be initialized")
+
+	// Verify the parser has the files-specific flags.
+	registry := filesParser.Registry()
+
+	expectedFlags := []string{
+		"stack",
+		"all",
+		"stacks",
+		"components",
+		"dry-run",
+		"clean",
+	}
+
+	for _, flagName := range expectedFlags {
+		assert.True(t, registry.Has(flagName), "filesParser should have %s flag registered", flagName)
+	}
+}
+
+// TestFilesCommandArgs verifies that files command accepts the correct number of arguments.
+func TestFilesCommandArgs(t *testing.T) {
+	// Find the files command.
+	var filesCmdPtr *cobra.Command
+	for _, cmd := range GenerateCmd.Commands() {
+		if cmd.Name() == "files" {
+			filesCmdPtr = cmd
+			break
+		}
+	}
+	require.NotNil(t, filesCmdPtr)
+
+	// The command should accept 0 or 1 argument (component name is optional).
+	require.NotNil(t, filesCmdPtr.Args)
+
+	// Verify with no args (should pass since --all is available).
+	err := filesCmdPtr.Args(filesCmdPtr, []string{})
+	assert.NoError(t, err, "files command should accept 0 arguments")
+
+	// Verify with one arg.
+	err = filesCmdPtr.Args(filesCmdPtr, []string{"my-component"})
+	assert.NoError(t, err, "files command should accept 1 argument")
+
+	// Verify with two args (should fail).
+	err = filesCmdPtr.Args(filesCmdPtr, []string{"arg1", "arg2"})
+	assert.Error(t, err, "files command should reject more than 1 argument")
+}
+
+// TestFilesFlagEnvVars verifies that files command flags have environment variable bindings.
+func TestFilesFlagEnvVars(t *testing.T) {
+	registry := filesParser.Registry()
+
+	// Expected env var bindings.
+	expectedEnvVars := map[string]string{
+		"stack":      "ATMOS_STACK",
+		"stacks":     "ATMOS_STACKS",
+		"components": "ATMOS_COMPONENTS",
+	}
+
+	for flagName, expectedEnvVar := range expectedEnvVars {
+		require.True(t, registry.Has(flagName), "filesParser should have %s flag registered", flagName)
+		flag := registry.Get(flagName)
+		require.NotNil(t, flag, "filesParser should have info for %s flag", flagName)
+		envVars := flag.GetEnvVars()
+		assert.Contains(t, envVars, expectedEnvVar, "%s should be bound to %s", flagName, expectedEnvVar)
+	}
+}

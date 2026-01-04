@@ -666,3 +666,431 @@ func TestService_HandleSubCommand_Force(t *testing.T) {
 	// File should be deleted with force flag.
 	assert.NoFileExists(t, lockFile)
 }
+
+// TestService_collectAllFolders tests the collectAllFolders method.
+func TestService_collectAllFolders(t *testing.T) {
+	t.Run("With component and stack - includes state folders", func(t *testing.T) {
+		tempDir := t.TempDir()
+		componentDir := filepath.Join(tempDir, "vpc")
+		require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+		// Create terraform state folder.
+		stateFolderDir := filepath.Join(componentDir, "terraform.tfstate.d", "dev-us-west-2")
+		require.NoError(t, os.MkdirAll(stateFolderDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(stateFolderDir, "terraform.tfstate"), []byte("state"), 0o644))
+
+		// Create a regular file.
+		require.NoError(t, os.WriteFile(filepath.Join(componentDir, ".terraform.lock.hcl"), []byte("lock"), 0o644))
+
+		mock := &mockStackProcessor{
+			collectComponentsDirectoryObjectsFn: func(basePath string, componentPaths []string, patterns []string) ([]Directory, error) {
+				return []Directory{
+					{
+						Name:         "vpc",
+						FullPath:     componentDir,
+						RelativePath: "vpc",
+						Files: []ObjectInfo{
+							{
+								FullPath:     filepath.Join(componentDir, ".terraform.lock.hcl"),
+								RelativePath: ".terraform.lock.hcl",
+								Name:         ".terraform.lock.hcl",
+								IsDir:        false,
+							},
+						},
+					},
+				}, nil
+			},
+		}
+		service := NewService(mock)
+
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "vpc",
+			Component:        "vpc",
+			Stack:            "dev-us-west-2",
+			FinalComponent:   "vpc",
+		}
+		atmosConfig := &schema.AtmosConfiguration{
+			TerraformDirAbsolutePath: tempDir,
+		}
+
+		folders, err := service.collectAllFolders(info, atmosConfig, componentDir, []string{".terraform.lock.hcl"})
+		require.NoError(t, err)
+		// Should have at least the files from CollectComponentsDirectoryObjects.
+		assert.GreaterOrEqual(t, len(folders), 1)
+	})
+
+	t.Run("Without component - uses ExecuteDescribeStacks", func(t *testing.T) {
+		tempDir := t.TempDir()
+		componentDir := filepath.Join(tempDir, "vpc")
+		require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+		mock := &mockStackProcessor{
+			executeDescribeStacksFn: func(atmosConfig *schema.AtmosConfiguration, filterByStack string, components []string) (map[string]any, error) {
+				return map[string]any{
+					"dev": map[string]any{
+						"components": map[string]any{
+							"terraform": map[string]any{
+								"vpc": map[string]any{
+									"component": "vpc",
+								},
+							},
+						},
+					},
+				}, nil
+			},
+			collectComponentsDirectoryObjectsFn: func(basePath string, componentPaths []string, patterns []string) ([]Directory, error) {
+				return []Directory{}, nil
+			},
+		}
+		service := NewService(mock)
+
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "",
+		}
+		atmosConfig := &schema.AtmosConfiguration{
+			TerraformDirAbsolutePath: tempDir,
+		}
+
+		folders, err := service.collectAllFolders(info, atmosConfig, tempDir, []string{".terraform"})
+		require.NoError(t, err)
+		assert.NotNil(t, folders)
+	})
+
+	t.Run("Error from getComponentsToClean", func(t *testing.T) {
+		mock := &mockStackProcessor{
+			executeDescribeStacksFn: func(atmosConfig *schema.AtmosConfiguration, filterByStack string, components []string) (map[string]any, error) {
+				return nil, ErrDescribeStack
+			},
+		}
+		service := NewService(mock)
+
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "",
+		}
+		atmosConfig := &schema.AtmosConfiguration{
+			TerraformDirAbsolutePath: t.TempDir(),
+		}
+
+		_, err := service.collectAllFolders(info, atmosConfig, t.TempDir(), []string{".terraform"})
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrDescribeStack)
+	})
+}
+
+// TestPrintDryRunOutput tests the printDryRunOutput function.
+func TestPrintDryRunOutput(t *testing.T) {
+	tempDir := t.TempDir()
+
+	folders := []Directory{
+		{
+			Name:     "vpc",
+			FullPath: filepath.Join(tempDir, "vpc"),
+			Files: []ObjectInfo{
+				{
+					FullPath: filepath.Join(tempDir, "vpc", ".terraform.lock.hcl"),
+					Name:     ".terraform.lock.hcl",
+				},
+			},
+		},
+	}
+
+	tfDataDirFolders := []Directory{
+		{
+			Name:     ".terraform",
+			FullPath: filepath.Join(tempDir, ".terraform"),
+			Files: []ObjectInfo{
+				{
+					FullPath: filepath.Join(tempDir, ".terraform", "providers"),
+					Name:     "providers",
+				},
+			},
+		},
+	}
+
+	// Should not panic.
+	printDryRunOutput(folders, tfDataDirFolders, tempDir, 2)
+}
+
+// TestPrintFolderFiles tests the printFolderFiles function.
+func TestPrintFolderFiles(t *testing.T) {
+	tempDir := t.TempDir()
+
+	folders := []Directory{
+		{
+			Name:     "test",
+			FullPath: tempDir,
+			Files: []ObjectInfo{
+				{
+					FullPath: filepath.Join(tempDir, "file1.txt"),
+					Name:     "file1.txt",
+				},
+				{
+					FullPath: filepath.Join(tempDir, "file2.txt"),
+					Name:     "file2.txt",
+				},
+			},
+		},
+	}
+
+	// Should not panic.
+	printFolderFiles(folders, tempDir)
+}
+
+// TestService_Execute_ProcessStacksError tests Execute when ProcessStacks fails.
+func TestService_Execute_ProcessStacksError(t *testing.T) {
+	mock := &mockStackProcessor{
+		processStacksFn: func(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) (schema.ConfigAndStacksInfo, error) {
+			return info, ErrComponentNotFound
+		},
+	}
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		TerraformDirAbsolutePath: t.TempDir(),
+	}
+
+	opts := &Options{
+		Component: "nonexistent",
+		Stack:     "dev",
+	}
+
+	err := service.Execute(opts, atmosConfig)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrComponentNotFound)
+}
+
+// TestService_Execute_WithAllOptions tests Execute with all options enabled.
+func TestService_Execute_WithAllOptions(t *testing.T) {
+	tempDir := t.TempDir()
+	componentDir := filepath.Join(tempDir, "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	mock := &mockStackProcessor{
+		processStacksFn: func(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) (schema.ConfigAndStacksInfo, error) {
+			info.Context.BaseComponent = "vpc"
+			return info, nil
+		},
+		collectComponentsDirectoryObjectsFn: func(basePath string, componentPaths []string, patterns []string) ([]Directory, error) {
+			return []Directory{}, nil
+		},
+	}
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tempDir,
+		TerraformDirAbsolutePath: tempDir,
+	}
+
+	opts := &Options{
+		Component:    "vpc",
+		Stack:        "dev",
+		Force:        true,
+		Everything:   true,
+		SkipLockFile: true,
+		DryRun:       false,
+	}
+
+	err := service.Execute(opts, atmosConfig)
+	require.NoError(t, err)
+}
+
+// TestBuildConfirmationMessage_EdgeCases tests edge cases for buildConfirmationMessage.
+func TestBuildConfirmationMessage_EdgeCases(t *testing.T) {
+	t.Run("Zero files", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "",
+		}
+		result := buildConfirmationMessage(info, 0)
+		assert.Contains(t, result, "0 local terraform state files")
+	})
+
+	t.Run("Component with empty stack", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "vpc",
+			Component:        "",
+			Stack:            "",
+		}
+		result := buildConfirmationMessage(info, 5)
+		assert.Contains(t, result, "component 'vpc'")
+	})
+}
+
+// TestService_HandleSubCommand_CollectAllFoldersError tests error handling from collectAllFolders.
+func TestService_HandleSubCommand_CollectAllFoldersError(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mock := &mockStackProcessor{
+		executeDescribeStacksFn: func(atmosConfig *schema.AtmosConfiguration, filterByStack string, components []string) (map[string]any, error) {
+			return nil, ErrDescribeStack
+		},
+	}
+	service := NewService(mock)
+
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand: "clean",
+	}
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tempDir,
+		TerraformDirAbsolutePath: tempDir,
+	}
+
+	err := service.HandleSubCommand(info, tempDir, atmosConfig)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrDescribeStack)
+}
+
+// TestService_HandleSubCommand_WithEverythingFlag tests HandleSubCommand with everything flag.
+func TestService_HandleSubCommand_WithEverythingFlag(t *testing.T) {
+	tempDir := t.TempDir()
+	componentDir := filepath.Join(tempDir, "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Create terraform state directory.
+	stateDir := filepath.Join(componentDir, "terraform.tfstate.d")
+	require.NoError(t, os.MkdirAll(stateDir, 0o755))
+
+	mock := &mockStackProcessor{
+		executeDescribeStacksFn: func(atmosConfig *schema.AtmosConfiguration, filterByStack string, components []string) (map[string]any, error) {
+			return map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"component": "vpc",
+							},
+						},
+					},
+				},
+			}, nil
+		},
+		collectComponentsDirectoryObjectsFn: func(basePath string, componentPaths []string, patterns []string) ([]Directory, error) {
+			return []Directory{}, nil
+		},
+	}
+	service := NewService(mock)
+
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:             "clean",
+		AdditionalArgsAndFlags: []string{ForceFlag, EverythingFlag},
+	}
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tempDir,
+		TerraformDirAbsolutePath: tempDir,
+	}
+
+	err := service.HandleSubCommand(info, tempDir, atmosConfig)
+	require.NoError(t, err)
+}
+
+// TestService_cleanPluginCache tests the cleanPluginCache function.
+func TestService_cleanPluginCache(t *testing.T) {
+	t.Run("Cache directory does not exist", func(t *testing.T) {
+		mock := &mockStackProcessor{}
+		service := NewService(mock)
+
+		opts := &Options{
+			Cache: true,
+			Force: true,
+		}
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					PluginCacheDir: filepath.Join(t.TempDir(), "nonexistent"),
+				},
+			},
+		}
+
+		err := service.cleanPluginCache(opts, atmosConfig)
+		require.NoError(t, err)
+	})
+
+	t.Run("Cache directory exists and is deleted with force", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cacheDir := filepath.Join(tempDir, "plugins")
+		require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+
+		// Create a test file in the cache directory.
+		testFile := filepath.Join(cacheDir, "test-provider")
+		require.NoError(t, os.WriteFile(testFile, []byte("test"), 0o644))
+
+		mock := &mockStackProcessor{}
+		service := NewService(mock)
+
+		opts := &Options{
+			Cache: true,
+			Force: true,
+		}
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					PluginCacheDir: cacheDir,
+				},
+			},
+		}
+
+		err := service.cleanPluginCache(opts, atmosConfig)
+		require.NoError(t, err)
+
+		// Verify the cache directory was deleted.
+		_, statErr := os.Stat(cacheDir)
+		assert.True(t, os.IsNotExist(statErr), "Cache directory should be deleted")
+	})
+
+	t.Run("Dry run does not delete", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cacheDir := filepath.Join(tempDir, "plugins")
+		require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+
+		mock := &mockStackProcessor{}
+		service := NewService(mock)
+
+		opts := &Options{
+			Cache:  true,
+			Force:  true,
+			DryRun: true,
+		}
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{
+					PluginCacheDir: cacheDir,
+				},
+			},
+		}
+
+		err := service.cleanPluginCache(opts, atmosConfig)
+		require.NoError(t, err)
+
+		// Verify the cache directory still exists.
+		_, statErr := os.Stat(cacheDir)
+		assert.NoError(t, statErr, "Cache directory should still exist in dry run mode")
+	})
+}
+
+// TestService_Execute_WithCacheFlag tests Execute with the Cache flag.
+func TestService_Execute_WithCacheFlag(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "plugins")
+	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+
+	mock := &mockStackProcessor{}
+	service := NewService(mock)
+
+	opts := &Options{
+		Cache: true,
+		Force: true,
+	}
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				PluginCacheDir: cacheDir,
+			},
+		},
+	}
+
+	err := service.Execute(opts, atmosConfig)
+	require.NoError(t, err)
+
+	// Verify the cache directory was deleted.
+	_, statErr := os.Stat(cacheDir)
+	assert.True(t, os.IsNotExist(statErr), "Cache directory should be deleted")
+}

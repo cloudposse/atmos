@@ -61,15 +61,19 @@ The generate section in stack configuration supports:
 			return fmt.Errorf("%w: either specify a component or use --all", errUtils.ErrInvalidFlag)
 		}
 
-		// Parse CSV values.
+		// Parse CSV values with whitespace trimming.
 		var stacks []string
 		if stacksCsv != "" {
-			stacks = strings.Split(stacksCsv, ",")
+			for _, s := range strings.Split(stacksCsv, ",") {
+				stacks = append(stacks, strings.TrimSpace(s))
+			}
 		}
 
 		var components []string
 		if componentsCsv != "" {
-			components = strings.Split(componentsCsv, ",")
+			for _, c := range strings.Split(componentsCsv, ",") {
+				components = append(components, strings.TrimSpace(c))
+			}
 		}
 
 		// Get global flags from Viper (includes base-path, config, config-path, profile).

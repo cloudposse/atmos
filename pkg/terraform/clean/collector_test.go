@@ -862,3 +862,288 @@ func TestGetRelativePath_ThroughPublicAPI(t *testing.T) {
 		assert.Equal(t, ".terraform.lock.hcl", file.RelativePath)
 	}
 }
+
+// TestGetRelativePath_Direct tests the getRelativePath function directly.
+func TestGetRelativePath_Direct(t *testing.T) {
+	tests := []struct {
+		name          string
+		basePath      string
+		componentPath string
+		wantErr       bool
+	}{
+		{
+			name:          "Simple nested path",
+			basePath:      "/base",
+			componentPath: "/base/components/vpc",
+			wantErr:       false,
+		},
+		{
+			name:          "Same path",
+			basePath:      "/base",
+			componentPath: "/base",
+			wantErr:       false,
+		},
+		{
+			name:          "Relative paths",
+			basePath:      ".",
+			componentPath: "./subdir",
+			wantErr:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := getRelativePath(tt.basePath, tt.componentPath)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.NotEmpty(t, result)
+			}
+		})
+	}
+}
+
+// TestCollectTFDataDirFolders tests the collectTFDataDirFolders function.
+func TestCollectTFDataDirFolders(t *testing.T) {
+	t.Run("Empty TF_DATA_DIR env var", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		// Ensure TF_DATA_DIR is not set.
+		t.Setenv(EnvTFDataDir, "")
+
+		folders, tfDataDir := collectTFDataDirFolders(tempDir)
+		assert.Nil(t, folders)
+		assert.Empty(t, tfDataDir)
+	})
+
+	t.Run("Invalid TF_DATA_DIR value", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		// Set TF_DATA_DIR to root (invalid).
+		t.Setenv(EnvTFDataDir, "/")
+
+		folders, tfDataDir := collectTFDataDirFolders(tempDir)
+		assert.Nil(t, folders)
+		assert.Equal(t, "/", tfDataDir)
+	})
+
+	t.Run("Valid TF_DATA_DIR that exists", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		// Create TF_DATA_DIR directory.
+		customDir := filepath.Join(tempDir, ".custom-terraform")
+		require.NoError(t, os.MkdirAll(customDir, 0o755))
+
+		// Set TF_DATA_DIR.
+		t.Setenv(EnvTFDataDir, ".custom-terraform")
+
+		folders, tfDataDir := collectTFDataDirFolders(tempDir)
+		assert.Equal(t, ".custom-terraform", tfDataDir)
+		assert.NotNil(t, folders)
+	})
+
+	t.Run("Valid TF_DATA_DIR that does not exist in path", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		// Set TF_DATA_DIR to a non-existent directory.
+		t.Setenv(EnvTFDataDir, ".nonexistent-dir")
+
+		folders, tfDataDir := collectTFDataDirFolders(tempDir)
+		assert.Equal(t, ".nonexistent-dir", tfDataDir)
+		// Should return empty folders since the pattern doesn't match.
+		assert.Empty(t, folders)
+	})
+}
+
+// TestCreateComponentFileInfo tests the createComponentFileInfo function.
+func TestCreateComponentFileInfo(t *testing.T) {
+	t.Run("File exists", func(t *testing.T) {
+		tempDir := t.TempDir()
+		testFile := filepath.Join(tempDir, "test.txt")
+		require.NoError(t, os.WriteFile(testFile, []byte("content"), 0o644))
+
+		info, err := createComponentFileInfo(tempDir, testFile)
+		require.NoError(t, err)
+		require.NotNil(t, info)
+		assert.Equal(t, "test.txt", info.Name)
+		assert.Equal(t, testFile, info.FullPath)
+		assert.False(t, info.IsDir)
+	})
+
+	t.Run("Directory exists", func(t *testing.T) {
+		tempDir := t.TempDir()
+		subDir := filepath.Join(tempDir, "subdir")
+		require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+		info, err := createComponentFileInfo(tempDir, subDir)
+		require.NoError(t, err)
+		require.NotNil(t, info)
+		assert.Equal(t, "subdir", info.Name)
+		assert.True(t, info.IsDir)
+	})
+
+	t.Run("File does not exist", func(t *testing.T) {
+		tempDir := t.TempDir()
+		nonExistent := filepath.Join(tempDir, "nonexistent.txt")
+
+		info, err := createComponentFileInfo(tempDir, nonExistent)
+		require.NoError(t, err)
+		assert.Nil(t, info) // Should return nil for non-existent files.
+	})
+}
+
+// TestCollectComponentFolder tests the createComponentFolder function.
+func TestCreateComponentFolder(t *testing.T) {
+	tempDir := t.TempDir()
+	subDir := filepath.Join(tempDir, "components", "vpc")
+	require.NoError(t, os.MkdirAll(subDir, 0o755))
+
+	folder, err := createComponentFolder(tempDir, subDir, "vpc")
+	require.NoError(t, err)
+	assert.Equal(t, "vpc", folder.Name)
+	assert.Equal(t, subDir, folder.FullPath)
+	assert.Equal(t, filepath.Join("components", "vpc"), folder.RelativePath)
+	assert.Empty(t, folder.Files)
+}
+
+// TestCollectFilesInComponentFolder tests the collectFilesInComponentFolder function.
+func TestCollectFilesInComponentFolder(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create test files.
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, ".terraform.lock.hcl"), []byte("lock"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "test.tfvars.json"), []byte("{}"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "unmatched.txt"), []byte("text"), 0o644))
+
+	folder := &Directory{
+		Name:         "test",
+		FullPath:     tempDir,
+		RelativePath: "test",
+		Files:        []ObjectInfo{},
+	}
+
+	patterns := []string{".terraform.lock.hcl", "*.tfvars.json"}
+	err := collectFilesInComponentFolder(folder, tempDir, patterns)
+	require.NoError(t, err)
+
+	// Should have 2 files matching patterns.
+	assert.Len(t, folder.Files, 2)
+
+	var fileNames []string
+	for _, f := range folder.Files {
+		fileNames = append(fileNames, f.Name)
+	}
+	assert.Contains(t, fileNames, ".terraform.lock.hcl")
+	assert.Contains(t, fileNames, "test.tfvars.json")
+	assert.NotContains(t, fileNames, "unmatched.txt")
+}
+
+// TestCollectComponentObjects tests the collectComponentObjects function.
+func TestCollectComponentObjects(t *testing.T) {
+	tempDir := t.TempDir()
+	componentDir := filepath.Join(tempDir, "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Create test files.
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, ".terraform.lock.hcl"), []byte("lock"), 0o644))
+
+	folders, err := collectComponentObjects(tempDir, componentDir, []string{".terraform.lock.hcl"})
+	require.NoError(t, err)
+	require.Len(t, folders, 1)
+	assert.Len(t, folders[0].Files, 1)
+}
+
+// TestGetComponentsPaths tests the getComponentsPaths function.
+func TestGetComponentsPaths(t *testing.T) {
+	tests := []struct {
+		name          string
+		stackData     any
+		expectedPaths []string
+		expectError   bool
+		expectedErr   error
+	}{
+		{
+			name:        "Invalid stack data type",
+			stackData:   "not a map",
+			expectError: true,
+			expectedErr: ErrParseTerraformComponents,
+		},
+		{
+			name: "Missing components section",
+			stackData: map[string]any{
+				"other": "data",
+			},
+			expectError: true,
+			expectedErr: ErrParseTerraformComponents,
+		},
+		{
+			name: "Missing terraform section",
+			stackData: map[string]any{
+				"components": map[string]any{
+					"helmfile": map[string]any{},
+				},
+			},
+			expectError: true,
+			expectedErr: ErrParseTerraformComponents,
+		},
+		{
+			name: "Invalid component data type",
+			stackData: map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": "not a map",
+					},
+				},
+			},
+			expectError: true,
+			expectedErr: ErrParseTerraformComponents,
+		},
+		{
+			name: "Missing component attribute",
+			stackData: map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": map[string]any{
+							"vars": map[string]any{},
+						},
+					},
+				},
+			},
+			expectError: true,
+			expectedErr: ErrParseComponentsAttributes,
+		},
+		{
+			name: "Valid stack data",
+			stackData: map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": map[string]any{
+							"component": "vpc",
+						},
+						"rds": map[string]any{
+							"component": "rds",
+						},
+					},
+				},
+			},
+			expectedPaths: []string{"vpc", "rds"},
+			expectError:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			paths, err := getComponentsPaths(tt.stackData)
+			if tt.expectError {
+				require.Error(t, err)
+				require.ErrorIs(t, err, tt.expectedErr)
+			} else {
+				require.NoError(t, err)
+				for _, expected := range tt.expectedPaths {
+					assert.Contains(t, paths, expected)
+				}
+			}
+		})
+	}
+}
