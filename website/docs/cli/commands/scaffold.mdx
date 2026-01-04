@@ -1,0 +1,224 @@
+---
+title: atmos scaffold
+sidebar_label: scaffold
+sidebar_class_name: command
+id: scaffold
+description: Use this command to generate infrastructure code from templates.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to generate infrastructure code, configurations, and documentation from reusable templates. Scaffold templates can be local, remote (Git), or configured in your `atmos.yaml`.
+</Intro>
+
+<Screengrab title="atmos scaffold --help" slug="atmos-scaffold--help" />
+
+## Usage
+
+The `scaffold` command has several subcommands for working with templates:
+
+```shell
+atmos scaffold [sub-command] [flags]
+```
+
+## Subcommands
+
+<dl>
+  <dt>[`generate`](/cli/commands/scaffold/generate)</dt>
+  <dd>Generate code from a scaffold template</dd>
+
+  <dt>[`list`](/cli/commands/scaffold/list)</dt>
+  <dd>List available scaffold templates</dd>
+
+  <dt>[`validate`](/cli/commands/scaffold/validate)</dt>
+  <dd>Validate scaffold.yaml files against the schema</dd>
+</dl>
+
+## Quick Start
+
+### List Available Templates
+
+See what scaffold templates are available:
+
+```shell
+atmos scaffold list
+```
+
+### Generate from a Template
+
+Generate code from a template:
+
+```shell
+atmos scaffold generate vpc-component ./components/terraform/vpc
+```
+
+### Create Custom Template
+
+Create your own scaffold template:
+
+1. Create template directory:
+```shell
+mkdir -p scaffolds/my-template
+```
+
+2. Create `scaffold.yaml`:
+```yaml
+name: "my-template"
+description: "My custom template"
+author: "Your Name"
+version: "1.0.0"
+
+prompts:
+  - name: "component_name"
+    description: "Component name"
+    type: "input"
+    default: "my-component"
+```
+
+3. Add template files:
+```shell
+echo "# {{.Config.component_name}}" > scaffolds/my-template/README.md
+```
+
+4. Use your template:
+```shell
+atmos scaffold generate ./scaffolds/my-template ./output
+```
+
+## Common Use Cases
+
+### Generate Infrastructure Components
+
+Create a new VPC component:
+
+```shell
+atmos scaffold generate vpc-component ./components/terraform/vpc-prod \
+  --set vpc_name=production \
+  --set cidr_block=10.0.0.0/16
+```
+
+### Standardize Team Workflows
+
+Create organization-specific templates:
+
+```shell
+# Configure in atmos.yaml
+scaffold:
+  templates:
+    team-microservice:
+      source: "github.com/acme/templates/microservice.git"
+      version: "1.0.0"
+
+# Team members use it
+atmos scaffold generate team-microservice ./services/api
+```
+
+### Preview Changes
+
+Use dry-run to see what would be generated:
+
+```shell
+atmos scaffold generate my-template ./output --dry-run
+```
+
+## Configuration
+
+Configure scaffold templates in `atmos.yaml`:
+
+```yaml
+scaffold:
+  # Base path for local templates (optional)
+  base_path: "./scaffolds"
+
+  # Available templates
+  templates:
+    # Local template
+    vpc-component:
+      description: "AWS VPC component"
+      source: "./scaffolds/vpc"
+      version: "1.0.0"
+
+    # Remote Git template
+    eks-cluster:
+      description: "EKS cluster template"
+      source: "github.com/cloudposse/atmos-scaffolds/eks.git"
+      version: "2.1.0"
+      ref: "tags/v2.1.0"
+```
+
+## Template Structure
+
+Scaffold templates follow this structure:
+
+```
+template-name/
+├── scaffold.yaml           # Template configuration
+├── README.md              # Template documentation
+├── main.tf                # Template files (can use Go templates)
+├── variables.tf
+└── {{.Config.name}}/      # Dynamic directory names
+    └── config.yaml
+```
+
+### scaffold.yaml Format
+
+```yaml
+name: "template-name"
+description: "Template description"
+author: "Author Name"
+version: "1.0.0"
+
+# User prompts
+prompts:
+  - name: "component_name"
+    description: "Name of the component"
+    type: "input"          # input, select, confirm
+    default: "my-component"
+
+  - name: "enable_monitoring"
+    description: "Enable monitoring?"
+    type: "confirm"
+    default: true
+```
+
+## Template Variables
+
+Templates use Go text/template syntax with Gomplate functions:
+
+### Available Variables
+
+- `.Config.<field>` - User-provided values
+- `.ScaffoldPath` - Target directory path
+- `.TemplateName` - Name of the template
+- `.TemplateDescription` - Template description
+
+### Example Usage
+
+```hcl
+# main.tf
+module "{{.Config.component_name}}" {
+  source  = "cloudposse/vpc/aws"
+  version = "{{.Config.module_version | default "2.0.0"}}"
+
+  name = "{{.Config.component_name}}"
+
+  {{if .Config.enable_monitoring}}
+  enable_flow_logs = true
+  {{end}}
+}
+```
+
+## Learn More
+
+See the individual subcommand documentation:
+
+- [`atmos scaffold generate`](/cli/commands/scaffold/generate) - Detailed generate command reference
+- [`atmos scaffold list`](/cli/commands/scaffold/list) - List templates
+- [`atmos scaffold validate`](/cli/commands/scaffold/validate) - Validate templates
+
+Additional resources:
+
+- [Creating Custom Scaffold Templates](/core-concepts/scaffold-templates)
+- [Go Templates](https://pkg.go.dev/text/template)
+- [Gomplate Functions](https://docs.gomplate.ca/)
