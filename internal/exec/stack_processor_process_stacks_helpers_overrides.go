@@ -21,6 +21,7 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 	result.ComponentOverridesAuth = make(map[string]any, componentOverridesCapacity)
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.ComponentOverridesProviders = make(map[string]any, componentOverridesCapacity)
+		result.ComponentOverridesRequiredProviders = make(map[string]any, componentOverridesCapacity)
 		result.ComponentOverridesHooks = make(map[string]any, componentOverridesCapacity)
 	}
 
@@ -89,6 +90,28 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 				return fmt.Errorf("%w: 'components.%s.%s.overrides.providers' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesProviders, opts.ComponentType, opts.Component, opts.StackName)
 			}
 			result.ComponentOverridesProviders = componentOverridesProviders
+		}
+	}
+
+	// Terraform-specific: extract required_providers overrides (DEV-3124).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := componentOverrides[cfg.RequiredProvidersSectionName]; ok {
+			componentOverridesRequiredProviders, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.overrides.required_providers' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesRequiredProviders, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentOverridesRequiredProviders = componentOverridesRequiredProviders
+		}
+	}
+
+	// Terraform-specific: extract required_version overrides (DEV-3124).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := componentOverrides[cfg.RequiredVersionSectionName]; ok {
+			componentOverridesRequiredVersion, ok := i.(string)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.overrides.required_version' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesRequiredVersion, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentOverridesRequiredVersion = componentOverridesRequiredVersion
 		}
 	}
 

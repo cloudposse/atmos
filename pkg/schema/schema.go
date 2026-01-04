@@ -760,8 +760,15 @@ type ConfigAndStacksInfo struct {
 	//   - pkg/auth already imports pkg/schema (for ConfigAndStacksInfo)
 	//   - This would create: schema → auth → schema (circular dependency error)
 	//   - Type assertions are used at usage sites to recover type safety
-	AuthManager               any
-	ComponentBackendType      string
+	AuthManager          any
+	ComponentBackendType string
+	// RequiredVersion is the Terraform version constraint (e.g., ">= 1.10.1").
+	// This is extracted from terraform.required_version or components.terraform.<name>.required_version.
+	RequiredVersion string
+	// RequiredProviders maps provider names to their configuration.
+	// Example: {"aws": {"source": "hashicorp/aws", "version": "~> 5.0"}}.
+	// This is extracted from terraform.required_providers or components.terraform.<name>.required_providers.
+	RequiredProviders         map[string]map[string]any
 	AdditionalArgsAndFlags    []string
 	GlobalOptions             []string
 	BasePath                  string
@@ -929,6 +936,8 @@ type BaseComponentConfig struct {
 	BaseComponentDependencies              AtmosSectionMapType
 	BaseComponentMetadata                  AtmosSectionMapType
 	BaseComponentProviders                 AtmosSectionMapType
+	BaseComponentRequiredProviders         AtmosSectionMapType
+	BaseComponentRequiredVersion           string
 	BaseComponentHooks                     AtmosSectionMapType
 	FinalBaseComponentName                 string
 	BaseComponentCommand                   string

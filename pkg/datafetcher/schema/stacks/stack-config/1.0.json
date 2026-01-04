@@ -233,6 +233,12 @@
             },
             "providers": {
               "$ref": "#/definitions/providers"
+            },
+            "required_version": {
+              "$ref": "#/definitions/required_version"
+            },
+            "required_providers": {
+              "$ref": "#/definitions/required_providers"
             }
           },
           "required": []
@@ -302,6 +308,12 @@
             },
             "providers": {
               "$ref": "#/definitions/providers"
+            },
+            "required_version": {
+              "$ref": "#/definitions/required_version"
+            },
+            "required_providers": {
+              "$ref": "#/definitions/required_providers"
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
@@ -893,6 +905,12 @@
             },
             "providers": {
               "$ref": "#/definitions/providers"
+            },
+            "required_version": {
+              "$ref": "#/definitions/required_version"
+            },
+            "required_providers": {
+              "$ref": "#/definitions/required_providers"
             }
           },
           "required": []
@@ -1193,6 +1211,48 @@
         {
           "type": "object",
           "additionalProperties": true
+        }
+      ]
+    },
+    "required_version": {
+      "title": "required_version",
+      "description": "Terraform required version constraint (e.g., '>= 1.10.1')",
+      "type": "string"
+    },
+    "required_providers": {
+      "title": "required_providers",
+      "description": "Terraform required providers section for version pinning",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "patternProperties": {
+            "^[a-zA-Z0-9-_]+$": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "description": "Provider source address (e.g., 'hashicorp/aws')"
+                },
+                "version": {
+                  "type": "string",
+                  "description": "Provider version constraint (e.g., '~> 5.0')"
+                },
+                "configuration_aliases": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "List of provider configuration aliases"
+                }
+              },
+              "required": ["source"]
+            }
+          }
         }
       ]
     }
