@@ -134,7 +134,7 @@ components:
 
 **Files:** `pkg/schema/schema.go`, `internal/exec/terraform.go`
 
-### PR 3: `source` (Just-in-Time Vendoring) 🔄 PR OPEN
+### PR 3: `source` (Just-in-Time Vendoring) ✅ COMPLETED
 
 Add support for remote terraform sources at the component level:
 
@@ -147,12 +147,7 @@ components:
       source: "git::git@github.com:acme/modules.git//vpc?ref=v1.0.0"
 ```
 
-**Implementation:**
-- Leverage existing `pkg/downloader/` infrastructure (go-getter)
-- Download to cache before terraform execution
-- Support same URL formats as Terragrunt (`git::`, `s3::`, etc.)
-
-**Files:** `pkg/schema/schema.go`, `internal/exec/terraform.go`, `pkg/component/source.go` (new)
+**Status:** Merged. Components can now specify remote sources that are downloaded just-in-time before terraform execution using the existing go-getter infrastructure.
 
 ### PR 4: Native `locals:` Section ✅ COMPLETED (#1883)
 
@@ -171,7 +166,7 @@ components:
 
 **Status:** Merged as file-scoped locals with dependency resolution and circular dependency detection. Locals can be defined at global, component-type, and component scopes.
 
-### PR 5: Import Adapter Registry ⏳ NOT STARTED
+### PR 5: Import Adapter Registry ✅ COMPLETED
 
 Create the extensible import adapter framework with a mock adapter for testing:
 
@@ -184,13 +179,7 @@ type ImportAdapter interface {
 }
 ```
 
-**Implementation:**
-- Define `ImportAdapter` interface
-- Create registry with `Register()` and `GetAdapter()` functions
-- Implement mock adapter for testing (`mock://`)
-- Extend import processor to detect scheme prefixes
-
-**Files:** `pkg/import/adapter.go`, `pkg/import/mock/adapter.go`, `internal/exec/stack_processor_utils.go`
+**Status:** Merged. The import adapter registry is in place with `Register()` and `GetAdapter()` functions, enabling custom import adapters to be registered for different schemes.
 
 ### PR 6: Terragrunt Import Adapter (This PRD)
 
