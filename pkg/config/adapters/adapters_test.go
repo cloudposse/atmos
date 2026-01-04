@@ -242,3 +242,398 @@ func TestGlobalMockAdapter(t *testing.T) {
 	ClearMockData()
 	assert.Empty(t, adapter.MockData)
 }
+
+// TestLocalAdapter_AbsolutePath tests resolution of absolute paths.
+func TestLocalAdapter_AbsolutePath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a valid YAML file.
+	validContent := `settings:
+  key: value
+`
+	validPath := filepath.Join(tempDir, "absolute.yaml")
+	err := os.WriteFile(validPath, []byte(validContent), 0o644)
+	assert.NoError(t, err)
+
+	adapter := &LocalAdapter{}
+	ctx := context.Background()
+
+	// Use the absolute path directly.
+	paths, err := adapter.Resolve(ctx, validPath, tempDir, tempDir, 1, 10)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, paths)
+	assert.Equal(t, validPath, paths[0].FilePath)
+}
+
+// TestLocalAdapter_OutsideBasePath tests paths outside the base directory.
+func TestLocalAdapter_OutsideBasePath(t *testing.T) {
+	parentDir := t.TempDir()
+	subDir := filepath.Join(parentDir, "subdir")
+	err := os.Mkdir(subDir, 0o755)
+	assert.NoError(t, err)
+
+	// Create a config in parent directory.
+	parentConfig := filepath.Join(parentDir, "parent.yaml")
+	err = os.WriteFile(parentConfig, []byte("key: value\n"), 0o644)
+	assert.NoError(t, err)
+
+	adapter := &LocalAdapter{}
+	ctx := context.Background()
+
+	// Import from subdir pointing to parent.
+	paths, err := adapter.Resolve(ctx, "../parent.yaml", subDir, parentDir, 1, 10)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, paths)
+	assert.Equal(t, parentConfig, paths[0].FilePath)
+}
+
+// TestLocalAdapter_NestedImports tests processing of nested imports.
+func TestLocalAdapter_NestedImports(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create nested config file.
+	nestedContent := `settings:
+  nested: true
+`
+	nestedPath := filepath.Join(tempDir, "nested.yaml")
+	err := os.WriteFile(nestedPath, []byte(nestedContent), 0o644)
+	assert.NoError(t, err)
+
+	// Create main config with import.
+	mainContent := `import:
+  - nested.yaml
+settings:
+  main: true
+`
+	mainPath := filepath.Join(tempDir, "main.yaml")
+	err = os.WriteFile(mainPath, []byte(mainContent), 0o644)
+	assert.NoError(t, err)
+
+	// Setup test adapters to avoid circular import.
+	config.ResetImportAdapterRegistry()
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	adapter := &LocalAdapter{}
+	ctx := context.Background()
+
+	paths, err := adapter.Resolve(ctx, "main.yaml", tempDir, tempDir, 1, 10)
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, len(paths), 1) // At least the main file.
+}
+
+// TestLocalAdapter_NestedImportsWithCustomBasePath tests nested imports with custom base_path.
+func TestLocalAdapter_NestedImportsWithCustomBasePath(t *testing.T) {
+	tempDir := t.TempDir()
+	subDir := filepath.Join(tempDir, "configs")
+	err := os.Mkdir(subDir, 0o755)
+	assert.NoError(t, err)
+
+	// Create nested config in subdirectory.
+	nestedContent := `settings:
+  nested: true
+`
+	nestedPath := filepath.Join(subDir, "nested.yaml")
+	err = os.WriteFile(nestedPath, []byte(nestedContent), 0o644)
+	assert.NoError(t, err)
+
+	// Create main config with import and custom base_path.
+	mainContent := `base_path: ./configs
+import:
+  - nested.yaml
+settings:
+  main: true
+`
+	mainPath := filepath.Join(tempDir, "main.yaml")
+	err = os.WriteFile(mainPath, []byte(mainContent), 0o644)
+	assert.NoError(t, err)
+
+	// Setup test adapters.
+	config.ResetImportAdapterRegistry()
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	adapter := &LocalAdapter{}
+	ctx := context.Background()
+
+	paths, err := adapter.Resolve(ctx, "main.yaml", tempDir, tempDir, 1, 10)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, paths)
+}
+
+// TestLocalAdapter_NoNestedImports tests file without nested imports.
+func TestLocalAdapter_NoNestedImports(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create config without imports.
+	content := `settings:
+  key: value
+`
+	configPath := filepath.Join(tempDir, "config.yaml")
+	err := os.WriteFile(configPath, []byte(content), 0o644)
+	assert.NoError(t, err)
+
+	config.ResetImportAdapterRegistry()
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	adapter := &LocalAdapter{}
+	ctx := context.Background()
+
+	paths, err := adapter.Resolve(ctx, "config.yaml", tempDir, tempDir, 1, 10)
+	assert.NoError(t, err)
+	assert.Len(t, paths, 1)
+}
+
+// TestGoGetterAdapter_AllSchemes tests that all expected schemes are present.
+func TestGoGetterAdapter_AllSchemes(t *testing.T) {
+	adapter := &GoGetterAdapter{}
+	schemes := adapter.Schemes()
+
+	expectedSchemes := []string{
+		"http://", "https://",
+		"git::", "git@",
+		"s3::", "s3://",
+		"gcs::", "gcs://",
+		"oci://",
+		"file://",
+		"hg::",
+		"scp://", "sftp://",
+		"github.com/", "bitbucket.org/",
+	}
+
+	for _, expected := range expectedSchemes {
+		assert.Contains(t, schemes, expected, "Should contain scheme: %s", expected)
+	}
+}
+
+// TestDownloadRemoteConfig_NilContext tests downloadRemoteConfig with nil context.
+func TestDownloadRemoteConfig_NilContext(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Test with TODO context - should work with default timeout.
+	// Use an invalid URL to trigger error (we're testing the context handling).
+	_, err := downloadRemoteConfig(context.TODO(), "https://nonexistent.invalid/config.yaml", tempDir)
+	assert.Error(t, err) // Should fail but not panic.
+}
+
+// TestDownloadRemoteConfig_ValidContext tests downloadRemoteConfig with valid context.
+func TestDownloadRemoteConfig_ValidContext(t *testing.T) {
+	tempDir := t.TempDir()
+	ctx := context.Background()
+
+	// Use an invalid URL to trigger error.
+	_, err := downloadRemoteConfig(ctx, "https://nonexistent.invalid/config.yaml", tempDir)
+	assert.Error(t, err)
+}
+
+// TestMockAdapter_NestedImports tests mock adapter with nested imports.
+func TestMockAdapter_NestedImports(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Setup adapters.
+	config.ResetImportAdapterRegistry()
+	mockAdapter := &MockAdapter{
+		MockData: map[string]string{
+			"parent": `import:
+  - mock://child
+settings:
+  parent: true
+`,
+			"child": `settings:
+  child: true
+`,
+		},
+	}
+	config.RegisterImportAdapter(mockAdapter)
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	ctx := context.Background()
+
+	paths, err := mockAdapter.Resolve(ctx, "mock://parent", tempDir, tempDir, 1, 10)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, paths)
+}
+
+// TestMockAdapter_WriteError tests mock adapter when temp directory doesn't exist.
+func TestMockAdapter_WriteError(t *testing.T) {
+	adapter := &MockAdapter{}
+	ctx := context.Background()
+
+	// Use non-existent temp directory.
+	_, err := adapter.Resolve(ctx, "mock://test", "/nonexistent/temp/dir", "/base", 1, 10)
+	assert.Error(t, err)
+}
+
+// TestGoGetterAdapter_ResolveWithLocalFile tests Resolve with a valid local file.
+func TestGoGetterAdapter_ResolveWithLocalFile(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a valid local YAML config file.
+	validContent := `settings:
+  key: value
+`
+	validPath := filepath.Join(tempDir, "config.yaml")
+	err := os.WriteFile(validPath, []byte(validContent), 0o644)
+	assert.NoError(t, err)
+
+	// Setup adapters.
+	config.ResetImportAdapterRegistry()
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	adapter := &GoGetterAdapter{}
+	ctx := context.Background()
+
+	// Use file:// URL to download local file.
+	fileURL := "file://" + validPath
+	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, paths)
+	assert.Equal(t, config.REMOTE, paths[0].ImportType)
+}
+
+// TestGoGetterAdapter_ResolveWithInvalidYAML tests Resolve with invalid YAML content.
+func TestGoGetterAdapter_ResolveWithInvalidYAML(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create an invalid YAML config file.
+	invalidContent := `invalid: [yaml: content`
+	invalidPath := filepath.Join(tempDir, "invalid.yaml")
+	err := os.WriteFile(invalidPath, []byte(invalidContent), 0o644)
+	assert.NoError(t, err)
+
+	adapter := &GoGetterAdapter{}
+	ctx := context.Background()
+
+	// Use file:// URL to download the invalid file.
+	fileURL := "file://" + invalidPath
+	_, err = adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	assert.Error(t, err) // Should fail when reading invalid YAML.
+}
+
+// TestGoGetterAdapter_ResolveWithNestedImports tests Resolve with nested imports.
+func TestGoGetterAdapter_ResolveWithNestedImports(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create nested config file.
+	nestedContent := `settings:
+  nested: true
+`
+	nestedPath := filepath.Join(tempDir, "nested.yaml")
+	err := os.WriteFile(nestedPath, []byte(nestedContent), 0o644)
+	assert.NoError(t, err)
+
+	// Create parent config with import.
+	parentContent := `import:
+  - nested.yaml
+settings:
+  parent: true
+`
+	parentPath := filepath.Join(tempDir, "parent.yaml")
+	err = os.WriteFile(parentPath, []byte(parentContent), 0o644)
+	assert.NoError(t, err)
+
+	// Setup adapters.
+	config.ResetImportAdapterRegistry()
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	adapter := &GoGetterAdapter{}
+	ctx := context.Background()
+
+	// Use file:// URL to download parent file.
+	fileURL := "file://" + parentPath
+	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, len(paths), 1) // At least the parent file.
+}
+
+// TestGoGetterAdapter_ResolveWithCustomBasePath tests Resolve with custom base_path.
+func TestGoGetterAdapter_ResolveWithCustomBasePath(t *testing.T) {
+	tempDir := t.TempDir()
+	subDir := filepath.Join(tempDir, "subdir")
+	err := os.Mkdir(subDir, 0o755)
+	assert.NoError(t, err)
+
+	// Create nested config in subdirectory.
+	nestedContent := `settings:
+  nested: true
+`
+	nestedPath := filepath.Join(subDir, "nested.yaml")
+	err = os.WriteFile(nestedPath, []byte(nestedContent), 0o644)
+	assert.NoError(t, err)
+
+	// Create parent config with custom base_path.
+	parentContent := `base_path: ` + subDir + `
+import:
+  - nested.yaml
+settings:
+  parent: true
+`
+	parentPath := filepath.Join(tempDir, "parent.yaml")
+	err = os.WriteFile(parentPath, []byte(parentContent), 0o644)
+	assert.NoError(t, err)
+
+	// Setup adapters.
+	config.ResetImportAdapterRegistry()
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	adapter := &GoGetterAdapter{}
+	ctx := context.Background()
+
+	// Use file:// URL to download parent file.
+	fileURL := "file://" + parentPath
+	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, paths)
+}
+
+// TestGoGetterAdapter_ResolveNoImports tests Resolve with config that has no imports.
+func TestGoGetterAdapter_ResolveNoImports(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a config without imports.
+	content := `settings:
+  key: value
+components:
+  terraform:
+    vpc: {}
+`
+	configPath := filepath.Join(tempDir, "no-imports.yaml")
+	err := os.WriteFile(configPath, []byte(content), 0o644)
+	assert.NoError(t, err)
+
+	// Setup adapters.
+	config.ResetImportAdapterRegistry()
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	adapter := &GoGetterAdapter{}
+	ctx := context.Background()
+
+	fileURL := "file://" + configPath
+	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	assert.NoError(t, err)
+	assert.Len(t, paths, 1) // Only the downloaded file.
+	assert.Equal(t, config.REMOTE, paths[0].ImportType)
+}
+
+// TestDownloadRemoteConfig_LocalFile tests downloading a local file via file:// URL.
+func TestDownloadRemoteConfig_LocalFile(t *testing.T) {
+	tempDir := t.TempDir()
+	destDir := t.TempDir()
+
+	// Create a source file.
+	content := `key: value`
+	sourcePath := filepath.Join(tempDir, "source.yaml")
+	err := os.WriteFile(sourcePath, []byte(content), 0o644)
+	assert.NoError(t, err)
+
+	ctx := context.Background()
+	fileURL := "file://" + sourcePath
+
+	// Download the file.
+	resultPath, err := downloadRemoteConfig(ctx, fileURL, destDir)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, resultPath)
+
+	// Verify content was downloaded.
+	downloadedContent, err := os.ReadFile(resultPath)
+	assert.NoError(t, err)
+	assert.Equal(t, content, string(downloadedContent))
+}

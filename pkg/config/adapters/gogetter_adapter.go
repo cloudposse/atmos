@@ -74,7 +74,7 @@ func (g *GoGetterAdapter) Resolve(
 	err = v.ReadInConfig()
 	if err != nil {
 		log.Debug("failed to read remote config", "path", importPath, "error", err)
-		return nil, err
+		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrReadConfig, err)
 	}
 
 	resolvedPaths := make([]config.ResolvedPaths, 0)
@@ -95,7 +95,7 @@ func (g *GoGetterAdapter) Resolve(
 		nestedPaths, err := config.ProcessImportsFromAdapter(importBasePath, imports, tempDir, currentDepth+1, maxDepth)
 		if err != nil {
 			log.Debug("failed to process nested imports", "import", importPath, "err", err)
-			return nil, err
+			return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessNestedImports, err)
 		}
 		resolvedPaths = append(resolvedPaths, nestedPaths...)
 	}
