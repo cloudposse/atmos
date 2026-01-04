@@ -76,7 +76,10 @@ func (w *FileOutputWriter) WriteOutput(key, value string) error {
 		_, err = fmt.Fprintf(f, "%s=%s\n", key, value)
 	}
 
-	return err
+	if err != nil {
+		return fmt.Errorf("%w: failed to write output: %w", errUtils.ErrCIOutputWriteFailed, err)
+	}
+	return nil
 }
 
 // WriteSummary appends content to the job summary file.
@@ -94,7 +97,10 @@ func (w *FileOutputWriter) WriteSummary(content string) error {
 	defer f.Close()
 
 	_, err = f.WriteString(content)
-	return err
+	if err != nil {
+		return fmt.Errorf("%w: failed to write summary: %w", errUtils.ErrCISummaryWriteFailed, err)
+	}
+	return nil
 }
 
 // OutputHelpers provides helper methods for common CI output patterns.
