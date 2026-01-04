@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"sync"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/samber/lo"
 
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -61,16 +62,16 @@ func componentFunc(
 		return nil, err
 	}
 
-	// Process Terraform remote state
+	// Process Terraform remote state.
 	var terraformOutputs map[string]any
 	componentType := sections[cfg.ComponentTypeSectionName]
 	if componentType == cfg.TerraformComponentType {
 		// Check if the component in the stack is configured with the 'static' remote state backend,
-		// in which case get the `output` from the static remote state instead of executing `terraform output`
+		// in which case get the `output` from the static remote state instead of executing `terraform output`.
 		remoteStateBackendStaticTypeOutputs := GetComponentRemoteStateBackendStaticType(&sections)
 
 		if remoteStateBackendStaticTypeOutputs != nil {
-			// Return the static backend outputs
+			// Return the static backend outputs.
 			terraformOutputs = remoteStateBackendStaticTypeOutputs
 		} else {
 			// Execute `terraform output` with authContext from configAndStacksInfo (populated by --identity flag).
@@ -78,7 +79,7 @@ func componentFunc(
 			if configAndStacksInfo != nil {
 				authContext = configAndStacksInfo.AuthContext
 			}
-			terraformOutputs, err = execTerraformOutput(atmosConfig, component, stack, sections, authContext)
+			terraformOutputs, err = tfoutput.ExecuteWithSections(atmosConfig, component, stack, sections, authContext)
 			if err != nil {
 				return nil, err
 			}

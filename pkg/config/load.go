@@ -351,6 +351,10 @@ func setEnv(v *viper.Viper) {
 	// Base path configuration.
 	bindEnv(v, "base_path", "ATMOS_BASE_PATH")
 
+	// Terraform plugin cache configuration.
+	bindEnv(v, "components.terraform.plugin_cache", "ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE")
+	bindEnv(v, "components.terraform.plugin_cache_dir", "ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR")
+
 	bindEnv(v, "settings.github_token", "GITHUB_TOKEN")
 	bindEnv(v, "settings.inject_github_token", "ATMOS_INJECT_GITHUB_TOKEN")
 	bindEnv(v, "settings.atmos_github_token", "ATMOS_GITHUB_TOKEN")
@@ -408,6 +412,8 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("components.helmfile.use_eks", true)
 	v.SetDefault("components.terraform.append_user_agent",
 		fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
+	// Plugin cache enabled by default for zero-config performance.
+	v.SetDefault("components.terraform.plugin_cache", true)
 
 	// Token injection defaults for all supported Git hosting providers.
 	v.SetDefault("settings.inject_github_token", true)

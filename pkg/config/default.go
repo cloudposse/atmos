@@ -39,6 +39,8 @@ var (
 				InitRunReconfigure:      true,
 				AutoGenerateBackendFile: true,
 				AppendUserAgent:         fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version),
+				PluginCache:             true, // Enabled by default for zero-config performance.
+				PluginCacheDir:          "",   // Empty = use XDG default (~/.cache/atmos/terraform/plugins).
 				Init: schema.TerraformInit{
 					PassVars: false,
 				},
