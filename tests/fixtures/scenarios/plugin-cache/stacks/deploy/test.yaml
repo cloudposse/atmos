@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: test
+
+import:
+  - catalog/components
+
+components:
+  terraform:
+    component-a:
+      vars:
+        value: "test-a"
+    component-b:
+      vars:
+        value: "test-b"

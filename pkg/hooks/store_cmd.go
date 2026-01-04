@@ -7,9 +7,9 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	e "github.com/cloudposse/atmos/internal/exec"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 )
 
 // TerraformOutputGetter retrieves terraform outputs.
@@ -43,7 +43,7 @@ func NewStoreCommand(atmosConfig *schema.AtmosConfiguration, info *schema.Config
 		Name:         "store",
 		atmosConfig:  atmosConfig,
 		info:         info,
-		outputGetter: e.GetTerraformOutput,
+		outputGetter: tfoutput.GetOutput,
 	}, nil
 }
 

@@ -14,6 +14,7 @@ components:
       pass_vars: false
     plan:
       skip_planfile: false
+    plugin_cache: true
   helmfile:
     base_path: components/helmfile
     use_eks: true
