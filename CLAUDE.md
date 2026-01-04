@@ -29,7 +29,7 @@ Multiple Claude sessions may be working on the same branch or worktree simultane
 - **When you see unfamiliar files**, assume another session created them - ask the user what to do
 - **If pre-commit hooks fail due to files you didn't touch**, ask the user how to proceed rather than trying to fix or remove them
 
-**Why this matters:** The user may have multiple Claude sessions working in parallel on different aspects of a feature. Deleting "unknown" files destroys that work.
+**Why this matters:** The user may have multiple Claude sessions working in parallel on different aspects of a feature. Deleting “unknown” files destroys that work.
 
 ## Essential Commands
 

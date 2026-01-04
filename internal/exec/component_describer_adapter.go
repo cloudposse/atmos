@@ -1,6 +1,7 @@
 package exec
 
 import (
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/perf"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
@@ -16,9 +17,11 @@ func (c *componentDescriberAdapter) DescribeComponent(params *tfoutput.DescribeC
 	// Convert AuthManager from any to auth.AuthManager if provided.
 	var authMgr auth.AuthManager
 	if params.AuthManager != nil {
-		if am, ok := params.AuthManager.(auth.AuthManager); ok {
-			authMgr = am
+		am, ok := params.AuthManager.(auth.AuthManager)
+		if !ok {
+			return nil, errUtils.ErrInvalidAuthManagerType
 		}
+		authMgr = am
 	}
 
 	return ExecuteDescribeComponent(&ExecuteDescribeComponentParams{

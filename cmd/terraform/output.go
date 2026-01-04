@@ -9,7 +9,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
-	e "github.com/cloudposse/atmos/internal/exec"
+	exec "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -82,7 +82,7 @@ func prepareOutputContext(cmd *cobra.Command, args []string) (*schema.ConfigAndS
 	}
 	separatedArgs := compat.GetSeparated()
 	argsWithSubCommand := append([]string{"output"}, args...)
-	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, terraformCmd, argsWithSubCommand, separatedArgs)
+	info, err := exec.ProcessCommandLineArgs(cfg.TerraformComponentType, terraformCmd, argsWithSubCommand, separatedArgs)
 	if err != nil {
 		return nil, nil, err
 	}
