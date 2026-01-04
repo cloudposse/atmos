@@ -6,12 +6,15 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // RenderTree renders the tree as a string with box-drawing characters.
 // Uses a two-column layout: action symbol (fixed width) | tree structure.
 func (t *DependencyTree) RenderTree() string {
+	defer perf.Track(nil, "terraform.ui.DependencyTree.RenderTree")()
+
 	var b strings.Builder
 
 	// Styles.
@@ -370,6 +373,8 @@ func colorizedActionSymbol(action string) string {
 
 // GetChangeSummary returns a summary of changes from the tree.
 func (t *DependencyTree) GetChangeSummary() (add, change, remove int) {
+	defer perf.Track(nil, "terraform.ui.DependencyTree.GetChangeSummary")()
+
 	countActions(t.Root, &add, &change, &remove)
 	return
 }
@@ -401,13 +406,15 @@ func countActions(node *TreeNode, add, change, remove *int) {
 // Shows "NO CHANGES" badge if all counts are zero.
 // Format: "  1 ADD 2 CHANGE 1 DELETE" with colored badges (green/yellow/red backgrounds).
 func RenderChangeSummaryBadges(add, change, remove int) string {
+	defer perf.Track(nil, "terraform.ui.RenderChangeSummaryBadges")()
+
 	var badges []string
 
 	// If no changes, show a "NO CHANGES" badge.
 	if add == 0 && change == 0 && remove == 0 {
 		noChangesBadge := lipgloss.NewStyle().
 			Background(lipgloss.Color(theme.ColorDarkGray)).
-			Foreground(lipgloss.Color("#FFFFFF")).
+			Foreground(lipgloss.Color(theme.ColorWhite)).
 			Bold(true).
 			Padding(0, 1).
 			Render("NO CHANGES")

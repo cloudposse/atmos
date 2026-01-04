@@ -9,10 +9,14 @@ import (
 	"strings"
 
 	tfjson "github.com/hashicorp/terraform-json"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // BuildDependencyTree parses a planfile and builds the dependency tree.
 func BuildDependencyTree(ctx context.Context, planfilePath, terraformPath, workingDir, stack, component string) (*DependencyTree, error) {
+	defer perf.Track(nil, "terraform.ui.BuildDependencyTree")()
+
 	// Run terraform show -json planfile.
 	cmd := exec.CommandContext(ctx, terraformPath, "show", "-json", planfilePath)
 	cmd.Dir = workingDir

@@ -320,6 +320,8 @@ func extractOutFlag(args []string) string {
 // ShouldUseStreamingUI determines if streaming UI should be used.
 // This checks the flag, config, TTY availability, and CI environment.
 func ShouldUseStreamingUI(uiFlagSet bool, uiFlag bool, configEnabled bool, subCommand string) bool {
+	defer perf.Track(nil, "terraform.ui.ShouldUseStreamingUI")()
+
 	// Check if explicitly disabled via --ui=false flag.
 	if uiFlagSet && !uiFlag {
 		return false
