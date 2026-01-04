@@ -106,6 +106,12 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 
 		err = os.Remove(fmt.Sprintf("%s/planfiles/new-planfile.yaml", componentPath))
 		assert.NoError(t, err)
+
+		err = os.Remove(fmt.Sprintf("%s/output/%s-%s.planfile.json", componentPath, stack, component))
+		assert.NoError(t, err)
+
+		err = os.RemoveAll(filepath.Join(componentPath, "output"))
+		assert.NoError(t, err)
 	}()
 
 	options := PlanfileOptions{
@@ -113,6 +119,7 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 		Stack:                stack,
 		Format:               "json",
 		File:                 "",
+		OutputPath:           "",
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
 		Skip:                 nil,
@@ -169,6 +176,24 @@ func TestExecuteTerraformGeneratePlanfile(t *testing.T) {
 	assert.NoError(t, err)
 
 	filePath = fmt.Sprintf("%s/planfiles/new-planfile.yaml", componentPath)
+	if _, err = os.Stat(filePath); os.IsNotExist(err) {
+		t.Errorf("Generated planfile does not exist: %s", filePath)
+	} else if err != nil {
+		t.Errorf("Error checking file: %v", err)
+	}
+
+	// Test --output-path option: generates planfile in specified directory with default filename.
+	options.Format = "json"
+	options.File = ""
+	options.OutputPath = "output"
+	err = ExecuteTerraformGeneratePlanfile(
+		&options,
+		&info,
+	)
+	assert.NoError(t, err)
+
+	// Verify the planfile was created with default naming in the output directory.
+	filePath = fmt.Sprintf("%s/output/%s-%s.planfile.json", componentPath, stack, component)
 	if _, err = os.Stat(filePath); os.IsNotExist(err) {
 		t.Errorf("Generated planfile does not exist: %s", filePath)
 	} else if err != nil {
@@ -330,6 +355,69 @@ func TestPlanfileValidateComponent(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+// TestResolvePlanfilePath tests the resolvePlanfilePath function with different modes.
+func TestResolvePlanfilePath(t *testing.T) {
+	// Create a temporary directory for testing.
+	tmpDir := t.TempDir()
+	componentPath := tmpDir
+	info := &schema.ConfigAndStacksInfo{
+		StackFromArg:     "dev-us-east-1",
+		ComponentFromArg: "vpc",
+	}
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	testCases := []struct {
+		name         string
+		customFile   string
+		outputPath   string
+		format       string
+		expectedPath string
+	}{
+		{
+			name:         "Mode 1: Exact file path (relative)",
+			customFile:   "custom-planfile.json",
+			outputPath:   "",
+			format:       "json",
+			expectedPath: filepath.Join(componentPath, "custom-planfile.json"),
+		},
+		{
+			name:         "Mode 1: Exact file path (absolute)",
+			customFile:   filepath.Join(tmpDir, "absolute", "path.json"),
+			outputPath:   "",
+			format:       "json",
+			expectedPath: filepath.Join(tmpDir, "absolute", "path.json"),
+		},
+		{
+			name:         "Mode 2: Output directory with default filename (relative)",
+			customFile:   "",
+			outputPath:   "planfiles",
+			format:       "json",
+			expectedPath: filepath.Join(componentPath, "planfiles", "dev-us-east-1-vpc.planfile.json"),
+		},
+		{
+			name:         "Mode 2: Output directory with default filename (absolute)",
+			customFile:   "",
+			outputPath:   filepath.Join(tmpDir, "output"),
+			format:       "yaml",
+			expectedPath: filepath.Join(tmpDir, "output", "dev-us-east-1-vpc.planfile.yaml"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := planfilePathOptions{
+				componentPath: componentPath,
+				format:        tc.format,
+				customFile:    tc.customFile,
+				outputPath:    tc.outputPath,
+			}
+			result, err := resolvePlanfilePath(opts, info, atmosConfig)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedPath, result)
 		})
 	}
 }

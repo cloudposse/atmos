@@ -37,6 +37,7 @@ func ExecuteGeneratePlanfile(opts *PlanfileOptions, atmosConfig *schema.AtmosCon
 		"component", opts.Component,
 		"stack", opts.Stack,
 		"file", opts.File,
+		"outputPath", opts.OutputPath,
 		"format", opts.Format,
 		"processTemplates", opts.ProcessTemplates,
 		"processFunctions", opts.ProcessYamlFunctions,
@@ -188,7 +189,13 @@ func ExecuteTerraformGeneratePlanfile(
 	}
 
 	// Resolve the planfile path based on options. If a custom file is specified, use that. Otherwise, use the default path.
-	planFilePath, err := resolvePlanfilePath(componentPath, options.Format, options.File, info, &atmosConfig)
+	pathOpts := planfilePathOptions{
+		componentPath: componentPath,
+		format:        options.Format,
+		customFile:    options.File,
+		outputPath:    options.OutputPath,
+	}
+	planFilePath, err := resolvePlanfilePath(pathOpts, info, &atmosConfig)
 	if err != nil {
 		return err
 	}
@@ -224,17 +231,39 @@ func validateComponent(component string) error {
 	return nil
 }
 
+// planfilePathOptions holds parameters for resolving planfile path.
+type planfilePathOptions struct {
+	componentPath string
+	format        string
+	customFile    string
+	outputPath    string
+}
+
 // resolvePlanfilePath determines the final path for the planfile based on options.
-func resolvePlanfilePath(componentPath, format string, customFile string, info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) (string, error) {
+// It handles three modes: CustomFile set uses exact path (absolute or relative to component).
+// OutputPath set uses default filename in specified directory. Neither uses atmos config default path.
+func resolvePlanfilePath(opts planfilePathOptions, info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) (string, error) {
 	var planFilePath string
-	if customFile != "" {
-		if filepath.IsAbs(customFile) {
-			planFilePath = customFile
+
+	switch {
+	case opts.customFile != "":
+		// Mode 1: Exact file path specified.
+		if filepath.IsAbs(opts.customFile) {
+			planFilePath = opts.customFile
 		} else {
-			planFilePath = filepath.Join(componentPath, customFile)
+			planFilePath = filepath.Join(opts.componentPath, opts.customFile)
 		}
-	} else {
-		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, info), format)
+	case opts.outputPath != "":
+		// Mode 2: Output directory specified, use default filename.
+		defaultFilename := fmt.Sprintf("%s-%s.planfile.%s", info.StackFromArg, info.ComponentFromArg, opts.format)
+		if filepath.IsAbs(opts.outputPath) {
+			planFilePath = filepath.Join(opts.outputPath, defaultFilename)
+		} else {
+			planFilePath = filepath.Join(opts.componentPath, opts.outputPath, defaultFilename)
+		}
+	default:
+		// Mode 3: Use atmos config default path.
+		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, info), opts.format)
 	}
 
 	err := u.EnsureDir(planFilePath)

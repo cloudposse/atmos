@@ -53,6 +53,7 @@ var planfileCmd = &cobra.Command{
 		// Get flag values from Viper.
 		stack := v.GetString("stack")
 		file := v.GetString("file")
+		outputPath := v.GetString("output-path")
 		format := v.GetString("format")
 		processTemplates := v.GetBool("process-templates")
 		processFunctions := v.GetBool("process-functions")
@@ -82,6 +83,7 @@ var planfileCmd = &cobra.Command{
 			Component:            component,
 			Stack:                stack,
 			File:                 file,
+			OutputPath:           outputPath,
 			Format:               format,
 			ProcessTemplates:     processTemplates,
 			ProcessYamlFunctions: processFunctions,
@@ -96,12 +98,14 @@ func init() {
 	planfileParser = flags.NewStandardParser(
 		flags.WithStringFlag("stack", "s", "", "Atmos stack (required)"),
 		flags.WithStringFlag("file", "f", "", "Planfile name"),
+		flags.WithStringFlag("output-path", "o", "", "Output path for planfile using default naming ({stack}-{component}.planfile.{format})"),
 		flags.WithStringFlag("format", "", "json", "Output format: json or yaml"),
 		flags.WithBoolFlag("process-templates", "", true, "Enable Go template processing in Atmos stack manifests"),
 		flags.WithBoolFlag("process-functions", "", true, "Enable YAML functions processing in Atmos stack manifests"),
 		flags.WithStringSliceFlag("skip", "", []string{}, "Skip processing specific Atmos YAML functions"),
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
 		flags.WithEnvVars("file", "ATMOS_FILE"),
+		flags.WithEnvVars("output-path", "ATMOS_OUTPUT_PATH"),
 		flags.WithEnvVars("format", "ATMOS_FORMAT"),
 		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
 		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
@@ -110,6 +114,9 @@ func init() {
 
 	// Register flags with the command.
 	planfileParser.RegisterFlags(planfileCmd)
+
+	// Mark file and output-path as mutually exclusive.
+	planfileCmd.MarkFlagsMutuallyExclusive("file", "output-path")
 
 	// Bind flags to Viper for environment variable support.
 	if err := planfileParser.BindToViper(viper.GetViper()); err != nil {

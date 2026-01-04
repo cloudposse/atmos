@@ -51,6 +51,7 @@ type PlanfileOptions struct {
 	Stack                string
 	Format               string
 	File                 string
+	OutputPath           string // Output path for planfile using default naming convention.
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
