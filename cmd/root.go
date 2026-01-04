@@ -28,6 +28,8 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	// Import adapters to register them with the config package.
+	_ "github.com/cloudposse/atmos/pkg/config/adapters"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"

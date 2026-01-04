@@ -572,6 +572,9 @@ var (
 	ErrNoFileMatchPattern   = errors.New("no files matching patterns found")
 	ErrMaxImportDepth       = errors.New("maximum import depth reached")
 	ErrNoValidAbsolutePaths = errors.New("no valid absolute paths found")
+	ErrDownloadRemoteConfig = errors.New("failed to download remote config")
+	ErrMockImportFailure    = errors.New("mock error: simulated import failure")
+	ErrProcessNestedImports = errors.New("failed to process nested imports")
 
 	// Profiler-related errors.
 	ErrProfilerStart           = errors.New("profiler start failed")
