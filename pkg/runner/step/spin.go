@@ -157,17 +157,10 @@ func getShellCommand() (shell string, arg string) {
 // safeEnvCapacity computes a safe capacity for environment variable slices.
 // It clamps both lengths to maxEnvVars before adding to prevent overflow.
 func safeEnvCapacity(len1, len2, maxEnvVars int) int {
-	if len1 > maxEnvVars {
-		len1 = maxEnvVars
-	}
-	if len2 > maxEnvVars {
-		len2 = maxEnvVars
-	}
-	total := len1 + len2
-	if total > maxEnvVars {
-		total = maxEnvVars
-	}
-	return total
+	// Clamp inputs using min() so the addition can't overflow.
+	len1 = min(len1, maxEnvVars)
+	len2 = min(len2, maxEnvVars)
+	return min(len1+len2, maxEnvVars)
 }
 
 // buildResult creates a step result from command output.

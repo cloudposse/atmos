@@ -66,16 +66,9 @@ func (h *LogHandler) buildKeyvals(step *schema.WorkflowStep, vars *Variables) []
 	}
 
 	// Cap at reasonable maximum to avoid overflow on 32-bit systems.
-	const maxCapacity = 1 << 20 // 1M capacity is more than reasonable.
-	fieldsLen := len(step.Fields)
-	// If doubling fieldsLen would exceed maxCapacity (or overflow), clamp to maxCapacity.
-	var capacity int
-	if fieldsLen >= maxCapacity/2 {
-		capacity = maxCapacity
-	} else {
-		capacity = fieldsLen * 2
-	}
-	keyvals := make([]interface{}, 0, capacity)
+	const maxCapacity = 1 << 20                       // 1M capacity is more than reasonable.
+	fieldsLen := min(len(step.Fields), maxCapacity/2) // Clamp so fieldsLen*2 can't overflow.
+	keyvals := make([]interface{}, 0, fieldsLen*2)
 	for key, value := range step.Fields {
 		// Resolve template variables in field values.
 		resolvedValue, err := vars.Resolve(value)
