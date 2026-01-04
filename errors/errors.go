@@ -795,15 +795,16 @@ var (
 	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
 
 	// CI-related errors.
-	ErrCIDisabled             = errors.New("CI integration is disabled")
-	ErrCIProviderNotDetected  = errors.New("CI provider not detected")
-	ErrCIProviderNotFound     = errors.New("CI provider not found")
-	ErrCICheckRunCreateFailed = errors.New("failed to create check run")
-	ErrCICheckRunUpdateFailed = errors.New("failed to update check run")
-	ErrCIStatusFetchFailed    = errors.New("failed to fetch CI status")
-	ErrCIOutputWriteFailed    = errors.New("failed to write CI output")
-	ErrCISummaryWriteFailed   = errors.New("failed to write CI summary")
-	ErrGitHubTokenNotFound    = errors.New("GitHub token not found")
+	ErrCIDisabled              = errors.New("CI integration is disabled")
+	ErrCIProviderNotDetected   = errors.New("CI provider not detected")
+	ErrCIProviderNotFound      = errors.New("CI provider not found")
+	ErrCIOperationNotSupported = errors.New("operation not supported by CI provider")
+	ErrCICheckRunCreateFailed  = errors.New("failed to create check run")
+	ErrCICheckRunUpdateFailed  = errors.New("failed to update check run")
+	ErrCIStatusFetchFailed     = errors.New("failed to fetch CI status")
+	ErrCIOutputWriteFailed     = errors.New("failed to write CI output")
+	ErrCISummaryWriteFailed    = errors.New("failed to write CI summary")
+	ErrGitHubTokenNotFound     = errors.New("GitHub token not found")
 
 	// Planfile storage errors.
 	ErrPlanfileNotFound           = errors.New("planfile not found")

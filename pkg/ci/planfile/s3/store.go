@@ -287,13 +287,13 @@ func (s *Store) loadMetadata(ctx context.Context, planfileKey string) (*planfile
 		Key:    aws.String(metadataKey),
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: failed to get metadata from S3: %w", errUtils.ErrPlanfileMetadataFailed, err)
 	}
 	defer result.Body.Close()
 
 	var metadata planfile.Metadata
 	if err := json.NewDecoder(result.Body).Decode(&metadata); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: failed to decode metadata JSON: %w", errUtils.ErrPlanfileMetadataFailed, err)
 	}
 
 	return &metadata, nil

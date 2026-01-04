@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -83,7 +84,7 @@ func (p *GenericProvider) GetStatus(_ context.Context, _ StatusOptions) (*Status
 	defer perf.Track(nil, "ci.GenericProvider.GetStatus")()
 
 	log.Debug("GetStatus not supported by generic CI provider")
-	return nil, nil
+	return nil, fmt.Errorf("%w: GetStatus is not supported by the generic CI provider", errUtils.ErrCIOperationNotSupported)
 }
 
 // CreateCheckRun is not supported by the generic provider.
@@ -91,7 +92,7 @@ func (p *GenericProvider) CreateCheckRun(_ context.Context, _ *CreateCheckRunOpt
 	defer perf.Track(nil, "ci.GenericProvider.CreateCheckRun")()
 
 	log.Debug("CreateCheckRun not supported by generic CI provider")
-	return nil, nil
+	return nil, fmt.Errorf("%w: CreateCheckRun is not supported by the generic CI provider", errUtils.ErrCIOperationNotSupported)
 }
 
 // UpdateCheckRun is not supported by the generic provider.
@@ -99,7 +100,7 @@ func (p *GenericProvider) UpdateCheckRun(_ context.Context, _ *UpdateCheckRunOpt
 	defer perf.Track(nil, "ci.GenericProvider.UpdateCheckRun")()
 
 	log.Debug("UpdateCheckRun not supported by generic CI provider")
-	return nil, nil
+	return nil, fmt.Errorf("%w: UpdateCheckRun is not supported by the generic CI provider", errUtils.ErrCIOperationNotSupported)
 }
 
 // OutputWriter returns an OutputWriter for the generic provider.

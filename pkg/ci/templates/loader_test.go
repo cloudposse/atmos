@@ -19,8 +19,14 @@ var rawTestEmbeddedTemplates embed.FS
 
 // testEmbeddedFS returns the test embedded templates with the correct path structure.
 // The loader expects "templates/plan.md", so we strip the "testdata" prefix.
+// Note: The "testdata" subdirectory is guaranteed to exist at compile time via //go:embed,
+// so fs.Sub cannot fail for embedded filesystems with compile-time validated paths.
 func testEmbeddedFS() fs.FS {
-	sub, _ := fs.Sub(rawTestEmbeddedTemplates, "testdata")
+	sub, err := fs.Sub(rawTestEmbeddedTemplates, "testdata")
+	if err != nil {
+		// This should never happen since the directory is embedded at compile time.
+		panic("testEmbeddedFS: failed to create sub-filesystem: " + err.Error())
+	}
 	return sub
 }
 
