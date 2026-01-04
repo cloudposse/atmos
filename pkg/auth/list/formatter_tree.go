@@ -437,6 +437,13 @@ func buildIdentityNode(authManager authTypes.AuthManager, identity *schema.Ident
 
 // buildIdentityTitle builds the title string for an identity node.
 func buildIdentityTitle(authManager authTypes.AuthManager, identity *schema.Identity, name string) string {
+	// Get display name with original case from IdentityCaseMap.
+	// Viper lowercases map keys, but we want to display original case (e.g., "core-artifacts/TerraformApplyAccess").
+	displayName := name
+	if authManager != nil {
+		displayName = authManager.GetIdentityDisplayName(name)
+	}
+
 	// Get authentication status and add indicator.
 	// If authManager is nil, use unknown status as safe default.
 	var status authStatus
@@ -450,9 +457,9 @@ func buildIdentityTitle(authManager authTypes.AuthManager, identity *schema.Iden
 	// Only prepend status indicator if it's not empty (authenticated identities only).
 	var title string
 	if statusIndicator != " " {
-		title = fmt.Sprintf("%s %s (%s)", statusIndicator, name, identity.Kind)
+		title = fmt.Sprintf("%s %s (%s)", statusIndicator, displayName, identity.Kind)
 	} else {
-		title = fmt.Sprintf("%s (%s)", name, identity.Kind)
+		title = fmt.Sprintf("%s (%s)", displayName, identity.Kind)
 	}
 
 	if identity.Default {

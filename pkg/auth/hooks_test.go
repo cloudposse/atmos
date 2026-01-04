@@ -42,6 +42,7 @@ func (s *stubAuthManager) GetDefaultIdentity(_ bool) (string, error) {
 	return s.defaultIdentity, s.defaultErr
 }
 func (s *stubAuthManager) ListIdentities() []string                          { return []string{"one", "two"} }
+func (s *stubAuthManager) GetIdentityDisplayName(name string) string         { return name }
 func (s *stubAuthManager) GetProviderForIdentity(identityName string) string { return "prov" }
 func (s *stubAuthManager) GetFilesDisplayPath(providerName string) string    { return "~/.aws/atmos" }
 func (s *stubAuthManager) GetProviderKindForIdentity(identityName string) (string, error) {
