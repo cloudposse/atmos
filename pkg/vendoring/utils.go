@@ -1,4 +1,4 @@
-package exec
+package vendoring
 
 import (
 	"fmt"
@@ -9,40 +9,24 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	cp "github.com/otiai10/copy"
-	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.yaml.in/yaml/v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/exec"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/vendoring/uri"
 )
 
-// Dedicated logger for stderr to keep stdout clean of detailed messaging, e.g. for files vendoring.
+// StderrLogger is a dedicated logger for stderr to keep stdout clean of detailed messaging, e.g. for files vendoring.
 var StderrLogger = func() *log.AtmosLogger {
 	l := log.New()
 	l.SetOutput(os.Stderr)
 	return l
 }()
-
-var (
-	ErrVendorComponents              = errors.New("failed to vendor components")
-	ErrSourceMissing                 = errors.New("'source' must be specified in 'sources' in the vendor config file")
-	ErrTargetsMissing                = errors.New("'targets' must be specified for the source in the vendor config file")
-	ErrVendorConfigSelfImport        = errors.New("vendor config file imports itself in 'spec.imports'")
-	ErrMissingVendorConfigDefinition = errors.New("either 'spec.sources' or 'spec.imports' (or both) must be defined in the vendor config file")
-	ErrVendoringNotConfigured        = errors.New("Vendoring is not configured. To set up vendoring, please see https://atmos.tools/core-concepts/vendor/")
-	ErrPermissionDenied              = errors.New("Permission denied when accessing")
-	ErrEmptySources                  = errors.New("'spec.sources' is empty in the vendor config file and the imports")
-	ErrNoComponentsWithTags          = errors.New("there are no components in the vendor config file")
-	ErrNoYAMLConfigFiles             = errors.New("no YAML configuration files found in directory")
-	ErrDuplicateComponents           = errors.New("duplicate component names")
-	ErrDuplicateImport               = errors.New("Duplicate import")
-	ErrDuplicateComponentsFound      = errors.New("duplicate component")
-	ErrComponentNotDefined           = errors.New("the flag '--component' is passed, but the component is not defined in any of the 'sources' in the vendor config file and the imports")
-)
 
 type processTargetsParams struct {
 	AtmosConfig          *schema.AtmosConfiguration
@@ -61,6 +45,13 @@ type executeVendorOptions struct {
 	component            string
 	tags                 []string
 	dryRun               bool
+}
+
+// sourceTypeResult contains the result of determining a source URI's type.
+type sourceTypeResult struct {
+	UseOciScheme       bool
+	UseLocalFileSystem bool
+	SourceIsLocalFile  bool
 }
 
 type vendorSourceParams struct {
@@ -131,10 +122,10 @@ func getConfigFiles(path string) ([]string, error) {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, ErrVendoringNotConfigured
+			return nil, errUtils.ErrVendoringNotConfigured
 		}
 		if os.IsPermission(err) {
-			return nil, fmt.Errorf("%w '%s'. Please check the file permissions", ErrPermissionDenied, path)
+			return nil, fmt.Errorf("%w '%s'. Please check the file permissions", errUtils.ErrPermissionDenied, path)
 		}
 		return nil, fmt.Errorf("An error occurred while accessing the vendoring configuration: %w", err)
 	}
@@ -147,7 +138,7 @@ func getConfigFiles(path string) ([]string, error) {
 		}
 
 		if len(matches) == 0 {
-			return nil, fmt.Errorf("%w '%s'", ErrNoYAMLConfigFiles, path)
+			return nil, fmt.Errorf("%w '%s'", errUtils.ErrNoYAMLConfigFiles, path)
 		}
 		for i, match := range matches {
 			matches[i] = filepath.Join(path, match)
@@ -179,7 +170,7 @@ func mergeVendorConfigFiles(configFiles []string) (schema.AtmosVendorConfig, err
 			source := currentConfig.Spec.Sources[i]
 			if source.Component != "" {
 				if sourceMap[source.Component] {
-					return vendorConfig, fmt.Errorf("%w '%s' found in config file '%s'", ErrDuplicateComponentsFound, source.Component, configFile)
+					return vendorConfig, fmt.Errorf("%w '%s' found in config file '%s'", errUtils.ErrDuplicateComponentsFound, source.Component, configFile)
 				}
 				sourceMap[source.Component] = true
 			}
@@ -206,7 +197,7 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 
 	logInitialMessage(params.vendorConfigFileName, params.tags)
 	if len(params.atmosVendorSpec.Sources) == 0 && len(params.atmosVendorSpec.Imports) == 0 {
-		return fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, params.vendorConfigFileName)
+		return fmt.Errorf("%w '%s'", errUtils.ErrMissingVendorConfigDefinition, params.vendorConfigFileName)
 	}
 	// Process imports and return all sources from all the imports and from `vendor.yaml`.
 	sources, _, err := processVendorImports(
@@ -221,7 +212,7 @@ func ExecuteAtmosVendorInternal(params *executeVendorOptions) error {
 	}
 
 	if len(sources) == 0 {
-		return fmt.Errorf("%w %s", ErrEmptySources, params.vendorConfigFileName)
+		return fmt.Errorf("%w %s", errUtils.ErrEmptySources, params.vendorConfigFileName)
 	}
 
 	if err := validateTagsAndComponents(sources, params.vendorConfigFileName, params.component, params.tags); err != nil {
@@ -259,7 +250,7 @@ func validateTagsAndComponents(
 
 		if len(lo.Intersect(tags, componentTags)) == 0 {
 			return fmt.Errorf("%w '%s' tagged with the tags %v",
-				ErrNoComponentsWithTags, vendorConfigFileName, tags)
+				errUtils.ErrNoComponentsWithTags, vendorConfigFileName, tags)
 		}
 	}
 
@@ -269,12 +260,12 @@ func validateTagsAndComponents(
 
 	if duplicates := lo.FindDuplicates(components); len(duplicates) > 0 {
 		return fmt.Errorf("%w %v in the vendor config file '%s' and the imports",
-			ErrDuplicateComponents, duplicates, vendorConfigFileName)
+			errUtils.ErrDuplicateComponents, duplicates, vendorConfigFileName)
 	}
 
 	if component != "" && !u.SliceContainsString(components, component) {
 		return fmt.Errorf("%w component '%s', file '%s'",
-			ErrComponentNotDefined, component, vendorConfigFileName)
+			errUtils.ErrVendorComponentNotDefinedInConfig, component, vendorConfigFileName)
 	}
 
 	return nil
@@ -297,7 +288,7 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 		}{params.sources[indexSource].Component, params.sources[indexSource].Version}
 
 		// Parse 'source' template
-		uri, err := ProcessTmpl(params.atmosConfig, fmt.Sprintf("source-%d", indexSource), params.sources[indexSource].Source, tmplData, false)
+		uri, err := exec.ProcessTmpl(params.atmosConfig, fmt.Sprintf("source-%d", indexSource), params.sources[indexSource].Source, tmplData, false)
 		if err != nil {
 			return nil, err
 		}
@@ -307,11 +298,11 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 		// security fixes.
 		uri = normalizeVendorURI(uri)
 
-		useOciScheme, useLocalFileSystem, sourceIsLocalFile, err := determineSourceType(&uri, params.vendorConfigFilePath)
+		sourceType, err := determineSourceType(&uri, params.vendorConfigFilePath)
 		if err != nil {
 			return nil, err
 		}
-		if !useLocalFileSystem {
+		if !sourceType.UseLocalFileSystem {
 			err = u.ValidateURI(uri)
 			if err != nil {
 				if strings.Contains(uri, "..") {
@@ -321,10 +312,10 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 			}
 		}
 
-		// Determine package type
-		pType := determinePackageType(useOciScheme, useLocalFileSystem)
+		// Determine package type.
+		pType := determinePackageType(sourceType.UseOciScheme, sourceType.UseLocalFileSystem)
 
-		// Process each target within the source
+		// Process each target within the source.
 		pkgs, err := processTargets(&processTargetsParams{
 			AtmosConfig:          params.atmosConfig,
 			IndexSource:          indexSource,
@@ -333,7 +324,7 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 			VendorConfigFilePath: params.vendorConfigFilePath,
 			URI:                  uri,
 			PkgType:              pType,
-			SourceIsLocalFile:    sourceIsLocalFile,
+			SourceIsLocalFile:    sourceType.SourceIsLocalFile,
 		})
 		if err != nil {
 			return nil, err
@@ -356,7 +347,7 @@ func determinePackageType(useOciScheme, useLocalFileSystem bool) pkgType {
 func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
 	for indexTarget, tgt := range params.Source.Targets {
-		target, err := ProcessTmpl(params.AtmosConfig, fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt, params.TemplateData, false)
+		target, err := exec.ProcessTmpl(params.AtmosConfig, fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt, params.TemplateData, false)
 		if err != nil {
 			return nil, err
 		}
@@ -392,7 +383,7 @@ func processVendorImports(
 	for _, imp := range imports {
 		if u.SliceContainsString(allImports, imp) {
 			return nil, nil, fmt.Errorf("%w '%s' in the vendor config file '%s'. It was already imported in the import chain",
-				ErrDuplicateImport,
+				errUtils.ErrDuplicateImport,
 				imp,
 				vendorConfigFile,
 			)
@@ -406,11 +397,11 @@ func processVendorImports(
 		}
 
 		if u.SliceContainsString(vendorConfig.Spec.Imports, imp) {
-			return nil, nil, fmt.Errorf("%w file '%s'", ErrVendorConfigSelfImport, imp)
+			return nil, nil, fmt.Errorf("%w file '%s'", errUtils.ErrVendorConfigSelfImport, imp)
 		}
 
 		if len(vendorConfig.Spec.Sources) == 0 && len(vendorConfig.Spec.Imports) == 0 {
-			return nil, nil, fmt.Errorf("%w '%s'", ErrMissingVendorConfigDefinition, imp)
+			return nil, nil, fmt.Errorf("%w '%s'", errUtils.ErrMissingVendorConfigDefinition, imp)
 		}
 
 		mergedSources, allImports, err = processVendorImports(atmosConfig, imp, vendorConfig.Spec.Imports, mergedSources, allImports)
@@ -442,10 +433,10 @@ func validateSourceFields(s *schema.AtmosVendorSource, vendorConfigFileName stri
 		s.File = vendorConfigFileName
 	}
 	if s.Source == "" {
-		return fmt.Errorf("%w `%s`", ErrSourceMissing, s.File)
+		return fmt.Errorf("%w `%s`", errUtils.ErrVendorSourceMissing, s.File)
 	}
 	if len(s.Targets) == 0 {
-		return fmt.Errorf("%w for source '%s' in file '%s'", ErrTargetsMissing, s.Source, s.File)
+		return fmt.Errorf("%w for source '%s' in file '%s'", errUtils.ErrTargetsMissing, s.Source, s.File)
 	}
 	return nil
 }
@@ -474,109 +465,91 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 //   - "github.com/repo.git//some/path?ref=v1.0.0" -> unchanged
 //
 //nolint:godot // Private function, follows standard Go documentation style.
-func normalizeVendorURI(uri string) string {
-	// Skip normalization for special URI types
-	if isFileURI(uri) || isOCIURI(uri) || isS3URI(uri) || isLocalPath(uri) || isNonGitHTTPURI(uri) {
-		return uri
+func normalizeVendorURI(vendorURI string) string {
+	// Skip normalization for special URI types.
+	if uri.IsFileURI(vendorURI) || uri.IsOCIURI(vendorURI) || uri.IsS3URI(vendorURI) || uri.IsLocalPath(vendorURI) || uri.IsNonGitHTTPURI(vendorURI) {
+		return vendorURI
 	}
 
-	// Handle triple-slash pattern first
-	if containsTripleSlash(uri) {
-		uri = normalizeTripleSlash(uri)
+	// Handle triple-slash pattern first.
+	if uri.ContainsTripleSlash(vendorURI) {
+		vendorURI = normalizeTripleSlash(vendorURI)
 	}
 
-	// Add //. to Git URLs without subdirectory
-	if needsDoubleSlashDot(uri) {
-		uri = appendDoubleSlashDot(uri)
-		log.Debug("Added //. to Git URL without subdirectory", "normalized", uri)
+	// Add //. to Git URLs without subdirectory.
+	if uri.NeedsDoubleSlashDot(vendorURI) {
+		vendorURI = uri.AppendDoubleSlashDot(vendorURI)
+		log.Debug("Added //. to Git URL without subdirectory", "normalized", vendorURI)
 	}
 
-	return uri
+	return vendorURI
 }
 
 // normalizeTripleSlash converts triple-slash patterns to appropriate double-slash patterns.
 // Uses go-getter's SourceDirSubdir for robust parsing across all Git platforms.
-func normalizeTripleSlash(uri string) string {
-	// Use go-getter to parse the URI and extract subdirectory
-	// Note: source will include query parameters from the original URI
-	source, subdir := parseSubdirFromTripleSlash(uri)
+func normalizeTripleSlash(vendorURI string) string {
+	// Use go-getter to parse the URI and extract subdirectory.
+	// Note: source will include query parameters from the original URI.
+	source, subdir := uri.ParseSubdirFromTripleSlash(vendorURI)
 
-	// Separate query parameters from source if present
+	// Separate query parameters from source if present.
 	var queryParams string
 	if queryPos := strings.Index(source, "?"); queryPos != -1 {
 		queryParams = source[queryPos:]
 		source = source[:queryPos]
 	}
 
-	// Determine the normalized form based on subdirectory
+	// Determine the normalized form based on subdirectory.
 	var normalized string
 	if subdir == "" {
 		// Root of repository case: convert /// to //.
 		normalized = source + "//." + queryParams
 		log.Debug("Normalized triple-slash to double-slash-dot for repository root",
-			"original", uri, "normalized", normalized)
+			"original", vendorURI, "normalized", normalized)
 	} else {
-		// Path specified after triple slash: convert /// to //
+		// Path specified after triple slash: convert /// to //.
 		normalized = source + "//" + subdir + queryParams
 		log.Debug("Normalized triple-slash to double-slash with path",
-			"original", uri, "normalized", normalized)
+			"original", vendorURI, "normalized", normalized)
 	}
 
 	return normalized
 }
 
-func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, error) {
-	// Determine if the URI is an OCI scheme, a local file, or remote
-	useLocalFileSystem := false
-	sourceIsLocalFile := false
-	useOciScheme := strings.HasPrefix(*uri, "oci://")
-	if useOciScheme {
-		*uri = strings.TrimPrefix(*uri, "oci://")
-		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
+func determineSourceType(sourceURI *string, vendorConfigFilePath string) (sourceTypeResult, error) {
+	// Determine if the URI is an OCI scheme, a local file, or remote.
+	result := sourceTypeResult{}
+
+	result.UseOciScheme = strings.HasPrefix(*sourceURI, "oci://")
+	if result.UseOciScheme {
+		*sourceURI = strings.TrimPrefix(*sourceURI, "oci://")
+		return result, nil
 	}
 
-	absPath, err := u.JoinPathAndValidate(filepath.ToSlash(vendorConfigFilePath), *uri)
-	// if URI contain path traversal is path should be resolved
-	if err != nil && strings.Contains(*uri, "..") && !strings.HasPrefix(*uri, "file://") {
-		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, fmt.Errorf("invalid source path '%s': %w", *uri, err)
+	absPath, err := u.JoinPathAndValidate(filepath.ToSlash(vendorConfigFilePath), *sourceURI)
+	// if URI contain path traversal is path should be resolved.
+	if err != nil && strings.Contains(*sourceURI, "..") && !strings.HasPrefix(*sourceURI, "file://") {
+		return result, fmt.Errorf("invalid source path '%s': %w", *sourceURI, err)
 	}
 	if err == nil {
-		uri = &absPath
-		useLocalFileSystem = true
-		sourceIsLocalFile = u.FileExists(*uri)
+		*sourceURI = absPath
+		result.UseLocalFileSystem = true
+		result.SourceIsLocalFile = u.FileExists(*sourceURI)
 	}
 
-	parsedURL, err := url.Parse(*uri)
+	parsedURL, err := url.Parse(*sourceURI)
 	if err != nil {
-		return useOciScheme, useLocalFileSystem, sourceIsLocalFile, err
+		return result, err
 	}
 	if parsedURL.Scheme != "" {
 		if parsedURL.Scheme == "file" {
 			trimmedPath := strings.TrimPrefix(filepath.ToSlash(parsedURL.Path), "/")
-			*uri = filepath.Clean(trimmedPath)
-			useLocalFileSystem = true
+			*sourceURI = filepath.Clean(trimmedPath)
+			result.UseLocalFileSystem = true
 		}
 	}
 
-	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
-}
-
-func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
-	copyOptions := cp.Options{
-		Skip:          generateSkipFunction(tempDir, s),
-		PreserveTimes: false,
-		PreserveOwner: false,
-		OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
-	}
-
-	// Adjust the target path if it's a local file with no extension
-	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
-		// Sanitize the URI for safe filenames, especially on Windows
-		sanitizedBase := SanitizeFileName(uri)
-		targetPath = filepath.Join(targetPath, sanitizedBase)
-	}
-
-	return cp.Copy(tempDir, targetPath, copyOptions)
+	return result, nil
 }
 
 // GenerateSkipFunction creates a function that determines whether to skip files during copying.
