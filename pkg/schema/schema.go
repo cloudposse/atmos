@@ -50,6 +50,27 @@ type ConfigMetadata struct {
 	Deprecated bool `yaml:"deprecated,omitempty" json:"deprecated,omitempty" mapstructure:"deprecated"`
 }
 
+// EnvFilesConfig contains configuration for .env file loading.
+type EnvFilesConfig struct {
+	// Enabled controls whether .env file loading is active.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// Paths specifies glob patterns for .env files to load (e.g., ".env", ".env.*").
+	Paths []string `yaml:"paths,omitempty" json:"paths,omitempty" mapstructure:"paths"`
+	// Parents enables walking up parent directories to repo root.
+	Parents bool `yaml:"parents,omitempty" json:"parents,omitempty" mapstructure:"parents"`
+}
+
+// EnvConfig contains environment variable configuration.
+// Supports two forms:
+// 1. Structured: env.vars (map) + env.files (EnvFilesConfig)
+// 2. Flat (legacy): env as direct key-value map.
+type EnvConfig struct {
+	// Vars contains inline environment variables.
+	Vars map[string]string `yaml:"vars,omitempty" json:"vars,omitempty" mapstructure:"-"`
+	// Files contains .env file loading configuration.
+	Files EnvFilesConfig `yaml:"files,omitempty" json:"files,omitempty" mapstructure:"files"`
+}
+
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
 	BasePath                      string             `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
@@ -89,8 +110,8 @@ type AtmosConfiguration struct {
 	Import          []string            `yaml:"import" json:"import" mapstructure:"import"`
 	Docs            Docs                `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Auth            AuthConfig          `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
-	Env             map[string]string   `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
-	CaseMaps        *casemap.CaseMaps   `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
+	Env             EnvConfig           `yaml:"-" json:"-" mapstructure:"-"` // Parsed manually for dual-form support (flat vs structured).
+	CaseMaps        *casemap.CaseMaps   `yaml:"-" json:"-" mapstructure:"-"` // Stores original case for YAML map keys (Viper lowercases them).
 	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
 	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
 	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
@@ -221,12 +242,12 @@ func (a *AtmosConfiguration) processResourceSchema(key string) {
 
 // GetCaseSensitiveMap returns the specified map with original key casing restored.
 // This compensates for Viper lowercasing all YAML map keys.
-// Supported paths: "env".
+// Supported paths: "env", "env.vars".
 func (a *AtmosConfiguration) GetCaseSensitiveMap(path string) map[string]string {
 	var source map[string]string
 	switch path {
-	case "env":
-		source = a.Env
+	case "env", "env.vars":
+		source = a.Env.Vars
 	default:
 		return nil
 	}
@@ -235,6 +256,17 @@ func (a *AtmosConfiguration) GetCaseSensitiveMap(path string) map[string]string 
 		return source
 	}
 	return a.CaseMaps.ApplyCase(path, source)
+}
+
+// GetCaseSensitiveEnvVars returns environment variables with original case preserved.
+// Works with both structured (env.vars) and flat (env) forms.
+func (a *AtmosConfiguration) GetCaseSensitiveEnvVars() map[string]string {
+	// Try structured form first (env.vars)
+	if vars := a.GetCaseSensitiveMap("env.vars"); len(vars) > 0 {
+		return vars
+	}
+	// Fall back to flat form (env)
+	return a.GetCaseSensitiveMap("env")
 }
 
 type Validate struct {

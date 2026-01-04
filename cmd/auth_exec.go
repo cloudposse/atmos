@@ -108,7 +108,7 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 
 	// Prepare shell environment with file-based credentials.
 	// Start with current OS environment + global env from atmos.yaml and let PrepareShellEnvironment configure auth.
-	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.GetCaseSensitiveEnvVars())
 	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, baseEnv)
 	if err != nil {
 		return fmt.Errorf("failed to prepare command environment: %w", err)

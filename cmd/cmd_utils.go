@@ -551,7 +551,7 @@ func executeCustomCommand(
 		// Prepare ENV vars
 		// ENV var values support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
 		// Start with current environment + global env from atmos.yaml to inherit PATH and other variables.
-		env := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+		env := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.GetCaseSensitiveEnvVars())
 		for _, v := range commandConfig.Env {
 			key := strings.TrimSpace(v.Key)
 			value := v.Value
@@ -608,7 +608,7 @@ func executeCustomCommand(
 		commandName := fmt.Sprintf("%s-step-%d", commandConfig.Name, i)
 
 		// Pass the prepared environment with custom variables to the subprocess
-		err = e.ExecuteShell(commandToRun, commandName, workDir, env, false)
+		err = e.ExecuteShell(&atmosConfig, commandToRun, commandName, workDir, env, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 }

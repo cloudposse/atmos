@@ -18,9 +18,11 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/provisioning"
 	"github.com/cloudposse/atmos/pkg/config/casemap"
+	"github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 	"github.com/cloudposse/atmos/pkg/xdg"
@@ -275,6 +277,11 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	}
 	setEnv(v)
 
+	// Early .env file loading: MUST happen before profile detection.
+	// This allows ATMOS_PROFILE and other ATMOS_* vars in .env files to influence Atmos behavior.
+	// The base path may not be fully resolved yet, so we use what's available from config.
+	loadEnvFilesEarly(v, v.GetString("base_path"))
+
 	// Load profiles if specified via --profile flag or ATMOS_PROFILE env var.
 	// Profiles are loaded after base config but before final unmarshaling.
 	// This allows profiles to override base config settings.
@@ -324,9 +331,11 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// Both AtmosConfiguration.Env and Command.Env use "env" but with different types
 	// (map[string]string vs []CommandEnv), causing mapstructure to silently drop Commands.
 	// Using mapstructure:"-" on the Env fields and extracting manually here fixes this.
-	if envMap := v.GetStringMapString("env"); len(envMap) > 0 {
-		atmosConfig.Env = envMap
-	}
+	//
+	// The env section supports two forms:
+	// 1. Structured: env.vars (map) + env.files (EnvFilesConfig)
+	// 2. Flat (legacy): env as direct key-value map
+	parseEnvConfig(v, &atmosConfig)
 	if envMap := v.GetStringMapString("templates.settings.env"); len(envMap) > 0 {
 		atmosConfig.Templates.Settings.Env = envMap
 	}
@@ -1225,10 +1234,93 @@ func loadEmbeddedConfig(v *viper.Viper) error {
 	return nil
 }
 
+// parseEnvConfig extracts the env section from Viper, supporting both structured and flat forms.
+// Structured form: env.vars (map) + env.files (EnvFilesConfig)
+// Flat form (legacy): env as direct key-value map.
+func parseEnvConfig(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) {
+	// Check if env section uses structured or flat form.
+	envRaw := v.Get("env")
+	if envRaw == nil {
+		return
+	}
+
+	envMap, ok := envRaw.(map[string]any)
+	if !ok {
+		return
+	}
+
+	// Detect structured form by presence of "vars" or "files" keys.
+	_, hasVars := envMap["vars"]
+	_, hasFiles := envMap["files"]
+
+	if hasVars || hasFiles {
+		// Structured form: env.vars + env.files.
+		if hasVars {
+			atmosConfig.Env.Vars = v.GetStringMapString("env.vars")
+		}
+		// Files config is parsed via mapstructure into atmosConfig.Env.Files.
+		atmosConfig.Env.Files.Enabled = v.GetBool("env.files.enabled")
+		atmosConfig.Env.Files.Paths = v.GetStringSlice("env.files.paths")
+		atmosConfig.Env.Files.Parents = v.GetBool("env.files.parents")
+	} else {
+		// Flat form: all keys are vars (backward compatibility).
+		atmosConfig.Env.Vars = v.GetStringMapString("env")
+	}
+}
+
+// loadEnvFilesEarly loads .env files early in the config loading process.
+// This must happen before profile detection to allow ATMOS_* variables
+// from .env files to influence Atmos behavior.
+// Returns the list of loaded files for UI feedback.
+func loadEnvFilesEarly(v *viper.Viper, basePath string) []string {
+	// Check if env.files is enabled (quick bootstrap read).
+	if !v.GetBool("env.files.enabled") {
+		return nil
+	}
+
+	paths := v.GetStringSlice("env.files.paths")
+	if len(paths) == 0 {
+		paths = []string{".env"} // Default pattern.
+	}
+
+	// Determine base path for loading.
+	if basePath == "" {
+		basePath = v.GetString("base_path")
+	}
+	if basePath == "" {
+		basePath = "."
+	}
+
+	// Load .env files from base path.
+	envVars, loadedFiles, err := env.LoadEnvFiles(basePath, paths)
+	if err != nil {
+		log.Debug("Failed to load .env files", "error", err)
+		return nil
+	}
+
+	// Inject into process environment (don't override existing).
+	// This allows ATMOS_* vars to influence Atmos behavior.
+	for k, val := range envVars {
+		if _, exists := os.LookupEnv(k); !exists {
+			if err := os.Setenv(k, val); err != nil { //nolint:forbidigo // Intentional: setting env vars from .env files
+				log.Debug("Failed to set env var from .env file", "key", k, "error", err)
+			}
+		}
+	}
+
+	// Report loaded files via UI.
+	for _, file := range loadedFiles {
+		ui.Success(fmt.Sprintf("Loaded %s", filepath.Base(file)))
+	}
+
+	return loadedFiles
+}
+
 // caseSensitivePaths lists the YAML paths that need case preservation.
 // Viper lowercases all map keys, but these sections need original case.
 var caseSensitivePaths = []string{
-	"env",             // Environment variables (e.g., GITHUB_TOKEN)
+	"env",             // Environment variables (e.g., GITHUB_TOKEN) - flat form
+	"env.vars",        // Environment variables - structured form
 	"auth.identities", // Auth identity names (e.g., SuperAdmin)
 }
 

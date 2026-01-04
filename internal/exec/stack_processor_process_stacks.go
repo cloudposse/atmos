@@ -208,7 +208,7 @@ func ProcessStackConfig(
 	}
 
 	// Include atmos.yaml global env as lowest priority in the merge chain.
-	atmosConfigEnv := envpkg.ConvertMapStringToAny(atmosConfig.Env)
+	atmosConfigEnv := envpkg.ConvertMapStringToAny(atmosConfig.GetCaseSensitiveEnvVars())
 	globalAndTerraformEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, terraformEnv})
 	if err != nil {
 		return nil, err

@@ -142,17 +142,19 @@ func TestGetCaseSensitiveMap(t *testing.T) {
 		assert.Nil(t, result)
 	})
 
-	t.Run("returns env map when no CaseMaps", func(t *testing.T) {
+	t.Run("returns env.vars map when no CaseMaps", func(t *testing.T) {
 		atmosConfig := &AtmosConfiguration{
-			Env: map[string]string{
-				"foo": "bar",
+			Env: EnvConfig{
+				Vars: map[string]string{
+					"foo": "bar",
+				},
 			},
 		}
 		result := atmosConfig.GetCaseSensitiveMap("env")
 		assert.Equal(t, map[string]string{"foo": "bar"}, result)
 	})
 
-	t.Run("returns env map with case restored when CaseMaps present", func(t *testing.T) {
+	t.Run("returns env.vars map with case restored when CaseMaps present", func(t *testing.T) {
 		cm := casemap.New()
 		cm.Set("env", casemap.CaseMap{
 			"github_token": "GITHUB_TOKEN",
@@ -160,9 +162,11 @@ func TestGetCaseSensitiveMap(t *testing.T) {
 		})
 
 		atmosConfig := &AtmosConfiguration{
-			Env: map[string]string{
-				"github_token": "secret123",
-				"aws_region":   "us-east-1",
+			Env: EnvConfig{
+				Vars: map[string]string{
+					"github_token": "secret123",
+					"aws_region":   "us-east-1",
+				},
 			},
 			CaseMaps: cm,
 		}
@@ -173,9 +177,9 @@ func TestGetCaseSensitiveMap(t *testing.T) {
 		}, result)
 	})
 
-	t.Run("returns empty map when env is nil and CaseMaps is nil", func(t *testing.T) {
+	t.Run("returns nil when env.vars is nil and CaseMaps is nil", func(t *testing.T) {
 		atmosConfig := &AtmosConfiguration{
-			Env: nil,
+			Env: EnvConfig{}, // Empty EnvConfig, Vars is nil.
 		}
 		result := atmosConfig.GetCaseSensitiveMap("env")
 		assert.Nil(t, result)
