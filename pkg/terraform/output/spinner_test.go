@@ -3,6 +3,7 @@ package output
 import (
 	"testing"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,7 +17,9 @@ func TestNewSpinner(t *testing.T) {
 }
 
 func TestModelSpinner_Init(t *testing.T) {
+	s := spinner.New()
 	model := modelSpinner{
+		spinner: s,
 		message: "Test message",
 	}
 
@@ -55,7 +58,9 @@ func TestModelSpinner_Update_KeyMsg(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			s := spinner.New()
 			model := modelSpinner{
+				spinner: s,
 				message: "Test",
 			}
 
@@ -75,15 +80,21 @@ func TestModelSpinner_Update_KeyMsg(t *testing.T) {
 			assert.NotNil(t, newModel)
 
 			if tt.wantQuit {
-				// cmd should be tea.Quit.
-				assert.NotNil(t, cmd)
+				// Verify it's the quit command by executing and comparing result.
+				require.NotNil(t, cmd)
+				assert.Equal(t, tea.Quit(), cmd())
+			} else {
+				// Non-quit keys shouldn't return a command.
+				assert.Nil(t, cmd)
 			}
 		})
 	}
 }
 
 func TestModelSpinner_Update_UnknownMsg(t *testing.T) {
+	s := spinner.New()
 	model := modelSpinner{
+		spinner: s,
 		message: "Test",
 	}
 
@@ -95,8 +106,27 @@ func TestModelSpinner_Update_UnknownMsg(t *testing.T) {
 	assert.Nil(t, cmd)
 }
 
-func TestModelSpinner_View(t *testing.T) {
+func TestModelSpinner_Update_TickMsg(t *testing.T) {
+	s := spinner.New()
 	model := modelSpinner{
+		spinner: s,
+		message: "Test",
+	}
+
+	// Get the tick command from the spinner and execute it to get the TickMsg.
+	tickCmd := s.Tick
+	msg := tickCmd()
+	newModel, cmd := model.Update(msg)
+
+	assert.NotNil(t, newModel)
+	// Tick should return the next tick command for continuous animation.
+	assert.NotNil(t, cmd)
+}
+
+func TestModelSpinner_View(t *testing.T) {
+	s := spinner.New()
+	model := modelSpinner{
+		spinner: s,
 		message: "Loading data...",
 	}
 

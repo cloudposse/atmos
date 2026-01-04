@@ -240,8 +240,13 @@ func TestWriteToFile(t *testing.T) {
 	})
 
 	t.Run("fails for invalid path", func(t *testing.T) {
-		// Use a path that cannot be created.
-		invalidPath := "/nonexistent/path/that/does/not/exist/file.txt"
+		// Create a file where a directory is expected to reliably cause an error.
+		tmpDir := t.TempDir()
+		blockingFile := filepath.Join(tmpDir, "blocking_file")
+		require.NoError(t, os.WriteFile(blockingFile, []byte("block"), 0o644))
+
+		// Try to write to a path that treats the file as a directory.
+		invalidPath := filepath.Join(blockingFile, "subdir", "file.txt")
 		err := WriteToFile(invalidPath, "content")
 		assert.Error(t, err)
 	})
