@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -59,7 +60,7 @@ func (w *FileOutputWriter) WriteOutput(key, value string) error {
 
 	f, err := os.OpenFile(w.outputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, outputFilePermissions)
 	if err != nil {
-		return fmt.Errorf("failed to open output file: %w", err)
+		return fmt.Errorf("%w: failed to open output file: %w", errUtils.ErrCIOutputWriteFailed, err)
 	}
 	defer f.Close()
 
@@ -88,7 +89,7 @@ func (w *FileOutputWriter) WriteSummary(content string) error {
 
 	f, err := os.OpenFile(w.summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, outputFilePermissions)
 	if err != nil {
-		return fmt.Errorf("failed to open summary file: %w", err)
+		return fmt.Errorf("%w: failed to open summary file: %w", errUtils.ErrCISummaryWriteFailed, err)
 	}
 	defer f.Close()
 
