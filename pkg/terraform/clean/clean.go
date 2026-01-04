@@ -77,6 +77,7 @@ type Options struct {
 	Everything   bool
 	SkipLockFile bool
 	DryRun       bool
+	Cache        bool
 }
 
 // Execute cleans up Terraform state and artifacts for a component.
