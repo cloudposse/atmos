@@ -366,6 +366,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
+	// Generate files from the generate section when auto_generate_files is enabled.
+	err = generateFilesForComponent(&atmosConfig, &info, workingDir)
+	if err != nil {
+		return err
+	}
+
 	err = generateProviderOverrides(&atmosConfig, &info, workingDir)
 	if err != nil {
 		return err
