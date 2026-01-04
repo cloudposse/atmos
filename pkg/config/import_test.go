@@ -2,8 +2,6 @@ package config
 
 import (
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,17 +17,14 @@ func setupTestFile(content, tempDir string, filename string) (string, error) {
 
 // Test for processImports.
 func TestProcessImports(t *testing.T) {
+	setupTestAdapters()
+
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	assert.NoError(t, err, "Unset 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
 	err = os.Unsetenv("ATMOS_BASE_PATH")
 	assert.NoError(t, err, "Unset 'ATMOS_BASE_PATH' environment variable should execute without error")
 	err = os.Unsetenv("ATMOS_LOGS_LEVEL")
 	assert.NoError(t, err, "Unset 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
-	// Step 1: Setup a mock HTTP server for a remote URL
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "base_path: ./") // Mock YAML content
-	}))
-	defer server.Close()
 
 	// Step 2: Create temporary base directory and files
 	baseDir := t.TempDir()
@@ -58,15 +53,15 @@ func TestProcessImports(t *testing.T) {
 	configFile3 := filepath.Join(configDir2, "config3.yaml")
 	err = os.WriteFile(configFile3, []byte("key4: value4"), 0o600)
 	assert.NoError(t, err)
-	// Step 3: Define test imports
+	// Step 3: Define test imports.
+	// Note: Remote URLs are not tested here because the test adapter only handles local paths.
+	// Remote URL handling is tested in the adapters package tests.
 	imports := []string{
-		server.URL,               // Remote URL
-		"configs.d/**/*",         // Recursive directory
-		"config/**/*.yaml",       // recursive/**/*.yaml", // Recursive directory with specific pattern extension
-		"./logs.yaml",            // Specific local file
-		"http://invalid-url.com", // Invalid URL
-		"",                       // Empty import path
-		"/config/foo.yaml",       // Invalid import path
+		"configs.d/**/*",   // Recursive directory
+		"config/**/*.yaml", // recursive/**/*.yaml", // Recursive directory with specific pattern extension
+		"./logs.yaml",      // Specific local file
+		"",                 // Empty import path
+		"/config/foo.yaml", // Invalid import path
 	}
 
 	// Step 5: Run the processImports method
@@ -76,7 +71,7 @@ func TestProcessImports(t *testing.T) {
 	assert.NoError(t, err, "processImports should not return an error")
 	var resolvedPaths []string
 	for _, resolvedPath := range imported {
-		resolvedPaths = append(resolvedPaths, resolvedPath.filePath)
+		resolvedPaths = append(resolvedPaths, resolvedPath.FilePath)
 	}
 
 	// Verify resolved paths contain expected files
@@ -90,12 +85,13 @@ func TestProcessImports(t *testing.T) {
 		assert.Contains(t, resolvedPaths, expectedPath, fmt.Sprintf("resolvedPaths should contain %s", expectedPath))
 	}
 
-	// Ensure invalid and empty imports are handled gracefully
-	assert.NotContains(t, resolvedPaths, "http://invalid-url.com", "Invalid URL should not be resolved")
+	// Ensure empty imports are handled gracefully.
 	assert.NotContains(t, resolvedPaths, "", "Empty import path should not be resolved")
 }
 
 func TestProcessImportNested(t *testing.T) {
+	setupTestAdapters()
+
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 	assert.NoError(t, err, "Unset 'ATMOS_CLI_CONFIG_PATH' environment variable should execute without error")
 	err = os.Unsetenv("ATMOS_BASE_PATH")
@@ -104,7 +100,7 @@ func TestProcessImportNested(t *testing.T) {
 	assert.NoError(t, err, "Unset 'ATMOS_LOGS_LEVEL' environment variable should execute without error")
 	baseDir := t.TempDir()
 
-	// Setting up test files
+	// Setting up test files.
 	_, err = setupTestFile(`
 import:
  - "./nested-local.yaml"
@@ -114,32 +110,6 @@ import:
 	nestedLocalConfigPath, err := setupTestFile(`import: []`, baseDir, "nested-local.yaml")
 	assert.NoError(t, err)
 
-	remoteContent := `
-import:
-  - nested-local.yaml
-`
-	nestedRemoteContent := `import: []`
-	// Create an HTTP server to simulate remote imports
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/config.yaml":
-			fmt.Fprint(w, remoteContent)
-		case "/nested-remote.yaml":
-			fmt.Fprint(w, nestedRemoteContent)
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	t.Run("Test remote import processing", func(t *testing.T) {
-		tempDir := t.TempDir()
-		importPaths := []string{server.URL + "/config.yaml"}
-		resolved, err := processImports(baseDir, importPaths, tempDir, 1, 5)
-		assert.NoError(t, err)
-		assert.Len(t, resolved, 2, "should resolve main and nested remote imports")
-	})
-
 	t.Run("Test local import processing", func(t *testing.T) {
 		tempDir := t.TempDir()
 		importPaths := []string{"local.yaml"}
@@ -147,17 +117,14 @@ import:
 		assert.NoError(t, err)
 		var resolvedPaths []string
 		for _, resolvedPath := range imported {
-			resolvedPaths = append(resolvedPaths, resolvedPath.filePath)
+			resolvedPaths = append(resolvedPaths, resolvedPath.FilePath)
 		}
 		assert.Contains(t, resolvedPaths, nestedLocalConfigPath, "should resolve nested local imports")
 	})
 
-	t.Run("Test mixed imports with depth limit", func(t *testing.T) {
+	t.Run("Test imports with depth limit", func(t *testing.T) {
 		tempDir := t.TempDir()
-		importPaths := []string{
-			"local.yaml",
-			server.URL + "/config.yaml",
-		}
+		importPaths := []string{"local.yaml"}
 		resolved, err := processImports(baseDir, importPaths, tempDir, 11, 10)
 		assert.Error(t, err, "should return an error when maxDepth is exceeded")
 		assert.Nil(t, resolved, "no resolved paths should be returned on depth limit breach")
@@ -255,9 +222,11 @@ func TestSanitizeImport(t *testing.T) {
 	}
 }
 
-// TestProcessLocalImport_OutsideBaseDirectory verifies that imports outside the base directory
+// TestProcessImports_OutsideBaseDirectory verifies that imports outside the base directory
 // work correctly and only log at trace level (not warning level).
-func TestProcessLocalImport_OutsideBaseDirectory(t *testing.T) {
+func TestProcessImports_OutsideBaseDirectory(t *testing.T) {
+	setupTestAdapters()
+
 	// Create a parent directory and a subdirectory.
 	parentDir := t.TempDir()
 	subDir := filepath.Join(parentDir, "repo")
@@ -289,12 +258,13 @@ settings:
 	// Process the import from the subdirectory (base path).
 	// This simulates the case where .github/atmos.yaml imports ../atmos.yaml.
 	tempDir := t.TempDir()
-	resolvedPaths, err := processLocalImport(subDir, "../atmos.yaml", tempDir, 1, 10)
+
+	resolvedPaths, err := processImports(subDir, []string{"../atmos.yaml"}, tempDir, 1, 10)
 
 	// Verify that the import resolves successfully.
 	assert.NoError(t, err)
 	assert.NotEmpty(t, resolvedPaths)
-	assert.Equal(t, parentConfigPath, resolvedPaths[0].filePath)
+	assert.Equal(t, parentConfigPath, resolvedPaths[0].FilePath)
 
 	// The import should work despite being outside base directory.
 	// The message is now logged at Trace level, not Warn level.
