@@ -754,7 +754,6 @@ var (
 	ErrRegionRequired       = errors.New("backend.region is required")
 	ErrCheckBucketExist     = errors.New("failed to check bucket existence")
 	ErrCreateBucket         = errors.New("failed to create bucket")
-	ErrS3BucketAccessDenied = errors.New("access denied to S3 bucket")
 
 	// Container errors (additional).
 	ErrContainerNotFound = errors.New("container not found")
@@ -827,10 +826,6 @@ var (
 	ErrBackendTypeMissing                 = errors.New("backend_type is missing for the component")
 	ErrBackendConfigEmpty                 = errors.New("backend config is empty for the component")
 	ErrBackendTypeEmptyAfterRender        = errors.New("backend type is empty after rendering for the component")
-
-	// Terraform state errors.
-	ErrTerraformStateNotProvisioned = errors.New("terraform state not provisioned")
-	ErrTerraformOutputNotFound      = errors.New("terraform output not found")
 
 	// Subcommand errors.
 	ErrUnknownSubcommand = errors.New("unknown subcommand")
