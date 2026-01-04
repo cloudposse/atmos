@@ -325,9 +325,9 @@ func TestNewContextRegistersCommonSecrets(t *testing.T) {
 		masked bool
 	}{
 		{
-			name:   "AWS Secret Access Key (40-char base64)",
+			name:   "AWS Secret Access Key (via env var - not pattern matched)",
 			input:  "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-			masked: true,
+			masked: false, // AWS secret keys are only masked when set via AWS_SECRET_ACCESS_KEY env var, not by pattern (too generic).
 		},
 		{
 			name:   "AWS Access Key ID",
@@ -346,8 +346,8 @@ func TestNewContextRegistersCommonSecrets(t *testing.T) {
 		},
 		{
 			name:   "GitHub Fine-grained PAT",
-			input:  "github_pat_11AAAAAAAAAAAAAAAAAA_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-			masked: true,
+			input:  "github_pat_11AAAAAAAAAAAAAAAAAAAA_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			masked: true, // Pattern: github_pat_[A-Za-z0-9]{22}_[A-Za-z0-9]{59} (22 + 59 chars).
 		},
 		{
 			name:   "GitLab Personal Access Token",

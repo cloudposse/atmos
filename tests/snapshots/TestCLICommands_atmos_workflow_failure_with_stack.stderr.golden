@@ -1,7 +1,5 @@
-
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 ℹ Executing command: atmos terraform plan idontexist
-
 # Error
 
 **Error:** invalid component
@@ -11,9 +9,6 @@
 Could not find the component idontexist in the stack prod. Check that all the
 context variables are correctly defined in the stack manifests. Are the
 component and stack names correct? Did you forget an import?
-
-
-
 # Workflow Error
 
 **Error:** workflow step execution failed: max attempts (1) exceeded, last
@@ -28,5 +23,3 @@ error: subcommand exited with code 1
 💡 To resume the workflow from this step, run:
 
  atmos workflow fail-with-stack -f test --from-step 'step1' -s 'prod'
-
-

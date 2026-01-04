@@ -1,6 +1,4 @@
-
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-
 # Error
 
 **Error:** path is not within Atmos component directories
@@ -14,5 +12,3 @@ Stacks directory: /absolute/path/to/repo/tests/fixtures/scenarios/complete/stack
 💡 Components are located in component directories (terraform, helmfile, packer)
 Change to a component directory and use . or provide a path within a component
 directory
-
-

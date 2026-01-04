@@ -48,7 +48,7 @@ func NewConsoleURLGenerator(httpClient http.Client) *ConsoleURLGenerator {
 
 	// Check for nil or typed-nil using reflection.
 	if httpClient == nil || (reflect.ValueOf(httpClient).Kind() == reflect.Ptr && reflect.ValueOf(httpClient).IsNil()) {
-		httpClient = http.NewDefaultClient(10 * time.Second)
+		httpClient = http.NewDefaultClient(http.WithTimeout(10 * time.Second))
 	}
 
 	return &ConsoleURLGenerator{

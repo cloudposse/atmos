@@ -1,8 +1,8 @@
 
 👽 test linux/amd64
 
-Validate the authentication configuration in atmos.yaml for syntax and logical  
-errors.                                                                         
+Validate the authentication configuration in atmos.yaml for syntax and logical
+errors.
 
 USAGE
 
@@ -74,6 +74,8 @@ GLOBAL FLAGS
 
       --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                 standard file descriptor (including '/dev/null')
+
+      --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
 
       --version                 Display the Atmos CLI version
 

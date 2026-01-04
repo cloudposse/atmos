@@ -1,6 +1,4 @@
-
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-
 # Incorrect Usage
 
 **Error:** The command atmos terraform requires a subcommand
@@ -33,6 +31,7 @@ Valid subcommands are:
 • refresh
 • shell
 • show
+• source
 • state
 • taint
 • test
@@ -40,6 +39,7 @@ Valid subcommands are:
 • validate
 • varfile
 • version
+• workdir
 • workspace
 • write
 
@@ -52,5 +52,3 @@ Valid subcommands are:
 ## Hints
 
 💡 https://atmos.tools/cli/commands/terraform/usage
-
-

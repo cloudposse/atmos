@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
@@ -294,7 +295,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		// First, do a temporary unmarshal to get CliConfigPath and Profiles config.
 		// We need these to discover and load profile directories.
 		var tempConfig schema.AtmosConfiguration
-		if err := v.Unmarshal(&tempConfig); err != nil {
+		if err := v.Unmarshal(&tempConfig, atmosDecodeHook()); err != nil {
 			return atmosConfig, err
 		}
 
@@ -315,7 +316,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
-	err := v.Unmarshal(&atmosConfig)
+	err := v.Unmarshal(&atmosConfig, atmosDecodeHook())
 	if err != nil {
 		return atmosConfig, err
 	}
@@ -349,6 +350,10 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 func setEnv(v *viper.Viper) {
 	// Base path configuration.
 	bindEnv(v, "base_path", "ATMOS_BASE_PATH")
+
+	// Terraform plugin cache configuration.
+	bindEnv(v, "components.terraform.plugin_cache", "ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE")
+	bindEnv(v, "components.terraform.plugin_cache_dir", "ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR")
 
 	bindEnv(v, "settings.github_token", "GITHUB_TOKEN")
 	bindEnv(v, "settings.inject_github_token", "ATMOS_INJECT_GITHUB_TOKEN")
@@ -407,6 +412,8 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("components.helmfile.use_eks", true)
 	v.SetDefault("components.terraform.append_user_agent",
 		fmt.Sprintf("Atmos/%s (Cloud Posse; +https://atmos.tools)", version.Version))
+	// Plugin cache enabled by default for zero-config performance.
+	v.SetDefault("components.terraform.plugin_cache", true)
 
 	// Token injection defaults for all supported Git hosting providers.
 	v.SetDefault("settings.inject_github_token", true)
@@ -1047,7 +1054,7 @@ func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) {
 // mergeImports processes imports from the atmos configuration and merges them into the destination configuration.
 func mergeImports(dst *viper.Viper) error {
 	var src schema.AtmosConfiguration
-	err := dst.Unmarshal(&src)
+	err := dst.Unmarshal(&src, atmosDecodeHook())
 	if err != nil {
 		return err
 	}
@@ -1288,6 +1295,18 @@ func populateLegacyIdentityCaseMap(caseMaps *casemap.CaseMaps, atmosConfig *sche
 	for k, v := range identityCaseMap {
 		atmosConfig.Auth.IdentityCaseMap[k] = v
 	}
+}
+
+// atmosDecodeHook returns the combined decode hooks for Atmos configuration unmarshaling.
+// This includes:
+// - Default viper hooks (StringToTimeDurationHookFunc, StringToSliceHookFunc)
+// - Custom TasksDecodeHook for flexible command steps parsing (strings or structs).
+func atmosDecodeHook() viper.DecoderConfigOption {
+	return viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+		mapstructure.StringToTimeDurationHookFunc(),
+		mapstructure.StringToSliceHookFunc(SliceSeparator),
+		schema.TasksDecodeHook(),
+	))
 }
 
 // preserveCaseSensitiveMaps extracts original case for registered paths from raw YAML files.

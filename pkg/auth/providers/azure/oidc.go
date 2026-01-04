@@ -166,7 +166,7 @@ func (p *oidcProvider) getHTTPClient() httpClient.Client {
 	if p.httpClient != nil {
 		return p.httpClient
 	}
-	return httpClient.NewDefaultClient(OIDCTimeout)
+	return httpClient.NewDefaultClient(httpClient.WithTimeout(OIDCTimeout))
 }
 
 // getTokenEndpoint returns the token endpoint URL.

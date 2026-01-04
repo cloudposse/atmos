@@ -1,0 +1,396 @@
+---
+title: atmos packer source
+sidebar_label: source
+sidebar_class_name: command
+id: source
+description: Manage packer component sources with JIT vendoring
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use these commands to manage Packer component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using the top-level `source` field without requiring a separate `component.yaml` file. Sources are automatically provisioned when running packer commands—just run `atmos packer build` and the source is downloaded on first use.
+</Intro>
+
+<ActionCard title="Source-Based Version Pinning">
+    Learn how to use the source field for native per-environment version control directly in stack configuration.
+    <div>
+      <PrimaryCTA to="/design-patterns/version-management/source-based-versioning">Design Pattern</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<Screengrab title="atmos packer source --help" slug="atmos-packer-source--help" />
+
+## Usage
+
+```shell
+atmos packer source <subcommand> [options]
+```
+
+## Subcommands
+
+<DocCardList />
+
+## Automatic Provisioning
+
+Sources are automatically provisioned when running any packer command. If a component has `source` configured and the target directory doesn't exist, Atmos downloads the source before running packer:
+
+```shell
+# Source is automatically provisioned on first use
+atmos packer build ami-builder --stack dev
+# → Auto-provisioning source for component 'ami-builder'
+# → Auto-provisioned source to components/packer/ami-builder
+# → Packer runs
+```
+
+This means you can simply configure your component's source and run packer—no explicit vendor step needed.
+
+## CLI Commands
+
+The explicit CLI commands are useful for fine-grained control:
+- Force re-vendor to get the latest version
+- Describe source configuration
+- Delete vendored sources
+- List components with sources
+
+## How It Works
+
+The source provisioner enables just-in-time vendoring of Packer components directly from stack configuration. Instead of pre-vendoring components or maintaining separate `component.yaml` files, you can declare the source inline:
+
+```yaml
+# stacks/dev.yaml
+components:
+  packer:
+    ami-builder:
+      source:
+        uri: github.com/cloudposse/packer-templates//ami-builder
+        version: 1.0.0
+        included_paths:
+          - "*.pkr.hcl"
+          - "*.pkr.json"
+          - "scripts/**"
+        excluded_paths:
+          - "*.md"
+          - "tests/**"
+      vars:
+        ami_name: "my-custom-ami"
+```
+
+When you run `atmos packer source pull ami-builder --stack dev`, Atmos:
+
+1. **Reads Configuration** - Extracts `source` from the component's stack manifest.
+2. **Resolves Source** - Parses the go-getter-compatible URI with optional version.
+3. **Downloads Content** - Fetches the source using go-getter (supports git, s3, http, oci, etc.).
+4. **Filters Files** - Applies `included_paths` and `excluded_paths` patterns.
+5. **Copies to Target** - Places files in the component directory.
+
+## Source Specification
+
+The `source` field supports two formats:
+
+### String Format (Simple)
+
+For simple cases, use a go-getter URI string:
+
+```yaml
+source: "github.com/cloudposse/packer-templates//ami-builder?ref=1.0.0"
+```
+
+### Map Format (Full Control)
+
+For more control, use a map with explicit fields:
+
+```yaml
+source:
+  uri: github.com/cloudposse/packer-templates//ami-builder
+  version: 1.0.0
+  included_paths:
+    - "*.pkr.hcl"
+    - "*.pkr.json"
+    - "scripts/**"
+  excluded_paths:
+    - "*.md"
+    - "tests/**"
+```
+
+### Source Fields
+
+<dl>
+  <dt>`uri`</dt>
+  <dd>Go-getter compatible source URI. Supports git, s3, http, gcs, oci, and other protocols.</dd>
+
+  <dt>`version`</dt>
+  <dd>Version tag, branch, or commit. Appended as `?ref=<version>` for git sources. For non-git sources (S3, HTTP, OCI), the version should be embedded in the URI itself.</dd>
+
+  <dt>`included_paths`</dt>
+  <dd>Glob patterns for files to include. If specified, only matching files are copied.</dd>
+
+  <dt>`excluded_paths`</dt>
+  <dd>Glob patterns for files to exclude. Applied after included_paths filtering.</dd>
+
+  <dt>`retry`</dt>
+  <dd>
+  Optional retry configuration for handling transient network errors during download. Useful for unreliable networks or when hitting rate limits.
+
+  ```yaml
+  retry:
+    max_attempts: 5
+    initial_delay: 2s
+    max_delay: 60s
+    backoff_strategy: exponential
+  ```
+
+  All fields are optional. Recommended: `max_attempts`, `initial_delay`, `max_delay`, `backoff_strategy` (`exponential`, `linear`, `constant`). Additional options: `multiplier`, `random_jitter`, `max_elapsed_time`.
+  </dd>
+</dl>
+
+## Examples
+
+### Vendor a Component
+
+Download and vendor a component source:
+
+```shell
+atmos packer source pull ami-builder --stack dev
+```
+
+### Force Re-vendor
+
+Force re-download even if the component directory exists:
+
+```shell
+atmos packer source pull ami-builder --stack dev --force
+```
+
+### View Source Configuration
+
+Display the source configuration for a component:
+
+```shell
+atmos packer source describe ami-builder --stack dev
+```
+
+### List Components with Sources
+
+List all components that have source configured:
+
+```shell
+atmos packer source list --stack dev
+```
+
+### Delete Vendored Source
+
+Remove the vendored component directory (requires --force for safety):
+
+```shell
+atmos packer source delete ami-builder --stack dev --force
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>The Atmos component name (required for pull, describe, delete)</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Atmos stack name (required). Can also be set via `ATMOS_STACK` environment variable.</dd>
+
+  <dt>`--identity` / `-i`</dt>
+  <dd>Identity to use for authentication when downloading from protected sources.</dd>
+
+  <dt>`--force` / `-f`</dt>
+  <dd>Force re-vendor even if component directory exists (pull command), or confirm deletion (delete command).</dd>
+</dl>
+
+## Authentication
+
+Source commands support authentication for accessing private repositories or cloud storage.
+
+### Component-Level Identity
+
+Components can specify their own authentication identity:
+
+```yaml
+components:
+  packer:
+    ami-builder:
+      source:
+        uri: github.com/my-org/private-templates//ami-builder
+        version: v1.0.0
+      auth:
+        identities:
+          github-deployer:
+            default: true
+            kind: github/app
+            via:
+              provider: github-app
+```
+
+### Identity Flag Override
+
+Override the component's default identity:
+
+```shell
+atmos packer source pull ami-builder --stack dev --identity admin
+```
+
+For more details on configuring authentication identities, see the [Authentication Guide](/cli/configuration/auth).
+
+## Configuration Patterns
+
+### Inheritance with source
+
+Use stack inheritance to share source configurations:
+
+```yaml
+# stacks/catalog/ami-builder/defaults.yaml
+components:
+  packer:
+    ami-builder/defaults:
+      source:
+        uri: github.com/cloudposse/packer-templates//ami-builder
+        version: 1.0.0
+
+# stacks/dev.yaml
+components:
+  packer:
+    ami-builder:
+      metadata:
+        inherits: [ami-builder/defaults]
+      # Inherits source configuration
+      vars:
+        ami_name: "my-custom-ami"
+```
+
+### Version Override per Environment
+
+Override the version per environment:
+
+```yaml
+# stacks/dev.yaml
+components:
+  packer:
+    ami-builder:
+      metadata:
+        inherits: [ami-builder/defaults]
+      source:
+        version: 1.1.0  # Override version for dev
+
+# stacks/prod.yaml
+components:
+  packer:
+    ami-builder:
+      metadata:
+        inherits: [ami-builder/defaults]
+      source:
+        version: 1.0.0  # Pin to stable version for prod
+```
+
+## Supported Source Types
+
+The source provisioner uses go-getter and supports multiple protocols:
+
+### Git Sources
+
+```yaml
+source:
+  uri: github.com/cloudposse/packer-templates//ami-builder
+  version: 1.0.0
+
+# Also supports:
+# - git::https://github.com/org/repo.git//path
+# - git::ssh://git@github.com/org/repo.git//path
+```
+
+### S3 Sources
+
+```yaml
+source:
+  uri: s3::https://s3-us-east-1.amazonaws.com/my-bucket/templates/ami-builder.tar.gz
+```
+
+### HTTP/HTTPS Sources
+
+```yaml
+source:
+  uri: https://releases.example.com/templates/ami-builder-1.0.0.tar.gz
+```
+
+### OCI Registry Sources
+
+```yaml
+source:
+  uri: oci::registry.example.com/templates/ami-builder:v1.0.0
+```
+
+## Error Handling
+
+### Missing source
+
+```
+Error: source not configured
+
+Hint: Add source to the component configuration in your stack manifest
+
+Example:
+  components:
+    packer:
+      ami-builder:
+        source:
+          uri: github.com/cloudposse/packer-templates//ami-builder
+          version: 1.0.0
+```
+
+### Component Directory Exists
+
+```
+Error: component directory already exists
+
+Hint: Use --force to overwrite the existing directory
+```
+
+### Download Failed
+
+```
+Error: failed to download source
+
+Cause: failed to clone repository: authentication required
+
+Hint: Check credentials or use --identity to specify authentication
+```
+
+## Comparison with Vendoring
+
+| Feature | source | component.yaml |
+|---------|--------|----------------|
+| Configuration location | Inline in stack | Separate file |
+| Version per environment | Yes | Single version |
+| JIT download | Yes | Pre-vendored |
+| Path filtering | Yes | Yes |
+| Mixins support | No | Yes |
+
+*Mixins allow combining multiple source configurations into a single component. See [Vendoring](/vendor) for details.*
+
+Use `source` when:
+- You want version control per environment
+- You prefer configuration colocation in stacks
+- You need just-in-time vendoring
+
+Use `component.yaml` when:
+- You need mixin support
+- You want pre-vendored components
+- You have complex vendoring requirements
+
+## See Also
+
+- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) — Design pattern for per-environment version management
+- [Stack Configuration](/learn/stacks) — Learn about Atmos stacks
+- [Vendoring](/vendor) — Pre-vendor components for immutability and audit trails
+- [`atmos vendor pull`](/cli/commands/vendor/pull) — Traditional component vendoring

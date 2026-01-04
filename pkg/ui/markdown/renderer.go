@@ -198,6 +198,9 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 		result, err = r.RenderAsciiWithoutWordWrap(content)
 	}
 	if err == nil {
+		// Glamour adds leading/trailing newlines; trim them to prevent flag descriptions
+		// from appearing on a new line instead of inline or having trailing blank lines.
+		result = strings.Trim(result, "\n")
 		result = trimTrailingSpaces(result)
 	}
 	return result, err
@@ -231,7 +234,8 @@ func (r *Renderer) Render(content string) (string, error) {
 			result = append(result, " "+styled)
 		} else {
 			// Keep all lines including blank lines for proper markdown paragraph spacing.
-			result = append(result, line)
+			// But remove trailing whitespace that glamour adds for padding.
+			result = append(result, strings.TrimRight(line, " \t"))
 		}
 	}
 
@@ -257,6 +261,9 @@ func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
 	}
 	result, err := renderer.Render(content)
 	if err == nil {
+		// Glamour adds leading/trailing newlines; trim them to prevent flag descriptions
+		// from appearing on a new line instead of inline or having trailing blank lines.
+		result = strings.Trim(result, "\n")
 		result = trimTrailingSpaces(result)
 	}
 	return result, err
@@ -274,6 +281,9 @@ func (r *Renderer) RenderAscii(content string) (string, error) {
 	}
 	result, err := renderer.Render(content)
 	if err == nil {
+		// Glamour adds leading/trailing newlines; trim them to prevent flag descriptions
+		// from appearing on a new line instead of inline or having trailing blank lines.
+		result = strings.Trim(result, "\n")
 		result = trimTrailingSpaces(result)
 	}
 	return result, err

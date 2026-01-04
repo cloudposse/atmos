@@ -371,7 +371,10 @@ func printDescription(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
 	// Use markdown rendering to respect terminal width and wrapping settings.
 	// This ensures long descriptions wrap properly based on screen width.
 	rendered := renderMarkdownDescription(desc)
-	fmt.Fprintln(w, styles.commandDesc.Render(rendered))
+	styled := styles.commandDesc.Render(rendered)
+	// Lipgloss pads multi-line strings to uniform width. Trim trailing whitespace from each line.
+	styled = ui.TrimLinesRight(styled)
+	fmt.Fprintln(w, styled)
 	fmt.Fprintln(w)
 }
 

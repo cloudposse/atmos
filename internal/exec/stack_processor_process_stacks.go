@@ -269,6 +269,16 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Global source.
+	globalSourceSection := map[string]any{}
+
+	if i, ok := globalTerraformSection[cfg.SourceSectionName]; ok {
+		globalSourceSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformSource, stackName)
+		}
+	}
+
 	// Helmfile section.
 	if i, ok := globalHelmfileSection[cfg.CommandSectionName]; ok {
 		helmfileCommand, ok = i.(string)
@@ -430,6 +440,7 @@ func ProcessStackConfig(
 					GlobalBackendSection:            globalBackendSection,
 					GlobalRemoteStateBackendType:    globalRemoteStateBackendType,
 					GlobalRemoteStateBackendSection: globalRemoteStateBackendSection,
+					GlobalSourceSection:             globalSourceSection,
 					AtmosConfig:                     atmosConfig,
 				}, nil
 			}

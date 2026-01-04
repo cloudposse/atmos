@@ -843,7 +843,13 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 			if _, err := os.Stat(src); err == nil { // Check if the file/directory exists
 				// t.Logf("Copying %s to %s\n", src, dest)
-				if err := copy.Copy(src, dest); err != nil {
+				// Skip socket files (e.g., SSH agent sockets) that cannot be copied.
+				copyOpts := copy.Options{
+					Skip: func(info os.FileInfo, src, dest string) (bool, error) {
+						return info.Mode()&os.ModeSocket != 0, nil
+					},
+				}
+				if err := copy.Copy(src, dest, copyOpts); err != nil {
 					t.Fatalf("Failed to copy %s to test folder: %v", src, err)
 				}
 			}

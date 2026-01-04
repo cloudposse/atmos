@@ -1,8 +1,14 @@
 package exec
 
 import (
+	"context"
+	"time"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -52,6 +58,25 @@ func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfigur
 	componentPath, err := u.GetComponentPath(atmosConfig, "terraform", info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return err
+	}
+
+	// Run provisioners to ensure workdir exists if configured.
+	// This handles the workdir provisioner which may copy component files to an isolated directory.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	err = provisioner.ExecuteProvisioners(ctx, provisioner.HookEvent(beforeTerraformInitEvent), atmosConfig, info.ComponentSection, info.AuthContext)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrProvisionerFailed).
+			WithCause(err).
+			WithExplanation("provisioner execution failed before terraform shell").
+			Err()
+	}
+
+	// Check if workdir provisioner set a workdir path - if so, use it instead of the component path.
+	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+		componentPath = workdirPath
+		log.Debug("Using workdir path for shell", "workdirPath", workdirPath)
 	}
 
 	cfg := &shellConfig{

@@ -3,7 +3,7 @@
   position: fixed;
   bottom: 2%;
   right: 2%;
-  width: 15em;
+  width: 10em;
   z-index: 100;
   opacity: 0.5;
   transition: opacity 0.2s ease-in-out;
@@ -17,7 +17,6 @@
 .cloudposse-logo img {
   width: 100%;
   height: auto;
-  display: block;
 }
 
 /* Theme-based logo switching */
@@ -44,4 +43,9 @@ html[data-theme='dark'] .cloudposse-logo__dark {
   .cloudposse-logo {
     display: none;
   }
+}
+
+/* Hide watermark when slide deck is active (progress bar would overlap) */
+body:has(.slide-deck) .cloudposse-logo {
+  display: none;
 }

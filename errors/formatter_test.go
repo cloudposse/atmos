@@ -298,10 +298,8 @@ func TestFormat_NonVerboseWithContext(t *testing.T) {
 	assert.Contains(t, result, "💡")
 	assert.Contains(t, result, "Check the configuration")
 
-	// Context IS shown in non-verbose mode (new structured markdown format).
-	assert.Contains(t, result, "## Context")
-	assert.Contains(t, result, "component")
-	assert.Contains(t, result, "vpc")
+	// Context should NOT be shown in non-verbose mode.
+	assert.NotContains(t, result, "## Context")
 
 	// Should NOT contain stack trace in non-verbose mode.
 	assert.NotContains(t, result, "## Stack Trace")

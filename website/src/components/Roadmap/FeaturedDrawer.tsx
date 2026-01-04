@@ -14,6 +14,8 @@ export interface FeaturedItem {
   benefits?: string;
   status: 'shipped' | 'in-progress' | 'planned';
   quarter: string;
+  /** Version this was released in (optional, typically for shipped items). */
+  version?: string;
   docs?: string;
   changelog?: string;
   pr?: number;
@@ -184,6 +186,16 @@ export default function FeaturedDrawer({
                 <span className={styles.drawerMetaItem}>
                   {item.quarter.replace('q', 'Q').replace('-', ' ')}
                 </span>
+                {item.version && (
+                  <Link
+                    to={`https://github.com/cloudposse/atmos/releases/tag/${item.version}`}
+                    className={styles.drawerMetaVersion}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {item.version}
+                  </Link>
+                )}
                 <span
                   className={`${styles.drawerMetaStatus} ${styles[statusClassMap[item.status] || 'drawerMetaStatusPlanned']}`}
                 >

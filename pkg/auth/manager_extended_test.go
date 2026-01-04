@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
@@ -477,10 +478,12 @@ func TestManager_GetCachedCredentials_ExpiredCredentials(t *testing.T) {
 		credentialStore: mockStore,
 	}
 
-	// Return expired credentials.
+	// Return expired credentials with session token.
+	// Session token prevents fallback to file loading in loadCredentialsWithFallback.
 	expiredCreds := &types.AWSCredentials{
 		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
 		SecretAccessKey: "secret",
+		SessionToken:    "expired-session-token",
 		Expiration:      "2020-01-01T00:00:00Z",
 	}
 
@@ -489,4 +492,212 @@ func TestManager_GetCachedCredentials_ExpiredCredentials(t *testing.T) {
 	_, err := m.GetCachedCredentials(context.Background(), "identity1")
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrExpiredCredentials)
+}
+
+func TestManager_loadCredentialsWithFallback_PrefersSessionCredsFromFiles(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+	mockIdentity := types.NewMockIdentity(ctrl)
+
+	config := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"identity1": {
+				Kind: "aws/user",
+			},
+		},
+	}
+
+	m := &manager{
+		config: config,
+		identities: map[string]types.Identity{
+			"identity1": mockIdentity,
+		},
+		credentialStore: mockStore,
+	}
+
+	// Keyring returns long-lived credentials (no session token, no expiration).
+	longLivedCreds := &types.AWSCredentials{
+		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+		SecretAccessKey: "secret",
+		// No SessionToken - triggers file check.
+	}
+
+	// Files have session credentials with expiration.
+	futureTime := time.Now().Add(1 * time.Hour).Format(time.RFC3339)
+	sessionCreds := &types.AWSCredentials{
+		AccessKeyID:     "ASIAIOSFODNN7EXAMPLE",
+		SecretAccessKey: "session-secret",
+		SessionToken:    "session-token",
+		Expiration:      futureTime,
+	}
+
+	mockStore.EXPECT().Retrieve("identity1").Return(longLivedCreds, nil)
+	mockIdentity.EXPECT().LoadCredentials(gomock.Any()).Return(sessionCreds, nil)
+
+	creds, err := m.loadCredentialsWithFallback(context.Background(), "identity1")
+	assert.NoError(t, err)
+	assert.NotNil(t, creds)
+
+	// Should return session credentials from files, not keyring credentials.
+	awsCreds, ok := creds.(*types.AWSCredentials)
+	assert.True(t, ok)
+	assert.Equal(t, "ASIAIOSFODNN7EXAMPLE", awsCreds.AccessKeyID)
+	assert.Equal(t, "session-token", awsCreds.SessionToken)
+}
+
+func TestManager_loadCredentialsWithFallback_KeyringWithSessionToken(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := types.NewMockCredentialStore(ctrl)
+
+	config := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"identity1": {
+				Kind: "aws/permission-set",
+			},
+		},
+	}
+
+	m := &manager{
+		config:          config,
+		identities:      map[string]types.Identity{},
+		credentialStore: mockStore,
+	}
+
+	// Keyring returns session credentials (has session token).
+	futureTime := time.Now().Add(1 * time.Hour).Format(time.RFC3339)
+	sessionCreds := &types.AWSCredentials{
+		AccessKeyID:     "ASIAIOSFODNN7EXAMPLE",
+		SecretAccessKey: "secret",
+		SessionToken:    "session-token",
+		Expiration:      futureTime,
+	}
+
+	mockStore.EXPECT().Retrieve("identity1").Return(sessionCreds, nil)
+	// LoadCredentials should NOT be called because keyring has session token.
+
+	creds, err := m.loadCredentialsWithFallback(context.Background(), "identity1")
+	assert.NoError(t, err)
+	assert.NotNil(t, creds)
+
+	// Should return keyring credentials directly.
+	awsCreds, ok := creds.(*types.AWSCredentials)
+	assert.True(t, ok)
+	assert.Equal(t, "ASIAIOSFODNN7EXAMPLE", awsCreds.AccessKeyID)
+	assert.Equal(t, "session-token", awsCreds.SessionToken)
+}
+
+func TestManager_loadSessionCredsFromFiles_ReturnsNilWhenExpired(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockIdentity := types.NewMockIdentity(ctrl)
+
+	config := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"identity1": {
+				Kind: "aws/user",
+			},
+		},
+	}
+
+	m := &manager{
+		config: config,
+		identities: map[string]types.Identity{
+			"identity1": mockIdentity,
+		},
+	}
+
+	// Files have expired session credentials.
+	expiredCreds := &types.AWSCredentials{
+		AccessKeyID:     "ASIAIOSFODNN7EXAMPLE",
+		SecretAccessKey: "session-secret",
+		SessionToken:    "session-token",
+		Expiration:      "2020-01-01T00:00:00Z", // Expired.
+	}
+
+	mockIdentity.EXPECT().LoadCredentials(gomock.Any()).Return(expiredCreds, nil)
+
+	creds := m.loadSessionCredsFromFiles(context.Background(), "identity1")
+	assert.Nil(t, creds, "Should return nil for expired credentials")
+}
+
+func TestManager_loadSessionCredsFromFiles_ReturnsNilWhenNoSessionToken(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockIdentity := types.NewMockIdentity(ctrl)
+
+	config := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"identity1": {
+				Kind: "aws/user",
+			},
+		},
+	}
+
+	m := &manager{
+		config: config,
+		identities: map[string]types.Identity{
+			"identity1": mockIdentity,
+		},
+	}
+
+	// Files have credentials without session token.
+	futureTime := time.Now().Add(1 * time.Hour).Format(time.RFC3339)
+	longLivedCreds := &types.AWSCredentials{
+		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+		SecretAccessKey: "secret",
+		Expiration:      futureTime,
+		// No SessionToken.
+	}
+
+	mockIdentity.EXPECT().LoadCredentials(gomock.Any()).Return(longLivedCreds, nil)
+
+	creds := m.loadSessionCredsFromFiles(context.Background(), "identity1")
+	assert.Nil(t, creds, "Should return nil for credentials without session token")
+}
+
+func TestManager_loadSessionCredsFromFiles_ReturnsNilWhenIdentityNotFound(t *testing.T) {
+	config := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{},
+	}
+
+	m := &manager{
+		config:     config,
+		identities: map[string]types.Identity{},
+	}
+
+	creds := m.loadSessionCredsFromFiles(context.Background(), "nonexistent")
+	assert.Nil(t, creds, "Should return nil for nonexistent identity")
+}
+
+func TestManager_loadSessionCredsFromFiles_ReturnsNilOnLoadError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockIdentity := types.NewMockIdentity(ctrl)
+
+	config := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"identity1": {
+				Kind: "aws/user",
+			},
+		},
+	}
+
+	m := &manager{
+		config: config,
+		identities: map[string]types.Identity{
+			"identity1": mockIdentity,
+		},
+	}
+
+	mockIdentity.EXPECT().LoadCredentials(gomock.Any()).Return(nil, assert.AnError)
+
+	creds := m.loadSessionCredsFromFiles(context.Background(), "identity1")
+	assert.Nil(t, creds, "Should return nil when LoadCredentials fails")
 }

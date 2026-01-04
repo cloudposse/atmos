@@ -1,9 +1,9 @@
 
 👽 test linux/amd64
 
-This command allows you to execute Terraform commands, such as plan, apply, and 
-destroy, using Atmos stack configurations for consistent infrastructure         
-management.                                                                     
+This command allows you to execute Terraform commands, such as plan, apply, and
+destroy, using Atmos stack configurations for consistent infrastructure
+management.
 
 USAGE
 
@@ -53,12 +53,14 @@ AVAILABLE COMMANDS
       refresh             Update the state to match remote systems
       shell               Configure an environment for an Atmos component and start a new shell
       show                Show the current state or a saved plan
+      source [command]    Manage Terraform component sources (JIT vendoring)
       state               Advanced state management
       taint               Mark a resource instance as not fully functional
       test                Execute integration tests for Terraform modules
       untaint             Remove the 'tainted' state from a resource instance
       validate            Check whether the configuration is valid
       version             Show the current Terraform version
+      workdir [command]   Manage component working directories
       workspace           Manage Terraform workspaces
 
 FLAGS
@@ -162,6 +164,8 @@ GLOBAL FLAGS
 
       --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                 standard file descriptor (including '/dev/null')
+
+      --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
 
   -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
 

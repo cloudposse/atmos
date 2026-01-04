@@ -1,0 +1,100 @@
+---
+title: atmos toolchain search
+sidebar_label: search
+sidebar_class_name: command
+id: search
+description: Quick alias for searching tools across registries.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Quick alias for searching tools across registries. A convenient shortcut to `atmos toolchain registry search` for faster tool discovery.
+</Intro>
+
+<Screengrab title="atmos toolchain search --help" slug="atmos-toolchain-search--help" />
+
+## Overview
+
+The `atmos toolchain search` command is a convenient alias to [`atmos toolchain registry search`](/cli/commands/toolchain/registry/registry-search). Both commands are identical:
+
+```shell
+# These are equivalent
+atmos toolchain search terraform
+atmos toolchain registry search terraform
+```
+
+## Usage
+
+```shell
+atmos toolchain search <query>
+```
+
+## Quick Examples
+
+```shell
+# Search for Terraform tools
+atmos toolchain search terraform
+
+# Search for Kubernetes tools
+atmos toolchain search kubernetes
+
+# Limit results
+atmos toolchain search terraform --limit 10
+
+# Show only installed tools
+atmos toolchain search terraform --installed-only
+
+# JSON output
+atmos toolchain search terraform --format json
+```
+
+## Arguments
+
+<dl>
+    <dt>`query` <em>(required)</em></dt>
+    <dd>
+        Search query to match against tool owner, repository name, and description.
+
+        Examples: `terraform`, `kubernetes`, `aws`, `helm`
+    </dd>
+</dl>
+
+## Flags
+
+All flags from [`atmos toolchain registry search`](/cli/commands/toolchain/registry/registry-search) are supported:
+
+| Flag | Description |
+|------|-------------|
+| `--limit` | Maximum results to display (default: 20) |
+| `--registry` | Search only in specified registry |
+| `--format` | Output format: `table`, `json`, `yaml` |
+| `--installed-only` | Show only installed tools |
+| `--available-only` | Show only available (not installed) tools |
+
+## Why Use This Alias?
+
+The alias provides a shorter, more ergonomic command:
+
+```shell
+# 21 characters
+atmos toolchain search terraform
+
+# 30 characters
+atmos toolchain registry search terraform
+```
+
+This aligns with other popular tool managers (`asdf search`, `brew search`, `apt search`).
+
+## Complete Documentation
+
+For complete documentation including all flags, detailed examples, and use cases, see:
+
+**[`atmos toolchain registry search`](/cli/commands/toolchain/registry/registry-search)**
+
+## Related Commands
+
+- [`atmos toolchain registry search`](/cli/commands/toolchain/registry/registry-search) - Full command documentation
+- [`atmos toolchain registry list`](/cli/commands/toolchain/registry/registry-list) - Browse all tools in a registry
+- [`atmos toolchain install`](/cli/commands/toolchain/install) - Install tools from search results

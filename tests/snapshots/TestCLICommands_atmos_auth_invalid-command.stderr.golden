@@ -1,4 +1,3 @@
-
 # Incorrect Usage
 
 **Error:** Unknown command invalid-command for atmos auth
@@ -6,6 +5,7 @@
 Valid subcommands are:
 
 • console
+• ecr-login
 • env
 • exec
 • list
@@ -19,5 +19,3 @@ Valid subcommands are:
 ## Hints
 
 💡 Run atmos auth --help for usage
-
-

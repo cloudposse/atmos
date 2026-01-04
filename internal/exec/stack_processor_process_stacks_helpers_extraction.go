@@ -88,6 +88,21 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentAuth = make(map[string]any, componentSmallMapCapacity)
 	}
 
+	// Extract provision section (for workdir provisioning) for terraform, helmfile, and packer.
+	if opts.ComponentType == cfg.TerraformComponentType ||
+		opts.ComponentType == cfg.HelmfileComponentType ||
+		opts.ComponentType == cfg.PackerComponentType {
+		if i, ok := opts.ComponentMap[cfg.ProvisionSectionName]; ok {
+			componentProvision, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.provision' in the file '%s'", errUtils.ErrInvalidComponentProvision, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentProvision = componentProvision
+		} else {
+			result.ComponentProvision = make(map[string]any, componentSmallMapCapacity)
+		}
+	}
+
 	// Extract metadata section.
 	if i, ok := opts.ComponentMap[cfg.MetadataSectionName]; ok {
 		componentMetadata, ok := i.(map[string]any)
@@ -95,6 +110,15 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 			return fmt.Errorf("%w: 'components.%s.%s.metadata' in the file '%s'", errUtils.ErrInvalidComponentMetadata, opts.ComponentType, opts.Component, opts.StackName)
 		}
 		result.ComponentMetadata = componentMetadata
+	}
+
+	// Extract dependencies section (for toolchain tool dependencies).
+	if i, ok := opts.ComponentMap[cfg.DependenciesSectionName]; ok {
+		componentDependencies, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.dependencies' in the file '%s'", errUtils.ErrInvalidComponentDependencies, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentDependencies = componentDependencies
 	}
 
 	// Terraform-specific: extract backend configuration.
@@ -136,6 +160,21 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 			result.ComponentRemoteStateBackendSection = componentRemoteStateBackendSection
 		} else {
 			result.ComponentRemoteStateBackendSection = make(map[string]any, componentSmallMapCapacity)
+		}
+	}
+
+	// Extract source configuration for terraform, helmfile, and packer components.
+	if opts.ComponentType == cfg.TerraformComponentType ||
+		opts.ComponentType == cfg.HelmfileComponentType ||
+		opts.ComponentType == cfg.PackerComponentType {
+		if i, ok := opts.ComponentMap[cfg.SourceSectionName]; ok {
+			componentSourceSection, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.source' in the file '%s'", errUtils.ErrInvalidComponentSource, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentSourceSection = componentSourceSection
+		} else {
+			result.ComponentSourceSection = make(map[string]any, componentSmallMapCapacity)
 		}
 	}
 

@@ -1262,6 +1262,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentSettings map[string]any
 	var baseComponentEnv map[string]any
 	var baseComponentAuth map[string]any
+	var baseComponentDependencies map[string]any
 	var baseComponentProviders map[string]any
 	var baseComponentHooks map[string]any
 	var baseComponentCommand string
@@ -1269,6 +1270,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentBackendSection map[string]any
 	var baseComponentRemoteStateBackendType string
 	var baseComponentRemoteStateBackendSection map[string]any
+	var baseComponentSourceSection map[string]any
 	var baseComponentMap map[string]any
 	var ok bool
 
@@ -1386,6 +1388,13 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		if baseComponentDependenciesSection, baseComponentDependenciesSectionExist := baseComponentMap[cfg.DependenciesSectionName]; baseComponentDependenciesSectionExist {
+			baseComponentDependencies, ok = baseComponentDependenciesSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: '%s.dependencies' in the stack '%s'", errUtils.ErrInvalidComponentDependencies, baseComponent, stack)
+			}
+		}
+
 		if baseComponentProvidersSection, baseComponentProvidersSectionExist := baseComponentMap[cfg.ProvidersSectionName]; baseComponentProvidersSectionExist {
 			baseComponentProviders, ok = baseComponentProvidersSection.(map[string]any)
 			if !ok {
@@ -1430,6 +1439,16 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		// Base component source (when source inheritance is enabled).
+		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
+			if i, ok2 := baseComponentMap[cfg.SourceSectionName]; ok2 {
+				baseComponentSourceSection, ok = i.(map[string]any)
+				if !ok {
+					return fmt.Errorf("%w '%s.source' in the stack '%s'", errUtils.ErrInvalidComponentSource, baseComponent, stack)
+				}
+			}
+		}
+
 		// Base component `command`
 		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap[cfg.CommandSectionName]; baseComponentCommandSectionExist {
 			baseComponentCommand, ok = baseComponentCommandSection.(string)
@@ -1469,6 +1488,13 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentAuth = merged
+
+		// Base component `dependencies`
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentDependencies, baseComponentDependencies})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentDependencies = merged
 
 		// Base component `metadata` (when metadata inheritance is enabled).
 		// Merge all metadata fields except 'inherits' and 'type'.
@@ -1530,6 +1556,15 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentRemoteStateBackendSection = merged
+
+		// Base component `source` (when source inheritance is enabled).
+		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
+			merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentSourceSection, baseComponentSourceSection})
+			if err != nil {
+				return err
+			}
+			baseComponentConfig.BaseComponentSourceSection = merged
+		}
 
 		baseComponentConfig.ComponentInheritanceChain = u.UniqueStrings(append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...))
 	} else {

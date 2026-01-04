@@ -107,6 +107,18 @@ func (s *stubAuthManager) PrepareShellEnvironment(ctx context.Context, identityN
 	return result, nil
 }
 
+func (s *stubAuthManager) ExecuteIntegration(ctx context.Context, integrationName string) error {
+	return nil
+}
+
+func (s *stubAuthManager) ExecuteIdentityIntegrations(ctx context.Context, identityName string) error {
+	return nil
+}
+
+func (s *stubAuthManager) GetIntegration(integrationName string) (*schema.Integration, error) {
+	return nil, nil
+}
+
 func TestGetConfigLogLevels(t *testing.T) {
 	tests := []struct {
 		name             string

@@ -33,11 +33,22 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 
 	// Store credentials in the keystore and set a reference handle.
 	// Use the identity name as the opaque handle for retrieval.
-	if err := m.credentialStore.Store(identityName, creds); err == nil {
+	// CRITICAL: Skip caching session tokens to avoid overwriting long-lived credentials.
+	// Session tokens have a SessionToken field set and are temporary (short-lived).
+	// Long-lived credentials (access key + secret key) are needed for future authentication.
+	// Caching session tokens would overwrite the long-lived credentials in keyring,
+	// causing "keyring contains session credentials" errors on subsequent runs.
+	if !isSessionToken(creds) {
+		if err := m.credentialStore.Store(identityName, creds); err == nil {
+			info.CredentialsRef = identityName
+			// Note: We keep info.Credentials populated for validation purposes.
+			// The Credentials field is marked with json:"-" yaml:"-" tags to prevent
+			// accidental serialization, so there's no security risk in keeping it.
+		}
+	} else {
+		log.Debug("Skipping keyring cache for session tokens in WhoamiInfo", logKeyIdentity, identityName)
+		// Still set the reference for credential lookups - credentials can be loaded from identity storage.
 		info.CredentialsRef = identityName
-		// Note: We keep info.Credentials populated for validation purposes.
-		// The Credentials field is marked with json:"-" yaml:"-" tags to prevent
-		// accidental serialization, so there's no security risk in keeping it.
 	}
 
 	return info

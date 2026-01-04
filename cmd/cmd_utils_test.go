@@ -964,15 +964,19 @@ func TestCloneCommand(t *testing.T) {
 		{
 			name: "command with steps",
 			input: &schema.Command{
-				Name:  "multi-step",
-				Steps: []string{"step1", "step2", "step3"},
+				Name: "multi-step",
+				Steps: schema.Tasks{
+					{Command: "step1", Type: "shell"},
+					{Command: "step2", Type: "shell"},
+					{Command: "step3", Type: "shell"},
+				},
 			},
 			wantErr: false,
 			verifyFn: func(t *testing.T, orig, clone *schema.Command) {
 				assert.Equal(t, len(orig.Steps), len(clone.Steps))
 				// Verify it's a deep copy - modifying clone doesn't affect original.
-				clone.Steps[0] = "modified"
-				assert.NotEqual(t, orig.Steps[0], clone.Steps[0])
+				clone.Steps[0].Command = "modified"
+				assert.NotEqual(t, orig.Steps[0].Command, clone.Steps[0].Command)
 			},
 		},
 		{

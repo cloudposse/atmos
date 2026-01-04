@@ -180,3 +180,125 @@ func (m *mockIdentityReturningSessionTokens) Logout(ctx context.Context) error {
 func (m *mockIdentityReturningSessionTokens) GetProviderName() (string, error) {
 	return "test-provider", nil
 }
+
+// TestBuildWhoamiInfo_SkipsSessionTokenCaching verifies that buildWhoamiInfo
+// does NOT cache session tokens in the keyring.
+//
+// This is a critical test because buildWhoamiInfo is called after authentication
+// completes, and if it cached session tokens, it would overwrite the long-lived
+// credentials that the user configured via `atmos auth user configure`.
+func TestBuildWhoamiInfo_SkipsSessionTokenCaching(t *testing.T) {
+	// Step 1: Set up keyring with long-lived credentials.
+	longLivedCreds := &types.AWSCredentials{
+		AccessKeyID:     "AKIA_LONG_LIVED_KEY",
+		SecretAccessKey: "long_lived_secret_key",
+		MfaArn:          "arn:aws:iam::123456789012:mfa/test-user",
+		SessionDuration: "12h",
+		Region:          "us-east-1",
+		// NO SessionToken - this is a long-lived credential
+	}
+
+	store := &testStore{
+		data: map[string]any{
+			"test-identity": longLivedCreds, // Long-lived credentials should NOT be overwritten
+		},
+		expired: map[string]bool{},
+	}
+
+	// Step 2: Create a manager with the test store.
+	mockIdentity := &mockIdentityReturningSessionTokens{
+		sessionCreds: &types.AWSCredentials{
+			AccessKeyID:     "ASIA_SESSION_KEY",
+			SecretAccessKey: "session_secret_key",
+			SessionToken:    "session_token_12345",
+			Region:          "us-east-1",
+			Expiration:      "2099-12-31T23:59:59Z",
+		},
+	}
+
+	m := &manager{
+		credentialStore: store,
+		identities: map[string]types.Identity{
+			"test-identity": mockIdentity,
+		},
+	}
+
+	// Step 3: Call buildWhoamiInfo with session tokens.
+	// This simulates what happens after authentication completes.
+	sessionCreds := &types.AWSCredentials{
+		AccessKeyID:     "ASIA_SESSION_KEY",
+		SecretAccessKey: "session_secret_key",
+		SessionToken:    "session_token_12345", // Session token present
+		Region:          "us-east-1",
+		Expiration:      "2099-12-31T23:59:59Z",
+	}
+
+	info := m.buildWhoamiInfo("test-identity", sessionCreds)
+
+	// Verify buildWhoamiInfo returns correct info.
+	assert.Equal(t, "test-identity", info.Identity)
+	assert.Equal(t, "test-identity", info.CredentialsRef, "CredentialsRef should be set even for session tokens")
+	assert.NotNil(t, info.Credentials, "Credentials should be set for validation")
+
+	// Step 4: Verify keyring STILL contains long-lived credentials.
+	// Session tokens should NOT have been cached.
+	retrievedCreds, err := store.Retrieve("test-identity")
+	require.NoError(t, err, "Should retrieve credentials from keyring")
+
+	retrievedAWSCreds, ok := retrievedCreds.(*types.AWSCredentials)
+	require.True(t, ok, "Retrieved credentials should be AWS credentials")
+
+	// CRITICAL: Keyring should NOT contain session tokens.
+	assert.Empty(t, retrievedAWSCreds.SessionToken,
+		"buildWhoamiInfo should NOT cache session tokens in keyring")
+
+	// CRITICAL: Keyring should STILL contain long-lived credentials.
+	assert.Equal(t, "AKIA_LONG_LIVED_KEY", retrievedAWSCreds.AccessKeyID,
+		"Long-lived access key should be preserved in keyring")
+
+	assert.Equal(t, "long_lived_secret_key", retrievedAWSCreds.SecretAccessKey,
+		"Long-lived secret key should be preserved in keyring")
+}
+
+// TestBuildWhoamiInfo_CachesNonSessionCredentials verifies that buildWhoamiInfo
+// DOES cache non-session credentials (like long-lived credentials or OIDC tokens).
+func TestBuildWhoamiInfo_CachesNonSessionCredentials(t *testing.T) {
+	// Start with empty keyring.
+	store := &testStore{
+		data:    map[string]any{},
+		expired: map[string]bool{},
+	}
+
+	mockIdentity := &mockIdentityReturningSessionTokens{}
+
+	m := &manager{
+		credentialStore: store,
+		identities: map[string]types.Identity{
+			"test-identity": mockIdentity,
+		},
+	}
+
+	// Call buildWhoamiInfo with long-lived credentials (no SessionToken).
+	longLivedCreds := &types.AWSCredentials{
+		AccessKeyID:     "AKIA_LONG_LIVED_KEY",
+		SecretAccessKey: "long_lived_secret_key",
+		Region:          "us-east-1",
+		// NO SessionToken - this should be cached
+	}
+
+	info := m.buildWhoamiInfo("test-identity", longLivedCreds)
+
+	// Verify buildWhoamiInfo returns correct info.
+	assert.Equal(t, "test-identity", info.Identity)
+	assert.Equal(t, "test-identity", info.CredentialsRef)
+
+	// Verify credentials WERE cached (since they're not session tokens).
+	retrievedCreds, err := store.Retrieve("test-identity")
+	require.NoError(t, err, "Credentials should be cached in keyring")
+
+	retrievedAWSCreds, ok := retrievedCreds.(*types.AWSCredentials)
+	require.True(t, ok, "Retrieved credentials should be AWS credentials")
+
+	assert.Equal(t, "AKIA_LONG_LIVED_KEY", retrievedAWSCreds.AccessKeyID,
+		"Long-lived credentials should be cached in keyring")
+}

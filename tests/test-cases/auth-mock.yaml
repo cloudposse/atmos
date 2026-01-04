@@ -94,6 +94,7 @@ tests:
       - "--identity"
       - "mock-identity"
     expect:
+      ignore_trailing_whitespace: true  # Lipgloss table padding varies by platform/terminal width
       diff:
         - "Expires"
         - "Last Updated"

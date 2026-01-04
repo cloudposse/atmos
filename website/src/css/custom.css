@@ -106,6 +106,21 @@ div.atmos__effect::before, html[data-theme='dark'] div.navbar__logo::before {
     padding-right: 10px;
 }
 
+/* Mobile navbar: ensure hamburger toggle is visible on right side */
+@media (max-width: 996px) {
+    /* Override Docusaurus default absolute positioning on search container */
+    .navbarSearchContainer_NhcR,
+    [class*="navbarSearchContainer"] {
+        position: static !important;
+        right: auto !important;
+    }
+
+    /* Add spacing between search and hamburger */
+    .navbar__toggle {
+        margin-left: 0.75rem;
+    }
+}
+
 .menu__list-item-collapsible {
     font-weight: bold;
 }
@@ -977,9 +992,10 @@ a[class*="table-of-contents__link"] {
 /* ==================== */
 
 /* Hide sidebar on changelog/blog list page to use full width */
+/* Note: Use specific selectors to avoid hiding navbar-sidebar */
 .blog-list-page aside.theme-doc-sidebar-container,
-.blog-list-page [class*="sidebar"],
-.blog-list-page [class*="BlogSidebar"] {
+.blog-list-page aside[class*="sidebar"],
+.blog-list-page div[class*="BlogSidebar"] {
     display: none !important;
 }
 

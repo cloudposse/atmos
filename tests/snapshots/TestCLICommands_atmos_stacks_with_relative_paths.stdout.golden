@@ -17,9 +17,11 @@ acme-platform-dev:
         metadata: {}
         overrides: {}
         providers: {}
+        provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
         settings: {}
+        source: {}
         stack: acme-platform-dev
         vars:
           bar: bar dev override
@@ -48,9 +50,11 @@ acme-platform-prod:
         metadata: {}
         overrides: {}
         providers: {}
+        provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
         settings: {}
+        source: {}
         stack: acme-platform-prod
         vars:
           bar: bar prod override
@@ -79,9 +83,11 @@ acme-platform-staging:
         metadata: {}
         overrides: {}
         providers: {}
+        provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
         settings: {}
+        source: {}
         stack: acme-platform-staging
         vars:
           bar: bar staging override

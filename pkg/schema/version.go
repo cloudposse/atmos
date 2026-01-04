@@ -37,8 +37,19 @@ type VersionConstraint struct {
 	Message string `yaml:"message,omitempty" mapstructure:"message" json:"message,omitempty"`
 }
 
-// Version configures version checking and constraint validation.
+// Version configures version checking, constraint validation, and self-management.
 type Version struct {
 	Check      VersionCheck      `yaml:"check,omitempty" mapstructure:"check" json:"check,omitempty"`
 	Constraint VersionConstraint `yaml:"constraint,omitempty" mapstructure:"constraint" json:"constraint,omitempty"`
+
+	// Use specifies the exact Atmos version to use for this project.
+	// When set, Atmos will automatically re-execute itself with the specified version,
+	// installing it first if not already present.
+	//
+	// Examples:
+	//   "1.160.0"  - Use exact version
+	//   "latest"   - Resolve and use the latest available version
+	//
+	// The re-exec uses the toolchain installer, storing versions in ~/.atmos/bin/cloudposse/atmos/{version}/.
+	Use string `yaml:"use,omitempty" mapstructure:"use" json:"use,omitempty"`
 }

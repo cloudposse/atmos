@@ -21,6 +21,7 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 	result.BaseComponentEnv = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentAuth = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentMetadata = make(map[string]any, componentSmallMapCapacity)
+	result.BaseComponentDependencies = make(map[string]any, componentSmallMapCapacity)
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentHooks = make(map[string]any, componentSmallMapCapacity)
@@ -197,11 +198,12 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentEnv = baseComponentConfig.BaseComponentEnv
 	result.BaseComponentAuth = baseComponentConfig.BaseComponentAuth
 	result.BaseComponentMetadata = baseComponentConfig.BaseComponentMetadata
+	result.BaseComponentDependencies = baseComponentConfig.BaseComponentDependencies
 	result.BaseComponentName = baseComponentConfig.FinalBaseComponentName
 	result.BaseComponentCommand = baseComponentConfig.BaseComponentCommand
 	*componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
 
-	// Terraform-specific: extract base component providers, hooks, and backend.
+	// Terraform-specific: extract base component providers, hooks, backend, and source.
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = baseComponentConfig.BaseComponentProviders
 		result.BaseComponentHooks = baseComponentConfig.BaseComponentHooks
@@ -209,5 +211,6 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 		result.BaseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
 		result.BaseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
 		result.BaseComponentRemoteStateBackendSection = baseComponentConfig.BaseComponentRemoteStateBackendSection
+		result.BaseComponentSourceSection = baseComponentConfig.BaseComponentSourceSection
 	}
 }

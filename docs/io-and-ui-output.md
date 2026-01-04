@@ -109,6 +109,7 @@ ui.Toastf("📦", "Package: %s\nVersion: %s\nSize: %dMB", name, version, size)
 //   Version: 1.2.3
 //   Size: 42MB
 
+
 // Themed icons - convenience wrappers for common status types
 ui.Success("Done!")                   // ✓ Done! (green)
 ui.Successf("Loaded %d items", n)     // ✓ Loaded 5 items (green)

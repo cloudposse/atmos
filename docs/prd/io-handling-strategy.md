@@ -434,6 +434,7 @@ ui.Toastf("📦", "Installed: %s\nVersion: %s\nSize: %dMB", name, version, size)
 //   Version: 1.2.3
 //   Size: 42MB
 
+
 // Toast notifications with themed icons (convenience wrappers)
 ui.Success("Configuration loaded!")
 ui.Successf("Installed %s/%s@%s", owner, repo, version)

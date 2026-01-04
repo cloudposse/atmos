@@ -556,8 +556,14 @@
 /* ==================== */
 
 @media (max-width: 768px) {
+  .changelogTimeline {
+    padding: 0 0.5rem;
+    margin-left: -0.5rem;
+    margin-right: -0.5rem;
+  }
+
   .timelineLine {
-    left: 24px;
+    left: 12px;
   }
 
   .entry {
@@ -570,16 +576,16 @@
 
   .entryLeft .entryNode,
   .entryRight .entryNode {
-    left: -32px;
+    left: -40px;
     right: auto;
     transform: none;
   }
 
   .entryLeft .entryConnector,
   .entryRight .entryConnector {
-    left: -24px;
+    left: -36px;
     right: auto;
-    width: 24px;
+    width: 36px;
   }
 
   .yearText {

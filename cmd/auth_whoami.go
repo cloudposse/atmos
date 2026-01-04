@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -17,8 +16,10 @@ import (
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -160,13 +161,10 @@ func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
 	if whoami.Environment != nil {
 		redactedWhoami.Environment = sanitizeEnvMap(whoami.Environment, homeDir)
 	}
-	jsonData, err := json.MarshalIndent(redactedWhoami, "", "  ")
-	if err != nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "Failed to marshal JSON", "")
-		return errUtils.ErrInvalidAuthConfig
-	}
-	fmt.Println(string(jsonData))
-	return nil
+	// Use data.WriteJSON() to write to the data channel (stdout) with proper I/O handling.
+	// This ensures output goes through the I/O layer with automatic masking and respects
+	// stream redirection in tests.
+	return data.WriteJSON(redactedWhoami)
 }
 
 func printWhoamiHuman(whoami *authTypes.WhoamiInfo, isValid bool) {
@@ -176,13 +174,20 @@ func printWhoamiHuman(whoami *authTypes.WhoamiInfo, isValid bool) {
 		statusIndicator = theme.Styles.Checkmark.String()
 	}
 
-	fmt.Fprintf(os.Stderr, "%s Current Authentication Status\n\n", statusIndicator)
+	_ = ui.Writef("%s Current Authentication Status\n\n", statusIndicator)
 
 	// Build and print table.
 	rows := buildWhoamiTableRows(whoami)
 	t := createWhoamiTable(rows)
 
-	fmt.Fprintf(os.Stderr, "%s\n", t)
+	_ = ui.Writef("%s\n", t)
+
+	// Show warning with tip if credentials are invalid.
+	if !isValid {
+		_ = ui.Writeln("")
+		_ = ui.Warning("Credentials may be expired or invalid.")
+		_ = ui.Writef("  Run 'atmos auth login --identity %s' to refresh.\n", whoami.Identity)
+	}
 }
 
 // buildWhoamiTableRows builds table rows for whoami output.

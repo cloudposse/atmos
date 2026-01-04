@@ -24,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	l "github.com/cloudposse/atmos/pkg/list"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -430,6 +431,26 @@ func executeCustomCommand(
 		finalArgs = args
 	}
 
+	// Resolve and install command dependencies
+	resolver := dependencies.NewResolver(&atmosConfig)
+	deps, err := resolver.ResolveCommandDependencies(commandConfig)
+	if err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to resolve dependencies for command '%s'", commandConfig.Name))
+	}
+
+	if len(deps) > 0 {
+		log.Debug("Installing command dependencies", "command", commandConfig.Name, "tools", deps)
+		installer := dependencies.NewInstaller(&atmosConfig)
+		if err := installer.EnsureTools(deps); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to install dependencies for command '%s'", commandConfig.Name))
+		}
+
+		// Update PATH to include installed tools
+		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
+			errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to update PATH for command '%s'", commandConfig.Name))
+		}
+	}
+
 	// Create auth manager if identity is specified for this custom command.
 	// Check for --identity flag first (it overrides the config).
 	var authManager auth.AuthManager
@@ -601,7 +622,7 @@ func executeCustomCommand(
 
 		// Process Go templates in the command's steps.
 		// Steps support Go templates and have access to {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step, data, false)
+		commandToRun, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("step-%d", i), step.Command, data, false)
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 
 		// Execute the command step
@@ -804,6 +825,31 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 // Check Atmos is version command.
 func isVersionCommand() bool {
 	return len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version")
+}
+
+// isVersionManagementCommand checks if the current command is a version management command.
+// These commands should not trigger re-exec to avoid infinite loops.
+func isVersionManagementCommand(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+
+	// Check the command hierarchy.
+	cmdName := cmd.Name()
+
+	// Direct version subcommands that manage local installations (install, uninstall).
+	// Note: "list" is excluded because it can reasonably work with --use-version
+	// to list releases using a different Atmos version.
+	if cmd.Parent() != nil && cmd.Parent().Name() == "version" {
+		return cmdName == "install" || cmdName == "uninstall"
+	}
+
+	// The version command itself (shows current version).
+	if cmdName == "version" && cmd.Parent() != nil && cmd.Parent().Name() == "atmos" {
+		return true
+	}
+
+	return false
 }
 
 // handleHelpRequest shows help content and exits only if the first argument is "help" or "--help" or "-h".
