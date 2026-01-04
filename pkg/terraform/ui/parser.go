@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // Parser reads and parses Terraform JSON streaming output.
@@ -38,7 +40,7 @@ func (p *Parser) Next() (*ParseResult, error) {
 	for {
 		if !p.scanner.Scan() {
 			if err := p.scanner.Err(); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 			}
 			return nil, io.EOF
 		}
@@ -64,7 +66,7 @@ func (p *Parser) parseMessage(line []byte) (any, error) {
 	var base BaseMessage
 	if err := json.Unmarshal(line, &base); err != nil {
 		// Not JSON - return as raw output.
-		return nil, fmt.Errorf("invalid JSON: %w", err)
+		return nil, fmt.Errorf("%w: invalid JSON: %w", errUtils.ErrParseTerraformOutput, err)
 	}
 
 	// Parse into specific type based on message type.
@@ -72,91 +74,91 @@ func (p *Parser) parseMessage(line []byte) (any, error) {
 	case MessageTypeVersion:
 		var msg VersionMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 		}
 		return &msg, nil
 
 	case MessageTypePlannedChange:
 		var msg PlannedChangeMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 		}
 		return &msg, nil
 
 	case MessageTypeChangeSummary:
 		var msg ChangeSummaryMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 		}
 		return &msg, nil
 
 	case MessageTypeApplyStart:
 		var msg ApplyStartMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 		}
 		return &msg, nil
 
 	case MessageTypeApplyProgress:
 		var msg ApplyProgressMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 		}
 		return &msg, nil
 
 	case MessageTypeApplyComplete:
 		var msg ApplyCompleteMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 		}
 		return &msg, nil
 
 	case MessageTypeApplyErrored:
 		var msg ApplyErroredMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 		}
 		return &msg, nil
 
 	case MessageTypeRefreshStart:
 		var msg RefreshStartMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 		}
 		return &msg, nil
 
 	case MessageTypeRefreshComplete:
 		var msg RefreshCompleteMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 		}
 		return &msg, nil
 
 	case MessageTypeDiagnostic:
 		var msg DiagnosticMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 		}
 		return &msg, nil
 
 	case MessageTypeOutputs:
 		var msg OutputsMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 		}
 		return &msg, nil
 
 	case MessageTypeInitOutput:
 		var msg InitOutputMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 		}
 		return &msg, nil
 
 	case MessageTypeLog:
 		var msg LogMessage
 		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 		}
 		return &msg, nil
 
