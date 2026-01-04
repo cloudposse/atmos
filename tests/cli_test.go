@@ -675,6 +675,30 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	return &mergedSuite, nil
 }
 
+// validateAtmosBinary checks if the atmos binary is available and up-to-date.
+// Returns the binary path and a skip reason if the binary is not suitable for testing.
+func validateAtmosBinary(repoRoot string) (string, string) {
+	binaryPath, err := exec.LookPath("atmos")
+	if err != nil {
+		return "", fmt.Sprintf("Atmos binary not found in PATH: %s. Run 'make build' to build the binary.", os.Getenv("PATH"))
+	}
+
+	rel, err := filepath.Rel(repoRoot, binaryPath)
+	if err == nil && strings.HasPrefix(rel, "..") {
+		return binaryPath, fmt.Sprintf("Atmos binary found outside repository at %s", binaryPath)
+	}
+
+	stale, err := checkIfRebuildNeeded(binaryPath, repoRoot)
+	if err != nil {
+		return binaryPath, fmt.Sprintf("Failed to check if rebuild needed: %v", err)
+	}
+	if stale {
+		return binaryPath, fmt.Sprintf("Atmos binary at %s needs rebuild. Run 'make build' to rebuild.", binaryPath)
+	}
+
+	return binaryPath, ""
+}
+
 // Entry point for tests to parse flags and handle setup/teardown.
 func TestMain(m *testing.M) {
 	// Parse flags first to get -v status
@@ -712,10 +736,21 @@ func TestMain(m *testing.M) {
 		logger.Fatal("failed to locate git repository", "dir", startingDir)
 	}
 
-	// Check if we should collect coverage
+	// Check if we should collect coverage.
 	coverDir = os.Getenv("GOCOVERDIR")
 	if coverDir != "" {
 		logger.Info("Coverage collection enabled", "GOCOVERDIR", coverDir)
+	}
+
+	// Check for the atmos binary.
+	var binaryPath string
+	binaryPath, skipReason = validateAtmosBinary(repoRoot)
+	if skipReason != "" {
+		logger.Info("Tests will be skipped", "reason", skipReason)
+	}
+
+	if skipReason == "" {
+		logger.Info("Atmos binary for tests", "binary", binaryPath)
 	}
 
 	logger.Info("Starting directory", "dir", startingDir)
