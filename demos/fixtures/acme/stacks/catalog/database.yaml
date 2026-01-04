@@ -1,0 +1,25 @@
+# Database Component Catalog
+# RDS/Aurora PostgreSQL
+
+components:
+  terraform:
+    database:
+      metadata:
+        component: database
+        type: real
+      vars:
+        enabled: true
+        name: "aurora-postgres"
+        engine: "aurora-postgresql"
+        engine_version: "15.4"
+        instance_class: "db.r6g.large"
+        cluster_size: 2
+        storage_encrypted: true
+        deletion_protection: true
+        skip_final_snapshot: false
+        backup_retention_period: 7
+        preferred_backup_window: "03:00-04:00"
+        preferred_maintenance_window: "Mon:04:00-Mon:05:00"
+        # Read from VPC component state
+        vpc_id: !terraform.state vpc vpc_id
+        subnet_ids: !terraform.state vpc private_subnet_ids

@@ -825,7 +825,9 @@ func CreateStyledTable(header []string, rows [][]string) string {
 	}
 
 	// Table styling - simple and clean like version list.
-	headerStyle := lipgloss.NewStyle().Bold(true)
+	headerStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color(theme.GetHeaderTextColor()))
 	cellStyle := lipgloss.NewStyle()
 
 	t := table.New().
@@ -855,7 +857,8 @@ func CreateStyledTable(header []string, rows [][]string) string {
 			}
 		})
 
-	return t.String() + utils.GetLineEnding()
+	// Add blank lines before and after the table for visual separation.
+	return "\n" + t.String() + "\n" + utils.GetLineEnding()
 }
 
 // Format implements the Formatter interface for TableFormatter.
