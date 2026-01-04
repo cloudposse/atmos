@@ -431,7 +431,7 @@ type Terraform struct {
 	PluginCache bool `yaml:"plugin_cache" json:"plugin_cache" mapstructure:"plugin_cache"`
 	// PluginCacheDir is an optional custom path for the plugin cache.
 	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
-	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	PluginCacheDir string      `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
 	UI             TerraformUI `yaml:"ui" json:"ui" mapstructure:"ui"`
 }
 
