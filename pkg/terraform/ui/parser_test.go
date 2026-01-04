@@ -1,12 +1,15 @@
 package ui
 
 import (
+	"errors"
 	"io"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestParser_Next_VersionMessage(t *testing.T) {
@@ -172,7 +175,7 @@ func TestParser_Next_InvalidJSON(t *testing.T) {
 	require.NoError(t, err) // Parser returns result with error, not error itself.
 	require.NotNil(t, result)
 	assert.NotNil(t, result.Err)
-	assert.Contains(t, result.Err.Error(), "invalid JSON")
+	assert.True(t, errors.Is(result.Err, errUtils.ErrParseTerraformOutput), "expected ErrParseTerraformOutput sentinel")
 }
 
 func TestParser_Next_UnknownType(t *testing.T) {

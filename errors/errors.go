@@ -116,6 +116,7 @@ var (
 	ErrTerraformStateNotProvisioned = errors.New("terraform state not provisioned")
 	ErrTerraformOutputNotFound      = errors.New("terraform output not found")
 	ErrTerraformOutputFailed        = errors.New("failed to retrieve terraform outputs")
+	ErrParseTerraformOutput         = errors.New("failed to parse terraform output")
 
 	// Terraform output component configuration errors.
 	ErrMissingExecutable      = errors.New("component does not have 'command' (executable) defined")
