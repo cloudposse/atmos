@@ -1,16 +1,15 @@
 //go:build windows
-// +build windows
 
-package exec
+package output
 
 import (
 	"runtime"
 	"time"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// windowsFileDelay adds a small delay on Windows to allow file handles to be released.
-// This helps prevent "The process cannot access the file because another process has locked
-// a portion of the file" errors when multiple terraform operations run in quick succession.
+// windowsFileDelay adds a delay on Windows to prevent file locking issues.
 func windowsFileDelay() {
 	if runtime.GOOS == "windows" {
 		time.Sleep(200 * time.Millisecond)
@@ -39,4 +38,12 @@ func retryOnWindows(fn func() error) error {
 	}
 
 	return lastErr
+}
+
+// RetryOnWindows is the exported version for use by other packages.
+// It wraps a function with retry logic for Windows file operations.
+func RetryOnWindows(fn func() error) error {
+	defer perf.Track(nil, "output.RetryOnWindows")()
+
+	return retryOnWindows(fn)
 }

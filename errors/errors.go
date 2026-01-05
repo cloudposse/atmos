@@ -110,6 +110,18 @@ var (
 	// These errors indicate the data is not available but do not represent API failures.
 	ErrTerraformStateNotProvisioned = errors.New("terraform state not provisioned")
 	ErrTerraformOutputNotFound      = errors.New("terraform output not found")
+	ErrTerraformOutputFailed        = errors.New("failed to retrieve terraform outputs")
+
+	// Terraform output component configuration errors.
+	ErrMissingExecutable      = errors.New("component does not have 'command' (executable) defined")
+	ErrMissingWorkspace       = errors.New("component does not have terraform workspace defined")
+	ErrMissingComponentInfo   = errors.New("component does not have 'component_info' defined")
+	ErrInvalidComponentInfoS  = errors.New("component has invalid 'component_info' section")
+	ErrMissingComponentPath   = errors.New("component has invalid 'component_info.component_path'")
+	ErrBackendFileGeneration  = errors.New("failed to generate backend file")
+	ErrProviderFileGeneration = errors.New("failed to generate provider override file")
+	ErrTerraformInit          = errors.New("terraform init failed")
+	ErrTerraformWorkspaceOp   = errors.New("terraform workspace operation failed")
 
 	// API/infrastructure errors - should cause non-zero exit.
 	// These errors indicate backend API failures that should not use YQ defaults.
@@ -565,6 +577,9 @@ var (
 	ErrNoFileMatchPattern   = errors.New("no files matching patterns found")
 	ErrMaxImportDepth       = errors.New("maximum import depth reached")
 	ErrNoValidAbsolutePaths = errors.New("no valid absolute paths found")
+	ErrDownloadRemoteConfig = errors.New("failed to download remote config")
+	ErrMockImportFailure    = errors.New("mock error: simulated import failure")
+	ErrProcessNestedImports = errors.New("failed to process nested imports")
 
 	// Profiler-related errors.
 	ErrProfilerStart           = errors.New("profiler start failed")
