@@ -1,0 +1,72 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: dev
+  namespace: test
+  environment: development
+
+components:
+  terraform:
+    # VPC component with multiple file types in generate section
+    vpc:
+      metadata:
+        component: vpc
+      vars:
+        vpc_name: "dev-vpc"
+        cidr_block: "10.1.0.0/16"
+        environment: "development"
+        region: "us-east-1"
+      generate:
+        # HCL file generation - locals block
+        locals.tf:
+          locals:
+            environment: "{{ .vars.environment }}"
+            vpc_name: "{{ .vars.vpc_name }}"
+            atmos_component: "{{ .atmos_component }}"
+            atmos_stack: "{{ .atmos_stack }}"
+        # JSON file generation
+        metadata.json:
+          component: "{{ .component }}"
+          stack: "{{ .atmos_stack }}"
+          namespace: "{{ .namespace }}"
+          environment: "{{ .vars.environment }}"
+        # String template for README
+        README.md: |
+          # VPC Component
+
+          Environment: {{ .vars.environment }}
+          Stack: {{ .atmos_stack }}
+          Component: {{ .component }}
+          Region: {{ .vars.region }}
+          CIDR: {{ .vars.cidr_block }}
+
+    # S3 bucket component with YAML and HCL generation
+    s3-logs:
+      metadata:
+        component: s3-bucket
+      vars:
+        bucket_name: "dev-logs-bucket"
+        environment: "development"
+        versioning_enabled: true
+      generate:
+        # YAML file generation
+        config.yaml:
+          bucket:
+            name: "{{ .vars.bucket_name }}"
+            environment: "{{ .vars.environment }}"
+          tags:
+            ManagedBy: "atmos"
+            Component: "{{ .component }}"
+        # HCL file
+        bucket_config.tf:
+          locals:
+            bucket_name: "{{ .vars.bucket_name }}"
+            versioning: "{{ .vars.versioning_enabled }}"
+
+    # Component with no generate section (for testing filtering)
+    s3-data:
+      metadata:
+        component: s3-bucket
+      vars:
+        bucket_name: "dev-data-bucket"
+        environment: "development"
