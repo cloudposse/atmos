@@ -4,7 +4,7 @@ This fixture tests the `atmos terraform generate files` command functionality.
 
 ## Structure
 
-```
+```text
 terraform-generate-files/
 ├── atmos.yaml                    # Atmos configuration
 ├── components/

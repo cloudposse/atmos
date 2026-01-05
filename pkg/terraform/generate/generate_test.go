@@ -7,46 +7,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// MockStackProcessor implements StackProcessor for testing.
-type MockStackProcessor struct {
-	ProcessStacksFn    func(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, checkStack, processTemplates, processYamlFunctions bool, skip []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error)
-	FindStacksMapFn    func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error)
-	ProcessStacksCalls int
-	FindStacksMapCalls int
-}
-
-//nolint:gocritic // hugeParam: mock must match interface signature which uses value type
-func (m *MockStackProcessor) ProcessStacks(
-	atmosConfig *schema.AtmosConfiguration,
-	info schema.ConfigAndStacksInfo,
-	checkStack bool,
-	processTemplates bool,
-	processYamlFunctions bool,
-	skip []string,
-	authManager auth.AuthManager,
-) (schema.ConfigAndStacksInfo, error) {
-	m.ProcessStacksCalls++
-	if m.ProcessStacksFn != nil {
-		return m.ProcessStacksFn(atmosConfig, info, checkStack, processTemplates, processYamlFunctions, skip, authManager)
-	}
-	return info, nil
-}
-
-func (m *MockStackProcessor) FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
-	m.FindStacksMapCalls++
-	if m.FindStacksMapFn != nil {
-		return m.FindStacksMapFn(atmosConfig, ignoreMissingFiles)
-	}
-	return map[string]any{}, map[string]map[string]any{}, nil
-}
-
 func TestNewService(t *testing.T) {
-	mock := &MockStackProcessor{}
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
 	service := NewService(mock)
 	assert.NotNil(t, service)
 }
@@ -440,9 +409,12 @@ func TestExtractTerraformSection(t *testing.T) {
 
 func TestService_ExecuteForComponent(t *testing.T) {
 	tempDir := t.TempDir()
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
 
-	mock := &MockStackProcessor{
-		ProcessStacksFn: func(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, checkStack, processTemplates, processYamlFunctions bool, skip []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+	mock.EXPECT().
+		ProcessStacks(gomock.Any(), gomock.Any(), true, true, true, nil, nil).
+		DoAndReturn(func(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, checkStack, processTemplates, processYamlFunctions bool, skip []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 			info.ComponentSection = map[string]any{
 				"generate": map[string]any{
 					"test.json": map[string]any{
@@ -452,8 +424,7 @@ func TestService_ExecuteForComponent(t *testing.T) {
 			}
 			info.FinalComponent = "vpc"
 			return info, nil
-		},
-	}
+		})
 
 	service := NewService(mock)
 
@@ -474,9 +445,6 @@ func TestService_ExecuteForComponent(t *testing.T) {
 	err = service.ExecuteForComponent(atmosConfig, "vpc", "dev-us-west-2", false, false)
 	require.NoError(t, err)
 
-	// Verify ProcessStacks was called.
-	assert.Equal(t, 1, mock.ProcessStacksCalls)
-
 	// Verify file was created.
 	content, err := os.ReadFile(filepath.Join(componentDir, "test.json"))
 	require.NoError(t, err)
@@ -484,15 +452,18 @@ func TestService_ExecuteForComponent(t *testing.T) {
 }
 
 func TestService_ExecuteForComponent_NoGenerateSection(t *testing.T) {
-	mock := &MockStackProcessor{
-		ProcessStacksFn: func(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, checkStack, processTemplates, processYamlFunctions bool, skip []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+
+	mock.EXPECT().
+		ProcessStacks(gomock.Any(), gomock.Any(), true, true, true, nil, nil).
+		DoAndReturn(func(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, checkStack, processTemplates, processYamlFunctions bool, skip []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 			// No generate section.
 			info.ComponentSection = map[string]any{
 				"vars": map[string]any{},
 			}
 			return info, nil
-		},
-	}
+		})
 
 	service := NewService(mock)
 
@@ -507,26 +478,26 @@ func TestService_ExecuteForComponent_NoGenerateSection(t *testing.T) {
 
 func TestService_ExecuteForAll(t *testing.T) {
 	tempDir := t.TempDir()
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
 
-	mock := &MockStackProcessor{
-		FindStacksMapFn: func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
-			return map[string]any{
-				"dev-us-west-2": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"vpc": map[string]any{
-								"generate": map[string]any{
-									"output.json": map[string]any{
-										"stack": "dev",
-									},
+	mock.EXPECT().
+		FindStacksMap(gomock.Any(), false).
+		Return(map[string]any{
+			"dev-us-west-2": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": map[string]any{
+							"generate": map[string]any{
+								"output.json": map[string]any{
+									"stack": "dev",
 								},
 							},
 						},
 					},
 				},
-			}, map[string]map[string]any{}, nil
-		},
-	}
+			},
+		}, map[string]map[string]any{}, nil)
 
 	service := NewService(mock)
 
@@ -547,9 +518,6 @@ func TestService_ExecuteForAll(t *testing.T) {
 	err = service.ExecuteForAll(atmosConfig, nil, nil, false, false)
 	require.NoError(t, err)
 
-	// Verify FindStacksMap was called.
-	assert.Equal(t, 1, mock.FindStacksMapCalls)
-
 	// Verify file was created.
 	content, err := os.ReadFile(filepath.Join(componentDir, "output.json"))
 	require.NoError(t, err)
@@ -557,14 +525,15 @@ func TestService_ExecuteForAll(t *testing.T) {
 }
 
 func TestService_ExecuteForAll_WithFilters(t *testing.T) {
-	mock := &MockStackProcessor{
-		FindStacksMapFn: func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
-			return map[string]any{
-				"dev-us-west-2":  map[string]any{},
-				"prod-us-west-2": map[string]any{},
-			}, map[string]map[string]any{}, nil
-		},
-	}
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+
+	mock.EXPECT().
+		FindStacksMap(gomock.Any(), false).
+		Return(map[string]any{
+			"dev-us-west-2":  map[string]any{},
+			"prod-us-west-2": map[string]any{},
+		}, map[string]map[string]any{}, nil)
 
 	service := NewService(mock)
 
@@ -575,13 +544,13 @@ func TestService_ExecuteForAll_WithFilters(t *testing.T) {
 	// Filter to only dev stacks.
 	err := service.ExecuteForAll(atmosConfig, []string{"dev-*"}, nil, false, false)
 	require.NoError(t, err)
-
-	// FindStacksMap should be called.
-	assert.Equal(t, 1, mock.FindStacksMapCalls)
 }
 
 func TestService_GenerateFilesForComponent_Disabled(t *testing.T) {
-	mock := &MockStackProcessor{}
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+	// No expectations - mock should not be called.
+
 	service := NewService(mock)
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -600,7 +569,10 @@ func TestService_GenerateFilesForComponent_Disabled(t *testing.T) {
 }
 
 func TestService_GenerateFilesForComponent_NoGenerateSection(t *testing.T) {
-	mock := &MockStackProcessor{}
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+	// No expectations - mock should not be called.
+
 	service := NewService(mock)
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -624,8 +596,10 @@ func TestService_GenerateFilesForComponent_NoGenerateSection(t *testing.T) {
 
 func TestService_GenerateFilesForComponent_Success(t *testing.T) {
 	tempDir := t.TempDir()
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+	// No expectations - mock should not be called for this method.
 
-	mock := &MockStackProcessor{}
 	service := NewService(mock)
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -663,29 +637,29 @@ func TestService_GenerateFilesForComponent_Success(t *testing.T) {
 
 func TestService_ExecuteForAll_WithComponentFilter(t *testing.T) {
 	tempDir := t.TempDir()
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
 
-	mock := &MockStackProcessor{
-		FindStacksMapFn: func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
-			return map[string]any{
-				"dev-us-west-2": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"vpc": map[string]any{
-								"generate": map[string]any{
-									"output.json": map[string]any{"stack": "dev"},
-								},
+	mock.EXPECT().
+		FindStacksMap(gomock.Any(), false).
+		Return(map[string]any{
+			"dev-us-west-2": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": map[string]any{
+							"generate": map[string]any{
+								"output.json": map[string]any{"stack": "dev"},
 							},
-							"rds": map[string]any{
-								"generate": map[string]any{
-									"output.json": map[string]any{"stack": "dev"},
-								},
+						},
+						"rds": map[string]any{
+							"generate": map[string]any{
+								"output.json": map[string]any{"stack": "dev"},
 							},
 						},
 					},
 				},
-			}, map[string]map[string]any{}, nil
-		},
-	}
+			},
+		}, map[string]map[string]any{}, nil)
 
 	service := NewService(mock)
 
@@ -719,27 +693,27 @@ func TestService_ExecuteForAll_WithComponentFilter(t *testing.T) {
 
 func TestService_ExecuteForAll_AbstractComponentSkipped(t *testing.T) {
 	tempDir := t.TempDir()
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
 
-	mock := &MockStackProcessor{
-		FindStacksMapFn: func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
-			return map[string]any{
-				"dev": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"abstract-vpc": map[string]any{
-								"metadata": map[string]any{
-									"type": "abstract",
-								},
-								"generate": map[string]any{
-									"output.json": map[string]any{"stack": "dev"},
-								},
+	mock.EXPECT().
+		FindStacksMap(gomock.Any(), false).
+		Return(map[string]any{
+			"dev": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"abstract-vpc": map[string]any{
+							"metadata": map[string]any{
+								"type": "abstract",
+							},
+							"generate": map[string]any{
+								"output.json": map[string]any{"stack": "dev"},
 							},
 						},
 					},
 				},
-			}, map[string]map[string]any{}, nil
-		},
-	}
+			},
+		}, map[string]map[string]any{}, nil)
 
 	service := NewService(mock)
 
@@ -766,27 +740,27 @@ func TestService_ExecuteForAll_AbstractComponentSkipped(t *testing.T) {
 
 func TestService_ExecuteForAll_ComponentWithMetadataPath(t *testing.T) {
 	tempDir := t.TempDir()
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
 
-	mock := &MockStackProcessor{
-		FindStacksMapFn: func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
-			return map[string]any{
-				"dev": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"vpc-dev": map[string]any{
-								"metadata": map[string]any{
-									"component": "shared/vpc",
-								},
-								"generate": map[string]any{
-									"output.json": map[string]any{"stack": "dev"},
-								},
+	mock.EXPECT().
+		FindStacksMap(gomock.Any(), false).
+		Return(map[string]any{
+			"dev": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc-dev": map[string]any{
+							"metadata": map[string]any{
+								"component": "shared/vpc",
+							},
+							"generate": map[string]any{
+								"output.json": map[string]any{"stack": "dev"},
 							},
 						},
 					},
 				},
-			}, map[string]map[string]any{}, nil
-		},
-	}
+			},
+		}, map[string]map[string]any{}, nil)
 
 	service := NewService(mock)
 
@@ -812,19 +786,20 @@ func TestService_ExecuteForAll_ComponentWithMetadataPath(t *testing.T) {
 }
 
 func TestService_ExecuteForAll_NoTerraformSection(t *testing.T) {
-	mock := &MockStackProcessor{
-		FindStacksMapFn: func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
-			return map[string]any{
-				"dev": map[string]any{
-					"components": map[string]any{
-						"helmfile": map[string]any{
-							"chart": map[string]any{},
-						},
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+
+	mock.EXPECT().
+		FindStacksMap(gomock.Any(), false).
+		Return(map[string]any{
+			"dev": map[string]any{
+				"components": map[string]any{
+					"helmfile": map[string]any{
+						"chart": map[string]any{},
 					},
 				},
-			}, map[string]map[string]any{}, nil
-		},
-	}
+			},
+		}, map[string]map[string]any{}, nil)
 
 	service := NewService(mock)
 
@@ -838,13 +813,14 @@ func TestService_ExecuteForAll_NoTerraformSection(t *testing.T) {
 }
 
 func TestService_ExecuteForAll_InvalidStackSection(t *testing.T) {
-	mock := &MockStackProcessor{
-		FindStacksMapFn: func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
-			return map[string]any{
-				"dev": "not a map",
-			}, map[string]map[string]any{}, nil
-		},
-	}
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+
+	mock.EXPECT().
+		FindStacksMap(gomock.Any(), false).
+		Return(map[string]any{
+			"dev": "not a map",
+		}, map[string]map[string]any{}, nil)
 
 	service := NewService(mock)
 
@@ -858,26 +834,25 @@ func TestService_ExecuteForAll_InvalidStackSection(t *testing.T) {
 }
 
 func TestService_ExecuteForAll_InvalidComponentSection(t *testing.T) {
-	tempDir := t.TempDir()
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
 
-	mock := &MockStackProcessor{
-		FindStacksMapFn: func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
-			return map[string]any{
-				"dev": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"vpc": "not a map", // Invalid component section.
-						},
+	mock.EXPECT().
+		FindStacksMap(gomock.Any(), false).
+		Return(map[string]any{
+			"dev": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": "not a map", // Invalid component section.
 					},
 				},
-			}, map[string]map[string]any{}, nil
-		},
-	}
+			},
+		}, map[string]map[string]any{}, nil)
 
 	service := NewService(mock)
 
 	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
+		BasePath: t.TempDir(),
 	}
 
 	// Should not error when component section is invalid.

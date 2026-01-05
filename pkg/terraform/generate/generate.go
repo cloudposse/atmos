@@ -2,6 +2,8 @@
 // from the generate section in Atmos stack configuration.
 package generate
 
+//go:generate go run go.uber.org/mock/mockgen@latest -typed -destination=mock_stack_processor_test.go -package=generate github.com/cloudposse/atmos/pkg/terraform/generate StackProcessor
+
 import (
 	"path/filepath"
 
