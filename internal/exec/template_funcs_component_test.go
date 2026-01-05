@@ -1,15 +1,18 @@
 package exec
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -88,4 +91,66 @@ func TestComponentFunc(t *testing.T) {
 	assert.Contains(t, y, "bar: component-1-b")
 	// Helmfile components don't have `outputs` (terraform output) - this should result in `<no value>`
 	assert.Contains(t, y, "baz: <no value>")
+}
+
+// TestWrapComponentFuncError_BreaksErrInvalidComponentChain tests that wrapComponentFuncError
+// correctly breaks the ErrInvalidComponent chain to prevent component type fallback.
+// This is a regression test for https://github.com/cloudposse/atmos/issues/1030.
+func TestWrapComponentFuncError_BreaksErrInvalidComponentChain(t *testing.T) {
+	tests := []struct {
+		name            string
+		inputErr        error
+		wantErrDescribe bool
+		wantErrInvalid  bool
+		wantMsgContains string
+	}{
+		{
+			name:            "ErrInvalidComponent chain is broken",
+			inputErr:        errors.Join(errUtils.ErrInvalidComponent, errors.New("component not found")),
+			wantErrDescribe: true,
+			wantErrInvalid:  false, // Chain should be broken
+			wantMsgContains: "atmos.Component",
+		},
+		{
+			name:            "wrapped ErrInvalidComponent chain is broken",
+			inputErr:        errors.Join(errors.New("outer"), errUtils.ErrInvalidComponent),
+			wantErrDescribe: true,
+			wantErrInvalid:  false, // Chain should be broken
+			wantMsgContains: "failed to describe component",
+		},
+		{
+			name:            "other errors preserve chain",
+			inputErr:        errors.New("network timeout"),
+			wantErrDescribe: false,
+			wantErrInvalid:  false,
+			wantMsgContains: "network timeout",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := wrapComponentFuncError("test-comp", "test-stack", tt.inputErr)
+			require.Error(t, result)
+
+			// Check ErrDescribeComponent
+			if tt.wantErrDescribe {
+				assert.ErrorIs(t, result, errUtils.ErrDescribeComponent,
+					"Expected ErrDescribeComponent in error chain")
+			}
+
+			// Check ErrInvalidComponent - should NOT be in chain for broken cases
+			if tt.wantErrInvalid {
+				assert.ErrorIs(t, result, errUtils.ErrInvalidComponent,
+					"Expected ErrInvalidComponent in error chain")
+			} else {
+				assert.NotErrorIs(t, result, errUtils.ErrInvalidComponent,
+					"ErrInvalidComponent should NOT be in error chain (chain should be broken)")
+			}
+
+			// Check message content
+			if tt.wantMsgContains != "" {
+				assert.Contains(t, result.Error(), tt.wantMsgContains)
+			}
+		})
+	}
 }
