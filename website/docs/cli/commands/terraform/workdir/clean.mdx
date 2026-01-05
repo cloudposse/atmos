@@ -2,7 +2,7 @@
 title: atmos terraform workdir clean
 sidebar_label: workdir clean
 sidebar_class_name: command
-id: workdir-clean
+id: clean
 description: Remove workdir(s) to free disk space or force regeneration.
 ---
 import Intro from '@site/src/components/Intro'
@@ -140,8 +140,8 @@ This does **not** affect your remote Terraform state (e.g., S3 backend). However
 
 ## Related Commands
 
-- [`atmos terraform workdir list`](/cli/commands/terraform/workdir-list) - List all workdirs
-- [`atmos terraform workdir show`](/cli/commands/terraform/workdir-show) - Show workdir details
-- [`atmos terraform workdir describe`](/cli/commands/terraform/workdir-describe) - Output workdir as stack manifest
+- [`atmos terraform workdir list`](/cli/commands/terraform/workdir/list) - List all workdirs
+- [`atmos terraform workdir show`](/cli/commands/terraform/workdir/show) - Show workdir details
+- [`atmos terraform workdir describe`](/cli/commands/terraform/workdir/describe) - Output workdir as stack manifest
 - [`atmos terraform clean`](/cli/commands/terraform/clean) - Clean Terraform files from component directories
 - [`atmos terraform init`](/cli/commands/terraform/init) - Initialize and recreate workdir
