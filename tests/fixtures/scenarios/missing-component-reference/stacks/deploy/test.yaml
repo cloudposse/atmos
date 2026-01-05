@@ -1,0 +1,18 @@
+# Stack manifest for testing issue #1030 - silent failure when component is missing.
+# This component references a non-existent component "nonexistent" via atmos.Component().
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    # Component that references a missing component.
+    # This should fail with a clear error, not silently.
+    component-with-missing-ref:
+      metadata:
+        component: mock
+      vars:
+        # This references a component that doesn't exist.
+        # Expected behavior: Error should be returned.
+        # Bug behavior (issue #1030): Silent failure with exit code 1.
+        foo: '{{ (atmos.Component "nonexistent" .stack).vars.some_var }}'
