@@ -3,6 +3,8 @@ package step
 import (
 	"bytes"
 	"context"
+	"runtime"
+	"strings"
 	"sync"
 	"testing"
 
@@ -308,6 +310,44 @@ func TestSpinHandler_BuildResult(t *testing.T) {
 	})
 }
 
+// getPwdCommand returns a platform-specific command to print the current directory.
+func getPwdCommand() string {
+	if runtime.GOOS == "windows" {
+		return "cd"
+	}
+	return "pwd"
+}
+
+// getEchoEnvCommand returns a platform-specific command to echo an environment variable.
+func getEchoEnvCommand(varName string) string {
+	if runtime.GOOS == "windows" {
+		return "echo %" + varName + "%"
+	}
+	return "echo $" + varName
+}
+
+// getTempDir returns a platform-specific temp directory path.
+func getTempDir() string {
+	if runtime.GOOS == "windows" {
+		return "C:\\Windows\\Temp"
+	}
+	return "/tmp"
+}
+
+// assertContainsTempDir checks if the output contains a valid temp directory path.
+func assertContainsTempDir(t *testing.T, output string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		// Windows cd command outputs the current directory.
+		assert.True(t, strings.Contains(strings.ToLower(output), "temp"),
+			"Output should contain temp directory path, got: %s", output)
+	} else {
+		// On macOS, /tmp is symlinked to /private/tmp.
+		assert.True(t, containsStr(output, "/tmp") || containsStr(output, "/private/tmp"),
+			"Output should contain /tmp or /private/tmp, got: %s", output)
+	}
+}
+
 func TestSpinHandler_RunCommand(t *testing.T) {
 	initSpinTestIO(t)
 	handler, ok := Get("spin")
@@ -367,8 +407,8 @@ func TestSpinHandler_RunCommand(t *testing.T) {
 
 	t.Run("command with workdir", func(t *testing.T) {
 		opts := &spinExecOptions{
-			command: "pwd",
-			workDir: "/tmp",
+			command: getPwdCommand(),
+			workDir: getTempDir(),
 			envVars: []string{},
 		}
 		var stdout, stderr bytes.Buffer
@@ -376,14 +416,19 @@ func TestSpinHandler_RunCommand(t *testing.T) {
 
 		err := spinHandler.runCommand(ctx, opts, &stdout, &stderr)
 		require.NoError(t, err)
-		// On macOS, /tmp is symlinked to /private/tmp.
-		assert.True(t, containsStr(stdout.String(), "/tmp") || containsStr(stdout.String(), "/private/tmp"))
+		assertContainsTempDir(t, stdout.String())
 	})
 
 	t.Run("command with env vars", func(t *testing.T) {
+		envVars := []string{"MY_TEST_VAR=test_value"}
+		if runtime.GOOS == "windows" {
+			envVars = append(envVars, "PATH=C:\\Windows\\System32")
+		} else {
+			envVars = append(envVars, "PATH=/usr/bin:/bin")
+		}
 		opts := &spinExecOptions{
-			command: "echo $MY_TEST_VAR",
-			envVars: []string{"MY_TEST_VAR=test_value", "PATH=/usr/bin:/bin"},
+			command: getEchoEnvCommand("MY_TEST_VAR"),
+			envVars: envVars,
 		}
 		var stdout, stderr bytes.Buffer
 		ctx := context.Background()
