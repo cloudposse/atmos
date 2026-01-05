@@ -122,6 +122,9 @@ func TestIsValidDataDir_PathVariations(t *testing.T) {
 }
 
 // TestIsValidDataDir_WindowsRootPath tests Windows root path validation.
+// Note: These tests verify Windows-style path handling. On Unix/macOS, paths like "C:\"
+// are treated as relative paths by filepath.Abs, so they won't trigger the Windows root
+// check. The Windows root rejection (validation.go:28-31) only activates on Windows.
 func TestIsValidDataDir_WindowsRootPath(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -137,6 +140,13 @@ func TestIsValidDataDir_WindowsRootPath(t *testing.T) {
 			name:          "Valid path with drive letter",
 			tfDataDir:     "D:/projects/terraform",
 			shouldBeError: false,
+		},
+		{
+			// On Windows, "C:\" is rejected as a root path.
+			// On Unix/macOS, filepath.Abs treats this as a relative path, so it's accepted.
+			name:          "Windows root path - platform dependent",
+			tfDataDir:     "C:\\",
+			shouldBeError: false, // Only true on Windows; false on Unix/macOS.
 		},
 	}
 

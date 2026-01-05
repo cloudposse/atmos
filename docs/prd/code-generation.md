@@ -381,8 +381,10 @@ When called with --all, generates files for all components across stacks.`,
             components = strings.Split(componentsCsv, ",")
         }
 
-        // Initialize Atmos configuration
-        atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+        // Initialize Atmos configuration with global flags (--base-path, --config, etc.)
+        info := schema.ConfigAndStacksInfo{}
+        flags.ParseGlobalFlags(cmd, v, &info)
+        atmosConfig, err := cfg.InitCliConfig(info, true)
         if err != nil {
             return err
         }
@@ -557,15 +559,18 @@ File generation is implemented as a built-in feature rather than user-configurab
 ### Dedicated Cleanup Command
 
 ```bash
-# Clean generated files for one component
-atmos terraform generate files --clean vpc -s prod-ue2
+# Clean generated files for one component (positional arg before flags)
+atmos terraform generate files vpc -s prod-ue2 --clean
 
 # Clean all generated files
-atmos terraform generate files --clean --all
+atmos terraform generate files --all --clean
 
 # Dry-run to see what would be deleted
-atmos terraform generate files --clean --all --dry-run
+atmos terraform generate files --all --clean --dry-run
 ```
+
+> **Note:** Cobra accepts flags in any position, but placing the positional `component` argument
+> before flags follows standard CLI conventions and improves readability.
 
 ### Integration with `terraform clean`
 
