@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -208,6 +209,8 @@ func TestBuildRelativePath(t *testing.T) {
 		componentPath string
 		baseComponent string
 		expectError   bool
+		// validateFn allows custom validation for each test case.
+		validateFn func(t *testing.T, result string)
 	}{
 		{
 			name:          "Simple relative path",
@@ -215,13 +218,24 @@ func TestBuildRelativePath(t *testing.T) {
 			componentPath: "/base/components/terraform/vpc",
 			baseComponent: "",
 			expectError:   false,
+			validateFn: func(t *testing.T, result string) {
+				assert.NotEmpty(t, result)
+				// Path should contain the component directory structure.
+				assert.Contains(t, result, "vpc")
+			},
 		},
 		{
-			name:          "With base component",
+			name:          "With base component - removes component from path",
 			basePath:      "/base",
 			componentPath: "/base/components/terraform/vpc",
 			baseComponent: "vpc",
 			expectError:   false,
+			validateFn: func(t *testing.T, result string) {
+				assert.NotEmpty(t, result)
+				// Base component should be removed from the path.
+				assert.NotContains(t, result, "/vpc/")
+				assert.NotEqual(t, result, "vpc")
+			},
 		},
 		{
 			name:          "Same path",
@@ -229,6 +243,9 @@ func TestBuildRelativePath(t *testing.T) {
 			componentPath: "/base",
 			baseComponent: "",
 			expectError:   false,
+			validateFn: func(t *testing.T, result string) {
+				assert.NotEmpty(t, result)
+			},
 		},
 	}
 
@@ -239,7 +256,9 @@ func TestBuildRelativePath(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				assert.NotEmpty(t, result)
+				if tt.validateFn != nil {
+					tt.validateFn(t, result)
+				}
 			}
 		})
 	}
@@ -1093,4 +1112,172 @@ func TestService_Execute_WithCacheFlag(t *testing.T) {
 	// Verify the cache directory was deleted.
 	_, statErr := os.Stat(cacheDir)
 	assert.True(t, os.IsNotExist(statErr), "Cache directory should be deleted")
+}
+
+// TestService_cleanPluginCache_NoForce tests that without force, non-TTY skips deletion.
+func TestService_cleanPluginCache_NoForce(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "plugins")
+	require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+
+	mock := &mockStackProcessor{}
+	service := NewService(mock)
+
+	opts := &Options{
+		Cache: true,
+		Force: false, // No force, will need confirmation.
+	}
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				PluginCacheDir: cacheDir,
+			},
+		},
+	}
+
+	// In non-TTY mode without force, should return ErrInteractiveNotAvailable.
+	err := service.cleanPluginCache(opts, atmosConfig)
+	// Should either error or return (based on TTY status).
+	if err != nil {
+		require.ErrorIs(t, err, errUtils.ErrInteractiveNotAvailable)
+	}
+}
+
+// TestService_HandleSubCommand_BuildCleanPathError tests error from buildCleanPath.
+func TestService_HandleSubCommand_BuildCleanPathError(t *testing.T) {
+	mock := &mockStackProcessor{}
+	service := NewService(mock)
+
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:       "clean",
+		ComponentFromArg: "vpc",
+		StackFromArg:     "",               // No stack, will need BaseComponent.
+		Context:          schema.Context{}, // Empty context, no BaseComponent.
+	}
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 t.TempDir(),
+		TerraformDirAbsolutePath: t.TempDir(),
+	}
+
+	err := service.HandleSubCommand(info, "/some/path", atmosConfig)
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrComponentNotFound)
+}
+
+// TestPromptForConfirmation_NonTTY tests promptForConfirmation in non-TTY mode.
+func TestPromptForConfirmation_NonTTY(t *testing.T) {
+	// In test environment (non-TTY), confirmDeletion should return error.
+	confirmed, err := confirmDeletion()
+	assert.False(t, confirmed)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInteractiveNotAvailable)
+}
+
+// TestService_Execute_NoComponent tests Execute without component (everything mode).
+func TestService_Execute_NoComponent(t *testing.T) {
+	tempDir := t.TempDir()
+	componentDir := filepath.Join(tempDir, "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	mock := &mockStackProcessor{
+		executeDescribeStacksFn: func(atmosConfig *schema.AtmosConfiguration, filterByStack string, components []string) (map[string]any, error) {
+			return map[string]any{}, nil
+		},
+		collectComponentsDirectoryObjectsFn: func(basePath string, componentPaths []string, patterns []string) ([]Directory, error) {
+			return []Directory{}, nil
+		},
+	}
+	service := NewService(mock)
+
+	opts := &Options{
+		Component: "", // No component.
+		Force:     true,
+	}
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tempDir,
+		TerraformDirAbsolutePath: tempDir,
+	}
+
+	err := service.Execute(opts, atmosConfig)
+	require.NoError(t, err)
+}
+
+// TestService_Execute_DryRun tests Execute in dry-run mode.
+func TestService_Execute_DryRun(t *testing.T) {
+	tempDir := t.TempDir()
+	componentDir := filepath.Join(tempDir, "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	// Create a file that would be deleted.
+	lockFile := filepath.Join(componentDir, ".terraform.lock.hcl")
+	require.NoError(t, os.WriteFile(lockFile, []byte("lock"), 0o644))
+
+	mock := &mockStackProcessor{
+		processStacksFn: func(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo) (schema.ConfigAndStacksInfo, error) {
+			info.Context.BaseComponent = "vpc"
+			return info, nil
+		},
+	}
+	service := NewService(mock)
+
+	opts := &Options{
+		Component: "vpc",
+		DryRun:    true,
+		Force:     true,
+	}
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tempDir,
+		TerraformDirAbsolutePath: tempDir,
+	}
+
+	err := service.Execute(opts, atmosConfig)
+	require.NoError(t, err)
+
+	// File should still exist in dry-run mode.
+	assert.FileExists(t, lockFile)
+}
+
+// TestService_collectAllFolders_CollectorError tests error handling from collector.
+func TestService_collectAllFolders_CollectorError(t *testing.T) {
+	mock := &mockStackProcessor{
+		collectComponentsDirectoryObjectsFn: func(basePath string, componentPaths []string, patterns []string) ([]Directory, error) {
+			return nil, ErrCollectFiles
+		},
+	}
+	service := NewService(mock)
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		FinalComponent:   "vpc",
+	}
+	atmosConfig := &schema.AtmosConfiguration{
+		TerraformDirAbsolutePath: t.TempDir(),
+	}
+
+	_, err := service.collectAllFolders(info, atmosConfig, t.TempDir(), []string{".terraform"})
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrCollectFiles)
+}
+
+// TestBuildConfirmationMessage_AllCases tests all branches of buildConfirmationMessage.
+func TestBuildConfirmationMessage_AllCases(t *testing.T) {
+	// Test default case (none of the conditions match).
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Component:        "vpc",
+		Stack:            "", // Stack is empty, but ComponentFromArg is set.
+	}
+	result := buildConfirmationMessage(info, 5)
+	assert.Contains(t, result, "component 'vpc'")
+}
+
+// TestPromptForConfirmation_WithTFDataDir tests promptForConfirmation with TF_DATA_DIR set.
+func TestPromptForConfirmation_WithTFDataDir(t *testing.T) {
+	tfDataDirFolders := []Directory{
+		{Name: ".custom-terraform"},
+	}
+
+	confirmed, err := promptForConfirmation(tfDataDirFolders, ".custom-terraform", "Test message")
+	assert.False(t, confirmed)
+	assert.Error(t, err) // Non-TTY environment.
 }

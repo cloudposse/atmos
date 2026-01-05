@@ -39,15 +39,9 @@ func verifyFileDeleted(t *testing.T, files []string) (bool, string) {
 // correctly with ExecuteTerraform. This test must remain in internal/exec because it
 // depends on ExecuteTerraform and other internal/exec functions.
 func TestCLITerraformClean(t *testing.T) {
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
-	}
-
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
-	}
+	// Use t.Setenv for automatic cleanup and better test isolation.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	// Define the work directory and change to it.
 	workDir := "../../tests/fixtures/scenarios/terraform-sub-components"
@@ -59,7 +53,7 @@ func TestCLITerraformClean(t *testing.T) {
 	infoApply.Stack = "staging"
 	infoApply.Component = "component-1"
 	infoApply.ComponentFromArg = "component-1"
-	err = ExecuteTerraform(infoApply)
+	err := ExecuteTerraform(infoApply)
 	require.NoError(t, err)
 	infoApply.Component = "component-2"
 	infoApply.ComponentFromArg = "component-2"

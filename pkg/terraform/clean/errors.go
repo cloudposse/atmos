@@ -19,7 +19,6 @@ var (
 	ErrRefusingToDeleteDir       = errors.New("refusing to delete root directory")
 	ErrRefusingToDelete          = errors.New("refusing to delete directory containing")
 	ErrRootPath                  = errors.New("root path cannot be empty")
-	ErrUserAborted               = errors.New("mission aborted")
 	ErrComponentNotFound         = errors.New("could not find component")
 	ErrRelPath                   = errors.New("error getting relative path")
 )

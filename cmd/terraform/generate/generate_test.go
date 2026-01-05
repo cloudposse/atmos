@@ -254,3 +254,125 @@ func TestFilesFlagEnvVars(t *testing.T) {
 		assert.Contains(t, envVars, expectedEnvVar, "%s should be bound to %s", flagName, expectedEnvVar)
 	}
 }
+
+// TestFilesCommandDescription verifies the command description content.
+func TestFilesCommandDescription(t *testing.T) {
+	// Find the files command.
+	var filesCmdPtr *cobra.Command
+	for _, cmd := range GenerateCmd.Commands() {
+		if cmd.Name() == "files" {
+			filesCmdPtr = cmd
+			break
+		}
+	}
+
+	require.NotNil(t, filesCmdPtr)
+
+	t.Run("short description mentions generate", func(t *testing.T) {
+		assert.Contains(t, filesCmdPtr.Short, "Generate files")
+	})
+
+	t.Run("long description explains usage", func(t *testing.T) {
+		assert.Contains(t, filesCmdPtr.Long, "generate section")
+		assert.Contains(t, filesCmdPtr.Long, "--all")
+		assert.Contains(t, filesCmdPtr.Long, "component")
+	})
+}
+
+// TestFilesCommandFlagTypes verifies that flags have correct types.
+func TestFilesCommandFlagTypes(t *testing.T) {
+	// Find the files command.
+	var filesCmdPtr *cobra.Command
+	for _, cmd := range GenerateCmd.Commands() {
+		if cmd.Name() == "files" {
+			filesCmdPtr = cmd
+			break
+		}
+	}
+	require.NotNil(t, filesCmdPtr)
+
+	// String flags.
+	stringFlags := []string{"stack", "stacks", "components"}
+	for _, flagName := range stringFlags {
+		flag := filesCmdPtr.Flags().Lookup(flagName)
+		require.NotNil(t, flag, "%s flag should exist", flagName)
+		assert.Equal(t, "string", flag.Value.Type(), "%s should be a string flag", flagName)
+	}
+
+	// Bool flags.
+	boolFlags := []string{"all", "dry-run", "clean"}
+	for _, flagName := range boolFlags {
+		flag := filesCmdPtr.Flags().Lookup(flagName)
+		require.NotNil(t, flag, "%s flag should exist", flagName)
+		assert.Equal(t, "bool", flag.Value.Type(), "%s should be a bool flag", flagName)
+	}
+}
+
+// TestFilesCommandFlagDefaults verifies that flags have correct default values.
+func TestFilesCommandFlagDefaults(t *testing.T) {
+	// Find the files command.
+	var filesCmdPtr *cobra.Command
+	for _, cmd := range GenerateCmd.Commands() {
+		if cmd.Name() == "files" {
+			filesCmdPtr = cmd
+			break
+		}
+	}
+	require.NotNil(t, filesCmdPtr)
+
+	tests := []struct {
+		name         string
+		flag         string
+		expectedDef  string
+		expectedType string
+	}{
+		{"stack default is empty", "stack", "", "string"},
+		{"stacks default is empty", "stacks", "", "string"},
+		{"components default is empty", "components", "", "string"},
+		{"all default is false", "all", "false", "bool"},
+		{"dry-run default is false", "dry-run", "false", "bool"},
+		{"clean default is false", "clean", "false", "bool"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flag := filesCmdPtr.Flags().Lookup(tt.flag)
+			require.NotNil(t, flag)
+			assert.Equal(t, tt.expectedDef, flag.DefValue)
+		})
+	}
+}
+
+// TestFilesParserFlags verifies all filesParser flags are properly configured.
+func TestFilesParserFlags(t *testing.T) {
+	registry := filesParser.Registry()
+
+	tests := []struct {
+		name        string
+		flag        string
+		hasShort    bool
+		shorthand   string
+		hasEnvVars  bool
+		envVarCount int
+	}{
+		{"stack flag has shorthand", "stack", true, "s", true, 1},
+		{"all flag has no shorthand", "all", false, "", false, 0},
+		{"stacks flag has env var", "stacks", false, "", true, 1},
+		{"components flag has env var", "components", false, "", true, 1},
+		{"dry-run flag exists", "dry-run", false, "", false, 0},
+		{"clean flag exists", "clean", false, "", false, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.True(t, registry.Has(tt.flag), "registry should have %s flag", tt.flag)
+
+			flagInfo := registry.Get(tt.flag)
+			require.NotNil(t, flagInfo)
+
+			if tt.hasEnvVars {
+				assert.Len(t, flagInfo.GetEnvVars(), tt.envVarCount)
+			}
+		})
+	}
+}

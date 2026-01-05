@@ -72,23 +72,38 @@ func TestIsValidDataDir(t *testing.T) {
 	}
 }
 
-// TestIsValidDataDir_ParentReferenceCheck tests that paths with ".." are rejected.
-func TestIsValidDataDir_ParentReferenceCheck(t *testing.T) {
-	// Note: filepath.Abs resolves ".." references, so this test checks behavior
-	// with raw strings containing ".." that don't get resolved.
+// TestIsValidDataDir_PathVariations tests various path patterns including those with ".." sequences.
+// Note: filepath.Abs normalizes paths before validation, so ".." in path traversal contexts
+// (like "/path/../other") gets resolved. Only embedded ".." that remain after normalization
+// (like "some..path" where ".." is part of the name) will be rejected.
+func TestIsValidDataDir_PathVariations(t *testing.T) {
 	tests := []struct {
 		name          string
 		tfDataDir     string
 		expectedError error
 	}{
 		{
-			name:          "Valid absolute path without parent reference",
+			name:          "Valid absolute path",
 			tfDataDir:     "/home/user/terraform",
 			expectedError: nil,
 		},
 		{
 			name:          "Valid relative path",
 			tfDataDir:     "subdir/terraform-data",
+			expectedError: nil,
+		},
+		{
+			// Embedded ".." in filename (not path traversal) - rejected because
+			// ".." remains in the absolute path after normalization.
+			name:          "Embedded double dots in name - rejected",
+			tfDataDir:     "some..path",
+			expectedError: ErrRefusingToDelete,
+		},
+		{
+			// Path traversal ".." gets resolved by filepath.Abs, so the final path
+			// is clean and valid (e.g., "/path/with/../dots" becomes "/path/dots").
+			name:          "Path traversal resolved by filepath.Abs - accepted",
+			tfDataDir:     "/path/with/../dots",
 			expectedError: nil,
 		},
 	}
@@ -99,6 +114,37 @@ func TestIsValidDataDir_ParentReferenceCheck(t *testing.T) {
 			if tt.expectedError != nil {
 				require.Error(t, err)
 				require.ErrorIs(t, err, tt.expectedError)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestIsValidDataDir_WindowsRootPath tests Windows root path validation.
+func TestIsValidDataDir_WindowsRootPath(t *testing.T) {
+	tests := []struct {
+		name          string
+		tfDataDir     string
+		shouldBeError bool
+	}{
+		{
+			name:          "Valid Windows-like path",
+			tfDataDir:     "C:/Users/terraform",
+			shouldBeError: false,
+		},
+		{
+			name:          "Valid path with drive letter",
+			tfDataDir:     "D:/projects/terraform",
+			shouldBeError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := IsValidDataDir(tt.tfDataDir)
+			if tt.shouldBeError {
+				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 			}

@@ -241,6 +241,7 @@ func processComponentForGenerate(
 
 	_, genErr := GenerateFiles(generateSection, componentDir, templateContext, config)
 	if genErr != nil {
+		// Log error but continue processing other components to maximize successful generations.
 		log.Error("Error generating files", logKeyComponent, componentName, logKeyStack, stackFileName, "error", genErr)
 	}
 }
@@ -392,6 +393,7 @@ func GetComponentPath(componentSection map[string]any, componentName string) str
 }
 
 // MatchesStackFilter checks if a stack matches the filter patterns.
+// Uses filepath.Match which supports glob patterns including trailing * for prefix matching.
 func MatchesStackFilter(stackName string, filters []string) bool {
 	defer perf.Track(nil, "generate.MatchesStackFilter")()
 
@@ -399,13 +401,6 @@ func MatchesStackFilter(stackName string, filters []string) bool {
 		matched, err := filepath.Match(filter, stackName)
 		if err == nil && matched {
 			return true
-		}
-		// Also check if the filter matches as a prefix.
-		if len(filter) > 0 && filter[len(filter)-1] == '*' {
-			prefix := filter[:len(filter)-1]
-			if len(stackName) >= len(prefix) && stackName[:len(prefix)] == prefix {
-				return true
-			}
 		}
 	}
 	return false

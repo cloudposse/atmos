@@ -20,8 +20,8 @@ func IsValidDataDir(tfDataDir string) error {
 		return fmt.Errorf("%w: %w", ErrResolveEnvDir, err)
 	}
 
-	// Check for root path on both Unix and Windows systems.
-	if absTFDataDir == "/" || absTFDataDir == filepath.Clean("/") {
+	// Check for root path on Unix systems.
+	if absTFDataDir == "/" {
 		return fmt.Errorf("%w: %s", ErrRefusingToDeleteDir, absTFDataDir)
 	}
 

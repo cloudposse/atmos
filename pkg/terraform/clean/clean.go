@@ -28,6 +28,20 @@ const (
 	SkipTerraformLockFileFlag = "--skip-lock-file"
 )
 
+// File and directory patterns for Terraform artifacts.
+const (
+	// TerraformDir is the standard Terraform working directory.
+	TerraformDir = ".terraform"
+	// TerraformLockFile is the dependency lock file.
+	TerraformLockFile = ".terraform.lock.hcl"
+	// TerraformVarFileGlob is the glob pattern for generated variable files.
+	TerraformVarFileGlob = "*.tfvars.json"
+	// TerraformStateDir is the directory for local state files.
+	TerraformStateDir = "terraform.tfstate.d"
+	// BackendConfigFile is the auto-generated backend configuration file.
+	BackendConfigFile = "backend.tf.json"
+)
+
 // StackProcessor defines the interface for stack operations needed by clean.
 type StackProcessor interface {
 	// ProcessStacks processes stacks and returns component configuration.
@@ -283,18 +297,18 @@ func buildRelativePath(basePath, componentPath string, baseComponent string) (st
 //nolint:gocritic // hugeParam: value type is required as info is modified within the function
 func (s *Service) initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) []string {
 	if info.ComponentFromArg == "" {
-		return []string{".terraform", ".terraform.lock.hcl", "*.tfvars.json", "terraform.tfstate.d"}
+		return []string{TerraformDir, TerraformLockFile, TerraformVarFileGlob, TerraformStateDir}
 	}
 	varFile := s.processor.ConstructTerraformComponentVarfileName(&info)
 	planFile := s.processor.ConstructTerraformComponentPlanfileName(&info)
-	files := []string{".terraform", varFile, planFile}
+	files := []string{TerraformDir, varFile, planFile}
 
 	if !slices.Contains(info.AdditionalArgsAndFlags, SkipTerraformLockFileFlag) {
-		files = append(files, ".terraform.lock.hcl")
+		files = append(files, TerraformLockFile)
 	}
 
 	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
-		files = append(files, "backend.tf.json")
+		files = append(files, BackendConfigFile)
 	}
 
 	// Include auto-generated files from the generate section.
@@ -442,7 +456,7 @@ func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 		Value(&confirm).WithTheme(t)
 	if err := confirmPrompt.Run(); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
-			return confirm, fmt.Errorf("%w", ErrUserAborted)
+			return confirm, fmt.Errorf("%w", errUtils.ErrUserAborted)
 		}
 		return confirm, err
 	}

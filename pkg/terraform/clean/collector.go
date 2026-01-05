@@ -183,14 +183,14 @@ func FindFoldersNamesWithPrefix(root, prefix string) ([]string, error) {
 func GetStackTerraformStateFolder(componentPath string, stack string) ([]Directory, error) {
 	defer perf.Track(nil, "clean.GetStackTerraformStateFolder")()
 
-	tfStateFolderPath := filepath.Join(componentPath, "terraform.tfstate.d")
+	tfStateFolderPath := filepath.Join(componentPath, TerraformStateDir)
 	tfStateFolderNames, err := FindFoldersNamesWithPrefix(tfStateFolderPath, stack)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrFailedFoundStack, err)
 	}
 	var stackTfStateFolders []Directory
 	for _, folderName := range tfStateFolderNames {
-		tfStateFolderPath := filepath.Join(componentPath, "terraform.tfstate.d", folderName)
+		tfStateFolderPath := filepath.Join(componentPath, TerraformStateDir, folderName)
 		// Check if exists.
 		if _, err := os.Stat(tfStateFolderPath); os.IsNotExist(err) {
 			continue

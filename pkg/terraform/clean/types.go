@@ -3,18 +3,26 @@ package clean
 // EnvTFDataDir is the environment variable name for TF_DATA_DIR.
 const EnvTFDataDir = "TF_DATA_DIR"
 
-// ObjectInfo contains information about a file or directory object.
+// ObjectInfo contains information about a file or directory object discovered during clean operations.
 type ObjectInfo struct {
-	FullPath     string
+	// FullPath is the absolute path to the object.
+	FullPath string
+	// RelativePath is the path relative to the component directory.
 	RelativePath string
-	Name         string
-	IsDir        bool
+	// Name is the base name of the object.
+	Name string
+	// IsDir indicates whether the object is a directory.
+	IsDir bool
 }
 
-// Directory represents a directory with its files.
+// Directory represents a directory discovered during clean operations along with its contained files.
 type Directory struct {
-	Name         string
-	FullPath     string
+	// Name is the base name of the directory.
+	Name string
+	// FullPath is the absolute path to the directory.
+	FullPath string
+	// RelativePath is the path relative to the component directory.
 	RelativePath string
-	Files        []ObjectInfo
+	// Files contains the list of files and subdirectories within this directory.
+	Files []ObjectInfo
 }

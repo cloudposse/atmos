@@ -271,7 +271,8 @@ func TestExecuteCleanDeletion_DeletesFoldersAndTFDataDir(t *testing.T) {
 func TestHandleTFDataDir_NoEnvVar(t *testing.T) {
 	tempDir := t.TempDir()
 
-	// Ensure TF_DATA_DIR is not set (t.Setenv with empty string effectively unsets).
+	// Set TF_DATA_DIR to empty string to trigger the early return in handleTFDataDir.
+	// This achieves the same behavior as if the variable were unset.
 	t.Setenv(EnvTFDataDir, "")
 
 	// Should do nothing and not panic.

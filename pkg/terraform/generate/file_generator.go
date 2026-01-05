@@ -23,6 +23,15 @@ import (
 // filePermissions is the default permission mode for generated config files.
 const filePermissions = 0o644
 
+// File extension constants for serialization format detection.
+const (
+	ExtJSON = ".json"
+	ExtYAML = ".yaml"
+	ExtYML  = ".yml"
+	ExtTF   = ".tf"
+	ExtHCL  = ".hcl"
+)
+
 // GenerateConfig contains configuration for file generation.
 type GenerateConfig struct {
 	// DryRun when true, shows what would be generated without writing.
@@ -207,11 +216,11 @@ func serializeByExtension(filename string, content map[string]any, templateConte
 	}
 
 	switch ext {
-	case ".json":
+	case ExtJSON:
 		return json.MarshalIndent(rendered, "", "  ")
-	case ".yaml", ".yml":
+	case ExtYAML, ExtYML:
 		return serializeToYAML(rendered)
-	case ".hcl", ".tf":
+	case ExtHCL, ExtTF:
 		return serializeToHCL(rendered)
 	default:
 		// Default to JSON for unknown extensions.
@@ -317,11 +326,14 @@ func serializeToHCL(content map[string]any) ([]byte, error) {
 }
 
 // writeHCLBlock writes content to an HCL body.
+// Note: All nested maps are treated as HCL blocks (e.g., locals {}, resource {}),
+// not as map attribute values. This matches typical Terraform configuration patterns
+// but may not be suitable for all HCL use cases.
 func writeHCLBlock(body *hclwrite.Body, content map[string]any) error {
 	for key, value := range content {
 		switch v := value.(type) {
 		case map[string]any:
-			// Create a block for nested maps.
+			// Create a block for nested maps (e.g., locals {}, provider {}).
 			block := body.AppendNewBlock(key, nil)
 			if err := writeHCLBlock(block.Body(), v); err != nil {
 				return err
