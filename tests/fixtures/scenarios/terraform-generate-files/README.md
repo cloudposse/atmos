@@ -58,6 +58,24 @@ atmos terraform generate files vpc -s dev --clean
 
 After running `atmos terraform generate files vpc -s dev`:
 
-- `components/terraform/vpc/locals.tf` - HCL locals block
-- `components/terraform/vpc/metadata.json` - JSON metadata
-- `components/terraform/vpc/README.md` - Markdown documentation
+- `components/terraform/vpc/locals.tf` — HCL locals block
+- `components/terraform/vpc/metadata.json` — JSON metadata
+- `components/terraform/vpc/config.yaml` — YAML configuration
+- `components/terraform/vpc/README.md` — Markdown documentation
+
+## Cleanup
+
+Generated files are excluded from version control via `.gitignore`. To clean up generated files after testing:
+
+```bash
+# Clean generated files for a specific component
+atmos terraform generate files vpc -s dev --clean
+
+# Or manually remove generated files
+rm -f components/terraform/vpc/locals.tf
+rm -f components/terraform/vpc/metadata.json
+rm -f components/terraform/vpc/config.yaml
+rm -f components/terraform/vpc/README.md
+```
+
+Integration tests should use `--clean` after each test run to prevent state pollution.
