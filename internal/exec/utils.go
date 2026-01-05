@@ -390,9 +390,29 @@ func findComponentInStacks(
 			continue
 		}
 
+		// Extract manifest name if present (the 'name' field in the stack manifest).
+		var stackManifestName string
+		if stackSection, ok := stacksMap[stackName].(map[string]any); ok {
+			if nameValue, ok := stackSection[cfg.NameSectionName].(string); ok {
+				stackManifestName = nameValue
+			}
+		}
+
 		// Check if we've found the stack.
-		if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
+		// Match against either:
+		// 1. ContextPrefix (derived from name_template or name_pattern)
+		// 2. Stack manifest name (the 'name' field in the manifest, if present)
+		// 3. Stack filename (for backward compatibility)
+		stackMatches := configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix ||
+			(stackManifestName != "" && configAndStacksInfo.Stack == stackManifestName) ||
+			configAndStacksInfo.Stack == stackName
+
+		if stackMatches {
 			configAndStacksInfo.StackFile = stackName
+			// Set StackManifestName if we matched via manifest name.
+			if stackManifestName != "" {
+				configAndStacksInfo.StackManifestName = stackManifestName
+			}
 			foundConfigAndStacksInfo = *configAndStacksInfo
 			foundStackCount++
 			foundStacks = append(foundStacks, stackName)
