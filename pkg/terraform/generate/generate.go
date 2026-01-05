@@ -393,14 +393,25 @@ func GetComponentPath(componentSection map[string]any, componentName string) str
 }
 
 // MatchesStackFilter checks if a stack matches the filter patterns.
-// Uses filepath.Match which supports glob patterns including trailing * for prefix matching.
+// It checks both the full stack file path and the basename, allowing users to filter by
+// either "deploy/dev" (full path) or "dev" (basename).
+// Uses filepath.Match which supports glob patterns.
 func MatchesStackFilter(stackName string, filters []string) bool {
 	defer perf.Track(nil, "generate.MatchesStackFilter")()
 
+	// Get the basename for user-friendly matching (e.g., "deploy/dev" -> "dev").
+	baseName := filepath.Base(stackName)
+
 	for _, filter := range filters {
-		matched, err := filepath.Match(filter, stackName)
-		if err == nil && matched {
+		// Check against the full stack file path.
+		if matched, err := filepath.Match(filter, stackName); err == nil && matched {
 			return true
+		}
+		// Check against the basename for user-friendly matching.
+		if baseName != stackName {
+			if matched, err := filepath.Match(filter, baseName); err == nil && matched {
+				return true
+			}
 		}
 	}
 	return false

@@ -343,6 +343,36 @@ func TestMatchesStackFilter(t *testing.T) {
 			filters:   []string{"prod-*", "staging-*", "dev-*"},
 			expected:  true,
 		},
+		{
+			name:      "basename match - simple filter matches basename of path",
+			stackName: "deploy/dev",
+			filters:   []string{"dev"},
+			expected:  true,
+		},
+		{
+			name:      "basename match - nested path",
+			stackName: "stacks/deploy/prod",
+			filters:   []string{"prod"},
+			expected:  true,
+		},
+		{
+			name:      "basename match - full path also works",
+			stackName: "deploy/dev",
+			filters:   []string{"deploy/dev"},
+			expected:  true,
+		},
+		{
+			name:      "basename match - glob on full path",
+			stackName: "deploy/dev",
+			filters:   []string{"*/dev"},
+			expected:  true,
+		},
+		{
+			name:      "basename match - no match when filter doesn't match basename or path",
+			stackName: "deploy/dev",
+			filters:   []string{"staging"},
+			expected:  false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -589,6 +619,269 @@ func TestService_GenerateFilesForComponent_NoGenerateSection(t *testing.T) {
 
 	// Should return nil when no generate section.
 	err := service.GenerateFilesForComponent(atmosConfig, info, "/tmp")
+	require.NoError(t, err)
+}
+
+func TestService_GenerateFilesForComponent_Success(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mock := &MockStackProcessor{}
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				AutoGenerateFiles: true,
+			},
+		},
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "dev-us-west-2",
+		ComponentSection: map[string]any{
+			"generate": map[string]any{
+				"auto-output.json": map[string]any{
+					"generated": true,
+				},
+			},
+		},
+		ComponentVarsSection: map[string]any{
+			"name": "test-vpc",
+		},
+	}
+
+	// Should successfully generate files.
+	err := service.GenerateFilesForComponent(atmosConfig, info, tempDir)
+	require.NoError(t, err)
+
+	// Verify file was created.
+	content, err := os.ReadFile(filepath.Join(tempDir, "auto-output.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "generated")
+}
+
+func TestService_ExecuteForAll_WithComponentFilter(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mock := &MockStackProcessor{
+		FindStacksMapFn: func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
+			return map[string]any{
+				"dev-us-west-2": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"generate": map[string]any{
+									"output.json": map[string]any{"stack": "dev"},
+								},
+							},
+							"rds": map[string]any{
+								"generate": map[string]any{
+									"output.json": map[string]any{"stack": "dev"},
+								},
+							},
+						},
+					},
+				},
+			}, map[string]map[string]any{}, nil
+		},
+	}
+
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Create the component directories.
+	vpcDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	rdsDir := filepath.Join(tempDir, "components", "terraform", "rds")
+	require.NoError(t, os.MkdirAll(vpcDir, 0o755))
+	require.NoError(t, os.MkdirAll(rdsDir, 0o755))
+
+	// Filter to only vpc component.
+	err := service.ExecuteForAll(atmosConfig, nil, []string{"vpc"}, false, false)
+	require.NoError(t, err)
+
+	// Verify vpc file was created.
+	_, err = os.Stat(filepath.Join(vpcDir, "output.json"))
+	assert.NoError(t, err)
+
+	// Verify rds file was NOT created (filtered out).
+	_, err = os.Stat(filepath.Join(rdsDir, "output.json"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestService_ExecuteForAll_AbstractComponentSkipped(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mock := &MockStackProcessor{
+		FindStacksMapFn: func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
+			return map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"abstract-vpc": map[string]any{
+								"metadata": map[string]any{
+									"type": "abstract",
+								},
+								"generate": map[string]any{
+									"output.json": map[string]any{"stack": "dev"},
+								},
+							},
+						},
+					},
+				},
+			}, map[string]map[string]any{}, nil
+		},
+	}
+
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Create the component directory.
+	componentDir := filepath.Join(tempDir, "components", "terraform", "abstract-vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	err := service.ExecuteForAll(atmosConfig, nil, nil, false, false)
+	require.NoError(t, err)
+
+	// Verify file was NOT created (abstract component skipped).
+	_, err = os.Stat(filepath.Join(componentDir, "output.json"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+func TestService_ExecuteForAll_ComponentWithMetadataPath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mock := &MockStackProcessor{
+		FindStacksMapFn: func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
+			return map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc-dev": map[string]any{
+								"metadata": map[string]any{
+									"component": "shared/vpc",
+								},
+								"generate": map[string]any{
+									"output.json": map[string]any{"stack": "dev"},
+								},
+							},
+						},
+					},
+				},
+			}, map[string]map[string]any{}, nil
+		},
+	}
+
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Create the component directory using metadata component path.
+	componentDir := filepath.Join(tempDir, "components", "terraform", "shared", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	err := service.ExecuteForAll(atmosConfig, nil, nil, false, false)
+	require.NoError(t, err)
+
+	// Verify file was created in the correct path.
+	_, err = os.Stat(filepath.Join(componentDir, "output.json"))
+	assert.NoError(t, err)
+}
+
+func TestService_ExecuteForAll_NoTerraformSection(t *testing.T) {
+	mock := &MockStackProcessor{
+		FindStacksMapFn: func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
+			return map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"helmfile": map[string]any{
+							"chart": map[string]any{},
+						},
+					},
+				},
+			}, map[string]map[string]any{}, nil
+		},
+	}
+
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	// Should not error when there's no terraform section.
+	err := service.ExecuteForAll(atmosConfig, nil, nil, false, false)
+	require.NoError(t, err)
+}
+
+func TestService_ExecuteForAll_InvalidStackSection(t *testing.T) {
+	mock := &MockStackProcessor{
+		FindStacksMapFn: func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
+			return map[string]any{
+				"dev": "not a map",
+			}, map[string]map[string]any{}, nil
+		},
+	}
+
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	// Should not error when stack section is invalid.
+	err := service.ExecuteForAll(atmosConfig, nil, nil, false, false)
+	require.NoError(t, err)
+}
+
+func TestService_ExecuteForAll_InvalidComponentSection(t *testing.T) {
+	tempDir := t.TempDir()
+
+	mock := &MockStackProcessor{
+		FindStacksMapFn: func(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, error) {
+			return map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": "not a map", // Invalid component section.
+						},
+					},
+				},
+			}, map[string]map[string]any{}, nil
+		},
+	}
+
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+	}
+
+	// Should not error when component section is invalid.
+	err := service.ExecuteForAll(atmosConfig, nil, nil, false, false)
 	require.NoError(t, err)
 }
 

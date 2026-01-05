@@ -384,3 +384,344 @@ func TestGenerateFiles_HCLMixedTypes(t *testing.T) {
 	assert.Contains(t, contentStr, "mixed_list")
 	assert.Contains(t, contentStr, "mixed_map")
 }
+
+func TestGenerateFiles_CleanDryRun(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a file first.
+	testFile := filepath.Join(tempDir, "test.txt")
+	err := os.WriteFile(testFile, []byte("content"), 0o644)
+	require.NoError(t, err)
+
+	generateSection := map[string]any{
+		"test.txt": "content",
+	}
+
+	config := GenerateConfig{
+		DryRun: true,
+		Clean:  true,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, nil, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	assert.True(t, results[0].Skipped)
+
+	// Verify file was NOT deleted.
+	_, err = os.Stat(testFile)
+	assert.NoError(t, err)
+}
+
+func TestGenerateFiles_CleanNonExistentFile(t *testing.T) {
+	tempDir := t.TempDir()
+
+	generateSection := map[string]any{
+		"nonexistent.txt": "content",
+	}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  true,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, nil, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	// Should be skipped since file doesn't exist.
+	assert.True(t, results[0].Skipped)
+}
+
+func TestGenerateFiles_YMLExtension(t *testing.T) {
+	tempDir := t.TempDir()
+
+	generateSection := map[string]any{
+		"config.yml": map[string]any{
+			"name":    "test",
+			"enabled": true,
+		},
+	}
+
+	templateContext := map[string]any{}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, templateContext, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	// Verify file exists and contains YAML (same as .yaml).
+	content, err := os.ReadFile(filepath.Join(tempDir, "config.yml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "name: test")
+}
+
+func TestGenerateFiles_HCLExtension(t *testing.T) {
+	tempDir := t.TempDir()
+
+	generateSection := map[string]any{
+		"backend.hcl": map[string]any{
+			"backend": map[string]any{
+				"type": "s3",
+			},
+		},
+	}
+
+	templateContext := map[string]any{}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, templateContext, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	content, err := os.ReadFile(filepath.Join(tempDir, "backend.hcl"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "backend")
+}
+
+func TestGenerateFiles_UnknownExtensionDefaultsToJSON(t *testing.T) {
+	tempDir := t.TempDir()
+
+	generateSection := map[string]any{
+		"config.xyz": map[string]any{
+			"key": "value",
+		},
+	}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, nil, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	// Unknown extension should default to JSON.
+	content, err := os.ReadFile(filepath.Join(tempDir, "config.xyz"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), `"key": "value"`)
+}
+
+func TestGenerateFiles_TemplateError(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Invalid template syntax.
+	generateSection := map[string]any{
+		"invalid.txt": "{{ .invalid | nonexistent }}",
+	}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, nil, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	// Should have error in result.
+	assert.Error(t, results[0].Error)
+	assert.Contains(t, results[0].Error.Error(), "template")
+}
+
+func TestGenerateFiles_UnsupportedContentType(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Unsupported content type (not string or map).
+	generateSection := map[string]any{
+		"test.txt": 12345,
+	}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, nil, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	// Should have error in result.
+	assert.Error(t, results[0].Error)
+	assert.Contains(t, results[0].Error.Error(), "unsupported content type")
+}
+
+func TestGenerateFiles_NestedArrayTemplates(t *testing.T) {
+	tempDir := t.TempDir()
+
+	generateSection := map[string]any{
+		"config.json": map[string]any{
+			"items": []any{
+				map[string]any{"name": "{{ .item1 }}"},
+				map[string]any{"name": "{{ .item2 }}"},
+			},
+		},
+	}
+
+	templateContext := map[string]any{
+		"item1": "first",
+		"item2": "second",
+	}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, templateContext, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.NoError(t, results[0].Error)
+
+	content, err := os.ReadFile(filepath.Join(tempDir, "config.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "first")
+	assert.Contains(t, string(content), "second")
+}
+
+func TestGenerateFiles_EmptyMap(t *testing.T) {
+	tempDir := t.TempDir()
+
+	generateSection := map[string]any{
+		"empty.json": map[string]any{},
+	}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, nil, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	content, err := os.ReadFile(filepath.Join(tempDir, "empty.json"))
+	require.NoError(t, err)
+	assert.Equal(t, "{}", string(content))
+}
+
+func TestGenerateFiles_NilValue(t *testing.T) {
+	tempDir := t.TempDir()
+
+	generateSection := map[string]any{
+		"null.json": map[string]any{
+			"value": nil,
+		},
+	}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, nil, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+
+	content, err := os.ReadFile(filepath.Join(tempDir, "null.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "null")
+}
+
+func TestGenerateFiles_Int64Value(t *testing.T) {
+	tempDir := t.TempDir()
+
+	generateSection := map[string]any{
+		"numbers.tf": map[string]any{
+			"locals": map[string]any{
+				"big_number": int64(9223372036854775807),
+			},
+		},
+	}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, nil, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.NoError(t, results[0].Error)
+}
+
+func TestGenerateFiles_MultipleFiles(t *testing.T) {
+	tempDir := t.TempDir()
+
+	generateSection := map[string]any{
+		"file1.json": map[string]any{"key1": "value1"},
+		"file2.yaml": map[string]any{"key2": "value2"},
+		"file3.txt":  "plain text",
+	}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, nil, config)
+	require.NoError(t, err)
+	require.Len(t, results, 3)
+
+	// All files should be created.
+	for _, result := range results {
+		assert.True(t, result.Created)
+		assert.NoError(t, result.Error)
+	}
+}
+
+func TestGenerateFiles_NestedArraysInHCL(t *testing.T) {
+	tempDir := t.TempDir()
+
+	generateSection := map[string]any{
+		"arrays.tf": map[string]any{
+			"locals": map[string]any{
+				"nested": []any{
+					[]any{"a", "b"},
+					[]any{"c", "d"},
+				},
+			},
+		},
+	}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, nil, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.NoError(t, results[0].Error)
+}
+
+func TestGenerateFiles_EmptySlice(t *testing.T) {
+	tempDir := t.TempDir()
+
+	generateSection := map[string]any{
+		"empty_array.tf": map[string]any{
+			"locals": map[string]any{
+				"empty_list": []any{},
+			},
+		},
+	}
+
+	config := GenerateConfig{
+		DryRun: false,
+		Clean:  false,
+	}
+
+	results, err := GenerateFiles(generateSection, tempDir, nil, config)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.NoError(t, results[0].Error)
+}

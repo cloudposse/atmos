@@ -10,7 +10,6 @@ components:
     deploy_run_init: true
     init_run_reconfigure: true
     auto_generate_backend_file: false
-    # Enable auto generation of files during terraform commands
     auto_generate_files: false
 
 stacks:
@@ -19,7 +18,7 @@ stacks:
     - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
+  name_template: "{{ .vars.stage }}"
 
 logs:
   file: "/dev/stderr"
