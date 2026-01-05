@@ -35,6 +35,7 @@ type ComponentProcessorOptions struct {
 	// Terraform-specific options.
 	TerraformProviders              map[string]any
 	GlobalAndTerraformHooks         map[string]any
+	GlobalAndTerraformGenerate      map[string]any
 	GlobalBackendType               string
 	GlobalBackendSection            map[string]any
 	GlobalRemoteStateBackendType    string

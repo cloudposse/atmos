@@ -11,9 +11,21 @@ Atmos now supports declarative file generation for Terraform components via the 
 
 ## What Changed
 
-A new `generate` section can be defined at the component level to declaratively specify files that should be generated alongside your Terraform components. This extends Atmos's existing pattern of generating backend configuration files to support arbitrary auxiliary files.
+A new `generate` section can be defined at multiple levels to declaratively specify files that should be generated alongside your Terraform components. This extends Atmos's existing pattern of generating backend configuration files to support arbitrary auxiliary files.
 
 ```yaml
+# Level 1: Global level (applies to all components)
+generate:
+  "global-context.json":
+    level: "global"
+
+# Level 2: Component type level (applies to all terraform components)
+terraform:
+  generate:
+    "terraform-context.json":
+      level: "terraform-type"
+
+# Level 3-4: Base component and component levels
 components:
   terraform:
     vpc:
@@ -29,13 +41,25 @@ components:
         README.md: |
           # VPC Component
           Environment: {{ .vars.environment }}
+
+# Level 5: Overrides level (highest priority, file-scoped)
+terraform:
+  overrides:
+    generate:
+      "override-context.json":
+        level: "overrides"
 ```
 
 ### Key Features
 
 - **Extension-aware serialization**: `.json`, `.yaml`, `.yml` files are serialized in their respective formats; `.tf` and `.hcl` files generate valid HCL
 - **Go template support**: String values are processed as Go templates with full access to component context
-- **Inheritance**: The `generate` section inherits from base components, following the same merge semantics as `vars`, `settings`, and other sections
+- **5-level inheritance**: The `generate` section follows Atmos's standard inheritance model with merge from lowest to highest priority:
+  1. **Global level** (`generate:` at stack root)
+  2. **Component type level** (`terraform.generate:`)
+  3. **Base component level** (via `metadata.inherits`)
+  4. **Component level** (`components.terraform.vpc.generate`)
+  5. **Overrides level** (`terraform.overrides.generate:`) - file-scoped, highest priority
 - **CLI integration**: New `atmos terraform generate files` command with `--all`, `--dry-run`, and `--clean` flags
 - **Auto-generation**: Enable `auto_generate_files: true` in `atmos.yaml` to automatically generate files during terraform commands
 - **Clean integration**: Generated files are automatically cleaned up by `atmos terraform clean`

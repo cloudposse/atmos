@@ -133,12 +133,18 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	}
 
 	// Terraform-specific: merge generate section using deferred merge.
+	// Merge order (lowest to highest priority):
+	// 1. Global + Terraform-level generate (stack-level `generate:` + `terraform.generate:`)
+	// 2. Base component generate (from metadata.inherits)
+	// 3. Component generate (component-specific generate section)
+	// 4. Component overrides generate (from overrides section)
 	var finalComponentGenerate map[string]any
 	if opts.ComponentType == cfg.TerraformComponentType {
 		var generateCtx *m.DeferredMergeContext
 		finalComponentGenerate, generateCtx, err = m.MergeWithDeferred(
 			atmosConfig,
 			[]map[string]any{
+				opts.GlobalAndTerraformGenerate,
 				result.BaseComponentGenerate,
 				result.ComponentGenerate,
 				result.ComponentOverridesGenerate,

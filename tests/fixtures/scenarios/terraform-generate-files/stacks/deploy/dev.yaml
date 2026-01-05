@@ -1,9 +1,38 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 
+import:
+  - catalog/vpc-defaults
+
 vars:
   stage: dev
   namespace: test
   environment: development
+
+# Level 1: Global generate section (applies to all components)
+generate:
+  # Global file generated for all components
+  "global-context.json":
+    level: "global"
+    stage: "{{ .vars.stage }}"
+    namespace: "{{ .vars.namespace }}"
+
+# Component type level configuration
+terraform:
+  # Level 2: Terraform-level generate section (applies to all terraform components)
+  generate:
+    # Terraform-specific file for all terraform components
+    "terraform-context.json":
+      level: "terraform-type"
+      stage: "{{ .vars.stage }}"
+      component_type: "terraform"
+  # Level 5: Overrides section (highest priority, file-scoped, applies to all terraform components in this file)
+  overrides:
+    generate:
+      # This overrides file will be generated for all terraform components
+      "override-context.json":
+        level: "overrides"
+        stage: "{{ .vars.stage }}"
+        applied_via: "terraform-overrides"
 
 components:
   terraform:
@@ -18,20 +47,20 @@ components:
         region: "us-east-1"
       generate:
         # HCL file generation - locals block
-        locals.tf:
+        "locals.tf":
           locals:
             environment: "{{ .vars.environment }}"
             vpc_name: "{{ .vars.vpc_name }}"
             atmos_component: "{{ .atmos_component }}"
             atmos_stack: "{{ .atmos_stack }}"
         # JSON file generation
-        metadata.json:
+        "metadata.json":
           component: "{{ .component }}"
           stack: "{{ .atmos_stack }}"
           namespace: "{{ .namespace }}"
           environment: "{{ .vars.environment }}"
         # String template for README
-        README.md: |
+        "README.md": |
           # VPC Component
 
           Environment: {{ .vars.environment }}
@@ -39,6 +68,56 @@ components:
           Component: {{ .component }}
           Region: {{ .vars.region }}
           CIDR: {{ .vars.cidr_block }}
+
+    # VPC component that inherits from vpc-defaults
+    # Tests Level 3 (base component) inheritance
+    # Should also inherit Level 1 (global) and Level 2 (terraform-level) generate files
+    vpc-inherited:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc-defaults
+      vars:
+        vpc_name: "dev-vpc-inherited"
+        environment: "development"
+      # No generate section - should inherit from:
+      # 1. global generate section
+      # 2. terraform.generate section
+      # 3. vpc-defaults base component generate section
+
+    # VPC component that inherits and overrides
+    # Tests all 4 levels:
+    # 1. Global generate (inherited)
+    # 2. Terraform-level generate (inherited)
+    # 3. Base component generate from vpc-defaults (inherited)
+    # 4. Component-level generate (defined here, overrides base)
+    vpc-override:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc-defaults
+      vars:
+        vpc_name: "dev-vpc-override"
+        environment: "development-override"
+        region: "us-west-2"
+      generate:
+        # Override the locals.tf from base component
+        "locals.tf":
+          locals:
+            environment: "{{ .vars.environment }}"
+            vpc_name: "{{ .vars.vpc_name }}"
+            atmos_component: "{{ .atmos_component }}"
+            atmos_stack: "{{ .atmos_stack }}"
+            # This overrides the base component value
+            source: "component-override"
+            region: "{{ .vars.region }}"
+        # Add a new file not in base component
+        "README.md": |
+          # VPC Override Component
+
+          This component overrides the base vpc-defaults.
+          Environment: {{ .vars.environment }}
+          Region: {{ .vars.region }}
 
     # S3 bucket component with YAML and HCL generation
     s3-logs:
@@ -50,7 +129,7 @@ components:
         versioning_enabled: true
       generate:
         # YAML file generation
-        config.yaml:
+        "config.yaml":
           bucket:
             name: "{{ .vars.bucket_name }}"
             environment: "{{ .vars.environment }}"
@@ -58,12 +137,15 @@ components:
             ManagedBy: "atmos"
             Component: "{{ .component }}"
         # HCL file
-        bucket_config.tf:
+        "bucket_config.tf":
           locals:
             bucket_name: "{{ .vars.bucket_name }}"
             versioning: "{{ .vars.versioning_enabled }}"
 
     # Component with no generate section (for testing filtering)
+    # Should still inherit:
+    # 1. global generate section
+    # 2. terraform.generate section
     s3-data:
       metadata:
         component: s3-bucket

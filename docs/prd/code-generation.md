@@ -14,35 +14,47 @@ Add a `generate` section to Atmos stack configuration that allows users to decla
 
 ## Configuration Structure
 
-The `generate` section can be defined at three levels, following standard Atmos merge behavior:
+The `generate` section can be defined at five levels, following standard Atmos merge behavior (lowest to highest priority):
 
 ```yaml
-# Level 1: Global (applies to all terraform components)
+# Level 1: Global level (applies to all components)
+# Define directly in stack file
+generate:
+  "global-context.json":
+    level: "global"
+    stage: "{{ .vars.stage }}"
+
+# Level 2: Component type level (applies to all terraform components)
+# Define under the terraform section
 terraform:
   generate:
-    "common.auto.tfvars.json":
-      locals:
-        atmos_component: "{{ .atmos_component }}"
+    "terraform-context.json":
+      level: "terraform-type"
+      component_type: "terraform"
 
-# Level 2: Component type level (in components.terraform section)
+# Level 3: Base component level (via metadata.inherits)
+# Define in a catalog file that other components inherit from
 components:
   terraform:
-    generate:
-      "providers.tf.json":
-        terraform:
-          required_providers:
-            aws:
-              source: "hashicorp/aws"
-              version: ">= 5.0"
-
-# Level 3: Component level (highest priority)
-components:
-  terraform:
-    vpc:
+    vpc-defaults:
+      metadata:
+        type: abstract
       generate:
+        # Common files inherited by all VPC components
         "context.auto.tfvars.json":
           namespace: "{{ .vars.namespace }}"
           environment: "{{ .vars.environment }}"
+
+# Level 4: Component level
+# Define in stack file for specific component
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits:
+          - vpc-defaults
+      generate:
+        # Component-specific files (merged with inherited)
         "backend.tf": |
           terraform {
             backend "s3" {
@@ -50,7 +62,24 @@ components:
               key    = "{{ .backend.key }}"
             }
           }
+        # Can also override inherited files by using same filename
+        "context.auto.tfvars.json":
+          # This completely replaces the inherited version
+          namespace: "{{ .vars.namespace }}"
+          environment: "{{ .vars.environment }}"
+          region: "{{ .vars.region }}"
+
+# Level 5: Overrides level (highest priority, file-scoped)
+# Define in terraform.overrides section (applies to all terraform components in this file)
+terraform:
+  overrides:
+    generate:
+      "override-context.json":
+        level: "overrides"
+        applied_via: "terraform-overrides"
 ```
+
+**Note:** Overrides are file-scoped and do not get inherited through imports. They apply only to components defined in the same stack file.
 
 **Important:** Filenames containing dots (`.`) MUST be quoted in YAML to be parsed as strings.
 
@@ -175,14 +204,17 @@ Writes to: `components/terraform/vpc/context.auto.tfvars.json`
 
 ## Merge Behavior
 
-Standard Atmos deep merge with later values winning:
+Standard Atmos deep merge with later values winning (lowest to highest priority):
 
-1. **Global level** (`terraform.generate`) - lowest priority
-2. **Component type level** (`components.terraform.generate`)
-3. **Base component level** (via inheritance)
-4. **Component level** (`components.terraform.vpc.generate`) - highest priority
+1. **Global level** (`generate:` at stack root) - lowest priority
+2. **Component type level** (`terraform.generate:`) - applies to all terraform components
+3. **Base component level** (via `metadata.inherits`) - inherited from parent components
+4. **Component level** (`components.terraform.vpc.generate`) - component-specific
+5. **Overrides level** (`terraform.overrides.generate:`) - highest priority, file-scoped
 
-Files merge by filename - component-level definition of same filename completely replaces higher-level definition.
+Files merge by filename - a file defined at a higher priority level completely replaces the same filename from lower priority levels.
+
+**Note on Overrides:** The overrides section is file-scoped and does not get inherited through imports. It applies only to components defined in the same stack file where the override is declared.
 
 ## Auto-Generation
 

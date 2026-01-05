@@ -198,3 +198,84 @@ tests:
       stderr:
         - "Would generate"
         - "locals.tf"
+
+  # Test component with its own generate section that inherits from base
+  - name: "terraform generate files for vpc-override component"
+    enabled: true
+    tty: false
+    description: "Generate files for vpc-override which has its own generate section"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "vpc-override"
+      - "-s"
+      - "dev"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        - "locals.tf"
+        - "README.md"
+
+  # Test inheritance levels - vpc-inherited should inherit from global, terraform, and base component
+  - name: "terraform generate files vpc-inherited inherits from all levels"
+    enabled: true
+    tty: false
+    description: "Test that vpc-inherited inherits generate section from global, terraform-level, and base component"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "vpc-inherited"
+      - "-s"
+      - "dev"
+      - "--dry-run"
+    env:
+      ATMOS_LOGS_LEVEL: Info
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        # From global level
+        - "global-context.json"
+        # From terraform level
+        - "terraform-context.json"
+        # From base component (vpc-defaults)
+        - "locals.tf"
+        - "metadata.json"
+        # From overrides level
+        - "override-context.json"
+
+  # Test s3-data component which only has global and terraform-level generate
+  - name: "terraform generate files s3-data inherits global and terraform levels"
+    enabled: true
+    tty: false
+    description: "Test that s3-data inherits generate section from global and terraform-level"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "s3-data"
+      - "-s"
+      - "dev"
+      - "--dry-run"
+    env:
+      ATMOS_LOGS_LEVEL: Info
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        # From global level
+        - "global-context.json"
+        # From terraform level
+        - "terraform-context.json"
+        # From overrides level
+        - "override-context.json"
