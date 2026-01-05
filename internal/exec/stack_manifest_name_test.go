@@ -402,6 +402,79 @@ func TestDescribeStacks_NamePatternWorkspace(t *testing.T) {
 	assert.Equal(t, "dev-uw2", workspace, "Workspace should be based on the pattern-derived stack name")
 }
 
+// TestProcessStacks_FindsComponentByManifestName verifies that ProcessStacks can find
+// a component when the user specifies the manifest-level 'name' field as the stack argument.
+//
+// Scenario:
+// - atmos.yaml has: name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+// - Stack file: with-explicit-name.yaml has: name: "my-explicit-stack"
+// - Stack vars: environment=prod, stage=ue1 (so template produces "prod-ue1")
+// - User runs: atmos tf plan vpc -s my-explicit-stack (using manifest name, not template result)
+//
+// The manifest 'name' field should take precedence and allow the user to reference the stack
+// by that name in all commands (terraform, helmfile, describe, etc.).
+func TestProcessStacks_FindsComponentByManifestName(t *testing.T) {
+	// Change to the test fixture directory with name_template configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-template"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Initialize the CLI config with the manifest name as the stack argument.
+	// This simulates: atmos tf plan vpc -s my-explicit-stack
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "my-explicit-stack", // User specifies the manifest name override
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify the fixture is configured correctly.
+	require.NotEmpty(t, atmosConfig.Stacks.NameTemplate, "name_template should be configured in atmos.yaml")
+
+	// ProcessStacks should find the vpc component when user specifies the manifest name.
+	result, err := ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	// The component should be found when using the manifest 'name' field.
+	require.NoError(t, err, "ProcessStacks should find component when using manifest 'name' field; got error: %v", err)
+
+	// Verify we found the correct component and stack.
+	assert.Equal(t, "vpc", result.ComponentFromArg, "Component should be 'vpc'")
+	// The Stack field should reflect what the user requested or the resolved stack name.
+	assert.NotEmpty(t, result.StackFile, "StackFile should be set after finding the component")
+}
+
+// TestProcessStacks_FindsComponentByTemplateName verifies that ProcessStacks can find
+// a component when the user specifies the template-derived name as the stack argument.
+func TestProcessStacks_FindsComponentByTemplateName(t *testing.T) {
+	// Change to the test fixture directory.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-template"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Use the template-derived name "prod-ue2" (from environment=prod, stage=ue2).
+	// This tests the "without-explicit-name" stack which has no 'name' field,
+	// so its logical name IS "prod-ue2" (environment=prod, stage=ue2).
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "prod-ue2", // Template-derived name for without-explicit-name stack
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// This should work - using the template-derived name is the current behavior.
+	result, err := ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	require.NoError(t, err, "ProcessStacks should find component when using template name; got error: %v", err)
+	assert.Equal(t, "vpc", result.ComponentFromArg, "Component should be 'vpc'")
+	assert.NotEmpty(t, result.StackFile, "StackFile should be set after finding the component")
+}
+
 // TestBuildTerraformWorkspace_Precedence verifies the full precedence order:
 // name (manifest) > name_template > name_pattern > filename.
 func TestBuildTerraformWorkspace_Precedence(t *testing.T) {
