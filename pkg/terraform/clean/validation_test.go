@@ -1,6 +1,7 @@
 package clean
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -144,9 +145,9 @@ func TestIsValidDataDir_WindowsRootPath(t *testing.T) {
 		{
 			// On Windows, "C:\" is rejected as a root path.
 			// On Unix/macOS, filepath.Abs treats this as a relative path, so it's accepted.
-			name:          "Windows root path - platform dependent",
+			name:          "Windows root path - rejected on Windows",
 			tfDataDir:     "C:\\",
-			shouldBeError: false, // Only true on Windows; false on Unix/macOS.
+			shouldBeError: runtime.GOOS == "windows",
 		},
 	}
 
