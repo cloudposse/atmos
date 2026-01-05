@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -618,6 +619,47 @@ func TestProcessCommandLineArgs_IdentityFromEnvironmentVariable(t *testing.T) {
 			args:           []string{"plan", "component", "--stack", "stack", "--identity=test-identity-from-flag-equals"},
 			expectedResult: "test-identity-from-flag-equals",
 			description:    "--identity=value syntax should override ATMOS_IDENTITY env var",
+		},
+		// Test cases for ATMOS_IDENTITY=false (issue #1931).
+		{
+			name:           "ATMOS_IDENTITY=false disables authentication",
+			envValue:       "false",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+			description:    "ATMOS_IDENTITY=false should be normalized to __DISABLED__",
+		},
+		{
+			name:           "ATMOS_IDENTITY=FALSE disables authentication",
+			envValue:       "FALSE",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+			description:    "ATMOS_IDENTITY=FALSE should be normalized to __DISABLED__",
+		},
+		{
+			name:           "ATMOS_IDENTITY=0 disables authentication",
+			envValue:       "0",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+			description:    "ATMOS_IDENTITY=0 should be normalized to __DISABLED__",
+		},
+		{
+			name:           "ATMOS_IDENTITY=no disables authentication",
+			envValue:       "no",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+			description:    "ATMOS_IDENTITY=no should be normalized to __DISABLED__",
+		},
+		{
+			name:           "ATMOS_IDENTITY=off disables authentication",
+			envValue:       "off",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+			description:    "ATMOS_IDENTITY=off should be normalized to __DISABLED__",
 		},
 	}
 

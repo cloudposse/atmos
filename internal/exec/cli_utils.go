@@ -179,9 +179,10 @@ func ProcessCommandLineArgs(
 
 	// Fallback to ATMOS_IDENTITY environment variable if identity not set via flag.
 	// Use os.Getenv directly to avoid polluting viper config with temporary binding.
+	// Normalize the value to handle boolean false representations (false, 0, no, off).
 	if configAndStacksInfo.Identity == "" {
 		if envIdentity := os.Getenv("ATMOS_IDENTITY"); envIdentity != "" { //nolint:forbidigo // Direct env var read to avoid viper config pollution
-			configAndStacksInfo.Identity = envIdentity
+			configAndStacksInfo.Identity = cfg.NormalizeIdentityValue(envIdentity)
 		}
 	}
 
