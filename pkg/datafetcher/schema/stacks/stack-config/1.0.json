@@ -239,6 +239,9 @@
             },
             "required_providers": {
               "$ref": "#/definitions/required_providers"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
             }
           },
           "required": []
@@ -317,6 +320,9 @@
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
             }
           },
           "required": []
@@ -1183,6 +1189,32 @@
         {
           "type": "object",
           "additionalProperties": true
+        }
+      ]
+    },
+    "generate": {
+      "title": "generate",
+      "description": "Generate section for declarative file generation. Keys are filenames, values are content (string for literal template, object for serialized output based on file extension).",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Literal template content written as-is (supports Go templates)"
+              },
+              {
+                "type": "object",
+                "description": "Object content serialized based on file extension (.json, .yaml, .hcl, .tf)",
+                "additionalProperties": true
+              }
+            ]
+          }
         }
       ]
     },

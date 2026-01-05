@@ -37,6 +37,7 @@ type ComponentProcessorOptions struct {
 	TerraformRequiredProviders      map[string]any
 	TerraformRequiredVersion        string
 	GlobalAndTerraformHooks         map[string]any
+	GlobalAndTerraformGenerate      map[string]any
 	GlobalBackendType               string
 	GlobalBackendSection            map[string]any
 	GlobalRemoteStateBackendType    string
@@ -77,6 +78,7 @@ type ComponentProcessorResult struct {
 	ComponentRequiredProviders map[string]any
 	ComponentRequiredVersion   string
 	ComponentHooks             map[string]any
+	ComponentGenerate          map[string]any
 	ComponentAuth              map[string]any
 	// ComponentProvision holds provisioning configuration for the component (e.g., workdir settings).
 	ComponentProvision                     map[string]any
@@ -88,10 +90,12 @@ type ComponentProcessorResult struct {
 	ComponentOverridesRequiredProviders    map[string]any
 	ComponentOverridesRequiredVersion      string
 	ComponentOverridesHooks                map[string]any
+	ComponentOverridesGenerate             map[string]any
 	BaseComponentProviders                 map[string]any
 	BaseComponentRequiredProviders         map[string]any
 	BaseComponentRequiredVersion           string
 	BaseComponentHooks                     map[string]any
+	BaseComponentGenerate                  map[string]any
 	BaseComponentBackendType               string
 	BaseComponentBackendSection            map[string]any
 	BaseComponentRemoteStateBackendType    string

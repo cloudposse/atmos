@@ -1265,6 +1265,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentDependencies map[string]any
 	var baseComponentProviders map[string]any
 	var baseComponentHooks map[string]any
+	var baseComponentGenerate map[string]any
 	var baseComponentCommand string
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[string]any
@@ -1427,6 +1428,13 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		if baseComponentGenerateSection, baseComponentGenerateSectionExist := baseComponentMap[cfg.GenerateSectionName]; baseComponentGenerateSectionExist {
+			baseComponentGenerate, ok = baseComponentGenerateSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.generate' in the stack '%s'", errUtils.ErrInvalidComponentGenerate, baseComponent, stack)
+			}
+		}
+
 		// Base component backend
 		if i, ok2 := baseComponentMap[cfg.BackendTypeSectionName]; ok2 {
 			baseComponentBackendType, ok = i.(string)
@@ -1564,6 +1572,13 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentHooks = merged
+
+		// Base component `generate`
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentGenerate, baseComponentGenerate})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentGenerate = merged
 
 		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand

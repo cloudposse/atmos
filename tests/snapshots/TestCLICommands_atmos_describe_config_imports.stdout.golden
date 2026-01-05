@@ -7,6 +7,7 @@ components:
     deploy_run_init: true
     init_run_reconfigure: true
     auto_generate_backend_file: false
+    auto_generate_files: false
     command: terraform
     shell:
       prompt: ""
