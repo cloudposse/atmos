@@ -351,7 +351,9 @@ func processStackContextPrefix(
 			return err
 		}
 	default:
-		return errUtils.ErrMissingStackNameTemplateAndPattern
+		// No name_template or name_pattern configured - use filename as identity.
+		// This enables zero-config stack naming for newcomers.
+		configAndStacksInfo.ContextPrefix = stackName
 	}
 
 	configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg

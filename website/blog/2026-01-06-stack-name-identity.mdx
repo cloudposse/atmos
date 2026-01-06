@@ -1,0 +1,75 @@
+---
+slug: stack-name-identity
+title: Stack Name Identity and Zero-Config Defaults
+authors:
+  - osterman
+tags:
+  - feature
+  - dx
+date: 2026-01-06T00:00:00.000Z
+---
+
+Atmos now enforces a single canonical identity per stack and supports zero-config stack naming using filenames. These changes make Atmos easier for newcomers while providing explicit control for advanced users.
+
+<!--truncate-->
+
+## What Changed
+
+### Single Identity Rule
+
+Each stack now has exactly ONE valid identifier based on this precedence:
+
+1. **`name`** (highest) - Explicit name from stack manifest
+2. **`name_template`** - Go template from `atmos.yaml`
+3. **`name_pattern`** - Token pattern from `atmos.yaml`
+4. **Filename** (lowest) - Basename of the stack file
+
+Previously, a stack might respond to multiple identifiers (e.g., both the filename and a generated name). Now, only the highest-priority identifier is valid.
+
+### Zero-Config Stack Naming
+
+When no `name`, `name_template`, or `name_pattern` is configured, stacks are identified by their filename. This enables newcomers to start using Atmos immediately without any naming configuration.
+
+## Why This Matters
+
+### For Newcomers
+
+Getting started with Atmos is now simpler. Create a stack file and reference it by filename:
+
+```yaml
+# stacks/prod.yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+```
+
+```bash
+# Just works - no naming configuration required
+atmos terraform plan vpc -s prod
+```
+
+### For Advanced Users
+
+The single identity rule prevents confusion. If you have:
+
+```yaml
+# stacks/legacy-prod.yaml
+name: "my-legacy-stack"
+```
+
+Only `atmos terraform plan vpc -s my-legacy-stack` works. Using `-s legacy-prod` correctly returns an error because that's not the canonical name.
+
+## Migration Notes
+
+If you were using both the filename and a generated name to reference the same stack, you must now use only the canonical name. Check which identifier has highest precedence:
+
+- Stack has `name` field? Use that name.
+- `name_template` or `name_pattern` configured? Use the generated name.
+- Neither? Use the filename.
+
+## Related
+
+- [Stack Manifest Name Override](/changelog/stack-manifest-name-override)
+- [Stack Names Documentation](/stacks/name)
