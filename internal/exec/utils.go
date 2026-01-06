@@ -398,18 +398,33 @@ func findComponentInStacks(
 			}
 		}
 
-		// Check if we've found the stack.
-		// Match against either:
-		// 1. ContextPrefix (derived from name_template or name_pattern)
-		// 2. Stack manifest name (the 'name' field in the manifest, if present)
-		// 3. Stack filename (for backward compatibility)
-		stackMatches := configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix ||
-			(stackManifestName != "" && configAndStacksInfo.Stack == stackManifestName) ||
-			configAndStacksInfo.Stack == stackName
+		// Determine the canonical stack name using single-identity rule.
+		// Each stack has exactly ONE valid identifier based on precedence:
+		// 1. Explicit 'name' field in manifest (highest priority)
+		// 2. Generated name from name_template or name_pattern (via ContextPrefix)
+		// 3. Stack filename (only if nothing else is configured)
+		//
+		// See docs/prd/stack-name-identity.md for the full specification.
+		var canonicalStackName string
+		switch {
+		case stackManifestName != "":
+			// Priority 1: Explicit name from manifest.
+			canonicalStackName = stackManifestName
+		case configAndStacksInfo.ContextPrefix != "" && configAndStacksInfo.ContextPrefix != stackName:
+			// Priority 2/3: Generated from name_template or name_pattern.
+			// Only use if ContextPrefix differs from filename (indicates template/pattern was applied).
+			canonicalStackName = configAndStacksInfo.ContextPrefix
+		default:
+			// Priority 4: Filename (when nothing else is configured).
+			canonicalStackName = stackName
+		}
+
+		// Check if user's requested stack matches the canonical name.
+		stackMatches := configAndStacksInfo.Stack == canonicalStackName
 
 		if stackMatches {
 			configAndStacksInfo.StackFile = stackName
-			// Set StackManifestName if we matched via manifest name.
+			// Set StackManifestName if the stack has an explicit name.
 			if stackManifestName != "" {
 				configAndStacksInfo.StackManifestName = stackManifestName
 			}

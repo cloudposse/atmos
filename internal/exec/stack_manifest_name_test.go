@@ -555,3 +555,131 @@ func TestBuildTerraformWorkspace_Precedence(t *testing.T) {
 		})
 	}
 }
+
+// =============================================================================
+// Stack Name Identity Tests
+// =============================================================================
+// These tests verify that each stack has exactly ONE valid identifier.
+// When an explicit 'name' field is set, only that name should work.
+// When name_template/name_pattern is set (without explicit name), only the
+// generated name should work. The filename is only valid when nothing else
+// is configured.
+//
+// See docs/prd/stack-name-identity.md for the full specification.
+// =============================================================================
+
+// TestProcessStacks_RejectsGeneratedNameWhenExplicitNameSet verifies that when a stack
+// has an explicit 'name' field, using the template-generated name should FAIL.
+//
+// Scenario:
+// - Stack file: with-explicit-name.yaml
+// - Manifest has: name: "my-explicit-stack"
+// - name_template produces: "prod-ue1" (from environment=prod, stage=ue1)
+// - User runs: atmos tf plan vpc -s prod-ue1 (using generated name)
+//
+// Expected: FAIL - only "my-explicit-stack" should be valid.
+func TestProcessStacks_RejectsGeneratedNameWhenExplicitNameSet(t *testing.T) {
+	// Change to the test fixture directory with name_template configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-template"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Try to use the template-generated name "prod-ue1" for a stack that has
+	// explicit name "my-explicit-stack". This should FAIL.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "prod-ue1", // Generated name - should be rejected
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify fixture is configured correctly.
+	require.NotEmpty(t, atmosConfig.Stacks.NameTemplate, "name_template should be configured")
+
+	// ProcessStacks should NOT find the component when using generated name
+	// for a stack with explicit name.
+	_, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	// This should fail because "prod-ue1" is not the canonical name.
+	// The canonical name is "my-explicit-stack".
+	assert.Error(t, err, "ProcessStacks should reject generated name when explicit name is set")
+}
+
+// TestProcessStacks_RejectsFilenameWhenExplicitNameSet verifies that when a stack
+// has an explicit 'name' field, using the filename should FAIL.
+//
+// Scenario:
+// - Stack file: with-explicit-name.yaml
+// - Manifest has: name: "my-explicit-stack"
+// - User runs: atmos tf plan vpc -s with-explicit-name (using filename)
+//
+// Expected: FAIL - only "my-explicit-stack" should be valid.
+func TestProcessStacks_RejectsFilenameWhenExplicitNameSet(t *testing.T) {
+	// Change to the test fixture directory with name_template configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-template"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Try to use the filename "with-explicit-name" for a stack that has
+	// explicit name "my-explicit-stack". This should FAIL.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "with-explicit-name", // Filename - should be rejected
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// ProcessStacks should NOT find the component when using filename
+	// for a stack with explicit name.
+	_, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	// This should fail because "with-explicit-name" is not the canonical name.
+	// The canonical name is "my-explicit-stack".
+	assert.Error(t, err, "ProcessStacks should reject filename when explicit name is set")
+}
+
+// TestProcessStacks_RejectsFilenameWhenTemplateSet verifies that when name_template
+// is configured (and no explicit name), using the filename should FAIL.
+//
+// Scenario:
+// - Stack file: without-explicit-name.yaml
+// - No 'name' field in manifest
+// - name_template produces: "prod-ue2" (from environment=prod, stage=ue2)
+// - User runs: atmos tf plan vpc -s without-explicit-name (using filename)
+//
+// Expected: FAIL - only "prod-ue2" should be valid.
+func TestProcessStacks_RejectsFilenameWhenTemplateSet(t *testing.T) {
+	// Change to the test fixture directory with name_template configured.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name-template"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Try to use the filename "without-explicit-name" when name_template is set.
+	// The canonical name should be "prod-ue2" (from template).
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "without-explicit-name", // Filename - should be rejected
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify fixture is configured correctly.
+	require.NotEmpty(t, atmosConfig.Stacks.NameTemplate, "name_template should be configured")
+
+	// ProcessStacks should NOT find the component when using filename
+	// when name_template is configured.
+	_, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	// This should fail because "without-explicit-name" is not the canonical name.
+	// The canonical name is "prod-ue2" (from name_template).
+	assert.Error(t, err, "ProcessStacks should reject filename when name_template is set")
+}
