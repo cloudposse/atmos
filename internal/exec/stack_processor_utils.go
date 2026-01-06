@@ -80,7 +80,8 @@ func extractAndAddLocalsToContext(
 
 	resolvedLocals, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
 	if localsErr != nil {
-		log.Trace("Failed to extract locals from file", "file", relativeFilePath, "error", localsErr)
+		// Log at Debug level so users can discover locals syntax errors during development.
+		log.Debug("Failed to extract locals from file", "file", relativeFilePath, "error", localsErr)
 		return context
 	}
 
