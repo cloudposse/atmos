@@ -168,6 +168,104 @@ The issue was that the **component type fallback logic** was incorrectly trigger
 
 ---
 
+## Issue #1921: Panic in !terraform.output with Authentication
+
+**GitHub Issue:** https://github.com/cloudposse/atmos/issues/1921
+
+**Reporter:** leoagueci
+
+**Status:** Complete
+
+### Problem Statement
+
+When using `!terraform.output` YAML function with authentication configured (e.g., AWS SSO provider), Atmos panics with the error:
+
+```
+panic: authContextWrapper.GetChain should not be called
+```
+
+This occurs when processing nested component references that require authentication context propagation.
+
+### Reproduction Steps
+
+1. Configure Atmos authentication (e.g., AWS SSO provider in `atmos.yaml`)
+2. Create a component that uses `!terraform.output` to reference another component
+3. Run `atmos terraform plan` on the component
+4. Observe the panic exception
+
+### Root Cause Analysis
+
+The `authContextWrapper` is a minimal `AuthManager` implementation used to propagate authentication context through nested component processing. It's designed to only provide `GetStackInfo()` for passing `AuthContext` to `ExecuteDescribeComponent`.
+
+When a nested component has its own auth configuration with a `default: true` identity, the `resolveAuthManagerForNestedComponent()` function tries to inherit the identity from the parent:
+
+```go
+// In createComponentAuthManager():
+if parentAuthManager != nil {
+    chain := parentAuthManager.GetChain()  // ← PANIC here
+    if len(chain) > 0 {
+        identityName = chain[len(chain)-1]
+    }
+}
+```
+
+The `authContextWrapper.GetChain()` method was implemented as a panic stub because it was originally assumed this method would never be called on the wrapper.
+
+### Call Chain Leading to Panic
+
+```
+!terraform.output processing
+  ↓
+componentFunc() creates authContextWrapper from AuthContext
+  ↓
+ExecuteDescribeComponent(authManager: wrapper)
+  ↓
+Component has auth config with default identity
+  ↓
+resolveAuthManagerForNestedComponent(parentAuthManager: wrapper)
+  ↓
+createComponentAuthManager(parentAuthManager: wrapper)
+  ↓
+parentAuthManager.GetChain() → PANIC!
+```
+
+### Solution Design
+
+Changed `GetChain()` in `authContextWrapper` to return an empty slice instead of panicking:
+
+```go
+func (a *authContextWrapper) GetChain() []string {
+    defer perf.Track(nil, "exec.authContextWrapper.GetChain")()
+
+    // Return empty slice instead of panicking.
+    // This wrapper doesn't track the authentication chain; it only propagates auth context.
+    // When used in resolveAuthManagerForNestedComponent, an empty chain means
+    // no inherited identity, so the component will use its own defaults.
+    return []string{}
+}
+```
+
+An empty chain means no inherited identity from the wrapper, so the nested component will use its own default identity configuration. This is the correct behavior.
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `internal/exec/terraform_output_utils.go` | Changed `GetChain()` to return empty slice instead of panic |
+| `internal/exec/terraform_output_utils_test.go` | Updated test to expect empty slice; added regression test |
+
+### Testing
+
+1. **Regression test:** Added `TestAuthContextWrapper_GetChain_NoLongerPanics` to verify no panic
+2. **Behavior verification:** Updated `TestAuthContextWrapper_PanicMethods` to expect empty slice for `GetChain()`
+3. **Unit test:** Verifies `GetChain()` returns empty slice
+
+### Key Insight
+
+The `authContextWrapper` was originally designed with panic stubs for all methods except `GetStackInfo()`. However, the auth system evolved to call `GetChain()` on any `AuthManager` passed to nested component resolution. The fix ensures backward compatibility while supporting the auth chain inheritance logic.
+
+---
+
 ## Template for Additional Issues
 
 ### Issue #XXXX: [Title]
