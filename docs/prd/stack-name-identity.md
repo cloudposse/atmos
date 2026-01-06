@@ -4,71 +4,39 @@
 
 Implemented.
 
-## Problem Statement
+## Overview
 
-### Current Behavior (Incorrect)
+This PRD defines how Atmos resolves stack identity - the mechanism by which users reference stacks via the `-s` argument and how Atmos determines which stack configuration to use.
 
-When resolving which stack a user is referring to via the `-s` argument, Atmos currently accepts multiple identifiers for the same stack:
+## Goals
 
-1. The explicit `name` field from the stack manifest
-2. The generated name from `name_template` or `name_pattern` in `atmos.yaml`
-3. The stack filename
+1. **Single Identity**: Each stack has exactly ONE valid identifier
+2. **Zero-Config**: Newcomers can use stack filenames without any naming configuration
+3. **Explicit Override**: Advanced users can set a `name` field to control the identifier
+4. **Predictability**: The identifier shown in `atmos list stacks` is the only valid identifier
 
-For example, given:
-- Stack file: `legacy-prod.yaml`
-- Manifest contains: `name: my-explicit-stack`
-- `atmos.yaml` has: `name_template: "{{ .vars.environment }}-{{ .vars.stage }}"`
-- Stack vars produce: `prod-ue1`
+## Non-Goals
 
-Currently, ALL of the following commands work:
-```bash
-atmos tf plan vpc -s my-explicit-stack  # Works (explicit name)
-atmos tf plan vpc -s prod-ue1           # Works (template name) - SHOULD FAIL
-atmos tf plan vpc -s legacy-prod        # Works (filename) - SHOULD FAIL
-```
+- Automatic migration of existing configurations
+- Support for aliases or multiple valid names per stack
 
-### Why This Is Wrong
+## Stack Name Precedence
 
-1. **Ambiguity**: Multiple valid names creates confusion about the "canonical" stack name
-2. **Inconsistency**: `atmos list stacks` shows one name, but other names still work
-3. **Error-prone**: Users might use deprecated/incorrect names without realizing it
-4. **Principle of least surprise**: When you explicitly name something, that should BE its name
-
-## Proposed Solution
-
-### Single Identity Rule
-
-A stack has exactly ONE valid identifier, determined by precedence:
+A stack's canonical identifier is determined by the following precedence (highest to lowest):
 
 | Priority | Source | When Used |
 |----------|--------|-----------|
-| 1 | `name` field in manifest | If set, ONLY this name is valid |
-| 2 | `name_template` result | If template is set (and no explicit name), ONLY template result is valid |
-| 3 | `name_pattern` result | If pattern is set (and no template/name), ONLY pattern result is valid |
-| 4 | Filename | If nothing else configured, filename is the identity |
+| 1 | `name` field in manifest | If set, this is the only valid identifier |
+| 2 | `name_template` result | If template is set (and no explicit name), template result is the identifier |
+| 3 | `name_pattern` result | If pattern is set (and no template/name), pattern result is the identifier |
+| 4 | Filename | If nothing else is configured, filename is the identifier |
 
-**Key principle**: There is no fallback. Each stack has exactly ONE valid identifier.
+**Key principle**: There is no fallback. Only ONE identifier is valid per stack.
 
-### Expected Behavior
+## Examples
 
-Given the example above:
-```bash
-atmos tf plan vpc -s my-explicit-stack  # Works (explicit name)
-atmos tf plan vpc -s prod-ue1           # FAILS - not the canonical name
-atmos tf plan vpc -s legacy-prod        # FAILS - not the canonical name
-```
+### Example 1: Explicit Name Takes Priority
 
-Error message for invalid name:
-```
-Could not find the component 'vpc' in the stack 'prod-ue1'.
-
-Did you mean 'my-explicit-stack'? The stack file 'legacy-prod.yaml'
-defines an explicit name 'my-explicit-stack'.
-```
-
-### Scenarios
-
-#### Scenario 1: Explicit Name Set
 ```yaml
 # stacks/legacy-prod.yaml
 name: my-explicit-stack
@@ -77,11 +45,13 @@ vars:
   stage: ue1
 ```
 
-With `name_template: "{{ .vars.environment }}-{{ .vars.stage }}"`:
-- Valid: `my-explicit-stack`
-- Invalid: `prod-ue1`, `legacy-prod`
+With `name_template: "{{ .vars.environment }}-{{ .vars.stage }}"` in atmos.yaml:
+- **Valid**: `atmos tf plan vpc -s my-explicit-stack`
+- **Invalid**: `atmos tf plan vpc -s prod-ue1` (template result ignored)
+- **Invalid**: `atmos tf plan vpc -s legacy-prod` (filename ignored)
 
-#### Scenario 2: No Explicit Name, Template Set
+### Example 2: Template Takes Priority Over Filename
+
 ```yaml
 # stacks/legacy-prod.yaml
 vars:
@@ -90,10 +60,11 @@ vars:
 ```
 
 With `name_template: "{{ .vars.environment }}-{{ .vars.stage }}"`:
-- Valid: `prod-ue1`
-- Invalid: `legacy-prod`
+- **Valid**: `atmos tf plan vpc -s prod-ue1`
+- **Invalid**: `atmos tf plan vpc -s legacy-prod`
 
-#### Scenario 3: No Name, No Template, Pattern Set
+### Example 3: Pattern Takes Priority Over Filename
+
 ```yaml
 # stacks/deploy/prod/us-east-1.yaml
 vars:
@@ -102,109 +73,117 @@ vars:
 ```
 
 With `name_pattern: "{environment}-{stage}"`:
-- Valid: `prod-ue1`
-- Invalid: `deploy/prod/us-east-1`
+- **Valid**: `atmos tf plan vpc -s prod-ue1`
+- **Invalid**: `atmos tf plan vpc -s deploy/prod/us-east-1`
 
-#### Scenario 4: No Naming Configuration
+### Example 4: Zero-Config (Filename as Identifier)
+
 ```yaml
-# stacks/prod-us-east-1.yaml
-vars:
-  environment: prod
+# stacks/prod.yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
 ```
 
-With no `name`, `name_template`, or `name_pattern`:
-- Valid: `prod-us-east-1`
+With no `name`, `name_template`, or `name_pattern` configured:
+- **Valid**: `atmos tf plan vpc -s prod`
+
+This enables newcomers to start using Atmos immediately without configuring any naming strategy.
+
+## User Experience
+
+### Successful Usage
+
+```bash
+$ atmos terraform plan vpc -s my-explicit-stack
+# Works as expected
+```
+
+### Invalid Identifier
+
+```bash
+$ atmos terraform plan vpc -s legacy-prod
+Error: Could not find the component 'vpc' in the stack 'legacy-prod'.
+```
+
+### Stack Listing
+
+The `atmos list stacks` command shows only canonical identifiers:
+
+```bash
+$ atmos list stacks
+my-explicit-stack    # Not 'legacy-prod' or 'prod-ue1'
+prod-ue1             # From template, not filename
+dev                  # Filename (no naming config)
+```
 
 ## Implementation
 
-### Code Changes
+### Stack Resolution Logic
 
-**File: `internal/exec/utils.go`**
-
-Update `findComponentInStacks()` to use exclusive matching:
+In `internal/exec/utils.go`, the `findComponentInStacks` function determines the canonical name:
 
 ```go
-// Current (incorrect - OR logic):
-stackMatches := configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix ||
-    (stackManifestName != "" && configAndStacksInfo.Stack == stackManifestName) ||
-    configAndStacksInfo.Stack == stackName
-
-// New (correct - single identity):
-var validStackName string
+var canonicalStackName string
 switch {
 case stackManifestName != "":
     // Priority 1: Explicit name from manifest
-    validStackName = stackManifestName
+    canonicalStackName = stackManifestName
 case configAndStacksInfo.ContextPrefix != "" && configAndStacksInfo.ContextPrefix != stackName:
     // Priority 2/3: Generated from name_template or name_pattern
-    validStackName = configAndStacksInfo.ContextPrefix
+    canonicalStackName = configAndStacksInfo.ContextPrefix
 default:
-    // Priority 4: Filename
-    validStackName = stackName
+    // Priority 4: Filename (zero-config)
+    canonicalStackName = stackName
 }
-stackMatches := configAndStacksInfo.Stack == validStackName
+stackMatches := configAndStacksInfo.Stack == canonicalStackName
 ```
 
-### Error Message Enhancement
+### Filename Fallback
 
-When a stack is not found, provide helpful suggestions:
+In `internal/exec/utils.go`, the `processStackContextPrefix` function enables filename-based identity:
 
 ```go
-// If user's stack name matches a filename but not the canonical name
-if userStack == stackFilename && canonicalName != stackFilename {
-    return fmt.Errorf("stack '%s' not found. Did you mean '%s'? "+
-        "The stack file '%s' has canonical name '%s'",
-        userStack, canonicalName, stackFilename, canonicalName)
+switch {
+case atmosConfig.Stacks.NameTemplate != "":
+    // Process name_template
+case atmosConfig.Stacks.NamePattern != "":
+    // Process name_pattern
+default:
+    // No naming config - use filename as identity
+    configAndStacksInfo.ContextPrefix = stackName
 }
 ```
-
-## Backwards Compatibility
-
-### Breaking Change
-
-This IS a breaking change for users who:
-1. Have `name` field set but use the generated name or filename
-2. Have `name_template`/`name_pattern` set but use the filename
-
-### Migration Path
-
-Users will receive clear error messages indicating the correct name to use.
-
-### Detection
-
-`atmos validate stacks` could warn about non-canonical names in CI/scripts.
 
 ## Testing
 
-### Unit Tests
+The following test cases verify the single identity rule:
 
-1. `TestProcessStacks_RejectsGeneratedNameWhenExplicitNameSet`
-   - Stack has `name: explicit`, template produces `generated`
-   - Using `-s generated` should FAIL
-   - Using `-s explicit` should PASS
+1. **`TestProcessStacks_RejectsGeneratedNameWhenExplicitNameSet`**: Using template-generated name fails when explicit `name` is set
+2. **`TestProcessStacks_RejectsFilenameWhenExplicitNameSet`**: Using filename fails when explicit `name` is set
+3. **`TestProcessStacks_RejectsFilenameWhenTemplateSet`**: Using filename fails when `name_template` is configured
+4. **`TestProcessStacks_AcceptsFilenameWhenNoNamingConfigured`**: Using filename works when no naming is configured
+5. **`TestDescribeStacks_FilenameAsKeyWhenNoNamingConfigured`**: DescribeStacks returns filename as key when no naming is configured
 
-2. `TestProcessStacks_RejectsFilenameWhenExplicitNameSet`
-   - Stack has `name: explicit`, filename is `legacy-prod`
-   - Using `-s legacy-prod` should FAIL
-   - Using `-s explicit` should PASS
+## Backwards Compatibility
 
-3. `TestProcessStacks_RejectsFilenameWhenTemplateSet`
-   - Stack has no `name`, template produces `generated`, filename is `legacy-prod`
-   - Using `-s legacy-prod` should FAIL
-   - Using `-s generated` should PASS
+This is a behavioral change for users who:
+1. Have `name` field set but reference stacks by generated name or filename
+2. Have `name_template`/`name_pattern` set but reference stacks by filename
 
-4. `TestProcessStacks_AcceptsFilenameWhenNoNamingConfigured`
-   - Stack has no `name`, no template, no pattern
-   - Using `-s filename` should PASS
+Users will receive clear error messages indicating the stack was not found, prompting them to use the canonical identifier.
 
 ## Success Criteria
 
 1. Each stack has exactly ONE valid identifier
-2. Using any other identifier fails with helpful error message
+2. Using any other identifier returns "stack not found"
 3. `atmos list stacks` output matches the only valid identifier
-4. All terraform/helmfile/describe commands respect this rule
+4. All commands (terraform, helmfile, describe, etc.) respect this rule
+5. Newcomers can use filenames without any naming configuration
 
 ## References
 
-- Related PR: #1934 (fix: honor stack manifest 'name' field in ProcessStacks)
-- Related Issue: #1932
+- PR: #1934
+- Issue: #1932
