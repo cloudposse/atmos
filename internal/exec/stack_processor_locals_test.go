@@ -529,3 +529,312 @@ func TestCopyOrCreateParentLocals_WithData(t *testing.T) {
 	result["key1"] = "modified"
 	assert.Equal(t, "value1", parentLocals["key1"])
 }
+
+// =============================================================================
+// File-Scoped Locals Unit Tests
+// =============================================================================
+
+// TestLocalsContext_MergeForTemplateContext verifies the merge behavior for template context.
+func TestLocalsContext_MergeForTemplateContext(t *testing.T) {
+	ctx := &LocalsContext{
+		Global: map[string]any{
+			"namespace":   "global-ns",
+			"environment": "global-env",
+		},
+		Terraform: map[string]any{
+			"namespace":      "terraform-ns",
+			"backend_bucket": "tf-bucket",
+		},
+		Helmfile: map[string]any{
+			"namespace":    "helmfile-ns",
+			"release_name": "hf-release",
+		},
+		Packer: map[string]any{
+			"namespace":  "packer-ns",
+			"image_name": "pk-image",
+		},
+		HasTerraformLocals: true,
+		HasHelmfileLocals:  true,
+		HasPackerLocals:    true,
+	}
+
+	merged := ctx.MergeForTemplateContext()
+
+	// Packer (last) should win for namespace since all sections define it.
+	assert.Equal(t, "packer-ns", merged["namespace"])
+
+	// Section-specific values should be present.
+	assert.Equal(t, "tf-bucket", merged["backend_bucket"])
+	assert.Equal(t, "hf-release", merged["release_name"])
+	assert.Equal(t, "pk-image", merged["image_name"])
+
+	// Global-only values should be present.
+	assert.Equal(t, "global-env", merged["environment"])
+}
+
+// TestLocalsContext_MergeForTemplateContext_OnlyGlobal verifies merge with only global locals.
+func TestLocalsContext_MergeForTemplateContext_OnlyGlobal(t *testing.T) {
+	ctx := &LocalsContext{
+		Global: map[string]any{
+			"namespace": "global-ns",
+		},
+		// No section-specific locals (flags are false).
+		HasTerraformLocals: false,
+		HasHelmfileLocals:  false,
+		HasPackerLocals:    false,
+	}
+
+	merged := ctx.MergeForTemplateContext()
+
+	assert.Equal(t, "global-ns", merged["namespace"])
+	assert.Len(t, merged, 1)
+}
+
+// TestLocalsContext_MergeForTemplateContext_Nil verifies nil context returns nil.
+func TestLocalsContext_MergeForTemplateContext_Nil(t *testing.T) {
+	var ctx *LocalsContext
+	merged := ctx.MergeForTemplateContext()
+	assert.Nil(t, merged)
+}
+
+// TestLocalsContext_MergeForTemplateContext_EmptyGlobal verifies empty global with sections.
+func TestLocalsContext_MergeForTemplateContext_EmptyGlobal(t *testing.T) {
+	ctx := &LocalsContext{
+		Global: map[string]any{},
+		Terraform: map[string]any{
+			"tf_var": "tf-value",
+		},
+		HasTerraformLocals: true,
+	}
+
+	merged := ctx.MergeForTemplateContext()
+
+	assert.Equal(t, "tf-value", merged["tf_var"])
+}
+
+// TestProcessStackLocals_SectionLocalsOverrideGlobal verifies section locals override global.
+func TestProcessStackLocals_SectionLocalsOverrideGlobal(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackConfig := map[string]any{
+		"locals": map[string]any{
+			"namespace": "global-namespace",
+			"shared":    "global-shared",
+		},
+		"terraform": map[string]any{
+			"locals": map[string]any{
+				"namespace": "terraform-namespace",
+			},
+		},
+	}
+
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, ctx)
+
+	// Global should have original value.
+	assert.Equal(t, "global-namespace", ctx.Global["namespace"])
+	assert.Equal(t, "global-shared", ctx.Global["shared"])
+
+	// Terraform should have overridden namespace but inherit shared.
+	assert.Equal(t, "terraform-namespace", ctx.Terraform["namespace"])
+	assert.Equal(t, "global-shared", ctx.Terraform["shared"])
+}
+
+// TestProcessStackLocals_HasFlagsSetCorrectly verifies Has*Locals flags are set.
+func TestProcessStackLocals_HasFlagsSetCorrectly(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tests := []struct {
+		name            string
+		stackConfig     map[string]any
+		expectTerraform bool
+		expectHelmfile  bool
+		expectPacker    bool
+	}{
+		{
+			name: "only terraform locals",
+			stackConfig: map[string]any{
+				"terraform": map[string]any{
+					"locals": map[string]any{"key": "value"},
+				},
+			},
+			expectTerraform: true,
+			expectHelmfile:  false,
+			expectPacker:    false,
+		},
+		{
+			name: "only helmfile locals",
+			stackConfig: map[string]any{
+				"helmfile": map[string]any{
+					"locals": map[string]any{"key": "value"},
+				},
+			},
+			expectTerraform: false,
+			expectHelmfile:  true,
+			expectPacker:    false,
+		},
+		{
+			name: "only packer locals",
+			stackConfig: map[string]any{
+				"packer": map[string]any{
+					"locals": map[string]any{"key": "value"},
+				},
+			},
+			expectTerraform: false,
+			expectHelmfile:  false,
+			expectPacker:    true,
+		},
+		{
+			name: "all sections with locals",
+			stackConfig: map[string]any{
+				"terraform": map[string]any{
+					"locals": map[string]any{"key": "value"},
+				},
+				"helmfile": map[string]any{
+					"locals": map[string]any{"key": "value"},
+				},
+				"packer": map[string]any{
+					"locals": map[string]any{"key": "value"},
+				},
+			},
+			expectTerraform: true,
+			expectHelmfile:  true,
+			expectPacker:    true,
+		},
+		{
+			name: "sections without locals key",
+			stackConfig: map[string]any{
+				"terraform": map[string]any{
+					"vars": map[string]any{"key": "value"},
+				},
+				"helmfile": map[string]any{
+					"vars": map[string]any{"key": "value"},
+				},
+			},
+			expectTerraform: false,
+			expectHelmfile:  false,
+			expectPacker:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, err := ProcessStackLocals(atmosConfig, tt.stackConfig, "test.yaml")
+
+			require.NoError(t, err)
+			require.NotNil(t, ctx)
+
+			assert.Equal(t, tt.expectTerraform, ctx.HasTerraformLocals, "HasTerraformLocals mismatch")
+			assert.Equal(t, tt.expectHelmfile, ctx.HasHelmfileLocals, "HasHelmfileLocals mismatch")
+			assert.Equal(t, tt.expectPacker, ctx.HasPackerLocals, "HasPackerLocals mismatch")
+		})
+	}
+}
+
+// TestExtractAndResolveLocals_NestedTemplateReferences tests deeply nested template references.
+func TestExtractAndResolveLocals_NestedTemplateReferences(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	section := map[string]any{
+		"locals": map[string]any{
+			"a":     "base",
+			"b":     "{{ .locals.a }}-level1",
+			"c":     "{{ .locals.b }}-level2",
+			"d":     "{{ .locals.c }}-level3",
+			"final": "{{ .locals.d }}-final",
+		},
+	}
+
+	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml")
+
+	require.NoError(t, err)
+	assert.Equal(t, "base", result["a"])
+	assert.Equal(t, "base-level1", result["b"])
+	assert.Equal(t, "base-level1-level2", result["c"])
+	assert.Equal(t, "base-level1-level2-level3", result["d"])
+	assert.Equal(t, "base-level1-level2-level3-final", result["final"])
+}
+
+// TestExtractAndResolveLocals_MixedStaticAndTemplateValues tests mixed values.
+func TestExtractAndResolveLocals_MixedStaticAndTemplateValues(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	section := map[string]any{
+		"locals": map[string]any{
+			"static_string": "hello",
+			"static_int":    42,
+			"static_bool":   true,
+			"static_list":   []any{"a", "b", "c"},
+			"template_val":  "{{ .locals.static_string }}-world",
+		},
+	}
+
+	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml")
+
+	require.NoError(t, err)
+	assert.Equal(t, "hello", result["static_string"])
+	assert.Equal(t, 42, result["static_int"])
+	assert.Equal(t, true, result["static_bool"])
+	assert.Equal(t, []any{"a", "b", "c"}, result["static_list"])
+	assert.Equal(t, "hello-world", result["template_val"])
+}
+
+// TestExtractAndResolveLocals_ParentLocalsNotModified verifies parent locals are not modified.
+func TestExtractAndResolveLocals_ParentLocalsNotModified(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	parentLocals := map[string]any{
+		"parent_key": "parent_value",
+	}
+	section := map[string]any{
+		"locals": map[string]any{
+			"parent_key": "child_override",
+			"child_key":  "child_value",
+		},
+	}
+
+	result, err := ExtractAndResolveLocals(atmosConfig, section, parentLocals, "test.yaml")
+
+	require.NoError(t, err)
+
+	// Result should have overridden value.
+	assert.Equal(t, "child_override", result["parent_key"])
+	assert.Equal(t, "child_value", result["child_key"])
+
+	// Parent locals should NOT be modified.
+	assert.Equal(t, "parent_value", parentLocals["parent_key"])
+	assert.NotContains(t, parentLocals, "child_key")
+}
+
+// TestProcessStackLocals_IsolationBetweenSections verifies sections don't affect each other.
+func TestProcessStackLocals_IsolationBetweenSections(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackConfig := map[string]any{
+		"locals": map[string]any{
+			"shared": "global",
+		},
+		"terraform": map[string]any{
+			"locals": map[string]any{
+				"tf_only": "terraform-value",
+			},
+		},
+		"helmfile": map[string]any{
+			"locals": map[string]any{
+				"hf_only": "helmfile-value",
+			},
+		},
+	}
+
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, ctx)
+
+	// Terraform should have its own local plus global.
+	assert.Equal(t, "terraform-value", ctx.Terraform["tf_only"])
+	assert.Equal(t, "global", ctx.Terraform["shared"])
+	assert.NotContains(t, ctx.Terraform, "hf_only", "terraform should not have helmfile locals")
+
+	// Helmfile should have its own local plus global.
+	assert.Equal(t, "helmfile-value", ctx.Helmfile["hf_only"])
+	assert.Equal(t, "global", ctx.Helmfile["shared"])
+	assert.NotContains(t, ctx.Helmfile, "tf_only", "helmfile should not have terraform locals")
+}

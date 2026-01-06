@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# This mixin defines locals that should NOT be inherited.
+locals:
+  mixin_value: "from-mixin-locals"
+
+# Regular vars ARE inherited.
+vars:
+  inherited_var: "from-mixin-vars"

@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Level 1: Base mixin - defines locals that should NOT be inherited.
+locals:
+  base_local: "from-base-mixin"
+  shared_key: "base-value"
+
+# Regular vars ARE inherited through the chain.
+vars:
+  base_var: "from-base-vars"

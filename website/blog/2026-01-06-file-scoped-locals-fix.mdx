@@ -58,6 +58,45 @@ vars:
 2. **Template context** - Resolved locals are added to the template context so `{{ .locals.* }}` references work
 3. **Section override tracking** - Section-specific locals (in `terraform:`, `helmfile:`, `packer:`) correctly override global locals
 
+### New Command: `atmos describe locals`
+
+A new command has been added to help inspect and debug locals configurations:
+
+```bash
+# Show locals for all stacks
+atmos describe locals
+
+# Show locals for a specific stack
+atmos describe locals --stack deploy/dev
+
+# Output as JSON
+atmos describe locals --format json
+
+# Write to file
+atmos describe locals --file locals.yaml
+```
+
+The output is organized by scope:
+
+```yaml
+deploy/dev:
+  global:
+    namespace: acme
+    environment: dev
+    name_prefix: acme-dev
+  terraform:
+    backend_bucket: acme-dev-tfstate
+  merged:
+    namespace: acme
+    environment: dev
+    name_prefix: acme-dev
+    backend_bucket: acme-dev-tfstate
+```
+
+- **global** - Root-level locals from the stack file
+- **terraform/helmfile/packer** - Section-specific locals (only shown if defined)
+- **merged** - All locals merged together (global first, then sections)
+
 ### Section-Specific Locals
 
 Locals can be defined at multiple levels, with later scopes overriding earlier ones:
@@ -151,7 +190,10 @@ Upgrade Atmos to get this fix. No configuration changes are required.
 Your existing `locals:` definitions will automatically start working.
 
 ```bash
-# Verify locals are resolving correctly
+# View all locals across your stacks
+atmos describe locals
+
+# Verify locals are resolving correctly in component output
 atmos describe component myapp -s prod --format yaml
 ```
 
