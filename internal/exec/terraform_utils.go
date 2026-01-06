@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator"
 	"github.com/cloudposse/atmos/pkg/generator/required_providers"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -130,6 +131,8 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 // generateRequiredProviders generates the terraform_override.tf.json file with required_version
 // and required_providers blocks from stack configuration (DEV-3124).
 func generateRequiredProviders(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	defer perf.Track(atmosConfig, "exec.generateRequiredProviders")()
+
 	// Skip if no required_version or required_providers configured.
 	if info.RequiredVersion == "" && len(info.RequiredProviders) == 0 {
 		return nil
