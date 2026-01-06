@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -12,22 +11,23 @@ import (
 
 func processTagTemplate(
 	input string,
-) any {
+) (any, error) {
 	defer perf.Track(nil, "exec.processTagTemplate")()
 
 	log.Debug("Executing", "Atmos YAML function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncTemplate)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return nil, err
 	}
 
 	var decoded any
 	if err = json.Unmarshal([]byte(str), &decoded); err != nil {
-		return str
+		// JSON decode failed, return original string (not an error).
+		return str, nil
 	}
 
-	return decoded
+	return decoded, nil
 }
 
 // ProcessTemplateTagsOnly processes only !template tags in a data structure, recursively.
@@ -48,7 +48,12 @@ func ProcessTemplateTagsOnly(input map[string]any) map[string]any {
 		case string:
 			// Only process !template tags, leave other tags as-is.
 			if strings.HasPrefix(v, u.AtmosYamlFuncTemplate) {
-				return processTagTemplate(v)
+				result, err := processTagTemplate(v)
+				if err != nil {
+					// On error, return original string (ProcessTemplateTagsOnly doesn't propagate errors).
+					return v
+				}
+				return result
 			}
 			return v
 
