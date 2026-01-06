@@ -106,6 +106,10 @@ func ProcessStackLocals(
 			return nil, fmt.Errorf("failed to resolve terraform locals: %w", err)
 		}
 		ctx.Terraform = terraformLocals
+		// Check if terraform section has its own locals key.
+		if _, hasLocals := terraformSection[cfg.LocalsSectionName]; hasLocals {
+			ctx.HasTerraformLocals = true
+		}
 	} else {
 		ctx.Terraform = ctx.Global
 	}
@@ -117,6 +121,10 @@ func ProcessStackLocals(
 			return nil, fmt.Errorf("failed to resolve helmfile locals: %w", err)
 		}
 		ctx.Helmfile = helmfileLocals
+		// Check if helmfile section has its own locals key.
+		if _, hasLocals := helmfileSection[cfg.LocalsSectionName]; hasLocals {
+			ctx.HasHelmfileLocals = true
+		}
 	} else {
 		ctx.Helmfile = ctx.Global
 	}
@@ -128,6 +136,10 @@ func ProcessStackLocals(
 			return nil, fmt.Errorf("failed to resolve packer locals: %w", err)
 		}
 		ctx.Packer = packerLocals
+		// Check if packer section has its own locals key.
+		if _, hasLocals := packerSection[cfg.LocalsSectionName]; hasLocals {
+			ctx.HasPackerLocals = true
+		}
 	} else {
 		ctx.Packer = ctx.Global
 	}
@@ -149,6 +161,49 @@ type LocalsContext struct {
 
 	// Packer holds locals from the packer section (merged with global).
 	Packer map[string]any
+
+	// HasTerraformLocals indicates the terraform section has its own locals defined.
+	HasTerraformLocals bool
+
+	// HasHelmfileLocals indicates the helmfile section has its own locals defined.
+	HasHelmfileLocals bool
+
+	// HasPackerLocals indicates the packer section has its own locals defined.
+	HasPackerLocals bool
+}
+
+// MergeForTemplateContext merges all locals into a single flat map for template processing.
+// Global locals are copied first, then section-specific locals override if explicitly defined.
+func (ctx *LocalsContext) MergeForTemplateContext() map[string]any {
+	defer perf.Track(nil, "exec.LocalsContext.MergeForTemplateContext")()
+
+	if ctx == nil {
+		return nil
+	}
+
+	result := make(map[string]any)
+
+	// Copy global locals first.
+	for k, v := range ctx.Global {
+		result[k] = v
+	}
+
+	// Merge section-specific locals only if explicitly defined.
+	ctx.mergeSectionLocals(result, ctx.Terraform, ctx.HasTerraformLocals)
+	ctx.mergeSectionLocals(result, ctx.Helmfile, ctx.HasHelmfileLocals)
+	ctx.mergeSectionLocals(result, ctx.Packer, ctx.HasPackerLocals)
+
+	return result
+}
+
+// mergeSectionLocals merges section locals into the result map if hasLocals is true.
+func (ctx *LocalsContext) mergeSectionLocals(result, sectionLocals map[string]any, hasLocals bool) {
+	if !hasLocals {
+		return
+	}
+	for k, v := range sectionLocals {
+		result[k] = v
+	}
 }
 
 // GetForComponentType returns the appropriate locals for a given component type.

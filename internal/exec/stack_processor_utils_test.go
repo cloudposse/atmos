@@ -1431,3 +1431,288 @@ func TestCacheCompiledSchema(t *testing.T) {
 	assert.Equal(t, found, found2, "Consistent cache lookups should return same result")
 	assert.Equal(t, compiledSchema, compiledSchema2, "Consistent cache lookups should return same schema")
 }
+
+// TestExtractLocalsFromRawYAML_Basic tests basic locals extraction from raw YAML.
+func TestExtractLocalsFromRawYAML_Basic(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  namespace: "acme"
+  environment: "dev"
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+vars:
+  stage: "us-east-1"
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "acme", result["namespace"])
+	assert.Equal(t, "dev", result["environment"])
+	assert.Equal(t, "acme-dev", result["name_prefix"])
+}
+
+// TestExtractLocalsFromRawYAML_NoLocals tests extraction when no locals section exists.
+func TestExtractLocalsFromRawYAML_NoLocals(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+vars:
+  stage: "us-east-1"
+  environment: "dev"
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	// Returns empty map when no locals are defined (safe for template processing).
+	assert.Empty(t, result)
+}
+
+// TestExtractLocalsFromRawYAML_EmptyYAML tests extraction from empty YAML.
+func TestExtractLocalsFromRawYAML_EmptyYAML(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := ""
+
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+// TestExtractLocalsFromRawYAML_InvalidYAML tests extraction from invalid YAML.
+func TestExtractLocalsFromRawYAML_InvalidYAML(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  - this is not valid
+  namespace: "acme"
+  invalid yaml structure
+`
+	_, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse YAML")
+}
+
+// TestExtractLocalsFromRawYAML_TerraformSectionLocals tests extraction of terraform section locals.
+func TestExtractLocalsFromRawYAML_TerraformSectionLocals(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  namespace: "acme"
+  environment: "dev"
+terraform:
+  locals:
+    backend_bucket: "{{ .locals.namespace }}-{{ .locals.environment }}-tfstate"
+  backend_type: s3
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	// Global locals should be present.
+	assert.Equal(t, "acme", result["namespace"])
+	assert.Equal(t, "dev", result["environment"])
+	// Terraform section locals should be merged.
+	assert.Equal(t, "acme-dev-tfstate", result["backend_bucket"])
+}
+
+// TestExtractLocalsFromRawYAML_HelmfileSectionLocals tests extraction of helmfile section locals.
+func TestExtractLocalsFromRawYAML_HelmfileSectionLocals(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  namespace: "acme"
+helmfile:
+  locals:
+    release_name: "{{ .locals.namespace }}-release"
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "acme", result["namespace"])
+	assert.Equal(t, "acme-release", result["release_name"])
+}
+
+// TestExtractLocalsFromRawYAML_PackerSectionLocals tests extraction of packer section locals.
+func TestExtractLocalsFromRawYAML_PackerSectionLocals(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  namespace: "acme"
+packer:
+  locals:
+    ami_name: "{{ .locals.namespace }}-ami"
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "acme", result["namespace"])
+	assert.Equal(t, "acme-ami", result["ami_name"])
+}
+
+// TestExtractLocalsFromRawYAML_AllSectionLocals tests extraction from all sections.
+func TestExtractLocalsFromRawYAML_AllSectionLocals(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  namespace: "acme"
+  environment: "prod"
+terraform:
+  locals:
+    tf_var: "{{ .locals.namespace }}-terraform"
+helmfile:
+  locals:
+    hf_var: "{{ .locals.namespace }}-helmfile"
+packer:
+  locals:
+    pk_var: "{{ .locals.namespace }}-packer"
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	// Global locals.
+	assert.Equal(t, "acme", result["namespace"])
+	assert.Equal(t, "prod", result["environment"])
+	// Section-specific locals.
+	assert.Equal(t, "acme-terraform", result["tf_var"])
+	assert.Equal(t, "acme-helmfile", result["hf_var"])
+	assert.Equal(t, "acme-packer", result["pk_var"])
+}
+
+// TestExtractLocalsFromRawYAML_CircularDependency tests circular dependency detection.
+func TestExtractLocalsFromRawYAML_CircularDependency(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  a: "{{ .locals.b }}"
+  b: "{{ .locals.c }}"
+  c: "{{ .locals.a }}"
+`
+	_, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "circular dependency")
+}
+
+// TestExtractLocalsFromRawYAML_SelfReference tests self-referencing locals.
+func TestExtractLocalsFromRawYAML_SelfReference(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  a: "value-a"
+  b: "{{ .locals.a }}-suffix"
+  c: "prefix-{{ .locals.b }}-suffix"
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "value-a", result["a"])
+	assert.Equal(t, "value-a-suffix", result["b"])
+	assert.Equal(t, "prefix-value-a-suffix-suffix", result["c"])
+}
+
+// TestExtractLocalsFromRawYAML_ComplexValue tests complex value types in locals.
+func TestExtractLocalsFromRawYAML_ComplexValue(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  namespace: "acme"
+  tags:
+    Environment: "{{ .locals.namespace }}"
+    Managed: "atmos"
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "acme", result["namespace"])
+	tags, ok := result["tags"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme", tags["Environment"])
+	assert.Equal(t, "atmos", tags["Managed"])
+}
+
+// TestExtractLocalsFromRawYAML_SectionOverridesGlobal tests that section locals can override global.
+func TestExtractLocalsFromRawYAML_SectionOverridesGlobal(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals:
+  namespace: "global-acme"
+terraform:
+  locals:
+    namespace: "terraform-acme"
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	// Terraform section should override global.
+	assert.Equal(t, "terraform-acme", result["namespace"])
+}
+
+// TestExtractLocalsFromRawYAML_TemplateInNonLocalSection tests that templates outside locals remain unresolved.
+func TestExtractLocalsFromRawYAML_TemplateInNonLocalSection(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	// This test verifies that extractLocalsFromRawYAML only resolves locals,
+	// not templates in other sections.
+	yamlContent := `
+locals:
+  namespace: "acme"
+vars:
+  name: "{{ .locals.namespace }}-app"
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	// Only locals should be resolved and returned.
+	assert.Equal(t, "acme", result["namespace"])
+	// vars section is not part of the locals result.
+	assert.Nil(t, result["name"])
+}
+
+// TestExtractLocalsFromRawYAML_NilAtmosConfig tests extraction with nil atmosConfig.
+func TestExtractLocalsFromRawYAML_NilAtmosConfig(t *testing.T) {
+	yamlContent := `
+locals:
+  namespace: "acme"
+`
+	result, err := extractLocalsFromRawYAML(nil, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "acme", result["namespace"])
+}
+
+// TestExtractLocalsFromRawYAML_OnlyComments tests extraction from YAML with only comments.
+func TestExtractLocalsFromRawYAML_OnlyComments(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+# This is a comment
+# Another comment
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
+// TestExtractLocalsFromRawYAML_EmptyLocals tests extraction with empty locals section.
+func TestExtractLocalsFromRawYAML_EmptyLocals(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals: {}
+vars:
+  stage: "dev"
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	// Empty locals should return an empty map, not nil.
+	require.NotNil(t, result)
+	assert.Empty(t, result)
+}

@@ -1,0 +1,162 @@
+---
+slug: file-scoped-locals-fix
+title: 'Fixed: File-Scoped Locals Now Resolve Templates Correctly'
+authors:
+  - aknysh
+tags:
+  - bugfix
+date: 2026-01-06T00:00:00.000Z
+---
+
+The file-scoped locals feature introduced in v1.203.0 now correctly resolves `{{ .locals.* }}` templates in stack configurations.
+Previously, locals were defined but not integrated into the template processing pipeline, causing templates to remain unresolved.
+
+<!--truncate-->
+
+## The Problem
+
+When using file-scoped locals as documented, templates referencing locals were not being resolved:
+
+```yaml
+# stacks/prod.yaml
+locals:
+  namespace: acme
+  environment: prod
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+
+components:
+  terraform:
+    myapp:
+      vars:
+        name: "{{ .locals.name_prefix }}-myapp"
+        stage: "{{ .locals.environment }}"
+```
+
+Running `atmos describe component` showed raw template strings instead of resolved values:
+
+```yaml
+# Before fix - templates not resolved
+vars:
+  name: "{{ .locals.name_prefix }}-myapp"
+  stage: "{{ .locals.environment }}"
+```
+
+## The Fix
+
+Atmos now correctly resolves locals before template processing. The same configuration now produces the expected output:
+
+```yaml
+# After fix - templates resolved correctly
+vars:
+  name: "acme-prod-myapp"
+  stage: "prod"
+```
+
+### What Changed
+
+1. **Locals extraction** - Raw YAML is now parsed to extract `locals:` sections before template processing
+2. **Template context** - Resolved locals are added to the template context so `{{ .locals.* }}` references work
+3. **Section override tracking** - Section-specific locals (in `terraform:`, `helmfile:`, `packer:`) correctly override global locals
+
+### Section-Specific Locals
+
+Locals can be defined at multiple levels, with later scopes overriding earlier ones:
+
+```yaml
+# Global locals
+locals:
+  namespace: "global-acme"
+
+terraform:
+  # Terraform-scope locals override global
+  locals:
+    namespace: "terraform-acme"
+    backend_bucket: "{{ .locals.namespace }}-tfstate"
+
+components:
+  terraform:
+    myapp:
+      vars:
+        # Uses terraform-scope value: "terraform-acme-tfstate"
+        bucket: "{{ .locals.backend_bucket }}"
+```
+
+## Features That Work
+
+All documented locals features now function correctly:
+
+### Locals Referencing Other Locals
+
+```yaml
+locals:
+  namespace: acme
+  environment: prod
+  # Resolved in dependency order
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+  full_name: "{{ .locals.name_prefix }}-us-east-1"
+```
+
+### Circular Dependency Detection
+
+Atmos detects circular dependencies and logs them gracefully:
+
+```yaml
+# This triggers a circular dependency warning
+locals:
+  a: "{{ .locals.b }}"
+  b: "{{ .locals.a }}"
+```
+
+### Complex Values
+
+Maps and nested structures work as expected:
+
+```yaml
+locals:
+  common_tags:
+    Environment: "{{ .locals.environment }}"
+    Namespace: "{{ .locals.namespace }}"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        tags: "{{ .locals.common_tags }}"
+```
+
+## Known Limitations
+
+**Component-level locals** are not supported in the initial template pass. This is because component-level locals require per-component scoping that cannot be handled in a single template pass. Use global or section-level locals instead:
+
+```yaml
+# Supported: Global and section-level locals
+locals:
+  namespace: acme
+
+terraform:
+  locals:
+    backend_bucket: "{{ .locals.namespace }}-tfstate"
+
+# Not yet supported: Component-level locals
+components:
+  terraform:
+    myapp:
+      locals:  # These won't be resolved in this release
+        app_name: myapp
+```
+
+## Upgrade
+
+Upgrade Atmos to get this fix. No configuration changes are required.
+Your existing `locals:` definitions will automatically start working.
+
+```bash
+# Verify locals are resolving correctly
+atmos describe component myapp -s prod --format yaml
+```
+
+## References
+
+- [GitHub Issue #1933](https://github.com/cloudposse/atmos/issues/1933)
+- [File-Scoped Locals Documentation](/stacks/locals)
+- [Original Feature Announcement](/changelog/file-scoped-locals)

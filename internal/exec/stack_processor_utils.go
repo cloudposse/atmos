@@ -13,6 +13,7 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
+	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -25,6 +26,77 @@ import (
 
 // Mutex to serialize writes to importsConfig maps during parallel import processing.
 var importsConfigLock = &sync.Mutex{}
+
+// extractLocalsFromRawYAML parses raw YAML content and extracts/resolves file-scoped locals.
+// This function is called BEFORE template processing to make locals available during template execution.
+// The raw YAML may contain unresolved templates like {{ .locals.X }}, which YAML treats as strings.
+// The locals resolver handles resolving self-references between locals.
+// Returns the resolved locals map or nil if no locals section exists.
+//
+// Locals are extracted and merged in order of specificity:
+// 1. Global locals (root level)
+// 2. Section-specific locals (terraform, helmfile, packer sections)
+// 3. Component-level locals (within components/terraform/*, etc.)
+//
+// Later scopes inherit from and can override earlier scopes.
+// All resolved locals are flattened into a single map for template processing.
+func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.extractLocalsFromRawYAML")()
+
+	// Parse raw YAML to extract the structure.
+	// YAML treats template expressions like {{ .locals.X }} as plain strings,
+	// so parsing succeeds even with unresolved templates.
+	var rawConfig map[string]any
+	if err := yaml.Unmarshal([]byte(yamlContent), &rawConfig); err != nil {
+		return nil, fmt.Errorf("failed to parse YAML for locals extraction: %w", err)
+	}
+
+	if rawConfig == nil {
+		return nil, nil
+	}
+
+	// Use the comprehensive ProcessStackLocals which handles all scopes.
+	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath)
+	if err != nil {
+		return nil, err
+	}
+
+	// Note: Component-level locals are NOT extracted here because they require
+	// per-component scoping that can't be handled in a single template pass.
+	// This initial pass handles global and section-level locals.
+	return localsCtx.MergeForTemplateContext(), nil
+}
+
+// extractAndAddLocalsToContext extracts locals from YAML and adds them to the template context.
+// Returns the updated context (or original if extraction fails).
+func extractAndAddLocalsToContext(
+	atmosConfig *schema.AtmosConfiguration,
+	yamlContent string,
+	filePath string,
+	relativeFilePath string,
+	context map[string]any,
+) map[string]any {
+	defer perf.Track(atmosConfig, "exec.extractAndAddLocalsToContext")()
+
+	resolvedLocals, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
+	if localsErr != nil {
+		log.Trace("Failed to extract locals from file", "file", relativeFilePath, "error", localsErr)
+		return context
+	}
+
+	if len(resolvedLocals) == 0 {
+		return context
+	}
+
+	// Add resolved locals to the template context.
+	if context == nil {
+		context = make(map[string]any)
+	}
+	context["locals"] = resolvedLocals
+	log.Trace("Extracted and resolved locals", "file", relativeFilePath, "count", len(resolvedLocals))
+
+	return context
+}
 
 // stackProcessResult holds the result of processing a single stack in parallel.
 type stackProcessResult struct {
@@ -415,6 +487,24 @@ func processYAMLConfigFileWithContextInternal(
 	}
 	if stackYamlConfig == "" {
 		return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil, nil
+	}
+
+	// Extract and resolve file-scoped locals before template processing.
+	// Locals can reference other locals using {{ .locals.X }} syntax.
+	// The resolved locals are added to the template context so they're available during template processing.
+	// This enables patterns like:
+	//   locals:
+	//     stage: prod
+	//     name_prefix: "{{ .locals.stage }}-app"
+	//   components:
+	//     terraform:
+	//       myapp:
+	//         vars:
+	//           name: "{{ .locals.name_prefix }}"
+	// Extract and resolve file-scoped locals before template processing.
+	// Locals are added to the template context so {{ .locals.* }} references work.
+	if !skipTemplatesProcessingInImports {
+		context = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
 	}
 
 	stackManifestTemplatesProcessed := stackYamlConfig
