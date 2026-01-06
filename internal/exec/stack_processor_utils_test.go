@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"errors"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -1490,6 +1492,7 @@ locals:
 	_, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
 
 	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidStackManifest), "error should wrap ErrInvalidStackManifest")
 	assert.Contains(t, err.Error(), "failed to parse YAML")
 }
 

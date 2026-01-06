@@ -48,7 +48,7 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	// so parsing succeeds even with unresolved templates.
 	var rawConfig map[string]any
 	if err := yaml.Unmarshal([]byte(yamlContent), &rawConfig); err != nil {
-		return nil, fmt.Errorf("failed to parse YAML for locals extraction: %w", err)
+		return nil, fmt.Errorf("%w: failed to parse YAML for locals extraction: %w", errUtils.ErrInvalidStackManifest, err)
 	}
 
 	if rawConfig == nil {
@@ -502,8 +502,6 @@ func processYAMLConfigFileWithContextInternal(
 	//       myapp:
 	//         vars:
 	//           name: "{{ .locals.name_prefix }}"
-	// Extract and resolve file-scoped locals before template processing.
-	// Locals are added to the template context so {{ .locals.* }} references work.
 	if !skipTemplatesProcessingInImports {
 		context = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
 	}
