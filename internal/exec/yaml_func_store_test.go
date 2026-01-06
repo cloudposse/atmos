@@ -119,3 +119,124 @@ func TestProcessTagStore(t *testing.T) {
 		})
 	}
 }
+
+// TestProcessTagStore_ErrorPaths tests error handling paths in processTagStore.
+func TestProcessTagStore_ErrorPaths(t *testing.T) {
+	// Start a new Redis server.
+	s := miniredis.RunT(t)
+	defer s.Close()
+
+	redisUrl := fmt.Sprintf("redis://%s", s.Addr())
+	t.Setenv("ATMOS_REDIS_URL", redisUrl)
+
+	redisStore, err := store.NewRedisStore(store.RedisStoreOptions{
+		URL: &redisUrl,
+	})
+	require.NoError(t, err)
+
+	// Populate store with test data.
+	require.NoError(t, redisStore.Set("dev", "vpc", "cidr", "10.0.0.0/16"))
+
+	tests := []struct {
+		name         string
+		atmosConfig  *schema.AtmosConfiguration
+		input        string
+		currentStack string
+		wantErr      bool
+		errContains  string
+	}{
+		{
+			name: "store not found",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stores: map[string]store.Store{
+					"redis": redisStore,
+				},
+			},
+			input:        "!store nonexistent dev vpc cidr",
+			currentStack: "dev",
+			wantErr:      true,
+			errContains:  "store nonexistent not found",
+		},
+		{
+			name: "invalid identifier after pipe (not default or query)",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stores: map[string]store.Store{
+					"redis": redisStore,
+				},
+			},
+			input:        "!store redis dev vpc cidr | invalid value",
+			currentStack: "dev",
+			wantErr:      true,
+			errContains:  "invalid identifier after the pipe: invalid",
+		},
+		{
+			name: "too few parameters",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stores: map[string]store.Store{
+					"redis": redisStore,
+				},
+			},
+			input:        "!store redis vpc",
+			currentStack: "dev",
+			wantErr:      true,
+			errContains:  "invalid number of parameters: 2",
+		},
+		{
+			name: "too many parameters",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stores: map[string]store.Store{
+					"redis": redisStore,
+				},
+			},
+			input:        "!store redis dev vpc cidr extra",
+			currentStack: "dev",
+			wantErr:      true,
+			errContains:  "invalid number of parameters: 5",
+		},
+		{
+			name: "key not found without default",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stores: map[string]store.Store{
+					"redis": redisStore,
+				},
+			},
+			input:        "!store redis dev vpc nonexistent",
+			currentStack: "dev",
+			wantErr:      true,
+			errContains:  "failed to get key nonexistent",
+		},
+		{
+			name: "empty stores map",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stores: map[string]store.Store{},
+			},
+			input:        "!store redis dev vpc cidr",
+			currentStack: "dev",
+			wantErr:      true,
+			errContains:  "store redis not found",
+		},
+		{
+			name: "nil stores map",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stores: nil,
+			},
+			input:        "!store redis dev vpc cidr",
+			currentStack: "dev",
+			wantErr:      true,
+			errContains:  "store redis not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := processTagStore(tt.atmosConfig, tt.input, tt.currentStack)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+				assert.Nil(t, result)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

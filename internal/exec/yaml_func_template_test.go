@@ -291,6 +291,55 @@ func TestProcessTagTemplate_ErrorHandling(t *testing.T) {
 	}
 }
 
+// TestProcessTagTemplate_EmptyInput tests that empty input after the tag returns an error.
+func TestProcessTagTemplate_EmptyInput(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:        "empty input after tag",
+			input:       "!template",
+			wantErr:     true,
+			errContains: "invalid Atmos YAML function",
+		},
+		{
+			name:        "only whitespace after tag",
+			input:       "!template   ",
+			wantErr:     true,
+			errContains: "invalid Atmos YAML function",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := processTagTemplate(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+				assert.Nil(t, result)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestProcessTemplateTagsOnly_ErrorPath tests that ProcessTemplateTagsOnly handles errors gracefully.
+func TestProcessTemplateTagsOnly_ErrorPath(t *testing.T) {
+	// Test that an error in processTagTemplate returns the original string.
+	input := map[string]any{
+		"key": "!template", // Empty after tag - would return error from processTagTemplate.
+	}
+
+	result := ProcessTemplateTagsOnly(input)
+
+	// On error, the original string should be preserved.
+	assert.Equal(t, "!template", result["key"])
+}
+
 // TestYamlFuncTemplate_Integration tests the !template function in a real stack context.
 func TestYamlFuncTemplate_Integration(t *testing.T) {
 	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
