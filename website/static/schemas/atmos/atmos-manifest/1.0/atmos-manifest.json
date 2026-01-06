@@ -42,6 +42,9 @@
     },
     "dependencies": {
       "$ref": "#/definitions/dependencies"
+    },
+    "generate": {
+      "$ref": "#/definitions/generate"
     }
   },
   "additionalProperties": true,
@@ -236,6 +239,9 @@
             },
             "dependencies": {
               "$ref": "#/definitions/dependencies"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
             }
           },
           "required": []
@@ -323,6 +329,9 @@
             },
             "auth": {
               "$ref": "#/definitions/component_auth"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
             }
           },
           "required": []
@@ -963,6 +972,9 @@
             },
             "providers": {
               "$ref": "#/definitions/providers"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
             }
           },
           "required": []
@@ -1263,6 +1275,32 @@
         {
           "type": "object",
           "additionalProperties": true
+        }
+      ]
+    },
+    "generate": {
+      "title": "generate",
+      "description": "Generate section for declarative file generation. Keys are filenames (must be quoted if containing dots), values are either string templates or objects that will be serialized based on file extension (.json, .yaml, .yml, .tf, .hcl).",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "String template processed with Go templates"
+              },
+              {
+                "type": "object",
+                "description": "Object serialized based on file extension",
+                "additionalProperties": true
+              }
+            ]
+          }
         }
       ]
     },

@@ -410,17 +410,21 @@ type TemplatesSettingsGomplate struct {
 }
 
 type Terraform struct {
-	BasePath                string        `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	ApplyAutoApprove        bool          `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
-	AppendUserAgent         string        `yaml:"append_user_agent" json:"append_user_agent" mapstructure:"append_user_agent"`
-	DeployRunInit           bool          `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
-	InitRunReconfigure      bool          `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
-	AutoGenerateBackendFile bool          `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
-	WorkspacesEnabled       *bool         `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
-	Command                 string        `yaml:"command" json:"command" mapstructure:"command"`
-	Shell                   ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
-	Init                    TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
-	Plan                    TerraformPlan `yaml:"plan" json:"plan" mapstructure:"plan"`
+	BasePath                string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
+	AppendUserAgent         string `yaml:"append_user_agent" json:"append_user_agent" mapstructure:"append_user_agent"`
+	DeployRunInit           bool   `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
+	InitRunReconfigure      bool   `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
+	AutoGenerateBackendFile bool   `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// (e.g., .tf, .json, .yaml) during Terraform operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool          `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	WorkspacesEnabled *bool         `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
+	Command           string        `yaml:"command" json:"command" mapstructure:"command"`
+	Shell             ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
+	Init              TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
+	Plan              TerraformPlan `yaml:"plan" json:"plan" mapstructure:"plan"`
 	// PluginCache enables automatic Terraform provider plugin caching.
 	// When true, Atmos sets TF_PLUGIN_CACHE_DIR to XDG cache or PluginCacheDir.
 	// Default: true.
@@ -922,14 +926,17 @@ type Affected struct {
 }
 
 type BaseComponentConfig struct {
-	BaseComponentVars                      AtmosSectionMapType
-	BaseComponentSettings                  AtmosSectionMapType
-	BaseComponentEnv                       AtmosSectionMapType
-	BaseComponentAuth                      AtmosSectionMapType
-	BaseComponentDependencies              AtmosSectionMapType
-	BaseComponentMetadata                  AtmosSectionMapType
-	BaseComponentProviders                 AtmosSectionMapType
-	BaseComponentHooks                     AtmosSectionMapType
+	BaseComponentVars         AtmosSectionMapType
+	BaseComponentSettings     AtmosSectionMapType
+	BaseComponentEnv          AtmosSectionMapType
+	BaseComponentAuth         AtmosSectionMapType
+	BaseComponentDependencies AtmosSectionMapType
+	BaseComponentMetadata     AtmosSectionMapType
+	BaseComponentProviders    AtmosSectionMapType
+	BaseComponentHooks        AtmosSectionMapType
+	// BaseComponentGenerate holds the generate section configuration from the base component,
+	// defining auxiliary files to be generated for this component.
+	BaseComponentGenerate                  AtmosSectionMapType
 	FinalBaseComponentName                 string
 	BaseComponentCommand                   string
 	BaseComponentBackendType               string
