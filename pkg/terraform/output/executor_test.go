@@ -3,6 +3,7 @@ package output
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
@@ -670,18 +671,20 @@ func TestWrapDescribeError_BreaksErrInvalidComponentChain(t *testing.T) {
 		wantMsgContains string
 	}{
 		{
-			name:            "ErrInvalidComponent chain is broken",
-			inputErr:        errors.Join(errUtils.ErrInvalidComponent, errors.New("component not found")),
+			name: "ErrInvalidComponent chain is broken",
+			// Use fmt.Errorf with %w for proper error wrapping (causality chain).
+			inputErr:        fmt.Errorf("component not found: %w", errUtils.ErrInvalidComponent),
 			wantErrDescribe: true,
 			wantErrInvalid:  false, // Chain should be broken
 			wantMsgContains: "component not found",
 		},
 		{
-			name:            "wrapped ErrInvalidComponent chain is broken",
-			inputErr:        errors.Join(errors.New("outer"), errUtils.ErrInvalidComponent),
+			name: "wrapped ErrInvalidComponent chain is broken",
+			// Use fmt.Errorf with %w to express "this happened because of that".
+			inputErr:        fmt.Errorf("outer error: %w", errUtils.ErrInvalidComponent),
 			wantErrDescribe: true,
 			wantErrInvalid:  false, // Chain should be broken
-			wantMsgContains: "failed to describe component",
+			wantMsgContains: "component",
 		},
 		{
 			name:            "other errors preserve chain",
@@ -704,13 +707,13 @@ func TestWrapDescribeError_BreaksErrInvalidComponentChain(t *testing.T) {
 			result := wrapDescribeError("test-comp", "test-stack", tt.inputErr)
 			require.Error(t, result)
 
-			// Check ErrDescribeComponent
+			// Check ErrDescribeComponent.
 			if tt.wantErrDescribe {
 				assert.ErrorIs(t, result, errUtils.ErrDescribeComponent,
 					"Expected ErrDescribeComponent in error chain")
 			}
 
-			// Check ErrInvalidComponent - should NOT be in chain for broken cases
+			// Check ErrInvalidComponent - should NOT be in chain for broken cases.
 			if tt.wantErrInvalid {
 				assert.ErrorIs(t, result, errUtils.ErrInvalidComponent,
 					"Expected ErrInvalidComponent in error chain")
@@ -719,7 +722,7 @@ func TestWrapDescribeError_BreaksErrInvalidComponentChain(t *testing.T) {
 					"ErrInvalidComponent should NOT be in error chain (chain should be broken)")
 			}
 
-			// Check message content
+			// Check message content.
 			if tt.wantMsgContains != "" {
 				assert.Contains(t, result.Error(), tt.wantMsgContains)
 			}

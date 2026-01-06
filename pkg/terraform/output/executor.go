@@ -2,7 +2,6 @@ package output
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -34,20 +33,9 @@ const (
 	maxLogValueLen = 100
 )
 
-// wrapDescribeError wraps an error from DescribeComponent, breaking the ErrInvalidComponent
-// chain to prevent triggering component type fallback in detectComponentType.
-// This is critical for proper error propagation when a referenced component is not found.
+// wrapDescribeError wraps an error from DescribeComponent using the shared helper.
 func wrapDescribeError(component, stack string, err error) error {
-	if errors.Is(err, errUtils.ErrInvalidComponent) {
-		// Break the ErrInvalidComponent chain by using ErrDescribeComponent as the base.
-		// This ensures that errors from YAML function processing (like !terraform.output
-		// referencing a missing component) don't trigger fallback to try other component types.
-		// The original error message is preserved for debugging.
-		return fmt.Errorf("%w: component '%s' in stack '%s': %s",
-			errUtils.ErrDescribeComponent, component, stack, err.Error())
-	}
-	// For other errors, preserve the full chain.
-	return fmt.Errorf("failed to describe component %s in stack %s: %w", component, stack, err)
+	return errUtils.WrapComponentDescribeError(component, stack, err, "component")
 }
 
 // terraformOutputsCache caches terraform outputs by stack-component slug.

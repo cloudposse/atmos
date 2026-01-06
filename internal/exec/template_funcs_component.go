@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 
@@ -17,19 +16,6 @@ import (
 )
 
 var componentFuncSyncMap = sync.Map{}
-
-// wrapComponentFuncError wraps an error from ExecuteDescribeComponent, breaking the
-// ErrInvalidComponent chain to prevent triggering component type fallback.
-func wrapComponentFuncError(component, stack string, err error) error {
-	if errors.Is(err, errUtils.ErrInvalidComponent) {
-		// Break the ErrInvalidComponent chain by using ErrDescribeComponent as the base.
-		// This ensures that errors from template function processing don't trigger
-		// fallback to try other component types.
-		return fmt.Errorf("%w: atmos.Component(%s, %s): %s",
-			errUtils.ErrDescribeComponent, component, stack, err.Error())
-	}
-	return fmt.Errorf("atmos.Component(%s, %s) failed: %w", component, stack, err)
-}
 
 func componentFunc(
 	atmosConfig *schema.AtmosConfiguration,
@@ -74,7 +60,7 @@ func componentFunc(
 		AuthManager:          authMgr,
 	})
 	if err != nil {
-		return nil, wrapComponentFuncError(component, stack, err)
+		return nil, errUtils.WrapComponentDescribeError(component, stack, err, "atmos.Component")
 	}
 
 	// Process Terraform remote state.
