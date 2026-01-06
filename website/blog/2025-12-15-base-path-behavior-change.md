@@ -29,7 +29,7 @@ base_path: "."
 # Triggers git root discovery with fallback
 base_path: ""
 
-# Explicitly uses config file directory
+# Explicitly uses config file directory relative to the location of the `atmos.yaml`
 base_path: "."
 ```
 
