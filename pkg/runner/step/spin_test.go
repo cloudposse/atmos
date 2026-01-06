@@ -343,7 +343,7 @@ func assertContainsTempDir(t *testing.T, output string) {
 			"Output should contain temp directory path, got: %s", output)
 	} else {
 		// On macOS, /tmp is symlinked to /private/tmp.
-		assert.True(t, containsStr(output, "/tmp") || containsStr(output, "/private/tmp"),
+		assert.True(t, strings.Contains(output, "/tmp") || strings.Contains(output, "/private/tmp"),
 			"Output should contain /tmp or /private/tmp, got: %s", output)
 	}
 }
@@ -450,14 +450,4 @@ func TestSpinHandler_RunCommand(t *testing.T) {
 		err := spinHandler.runCommand(ctx, opts, &stdout, &stderr)
 		assert.Error(t, err)
 	})
-}
-
-// containsStr checks if s contains substr.
-func containsStr(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
