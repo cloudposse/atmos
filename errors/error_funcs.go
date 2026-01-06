@@ -363,3 +363,23 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 func Exit(exitCode int) {
 	OsExit(exitCode)
 }
+
+// WrapComponentDescribeError wraps an error from DescribeComponent, breaking the
+// ErrInvalidComponent chain to prevent triggering component type fallback in detectComponentType.
+//
+// This is critical for proper error propagation when a referenced component is not found.
+// Without breaking the chain, detectComponentType incorrectly tries Helmfile/Packer fallbacks,
+// producing confusing "component not found as Helmfile/Packer" errors instead of clear
+// "referenced component missing" errors.
+//
+// The context parameter describes where the error occurred (e.g., "atmos.Component", "!terraform.output").
+func WrapComponentDescribeError(component, stack string, err error, context string) error {
+	if goerrors.Is(err, ErrInvalidComponent) {
+		// Break the ErrInvalidComponent chain by using ErrDescribeComponent as the base.
+		// The original error message is preserved for debugging via %s (not %w).
+		return fmt.Errorf("%w: %s(%s, %s): %s",
+			ErrDescribeComponent, context, component, stack, err.Error())
+	}
+	// For other errors, preserve the full chain.
+	return fmt.Errorf("%s(%s, %s) failed: %w", context, component, stack, err)
+}
