@@ -47,14 +47,14 @@ You may be affected if:
 
 If affected, you'll see errors like:
 
-```
+```text
 The atmos.yaml CLI config file specifies the directory for Atmos stacks
 as stacks, but the directory does not exist.
 ```
 
 Or:
 
-```
+```text
 atmos exited with code 1
 ```
 
