@@ -697,6 +697,119 @@ func TestAllAWSFunctionsShareCache(t *testing.T) {
 	assert.Equal(t, 1, callCount, "All AWS functions should share the same cache")
 }
 
+// TestProcessTagAwsInvalidInput tests that invalid inputs return proper errors.
+func TestProcessTagAwsInvalidInput(t *testing.T) {
+	ClearAWSIdentityCache()
+
+	restore := SetAWSGetter(&mockAWSGetter{
+		identity: &AWSCallerIdentity{
+			Account: "123456789012",
+			Arn:     "arn:aws:iam::123456789012:user/test",
+			UserID:  "AIDATEST",
+			Region:  "us-east-1",
+		},
+		err: nil,
+	})
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackInfo := &schema.ConfigAndStacksInfo{}
+
+	tests := []struct {
+		name        string
+		input       string
+		fn          func(*schema.AtmosConfiguration, string, *schema.ConfigAndStacksInfo) (any, error)
+		expectedTag string
+	}{
+		{
+			name:        "invalid input for aws.account_id",
+			input:       "!aws.wrong_tag",
+			fn:          processTagAwsAccountID,
+			expectedTag: u.AtmosYamlFuncAwsAccountID,
+		},
+		{
+			name:        "invalid input for aws.caller_identity_arn",
+			input:       "!aws.wrong_tag",
+			fn:          processTagAwsCallerIdentityArn,
+			expectedTag: u.AtmosYamlFuncAwsCallerIdentityArn,
+		},
+		{
+			name:        "invalid input for aws.caller_identity_user_id",
+			input:       "!aws.wrong_tag",
+			fn:          processTagAwsCallerIdentityUserID,
+			expectedTag: u.AtmosYamlFuncAwsCallerIdentityUserID,
+		},
+		{
+			name:        "invalid input for aws.region",
+			input:       "!aws.wrong_tag",
+			fn:          processTagAwsRegion,
+			expectedTag: u.AtmosYamlFuncAwsRegion,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ClearAWSIdentityCache()
+			result, err := tt.fn(atmosConfig, tt.input, stackInfo)
+			require.Error(t, err)
+			assert.Nil(t, result)
+			assert.Contains(t, err.Error(), "expected "+tt.expectedTag)
+			assert.ErrorIs(t, err, errUtils.ErrYamlFuncInvalidArguments)
+		})
+	}
+}
+
+// TestProcessTagAwsErrorPropagation tests that AWS errors are properly propagated.
+func TestProcessTagAwsErrorPropagation(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		fn    func(*schema.AtmosConfiguration, string, *schema.ConfigAndStacksInfo) (any, error)
+	}{
+		{
+			name:  "aws.account_id error propagation",
+			input: u.AtmosYamlFuncAwsAccountID,
+			fn:    processTagAwsAccountID,
+		},
+		{
+			name:  "aws.caller_identity_arn error propagation",
+			input: u.AtmosYamlFuncAwsCallerIdentityArn,
+			fn:    processTagAwsCallerIdentityArn,
+		},
+		{
+			name:  "aws.caller_identity_user_id error propagation",
+			input: u.AtmosYamlFuncAwsCallerIdentityUserID,
+			fn:    processTagAwsCallerIdentityUserID,
+		},
+		{
+			name:  "aws.region error propagation",
+			input: u.AtmosYamlFuncAwsRegion,
+			fn:    processTagAwsRegion,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ClearAWSIdentityCache()
+
+			expectedErr := errors.New("simulated AWS error")
+			restore := SetAWSGetter(&mockAWSGetter{
+				identity: nil,
+				err:      expectedErr,
+			})
+			defer restore()
+
+			atmosConfig := &schema.AtmosConfiguration{}
+			stackInfo := &schema.ConfigAndStacksInfo{}
+
+			result, err := tt.fn(atmosConfig, tt.input, stackInfo)
+			require.Error(t, err)
+			assert.Nil(t, result)
+			assert.ErrorIs(t, err, expectedErr)
+		})
+	}
+}
+
 // TestCacheWithDifferentConfigFiles verifies different config files get different cache entries.
 func TestCacheWithDifferentConfigFiles(t *testing.T) {
 	ClearAWSIdentityCache()
