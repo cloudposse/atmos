@@ -86,13 +86,13 @@ func TestProcessTagStore(t *testing.T) {
 			name:         "lookup with invalid default format",
 			input:        "!store redis staging vpc cidr | default",
 			currentStack: "dev",
-			expected:     "invalid YAML function: !store redis staging vpc cidr | default",
+			expected:     "invalid number of arguments in the Atmos YAML function: !store redis staging vpc cidr | default: invalid number of parameters after the pipe: 1",
 		},
 		{
 			name:         "lookup with extra parameters after default",
 			input:        "!store redis staging vpc cidr | default 172.20.0.0/16 extra",
 			currentStack: "dev",
-			expected:     "invalid YAML function: !store redis staging vpc cidr | default 172.20.0.0/16 extra",
+			expected:     "invalid number of arguments in the Atmos YAML function: !store redis staging vpc cidr | default 172.20.0.0/16 extra: invalid number of parameters after the pipe: 3",
 		},
 		{
 			name:         "lookup cross-stack and get a value from the result map using a YQ expression",
@@ -110,8 +110,12 @@ func TestProcessTagStore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processTagStore(&atmosConfig, tt.input, tt.currentStack)
-			assert.Equal(t, tt.expected, result)
+			result, err := processTagStore(&atmosConfig, tt.input, tt.currentStack)
+			if err != nil {
+				assert.Equal(t, tt.expected, err.Error())
+			} else {
+				assert.Equal(t, tt.expected, result)
+			}
 		})
 	}
 }

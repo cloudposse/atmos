@@ -90,13 +90,13 @@ func TestProcessTagStoreGet(t *testing.T) {
 			name:         "Test invalid number of parameters",
 			input:        "!store.get redis",
 			currentStack: "dev",
-			expected:     "invalid YAML function: !store.get redis",
+			expected:     "invalid number of arguments in the Atmos YAML function: !store.get redis: invalid number of parameters: 1",
 		},
 		{
 			name:         "Test invalid number of parameters (too many)",
 			input:        "!store.get redis key1 key2",
 			currentStack: "dev",
-			expected:     "invalid YAML function: !store.get redis key1 key2",
+			expected:     "invalid number of arguments in the Atmos YAML function: !store.get redis key1 key2: invalid number of parameters: 3",
 		},
 		{
 			name:         "Test invalid default format",
@@ -108,8 +108,12 @@ func TestProcessTagStoreGet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processTagStoreGet(&atmosConfig, tt.input, tt.currentStack)
-			assert.Equal(t, tt.expected, result)
+			result, err := processTagStoreGet(&atmosConfig, tt.input, tt.currentStack)
+			if err != nil {
+				assert.Equal(t, tt.expected, err.Error())
+			} else {
+				assert.Equal(t, tt.expected, result)
+			}
 		})
 	}
 }
