@@ -187,5 +187,18 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentCommand = componentCommand
 	}
 
+	// Terraform-specific: extract generate section for file generation.
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.GenerateSectionName]; ok {
+			componentGenerate, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.generate' in the file '%s'", errUtils.ErrInvalidComponentGenerate, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentGenerate = componentGenerate
+		} else {
+			result.ComponentGenerate = make(map[string]any, componentSmallMapCapacity)
+		}
+	}
+
 	return nil
 }
