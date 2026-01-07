@@ -31,6 +31,7 @@
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@fortawesome/react-fontawesome": "^0.2.2",
     "@mdx-js/react": "^3.1.0",
+    "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "custom-loaders": "file:plugins/custom-loaders",
     "docusaurus-plugin-image-zoom": "^2.0.0",
@@ -59,6 +60,7 @@
   },
   "devDependencies": {
     "@docusaurus/module-type-aliases": "^3.6.3",
+    "@types/canvas-confetti": "^1.9.0",
     "prettier": "^3.4.2"
   },
   "browserslist": {

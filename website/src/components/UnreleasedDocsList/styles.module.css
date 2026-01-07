@@ -57,3 +57,89 @@
 :global([data-theme='dark']) .docList {
   border-left-color: var(--ifm-color-gray-600);
 }
+
+/* All Released Celebration State */
+.allReleasedContainer {
+  text-align: center;
+  padding: 3rem 2rem;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
+  border-radius: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  margin: 1.5rem 0;
+}
+
+.allReleasedIcon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  animation: bounce 1s ease-in-out;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.allReleasedTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #22c55e;
+  margin: 0 0 0.75rem 0;
+}
+
+.allReleasedText {
+  font-size: 1rem;
+  color: var(--ifm-color-emphasis-700);
+  margin: 0 0 1rem 0;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.buildDateSmall {
+  font-size: 0.85rem;
+  color: var(--ifm-color-emphasis-500);
+  margin: 0 0 1.5rem 0;
+}
+
+.allReleasedLinks {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.allReleasedLink {
+  display: inline-block;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  background: var(--ifm-color-primary);
+  color: white;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.allReleasedLink:hover {
+  background: var(--ifm-color-primary-dark);
+  text-decoration: none;
+  color: white;
+}
+
+/* Dark mode adjustments */
+:global([data-theme='dark']) .allReleasedContainer {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(59, 130, 246, 0.15) 100%);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+:global([data-theme='dark']) .allReleasedTitle {
+  color: #4ade80;
+}
+
+:global([data-theme='dark']) .allReleasedText {
+  color: var(--ifm-color-emphasis-600);
+}
