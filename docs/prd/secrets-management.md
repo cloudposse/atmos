@@ -96,24 +96,24 @@ secrets:
     aws/ssm:
       kind: aws/ssm                    # cloud/thing format (consistent with auth)
       identity: aws/prod-admin         # Optional: use this auth identity
-      options:
+      spec:
         region: us-east-1
         prefix: "/atmos/secrets"
 
     aws/asm:
       kind: aws/asm                    # AWS Secrets Manager
       identity: aws/prod-secrets       # Optional: different identity for ASM
-      options:
+      spec:
         region: us-east-1
 
     sops:
       kind: sops/age                   # or: sops/aws-kms, sops/gcp-kms, sops/gpg
-      options:
+      spec:
         file: secrets.enc.yaml
 
     vault:
       kind: hashicorp/vault
-      options:
+      spec:
         url: https://vault.example.com
 
   # Global secret declarations
@@ -496,7 +496,7 @@ secrets:
     aws/ssm:
       kind: aws/ssm
       identity: aws/prod-admin           # Optional auth identity
-      options:
+      spec:
         region: us-east-1
         prefix: "/atmos/secrets"
 ```
@@ -513,7 +513,7 @@ secrets:
     aws/asm:
       kind: aws/asm
       identity: aws/prod-secrets         # Optional auth identity
-      options:
+      spec:
         region: us-east-1
         prefix: "atmos/secrets"
 ```
@@ -529,7 +529,7 @@ secrets:
   providers:
     sops-dev:
       kind: sops/age                     # or: sops/aws-kms, sops/gcp-kms, sops/gpg
-      options:
+      spec:
         file: secrets.enc.yaml           # or: secrets/{stack}.enc.yaml
         age_recipients: age1...          # or from SOPS_AGE_RECIPIENTS env
 ```
@@ -544,7 +544,7 @@ secrets:
   providers:
     vault:
       kind: hashicorp/vault
-      options:
+      spec:
         url: https://vault.example.com
         path: secret/data/atmos
         auth_method: token               # or: kubernetes, aws-iam
@@ -558,7 +558,7 @@ secrets:
     azure:
       kind: azure/keyvault
       identity: azure/prod-subscription  # Optional auth identity
-      options:
+      spec:
         vault_url: https://myvault.vault.azure.net/
 ```
 
@@ -569,7 +569,7 @@ secrets:
   providers:
     gcp:
       kind: gcp/secretmanager
-      options:
+      spec:
         project_id: my-project
 ```
 
@@ -783,7 +783,7 @@ Location: `pkg/datafetcher/schema/`
 
 - Update JSON schema for `secrets` configuration
 - Add `secrets.vars` to component schema
-- Document all provider options
+- Document all provider spec options
 
 ## Open Questions (Resolved)
 
