@@ -483,6 +483,43 @@ var RootCmd = &cobra.Command{
 		data.InitWriter(ioCtx)
 		data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
 
+		// Check if running an experimental command.
+		// This happens after I/O init so ui.Experimental() can output properly.
+		// Walk up the command tree to find if any parent is experimental.
+		// For example, "atmos devcontainer list" should trigger the devcontainer warning.
+		experimentalCmd := findExperimentalParent(cmd)
+		if experimentalCmd != "" {
+			experimentalMode := tmpConfig.Settings.Experimental
+			if experimentalMode == "" {
+				experimentalMode = "warn" // Default
+			}
+
+			switch experimentalMode {
+			case "silence":
+				// Do nothing - completely silent.
+			case "disable":
+				// Command is registered but disabled at runtime.
+				errUtils.CheckErrorPrintAndExit(
+					errUtils.Build(errUtils.ErrExperimentalDisabled).
+						WithContext("command", experimentalCmd).
+						WithHint("Enable with settings.experimental: warn").
+						Err(),
+					"", "",
+				)
+			case "warn":
+				_ = ui.Experimental(experimentalCmd)
+			case "error":
+				_ = ui.Experimental(experimentalCmd)
+				errUtils.CheckErrorPrintAndExit(
+					errUtils.Build(errUtils.ErrExperimentalRequiresIn).
+						WithContext("command", experimentalCmd).
+						WithHint("Enable with settings.experimental: warn").
+						Err(),
+					"", "",
+				)
+			}
+		}
+
 		// Configure lipgloss color profile based on terminal capabilities.
 		// This ensures tables and styled output degrade gracefully when piped or in non-TTY environments.
 		term := terminal.New()
@@ -790,6 +827,19 @@ func isCompletionCommand(cmd *cobra.Command) bool {
 	}
 
 	return false
+}
+
+// findExperimentalParent walks up the command tree to find if any command in the
+// chain is experimental. Returns the name of the experimental command, or empty
+// string if none found. This allows subcommands to inherit experimental status
+// from their parent (e.g., "atmos devcontainer list" triggers the devcontainer warning).
+func findExperimentalParent(cmd *cobra.Command) string {
+	for c := cmd; c != nil; c = c.Parent() {
+		if internal.IsCommandExperimental(c.Name()) {
+			return c.Name()
+		}
+	}
+	return ""
 }
 
 // flagStyles holds the lipgloss styles for flag rendering.

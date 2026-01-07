@@ -2,29 +2,52 @@
   margin: 1.5rem 0;
 }
 
+/* Group container - single card for entire group */
+.groupContainer {
+  margin-bottom: 1.5rem;
+  background: var(--ifm-color-emphasis-100);
+  border-radius: 8px;
+  border-left: 3px solid #ff9800;
+  overflow: hidden;
+}
+
+/* Group header (initiative title) */
+.groupHeader {
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--ifm-color-content);
+  background: var(--ifm-color-emphasis-200);
+  border-bottom: 1px solid var(--ifm-color-emphasis-300);
+}
+
 .featureList {
   list-style: none;
   padding: 0;
   margin: 0;
 }
 
+/* Individual feature items - minimal styling within group */
 .featureItem {
-  padding: 1rem;
-  margin-bottom: 0.75rem;
-  background: var(--ifm-color-emphasis-100);
-  border-radius: 8px;
-  border-left: 3px solid #ff9800;
+  padding: 0.6rem 1rem;
+  margin: 0;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.featureItem:last-child {
+  border-bottom: none;
 }
 
 .featureHeader {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
 }
 
 .featureTitle {
-  font-size: 1rem;
+  font-size: 0.95rem;
   color: var(--ifm-color-content);
 }
 
@@ -32,12 +55,13 @@
   display: inline-flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  margin-left: auto;
 }
 
 .link {
   display: inline-block;
   padding: 0.15rem 0.5rem;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 500;
   background: rgba(255, 152, 0, 0.15);
   color: #e65100;
@@ -61,10 +85,10 @@
 }
 
 .description {
-  margin: 0.5rem 0 0 0;
-  font-size: 0.875rem;
+  margin: 0.35rem 0 0 0;
+  font-size: 0.8rem;
   color: var(--ifm-color-emphasis-600);
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .noFeatures {

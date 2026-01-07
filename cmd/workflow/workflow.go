@@ -119,3 +119,8 @@ func (w *WorkflowCommandProvider) GetCompatibilityFlags() map[string]compat.Comp
 func (w *WorkflowCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
+
+// IsExperimental returns whether this command is experimental.
+func (w *WorkflowCommandProvider) IsExperimental() bool {
+	return false
+}

@@ -190,3 +190,8 @@ func (t *ToolchainCommandProvider) GetPositionalArgsBuilder() *flags.PositionalA
 func (t *ToolchainCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
 	return nil
 }
+
+// IsExperimental returns whether this command is experimental.
+func (t *ToolchainCommandProvider) IsExperimental() bool {
+	return false
+}

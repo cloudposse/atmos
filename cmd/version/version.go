@@ -135,3 +135,8 @@ func (v *VersionCommandProvider) GetCompatibilityFlags() map[string]compat.Compa
 func (v *VersionCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
+
+// IsExperimental returns whether this command is experimental.
+func (v *VersionCommandProvider) IsExperimental() bool {
+	return false
+}

@@ -283,3 +283,8 @@ func (e *EnvCommandProvider) GetCompatibilityFlags() map[string]compat.Compatibi
 func (e *EnvCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
+
+// IsExperimental returns whether this command is experimental.
+func (e *EnvCommandProvider) IsExperimental() bool {
+	return false
+}

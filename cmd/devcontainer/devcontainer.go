@@ -77,3 +77,9 @@ func (d *DevcontainerCommandProvider) GetCompatibilityFlags() map[string]compat.
 func (d *DevcontainerCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
+
+// IsExperimental returns whether this command is experimental.
+// Devcontainer support is currently experimental.
+func (d *DevcontainerCommandProvider) IsExperimental() bool {
+	return true
+}

@@ -282,19 +282,18 @@ type ToolchainRegistry struct {
 }
 
 type Terminal struct {
-	MaxWidth             int                `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
-	Pager                string             `yaml:"pager" json:"pager" mapstructure:"pager"`
-	Unicode              bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
-	SyntaxHighlighting   SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
-	Color                bool               `yaml:"color" json:"color" mapstructure:"color"`
-	NoColor              bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"` // Deprecated in config, use Color instead
-	ForceColor           bool               `yaml:"-" json:"-" mapstructure:"force_color"`            // ENV-only: ATMOS_FORCE_COLOR
-	TabWidth             int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
-	Title                bool               `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
-	Alerts               bool               `yaml:"alerts,omitempty" json:"alerts,omitempty" mapstructure:"alerts"`
-	Mask                 MaskSettings       `yaml:"mask,omitempty" json:"mask,omitempty" mapstructure:"mask"`
-	Theme                string             `yaml:"theme,omitempty" json:"theme,omitempty" mapstructure:"theme"`
-	ExperimentalWarnings bool               `yaml:"experimental_warnings" json:"experimental_warnings" mapstructure:"experimental_warnings"` // Show experimental feature warnings (default: true)
+	MaxWidth           int                `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
+	Pager              string             `yaml:"pager" json:"pager" mapstructure:"pager"`
+	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
+	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
+	Color              bool               `yaml:"color" json:"color" mapstructure:"color"`
+	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"` // Deprecated in config, use Color instead
+	ForceColor         bool               `yaml:"-" json:"-" mapstructure:"force_color"`            // ENV-only: ATMOS_FORCE_COLOR
+	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
+	Title              bool               `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
+	Alerts             bool               `yaml:"alerts,omitempty" json:"alerts,omitempty" mapstructure:"alerts"`
+	Mask               MaskSettings       `yaml:"mask,omitempty" json:"mask,omitempty" mapstructure:"mask"`
+	Theme              string             `yaml:"theme,omitempty" json:"theme,omitempty" mapstructure:"theme"`
 }
 
 // MaskSettings contains configuration for sensitive data masking.
@@ -346,6 +345,9 @@ type SyntaxHighlighting struct {
 type AtmosSettings struct {
 	ListMergeStrategy string   `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
 	Terminal          Terminal `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	// Experimental controls how experimental features are handled.
+	// Values: "silence" (no output), "disable" (disabled), "warn" (default), "error" (exit).
+	Experimental string `yaml:"experimental" json:"experimental" mapstructure:"experimental"`
 	// Deprecated: this was moved to top-level Atmos config
 	Docs                 Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Markdown             MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`

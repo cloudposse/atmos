@@ -79,6 +79,10 @@ var (
 	ErrThemeNotFound = errors.New("theme not found")
 	ErrInvalidTheme  = errors.New("invalid theme")
 
+	// Experimental feature errors.
+	ErrExperimentalDisabled   = errors.New("experimental command is disabled")
+	ErrExperimentalRequiresIn = errors.New("experimental command requires explicit opt-in")
+
 	// Authentication and TTY errors.
 	ErrAuthConsole            = errors.New("auth console operation failed")
 	ErrProviderNotSupported   = errors.New("provider does not support this operation")

@@ -315,7 +315,7 @@ func TestCalculateCommandWidth(t *testing.T) {
 				}
 				cmd.AddCommand(subCmd)
 			}
-			result := calculateCommandWidth(cmd)
+			result := calculateCommandWidth(cmd, false)
 			if result != tt.expected {
 				t.Errorf("calculateCommandWidth() = %d, want %d", result, tt.expected)
 			}
@@ -325,7 +325,7 @@ func TestCalculateCommandWidth(t *testing.T) {
 
 func TestCalculateMaxCommandWidth(t *testing.T) {
 	t.Run("empty list", func(t *testing.T) {
-		result := calculateMaxCommandWidth([]*cobra.Command{})
+		result := calculateMaxCommandWidth([]*cobra.Command{}, false)
 		if result != 0 {
 			t.Errorf("Expected 0 for empty list, got %d", result)
 		}
@@ -335,7 +335,7 @@ func TestCalculateMaxCommandWidth(t *testing.T) {
 		commands := []*cobra.Command{
 			{Use: "test", Run: func(cmd *cobra.Command, args []string) {}},
 		}
-		result := calculateMaxCommandWidth(commands)
+		result := calculateMaxCommandWidth(commands, false)
 		if result != 4 {
 			t.Errorf("Expected 4, got %d", result)
 		}
@@ -347,7 +347,7 @@ func TestCalculateMaxCommandWidth(t *testing.T) {
 			{Use: "muchlongercommandname", Run: func(cmd *cobra.Command, args []string) {}},
 			{Use: "mid", Run: func(cmd *cobra.Command, args []string) {}},
 		}
-		result := calculateMaxCommandWidth(commands)
+		result := calculateMaxCommandWidth(commands, false)
 		expected := len("muchlongercommandname")
 		if result != expected {
 			t.Errorf("Expected %d, got %d", expected, result)
@@ -359,7 +359,7 @@ func TestCalculateMaxCommandWidth(t *testing.T) {
 			{Use: "short", Run: func(cmd *cobra.Command, args []string) {}},
 			{Use: "verylongbutthisishidden", Hidden: true, Run: func(cmd *cobra.Command, args []string) {}},
 		}
-		result := calculateMaxCommandWidth(commands)
+		result := calculateMaxCommandWidth(commands, false)
 		if result != 5 { // Length of "short".
 			t.Errorf("Expected 5 (ignoring hidden), got %d", result)
 		}
@@ -1060,7 +1060,7 @@ func TestFormatCommandLine(t *testing.T) {
 				styles: &styles,
 			}
 
-			formatCommandLine(ctx, tt.cmd, tt.maxWidth, nil)
+			formatCommandLine(ctx, tt.cmd, tt.maxWidth, nil, false)
 
 			output := buf.String()
 			for _, expected := range tt.contains {
@@ -1287,7 +1287,7 @@ func TestFormatCommandLineWithMarkdownRenderer(t *testing.T) {
 				t.Fatalf("Failed to create markdown renderer: %v", err)
 			}
 
-			formatCommandLine(ctx, tt.cmd, tt.maxWidth, mdRenderer)
+			formatCommandLine(ctx, tt.cmd, tt.maxWidth, mdRenderer, false)
 
 			output := buf.String()
 			for _, expected := range tt.contains {

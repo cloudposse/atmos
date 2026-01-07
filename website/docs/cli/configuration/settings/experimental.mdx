@@ -1,0 +1,171 @@
+---
+title: Experimental Features
+sidebar_position: 10
+sidebar_label: experimental
+sidebar_class_name: command
+description: Control how Atmos handles experimental features and commands
+id: experimental
+slug: /cli/configuration/settings/experimental
+---
+
+import Intro from '@site/src/components/Intro';
+import KeyPoints from '@site/src/components/KeyPoints';
+import Note from '@site/src/components/Note';
+import File from '@site/src/components/File';
+
+<Intro>
+Atmos introduces new capabilities as experimental features before stabilizing them. The `settings.experimental` configuration controls how these experimental features behave, letting you choose between silent operation, warnings, disabled access, or strict error handling.
+</Intro>
+
+<KeyPoints>
+- Control experimental feature visibility and behavior
+- Choose from four modes: silence, disable, warn, error
+- Commands self-register as experimental
+- Automatic notifications without manual configuration
+</KeyPoints>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  # Control experimental feature handling
+  # Values: "silence", "disable", "warn" (default), "error"
+  experimental: warn
+```
+</File>
+
+## Behavior Modes
+
+The `settings.experimental` setting accepts four values that control how Atmos handles experimental commands:
+
+<dl>
+  <dt>`silence`</dt>
+  <dd>
+    Run experimental commands without any output or notification. Use this when you've already acknowledged the experimental status and want clean output.
+
+    ```yaml
+    settings:
+      experimental: silence
+    ```
+  </dd>
+
+  <dt>`disable`</dt>
+  <dd>
+    Completely disable experimental commands. When a user attempts to run an experimental command, Atmos will display an error and exit. Use this in production environments where experimental features should not be accessible.
+
+    ```yaml
+    settings:
+      experimental: disable
+    ```
+
+    **Example output:**
+    ```
+    Error: experimental command "devcontainer" is disabled; enable with settings.experimental: warn
+    ```
+  </dd>
+
+  <dt>`warn` (default)</dt>
+  <dd>
+    Show a warning notification when running experimental commands, then continue execution. This is the recommended setting for most users - you'll be informed about experimental features while still being able to use them.
+
+    ```yaml
+    settings:
+      experimental: warn
+    ```
+
+    **Example output:**
+    ```
+    devcontainer is an experimental feature. Learn more: https://atmos.tools/experimental
+    ```
+  </dd>
+
+  <dt>`error`</dt>
+  <dd>
+    Show a warning notification and exit with an error code. Use this when you want to be notified about experimental features but prefer explicit opt-in before using them.
+
+    ```yaml
+    settings:
+      experimental: error
+    ```
+
+    **Example output:**
+    ```
+    devcontainer is an experimental feature. Learn more: https://atmos.tools/experimental
+    Error: experimental command "devcontainer" requires explicit opt-in; enable with settings.experimental: warn
+    ```
+  </dd>
+</dl>
+
+## Environment Variable
+
+You can also control experimental feature handling via environment variable:
+
+```bash
+# Silence all experimental warnings
+export ATMOS_EXPERIMENTAL=silence
+
+# Disable experimental features
+export ATMOS_EXPERIMENTAL=disable
+
+# Enable with warnings (default)
+export ATMOS_EXPERIMENTAL=warn
+
+# Require explicit opt-in
+export ATMOS_EXPERIMENTAL=error
+```
+
+The environment variable takes precedence over the configuration file setting.
+
+## Current Experimental Features
+
+The following features are currently marked as experimental:
+
+| Feature | Command | Description |
+|---------|---------|-------------|
+| Devcontainers | `atmos devcontainer` | Development container lifecycle management |
+
+<Note>
+Experimental features may change significantly or be removed in future releases. We encourage you to try them and provide feedback, but avoid relying on them in production workflows until they are stabilized.
+</Note>
+
+## Use Cases
+
+### Development Environment
+
+For local development where you want to experiment with new features:
+
+```yaml
+settings:
+  experimental: warn  # See warnings but continue working
+```
+
+### CI/CD Pipeline
+
+For continuous integration where you want stability:
+
+```yaml
+settings:
+  experimental: disable  # Block experimental commands in CI
+```
+
+Or use environment-specific configuration:
+
+```bash
+# In your CI environment
+export ATMOS_EXPERIMENTAL=disable
+```
+
+### Production Environment
+
+For production where experimental features must be explicitly enabled:
+
+```yaml
+settings:
+  experimental: error  # Require explicit opt-in
+```
+
+## See Also
+
+- [Settings](/cli/configuration/settings) - Overview of all settings
+- [Devcontainers](/cli/commands/devcontainer) - Experimental devcontainer support
