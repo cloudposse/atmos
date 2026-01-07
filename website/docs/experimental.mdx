@@ -47,6 +47,38 @@ Experimental features graduate to stable when:
 - Community feedback has been incorporated
 - Breaking changes are no longer expected
 
+## Controlling Experimental Features
+
+When you run an experimental command, Atmos displays a notification:
+
+```
+🧪 Experimental feature. Learn more https://atmos.tools/experimental
+```
+
+You can control this behavior with the `settings.experimental` configuration in `atmos.yaml`:
+
+```yaml
+settings:
+  # Control experimental feature handling
+  # Values: "silence", "disable", "warn" (default), "error"
+  experimental: warn
+```
+
+| Mode | Behavior |
+|------|----------|
+| `silence` | Run without any notification |
+| `warn` | Show notification, then continue (default) |
+| `error` | Show notification and exit with error |
+| `disable` | Block experimental commands entirely |
+
+Or use the environment variable:
+
+```bash
+export ATMOS_EXPERIMENTAL=silence
+```
+
+For detailed configuration options, see [Experimental Settings](/cli/configuration/settings/experimental).
+
 ## Current Experimental Features
 
 The following features are currently marked as experimental. This list is automatically generated from our [roadmap](/roadmap).
