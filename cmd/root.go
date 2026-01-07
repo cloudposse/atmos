@@ -835,7 +835,12 @@ func isCompletionCommand(cmd *cobra.Command) bool {
 // from their parent (e.g., "atmos devcontainer list" triggers the devcontainer warning).
 func findExperimentalParent(cmd *cobra.Command) string {
 	for c := cmd; c != nil; c = c.Parent() {
+		// Check registry-based experimental status (top-level commands).
 		if internal.IsCommandExperimental(c.Name()) {
+			return c.Name()
+		}
+		// Check annotation-based experimental status (subcommands like "list affected").
+		if c.Annotations != nil && c.Annotations["experimental"] == "true" {
 			return c.Name()
 		}
 	}
