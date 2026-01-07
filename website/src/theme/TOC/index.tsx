@@ -45,6 +45,7 @@ const BLOG_NON_POST_PATHS = ['/page/', '/tags/', '/archive'];
 const NON_DOC_PATHS = [
   BLOG_ROUTE_BASE, // Blog/changelog pages
   '/search', // Search page
+  '/roadmap', // Roadmap page
 ];
 
 /**

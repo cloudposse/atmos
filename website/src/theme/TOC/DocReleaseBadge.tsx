@@ -19,13 +19,8 @@ export default function DocReleaseBadge(): JSX.Element | null {
   const { pathname } = useLocation();
 
   // Get the release map from our plugin's global data.
-  let releaseData: DocReleaseData | undefined;
-  try {
-    releaseData = usePluginData('doc-release-data') as DocReleaseData;
-  } catch {
-    // Plugin data not available (e.g., during development without the plugin).
-    return null;
-  }
+  // usePluginData returns undefined if the plugin isn't loaded.
+  const releaseData = usePluginData('doc-release-data') as DocReleaseData | undefined;
 
   if (!releaseData?.releaseMap) {
     return null;

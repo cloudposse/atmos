@@ -97,10 +97,11 @@ function AllReleasedMessage({ buildDate }: { buildDate: string | null }): JSX.El
 }
 
 export default function UnreleasedDocsList(): JSX.Element {
-  let data: DocReleaseData | undefined;
-  try {
-    data = usePluginData('doc-release-data') as DocReleaseData;
-  } catch {
+  // Get the release data from our plugin's global data.
+  // usePluginData returns undefined if the plugin isn't loaded.
+  const data = usePluginData('doc-release-data') as DocReleaseData | undefined;
+
+  if (!data) {
     return (
       <p className={styles.noFeatures}>
         Unable to load unreleased documentation data.
