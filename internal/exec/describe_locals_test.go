@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -361,8 +362,9 @@ func TestDeriveStackNameWithTemplate(t *testing.T) {
 				"stage":       "us-east-1",
 			},
 			stackSectionMap: map[string]any{},
-			nameTemplate:    "{{ .namespace }}-{{ .environment }}-{{ .stage }}",
-			expected:        "acme-dev-us-east-1",
+			// Template uses .vars.* to access varsSection values.
+			nameTemplate: "{{ .vars.namespace }}-{{ .vars.environment }}-{{ .vars.stage }}",
+			expected:     "acme-dev-us-east-1",
 		},
 		{
 			name:          "explicit name overrides template",
@@ -373,7 +375,7 @@ func TestDeriveStackNameWithTemplate(t *testing.T) {
 			stackSectionMap: map[string]any{
 				"name": "custom-name",
 			},
-			nameTemplate: "{{ .namespace }}-derived",
+			nameTemplate: "{{ .vars.namespace }}-derived",
 			expected:     "custom-name",
 		},
 	}
@@ -450,6 +452,417 @@ func TestDeriveStackNameWithNamePattern(t *testing.T) {
 func TestNewDescribeLocalsExec(t *testing.T) {
 	exec := NewDescribeLocalsExec()
 	assert.NotNil(t, exec)
+}
+
+func TestGetLocalsForComponentType(t *testing.T) {
+	tests := []struct {
+		name          string
+		stackLocals   map[string]any
+		componentType string
+		expected      map[string]any
+	}{
+		{
+			name: "returns terraform section when available",
+			stackLocals: map[string]any{
+				"global": map[string]any{
+					"namespace": "acme",
+				},
+				"terraform": map[string]any{
+					"namespace":      "acme",
+					"backend_bucket": "acme-tfstate",
+				},
+				"merged": map[string]any{
+					"namespace":      "acme",
+					"backend_bucket": "acme-tfstate",
+				},
+			},
+			componentType: "terraform",
+			expected: map[string]any{
+				"namespace":      "acme",
+				"backend_bucket": "acme-tfstate",
+			},
+		},
+		{
+			name: "returns helmfile section when available",
+			stackLocals: map[string]any{
+				"global": map[string]any{
+					"namespace": "acme",
+				},
+				"helmfile": map[string]any{
+					"namespace":   "acme",
+					"release_dir": "/releases",
+				},
+				"merged": map[string]any{
+					"namespace":   "acme",
+					"release_dir": "/releases",
+				},
+			},
+			componentType: "helmfile",
+			expected: map[string]any{
+				"namespace":   "acme",
+				"release_dir": "/releases",
+			},
+		},
+		{
+			name: "returns packer section when available",
+			stackLocals: map[string]any{
+				"global": map[string]any{
+					"namespace": "acme",
+				},
+				"packer": map[string]any{
+					"namespace": "acme",
+					"ami_name":  "my-ami",
+				},
+				"merged": map[string]any{
+					"namespace": "acme",
+					"ami_name":  "my-ami",
+				},
+			},
+			componentType: "packer",
+			expected: map[string]any{
+				"namespace": "acme",
+				"ami_name":  "my-ami",
+			},
+		},
+		{
+			name: "falls back to merged when section not available",
+			stackLocals: map[string]any{
+				"global": map[string]any{
+					"namespace": "acme",
+				},
+				"merged": map[string]any{
+					"namespace":   "acme",
+					"environment": "dev",
+				},
+			},
+			componentType: "terraform",
+			expected: map[string]any{
+				"namespace":   "acme",
+				"environment": "dev",
+			},
+		},
+		{
+			name: "falls back to global when merged not available",
+			stackLocals: map[string]any{
+				"global": map[string]any{
+					"namespace": "acme",
+				},
+			},
+			componentType: "terraform",
+			expected: map[string]any{
+				"namespace": "acme",
+			},
+		},
+		{
+			name:          "returns empty map when no locals available",
+			stackLocals:   map[string]any{},
+			componentType: "terraform",
+			expected:      map[string]any{},
+		},
+		{
+			name: "handles unknown component type",
+			stackLocals: map[string]any{
+				"global": map[string]any{
+					"namespace": "acme",
+				},
+				"merged": map[string]any{
+					"namespace": "acme",
+				},
+			},
+			componentType: "unknown",
+			expected: map[string]any{
+				"namespace": "acme",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getLocalsForComponentType(tt.stackLocals, tt.componentType)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExecuteForComponent(t *testing.T) {
+	t.Run("requires stack when component is specified", func(t *testing.T) {
+		exec := &describeLocalsExec{}
+
+		args := &DescribeLocalsArgs{
+			Component: "vpc",
+			// FilterByStack is empty - should error.
+		}
+
+		_, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrStackRequiredWithComponent)
+	})
+
+	t.Run("returns error when component not found", func(t *testing.T) {
+		expectedErr := errors.New("component not found")
+
+		exec := &describeLocalsExec{
+			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+				return nil, expectedErr
+			},
+		}
+
+		args := &DescribeLocalsArgs{
+			Component:     "nonexistent",
+			FilterByStack: "dev",
+		}
+
+		_, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to describe component")
+	})
+
+	t.Run("returns error when stack has no locals", func(t *testing.T) {
+		exec := &describeLocalsExec{
+			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+				return map[string]any{
+					"component_type": "terraform",
+				}, nil
+			},
+			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
+				// Return empty map - no locals.
+				return map[string]any{}, nil
+			},
+		}
+
+		args := &DescribeLocalsArgs{
+			Component:     "vpc",
+			FilterByStack: "dev",
+		}
+
+		_, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrStackNotFoundOrNoLocals)
+	})
+
+	t.Run("returns locals for terraform component", func(t *testing.T) {
+		exec := &describeLocalsExec{
+			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+				assert.Equal(t, "vpc", params.Component)
+				assert.Equal(t, "dev", params.Stack)
+				return map[string]any{
+					"component_type": "terraform",
+				}, nil
+			},
+			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
+				return map[string]any{
+					"dev": map[string]any{
+						"global": map[string]any{
+							"namespace":   "acme",
+							"environment": "dev",
+						},
+						"terraform": map[string]any{
+							"namespace":      "acme",
+							"environment":    "dev",
+							"backend_bucket": "acme-dev-tfstate",
+						},
+						"merged": map[string]any{
+							"namespace":      "acme",
+							"environment":    "dev",
+							"backend_bucket": "acme-dev-tfstate",
+						},
+					},
+				}, nil
+			},
+		}
+
+		args := &DescribeLocalsArgs{
+			Component:     "vpc",
+			FilterByStack: "dev",
+		}
+
+		result, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
+		require.NoError(t, err)
+
+		assert.Equal(t, "vpc", result["component"])
+		assert.Equal(t, "dev", result["stack"])
+		assert.Equal(t, "terraform", result["component_type"])
+
+		locals, ok := result["locals"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "acme", locals["namespace"])
+		assert.Equal(t, "dev", locals["environment"])
+		assert.Equal(t, "acme-dev-tfstate", locals["backend_bucket"])
+	})
+
+	t.Run("returns locals for helmfile component", func(t *testing.T) {
+		exec := &describeLocalsExec{
+			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+				return map[string]any{
+					"component_type": "helmfile",
+				}, nil
+			},
+			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
+				return map[string]any{
+					"prod": map[string]any{
+						"global": map[string]any{
+							"namespace": "acme",
+						},
+						"helmfile": map[string]any{
+							"namespace":    "acme",
+							"release_name": "my-release",
+						},
+						"merged": map[string]any{
+							"namespace":    "acme",
+							"release_name": "my-release",
+						},
+					},
+				}, nil
+			},
+		}
+
+		args := &DescribeLocalsArgs{
+			Component:     "nginx",
+			FilterByStack: "prod",
+		}
+
+		result, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
+		require.NoError(t, err)
+
+		assert.Equal(t, "nginx", result["component"])
+		assert.Equal(t, "prod", result["stack"])
+		assert.Equal(t, "helmfile", result["component_type"])
+
+		locals, ok := result["locals"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "my-release", locals["release_name"])
+	})
+
+	t.Run("defaults to terraform when component_type not set", func(t *testing.T) {
+		exec := &describeLocalsExec{
+			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+				// Return without component_type.
+				return map[string]any{}, nil
+			},
+			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
+				return map[string]any{
+					"dev": map[string]any{
+						"global": map[string]any{
+							"namespace": "acme",
+						},
+						"merged": map[string]any{
+							"namespace": "acme",
+						},
+					},
+				}, nil
+			},
+		}
+
+		args := &DescribeLocalsArgs{
+			Component:     "vpc",
+			FilterByStack: "dev",
+		}
+
+		result, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
+		require.NoError(t, err)
+
+		// Should default to terraform.
+		assert.Equal(t, "terraform", result["component_type"])
+	})
+}
+
+// TestExecuteForComponentOutputStructure verifies that component queries return the correct structure.
+func TestExecuteForComponentOutputStructure(t *testing.T) {
+	t.Run("component output has expected structure", func(t *testing.T) {
+		exec := &describeLocalsExec{
+			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+				return map[string]any{
+					"component_type": "terraform",
+				}, nil
+			},
+			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
+				return map[string]any{
+					"dev-us-east-1": map[string]any{
+						"global": map[string]any{
+							"namespace": "acme",
+						},
+						"terraform": map[string]any{
+							"namespace":      "acme",
+							"backend_bucket": "acme-tfstate",
+						},
+						"merged": map[string]any{
+							"namespace":      "acme",
+							"backend_bucket": "acme-tfstate",
+						},
+					},
+				}, nil
+			},
+		}
+
+		args := &DescribeLocalsArgs{
+			Component:     "vpc",
+			FilterByStack: "dev-us-east-1",
+		}
+
+		result, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
+		require.NoError(t, err)
+
+		// Verify component output structure.
+		assert.Contains(t, result, "component", "component output should have 'component' key")
+		assert.Contains(t, result, "stack", "component output should have 'stack' key")
+		assert.Contains(t, result, "component_type", "component output should have 'component_type' key")
+		assert.Contains(t, result, "locals", "component output should have 'locals' key")
+
+		// Verify values.
+		assert.Equal(t, "vpc", result["component"])
+		assert.Equal(t, "dev-us-east-1", result["stack"])
+		assert.Equal(t, "terraform", result["component_type"])
+
+		// Verify locals are flattened (not nested with global/terraform/merged).
+		locals, ok := result["locals"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "acme", locals["namespace"])
+		assert.Equal(t, "acme-tfstate", locals["backend_bucket"])
+
+		// Verify locals do NOT have nested section keys.
+		_, hasGlobal := locals["global"]
+		_, hasTerraform := locals["terraform"]
+		_, hasMerged := locals["merged"]
+		assert.False(t, hasGlobal, "component locals should NOT have nested 'global' key")
+		assert.False(t, hasTerraform, "component locals should NOT have nested 'terraform' key")
+		assert.False(t, hasMerged, "component locals should NOT have nested 'merged' key")
+	})
+
+	t.Run("component output uses logical stack name", func(t *testing.T) {
+		exec := &describeLocalsExec{
+			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+				// Filter should be "deploy/prod" (file path).
+				assert.Equal(t, "deploy/prod", params.Stack)
+				return map[string]any{
+					"component_type": "terraform",
+				}, nil
+			},
+			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
+				// Return logical stack name as key.
+				return map[string]any{
+					"prod-us-west-2": map[string]any{
+						"global": map[string]any{
+							"namespace": "acme",
+						},
+						"merged": map[string]any{
+							"namespace": "acme",
+						},
+					},
+				}, nil
+			},
+		}
+
+		args := &DescribeLocalsArgs{
+			Component:     "vpc",
+			FilterByStack: "deploy/prod",
+		}
+
+		result, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
+		require.NoError(t, err)
+
+		// The output should use the logical stack name from ExecuteDescribeLocals result.
+		assert.Equal(t, "prod-us-west-2", result["stack"])
+	})
 }
 
 func TestDescribeLocalsExecExecute(t *testing.T) {
@@ -619,5 +1032,77 @@ locals:
 
 		err := exec.Execute(atmosConfig, args)
 		assert.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("execute with component argument", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{}
+		var capturedData any
+
+		exec := &describeLocalsExec{
+			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+				return map[string]any{
+					"component_type": "terraform",
+				}, nil
+			},
+			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
+				return map[string]any{
+					"dev": map[string]any{
+						"global": map[string]any{
+							"namespace": "acme",
+						},
+						"terraform": map[string]any{
+							"namespace":      "acme",
+							"backend_bucket": "acme-dev-tfstate",
+						},
+						"merged": map[string]any{
+							"namespace":      "acme",
+							"backend_bucket": "acme-dev-tfstate",
+						},
+					},
+				}, nil
+			},
+			isTTYSupportForStdout: func() bool { return false },
+			printOrWriteToFile: func(ac *schema.AtmosConfiguration, format string, file string, data any) error {
+				capturedData = data
+				return nil
+			},
+		}
+
+		args := &DescribeLocalsArgs{
+			Component:     "vpc",
+			FilterByStack: "dev",
+			Format:        "yaml",
+		}
+
+		err := exec.Execute(atmosConfig, args)
+		require.NoError(t, err)
+
+		// Verify the output structure.
+		result, ok := capturedData.(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "vpc", result["component"])
+		assert.Equal(t, "dev", result["stack"])
+		assert.Equal(t, "terraform", result["component_type"])
+	})
+
+	t.Run("execute with component but missing stack returns error", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{}
+
+		exec := &describeLocalsExec{
+			isTTYSupportForStdout: func() bool { return false },
+			printOrWriteToFile: func(ac *schema.AtmosConfiguration, format string, file string, data any) error {
+				return nil
+			},
+		}
+
+		args := &DescribeLocalsArgs{
+			Component: "vpc",
+			// FilterByStack is empty - should error.
+			Format: "yaml",
+		}
+
+		err := exec.Execute(atmosConfig, args)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrStackRequiredWithComponent)
 	})
 }

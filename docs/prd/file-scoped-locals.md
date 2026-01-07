@@ -1838,3 +1838,114 @@ But this is **not needed for the initial implementation**. The `atmos describe l
 3. **UX**: Error messages clearly explain the problem and suggest fixes
 4. **Debugging**: Users can inspect resolved locals without guessing
 5. **Adoption**: Users can reduce config duplication by 30%+ using locals
+
+---
+
+## Implementation Status
+
+### Implemented Features (v1.203.0+)
+
+The following features have been implemented:
+
+#### Core Locals Resolution
+- ✅ File-scoped locals (not inherited across imports)
+- ✅ Global-level locals (stack file root)
+- ✅ Section-level locals (terraform, helmfile, packer sections)
+- ✅ Locals referencing other locals
+- ✅ Topological sorting for dependency resolution
+- ✅ Circular dependency detection with clear error messages
+- ✅ Integration with template processing (`{{ .locals.* }}`)
+
+#### `atmos describe locals` Command
+- ✅ Show all locals across stacks: `atmos describe locals`
+- ✅ Filter by stack: `atmos describe locals --stack prod`
+- ✅ Filter by component in stack: `atmos describe locals vpc -s prod`
+- ✅ JSON output format: `atmos describe locals --format json`
+- ✅ Query support: `atmos describe locals --query '.merged.namespace'`
+- ✅ File output: `atmos describe locals --file output.yaml`
+
+#### Implementation Files
+- `internal/exec/stack_processor_locals.go` - LocalsContext and extraction
+- `internal/exec/describe_locals.go` - DescribeLocalsExec implementation
+- `cmd/describe_locals.go` - CLI command definition
+- `pkg/locals/resolver.go` - Dependency resolution with cycle detection
+- `errors/errors.go` - Sentinel errors for locals
+
+### Not Yet Implemented
+
+The following features from the PRD are planned but not yet implemented:
+
+#### Provenance Tracking (`--provenance` flag)
+The `--provenance` flag for showing source file and line numbers is not yet implemented for `describe locals`. This would require:
+1. Using `yaml.v3.Node` parsing to track line numbers
+2. Adding `LocalsProvenance` struct to track source/line per local
+3. Modifying `ProcessStackLocals` to optionally track provenance
+4. Adding provenance rendering similar to `describe component --provenance`
+
+This is a medium-effort enhancement that would provide debugging value similar to what `describe component --provenance` provides for vars/settings.
+
+#### Component-Level Locals
+Component-level locals (inside individual component definitions) are parsed but not resolved during the initial template pass. This is because component-level locals require per-component scoping that cannot be handled in a single template pass. Users should use global or section-level locals instead.
+
+#### `ATMOS_DEBUG_LOCALS` Environment Variable
+Verbose logging during stack processing has not been implemented.
+
+### Design Clarifications
+
+#### Stack Name Resolution in `describe locals`
+
+The `--stack` flag accepts two formats that both resolve to the same underlying stack manifest file:
+
+1. **Stack manifest file path** - Direct path relative to the stacks directory (e.g., `deploy/dev`, `prod`)
+2. **Logical stack name** - The derived name based on your `atmos.yaml` stack name pattern (e.g., `prod-us-east-1`, `dev-ue2-sandbox`)
+
+Both formats resolve to the same file and return the same locals because **locals are file-scoped**. The command returns only the locals defined in that specific stack manifest file.
+
+**Example:** If your `atmos.yaml` has `name_pattern: "{stage}-{environment}"` and you have a file `stacks/deploy/prod-us-east-1.yaml`:
+```bash
+# These are equivalent - both resolve to the same file
+atmos describe locals --stack deploy/prod-us-east-1
+atmos describe locals --stack prod-us-east-1
+```
+
+#### Component Argument Semantics
+
+When you specify a component with the `--stack` flag, you're asking: *"What locals would be available to this component during template processing?"*
+
+The component argument does **not** mean the locals come from the component definition. Instead:
+1. Atmos determines the component's type (terraform, helmfile, or packer)
+2. Atmos merges the global locals with the corresponding section-specific locals
+3. The result shows what `{{ .locals.* }}` references would resolve to for that component
+
+**Example:**
+```yaml
+# stacks/deploy/prod.yaml
+locals:
+  namespace: acme           # Global locals
+
+terraform:
+  locals:
+    backend_bucket: "{{ .locals.namespace }}-tfstate"  # Terraform section locals
+```
+
+Running `atmos describe locals vpc -s deploy/prod` (where `vpc` is a Terraform component) returns:
+```yaml
+component: vpc
+stack: deploy/prod
+component_type: terraform
+locals:
+  namespace: acme
+  backend_bucket: acme-tfstate
+```
+
+The locals come from the **stack manifest file**, not the `vpc` component definition. The component only determines which section-specific locals (terraform/helmfile/packer) to merge.
+
+#### File-Scoped Isolation
+
+A key design principle: when querying locals for a stack, you get **only** the locals defined in that stack manifest file, regardless of what files it imports. This is intentional:
+
+1. **Predictability** - You know exactly what locals are available by looking at the current file
+2. **No hidden dependencies** - Locals won't mysteriously change based on import order
+3. **Safer refactoring** - Renaming a local in one file won't break other files
+
+Use `vars` or `settings` for values that should propagate across imports. Use `locals` for file-internal convenience.

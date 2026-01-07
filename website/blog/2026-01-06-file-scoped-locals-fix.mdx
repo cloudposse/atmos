@@ -66,8 +66,14 @@ A new command has been added to help inspect and debug locals configurations:
 # Show locals for all stacks
 atmos describe locals
 
-# Show locals for a specific stack
+# Show locals for a specific stack (using file path)
 atmos describe locals --stack deploy/dev
+
+# Show locals for a specific stack (using logical stack name from atmos.yaml)
+atmos describe locals --stack prod-us-east-1
+
+# Show locals available to a specific component in a stack
+atmos describe locals vpc -s prod
 
 # Output as JSON
 atmos describe locals --format json
@@ -76,7 +82,31 @@ atmos describe locals --format json
 atmos describe locals --file locals.yaml
 ```
 
-The output is organized by scope:
+The `--stack` flag accepts either a **stack manifest file path** (e.g., `deploy/dev`) or a **logical stack name** derived from your `atmos.yaml` naming pattern (e.g., `prod-us-east-1`). Both resolve to the same underlying file, and locals are returned from that file only.
+
+#### Component-Specific Locals
+
+When specifying a component with the `--stack` flag, the command shows the merged locals that would be **available to** that component during template processing. The component argument determines which section-specific locals to include (e.g., `terraform:` locals for a Terraform component), but the locals themselves come from the stack manifest file, not the component definition:
+
+```bash
+atmos describe locals vpc -s prod
+```
+
+```yaml
+component: vpc
+stack: prod
+component_type: terraform
+locals:
+  namespace: acme
+  environment: prod
+  backend_bucket: acme-prod-tfstate
+```
+
+The `component_type` field shows how Atmos determined which section-specific locals to merge with global locals.
+
+#### Stack-Level Output
+
+Without a component argument, the output is organized by scope:
 
 ```yaml
 deploy/dev:

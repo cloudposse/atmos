@@ -182,39 +182,16 @@ atmos describe locals vpc -s prod-ue2
 
 <Terminal title="atmos describe locals vpc -s prod-ue2">
 ```yaml
-namespace: acme
-environment: prod
-stage: us-east-1
-name_prefix: acme-prod
-full_name: acme-prod-us-east-1
-backend_bucket: acme-prod-tfstate
-component_name: vpc
-tags:
-  Environment: prod
-  Namespace: acme
-```
-</Terminal>
-
-### Provenance Tracking
-
-Add `--provenance` to see exactly where each local was defined:
-
-```bash
-atmos describe locals vpc -s prod-ue2 --provenance
-```
-
-<Terminal title="atmos describe locals vpc -s prod-ue2 --provenance">
-```yaml
-namespace: acme           # ● [1] stacks/prod/us-east-1.yaml:4
-environment: prod         # ● [1] stacks/prod/us-east-1.yaml:5
-stage: us-east-1         # ● [1] stacks/prod/us-east-1.yaml:6
-name_prefix: acme-prod   # ● [1] stacks/prod/us-east-1.yaml:7 (computed)
-full_name: acme-prod-us-east-1  # ● [1] stacks/prod/us-east-1.yaml:8 (computed)
-backend_bucket: acme-prod-tfstate  # ○ [2] terraform section:12 (computed)
-component_name: vpc      # ○ [3] component section:18
-tags:                    # ● [1] stacks/prod/us-east-1.yaml:9
-  Environment: prod      # ● [1] stacks/prod/us-east-1.yaml:10 (computed)
-  Namespace: acme        # ● [1] stacks/prod/us-east-1.yaml:11 (computed)
+component: vpc
+stack: prod-ue2
+component_type: terraform
+locals:
+  namespace: acme
+  environment: prod
+  stage: us-east-1
+  name_prefix: acme-prod
+  full_name: acme-prod-us-east-1
+  backend_bucket: acme-prod-tfstate
 ```
 </Terminal>
 
@@ -228,17 +205,36 @@ atmos describe locals vpc -s prod-ue2 --format json
 
 ```json
 {
+  "component": "vpc",
+  "stack": "prod-ue2",
+  "component_type": "terraform",
   "locals": {
     "namespace": "acme",
     "environment": "prod",
     "name_prefix": "acme-prod"
-  },
-  "metadata": {
-    "component": "vpc",
-    "stack": "prod-ue2",
-    "component_type": "terraform"
   }
 }
+```
+
+### Show All Locals Across Stacks
+
+Without a component argument, show all locals organized by stack:
+
+```bash
+atmos describe locals
+```
+
+```yaml
+prod-ue2:
+  global:
+    namespace: acme
+    environment: prod
+  terraform:
+    backend_bucket: acme-prod-tfstate
+  merged:
+    namespace: acme
+    environment: prod
+    backend_bucket: acme-prod-tfstate
 ```
 
 ## Why File-Scoped?

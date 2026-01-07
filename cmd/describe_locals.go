@@ -11,14 +11,21 @@ import (
 
 // describeLocalsCmd describes locals for stacks.
 var describeLocalsCmd = &cobra.Command{
-	Use:   "locals",
+	Use:   "locals [component]",
 	Short: "Display locals from Atmos stack manifests",
-	Long:  "This command displays the locals defined in Atmos stack manifests.",
+	Long: `This command displays the locals defined in Atmos stack manifests.
+
+When called without arguments, it shows all locals organized by stack.
+When a component is specified with --stack, it shows the merged locals
+that would be available to that component (global + component-type-specific).`,
 	Example: `  # Show all locals
   atmos describe locals
 
   # Show locals for a specific stack
   atmos describe locals --stack deploy/dev
+
+  # Show locals for a component in a stack
+  atmos describe locals vpc -s prod
 
   # Output as JSON
   atmos describe locals --format json
@@ -26,7 +33,7 @@ var describeLocalsCmd = &cobra.Command{
   # Query specific values
   atmos describe locals --query '.["deploy/dev"].merged.namespace'`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Args:               cobra.NoArgs,
+	Args:               cobra.MaximumNArgs(1),
 	RunE: getRunnableDescribeLocalsCmd(getRunnableDescribeLocalsCmdProps{
 		checkAtmosConfig:       checkAtmosConfig,
 		processCommandLineArgs: exec.ProcessCommandLineArgs,
@@ -72,6 +79,12 @@ func getRunnableDescribeLocalsCmd(
 		}
 
 		describeArgs := &exec.DescribeLocalsArgs{}
+
+		// Extract component from positional argument if provided.
+		if len(args) > 0 {
+			describeArgs.Component = args[0]
+		}
+
 		err = setCliArgsForDescribeLocalsCli(cmd.Flags(), describeArgs)
 		if err != nil {
 			return err

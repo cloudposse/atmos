@@ -174,6 +174,28 @@ type LocalsContext struct {
 
 // MergeForTemplateContext merges all locals into a single flat map for template processing.
 // Global locals are copied first, then section-specific locals override if explicitly defined.
+// MergeForComponentType returns the merged locals for a specific component type.
+// This is what templates would see for a component of that type.
+func (ctx *LocalsContext) MergeForComponentType(componentType string) map[string]any {
+	defer perf.Track(nil, "exec.LocalsContext.MergeForComponentType")()
+
+	if ctx == nil {
+		return nil
+	}
+
+	switch componentType {
+	case "terraform":
+		return ctx.Terraform
+	case "helmfile":
+		return ctx.Helmfile
+	case "packer":
+		return ctx.Packer
+	default:
+		// For unknown types, return global only.
+		return ctx.Global
+	}
+}
+
 func (ctx *LocalsContext) MergeForTemplateContext() map[string]any {
 	defer perf.Track(nil, "exec.LocalsContext.MergeForTemplateContext")()
 

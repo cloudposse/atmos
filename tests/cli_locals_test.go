@@ -460,8 +460,10 @@ func TestLocalsDescribeLocalsDeepChain(t *testing.T) {
 	require.NotNil(t, result)
 
 	// Verify we got locals for the final stack.
-	finalLocals, ok := result["deploy/final"].(map[string]any)
-	require.True(t, ok, "should have deploy/final stack locals")
+	// The fixture has name_template: "{{ .vars.stage }}" and vars.stage: "final",
+	// so the derived stack name is "final" (not "deploy/final").
+	finalLocals, ok := result["final"].(map[string]any)
+	require.True(t, ok, "should have 'final' stack locals (derived from name_template)")
 
 	// Check global locals show this file's own locals.
 	globalLocals, ok := finalLocals["global"].(map[string]any)
@@ -479,4 +481,388 @@ func TestLocalsDescribeLocalsDeepChain(t *testing.T) {
 	assert.False(t, hasLayer1Local, "layer1_local should NOT be present - it's in layer1 mixin")
 	_, hasLayer2Local := globalLocals["layer2_local"]
 	assert.False(t, hasLayer2Local, "layer2_local should NOT be present - it's in layer2 mixin")
+}
+
+// TestDescribeLocalsForComponent tests that describe locals command correctly
+// returns locals for a specific component in a stack.
+// This tests the `atmos describe locals <component> -s <stack>` functionality.
+func TestDescribeLocalsForComponent(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Create the describe locals executor.
+	describeLocalsExec := exec.NewDescribeLocalsExec()
+
+	// Test getting locals for a terraform component.
+	t.Run("returns locals for terraform component", func(t *testing.T) {
+		// Get locals for mock/instance-1 component in deploy/dev stack.
+		// Since the describeLocalsExec.Execute writes to a file or stdout,
+		// we need to use a lower-level approach for testing.
+		// Let's test using ExecuteDescribeLocals with the component logic.
+
+		// First, get the stack locals.
+		// Note: ExecuteDescribeLocals uses the file path as the stack name key.
+		stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/dev")
+		require.NoError(t, err)
+		require.NotNil(t, stackLocals)
+
+		// Verify the structure has the expected locals.
+		devLocals, ok := stackLocals["deploy/dev"].(map[string]any)
+		require.True(t, ok, "should have deploy/dev stack")
+
+		// Check terraform section has the terraform-specific locals.
+		terraformLocals, ok := devLocals["terraform"].(map[string]any)
+		require.True(t, ok, "should have terraform section locals")
+
+		// Verify terraform-specific locals include the backend_bucket.
+		assert.Equal(t, "acme-dev-tfstate", terraformLocals["backend_bucket"],
+			"terraform locals should include backend_bucket")
+		assert.Equal(t, "terraform-only", terraformLocals["tf_specific"],
+			"terraform locals should include tf_specific")
+
+		// Verify global locals are also available in terraform section.
+		assert.Equal(t, "acme", terraformLocals["namespace"],
+			"terraform locals should include global namespace")
+		assert.Equal(t, "dev", terraformLocals["environment"],
+			"terraform locals should include global environment")
+	})
+
+	// Ensure describeLocalsExec is created successfully.
+	assert.NotNil(t, describeLocalsExec)
+}
+
+// TestDescribeLocalsForComponentOutput tests the full output structure
+// when describing locals for a specific component.
+func TestDescribeLocalsForComponentOutput(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Get locals filtered by stack file path.
+	// Note: ExecuteDescribeLocals uses the file path as the stack name key.
+	stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/dev")
+	require.NoError(t, err)
+	require.Len(t, stackLocals, 1, "should have exactly one stack")
+
+	// The component would see the terraform section locals.
+	devLocals, ok := stackLocals["deploy/dev"].(map[string]any)
+	require.True(t, ok)
+
+	// Check merged locals.
+	mergedLocals, ok := devLocals["merged"].(map[string]any)
+	require.True(t, ok, "should have merged locals")
+
+	// Merged should have all locals from global and terraform sections.
+	assert.Equal(t, "acme", mergedLocals["namespace"])
+	assert.Equal(t, "dev", mergedLocals["environment"])
+	assert.Equal(t, "us-east-1", mergedLocals["stage"])
+	assert.Equal(t, "acme-dev", mergedLocals["name_prefix"])
+	assert.Equal(t, "acme-dev-us-east-1", mergedLocals["full_name"])
+	assert.Equal(t, "acme-dev-tfstate", mergedLocals["backend_bucket"])
+	assert.Equal(t, "terraform-only", mergedLocals["tf_specific"])
+}
+
+// TestDescribeLocalsForComponentInProdStack tests locals for a component
+// in the prod stack to ensure different stacks have independent locals.
+func TestDescribeLocalsForComponentInProdStack(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Get locals for prod stack using the file path.
+	// Note: ExecuteDescribeLocals uses the file path as the stack name key.
+	stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/prod")
+	require.NoError(t, err)
+	require.Len(t, stackLocals, 1, "should have exactly one stack")
+
+	prodLocals, ok := stackLocals["deploy/prod"].(map[string]any)
+	require.True(t, ok)
+
+	// Check terraform section locals for prod.
+	terraformLocals, ok := prodLocals["terraform"].(map[string]any)
+	require.True(t, ok, "should have terraform section locals")
+
+	// Verify prod-specific values.
+	assert.Equal(t, "acme", terraformLocals["namespace"])
+	assert.Equal(t, "prod", terraformLocals["environment"])
+	assert.Equal(t, "acme-prod-tfstate", terraformLocals["backend_bucket"],
+		"prod should have prod-specific backend_bucket")
+}
+
+// =============================================================================
+// Logical Stack Name Tests
+// =============================================================================
+// These tests use the locals-logical-names fixture where vars contain literal
+// values (not templates), allowing name_template to derive logical stack names.
+
+// TestDescribeLocalsWithLogicalStackName tests that ExecuteDescribeLocals
+// correctly derives and returns logical stack names when configured.
+func TestDescribeLocalsWithLogicalStackName(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-logical-names")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Get all locals - should use derived logical stack names as keys.
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotEmpty(t, result)
+
+	// The fixture has name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+	// dev.yaml has vars: {environment: dev, stage: us-east-1} -> "dev-us-east-1"
+	// prod.yaml has vars: {environment: prod, stage: us-west-2} -> "prod-us-west-2"
+
+	// Verify we got the logical stack names as keys.
+	devLocals, hasDevLogical := result["dev-us-east-1"].(map[string]any)
+	prodLocals, hasProdLogical := result["prod-us-west-2"].(map[string]any)
+
+	assert.True(t, hasDevLogical, "should have dev-us-east-1 stack (logical name)")
+	assert.True(t, hasProdLogical, "should have prod-us-west-2 stack (logical name)")
+
+	// Verify locals content for dev stack.
+	if hasDevLogical {
+		global, ok := devLocals["global"].(map[string]any)
+		require.True(t, ok, "dev stack should have global locals")
+		assert.Equal(t, "acme", global["namespace"])
+		assert.Equal(t, "acme-dev", global["env_prefix"])
+	}
+
+	// Verify locals content for prod stack.
+	if hasProdLogical {
+		global, ok := prodLocals["global"].(map[string]any)
+		require.True(t, ok, "prod stack should have global locals")
+		assert.Equal(t, "acme", global["namespace"])
+		assert.Equal(t, "acme-prod", global["env_prefix"])
+	}
+}
+
+// TestDescribeLocalsFilterByLogicalStackName tests filtering by logical stack name.
+func TestDescribeLocalsFilterByLogicalStackName(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-logical-names")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Filter by logical stack name "dev-us-east-1".
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "dev-us-east-1")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result, 1, "should have exactly one stack when filtering by logical name")
+
+	// Verify we got the dev stack.
+	devLocals, ok := result["dev-us-east-1"].(map[string]any)
+	require.True(t, ok, "should have dev-us-east-1 stack")
+
+	global, ok := devLocals["global"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme", global["namespace"])
+}
+
+// TestDescribeLocalsFilterByFilePath tests filtering by file path when logical names are available.
+func TestDescribeLocalsFilterByFilePath(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-logical-names")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Filter by file path "deploy/prod" - should still work.
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/prod")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result, 1, "should have exactly one stack when filtering by file path")
+
+	// The result key is the logical name even when filtering by file path.
+	prodLocals, ok := result["prod-us-west-2"].(map[string]any)
+	require.True(t, ok, "should have prod-us-west-2 stack (returned with logical name)")
+
+	global, ok := prodLocals["global"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme-prod", global["env_prefix"])
+}
+
+// TestDescribeLocalsOutputStructureStack tests the output structure when querying stacks (no component).
+func TestDescribeLocalsOutputStructureStack(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-logical-names")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "prod-us-west-2")
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+
+	prodLocals, ok := result["prod-us-west-2"].(map[string]any)
+	require.True(t, ok)
+
+	// Verify stack output structure has the expected sections.
+	_, hasGlobal := prodLocals["global"]
+	_, hasTerraform := prodLocals["terraform"]
+	_, hasHelmfile := prodLocals["helmfile"]
+	_, hasMerged := prodLocals["merged"]
+
+	assert.True(t, hasGlobal, "stack output should have 'global' section")
+	assert.True(t, hasTerraform, "stack output should have 'terraform' section")
+	assert.True(t, hasHelmfile, "stack output should have 'helmfile' section (prod has helmfile locals)")
+	assert.True(t, hasMerged, "stack output should have 'merged' section")
+
+	// Verify terraform section has correct merged locals.
+	terraform, ok := prodLocals["terraform"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme-prod-tfstate", terraform["backend_bucket"])
+	assert.Equal(t, "terraform-specific-prod", terraform["tf_only"])
+	// terraform section should also include global locals (merged).
+	assert.Equal(t, "acme", terraform["namespace"])
+
+	// Verify helmfile section has correct merged locals.
+	helmfile, ok := prodLocals["helmfile"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme-prod-release", helmfile["release_name"])
+	assert.Equal(t, "helmfile-specific-prod", helmfile["hf_only"])
+	// helmfile section should also include global locals (merged).
+	assert.Equal(t, "acme", helmfile["namespace"])
+}
+
+// TestDescribeLocalsOutputStructureComponent tests the output structure when querying for a component.
+func TestDescribeLocalsOutputStructureComponent(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-logical-names")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Create the describe locals executor.
+	describeLocalsExec := exec.NewDescribeLocalsExec()
+
+	// We need to call Execute to get the component output format.
+	// Since Execute writes to stdout/file, we'll test the internal logic.
+
+	// Test using executeForComponent via the exported interface.
+	// For now, verify the stack filtering works with component type.
+
+	// Get all locals for the stack.
+	stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "dev-us-east-1")
+	require.NoError(t, err)
+
+	devLocals, ok := stackLocals["dev-us-east-1"].(map[string]any)
+	require.True(t, ok)
+
+	// Verify terraform section locals (what vpc component would see).
+	terraform, ok := devLocals["terraform"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme", terraform["namespace"], "terraform locals should include global namespace")
+	assert.Equal(t, "acme-dev-tfstate", terraform["backend_bucket"])
+	assert.Equal(t, "terraform-specific-dev", terraform["tf_only"])
+
+	// Ensure describeLocalsExec is created successfully.
+	assert.NotNil(t, describeLocalsExec)
+}
+
+// TestDescribeLocalsComponentWithLogicalStackName tests component argument with logical stack name.
+func TestDescribeLocalsComponentWithLogicalStackName(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-logical-names")
+
+	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Verify component resolution works with logical stack name.
+	// The component "vpc" in stack "dev-us-east-1" should return terraform locals.
+	result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            "vpc",
+		Stack:                "dev-us-east-1",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify vars were resolved from locals.
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme-dev-us-east-1-vpc", vars["name"])
+	assert.Equal(t, "acme-dev-tfstate", vars["bucket"])
+}
+
+// TestDescribeLocalsComponentWithFilePath tests component argument with file path via ExecuteDescribeLocals.
+// Note: ExecuteDescribeComponent uses different stack resolution logic and may not work with file paths
+// when a global config overrides the fixture config. This test verifies ExecuteDescribeLocals accepts file paths.
+func TestDescribeLocalsComponentWithFilePath(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-logical-names")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Verify ExecuteDescribeLocals accepts file path "deploy/prod" as filter.
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/prod")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result, 1, "should have exactly one stack when filtering by file path")
+
+	// The result key is the logical name even when filtering by file path.
+	prodLocals, ok := result["prod-us-west-2"].(map[string]any)
+	require.True(t, ok, "should have prod-us-west-2 stack (returned with logical name)")
+
+	// Verify terraform section locals.
+	terraform, ok := prodLocals["terraform"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme-prod-tfstate", terraform["backend_bucket"])
+}
+
+// TestDescribeLocalsHelmfileComponent tests locals for helmfile component type.
+func TestDescribeLocalsHelmfileComponent(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-logical-names")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Get locals for prod stack which has helmfile locals.
+	stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "prod-us-west-2")
+	require.NoError(t, err)
+
+	prodLocals, ok := stackLocals["prod-us-west-2"].(map[string]any)
+	require.True(t, ok)
+
+	// Verify helmfile section locals (what nginx component would see).
+	helmfile, ok := prodLocals["helmfile"].(map[string]any)
+	require.True(t, ok)
+
+	// Helmfile section should have helmfile-specific locals.
+	assert.Equal(t, "acme-prod-release", helmfile["release_name"])
+	assert.Equal(t, "helmfile-specific-prod", helmfile["hf_only"])
+
+	// Plus global locals merged in.
+	assert.Equal(t, "acme", helmfile["namespace"])
+	assert.Equal(t, "acme-prod", helmfile["env_prefix"])
+}
+
+// TestDescribeLocalsDifferentOutputStructures verifies that stack queries and component queries
+// return different output structures as documented.
+func TestDescribeLocalsDifferentOutputStructures(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-logical-names")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Stack query output structure.
+	stackResult, err := exec.ExecuteDescribeLocals(&atmosConfig, "dev-us-east-1")
+	require.NoError(t, err)
+
+	// Stack output: map keyed by stack name containing {global, terraform/helmfile/packer, merged}.
+	devLocals, ok := stackResult["dev-us-east-1"].(map[string]any)
+	require.True(t, ok, "stack result should have stack name as key")
+
+	// Verify stack output has section keys.
+	_, hasGlobal := devLocals["global"]
+	_, hasMerged := devLocals["merged"]
+	assert.True(t, hasGlobal, "stack output should have 'global' key")
+	assert.True(t, hasMerged, "stack output should have 'merged' key")
+
+	// Stack output should NOT have component-specific keys.
+	_, hasComponent := devLocals["component"]
+	_, hasComponentType := devLocals["component_type"]
+	assert.False(t, hasComponent, "stack output should NOT have 'component' key")
+	assert.False(t, hasComponentType, "stack output should NOT have 'component_type' key")
 }

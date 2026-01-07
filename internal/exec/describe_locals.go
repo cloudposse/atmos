@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -19,6 +20,7 @@ import (
 
 // DescribeLocalsArgs holds the arguments for the describe locals command.
 type DescribeLocalsArgs struct {
+	Component     string
 	Query         string
 	FilterByStack string
 	Format        string
@@ -33,13 +35,11 @@ type DescribeLocalsExec interface {
 }
 
 type describeLocalsExec struct {
-	pageCreator           pager.PageCreator
-	isTTYSupportForStdout func() bool
-	printOrWriteToFile    func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error
-	executeDescribeLocals func(
-		atmosConfig *schema.AtmosConfiguration,
-		filterByStack string,
-	) (map[string]any, error)
+	pageCreator              pager.PageCreator
+	isTTYSupportForStdout    func() bool
+	printOrWriteToFile       func(atmosConfig *schema.AtmosConfiguration, format string, file string, data any) error
+	executeDescribeLocals    func(atmosConfig *schema.AtmosConfiguration, filterByStack string) (map[string]any, error)
+	executeDescribeComponent func(params *ExecuteDescribeComponentParams) (map[string]any, error)
 }
 
 // NewDescribeLocalsExec creates a new DescribeLocalsExec instance.
@@ -47,10 +47,11 @@ func NewDescribeLocalsExec() DescribeLocalsExec {
 	defer perf.Track(nil, "exec.NewDescribeLocalsExec")()
 
 	return &describeLocalsExec{
-		pageCreator:           pager.New(),
-		isTTYSupportForStdout: term.IsTTYSupportForStdout,
-		printOrWriteToFile:    printOrWriteToFile,
-		executeDescribeLocals: ExecuteDescribeLocals,
+		pageCreator:              pager.New(),
+		isTTYSupportForStdout:    term.IsTTYSupportForStdout,
+		printOrWriteToFile:       printOrWriteToFile,
+		executeDescribeLocals:    ExecuteDescribeLocals,
+		executeDescribeComponent: ExecuteDescribeComponent,
 	}
 }
 
@@ -58,23 +59,30 @@ func NewDescribeLocalsExec() DescribeLocalsExec {
 func (d *describeLocalsExec) Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeLocalsArgs) error {
 	defer perf.Track(atmosConfig, "exec.DescribeLocalsExec.Execute")()
 
-	finalLocalsMap, err := d.executeDescribeLocals(
-		atmosConfig,
-		args.FilterByStack,
-	)
-	if err != nil {
-		return err
-	}
-
 	var res any
+	var err error
 
-	if args.Query != "" {
-		res, err = u.EvaluateYqExpression(atmosConfig, finalLocalsMap, args.Query)
+	// If component is specified, get locals for that specific component.
+	if args.Component != "" {
+		res, err = d.executeForComponent(atmosConfig, args)
 		if err != nil {
 			return err
 		}
 	} else {
+		// Get locals for all stacks.
+		finalLocalsMap, err := d.executeDescribeLocals(atmosConfig, args.FilterByStack)
+		if err != nil {
+			return err
+		}
 		res = finalLocalsMap
+	}
+
+	// Apply query if specified.
+	if args.Query != "" {
+		res, err = u.EvaluateYqExpression(atmosConfig, res, args.Query)
+		if err != nil {
+			return err
+		}
 	}
 
 	return viewWithScroll(&viewWithScrollProps{
@@ -87,6 +95,77 @@ func (d *describeLocalsExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 		file:                  args.File,
 		res:                   res,
 	})
+}
+
+// executeForComponent gets the locals for a specific component in a stack.
+func (d *describeLocalsExec) executeForComponent(
+	atmosConfig *schema.AtmosConfiguration,
+	args *DescribeLocalsArgs,
+) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.DescribeLocalsExec.executeForComponent")()
+
+	// Stack is required when component is specified.
+	if args.FilterByStack == "" {
+		return nil, errUtils.ErrStackRequiredWithComponent
+	}
+
+	// Use ExecuteDescribeComponent to get component info (including type).
+	componentSection, err := d.executeDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            args.Component,
+		Stack:                args.FilterByStack,
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe component %s in stack %s: %w", args.Component, args.FilterByStack, err)
+	}
+
+	// Get the component type from the component section.
+	componentType := "terraform" // Default to terraform.
+	if ct, ok := componentSection["component_type"].(string); ok && ct != "" {
+		componentType = ct
+	}
+
+	// Now get the locals for the stack and return the merged locals for this component type.
+	stackLocals, err := d.executeDescribeLocals(atmosConfig, args.FilterByStack)
+	if err != nil {
+		return nil, err
+	}
+
+	// Find the stack in the results.
+	for stackName, localsData := range stackLocals {
+		if localsMap, ok := localsData.(map[string]any); ok {
+			// Get the component-type-specific merged locals.
+			result := getLocalsForComponentType(localsMap, componentType)
+			return map[string]any{
+				"component":      args.Component,
+				"stack":          stackName,
+				"component_type": componentType,
+				"locals":         result,
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("%w: %s", errUtils.ErrStackNotFoundOrNoLocals, args.FilterByStack)
+}
+
+// getLocalsForComponentType extracts the appropriate merged locals for a component type.
+func getLocalsForComponentType(stackLocals map[string]any, componentType string) map[string]any {
+	// If there are section-specific locals, use them (they already include global).
+	if sectionLocals, ok := stackLocals[componentType].(map[string]any); ok {
+		return sectionLocals
+	}
+
+	// Fall back to merged or global.
+	if merged, ok := stackLocals["merged"].(map[string]any); ok {
+		return merged
+	}
+
+	if global, ok := stackLocals["global"].(map[string]any); ok {
+		return global
+	}
+
+	return map[string]any{}
 }
 
 // ExecuteDescribeLocals processes stack manifests and returns the locals for all stacks.
@@ -131,9 +210,11 @@ func processStackFileForLocals(
 	}
 
 	// Parse the YAML to extract structure.
-	// Unmarshal errors are expected for non-YAML files, so we skip them silently.
+	// Unmarshal errors indicate malformed YAML, log at trace level for debugging.
 	var rawConfig map[string]any
-	_ = yaml.Unmarshal(content, &rawConfig)
+	if err := yaml.Unmarshal(content, &rawConfig); err != nil {
+		log.Trace("Skipping file with YAML parse error", "file", filePath, "error", err)
+	}
 
 	if rawConfig == nil {
 		return "", nil, nil
@@ -238,34 +319,92 @@ func deriveStackName(
 ) string {
 	defer perf.Track(atmosConfig, "exec.deriveStackName")()
 
-	// Check for explicit name in manifest.
-	if nameValue, ok := stackSectionMap[cfg.NameSectionName]; ok {
-		if name, ok := nameValue.(string); ok && name != "" {
-			return name
-		}
+	// Try explicit name from manifest first.
+	if name := getExplicitStackName(stackSectionMap); name != "" {
+		return name
 	}
 
-	// Use name template if configured.
-	if atmosConfig.Stacks.NameTemplate != "" {
-		stackName, err := ProcessTmpl(atmosConfig, "describe-locals-name-template", atmosConfig.Stacks.NameTemplate, varsSection, false)
-		if err != nil {
-			log.Debug("Failed to evaluate name template for stack", "file", stackFileName, "error", err)
-		} else if stackName != "" {
-			return stackName
-		}
+	// Try name template.
+	if name := deriveStackNameFromTemplate(atmosConfig, stackFileName, varsSection); name != "" {
+		return name
 	}
 
-	// Use name pattern if configured.
-	if GetStackNamePattern(atmosConfig) != "" {
-		context := cfg.GetContextFromVars(varsSection)
-		stackName, err := cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
-		if err != nil {
-			log.Debug("Failed to evaluate name pattern for stack", "file", stackFileName, "error", err)
-		} else if stackName != "" {
-			return stackName
-		}
+	// Try name pattern.
+	if name := deriveStackNameFromPattern(atmosConfig, stackFileName, varsSection); name != "" {
+		return name
 	}
 
 	// Default: use stack filename.
 	return stackFileName
+}
+
+// getExplicitStackName extracts an explicit name from the stack manifest if defined.
+func getExplicitStackName(stackSectionMap map[string]any) string {
+	nameValue, ok := stackSectionMap[cfg.NameSectionName]
+	if !ok {
+		return ""
+	}
+	name, ok := nameValue.(string)
+	if !ok || name == "" {
+		return ""
+	}
+	return name
+}
+
+// deriveStackNameFromTemplate derives a stack name using the configured name template.
+// Returns empty string if template is not configured or evaluation fails.
+func deriveStackNameFromTemplate(
+	atmosConfig *schema.AtmosConfiguration,
+	stackFileName string,
+	varsSection map[string]any,
+) string {
+	if atmosConfig.Stacks.NameTemplate == "" {
+		return ""
+	}
+
+	// Wrap varsSection in "vars" key to match template syntax: {{ .vars.environment }}.
+	templateData := map[string]any{
+		"vars": varsSection,
+	}
+
+	stackName, err := ProcessTmpl(atmosConfig, "describe-locals-name-template", atmosConfig.Stacks.NameTemplate, templateData, false)
+	if err != nil {
+		log.Debug("Failed to evaluate name template for stack", "file", stackFileName, "error", err)
+		return ""
+	}
+
+	if stackName == "" {
+		return ""
+	}
+
+	// If vars contain unresolved templates (e.g., "{{ .locals.* }}"), the result
+	// will contain raw template markers. Fall back to empty (use filename).
+	if strings.Contains(stackName, "{{") || strings.Contains(stackName, "}}") {
+		log.Debug("Name template result contains unresolved templates, using filename", "file", stackFileName, "result", stackName)
+		return ""
+	}
+
+	return stackName
+}
+
+// deriveStackNameFromPattern derives a stack name using the configured name pattern.
+// Returns empty string if pattern is not configured or evaluation fails.
+func deriveStackNameFromPattern(
+	atmosConfig *schema.AtmosConfiguration,
+	stackFileName string,
+	varsSection map[string]any,
+) string {
+	pattern := GetStackNamePattern(atmosConfig)
+	if pattern == "" {
+		return ""
+	}
+
+	context := cfg.GetContextFromVars(varsSection)
+	stackName, err := cfg.GetContextPrefix(stackFileName, context, pattern, stackFileName)
+	if err != nil {
+		log.Debug("Failed to evaluate name pattern for stack", "file", stackFileName, "error", err)
+		return ""
+	}
+
+	return stackName
 }

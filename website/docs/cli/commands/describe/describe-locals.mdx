@@ -14,6 +14,14 @@ Use this command to display the [locals](/stacks/locals) defined in Atmos stack 
 This is useful for debugging and understanding how locals are configured across your stacks.
 </Intro>
 
+:::info Understanding Stack Resolution
+When you specify `--stack`, Atmos resolves it to a stack manifest file and returns **only the locals defined in that file** (not inherited from imports). The `--stack` flag accepts either:
+- A **logical stack name** derived from your `atmos.yaml` naming pattern (e.g., `prod-us-east-1`)
+- A **stack manifest file path** (e.g., `deploy/prod`)
+
+Both resolve to the same underlying file. Locals are file-scoped, so the output reflects what's defined in that specific manifest.
+:::
+
 <Screengrab title="atmos describe locals --help" slug="atmos-describe-locals--help" />
 
 ## Usage
@@ -21,10 +29,11 @@ This is useful for debugging and understanding how locals are configured across 
 Execute the `describe locals` command like this:
 
 ```shell
-atmos describe locals [options]
+atmos describe locals [component] [options]
 ```
 
-This command reads all stack manifest files and extracts the `locals` sections, showing both raw and resolved values organized by scope (global, terraform, helmfile, packer).
+When called without arguments, it shows all locals organized by stack.
+When a component is specified with `--stack`, it shows the merged locals that would be **available to** that component (global + component-type-specific). The component argument determines which section-specific locals to include (e.g., `terraform:` locals for a Terraform component), but the locals themselves come from the stack manifest file, not the component definition.
 
 :::tip
 Run `atmos describe locals --help` to see all the available options
@@ -36,26 +45,40 @@ Run `atmos describe locals --help` to see all the available options
 # Show locals for all stacks
 atmos describe locals
 
-# Show locals for a specific stack
+# Show locals for a specific stack (using file path)
 atmos describe locals --stack deploy/dev
+
+# Show locals for a specific stack (using logical stack name derived from atmos.yaml)
 atmos describe locals -s prod-us-east-1
+
+# Show locals available to a specific component in a stack
+# The component determines which section-specific locals to merge (terraform/helmfile/packer)
+atmos describe locals vpc -s prod
+atmos describe locals eks --stack prod-us-east-1
 
 # Output as JSON
 atmos describe locals --format json
-atmos describe locals -f json
+atmos describe locals vpc -s prod -f json
 
 # Write to file
 atmos describe locals --file locals.yaml
 
-# Query specific values
+# Query specific values (note: stack key is the file path, not logical name)
 atmos describe locals --query '.["deploy/dev"].merged.namespace'
 ```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(optional)</em></dt>
+  <dd>The name of a component. When specified with `--stack`, shows the merged locals that would be <strong>available to</strong> that component. Atmos determines the component's type (terraform, helmfile, or packer) and merges the global locals with the corresponding section-specific locals from the stack manifest file. The locals come from the file, not the component definition itself.</dd>
+</dl>
 
 ## Flags
 
 <dl>
-  <dt>`--stack` / `-s` <em>(optional)</em></dt>
-  <dd>Filter by a specific stack. Supports both stack manifest names (including subfolder paths like `deploy/dev`) and Atmos stack names derived from context vars.</dd>
+  <dt>`--stack` / `-s` <em>(optional, required with component)</em></dt>
+  <dd>Filter by a specific stack. Accepts two formats: (1) <strong>Stack manifest file path</strong> - direct path relative to your stacks directory (e.g., <code>deploy/dev</code>, <code>prod</code>), or (2) <strong>Logical stack name</strong> - the derived name based on your <code>atmos.yaml</code> naming pattern (e.g., <code>prod-us-east-1</code>). Atmos resolves either format to the underlying stack manifest file and returns only the locals defined in that file. Required when a component argument is provided.</dd>
 
   <dt>`--format` / `-f` <em>(optional)</em></dt>
   <dd>Output format: `yaml` or `json` (`yaml` is default).</dd>
@@ -117,6 +140,31 @@ deploy/dev:
 ```
 </Terminal>
 
+### Component-Specific Output
+
+When a component is specified with `--stack`, the output shows the locals that would be **available to** that component during template processing. The output includes the component name, stack, component type, and the merged locals:
+
+<Terminal title="atmos describe locals vpc -s prod-ue2">
+```yaml
+component: vpc
+stack: prod-ue2
+component_type: terraform
+locals:
+  backend_bucket: acme-prod-tfstate
+  environment: prod
+  full_name: acme-prod-us-east-1
+  name_prefix: acme-prod
+  namespace: acme
+  tf_specific: terraform-only
+```
+</Terminal>
+
+The `component_type` field shows how Atmos determined which section-specific locals to include. Since `vpc` is a Terraform component, Atmos merged the global locals with the `terraform:` section locals from the stack manifest file.
+
+:::note
+The locals shown come from the **stack manifest file**, not the component definition. The component argument only determines which section-specific locals (terraform/helmfile/packer) to merge with the global locals.
+:::
+
 ## How Locals Work
 
 Locals are file-scoped variables that can reference each other and are resolved before template processing. They provide a way to define computed values that can be used throughout the stack manifest.
@@ -159,6 +207,12 @@ terraform:
 ### File-Scoped Behavior
 
 Locals are **file-scoped** and are NOT inherited across imports. Each stack manifest file can only access its own locally defined `locals` section. This prevents unintended side effects from imported files.
+
+This is a key design principle: when you run `atmos describe locals --stack deploy/dev`, you get **only** the locals defined in the `deploy/dev.yaml` file itself, regardless of what files it imports. The `--stack` flag accepts either:
+- The file path (`deploy/dev`)
+- The logical stack name derived from your naming pattern (e.g., `dev-us-east-1`)
+
+Both resolve to the same file and return the same locals.
 
 ```yaml
 # mixins/base.yaml

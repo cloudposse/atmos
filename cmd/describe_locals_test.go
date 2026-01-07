@@ -75,6 +75,44 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 		assert.True(t, executeCalled, "execute should be called")
 	})
 
+	t.Run("successful execution with component argument", func(t *testing.T) {
+		var capturedArgs *exec.DescribeLocalsArgs
+
+		mockExec := &mockDescribeLocalsExec{
+			executeFunc: func(atmosConfig *schema.AtmosConfiguration, args *exec.DescribeLocalsArgs) error {
+				capturedArgs = args
+				return nil
+			},
+		}
+
+		props := getRunnableDescribeLocalsCmdProps{
+			checkAtmosConfig: func(opts ...AtmosValidateOption) {},
+			processCommandLineArgs: func(componentType string, cmd *cobra.Command, args []string, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+				return schema.ConfigAndStacksInfo{}, nil
+			},
+			initCliConfig: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+				return schema.AtmosConfiguration{}, nil
+			},
+			validateStacks: func(atmosConfig *schema.AtmosConfiguration) error {
+				return nil
+			},
+			newDescribeLocalsExec: mockExec,
+		}
+
+		runFunc := getRunnableDescribeLocalsCmd(props)
+		cmd := &cobra.Command{}
+		cmd.Flags().String("stack", "", "")
+		cmd.Flags().String("format", "", "")
+		cmd.Flags().String("file", "", "")
+		cmd.Flags().String("query", "", "")
+
+		// Pass component as positional argument.
+		err := runFunc(cmd, []string{"vpc"})
+		require.NoError(t, err)
+
+		assert.Equal(t, "vpc", capturedArgs.Component)
+	})
+
 	// Table-driven tests for error cases to avoid code duplication.
 	errorTests := []struct {
 		name                  string
@@ -231,7 +269,7 @@ func TestSetCliArgsForDescribeLocalsCli(t *testing.T) {
 
 func TestDescribeLocalsCmd(t *testing.T) {
 	t.Run("command has expected properties", func(t *testing.T) {
-		assert.Equal(t, "locals", describeLocalsCmd.Use)
+		assert.Equal(t, "locals [component]", describeLocalsCmd.Use)
 		assert.NotEmpty(t, describeLocalsCmd.Short)
 		assert.NotEmpty(t, describeLocalsCmd.Long)
 		assert.NotEmpty(t, describeLocalsCmd.Example)
