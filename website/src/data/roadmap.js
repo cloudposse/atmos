@@ -376,6 +376,28 @@ export const roadmapConfig = {
       prs: [],
     },
     {
+      id: 'logs',
+      icon: 'RiFileTextLine',
+      title: 'Multi-Cloud Log Streaming',
+      tagline: 'Stream runtime logs from deployed components',
+      description:
+        'Infrastructure operators need to view logs from deployed components but must currently use separate CLI tools, know provider-specific log locations, and handle authentication separately. Atmos logs brings log streaming into the core with native support for CloudWatch and CloudTrail, with planned support for GitHub Actions, Azure Monitor, GCP Logging, and Kubernetes.',
+      progress: 0,
+      status: 'planned',
+      milestones: [
+        // Featured - core atmos logs command with CloudWatch support
+        { label: '`atmos logs` command with CloudWatch support', status: 'planned', quarter: 'q1-2026', prd: 'atmos-logs', description: 'View, tail, and search CloudWatch logs for components. Config-driven log sources with filter patterns and Insights queries.', codeExample: 'atmos logs view --stack dev --component api', category: 'featured', priority: 'high', benefits: 'View logs without knowing log group names. Watch deployments in real-time. No separate CloudWatch console needed.' },
+        { label: 'Real-time log streaming (`--follow`)', status: 'planned', quarter: 'q1-2026', prd: 'atmos-logs', description: 'Live tail logs using CloudWatch Live Tail API with colored, streaming output.', codeExample: 'atmos logs tail --stack prod --component api --follow', category: 'featured', priority: 'high', benefits: 'Watch logs in real-time during deployments. See errors as they happen.' },
+        { label: 'CloudTrail audit log viewer', status: 'planned', quarter: 'q1-2026', prd: 'atmos-logs', description: 'View CloudTrail events with event source and name filtering. See who did what in your AWS accounts.', codeExample: 'atmos logs view --source cloudtrail-audit', category: 'featured', priority: 'high', benefits: 'Audit trail at your fingertips. Debug IAM issues without CloudTrail console.' },
+        { label: 'Interactive log browser (`--interactive`)', status: 'planned', quarter: 'q2-2026', prd: 'atmos-logs', description: 'TUI with fuzzy search across log sources, pinned favorites, and real-time streaming viewer.', codeExample: 'atmos logs --interactive', category: 'featured', priority: 'high', benefits: 'Discover and navigate logs interactively. Pin frequently-used sources for quick access.' },
+        // Other improvements
+        { label: 'GitHub Actions log viewer', status: 'planned', quarter: 'q2-2026', prd: 'atmos-logs', description: 'View workflow run logs with job/step filtering and live streaming of in-progress workflows.', codeExample: 'atmos logs view --source github-deploy', benefits: 'View CI logs without leaving the terminal. Stream live workflow output.' },
+        { label: 'Multi-component log tailing', status: 'planned', quarter: 'q2-2026', prd: 'atmos-logs', description: 'Tail logs from multiple components with wildcard patterns and interleaved, color-coded output.', codeExample: "atmos logs tail --stack dev --component 'api-*'", benefits: 'Monitor multiple services simultaneously. Correlate events across components.' },
+      ],
+      issues: [],
+      prs: [],
+    },
+    {
       id: 'docs',
       icon: 'RiBookOpenLine',
       title: 'Documentation Overhaul and Community Announcements',
