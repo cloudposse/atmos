@@ -84,7 +84,7 @@ tests:
 
   - name: "atmos --chdir config isolation"
     enabled: true
-    snapshot: false
+    snapshot: true
     description: "Verify --chdir uses ONLY the target directory config, not repo root config"
     workdir: "../"
     command: "atmos"
