@@ -193,5 +193,5 @@ func (t *ToolchainCommandProvider) GetCompatibilityFlags() map[string]compat.Com
 
 // IsExperimental returns whether this command is experimental.
 func (t *ToolchainCommandProvider) IsExperimental() bool {
-	return false
+	return true
 }
