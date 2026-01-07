@@ -263,6 +263,7 @@ vars:
 	t.Run("file not found", func(t *testing.T) {
 		_, err := processStackFileForLocals(atmosConfig, "/nonexistent/file.yaml", "")
 		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
 		assert.Contains(t, err.Error(), "failed to read stack file")
 	})
 

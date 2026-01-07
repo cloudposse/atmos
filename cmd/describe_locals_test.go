@@ -268,6 +268,8 @@ func TestSetCliArgsForDescribeLocalsCli(t *testing.T) {
 }
 
 func TestDescribeLocalsCmd(t *testing.T) {
+	_ = NewTestKit(t)
+
 	t.Run("command has expected properties", func(t *testing.T) {
 		assert.Equal(t, "locals [component]", describeLocalsCmd.Use)
 		assert.NotEmpty(t, describeLocalsCmd.Short)

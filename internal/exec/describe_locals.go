@@ -224,7 +224,7 @@ func processStackFileForLocals(
 	// Read the raw YAML file.
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read stack file %s: %w", filePath, err)
+		return nil, fmt.Errorf("%w: failed to read stack file %s: %w", errUtils.ErrInvalidStackManifest, filePath, err)
 	}
 
 	// Parse the YAML to extract structure.

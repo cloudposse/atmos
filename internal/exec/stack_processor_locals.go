@@ -171,8 +171,6 @@ type LocalsContext struct {
 	HasPackerLocals bool
 }
 
-// MergeForTemplateContext merges all locals into a single flat map for template processing.
-// Global locals are copied first, then section-specific locals override if explicitly defined.
 // MergeForComponentType returns the merged locals for a specific component type.
 // This is what templates would see for a component of that type.
 func (ctx *LocalsContext) MergeForComponentType(componentType string) map[string]any {
@@ -195,6 +193,8 @@ func (ctx *LocalsContext) MergeForComponentType(componentType string) map[string
 	}
 }
 
+// MergeForTemplateContext merges all locals into a single flat map for template processing.
+// Global locals are copied first, then section-specific locals override if explicitly defined.
 func (ctx *LocalsContext) MergeForTemplateContext() map[string]any {
 	defer perf.Track(nil, "exec.LocalsContext.MergeForTemplateContext")()
 
