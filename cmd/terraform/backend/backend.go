@@ -23,7 +23,10 @@ var backendCmd = &cobra.Command{
 }
 
 func init() {
-	// Add CRUD subcommands
+	// Mark this subcommand as experimental.
+	backendCmd.Annotations = map[string]string{"experimental": "true"}
+
+	// Add CRUD subcommands.
 	backendCmd.AddCommand(createCmd)
 	backendCmd.AddCommand(listCmd)
 	backendCmd.AddCommand(describeCmd)
