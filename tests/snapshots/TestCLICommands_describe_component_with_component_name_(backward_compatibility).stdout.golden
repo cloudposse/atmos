@@ -9,6 +9,7 @@ atmos_cli_config:
       deploy_run_init: true
       init_run_reconfigure: true
       auto_generate_backend_file: false
+      auto_generate_files: false
       command: terraform
       shell:
         prompt: ""
@@ -16,6 +17,7 @@ atmos_cli_config:
         pass_vars: false
       plan:
         skip_planfile: false
+      plugin_cache: true
     helmfile:
       base_path: components/helmfile
       use_eks: true
@@ -462,6 +464,7 @@ deps_all:
   - orgs/cp/tenant1/_defaults
   - orgs/cp/tenant1/dev/us-east-2
 env: {}
+generate: {}
 hooks: {}
 imports:
   - catalog/helmfile/echo-server

@@ -7,6 +7,7 @@ import (
 
 	fn "github.com/cloudposse/atmos/pkg/function"
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -76,6 +77,11 @@ func processNodesWithContext(
 		case string:
 			result, err := processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
 			if err != nil {
+				log.Debug("Error processing YAML function",
+					"value", v,
+					"stack", currentStack,
+					"error", err.Error(),
+				)
 				firstErr = err
 				return v
 			}

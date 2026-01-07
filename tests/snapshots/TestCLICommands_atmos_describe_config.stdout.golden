@@ -8,6 +8,7 @@
       "deploy_run_init": true,
       "init_run_reconfigure": true,
       "auto_generate_backend_file": false,
+      "auto_generate_files": false,
       "command": "",
       "shell": {
         "prompt": ""
@@ -17,7 +18,8 @@
       },
       "plan": {
         "skip_planfile": false
-      }
+      },
+      "plugin_cache": true
     },
     "helmfile": {
       "base_path": "",

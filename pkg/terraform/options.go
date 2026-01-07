@@ -19,6 +19,7 @@ type CleanOptions struct {
 	Everything   bool
 	SkipLockFile bool
 	DryRun       bool
+	Cache        bool // Clean shared plugin cache directory.
 }
 
 // GenerateBackendOptions holds options for generating Terraform backend configs.
