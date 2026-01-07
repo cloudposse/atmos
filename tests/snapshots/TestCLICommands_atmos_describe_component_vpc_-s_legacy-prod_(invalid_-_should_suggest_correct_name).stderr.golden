@@ -10,3 +10,5 @@ Stack legacy-prod not found.
 ## Hints
 
 💡 Did you mean my-legacy-prod-stack?
+
+💡 Run atmos list stacks to see all available stacks.

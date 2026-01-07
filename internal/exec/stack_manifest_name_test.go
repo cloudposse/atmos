@@ -797,17 +797,13 @@ func TestProcessStacks_InvalidStackErrorWithSuggestion(t *testing.T) {
 	// Verify error is ErrInvalidStack, not ErrInvalidComponent.
 	assert.ErrorIs(t, err, errUtils.ErrInvalidStack, "Error should be ErrInvalidStack when filename is used for stack with explicit name")
 
-	// Verify the hint suggests the correct canonical name.
+	// Verify the hints suggest the correct canonical name and list stacks command.
 	hints := errors.GetAllHints(err)
-	require.NotEmpty(t, hints, "Error should have hints")
+	require.Len(t, hints, 2, "Error should have exactly 2 hints")
 
-	// Look for the canonical name in any of the hints.
-	found := false
-	for _, hint := range hints {
-		if assert.ObjectsAreEqual(hint, "Did you mean `my-legacy-prod-stack`?") {
-			found = true
-			break
-		}
-	}
-	assert.True(t, found, "One of the hints should suggest the canonical name 'my-legacy-prod-stack', got hints: %v", hints)
+	// Check for the "Did you mean" hint.
+	assert.Equal(t, "Did you mean `my-legacy-prod-stack`?", hints[0], "First hint should suggest the canonical name")
+
+	// Check for the "list stacks" hint.
+	assert.Equal(t, "Run `atmos list stacks` to see all available stacks.", hints[1], "Second hint should suggest listing stacks")
 }

@@ -620,6 +620,7 @@ func ProcessStacks(
 					errUtils.Build(errUtils.ErrInvalidStack).
 						WithExplanation(fmt.Sprintf("Stack `%s` not found.", configAndStacksInfo.Stack)).
 						WithHint(fmt.Sprintf("Did you mean `%s`?", canonicalName)).
+						WithHint("Run `atmos list stacks` to see all available stacks.").
 						Err()
 			}
 

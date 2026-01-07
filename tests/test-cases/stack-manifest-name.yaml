@@ -85,6 +85,7 @@ tests:
         - "invalid stack"
         - "legacy-prod"
         - "my-legacy-prod-stack"
+        - "atmos list stacks"
       exit_code: 1
 
   # Test 5: Describe stacks requires name_pattern for zero-config scenarios
@@ -132,4 +133,5 @@ tests:
         - "invalid stack"
         - "legacy-prod"
         - "my-legacy-prod-stack"
+        - "atmos list stacks"
       exit_code: 1
