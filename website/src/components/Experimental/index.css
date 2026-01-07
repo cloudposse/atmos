@@ -20,18 +20,25 @@
   line-height: 1.3;
 }
 
+/* Light theme: use darker shades for WCAG AA compliance (4.5:1 contrast). */
 .experimental-text strong {
-  color: #e65100;
+  color: #b45309;
 }
 
 .experimental-text a {
   font-size: 0.8rem;
-  color: #ff9800;
+  color: #d97706;
 }
 
 .experimental-text a:hover {
-  color: #e65100;
+  color: #b45309;
   text-decoration: underline;
+}
+
+.experimental-text a:focus-visible {
+  outline: 2px solid #d97706;
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 [data-theme='dark'] .experimental-badge {
@@ -49,4 +56,10 @@
 
 [data-theme='dark'] .experimental-text a:hover {
   color: #ffb74d;
+}
+
+[data-theme='dark'] .experimental-text a:focus-visible {
+  outline: 2px solid #ffa726;
+  outline-offset: 2px;
+  border-radius: 2px;
 }
