@@ -269,6 +269,7 @@ var (
 	ErrInvalidArguments                           = errors.New("invalid arguments")
 	ErrUnknownSubcommand                          = errors.New("unknown subcommand")
 	ErrInvalidComponent                           = errors.New("invalid component")
+	ErrInvalidStack                               = errors.New("invalid stack")
 	ErrInvalidComponentMapType                    = errors.New("invalid component map type")
 	ErrAbstractComponentCantBeProvisioned         = errors.New("abstract component cannot be provisioned")
 	ErrLockedComponentCantBeProvisioned           = errors.New("locked component cannot be provisioned")

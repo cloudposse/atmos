@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -759,4 +760,42 @@ func TestDescribeStacks_FilenameAsKeyWhenNoNamingConfigured(t *testing.T) {
 	// Stack without 'name' field should use filename as the key.
 	_, hasNoNameStack := result["no-name-prod"]
 	assert.True(t, hasNoNameStack, "Stack without 'name' field should use filename 'no-name-prod' as key")
+}
+
+// TestProcessStacks_InvalidStackErrorWithSuggestion verifies that when a user provides
+// a filename for a stack that has an explicit name, the error message suggests the
+// correct canonical name.
+//
+// Scenario:
+// - Stack file: legacy-prod.yaml
+// - Manifest has: name: "my-legacy-prod-stack"
+// - User runs: atmos tf plan vpc -s legacy-prod (using filename)
+//
+// Expected: Error message should say "invalid stack" and suggest "my-legacy-prod-stack".
+func TestProcessStacks_InvalidStackErrorWithSuggestion(t *testing.T) {
+	// Change to the test fixture directory with NO name_template or name_pattern.
+	testDir := "../../tests/fixtures/scenarios/stack-manifest-name"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Try to use the filename "legacy-prod" for a stack that has
+	// explicit name "my-legacy-prod-stack". This should FAIL with a helpful suggestion.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "legacy-prod", // Filename - should be rejected with suggestion
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// ProcessStacks should fail with ErrInvalidStack (not ErrInvalidComponent).
+	_, err = ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+
+	// Verify error is ErrInvalidStack, not ErrInvalidComponent.
+	assert.ErrorIs(t, err, errUtils.ErrInvalidStack, "Error should be ErrInvalidStack when filename is used for stack with explicit name")
+
+	// Verify error message suggests the correct canonical name.
+	assert.Contains(t, err.Error(), "my-legacy-prod-stack", "Error message should suggest the canonical name")
 }
