@@ -514,6 +514,9 @@ func (f *formatter) Toastf(icon, format string, a ...interface{}) string {
 // Badge renders a styled badge with background color, foreground color, bold text, and padding.
 // Badges are compact labels used for status indicators like [EXPERIMENTAL], [BETA], etc.
 func (f *formatter) Badge(text, background, foreground string) string {
+	if !f.SupportsColor() {
+		return "[" + text + "]"
+	}
 	return lipgloss.NewStyle().
 		Background(lipgloss.Color(background)).
 		Foreground(lipgloss.Color(foreground)).
