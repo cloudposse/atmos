@@ -297,7 +297,7 @@ Tests in `tests/cli_locals_test.go` (12 tests total):
 
 New fixture for testing file-scoped locals across deep import chains:
 
-```
+```text
 locals-deep-import-chain/
 ├── atmos.yaml
 └── stacks/

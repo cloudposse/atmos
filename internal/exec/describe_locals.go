@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -203,6 +204,7 @@ func buildStackLocalsFromContext(localsCtx *LocalsContext) map[string]any {
 
 // deriveStackFileName extracts the stack file name from the absolute path.
 // It removes the stacks base path and file extension to get the relative stack name.
+// The returned path always uses forward slashes for consistency across platforms.
 func deriveStackFileName(atmosConfig *schema.AtmosConfiguration, filePath string) string {
 	defer perf.Track(atmosConfig, "exec.deriveStackFileName")()
 
@@ -222,8 +224,9 @@ func deriveStackFileName(atmosConfig *schema.AtmosConfiguration, filePath string
 		return strings.TrimSuffix(base, filepath.Ext(base))
 	}
 
-	// Remove the extension.
-	return strings.TrimSuffix(relPath, filepath.Ext(relPath))
+	// Remove the extension and normalize path separators to forward slashes.
+	result := strings.TrimSuffix(relPath, filepath.Ext(relPath))
+	return filepath.ToSlash(result)
 }
 
 // deriveStackName derives the stack name using the same logic as describe stacks.
@@ -245,7 +248,9 @@ func deriveStackName(
 	// Use name template if configured.
 	if atmosConfig.Stacks.NameTemplate != "" {
 		stackName, err := ProcessTmpl(atmosConfig, "describe-locals-name-template", atmosConfig.Stacks.NameTemplate, varsSection, false)
-		if err == nil && stackName != "" {
+		if err != nil {
+			log.Debug("Failed to evaluate name template for stack", "file", stackFileName, "error", err)
+		} else if stackName != "" {
 			return stackName
 		}
 	}
@@ -254,7 +259,9 @@ func deriveStackName(
 	if GetStackNamePattern(atmosConfig) != "" {
 		context := cfg.GetContextFromVars(varsSection)
 		stackName, err := cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
-		if err == nil && stackName != "" {
+		if err != nil {
+			log.Debug("Failed to evaluate name pattern for stack", "file", stackFileName, "error", err)
+		} else if stackName != "" {
 			return stackName
 		}
 	}

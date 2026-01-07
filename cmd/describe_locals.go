@@ -11,9 +11,20 @@ import (
 
 // describeLocalsCmd describes locals for stacks.
 var describeLocalsCmd = &cobra.Command{
-	Use:                "locals",
-	Short:              "Display locals from Atmos stack manifests",
-	Long:               "This command displays the locals defined in Atmos stack manifests.",
+	Use:   "locals",
+	Short: "Display locals from Atmos stack manifests",
+	Long:  "This command displays the locals defined in Atmos stack manifests.",
+	Example: `  # Show all locals
+  atmos describe locals
+
+  # Show locals for a specific stack
+  atmos describe locals --stack deploy/dev
+
+  # Output as JSON
+  atmos describe locals --format json
+
+  # Query specific values
+  atmos describe locals --query '.["deploy/dev"].merged.namespace'`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	RunE: getRunnableDescribeLocalsCmd(getRunnableDescribeLocalsCmdProps{
@@ -122,6 +133,8 @@ func init() {
 	describeLocalsCmd.PersistentFlags().StringP("format", "f", "yaml", "Specify the output format (`yaml` is default)")
 
 	describeLocalsCmd.PersistentFlags().String("file", "", "Write the result to file")
+
+	describeLocalsCmd.PersistentFlags().StringP("query", "q", "", "Query the result using `yq` expression")
 
 	describeCmd.AddCommand(describeLocalsCmd)
 }
