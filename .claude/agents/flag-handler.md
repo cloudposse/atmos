@@ -740,74 +740,16 @@ When implementing complex commands, coordinate with other agents:
 
 ## Resources
 
-**Primary PRDs:**
-- `docs/prd/flag-handling/unified-flag-parsing.md` - Unified flag parsing architecture
-- `docs/prd/flag-handling/strongly-typed-builder-pattern.md` - Builder pattern implementation
-- `docs/prd/flag-handling/global-flags-pattern.md` - Global flags design
-- `docs/prd/command-registry-pattern.md` - Command registry architecture
+**PRDs:** `docs/prd/flag-handling/` (unified-flag-parsing.md, strongly-typed-builder-pattern.md, global-flags-pattern.md), `docs/prd/command-registry-pattern.md`
 
-**Additional PRDs:**
-- `docs/prd/flag-handling/README.md` - Overview of flag handling architecture
-- `docs/prd/flag-handling/command-registry-colocation.md` - Registry colocation
-- `docs/prd/flag-handling/type-safe-positional-arguments.md` - Positional args handling
-- `docs/prd/flag-handling/default-values-pattern.md` - Default value handling
-
-**Core Patterns:**
-- `CLAUDE.md` - Core development patterns (error handling, I/O, comment style)
-
-**Reference Implementations:**
-- `cmd/version/version.go` - Command with flags
-- `cmd/about/about.go` - Simple command
-- `cmd/internal/command.go` - CommandProvider interface
+**Reference:** `cmd/version/version.go` (with flags), `cmd/about/about.go` (simple), `cmd/internal/command.go` (interface)
 
 ## Key Principle
 
-**Everything goes through the command registry.** There is no direct flag parsing - all commands MUST implement CommandProvider and register with `internal.Register()`.
+**Everything goes through the command registry.** All commands MUST implement CommandProvider and register with `internal.Register()`.
 
 ## Self-Maintenance
 
-This agent actively monitors and updates itself when dependencies change.
+**Monitor:** `docs/prd/flag-handling/*.md`, `docs/prd/command-registry-pattern.md`, `cmd/internal/command.go`, `pkg/flags/builder.go`
 
-**Dependencies to monitor:**
-- `docs/prd/flag-handling/unified-flag-parsing.md` - Core flag parsing architecture
-- `docs/prd/flag-handling/strongly-typed-builder-pattern.md` - Builder pattern implementation
-- `docs/prd/flag-handling/global-flags-pattern.md` - Global flags design
-- `docs/prd/command-registry-pattern.md` - Command registry architecture
-- `CLAUDE.md` - Core development patterns
-- `cmd/internal/command.go` - CommandProvider interface definition
-- `pkg/flags/builder.go` - Builder interface definition
-
-**Update triggers:**
-1. **PRD updated** - When flag-handling PRDs or command-registry PRD modified
-2. **Interface changes** - When CommandProvider or Builder interfaces evolve
-3. **Pattern maturity** - When new flag patterns emerge in implementations
-4. **Invocation unclear** - When agent isn't triggered appropriately
-
-**Update process:**
-1. Detect change: `git log -1 --format="%ai" docs/prd/flag-handling/*.md`
-2. Read updated documentation
-3. Draft proposed changes to agent
-4. **Present changes to user for confirmation**
-5. Upon approval, apply updates
-6. Test with sample command implementation
-7. Commit with descriptive message referencing PRD version
-
-**Self-check before each invocation:**
-- Read latest version of unified-flag-parsing.md
-- Verify CommandProvider interface hasn't changed
-- Check for new flag patterns in recent command implementations
-
-## Relevant PRDs
-
-This agent implements patterns from:
-
-- `docs/prd/flag-handling/unified-flag-parsing.md` - Unified flag parsing architecture
-- `docs/prd/flag-handling/strongly-typed-builder-pattern.md` - Builder pattern
-- `docs/prd/flag-handling/global-flags-pattern.md` - Global flags design
-- `docs/prd/command-registry-pattern.md` - Command registry
-
-**Before implementing:**
-1. Check PRD modification date: `git log -1 --format="%ai" docs/prd/flag-handling/unified-flag-parsing.md`
-2. Compare with last sync date
-3. If newer, read full PRD before proceeding
-4. Update this agent if patterns have changed
+**Before each invocation:** Check PRD dates with `git log -1 --format="%ai" docs/prd/flag-handling/unified-flag-parsing.md`. If newer than last sync, read full PRD and update agent if patterns changed.
