@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -251,45 +252,50 @@ vars:
 	}
 
 	t.Run("valid file with locals", func(t *testing.T) {
-		stackName, stackLocals, err := processStackFileForLocals(atmosConfig, validFile, "")
+		result, err := processStackFileForLocals(atmosConfig, validFile, "")
 		require.NoError(t, err)
-		assert.Equal(t, "valid", stackName)
-		assert.NotEmpty(t, stackLocals)
-		assert.Contains(t, stackLocals, "global")
+		assert.Equal(t, "valid", result.StackName)
+		assert.NotEmpty(t, result.StackLocals)
+		assert.Contains(t, result.StackLocals, "global")
+		assert.True(t, result.Found)
 	})
 
 	t.Run("file not found", func(t *testing.T) {
-		_, _, err := processStackFileForLocals(atmosConfig, "/nonexistent/file.yaml", "")
+		_, err := processStackFileForLocals(atmosConfig, "/nonexistent/file.yaml", "")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to read stack file")
 	})
 
-	t.Run("invalid YAML returns nil", func(t *testing.T) {
-		stackName, stackLocals, err := processStackFileForLocals(atmosConfig, invalidFile, "")
+	t.Run("invalid YAML returns empty result", func(t *testing.T) {
+		result, err := processStackFileForLocals(atmosConfig, invalidFile, "")
 		require.NoError(t, err)
-		assert.Empty(t, stackName)
-		assert.Empty(t, stackLocals)
+		assert.Empty(t, result.StackName)
+		assert.Empty(t, result.StackLocals)
+		assert.False(t, result.Found)
 	})
 
-	t.Run("empty file returns nil", func(t *testing.T) {
-		stackName, stackLocals, err := processStackFileForLocals(atmosConfig, emptyFile, "")
+	t.Run("empty file returns empty result", func(t *testing.T) {
+		result, err := processStackFileForLocals(atmosConfig, emptyFile, "")
 		require.NoError(t, err)
-		assert.Empty(t, stackName)
-		assert.Empty(t, stackLocals)
+		assert.Empty(t, result.StackName)
+		assert.Empty(t, result.StackLocals)
+		assert.False(t, result.Found)
 	})
 
 	t.Run("filter by stack name matches", func(t *testing.T) {
-		stackName, stackLocals, err := processStackFileForLocals(atmosConfig, validFile, "valid")
+		result, err := processStackFileForLocals(atmosConfig, validFile, "valid")
 		require.NoError(t, err)
-		assert.Equal(t, "valid", stackName)
-		assert.NotEmpty(t, stackLocals)
+		assert.Equal(t, "valid", result.StackName)
+		assert.NotEmpty(t, result.StackLocals)
+		assert.True(t, result.Found)
 	})
 
 	t.Run("filter by stack name does not match", func(t *testing.T) {
-		stackName, stackLocals, err := processStackFileForLocals(atmosConfig, validFile, "other-stack")
+		result, err := processStackFileForLocals(atmosConfig, validFile, "other-stack")
 		require.NoError(t, err)
-		assert.Empty(t, stackName)
-		assert.Empty(t, stackLocals)
+		assert.Empty(t, result.StackName)
+		assert.Empty(t, result.StackLocals)
+		assert.False(t, result.Found)
 	})
 }
 
@@ -625,7 +631,7 @@ func TestExecuteForComponent(t *testing.T) {
 				}, nil
 			},
 			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
-				// Return empty map - no locals.
+				// Return empty map - stack exists but has no locals.
 				return map[string]any{}, nil
 			},
 		}
@@ -637,7 +643,30 @@ func TestExecuteForComponent(t *testing.T) {
 
 		_, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrStackNotFoundOrNoLocals)
+		assert.ErrorIs(t, err, errUtils.ErrStackHasNoLocals)
+	})
+
+	t.Run("returns error when stack not found", func(t *testing.T) {
+		exec := &describeLocalsExec{
+			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+				return map[string]any{
+					"component_type": "terraform",
+				}, nil
+			},
+			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
+				// Return ErrStackNotFound - stack doesn't exist.
+				return nil, fmt.Errorf("%w: %s", errUtils.ErrStackNotFound, filterByStack)
+			},
+		}
+
+		args := &DescribeLocalsArgs{
+			Component:     "vpc",
+			FilterByStack: "nonexistent",
+		}
+
+		_, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrStackNotFound)
 	})
 
 	t.Run("returns locals for terraform component", func(t *testing.T) {

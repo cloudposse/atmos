@@ -492,17 +492,9 @@ func TestDescribeLocalsForComponent(t *testing.T) {
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Create the describe locals executor.
-	describeLocalsExec := exec.NewDescribeLocalsExec()
-
 	// Test getting locals for a terraform component.
 	t.Run("returns locals for terraform component", func(t *testing.T) {
 		// Get locals for mock/instance-1 component in deploy/dev stack.
-		// Since the describeLocalsExec.Execute writes to a file or stdout,
-		// we need to use a lower-level approach for testing.
-		// Let's test using ExecuteDescribeLocals with the component logic.
-
-		// First, get the stack locals.
 		// Note: ExecuteDescribeLocals uses the file path as the stack name key.
 		stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/dev")
 		require.NoError(t, err)
@@ -528,9 +520,6 @@ func TestDescribeLocalsForComponent(t *testing.T) {
 		assert.Equal(t, "dev", terraformLocals["environment"],
 			"terraform locals should include global environment")
 	})
-
-	// Ensure describeLocalsExec is created successfully.
-	assert.NotNil(t, describeLocalsExec)
 }
 
 // TestDescribeLocalsForComponentOutput tests the full output structure
@@ -734,15 +723,6 @@ func TestDescribeLocalsOutputStructureComponent(t *testing.T) {
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Create the describe locals executor.
-	describeLocalsExec := exec.NewDescribeLocalsExec()
-
-	// We need to call Execute to get the component output format.
-	// Since Execute writes to stdout/file, we'll test the internal logic.
-
-	// Test using executeForComponent via the exported interface.
-	// For now, verify the stack filtering works with component type.
-
 	// Get all locals for the stack.
 	stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "dev-us-east-1")
 	require.NoError(t, err)
@@ -756,9 +736,6 @@ func TestDescribeLocalsOutputStructureComponent(t *testing.T) {
 	assert.Equal(t, "acme", terraform["namespace"], "terraform locals should include global namespace")
 	assert.Equal(t, "acme-dev-tfstate", terraform["backend_bucket"])
 	assert.Equal(t, "terraform-specific-dev", terraform["tf_only"])
-
-	// Ensure describeLocalsExec is created successfully.
-	assert.NotNil(t, describeLocalsExec)
 }
 
 // TestDescribeLocalsComponentWithLogicalStackName tests component argument with logical stack name.

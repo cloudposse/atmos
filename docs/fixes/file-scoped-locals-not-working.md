@@ -217,7 +217,7 @@ This is explicitly stated in the PRD:
 
 **1. WITHIN a single file - Locals DO cascade (global → component-type only):**
 
-```
+```text
 global → component-type (terraform/helmfile/packer)
 ```
 

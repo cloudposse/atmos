@@ -36,9 +36,8 @@ var importsConfigLock = &sync.Mutex{}
 // Locals are extracted and merged in order of specificity:
 // 1. Global locals (root level)
 // 2. Section-specific locals (terraform, helmfile, packer sections)
-// 3. Component-level locals (within components/terraform/*, etc.)
 //
-// Later scopes inherit from and can override earlier scopes.
+// Section-specific locals inherit from and can override global locals.
 // All resolved locals are flattened into a single map for template processing.
 func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.extractLocalsFromRawYAML")()
@@ -55,15 +54,12 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 		return nil, nil
 	}
 
-	// Use the comprehensive ProcessStackLocals which handles all scopes.
+	// Use ProcessStackLocals which handles global and section-level scopes.
 	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath)
 	if err != nil {
 		return nil, err
 	}
 
-	// Note: Component-level locals are NOT extracted here because they require
-	// per-component scoping that can't be handled in a single template pass.
-	// This initial pass handles global and section-level locals.
 	return localsCtx.MergeForTemplateContext(), nil
 }
 

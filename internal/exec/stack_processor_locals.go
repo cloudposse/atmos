@@ -82,7 +82,6 @@ func resolveLocalsWithDependencies(localsMap, parentLocals map[string]any, fileP
 
 // ProcessStackLocals extracts and resolves all locals from a stack config file.
 // Returns a LocalsContext with resolved locals at each scope (global, terraform, helmfile, packer).
-// Component-level locals are processed separately during component processing.
 func ProcessStackLocals(
 	atmosConfig *schema.AtmosConfiguration,
 	stackConfigMap map[string]any,
@@ -184,11 +183,11 @@ func (ctx *LocalsContext) MergeForComponentType(componentType string) map[string
 	}
 
 	switch componentType {
-	case "terraform":
+	case cfg.TerraformSectionName:
 		return ctx.Terraform
-	case "helmfile":
+	case cfg.HelmfileSectionName:
 		return ctx.Helmfile
-	case "packer":
+	case cfg.PackerSectionName:
 		return ctx.Packer
 	default:
 		// For unknown types, return global only.
@@ -248,8 +247,8 @@ func (ctx *LocalsContext) GetForComponentType(componentType string) map[string]a
 	}
 }
 
-// ResolveComponentLocals resolves locals for a specific component.
-// It merges component-level locals with the parent scope (component-type or global).
+// ResolveComponentLocals resolves locals from a config section and merges with parent locals.
+// Note: Component-level locals are not currently supported. This function is not used.
 func ResolveComponentLocals(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,

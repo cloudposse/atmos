@@ -146,7 +146,7 @@ func (d *describeLocalsExec) executeForComponent(
 		}
 	}
 
-	return nil, fmt.Errorf("%w: %s", errUtils.ErrStackNotFoundOrNoLocals, args.FilterByStack)
+	return nil, fmt.Errorf("%w: %s", errUtils.ErrStackHasNoLocals, args.FilterByStack)
 }
 
 // getLocalsForComponentType extracts the appropriate merged locals for a component type.
@@ -168,6 +168,13 @@ func getLocalsForComponentType(stackLocals map[string]any, componentType string)
 	return map[string]any{}
 }
 
+// stackFileLocalsResult holds the result of processing a stack file for locals.
+type stackFileLocalsResult struct {
+	StackName   string         // Derived stack name (empty if filtered out or unparseable).
+	StackLocals map[string]any // Locals extracted from the stack file.
+	Found       bool           // Whether the stack matched the filter (even if no locals).
+}
+
 // ExecuteDescribeLocals processes stack manifests and returns the locals for all stacks.
 // It reads the raw YAML files directly since locals are stripped during normal stack processing.
 func ExecuteDescribeLocals(
@@ -177,47 +184,58 @@ func ExecuteDescribeLocals(
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeLocals")()
 
 	finalLocalsMap := make(map[string]any)
+	stackFound := false
 
 	// Process each stack config file directly.
 	for _, filePath := range atmosConfig.StackConfigFilesAbsolutePaths {
-		stackName, stackLocals, err := processStackFileForLocals(atmosConfig, filePath, filterByStack)
+		result, err := processStackFileForLocals(atmosConfig, filePath, filterByStack)
 		if err != nil {
 			return nil, err
 		}
 
+		// Track if we found a matching stack (even with no locals).
+		if result.Found {
+			stackFound = true
+		}
+
 		// Skip if no locals or filtered out.
-		if stackName == "" || len(stackLocals) == 0 {
+		if result.StackName == "" || len(result.StackLocals) == 0 {
 			continue
 		}
 
-		finalLocalsMap[stackName] = stackLocals
+		finalLocalsMap[result.StackName] = result.StackLocals
+	}
+
+	// If filtering and no stack was found, return specific error.
+	if filterByStack != "" && !stackFound {
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrStackNotFound, filterByStack)
 	}
 
 	return finalLocalsMap, nil
 }
 
 // processStackFileForLocals reads a stack file and extracts its locals.
-// Returns empty stackName if the file should be skipped (filtered, unparseable, or no locals).
+// Returns a result struct with stack name, locals, and whether the stack matched the filter.
 func processStackFileForLocals(
 	atmosConfig *schema.AtmosConfiguration,
 	filePath string,
 	filterByStack string,
-) (string, map[string]any, error) {
+) (*stackFileLocalsResult, error) {
 	// Read the raw YAML file.
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to read stack file %s: %w", filePath, err)
+		return nil, fmt.Errorf("failed to read stack file %s: %w", filePath, err)
 	}
 
 	// Parse the YAML to extract structure.
-	// Unmarshal errors indicate malformed YAML, log at trace level for debugging.
+	// Unmarshal errors indicate malformed YAML, log at debug level for troubleshooting.
 	var rawConfig map[string]any
 	if err := yaml.Unmarshal(content, &rawConfig); err != nil {
-		log.Trace("Skipping file with YAML parse error", "file", filePath, "error", err)
+		log.Debug("Skipping file with YAML parse error", "file", filePath, "error", err)
 	}
 
 	if rawConfig == nil {
-		return "", nil, nil
+		return &stackFileLocalsResult{}, nil
 	}
 
 	// Derive stack name from the file path.
@@ -234,19 +252,23 @@ func processStackFileForLocals(
 
 	// Apply filter if specified.
 	if filterByStack != "" && filterByStack != stackFileName && filterByStack != stackName {
-		return "", nil, nil
+		return &stackFileLocalsResult{}, nil
 	}
 
 	// Extract locals from the raw config.
 	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed to process locals for stack %s: %w", stackFileName, err)
+		return &stackFileLocalsResult{Found: true}, fmt.Errorf("failed to process locals for stack %s: %w", stackFileName, err)
 	}
 
 	// Build locals entry for this stack.
 	stackLocals := buildStackLocalsFromContext(localsCtx)
 
-	return stackName, stackLocals, nil
+	return &stackFileLocalsResult{
+		StackName:   stackName,
+		StackLocals: stackLocals,
+		Found:       true,
+	}, nil
 }
 
 // buildStackLocalsFromContext converts a LocalsContext to a map suitable for output.

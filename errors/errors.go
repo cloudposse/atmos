@@ -93,7 +93,7 @@ var (
 	ErrInvalidStackConfiguration  = errors.New("invalid stack configuration")
 	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
 	ErrStackRequiredWithComponent = errors.New("--stack flag is required when specifying a component")
-	ErrStackNotFoundOrNoLocals    = errors.New("stack not found or has no locals")
+	ErrStackHasNoLocals           = errors.New("stack has no locals defined")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")

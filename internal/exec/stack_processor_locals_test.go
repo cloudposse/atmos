@@ -716,6 +716,34 @@ func TestProcessStackLocals_HasFlagsSetCorrectly(t *testing.T) {
 			expectHelmfile:  false,
 			expectPacker:    false,
 		},
+		{
+			name: "empty locals section sets flag",
+			stackConfig: map[string]any{
+				"terraform": map[string]any{
+					"locals": map[string]any{}, // Empty locals section.
+				},
+			},
+			expectTerraform: true, // Flag is set based on key presence, not content.
+			expectHelmfile:  false,
+			expectPacker:    false,
+		},
+		{
+			name: "all sections with empty locals",
+			stackConfig: map[string]any{
+				"terraform": map[string]any{
+					"locals": map[string]any{},
+				},
+				"helmfile": map[string]any{
+					"locals": map[string]any{},
+				},
+				"packer": map[string]any{
+					"locals": map[string]any{},
+				},
+			},
+			expectTerraform: true,
+			expectHelmfile:  true,
+			expectPacker:    true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -837,4 +865,38 @@ func TestProcessStackLocals_IsolationBetweenSections(t *testing.T) {
 	assert.Equal(t, "helmfile-value", ctx.Helmfile["hf_only"])
 	assert.Equal(t, "global", ctx.Helmfile["shared"])
 	assert.NotContains(t, ctx.Helmfile, "tf_only", "helmfile should not have terraform locals")
+}
+
+// TestMergeForTemplateContext_EmptyLocals verifies that merging empty locals sections has no effect.
+func TestMergeForTemplateContext_EmptyLocals(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Stack config with global locals and empty section locals.
+	stackConfig := map[string]any{
+		"locals": map[string]any{
+			"namespace":   "acme",
+			"environment": "prod",
+		},
+		"terraform": map[string]any{
+			"locals": map[string]any{}, // Empty locals section.
+		},
+		"helmfile": map[string]any{
+			"locals": map[string]any{}, // Empty locals section.
+		},
+	}
+
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, ctx)
+
+	// Flags should be set because locals key exists.
+	assert.True(t, ctx.HasTerraformLocals, "HasTerraformLocals should be true for empty locals")
+	assert.True(t, ctx.HasHelmfileLocals, "HasHelmfileLocals should be true for empty locals")
+	assert.False(t, ctx.HasPackerLocals, "HasPackerLocals should be false when not defined")
+
+	// MergeForTemplateContext should return only global locals since section locals are empty.
+	merged := ctx.MergeForTemplateContext()
+	assert.Equal(t, "acme", merged["namespace"])
+	assert.Equal(t, "prod", merged["environment"])
+	assert.Len(t, merged, 2, "merged should only contain global locals")
 }

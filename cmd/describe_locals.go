@@ -6,6 +6,7 @@ import (
 
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -60,6 +61,8 @@ func getRunnableDescribeLocalsCmd(
 	g getRunnableDescribeLocalsCmdProps,
 ) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
+		defer perf.Track(nil, "cmd.describeLocals")()
+
 		// Check Atmos configuration.
 		g.checkAtmosConfig()
 
