@@ -27,41 +27,41 @@ EXAMPLES
 
 AVAILABLE COMMANDS
 
-      apply               Apply changes to infrastructure
-      backend [command]   Manage Terraform state backends
-      clean               Clean up Terraform state and artifacts
-      console             Try Terraform expressions at an interactive command prompt
-      deploy              Deploy the specified infrastructure using Terraform
-      destroy             Destroy previously-created infrastructure
-      fmt                 Reformat your configuration in the standard style
-      force-unlock        Release a stuck lock on the current workspace
-      generate [command]  Generate Terraform configuration files for Atmos components and stacks
-      get                 Install or upgrade remote Terraform modules
-      graph               Generate a Graphviz graph of the steps in an operation
-      help                Show help for terraform command
-      import              Import existing infrastructure into Terraform state
-      init                Prepare your working directory for other commands
-      login               Obtain and save credentials for a remote host
-      logout              Remove locally-stored credentials for a remote host
-      metadata            Metadata related commands
-      modules             Show all declared modules in a working directory
-      output              Show output values from your root module
-      plan                Show changes required by the current configuration
-      plan-diff           Compare two Terraform plans and show the differences
-      providers           Show the providers required for this configuration
-      provision           This command provisions terraform components
-      refresh             Update the state to match remote systems
-      shell               Configure an environment for an Atmos component and start a new shell
-      show                Show the current state or a saved plan
-      source [command]    Manage Terraform component sources (JIT vendoring)
-      state               Advanced state management
-      taint               Mark a resource instance as not fully functional
-      test                Execute integration tests for Terraform modules
-      untaint             Remove the 'tainted' state from a resource instance
-      validate            Check whether the configuration is valid
-      version             Show the current Terraform version
-      workdir [command]   Manage component working directories
-      workspace           Manage Terraform workspaces
+      apply                             Apply changes to infrastructure
+      backend [command] [EXPERIMENTAL]  Manage Terraform state backends
+      clean                             Clean up Terraform state and artifacts
+      console                           Try Terraform expressions at an interactive command prompt
+      deploy                            Deploy the specified infrastructure using Terraform
+      destroy                           Destroy previously-created infrastructure
+      fmt                               Reformat your configuration in the standard style
+      force-unlock                      Release a stuck lock on the current workspace
+      generate [command]                Generate Terraform configuration files for Atmos components and stacks
+      get                               Install or upgrade remote Terraform modules
+      graph                             Generate a Graphviz graph of the steps in an operation
+      help                              Show help for terraform command
+      import                            Import existing infrastructure into Terraform state
+      init                              Prepare your working directory for other commands
+      login                             Obtain and save credentials for a remote host
+      logout                            Remove locally-stored credentials for a remote host
+      metadata                          Metadata related commands
+      modules                           Show all declared modules in a working directory
+      output                            Show output values from your root module
+      plan                              Show changes required by the current configuration
+      plan-diff                         Compare two Terraform plans and show the differences
+      providers                         Show the providers required for this configuration
+      provision                         This command provisions terraform components
+      refresh                           Update the state to match remote systems
+      shell                             Configure an environment for an Atmos component and start a new shell
+      show                              Show the current state or a saved plan
+      source [command]                  Manage Terraform component sources (JIT vendoring)
+      state                             Advanced state management
+      taint                             Mark a resource instance as not fully functional
+      test                              Execute integration tests for Terraform modules
+      untaint                           Remove the 'tainted' state from a resource instance
+      validate                          Check whether the configuration is valid
+      version                           Show the current Terraform version
+      workdir [command] [EXPERIMENTAL]  Manage component working directories
+      workspace                         Manage Terraform workspaces
 
 FLAGS
 
