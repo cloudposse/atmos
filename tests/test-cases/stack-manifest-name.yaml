@@ -1,0 +1,135 @@
+# yaml-language-server: $schema=schema.json
+# Tests for stack manifest name identity feature
+# See docs/prd/stack-name-identity.md for specification
+tests:
+  # Test 1: List stacks shows canonical names (explicit name and filename)
+  - name: atmos list stacks (stack-manifest-name)
+    enabled: true
+    snapshot: true
+    description: "List stacks shows canonical names - explicit name for legacy-prod, filename for no-name-prod"
+    workdir: "../tests/fixtures/scenarios/stack-manifest-name"
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+    expect:
+      stdout:
+        - "my-legacy-prod-stack"
+        - "no-name-prod"
+        - !not "^legacy-prod$"
+      exit_code: 0
+
+  # Test 2: Describe component with explicit name works
+  - name: atmos describe component vpc -s my-legacy-prod-stack
+    enabled: true
+    snapshot: true
+    description: "Describe component using explicit stack name works"
+    workdir: "../tests/fixtures/scenarios/stack-manifest-name"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "vpc"
+      - "-s"
+      - "my-legacy-prod-stack"
+      - "--format"
+      - "json"
+    expect:
+      valid:
+        - "json"
+      stdout:
+        - '"atmos_stack": "my-legacy-prod-stack"'
+        - '"atmos_stack_file": "legacy-prod"'
+        - '"stack": "my-legacy-prod-stack"'
+      exit_code: 0
+
+  # Test 3: Describe component with filename works when no naming config
+  - name: atmos describe component vpc -s no-name-prod
+    enabled: true
+    snapshot: true
+    description: "Describe component using filename works when stack has no explicit name"
+    workdir: "../tests/fixtures/scenarios/stack-manifest-name"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "vpc"
+      - "-s"
+      - "no-name-prod"
+      - "--format"
+      - "json"
+    expect:
+      valid:
+        - "json"
+      stdout:
+        - '"atmos_stack": "no-name-prod"'
+        - '"atmos_stack_file": "no-name-prod"'
+        - '"stack": "no-name-prod"'
+      exit_code: 0
+
+  # Test 4: Using filename when explicit name exists fails with helpful error
+  - name: atmos describe component vpc -s legacy-prod (invalid - should suggest correct name)
+    enabled: true
+    snapshot: true
+    description: "Using filename fails when stack has explicit name, suggests correct name"
+    workdir: "../tests/fixtures/scenarios/stack-manifest-name"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "vpc"
+      - "-s"
+      - "legacy-prod"
+    expect:
+      stderr:
+        - "invalid stack"
+        - "legacy-prod"
+        - "my-legacy-prod-stack"
+      exit_code: 1
+
+  # Test 5: Describe stacks requires name_pattern for zero-config scenarios
+  # This test is disabled because describe stacks iterates all stacks and requires name_pattern
+  # The stack manifest name feature is tested via describe component and terraform commands
+  - name: atmos describe stacks (stack-manifest-name)
+    enabled: false
+    snapshot: true
+    description: "Describe stacks output uses canonical names as keys (requires name_pattern)"
+    workdir: "../tests/fixtures/scenarios/stack-manifest-name"
+    command: "atmos"
+    args:
+      - "describe"
+      - "stacks"
+      - "--format"
+      - "json"
+    expect:
+      valid:
+        - "json"
+      stdout:
+        - '"my-legacy-prod-stack":'
+        - '"no-name-prod":'
+      exit_code: 0
+
+  # Terraform plan tests are disabled because they require actual terraform init/plan
+  # which is tested in other integration test suites. The stack identity feature is
+  # validated through describe component tests which verify the correct behavior
+  # without requiring terraform execution.
+
+  # Test 6: Terraform plan with filename when explicit name exists fails (error path only)
+  - name: atmos terraform plan vpc -s legacy-prod (invalid)
+    enabled: true
+    snapshot: true
+    description: "Terraform plan using filename fails when stack has explicit name"
+    workdir: "../tests/fixtures/scenarios/stack-manifest-name"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "vpc"
+      - "-s"
+      - "legacy-prod"
+    expect:
+      stderr:
+        - "invalid stack"
+        - "legacy-prod"
+        - "my-legacy-prod-stack"
+      exit_code: 1
