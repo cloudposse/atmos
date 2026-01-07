@@ -371,7 +371,7 @@ func printDescription(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
 
 	// Print experimental badge if command is experimental.
 	if isExperimentalCommand(cmd) {
-		badge := ui.Badge("EXPERIMENTAL", "#FF9800", "#000000")
+		badge := ui.FormatExperimentalBadge()
 		fmt.Fprintln(w, badge)
 		fmt.Fprintln(w)
 	}
@@ -548,7 +548,7 @@ func calculateMaxCommandWidth(commands []*cobra.Command, parentExperimental bool
 // Returns empty strings if parent is already experimental or command is not experimental.
 func getExperimentalBadge(cmd *cobra.Command, parentExperimental bool) (styled, plain string) {
 	if isExperimentalCommand(cmd) && !parentExperimental {
-		return " " + ui.Badge("EXPERIMENTAL", "#FF9800", "#000000"), " [EXPERIMENTAL]"
+		return " " + ui.FormatExperimentalBadge(), " [EXPERIMENTAL]"
 	}
 	return "", ""
 }

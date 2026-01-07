@@ -399,10 +399,18 @@ func Badge(text, background, foreground string) string {
 	return f.Badge(text, background, foreground)
 }
 
-// FormatExperimentalBadge returns an "EXPERIMENTAL" badge with warning-colored background.
+// FormatExperimentalBadge returns an "EXPERIMENTAL" badge using theme colors.
 // Use this to indicate experimental features in help text or command descriptions.
 func FormatExperimentalBadge() string {
-	return Badge("EXPERIMENTAL", "#FF9800", "#000000")
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted.
+		return "[EXPERIMENTAL]"
+	}
+	if !f.SupportsColor() {
+		return "[EXPERIMENTAL]"
+	}
+	return f.styles.ExperimentalBadge.Render("EXPERIMENTAL")
 }
 
 // Writef writes formatted text to stderr (UI channel) without icons or automatic styling.

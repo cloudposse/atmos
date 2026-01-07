@@ -43,10 +43,11 @@ type StyleSet struct {
 	TableLightType lipgloss.Style // For "Light" theme type
 
 	// Special elements
-	Checkmark lipgloss.Style
-	XMark     lipgloss.Style
-	Footer    lipgloss.Style
-	Border    lipgloss.Style
+	Checkmark         lipgloss.Style
+	XMark             lipgloss.Style
+	Footer            lipgloss.Style
+	Border            lipgloss.Style
+	ExperimentalBadge lipgloss.Style // Badge style for experimental features
 
 	// Version styles
 	VersionNumber lipgloss.Style
@@ -143,6 +144,11 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		XMark:     lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)).SetString(IconXMark),
 		Footer:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)).Italic(true),
 		Border:    getBorderStyle(scheme),
+		ExperimentalBadge: lipgloss.NewStyle().
+			Background(lipgloss.Color(scheme.ExperimentalBadgeBg)).
+			Foreground(lipgloss.Color(scheme.ExperimentalBadgeFg)).
+			Bold(true).
+			Padding(0, 1),
 
 		// Version styles
 		VersionNumber: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
