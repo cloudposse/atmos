@@ -1,0 +1,30 @@
+.first-released-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.85rem;
+  margin-left: 0.75rem;
+}
+
+.first-released-badge a {
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  background-color: rgba(53, 120, 229, 0.15);
+  color: #3578e5;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.first-released-badge a:hover {
+  background-color: rgba(53, 120, 229, 0.25);
+  text-decoration: none;
+}
+
+[data-theme='dark'] .first-released-badge a {
+  background-color: rgba(83, 140, 233, 0.2);
+  color: #72a1ed;
+}
+
+[data-theme='dark'] .first-released-badge a:hover {
+  background-color: rgba(83, 140, 233, 0.3);
+}

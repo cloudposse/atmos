@@ -8,10 +8,13 @@ id: locals
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 The `locals` section defines file-scoped temporary variables for use within templates. Unlike `vars`, `settings`, and `env`, locals do **not** inherit across file boundaries—they are resolved within a single file and can reference each other with automatic dependency resolution.
 </Intro>
+
+<Experimental />
 
 ## Use Cases
 
