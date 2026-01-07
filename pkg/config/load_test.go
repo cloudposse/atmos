@@ -1135,56 +1135,77 @@ func TestReadParentDirConfig_SkipsWhenLocalConfigExists(t *testing.T) {
 
 // TestReadGitRootConfig_SkipsWhenLocalConfigExists verifies that git root
 // search is skipped when CWD has local Atmos config (per PRD constraint).
+// This test uses TEST_GIT_ROOT to mock a git root with config that WOULD be loaded
+// if not for the hasLocalAtmosConfig() gating.
 func TestReadGitRootConfig_SkipsWhenLocalConfigExists(t *testing.T) {
-	// This test just verifies the skip behavior without needing a real git repo.
 	tests := []struct {
-		name          string
-		setupDirs     func(t *testing.T, tempDir string)
-		expectSkip    bool
-		expectSkipLog string
+		name              string
+		setupDirs         func(t *testing.T, cwdDir, gitRootDir string)
+		expectGitRootLoad bool
 	}{
 		{
 			name: "skips git root search when CWD has atmos.yaml",
-			setupDirs: func(t *testing.T, tempDir string) {
-				createTestConfig(t, tempDir, `base_path: /local`)
+			setupDirs: func(t *testing.T, cwdDir, gitRootDir string) {
+				// Create config at mock git root that WOULD be loaded.
+				createTestConfig(t, gitRootDir, `base_path: /from/git-root`)
+				// Create local config in CWD - should prevent git root loading.
+				createTestConfig(t, cwdDir, `base_path: /from/local`)
 			},
-			expectSkip: true,
+			expectGitRootLoad: false,
 		},
 		{
 			name: "skips git root search when CWD has .atmos directory",
-			setupDirs: func(t *testing.T, tempDir string) {
-				require.NoError(t, os.MkdirAll(filepath.Join(tempDir, ".atmos"), 0o755))
+			setupDirs: func(t *testing.T, cwdDir, gitRootDir string) {
+				createTestConfig(t, gitRootDir, `base_path: /from/git-root`)
+				require.NoError(t, os.MkdirAll(filepath.Join(cwdDir, ".atmos"), 0o755))
 			},
-			expectSkip: true,
+			expectGitRootLoad: false,
 		},
 		{
 			name: "skips git root search when CWD has atmos.d directory",
-			setupDirs: func(t *testing.T, tempDir string) {
-				require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "atmos.d"), 0o755))
+			setupDirs: func(t *testing.T, cwdDir, gitRootDir string) {
+				createTestConfig(t, gitRootDir, `base_path: /from/git-root`)
+				require.NoError(t, os.MkdirAll(filepath.Join(cwdDir, "atmos.d"), 0o755))
 			},
-			expectSkip: true,
+			expectGitRootLoad: false,
+		},
+		{
+			name: "loads git root config when CWD has no local config",
+			setupDirs: func(t *testing.T, cwdDir, gitRootDir string) {
+				// Create config at mock git root.
+				createTestConfig(t, gitRootDir, `base_path: /from/git-root`)
+				// CWD has no local config - git root should be loaded.
+			},
+			expectGitRootLoad: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tempDir := t.TempDir()
-			tt.setupDirs(t, tempDir)
+			// Create separate directories for CWD and mock git root.
+			cwdDir := t.TempDir()
+			gitRootDir := t.TempDir()
 
-			t.Chdir(tempDir)
+			tt.setupDirs(t, cwdDir, gitRootDir)
+
+			t.Chdir(cwdDir)
+
+			// Point TEST_GIT_ROOT to our mock git root with config.
+			t.Setenv("TEST_GIT_ROOT", gitRootDir)
 
 			v := viper.New()
 			v.SetConfigType("yaml")
 
-			// Disable git root basepath to isolate the local config check.
-			// Without this, the test would try to find actual git root.
-			t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
-
 			err := readGitRootConfig(v)
 			require.NoError(t, err)
 
-			// Config should remain empty since we skipped git root search.
-			assert.Empty(t, v.ConfigFileUsed())
+			if tt.expectGitRootLoad {
+				assert.Equal(t, "/from/git-root", v.GetString("base_path"),
+					"Should load git root config when CWD has no local config")
+			} else {
+				assert.Empty(t, v.GetString("base_path"),
+					"Should NOT load git root config when CWD has local config")
+			}
 		})
 	}
 }

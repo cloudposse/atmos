@@ -101,8 +101,7 @@ tests:
         - "chdir-isolation-vendor"
         - "chdir-isolation-components"
         - "chdir-isolation-stacks"
-      stdout_not:
         # Must NOT see the repo root config values (which would indicate config merging)
-        - "vendor.yaml"
-        - "components/terraform"
+        - !not "vendor.yaml"
+        - !not "components/terraform"
       exit_code: 0
