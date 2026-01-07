@@ -91,31 +91,26 @@ Added `extractLocalsFromRawYAML()` function in `internal/exec/stack_processor_ut
 // This function is called BEFORE template processing to make locals available during template execution.
 func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (map[string]any, error) {
     // Parse raw YAML to extract the structure.
+    // YAML treats template expressions like {{ .locals.X }} as plain strings,
+    // so parsing succeeds even with unresolved templates.
     var rawConfig map[string]any
     if err := yaml.Unmarshal([]byte(yamlContent), &rawConfig); err != nil {
-        return nil, fmt.Errorf("failed to parse YAML for locals extraction: %w", err)
+        return nil, fmt.Errorf("%w: failed to parse YAML for locals extraction: %w",
+            errUtils.ErrInvalidStackManifest, err)
     }
 
-    // Use ProcessStackLocals which handles all scopes.
+    if rawConfig == nil {
+        return nil, nil
+    }
+
+    // Use ProcessStackLocals which handles global and section-level scopes.
     localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath)
     if err != nil {
         return nil, err
     }
 
-    // Merge all locals into a single flat map for template processing.
-    // Only merge section locals if they were explicitly defined.
-    resolvedLocals := make(map[string]any)
-    for k, v := range localsCtx.Global {
-        resolvedLocals[k] = v
-    }
-    if localsCtx.HasTerraformLocals {
-        for k, v := range localsCtx.Terraform {
-            resolvedLocals[k] = v
-        }
-    }
-    // ... similar for helmfile and packer sections
-
-    return resolvedLocals, nil
+    // Delegate flattening to LocalsContext which merges global and section-specific locals.
+    return localsCtx.MergeForTemplateContext(), nil
 }
 ```
 

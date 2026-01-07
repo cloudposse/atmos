@@ -228,10 +228,10 @@ func processStackFileForLocals(
 	}
 
 	// Parse the YAML to extract structure.
-	// Unmarshal errors indicate malformed YAML, log at debug level for troubleshooting.
+	// Unmarshal errors indicate malformed YAML, log at warn level for visibility.
 	var rawConfig map[string]any
 	if err := yaml.Unmarshal(content, &rawConfig); err != nil {
-		log.Debug("Skipping file with YAML parse error", "file", filePath, "error", err)
+		log.Warn("Skipping file with YAML parse error", "file", filePath, "error", err)
 	}
 
 	if rawConfig == nil {
