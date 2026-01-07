@@ -1344,12 +1344,11 @@ func TestLocalsResolver_ComplexTemplateExpressions(t *testing.T) {
 - Update documentation
 
 **Phase 7: Debugging Support** (~2-3 days)
-- Implement `atmos describe locals` command with provenance support
+- Implement `atmos describe locals` command
   - Follow command registry pattern from `cmd/internal/registry.go`
   - Create `cmd/describe/locals.go` implementing `CommandProvider`
   - Register via `internal.Register()` in `init()`
   - Use `pkg/flags/` for `--stack` and `--format` flags
-  - Show source file for each local (provenance tracking)
   - Show scope hierarchy (global → terraform → component)
 - Enhance error messages with available locals list
 - Add typo detection ("did you mean?") using Levenshtein distance
@@ -1523,7 +1522,7 @@ tests/test-cases/locals/
 
 ### Debugging Locals
 
-Since locals are file-scoped and not visible in `atmos describe component`, we provide a dedicated `atmos describe locals` command with full provenance tracking:
+Since locals are file-scoped and not visible in `atmos describe component`, we provide a dedicated `atmos describe locals` command:
 
 #### The `atmos describe locals` Command
 
@@ -1535,34 +1534,28 @@ atmos describe locals vpc -s prod-us-east-1
 atmos describe locals vpc -s prod-us-east-1 --format json
 ```
 
-Output with provenance:
+**Example output:**
 ```yaml
 # Locals for component "vpc" in stack "prod-us-east-1"
 # Resolution order: global → terraform → component
 
-global:                              # Source: stacks/catalog/vpc.yaml:3
+global:
   region: "us-east-1"
   account_id: "123456789012"
 
-terraform:                           # Source: stacks/catalog/vpc.yaml:15
+terraform:
   state_bucket: "terraform-state-123456789012"
 
-component:                           # Source: stacks/orgs/acme/plat/prod.yaml:42
-  vpc_name: "main-vpc-us-east-1"
-
-merged:                              # Final merged locals available to templates
-  region: "us-east-1"                # from global (stacks/catalog/vpc.yaml:4)
-  account_id: "123456789012"         # from global (stacks/catalog/vpc.yaml:5)
-  state_bucket: "terraform-state-123456789012"  # from terraform (stacks/catalog/vpc.yaml:16)
-  vpc_name: "main-vpc-us-east-1"     # from component (stacks/orgs/acme/plat/prod.yaml:43)
+merged:
+  region: "us-east-1"
+  account_id: "123456789012"
+  state_bucket: "terraform-state-123456789012"
 ```
 
 #### Key Features
 
-1. **Provenance tracking**: Shows which file and line number each local was defined
-2. **Scope separation**: Clearly shows global, component-type, and component scopes
-3. **Merged view**: Shows the final resolved locals available to templates
-4. **Resolution tracing**: In the merged view, shows where each value originated
+1. **Scope separation**: Clearly shows global, component-type, and component scopes
+2. **Merged view**: Shows the final resolved locals available to templates
 
 #### Optional: `ATMOS_DEBUG_LOCALS` Environment Variable
 
@@ -1587,7 +1580,7 @@ Output (to stderr):
 [locals] Resolution complete: 4 locals available
 ```
 
-#### Option 4: Provenance in Error Messages
+#### Option 4: Error Messages with Available Locals
 
 When a template fails, show which locals were available:
 
@@ -1610,7 +1603,7 @@ Hint: Check for typos in local variable names.
 
 | Feature | Priority | Effort | Phase |
 |---------|----------|--------|-------|
-| Provenance in error messages | P0 (must have) | Low | Phase 2 |
+| Error messages with available locals | P0 (must have) | Low | Phase 2 |
 | `atmos describe locals` command | P1 (should have) | Medium | Phase 2 |
 | `ATMOS_DEBUG_LOCALS` env var | P2 (nice to have) | Low | Phase 3 |
 
@@ -1621,104 +1614,64 @@ Hint: Check for typos in local variable names.
 
 ### The `atmos describe locals` Command
 
-List the resolved locals for a component in a stack with full provenance tracking:
+List the resolved locals for a component in a stack:
 
 ```bash
 # Show locals for a component in a stack
 atmos describe locals vpc -s plat-ue2-prod
 
+# Show locals for all stacks
+atmos describe locals
+
+# Filter by stack (logical name or file path)
+atmos describe locals --stack plat-ue2-prod
+atmos describe locals --stack deploy/prod
+
 # Output as YAML (default)
 atmos describe locals vpc -s plat-ue2-prod --format yaml
 
-# Output as JSON (includes full provenance metadata)
+# Output as JSON
 atmos describe locals vpc -s plat-ue2-prod --format json
 ```
 
-**Example output (YAML):**
+**Example output (stack query):**
 ```yaml
-# Locals for component 'vpc' in stack 'plat-ue2-prod'
-# Resolution order: global → terraform → component
-
-# Global scope (stacks/catalog/vpc.yaml)
-global:
-  region: us-east-2                    # line 5
-  account_id: "123456789012"           # line 6
-  environment: prod                    # line 7
-
-# Terraform scope (stacks/catalog/vpc.yaml)
-terraform:
-  state_bucket: terraform-state-123456789012   # line 12
-  state_key_prefix: plat-ue2-prod              # line 13
-
-# Component scope (stacks/orgs/acme/plat/prod/us-east-2.yaml)
-component:
-  vpc_name: main-vpc-us-east-2         # line 45
-  cidr_block: 10.0.0.0/16              # line 46
-  enable_nat_gateway: true             # line 47
-
-# Merged view (final resolved locals available to templates)
-merged:
-  region: us-east-2                    # from global
-  account_id: "123456789012"           # from global
-  environment: prod                    # from global
-  state_bucket: terraform-state-123456789012   # from terraform
-  state_key_prefix: plat-ue2-prod              # from terraform
-  vpc_name: main-vpc-us-east-2         # from component
-  cidr_block: 10.0.0.0/16              # from component
-  enable_nat_gateway: true             # from component
+plat-ue2-prod:
+  global:
+    region: us-east-2
+    account_id: "123456789012"
+    environment: prod
+  terraform:
+    state_bucket: terraform-state-123456789012
+    state_key_prefix: plat-ue2-prod
+  merged:
+    region: us-east-2
+    account_id: "123456789012"
+    environment: prod
+    state_bucket: terraform-state-123456789012
+    state_key_prefix: plat-ue2-prod
 ```
 
-**Example output (JSON with full provenance):**
-```json
-{
-  "component": "vpc",
-  "stack": "plat-ue2-prod",
-  "component_type": "terraform",
-  "locals": {
-    "global": {
-      "source_file": "stacks/catalog/vpc.yaml",
-      "values": {
-        "region": {"value": "us-east-2", "line": 5},
-        "account_id": {"value": "123456789012", "line": 6},
-        "environment": {"value": "prod", "line": 7}
-      }
-    },
-    "terraform": {
-      "source_file": "stacks/catalog/vpc.yaml",
-      "values": {
-        "state_bucket": {"value": "terraform-state-123456789012", "line": 12},
-        "state_key_prefix": {"value": "plat-ue2-prod", "line": 13}
-      }
-    },
-    "component": {
-      "source_file": "stacks/orgs/acme/plat/prod/us-east-2.yaml",
-      "values": {
-        "vpc_name": {"value": "main-vpc-us-east-2", "line": 45},
-        "cidr_block": {"value": "10.0.0.0/16", "line": 46},
-        "enable_nat_gateway": {"value": true, "line": 47}
-      }
-    }
-  },
-  "merged": {
-    "region": {"value": "us-east-2", "scope": "global", "source_file": "stacks/catalog/vpc.yaml", "line": 5},
-    "account_id": {"value": "123456789012", "scope": "global", "source_file": "stacks/catalog/vpc.yaml", "line": 6},
-    "environment": {"value": "prod", "scope": "global", "source_file": "stacks/catalog/vpc.yaml", "line": 7},
-    "state_bucket": {"value": "terraform-state-123456789012", "scope": "terraform", "source_file": "stacks/catalog/vpc.yaml", "line": 12},
-    "state_key_prefix": {"value": "plat-ue2-prod", "scope": "terraform", "source_file": "stacks/catalog/vpc.yaml", "line": 13},
-    "vpc_name": {"value": "main-vpc-us-east-2", "scope": "component", "source_file": "stacks/orgs/acme/plat/prod/us-east-2.yaml", "line": 45},
-    "cidr_block": {"value": "10.0.0.0/16", "scope": "component", "source_file": "stacks/orgs/acme/plat/prod/us-east-2.yaml", "line": 46},
-    "enable_nat_gateway": {"value": true, "scope": "component", "source_file": "stacks/orgs/acme/plat/prod/us-east-2.yaml", "line": 47}
-  }
-}
+**Example output (component query):**
+```yaml
+component: vpc
+stack: plat-ue2-prod
+component_type: terraform
+locals:
+  region: us-east-2
+  account_id: "123456789012"
+  environment: prod
+  state_bucket: terraform-state-123456789012
+  state_key_prefix: plat-ue2-prod
 ```
 
 **Key Design Decisions:**
 
-1. **Full provenance tracking**: Shows source file AND line number for each local
-2. **Scope separation**: Clearly shows global, component-type, and component scopes
-3. **Merged view with attribution**: The `merged` field shows where each final value originated
-4. **JSON for tooling**: Full metadata in JSON format for programmatic access
-5. **Consistent with other describe commands**: Same flags (`-s`, `--format`) as `atmos describe component`
+1. **Scope separation**: Clearly shows global, component-type, and component scopes
+2. **Merged view**: The `merged` field shows final resolved locals available to templates
+3. **JSON for tooling**: Full metadata in JSON format for programmatic access
+4. **Consistent with other describe commands**: Same flags (`-s`, `--format`) as `atmos describe component`
+5. **Stack name flexibility**: Accepts both logical stack names and file paths
 
 **Implementation Notes:**
 
@@ -1726,8 +1679,7 @@ The command follows the existing `describe` command pattern:
 - Located in `cmd/describe/describe_locals.go`
 - Uses `CommandProvider` pattern from `cmd/internal/registry.go`
 - Business logic in `internal/exec/describe_locals.go`
-- Reuses `ProcessStackLocals()` and `ResolveComponentLocals()` from `internal/exec/stack_processor_locals.go`
-- Leverages existing YAML position tracking (`pkg/utils/yaml_utils.go`) for line numbers
+- Reuses `ProcessStackLocals()` from `internal/exec/stack_processor_locals.go`
 
 ### Component Registry Integration
 
@@ -1874,15 +1826,6 @@ The following features have been implemented:
 ### Not Yet Implemented
 
 The following features from the PRD are planned but not yet implemented:
-
-#### Provenance Tracking (`--provenance` flag)
-The `--provenance` flag for showing source file and line numbers is not yet implemented for `describe locals`. This would require:
-1. Using `yaml.v3.Node` parsing to track line numbers
-2. Adding `LocalsProvenance` struct to track source/line per local
-3. Modifying `ProcessStackLocals` to optionally track provenance
-4. Adding provenance rendering similar to `describe component --provenance`
-
-This is a medium-effort enhancement that would provide debugging value similar to what `describe component --provenance` provides for vars/settings.
 
 #### Component-Level Locals
 Component-level locals (inside individual component definitions) are parsed but not resolved during the initial template pass. This is because component-level locals require per-component scoping that cannot be handled in a single template pass. Users should use global or section-level locals instead.

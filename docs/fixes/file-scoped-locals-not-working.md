@@ -448,9 +448,279 @@ deploy/dev:
 - **Unit tests**: `internal/exec/describe_locals_test.go`
 - **Integration tests**: `tests/cli_locals_test.go` (`TestDescribeLocals`, `TestDescribeLocalsWithFilter`)
 
-## Future Enhancements
+## Manual CLI Testing Guide
 
-1. **Component-level locals** - Requires per-component template scoping for proper isolation
+This section provides comprehensive CLI commands to manually test all `locals` functionality using the test fixtures in `tests/fixtures/scenarios/`.
+
+### Test Fixtures Overview
+
+| Fixture | Purpose | Stack Names |
+|---------|---------|-------------|
+| `locals` | Basic locals with global + terraform scopes | `dev-us-east-1`, `prod-us-east-1` |
+| `locals-logical-names` | Logical stack name derivation, terraform + helmfile | `dev-us-east-1`, `prod-us-west-2` |
+| `locals-file-scoped` | File-scoped isolation from mixin imports | `test` |
+| `locals-not-inherited` | Mixin locals NOT available to importer | `test` |
+| `locals-deep-import-chain` | 4-level import chain isolation | `final` |
+| `locals-circular` | Circular dependency detection | `dev` |
+
+### 1. Basic Locals Resolution
+
+Test that `{{ .locals.* }}` templates resolve correctly.
+
+```bash
+# Navigate to basic locals fixture
+cd tests/fixtures/scenarios/locals
+
+# Test describe stacks - shows all stacks with resolved locals
+../../../../build/atmos describe stacks --format yaml
+
+# Test describe component - shows resolved vars for specific component
+../../../../build/atmos describe component mock/instance-1 -s dev-us-east-1
+
+# Expected: vars.app_name = "acme-dev-mock-instance-1" (resolved from {{ .locals.name_prefix }})
+# Expected: backend.bucket = "acme-dev-tfstate" (resolved from {{ .locals.backend_bucket }})
+```
+
+### 2. Logical Stack Names vs File Paths
+
+The `--stack` flag accepts both logical stack names and file paths.
+
+```bash
+# Navigate to logical names fixture
+cd tests/fixtures/scenarios/locals-logical-names
+
+# Using LOGICAL stack name (derived from name_template)
+../../../../build/atmos describe locals --stack dev-us-east-1
+../../../../build/atmos describe locals --stack prod-us-west-2
+
+# Using FILE PATH (relative to stacks base)
+../../../../build/atmos describe locals --stack deploy/dev
+../../../../build/atmos describe locals --stack deploy/prod
+
+# Both should return the same locals for the same underlying file
+# Verify: dev-us-east-1 == deploy/dev
+# Verify: prod-us-west-2 == deploy/prod
+```
+
+### 3. Describe Locals Command
+
+Test all variations of the `describe locals` command.
+
+```bash
+cd tests/fixtures/scenarios/locals-logical-names
+
+# Show locals for ALL stacks
+../../../../build/atmos describe locals
+
+# Filter by stack (logical name)
+../../../../build/atmos describe locals --stack dev-us-east-1
+
+# Filter by stack (file path)
+../../../../build/atmos describe locals --stack deploy/prod
+
+# With component argument - shows merged locals for component's type
+../../../../build/atmos describe locals vpc -s dev-us-east-1
+# Expected output structure: { component, stack, component_type, locals }
+
+# Helmfile component (tests helmfile section locals)
+../../../../build/atmos describe locals nginx -s prod-us-west-2
+# Expected: component_type = "helmfile", includes helmfile-specific locals
+
+# Different output formats
+../../../../build/atmos describe locals --stack dev-us-east-1 --format yaml
+../../../../build/atmos describe locals --stack dev-us-east-1 --format json
+
+# Write to file
+../../../../build/atmos describe locals --stack dev-us-east-1 --file /tmp/locals-output.yaml
+cat /tmp/locals-output.yaml
+
+# With query (yq expression)
+../../../../build/atmos describe locals --stack dev-us-east-1 --query '.global.namespace'
+# Expected: "acme"
+```
+
+### 4. File-Scoped Isolation
+
+Test that locals do NOT inherit across file boundaries via imports.
+
+```bash
+# Test that file's own locals work
+cd tests/fixtures/scenarios/locals-file-scoped
+../../../../build/atmos describe component test-component -s test
+
+# Expected: vars.own_local = "file-ns-file-env" (from file's own {{ .locals.file_computed }})
+
+# Describe locals should show ONLY the file's locals, NOT mixin's locals
+../../../../build/atmos describe locals --stack test
+# Expected: file_namespace, file_env, file_computed
+# Should NOT include: mixin_namespace, mixin_env, mixin_computed
+```
+
+### 5. Locals NOT Inherited from Imports
+
+Test that attempting to use a mixin's local fails gracefully.
+
+```bash
+cd tests/fixtures/scenarios/locals-not-inherited
+
+# This file tries to use {{ .locals.mixin_value }} from the mixin - should remain unresolved
+../../../../build/atmos describe component test-component -s test
+
+# Expected: vars.attempt_mixin_local = "{{ .locals.mixin_value }}" (unresolved template)
+# Regular vars ARE inherited: vars.inherited_var = "from-mixin-vars"
+```
+
+### 6. Deep Import Chain
+
+Test 4-level import chain: base → layer1 → layer2 → final.
+
+```bash
+cd tests/fixtures/scenarios/locals-deep-import-chain
+
+# Describe the component - should show file's own locals resolved
+../../../../build/atmos describe component deep-chain-component -s final
+
+# Expected resolved values (from final.yaml's own locals):
+# vars.local_value = "from-final-stack"
+# vars.computed = "from-final-stack-computed"
+# vars.shared = "final-value"  (NOT "base-value" or "layer1-value" or "layer2-value")
+# vars.full_chain = "final-value-from-final-stack"
+
+# Expected inherited vars (regular vars DO inherit):
+# vars.base_var = "from-base-vars"
+# vars.layer1_var = "from-layer1-vars"
+# vars.layer2_var = "from-layer2-vars"
+# vars.final_var = "from-final-vars"
+
+# Describe locals for the deep chain stack
+../../../../build/atmos describe locals --stack final
+
+# Expected: Only final.yaml's locals (final_local, shared_key, computed_value, full_chain)
+# Should NOT include: base_local, layer1_local, layer2_local
+```
+
+### 7. Section-Specific Locals
+
+Test terraform, helmfile, and packer section locals.
+
+```bash
+cd tests/fixtures/scenarios/locals-logical-names
+
+# Terraform component - gets global + terraform locals merged
+../../../../build/atmos describe locals vpc -s prod-us-west-2
+# Expected: includes tf_only: "terraform-specific-prod"
+
+# Helmfile component - gets global + helmfile locals merged
+../../../../build/atmos describe locals nginx -s prod-us-west-2
+# Expected: includes hf_only: "helmfile-specific-prod", release_name: "acme-prod-release"
+
+# Verify section isolation - terraform component should NOT have helmfile locals
+../../../../build/atmos describe locals vpc -s prod-us-west-2 --format json | grep -c "hf_only"
+# Expected: 0 (not found)
+```
+
+### 8. Circular Dependency Detection
+
+Test that circular dependencies are detected and handled gracefully.
+
+```bash
+cd tests/fixtures/scenarios/locals-circular
+
+# This should detect circular dependency and continue without resolving locals
+../../../../build/atmos describe stacks 2>&1
+
+# The command should complete (not hang or crash)
+# Locals with circular references remain unresolved
+```
+
+### 9. Describe Stacks with Locals
+
+Test that describe stacks works correctly with locals.
+
+```bash
+cd tests/fixtures/scenarios/locals
+
+# Full describe stacks output
+../../../../build/atmos describe stacks --format yaml
+
+# Verify locals are resolved in backend configuration
+../../../../build/atmos describe stacks --format yaml | grep -A5 "backend:"
+# Expected: bucket: "acme-dev-tfstate" (not {{ .locals.backend_bucket }})
+
+# Verify locals are stripped from final component output
+../../../../build/atmos describe stacks --format yaml | grep -c "^  locals:"
+# Expected: 0 (locals section should not appear in component output)
+```
+
+### 10. Output Structure Verification
+
+Verify the output structure differences between stack and component queries.
+
+```bash
+cd tests/fixtures/scenarios/locals-logical-names
+
+# Stack query - returns organized by scopes
+../../../../build/atmos describe locals --stack dev-us-east-1 --format json
+
+# Expected structure:
+# {
+#   "dev-us-east-1": {
+#     "global": { ... },
+#     "terraform": { ... },
+#     "merged": { ... }
+#   }
+# }
+
+# Component query - returns flattened for component's type
+../../../../build/atmos describe locals vpc -s dev-us-east-1 --format json
+
+# Expected structure:
+# {
+#   "component": "vpc",
+#   "stack": "dev-us-east-1",
+#   "component_type": "terraform",
+#   "locals": { ... }
+# }
+```
+
+### Quick Test Script
+
+Run this script to test all major functionality:
+
+```bash
+#!/bin/bash
+set -e
+
+ATMOS="../../../../build/atmos"
+
+echo "=== Test 1: Basic Locals Resolution ==="
+cd tests/fixtures/scenarios/locals
+$ATMOS describe component mock/instance-1 -s dev-us-east-1 --format yaml | grep "app_name"
+
+echo "=== Test 2: Logical Stack Name ==="
+cd ../locals-logical-names
+$ATMOS describe locals --stack dev-us-east-1 --format yaml | head -10
+
+echo "=== Test 3: File Path Stack Name ==="
+$ATMOS describe locals --stack deploy/dev --format yaml | head -10
+
+echo "=== Test 4: Component Argument ==="
+$ATMOS describe locals vpc -s dev-us-east-1 --format yaml
+
+echo "=== Test 5: File-Scoped Isolation ==="
+cd ../locals-file-scoped
+$ATMOS describe locals --stack test --format yaml
+
+echo "=== Test 6: Deep Import Chain ==="
+cd ../locals-deep-import-chain
+$ATMOS describe component deep-chain-component -s final --format yaml | grep -E "(local_value|shared|base_var)"
+
+echo "=== Test 7: Helmfile Section Locals ==="
+cd ../locals-logical-names
+$ATMOS describe locals nginx -s prod-us-west-2 --format yaml
+
+echo "=== All tests passed! ==="
+```
 
 ## References
 
