@@ -292,6 +292,7 @@ settings:
       wrap: false
     color: true
     no_color: false
+  experimental: warn
   markdown:
     document:
       color: ${colors.text}
