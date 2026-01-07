@@ -72,9 +72,9 @@ terraform:
       key: "{{ .locals.backend_key_prefix }}/terraform.tfstate"
 ```
 
-### Component Level
+### Using Locals in Components
 
-Locals defined within a component inherit from the component-type scope:
+Components can reference merged locals (global + component-type) in their `vars`:
 
 ```yaml
 # stacks/orgs/acme/plat/prod/us-east-1.yaml
@@ -83,24 +83,28 @@ locals:
   environment: prod
   name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
 
+terraform:
+  locals:
+    backend_bucket: "{{ .locals.namespace }}-{{ .locals.environment }}-tfstate"
+
 components:
   terraform:
     vpc:
-      locals:
-        # Inherits name_prefix from global
-        vpc_name: "{{ .locals.name_prefix }}-vpc"
-        cidr_prefix: "10.0"
       vars:
-        vpc_name: "{{ .locals.vpc_name }}"
-        vpc_cidr: "{{ .locals.cidr_prefix }}.0.0/16"
+        # Uses merged locals (global + terraform section)
+        vpc_name: "{{ .locals.name_prefix }}-vpc"
+        bucket: "{{ .locals.backend_bucket }}"
 
     eks:
-      locals:
-        # Each component has its own locals scope
-        cluster_name: "{{ .locals.name_prefix }}-eks"
       vars:
-        cluster_name: "{{ .locals.cluster_name }}"
+        # Same merged locals available to all terraform components
+        cluster_name: "{{ .locals.name_prefix }}-eks"
+        bucket: "{{ .locals.backend_bucket }}"
 ```
+
+:::note
+Component-level locals (defined inside individual component definitions) are **not supported**. Only global and component-type scopes are implemented. Use global or section-level locals instead.
+:::
 
 ## Scope Inheritance (Within a File)
 
@@ -110,8 +114,6 @@ Within a single file, locals follow this inheritance chain:
 Global locals
     ↓
 Component-type locals (terraform/helmfile/packer)
-    ↓
-Component locals
 ```
 
 Each level can:
@@ -133,10 +135,10 @@ terraform:
 components:
   terraform:
     vpc:
-      locals:
-        component: vpc
-        # Can access: env (= "production"), tf_version (= "1.5")
-        full_name: "{{ .locals.env }}-{{ .locals.component }}"
+      vars:
+        # Uses merged locals: env = "production", tf_version = "1.5"
+        name: "{{ .locals.env }}-vpc"
+        terraform_version: "{{ .locals.tf_version }}"
 ```
 
 ## File-Scoped Isolation
@@ -292,9 +294,11 @@ vars:
   tags: "{{ .locals.default_tags }}"
 
 terraform:
-  # Terraform-specific locals
+  # Terraform-specific locals (inherit from global)
   locals:
     backend_bucket: "{{ .locals.namespace }}-{{ .locals.environment }}-tfstate"
+    vpc_name: "{{ .locals.full_name }}-vpc"
+    cluster_name: "{{ .locals.full_name }}-eks"
 
   backend_type: s3
   backend:
@@ -303,12 +307,10 @@ terraform:
       region: "{{ .locals.stage }}"
       key: terraform.tfstate
 
+# Components use merged locals (global + terraform section)
 components:
   terraform:
     vpc:
-      locals:
-        # Component-specific local
-        vpc_name: "{{ .locals.full_name }}-vpc"
       vars:
         name: "{{ .locals.vpc_name }}"
         cidr_block: "10.0.0.0/16"
@@ -316,8 +318,6 @@ components:
           Name: "{{ .locals.vpc_name }}"
 
     eks:
-      locals:
-        cluster_name: "{{ .locals.full_name }}-eks"
       vars:
         cluster_name: "{{ .locals.cluster_name }}"
         tags:

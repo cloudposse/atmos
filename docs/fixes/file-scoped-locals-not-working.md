@@ -202,6 +202,103 @@ Section locals can override global locals with the same key.
 
 **Note**: Component-level locals are NOT supported in the initial template pass because they require per-component scoping that can't be handled in a single template pass. This is a known limitation for future enhancement.
 
+## Design Intent: File-Scoped Isolation
+
+This section documents the original design intent for `locals` based on the PRD (`docs/prd/file-scoped-locals.md`) and blog post (`website/blog/2025-12-16-file-scoped-locals.mdx`).
+
+### Core Principle
+
+**Locals are strictly file-scoped and do NOT inherit across file boundaries via imports.**
+
+This is explicitly stated in the PRD:
+> "Is **file-scoped only** (never inherited across file boundaries via imports)"
+
+### Two Types of Scope Merging
+
+**1. WITHIN a single file - Locals DO cascade (global → component-type only):**
+
+```
+global → component-type (terraform/helmfile/packer)
+```
+
+**Note:** Component-level locals (inside individual component definitions) are NOT supported. Only global and component-type scopes are implemented.
+
+Example:
+```yaml
+# All in the SAME file
+locals:
+  namespace: acme              # Global scope
+
+terraform:
+  locals:
+    bucket: "{{ .locals.namespace }}-tfstate"  # Inherits from global
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # Uses merged locals (global + terraform section)
+        name: "{{ .locals.namespace }}-vpc"
+        bucket: "{{ .locals.bucket }}"
+```
+
+**2. ACROSS files via imports - Locals do NOT inherit:**
+
+```yaml
+# _defaults.yaml
+locals:
+  shared_value: "from-defaults"  # Only available in THIS file
+
+# prod.yaml
+import:
+  - _defaults
+
+locals:
+  prod_value: "prod-specific"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # ✅ Works - prod_value is defined in this file
+        name: "{{ .locals.prod_value }}"
+
+        # ❌ Error - shared_value is NOT available (file-scoped to _defaults.yaml)
+        # bad_ref: "{{ .locals.shared_value }}"
+```
+
+### Comparison with vars and settings
+
+| Feature | Locals | Vars | Settings |
+|---------|--------|------|----------|
+| Inherited across imports | ❌ No | ✅ Yes | ✅ Yes |
+| Passed to Terraform/Helmfile | ❌ No | ✅ Yes | ❌ No |
+| Visible in `describe component` | ❌ No | ✅ Yes | ✅ Yes |
+| Available in templates within same file | ✅ Yes | ✅ Yes | ✅ Yes |
+| Purpose | File-scoped temp variables | Tool inputs | Component metadata |
+
+### Design Rationale
+
+From the blog post "Why File-Scoped?":
+
+1. **Predictability** - You know exactly what locals are available by looking at the current file
+2. **No hidden dependencies** - Locals won't mysteriously change based on import order
+3. **Safer refactoring** - Renaming a local in one file won't break other files
+4. **Clear separation** - Use `vars` for values that should propagate; use `locals` for file-internal convenience
+
+### Test Fixtures Alignment
+
+All test fixtures correctly implement this design:
+
+| Fixture | Tests | Alignment |
+|---------|-------|-----------|
+| `locals` | Basic locals with global + terraform scopes | ✅ Within-file scoping |
+| `locals-file-scoped` | File's own locals work, mixin's don't | ✅ Cross-file isolation |
+| `locals-not-inherited` | Mixin locals NOT available to importer | ✅ Cross-file isolation |
+| `locals-deep-import-chain` | 4-level chain, each file has own locals | ✅ Cross-file isolation |
+| `locals-logical-names` | terraform + helmfile section locals | ✅ Within-file scoping |
+| `locals-circular` | Circular dependency detection | ✅ Within-file validation |
+
 ## Files Changed
 
 | File | Change |

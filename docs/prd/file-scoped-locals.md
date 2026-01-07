@@ -97,16 +97,15 @@ locals:
 terraform:
   locals:
     state_bucket: "terraform-state-{{ .locals.account_id }}"
+    vpc_name: "main-vpc-{{ .locals.region }}"
 
   vars:
     backend_bucket: "{{ .locals.state_bucket }}"
 
-# Component-specific locals
+# Components use merged locals (global + terraform section)
 components:
   terraform:
     vpc:
-      locals:
-        vpc_name: "main-vpc-{{ .locals.region }}"
       vars:
         name: "{{ .locals.vpc_name }}"
         tags:
@@ -169,8 +168,9 @@ components:
 Within a single file, locals are resolved in this order (inner scopes can reference outer scopes):
 
 1. **Global locals** → resolved first, available everywhere in the file
-2. **Component-type locals** (terraform/helmfile) → can reference global locals
-3. **Component locals** → can reference global and component-type locals
+2. **Component-type locals** (terraform/helmfile/packer) → can reference global locals
+
+**Note:** Component-level locals (inside individual component definitions) are NOT supported. Only global and component-type scopes are implemented.
 
 ```yaml
 locals:
@@ -183,10 +183,9 @@ terraform:
 components:
   terraform:
     vpc:
-      locals:
-        component_val: "{{ .locals.tf_val }}-vpc"
       vars:
-        name: "{{ .locals.component_val }}"  # Results in "global-terraform-vpc"
+        # Uses merged locals (global + terraform section)
+        name: "{{ .locals.tf_val }}-vpc"  # Results in "global-terraform-vpc"
 ```
 
 ## Behavior Clarifications
@@ -255,13 +254,16 @@ locals:
 **Component inheritance (`metadata.inherits`)**: Locals are NOT inherited through component inheritance—they are purely file-scoped
 ```yaml
 # catalog/base.yaml
+locals:
+  base_local: "value"  # Only available in THIS file
+
 components:
   terraform:
     base-vpc:
-      locals:
-        base_local: "value"  # NOT inherited
+      vars:
+        name: "{{ .locals.base_local }}"  # Works - same file
 
-# deploy/prod.yaml
+# deploy/prod.yaml (imports catalog/base.yaml)
 components:
   terraform:
     vpc:
@@ -309,7 +311,7 @@ Example: locals = {c: "{{.locals.b}}", a: "val", b: "{{.locals.a}}"}
 
 ### Cross-Scope Local References
 
-Inner scopes inherit resolved locals from outer scopes:
+Component-type scopes inherit resolved locals from global scope:
 
 ```yaml
 locals:
@@ -322,14 +324,17 @@ terraform:
 components:
   terraform:
     vpc:
-      locals:
-        comp_val: "{{ .locals.tf_val }}-vpc"  # Scope 3: can see global_val AND tf_val
+      vars:
+        # Components use merged locals (global + terraform)
+        name: "{{ .locals.tf_val }}-vpc"  # Can see global_val AND tf_val
 ```
 
 Resolution order:
 1. Resolve global locals (scope 1)
 2. Resolve terraform locals with global locals in context (scope 2)
-3. Resolve component locals with global + terraform locals in context (scope 3)
+3. Merge global + terraform locals for use in component templates
+
+**Note:** Component-level locals (scope 3 in original design) are NOT supported.
 
 ### Template Context
 

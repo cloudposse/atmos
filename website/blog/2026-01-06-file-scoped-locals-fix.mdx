@@ -193,25 +193,27 @@ components:
         tags: "{{ .locals.common_tags }}"
 ```
 
-## Known Limitations
+## Supported Scopes
 
-**Component-level locals** are not supported in the initial template pass. This is because component-level locals require per-component scoping that cannot be handled in a single template pass. Use global or section-level locals instead:
+Locals can be defined at two levels:
 
 ```yaml
-# Supported: Global and section-level locals
+# Global locals (root level) - available throughout the file
 locals:
   namespace: acme
+  environment: prod
 
+# Section-level locals (terraform/helmfile/packer) - inherit from global
 terraform:
   locals:
-    backend_bucket: "{{ .locals.namespace }}-tfstate"
+    backend_bucket: "{{ .locals.namespace }}-{{ .locals.environment }}-tfstate"
 
-# Not yet supported: Component-level locals
 components:
   terraform:
-    myapp:
-      locals:  # These won't be resolved in this release
-        app_name: myapp
+    vpc:
+      vars:
+        # Uses merged locals (global + terraform section)
+        bucket: "{{ .locals.backend_bucket }}"
 ```
 
 ## Upgrade

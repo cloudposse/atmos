@@ -144,11 +144,10 @@ This keeps locals truly local, preventing unexpected interactions between files.
 
 ### Multi-Level Scopes
 
-Locals can be defined at three levels, each inheriting from its parent:
+Locals can be defined at two levels, with the inner scope inheriting from the outer:
 
 1. **Global** (stack file root) - Available throughout the file
 2. **Component-type** (`terraform`, `helmfile`, `packer` sections) - Inherits from global
-3. **Component** (individual component) - Inherits from component-type
 
 ```yaml
 # Global locals
@@ -161,15 +160,13 @@ terraform:
   locals:
     backend_bucket: "{{ .locals.namespace }}-{{ .locals.environment }}-tfstate"
 
-  components:
-    terraform:
-      vpc:
-        # Component-level locals (inherit from terraform scope)
-        locals:
-          component_name: vpc
-          full_name: "{{ .locals.namespace }}-{{ .locals.component_name }}"
-        vars:
-          name: "{{ .locals.full_name }}"
+components:
+  terraform:
+    vpc:
+      vars:
+        # Uses merged locals (global + terraform section)
+        name: "{{ .locals.namespace }}-{{ .locals.environment }}-vpc"
+        bucket: "{{ .locals.backend_bucket }}"
 ```
 
 ## Inspecting Locals with `atmos describe locals`
@@ -292,13 +289,15 @@ terraform:
   # Terraform-specific - only used by terraform components
   locals:
     state_bucket: "{{ .locals.namespace }}-tfstate"
+    vpc_name: "{{ .locals.namespace }}-vpc"
 
-  components:
-    terraform:
-      vpc:
-        # Component-specific - only used by this component
-        locals:
-          vpc_name: "{{ .locals.namespace }}-vpc"
+components:
+  terraform:
+    vpc:
+      vars:
+        # Uses merged locals (global + terraform section)
+        name: "{{ .locals.vpc_name }}"
+        bucket: "{{ .locals.state_bucket }}"
 ```
 
 ## Get Started
