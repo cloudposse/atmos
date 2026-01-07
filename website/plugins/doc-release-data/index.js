@@ -15,6 +15,7 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const matter = require('gray-matter');
 
 /**
  * Gets the commit SHA that last modified a file.
@@ -108,6 +109,22 @@ function getDocUrlPath(filePath, docsDir) {
 }
 
 /**
+ * Extracts frontmatter from a doc file.
+ * @param {string} filePath - Absolute path to the doc file.
+ * @returns {object} - Parsed frontmatter data.
+ */
+function extractFrontmatter(filePath) {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const { data } = matter(content);
+    return data;
+  } catch (e) {
+    console.warn(`[doc-release-data] Failed to parse frontmatter for ${filePath}: ${e.message}`);
+    return {};
+  }
+}
+
+/**
  * Recursively finds all .mdx and .md files in a directory.
  * @param {string} dir - Directory to search.
  * @returns {string[]} - Array of absolute file paths.
@@ -138,11 +155,13 @@ module.exports = function docReleaseDataPlugin(context, options) {
     async loadContent() {
       const docsDir = path.join(context.siteDir, 'docs');
       const releaseMap = {};
+      const unreleasedDocs = [];
+      const buildDate = new Date().toISOString();
 
       // Check if docs directory exists.
       if (!fs.existsSync(docsDir)) {
         console.warn('[doc-release-data] docs directory not found');
-        return { releaseMap };
+        return { releaseMap, unreleasedDocs, buildDate };
       }
 
       // Find all doc files recursively.
@@ -157,7 +176,47 @@ module.exports = function docReleaseDataPlugin(context, options) {
         if (urlPath !== '/') {
           releaseMap[`${urlPath}/`] = release;
         }
+
+        // For unreleased docs, extract metadata for the index page.
+        if (release === 'unreleased') {
+          const frontmatter = extractFrontmatter(filePath);
+
+          // Determine the correct URL path.
+          // Docusaurus URL routing rules:
+          // 1. slug (explicit) takes highest priority
+          // 2. id replaces the filename in the URL
+          // 3. File path is used if no slug/id
+          let finalPath = urlPath;
+          const fileName = path.basename(filePath, path.extname(filePath));
+          const parentDirPath = path.dirname(urlPath);
+          const parentDirName = path.basename(path.dirname(filePath));
+
+          if (frontmatter.slug) {
+            // Slug is an explicit path - use as-is.
+            finalPath = frontmatter.slug.startsWith('/') ? frontmatter.slug : `/${frontmatter.slug}`;
+          } else if (frontmatter.id) {
+            // ID replaces the filename in the URL.
+            if (frontmatter.id === parentDirName) {
+              // Special case: id matches parent folder = becomes index of that folder.
+              // e.g., devcontainer/devcontainer.mdx with id: devcontainer -> /devcontainer
+              finalPath = parentDirPath;
+            } else {
+              // Normal case: id replaces filename.
+              // e.g., list-affected.mdx with id: affected -> /list/affected
+              finalPath = parentDirPath === '/' ? `/${frontmatter.id}` : `${parentDirPath}/${frontmatter.id}`;
+            }
+          }
+
+          unreleasedDocs.push({
+            path: finalPath,
+            title: frontmatter.title || frontmatter.sidebar_label || fileName,
+            description: frontmatter.description || null,
+          });
+        }
       }
+
+      // Sort unreleased docs alphabetically by title.
+      unreleasedDocs.sort((a, b) => a.title.localeCompare(b.title));
 
       // Log summary for debugging.
       const entries = Object.entries(releaseMap);
@@ -173,7 +232,7 @@ module.exports = function docReleaseDataPlugin(context, options) {
         `[doc-release-data] Processed ${files.length} doc files: ${released} released, ${unreleased} unreleased`
       );
 
-      return { releaseMap };
+      return { releaseMap, unreleasedDocs, buildDate };
     },
 
     async contentLoaded({ content, actions }) {

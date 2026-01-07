@@ -46,7 +46,7 @@ export default function DocReleaseBadge(): JSX.Element | null {
 
   return (
     <div className={styles.releaseContainer}>
-      <ReleaseBadge release={release} unreleasedLink="/changelog" />
+      <ReleaseBadge release={release} unreleasedLink="/unreleased" />
     </div>
   );
 }

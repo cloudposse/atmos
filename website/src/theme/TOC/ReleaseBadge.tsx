@@ -9,13 +9,13 @@ import styles from './styles.module.css';
 
 interface ReleaseBadgeProps {
   release: string;
-  /** Link destination for unreleased badge. Defaults to /changelog */
+  /** Link destination for unreleased badge. Defaults to /unreleased */
   unreleasedLink?: string;
 }
 
 export default function ReleaseBadge({
   release,
-  unreleasedLink = '/changelog',
+  unreleasedLink = '/unreleased',
 }: ReleaseBadgeProps): JSX.Element {
   if (release === 'unreleased') {
     return (

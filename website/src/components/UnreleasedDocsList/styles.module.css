@@ -1,0 +1,59 @@
+.container {
+  margin: 1.5rem 0;
+}
+
+.buildDate {
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: var(--ifm-color-emphasis-600);
+}
+
+.docList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  background: var(--ifm-color-emphasis-100);
+  border-radius: 8px;
+  border-left: 3px solid var(--ifm-color-gray-500);
+  overflow: hidden;
+}
+
+.docItem {
+  padding: 0.75rem 1rem;
+  margin: 0;
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.docItem:last-child {
+  border-bottom: none;
+}
+
+.docLink {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--ifm-color-primary);
+  text-decoration: none;
+}
+
+.docLink:hover {
+  text-decoration: underline;
+}
+
+.description {
+  margin: 0.35rem 0 0 0;
+  font-size: 0.8rem;
+  color: var(--ifm-color-emphasis-600);
+  line-height: 1.4;
+}
+
+.noFeatures {
+  padding: 1rem;
+  background: var(--ifm-color-emphasis-100);
+  border-radius: 8px;
+  color: var(--ifm-color-emphasis-600);
+  font-style: italic;
+}
+
+:global([data-theme='dark']) .docList {
+  border-left-color: var(--ifm-color-gray-600);
+}
