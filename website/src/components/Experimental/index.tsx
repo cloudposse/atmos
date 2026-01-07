@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
+import { RiFlaskLine } from 'react-icons/ri';
 import './index.css';
 
 interface ExperimentalProps {
@@ -12,13 +13,10 @@ const Experimental: React.FC<ExperimentalProps> = ({ feature }) => {
     : 'This is an experimental feature';
 
   return (
-    <div className="experimental-badge" role="status" aria-label={ariaLabel}>
-      <span className="experimental-icon">&#x1F9EA;</span>
-      <span className="experimental-text">
-        <strong>Experimental</strong>
-        <Link to="/experimental">Learn more</Link>
-      </span>
-    </div>
+    <Link to="/experimental" className="experimental-badge" role="status" aria-label={ariaLabel}>
+      <RiFlaskLine className="experimental-icon" />
+      <span className="experimental-text">Experimental</span>
+    </Link>
   );
 };
 

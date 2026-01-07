@@ -8,37 +8,30 @@
   background-color: rgba(255, 152, 0, 0.15);
   border: 1px solid rgba(255, 152, 0, 0.4);
   font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.experimental-badge:hover {
+  background-color: rgba(255, 152, 0, 0.25);
+  border-color: rgba(255, 152, 0, 0.6);
+  text-decoration: none;
+}
+
+.experimental-badge:focus-visible {
+  outline: 2px solid #d97706;
+  outline-offset: 2px;
 }
 
 .experimental-icon {
   font-size: 1.2rem;
-}
-
-.experimental-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.3;
-}
-
-/* Light theme: use darker shades for WCAG AA compliance (4.5:1 contrast). */
-.experimental-text strong {
-  color: #b45309;
-}
-
-.experimental-text a {
-  font-size: 0.8rem;
   color: #d97706;
 }
 
-.experimental-text a:hover {
+.experimental-text {
+  font-weight: 600;
   color: #b45309;
-  text-decoration: underline;
-}
-
-.experimental-text a:focus-visible {
-  outline: 2px solid #d97706;
-  outline-offset: 2px;
-  border-radius: 2px;
 }
 
 [data-theme='dark'] .experimental-badge {
@@ -46,20 +39,19 @@
   border-color: rgba(255, 152, 0, 0.5);
 }
 
-[data-theme='dark'] .experimental-text strong {
-  color: #ffb74d;
+[data-theme='dark'] .experimental-badge:hover {
+  background-color: rgba(255, 152, 0, 0.3);
+  border-color: rgba(255, 152, 0, 0.7);
 }
 
-[data-theme='dark'] .experimental-text a {
+[data-theme='dark'] .experimental-badge:focus-visible {
+  outline: 2px solid #ffa726;
+}
+
+[data-theme='dark'] .experimental-icon {
   color: #ffa726;
 }
 
-[data-theme='dark'] .experimental-text a:hover {
+[data-theme='dark'] .experimental-text {
   color: #ffb74d;
-}
-
-[data-theme='dark'] .experimental-text a:focus-visible {
-  outline: 2px solid #ffa726;
-  outline-offset: 2px;
-  border-radius: 2px;
 }
