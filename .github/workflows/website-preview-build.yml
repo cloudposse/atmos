@@ -47,6 +47,7 @@ jobs:
           pnpm run build:site
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOYMENT_HOST: ${{ github.event.pull_request.number && format('pr-{0}.atmos-docs.ue2.dev.plat.cloudposse.org', github.event.pull_request.number) || '' }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
