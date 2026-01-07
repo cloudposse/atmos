@@ -42,13 +42,19 @@
   color: white;
 }
 
+/* Unreleased badge - styled similar to Experimental badge */
 .unreleased {
-  background-color: var(--ifm-color-gray-500);
+  background-color: rgba(128, 128, 128, 0.15);
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  color: #6b7280;
   cursor: pointer;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .unreleased:hover {
-  background-color: var(--ifm-color-gray-600);
+  background-color: rgba(128, 128, 128, 0.25);
+  border-color: rgba(128, 128, 128, 0.6);
+  color: #6b7280;
 }
 
 /* Dark mode */
@@ -61,9 +67,13 @@
 }
 
 [data-theme='dark'] .unreleased {
-  background-color: var(--ifm-color-gray-600);
+  background-color: rgba(156, 163, 175, 0.2);
+  border-color: rgba(156, 163, 175, 0.5);
+  color: #9ca3af;
 }
 
 [data-theme='dark'] .unreleased:hover {
-  background-color: var(--ifm-color-gray-700);
+  background-color: rgba(156, 163, 175, 0.3);
+  border-color: rgba(156, 163, 175, 0.7);
+  color: #d1d5db;
 }
