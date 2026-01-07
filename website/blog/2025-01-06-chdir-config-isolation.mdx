@@ -52,6 +52,17 @@ atmos --chdir examples/demo-stacks describe config
 atmos -C examples/demo-stacks describe config
 ```
 
+## Restoring Previous Behavior
+
+If you relied on the previous behavior where parent/repo-root configurations were merged, you can explicitly import the parent configuration in your local `atmos.yaml`:
+
+```yaml
+import:
+  - path: "../../atmos.yaml"
+```
+
+This gives you explicit control over which configurations are inherited, rather than relying on implicit directory traversal.
+
 ## Get Involved
 
 Have questions or feedback? Join us on [Slack](https://cloudposse.com/slack) or open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).
