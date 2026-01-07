@@ -346,6 +346,7 @@ func Experimental(feature string) error {
 	// Check if experimental warnings are disabled.
 	if f.ioCtx != nil && f.ioCtx.Config() != nil {
 		if !f.ioCtx.Config().AtmosConfig.Settings.Terminal.ExperimentalWarnings {
+			log.Debug("Using experimental feature", "feature", feature)
 			return nil
 		}
 	}
