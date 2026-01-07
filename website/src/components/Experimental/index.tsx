@@ -16,7 +16,7 @@ const Experimental: React.FC<ExperimentalProps> = ({ feature }) => {
       <span className="experimental-icon">&#x1F9EA;</span>
       <span className="experimental-text">
         <strong>Experimental</strong>
-        <Link to="/community/experimental-features">Learn more</Link>
+        <Link to="/experimental">Learn more</Link>
       </span>
     </div>
   );

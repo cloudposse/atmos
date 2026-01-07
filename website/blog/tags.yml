@@ -37,6 +37,10 @@ deprecation:
   label: Deprecation
   description: Deprecated features scheduled for removal
 
+experimental:
+  label: Experimental
+  description: Features that are still being refined and may change
+
 # CONTRIBUTOR TAG
 # Use for internal changes with zero user impact:
 

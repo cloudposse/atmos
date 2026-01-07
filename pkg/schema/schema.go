@@ -282,18 +282,19 @@ type ToolchainRegistry struct {
 }
 
 type Terminal struct {
-	MaxWidth           int                `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
-	Pager              string             `yaml:"pager" json:"pager" mapstructure:"pager"`
-	Unicode            bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
-	SyntaxHighlighting SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
-	Color              bool               `yaml:"color" json:"color" mapstructure:"color"`
-	NoColor            bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"` // Deprecated in config, use Color instead
-	ForceColor         bool               `yaml:"-" json:"-" mapstructure:"force_color"`            // ENV-only: ATMOS_FORCE_COLOR
-	TabWidth           int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
-	Title              bool               `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
-	Alerts             bool               `yaml:"alerts,omitempty" json:"alerts,omitempty" mapstructure:"alerts"`
-	Mask               MaskSettings       `yaml:"mask,omitempty" json:"mask,omitempty" mapstructure:"mask"`
-	Theme              string             `yaml:"theme,omitempty" json:"theme,omitempty" mapstructure:"theme"`
+	MaxWidth             int                `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
+	Pager                string             `yaml:"pager" json:"pager" mapstructure:"pager"`
+	Unicode              bool               `yaml:"unicode" json:"unicode" mapstructure:"unicode"`
+	SyntaxHighlighting   SyntaxHighlighting `yaml:"syntax_highlighting" json:"syntax_highlighting" mapstructure:"syntax_highlighting"`
+	Color                bool               `yaml:"color" json:"color" mapstructure:"color"`
+	NoColor              bool               `yaml:"no_color" json:"no_color" mapstructure:"no_color"` // Deprecated in config, use Color instead
+	ForceColor           bool               `yaml:"-" json:"-" mapstructure:"force_color"`            // ENV-only: ATMOS_FORCE_COLOR
+	TabWidth             int                `yaml:"tab_width,omitempty" json:"tab_width,omitempty" mapstructure:"tab_width"`
+	Title                bool               `yaml:"title,omitempty" json:"title,omitempty" mapstructure:"title"`
+	Alerts               bool               `yaml:"alerts,omitempty" json:"alerts,omitempty" mapstructure:"alerts"`
+	Mask                 MaskSettings       `yaml:"mask,omitempty" json:"mask,omitempty" mapstructure:"mask"`
+	Theme                string             `yaml:"theme,omitempty" json:"theme,omitempty" mapstructure:"theme"`
+	ExperimentalWarnings bool               `yaml:"experimental_warnings" json:"experimental_warnings" mapstructure:"experimental_warnings"` // Show experimental feature warnings (default: true)
 }
 
 // MaskSettings contains configuration for sensitive data masking.

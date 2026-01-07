@@ -16,13 +16,14 @@ type StyleSet struct {
 	Muted   lipgloss.Style
 
 	// Status styles
-	Success lipgloss.Style
-	Warning lipgloss.Style
-	Error   lipgloss.Style
-	Info    lipgloss.Style
-	Notice  lipgloss.Style
-	Debug   lipgloss.Style
-	Trace   lipgloss.Style
+	Success      lipgloss.Style
+	Warning      lipgloss.Style
+	Error        lipgloss.Style
+	Info         lipgloss.Style
+	Notice       lipgloss.Style
+	Debug        lipgloss.Style
+	Trace        lipgloss.Style
+	Experimental lipgloss.Style // For experimental feature notifications
 
 	// UI element styles
 	Selected    lipgloss.Style
@@ -111,13 +112,14 @@ func GetStyles(scheme *ColorScheme) *StyleSet {
 		Muted:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
 
 		// Status styles
-		Success: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Success)),
-		Warning: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
-		Error:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)),
-		Info:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Link)),
-		Notice:  lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
-		Debug:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
-		Trace:   lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)).Faint(true),
+		Success:      lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Success)),
+		Warning:      lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
+		Error:        lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Error)),
+		Info:         lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Link)),
+		Notice:       lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Warning)),
+		Debug:        lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)),
+		Trace:        lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)).Faint(true),
+		Experimental: lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.TextMuted)), // Subtle gray for experimental
 
 		// UI element styles
 		Selected:    lipgloss.NewStyle().Foreground(lipgloss.Color(scheme.Selected)),

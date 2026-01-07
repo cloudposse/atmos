@@ -421,6 +421,11 @@
   color: #ffc107;
 }
 
+.tagExperimental {
+  background: rgba(255, 152, 0, 0.15);
+  color: #e65100;
+}
+
 .tagDefault {
   background: rgba(158, 158, 158, 0.15);
   color: #757575;
@@ -526,6 +531,11 @@
 
 :global([data-theme='dark']) .tagDeprecation {
   background: rgba(255, 193, 7, 0.25);
+}
+
+:global([data-theme='dark']) .tagExperimental {
+  background: rgba(255, 152, 0, 0.2);
+  color: #ffb74d;
 }
 
 :global([data-theme='dark']) .tagRelease {

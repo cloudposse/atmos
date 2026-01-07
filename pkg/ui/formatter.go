@@ -333,6 +333,33 @@ func Hintf(format string, a ...interface{}) error {
 	return f.terminal.Write(formatted)
 }
 
+// Experimental writes an experimental feature notification with test tube icon to stderr (UI channel).
+// This is used to notify users when they're using an experimental feature that may change.
+// The notification can be disabled via settings.terminal.experimental_warnings: false in atmos.yaml.
+// Flow: ui.Experimental() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Experimental(feature string) error {
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
+
+	// Check if experimental warnings are disabled.
+	if f.ioCtx != nil && f.ioCtx.Config() != nil {
+		if !f.ioCtx.Config().AtmosConfig.Settings.Terminal.ExperimentalWarnings {
+			return nil
+		}
+	}
+
+	formatted := f.Experimental(feature) + newline
+	return f.terminal.Write(formatted)
+}
+
+// Experimentalf writes a formatted experimental feature notification with test tube icon to stderr (UI channel).
+// Flow: ui.Experimentalf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Experimentalf(format string, a ...interface{}) error {
+	return Experimental(fmt.Sprintf(format, a...))
+}
+
 // Write writes plain text to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Write() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Write(text string) error {
@@ -792,6 +819,16 @@ func (f *formatter) Info(text string) string {
 
 func (f *formatter) Infof(format string, a ...interface{}) string {
 	return f.Info(fmt.Sprintf(format, a...))
+}
+
+func (f *formatter) Experimental(feature string) string {
+	message := fmt.Sprintf("**%s** is an experimental feature. [Learn more](https://atmos.tools/experimental)", feature)
+	result, _ := f.toastMarkdown(theme.IconExperimental, &f.styles.Experimental, message)
+	return result
+}
+
+func (f *formatter) Experimentalf(format string, a ...interface{}) string {
+	return f.Experimental(fmt.Sprintf(format, a...))
 }
 
 func (f *formatter) Hint(text string) string {
