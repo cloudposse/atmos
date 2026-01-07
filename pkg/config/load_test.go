@@ -1036,6 +1036,159 @@ base_path: /test/parent-should-not-find
 	}
 }
 
+// TestReadParentDirConfig_SkipsWhenLocalConfigExists verifies that parent directory
+// search is skipped when CWD has local Atmos config (per PRD constraint).
+func TestReadParentDirConfig_SkipsWhenLocalConfigExists(t *testing.T) {
+	tests := []struct {
+		name             string
+		setupDirs        func(t *testing.T, tempDir string) string
+		expectParentLoad bool
+	}{
+		{
+			name: "skips parent search when CWD has atmos.yaml",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				// Create child dir with its own config.
+				childDir := filepath.Join(tempDir, "child")
+				require.NoError(t, os.MkdirAll(childDir, 0o755))
+
+				// Create config in parent.
+				createTestConfig(t, tempDir, `base_path: /from/parent`)
+
+				// Create config in child.
+				createTestConfig(t, childDir, `base_path: /from/child`)
+
+				return childDir
+			},
+			expectParentLoad: false,
+		},
+		{
+			name: "skips parent search when CWD has .atmos.yaml",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				childDir := filepath.Join(tempDir, "child")
+				require.NoError(t, os.MkdirAll(childDir, 0o755))
+
+				// Create config in parent.
+				createTestConfig(t, tempDir, `base_path: /from/parent`)
+
+				// Create hidden config in child.
+				err := os.WriteFile(filepath.Join(childDir, ".atmos.yaml"), []byte(`base_path: /from/child`), 0o644)
+				require.NoError(t, err)
+
+				return childDir
+			},
+			expectParentLoad: false,
+		},
+		{
+			name: "skips parent search when CWD has .atmos.d directory",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				childDir := filepath.Join(tempDir, "child")
+				require.NoError(t, os.MkdirAll(childDir, 0o755))
+
+				// Create config in parent.
+				createTestConfig(t, tempDir, `base_path: /from/parent`)
+
+				// Create .atmos.d directory in child (no config file).
+				require.NoError(t, os.MkdirAll(filepath.Join(childDir, ".atmos.d"), 0o755))
+
+				return childDir
+			},
+			expectParentLoad: false,
+		},
+		{
+			name: "searches parent when CWD has no config",
+			setupDirs: func(t *testing.T, tempDir string) string {
+				childDir := filepath.Join(tempDir, "child")
+				require.NoError(t, os.MkdirAll(childDir, 0o755))
+
+				// Create config in parent only.
+				createTestConfig(t, tempDir, `base_path: /from/parent`)
+
+				return childDir
+			},
+			expectParentLoad: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			workDir := tt.setupDirs(t, tempDir)
+
+			t.Chdir(workDir)
+
+			v := viper.New()
+			v.SetConfigType("yaml")
+
+			err := readParentDirConfig(v)
+			require.NoError(t, err)
+
+			if tt.expectParentLoad {
+				assert.Equal(t, "/from/parent", v.GetString("base_path"),
+					"Should load parent config when CWD has no local config")
+			} else {
+				assert.Empty(t, v.GetString("base_path"),
+					"Should NOT load parent config when CWD has local config")
+			}
+		})
+	}
+}
+
+// TestReadGitRootConfig_SkipsWhenLocalConfigExists verifies that git root
+// search is skipped when CWD has local Atmos config (per PRD constraint).
+func TestReadGitRootConfig_SkipsWhenLocalConfigExists(t *testing.T) {
+	// This test just verifies the skip behavior without needing a real git repo.
+	tests := []struct {
+		name          string
+		setupDirs     func(t *testing.T, tempDir string)
+		expectSkip    bool
+		expectSkipLog string
+	}{
+		{
+			name: "skips git root search when CWD has atmos.yaml",
+			setupDirs: func(t *testing.T, tempDir string) {
+				createTestConfig(t, tempDir, `base_path: /local`)
+			},
+			expectSkip: true,
+		},
+		{
+			name: "skips git root search when CWD has .atmos directory",
+			setupDirs: func(t *testing.T, tempDir string) {
+				require.NoError(t, os.MkdirAll(filepath.Join(tempDir, ".atmos"), 0o755))
+			},
+			expectSkip: true,
+		},
+		{
+			name: "skips git root search when CWD has atmos.d directory",
+			setupDirs: func(t *testing.T, tempDir string) {
+				require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "atmos.d"), 0o755))
+			},
+			expectSkip: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			tt.setupDirs(t, tempDir)
+
+			t.Chdir(tempDir)
+
+			v := viper.New()
+			v.SetConfigType("yaml")
+
+			// Disable git root basepath to isolate the local config check.
+			// Without this, the test would try to find actual git root.
+			t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "false")
+
+			err := readGitRootConfig(v)
+			require.NoError(t, err)
+
+			// Config should remain empty since we skipped git root search.
+			assert.Empty(t, v.ConfigFileUsed())
+		})
+	}
+}
+
 // TestLoadConfig_DefaultConfigWithGitRootAtmosD tests that .atmos.d at git root is loaded
 // even when no atmos.yaml config file is found (using default config).
 func TestLoadConfig_DefaultConfigWithGitRootAtmosD(t *testing.T) {

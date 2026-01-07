@@ -1,0 +1,57 @@
+---
+slug: chdir-config-isolation
+title: "Config Isolation with --chdir Flag"
+authors: [atmos]
+tags: [bugfix]
+---
+
+The `--chdir` flag now correctly isolates configuration loading when changing to a directory with its own Atmos configuration.
+
+<!--truncate-->
+
+## What Changed
+
+When using `atmos --chdir path/to/project`, Atmos now correctly uses only the configuration from the target directory. Previously, configuration from parent directories and the git repository root would be merged with the target directory's config, leading to unexpected behavior.
+
+The fix ensures that when you change to a directory with its own `atmos.yaml`, Atmos behaves exactly as if you had run the command directly from that directory - searching parent directories and git root are fallback mechanisms that only apply when no local config exists.
+
+## Why This Matters
+
+This fix is particularly important for:
+
+- **Monorepos** with multiple independent Atmos projects in subdirectories
+- **Testing scenarios** where isolated configuration is essential
+- **CI/CD pipelines** that use `--chdir` to target specific project directories
+
+Without this fix, running `atmos --chdir projects/team-a terraform plan vpc -s prod` might unexpectedly pick up configuration from the repository root, causing the wrong component paths or stack settings to be used.
+
+## Technical Details
+
+The config loading order in Atmos is:
+
+1. Embedded defaults
+2. System directory (`/usr/local/etc/atmos/atmos.yaml`)
+3. Home directory (`~/.atmos/atmos.yaml`)
+4. Parent directory search (**now skipped if local config exists**)
+5. Git repository root (**now skipped if local config exists**)
+6. Current working directory (`./atmos.yaml`)
+7. Environment variable (`ATMOS_CLI_CONFIG_PATH`)
+8. CLI argument (`--config-path`)
+
+The key change is that steps 4 and 5 are now properly treated as fallback mechanisms - they only run when the current working directory does NOT have any Atmos configuration indicator (`atmos.yaml`, `.atmos.yaml`, `.atmos/`, `.atmos.d/`, or `atmos.d/`).
+
+## How to Use It
+
+No changes to your workflow are required. The `--chdir` flag now works as expected:
+
+```bash
+# Changes to examples/demo-stacks and uses ONLY its config
+atmos --chdir examples/demo-stacks describe config
+
+# Short form works the same way
+atmos -C examples/demo-stacks describe config
+```
+
+## Get Involved
+
+Have questions or feedback? Join us on [Slack](https://cloudposse.com/slack) or open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

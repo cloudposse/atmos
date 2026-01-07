@@ -67,6 +67,8 @@ const (
 	profileDelimiter = ","
 	// AtmosCliConfigPathEnvVar is the environment variable name for CLI config path.
 	AtmosCliConfigPathEnvVar = "ATMOS_CLI_CONFIG_PATH"
+	// CwdKey is the log key for current working directory.
+	cwdKey = "cwd"
 )
 
 // parseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
@@ -557,6 +559,7 @@ func readWorkDirConfigOnly(v *viper.Viper) error {
 }
 
 // readGitRootConfig tries to load atmos.yaml from the git repository root.
+// This is a fallback search - it only runs when CWD does NOT have local Atmos config.
 func readGitRootConfig(v *viper.Viper) error {
 	// Check if git root discovery is disabled.
 	//nolint:forbidigo // ATMOS_GIT_ROOT_BASEPATH is bootstrap config, not application configuration.
@@ -569,6 +572,20 @@ func readGitRootConfig(v *viper.Viper) error {
 	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself.
 	if os.Getenv(AtmosCliConfigPathEnvVar) != "" {
 		return nil
+	}
+
+	// Skip git root search if CWD has local Atmos config.
+	// This ensures --chdir to a directory with its own config uses only that config.
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Debug("Failed to get CWD for local config check", "error", err)
+	} else {
+		log.Debug("readGitRootConfig checking CWD for local config", cwdKey, cwd)
+		if hasLocalAtmosConfig(cwd) {
+			log.Debug("Skipping git root search (local config exists)", "path", cwd)
+			return nil
+		}
+		log.Debug("No local config found, will search git root", cwdKey, cwd)
 	}
 
 	gitRoot, err := u.ProcessTagGitRoot("!repo-root")
@@ -604,6 +621,7 @@ func readGitRootConfig(v *viper.Viper) error {
 }
 
 // readParentDirConfig searches parent directories for atmos.yaml (fallback).
+// This is a fallback search - it only runs when CWD does NOT have local Atmos config.
 func readParentDirConfig(v *viper.Viper) error {
 	// If ATMOS_CLI_CONFIG_PATH is set, don't search parent directories.
 	// This allows tests and users to explicitly control config discovery.
@@ -616,6 +634,16 @@ func readParentDirConfig(v *viper.Viper) error {
 	if err != nil {
 		return err
 	}
+
+	log.Debug("readParentDirConfig checking CWD for local config", cwdKey, wd)
+
+	// Skip parent search if CWD has local Atmos config.
+	// This ensures --chdir to a directory with its own config uses only that config.
+	if hasLocalAtmosConfig(wd) {
+		log.Debug("Skipping parent directory search (local config exists)", "path", wd)
+		return nil
+	}
+	log.Debug("No local config found, will search parent directories", cwdKey, wd)
 
 	// Search parent directories for atmos.yaml.
 	configDir := findAtmosConfigInParentDirs(wd)

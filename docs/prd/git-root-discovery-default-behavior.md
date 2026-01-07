@@ -178,12 +178,28 @@ YAML Function Processing:
 
 ### Config Search Order (Current)
 
+Config is loaded from multiple sources. Sources are loaded in order, with later sources
+overriding earlier ones via Viper's merge behavior.
+
+**IMPORTANT:** Parent directory and git root searches are **fallbacks** - they only run
+when the current working directory does NOT have any Atmos configuration indicator.
+
 1. **Embedded config** - `pkg/config/atmos.yaml` (no YAML functions)
 2. **System directory** - `/usr/local/etc/atmos/atmos.yaml`
 3. **Home directory** - `~/.atmos/atmos.yaml`
-4. **Current working directory** - `./atmos.yaml`
-5. **Environment variable** - `ATMOS_CLI_CONFIG_PATH`
-6. **CLI argument** - `--config-dir` flag
+4. **Parent directory search** - Walk up from CWD (**fallback only - skipped if CWD has config**)
+5. **Git repository root** - `!repo-root` location (**fallback only - skipped if CWD has config**)
+6. **Current working directory** - `./atmos.yaml`
+7. **Environment variable** - `ATMOS_CLI_CONFIG_PATH`
+8. **CLI argument** - `--config-path` flag
+
+**Atmos configuration indicators** (any means "local config exists"):
+- `atmos.yaml` or `.atmos.yaml`
+- `.atmos/` directory
+- `.atmos.d/` or `atmos.d/` directory
+
+This ensures that `--chdir` to a directory with its own `atmos.yaml` uses ONLY that config,
+without merging parent/repo-root configs.
 
 ### BasePath Usage
 

@@ -81,3 +81,28 @@ tests:
         - "stacks:"
         - "base_path: stacks"
       exit_code: 0
+
+  - name: "atmos --chdir config isolation"
+    enabled: true
+    snapshot: false
+    description: "Verify --chdir uses ONLY the target directory config, not repo root config"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "--chdir"
+      - "tests/fixtures/scenarios/chdir-isolation"
+      - "describe"
+      - "config"
+      - "-f"
+      - "yaml"
+    expect:
+      stdout:
+        # Must see the scenario's unique values
+        - "chdir-isolation-vendor"
+        - "chdir-isolation-components"
+        - "chdir-isolation-stacks"
+      stdout_not:
+        # Must NOT see the repo root config values (which would indicate config merging)
+        - "vendor.yaml"
+        - "components/terraform"
+      exit_code: 0
