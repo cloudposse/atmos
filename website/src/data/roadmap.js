@@ -194,6 +194,7 @@ export const roadmapConfig = {
         { label: 'Configuration provenance tracking', status: 'shipped', quarter: 'q4-2025', changelog: 'provenance-tracking', version: 'v1.195.0', description: 'Track where every configuration value comes from—which file, which import, which override.', benefits: 'Debug complex inheritance chains. Understand exactly how configuration was assembled.' },
         { label: 'Global environment variables', status: 'shipped', quarter: 'q4-2025', changelog: 'global-env-section', version: 'v1.202.0', description: 'Define environment variables globally in atmos.yaml that apply to all commands.', benefits: 'Set common environment variables once. No repetition across components.' },
         { label: 'Metadata inheritance', status: 'shipped', quarter: 'q4-2025', changelog: 'metadata-inheritance', version: 'v1.201.0', description: 'Metadata section now supports full inheritance from base stacks.', benefits: 'Define metadata patterns once and inherit everywhere. Consistent naming across stacks.' },
+        { label: 'Experimental feature controls', status: 'shipped', quarter: 'q1-2026', docs: '/cli/configuration/settings/experimental', changelog: 'experimental-feature-flag', description: 'Granular control over experimental features with CLI badges, configurable modes (warn, silence, disable, error), and environment variable support.', benefits: 'Explore new features safely. Block experimental commands in CI while testing locally.' },
       ],
       issues: [],
       prs: [
