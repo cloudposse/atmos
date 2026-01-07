@@ -96,6 +96,8 @@ tests:
       - "-f"
       - "yaml"
     expect:
+      diff:
+        - 'github_token:'  # Varies by environment (present when GITHUB_TOKEN is set)
       stdout:
         # Must see the scenario's unique values
         - "chdir-isolation-vendor"
