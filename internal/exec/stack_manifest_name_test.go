@@ -3,6 +3,7 @@ package exec
 import (
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -796,6 +797,17 @@ func TestProcessStacks_InvalidStackErrorWithSuggestion(t *testing.T) {
 	// Verify error is ErrInvalidStack, not ErrInvalidComponent.
 	assert.ErrorIs(t, err, errUtils.ErrInvalidStack, "Error should be ErrInvalidStack when filename is used for stack with explicit name")
 
-	// Verify error message suggests the correct canonical name.
-	assert.Contains(t, err.Error(), "my-legacy-prod-stack", "Error message should suggest the canonical name")
+	// Verify the hint suggests the correct canonical name.
+	hints := errors.GetAllHints(err)
+	require.NotEmpty(t, hints, "Error should have hints")
+
+	// Look for the canonical name in any of the hints.
+	found := false
+	for _, hint := range hints {
+		if assert.ObjectsAreEqual(hint, "Did you mean `my-legacy-prod-stack`?") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "One of the hints should suggest the canonical name 'my-legacy-prod-stack', got hints: %v", hints)
 }

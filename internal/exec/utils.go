@@ -617,10 +617,10 @@ func ProcessStacks(
 			// This helps users who try to use the filename when the stack has an explicit name.
 			if canonicalName, found := stackNameMappings[configAndStacksInfo.Stack]; found {
 				return configAndStacksInfo,
-					fmt.Errorf("%w: Stack `%s` not found. Did you mean `%s`?",
-						errUtils.ErrInvalidStack,
-						configAndStacksInfo.Stack,
-						canonicalName)
+					errUtils.Build(errUtils.ErrInvalidStack).
+						WithExplanation(fmt.Sprintf("Stack `%s` not found.", configAndStacksInfo.Stack)).
+						WithHint(fmt.Sprintf("Did you mean `%s`?", canonicalName)).
+						Err()
 			}
 
 			cliConfigYaml := ""
