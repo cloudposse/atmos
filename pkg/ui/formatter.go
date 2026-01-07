@@ -857,8 +857,8 @@ func (f *formatter) Infof(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Experimental(feature string) string {
-	message := fmt.Sprintf("**%s** is an experimental feature. [Learn more](https://atmos.tools/experimental)", feature)
-	result, _ := f.toastMarkdown(theme.IconExperimental, &f.styles.Experimental, message)
+	message := "Experimental feature. [Learn more](https://atmos.tools/cli/configuration/settings/experimental)"
+	result, _ := f.toastMarkdown(theme.IconExperimental, &f.styles.Muted, message)
 	return result
 }
 
