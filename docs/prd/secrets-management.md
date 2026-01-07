@@ -19,8 +19,8 @@ Additionally:
 ## Design Principles
 
 1. **Vercel-like DX** - Simple CRUD: `atmos secret init`, `atmos secret set`, etc.
-2. **GitOps-friendly** - Explicit declarations in YAML, not opaque backend state
-3. **Cloud-native** - Each cloud gets optimized backend (SSM, Key Vault, GSM), not cross-cloud abstraction
+2. **GitOps-friendly** - Explicit declarations in YAML, not opaque provider state
+3. **Cloud-native** - Each cloud gets optimized provider (SSM, Key Vault, GSM), not cross-cloud abstraction
 4. **Zero-config where possible** - Sensible defaults, auto-generated paths
 5. **Works with deployments** - Scoped to avoid secrets sprawl
 6. **Works with component registry** - Not just Terraform, but all component types
@@ -52,7 +52,7 @@ Secrets are designed for **human-managed configuration** - API keys, tokens, pas
 secrets:
   vars:
     DATADOG_API_KEY:
-      backend: aws/ssm
+      provider: aws/ssm
       required: true
 
 # Use the secret (value resolved at runtime, never in git)
@@ -69,7 +69,7 @@ vars:
 | Scope | Terraform components | All component types |
 | Listing | Not supported (opaque) | Required (declarative registry) |
 | Interface | `!store`/`!store.get` functions | `!secret` function + CRUD CLI |
-| Backend config | `stores:` in atmos.yaml | `secrets.backends:` in atmos.yaml |
+| Provider config | `stores:` in atmos.yaml | `secrets.providers:` in atmos.yaml |
 | Declaration | Implicit (write creates key) | Explicit (must declare before use) |
 | Validation | None (opaque) | Pre-flight validation of declarations |
 | Masking | Manual | Automatic via I/O layer |
@@ -80,18 +80,19 @@ vars:
 2. **Different access patterns** - Stores need stack/component scoping for outputs; secrets may be global or scoped
 3. **Different security models** - Store values are infrastructure state; secrets need audit trails and rotation policies
 4. **Different tooling** - Stores integrate with Terraform workflow; secrets need dedicated CRUD commands
-5. **Different backends** - Stores optimize for Terraform state backends; secrets optimize for secret managers with rotation/auditing
+5. **Different providers** - Stores optimize for Terraform state backends; secrets optimize for secret managers with rotation/auditing
 
 ## Configuration Schema
 
-### Backend Configuration (atmos.yaml only)
+### Provider Configuration (atmos.yaml only)
 
 ```yaml
 # atmos.yaml
 secrets:
-  default_backend: aws/ssm
+  defaults:
+    provider: aws/ssm                  # Selected default provider
 
-  backends:
+  providers:
     aws/ssm:
       kind: aws/ssm                    # cloud/thing format (consistent with auth)
       identity: aws/prod-admin         # Optional: use this auth identity
@@ -119,27 +120,27 @@ secrets:
   vars: !include secrets/global.yaml
 ```
 
-### Backend Kind Constants
+### Provider Kind Constants
 
 ```go
 // pkg/secrets/kinds/kinds.go
 package kinds
 
 const (
-    // AWS backends
+    // AWS providers
     AWSSSM = "aws/ssm"    // AWS Systems Manager Parameter Store
     AWSASM = "aws/asm"    // AWS Secrets Manager
 
-    // Azure backends
+    // Azure providers
     AzureKeyVault = "azure/keyvault"
 
-    // GCP backends
+    // GCP providers
     GCPSecretManager = "gcp/secretmanager"
 
-    // HashiCorp backends
+    // HashiCorp providers
     HashicorpVault = "hashicorp/vault"
 
-    // SOPS backends (by encryption type)
+    // SOPS providers (by encryption type)
     SOPSAge    = "sops/age"
     SOPSAwsKms = "sops/aws-kms"
     SOPSGcpKms = "sops/gcp-kms"
@@ -159,7 +160,7 @@ stores:
 
 # New format (secrets) - uses kind
 secrets:
-  backends:
+  providers:
     aws/ssm:
       kind: aws/ssm                 # New cloud/thing format
 ```
@@ -179,12 +180,12 @@ if kind == "" {
 # secrets/global.yaml (or inline under secrets.vars)
 ARTIFACTORY_TOKEN:
   description: "Artifactory access token for private packages"
-  backend: aws/ssm
+  provider: aws/ssm
   required: true
 
 GITHUB_APP_KEY:
   description: "GitHub App private key for CI"
-  backend: sops
+  provider: sops
   required: true
 ```
 
@@ -199,11 +200,11 @@ components:
         vars:
           DATADOG_API_KEY:
             description: "Datadog API key for monitoring"
-            backend: aws/ssm
+            provider: aws/ssm
             required: true
           REDIS_URL:
             description: "Redis connection string"
-            backend: aws/ssm
+            provider: aws/ssm
       vars:
         datadog_api_key: !secret DATADOG_API_KEY
         redis_url: !secret REDIS_URL
@@ -228,7 +229,7 @@ components:
 
 **Secrets follow standard Atmos inheritance** with these considerations:
 
-1. **Backend config** - Only in `atmos.yaml`, not inheritable
+1. **Provider config** - Only in `atmos.yaml`, not inheritable
 2. **Secret declarations** - Inherit through stack hierarchy
 3. **Scope awareness** - Deployments can restrict which secrets are loaded (addressing secrets sprawl)
 
@@ -237,14 +238,14 @@ components:
 secrets:
   vars:
     SHARED_TOKEN:
-      backend: aws/ssm
+      provider: aws/ssm
 
 # prod/_defaults.yaml (inherits)
 secrets:
   vars:
     # Inherits SHARED_TOKEN
     PROD_DB_PASSWORD:
-      backend: aws/ssm
+      provider: aws/ssm
 
 # prod/api.yaml (inherits both)
 components:
@@ -254,7 +255,7 @@ components:
         vars:
           # Inherits SHARED_TOKEN, PROD_DB_PASSWORD
           API_SPECIFIC_KEY:
-            backend: aws/ssm
+            provider: aws/ssm
 ```
 
 ## CLI Commands
@@ -288,7 +289,7 @@ atmos secret init --stack prod --dry-run
 - Scans declarations for stack/component
 - **Component resolution**: Auto-detect if unique, selector if ambiguous, `--type` for explicit
 - Prompts interactively for each missing required secret
-- Writes values to configured backend
+- Writes values to configured provider
 - Skips already-initialized secrets (unless `--force`)
 
 ### `atmos secret set`
@@ -332,7 +333,7 @@ atmos secret get DATADOG_API_KEY --format env
 
 ### `atmos secret delete`
 
-Remove a secret from the backend.
+Remove a secret from the provider.
 
 **Aliases:** `rm`
 
@@ -364,7 +365,7 @@ atmos secret list --stack prod --verbose
 
 Output:
 ```
-STACK       COMPONENT  SECRET            BACKEND    STATUS
+STACK       COMPONENT  SECRET            PROVIDER   STATUS
 prod        (global)   ARTIFACTORY_TOKEN aws/ssm    initialized
 prod        api        DATADOG_API_KEY   aws/ssm    initialized
 prod        api        REDIS_URL         aws/ssm    missing
@@ -387,7 +388,7 @@ atmos secret pull --stack dev --format json --output secrets.json
 
 ### `atmos secret push`
 
-Upload secrets from a local file to the backend (must be declared).
+Upload secrets from a local file to the provider (must be declared).
 
 ```bash
 # Push from .env file (secrets must be declared)
@@ -421,7 +422,7 @@ atmos secret import secrets.json --stack prod --format json
 **Behavior:**
 - Parses env file (KEY=value format) or JSON/YAML
 - For each key in the file:
-  - If declared: sets value in configured backend
+  - If declared: sets value in configured provider
   - If not declared: warns and skips (maintains declarative registry principle)
 - Supports `--dry-run` to preview changes
 - Reports summary: X imported, Y skipped (undeclared)
@@ -470,7 +471,7 @@ vars:
 
 **Behavior:**
 1. Validates secret is declared in current scope (component + inherited)
-2. Resolves value from configured backend
+2. Resolves value from configured provider
 3. If `path` modifier: extracts nested value from JSON/structured data
 4. Registers value with I/O masker for automatic redaction
 5. Returns value for template substitution
@@ -485,13 +486,13 @@ atmos secret get DATABASE_CONFIG --path ".credentials.password"
 atmos secret get DATABASE_CONFIG --format json
 ```
 
-## Backend Implementations
+## Provider Implementations
 
 ### AWS SSM Parameter Store (`aws/ssm`)
 
 ```yaml
 secrets:
-  backends:
+  providers:
     aws/ssm:
       kind: aws/ssm
       identity: aws/prod-admin           # Optional auth identity
@@ -508,7 +509,7 @@ secrets:
 
 ```yaml
 secrets:
-  backends:
+  providers:
     aws/asm:
       kind: aws/asm
       identity: aws/prod-secrets         # Optional auth identity
@@ -525,7 +526,7 @@ secrets:
 
 ```yaml
 secrets:
-  backends:
+  providers:
     sops-dev:
       kind: sops/age                     # or: sops/aws-kms, sops/gcp-kms, sops/gpg
       options:
@@ -540,7 +541,7 @@ secrets:
 
 ```yaml
 secrets:
-  backends:
+  providers:
     vault:
       kind: hashicorp/vault
       options:
@@ -553,7 +554,7 @@ secrets:
 
 ```yaml
 secrets:
-  backends:
+  providers:
     azure:
       kind: azure/keyvault
       identity: azure/prod-subscription  # Optional auth identity
@@ -565,7 +566,7 @@ secrets:
 
 ```yaml
 secrets:
-  backends:
+  providers:
     gcp:
       kind: gcp/secretmanager
       options:
@@ -580,7 +581,7 @@ All secret values are automatically registered with the masker:
 
 ```go
 // When resolving !secret
-value, err := backend.Get(secretPath)
+value, err := provider.Get(secretPath)
 if err == nil {
     io.RegisterSecret(value)  // Masks in all output
 }
@@ -599,7 +600,7 @@ components:
       secrets:
         vars:
           API_KEY:
-            backend: aws/ssm  # Uses aws/prod-admin credentials
+            provider: aws/ssm  # Uses aws/prod-admin credentials
 ```
 
 ### Deployments Integration
@@ -625,8 +626,8 @@ pkg/secrets/
     registry.go          # SecretRegistry (declaration tracking)
     resolver.go          # Secret value resolution
     validator.go         # Declaration validation
-    backends/
-        backend.go       # Backend interface
+    providers/
+        provider.go      # Provider interface
         ssm.go           # AWS SSM (wraps pkg/store)
         sops.go          # SOPS encrypted files
         vault.go         # HashiCorp Vault
@@ -655,17 +656,17 @@ pkg/schema/
 
 ## Implementation Phases
 
-### Phase 1: Core Infrastructure + AWS Backends
+### Phase 1: Core Infrastructure + AWS Providers
 - Schema additions in `pkg/schema/` for secrets config
 - `pkg/secrets/kinds/` package with kind constants
-- `pkg/secrets/` package with service interface and backend abstraction
-- **AWS SSM backend** (`aws/ssm`) - reusing/extending `pkg/store/` code
-- **AWS Secrets Manager backend** (`aws/asm`) - new implementation
+- `pkg/secrets/` package with service interface and provider abstraction
+- **AWS SSM provider** (`aws/ssm`) - reusing/extending `pkg/store/` code
+- **AWS Secrets Manager provider** (`aws/asm`) - new implementation
 - Path extraction for structured JSON secrets
 - Update `pkg/store/registry.go` for `kind` field (legacy `type` compatibility)
 - Secret declaration parsing from atmos.yaml and stacks
 - Basic validation
-- Integration with auth identities for backend access
+- Integration with auth identities for provider access
 
 ### Phase 2: CLI Commands
 - `cmd/secret/` command structure following **command registry pattern**
@@ -688,9 +689,9 @@ pkg/schema/
 - `validate` command for CI
 - Deployments integration (scoped secrets)
 
-### Phase 5: Additional Backends
-- SOPS encrypted file backends (`sops/age`, `sops/aws-kms`, etc.)
-- HashiCorp Vault backend
+### Phase 5: Additional Providers
+- SOPS encrypted file providers (`sops/age`, `sops/aws-kms`, etc.)
+- HashiCorp Vault provider
 - Azure Key Vault, GCP Secret Manager
 
 ## Documentation Deliverables
@@ -728,11 +729,11 @@ Each file follows the mandatory documentation requirements:
 Location: `website/docs/core-concepts/configuration/secrets.mdx`
 
 Contents:
-- `secrets.default_backend` configuration
-- `secrets.backends` with all supported kinds
+- `secrets.defaults.provider` configuration
+- `secrets.providers` with all supported kinds
 - `secrets.vars` for global declarations
 - `identity` integration with auth
-- Examples for each backend type
+- Examples for each provider type
 
 **Stack secrets config:**
 Location: `website/docs/core-concepts/stacks/secrets.mdx`
@@ -750,7 +751,7 @@ Location: `website/docs/tutorials/secrets-aws-ssm.mdx`
 
 Contents:
 1. Prerequisites (AWS account, IAM permissions)
-2. Configure backend in atmos.yaml
+2. Configure provider in atmos.yaml
 3. Declare secrets in stack config
 4. Initialize secrets with `atmos secret init`
 5. Use `!secret` in component vars
@@ -772,7 +773,7 @@ tags: [feature]
 Contents:
 - Problem: Managing secrets across stacks and components
 - Solution: Declarative secrets with CRUD CLI
-- Key features: Multi-backend, path extraction, auth integration
+- Key features: Multi-provider, path extraction, auth integration
 - Getting started example
 - Link to full documentation
 
@@ -782,7 +783,7 @@ Location: `pkg/datafetcher/schema/`
 
 - Update JSON schema for `secrets` configuration
 - Add `secrets.vars` to component schema
-- Document all backend options
+- Document all provider options
 
 ## Open Questions (Resolved)
 
@@ -791,9 +792,9 @@ Location: `pkg/datafetcher/schema/`
 3. **Stores relationship** - Keep both; stores for outputs, secrets for user config
 4. **File organization** - Support `!include` for flexible organization
 5. **Component type ambiguity** - Auto-detect -> interactive selector -> `--type` flag
-6. **Backend naming** - Use `kind` field with `cloud/thing` format (consistent with auth)
+6. **Provider naming** - Use `kind` field with `cloud/thing` format (consistent with auth)
 7. **Structured secrets** - Path extraction via `| path ".foo.bar"` modifier and `--path` CLI flag
-8. **Backend auth** - Optional `identity` field on backend config
+8. **Provider auth** - Optional `identity` field on provider config
 
 ## Alternatives Considered
 
@@ -831,6 +832,8 @@ Location: `pkg/datafetcher/schema/`
 ## References
 
 - Deployments PRD: `docs/prd/deployments/` (origin/deployments-prd branch)
+- I/O Handling Strategy PRD: `docs/prd/io-handling-strategy.md` (masking architecture)
+- Auth Default Settings PRD: `docs/prd/auth-default-settings.md` (provider/defaults pattern)
 - Existing store implementation: `pkg/store/`
 - Auth implementation: `pkg/auth/`
-- I/O masking: `pkg/io/masker.go`
+- I/O masking: `pkg/io/masker.go`, `io.RegisterSecret()`
