@@ -17,6 +17,8 @@ description: >-
   - --check, --format, --stack, or any flag name discussions
   - Flag improvements, flag refactoring, flag migration
   - Troubleshooting flags, flag issues, flag errors
+  - experimental, IsExperimental, experimental commands, ATMOS_EXPERIMENTAL
+  - settings.experimental, experimental feature handling
 
   **CRITICAL: pkg/flags/ is FULLY IMPLEMENTED. This is NOT future architecture.**
 
@@ -562,6 +564,60 @@ type global.Flags struct {
     Pager       string
 }
 ```
+
+## Experimental Feature Handling
+
+Commands can be marked as experimental by implementing `IsExperimental() bool`:
+
+```go
+// IsExperimental returns whether this command is experimental.
+func (t *MyCommandProvider) IsExperimental() bool {
+    return true
+}
+```
+
+For subcommands, use the `experimental` annotation:
+
+```go
+mySubCmd := &cobra.Command{
+    Use: "affected",
+    Annotations: map[string]string{
+        "experimental": "true",
+    },
+}
+```
+
+### Experimental Configuration
+
+Users configure experimental feature handling via `settings.experimental` in `atmos.yaml`:
+
+```yaml
+settings:
+  # Control experimental feature handling
+  # Values: "silence", "disable", "warn" (default), "error"
+  experimental: warn
+```
+
+| Mode | Behavior |
+|------|----------|
+| `silence` | Run without any notification |
+| `warn` | Show notification, then continue (default) |
+| `error` | Show notification and exit with error |
+| `disable` | Block experimental commands entirely |
+
+Environment variable: `ATMOS_EXPERIMENTAL`
+
+### How It Works
+
+1. Commands declare experimental status via `IsExperimental() bool` method
+2. Root command's `PersistentPreRunE` checks if any command in the tree is experimental
+3. Based on `settings.experimental` value, it either:
+   - `silence`: Does nothing
+   - `warn`: Shows notification via `ui.Experimental()`, continues
+   - `error`: Shows notification, exits with error
+   - `disable`: Exits with error (no notification)
+
+See [/experimental](https://atmos.tools/experimental) for full documentation.
 
 Embed in options struct:
 
