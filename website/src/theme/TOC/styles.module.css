@@ -44,11 +44,11 @@
 
 .unreleased {
   background-color: var(--ifm-color-gray-500);
-  cursor: default;
+  cursor: pointer;
 }
 
 .unreleased:hover {
-  background-color: var(--ifm-color-gray-500);
+  background-color: var(--ifm-color-gray-600);
 }
 
 /* Dark mode */
@@ -65,5 +65,5 @@
 }
 
 [data-theme='dark'] .unreleased:hover {
-  background-color: var(--ifm-color-gray-600);
+  background-color: var(--ifm-color-gray-700);
 }
