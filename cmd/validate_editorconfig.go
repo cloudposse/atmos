@@ -15,6 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -163,24 +164,41 @@ func runMainLogic() {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
-	filePaths, err := files.GetFiles(config)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-
+	// Dry-run mode - just list files without spinner.
 	if config.DryRun {
+		filePaths, err := files.GetFiles(config)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		for _, file := range filePaths {
 			log.Info(file)
 		}
 		return
 	}
 
-	errors := validation.ProcessValidation(filePaths, config)
-	log.Debug("Files checked", "count", len(filePaths))
-	errorCount := er.GetErrorCount(errors)
-	if errorCount != 0 {
+	var filePaths []string
+	var errors []er.ValidationErrors
+
+	err := spinner.ExecWithSpinner(
+		"Validating EditorConfig...",
+		"EditorConfig validation passed",
+		func() error {
+			var err error
+			filePaths, err = files.GetFiles(config)
+			if err != nil {
+				return err
+			}
+			errors = validation.ProcessValidation(filePaths, config)
+			log.Debug("Files checked", "count", len(filePaths))
+			if er.GetErrorCount(errors) != 0 {
+				return fmt.Errorf("EditorConfig validation failed")
+			}
+			return nil
+		},
+	)
+
+	if err != nil {
 		er.PrintErrors(errors, config)
 		errUtils.Exit(1)
 	}
-	u.PrintMessage("No errors found")
 }
 
 func checkVersion(config config.Config) error {

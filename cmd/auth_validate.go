@@ -10,6 +10,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -40,14 +41,23 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 	// Create validator
 	validator := validation.NewValidator()
 
-	// Validate auth configuration
-	if err := validator.ValidateAuthConfig(&atmosConfig.Auth); err != nil {
+	// Validate auth configuration with spinner
+	var validationErr error
+	err = spinner.ExecWithSpinner(
+		"Validating authentication configuration...",
+		"Authentication configuration is valid",
+		func() error {
+			validationErr = validator.ValidateAuthConfig(&atmosConfig.Auth)
+			return validationErr
+		},
+	)
+
+	if err != nil {
 		u.PrintfMarkdown("**❌ Authentication configuration validation failed:**\n")
-		u.PrintfMarkdown("%s\n", err.Error())
-		return err
+		u.PrintfMarkdown("%s\n", validationErr.Error())
+		return validationErr
 	}
 
-	u.PrintfMarkdown("**✅ Authentication configuration is valid**\n")
 	return nil
 }
 
