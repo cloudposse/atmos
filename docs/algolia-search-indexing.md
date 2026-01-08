@@ -40,7 +40,26 @@ The following secrets must be configured in the GitHub repository:
 |--------|-------------|--------|
 | `ALGOLIA_CRAWLER_USER_ID` | Crawler authentication user ID | Algolia Crawler > Account Settings |
 | `ALGOLIA_CRAWLER_API_KEY` | Crawler authentication API key | Algolia Crawler > Account Settings |
-| `ALGOLIA_API_KEY` | Admin API key for writing to index | Algolia Dashboard > API Keys |
+| `ALGOLIA_API_KEY` | API key for writing to index | Algolia Dashboard > API Keys |
+
+### API Key Permissions (ACL)
+
+The `ALGOLIA_API_KEY` must have the following ACL permissions:
+
+| Permission | Purpose |
+|------------|---------|
+| `addObject` | Add records to the index |
+| `editSettings` | Modify index settings |
+| `deleteIndex` | Delete/recreate the index during full reindex |
+| `browse` | Optional - needed for partial updates |
+
+To create or edit an API key with these permissions:
+
+1. Go to **Algolia Dashboard** → **Settings** → **API Keys** → **All API Keys**.
+2. Click **New API Key** (or edit an existing key).
+3. Under **ACL**, select the permissions listed above.
+4. Under **Indices**, restrict to `atmos.tools` or use `*` for all indices.
+5. Save and copy the key to GitHub secrets.
 
 ### Algolia Crawler Configuration
 

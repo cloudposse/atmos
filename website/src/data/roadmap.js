@@ -38,17 +38,6 @@ export const roadmapConfig = {
 
   featured: [
     {
-      id: 'ask-ai',
-      icon: 'RiRobot2Line',
-      title: 'Ask AI Search',
-      tagline: 'Conversational documentation search',
-      description: 'AI-powered search that understands natural language questions about Atmos. Get intelligent, contextual answers drawn directly from the documentation.',
-      benefits: 'Ask questions in plain English instead of searching for keywords. Get answers with source citations and direct links to relevant docs.',
-      status: 'shipped',
-      quarter: 'q4-2025',
-      changelog: 'ask-ai-search',
-    },
-    {
       id: 'devcontainer',
       icon: 'RiCodeBoxLine',
       title: 'Dev Container Support',
@@ -396,16 +385,16 @@ export const roadmapConfig = {
       progress: 100,
       status: 'shipped',
       milestones: [
+        { label: 'Ask AI conversational search', status: 'shipped', quarter: 'q1-2026', changelog: 'ask-ai-search', description: 'Conversational documentation search powered by Algolia DocSearch v4 and ChatGPT. Ask natural language questions and get intelligent, contextual answers.', category: 'featured', priority: 'high', benefits: 'Find answers faster with natural language queries. No need to guess the right keywords.' },
         { label: 'Changelog introduction', status: 'shipped', quarter: 'q4-2025', docs: '/changelog', description: 'Detailed changelogs for every release with feature announcements and migration guides.', category: 'featured', priority: 'high', benefits: 'Know exactly what changed in each release. Plan upgrades with full visibility into breaking changes.' },
+        { label: 'New learning section', status: 'shipped', quarter: 'q4-2025', docs: '/learn/concepts-overview', changelog: 'documentation-reorganization', description: 'Step-by-step tutorials for getting started with Atmos from scratch.', category: 'featured', priority: 'high', benefits: 'New users have a clear path from zero to productive. Concepts build on each other logically.' },
+        { label: 'Added migration guides', status: 'shipped', quarter: 'q4-2025', docs: '/migration/terragrunt', changelog: 'migration-guides', description: 'Detailed guides for migrating from Terragrunt, Terraform workspaces, and native Terraform to Atmos.', category: 'featured', priority: 'high', benefits: 'Migrate from your current tool with step-by-step guidance. Understand the mapping between concepts.' },
+        { label: 'Roadmap', status: 'shipped', quarter: 'q4-2025', docs: '/roadmap', changelog: 'product-roadmap', description: 'Public roadmap showing past accomplishments and future plans.', category: 'featured', priority: 'high', benefits: 'See what\'s coming and plan accordingly. Understand the direction of the project.' },
         { label: 'Every `atmos.yaml` section documented', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration', description: 'Complete reference for every configuration option in atmos.yaml with examples and defaults.', category: 'featured', priority: 'high', benefits: 'Find the exact option you need without reading source code. Every setting has examples.' },
         { label: 'Every CLI command documented', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands', description: 'Comprehensive documentation for every CLI command with usage examples and screenshots.', category: 'featured', priority: 'high', benefits: 'Learn any command from its documentation. Screenshots show exactly what to expect.' },
         { label: 'Cross-linking commands to configs', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration', description: 'Navigate from any command to its related configuration and vice versa.', category: 'featured', priority: 'high', benefits: 'Jump between commands and their configuration options. Understand how settings affect behavior.' },
         { label: 'Design patterns refresh', status: 'shipped', quarter: 'q3-2025', docs: '/design-patterns', description: 'Updated design patterns with real-world examples for common infrastructure scenarios.', category: 'featured', priority: 'high', benefits: 'Apply proven patterns instead of inventing solutions. Learn from real-world examples.' },
         { label: 'Versioning strategy docs', status: 'shipped', quarter: 'q3-2025', docs: '/design-patterns/version-management', changelog: 'comprehensive-version-management-documentation', version: 'v1.199.0', description: 'Complete guide to version management including component versioning and upgrade strategies.', category: 'featured', priority: 'high', benefits: 'Upgrade components safely with a clear strategy. Understand version compatibility.' },
-        { label: 'New learning section', status: 'shipped', quarter: 'q4-2025', docs: '/learn/concepts-overview', changelog: 'documentation-reorganization', description: 'Step-by-step tutorials for getting started with Atmos from scratch.', category: 'featured', priority: 'high', benefits: 'New users have a clear path from zero to productive. Concepts build on each other logically.' },
-        { label: 'Added migration guides', status: 'shipped', quarter: 'q4-2025', docs: '/migration/terragrunt', changelog: 'migration-guides', description: 'Detailed guides for migrating from Terragrunt, Terraform workspaces, and native Terraform to Atmos.', category: 'featured', priority: 'high', benefits: 'Migrate from your current tool with step-by-step guidance. Understand the mapping between concepts.' },
-        { label: 'Roadmap', status: 'shipped', quarter: 'q4-2025', docs: '/roadmap', changelog: 'product-roadmap', description: 'Public roadmap showing past accomplishments and future plans.', category: 'featured', priority: 'high', benefits: 'See what\'s coming and plan accordingly. Understand the direction of the project.' },
-        { label: 'Ask AI conversational search', status: 'shipped', quarter: 'q4-2025', changelog: 'ask-ai-search', description: 'AI-powered conversational search using Algolia DocSearch v4 with Ask AI. Ask natural language questions and get intelligent, contextual answers from the documentation.', category: 'featured', priority: 'high', benefits: 'Find answers faster with natural language queries. No need to guess the right keywords.' },
       ],
       issues: [],
       prs: [],
