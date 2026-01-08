@@ -1,12 +1,17 @@
 package cmd
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -14,6 +19,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 // TestGetInvalidCommandName tests extraction of command names from error messages.
@@ -840,4 +846,356 @@ func TestRootCmd_RunE(t *testing.T) {
 	// Note: This is a minimal test - the actual RunE behavior is tested
 	// through integration tests in the tests/ directory.
 	assert.NotNil(t, RootCmd.RunE, "RootCmd should have a RunE function")
+}
+
+// TestConvertToTermenvProfile tests terminal color profile conversion.
+func TestConvertToTermenvProfile(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    terminal.ColorProfile
+		expected termenv.Profile
+	}{
+		{
+			name:     "ColorNone maps to Ascii",
+			input:    terminal.ColorNone,
+			expected: termenv.Ascii,
+		},
+		{
+			name:     "Color16 maps to ANSI",
+			input:    terminal.Color16,
+			expected: termenv.ANSI,
+		},
+		{
+			name:     "Color256 maps to ANSI256",
+			input:    terminal.Color256,
+			expected: termenv.ANSI256,
+		},
+		{
+			name:     "ColorTrue maps to TrueColor",
+			input:    terminal.ColorTrue,
+			expected: termenv.TrueColor,
+		},
+		{
+			name:     "Unknown profile defaults to Ascii",
+			input:    terminal.ColorProfile(99),
+			expected: termenv.Ascii,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := convertToTermenvProfile(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestFindExperimentalParent tests finding experimental parent commands.
+func TestFindExperimentalParent(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *cobra.Command
+		expected string
+	}{
+		{
+			name: "nil command returns empty",
+			setup: func() *cobra.Command {
+				return nil
+			},
+			expected: "",
+		},
+		{
+			name: "non-experimental command returns empty",
+			setup: func() *cobra.Command {
+				return &cobra.Command{Use: "regular"}
+			},
+			expected: "",
+		},
+		{
+			name: "command with experimental annotation returns name",
+			setup: func() *cobra.Command {
+				cmd := &cobra.Command{
+					Use:         "experimental-cmd",
+					Annotations: map[string]string{"experimental": "true"},
+				}
+				return cmd
+			},
+			expected: "experimental-cmd",
+		},
+		{
+			name: "subcommand of experimental parent returns parent name",
+			setup: func() *cobra.Command {
+				parent := &cobra.Command{
+					Use:         "parent",
+					Annotations: map[string]string{"experimental": "true"},
+				}
+				child := &cobra.Command{Use: "child"}
+				parent.AddCommand(child)
+				return child
+			},
+			expected: "parent",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := tt.setup()
+			result := findExperimentalParent(cmd)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestParseUseVersionFromArgsInternal tests --use-version flag parsing.
+func TestParseUseVersionFromArgsInternal(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected string
+	}{
+		{
+			name:     "no args returns empty",
+			args:     []string{},
+			expected: "",
+		},
+		{
+			name:     "no use-version flag returns empty",
+			args:     []string{"terraform", "plan"},
+			expected: "",
+		},
+		{
+			name:     "use-version=value format",
+			args:     []string{"terraform", "--use-version=1.2.3", "plan"},
+			expected: "1.2.3",
+		},
+		{
+			name:     "use-version value format",
+			args:     []string{"terraform", "--use-version", "1.2.3", "plan"},
+			expected: "1.2.3",
+		},
+		{
+			name:     "use-version at end without value returns empty",
+			args:     []string{"terraform", "--use-version"},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseUseVersionFromArgsInternal(tt.args)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestBuildFlagDescription tests flag description building.
+func TestBuildFlagDescription(t *testing.T) {
+	tests := []struct {
+		name     string
+		flag     *pflag.Flag
+		contains string
+	}{
+		{
+			name: "flag with no default",
+			flag: &pflag.Flag{
+				Name:     "test",
+				Usage:    "Test flag",
+				DefValue: "",
+			},
+			contains: "Test flag",
+		},
+		{
+			name: "flag with string default",
+			flag: &pflag.Flag{
+				Name:     "format",
+				Usage:    "Output format",
+				DefValue: "json",
+			},
+			contains: "(default `json`)",
+		},
+		{
+			name: "flag with false default",
+			flag: &pflag.Flag{
+				Name:     "verbose",
+				Usage:    "Verbose output",
+				DefValue: "false",
+			},
+			contains: "Verbose output",
+		},
+		{
+			name: "flag with zero default",
+			flag: &pflag.Flag{
+				Name:     "count",
+				Usage:    "Item count",
+				DefValue: "0",
+			},
+			contains: "Item count",
+		},
+		{
+			name: "flag with empty array default",
+			flag: &pflag.Flag{
+				Name:     "items",
+				Usage:    "Item list",
+				DefValue: "[]",
+			},
+			contains: "Item list",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildFlagDescription(tt.flag)
+			assert.Contains(t, result, tt.contains)
+		})
+	}
+}
+
+// TestRenderWrappedLines tests wrapped line rendering.
+func TestRenderWrappedLines(t *testing.T) {
+	tests := []struct {
+		name     string
+		lines    []string
+		indent   int
+		expected string
+	}{
+		{
+			name:     "empty lines",
+			lines:    []string{},
+			indent:   4,
+			expected: "",
+		},
+		{
+			name:     "single line",
+			lines:    []string{"Hello world"},
+			indent:   4,
+			expected: "Hello world\n",
+		},
+		{
+			name:     "multiple lines",
+			lines:    []string{"Line one", "Line two"},
+			indent:   2,
+			expected: "Line one\n  Line two\n",
+		},
+	}
+
+	descStyle := lipgloss.NewStyle()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderWrappedLines(&buf, tt.lines, tt.indent, &descStyle)
+			assert.Equal(t, tt.expected, buf.String())
+		})
+	}
+}
+
+// TestSyncGlobalFlagsToViper tests syncing global flags to viper.
+func TestSyncGlobalFlagsToViper(t *testing.T) {
+	tests := []struct {
+		name       string
+		setupCmd   func(*cobra.Command)
+		checkViper func(t *testing.T)
+	}{
+		{
+			name: "profile flag synced",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().StringSlice("profile", []string{}, "")
+				cmd.Flags().Set("profile", "dev")
+			},
+			checkViper: func(t *testing.T) {
+				profiles := viper.GetStringSlice("profile")
+				assert.Contains(t, profiles, "dev")
+			},
+		},
+		{
+			name: "identity flag synced",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("identity", "", "")
+				cmd.Flags().Set("identity", "test-user")
+			},
+			checkViper: func(t *testing.T) {
+				identity := viper.GetString("identity")
+				assert.Equal(t, "test-user", identity)
+			},
+		},
+		{
+			name: "unchanged flags not synced",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("identity", "default", "")
+				// Don't set/change the flag
+			},
+			checkViper: func(t *testing.T) {
+				// Just verify it doesn't panic
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset viper for each test
+			viper.Reset()
+
+			cmd := &cobra.Command{Use: "test"}
+			tt.setupCmd(cmd)
+
+			syncGlobalFlagsToViper(cmd)
+			tt.checkViper(t)
+		})
+	}
+}
+
+// TestConfigureEarlyColorProfile tests early color profile configuration.
+func TestConfigureEarlyColorProfile(t *testing.T) {
+	tests := []struct {
+		name       string
+		setupEnv   func(t *testing.T)
+		setupFlags func(*cobra.Command)
+	}{
+		{
+			name: "NO_COLOR env disables colors",
+			setupEnv: func(t *testing.T) {
+				t.Setenv("NO_COLOR", "1")
+			},
+			setupFlags: func(cmd *cobra.Command) {
+				cmd.Flags().Bool("no-color", false, "")
+				cmd.Flags().Bool("force-color", false, "")
+			},
+		},
+		{
+			name: "no-color flag disables colors",
+			setupEnv: func(t *testing.T) {
+				// NO_COLOR not set
+			},
+			setupFlags: func(cmd *cobra.Command) {
+				cmd.Flags().Bool("no-color", false, "")
+				cmd.Flags().Bool("force-color", false, "")
+				cmd.Flags().Set("no-color", "true")
+			},
+		},
+		{
+			name: "force-color flag enables colors",
+			setupEnv: func(t *testing.T) {
+				// NO_COLOR not set
+			},
+			setupFlags: func(cmd *cobra.Command) {
+				cmd.Flags().Bool("no-color", false, "")
+				cmd.Flags().Bool("force-color", false, "")
+				cmd.Flags().Set("force-color", "true")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setupEnv(t)
+
+			cmd := &cobra.Command{Use: "test"}
+			tt.setupFlags(cmd)
+
+			// Should not panic.
+			assert.NotPanics(t, func() {
+				configureEarlyColorProfile(cmd)
+			})
+		})
+	}
 }

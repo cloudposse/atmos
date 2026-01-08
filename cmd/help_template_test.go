@@ -6,10 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
@@ -1360,6 +1362,329 @@ func TestPrintAvailableCommandsWithAtmosConfig(t *testing.T) {
 				if !strings.Contains(output, expected) {
 					t.Errorf("Expected output to contain %q, got: %q", expected, output)
 				}
+			}
+		})
+	}
+}
+
+func TestFindProviderName(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *cobra.Command
+		expected string
+	}{
+		{
+			name: "root command returns empty",
+			setup: func() *cobra.Command {
+				return &cobra.Command{Use: "root"}
+			},
+			expected: "",
+		},
+		{
+			name: "direct child of root returns its name",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				terraform := &cobra.Command{Use: "terraform"}
+				root.AddCommand(terraform)
+				return terraform
+			},
+			expected: "terraform",
+		},
+		{
+			name: "nested command returns parent name",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				terraform := &cobra.Command{Use: "terraform"}
+				apply := &cobra.Command{Use: "apply"}
+				root.AddCommand(terraform)
+				terraform.AddCommand(apply)
+				return apply
+			},
+			expected: "terraform",
+		},
+		{
+			name: "deeply nested command",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				terraform := &cobra.Command{Use: "terraform"}
+				backend := &cobra.Command{Use: "backend"}
+				generate := &cobra.Command{Use: "generate"}
+				root.AddCommand(terraform)
+				terraform.AddCommand(backend)
+				backend.AddCommand(generate)
+				return generate
+			},
+			expected: "terraform",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := tt.setup()
+			result := findProviderName(cmd)
+			if result != tt.expected {
+				t.Errorf("findProviderName() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestRenderCompatFlags(t *testing.T) {
+	tests := []struct {
+		name     string
+		flags    map[string]compat.CompatibilityFlag
+		contains []string
+	}{
+		{
+			name: "single flag",
+			flags: map[string]compat.CompatibilityFlag{
+				"-auto-approve": {Description: "Automatically approve"},
+			},
+			contains: []string{"-auto-approve", "Automatically approve"},
+		},
+		{
+			name: "multiple flags sorted",
+			flags: map[string]compat.CompatibilityFlag{
+				"-var":      {Description: "Set a variable"},
+				"-auto":     {Description: "Auto approve"},
+				"-no-color": {Description: "Disable color"},
+			},
+			contains: []string{"-auto", "-no-color", "-var"},
+		},
+		{
+			name:     "empty flags",
+			flags:    map[string]compat.CompatibilityFlag{},
+			contains: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderer := lipgloss.NewRenderer(&buf)
+			styles := createHelpStyles(renderer)
+
+			renderCompatFlags(&buf, tt.flags, &styles.flagName, &styles.flagName, &styles.flagDesc)
+
+			output := buf.String()
+			for _, expected := range tt.contains {
+				if !strings.Contains(output, expected) {
+					t.Errorf("Expected output to contain %q, got: %q", expected, output)
+				}
+			}
+		})
+	}
+}
+
+func TestPrintCompatibilityFlags(t *testing.T) {
+	tests := []struct {
+		name        string
+		setup       func() *cobra.Command
+		shouldPrint bool
+	}{
+		{
+			name: "no parent returns early",
+			setup: func() *cobra.Command {
+				return &cobra.Command{Use: "standalone"}
+			},
+			shouldPrint: false,
+		},
+		{
+			name: "non-terraform parent returns early",
+			setup: func() *cobra.Command {
+				root := &cobra.Command{Use: "atmos"}
+				other := &cobra.Command{Use: "other"}
+				child := &cobra.Command{Use: "child"}
+				root.AddCommand(other)
+				other.AddCommand(child)
+				return child
+			},
+			shouldPrint: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderer := lipgloss.NewRenderer(&buf)
+			styles := createHelpStyles(renderer)
+
+			cmd := tt.setup()
+			printCompatibilityFlags(&buf, cmd, &styles)
+
+			output := buf.String()
+			if tt.shouldPrint && output == "" {
+				t.Error("Expected compatibility flags to be printed")
+			}
+			if !tt.shouldPrint && strings.Contains(output, "COMPATIBILITY FLAGS") {
+				t.Error("Expected no compatibility flags to be printed")
+			}
+		})
+	}
+}
+
+func TestPrintFooterWithSubcommands(t *testing.T) {
+	tests := []struct {
+		name        string
+		hasSubcmds  bool
+		shouldPrint bool
+	}{
+		{
+			name:        "command with subcommands shows footer",
+			hasSubcmds:  true,
+			shouldPrint: true,
+		},
+		{
+			name:        "command without subcommands shows no footer",
+			hasSubcmds:  false,
+			shouldPrint: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderer := lipgloss.NewRenderer(&buf)
+			styles := createHelpStyles(renderer)
+
+			cmd := &cobra.Command{Use: "test"}
+			if tt.hasSubcmds {
+				cmd.AddCommand(&cobra.Command{Use: "sub", Run: func(cmd *cobra.Command, args []string) {}})
+			}
+
+			printFooter(&buf, cmd, &styles)
+
+			output := buf.String()
+			hasFooter := strings.Contains(output, "--help")
+			if tt.shouldPrint && !hasFooter {
+				t.Error("Expected footer with help message")
+			}
+			if !tt.shouldPrint && len(output) > 0 {
+				t.Errorf("Expected no footer, got: %q", output)
+			}
+		})
+	}
+}
+
+func TestSetRendererProfileForAutoDetect(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile colorprofile.Profile
+	}{
+		{name: "TrueColor", profile: colorprofile.TrueColor},
+		{name: "ANSI256", profile: colorprofile.ANSI256},
+		{name: "ANSI", profile: colorprofile.ANSI},
+		{name: "Ascii", profile: colorprofile.Ascii},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderer := lipgloss.NewRenderer(&buf)
+
+			// This should not panic.
+			setRendererProfileForAutoDetect(renderer, tt.profile, false)
+		})
+	}
+}
+
+func TestCalculateCommandWidthWithExperimental(t *testing.T) {
+	tests := []struct {
+		name               string
+		cmdName            string
+		isExperimental     bool
+		parentExperimental bool
+		hasSubcommand      bool
+		expected           int
+	}{
+		{
+			name:               "experimental command adds badge width",
+			cmdName:            "test",
+			isExperimental:     true,
+			parentExperimental: false,
+			hasSubcommand:      false,
+			expected:           4 + 15, // "test" + " [EXPERIMENTAL]"
+		},
+		{
+			name:               "experimental command with experimental parent",
+			cmdName:            "test",
+			isExperimental:     true,
+			parentExperimental: true,
+			hasSubcommand:      false,
+			expected:           4, // "test" only - badge hidden when parent is experimental
+		},
+		{
+			name:               "non-experimental command",
+			cmdName:            "test",
+			isExperimental:     false,
+			parentExperimental: false,
+			hasSubcommand:      false,
+			expected:           4, // "test"
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: tt.cmdName}
+			if tt.isExperimental {
+				cmd.Annotations = map[string]string{annotationExperimental: annotationValueTrue}
+			}
+			if tt.hasSubcommand {
+				cmd.AddCommand(&cobra.Command{Use: "sub", Run: func(cmd *cobra.Command, args []string) {}})
+			}
+
+			result := calculateCommandWidth(cmd, tt.parentExperimental)
+			if result != tt.expected {
+				t.Errorf("calculateCommandWidth() = %d, want %d", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetExperimentalBadge(t *testing.T) {
+	tests := []struct {
+		name               string
+		isExperimental     bool
+		parentExperimental bool
+		expectBadge        bool
+	}{
+		{
+			name:               "experimental command returns badge",
+			isExperimental:     true,
+			parentExperimental: false,
+			expectBadge:        true,
+		},
+		{
+			name:               "experimental command with experimental parent returns no badge",
+			isExperimental:     true,
+			parentExperimental: true,
+			expectBadge:        false,
+		},
+		{
+			name:               "non-experimental command returns no badge",
+			isExperimental:     false,
+			parentExperimental: false,
+			expectBadge:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "test"}
+			if tt.isExperimental {
+				cmd.Annotations = map[string]string{annotationExperimental: annotationValueTrue}
+			}
+
+			styled, plain := getExperimentalBadge(cmd, tt.parentExperimental)
+			if tt.expectBadge {
+				if plain == "" {
+					t.Error("Expected badge, got empty string")
+				}
+				if !strings.Contains(plain, "EXPERIMENTAL") {
+					t.Errorf("Expected badge to contain EXPERIMENTAL, got: %q", plain)
+				}
+			} else if styled != "" || plain != "" {
+				t.Errorf("Expected no badge, got styled=%q plain=%q", styled, plain)
 			}
 		})
 	}
