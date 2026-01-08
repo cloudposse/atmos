@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/terminal"
@@ -1708,5 +1709,114 @@ func TestTrimRight(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+func TestReset(t *testing.T) {
+	// Initialize first.
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	// Verify initialized.
+	if Format == nil {
+		t.Fatal("Format should be initialized after InitFormatter")
+	}
+
+	// Reset.
+	Reset()
+
+	// Verify reset.
+	if Format != nil {
+		t.Error("Format should be nil after Reset")
+	}
+
+	// Re-initialize for other tests.
+	InitFormatter(ioCtx)
+}
+
+func TestSetColorProfile(t *testing.T) {
+	// This function should not panic.
+	SetColorProfile(termenv.Ascii)
+	SetColorProfile(termenv.ANSI)
+	SetColorProfile(termenv.ANSI256)
+	SetColorProfile(termenv.TrueColor)
+}
+
+func TestHint(t *testing.T) {
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	err := Hint("This is a hint")
+	if err != nil {
+		t.Errorf("Hint() returned error: %v", err)
+	}
+}
+
+func TestHintf(t *testing.T) {
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	err := Hintf("This is a %s hint", "formatted")
+	if err != nil {
+		t.Errorf("Hintf() returned error: %v", err)
+	}
+}
+
+func TestExperimental(t *testing.T) {
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	err := Experimental("test-feature")
+	if err != nil {
+		t.Errorf("Experimental() returned error: %v", err)
+	}
+}
+
+func TestExperimentalf(t *testing.T) {
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	err := Experimentalf("test-%s", "feature")
+	if err != nil {
+		t.Errorf("Experimentalf() returned error: %v", err)
+	}
+}
+
+func TestBadge(t *testing.T) {
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	result := Badge("TEST", "#FF9800", "#000000")
+	if result == "" {
+		t.Error("Badge() returned empty string")
+	}
+	// Badge should contain the text.
+	if !strings.Contains(result, "TEST") {
+		t.Errorf("Badge() should contain text 'TEST', got: %q", result)
+	}
+}
+
+func TestFormatExperimentalBadge(t *testing.T) {
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	result := FormatExperimentalBadge()
+	if result == "" {
+		t.Error("FormatExperimentalBadge() returned empty string")
+	}
+	// Should contain EXPERIMENTAL.
+	if !strings.Contains(result, "EXPERIMENTAL") {
+		t.Errorf("FormatExperimentalBadge() should contain 'EXPERIMENTAL', got: %q", result)
+	}
+}
+
+func TestClearLine(t *testing.T) {
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	// ClearLine should not panic or return error.
+	err := ClearLine()
+	if err != nil {
+		t.Errorf("ClearLine() returned error: %v", err)
 	}
 }
