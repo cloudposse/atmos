@@ -3,23 +3,33 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+const (
+	// ComponentTypeHelmfile is the component type identifier for helmfile.
+	componentTypeHelmfile = "helmfile"
+)
+
 // ExecuteHelmfileCmd parses the provided arguments and flags and executes helmfile commands.
 func ExecuteHelmfileCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
-	info, err := ProcessCommandLineArgs("helmfile", cmd, args, additionalArgsAndFlags)
+	info, err := ProcessCommandLineArgs(componentTypeHelmfile, cmd, args, additionalArgsAndFlags)
 	if err != nil {
 		return err
 	}
@@ -73,20 +83,45 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Check if the component exists as a helmfile component.
-	componentPath, err := u.GetComponentPath(&atmosConfig, "helmfile", info.ComponentFolderPrefix, info.FinalComponent)
+	componentPath, err := u.GetComponentPath(&atmosConfig, componentTypeHelmfile, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component path: %w", err)
 	}
 
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		// Get the base path for the error message, respecting the user's actual config.
-		basePath, _ := u.GetComponentBasePath(&atmosConfig, "helmfile")
-		return fmt.Errorf("'%s' points to the Helmfile component '%s', but it does not exist in '%s'",
-			info.ComponentFromArg,
-			info.FinalComponent,
-			basePath,
-		)
+		// Check if component has source configured for JIT provisioning.
+		if provSource.HasSource(info.ComponentSection) {
+			// Run JIT source provisioning before path validation.
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.HelmfileComponentType, info.ComponentSection, info.AuthContext); err != nil {
+				return fmt.Errorf("failed to auto-provision component source: %w", err)
+			}
+
+			// Check if source provisioner set a workdir path (source + workdir case).
+			// If so, use that path instead of the component path.
+			if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
+				componentPath = workdirPath
+				componentPathExists = true
+				err = nil // Clear any previous error since we have a valid workdir path.
+			} else {
+				// Re-check if component path now exists after provisioning (source only case).
+				componentPathExists, err = u.IsDirectory(componentPath)
+			}
+		}
+
+		// If still doesn't exist, return the error.
+		if err != nil || !componentPathExists {
+			// Get the base path for the error message, respecting the user's actual config.
+			basePath, _ := u.GetComponentBasePath(&atmosConfig, componentTypeHelmfile)
+			return fmt.Errorf("%w: '%s' points to the Helmfile component '%s', but it does not exist in '%s'",
+				errUtils.ErrInvalidComponent,
+				info.ComponentFromArg,
+				info.FinalComponent,
+				basePath,
+			)
+		}
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute).
@@ -100,9 +135,35 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		// Allow read-only commands, block modification commands.
 		switch info.SubCommand {
 		case "sync", "apply", "deploy", "delete", "destroy":
-			return fmt.Errorf("component `%s` is locked and cannot be modified (metadata.locked = true)",
+			return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
+				errUtils.ErrLockedComponentCantBeProvisioned,
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
 		}
+	}
+
+	// Resolve and install component dependencies.
+	resolver := dependencies.NewResolver(&atmosConfig)
+	deps, err := resolver.ResolveComponentDependencies(componentTypeHelmfile, info.StackSection, info.ComponentSection)
+	if err != nil {
+		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+	}
+
+	if len(deps) > 0 {
+		log.Debug("Installing component dependencies", "component", info.ComponentFromArg, "stack", info.Stack, "tools", deps)
+		installer := dependencies.NewInstaller(&atmosConfig)
+		if err := installer.EnsureTools(deps); err != nil {
+			return fmt.Errorf("failed to install component dependencies: %w", err)
+		}
+
+		// Build PATH with toolchain binaries and add to component environment.
+		// This does NOT modify the global process environment - only the subprocess environment.
+		toolchainPATH, err := dependencies.BuildToolchainPATH(&atmosConfig, deps)
+		if err != nil {
+			return fmt.Errorf("failed to build toolchain PATH: %w", err)
+		}
+
+		// Propagate toolchain PATH into environment for subprocess.
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
 	}
 
 	// Print component variables.

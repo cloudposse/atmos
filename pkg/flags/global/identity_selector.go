@@ -56,3 +56,13 @@ func (i IdentitySelector) IsProvided() bool {
 
 	return i.provided
 }
+
+// IsDisabled returns true if authentication was explicitly disabled.
+// This happens when --identity=false, --identity=0, --identity=no, or --identity=off
+// is used, or when ATMOS_IDENTITY is set to one of these values.
+// The value is normalized to the disabled sentinel value by parseIdentityFlag.
+func (i IdentitySelector) IsDisabled() bool {
+	defer perf.Track(nil, "flags.IdentitySelector.IsDisabled")()
+
+	return i.provided && i.value == cfg.IdentityFlagDisabledValue
+}

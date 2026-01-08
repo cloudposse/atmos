@@ -409,7 +409,7 @@ func TestManager_Rebuild(t *testing.T) {
 						Context:    ".",
 						Dockerfile: "Dockerfile",
 						Args: map[string]string{
-							"ATMOS_VERSION": "1.202.0",
+							"ATMOS_VERSION": "1.204.0",
 						},
 					},
 				}
@@ -431,7 +431,7 @@ func TestManager_Rebuild(t *testing.T) {
 						assert.Equal(t, ".", buildConfig.Context)
 						assert.Equal(t, "Dockerfile", buildConfig.Dockerfile)
 						assert.Equal(t, []string{"atmos-devcontainer-geodesic"}, buildConfig.Tags)
-						assert.Equal(t, map[string]string{"ATMOS_VERSION": "1.202.0"}, buildConfig.Args)
+						assert.Equal(t, map[string]string{"ATMOS_VERSION": "1.204.0"}, buildConfig.Args)
 						return nil
 					})
 				// Pull is NOT called for locally built images since they don't exist

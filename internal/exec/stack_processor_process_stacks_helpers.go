@@ -35,10 +35,12 @@ type ComponentProcessorOptions struct {
 	// Terraform-specific options.
 	TerraformProviders              map[string]any
 	GlobalAndTerraformHooks         map[string]any
+	GlobalAndTerraformGenerate      map[string]any
 	GlobalBackendType               string
 	GlobalBackendSection            map[string]any
 	GlobalRemoteStateBackendType    string
 	GlobalRemoteStateBackendSection map[string]any
+	GlobalSourceSection             map[string]any
 
 	// Atmos configuration.
 	AtmosConfig *schema.AtmosConfiguration
@@ -50,6 +52,7 @@ type ComponentProcessorResult struct {
 	ComponentSettings          map[string]any
 	ComponentEnv               map[string]any
 	ComponentMetadata          map[string]any
+	ComponentDependencies      map[string]any
 	ComponentCommand           string
 	ComponentOverrides         map[string]any
 	ComponentOverridesVars     map[string]any
@@ -63,26 +66,34 @@ type ComponentProcessorResult struct {
 	BaseComponentEnv           map[string]any
 	BaseComponentAuth          map[string]any
 	BaseComponentMetadata      map[string]any
+	BaseComponentDependencies  map[string]any
 	BaseComponentCommand       string
 	ComponentInheritanceChain  []string
 	BaseComponents             []string
 
 	// Terraform-specific fields.
-	ComponentProviders                     map[string]any
-	ComponentHooks                         map[string]any
-	ComponentAuth                          map[string]any
+	ComponentProviders map[string]any
+	ComponentHooks     map[string]any
+	ComponentGenerate  map[string]any
+	ComponentAuth      map[string]any
+	// ComponentProvision holds provisioning configuration for the component (e.g., workdir settings).
+	ComponentProvision                     map[string]any
 	ComponentBackendType                   string
 	ComponentBackendSection                map[string]any
 	ComponentRemoteStateBackendType        string
 	ComponentRemoteStateBackendSection     map[string]any
 	ComponentOverridesProviders            map[string]any
 	ComponentOverridesHooks                map[string]any
+	ComponentOverridesGenerate             map[string]any
 	BaseComponentProviders                 map[string]any
 	BaseComponentHooks                     map[string]any
+	BaseComponentGenerate                  map[string]any
 	BaseComponentBackendType               string
 	BaseComponentBackendSection            map[string]any
 	BaseComponentRemoteStateBackendType    string
 	BaseComponentRemoteStateBackendSection map[string]any
+	ComponentSourceSection                 map[string]any
+	BaseComponentSourceSection             map[string]any
 }
 
 // processComponent processes a component extracting common configuration sections.

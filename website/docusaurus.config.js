@@ -13,12 +13,13 @@ const latestReleasePlugin = require('./plugins/fetch-latest-release');
 const rehypeDtIds = require('./plugins/rehype-dt-ids');
 
 const BASE_URL = '';
+const DEPLOYMENT_HOST = process.env.DEPLOYMENT_HOST || 'atmos.tools';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
     title: 'atmos',
     tagline: 'Universal tool for DevOps and Cloud Automation',
-    url: 'https://atmos.tools',
+    url: `https://${DEPLOYMENT_HOST}`,
     baseUrl: `${BASE_URL}/`,
     onBrokenLinks: 'throw',
     favicon: 'img/atmos-logo.png',
@@ -288,7 +289,25 @@ const config = {
                     {from: '/core-concepts/inheritance-basics', to: '/learn/inheritance-basics'},
                     {from: '/core-concepts/organizing-stacks', to: '/learn/organizing-stacks'},
                     {from: '/core-concepts/connecting-components', to: '/learn/connecting-components'},
-                    {from: '/core-concepts/next-steps', to: '/learn/next-steps'}
+                    {from: '/core-concepts/next-steps', to: '/learn/next-steps'},
+                    // Terraform source command reorganization
+                    {from: '/cli/commands/terraform/terraform-source', to: '/cli/commands/terraform/source'},
+                    {from: '/cli/commands/terraform/terraform-source-pull', to: '/cli/commands/terraform/source/pull'},
+                    {from: '/cli/commands/terraform/terraform-source-list', to: '/cli/commands/terraform/source/list'},
+                    {from: '/cli/commands/terraform/terraform-source-describe', to: '/cli/commands/terraform/source/describe'},
+                    {from: '/cli/commands/terraform/terraform-source-delete', to: '/cli/commands/terraform/source/delete'},
+                    // Terraform generate command reorganization
+                    {from: '/cli/commands/terraform/terraform-generate-backend', to: '/cli/commands/terraform/generate/backend'},
+                    {from: '/cli/commands/terraform/terraform-generate-backends', to: '/cli/commands/terraform/generate/backends'},
+                    {from: '/cli/commands/terraform/terraform-generate-planfile', to: '/cli/commands/terraform/generate/planfile'},
+                    {from: '/cli/commands/terraform/terraform-generate-varfile', to: '/cli/commands/terraform/generate/varfile'},
+                    {from: '/cli/commands/terraform/terraform-generate-varfiles', to: '/cli/commands/terraform/generate/varfiles'},
+                    // Legacy generate command paths (without terraform- prefix)
+                    {from: '/cli/commands/terraform/generate-backend', to: '/cli/commands/terraform/generate/backend'},
+                    {from: '/cli/commands/terraform/generate-backends', to: '/cli/commands/terraform/generate/backends'},
+                    {from: '/cli/commands/terraform/generate-planfile', to: '/cli/commands/terraform/generate/planfile'},
+                    {from: '/cli/commands/terraform/generate-varfile', to: '/cli/commands/terraform/generate/varfile'},
+                    {from: '/cli/commands/terraform/generate-varfiles', to: '/cli/commands/terraform/generate/varfiles'},
                 ],
             },
         ],
@@ -347,6 +366,9 @@ const config = {
                     'cli/*',
                 ],
             },
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'slide-notes-extractor'), {}
         ]
     ],
 
@@ -434,6 +456,11 @@ const config = {
                         label: 'Changelog',
                         position: 'left',
                         to: '/changelog'
+                    },
+                    {
+                        label: 'Roadmap',
+                        position: 'left',
+                        to: '/roadmap'
                     },
                     // GitHub stars badge
                     {

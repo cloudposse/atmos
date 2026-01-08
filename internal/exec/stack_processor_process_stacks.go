@@ -61,6 +61,7 @@ func ProcessStackConfig(
 	globalHooksSection := map[string]any{}
 	globalSettingsSection := map[string]any{}
 	globalEnvSection := map[string]any{}
+	globalGenerateSection := map[string]any{}
 	globalTerraformSection := map[string]any{}
 	globalHelmfileSection := map[string]any{}
 	globalPackerSection := map[string]any{}
@@ -73,6 +74,7 @@ func ProcessStackConfig(
 	terraformCommand := ""
 	terraformProviders := map[string]any{}
 	terraformHooks := map[string]any{}
+	terraformGenerate := map[string]any{}
 	terraformAuth := map[string]any{}
 
 	helmfileVars := map[string]any{}
@@ -118,6 +120,13 @@ func ProcessStackConfig(
 		globalEnvSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidEnvSection, stackName)
+		}
+	}
+
+	if i, ok := config[cfg.GenerateSectionName]; ok {
+		globalGenerateSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGenerateSection, stackName)
 		}
 	}
 
@@ -184,6 +193,18 @@ func ProcessStackConfig(
 	}
 
 	globalAndTerraformHooks, err := m.Merge(atmosConfig, []map[string]any{globalHooksSection, terraformHooks})
+	if err != nil {
+		return nil, err
+	}
+
+	if i, ok := globalTerraformSection[cfg.GenerateSectionName]; ok {
+		terraformGenerate, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformGenerateSection, stackName)
+		}
+	}
+
+	globalAndTerraformGenerate, err := m.Merge(atmosConfig, []map[string]any{globalGenerateSection, terraformGenerate})
 	if err != nil {
 		return nil, err
 	}
@@ -266,6 +287,16 @@ func ProcessStackConfig(
 		globalRemoteStateBackendSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformRemoteStateSection, stackName)
+		}
+	}
+
+	// Global source.
+	globalSourceSection := map[string]any{}
+
+	if i, ok := globalTerraformSection[cfg.SourceSectionName]; ok {
+		globalSourceSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformSource, stackName)
 		}
 	}
 
@@ -426,10 +457,12 @@ func ProcessStackConfig(
 					AtmosGlobalAuthMap:              atmosAuthConfig,
 					TerraformProviders:              terraformProviders,
 					GlobalAndTerraformHooks:         globalAndTerraformHooks,
+					GlobalAndTerraformGenerate:      globalAndTerraformGenerate,
 					GlobalBackendType:               globalBackendType,
 					GlobalBackendSection:            globalBackendSection,
 					GlobalRemoteStateBackendType:    globalRemoteStateBackendType,
 					GlobalRemoteStateBackendSection: globalRemoteStateBackendSection,
+					GlobalSourceSection:             globalSourceSection,
 					AtmosConfig:                     atmosConfig,
 				}, nil
 			}

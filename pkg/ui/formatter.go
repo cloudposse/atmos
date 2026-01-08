@@ -68,6 +68,17 @@ func InitFormatter(ioCtx io.Context) {
 	Format = globalFormatter // Also expose for advanced use
 }
 
+// Reset clears all UI globals (formatter, I/O, terminal).
+// This is primarily used in tests to ensure clean state between test executions.
+func Reset() {
+	formatterMu.Lock()
+	defer formatterMu.Unlock()
+	globalIO = nil
+	globalFormatter = nil
+	globalTerminal = nil
+	Format = nil
+}
+
 // configureColorProfile sets the global lipgloss color profile based on terminal capabilities.
 // This ensures all lipgloss styles respect NO_COLOR and other terminal color settings.
 func configureColorProfile(term terminal.Terminal) {
@@ -298,6 +309,30 @@ func Toastf(icon, format string, a ...interface{}) error {
 	return f.terminal.Write(formatted)
 }
 
+// Hint writes a hint/tip message with lightbulb icon to stderr (UI channel).
+// This is a convenience wrapper with themed hint icon and muted color.
+// Flow: ui.Hint() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Hint(text string) error {
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
+	formatted := f.Hint(text) + newline
+	return f.terminal.Write(formatted)
+}
+
+// Hintf writes a formatted hint/tip message with lightbulb icon to stderr (UI channel).
+// This is a convenience wrapper with themed hint icon and muted color.
+// Flow: ui.Hintf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Hintf(format string, a ...interface{}) error {
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
+	formatted := f.Hintf(format, a...) + newline
+	return f.terminal.Write(formatted)
+}
+
 // Write writes plain text to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Write() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Write(text string) error {
@@ -306,6 +341,28 @@ func Write(text string) error {
 		return err
 	}
 	return f.terminal.Write(text)
+}
+
+// FormatSuccess returns a success message with green checkmark as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatSuccess(text string) string {
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted
+		return "✓ " + text
+	}
+	return f.Success(text)
+}
+
+// FormatError returns an error message with red X as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatError(text string) string {
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted
+		return "✗ " + text
+	}
+	return f.Error(text)
 }
 
 // Writef writes formatted text to stderr (UI channel) without icons or automatic styling.
@@ -551,6 +608,17 @@ func TrimRight(s string) string {
 	return result.String()
 }
 
+// TrimLinesRight trims trailing whitespace from each line in a multi-line string.
+// This is useful after lipgloss.Render() which pads all lines to the same width.
+// Uses ANSI-aware TrimRight to handle whitespace wrapped in ANSI codes.
+func TrimLinesRight(s string) string {
+	lines := strings.Split(s, newline)
+	for i, line := range lines {
+		lines[i] = TrimRight(line)
+	}
+	return strings.Join(lines, newline)
+}
+
 // trimTrailingWhitespace splits rendered markdown by newlines and trims trailing spaces
 // that Glamour adds for padding (including ANSI-wrapped spaces). For empty lines (all whitespace),
 // it preserves the leading indent (first 2 spaces) to maintain paragraph structure.
@@ -726,6 +794,66 @@ func (f *formatter) Infof(format string, a ...interface{}) string {
 	return f.Info(fmt.Sprintf(format, a...))
 }
 
+func (f *formatter) Hint(text string) string {
+	// Render the icon with muted style.
+	var styledIcon string
+	if f.SupportsColor() {
+		styledIcon = f.styles.Muted.Render("💡")
+	} else {
+		styledIcon = "💡"
+	}
+
+	// Render the text with inline markdown and apply muted style.
+	styledText := f.renderInlineMarkdownWithBase(text, &f.styles.Muted)
+
+	return fmt.Sprintf(iconMessageFormat, styledIcon, styledText)
+}
+
+// renderInlineMarkdownWithBase renders inline markdown and applies a base style to the result.
+// This is useful for rendering markdown within styled contexts like hints.
+func (f *formatter) renderInlineMarkdownWithBase(text string, baseStyle *lipgloss.Style) string {
+	// Render markdown using toast renderer for compact inline formatting.
+	rendered, err := f.renderToastMarkdown(text)
+	if err != nil {
+		// Degrade gracefully: apply base style to plain text.
+		if f.SupportsColor() && baseStyle != nil {
+			return baseStyle.Render(text)
+		}
+		return text
+	}
+
+	// Clean up Glamour's extra newlines.
+	rendered = strings.TrimPrefix(rendered, newline)
+	rendered = strings.TrimSuffix(rendered, newline+newline)
+	rendered = strings.TrimSuffix(rendered, newline)
+
+	// Trim trailing padding and leading indent from Glamour.
+	lines := trimTrailingWhitespace(rendered)
+	if len(lines) == 0 {
+		return ""
+	}
+
+	// For single line, trim leading spaces.
+	if len(lines) == 1 {
+		rendered = strings.TrimLeft(lines[0], space)
+	} else {
+		// Multi-line: trim first line and rejoin.
+		lines[0] = strings.TrimLeft(lines[0], space)
+		rendered = strings.Join(lines, newline)
+	}
+
+	// Apply base style if color is supported.
+	if f.SupportsColor() && baseStyle != nil {
+		return baseStyle.Render(rendered)
+	}
+
+	return rendered
+}
+
+func (f *formatter) Hintf(format string, a ...interface{}) string {
+	return f.Hint(fmt.Sprintf(format, a...))
+}
+
 func (f *formatter) Muted(text string) string {
 	if !f.SupportsColor() {
 		return text
@@ -812,5 +940,6 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 		return content, err
 	}
 
-	return rendered, nil
+	// Remove trailing whitespace that glamour adds for padding.
+	return TrimLinesRight(rendered), nil
 }

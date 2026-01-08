@@ -13,7 +13,7 @@ import (
 	"github.com/aws/smithy-go"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/aws_utils"
+	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -171,7 +171,7 @@ func loadAWSConfigWithAuth(ctx context.Context, region, roleArn string, authCont
 	assumeRoleDuration := 1 * time.Hour
 
 	// Load AWS config with auth context and optional role assumption.
-	return aws_utils.LoadAWSConfigWithAuth(ctx, region, roleArn, assumeRoleDuration, awsAuthContext)
+	return awsIdentity.LoadConfigWithAuth(ctx, region, roleArn, assumeRoleDuration, awsAuthContext)
 }
 
 // bucketExists checks if an S3 bucket exists.

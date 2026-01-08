@@ -1,15 +1,15 @@
 
 👽 test linux/amd64
 
-Generate an execution plan, which shows what actions Terraform will take to     
-reach the desired state of the configuration.                                   
-                                                                                
-This command shows what Terraform will do when you run 'apply'. It helps you    
-verify changes before making them to your infrastructure.                       
-                                                                                
-For complete Terraform/OpenTofu documentation, see:                             
-https://developer.hashicorp.com/terraform/cli/commands/plan                     
-https://opentofu.org/docs/cli/commands/plan                                     
+Generate an execution plan, which shows what actions Terraform will take to
+reach the desired state of the configuration.
+
+This command shows what Terraform will do when you run 'apply'. It helps you
+verify changes before making them to your infrastructure.
+
+For complete Terraform/OpenTofu documentation, see:
+https://developer.hashicorp.com/terraform/cli/commands/plan
+https://opentofu.org/docs/cli/commands/plan
 
 USAGE
 
@@ -28,17 +28,22 @@ EXAMPLES
 
 FLAGS
 
-      --affected       Plan the affected components in dependency order
+      --affected                           Plan the affected components in dependency order
 
-      --all            Plan all components in all stacks
+      --all                                Plan all components in all stacks
 
-  -h, --help           help for plan
+      --auto-generate-backend-file string  Override auto_generate_backend_file setting from atmos.yaml (true/false)
 
-      --skip-planfile  Skip writing the plan to a file by not passing the -out flag to Terraform when executing the
-                       command. Set it to true when using Terraform Cloud since the -out flag is not supported.
-                       Terraform Cloud automatically stores plans in its backend
+  -h, --help                               help for plan
 
-      --upload-status  If set atmos will upload the plan result to the pro API
+      --init-run-reconfigure string        Override init_run_reconfigure setting from atmos.yaml (true/false)
+
+      --skip-planfile                      Skip writing the plan to a file by not passing the -out flag to Terraform
+                                           when executing the command. Set it to true when using Terraform Cloud since
+                                           the -out flag is not supported. Terraform Cloud automatically stores plans
+                                           in its backend
+
+      --upload-status                      If set atmos will upload the plan result to the pro API
 
 
 GLOBAL FLAGS
@@ -138,6 +143,8 @@ GLOBAL FLAGS
                                   encrypted PEM block
 
   -s, --stack string              Stack name
+
+      --use-version string        Use a specific version of Atmos (e.g., --use-version=1.160.0)
 
   -v, --verbose                   Enable verbose error output with full context, stack traces, and detailed
                                   information

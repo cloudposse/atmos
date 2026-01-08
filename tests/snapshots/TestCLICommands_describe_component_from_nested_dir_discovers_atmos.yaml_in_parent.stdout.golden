@@ -8,6 +8,7 @@ atmos_cli_config:
       deploy_run_init: true
       init_run_reconfigure: true
       auto_generate_backend_file: false
+      auto_generate_files: false
       command: tofu
       shell:
         prompt: ""
@@ -15,6 +16,7 @@ atmos_cli_config:
         pass_vars: true
       plan:
         skip_planfile: false
+      plugin_cache: true
     helmfile:
       base_path: ""
       use_eks: true
@@ -60,15 +62,18 @@ deps:
 deps_all:
   - test-stack
 env: {}
+generate: {}
 hooks: {}
 imports: []
 inheritance: []
 metadata: {}
 overrides: {}
 providers: {}
+provision: {}
 remote_state_backend: {}
 remote_state_backend_type: ""
 settings: {}
+source: {}
 sources:
   backend: {}
   env: {}

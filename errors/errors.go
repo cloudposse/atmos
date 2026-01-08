@@ -10,11 +10,20 @@ const (
 	// Use with fmt.Errorf to wrap a sentinel error with an underlying error:
 	//   fmt.Errorf(ErrWrapFormat, errUtils.ErrSentinel, underlyingErr)
 	ErrWrapFormat = "%w: %w"
+	// ErrWrapWithNameFormat is the format string for wrapping errors with a name context.
+	// Use with fmt.Errorf to wrap a sentinel error with a name:
+	//   fmt.Errorf(ErrWrapWithNameFormat, errUtils.ErrSentinel, name)
+	ErrWrapWithNameFormat = "%w: %s"
+	// ErrWrapWithNameAndCauseFormat is the format string for wrapping errors with a name and cause.
+	// Use with fmt.Errorf to wrap a sentinel error with a name and underlying error:
+	//   fmt.Errorf(ErrWrapWithNameAndCauseFormat, errUtils.ErrSentinel, name, underlyingErr)
+	ErrWrapWithNameAndCauseFormat = "%w '%s': %w"
 )
 
 var (
 	ErrDownloadPackage                       = errors.New("failed to download package")
 	ErrDownloadFile                          = errors.New("failed to download file")
+	ErrInvalidClientMode                     = errors.New("invalid client mode for operation")
 	ErrParseFile                             = errors.New("failed to parse file")
 	ErrParseURL                              = errors.New("failed to parse URL")
 	ErrInvalidURL                            = errors.New("invalid URL")
@@ -101,6 +110,18 @@ var (
 	// These errors indicate the data is not available but do not represent API failures.
 	ErrTerraformStateNotProvisioned = errors.New("terraform state not provisioned")
 	ErrTerraformOutputNotFound      = errors.New("terraform output not found")
+	ErrTerraformOutputFailed        = errors.New("failed to retrieve terraform outputs")
+
+	// Terraform output component configuration errors.
+	ErrMissingExecutable      = errors.New("component does not have 'command' (executable) defined")
+	ErrMissingWorkspace       = errors.New("component does not have terraform workspace defined")
+	ErrMissingComponentInfo   = errors.New("component does not have 'component_info' defined")
+	ErrInvalidComponentInfoS  = errors.New("component has invalid 'component_info' section")
+	ErrMissingComponentPath   = errors.New("component has invalid 'component_info.component_path'")
+	ErrBackendFileGeneration  = errors.New("failed to generate backend file")
+	ErrProviderFileGeneration = errors.New("failed to generate provider override file")
+	ErrTerraformInit          = errors.New("terraform init failed")
+	ErrTerraformWorkspaceOp   = errors.New("terraform workspace operation failed")
 
 	// API/infrastructure errors - should cause non-zero exit.
 	// These errors indicate backend API failures that should not use YQ defaults.
@@ -154,6 +175,7 @@ var (
 	ErrFailedToGetLocalRepo = errors.New("failed to get local repository")
 	ErrFailedToGetRepoInfo  = errors.New("failed to get repository info")
 	ErrLocalRepoFetch       = errors.New("local repo unavailable")
+	ErrGitRefNotFound       = errors.New("git reference not found on local filesystem")
 
 	// I/O and output errors.
 	ErrBuildIOConfig  = errors.New("failed to build I/O config")
@@ -175,6 +197,31 @@ var (
 
 	ErrReadFile    = errors.New("error reading file")
 	ErrInvalidFlag = errors.New("invalid flag")
+
+	// Dependency management errors.
+	ErrDependencyConstraint = errors.New("dependency constraint validation failed")
+	ErrDependencyResolution = errors.New("dependency resolution failed")
+	ErrToolInstall          = errors.New("tool installation failed")
+
+	// Toolchain errors.
+	ErrToolNotFound                 = errors.New("tool not found")
+	ErrInvalidToolSpec              = errors.New("invalid tool specification")
+	ErrToolAlreadyInstalled         = errors.New("tool already installed")
+	ErrDownloadFailed               = errors.New("download failed")
+	ErrExtractionFailed             = errors.New("extraction failed")
+	ErrChecksumMismatch             = errors.New("checksum mismatch")
+	ErrNoVersionsInstalled          = errors.New("no versions installed")
+	ErrLatestFileNotFound           = errors.New("latest version file not found")
+	ErrRegistryNotReachable         = errors.New("registry not reachable")
+	ErrToolNotInRegistry            = errors.New("tool not in registry")
+	ErrAliasNotFound                = errors.New("alias not found")
+	ErrBinaryNotExecutable          = errors.New("binary not executable")
+	ErrBinaryNotFound               = errors.New("binary not found")
+	ErrLockfileVersionMismatch      = errors.New("lockfile version mismatch")
+	ErrNoAssetTemplate              = errors.New("no asset template defined")
+	ErrAssetTemplateInvalid         = errors.New("asset template invalid")
+	ErrToolVersionsFileOperation    = errors.New("tool-versions file operation failed")
+	ErrUnsupportedVersionConstraint = errors.New("unsupported version constraint format")
 
 	// Flag validation errors.
 	ErrCompatibilityFlagMissingTarget = errors.New("compatibility flag references non-existent flag")
@@ -267,13 +314,17 @@ var (
 	ErrInvalidComponentEnv                    = errors.New("invalid component env section")
 	ErrInvalidComponentProviders              = errors.New("invalid component providers section")
 	ErrInvalidComponentHooks                  = errors.New("invalid component hooks section")
+	ErrInvalidComponentGenerate               = errors.New("invalid component generate section")
 	ErrInvalidComponentAuth                   = errors.New("invalid component auth section")
+	ErrInvalidComponentProvision              = errors.New("invalid component provision section")
 	ErrInvalidComponentMetadata               = errors.New("invalid component metadata section")
+	ErrInvalidComponentDependencies           = errors.New("invalid component dependencies section")
 	ErrInvalidComponentBackendType            = errors.New("invalid component backend_type attribute")
 	ErrInvalidComponentBackend                = errors.New("invalid component backend section")
 	ErrInvalidComponentRemoteStateBackendType = errors.New("invalid component remote_state_backend_type attribute")
 	ErrInvalidComponentRemoteStateBackend     = errors.New("invalid component remote_state_backend section")
 	ErrInvalidComponentCommand                = errors.New("invalid component command attribute")
+	ErrInvalidComponentSource                 = errors.New("invalid component source section")
 	ErrInvalidComponentOverrides              = errors.New("invalid component overrides section")
 	ErrInvalidComponentOverridesVars          = errors.New("invalid component overrides vars section")
 	ErrInvalidComponentOverridesSettings      = errors.New("invalid component overrides settings section")
@@ -282,6 +333,7 @@ var (
 	ErrInvalidComponentOverridesCommand       = errors.New("invalid component overrides command attribute")
 	ErrInvalidComponentOverridesProviders     = errors.New("invalid component overrides providers section")
 	ErrInvalidComponentOverridesHooks         = errors.New("invalid component overrides hooks section")
+	ErrInvalidComponentOverridesGenerate      = errors.New("invalid component overrides generate section")
 	ErrInvalidComponentAttribute              = errors.New("invalid component attribute")
 	ErrInvalidComponentMetadataComponent      = errors.New("invalid component metadata.component attribute")
 	ErrInvalidSpaceLiftSettings               = errors.New("invalid spacelift settings section")
@@ -342,6 +394,7 @@ var (
 	ErrInvalidVarsSection               = errors.New("invalid vars section")
 	ErrInvalidSettingsSection           = errors.New("invalid settings section")
 	ErrInvalidEnvSection                = errors.New("invalid env section")
+	ErrInvalidGenerateSection           = errors.New("invalid generate section")
 	ErrInvalidTerraformSection          = errors.New("invalid terraform section")
 	ErrInvalidHelmfileSection           = errors.New("invalid helmfile section")
 	ErrInvalidPackerSection             = errors.New("invalid packer section")
@@ -360,6 +413,7 @@ var (
 	ErrInvalidTerraformSettings           = errors.New("invalid terraform settings section")
 	ErrInvalidTerraformEnv                = errors.New("invalid terraform env section")
 	ErrInvalidTerraformProviders          = errors.New("invalid terraform providers section")
+	ErrInvalidTerraformGenerateSection    = errors.New("invalid terraform generate section")
 	ErrInvalidTerraformBackendType        = errors.New("invalid terraform backend_type")
 	ErrMissingTerraformBackendType        = errors.New("'backend_type' is missing for the component")
 	ErrMissingTerraformBackendConfig      = errors.New("'backend' config is missing for the component")
@@ -367,6 +421,7 @@ var (
 	ErrInvalidTerraformRemoteStateType    = errors.New("invalid terraform remote_state_backend_type")
 	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
 	ErrInvalidTerraformAuth               = errors.New("invalid terraform auth section")
+	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
 
 	// Helmfile-specific subsection errors.
 	ErrInvalidHelmfileCommand  = errors.New("invalid helmfile command")
@@ -484,6 +539,7 @@ var (
 	ErrSetPermissions      = errors.New("failed to set permissions")
 	ErrReadDirectory       = errors.New("failed to read directory")
 	ErrComputeRelativePath = errors.New("failed to compute relative path")
+	ErrFileOperation       = errors.New("file operation failed")
 
 	// OCI/Container image errors.
 	ErrCreateTempDirectory   = ErrCreateTempDir // Alias to avoid duplicate sentinels
@@ -520,6 +576,9 @@ var (
 	ErrNoFileMatchPattern   = errors.New("no files matching patterns found")
 	ErrMaxImportDepth       = errors.New("maximum import depth reached")
 	ErrNoValidAbsolutePaths = errors.New("no valid absolute paths found")
+	ErrDownloadRemoteConfig = errors.New("failed to download remote config")
+	ErrMockImportFailure    = errors.New("mock error: simulated import failure")
+	ErrProcessNestedImports = errors.New("failed to process nested imports")
 
 	// Profiler-related errors.
 	ErrProfilerStart           = errors.New("profiler start failed")
@@ -555,6 +614,10 @@ var (
 	ErrSSOProvisioningFailed  = errors.New("aws sso identity provisioning failed")
 	ErrSSOInvalidToken        = errors.New("invalid aws sso token")
 
+	// Credential errors.
+	ErrCredentialsInvalid = errors.New("credentials are invalid or have been revoked")
+	ErrInvalidDuration    = errors.New("invalid duration format")
+
 	// Auth manager and identity/provider resolution errors (centralized sentinels).
 	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")
 	ErrNoCredentialsFound            = errors.New("no credentials found for identity")
@@ -570,7 +633,10 @@ var (
 	ErrNoDefaultIdentity             = errors.New("no default identity configured for authentication")
 	ErrMultipleDefaultIdentities     = errors.New("multiple default identities found")
 	ErrNoIdentitiesAvailable         = errors.New("no identities available")
+	ErrNoProvidersAvailable          = errors.New("no providers available")
+	ErrNoDefaultProvider             = errors.New("no default provider configured and multiple providers exist")
 	ErrIdentitySelectionRequiresTTY  = fmt.Errorf("interactive identity selection: %w", ErrTTYRequired)
+	ErrProviderSelectionRequiresTTY  = fmt.Errorf("interactive provider selection: %w", ErrTTYRequired)
 	ErrAuthenticationChainNotBuilt   = errors.New("authentication chain not built")
 	ErrInvalidStackConfig            = errors.New("invalid stack config")
 	ErrNoCommandSpecified            = errors.New("no command specified")
@@ -664,6 +730,46 @@ var (
 	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
 	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
 	ErrLocalsResolution        = errors.New("failed to resolve local")
+
+	// Source provisioner errors.
+	ErrSourceProvision       = errors.New("source provisioning failed")
+	ErrSourceNotFound        = errors.New("source not found")
+	ErrSourceAccessDenied    = errors.New("source access denied")
+	ErrSourceInvalidSpec     = errors.New("invalid source specification")
+	ErrSourceAlreadyVendored = errors.New("source already vendored")
+	ErrSourceCacheOperation  = errors.New("source cache operation failed")
+	ErrSourceCopyFailed      = errors.New("failed to copy source files")
+	ErrSourceMissing         = errors.New("source not configured for component")
+
+	// Workdir provisioner errors.
+	ErrSourceDownload   = errors.New("failed to download component source")
+	ErrSourceCacheRead  = errors.New("failed to read source cache")
+	ErrSourceCacheWrite = errors.New("failed to write source cache")
+	ErrInvalidSource    = errors.New("invalid source configuration")
+	ErrWorkdirCreation  = errors.New("failed to create working directory")
+	ErrWorkdirSync      = errors.New("failed to sync files to working directory")
+	ErrWorkdirMetadata  = errors.New("failed to read/write workdir metadata")
+	ErrWorkdirProvision = errors.New("workdir provisioning failed")
+	ErrWorkdirClean     = errors.New("failed to clean working directory")
+
+	// Integration errors.
+	ErrIntegrationNotFound    = errors.New("integration not found")
+	ErrUnknownIntegrationKind = errors.New("unknown integration kind")
+	ErrIntegrationFailed      = errors.New("integration execution failed")
+	ErrNoLinkedIntegrations   = errors.New("identity has no linked integrations")
+
+	// ECR authentication errors.
+	ErrECRAuthFailed       = errors.New("ECR authentication failed")
+	ErrECRTokenExpired     = errors.New("ECR authorization token expired")
+	ErrECRRegistryNotFound = errors.New("ECR registry not found")
+	ErrECRInvalidRegistry  = errors.New("invalid ECR registry URL")
+	ErrECRLoginNoArgs      = errors.New("specify an integration name, --identity, or --registry")
+	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
+	ErrDockerConfigRead    = errors.New("failed to read Docker config")
+
+	// Identity authentication errors.
+	ErrIdentityAuthFailed      = errors.New("failed to authenticate identity")
+	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.
