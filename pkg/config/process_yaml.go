@@ -482,7 +482,7 @@ func handleAppend(node *yaml.Node, v *viper.Viper, currentPath string) error {
 		var value any
 		if err := child.Decode(&value); err != nil {
 			log.Debug("Failed to decode list item", "error", err)
-			return fmt.Errorf("%w: failed to decode list item in !append: %v", ErrExecuteYamlFunctions, err)
+			return fmt.Errorf("%w: failed to decode list item in !append: %w", ErrExecuteYamlFunctions, err)
 		}
 		list = append(list, value)
 	}

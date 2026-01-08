@@ -1,0 +1,8 @@
+{
+  "label": "source",
+  "className": "command",
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/helmfile/source/source"
+  }
+}

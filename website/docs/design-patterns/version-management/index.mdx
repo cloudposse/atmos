@@ -169,6 +169,10 @@ Within Continuous Version Deployment, choose how to organize your component fold
 
    Creates explicit component versions following SemVer (`vpc/1.2.3`, `vpc/2.0.0`). Works well when vendoring from external sources or managing shared component libraries within your organization.
 
+##### 4. [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning)
+
+   Native per-environment version pinning using the `source` field. Components declare their source directly in stack configuration, enabling just-in-time vendoring without managing separate vendor manifests. Ideal for strict version pinning with minimal operational overhead.
+
 ### Alternative Strategy: [Git Flow: Branches as Channels](/design-patterns/version-management/git-flow-branches-as-channels)
 
 **The branch-based alternative** where long-lived branches map to release channels. Environments track branches; promotions happen via merges between branches. Uses simple folder-based versioning since branches serve as the versioning mechanism.
@@ -204,6 +208,7 @@ A technique that works with any deployment strategy to automate copying componen
 | **Folder-Based Versioning** | `vpc/`, `eks/`, `rds/` | High | Low | Default - simple, explicit folders |
 | **Release Tracks/Channels** | `alpha/vpc`, `beta/vpc`, `prod/vpc` | High | Medium | Multiple environments needing coordinated progression |
 | **Strict Version Pinning** | `vpc/1.2.3`, `vpc/2.0.0` | Low | High | Vendored components requiring exact version tracking |
+| **Source-Based Versioning** | `source: ...?ref=1.2.3` | Low | Low | Per-environment version pinning without vendor files |
 
 ### Complementary Technique
 

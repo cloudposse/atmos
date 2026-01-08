@@ -1,8 +1,8 @@
 
 👽 test linux/amd64
 
-This command runs Helmfile commands to manage Kubernetes deployments using      
-Helmfile.                                                                       
+This command runs Helmfile commands to manage Kubernetes deployments using
+Helmfile.
 
 USAGE
 
@@ -20,6 +20,7 @@ AVAILABLE COMMANDS
       destroy             Destroy the Helm releases for the specified stack.
       diff                Show differences between the desired and actual state of Helm releases.
       generate [command]  Generate configurations for Helmfile components
+      source [command]    Manage Helmfile component sources (JIT vendoring)
       sync                Synchronize the state of Helm releases by reconciling the actual state with the desired state
                           (applies changes as needed).
       version             Get Helmfile version
@@ -92,6 +93,8 @@ GLOBAL FLAGS
 
       --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                 standard file descriptor (including '/dev/null')
+
+      --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
 
   -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
 

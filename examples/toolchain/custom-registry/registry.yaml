@@ -1,0 +1,19 @@
+# Custom Toolchain Registry - Single File Index
+# All tool definitions in one place (Aqua format)
+---
+packages:
+  # jq - Command-line JSON processor
+  - type: github_release
+    repo_owner: stedolan
+    repo_name: jq
+    url: "jq-{{.OS}}-{{.Arch}}"
+    description: Command-line JSON processor
+    binary_name: jq
+
+  # yq - YAML/JSON/XML processor
+  - type: github_release
+    repo_owner: mikefarah
+    repo_name: yq
+    url: "yq_{{.OS}}_{{.Arch}}"
+    description: YAML/JSON/XML processor
+    binary_name: yq

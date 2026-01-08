@@ -4,11 +4,41 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 )
+
+// successCmd returns a command that will exit successfully on any platform.
+func successCmd() *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		return exec.Command("cmd", "/c", "exit 0")
+	}
+	return exec.Command("true")
+}
+
+// failCmd returns a command that will exit with failure on any platform.
+func failCmd() *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		return exec.Command("cmd", "/c", "exit 1")
+	}
+	return exec.Command("false")
+}
+
+// echoCmd returns a command that outputs the given string on any platform.
+// Note: On Windows, output must not contain cmd.exe metacharacters (&, |, etc.).
+func echoCmd(output string) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		if output == "" {
+			// Windows echo without args outputs "ECHO is on.", so use empty type command.
+			return exec.Command("cmd", "/c", "echo.")
+		}
+		return exec.Command("cmd", "/c", "echo "+output)
+	}
+	return exec.Command("echo", output)
+}
 
 // TestIsAvailable_WithMocks tests isAvailable function with mocked executor.
 func TestIsAvailable_WithMocks(t *testing.T) {
@@ -29,7 +59,7 @@ func TestIsAvailable_WithMocks(t *testing.T) {
 					Times(1)
 
 				// CommandContext returns a command that will succeed.
-				cmd := exec.Command("true") // Use 'true' command which always succeeds.
+				cmd := successCmd()
 				m.EXPECT().
 					CommandContext(gomock.Any(), "docker", "info").
 					Return(cmd).
@@ -60,7 +90,7 @@ func TestIsAvailable_WithMocks(t *testing.T) {
 					Times(1)
 
 				// CommandContext returns a command that will fail.
-				cmd := exec.Command("false") // Use 'false' command which always fails.
+				cmd := failCmd()
 				m.EXPECT().
 					CommandContext(gomock.Any(), "docker", "info").
 					Return(cmd).
@@ -79,7 +109,7 @@ func TestIsAvailable_WithMocks(t *testing.T) {
 					Times(1)
 
 				// CommandContext returns a command that will succeed.
-				cmd := exec.Command("true")
+				cmd := successCmd()
 				m.EXPECT().
 					CommandContext(gomock.Any(), "podman", "info").
 					Return(cmd).
@@ -110,7 +140,7 @@ func TestIsAvailable_WithMocks(t *testing.T) {
 					Times(1)
 
 				// First info command fails.
-				cmdFail := exec.Command("false")
+				cmdFail := failCmd()
 				m.EXPECT().
 					CommandContext(gomock.Any(), "podman", "info").
 					Return(cmdFail).
@@ -118,7 +148,7 @@ func TestIsAvailable_WithMocks(t *testing.T) {
 
 				// diagnoseUnresponsiveRuntime checks if machine exists.
 				// Machine list command returns empty (no machines).
-				cmdMachineList := exec.Command("echo", "")
+				cmdMachineList := echoCmd("")
 				m.EXPECT().
 					CommandContext(gomock.Any(), "podman", "machine", "list", "--format", "{{.Name}}").
 					Return(cmdMachineList).
@@ -174,14 +204,14 @@ func TestCheckRuntimeStatus(t *testing.T) {
 					Times(1)
 
 				// Info fails.
-				cmdInfoFail := exec.Command("false")
+				cmdInfoFail := failCmd()
 				m.EXPECT().
 					CommandContext(gomock.Any(), "podman", "info").
 					Return(cmdInfoFail).
 					Times(1)
 
 				// Machine list returns empty.
-				cmdMachineList := exec.Command("echo", "")
+				cmdMachineList := echoCmd("")
 				m.EXPECT().
 					CommandContext(gomock.Any(), "podman", "machine", "list", "--format", "{{.Name}}").
 					Return(cmdMachineList).
@@ -199,14 +229,14 @@ func TestCheckRuntimeStatus(t *testing.T) {
 					Times(1)
 
 				// Info fails.
-				cmdInfoFail := exec.Command("false")
+				cmdInfoFail := failCmd()
 				m.EXPECT().
 					CommandContext(gomock.Any(), "podman", "info").
 					Return(cmdInfoFail).
 					Times(1)
 
 				// Machine list returns a machine.
-				cmdMachineList := exec.Command("echo", "podman-machine-default")
+				cmdMachineList := echoCmd("podman-machine-default")
 				m.EXPECT().
 					CommandContext(gomock.Any(), "podman", "machine", "list", "--format", "{{.Name}}").
 					Return(cmdMachineList).
@@ -224,7 +254,7 @@ func TestCheckRuntimeStatus(t *testing.T) {
 					Times(1)
 
 				// Info fails.
-				cmdInfoFail := exec.Command("false")
+				cmdInfoFail := failCmd()
 				m.EXPECT().
 					CommandContext(gomock.Any(), "docker", "info").
 					Return(cmdInfoFail).
@@ -267,28 +297,28 @@ func TestTryRecoverPodmanRuntime(t *testing.T) {
 			Return("/usr/bin/podman", nil).
 			Times(1)
 
-		cmdInfoFail := exec.Command("false")
+		cmdInfoFail := failCmd()
 		mockExec.EXPECT().
 			CommandContext(gomock.Any(), "podman", "info").
 			Return(cmdInfoFail).
 			Times(1)
 
 		// Machine exists.
-		cmdMachineList := exec.Command("echo", "podman-machine-default")
+		cmdMachineList := echoCmd("podman-machine-default")
 		mockExec.EXPECT().
 			CommandContext(gomock.Any(), "podman", "machine", "list", "--format", "{{.Name}}").
 			Return(cmdMachineList).
 			Times(1)
 
 		// Start machine succeeds.
-		cmdStart := exec.Command("true")
+		cmdStart := successCmd()
 		mockExec.EXPECT().
 			CommandContext(gomock.Any(), "podman", "machine", "start").
 			Return(cmdStart).
 			Times(1)
 
 		// Verify info succeeds after start.
-		cmdInfoSuccess := exec.Command("true")
+		cmdInfoSuccess := successCmd()
 		mockExec.EXPECT().
 			CommandContext(gomock.Any(), "podman", "info").
 			Return(cmdInfoSuccess).
@@ -315,35 +345,35 @@ func TestTryRecoverPodmanRuntime(t *testing.T) {
 			Return("/usr/bin/podman", nil).
 			Times(1)
 
-		cmdInfoFail := exec.Command("false")
+		cmdInfoFail := failCmd()
 		mockExec.EXPECT().
 			CommandContext(gomock.Any(), "podman", "info").
 			Return(cmdInfoFail).
 			Times(1)
 
 		// No machine exists.
-		cmdMachineListEmpty := exec.Command("echo", "")
+		cmdMachineListEmpty := echoCmd("")
 		mockExec.EXPECT().
 			CommandContext(gomock.Any(), "podman", "machine", "list", "--format", "{{.Name}}").
 			Return(cmdMachineListEmpty).
 			Times(1)
 
 		// Initialize machine.
-		cmdInit := exec.Command("true")
+		cmdInit := successCmd()
 		mockExec.EXPECT().
 			CommandContext(gomock.Any(), "podman", "machine", "init").
 			Return(cmdInit).
 			Times(1)
 
 		// Start machine.
-		cmdStart := exec.Command("true")
+		cmdStart := successCmd()
 		mockExec.EXPECT().
 			CommandContext(gomock.Any(), "podman", "machine", "start").
 			Return(cmdStart).
 			Times(1)
 
 		// Verify info succeeds.
-		cmdInfoSuccess := exec.Command("true")
+		cmdInfoSuccess := successCmd()
 		mockExec.EXPECT().
 			CommandContext(gomock.Any(), "podman", "info").
 			Return(cmdInfoSuccess).
@@ -370,21 +400,21 @@ func TestTryRecoverPodmanRuntime(t *testing.T) {
 			Return("/usr/bin/podman", nil).
 			Times(1)
 
-		cmdInfoFail := exec.Command("false")
+		cmdInfoFail := failCmd()
 		mockExec.EXPECT().
 			CommandContext(gomock.Any(), "podman", "info").
 			Return(cmdInfoFail).
 			Times(1)
 
 		// Machine exists.
-		cmdMachineList := exec.Command("echo", "podman-machine-default")
+		cmdMachineList := echoCmd("podman-machine-default")
 		mockExec.EXPECT().
 			CommandContext(gomock.Any(), "podman", "machine", "list", "--format", "{{.Name}}").
 			Return(cmdMachineList).
 			Times(1)
 
 		// Start machine fails.
-		cmdStartFail := exec.Command("false")
+		cmdStartFail := failCmd()
 		mockExec.EXPECT().
 			CommandContext(gomock.Any(), "podman", "machine", "start").
 			Return(cmdStartFail).

@@ -94,7 +94,7 @@ Atmos is designed to be fully compatible with vanilla Terraform, ensuring that y
 
 #### Atmos does not promote code generation for root modules
 
-Unlike Terragrunt, Atmos eschews code generation for composing DRY Terraform root modules, because that makes them more challenging to test. Instead, it encourages the use of modular architecture to maintain DRY principles, advocating for sufficient parameterization of components (root modules) to keep them versatile and highly reusable. The complexity is managed through configuration, with Atmos focusing on generating `.tfvars` files before running Terraform. This approach allows seamless integration with vanilla Terraform and offers an easy exit strategy by [generating and committing these files](/cli/commands/terraform/generate-varfiles).
+Unlike Terragrunt, Atmos eschews code generation for composing DRY Terraform root modules, because that makes them more challenging to test. Instead, it encourages the use of modular architecture to maintain DRY principles, advocating for sufficient parameterization of components (root modules) to keep them versatile and highly reusable. The complexity is managed through configuration, with Atmos focusing on generating `.tfvars` files before running Terraform. This approach allows seamless integration with vanilla Terraform and offers an easy exit strategy by [generating and committing these files](/cli/commands/terraform/generate/varfiles).
 
 #### Atmos provides prescriptive guidance
 
@@ -124,7 +124,7 @@ Probably, but we haven't tested it extensively.
 Here's why it should work with any CI/CD system:
 
 - Atmos works with *vanilla* Terraform HCL code (we do not introduce any proprietary HCL code formats)
-- Atmos can [generate `.tfvar` files](/cli/commands/terraform/generate-varfiles) from the deep-merged configurations for any given stack, or all stacks at once
+- Atmos can [generate `.tfvar` files](/cli/commands/terraform/generate/varfiles) from the deep-merged configurations for any given stack, or all stacks at once
 - Commit those `.tfvar` files, then run Terraform as normal, passing the appropriate `.tfvar` file with the `-var-file` argument
 
 Our recommended way of practicing GitOps with Terraform is with our turn-key [GitHub Actions](/integrations/github-actions/).

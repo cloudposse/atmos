@@ -52,6 +52,18 @@ func TestNewProvider_Factory(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:         "azure-oidc-valid",
+			providerName: "azure-oidc",
+			config: &schema.Provider{
+				Kind: "azure/oidc",
+				Spec: map[string]interface{}{
+					"tenant_id": "test-tenant-id",
+					"client_id": "test-client-id",
+				},
+			},
+			expectError: false,
+		},
+		{
 			name:         "github-oidc-valid",
 			providerName: "github-oidc",
 			config:       &schema.Provider{Kind: "github/oidc", Region: "us-east-1"},

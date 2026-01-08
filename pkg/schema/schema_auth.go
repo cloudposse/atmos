@@ -2,10 +2,11 @@ package schema
 
 // AuthConfig defines the authentication configuration structure.
 type AuthConfig struct {
-	Logs       Logs                `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
-	Keyring    KeyringConfig       `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`
-	Providers  map[string]Provider `yaml:"providers" json:"providers" mapstructure:"providers"`
-	Identities map[string]Identity `yaml:"identities" json:"identities" mapstructure:"identities"`
+	Logs         Logs                   `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
+	Keyring      KeyringConfig          `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`
+	Providers    map[string]Provider    `yaml:"providers" json:"providers" mapstructure:"providers"`
+	Identities   map[string]Identity    `yaml:"identities" json:"identities" mapstructure:"identities"`
+	Integrations map[string]Integration `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
 	// IdentityCaseMap maps lowercase identity names to their original case.
 	// This is populated during config loading to work around Viper's case-insensitive behavior.
 	IdentityCaseMap map[string]string `yaml:"-" json:"-" mapstructure:"-"`
@@ -112,4 +113,29 @@ type EnvironmentVariable struct {
 type ComponentAuthConfig struct {
 	Providers  map[string]Provider `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`
 	Identities map[string]Identity `yaml:"identities,omitempty" json:"identities,omitempty" mapstructure:"identities"`
+}
+
+// Integration defines a client-only credential materialization (e.g., ECR, EKS).
+// Integrations derive credentials from identities for service-specific access.
+type Integration struct {
+	Kind string           `yaml:"kind" json:"kind" mapstructure:"kind"` // Integration type (e.g., "aws/ecr", "aws/eks").
+	Via  *IntegrationVia  `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
+	Spec *IntegrationSpec `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"` // Integration-specific configuration.
+}
+
+// IntegrationVia defines how an integration connects to an identity.
+type IntegrationVia struct {
+	Identity string `yaml:"identity" json:"identity" mapstructure:"identity"` // Identity providing credentials.
+}
+
+// IntegrationSpec defines the spec configuration for integrations.
+type IntegrationSpec struct {
+	AutoProvision *bool        `yaml:"auto_provision,omitempty" json:"auto_provision,omitempty" mapstructure:"auto_provision"` // Whether to auto-provision on identity login. Defaults to true.
+	Registry      *ECRRegistry `yaml:"registry,omitempty" json:"registry,omitempty" mapstructure:"registry"`                   // Single ECR registry for aws/ecr integrations.
+}
+
+// ECRRegistry represents an ECR registry configuration for aws/ecr integrations.
+type ECRRegistry struct {
+	AccountID string `yaml:"account_id" json:"account_id" mapstructure:"account_id"`
+	Region    string `yaml:"region" json:"region" mapstructure:"region"`
 }

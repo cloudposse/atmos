@@ -675,7 +675,7 @@ func loadTestSuites(testCasesDir string) (*TestSuite, error) {
 	return &mergedSuite, nil
 }
 
-// validateAtmosBinary checks if the atmos binary is available and up-to-date.
+// validateAtmosBinary checks if the atmos binary is available.
 // Returns the binary path and a skip reason if the binary is not suitable for testing.
 func validateAtmosBinary(repoRoot string) (string, string) {
 	binaryPath, err := exec.LookPath("atmos")
@@ -686,14 +686,6 @@ func validateAtmosBinary(repoRoot string) (string, string) {
 	rel, err := filepath.Rel(repoRoot, binaryPath)
 	if err == nil && strings.HasPrefix(rel, "..") {
 		return binaryPath, fmt.Sprintf("Atmos binary found outside repository at %s", binaryPath)
-	}
-
-	stale, err := checkIfRebuildNeeded(binaryPath, repoRoot)
-	if err != nil {
-		return binaryPath, fmt.Sprintf("Failed to check if rebuild needed: %v", err)
-	}
-	if stale {
-		return binaryPath, fmt.Sprintf("Atmos binary at %s needs rebuild. Run 'make build' to rebuild.", binaryPath)
 	}
 
 	return binaryPath, ""
@@ -878,7 +870,13 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 			if _, err := os.Stat(src); err == nil { // Check if the file/directory exists
 				// t.Logf("Copying %s to %s\n", src, dest)
-				if err := copy.Copy(src, dest); err != nil {
+				// Skip socket files (e.g., SSH agent sockets) that cannot be copied.
+				copyOpts := copy.Options{
+					Skip: func(info os.FileInfo, src, dest string) (bool, error) {
+						return info.Mode()&os.ModeSocket != 0, nil
+					},
+				}
+				if err := copy.Copy(src, dest, copyOpts); err != nil {
 					t.Fatalf("Failed to copy %s to test folder: %v", src, err)
 				}
 			}

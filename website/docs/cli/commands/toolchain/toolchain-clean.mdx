@@ -1,0 +1,170 @@
+---
+title: atmos toolchain clean
+sidebar_label: clean
+sidebar_class_name: command
+id: clean
+description: Remove all installed CLI tools from your toolchain to free up disk space.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Remove all installed CLI tools from your toolchain to free up disk space or start fresh with a clean environment. This gives you a fresh slate for managing tool dependencies across your components and workflows.
+</Intro>
+
+<Screengrab title="atmos toolchain clean --help" slug="atmos-toolchain-clean--help" />
+
+## Usage
+
+Execute the `atmos toolchain clean` command like this:
+
+```shell
+atmos toolchain clean
+```
+
+## Examples
+
+### Clean All Tools
+
+```shell
+atmos toolchain clean
+```
+
+Example output:
+```
+Cleaning toolchain...
+  Removed: hashicorp/terraform@1.9.8 (85.2 MB)
+  Removed: opentofu/opentofu@1.10.3 (92.1 MB)
+  Removed: kubernetes-sigs/kubectl@1.28.0 (48.5 MB)
+
+Cleaned 3 tools, freed 225.8 MB
+```
+
+### Clean with Confirmation Skip
+
+```shell
+atmos toolchain clean --force
+```
+
+Skips the confirmation prompt and immediately removes all tools.
+
+### Clean Cache Only
+
+```shell
+atmos toolchain clean --cache-only
+```
+
+Removes downloaded archives and registry cache without removing installed tools.
+
+## Flags
+
+<dl>
+    <dt>`--force` <em>(optional)</em></dt>
+    <dd>
+        Skip confirmation prompt and immediately clean all tools.
+
+        Environment variable: `ATMOS_TOOLCHAIN_FORCE`
+    </dd>
+
+    <dt>`--cache-only` <em>(optional)</em></dt>
+    <dd>
+        Only clean the download cache, not installed tools. Useful for freeing space while keeping tools ready to use.
+
+        Environment variable: `ATMOS_TOOLCHAIN_CACHE_ONLY`
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be cleaned without actually removing anything.
+
+        Environment variable: `ATMOS_TOOLCHAIN_DRY_RUN`
+    </dd>
+</dl>
+
+## What Gets Cleaned
+
+The `clean` command removes:
+
+| Directory | Contents | Purpose |
+|-----------|----------|---------|
+| `.tools/bin/` | Installed tool binaries | Executable files |
+| `~/.cache/atmos/toolchain/downloads/` | Downloaded archives | Cached .tar.gz, .zip files |
+| `~/.cache/atmos/toolchain/registries/` | Registry data | Cached registry YAML files |
+| `~/.cache/atmos/toolchain/temp/` | Temporary files | Extraction workspace |
+
+## Use Cases
+
+### Free Up Disk Space
+
+When disk space is limited, clean unused tools:
+
+```shell
+# Check current usage
+atmos toolchain du
+
+# Clean everything
+atmos toolchain clean
+
+# Reinstall only what you need
+atmos toolchain install
+```
+
+### Start Fresh
+
+Reset your toolchain after configuration changes:
+
+```shell
+# Clean all tools
+atmos toolchain clean
+
+# Update .tool-versions
+atmos toolchain add terraform@1.9.8
+atmos toolchain add kubectl@1.28.0
+
+# Install fresh
+atmos toolchain install
+```
+
+### Clean Corrupted Downloads
+
+If tool installations fail, clear the cache:
+
+```shell
+# Clear download cache
+atmos toolchain clean --cache-only
+
+# Retry installation
+atmos toolchain install terraform@1.9.8
+```
+
+### Preview Before Cleaning
+
+See what would be removed:
+
+```shell
+# Dry run to see impact
+atmos toolchain clean --dry-run
+
+# If satisfied, actually clean
+atmos toolchain clean
+```
+
+## Notes
+
+- The `.tool-versions` file is **not** modified by this command
+- After cleaning, run `atmos toolchain install` to reinstall tools from `.tool-versions`
+- Use `atmos toolchain du` before cleaning to see current disk usage
+- The `--cache-only` flag is useful when you want to free space but keep tools ready
+
+## Related Commands
+
+- [`atmos toolchain du`](/cli/commands/toolchain/du) - Check disk usage before cleaning
+- [`atmos toolchain install`](/cli/commands/toolchain/install) - Reinstall tools after cleaning
+- [`atmos toolchain uninstall`](/cli/commands/toolchain/uninstall) - Remove specific tools
+- [`atmos toolchain list`](/cli/commands/toolchain/list) - View installed tools
+
+## Related Documentation
+
+- [Toolchain Overview](/cli/commands/toolchain/usage) - Complete toolchain documentation
+- [Caching](/cli/commands/toolchain/usage#caching) - Cache directory structure

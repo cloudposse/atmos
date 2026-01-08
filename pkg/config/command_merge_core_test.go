@@ -15,6 +15,8 @@ import (
 // ensuring that commands from imported configurations are properly merged
 // with local commands, and that local commands can override imported ones.
 func TestCommandMergeCore(t *testing.T) {
+	setupTestAdapters()
+
 	tests := []struct {
 		name        string
 		setupFiles  map[string]string

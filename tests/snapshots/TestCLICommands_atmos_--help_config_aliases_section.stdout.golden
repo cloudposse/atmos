@@ -1,8 +1,8 @@
 
 👽 test linux/amd64
 
-Atmos is a framework for orchestrating and operating infrastructure workflows   
-across multiple cloud and DevOps toolchains.                                    
+Atmos is a framework for orchestrating and operating infrastructure workflows
+across multiple cloud and DevOps toolchains.
 
 USAGE
 
@@ -37,6 +37,7 @@ AVAILABLE COMMANDS
       support                 Show Atmos support options
       terraform [command]     Execute Terraform commands using Atmos stack configurations
       theme [command]         Manage terminal themes for Atmos CLI
+      toolchain [command]     Manage tool versions and installations
       validate [command]      Validate configurations against OPA policies and JSON schemas
       vendor [command]        Manage external dependencies for components or stacks
       version [command]       Display the version of Atmos you are running and check for updates
@@ -108,6 +109,8 @@ FLAGS
 
       --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
                                 standard file descriptor (including '/dev/null')
+
+      --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
 
   -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
 

@@ -375,7 +375,11 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 	switch p.pkgType {
 	case pkgTypeRemote:
 		// Use go-getter to download remote packages
-		if err := downloader.NewGoGetterDownloader(atmosConfig).Fetch(p.uri, *tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
+		opts := []downloader.GoGetterOption{}
+		if p.atmosVendorSource.Retry != nil {
+			opts = append(opts, downloader.WithRetryConfig(p.atmosVendorSource.Retry))
+		}
+		if err := downloader.NewGoGetterDownloader(atmosConfig, opts...).Fetch(p.uri, *tempDir, downloader.ClientModeAny, 10*time.Minute); err != nil {
 			return fmt.Errorf("failed to download package: %w", err)
 		}
 

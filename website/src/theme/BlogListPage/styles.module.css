@@ -31,6 +31,11 @@
   .changelogTitle {
     font-size: 2rem;
   }
+
+  /* Hide "Atmos" prefix on mobile to save space */
+  .titlePrefix {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

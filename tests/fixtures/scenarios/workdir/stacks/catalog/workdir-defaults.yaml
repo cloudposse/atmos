@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Shared defaults for workdir-enabled components
+
+components:
+  terraform:
+    # VPC component with workdir enabled
+    vpc:
+      metadata:
+        component: vpc
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        vpc_name: "main-vpc"
+        cidr_block: "10.0.0.0/16"
+        enable_dns_hostnames: true
+
+    # S3 bucket component with workdir enabled
+    s3-logs:
+      metadata:
+        component: s3-bucket
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        bucket_name: "logs-bucket"
+        versioning_enabled: true
+        encryption_enabled: true
+
+    # S3 bucket component WITHOUT workdir (for comparison)
+    s3-data:
+      metadata:
+        component: s3-bucket
+      # No provision.workdir - runs in original directory
+      vars:
+        bucket_name: "data-bucket"
+        versioning_enabled: false
+        encryption_enabled: true

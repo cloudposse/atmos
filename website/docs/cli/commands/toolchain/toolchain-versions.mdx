@@ -1,0 +1,62 @@
+---
+title: atmos toolchain versions
+sidebar_label: versions
+sidebar_class_name: command
+id: versions
+description: Browse available versions of any toolchain tool from configured registries.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Browse available versions of any toolchain tool before installing or upgrading. This helps you select the right version for your components and workflows, whether you need the latest features or a stable release.
+</Intro>
+
+<Screengrab title="atmos toolchain versions --help" slug="atmos-toolchain-versions--help" />
+
+## Usage
+
+Execute the `toolchain versions` command like this:
+
+```shell
+atmos toolchain versions <tool>
+```
+
+## Examples
+
+```shell
+atmos toolchain versions terraform
+atmos toolchain versions terraform --all
+atmos toolchain versions terraform --limit 10
+atmos toolchain versions terraform --file path-to-config
+```
+
+## Arguments
+
+<dl>
+    <dt>`tool` <em>(required)</em></dt>
+    <dd>
+        Tool to get versions for. Can be a short name (alias) or full `owner/repo` format.
+
+        Examples: `terraform`, `kubectl`, `hashicorp/terraform`
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--all`  <em>(optional)</em></dt>
+    <dd>
+        List all the versions available for the package
+    </dd>
+    <dt>`--limit`  <em>(optional)</em></dt>
+    <dd>
+        Max number of versions to be displayed
+    </dd>
+    <dt>`--file`  <em>(optional)</em></dt>
+    <dd>
+        Path to tool-versions file (defaults to global --tool-versions-file)
+    </dd>
+
+</dl>

@@ -1,4 +1,3 @@
-
 # Incorrect Usage
 
 **Error:** unknown flag --non-existent for command atmos version
@@ -6,5 +5,3 @@
 ## Hints
 
 💡 Run atmos version --help for usage
-
-

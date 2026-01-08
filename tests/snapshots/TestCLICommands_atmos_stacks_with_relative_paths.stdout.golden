@@ -12,14 +12,17 @@ acme-platform-dev:
         command: terraform
         component: mock
         env: {}
+        generate: {}
         hooks: {}
         inheritance: []
         metadata: {}
         overrides: {}
         providers: {}
+        provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
         settings: {}
+        source: {}
         stack: acme-platform-dev
         vars:
           bar: bar dev override
@@ -43,14 +46,17 @@ acme-platform-prod:
         command: terraform
         component: mock
         env: {}
+        generate: {}
         hooks: {}
         inheritance: []
         metadata: {}
         overrides: {}
         providers: {}
+        provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
         settings: {}
+        source: {}
         stack: acme-platform-prod
         vars:
           bar: bar prod override
@@ -74,14 +80,17 @@ acme-platform-staging:
         command: terraform
         component: mock
         env: {}
+        generate: {}
         hooks: {}
         inheritance: []
         metadata: {}
         overrides: {}
         providers: {}
+        provision: {}
         remote_state_backend: {}
         remote_state_backend_type: ""
         settings: {}
+        source: {}
         stack: acme-platform-staging
         vars:
           bar: bar staging override

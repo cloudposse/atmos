@@ -7,6 +7,7 @@ id: clean
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import ActionCard from '@site/src/components/ActionCard'
 
 <Intro>
 Use this command to clean up Terraform files for an Atmos component in a stack. This removes `.terraform` folder, `.terraform.lock.hcl` file, and Atmos-generated varfiles and planfiles.
@@ -19,7 +20,7 @@ Use this command to clean up Terraform files for an Atmos component in a stack. 
 Execute the `terraform clean` command like this:
 
 ```shell
-atmos terraform clean <component> -s <stack> [--skip-lock-file] [--everything] [--force]
+atmos terraform clean <component> -s <stack> [--skip-lock-file] [--everything] [--force] [--cache]
 ```
 
 :::warning
@@ -48,6 +49,10 @@ The Terraform data directory location can be controlled via environment variable
 export TF_DATA_DIR="/tmp/.terraform"
 ```
 
+<ActionCard title="Configure Terraform" ctaText="Learn More" ctaLink="/cli/configuration/components/terraform">
+  Learn how to configure Terraform components in your `atmos.yaml`, including backends, auto-generation, and initialization options.
+</ActionCard>
+
 ## Examples
 
 ```shell
@@ -61,6 +66,10 @@ atmos terraform clean infra/vpc -s tenant1-ue2-staging --skip-lock-file
 atmos terraform clean test/test-component -s tenant1-ue2-dev
 atmos terraform clean test/test-component-override-2 -s tenant2-ue2-prod
 atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
+# Clean the shared plugin cache directory
+atmos terraform clean --cache
+# Clean both component files and plugin cache
+atmos terraform clean --cache --force
 ```
 
 ## Arguments
@@ -110,6 +119,18 @@ atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
     <dt>`--skip-lock-file` <em>(optional)</em></dt>
     <dd>
         Skip deleting the `.terraform.lock.hcl` file.
+    </dd>
+
+    <dt>`--cache` <em>(optional)</em></dt>
+    <dd>
+        Clean the shared Terraform plugin cache directory (`~/.cache/atmos/terraform/plugins` by default). This removes all cached provider plugins that are shared across components.
+
+        ```shell
+        atmos terraform clean --cache
+        atmos terraform clean --cache --force
+        ```
+
+        Use this to free disk space or force re-downloading of providers.
     </dd>
 </dl>
 

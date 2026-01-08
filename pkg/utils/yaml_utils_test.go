@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1147,4 +1149,315 @@ db_users: [!literal "{{external.email}}", !literal "{{external.admin}}", regular
 	assert.Equal(t, "{{external.email}}", users[0])
 	assert.Equal(t, "{{external.admin}}", users[1])
 	assert.Equal(t, "regular_user", users[2])
+}
+
+// TestGetUserHomeDir tests that GetUserHomeDir returns a valid home directory.
+func TestGetUserHomeDir(t *testing.T) {
+	homeDir := GetUserHomeDir()
+
+	// Should return a non-empty string on all platforms.
+	assert.NotEmpty(t, homeDir, "GetUserHomeDir should return non-empty home directory")
+
+	// The returned path should be an absolute path.
+	assert.True(t, filepath.IsAbs(homeDir), "Home directory should be an absolute path")
+
+	// The directory should exist.
+	info, err := os.Stat(homeDir)
+	require.NoError(t, err, "Home directory should exist")
+	assert.True(t, info.IsDir(), "Home directory should be a directory")
+}
+
+// TestObfuscateSensitivePaths_Map tests obfuscation of paths in maps.
+func TestObfuscateSensitivePaths_Map(t *testing.T) {
+	homeDir := "/Users/testuser"
+
+	data := map[string]any{
+		"path":       "/Users/testuser/projects/atmos",
+		"other":      "some value",
+		"number":     42,
+		"nested_dir": "/Users/testuser/.config/atmos.yaml",
+	}
+
+	result := ObfuscateSensitivePaths(data, homeDir)
+
+	resultMap, ok := result.(map[string]any)
+	require.True(t, ok, "Result should be a map")
+
+	assert.Equal(t, "~/projects/atmos", resultMap["path"], "Path should be obfuscated with ~")
+	assert.Equal(t, "some value", resultMap["other"], "Non-path values should be unchanged")
+	assert.Equal(t, 42, resultMap["number"], "Number values should be unchanged")
+	assert.Equal(t, "~/.config/atmos.yaml", resultMap["nested_dir"], "Nested dir path should be obfuscated")
+}
+
+// TestObfuscateSensitivePaths_Slice tests obfuscation of paths in slices.
+func TestObfuscateSensitivePaths_Slice(t *testing.T) {
+	homeDir := "/home/user"
+
+	data := []any{
+		"/home/user/file1.txt",
+		"/home/user/dir/file2.txt",
+		"not a path",
+		123,
+		"/other/path",
+	}
+
+	result := ObfuscateSensitivePaths(data, homeDir)
+
+	resultSlice, ok := result.([]any)
+	require.True(t, ok, "Result should be a slice")
+
+	assert.Equal(t, "~/file1.txt", resultSlice[0], "First path should be obfuscated")
+	assert.Equal(t, "~/dir/file2.txt", resultSlice[1], "Second path should be obfuscated")
+	assert.Equal(t, "not a path", resultSlice[2], "Non-path strings should be unchanged")
+	assert.Equal(t, 123, resultSlice[3], "Numbers should be unchanged")
+	assert.Equal(t, "/other/path", resultSlice[4], "Paths not starting with homeDir should be unchanged")
+}
+
+// TestObfuscateSensitivePaths_Nested tests obfuscation of paths in nested structures.
+func TestObfuscateSensitivePaths_Nested(t *testing.T) {
+	homeDir := "/Users/dev"
+
+	data := map[string]any{
+		"config": map[string]any{
+			"base_path": "/Users/dev/atmos",
+			"files": []any{
+				"/Users/dev/stack1.yaml",
+				"/Users/dev/stack2.yaml",
+			},
+		},
+		"metadata": map[string]any{
+			"author":  "John Doe",
+			"version": 1,
+			"paths": map[string]any{
+				"source": "/Users/dev/src",
+				"build":  "/tmp/build",
+			},
+		},
+	}
+
+	result := ObfuscateSensitivePaths(data, homeDir)
+
+	resultMap, ok := result.(map[string]any)
+	require.True(t, ok)
+
+	config := resultMap["config"].(map[string]any)
+	assert.Equal(t, "~/atmos", config["base_path"])
+
+	files := config["files"].([]any)
+	assert.Equal(t, "~/stack1.yaml", files[0])
+	assert.Equal(t, "~/stack2.yaml", files[1])
+
+	metadata := resultMap["metadata"].(map[string]any)
+	assert.Equal(t, "John Doe", metadata["author"])
+	assert.Equal(t, 1, metadata["version"])
+
+	paths := metadata["paths"].(map[string]any)
+	assert.Equal(t, "~/src", paths["source"])
+	assert.Equal(t, "/tmp/build", paths["build"], "Non-matching paths should be unchanged")
+}
+
+// TestObfuscateSensitivePaths_EmptyHomeDir tests that empty homeDir returns data unchanged.
+func TestObfuscateSensitivePaths_EmptyHomeDir(t *testing.T) {
+	data := map[string]any{
+		"path": "/Users/testuser/projects",
+	}
+
+	result := ObfuscateSensitivePaths(data, "")
+
+	resultMap, ok := result.(map[string]any)
+	require.True(t, ok)
+
+	// With empty homeDir, paths should not be changed.
+	assert.Equal(t, "/Users/testuser/projects", resultMap["path"], "Path should be unchanged when homeDir is empty")
+}
+
+// TestObfuscateSensitivePaths_NilData tests that nil data is handled gracefully.
+func TestObfuscateSensitivePaths_NilData(t *testing.T) {
+	result := ObfuscateSensitivePaths(nil, "/Users/test")
+	assert.Nil(t, result, "Nil input should return nil")
+}
+
+// TestObfuscateSensitivePaths_StringInput tests direct string input.
+func TestObfuscateSensitivePaths_StringInput(t *testing.T) {
+	homeDir := "/Users/testuser"
+
+	// String that starts with homeDir.
+	result1 := ObfuscateSensitivePaths("/Users/testuser/file.txt", homeDir)
+	assert.Equal(t, "~/file.txt", result1)
+
+	// String that doesn't start with homeDir.
+	result2 := ObfuscateSensitivePaths("/other/path/file.txt", homeDir)
+	assert.Equal(t, "/other/path/file.txt", result2)
+}
+
+// TestWriteToFileAsYAML tests writing YAML to a file.
+func TestWriteToFileAsYAML(t *testing.T) {
+	tempDir := t.TempDir()
+	filePath := filepath.Join(tempDir, "test.yaml")
+
+	data := map[string]any{
+		"key":    "value",
+		"number": 42,
+		"nested": map[string]any{
+			"inner": "data",
+		},
+	}
+
+	err := WriteToFileAsYAML(filePath, data, 0o644)
+	require.NoError(t, err)
+
+	// Verify file was created.
+	info, err := os.Stat(filePath)
+	require.NoError(t, err)
+	assert.False(t, info.IsDir())
+
+	// Read and verify content.
+	content, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "key: value")
+	assert.Contains(t, string(content), "number: 42")
+	assert.Contains(t, string(content), "inner: data")
+}
+
+// TestWriteToFileAsYAML_InvalidPath tests writing to an invalid path.
+func TestWriteToFileAsYAML_InvalidPath(t *testing.T) {
+	// Try to write to a non-existent directory.
+	invalidPath := filepath.Join(string(filepath.Separator), "nonexistent", "directory", "that", "does", "not", "exist", "test.yaml")
+
+	data := map[string]any{"key": "value"}
+
+	err := WriteToFileAsYAML(invalidPath, data, 0o644)
+	assert.Error(t, err, "Writing to invalid path should return an error")
+}
+
+// TestWriteToFileAsYAMLWithConfig tests writing YAML with config-based indentation.
+func TestWriteToFileAsYAMLWithConfig(t *testing.T) {
+	tempDir := t.TempDir()
+	filePath := filepath.Join(tempDir, "config-test.yaml")
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{
+				TabWidth: 4,
+			},
+		},
+	}
+
+	data := map[string]any{
+		"key": "value",
+	}
+
+	err := WriteToFileAsYAMLWithConfig(atmosConfig, filePath, data, 0o644)
+	require.NoError(t, err)
+
+	// Verify file was created.
+	_, err = os.Stat(filePath)
+	require.NoError(t, err)
+}
+
+// TestWriteToFileAsYAMLWithConfig_NilConfig tests nil config handling.
+func TestWriteToFileAsYAMLWithConfig_NilConfig(t *testing.T) {
+	tempDir := t.TempDir()
+	filePath := filepath.Join(tempDir, "nil-config-test.yaml")
+
+	data := map[string]any{"key": "value"}
+
+	err := WriteToFileAsYAMLWithConfig(nil, filePath, data, 0o644)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "atmosConfig cannot be nil")
+}
+
+// TestWrapLongStrings tests wrapping of long strings.
+func TestWrapLongStrings(t *testing.T) {
+	// Short string should not be wrapped.
+	shortData := map[string]any{
+		"short": "hello",
+	}
+	result := WrapLongStrings(shortData, 100)
+	resultMap := result.(map[string]any)
+	_, isLongString := resultMap["short"].(LongString)
+	assert.False(t, isLongString, "Short string should not be wrapped")
+
+	// Long string should be wrapped.
+	longString := "This is a very long string that exceeds the maximum length specified for wrapping purposes"
+	longData := map[string]any{
+		"long": longString,
+	}
+	result = WrapLongStrings(longData, 50)
+	resultMap = result.(map[string]any)
+	_, isLongString = resultMap["long"].(LongString)
+	assert.True(t, isLongString, "Long string should be wrapped as LongString")
+}
+
+// TestWrapLongStrings_Nested tests wrapping in nested structures.
+func TestWrapLongStrings_Nested(t *testing.T) {
+	longString := "This is a long string that should be wrapped because it exceeds the max length"
+	data := map[string]any{
+		"short": "hi",
+		"nested": map[string]any{
+			"long": longString,
+		},
+		"list": []any{
+			"short",
+			longString,
+		},
+	}
+
+	result := WrapLongStrings(data, 30)
+	resultMap := result.(map[string]any)
+
+	// Short string should not be wrapped.
+	_, isLongString := resultMap["short"].(LongString)
+	assert.False(t, isLongString)
+
+	// Nested long string should be wrapped.
+	nested := resultMap["nested"].(map[string]any)
+	_, isLongString = nested["long"].(LongString)
+	assert.True(t, isLongString)
+
+	// Long string in list should be wrapped.
+	list := resultMap["list"].([]any)
+	_, isLongString = list[0].(LongString)
+	assert.False(t, isLongString, "Short string in list should not be wrapped")
+	_, isLongString = list[1].(LongString)
+	assert.True(t, isLongString, "Long string in list should be wrapped")
+}
+
+// TestWrapLongStrings_ZeroMaxLength tests that zero maxLength returns data unchanged.
+func TestWrapLongStrings_ZeroMaxLength(t *testing.T) {
+	data := map[string]any{
+		"key": "This is a string that would normally be wrapped",
+	}
+
+	result := WrapLongStrings(data, 0)
+	resultMap := result.(map[string]any)
+
+	_, isLongString := resultMap["key"].(LongString)
+	assert.False(t, isLongString, "With maxLength=0, no wrapping should occur")
+}
+
+// TestWrapLongStrings_MultilineString tests that multiline strings are not wrapped.
+func TestWrapLongStrings_MultilineString(t *testing.T) {
+	multilineString := "Line 1\nLine 2\nLine 3"
+	data := map[string]any{
+		"multiline": multilineString,
+	}
+
+	result := WrapLongStrings(data, 10)
+	resultMap := result.(map[string]any)
+
+	// Multiline strings should not be wrapped even if long.
+	_, isLongString := resultMap["multiline"].(LongString)
+	assert.False(t, isLongString, "Multiline strings should not be wrapped")
+}
+
+// TestLongString_MarshalYAML tests LongString YAML marshaling.
+func TestLongString_MarshalYAML(t *testing.T) {
+	ls := LongString("This is a long string that will be marshaled as a folded scalar")
+
+	node, err := ls.MarshalYAML()
+	require.NoError(t, err)
+
+	// The result should be a yaml.Node with FoldedStyle.
+	require.NotNil(t, node)
 }

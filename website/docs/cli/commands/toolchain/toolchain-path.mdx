@@ -1,0 +1,211 @@
+---
+title: atmos toolchain path
+sidebar_label: path
+sidebar_class_name: command
+id: path
+description: Generate PATH environment variable entries for toolchain tools.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Generate the PATH environment variable for your toolchain tools, enabling seamless integration with shell environments and CI/CD pipelines. This ensures your components and workflows can locate the correct tool versions.
+</Intro>
+
+<Screengrab title="atmos toolchain path --help" slug="atmos-toolchain-path--help" />
+
+## Usage
+
+Execute the `atmos toolchain path` command like this:
+
+```shell
+atmos toolchain path
+```
+
+## Examples
+
+### Print PATH Entries
+
+```shell
+atmos toolchain path
+```
+
+Example output:
+```
+/home/user/.tools/bin/hashicorp/terraform/1.9.8
+/home/user/.tools/bin/opentofu/opentofu/1.10.3
+/home/user/.tools/bin/kubernetes-sigs/kubectl/1.28.0
+```
+
+### Print with Relative Paths
+
+```shell
+atmos toolchain path --relative
+```
+
+Example output:
+```
+.tools/bin/hashicorp/terraform/1.9.8
+.tools/bin/opentofu/opentofu/1.10.3
+.tools/bin/kubernetes-sigs/kubectl/1.28.0
+```
+
+### Print as Export Statement
+
+```shell
+atmos toolchain path --export
+```
+
+Example output:
+```
+export PATH="/home/user/.tools/bin/hashicorp/terraform/1.9.8:/home/user/.tools/bin/opentofu/opentofu/1.10.3:$PATH"
+```
+
+### Print as JSON
+
+```shell
+atmos toolchain path --json
+```
+
+Example output:
+```json
+{
+  "paths": [
+    "/home/user/.tools/bin/hashicorp/terraform/1.9.8",
+    "/home/user/.tools/bin/opentofu/opentofu/1.10.3",
+    "/home/user/.tools/bin/kubernetes-sigs/kubectl/1.28.0"
+  ]
+}
+```
+
+## Flags
+
+<dl>
+    <dt>`--relative` <em>(optional)</em></dt>
+    <dd>
+        Print paths relative to current directory instead of absolute paths.
+
+        Environment variable: `ATMOS_TOOLCHAIN_RELATIVE`
+    </dd>
+
+    <dt>`--export` <em>(optional)</em></dt>
+    <dd>
+        Print as shell export statement for direct sourcing.
+
+        Environment variable: `ATMOS_TOOLCHAIN_EXPORT`
+    </dd>
+
+    <dt>`--json` <em>(optional)</em></dt>
+    <dd>
+        Print paths as JSON object for programmatic use.
+
+        Environment variable: `ATMOS_TOOLCHAIN_JSON`
+    </dd>
+</dl>
+
+## Use Cases
+
+### Shell Integration
+
+Add toolchain paths to your shell:
+
+```shell
+# Add to PATH in current session
+export PATH="$(atmos toolchain path):$PATH"
+
+# Or use --export flag
+eval "$(atmos toolchain path --export)"
+```
+
+### CI/CD Pipelines
+
+Configure PATH in CI/CD:
+
+```yaml
+# GitHub Actions
+- name: Setup Toolchain PATH
+  run: echo "$(atmos toolchain path)" >> $GITHUB_PATH
+
+# GitLab CI
+before_script:
+  - export PATH="$(atmos toolchain path):$PATH"
+```
+
+### Script Integration
+
+Use paths in scripts:
+
+```bash
+#!/bin/bash
+
+# Get paths as JSON for processing
+paths=$(atmos toolchain path --json)
+
+# Or add to PATH
+export PATH="$(atmos toolchain path):$PATH"
+terraform --version
+```
+
+### Docker Builds
+
+Set PATH in Dockerfiles:
+
+```dockerfile
+RUN echo "$(atmos toolchain path)" >> /etc/paths.d/atmos-toolchain
+```
+
+## Comparison: `path` vs `env`
+
+Both commands help integrate toolchain tools with your environment, but serve different purposes:
+
+| Feature | `path` | `env` |
+|---------|--------|-------|
+| **Purpose** | Raw PATH entries | Shell-specific exports |
+| **Output** | Path directories | Complete shell statements |
+| **Shell formats** | Basic (with `--export`) | Bash, Fish, PowerShell, dotenv, JSON |
+| **Use case** | Scripting, CI/CD | Shell configuration |
+
+### When to Use `path`
+
+- Building PATH manually in scripts
+- CI/CD pipeline configuration
+- JSON output for automation
+- Simple path manipulation
+
+```shell
+# Simple PATH addition
+export PATH="$(atmos toolchain path):$PATH"
+```
+
+### When to Use `env`
+
+- Shell profile integration
+- Multiple shell support (Bash, Fish, PowerShell)
+- Generating dotenv files
+- Detailed JSON with tool metadata
+
+```shell
+# Shell-specific integration
+eval "$(atmos toolchain env)"                    # Bash/Zsh
+atmos toolchain env --format fish | source      # Fish
+Invoke-Expression (atmos toolchain env --format powershell)  # PowerShell
+```
+
+## Notes
+
+- Only installed tools are included in the output
+- Paths are ordered by tool order in `.tool-versions`
+- Use `--relative` for portable paths in version control
+- The output includes the version-specific directory for each tool
+
+## Related Commands
+
+- [`atmos toolchain env`](/cli/commands/toolchain/env) - Export PATH in shell-specific formats
+- [`atmos toolchain which`](/cli/commands/toolchain/which) - Find specific tool binary path
+- [`atmos toolchain exec`](/cli/commands/toolchain/exec) - Execute tools without PATH modification
+
+## Related Documentation
+
+- [Toolchain Overview](/cli/commands/toolchain/usage) - Complete toolchain documentation
+- [Execution Commands](/cli/commands/toolchain/usage#execution-commands) - Tool execution options

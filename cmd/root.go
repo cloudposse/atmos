@@ -28,6 +28,8 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	// Import adapters to register them with the config package.
+	_ "github.com/cloudposse/atmos/pkg/config/adapters"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -45,6 +47,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/utils"
+	pkgversion "github.com/cloudposse/atmos/pkg/version"
 
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
@@ -56,9 +59,12 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/profile"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
+	"github.com/cloudposse/atmos/cmd/terraform/workdir"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
+	toolchainCmd "github.com/cloudposse/atmos/cmd/toolchain"
 	"github.com/cloudposse/atmos/cmd/version"
 	_ "github.com/cloudposse/atmos/cmd/workflow"
+	"github.com/cloudposse/atmos/toolchain"
 )
 
 const (
@@ -91,6 +97,36 @@ var chdirProcessed bool
 // If no chdir flag is found, it returns an empty string.
 func parseChdirFromArgs() string {
 	return parseChdirFromArgsInternal(os.Args)
+}
+
+// parseUseVersionFromArgs manually parses --use-version flag from os.Args.
+// This is needed for commands with DisableFlagParsing=true (terraform, helmfile, packer)
+// where Cobra doesn't parse flags automatically.
+// It recognizes `--use-version=value` and `--use-version value` forms.
+// If no --use-version flag is found, it returns an empty string.
+func parseUseVersionFromArgs() string {
+	return parseUseVersionFromArgsInternal(os.Args)
+}
+
+// parseUseVersionFromArgsInternal manually parses --use-version flag from the provided args.
+// This internal version accepts args as a parameter for testability.
+func parseUseVersionFromArgsInternal(args []string) string {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		// Check for --use-version=value format.
+		if strings.HasPrefix(arg, "--use-version=") {
+			return strings.TrimPrefix(arg, "--use-version=")
+		}
+
+		// Check for --use-version value format (next arg is the value).
+		if arg == "--use-version" {
+			if i+1 < len(args) {
+				return args[i+1]
+			}
+		}
+	}
+	return ""
 }
 
 // parseChdirFromArgsInternal manually parses --chdir or -C flag from the provided args.
@@ -316,6 +352,16 @@ var RootCmd = &cobra.Command{
 			errUtils.SetVerboseFlag(verbose)
 		}
 
+		// Check for conflicting flags: --version and --use-version cannot be used together.
+		if cmd.Flags().Changed("version") && cmd.Flags().Changed("use-version") {
+			conflictErr := errUtils.Build(errUtils.ErrInvalidFlag).
+				WithExplanation("--version and --use-version cannot be used together").
+				WithHint("Use --version to display the current Atmos version").
+				WithHint("Use --use-version to run a command with a specific Atmos version").
+				Err()
+			errUtils.CheckErrorPrintAndExit(conflictErr, "", "")
+		}
+
 		// Determine if the command is a help command or if the help flag is set.
 		isHelpCommand := cmd.Name() == "help"
 		helpFlag := cmd.Flags().Changed("help")
@@ -378,6 +424,30 @@ var RootCmd = &cobra.Command{
 					Err()
 				errUtils.CheckErrorPrintAndExit(enrichedErr, "", "")
 			}
+		}
+
+		// Check for version.use configuration and re-exec with specified version if needed.
+		// This runs after profiles are loaded, so version.use can be set via profiles.
+		// Skip re-exec for help commands and version management commands to avoid loops.
+		if !isHelpRequested && !isVersionManagementCommand(cmd) && err == nil {
+			// Set ATMOS_VERSION_USE env var from --use-version flag if specified.
+			// This allows CheckAndReexec to pick up the flag value.
+			// First try Cobra's parsed flag (works when DisableFlagParsing=false).
+			if cmd.Flags().Changed("use-version") {
+				if useVersion, flagErr := cmd.Flags().GetString("use-version"); flagErr == nil && useVersion != "" {
+					_ = os.Setenv(pkgversion.VersionUseEnvVar, useVersion)
+				}
+			} else {
+				// For commands with DisableFlagParsing=true (terraform, helmfile, packer),
+				// manually parse --use-version from os.Args.
+				if useVersion := parseUseVersionFromArgs(); useVersion != "" {
+					_ = os.Setenv(pkgversion.VersionUseEnvVar, useVersion)
+				}
+			}
+			// CheckAndReexec returns true only on successful syscall.Exec, which replaces
+			// the current process entirely. This means true is never returned in practice
+			// since exec doesn't return. We call it for its side effects.
+			_ = pkgversion.CheckAndReexec(&tmpConfig)
 		}
 
 		// Setup profiler before command execution (but skip for help commands).
@@ -757,7 +827,7 @@ func renderSingleFlag(w io.Writer, f *pflag.Flag, layout flagRenderLayout, style
 	if renderer != nil {
 		rendered, err := renderer.RenderWithoutWordWrap(wrapped)
 		if err == nil {
-			wrapped = strings.TrimSpace(rendered)
+			wrapped = ui.TrimLinesRight(rendered)
 		}
 	}
 
@@ -1228,6 +1298,9 @@ func Execute() error {
 	devcontainer.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
 	backend.SetAtmosConfig(&atmosConfig)
+	toolchainCmd.SetAtmosConfig(&atmosConfig)
+	toolchain.SetAtmosConfig(&atmosConfig)
+	workdir.SetAtmosConfig(&atmosConfig)
 
 	if initErr != nil {
 		// Handle config initialization errors based on command context.
@@ -1465,11 +1538,12 @@ func init() {
 	// This must happen before initCobraConfig() creates Boa styles.
 	setupColorProfileFromEnv()
 
-	// Bind environment variables for GitHub authentication.
-	// ATMOS_GITHUB_TOKEN takes precedence over GITHUB_TOKEN.
-	if err := viper.BindEnv("ATMOS_GITHUB_TOKEN", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN"); err != nil {
-		log.Error("Failed to bind ATMOS_GITHUB_TOKEN environment variable", "error", err)
-	}
+	// Note: GitHub token is now bound via GlobalOptionsBuilder in pkg/flags/global_builder.go.
+	// It supports both ATMOS_GITHUB_TOKEN and GITHUB_TOKEN environment variables,
+	// and can be overridden with the --github-token CLI flag.
+
+	// Note: Toolchain command is now registered via the command registry pattern.
+	// The blank import of cmd/toolchain automatically registers it.
 
 	// Set custom usage template.
 	err := templates.SetCustomUsageFunc(RootCmd)

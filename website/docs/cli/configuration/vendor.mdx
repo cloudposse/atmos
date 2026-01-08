@@ -31,6 +31,13 @@ vendor:
         value: "{{ .version }}"
       - name: Source
         value: "{{ .source }}"
+
+  # Global retry configuration for vendor operations (optional)
+  retry:
+    max_attempts: 3
+    initial_delay: 2s
+    max_delay: 30s
+    backoff_strategy: exponential
 ```
 </File>
 
@@ -69,6 +76,36 @@ vendor:
     - `{{ .version }}` - Version tag
     - `{{ .targets }}` - Target paths
     - `{{ .tags }}` - Associated tags
+  </dd>
+
+  <dt>`retry`</dt>
+  <dd>
+    Global retry configuration for vendor operations. These settings apply to all vendor sources unless overridden at the source level.
+
+    Retry is useful for handling transient network errors, rate limiting, and other temporary failures when downloading from remote repositories.
+
+    <dl>
+      <dt>`retry.max_attempts`</dt>
+      <dd>Maximum number of retry attempts. **Default:** `3`</dd>
+
+      <dt>`retry.initial_delay`</dt>
+      <dd>Initial delay before the first retry. **Default:** `2s`</dd>
+
+      <dt>`retry.max_delay`</dt>
+      <dd>Maximum delay between retries. **Default:** `30s`</dd>
+
+      <dt>`retry.backoff_strategy`</dt>
+      <dd>Strategy for increasing delay between retries. **Values:** `exponential`, `linear`, `constant`. **Default:** `exponential`</dd>
+
+      <dt>`retry.multiplier`</dt>
+      <dd>Multiplier for exponential backoff. **Default:** `2.0`</dd>
+
+      <dt>`retry.random_jitter`</dt>
+      <dd>Random jitter factor (0.0-1.0) to add randomness to delays. **Default:** `0.1`</dd>
+
+      <dt>`retry.max_elapsed_time`</dt>
+      <dd>Maximum total time for all retry attempts. **Default:** `5m`</dd>
+    </dl>
   </dd>
 </dl>
 

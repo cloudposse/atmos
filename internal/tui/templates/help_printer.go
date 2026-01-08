@@ -122,11 +122,8 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	}
 	wrapped = strings.TrimSuffix(wrapped, "\n\n")
 	lines := strings.Split(wrapped, "\n")
-	if len(lines) > 0 {
-		lines = lines[1:]
-	}
 
-	// Check if there are any lines remaining after removing the first line.
+	// Check if there are any lines to print.
 	if len(lines) > 0 {
 		if _, err := fmt.Fprintf(p.out, "%-*s%s\n", descIndent, flagSection, lines[0]); err != nil {
 			return

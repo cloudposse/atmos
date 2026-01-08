@@ -39,6 +39,12 @@
     },
     "workflows": {
       "$ref": "#/definitions/workflows"
+    },
+    "dependencies": {
+      "$ref": "#/definitions/dependencies"
+    },
+    "generate": {
+      "$ref": "#/definitions/generate"
     }
   },
   "additionalProperties": true,
@@ -230,6 +236,12 @@
             },
             "providers": {
               "$ref": "#/definitions/providers"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
             }
           },
           "required": []
@@ -273,6 +285,9 @@
             "component": {
               "$ref": "#/definitions/component"
             },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
             "vars": {
               "$ref": "#/definitions/vars"
             },
@@ -305,6 +320,18 @@
             },
             "hooks": {
               "$ref": "#/definitions/hooks"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
             }
           },
           "required": []
@@ -340,6 +367,9 @@
             },
             "overrides": {
               "$ref": "#/definitions/overrides"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
             }
           },
           "required": []
@@ -383,6 +413,9 @@
             "component": {
               "$ref": "#/definitions/component"
             },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
             "vars": {
               "$ref": "#/definitions/vars"
             },
@@ -397,6 +430,15 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
             }
           },
           "required": []
@@ -432,6 +474,9 @@
             },
             "overrides": {
               "$ref": "#/definitions/overrides"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
             }
           },
           "required": []
@@ -475,6 +520,9 @@
             "component": {
               "$ref": "#/definitions/component"
             },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
             "vars": {
               "$ref": "#/definitions/vars"
             },
@@ -489,6 +537,15 @@
             },
             "command": {
               "$ref": "#/definitions/command"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
             }
           },
           "required": []
@@ -915,6 +972,9 @@
             },
             "providers": {
               "$ref": "#/definitions/providers"
+            },
+            "generate": {
+              "$ref": "#/definitions/generate"
             }
           },
           "required": []
@@ -1215,6 +1275,484 @@
         {
           "type": "object",
           "additionalProperties": true
+        }
+      ]
+    },
+    "generate": {
+      "title": "generate",
+      "description": "Generate section for declarative file generation. Keys are filenames (must be quoted if containing dots), values are either string templates or objects that will be serialized based on file extension (.json, .yaml, .yml, .tf, .hcl).",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "String template processed with Go templates"
+              },
+              {
+                "type": "object",
+                "description": "Object serialized based on file extension",
+                "additionalProperties": true
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "provision": {
+      "title": "provision",
+      "description": "Provision section for component provisioning configuration",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workdir": {
+              "$ref": "#/definitions/provision_workdir"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "provision_workdir": {
+      "title": "provision_workdir",
+      "description": "Workdir provisioner configuration for isolated component execution directories",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Enable isolated working directory for this component"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "source": {
+      "title": "source",
+      "description": "Component source configuration for Just-in-Time (JIT) vendoring. Specifies where to fetch component code from. Supports go-getter compatible URIs.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "string",
+          "description": "Go-getter compatible URI with optional version in query string (e.g., 'github.com/org/repo//path?ref=v1.0.0')"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "type": "string",
+              "description": "Source type hint for go-getter (e.g., 'git', 's3', 'gcs')"
+            },
+            "uri": {
+              "type": "string",
+              "description": "Go-getter compatible URI (e.g., 'github.com/org/repo//path')"
+            },
+            "version": {
+              "type": "string",
+              "description": "Version tag, branch, or commit hash to checkout"
+            },
+            "included_paths": {
+              "type": "array",
+              "description": "Glob patterns for files to include when vendoring",
+              "items": {
+                "type": "string"
+              }
+            },
+            "excluded_paths": {
+              "type": "array",
+              "description": "Glob patterns for files to exclude when vendoring",
+              "items": {
+                "type": "string"
+              }
+            },
+            "retry": {
+              "$ref": "#/definitions/source_retry"
+            }
+          },
+          "required": [
+            "uri"
+          ]
+        }
+      ]
+    },
+    "source_retry": {
+      "title": "source_retry",
+      "description": "Retry configuration for source vendoring operations",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum number of retry attempts"
+            },
+            "initial_delay": {
+              "type": "string",
+              "description": "Initial delay between retries (e.g., '1s', '500ms')"
+            },
+            "max_delay": {
+              "type": "string",
+              "description": "Maximum delay between retries (e.g., '30s', '1m')"
+            },
+            "backoff_strategy": {
+              "type": "string",
+              "enum": [
+                "constant",
+                "linear",
+                "exponential"
+              ],
+              "description": "Strategy for increasing delay between retries"
+            },
+            "multiplier": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Multiplier for exponential/linear backoff"
+            },
+            "random_jitter": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Random jitter factor (0-1) to add to delays"
+            },
+            "max_elapsed_time": {
+              "type": "string",
+              "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "dependencies": {
+      "title": "dependencies",
+      "description": "Dependencies section for declaring tool dependencies. Tools specified here will be automatically installed and made available when the component is provisioned.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tools": {
+              "$ref": "#/definitions/dependencies_tools"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "dependencies_tools": {
+      "title": "dependencies_tools",
+      "description": "Tool dependencies with version specifications. Keys are tool names (e.g., 'terraform', 'kubectl', 'k9s') and values are version strings (e.g., '1.9.8', 'latest').",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "description": "Tool version (e.g., '1.9.8', '0.32.7', 'latest')"
+          }
+        }
+      ]
+    },
+    "component_auth": {
+      "title": "component_auth",
+      "description": "Component-level authentication configuration. Allows overriding or extending global auth providers and identities for specific components.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "providers": {
+              "$ref": "#/definitions/auth_providers"
+            },
+            "identities": {
+              "$ref": "#/definitions/auth_identities"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "auth_providers": {
+      "title": "auth_providers",
+      "description": "Authentication providers configuration. Keys are provider names, values are provider configurations.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[a-zA-Z0-9-_]+$": {
+              "$ref": "#/definitions/auth_provider"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "auth_provider": {
+      "title": "auth_provider",
+      "description": "Authentication provider configuration.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Provider type (e.g., 'aws/iam-identity-center', 'aws/credentials')"
+            },
+            "start_url": {
+              "type": "string",
+              "description": "SSO start URL for AWS IAM Identity Center"
+            },
+            "url": {
+              "type": "string",
+              "description": "Provider URL"
+            },
+            "region": {
+              "type": "string",
+              "description": "AWS region for the provider"
+            },
+            "default": {
+              "type": "boolean",
+              "description": "Whether this is the default provider"
+            },
+            "session": {
+              "$ref": "#/definitions/auth_session"
+            },
+            "console": {
+              "$ref": "#/definitions/auth_console"
+            },
+            "auto_provision_identities": {
+              "type": "boolean",
+              "description": "Whether to auto-provision identities when authenticating with this provider"
+            },
+            "spec": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Provider-specific configuration"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "auth_identities": {
+      "title": "auth_identities",
+      "description": "Authentication identities configuration. Keys are identity names, values are identity configurations.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[a-zA-Z0-9-_]+$": {
+              "$ref": "#/definitions/auth_identity"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "auth_identity": {
+      "title": "auth_identity",
+      "description": "Authentication identity configuration.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "description": "Identity type (e.g., 'aws/permission-set', 'aws/assume-role')"
+            },
+            "default": {
+              "type": "boolean",
+              "description": "Whether this is the default identity"
+            },
+            "provider": {
+              "type": "string",
+              "description": "Provider name for direct provider association"
+            },
+            "via": {
+              "$ref": "#/definitions/auth_identity_via"
+            },
+            "principal": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Principal information (role name, account, etc.)",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Principal name (e.g., permission set name, role name)"
+                },
+                "account": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Account name"
+                    },
+                    "id": {
+                      "type": "string",
+                      "description": "Account ID"
+                    }
+                  }
+                }
+              }
+            },
+            "credentials": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Static credentials configuration"
+            },
+            "alias": {
+              "type": "string",
+              "description": "Alias for the identity"
+            },
+            "env": {
+              "type": "array",
+              "description": "Environment variables to set when using this identity",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key",
+                  "value"
+                ]
+              }
+            },
+            "session": {
+              "$ref": "#/definitions/auth_session"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "auth_identity_via": {
+      "title": "auth_identity_via",
+      "description": "Specifies how an identity connects to a provider or chains from another identity.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "type": "string",
+              "description": "Provider name to authenticate through"
+            },
+            "identity": {
+              "type": "string",
+              "description": "Identity name to chain from (for role chaining)"
+            }
+          }
+        }
+      ]
+    },
+    "auth_session": {
+      "title": "auth_session",
+      "description": "Session configuration for authentication.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "duration": {
+              "type": "string",
+              "description": "Session duration (e.g., '1h', '12h')"
+            }
+          }
+        }
+      ]
+    },
+    "auth_console": {
+      "title": "auth_console",
+      "description": "Web console access configuration.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "session_duration": {
+              "type": "string",
+              "description": "Console session duration (e.g., '12h'). Max: 12h for AWS."
+            }
+          }
         }
       ]
     }

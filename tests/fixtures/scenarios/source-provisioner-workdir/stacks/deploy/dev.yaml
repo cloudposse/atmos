@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: dev
+
+import:
+  # Terraform
+  - catalog/source-only
+  - catalog/source-with-workdir
+  - catalog/local-with-workdir
+  # Helmfile
+  - catalog/helmfile-source-with-workdir
+  # Packer
+  - catalog/packer-source-with-workdir
+
+# Override vars for dev environment
+components:
+  terraform:
+    vpc-remote:
+      vars:
+        environment: "dev-source-only"
+
+    vpc-remote-workdir:
+      vars:
+        environment: "dev-source-workdir"
+
+    mock-workdir:
+      vars:
+        environment: "dev-local-workdir"
+
+  helmfile:
+    nginx-workdir:
+      vars:
+        environment: "dev-helmfile-workdir"
+
+  packer:
+    ami-workdir:
+      vars:
+        environment: "dev-packer-workdir"

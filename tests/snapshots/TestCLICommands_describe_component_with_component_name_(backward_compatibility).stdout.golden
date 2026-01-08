@@ -9,6 +9,7 @@ atmos_cli_config:
       deploy_run_init: true
       init_run_reconfigure: true
       auto_generate_backend_file: false
+      auto_generate_files: false
       command: terraform
       shell:
         prompt: ""
@@ -16,6 +17,7 @@ atmos_cli_config:
         pass_vars: false
       plan:
         skip_planfile: false
+      plugin_cache: true
     helmfile:
       base_path: components/helmfile
       use_eks: true
@@ -462,6 +464,7 @@ deps_all:
   - orgs/cp/tenant1/_defaults
   - orgs/cp/tenant1/dev/us-east-2
 env: {}
+generate: {}
 hooks: {}
 imports:
   - catalog/helmfile/echo-server
@@ -524,6 +527,7 @@ providers:
       namespace: cp
       stage: dev
       tenant: tenant1
+provision: {}
 remote_state_backend:
   acl: bucket-owner-full-control
   bucket: cp-ue2-root-tfstate
@@ -615,6 +619,7 @@ settings:
             url: https://api.ipify.org?format=json
         timeout: 20
       sprig: {}
+source: {}
 sources:
   backend:
     acl:
