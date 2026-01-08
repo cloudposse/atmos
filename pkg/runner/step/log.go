@@ -65,15 +65,10 @@ func (h *LogHandler) buildKeyvals(step *schema.WorkflowStep, vars *Variables) []
 		return nil
 	}
 
-	// Guard against overflow: ensure fieldsLen*2 won't overflow.
-	// On 64-bit systems int max is ~9e18, on 32-bit it's ~2e9.
-	// 500M fields * 2 = 1B which fits safely in 32-bit int.
-	const maxFields = 500_000_000
-	fieldsLen := len(step.Fields)
-	if fieldsLen > maxFields {
-		fieldsLen = maxFields
-	}
-	keyvals := make([]interface{}, 0, fieldsLen*2)
+	// Guard against overflow: compute safe capacity for key-value pairs.
+	// On 32-bit systems int max is ~2B, so cap at 1M which is more than reasonable.
+	const maxCapacity = 1 << 20 // 1M capacity for keyvals slice.
+	keyvals := make([]interface{}, 0, safeKeyvalsCapacity(len(step.Fields), maxCapacity))
 	for key, value := range step.Fields {
 		// Resolve template variables in field values.
 		resolvedValue, err := vars.Resolve(value)
@@ -84,6 +79,18 @@ func (h *LogHandler) buildKeyvals(step *schema.WorkflowStep, vars *Variables) []
 		keyvals = append(keyvals, key, resolvedValue)
 	}
 	return keyvals
+}
+
+// safeKeyvalsCapacity computes a safe capacity for key-value pairs slice.
+// Each field becomes 2 entries (key + value), so we need fieldsLen*2 capacity.
+// Returns min(fieldsLen*2, maxCapacity) without risk of overflow.
+func safeKeyvalsCapacity(fieldsLen, maxCapacity int) int {
+	// If fieldsLen would cause overflow when doubled, use maxCapacity.
+	// maxCapacity/2 is the largest safe input for doubling.
+	if fieldsLen > maxCapacity/2 {
+		return maxCapacity
+	}
+	return fieldsLen * 2
 }
 
 // getLogLevel parses a log level string.
