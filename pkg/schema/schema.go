@@ -93,6 +93,7 @@ type AtmosConfiguration struct {
 	CaseMaps        *casemap.CaseMaps   `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
 	Profiler        profiler.Config     `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
 	TrackProvenance bool                `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
+	Toolchain       Toolchain           `yaml:"toolchain,omitempty" json:"toolchain,omitempty" mapstructure:"toolchain"`
 	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
 	Profiles        ProfilesConfig      `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
 	Metadata        ConfigMetadata      `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
@@ -257,6 +258,29 @@ type EditorConfig struct {
 	DisableTrimTrailingWhitespace bool `yaml:"disable_trim_trailing_whitespace,omitempty" json:"disable_trim_trailing_whitespace,omitempty" mapstructure:"disable_trim_trailing_whitespace"`
 }
 
+// Toolchain configures the built-in CLI toolchain management system for installing and managing external tools.
+type Toolchain struct {
+	InstallPath     string              `yaml:"install_path" json:"install_path" mapstructure:"install_path"`
+	FilePath        string              `yaml:"file_path" json:"file_path" mapstructure:"file_path"`
+	ToolsDir        string              `yaml:"tools_dir" json:"tools_dir" mapstructure:"tools_dir"`
+	VersionsFile    string              `yaml:"versions_file" json:"versions_file" mapstructure:"versions_file"`
+	LockFile        string              `yaml:"lock_file,omitempty" json:"lock_file,omitempty" mapstructure:"lock_file"`
+	UseToolVersions bool                `yaml:"use_tool_versions" json:"use_tool_versions" mapstructure:"use_tool_versions"`
+	UseLockFile     bool                `yaml:"use_lock_file" json:"use_lock_file" mapstructure:"use_lock_file"`
+	Registries      []ToolchainRegistry `yaml:"registries,omitempty" json:"registries,omitempty" mapstructure:"registries"`
+	Aliases         map[string]string   `yaml:"aliases,omitempty" json:"aliases,omitempty" mapstructure:"aliases"`
+}
+
+// ToolchainRegistry defines a registry source for tool metadata.
+type ToolchainRegistry struct {
+	Name     string         `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+	Type     string         `yaml:"type" json:"type" mapstructure:"type"` // aqua, atmos, url
+	Source   string         `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	Ref      string         `yaml:"ref,omitempty" json:"ref,omitempty" mapstructure:"ref"` // Git ref (tag, branch, or commit) to pin registry version.
+	Priority int            `yaml:"priority,omitempty" json:"priority,omitempty" mapstructure:"priority"`
+	Tools    map[string]any `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"` // For inline atmos-type registries
+}
+
 type Terminal struct {
 	MaxWidth           int                `yaml:"max_width" json:"max_width" mapstructure:"max_width"`
 	Pager              string             `yaml:"pager" json:"pager" mapstructure:"pager"`
@@ -386,17 +410,28 @@ type TemplatesSettingsGomplate struct {
 }
 
 type Terraform struct {
-	BasePath                string        `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
-	ApplyAutoApprove        bool          `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
-	AppendUserAgent         string        `yaml:"append_user_agent" json:"append_user_agent" mapstructure:"append_user_agent"`
-	DeployRunInit           bool          `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
-	InitRunReconfigure      bool          `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
-	AutoGenerateBackendFile bool          `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
-	WorkspacesEnabled       *bool         `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
-	Command                 string        `yaml:"command" json:"command" mapstructure:"command"`
-	Shell                   ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
-	Init                    TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
-	Plan                    TerraformPlan `yaml:"plan" json:"plan" mapstructure:"plan"`
+	BasePath                string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
+	AppendUserAgent         string `yaml:"append_user_agent" json:"append_user_agent" mapstructure:"append_user_agent"`
+	DeployRunInit           bool   `yaml:"deploy_run_init" json:"deploy_run_init" mapstructure:"deploy_run_init"`
+	InitRunReconfigure      bool   `yaml:"init_run_reconfigure" json:"init_run_reconfigure" mapstructure:"init_run_reconfigure"`
+	AutoGenerateBackendFile bool   `yaml:"auto_generate_backend_file" json:"auto_generate_backend_file" mapstructure:"auto_generate_backend_file"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// (e.g., .tf, .json, .yaml) during Terraform operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool          `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+	WorkspacesEnabled *bool         `yaml:"workspaces_enabled,omitempty" json:"workspaces_enabled,omitempty" mapstructure:"workspaces_enabled"`
+	Command           string        `yaml:"command" json:"command" mapstructure:"command"`
+	Shell             ShellConfig   `yaml:"shell" json:"shell" mapstructure:"shell"`
+	Init              TerraformInit `yaml:"init" json:"init" mapstructure:"init"`
+	Plan              TerraformPlan `yaml:"plan" json:"plan" mapstructure:"plan"`
+	// PluginCache enables automatic Terraform provider plugin caching.
+	// When true, Atmos sets TF_PLUGIN_CACHE_DIR to XDG cache or PluginCacheDir.
+	// Default: true.
+	PluginCache bool `yaml:"plugin_cache" json:"plugin_cache" mapstructure:"plugin_cache"`
+	// PluginCacheDir is an optional custom path for the plugin cache.
+	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
+	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
 }
 
 type TerraformInit struct {
@@ -705,6 +740,7 @@ type ConfigAndStacksInfo struct {
 	Command                       string
 	SubCommand                    string
 	SubCommand2                   string
+	StackSection                  AtmosSectionMapType
 	ComponentSection              AtmosSectionMapType
 	ComponentVarsSection          AtmosSectionMapType
 	ComponentSettingsSection      AtmosSectionMapType
@@ -890,13 +926,17 @@ type Affected struct {
 }
 
 type BaseComponentConfig struct {
-	BaseComponentVars                      AtmosSectionMapType
-	BaseComponentSettings                  AtmosSectionMapType
-	BaseComponentEnv                       AtmosSectionMapType
-	BaseComponentAuth                      AtmosSectionMapType
-	BaseComponentMetadata                  AtmosSectionMapType
-	BaseComponentProviders                 AtmosSectionMapType
-	BaseComponentHooks                     AtmosSectionMapType
+	BaseComponentVars         AtmosSectionMapType
+	BaseComponentSettings     AtmosSectionMapType
+	BaseComponentEnv          AtmosSectionMapType
+	BaseComponentAuth         AtmosSectionMapType
+	BaseComponentDependencies AtmosSectionMapType
+	BaseComponentMetadata     AtmosSectionMapType
+	BaseComponentProviders    AtmosSectionMapType
+	BaseComponentHooks        AtmosSectionMapType
+	// BaseComponentGenerate holds the generate section configuration from the base component,
+	// defining auxiliary files to be generated for this component.
+	BaseComponentGenerate                  AtmosSectionMapType
 	FinalBaseComponentName                 string
 	BaseComponentCommand                   string
 	BaseComponentBackendType               string

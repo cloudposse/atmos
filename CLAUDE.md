@@ -19,6 +19,18 @@ This repository uses git worktrees for parallel development. When working in a w
 
 **For Task agents:** When searching for files, always use the current working directory (`.`) or relative paths. Never construct absolute paths that might escape the worktree.
 
+## Concurrent Sessions (MANDATORY)
+
+Multiple Claude sessions may be working on the same branch or worktree simultaneously. To avoid destroying other sessions' work:
+
+- **NEVER delete, reset, or discard files you didn't create** - Other sessions may have created them
+- **NEVER run `git reset`, `git checkout --`, or `git clean`** without explicit user approval
+- **ALWAYS ask the user before removing untracked files** - They may be work-in-progress from another session
+- **When you see unfamiliar files**, assume another session created them - ask the user what to do
+- **If pre-commit hooks fail due to files you didn't touch**, ask the user how to proceed rather than trying to fix or remove them
+
+**Why this matters:** The user may have multiple Claude sessions working in parallel on different aspects of a feature. Deleting “unknown” files destroys that work.
+
 ## Essential Commands
 
 ```bash
@@ -315,6 +327,14 @@ ALWAYS build the website after documentation changes: `cd website && npm run bui
 
 ### Git (MANDATORY)
 Don't commit: todos, research, scratch files. Do commit: code, tests, requested docs, schemas. Update `.gitignore` for patterns only.
+
+**NEVER run destructive git commands without explicit user confirmation:**
+- `git reset HEAD` or `git reset --hard` - discards staged/committed changes
+- `git checkout HEAD -- .` or `git checkout -- .` - discards all working changes
+- `git clean -fd` - deletes untracked files
+- `git stash drop` - permanently deletes stashed changes
+
+Always ask first: "This will discard uncommitted changes. Proceed? [y/N]"
 
 ### Test Coverage (MANDATORY)
 80% minimum (CodeCov enforced). All features need tests. `make testacc-coverage` for reports.

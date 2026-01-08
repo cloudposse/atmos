@@ -29,9 +29,10 @@ auth:
   providers:
     azure-dev:
       kind: azure/device-code
-      tenant_id: "12345678-1234-1234-1234-123456789012"
-      subscription_id: "87654321-4321-4321-4321-210987654321"
-      location: "eastus"
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+        location: "eastus"
 
   identities:
     azure-dev-subscription:
@@ -68,9 +69,10 @@ auth:
   providers:
     azure-interactive:
       kind: azure/device-code
-      tenant_id: "YOUR_TENANT_ID"
-      subscription_id: "YOUR_SUBSCRIPTION_ID"
-      location: "eastus"
+      spec:
+        tenant_id: "YOUR_TENANT_ID"
+        subscription_id: "YOUR_SUBSCRIPTION_ID"
+        location: "eastus"
 
   identities:
     azure-dev:
@@ -111,10 +113,11 @@ auth:
   providers:
     azure-oidc:
       kind: azure/oidc
-      tenant_id: "YOUR_TENANT_ID"
-      client_id: "YOUR_APP_CLIENT_ID"
-      subscription_id: "YOUR_SUBSCRIPTION_ID"
-      location: "eastus"
+      spec:
+        tenant_id: "YOUR_TENANT_ID"
+        client_id: "YOUR_APP_CLIENT_ID"
+        subscription_id: "YOUR_SUBSCRIPTION_ID"
+        location: "eastus"
 
   identities:
     azure-ci:
@@ -178,11 +181,12 @@ auth:
   providers:
     azure-service-principal:
       kind: azure/service-principal
-      tenant_id: "YOUR_TENANT_ID"
-      client_id: "YOUR_SERVICE_PRINCIPAL_CLIENT_ID"
-      client_secret: "YOUR_CLIENT_SECRET"  # Store securely!
-      subscription_id: "YOUR_SUBSCRIPTION_ID"
-      location: "eastus"
+      spec:
+        tenant_id: "YOUR_TENANT_ID"
+        client_id: "YOUR_SERVICE_PRINCIPAL_CLIENT_ID"
+        client_secret: "YOUR_CLIENT_SECRET"  # Store securely!
+        subscription_id: "YOUR_SUBSCRIPTION_ID"
+        location: "eastus"
 
   identities:
     azure-automation:
@@ -222,9 +226,10 @@ auth:
   providers:
     azure-main:
       kind: azure/device-code
-      tenant_id: "YOUR_TENANT_ID"
-      subscription_id: "DEV_SUBSCRIPTION_ID"
-      location: "eastus"
+      spec:
+        tenant_id: "YOUR_TENANT_ID"
+        subscription_id: "DEV_SUBSCRIPTION_ID"
+        location: "eastus"
 
   identities:
     azure-dev:
@@ -356,14 +361,16 @@ auth:
   providers:
     azure-dev-interactive:
       kind: azure/device-code
-      tenant_id: "YOUR_TENANT_ID"
-      subscription_id: "DEV_SUBSCRIPTION_ID"
+      spec:
+        tenant_id: "YOUR_TENANT_ID"
+        subscription_id: "DEV_SUBSCRIPTION_ID"
 
     azure-ci:
       kind: azure/oidc
-      tenant_id: "YOUR_TENANT_ID"
-      client_id: "YOUR_APP_CLIENT_ID"
-      subscription_id: "PROD_SUBSCRIPTION_ID"
+      spec:
+        tenant_id: "YOUR_TENANT_ID"
+        client_id: "YOUR_APP_CLIENT_ID"
+        subscription_id: "PROD_SUBSCRIPTION_ID"
 
   identities:
     azure-dev:
@@ -391,8 +398,9 @@ auth:
   providers:
     azure-main:
       kind: azure/device-code
-      tenant_id: "YOUR_TENANT_ID"
-      subscription_id: "YOUR_SUBSCRIPTION_ID"
+      spec:
+        tenant_id: "YOUR_TENANT_ID"
+        subscription_id: "YOUR_SUBSCRIPTION_ID"
 
   identities:
     azure-eastus:

@@ -1,0 +1,205 @@
+package integrations
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// mockIntegration is a test implementation of the Integration interface.
+type mockIntegration struct {
+	kind       string
+	executeErr error
+}
+
+func (m *mockIntegration) Kind() string {
+	return m.kind
+}
+
+func (m *mockIntegration) Execute(ctx context.Context, creds types.ICredentials) error {
+	return m.executeErr
+}
+
+// setupRegistryTest clears the registry for testing and registers cleanup.
+func setupRegistryTest(t *testing.T) {
+	t.Helper()
+
+	registryMu.Lock()
+	originalRegistry := make(map[string]IntegrationFactory)
+	for k, v := range registry {
+		originalRegistry[k] = v
+	}
+	registry = make(map[string]IntegrationFactory)
+	registryMu.Unlock()
+
+	t.Cleanup(func() {
+		registryMu.Lock()
+		registry = originalRegistry
+		registryMu.Unlock()
+	})
+}
+
+func TestRegister(t *testing.T) {
+	setupRegistryTest(t)
+
+	// Register a test factory.
+	testFactory := func(config *IntegrationConfig) (Integration, error) {
+		return &mockIntegration{kind: "test/kind"}, nil
+	}
+
+	Register("test/kind", testFactory)
+
+	registryMu.RLock()
+	_, exists := registry["test/kind"]
+	registryMu.RUnlock()
+
+	assert.True(t, exists, "factory should be registered")
+}
+
+func TestCreate_Success(t *testing.T) {
+	setupRegistryTest(t)
+
+	// Register a test factory.
+	Register("test/kind", func(config *IntegrationConfig) (Integration, error) {
+		return &mockIntegration{kind: "test/kind"}, nil
+	})
+
+	config := &IntegrationConfig{
+		Name: "test-integration",
+		Config: &schema.Integration{
+			Kind: "test/kind",
+		},
+	}
+
+	integration, err := Create(config)
+	require.NoError(t, err)
+	assert.NotNil(t, integration)
+	assert.Equal(t, "test/kind", integration.Kind())
+}
+
+func TestCreate_UnknownKind(t *testing.T) {
+	setupRegistryTest(t)
+
+	config := &IntegrationConfig{
+		Name: "test-integration",
+		Config: &schema.Integration{
+			Kind: "unknown/kind",
+		},
+	}
+
+	_, err := Create(config)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUnknownIntegrationKind)
+}
+
+func TestCreate_FactoryError(t *testing.T) {
+	setupRegistryTest(t)
+
+	// Register a factory that returns an error.
+	Register("error/kind", func(config *IntegrationConfig) (Integration, error) {
+		return nil, errors.New("factory error")
+	})
+
+	config := &IntegrationConfig{
+		Name: "test-integration",
+		Config: &schema.Integration{
+			Kind: "error/kind",
+		},
+	}
+
+	_, err := Create(config)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "factory error")
+}
+
+func TestIntegrationConfig_Fields(t *testing.T) {
+	autoProvision := true
+	config := &IntegrationConfig{
+		Name: "my-integration",
+		Config: &schema.Integration{
+			Kind: "aws/ecr",
+			Via: &schema.IntegrationVia{
+				Identity: "dev-admin",
+			},
+			Spec: &schema.IntegrationSpec{
+				AutoProvision: &autoProvision,
+				Registry: &schema.ECRRegistry{
+					AccountID: "123456789012",
+					Region:    "us-east-1",
+				},
+			},
+		},
+	}
+
+	assert.Equal(t, "my-integration", config.Name)
+	assert.Equal(t, "aws/ecr", config.Config.Kind)
+	assert.Equal(t, "dev-admin", config.Config.Via.Identity)
+	assert.NotNil(t, config.Config.Spec)
+	assert.Equal(t, "123456789012", config.Config.Spec.Registry.AccountID)
+}
+
+func TestListKinds(t *testing.T) {
+	setupRegistryTest(t)
+
+	// Verify empty registry returns empty slice.
+	kinds := ListKinds()
+	assert.Empty(t, kinds)
+
+	// Register some test factories.
+	Register("kind-a", func(config *IntegrationConfig) (Integration, error) {
+		return &mockIntegration{kind: "kind-a"}, nil
+	})
+	Register("kind-b", func(config *IntegrationConfig) (Integration, error) {
+		return &mockIntegration{kind: "kind-b"}, nil
+	})
+	Register("kind-c", func(config *IntegrationConfig) (Integration, error) {
+		return &mockIntegration{kind: "kind-c"}, nil
+	})
+
+	// Verify all kinds are returned.
+	kinds = ListKinds()
+	assert.Len(t, kinds, 3)
+	assert.Contains(t, kinds, "kind-a")
+	assert.Contains(t, kinds, "kind-b")
+	assert.Contains(t, kinds, "kind-c")
+}
+
+func TestIsRegistered(t *testing.T) {
+	setupRegistryTest(t)
+
+	// Verify non-existent kind returns false.
+	assert.False(t, IsRegistered("non-existent"))
+
+	// Register a test factory.
+	Register("my-kind", func(config *IntegrationConfig) (Integration, error) {
+		return &mockIntegration{kind: "my-kind"}, nil
+	})
+
+	// Verify registered kind returns true.
+	assert.True(t, IsRegistered("my-kind"))
+	assert.False(t, IsRegistered("other-kind"))
+}
+
+func TestCreate_NilConfig(t *testing.T) {
+	_, err := Create(nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrIntegrationNotFound)
+}
+
+func TestCreate_NilInnerConfig(t *testing.T) {
+	config := &IntegrationConfig{
+		Name:   "test",
+		Config: nil,
+	}
+
+	_, err := Create(config)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrIntegrationNotFound)
+}

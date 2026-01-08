@@ -119,6 +119,36 @@ html[data-theme='dark'] .slide-subtitle {
   flex: 1;
 }
 
+/* Desktop fullscreen - scale text to fill larger slide area */
+.slide-deck--fullscreen .slide-title {
+  font-size: clamp(2.5rem, 4vw, 4rem);
+}
+
+.slide-deck--fullscreen .slide--title .slide-title {
+  font-size: clamp(3.5rem, 5vw, 5.5rem);
+}
+
+.slide-deck--fullscreen .slide-subtitle {
+  font-size: clamp(1.5rem, 2.5vw, 2.5rem);
+}
+
+.slide-deck--fullscreen .slide--title .slide-subtitle {
+  font-size: clamp(1.75rem, 3vw, 3rem);
+}
+
+.slide-deck--fullscreen .slide-content,
+.slide-deck--fullscreen .slide-list {
+  font-size: clamp(1.25rem, 2vw, 2rem);
+}
+
+.slide-deck--fullscreen .slide-list li {
+  margin-bottom: 1rem;
+}
+
+.slide-deck--fullscreen .slide-code {
+  font-size: clamp(0.9rem, 1.2vw, 1.3rem);
+}
+
 /* Responsive */
 @media screen and (max-width: 996px) {
   .slide-title {
@@ -163,5 +193,90 @@ html[data-theme='dark'] .slide-subtitle {
 
   .slide-code {
     font-size: 0.8rem;
+  }
+}
+
+/* Small Mobile */
+@media screen and (max-width: 480px) {
+  .slide-title {
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .slide--title .slide-title {
+    font-size: 1.5rem;
+  }
+
+  .slide-subtitle {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .slide-content,
+  .slide-list {
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .slide-list {
+    padding-left: 1rem;
+  }
+
+  .slide-list li {
+    margin-bottom: 0.5rem;
+  }
+
+  .slide-code {
+    font-size: 0.7rem;
+  }
+
+  .slide-image img {
+    border-radius: 4px;
+  }
+}
+
+/* Mobile Portrait Fullscreen - use smaller font sizes for narrow viewports */
+@media screen and (max-width: 768px) and (orientation: portrait) {
+  .slide-deck--fullscreen .slide-title {
+    font-size: clamp(1.25rem, 5vw, 1.75rem);
+    margin-bottom: 0.5rem;
+  }
+
+  .slide-deck--fullscreen .slide--title .slide-title {
+    font-size: clamp(1.5rem, 6vw, 2.25rem);
+  }
+
+  .slide-deck--fullscreen .slide-subtitle {
+    font-size: clamp(1rem, 4vw, 1.25rem);
+    margin-bottom: 0.5rem;
+  }
+
+  .slide-deck--fullscreen .slide--title .slide-subtitle {
+    font-size: clamp(1rem, 4.5vw, 1.5rem);
+  }
+
+  .slide-deck--fullscreen .slide-content,
+  .slide-deck--fullscreen .slide-list {
+    font-size: clamp(0.875rem, 3.5vw, 1.1rem);
+    line-height: 1.5;
+  }
+
+  .slide-deck--fullscreen .slide-list li {
+    margin-bottom: 0.5rem;
+  }
+
+  .slide-deck--fullscreen .slide-code {
+    font-size: clamp(0.7rem, 2.5vw, 0.9rem);
+  }
+
+  /* Split layouts in portrait - stack vertically */
+  .slide-deck--fullscreen .slide--split .slide__inner {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .slide-deck--fullscreen .slide--split .slide-image img,
+  .slide-deck--fullscreen .slide--split img {
+    max-height: 30vh;
   }
 }

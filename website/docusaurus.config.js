@@ -13,12 +13,13 @@ const latestReleasePlugin = require('./plugins/fetch-latest-release');
 const rehypeDtIds = require('./plugins/rehype-dt-ids');
 
 const BASE_URL = '';
+const DEPLOYMENT_HOST = process.env.DEPLOYMENT_HOST || 'atmos.tools';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
     title: 'atmos',
     tagline: 'Universal tool for DevOps and Cloud Automation',
-    url: 'https://atmos.tools',
+    url: `https://${DEPLOYMENT_HOST}`,
     baseUrl: `${BASE_URL}/`,
     onBrokenLinks: 'throw',
     favicon: 'img/atmos-logo.png',
@@ -365,6 +366,9 @@ const config = {
                     'cli/*',
                 ],
             },
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'slide-notes-extractor'), {}
         ]
     ],
 

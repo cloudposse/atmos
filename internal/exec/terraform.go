@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -20,6 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/xdg"
 
 	// Import backend provisioner to register S3 provisioner.
 	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
@@ -27,6 +29,8 @@ import (
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	// Import workdir provisioner to register workdir provisioner.
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
+
+	"github.com/cloudposse/atmos/toolchain"
 )
 
 const (
@@ -44,6 +48,40 @@ const (
 	detailedExitCodeFlag      = "-detailed-exitcode"
 	logFieldComponent         = "component"
 )
+
+// resolveAndInstallToolchainDeps resolves and installs toolchain dependencies for a terraform component.
+func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(atmosConfig, "exec.resolveAndInstallToolchainDeps")()
+
+	// Initialize toolchain with atmosConfig so it uses the configured install path.
+	toolchain.SetAtmosConfig(atmosConfig)
+	resolver := dependencies.NewResolver(atmosConfig)
+	deps, err := resolver.ResolveComponentDependencies("terraform", info.StackSection, info.ComponentSection)
+	if err != nil {
+		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+	}
+
+	if len(deps) == 0 {
+		return nil
+	}
+
+	log.Debug("Installing component dependencies", logFieldComponent, info.ComponentFromArg, "stack", info.Stack, "tools", deps)
+	installer := dependencies.NewInstaller(atmosConfig)
+	if err := installer.EnsureTools(deps); err != nil {
+		return fmt.Errorf("failed to install component dependencies: %w", err)
+	}
+
+	// Build PATH with toolchain binaries and add to component environment.
+	// This does NOT modify the global process environment - only the subprocess environment.
+	toolchainPATH, err := dependencies.BuildToolchainPATH(atmosConfig, deps)
+	if err != nil {
+		return fmt.Errorf("failed to build toolchain PATH: %w", err)
+	}
+
+	// Propagate toolchain PATH into environment for subprocess.
+	info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
+	return nil
+}
 
 // ExecuteTerraform executes terraform commands.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
@@ -239,6 +277,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return errUtils.ErrHTTPBackendWorkspaces
 	}
 
+	// Resolve and install component dependencies.
+	if shouldProcess {
+		if err := resolveAndInstallToolchainDeps(&atmosConfig, &info); err != nil {
+			return err
+		}
+	}
+
 	varFile := constructTerraformComponentVarfileName(&info)
 	planFile := constructTerraformComponentPlanfileName(&info)
 
@@ -321,6 +366,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
+	// Generate files from the generate section when auto_generate_files is enabled.
+	err = generateFilesForComponent(&atmosConfig, &info, workingDir)
+	if err != nil {
+		return err
+	}
+
 	err = generateProviderOverrides(&atmosConfig, &info, workingDir)
 	if err != nil {
 		return err
@@ -385,6 +436,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if appendUserAgent != "" {
 		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_APPEND_USER_AGENT=%s", appendUserAgent))
 	}
+
+	// Set TF_PLUGIN_CACHE_DIR for Terraform provider caching.
+	pluginCacheEnvList := configurePluginCache(&atmosConfig)
+	info.ComponentEnvList = append(info.ComponentEnvList, pluginCacheEnvList...)
 
 	// Print ENV vars if they are found in the component's stack config.
 	if len(info.ComponentEnvList) > 0 {
@@ -712,4 +767,79 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	return nil
+}
+
+// configurePluginCache returns environment variables for Terraform plugin caching.
+// It checks if the user has already set TF_PLUGIN_CACHE_DIR (via OS env or global env),
+// and if not, configures automatic caching based on atmosConfig.Components.Terraform.PluginCache.
+func configurePluginCache(atmosConfig *schema.AtmosConfiguration) []string {
+	// Check both OS env and global env (atmos.yaml env: section) for user override.
+	// If user has TF_PLUGIN_CACHE_DIR set to a valid path, do nothing - they manage their own cache.
+	// Invalid values (empty string or "/") are ignored with a warning, and we use our default.
+	if userCacheDir := getValidUserPluginCacheDir(atmosConfig); userCacheDir != "" {
+		log.Debug("TF_PLUGIN_CACHE_DIR already set, skipping automatic plugin cache configuration")
+		return nil
+	}
+
+	if !atmosConfig.Components.Terraform.PluginCache {
+		return nil
+	}
+
+	pluginCacheDir := atmosConfig.Components.Terraform.PluginCacheDir
+
+	// Use XDG cache directory if no custom path configured.
+	if pluginCacheDir == "" {
+		cacheDir, err := xdg.GetXDGCacheDir("terraform/plugins", xdg.DefaultCacheDirPerm)
+		if err != nil {
+			log.Warn("Failed to create plugin cache directory", "error", err)
+			return nil
+		}
+		pluginCacheDir = cacheDir
+	}
+
+	if pluginCacheDir == "" {
+		return nil
+	}
+
+	return []string{
+		fmt.Sprintf("TF_PLUGIN_CACHE_DIR=%s", pluginCacheDir),
+		"TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true",
+	}
+}
+
+// getValidUserPluginCacheDir checks if the user has set a valid TF_PLUGIN_CACHE_DIR.
+// Returns the valid path if set, or empty string if not set or invalid.
+// Invalid values (empty string or "/") are logged as warnings.
+func getValidUserPluginCacheDir(atmosConfig *schema.AtmosConfiguration) string {
+	// Check OS environment first.
+	if osEnvDir, inOsEnv := os.LookupEnv("TF_PLUGIN_CACHE_DIR"); inOsEnv {
+		if isValidPluginCacheDir(osEnvDir, "environment variable") {
+			return osEnvDir
+		}
+		return ""
+	}
+
+	// Check global env section in atmos.yaml.
+	if globalEnvDir, inGlobalEnv := atmosConfig.Env["TF_PLUGIN_CACHE_DIR"]; inGlobalEnv {
+		if isValidPluginCacheDir(globalEnvDir, "atmos.yaml env section") {
+			return globalEnvDir
+		}
+		return ""
+	}
+
+	return ""
+}
+
+// isValidPluginCacheDir checks if a plugin cache directory path is valid.
+// Invalid paths (empty string or "/") are logged as warnings and return false.
+func isValidPluginCacheDir(path, source string) bool {
+	if path == "" {
+		log.Warn("TF_PLUGIN_CACHE_DIR is empty, ignoring and using Atmos default", "source", source)
+		return false
+	}
+	if path == "/" {
+		log.Warn("TF_PLUGIN_CACHE_DIR is set to root '/', ignoring and using Atmos default", "source", source)
+		return false
+	}
+	return true
 }

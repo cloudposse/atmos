@@ -1262,8 +1262,10 @@ func processBaseComponentConfigInternal(
 	var baseComponentSettings map[string]any
 	var baseComponentEnv map[string]any
 	var baseComponentAuth map[string]any
+	var baseComponentDependencies map[string]any
 	var baseComponentProviders map[string]any
 	var baseComponentHooks map[string]any
+	var baseComponentGenerate map[string]any
 	var baseComponentCommand string
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[string]any
@@ -1387,6 +1389,13 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		if baseComponentDependenciesSection, baseComponentDependenciesSectionExist := baseComponentMap[cfg.DependenciesSectionName]; baseComponentDependenciesSectionExist {
+			baseComponentDependencies, ok = baseComponentDependenciesSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: '%s.dependencies' in the stack '%s'", errUtils.ErrInvalidComponentDependencies, baseComponent, stack)
+			}
+		}
+
 		if baseComponentProvidersSection, baseComponentProvidersSectionExist := baseComponentMap[cfg.ProvidersSectionName]; baseComponentProvidersSectionExist {
 			baseComponentProviders, ok = baseComponentProvidersSection.(map[string]any)
 			if !ok {
@@ -1398,6 +1407,13 @@ func processBaseComponentConfigInternal(
 			baseComponentHooks, ok = baseComponentHooksSection.(map[string]any)
 			if !ok {
 				return fmt.Errorf("%w '%s.hooks' in the stack '%s'", errUtils.ErrInvalidComponentHooks, baseComponent, stack)
+			}
+		}
+
+		if baseComponentGenerateSection, baseComponentGenerateSectionExist := baseComponentMap[cfg.GenerateSectionName]; baseComponentGenerateSectionExist {
+			baseComponentGenerate, ok = baseComponentGenerateSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.generate' in the stack '%s'", errUtils.ErrInvalidComponentGenerate, baseComponent, stack)
 			}
 		}
 
@@ -1481,6 +1497,13 @@ func processBaseComponentConfigInternal(
 		}
 		baseComponentConfig.BaseComponentAuth = merged
 
+		// Base component `dependencies`
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentDependencies, baseComponentDependencies})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentDependencies = merged
+
 		// Base component `metadata` (when metadata inheritance is enabled).
 		// Merge all metadata fields except 'inherits' and 'type'.
 		// - 'inherits' is the meta-property defining inheritance, not inherited itself.
@@ -1518,6 +1541,13 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentHooks = merged
+
+		// Base component `generate`
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentGenerate, baseComponentGenerate})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentGenerate = merged
 
 		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand
