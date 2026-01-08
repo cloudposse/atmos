@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: prod
+  namespace: test
+  environment: production
+
+components:
+  terraform:
+    # VPC component for production
+    vpc:
+      metadata:
+        component: vpc
+      vars:
+        vpc_name: "prod-vpc"
+        cidr_block: "10.0.0.0/16"
+        environment: "production"
+        region: "us-west-2"
+      generate:
+        # HCL file generation - locals block
+        locals.tf:
+          locals:
+            environment: "{{ .vars.environment }}"
+            vpc_name: "{{ .vars.vpc_name }}"
+            atmos_component: "{{ .atmos_component }}"
+            atmos_stack: "{{ .atmos_stack }}"
+        # JSON metadata
+        metadata.json:
+          component: "{{ .component }}"
+          stack: "{{ .atmos_stack }}"
+          namespace: "{{ .namespace }}"
+          environment: "{{ .vars.environment }}"
+        # Production-specific README
+        README.md: |
+          # VPC Component - Production
+
+          Environment: {{ .vars.environment }}
+          Stack: {{ .atmos_stack }}
+          Region: {{ .vars.region }}
+          CIDR: {{ .vars.cidr_block }}
+
+          ## Security Notice
+          This is a production VPC. Handle with care.
+
+    # S3 bucket for production logs
+    s3-logs:
+      metadata:
+        component: s3-bucket
+      vars:
+        bucket_name: "prod-logs-bucket"
+        environment: "production"
+        versioning_enabled: true
+      generate:
+        # YAML file generation
+        config.yaml:
+          bucket:
+            name: "{{ .vars.bucket_name }}"
+            environment: "{{ .vars.environment }}"
+          tags:
+            ManagedBy: "atmos"
+            Component: "{{ .component }}"

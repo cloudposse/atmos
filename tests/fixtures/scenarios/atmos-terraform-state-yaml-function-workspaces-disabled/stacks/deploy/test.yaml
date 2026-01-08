@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Test fixture for !terraform.state with workspaces disabled.
+# When workspaces_enabled: false, the workspace is "default" and Terraform
+# stores state directly at terraform.tfstate (not terraform.tfstate.d/default/terraform.tfstate).
+# See: https://github.com/cloudposse/atmos/issues/1920
+
+vars:
+  stage: test
+
+# Using local backend for testing.
+# When workspaces are disabled:
+# - Local backend: state at terraform.tfstate (not terraform.tfstate.d/default/terraform.tfstate)
+# - S3 backend: state at <key> (not <workspace_key_prefix>/default/<key>)
+
+components:
+  terraform:
+    component-1:
+      metadata:
+        component: mock
+      settings:
+        config:
+          a: component-1-a
+          b: component-1-b
+          c: component-1-c
+      vars:
+        foo: "{{ .settings.config.a }}"
+        bar: "{{ .settings.config.b }}"
+        baz: "{{ .settings.config.c }}"
+
+    component-2:
+      metadata:
+        component: mock
+      vars:
+        # When workspaces are disabled, !terraform.state should look for state
+        # at the key path (terraform.tfstate), not at components/default/terraform.tfstate.
+        foo: !terraform.state component-1 foo
+        bar: !terraform.state component-1 bar
+        baz: !terraform.state component-1 {{ .stack }} baz

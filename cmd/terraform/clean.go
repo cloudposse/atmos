@@ -8,6 +8,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfclean "github.com/cloudposse/atmos/pkg/terraform/clean"
 )
 
 // cleanParser handles flag parsing for clean command.
@@ -52,6 +53,7 @@ Common use cases:
 		everything := v.GetBool("everything")
 		skipLockFile := v.GetBool("skip-lock-file")
 		dryRun := v.GetBool("dry-run")
+		cache := v.GetBool("cache")
 
 		// Prompt for component/stack if neither is provided.
 		if component == "" && stack == "" {
@@ -71,15 +73,28 @@ Common use cases:
 			return err
 		}
 
-		opts := &e.CleanOptions{
+		opts := &tfclean.Options{
 			Component:    component,
 			Stack:        stack,
 			Force:        force,
 			Everything:   everything,
 			SkipLockFile: skipLockFile,
 			DryRun:       dryRun,
+			Cache:        cache,
 		}
-		return e.ExecuteClean(opts, &atmosConfig)
+
+		// Create adapter with exec functions and execute clean.
+		adapter := tfclean.NewExecAdapter(
+			e.ProcessStacksForClean,
+			e.ExecuteDescribeStacksForClean,
+			e.GetGenerateFilenamesForComponent,
+			e.CollectComponentsDirectoryObjectsForClean,
+			e.ConstructTerraformComponentVarfileNameForClean,
+			e.ConstructTerraformComponentPlanfileNameForClean,
+			e.GetAllStacksComponentsPathsForClean,
+		)
+		service := tfclean.NewService(adapter)
+		return service.Execute(opts, &atmosConfig)
 	},
 }
 
@@ -89,9 +104,11 @@ func init() {
 		flags.WithBoolFlag("everything", "", false, "If set atmos will also delete the Terraform state files and directories for the component"),
 		flags.WithBoolFlag("force", "f", false, "Forcefully delete Terraform state files and directories without interaction"),
 		flags.WithBoolFlag("skip-lock-file", "", false, "Skip deleting the `.terraform.lock.hcl` file"),
+		flags.WithBoolFlag("cache", "", false, "Clean Terraform plugin cache directory"),
 		flags.WithEnvVars("everything", "ATMOS_TERRAFORM_CLEAN_EVERYTHING"),
 		flags.WithEnvVars("force", "ATMOS_TERRAFORM_CLEAN_FORCE"),
 		flags.WithEnvVars("skip-lock-file", "ATMOS_TERRAFORM_CLEAN_SKIP_LOCK_FILE"),
+		flags.WithEnvVars("cache", "ATMOS_TERRAFORM_CLEAN_CACHE"),
 	)
 
 	// Register flags with the command as persistent flags.
