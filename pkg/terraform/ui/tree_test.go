@@ -166,7 +166,7 @@ func TestRenderChildren_SingleNode(t *testing.T) {
 
 	result := b.String()
 	assert.Contains(t, result, "aws_vpc.main")
-	assert.Contains(t, result, "└─") // Last (and only) child uses └─
+	assert.Contains(t, result, "└─") // Last (and only) child uses └─.
 }
 
 func TestRenderChildren_MultipleNodes(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -36,8 +37,8 @@ type InitModel struct {
 	startTime  time.Time
 	component  string
 	stack      string
-	subCommand string // "init" or "workspace"
-	workspace  string // Workspace name (for workspace commands)
+	subCommand string // "init" or "workspace".
+	workspace  string // Workspace name (for workspace commands).
 	clock      Clock  // Clock for time operations (injectable for testing).
 }
 
@@ -64,14 +65,22 @@ type initDoneMsg struct {
 
 // NewInitModel creates a new init/workspace streaming model.
 func NewInitModel(component, stack, subCommand, workspace string, reader io.Reader, opts ...InitModelOption) *InitModel {
+	defer perf.Track(nil, "terraform.ui.NewInitModel")()
+
 	// Use MiniDot spinner for init/workspace (more subtle, different from plan/apply).
 	s := spinner.New()
 	s.Spinner = spinner.MiniDot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
 
+	// Create scanner with increased buffer size for large terraform init output.
+	scanner := bufio.NewScanner(reader)
+	const maxScanTokenSize = 1024 * 1024 // 1MB
+	buf := make([]byte, maxScanTokenSize)
+	scanner.Buffer(buf, maxScanTokenSize)
+
 	m := &InitModel{
 		spinner:    s,
-		scanner:    bufio.NewScanner(reader),
+		scanner:    scanner,
 		lines:      make([]string, 0),
 		component:  component,
 		stack:      stack,

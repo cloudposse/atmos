@@ -7,11 +7,17 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 )
 
 // ConfirmApply prompts the user to confirm applying changes.
 func ConfirmApply() (bool, error) {
+	// Check TTY availability before showing prompt.
+	if !term.IsTTYSupportForStdout() {
+		return false, errUtils.ErrStreamingNotSupported
+	}
+
 	var confirm bool
 	theme := uiutils.NewAtmosHuhTheme()
 
@@ -34,6 +40,11 @@ func ConfirmApply() (bool, error) {
 
 // ConfirmDestroy prompts the user to confirm destroying resources.
 func ConfirmDestroy() (bool, error) {
+	// Check TTY availability before showing prompt.
+	if !term.IsTTYSupportForStdout() {
+		return false, errUtils.ErrStreamingNotSupported
+	}
+
 	var confirm bool
 	theme := uiutils.NewAtmosHuhTheme()
 

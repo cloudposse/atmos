@@ -64,6 +64,7 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 	cmd := exec.CommandContext(ctx, opts.Command, args...)
 	cmd.Dir = opts.WorkingDir
 	cmd.Env = opts.Env
+	cmd.Stdin = os.Stdin // Allow interactive terraform commands.
 
 	// Get stdout pipe for streaming.
 	stdout, err := cmd.StdoutPipe()
@@ -274,6 +275,7 @@ func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
 	cmd := exec.CommandContext(ctx, opts.Command, opts.Args...)
 	cmd.Dir = opts.WorkingDir
 	cmd.Env = opts.Env
+	cmd.Stdin = os.Stdin // Allow interactive terraform commands.
 
 	// Use a pipe to merge stdout and stderr into a single stream.
 	// This ensures all terraform output is captured by the TUI.

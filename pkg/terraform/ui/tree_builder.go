@@ -10,6 +10,7 @@ import (
 
 	tfjson "github.com/hashicorp/terraform-json"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -22,12 +23,12 @@ func BuildDependencyTree(ctx context.Context, planfilePath, terraformPath, worki
 	cmd.Dir = workingDir
 	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("failed to run terraform show: %w", err)
+		return nil, fmt.Errorf("%w: terraform show: %w", errUtils.ErrCommandStart, err)
 	}
 
 	var plan tfjson.Plan
 	if err := json.Unmarshal(output, &plan); err != nil {
-		return nil, fmt.Errorf("failed to parse plan JSON: %w", err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
 	}
 
 	return buildTreeFromPlan(&plan, stack, component)
@@ -63,10 +64,23 @@ func buildTreeFromPlan(plan *tfjson.Plan, stack, component string) (*DependencyT
 			continue
 		}
 
+		// Determine if this is a module node vs a resource within a module.
+		// A module node has address like "module.vpc", while a resource within a module
+		// has address like "module.vpc.aws_subnet.main" (contains a resource type/name after module path).
+		isModule := false
+		if strings.HasPrefix(rc.Address, "module.") {
+			// Check if this is just a module reference (module.name) vs a resource (module.name.type.name).
+			// Count the parts: module.name = 2 parts (is module), module.name.type.name = 4+ parts (is resource).
+			parts := strings.Split(rc.Address, ".")
+			// A pure module reference has exactly 2 parts: ["module", "name"].
+			// Anything with more parts is a resource within a module.
+			isModule = len(parts) == 2
+		}
+
 		node := &TreeNode{
 			Address:  rc.Address,
 			Action:   action,
-			IsModule: strings.HasPrefix(rc.Address, "module."),
+			IsModule: isModule,
 			Changes:  extractAttributeChanges(rc),
 		}
 		tree.nodes[rc.Address] = node
@@ -191,19 +205,42 @@ func extractReferences(expr *tfjson.Expression, prefix string) []string {
 		// Handle module-qualified references (e.g., module.vpc.aws_subnet.main.id).
 		if strings.HasPrefix(ref, "module.") {
 			parts := strings.Split(ref, ".")
-			// Minimum for a module reference: module.name (2 parts).
-			// For a resource within a module: module.name.resource_type.resource_name (4+ parts).
-			if len(parts) >= 4 {
-				// Extract the module path and resource address.
-				// e.g., module.vpc.aws_subnet.main.id -> module path is module.vpc,
-				// resource is aws_subnet.main.
-				modulePath := parts[0] + "." + parts[1]
-				resourceType := parts[2]
-				resourceName := parts[3]
-				ref = modulePath + "." + resourceType + "." + resourceName
-			} else if len(parts) >= 2 {
-				// Just a module reference (module.name) - keep as-is.
-				ref = parts[0] + "." + parts[1]
+
+			// Count how many "module" keywords we have.
+			// For nested modules (e.g., module.network.module.vpc.aws_subnet.main),
+			// we want to extract only the module path (module.network.module.vpc),
+			// not the resource within it.
+			// But for single modules (module.vpc.aws_subnet.main), we want the full resource address.
+			moduleCount := 0
+			lastModuleIdx := -1
+			for i := 0; i < len(parts); i++ {
+				if parts[i] == "module" {
+					moduleCount++
+					lastModuleIdx = i
+				}
+			}
+
+			if moduleCount > 1 {
+				// Nested module - extract only up to the last module.name.
+				if lastModuleIdx >= 0 && lastModuleIdx+1 < len(parts) {
+					ref = strings.Join(parts[:lastModuleIdx+2], ".")
+				}
+			} else {
+				// Single module - extract module.name.resource_type.resource_name.
+				// Minimum for a module reference: module.name (2 parts).
+				// For a resource within a module: module.name.resource_type.resource_name (4+ parts).
+				if len(parts) >= 4 {
+					// Extract the module path and resource address.
+					// e.g., module.vpc.aws_subnet.main.id -> module path is module.vpc,
+					// resource is aws_subnet.main.
+					modulePath := parts[0] + "." + parts[1]
+					resourceType := parts[2]
+					resourceName := parts[3]
+					ref = modulePath + "." + resourceType + "." + resourceName
+				} else if len(parts) >= 2 {
+					// Just a module reference (module.name) - keep as-is.
+					ref = parts[0] + "." + parts[1]
+				}
 			}
 		} else {
 			// Non-module reference - normalize to resource address (remove attribute path).

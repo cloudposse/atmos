@@ -10,6 +10,7 @@ import (
 	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -116,7 +117,7 @@ func getContrastTextColor(bgColor string) string {
 
 	// Default to white if parsing fails.
 	if len(hexColor) != 6 {
-		return "#FFFFFF"
+		return theme.ColorWhite
 	}
 
 	// Parse RGB components.
@@ -125,7 +126,7 @@ func getContrastTextColor(bgColor string) string {
 	b, err3 := parseHexComponent(hexColor[4:6])
 
 	if err1 != nil || err2 != nil || err3 != nil {
-		return "#FFFFFF" // Default to white on parse error.
+		return theme.ColorWhite // Default to white on parse error.
 	}
 
 	// Convert to 0-1 range and apply gamma correction.
@@ -145,10 +146,11 @@ func getContrastTextColor(bgColor string) string {
 	luminance := 0.2126*rLinear + 0.7152*gLinear + 0.0722*bLinear
 
 	// Use black text for light backgrounds (luminance > 0.5), white for dark backgrounds.
+	const blackText = "#000000"
 	if luminance > 0.5 {
-		return "#000000" // Black text for light backgrounds.
+		return blackText // Black text for light backgrounds.
 	}
-	return "#FFFFFF" // White text for dark backgrounds.
+	return theme.ColorWhite // White text for dark backgrounds.
 }
 
 // parseHexComponent parses a 2-character hex string to int64.

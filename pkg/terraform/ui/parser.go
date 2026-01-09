@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Parser reads and parses Terraform JSON streaming output.
@@ -16,6 +18,8 @@ type Parser struct {
 
 // NewParser creates a new parser from an io.Reader.
 func NewParser(r io.Reader) *Parser {
+	defer perf.Track(nil, "terraform.ui.NewParser")()
+
 	scanner := bufio.NewScanner(r)
 	// Increase buffer size for large JSON lines.
 	const maxScanTokenSize = 1024 * 1024 // 1MB
@@ -36,6 +40,8 @@ type ParseResult struct {
 // Next reads and parses the next JSON message.
 // Returns io.EOF when there are no more messages.
 func (p *Parser) Next() (*ParseResult, error) {
+	defer perf.Track(nil, "terraform.ui.Parser.Next")()
+
 	// Use iterative approach to skip empty lines, avoiding potential stack overflow.
 	for {
 		if !p.scanner.Scan() {
@@ -46,8 +52,8 @@ func (p *Parser) Next() (*ParseResult, error) {
 		}
 
 		line := p.scanner.Bytes()
-		if len(line) == 0 {
-			// Skip empty lines and continue to the next iteration.
+		// Skip empty lines and whitespace-only lines.
+		if len(line) == 0 || len(strings.TrimSpace(string(line))) == 0 {
 			continue
 		}
 

@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -71,6 +72,8 @@ type tickMsg time.Time
 
 // NewModel creates a new streaming model.
 func NewModel(component, stack, command string, reader io.Reader, opts ...ModelOption) *Model {
+	defer perf.Track(nil, "terraform.ui.NewModel")()
+
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))

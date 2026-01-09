@@ -157,7 +157,9 @@ func TestBuildTreeFromPlan_ModulePrefix(t *testing.T) {
 	tree, err := buildTreeFromPlan(plan, "dev", "vpc")
 	require.NoError(t, err)
 	require.Len(t, tree.Root.Children, 1)
-	assert.True(t, tree.Root.Children[0].IsModule)
+	// module.vpc.aws_subnet.main is a resource within a module, not a module itself.
+	assert.False(t, tree.Root.Children[0].IsModule)
+	assert.Equal(t, "module.vpc.aws_subnet.main", tree.Root.Children[0].Address)
 }
 
 func TestBuildTreeFromPlan_SortedByAddress(t *testing.T) {
@@ -256,13 +258,13 @@ func TestExtractDependencies_WithPrefix(t *testing.T) {
 func TestExtractDependencies_NestedModules(t *testing.T) {
 	module := &tfjson.ConfigModule{
 		Resources: []*tfjson.ConfigResource{
-			{Address: "aws_vpc.main"},
+			{Address: "aws_vpc.main", DependsOn: []string{"data.aws_availability_zones.available"}},
 		},
 		ModuleCalls: map[string]*tfjson.ModuleCall{
 			"subnet": {
 				Module: &tfjson.ConfigModule{
 					Resources: []*tfjson.ConfigResource{
-						{Address: "aws_subnet.private"},
+						{Address: "aws_subnet.private", DependsOn: []string{"var.vpc_id"}},
 					},
 				},
 			},
@@ -273,8 +275,13 @@ func TestExtractDependencies_NestedModules(t *testing.T) {
 	extractDependencies(module, "", dependsOn)
 
 	// Both root and nested module resources should be processed.
-	// The nested resource should have module prefix.
-	// Note: Dependencies aren't set in this test, but the function should handle nested modules.
+	// Root resource should have its dependencies.
+	require.Contains(t, dependsOn, "aws_vpc.main", "root resource should be processed")
+	assert.Equal(t, []string{"data.aws_availability_zones.available"}, dependsOn["aws_vpc.main"])
+
+	// The nested module resource should be prefixed with module name.
+	require.Contains(t, dependsOn, "module.subnet.aws_subnet.private", "nested module resource should be prefixed")
+	assert.Equal(t, []string{"var.vpc_id"}, dependsOn["module.subnet.aws_subnet.private"])
 }
 
 func TestExtractDependencies_NilModule(t *testing.T) {
