@@ -191,8 +191,11 @@ export const roadmapConfig = {
         { label: 'Configuration provenance tracking', status: 'shipped', quarter: 'q4-2025', changelog: 'provenance-tracking', version: 'v1.195.0', description: 'Track where every configuration value comes from—which file, which import, which override.', benefits: 'Debug complex inheritance chains. Understand exactly how configuration was assembled.' },
         { label: 'Global environment variables', status: 'shipped', quarter: 'q4-2025', changelog: 'global-env-section', version: 'v1.202.0', description: 'Define environment variables globally in atmos.yaml that apply to all commands.', benefits: 'Set common environment variables once. No repetition across components.' },
         { label: 'Metadata inheritance', status: 'shipped', quarter: 'q4-2025', changelog: 'metadata-inheritance', version: 'v1.201.0', description: 'Metadata section now supports full inheritance from base stacks.', benefits: 'Define metadata patterns once and inherit everywhere. Consistent naming across stacks.' },
+        { label: 'Intelligent terraform init detection', status: 'planned', quarter: 'q1-2026', issue: 620, prd: 'terraform-auto-init', description: 'Automatically detect when terraform init is needed instead of running it every time. Combines file-based pre-checks with error-based retry for reliable, fast execution.', category: 'featured', priority: 'high', benefits: 'Faster terraform commands—init only runs when needed. 50%+ reduction in init runs for typical workflows. Automatic recovery when init is required.' },
       ],
-      issues: [],
+      issues: [
+        { number: 620, title: 'Intelligently don\'t init on every apply/shell' },
+      ],
       prs: [
         { number: 1908, title: 'Add Terraform streaming UI with real-time visualization' },
         { number: 1891, title: 'Native CI Integration with Summary Templates and Terraform Command Registry' },
