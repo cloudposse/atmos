@@ -14,13 +14,14 @@ import (
 
 // ManifestScene represents a scene in the exported manifest.
 type ManifestScene struct {
-	Name        string                    `json:"name"`
-	Description string                    `json:"description,omitempty"`
-	Tags        []string                  `json:"tags,omitempty"`     // Scene tags (e.g., "featured")
-	Category    string                    `json:"category,omitempty"` // Gallery category ID
-	Title       string                    `json:"title,omitempty"`    // Display title
-	Order       int                       `json:"order,omitempty"`    // Sort order within category
-	Formats     map[string]ManifestFormat `json:"formats"`
+	Name          string                    `json:"name"`
+	Description   string                    `json:"description,omitempty"`
+	Tags          []string                  `json:"tags,omitempty"`           // Scene tags (e.g., "featured")
+	Category      string                    `json:"category,omitempty"`       // Gallery category ID
+	Title         string                    `json:"title,omitempty"`          // Display title
+	Order         int                       `json:"order,omitempty"`          // Sort order within category
+	FeaturedOrder int                       `json:"featured_order,omitempty"` // Sort order within featured demos
+	Formats       map[string]ManifestFormat `json:"formats"`
 }
 
 // ManifestFormat represents format-specific metadata for a scene output.
@@ -47,11 +48,11 @@ type Manifest struct {
 // runExportManifest is the shared export logic that can be called from both the export command
 // and the render command (when --export-manifest flag is used).
 func runExportManifest(demosDir string) error {
-	return runExportManifestWithOptions(demosDir, "", false)
+	return runExportManifestWithOptions(demosDir, "", false, false)
 }
 
 // runExportManifestWithOptions exports the manifest with configurable options.
-func runExportManifestWithOptions(demosDir string, output string, pretty bool) error {
+func runExportManifestWithOptions(demosDir string, output string, pretty bool, includeDrafts bool) error {
 	// Load cache metadata.
 	cacheDir := filepath.Join(demosDir, ".cache")
 	cache, err := vhsCache.LoadCache(cacheDir)
@@ -80,6 +81,11 @@ func runExportManifestWithOptions(demosDir string, output string, pretty bool) e
 	}
 
 	for _, sc := range scenesList.Scenes {
+		// Skip draft scenes unless --include-drafts is set.
+		if sc.IsDraft() && !includeDrafts {
+			continue
+		}
+
 		sceneHash, exists := cache.Scenes[sc.Name]
 		isPublished := exists && sceneHash.PublicURLs != nil
 
@@ -89,10 +95,11 @@ func runExportManifestWithOptions(demosDir string, output string, pretty bool) e
 		}
 
 		manifestScene := ManifestScene{
-			Name:        sc.Name,
-			Description: sc.Description,
-			Tags:        sc.Tags,
-			Formats:     make(map[string]ManifestFormat),
+			Name:          sc.Name,
+			Description:   sc.Description,
+			Tags:          sc.Tags,
+			FeaturedOrder: sc.FeaturedOrder,
+			Formats:       make(map[string]ManifestFormat),
 		}
 
 		// Add gallery metadata if present.
@@ -186,8 +193,9 @@ func runExportManifestWithOptions(demosDir string, output string, pretty bool) e
 
 func exportManifestCmd() *cobra.Command {
 	var (
-		pretty bool
-		output string
+		pretty        bool
+		output        string
+		includeDrafts bool
 	)
 
 	cmd := &cobra.Command{
@@ -198,6 +206,9 @@ func exportManifestCmd() *cobra.Command {
 Reads cache metadata and scenes configuration to build a JSON manifest
 that includes public URLs, video UIDs, and backend information for each
 rendered demo scene.
+
+By default, draft scenes (status: draft) are excluded from the manifest.
+Use --include-drafts to include them.
 
 By default, writes to website/src/data/manifest.json. Use --output to
 specify a different path, or --output=- to write to stdout.`,
@@ -213,6 +224,9 @@ director export manifest --output=custom.json
 
 # Export with pretty-printing
 director export manifest --pretty
+
+# Include draft scenes in the manifest
+director export manifest --include-drafts
 `,
 		RunE: func(c *cobra.Command, args []string) error {
 			demosDir, err := findDemosDir()
@@ -220,12 +234,13 @@ director export manifest --pretty
 				return err
 			}
 
-			return runExportManifestWithOptions(demosDir, output, pretty)
+			return runExportManifestWithOptions(demosDir, output, pretty, includeDrafts)
 		},
 	}
 
 	cmd.Flags().BoolVar(&pretty, "pretty", false, "Pretty-print JSON output")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file path (default: website/src/data/manifest.json, use - for stdout)")
+	cmd.Flags().BoolVar(&includeDrafts, "include-drafts", false, "Include draft scenes (status: draft) in the manifest")
 
 	return cmd
 }

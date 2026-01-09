@@ -6,3 +6,9 @@ vars:
   tenant: plat
   tags:
     Team: Platform
+
+# Platform team uses OpenTofu for all terraform operations
+terraform:
+  dependencies:
+    tools:
+      opentofu: "1.10.0"

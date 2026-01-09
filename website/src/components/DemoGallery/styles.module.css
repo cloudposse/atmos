@@ -5,6 +5,51 @@
   padding: 2rem 1rem;
 }
 
+/* Featured Section */
+.featuredSection {
+  margin-bottom: 3rem;
+  padding: 2rem;
+  background: linear-gradient(
+    135deg,
+    rgba(var(--ifm-color-primary-rgb), 0.08) 0%,
+    rgba(var(--ifm-color-primary-rgb), 0.02) 100%
+  );
+  border: 1px solid rgba(var(--ifm-color-primary-rgb), 0.2);
+  border-radius: 16px;
+}
+
+[data-theme='dark'] .featuredSection {
+  background: linear-gradient(
+    135deg,
+    rgba(var(--ifm-color-primary-rgb), 0.12) 0%,
+    rgba(var(--ifm-color-primary-rgb), 0.04) 100%
+  );
+  border-color: rgba(var(--ifm-color-primary-rgb), 0.3);
+}
+
+/* Featured Grid - 3 columns for larger cards */
+.featuredGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .featuredGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Featured cards inherit from regular cards but can have additional emphasis */
+.featuredSection .card {
+  border-color: rgba(var(--ifm-color-primary-rgb), 0.2);
+}
+
+.featuredSection .card:hover {
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 12px 24px -8px rgba(var(--ifm-color-primary-rgb), 0.2);
+}
+
 /* Category Filter */
 .categoryFilter {
   display: flex;

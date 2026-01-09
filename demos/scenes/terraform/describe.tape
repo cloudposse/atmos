@@ -19,6 +19,10 @@ Show
 Require atmos
 
 # Scene starts
+Type "# OpenTofu installed automatically via toolchain"
+Enter
+Sleep 1s
+
 Type "# See component configuration with provenance"
 Enter
 Sleep 1s

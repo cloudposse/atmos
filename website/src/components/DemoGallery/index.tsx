@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Stream, StreamPlayerApi } from '@cloudflare/stream-react';
 import { DemoVideo } from '../Video';
-import { demoCategories, getDemoAssetUrls, getManifestData, getDemoById } from '../../data/demos';
+import { demoCategories, getDemoAssetUrls, getManifestData, getDemoById, FEATURED_DEMOS } from '../../data/demos';
 import styles from './styles.module.css';
 
 interface DemoCardProps {
@@ -215,6 +215,21 @@ export default function DemoGallery(): JSX.Element {
 
   return (
     <div className={styles.gallery}>
+      {/* Featured Section */}
+      {FEATURED_DEMOS.length > 0 && !activeCategory && (
+        <section className={styles.featuredSection}>
+          <div className={styles.featuredGrid}>
+            {FEATURED_DEMOS.map((demo) => (
+              <DemoCard
+                key={demo.id}
+                demo={demo}
+                onClick={() => setSelectedDemo(demo)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Category Filter */}
       <div className={styles.categoryFilter}>
         <button

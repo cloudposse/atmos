@@ -18,18 +18,30 @@ type ScenesList struct {
 
 // Scene represents a single demo scene.
 type Scene struct {
-	Name        string            `yaml:"name"`
-	Enabled     bool              `yaml:"enabled"`
-	Description string            `yaml:"description"`
-	Tape        string            `yaml:"tape"`
-	Workdir     string            `yaml:"workdir,omitempty"` // Working directory for VHS (relative to repo root)
-	Requires    []string          `yaml:"requires"`
-	Outputs     []string          `yaml:"outputs"`
-	Audio       *AudioConfig      `yaml:"audio,omitempty"`
-	Tags        []string          `yaml:"tags,omitempty"`     // Tags for filtering (e.g., "featured")
-	Gallery     *GalleryConfig    `yaml:"gallery,omitempty"`  // Gallery display configuration
-	Prep        []string          `yaml:"prep,omitempty"`     // Shell commands to run before VHS (in workdir)
-	Validate    *ValidationConfig `yaml:"validate,omitempty"` // Post-render validation rules
+	Name          string            `yaml:"name"`
+	Enabled       bool              `yaml:"enabled"`
+	Description   string            `yaml:"description"`
+	Tape          string            `yaml:"tape"`
+	Workdir       string            `yaml:"workdir,omitempty"`       // Working directory for VHS (relative to repo root)
+	Requires      []string          `yaml:"requires"`
+	Outputs       []string          `yaml:"outputs"`
+	Audio         *AudioConfig      `yaml:"audio,omitempty"`
+	Tags          []string          `yaml:"tags,omitempty"`          // Tags for filtering (e.g., "featured")
+	Gallery       *GalleryConfig    `yaml:"gallery,omitempty"`       // Gallery display configuration
+	Prep          []string          `yaml:"prep,omitempty"`          // Shell commands to run before VHS (in workdir)
+	Validate      *ValidationConfig `yaml:"validate,omitempty"`      // Post-render validation rules
+	Status        string            `yaml:"status,omitempty"`        // "published" (default) or "draft"
+	FeaturedOrder int               `yaml:"featured_order,omitempty"` // Order within featured demos (lower = first)
+}
+
+// IsPublished returns true if the scene is published (or status not set, for backward compatibility).
+func (s *Scene) IsPublished() bool {
+	return s.Status == "" || s.Status == "published"
+}
+
+// IsDraft returns true if the scene is a draft.
+func (s *Scene) IsDraft() bool {
+	return s.Status == "draft"
 }
 
 // ValidationConfig contains patterns for validating rendered SVG output.

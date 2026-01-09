@@ -29,6 +29,7 @@ func renderCmd() *cobra.Command {
 		category       string
 		tag            string
 		validate       bool
+		includeDrafts  bool
 	)
 
 	cmd := &cobra.Command{
@@ -83,6 +84,9 @@ director render terraform-plan --force --validate
 
 # Full pipeline: render, publish, export manifest, and validate
 director render --category vendor --force --publish --export-manifest --validate
+
+# Include draft scenes in rendering (not included by default)
+director render --all --include-drafts
 `,
 		RunE: func(c *cobra.Command, args []string) error {
 			ctx := context.Background()
@@ -149,6 +153,10 @@ director render --category vendor --force --publish --export-manifest --validate
 			} else if tag != "" {
 				// Render all scenes with a specific tag.
 				for _, sc := range scenesList.Scenes {
+					// Skip drafts unless --include-drafts is set.
+					if sc.IsDraft() && !includeDrafts {
+						continue
+					}
 					if sc.HasTag(tag) && (all || sc.Enabled) {
 						scenesToRender = append(scenesToRender, sc)
 					}
@@ -160,6 +168,10 @@ director render --category vendor --force --publish --export-manifest --validate
 			} else if category != "" {
 				// Render all scenes in a category (uses gallery.category).
 				for _, sc := range scenesList.Scenes {
+					// Skip drafts unless --include-drafts is set.
+					if sc.IsDraft() && !includeDrafts {
+						continue
+					}
 					if sc.GetCategory() == category && (all || sc.Enabled) {
 						scenesToRender = append(scenesToRender, sc)
 					}
@@ -171,6 +183,10 @@ director render --category vendor --force --publish --export-manifest --validate
 			} else {
 				// Render all scenes (or all enabled).
 				for _, sc := range scenesList.Scenes {
+					// Skip drafts unless --include-drafts is set.
+					if sc.IsDraft() && !includeDrafts {
+						continue
+					}
 					if all || sc.Enabled {
 						scenesToRender = append(scenesToRender, sc)
 					}
@@ -313,6 +329,7 @@ director render --category vendor --force --publish --export-manifest --validate
 	cmd.Flags().StringVarP(&category, "category", "c", "", "Render all scenes in a gallery category (e.g., terraform, list, dx)")
 	cmd.Flags().StringVarP(&tag, "tag", "t", "", "Render all scenes with a specific tag (e.g., version, featured)")
 	cmd.Flags().BoolVarP(&validate, "validate", "v", false, "Validate rendered SVG outputs after rendering")
+	cmd.Flags().BoolVar(&includeDrafts, "include-drafts", false, "Include draft scenes (status: draft) in rendering")
 
 	return cmd
 }

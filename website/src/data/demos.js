@@ -167,9 +167,20 @@ export function getManifestData(demoId) {
 }
 
 // Get demos by tag (e.g., 'featured')
+// Results are sorted by featured_order (if present) then by order, then by name.
 export function getDemosByTag(tag) {
   return Object.values(manifestScenes)
     .filter(scene => scene.tags?.includes(tag) && hasVideo(scene.name))
+    .sort((a, b) => {
+      // Sort by featured_order first (lower = first), then by order, then by name.
+      const aFeatured = a.featured_order || 999;
+      const bFeatured = b.featured_order || 999;
+      if (aFeatured !== bFeatured) return aFeatured - bFeatured;
+      const aOrder = a.order || 999;
+      const bOrder = b.order || 999;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return (a.name || '').localeCompare(b.name || '');
+    })
     .map(scene => {
       const category = categoryDefinitions.find(c => c.id === scene.category);
       return {
@@ -178,6 +189,7 @@ export function getDemosByTag(tag) {
         description: scene.description || '',
         categoryId: scene.category,
         categoryTitle: category?.title || scene.category,
+        featuredOrder: scene.featured_order || 999,
         get duration() {
           return getManifestDuration(scene.name);
         },

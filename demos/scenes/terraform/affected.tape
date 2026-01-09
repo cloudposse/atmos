@@ -20,6 +20,10 @@ Require atmos
 Require terraform
 
 # Scene starts
+Type "# OpenTofu installed automatically via toolchain"
+Enter
+Sleep 1s
+
 Type "# Only deploy components that changed"
 Enter
 Sleep 1s

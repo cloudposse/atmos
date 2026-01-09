@@ -457,6 +457,100 @@ commands:
             {{ end }}
 ```
 
+## Tool Dependencies
+
+Custom commands can declare tool dependencies that are automatically installed before execution. This ensures that any CLI tools your command requires are available at the correct version, leveraging Atmos's [toolchain management](/cli/configuration/toolchain/) capabilities.
+
+### Basic Usage
+
+Specify tool dependencies using the `dependencies.tools` section within your command:
+
+```yaml
+commands:
+  - name: lint
+    description: Run tflint on terraform components
+    dependencies:
+      tools:
+        tflint: "0.54.0"
+    arguments:
+      - name: component
+        description: Component to lint
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        description: Stack name
+        required: true
+    steps:
+      - atmos terraform generate varfile {{ .Arguments.component }} -s {{ .Flags.stack }}
+      - tflint --chdir=components/terraform/{{ .Arguments.component }}
+```
+
+When you run `atmos lint vpc -s plat-ue2-dev`, Atmos will:
+1. Check if tflint 0.54.0 is installed in the toolchain directory
+2. Install it from the [toolchain registry](/cli/configuration/toolchain/registries) if missing
+3. Execute the command steps with the tool available in PATH
+
+### Multiple Tool Dependencies
+
+Commands can declare multiple tool dependencies:
+
+```yaml
+commands:
+  - name: security-scan
+    description: Run security scans on infrastructure code
+    dependencies:
+      tools:
+        tflint: "0.54.0"
+        checkov: "3.0.0"
+        tfsec: "1.28.0"
+    steps:
+      - tflint --chdir=components/terraform
+      - checkov -d components/terraform
+      - tfsec components/terraform
+```
+
+### Version Specification
+
+Tool versions can be specified in several formats:
+
+```yaml
+dependencies:
+  tools:
+    # Exact version
+    terraform: "1.9.8"
+
+    # Latest available version
+    kubectl: "latest"
+```
+
+### Integration with Toolchain Configuration
+
+Tool dependencies in custom commands work with your toolchain configuration in `atmos.yaml`. Tools are installed to the configured `install_path` and resolved using your configured [registries](/cli/configuration/toolchain/registries).
+
+```yaml
+# atmos.yaml
+toolchain:
+  install_path: ".tools"
+  registries:
+    - name: aqua
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
+commands:
+  - name: lint
+    dependencies:
+      tools:
+        tflint: "0.54.0"  # Installed to .tools/, resolved via aqua registry
+    steps:
+      - tflint --version
+```
+
+:::tip
+Use tool dependencies in custom commands to ensure all team members and CI/CD pipelines use consistent tool versions without manual installation steps.
+:::
+
 ## Working Directory
 
 Custom commands can specify a `working_directory` field to control where the command steps execute. This is useful when commands need to run from a specific location, regardless of where `atmos` was invoked.

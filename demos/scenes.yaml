@@ -132,6 +132,85 @@ scenes:
   # Acme Corp Demos (Website Gallery)
   # =============================================
 
+  # --- Featured Demos (Hero Section) ---
+  # These 3 demos tell the "After Atmos" story
+
+  - name: "featured-unified-config"
+    enabled: true
+    description: "One Config, Every Environment"
+    tape: "scenes/featured/unified-config.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+      - terraform
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - featured
+    featured_order: 1
+    gallery:
+      category: "featured"
+      title: "One Config, Every Environment"
+      order: 1
+
+  - name: "featured-see-everything"
+    enabled: true
+    description: "See Everything"
+    tape: "scenes/featured/see-everything.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - featured
+    featured_order: 2
+    gallery:
+      category: "featured"
+      title: "See Everything"
+      order: 2
+
+  - name: "featured-tools-just-work"
+    enabled: true
+    description: "Tools That Just Work"
+    tape: "scenes/featured/tools-just-work.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - featured
+    featured_order: 3
+    gallery:
+      category: "featured"
+      title: "Tools That Just Work"
+      order: 3
+
   # --- Terraform Commands ---
 
   - name: "terraform-plan"
@@ -153,7 +232,6 @@ scenes:
       fade_out: 2.0
       loop: true
     tags:
-      - featured
       - terraform
     gallery:
       category: "terraform"
@@ -299,7 +377,6 @@ scenes:
       fade_out: 2.0
       loop: true
     tags:
-      - featured
       - list
     gallery:
       category: "list"
@@ -428,7 +505,6 @@ scenes:
       fade_out: 2.0
       loop: true
     tags:
-      - featured
       - vendor
     gallery:
       category: "vendor"
@@ -460,6 +536,7 @@ scenes:
       loop: true
     tags:
       - commands
+    status: draft
     gallery:
       category: "dx"
       title: "Custom Commands"
@@ -484,6 +561,7 @@ scenes:
       loop: true
     tags:
       - aliases
+    status: draft
     gallery:
       category: "dx"
       title: "Aliases"
@@ -508,6 +586,7 @@ scenes:
       loop: true
     tags:
       - version
+    status: draft
     gallery:
       category: "dx"
       title: "Version Check"
@@ -532,6 +611,7 @@ scenes:
       loop: true
     tags:
       - completion
+    status: draft
     gallery:
       category: "dx"
       title: "Shell Completion"
@@ -556,6 +636,7 @@ scenes:
       loop: true
     tags:
       - docs
+    status: draft
     gallery:
       category: "dx"
       title: "Documentation"
@@ -580,6 +661,7 @@ scenes:
       loop: true
     tags:
       - validate
+    status: draft
     gallery:
       category: "dx"
       title: "Validate Stacks"
@@ -604,6 +686,7 @@ scenes:
       loop: true
     tags:
       - devcontainer
+    status: draft
     gallery:
       category: "dx"
       title: "Devcontainers"
@@ -650,6 +733,7 @@ scenes:
       loop: true
     tags:
       - theme
+    status: draft
     gallery:
       category: "dx"
       title: "Theme"
@@ -694,10 +778,139 @@ scenes:
       loop: true
     tags:
       - profile
+    status: draft
     gallery:
       category: "dx"
       title: "Profile"
       order: 9
+
+  # --- Toolchain Management ---
+
+  - name: "toolchain-search"
+    enabled: true
+    description: "Search for tools in the Atmos registry with fuzzy matching"
+    tape: "scenes/toolchain-search.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - toolchain
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Toolchain Search"
+      order: 10
+
+  - name: "toolchain"
+    enabled: true
+    description: "Install and manage cloud infrastructure tools"
+    tape: "scenes/toolchain.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - toolchain
+    gallery:
+      category: "dx"
+      title: "Toolchain Management"
+      order: 11
+
+  - name: "toolchain-env"
+    enabled: true
+    description: "Integrate toolchain with your shell PATH"
+    tape: "scenes/toolchain-env.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - toolchain
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Shell Integration"
+      order: 12
+
+  - name: "toolchain-deps"
+    enabled: true
+    description: "Auto-install tools based on stack dependencies"
+    tape: "scenes/toolchain-deps.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - toolchain
+      - terraform
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Stack Dependencies"
+      order: 13
+
+  - name: "use-version"
+    enabled: true
+    description: "Switch Atmos versions on the fly with --use-version"
+    tape: "scenes/use-version.tape"
+    workdir: "demos/fixtures/acme"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - toolchain
+      - version
+    status: draft
+    gallery:
+      category: "dx"
+      title: "Version Switching"
+      order: 14
 
   # --- Authentication ---
 
@@ -719,8 +932,8 @@ scenes:
       fade_out: 2.0
       loop: true
     tags:
-      - featured
       - auth
+    status: draft
     gallery:
       category: "auth"
       title: "Login"
@@ -747,6 +960,7 @@ scenes:
     tags:
       - auth
       - terraform
+    status: draft
     gallery:
       category: "auth"
       title: "Authenticated Terraform"
@@ -771,6 +985,7 @@ scenes:
       loop: true
     tags:
       - auth
+    status: draft
     gallery:
       category: "auth"
       title: "Exec with Credentials"
@@ -795,6 +1010,7 @@ scenes:
       loop: true
     tags:
       - auth
+    status: draft
     gallery:
       category: "auth"
       title: "Web Console"
@@ -819,6 +1035,7 @@ scenes:
       loop: true
     tags:
       - auth
+    status: draft
     gallery:
       category: "auth"
       title: "Authenticated Shell"
@@ -842,8 +1059,8 @@ scenes:
       fade_out: 2.0
       loop: true
     tags:
-      - featured
       - auth
+    status: draft
     gallery:
       category: "auth"
       title: "List Identities"
@@ -868,6 +1085,7 @@ scenes:
       loop: true
     tags:
       - auth
+    status: draft
     gallery:
       category: "auth"
       title: "Who Am I"
@@ -892,6 +1110,7 @@ scenes:
       loop: true
     tags:
       - auth
+    status: draft
     gallery:
       category: "auth"
       title: "Auth Env"
@@ -991,8 +1210,8 @@ scenes:
       fade_out: 2.0
       loop: true
     tags:
-      - featured
       - tui
+    status: draft
     gallery:
       category: "flagship"
       title: "Interactive TUI"
