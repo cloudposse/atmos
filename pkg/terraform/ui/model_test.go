@@ -497,3 +497,248 @@ func TestModel_Init(t *testing.T) {
 	// Init should return a batch command.
 	assert.NotNil(t, cmd)
 }
+
+func TestFormatDiagnosticMessage_UndeclaredVariable(t *testing.T) {
+	tests := []struct {
+		name            string
+		summary         string
+		detail          string
+		expectedMsg     string
+		expectedKeyvals []interface{}
+	}{
+		{
+			name:            "extracts variable name as keyval",
+			summary:         "Value for undeclared variable",
+			detail:          `The root module does not declare a variable named "environment" but a value was found in file "test.tfvars.json". If you meant to use this value, add a "variable" block.`,
+			expectedMsg:     "undeclared variable",
+			expectedKeyvals: []interface{}{"var", "environment"},
+		},
+		{
+			name:            "extracts different variable name as keyval",
+			summary:         "Value for undeclared variable",
+			detail:          `The root module does not declare a variable named "stage" but a value was found.`,
+			expectedMsg:     "undeclared variable",
+			expectedKeyvals: []interface{}{"var", "stage"},
+		},
+		{
+			name:            "falls back to summary when pattern not found",
+			summary:         "Value for undeclared variable",
+			detail:          "Some unexpected detail format",
+			expectedMsg:     "Value for undeclared variable: Some unexpected detail format",
+			expectedKeyvals: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg, keyvals := formatDiagnosticMessage(tt.summary, tt.detail)
+			assert.Equal(t, tt.expectedMsg, msg)
+			assert.Equal(t, tt.expectedKeyvals, keyvals)
+		})
+	}
+}
+
+func TestFormatDiagnosticMessage_CheckBlockFailed(t *testing.T) {
+	tests := []struct {
+		name        string
+		summary     string
+		detail      string
+		expectedMsg string
+	}{
+		{
+			name:        "extracts first sentence from detail",
+			summary:     "Check block assertion failed",
+			detail:      "Test warning: threshold exceeds limit. Additional boilerplate text here.",
+			expectedMsg: "check failed: Test warning: threshold exceeds limit.",
+		},
+		{
+			name:        "handles detail without period",
+			summary:     "Check block assertion failed",
+			detail:      "Short message",
+			expectedMsg: "check failed: Short message",
+		},
+		{
+			name:        "handles empty detail",
+			summary:     "Check block assertion failed",
+			detail:      "",
+			expectedMsg: "check failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg, keyvals := formatDiagnosticMessage(tt.summary, tt.detail)
+			assert.Equal(t, tt.expectedMsg, msg)
+			assert.Nil(t, keyvals)
+		})
+	}
+}
+
+func TestFormatDiagnosticMessage_PreconditionFailed(t *testing.T) {
+	tests := []struct {
+		name        string
+		summary     string
+		detail      string
+		expectedMsg string
+	}{
+		{
+			name:        "extracts first sentence",
+			summary:     "Resource precondition failed",
+			detail:      "Precondition check failed because trigger_error is true. More details follow.",
+			expectedMsg: "precondition failed: Precondition check failed because trigger_error is true.",
+		},
+		{
+			name:        "handles empty detail",
+			summary:     "Resource precondition failed",
+			detail:      "",
+			expectedMsg: "precondition failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg, keyvals := formatDiagnosticMessage(tt.summary, tt.detail)
+			assert.Equal(t, tt.expectedMsg, msg)
+			assert.Nil(t, keyvals)
+		})
+	}
+}
+
+func TestFormatDiagnosticMessage_DefaultBehavior(t *testing.T) {
+	tests := []struct {
+		name        string
+		summary     string
+		detail      string
+		expectedMsg string
+	}{
+		{
+			name:        "combines summary and first sentence of detail",
+			summary:     "Some other error",
+			detail:      "First sentence here. Second sentence with more info.",
+			expectedMsg: "Some other error: First sentence here.",
+		},
+		{
+			name:        "uses summary only when detail empty",
+			summary:     "Error message",
+			detail:      "",
+			expectedMsg: "Error message",
+		},
+		{
+			name:        "handles whitespace in summary and detail",
+			summary:     "  Trimmed summary  ",
+			detail:      "  Trimmed detail.  ",
+			expectedMsg: "Trimmed summary: Trimmed detail.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg, keyvals := formatDiagnosticMessage(tt.summary, tt.detail)
+			assert.Equal(t, tt.expectedMsg, msg)
+			assert.Nil(t, keyvals)
+		})
+	}
+}
+
+func TestExtractQuotedValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		text     string
+		prefix   string
+		expected string
+	}{
+		{
+			name:     "extracts quoted value after prefix",
+			text:     `The module does not declare a variable named "foo" but found`,
+			prefix:   "variable named",
+			expected: "foo",
+		},
+		{
+			name:     "extracts with different prefix",
+			text:     `File path "bar/baz.tf" is invalid`,
+			prefix:   "File path",
+			expected: "bar/baz.tf",
+		},
+		{
+			name:     "returns empty when prefix not found",
+			text:     `No matching prefix here`,
+			prefix:   "variable named",
+			expected: "",
+		},
+		{
+			name:     "returns empty when no opening quote",
+			text:     `variable named foo`,
+			prefix:   "variable named",
+			expected: "",
+		},
+		{
+			name:     "returns empty when no closing quote",
+			text:     `variable named "foo`,
+			prefix:   "variable named",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractQuotedValue(tt.text, tt.prefix)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExtractFirstSentence(t *testing.T) {
+	tests := []struct {
+		name     string
+		text     string
+		expected string
+	}{
+		{
+			name:     "extracts first sentence ending with period and space",
+			text:     "First sentence. Second sentence.",
+			expected: "First sentence.",
+		},
+		{
+			name:     "extracts first sentence ending with period and newline",
+			text:     "First sentence.\nSecond sentence.",
+			expected: "First sentence.",
+		},
+		{
+			name:     "returns whole text if ends with period",
+			text:     "Single sentence.",
+			expected: "Single sentence.",
+		},
+		{
+			name:     "returns whole text if short and no period",
+			text:     "Short text",
+			expected: "Short text",
+		},
+		{
+			name:     "truncates long text at word boundary",
+			text:     "This is a very long text that exceeds one hundred characters and should be truncated at a reasonable word boundary to avoid cutting words in half which would be ugly",
+			expected: "This is a very long text that exceeds one hundred characters and should be truncated at a...",
+		},
+		{
+			name:     "handles empty string",
+			text:     "",
+			expected: "",
+		},
+		{
+			name:     "handles whitespace only",
+			text:     "   ",
+			expected: "",
+		},
+		{
+			name:     "trims whitespace from result",
+			text:     "  First sentence.  Second.",
+			expected: "First sentence.",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractFirstSentence(tt.text)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

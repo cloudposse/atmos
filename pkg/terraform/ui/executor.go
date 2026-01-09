@@ -71,8 +71,10 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 		return fmt.Errorf("%w: %w", errUtils.ErrStdoutPipe, err)
 	}
 
-	// Stderr passes through to the real stderr (for terraform warnings/prompts).
-	cmd.Stderr = os.Stderr
+	// Suppress stderr since we parse JSON diagnostics from stdout.
+	// Terraform outputs human-readable warnings to stderr even with -json flag,
+	// but we route those through the Atmos logger via parsed JSON diagnostics.
+	cmd.Stderr = io.Discard
 
 	// Start command.
 	if err := cmd.Start(); err != nil {
@@ -111,6 +113,10 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 
 	// Check if model has an error.
 	m := finalModel.(Model)
+
+	// Log diagnostics after TUI completes (warnings appear after completion message).
+	m.LogDiagnostics()
+
 	if m.GetError() != nil {
 		return m.GetError()
 	}
@@ -133,31 +139,55 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 	return nil
 }
 
-// buildArgsWithJSON adds the -json flag to the arguments if not already present.
+// buildArgsWithJSON adds the -json and -compact-warnings flags to the arguments.
+// -json enables structured JSON output for parsing.
+// -compact-warnings suppresses verbose human-readable warnings since we route
+// diagnostics through the Atmos logger via parsed JSON.
 func buildArgsWithJSON(args []string, subCommand string) []string {
 	// Check if -json is already present.
+	hasJSON := false
+	hasCompactWarnings := false
 	for _, arg := range args {
 		if arg == "-json" || strings.HasPrefix(arg, "-json=") {
-			return args
+			hasJSON = true
+		}
+		if arg == "-compact-warnings" {
+			hasCompactWarnings = true
 		}
 	}
 
-	// Find the position to insert -json (after the subcommand).
+	// If both flags are already present, return as-is.
+	if hasJSON && hasCompactWarnings {
+		return args
+	}
+
+	// Find the position to insert flags (after the subcommand).
 	// Let append handle capacity growth to avoid integer overflow concerns.
 	var result []string
 
-	// For plan, we also want to add -out if not present (for terraform show later).
 	for i, arg := range args {
 		result = append(result, arg)
-		// Insert -json after the subcommand (plan, apply, init, refresh).
+		// Insert flags after the subcommand (plan, apply, init, refresh).
 		if i == 0 && (arg == "plan" || arg == "apply" || arg == "init" || arg == "refresh") {
-			result = append(result, "-json")
+			if !hasJSON {
+				result = append(result, "-json")
+			}
+			if !hasCompactWarnings {
+				result = append(result, "-compact-warnings")
+			}
 		}
 	}
 
-	// If no subcommand was found at position 0, just prepend -json.
+	// If no subcommand was found at position 0, just prepend flags.
 	if len(result) == len(args) {
-		result = append([]string{"-json"}, args...)
+		var flags []string
+		if !hasJSON {
+			flags = append(flags, "-json")
+		}
+		if !hasCompactWarnings {
+			flags = append(flags, "-compact-warnings")
+		}
+		result = append(flags, args...)
 	}
 
 	return result
@@ -176,10 +206,15 @@ func ExecutePlan(ctx context.Context, opts *ExecuteOptions) error {
 			return err
 		}
 
-		// Display tree from user's planfile.
+		// Display tree from user's planfile with badge summary.
 		tree, treeErr := BuildDependencyTree(ctx, userPlanFile, opts.Command, opts.WorkingDir, opts.Stack, opts.Component)
 		if treeErr == nil {
-			_ = ui.Writef("\n%s\n", tree.RenderTree())
+			add, change, remove := tree.GetChangeSummary()
+			// Only render tree if there are changes; otherwise just show badge.
+			if add > 0 || change > 0 || remove > 0 {
+				_ = ui.Writef("\n%s", tree.RenderTree())
+			}
+			_ = ui.Write(RenderChangeSummaryBadges(add, change, remove))
 		}
 
 		return nil
@@ -199,10 +234,15 @@ func ExecutePlan(ctx context.Context, opts *ExecuteOptions) error {
 		return err
 	}
 
-	// Display tree from planfile.
+	// Display tree from planfile with badge summary.
 	tree, treeErr := BuildDependencyTree(ctx, planFile, opts.Command, opts.WorkingDir, opts.Stack, opts.Component)
 	if treeErr == nil {
-		_ = ui.Writef("\n%s\n", tree.RenderTree())
+		add, change, remove := tree.GetChangeSummary()
+		// Only render tree if there are changes; otherwise just show badge.
+		if add > 0 || change > 0 || remove > 0 {
+			_ = ui.Writef("\n%s", tree.RenderTree())
+		}
+		_ = ui.Write(RenderChangeSummaryBadges(add, change, remove))
 	}
 
 	// Clean up temp planfile.

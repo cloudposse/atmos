@@ -43,46 +43,68 @@ func TestBuildArgsWithJSON_AddsFlagForPlan(t *testing.T) {
 	args := []string{"plan", "-out", "plan.out"}
 	result := buildArgsWithJSON(args, "plan")
 	assert.Contains(t, result, "-json")
-	// -json should be after "plan".
+	assert.Contains(t, result, "-compact-warnings")
+	// Flags should be after "plan".
 	assert.Equal(t, "plan", result[0])
 	assert.Equal(t, "-json", result[1])
+	assert.Equal(t, "-compact-warnings", result[2])
 }
 
 func TestBuildArgsWithJSON_AddsFlagForApply(t *testing.T) {
 	args := []string{"apply", "-auto-approve"}
 	result := buildArgsWithJSON(args, "apply")
 	assert.Contains(t, result, "-json")
+	assert.Contains(t, result, "-compact-warnings")
 	assert.Equal(t, "apply", result[0])
 	assert.Equal(t, "-json", result[1])
+	assert.Equal(t, "-compact-warnings", result[2])
 }
 
 func TestBuildArgsWithJSON_AddsFlagForInit(t *testing.T) {
 	args := []string{"init", "-reconfigure"}
 	result := buildArgsWithJSON(args, "init")
 	assert.Contains(t, result, "-json")
+	assert.Contains(t, result, "-compact-warnings")
 	assert.Equal(t, "init", result[0])
 	assert.Equal(t, "-json", result[1])
+	assert.Equal(t, "-compact-warnings", result[2])
 }
 
 func TestBuildArgsWithJSON_AddsFlagForRefresh(t *testing.T) {
 	args := []string{"refresh"}
 	result := buildArgsWithJSON(args, "refresh")
 	assert.Contains(t, result, "-json")
+	assert.Contains(t, result, "-compact-warnings")
 	assert.Equal(t, "refresh", result[0])
 	assert.Equal(t, "-json", result[1])
+	assert.Equal(t, "-compact-warnings", result[2])
 }
 
 func TestBuildArgsWithJSON_DoesNotDuplicateFlag(t *testing.T) {
-	args := []string{"plan", "-json", "-out", "plan.out"}
+	args := []string{"plan", "-json", "-compact-warnings", "-out", "plan.out"}
 	result := buildArgsWithJSON(args, "plan")
-	// Count -json occurrences.
-	count := 0
+	// Count flag occurrences.
+	jsonCount := 0
+	compactCount := 0
 	for _, arg := range result {
 		if arg == "-json" {
-			count++
+			jsonCount++
+		}
+		if arg == "-compact-warnings" {
+			compactCount++
 		}
 	}
-	assert.Equal(t, 1, count, "-json should not be duplicated")
+	assert.Equal(t, 1, jsonCount, "-json should not be duplicated")
+	assert.Equal(t, 1, compactCount, "-compact-warnings should not be duplicated")
+}
+
+func TestBuildArgsWithJSON_AddsCompactWarningsWhenOnlyJSONPresent(t *testing.T) {
+	args := []string{"plan", "-json", "-out", "plan.out"}
+	result := buildArgsWithJSON(args, "plan")
+	assert.Contains(t, result, "-json")
+	assert.Contains(t, result, "-compact-warnings")
+	// -json should still be at position 1, -compact-warnings added after.
+	assert.Equal(t, "plan", result[0])
 }
 
 func TestBuildArgsWithJSON_NoSubcommandAtStart(t *testing.T) {
@@ -90,8 +112,10 @@ func TestBuildArgsWithJSON_NoSubcommandAtStart(t *testing.T) {
 	args := []string{"-var", "foo=bar"}
 	result := buildArgsWithJSON(args, "other")
 	assert.Contains(t, result, "-json")
-	// In this case, -json should be prepended.
+	assert.Contains(t, result, "-compact-warnings")
+	// In this case, flags should be prepended.
 	assert.Equal(t, "-json", result[0])
+	assert.Equal(t, "-compact-warnings", result[1])
 }
 
 func TestDetectOutputContentType(t *testing.T) {
