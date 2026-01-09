@@ -360,7 +360,7 @@ func showProgress(
 	// Print status message (with newline - this becomes a permanent line that scrolls up).
 	switch state.result {
 	case "skipped":
-		_ = ui.Successf("Skipped `%s/%s@%s` (already installed)", tool.owner, tool.repo, tool.version)
+		_ = ui.Successf("Skipped `%s/%s@%s` ((already installed))", tool.owner, tool.repo, tool.version)
 	case "installed":
 		_ = ui.Successf("Installed `%s/%s@%s`", tool.owner, tool.repo, tool.version)
 	case "failed":
@@ -389,9 +389,11 @@ func printSummary(installed, failed, skipped, total int) {
 		_ = ui.Success("No tools to install")
 	case failed == 0 && skipped == 0:
 		_ = ui.Successf("Installed **%d** tools", installed)
+		_ = ui.Writeln("")
 		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
 	case failed == 0 && skipped > 0:
 		_ = ui.Successf("Installed **%d** tools, skipped **%d**", installed, skipped)
+		_ = ui.Writeln("")
 		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
 	case failed > 0 && skipped == 0:
 		_ = ui.Errorf("Installed %d tools, failed %d", installed, failed)
