@@ -421,9 +421,6 @@ func (m Model) finalView() string {
 	var b strings.Builder
 	elapsed := m.clock.Since(m.startTime).Seconds()
 
-	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
-	mutedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
-
 	// Determine command name for display.
 	// If it's an apply with only deletions, show "Destroy" instead of "Apply".
 	command := capitalizeCommand(m.command)
@@ -435,6 +432,7 @@ func (m Model) finalView() string {
 	}
 
 	// Condensed summary.
+	// Note: Error/warning details are shown via LogDiagnostics() after the TUI completes.
 	if m.tracker.HasErrors() {
 		errorCount := m.tracker.GetErrorCount()
 		b.WriteString(atmosui.FormatErrorf("%s `%s/%s` failed: %d error(s) (%.1fs)",
@@ -445,30 +443,6 @@ func (m Model) finalView() string {
 			elapsed,
 		))
 		b.WriteString("\n")
-
-		// Show error details.
-		for _, diag := range m.tracker.GetDiagnostics() {
-			if diag.Diagnostic.Severity == "error" {
-				b.WriteString(fmt.Sprintf("  %s %s\n",
-					errorStyle.Render("Error:"),
-					diag.Diagnostic.Summary,
-				))
-				if diag.Diagnostic.Detail != "" {
-					b.WriteString(fmt.Sprintf("    %s\n", mutedStyle.Render(diag.Diagnostic.Detail)))
-				}
-			}
-		}
-
-		// Show failed resources.
-		for _, res := range m.tracker.GetResources() {
-			if res.State == ResourceStateError {
-				b.WriteString(fmt.Sprintf("  %s %s: %s\n",
-					errorStyle.Render("✗"),
-					res.Address,
-					res.Error,
-				))
-			}
-		}
 	} else {
 		// Success summary (reuse summary fetched above for command detection).
 		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
