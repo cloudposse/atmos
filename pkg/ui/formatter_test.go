@@ -1963,3 +1963,320 @@ func TestFormatterLabelMethod(t *testing.T) {
 		t.Errorf("Formatter.Label() should contain text, got: %q", result)
 	}
 }
+
+func TestExperimental_FormatterNotInitialized(t *testing.T) {
+	// Save original state.
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	oldFormat := Format
+	oldTerminal := globalTerminal
+	globalFormatter = nil
+	Format = nil
+	globalTerminal = nil
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		Format = oldFormat
+		globalTerminal = oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// Experimental should return error when formatter not initialized.
+	err := Experimental("test-feature")
+	if err == nil {
+		t.Error("Experimental() should return error when formatter not initialized")
+	}
+}
+
+func TestExperimentalf_FormatterNotInitialized(t *testing.T) {
+	// Save original state.
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	oldFormat := Format
+	oldTerminal := globalTerminal
+	globalFormatter = nil
+	Format = nil
+	globalTerminal = nil
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		Format = oldFormat
+		globalTerminal = oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// Experimentalf should return error when formatter not initialized.
+	err := Experimentalf("test-%s", "feature")
+	if err == nil {
+		t.Error("Experimentalf() should return error when formatter not initialized")
+	}
+}
+
+func TestBadge_FormatterNotInitialized(t *testing.T) {
+	// Save original state.
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	oldFormat := Format
+	oldTerminal := globalTerminal
+	globalFormatter = nil
+	Format = nil
+	globalTerminal = nil
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		Format = oldFormat
+		globalTerminal = oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// Badge should return fallback format when formatter not initialized.
+	result := Badge("TEST", "#FF9800", "#000000")
+	expected := "[TEST]"
+	if result != expected {
+		t.Errorf("Badge() fallback = %q, want %q", result, expected)
+	}
+}
+
+func TestFormatExperimentalBadge_FormatterNotInitialized(t *testing.T) {
+	// Save original state.
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	oldFormat := Format
+	oldTerminal := globalTerminal
+	globalFormatter = nil
+	Format = nil
+	globalTerminal = nil
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		Format = oldFormat
+		globalTerminal = oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// FormatExperimentalBadge should return fallback format when formatter not initialized.
+	result := FormatExperimentalBadge()
+	expected := "[EXPERIMENTAL]"
+	if result != expected {
+		t.Errorf("FormatExperimentalBadge() fallback = %q, want %q", result, expected)
+	}
+}
+
+func TestFormatExperimentalBadge_NoColorSupport(t *testing.T) {
+	// Initialize formatter with no color support.
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	formatterMu.Lock()
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+	Format = globalFormatter
+	globalTerminal = term
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = nil
+		Format = nil
+		globalTerminal = nil
+		formatterMu.Unlock()
+	}()
+
+	// FormatExperimentalBadge should return plain format when color not supported.
+	result := FormatExperimentalBadge()
+	expected := "[EXPERIMENTAL]"
+	if result != expected {
+		t.Errorf("FormatExperimentalBadge() with no color = %q, want %q", result, expected)
+	}
+}
+
+func TestClearLine_TerminalNotInitialized(t *testing.T) {
+	// Save original state.
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	oldFormat := Format
+	oldTerminal := globalTerminal
+	globalTerminal = nil
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		Format = oldFormat
+		globalTerminal = oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// ClearLine should return error when terminal not initialized.
+	err := ClearLine()
+	if err == nil {
+		t.Error("ClearLine() should return error when terminal not initialized")
+	}
+}
+
+func TestClearLine_WithColorSupport(t *testing.T) {
+	// Initialize with color support.
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorTrue)
+	formatterMu.Lock()
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+	Format = globalFormatter
+	globalTerminal = term
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = nil
+		Format = nil
+		globalTerminal = nil
+		formatterMu.Unlock()
+	}()
+
+	// ClearLine should not return error when color is supported.
+	err := ClearLine()
+	if err != nil {
+		t.Errorf("ClearLine() with color support returned error: %v", err)
+	}
+}
+
+func TestClearLine_NoColorSupport(t *testing.T) {
+	// Initialize without color support.
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	formatterMu.Lock()
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+	Format = globalFormatter
+	globalTerminal = term
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = nil
+		Format = nil
+		globalTerminal = nil
+		formatterMu.Unlock()
+	}()
+
+	// ClearLine should not return error when color is not supported (uses \r fallback).
+	err := ClearLine()
+	if err != nil {
+		t.Errorf("ClearLine() without color support returned error: %v", err)
+	}
+}
+
+func TestFormatterExperimentalfMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	f := NewFormatter(ioCtx, term).(*formatter)
+
+	// Test the method on formatter struct.
+	// Note: Experimentalf doesn't actually use the format args in output,
+	// it just renders a static message about experimental features.
+	result := f.Experimentalf("Feature %s is %s", "test", "experimental")
+	if result == "" {
+		t.Error("Formatter.Experimentalf() returned empty string")
+	}
+	// The method outputs a generic experimental feature message.
+	if !strings.Contains(result, "Experimental feature") {
+		t.Errorf("Formatter.Experimentalf() should contain 'Experimental feature', got: %q", result)
+	}
+}
+
+func TestFormatterBadgeMethod(t *testing.T) {
+	tests := []struct {
+		name       string
+		profile    terminal.ColorProfile
+		text       string
+		background string
+		foreground string
+	}{
+		{
+			name:       "Badge with color support",
+			profile:    terminal.ColorTrue,
+			text:       "TEST",
+			background: "#FF9800",
+			foreground: "#000000",
+		},
+		{
+			name:       "Badge without color support",
+			profile:    terminal.ColorNone,
+			text:       "BADGE",
+			background: "#0000FF",
+			foreground: "#FFFFFF",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(tt.profile)
+			f := NewFormatter(ioCtx, term).(*formatter)
+
+			result := f.Badge(tt.text, tt.background, tt.foreground)
+			if result == "" {
+				t.Error("Formatter.Badge() returned empty string")
+			}
+			if !strings.Contains(result, tt.text) {
+				t.Errorf("Formatter.Badge() should contain text %q, got: %q", tt.text, result)
+			}
+
+			// Without color, should return plain bracketed format.
+			if tt.profile == terminal.ColorNone {
+				expected := "[" + tt.text + "]"
+				if result != expected {
+					t.Errorf("Formatter.Badge() without color = %q, want %q", result, expected)
+				}
+			}
+		})
+	}
+}
+
+func TestFormatterExperimentalMethod(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile terminal.ColorProfile
+		feature string
+	}{
+		{
+			name:    "Experimental with color support",
+			profile: terminal.ColorTrue,
+			feature: "new-feature",
+		},
+		{
+			name:    "Experimental without color support",
+			profile: terminal.ColorNone,
+			feature: "test-feature",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(tt.profile)
+			f := NewFormatter(ioCtx, term).(*formatter)
+
+			result := f.Experimental(tt.feature)
+			if result == "" {
+				t.Error("Formatter.Experimental() returned empty string")
+			}
+			// The method outputs a generic experimental feature message, not the feature name.
+			if !strings.Contains(result, "Experimental feature") {
+				t.Errorf("Formatter.Experimental() should contain 'Experimental feature', got: %q", result)
+			}
+		})
+	}
+}
