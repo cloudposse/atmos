@@ -132,6 +132,9 @@ toolchain:
     terraform: hashicorp/terraform
     opentofu: opentofu/opentofu
     tofu: opentofu/opentofu
+    helm: helm/helm
+    kubectl: kubernetes/kubectl
+    tflint: terraform-linters/tflint
   tool_versions_file: .tool-versions
 
 # Integrations
@@ -148,22 +151,22 @@ integrations:
         role: arn:aws:iam::111111111111:role/acme-gitops
 
 # Authentication configuration
-# Uses cptest namespace with demo account IDs
+# Uses mock/aws provider for demos (no real credentials required)
 auth:
   default: plat-dev/admin
 
   providers:
-    cptest-sso:
-      kind: aws/iam-identity-center
+    acme-sso:
+      kind: mock/aws
       region: us-east-2
-      start_url: https://cptest.awsapps.com/start/
+      start_url: https://acme.awsapps.com/start/
 
   identities:
     # Base identity via IAM Identity Center
     core-identity/platform-team-access:
-      kind: aws/permission-set
+      kind: mock/aws
       via:
-        provider: cptest-sso
+        provider: acme-sso
       principal:
         name: "PlatformTeamAccess"
         account:
@@ -171,47 +174,47 @@ auth:
 
     # Core accounts
     core-identity/admin:
-      kind: aws/assume-role
+      kind: mock/aws
       via:
         identity: core-identity/platform-team-access
       principal:
-        assume_role: arn:aws:iam::111111111111:role/cptest-core-gbl-identity-admin
+        assume_role: arn:aws:iam::111111111111:role/acme-core-gbl-identity-admin
 
     core-network/admin:
-      kind: aws/assume-role
+      kind: mock/aws
       via:
         identity: core-identity/platform-team-access
       principal:
-        assume_role: arn:aws:iam::222222222222:role/cptest-core-gbl-network-admin
+        assume_role: arn:aws:iam::222222222222:role/acme-core-gbl-network-admin
 
     core-security/admin:
-      kind: aws/assume-role
+      kind: mock/aws
       via:
         identity: core-identity/platform-team-access
       principal:
-        assume_role: arn:aws:iam::333333333333:role/cptest-core-gbl-security-admin
+        assume_role: arn:aws:iam::333333333333:role/acme-core-gbl-security-admin
 
     # Platform accounts
     plat-dev/admin:
-      kind: aws/assume-role
+      kind: mock/aws
       via:
         identity: core-identity/platform-team-access
       principal:
-        assume_role: arn:aws:iam::444444444444:role/cptest-plat-gbl-dev-admin
+        assume_role: arn:aws:iam::444444444444:role/acme-plat-gbl-dev-admin
 
     plat-staging/admin:
-      kind: aws/assume-role
+      kind: mock/aws
       via:
         identity: core-identity/platform-team-access
       principal:
-        assume_role: arn:aws:iam::555555555555:role/cptest-plat-gbl-staging-admin
+        assume_role: arn:aws:iam::555555555555:role/acme-plat-gbl-staging-admin
 
     plat-prod/admin:
-      kind: aws/assume-role
+      kind: mock/aws
       via:
         identity: core-identity/platform-team-access
       principal:
-        assume_role: arn:aws:iam::666666666666:role/cptest-plat-gbl-prod-admin
+        assume_role: arn:aws:iam::666666666666:role/acme-plat-gbl-prod-admin
 
 # Schemas for validation (disabled for demo)
 # schemas:

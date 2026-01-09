@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -51,7 +52,9 @@ func (i *Identity) getCredentialsFilePath() string {
 	// Use a temp directory that's cleaned up by the OS.
 	// In production, real providers would use XDG directories like ~/.config/atmos/aws/{provider}/.
 	tmpDir := os.TempDir()
-	return filepath.Join(tmpDir, "atmos-mock-"+i.name+".json")
+	// Sanitize identity name to be filesystem-safe (replace / with -).
+	safeName := strings.ReplaceAll(i.name, "/", "-")
+	return filepath.Join(tmpDir, "atmos-mock-"+safeName+".json")
 }
 
 // Kind returns the identity kind.
