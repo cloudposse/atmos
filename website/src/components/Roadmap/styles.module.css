@@ -1782,6 +1782,12 @@
   padding: 1.5rem;
 }
 
+.drawerDemo {
+  margin-bottom: 1.5rem;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
 .drawerDescription {
   font-size: 1rem;
   line-height: 1.6;
