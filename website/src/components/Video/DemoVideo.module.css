@@ -81,3 +81,19 @@
   color: var(--ifm-color-emphasis-600);
   line-height: 1.4;
 }
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-emphasis-600);
+  border-radius: 8px 8px 0 0;
+}
+
+.placeholder p {
+  margin: 0;
+  font-size: 1rem;
+  font-style: italic;
+}

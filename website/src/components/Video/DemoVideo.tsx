@@ -91,15 +91,21 @@ export default function DemoVideo({
     );
   }
 
-  // Priority 3: GIF fallback.
+  // Priority 3: GIF fallback (or placeholder if no assets available).
   return (
     <div className={containerClass}>
-      <img
-        className={styles.gif}
-        src={assets.gif}
-        alt={title}
-        loading="lazy"
-      />
+      {assets.gif ? (
+        <img
+          className={styles.gif}
+          src={assets.gif}
+          alt={title}
+          loading="lazy"
+        />
+      ) : (
+        <div className={styles.placeholder}>
+          <p>Demo not yet available</p>
+        </div>
+      )}
       {showCaption && (title || description) && (
         <div className={styles.caption}>
           {title && <h4 className={styles.title}>{title}</h4>}

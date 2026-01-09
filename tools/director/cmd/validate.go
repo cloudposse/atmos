@@ -113,7 +113,7 @@ func validateSceneConfig(ctx context.Context, cmd *cobra.Command, demosDir strin
 		if err := ffmpeg.CheckInstalled(); err != nil {
 			cmd.Printf("✗ FFmpeg validation failed: %v\n", err)
 			cmd.Println("  Required for scenes with background audio")
-			return fmt.Errorf("ffmpeg validation failed")
+			return fmt.Errorf("ffmpeg validation failed: %w", err)
 		}
 	}
 

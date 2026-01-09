@@ -3,6 +3,7 @@ package toolmgr
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 
@@ -24,7 +25,7 @@ type HooksConfig struct {
 
 // LoadToolsConfig loads the tools configuration from defaults.yaml.
 func LoadToolsConfig(demosDir string) (*ToolsConfig, error) {
-	defaultsFile := demosDir + "/defaults.yaml"
+	defaultsFile := filepath.Join(demosDir, "defaults.yaml")
 
 	data, err := os.ReadFile(defaultsFile)
 	if os.IsNotExist(err) {
@@ -44,7 +45,7 @@ func LoadToolsConfig(demosDir string) (*ToolsConfig, error) {
 
 // LoadDefaultsConfig loads the full defaults configuration from defaults.yaml.
 func LoadDefaultsConfig(demosDir string) (*DefaultsConfig, error) {
-	defaultsFile := demosDir + "/defaults.yaml"
+	defaultsFile := filepath.Join(demosDir, "defaults.yaml")
 
 	data, err := os.ReadFile(defaultsFile)
 	if os.IsNotExist(err) {

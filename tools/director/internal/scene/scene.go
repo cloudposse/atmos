@@ -62,7 +62,7 @@ type AudioConfig struct {
 	Source  string  `yaml:"source"`             // Path to MP3 file relative to demos/
 	Volume  float64 `yaml:"volume,omitempty"`   // Volume level 0.0-1.0, default 0.3
 	FadeOut float64 `yaml:"fade_out,omitempty"` // Fade-out duration in seconds, default 2.0
-	Loop    bool    `yaml:"loop,omitempty"`     // Loop audio if shorter than video, default true
+	Loop    *bool   `yaml:"loop,omitempty"`     // Loop audio if shorter than video, default true
 }
 
 // GetCategory returns the gallery category for the scene.

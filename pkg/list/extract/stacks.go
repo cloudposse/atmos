@@ -2,6 +2,7 @@ package extract
 
 import (
 	"fmt"
+	"sort"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -76,9 +77,16 @@ func findVarsFromComponents(stackMap map[string]any) map[string]any {
 			continue
 		}
 
-		// Get vars from the first component found.
-		for _, componentData := range typeComponents {
-			componentMap, ok := componentData.(map[string]any)
+		// Sort component names for deterministic selection.
+		componentNames := make([]string, 0, len(typeComponents))
+		for name := range typeComponents {
+			componentNames = append(componentNames, name)
+		}
+		sort.Strings(componentNames)
+
+		// Get vars from the first component found (alphabetically).
+		for _, name := range componentNames {
+			componentMap, ok := typeComponents[name].(map[string]any)
 			if !ok {
 				continue
 			}
@@ -109,11 +117,12 @@ func getComponentTypes() []string {
 		typeSet[t] = struct{}{}
 	}
 
-	// Convert set to slice.
+	// Convert set to sorted slice for deterministic iteration.
 	types := make([]string, 0, len(typeSet))
 	for t := range typeSet {
 		types = append(types, t)
 	}
+	sort.Strings(types)
 
 	return types
 }

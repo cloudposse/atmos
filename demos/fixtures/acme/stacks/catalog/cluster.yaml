@@ -7,6 +7,12 @@ components:
       metadata:
         component: cluster
         type: real
+      remote_state_backend_type: static
+      remote_state_backend:
+        static:
+          cluster_endpoint: "https://eks.us-east-1.amazonaws.com"
+          cluster_name: "acme-eks"
+          cluster_arn: "arn:aws:eks:us-east-1:123456789012:cluster/acme-eks"
       vars:
         enabled: true
         name: "eks"

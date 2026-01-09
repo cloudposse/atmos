@@ -7,6 +7,12 @@ components:
       metadata:
         component: database
         type: real
+      remote_state_backend_type: static
+      remote_state_backend:
+        static:
+          endpoint: "acme-aurora-postgres.cluster-abc123.us-east-1.rds.amazonaws.com"
+          reader_endpoint: "acme-aurora-postgres.cluster-ro-abc123.us-east-1.rds.amazonaws.com"
+          port: 5432
       vars:
         enabled: true
         name: "aurora-postgres"

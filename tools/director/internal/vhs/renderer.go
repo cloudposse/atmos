@@ -389,17 +389,10 @@ func (r *Renderer) processAudioForMP4(ctx context.Context, sc *scene.Scene) erro
 		fadeOut = 2.0 // Default 2 second fade-out
 	}
 
-	loop := sc.Audio.Loop
-	// Note: Zero value for bool is false, but we want default true.
-	// If Audio struct was just created, all fields are zero.
-	// We'll assume if the Audio config exists, loop should default to true.
-	// This is a limitation of the zero-value defaults in Go.
-	// Better approach: use pointers for optional fields, but keeping it simple for now.
-	if !loop {
-		// Check if this is intentionally false or just zero-value.
-		// For simplicity, we'll always default to true unless explicitly set.
-		// This requires the YAML to explicitly say "loop: false" to disable.
-		loop = true
+	// Default loop to true unless explicitly set to false.
+	loop := true
+	if sc.Audio.Loop != nil {
+		loop = *sc.Audio.Loop
 	}
 
 	// Merge audio with video.

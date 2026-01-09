@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -369,12 +370,14 @@ director render --tag version --force
 			fmt.Fprintln(os.Stdout)
 			fmt.Fprintln(os.Stdout)
 
-			// Sort tags alphabetically.
+			// Sort tags alphabetically with "featured" first.
 			var tagNames []string
 			for t := range tags {
 				tagNames = append(tagNames, t)
 			}
-			// Sort with "featured" first, then alphabetically.
+			sort.Strings(tagNames)
+
+			// Move "featured" to front if present.
 			sortedTags := make([]string, 0, len(tagNames))
 			for _, t := range tagNames {
 				if t == "featured" {

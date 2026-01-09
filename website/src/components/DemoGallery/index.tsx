@@ -204,9 +204,14 @@ export default function DemoGallery(): JSX.Element {
 
   const handleShare = async (demoId: string) => {
     const url = `${window.location.origin}/demos#${demoId}`;
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for browsers without clipboard API.
+      console.warn('Clipboard API not available');
+    }
   };
 
   const filteredCategories = activeCategory
