@@ -406,16 +406,7 @@ docs:
 
 toolchain:
   registries:
-    # Inline registry for tools not in the Aqua registry
-    - name: custom
-      type: atmos
-      priority: 100
-      tools:
-        replicatedhq/replicated:
-          type: github_release
-          # Darwin uses "all" instead of architecture-specific builds
-          asset: "replicated_{{trimV .Version}}_{{.OS}}_{{ternary (eq .OS \"darwin\") \"all\" .Arch}}.tar.gz"
-    # Default Aqua registry (fallback)
+    # Default Aqua registry
     - name: aqua
       type: aqua
       priority: 10

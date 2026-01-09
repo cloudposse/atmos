@@ -48,7 +48,8 @@ func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
 		},
 	})
 	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
-	installer := NewInstallerWithResolver(mockResolver)
+	binDir := filepath.Join(dir, ".atmos", "tools", "bin")
+	installer := NewInstallerWithResolver(mockResolver, binDir)
 	owner, repo, err := installer.ParseToolSpec("opentofu")
 	assert.NoError(t, err)
 	assert.Equal(t, "opentofu", owner)

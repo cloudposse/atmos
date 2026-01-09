@@ -1013,3 +1013,30 @@ packages:
 	require.NotNil(t, override.Replacements)
 	assert.Equal(t, "silicon", override.Replacements["arm64"])
 }
+
+func TestAquaRegistry_parseRegistryFile_ReplicatedDarwinAll(t *testing.T) {
+	ar := NewAquaRegistry()
+
+	// Test parsing the replicated tool pattern that uses darwin_all for macOS.
+	// This is a real-world example where darwin uses "all" instead of arch-specific builds.
+	data, err := os.ReadFile("testdata/replicated.yaml")
+	require.NoError(t, err, "Should read replicated.yaml test fixture")
+
+	tool, err := ar.parseRegistryFile(data)
+	assert.NoError(t, err)
+	assert.NotNil(t, tool)
+	assert.Equal(t, "replicated", tool.Name)
+	assert.Equal(t, "replicatedhq", tool.RepoOwner)
+	assert.Equal(t, "replicated", tool.RepoName)
+	assert.Equal(t, "github_release", tool.Type)
+
+	// Verify base asset pattern.
+	assert.Contains(t, tool.Asset, "replicated_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz")
+
+	// Verify darwin override uses "all" instead of arch.
+	require.Len(t, tool.Overrides, 1)
+	override := tool.Overrides[0]
+	assert.Equal(t, "darwin", override.GOOS)
+	assert.Empty(t, override.GOARCH) // Applies to all darwin architectures.
+	assert.Contains(t, override.Asset, "{{.OS}}_all.tar.gz")
+}

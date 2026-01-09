@@ -234,9 +234,10 @@ type AquaPackage struct {
 	Type       string `yaml:"type"`
 	RepoOwner  string `yaml:"repo_owner"`
 	RepoName   string `yaml:"repo_name"`
-	Name       string `yaml:"name"` // Used by http and some go_install types.
-	Path       string `yaml:"path"` // Used by go_install types (Go module path).
-	URL        string `yaml:"url"`
+	Name       string `yaml:"name"`  // Used by http and some go_install types.
+	Path       string `yaml:"path"`  // Used by go_install types (Go module path).
+	Asset      string `yaml:"asset"` // Used by github_release types.
+	URL        string `yaml:"url"`   // Used by http types (complete URL).
 	Format     string `yaml:"format"`
 	BinaryName string `yaml:"binary_name"`
 	// Files specifies which files to extract from archive with their destination names.

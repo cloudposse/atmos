@@ -32,6 +32,11 @@ const (
 	// Registry path parsing constants.
 	minRegistryPathSegments = 8          // Minimum path segments for registry.yaml parsing.
 	filenameKey             = "filename" // Key for filename in template replacements.
+
+	// Log field names for consistent debugging.
+	logFieldOwner   = "owner"
+	logFieldRepo    = "repo"
+	logFieldVersion = "version"
 )
 
 // ToolResolver defines an interface for resolving tool names to owner/repo pairs
@@ -111,6 +116,8 @@ type Option func(*Installer)
 
 // WithBinDir sets the binary installation directory.
 func WithBinDir(binDir string) Option {
+	defer perf.Track(nil, "installer.WithBinDir")()
+
 	return func(i *Installer) {
 		i.binDir = binDir
 	}
@@ -118,6 +125,8 @@ func WithBinDir(binDir string) Option {
 
 // WithCacheDir sets the cache directory.
 func WithCacheDir(cacheDir string) Option {
+	defer perf.Track(nil, "installer.WithCacheDir")()
+
 	return func(i *Installer) {
 		i.cacheDir = cacheDir
 	}
@@ -125,6 +134,8 @@ func WithCacheDir(cacheDir string) Option {
 
 // WithResolver sets the tool resolver.
 func WithResolver(resolver ToolResolver) Option {
+	defer perf.Track(nil, "installer.WithResolver")()
+
 	return func(i *Installer) {
 		i.resolver = resolver
 	}
@@ -132,6 +143,8 @@ func WithResolver(resolver ToolResolver) Option {
 
 // WithConfiguredRegistry sets a pre-configured registry.
 func WithConfiguredRegistry(reg registry.ToolRegistry) Option {
+	defer perf.Track(nil, "installer.WithConfiguredRegistry")()
+
 	return func(i *Installer) {
 		i.configuredReg = reg
 		i.useConfiguredReg = true
@@ -140,6 +153,8 @@ func WithConfiguredRegistry(reg registry.ToolRegistry) Option {
 
 // WithRegistryFactory sets the factory for creating registry instances.
 func WithRegistryFactory(factory RegistryFactory) Option {
+	defer perf.Track(nil, "installer.WithRegistryFactory")()
+
 	return func(i *Installer) {
 		i.registryFactory = factory
 	}
@@ -150,6 +165,8 @@ func WithRegistryFactory(factory RegistryFactory) Option {
 type defaultRegistryFactory struct{}
 
 func (d *defaultRegistryFactory) NewAquaRegistry() registry.ToolRegistry {
+	defer perf.Track(nil, "installer.defaultRegistryFactory.NewAquaRegistry")()
+
 	return nil
 }
 
@@ -179,6 +196,7 @@ func New(opts ...Option) *Installer {
 			"./tool-registry",
 		},
 		registryFactory: &defaultRegistryFactory{},
+		resolver:        &DefaultToolResolver{}, // Default resolver.
 	}
 
 	// Apply options.
@@ -221,7 +239,7 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 	if err != nil {
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, err)
 	}
-	log.Debug("Downloading tool", "owner", tool.RepoOwner, "repo", tool.RepoName, "version", version, "url", assetURL)
+	log.Debug("Downloading tool", "owner", tool.RepoOwner, "repo", tool.RepoName, logFieldVersion, version, "url", assetURL)
 
 	assetPath, err := i.downloadAssetWithVersionFallback(tool, version, assetURL)
 	if err != nil {
@@ -245,53 +263,24 @@ func (i *Installer) FindTool(owner, repo, version string) (*registry.Tool, error
 	defer perf.Track(nil, "installer.FindTool")()
 
 	log.Debug("Finding tool in registries",
-		"owner", owner,
-		"repo", repo,
-		"version", version,
+		logFieldOwner, owner,
+		logFieldRepo, repo,
+		logFieldVersion, version,
 		"useConfiguredReg", i.useConfiguredReg,
 		"hasConfiguredReg", i.configuredReg != nil,
 		"legacyRegistryCount", len(i.registries))
 
 	// Use configured registries from atmos.yaml if available.
-	if i.useConfiguredReg && i.configuredReg != nil {
-		log.Debug("Searching configured registries from atmos.yaml")
-		tool, err := i.configuredReg.GetToolWithVersion(owner, repo, version)
-		if err == nil {
-			log.Debug("Tool found in configured registry",
-				"owner", owner,
-				"repo", repo,
-				"version", version,
-				"toolRegistry", tool.Registry,
-				"toolAsset", tool.Asset)
-			// Ensure RepoOwner and RepoName are set correctly.
-			tool.RepoOwner = owner
-			tool.RepoName = repo
-			return tool, nil
-		}
-		log.Debug("Tool not found in configured registries",
-			"owner", owner,
-			"repo", repo,
-			"version", version,
-			"error", err)
-	} else {
-		log.Debug("No configured registries available, using legacy hardcoded registries",
-			"useConfiguredReg", i.useConfiguredReg,
-			"hasConfiguredReg", i.configuredReg != nil)
+	if tool, found := i.findToolInConfiguredRegistry(owner, repo, version); found {
+		return tool, nil
 	}
 
 	// Fallback: Search through legacy hardcoded registries.
-	log.Debug("Falling back to legacy hardcoded registries", "count", len(i.registries))
-	for _, reg := range i.registries {
-		log.Debug("Searching legacy registry", "registry", reg)
-		tool, err := i.searchRegistry(reg, owner, repo, version)
-		if err == nil {
-			log.Debug("Tool found in legacy registry", "registry", reg)
-			return tool, nil
-		}
-		log.Debug("Tool not found in legacy registry", "registry", reg, "error", err)
+	if tool, found := i.findToolInLegacyRegistries(owner, repo, version); found {
+		return tool, nil
 	}
 
-	// Build list of registry names for context.
+	// Tool not found, return error with context.
 	registryNames := make([]string, len(i.registries))
 	copy(registryNames, i.registries)
 
@@ -305,6 +294,53 @@ func (i *Installer) FindTool(owner, repo, version string) (*registry.Tool, error
 		WithContext("registries_searched", strings.Join(registryNames, ", ")).
 		WithExitCode(2).
 		Err()
+}
+
+// findToolInConfiguredRegistry searches for a tool in configured registries.
+func (i *Installer) findToolInConfiguredRegistry(owner, repo, version string) (*registry.Tool, bool) {
+	if !i.useConfiguredReg || i.configuredReg == nil {
+		log.Debug("No configured registries available, using legacy hardcoded registries",
+			"useConfiguredReg", i.useConfiguredReg,
+			"hasConfiguredReg", i.configuredReg != nil)
+		return nil, false
+	}
+
+	log.Debug("Searching configured registries from atmos.yaml")
+	tool, err := i.configuredReg.GetToolWithVersion(owner, repo, version)
+	if err == nil {
+		log.Debug("Tool found in configured registry",
+			logFieldOwner, owner,
+			logFieldRepo, repo,
+			logFieldVersion, version,
+			"toolRegistry", tool.Registry,
+			"toolAsset", tool.Asset)
+		// Ensure RepoOwner and RepoName are set correctly.
+		tool.RepoOwner = owner
+		tool.RepoName = repo
+		return tool, true
+	}
+
+	log.Debug("Tool not found in configured registries",
+		logFieldOwner, owner,
+		logFieldRepo, repo,
+		logFieldVersion, version,
+		"error", err)
+	return nil, false
+}
+
+// findToolInLegacyRegistries searches through legacy hardcoded registries.
+func (i *Installer) findToolInLegacyRegistries(owner, repo, version string) (*registry.Tool, bool) {
+	log.Debug("Falling back to legacy hardcoded registries", "count", len(i.registries))
+	for _, reg := range i.registries {
+		log.Debug("Searching legacy registry", "registry", reg)
+		tool, err := i.searchRegistry(reg, owner, repo, version)
+		if err == nil {
+			log.Debug("Tool found in legacy registry", "registry", reg)
+			return tool, true
+		}
+		log.Debug("Tool not found in legacy registry", "registry", reg, "error", err)
+	}
+	return nil, false
 }
 
 // searchRegistry searches a specific registry for a tool.
@@ -408,6 +444,8 @@ func (i *Installer) extractAndInstall(tool *registry.Tool, assetPath, version st
 
 // GetBinDir returns the binary installation directory.
 func (i *Installer) GetBinDir() string {
+	defer perf.Track(nil, "installer.Installer.GetBinDir")()
+
 	return i.binDir
 }
 
@@ -416,6 +454,8 @@ func (i *Installer) GetBinDir() string {
 // Otherwise, it will search the version directory for an executable file,
 // falling back to using the repo name as the binary name.
 func (i *Installer) GetBinaryPath(owner, repo, version, binaryName string) string {
+	defer perf.Track(nil, "installer.Installer.GetBinaryPath")()
+
 	versionDir := filepath.Join(i.binDir, owner, repo, version)
 
 	// If binary name is explicitly provided, use it directly.
@@ -484,7 +524,7 @@ func (i *Installer) Uninstall(owner, repo, version string) error {
 		}
 	}
 
-	log.Debug("Successfully uninstalled tool", "owner", owner, "repo", repo, "version", version)
+	log.Debug("Successfully uninstalled tool", logFieldOwner, owner, logFieldRepo, repo, "version", version)
 	return nil
 }
 

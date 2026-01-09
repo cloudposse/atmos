@@ -381,12 +381,17 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*registry.Tool, error) {
 	var aquaRegistry registry.AquaRegistryFile
 	if err := yaml.Unmarshal(data, &aquaRegistry); err == nil && len(aquaRegistry.Packages) > 0 {
 		pkg := aquaRegistry.Packages[0]
+		// Determine asset pattern: prefer Asset (github_release), fall back to URL (http type).
+		asset := pkg.Asset
+		if asset == "" {
+			asset = pkg.URL
+		}
 		// Convert AquaPackage to Tool.
 		tool := &registry.Tool{
 			Name:          pkg.BinaryName,
 			RepoOwner:     pkg.RepoOwner,
 			RepoName:      pkg.RepoName,
-			Asset:         pkg.URL,
+			Asset:         asset,
 			Format:        pkg.Format,
 			Type:          pkg.Type,
 			BinaryName:    pkg.BinaryName,
