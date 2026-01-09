@@ -16,6 +16,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -62,6 +63,27 @@ func WithStackValidation(check bool) AtmosValidateOption {
 	return func(cfg *ValidateConfig) {
 		cfg.CheckStack = check
 	}
+}
+
+// getGlobalFlagNames returns a set of all global persistent flag names and shorthands
+// by querying RootCmd.PersistentFlags() at runtime. This ensures we always have the
+// current set of reserved flags without maintaining a static list.
+func getGlobalFlagNames() map[string]bool {
+	reserved := make(map[string]bool)
+
+	// Query all persistent flags from RootCmd dynamically.
+	RootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+		reserved[f.Name] = true
+		if f.Shorthand != "" {
+			reserved[f.Shorthand] = true
+		}
+	})
+
+	// Also include the hardcoded "identity" flag that gets added to every custom command.
+	// This prevents user-defined flags from conflicting with it.
+	reserved["identity"] = true
+
+	return reserved
 }
 
 // processCustomCommands registers custom commands defined in the Atmos configuration onto the given parent Cobra command.
@@ -111,6 +133,29 @@ func processCustomCommands(
 			// Add --identity flag to all custom commands to allow runtime override
 			customCommand.PersistentFlags().String("identity", "", "Identity to use for authentication (overrides identity in command config)")
 			AddIdentityCompletion(customCommand)
+
+			// Get reserved flag names by querying RootCmd's persistent flags.
+			reservedFlags := getGlobalFlagNames()
+
+			// Validate flags don't conflict with global/reserved flags.
+			for _, flag := range commandConfig.Flags {
+				if reservedFlags[flag.Name] {
+					return errUtils.Build(errUtils.ErrReservedFlagName).
+						WithExplanation(fmt.Sprintf("Custom command '%s' defines flag '--%s' which conflicts with a global flag", commandConfig.Name, flag.Name)).
+						WithHint("Rename the flag in your atmos.yaml to avoid conflicts with reserved flag names").
+						WithContext("command", commandConfig.Name).
+						WithContext("flag", flag.Name).
+						Err()
+				}
+				if flag.Shorthand != "" && reservedFlags[flag.Shorthand] {
+					return errUtils.Build(errUtils.ErrReservedFlagName).
+						WithExplanation(fmt.Sprintf("Custom command '%s' defines flag shorthand '-%s' which conflicts with a global flag shorthand", commandConfig.Name, flag.Shorthand)).
+						WithHint("Change the shorthand in your atmos.yaml to avoid conflicts with reserved flag shorthands").
+						WithContext("command", commandConfig.Name).
+						WithContext("shorthand", flag.Shorthand).
+						Err()
+				}
+			}
 
 			// Process and add flags to the command.
 			for _, flag := range commandConfig.Flags {
