@@ -1820,3 +1820,146 @@ func TestClearLine(t *testing.T) {
 		t.Errorf("ClearLine() returned error: %v", err)
 	}
 }
+
+func TestConfigureColorProfileAllProfiles(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile terminal.ColorProfile
+	}{
+		{name: "ColorNone", profile: terminal.ColorNone},
+		{name: "Color16", profile: terminal.Color16},
+		{name: "Color256", profile: terminal.Color256},
+		{name: "ColorTrue", profile: terminal.ColorTrue},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			term := &mockTerminal{profile: tt.profile}
+			// Should not panic.
+			configureColorProfile(term)
+		})
+	}
+}
+
+func TestFormatterHintMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	// Test the Hint method on Formatter instance.
+	result := f.Hint("This is a hint message")
+	if result == "" {
+		t.Error("Formatter.Hint() returned empty string")
+	}
+}
+
+func TestFormatterHintfMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	// Test the Hintf method on Formatter instance.
+	result := f.Hintf("This is a %s hint", "formatted")
+	if result == "" {
+		t.Error("Formatter.Hintf() returned empty string")
+	}
+}
+
+func TestFormatterToastMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	// Test the Toast method on Formatter instance.
+	result := f.Toast("🎉", "Test message")
+	if result == "" {
+		t.Error("Formatter.Toast() returned empty string")
+	}
+	if !strings.Contains(result, "Test message") {
+		t.Errorf("Formatter.Toast() should contain message, got: %q", result)
+	}
+}
+
+func TestFormatterToastfMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	// Test the Toastf method on Formatter instance.
+	result := f.Toastf("📣", "Value is %d", 42)
+	if result == "" {
+		t.Error("Formatter.Toastf() returned empty string")
+	}
+	if !strings.Contains(result, "42") {
+		t.Errorf("Formatter.Toastf() should contain formatted value, got: %q", result)
+	}
+}
+
+func TestFormatterHintWithBackticks(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	// The renderInlineMarkdownWithBase is called through Hint.
+	// Test through the public API.
+	result := f.Hint("Use `--help` for more info")
+	if result == "" {
+		t.Error("Formatter.Hint() with backticks returned empty string")
+	}
+}
+
+func TestFormatterBoldMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	result := f.Bold("Bold text")
+	if result == "" {
+		t.Error("Formatter.Bold() returned empty string")
+	}
+	if !strings.Contains(result, "Bold text") {
+		t.Errorf("Formatter.Bold() should contain text, got: %q", result)
+	}
+}
+
+func TestFormatterMutedMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	result := f.Muted("Muted text")
+	if result == "" {
+		t.Error("Formatter.Muted() returned empty string")
+	}
+	if !strings.Contains(result, "Muted text") {
+		t.Errorf("Formatter.Muted() should contain text, got: %q", result)
+	}
+}
+
+func TestFormatterHeadingMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	result := f.Heading("Heading text")
+	if result == "" {
+		t.Error("Formatter.Heading() returned empty string")
+	}
+	if !strings.Contains(result, "Heading text") {
+		t.Errorf("Formatter.Heading() should contain text, got: %q", result)
+	}
+}
+
+func TestFormatterLabelMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	result := f.Label("Label text")
+	if result == "" {
+		t.Error("Formatter.Label() returned empty string")
+	}
+	if !strings.Contains(result, "Label text") {
+		t.Errorf("Formatter.Label() should contain text, got: %q", result)
+	}
+}

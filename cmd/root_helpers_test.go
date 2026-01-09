@@ -1199,3 +1199,166 @@ func TestConfigureEarlyColorProfile(t *testing.T) {
 		})
 	}
 }
+
+// TestFormatFlagNameParts tests flag name formatting for different flag types.
+func TestFormatFlagNameParts(t *testing.T) {
+	tests := []struct {
+		name              string
+		flagName          string
+		shorthand         string
+		flagType          string
+		expectedName      string
+		expectedType      string
+		expectedTypeEmpty bool
+	}{
+		{
+			name:              "bool flag with shorthand returns no type",
+			flagName:          "verbose",
+			shorthand:         "v",
+			flagType:          "bool",
+			expectedName:      "-v, --verbose",
+			expectedTypeEmpty: true,
+		},
+		{
+			name:              "bool flag without shorthand returns no type",
+			flagName:          "help",
+			shorthand:         "",
+			flagType:          "bool",
+			expectedName:      "    --help",
+			expectedTypeEmpty: true,
+		},
+		{
+			name:         "string flag with shorthand",
+			flagName:     "output",
+			shorthand:    "o",
+			flagType:     "string",
+			expectedName: "-o, --output",
+			expectedType: "string",
+		},
+		{
+			name:         "int flag without shorthand",
+			flagName:     "count",
+			shorthand:    "",
+			flagType:     "int",
+			expectedName: "    --count",
+			expectedType: "int",
+		},
+		{
+			name:         "stringSlice flag becomes strings",
+			flagName:     "profiles",
+			shorthand:    "p",
+			flagType:     "stringSlice",
+			expectedName: "-p, --profiles",
+			expectedType: "strings",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "test"}
+
+			// Add the flag based on type.
+			switch tt.flagType {
+			case "bool":
+				if tt.shorthand != "" {
+					cmd.Flags().BoolP(tt.flagName, tt.shorthand, false, "test")
+				} else {
+					cmd.Flags().Bool(tt.flagName, false, "test")
+				}
+			case "string":
+				if tt.shorthand != "" {
+					cmd.Flags().StringP(tt.flagName, tt.shorthand, "", "test")
+				} else {
+					cmd.Flags().String(tt.flagName, "", "test")
+				}
+			case "int":
+				if tt.shorthand != "" {
+					cmd.Flags().IntP(tt.flagName, tt.shorthand, 0, "test")
+				} else {
+					cmd.Flags().Int(tt.flagName, 0, "test")
+				}
+			case "stringSlice":
+				if tt.shorthand != "" {
+					cmd.Flags().StringSliceP(tt.flagName, tt.shorthand, nil, "test")
+				} else {
+					cmd.Flags().StringSlice(tt.flagName, nil, "test")
+				}
+			}
+
+			flag := cmd.Flags().Lookup(tt.flagName)
+			assert.NotNil(t, flag)
+
+			name, flagType := formatFlagNameParts(flag)
+			assert.Equal(t, tt.expectedName, name)
+			if tt.expectedTypeEmpty {
+				assert.Empty(t, flagType)
+			} else {
+				assert.Equal(t, tt.expectedType, flagType)
+			}
+		})
+	}
+}
+
+// TestGetTerminalWidth tests terminal width detection.
+func TestGetTerminalWidth(t *testing.T) {
+	// getTerminalWidth should return a positive integer.
+	// In test environment (non-TTY), it returns the default width.
+	width := getTerminalWidth()
+	assert.Greater(t, width, 0)
+	assert.LessOrEqual(t, width, 120) // Max width is 120
+}
+
+// TestCalculateMaxFlagWidth tests flag width calculation.
+func TestCalculateMaxFlagWidth(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().BoolP("verbose", "v", false, "verbose output")
+	cmd.Flags().String("long-flag-name", "", "a flag with a long name")
+	cmd.Flags().Bool("hidden", false, "hidden flag")
+	cmd.Flags().Lookup("hidden").Hidden = true
+
+	maxWidth := calculateMaxFlagWidth(cmd.Flags())
+	// Should not include hidden flag.
+	// Long flag: "    --long-flag-name string" is longest.
+	assert.Greater(t, maxWidth, 0)
+}
+
+// TestRenderFlags tests flag rendering.
+func TestRenderFlags(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().BoolP("verbose", "v", false, "verbose output")
+	cmd.Flags().String("format", "json", "output format")
+
+	var buf bytes.Buffer
+	flagStyle := lipgloss.NewStyle()
+	argTypeStyle := lipgloss.NewStyle()
+	descStyle := lipgloss.NewStyle()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Should not panic.
+	assert.NotPanics(t, func() {
+		renderFlags(&buf, cmd.Flags(), flagStyle, argTypeStyle, descStyle, 80, atmosConfig)
+	})
+
+	output := buf.String()
+	assert.Contains(t, output, "verbose")
+	assert.Contains(t, output, "format")
+}
+
+// TestRenderFlagsNilFlagSet tests renderFlags with nil flag set.
+func TestRenderFlagsNilFlagSet(t *testing.T) {
+	var buf bytes.Buffer
+	flagStyle := lipgloss.NewStyle()
+	argTypeStyle := lipgloss.NewStyle()
+	descStyle := lipgloss.NewStyle()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Should not panic with nil flags.
+	assert.NotPanics(t, func() {
+		renderFlags(&buf, nil, flagStyle, argTypeStyle, descStyle, 80, atmosConfig)
+	})
+
+	// Output should be empty.
+	assert.Empty(t, buf.String())
+}
