@@ -48,6 +48,9 @@ var (
 
 	// ErrToolAlreadyExists indicates the tool version already exists in .tool-versions.
 	ErrToolAlreadyExists = errors.New("tool already exists")
+
+	// ErrNoValidTools indicates no valid tools were provided for installation.
+	ErrNoValidTools = errors.New("no valid tools to install")
 )
 
 // SearchTotalProvider is an optional interface that registries can implement

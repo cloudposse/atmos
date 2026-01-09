@@ -80,17 +80,32 @@ func runBubbleTeaSpinner(message string) *tea.Program {
 	return p
 }
 
-// RunInstall installs the specified tool (owner/repo@version or alias@version).
-// If toolSpec is empty, installs all tools from .tool-versions file.
+// RunInstall installs the specified tools (owner/repo@version or alias@version).
+// If toolSpecs is empty, installs all tools from .tool-versions file.
+// If toolSpecs has one element, installs that single tool with progress.
+// If toolSpecs has multiple elements, installs all with batch progress and summary.
 // The setAsDefault parameter controls whether to set the installed version as default.
 // The reinstallFlag parameter forces reinstallation even if already installed.
-func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
+func RunInstall(toolSpecs []string, setAsDefault, reinstallFlag bool) error {
 	defer perf.Track(nil, "toolchain.Install")()
 
-	if toolSpec == "" {
+	// No args: install from .tool-versions file.
+	if len(toolSpecs) == 0 {
 		return installFromToolVersions(GetToolVersionsFilePath(), reinstallFlag)
 	}
 
+	// Single tool: use original single-tool flow with full progress.
+	if len(toolSpecs) == 1 {
+		return installSingleToolSpec(toolSpecs[0], setAsDefault, reinstallFlag)
+	}
+
+	// Multiple tools: use batch installation with progress bar and summary.
+	return installMultipleTools(toolSpecs, setAsDefault, reinstallFlag)
+}
+
+// installSingleToolSpec installs a single tool specification with full progress display.
+// Note: reinstallFlag is accepted for API consistency but handled by InstallSingleTool internally.
+func installSingleToolSpec(toolSpec string, setAsDefault, _ bool) error {
 	tool, version, err := ParseToolVersionArg(toolSpec)
 	if err != nil {
 		return err
@@ -128,6 +143,84 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 
 	// Update .tool-versions file.
 	return updateToolVersionsFile(tool, version, setAsDefault)
+}
+
+// parseToolSpecs parses command-line tool specs into toolInfo structs.
+func parseToolSpecs(installer *Installer, toolSpecs []string) []toolInfo {
+	var toolList []toolInfo
+	for _, spec := range toolSpecs {
+		info, ok := parseToolSpec(installer, spec)
+		if ok {
+			toolList = append(toolList, info)
+		}
+	}
+	return toolList
+}
+
+// parseToolSpec parses a single tool specification into toolInfo.
+func parseToolSpec(installer *Installer, spec string) (toolInfo, bool) {
+	tool, version, err := ParseToolVersionArg(spec)
+	if err != nil {
+		_ = ui.Errorf("Invalid tool spec `%s`: %v", spec, err)
+		return toolInfo{}, false
+	}
+
+	// Resolve version if not specified.
+	if version == "" {
+		lookupResult, err := resolveVersionFromToolVersions(tool, spec)
+		if err != nil {
+			_ = ui.Errorf("Failed to resolve version for `%s`: %v", spec, err)
+			return toolInfo{}, false
+		}
+		tool = lookupResult.tool
+		version = lookupResult.version
+	}
+
+	owner, repo, err := installer.parseToolSpec(tool)
+	if err != nil {
+		_ = ui.Errorf("Invalid tool `%s`: %v", tool, err)
+		return toolInfo{}, false
+	}
+
+	return toolInfo{version: version, owner: owner, repo: repo}, true
+}
+
+// installMultipleTools installs multiple tool specifications with batch progress.
+func installMultipleTools(toolSpecs []string, setAsDefault, reinstallFlag bool) error {
+	installer := NewInstaller()
+	toolList := parseToolSpecs(installer, toolSpecs)
+
+	if len(toolList) == 0 {
+		return ErrNoValidTools
+	}
+
+	// Use existing batch installation infrastructure.
+	spinner := bspinner.New()
+	spinner.Spinner = bspinner.Dot
+	styles := theme.GetCurrentStyles()
+	spinner.Style = styles.Spinner
+	progressBar := progress.New(progress.WithDefaultGradient())
+
+	var installedCount, failedCount, alreadyInstalledCount int
+
+	for i, tool := range toolList {
+		result, err := installOrSkipTool(installer, tool, reinstallFlag)
+		switch result {
+		case "installed":
+			installedCount++
+			// Update .tool-versions for each successfully installed tool.
+			toolName := fmt.Sprintf("%s/%s", tool.owner, tool.repo)
+			_ = updateToolVersionsFile(toolName, tool.version, setAsDefault)
+		case "failed":
+			failedCount++
+		case "skipped":
+			alreadyInstalledCount++
+		}
+		showProgress(&spinner, &progressBar, tool, progressState{index: i, total: len(toolList), result: result, err: err})
+	}
+
+	printSummary(installedCount, failedCount, alreadyInstalledCount, len(toolList))
+	return nil
 }
 
 func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressBar bool) error {

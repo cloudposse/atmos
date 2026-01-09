@@ -24,7 +24,7 @@ func TestInstallCommandProvider_Extended(t *testing.T) {
 		cmd := provider.GetCommand()
 		require.NotNil(t, cmd)
 		assert.Contains(t, cmd.Use, "install")
-		assert.Contains(t, cmd.Use, "[tool]")
+		assert.Contains(t, cmd.Use, "[tool...]")
 	})
 }
 
@@ -47,7 +47,7 @@ func TestInstallCommand_Flags(t *testing.T) {
 func TestInstallCommand_CommandStructure(t *testing.T) {
 	t.Run("command has correct use string", func(t *testing.T) {
 		assert.Contains(t, installCmd.Use, "install")
-		assert.Contains(t, installCmd.Use, "[tool]")
+		assert.Contains(t, installCmd.Use, "[tool...]")
 	})
 
 	t.Run("command has short description", func(t *testing.T) {
