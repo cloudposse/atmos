@@ -432,7 +432,8 @@ func (m Model) finalView() string {
 	}
 
 	// Condensed summary.
-	// Note: Error/warning details are shown via LogDiagnostics() after the TUI completes.
+	// Note: Diagnostic details (errors/warnings from terraform) are shown via LogDiagnostics() after the TUI completes.
+	// But failed resources (apply errors with address info) are shown inline below.
 	if m.tracker.HasErrors() {
 		errorCount := m.tracker.GetErrorCount()
 		b.WriteString(atmosui.FormatErrorf("%s `%s/%s` failed: %d error(s) (%.1fs)",
@@ -443,6 +444,18 @@ func (m Model) finalView() string {
 			elapsed,
 		))
 		b.WriteString("\n")
+
+		// Show failed resources (different from diagnostics - these have resource addresses).
+		errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
+		for _, res := range m.tracker.GetResources() {
+			if res.State == ResourceStateError && res.Error != "" {
+				b.WriteString(fmt.Sprintf("  %s %s: %s\n",
+					errorStyle.Render("✗"),
+					res.Address,
+					res.Error,
+				))
+			}
+		}
 	} else {
 		// Success summary (reuse summary fetched above for command detection).
 		dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
