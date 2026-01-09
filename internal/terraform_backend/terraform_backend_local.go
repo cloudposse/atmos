@@ -13,6 +13,12 @@ import (
 
 // ReadTerraformBackendLocal reads the Terraform state file from the local backend.
 // If the state file does not exist, the function returns `nil`.
+//
+// According to Terraform local backend behavior:
+// - For the default workspace: state is stored at `terraform.tfstate`
+// - For named workspaces: state is stored at `terraform.tfstate.d/<workspace>/terraform.tfstate`
+//
+// See: https://github.com/cloudposse/atmos/issues/1920
 func ReadTerraformBackendLocal(
 	atmosConfig *schema.AtmosConfiguration,
 	componentSections *map[string]any,
@@ -20,13 +26,20 @@ func ReadTerraformBackendLocal(
 ) ([]byte, error) {
 	defer perf.Track(atmosConfig, "terraform_backend.ReadTerraformBackendLocal")()
 
-	tfStateFilePath := filepath.Join(
+	workspace := GetTerraformWorkspace(componentSections)
+	componentPath := filepath.Join(
 		atmosConfig.TerraformDirAbsolutePath,
 		GetTerraformComponent(componentSections),
-		"terraform.tfstate.d",
-		GetTerraformWorkspace(componentSections),
-		"terraform.tfstate",
 	)
+
+	var tfStateFilePath string
+	if workspace == "" || workspace == "default" {
+		// Default workspace: state is stored directly at terraform.tfstate.
+		tfStateFilePath = filepath.Join(componentPath, "terraform.tfstate")
+	} else {
+		// Named workspace: state is stored at terraform.tfstate.d/<workspace>/terraform.tfstate.
+		tfStateFilePath = filepath.Join(componentPath, "terraform.tfstate.d", workspace, "terraform.tfstate")
+	}
 
 	// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.
 	if !u.FileExists(tfStateFilePath) {

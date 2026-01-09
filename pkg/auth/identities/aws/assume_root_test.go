@@ -1411,6 +1411,18 @@ func (m *mockAuthManager) PrepareShellEnvironment(_ context.Context, _ string, _
 	return nil, nil
 }
 
+func (m *mockAuthManager) ExecuteIdentityIntegrations(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *mockAuthManager) ExecuteIntegration(_ context.Context, _ string) error {
+	return nil
+}
+
+func (m *mockAuthManager) GetIntegration(_ string) (*schema.Integration, error) {
+	return nil, nil
+}
+
 func TestAssumeRootIdentity_CredentialsExist_ProviderResolutionError(t *testing.T) {
 	// Test when we can't resolve the provider name.
 	i := &assumeRootIdentity{

@@ -5,6 +5,7 @@
 Valid subcommands are:
 
 • console
+• ecr-login
 • env
 • exec
 • list

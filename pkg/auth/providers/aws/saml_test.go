@@ -176,6 +176,18 @@ func (s stubSamlMgr) PrepareShellEnvironment(context.Context, string, []string) 
 	return nil, nil
 }
 
+func (s stubSamlMgr) ExecuteIntegration(context.Context, string) error {
+	return nil
+}
+
+func (s stubSamlMgr) ExecuteIdentityIntegrations(context.Context, string) error {
+	return nil
+}
+
+func (s stubSamlMgr) GetIntegration(string) (*schema.Integration, error) {
+	return nil, nil
+}
+
 func TestSAMLProvider_PreAuthenticate(t *testing.T) {
 	p, err := NewSAMLProvider("p", &schema.Provider{Kind: "aws/saml", URL: "https://idp.example.com/saml", Region: "us-east-1"})
 	require.NoError(t, err)

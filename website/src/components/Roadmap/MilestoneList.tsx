@@ -8,6 +8,8 @@ export interface Milestone {
   label: string;
   status: 'shipped' | 'in-progress' | 'planned';
   quarter: string;
+  /** Version this was released in (optional, typically for shipped items). */
+  version?: string;
   /** GitHub PR number (optional). */
   pr?: number;
   /** Changelog slug (optional) - links to /changelog/{slug}. */
