@@ -16,6 +16,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -111,6 +112,37 @@ func processCustomCommands(
 			// Add --identity flag to all custom commands to allow runtime override
 			customCommand.PersistentFlags().String("identity", "", "Identity to use for authentication (overrides identity in command config)")
 			AddIdentityCompletion(customCommand)
+
+			// Validate custom command flags don't conflict with global flags.
+			globalNames, globalShorthands := getGlobalFlagNames()
+
+			for _, flag := range commandConfig.Flags {
+				// Check flag name conflict.
+				if globalNames[flag.Name] {
+					return errUtils.Build(errUtils.ErrReservedFlagName).
+						WithExplanationf("Custom command `%s` defines flag `--%s` which conflicts with a global flag",
+							commandConfig.Name, flag.Name).
+						WithHintf("Choose a different name for the `--%s` flag in your custom command", flag.Name).
+						WithContext("command", commandConfig.Name).
+						WithContext("flag", flag.Name).
+						Err()
+				}
+
+				// Check shorthand conflict.
+				if flag.Shorthand != "" {
+					if globalFlagName, exists := globalShorthands[flag.Shorthand]; exists {
+						return errUtils.Build(errUtils.ErrReservedFlagName).
+							WithExplanationf("Custom command `%s` defines flag shorthand `-%s` which conflicts with global flag `--%s`",
+								commandConfig.Name, flag.Shorthand, globalFlagName).
+							WithHintf("Choose a different shorthand for the `--%s` flag, or remove the shorthand", flag.Name).
+							WithContext("command", commandConfig.Name).
+							WithContext("flag", flag.Name).
+							WithContext("shorthand", flag.Shorthand).
+							WithContext("conflicts_with", globalFlagName).
+							Err()
+					}
+				}
+			}
 
 			// Process and add flags to the command.
 			for _, flag := range commandConfig.Flags {
@@ -399,6 +431,22 @@ func getTopLevelCommands() map[string]*cobra.Command {
 	}
 
 	return existingTopLevelCommands
+}
+
+// getGlobalFlagNames returns sets of all global flag names and shorthands
+// that are reserved and cannot be used by custom commands.
+func getGlobalFlagNames() (names map[string]bool, shorthands map[string]string) {
+	names = make(map[string]bool)
+	shorthands = make(map[string]string) // shorthand -> full name
+
+	RootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+		names[f.Name] = true
+		if f.Shorthand != "" {
+			shorthands[f.Shorthand] = f.Name
+		}
+	})
+
+	return names, shorthands
 }
 
 // executeCustomCommand executes a custom command.
