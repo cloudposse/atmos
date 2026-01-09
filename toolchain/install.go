@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -348,6 +349,15 @@ func showProgress(
 	tool toolInfo,
 	state progressState,
 ) {
+	// Strategy: Status messages scroll up normally, progress bar updates in place at bottom.
+	// 1. Clear current line (where progress bar was)
+	// 2. Print status message with newline (scrolls up, cursor on new line)
+	// 3. Print progress bar on current line (no newline, overwrites itself each frame)
+
+	// Clear the progress bar line first.
+	_ = ui.Write(terminal.EscResetLine)
+
+	// Print status message (with newline - this becomes a permanent line that scrolls up).
 	switch state.result {
 	case "skipped":
 		_ = ui.Successf("Skipped `%s/%s@%s` (already installed)", tool.owner, tool.repo, tool.version)
@@ -357,12 +367,12 @@ func showProgress(
 		_ = ui.Errorf("Install failed %s/%s@%s: %v", tool.owner, tool.repo, tool.version, state.err)
 	}
 
+	// Show animated progress bar on current line (EscResetLine overwrites each frame).
 	percent := float64(state.index+1) / float64(state.total)
 	bar := progressBar.ViewAs(percent)
 
-	// Show animated progress bar
 	for j := 0; j < spinnerAnimationFrames; j++ {
-		_ = ui.Writef("\r%s %s", spinner.View(), bar)
+		_ = ui.Writef("%s%s %s", terminal.EscResetLine, spinner.View(), bar)
 		spin, _ := spinner.Update(bspinner.TickMsg{})
 		spinner = &spin
 		time.Sleep(50 * time.Millisecond)
@@ -370,6 +380,8 @@ func showProgress(
 }
 
 func printSummary(installed, failed, skipped, total int) {
+	// Clear the progress bar line before printing summary.
+	_ = ui.Write(terminal.EscResetLine)
 	_ = ui.Writeln("")
 
 	switch {
