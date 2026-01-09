@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/cloudposse/atmos/pkg/logger"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -483,6 +484,9 @@ func (m Model) finalView() string {
 		}
 	}
 
+	// Log diagnostics to structured logger.
+	m.logDiagnostics()
+
 	return b.String()
 }
 
@@ -507,4 +511,48 @@ func (m *Model) GetError() error {
 // GetTracker returns the resource tracker.
 func (m *Model) GetTracker() *ResourceTracker {
 	return m.tracker
+}
+
+// logDiagnostics sends all diagnostics to the Atmos logger at appropriate severity levels.
+func (m Model) logDiagnostics() {
+	for _, diag := range m.tracker.GetDiagnostics() {
+		m.logDiagnostic(diag)
+	}
+}
+
+// logDiagnostic logs a single diagnostic at the appropriate level based on severity.
+func (m Model) logDiagnostic(diag *DiagnosticMessage) {
+	// Build structured key-value pairs.
+	keyvals := []interface{}{
+		logger.FieldStack, m.stack,
+		logger.FieldComponent, m.component,
+	}
+
+	// Add detail if present.
+	if diag.Diagnostic.Detail != "" {
+		keyvals = append(keyvals, "detail", diag.Diagnostic.Detail)
+	}
+
+	// Add resource address if present.
+	if diag.Diagnostic.Address != "" {
+		keyvals = append(keyvals, "address", diag.Diagnostic.Address)
+	}
+
+	// Add source location if present.
+	if diag.Diagnostic.Range != nil {
+		keyvals = append(keyvals,
+			logger.FieldFile, diag.Diagnostic.Range.Filename,
+			"line", diag.Diagnostic.Range.Start.Line,
+		)
+	}
+
+	// Route to appropriate logger level based on severity.
+	switch diag.Diagnostic.Severity {
+	case "error":
+		logger.Error(diag.Diagnostic.Summary, keyvals...)
+	case "warning":
+		logger.Warn(diag.Diagnostic.Summary, keyvals...)
+	default:
+		logger.Info(diag.Diagnostic.Summary, keyvals...)
+	}
 }
