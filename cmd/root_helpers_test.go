@@ -1362,3 +1362,112 @@ func TestRenderFlagsNilFlagSet(t *testing.T) {
 	// Output should be empty.
 	assert.Empty(t, buf.String())
 }
+
+// TestExperimentalModeHandling tests the experimental command mode switch cases.
+// This tests the different behaviors based on settings.experimental configuration.
+func TestExperimentalModeHandling(t *testing.T) {
+	tests := []struct {
+		name             string
+		experimentalMode string
+		expectExit       bool
+		expectedExitCode int
+	}{
+		{
+			name:             "silence mode - no output or exit",
+			experimentalMode: "silence",
+			expectExit:       false,
+		},
+		{
+			name:             "disable mode - command disabled with exit",
+			experimentalMode: "disable",
+			expectExit:       true,
+			expectedExitCode: 1,
+		},
+		{
+			name:             "warn mode - warning shown but no exit",
+			experimentalMode: "warn",
+			expectExit:       false,
+		},
+		{
+			name:             "error mode - warning and exit",
+			experimentalMode: "error",
+			expectExit:       true,
+			expectedExitCode: 1,
+		},
+		{
+			name:             "empty mode defaults to warn - no exit",
+			experimentalMode: "",
+			expectExit:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use NewTestKit to isolate RootCmd state.
+			_ = NewTestKit(t)
+
+			// Save and restore os.Exit.
+			originalOsExit := errUtils.OsExit
+			defer func() {
+				errUtils.OsExit = originalOsExit
+			}()
+
+			// Track if exit was called and with what code.
+			var exitCalled bool
+			var exitCode int
+			errUtils.OsExit = func(code int) {
+				exitCalled = true
+				exitCode = code
+				// Don't actually exit in tests - panic to stop execution.
+				panic(fmt.Sprintf("os.Exit(%d) called", code))
+			}
+
+			// Create a test command marked as experimental.
+			testCmd := &cobra.Command{
+				Use:   "test-experimental",
+				Short: "Test experimental command",
+				Annotations: map[string]string{
+					"experimental": "true",
+				},
+				Run: func(cmd *cobra.Command, args []string) {
+					// Command executed successfully.
+				},
+			}
+
+			// Add the test command to RootCmd.
+			RootCmd.AddCommand(testCmd)
+			defer func() {
+				RootCmd.RemoveCommand(testCmd)
+			}()
+
+			// Set up environment for the test.
+			stacksPath := "../tests/fixtures/scenarios/complete"
+			t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+			t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+			// Set the experimental mode via environment variable.
+			// This will be read during config initialization.
+			// The env var is ATMOS_EXPERIMENTAL (not ATMOS_SETTINGS_EXPERIMENTAL).
+			if tt.experimentalMode != "" {
+				t.Setenv("ATMOS_EXPERIMENTAL", tt.experimentalMode)
+			}
+
+			// Set args to run our test experimental command.
+			RootCmd.SetArgs([]string{"test-experimental"})
+
+			// Execute and check for panic (which we use to simulate exit).
+			if tt.expectExit {
+				assert.Panics(t, func() {
+					_ = Execute()
+				}, "Expected os.Exit to be called")
+				assert.True(t, exitCalled, "Expected exit to be called")
+				assert.Equal(t, tt.expectedExitCode, exitCode, "Expected exit code %d, got %d", tt.expectedExitCode, exitCode)
+			} else {
+				assert.NotPanics(t, func() {
+					_ = Execute()
+				}, "Expected no os.Exit call")
+				assert.False(t, exitCalled, "Expected exit not to be called")
+			}
+		})
+	}
+}
