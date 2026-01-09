@@ -70,6 +70,7 @@ var (
 	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
 	ErrInvalidOffset                         = errors.New("offset must be >= 0")
 	ErrDuplicateFlagRegistration             = errors.New("duplicate flag registration")
+	ErrReservedFlagName                      = errors.New("custom command uses reserved flag name")
 	ErrInvalidSinceDate                      = errors.New("invalid date format for --since")
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")

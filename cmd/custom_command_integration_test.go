@@ -287,15 +287,16 @@ func TestCustomCommandIntegration_BooleanFlagDefaults(t *testing.T) {
 	outputFile := filepath.Join(tmpDir, "bool-flag-output.txt")
 
 	// Create a custom command with boolean flags that have various default values.
+	// Note: We use "debug" instead of "verbose" to avoid conflict with the global --verbose flag.
 	testCommand := schema.Command{
 		Name:        "test-bool-defaults",
 		Description: "Test boolean flag defaults",
 		Flags: []schema.CommandFlag{
 			{
-				Name:      "verbose",
-				Shorthand: "v",
+				Name:      "debug",
+				Shorthand: "d",
 				Type:      "bool",
-				Usage:     "Enable verbose output",
+				Usage:     "Enable debug output",
 				Default:   false, // Explicit false default.
 			},
 			{
@@ -313,7 +314,7 @@ func TestCustomCommandIntegration_BooleanFlagDefaults(t *testing.T) {
 			},
 		},
 		Steps: stepsFromStrings(
-			"echo verbose={{ .Flags.verbose }} force={{ .Flags.force }} dry-run={{ index .Flags \"dry-run\" }} > " + outputFile,
+			"echo debug={{ .Flags.debug }} force={{ .Flags.force }} dry-run={{ index .Flags \"dry-run\" }} > " + outputFile,
 		),
 	}
 
@@ -335,9 +336,9 @@ func TestCustomCommandIntegration_BooleanFlagDefaults(t *testing.T) {
 	require.NotNil(t, customCmd, "Custom command should be registered")
 
 	// Verify flags are registered with correct defaults.
-	verboseFlag := customCmd.PersistentFlags().Lookup("verbose")
-	require.NotNil(t, verboseFlag, "verbose flag should be registered")
-	assert.Equal(t, "false", verboseFlag.DefValue, "verbose should default to false")
+	debugFlag := customCmd.PersistentFlags().Lookup("debug")
+	require.NotNil(t, debugFlag, "debug flag should be registered")
+	assert.Equal(t, "false", debugFlag.DefValue, "debug should default to false")
 
 	forceFlag := customCmd.PersistentFlags().Lookup("force")
 	require.NotNil(t, forceFlag, "force flag should be registered")
@@ -372,15 +373,16 @@ func TestCustomCommandIntegration_BooleanFlagTemplatePatterns(t *testing.T) {
 	outputFile := filepath.Join(tmpDir, "template-patterns-output.txt")
 
 	// Create a custom command that tests various template patterns with boolean flags.
+	// Note: We use "debug" instead of "verbose" to avoid conflict with the global --verbose flag.
 	testCommand := schema.Command{
 		Name:        "test-template-patterns",
 		Description: "Test boolean flag template patterns",
 		Flags: []schema.CommandFlag{
 			{
-				Name:      "verbose",
-				Shorthand: "v",
+				Name:      "debug",
+				Shorthand: "d",
 				Type:      "bool",
-				Usage:     "Enable verbose output",
+				Usage:     "Enable debug output",
 				Default:   false,
 			},
 			{
@@ -392,11 +394,11 @@ func TestCustomCommandIntegration_BooleanFlagTemplatePatterns(t *testing.T) {
 		},
 		Steps: stepsFromStrings(
 			// Test multiple patterns in a single step that writes to file.
-			`echo "PATTERN1={{ if .Flags.verbose }}VERBOSE_ON{{ end }}" >> `+outputFile,
-			`echo "PATTERN2=Building{{ if .Flags.verbose }} with verbose{{ end }}" >> `+outputFile,
+			`echo "PATTERN1={{ if .Flags.debug }}DEBUG_ON{{ end }}" >> `+outputFile,
+			`echo "PATTERN2=Building{{ if .Flags.debug }} with debug{{ end }}" >> `+outputFile,
 			`echo "PATTERN3={{ if .Flags.clean }}CLEAN_ON{{ else }}CLEAN_OFF{{ end }}" >> `+outputFile,
-			`echo "PATTERN4={{ if not .Flags.verbose }}QUIET_MODE{{ end }}" >> `+outputFile,
-			`echo "PATTERN5=verbose={{ .Flags.verbose }}" >> `+outputFile,
+			`echo "PATTERN4={{ if not .Flags.debug }}QUIET_MODE{{ end }}" >> `+outputFile,
+			`echo "PATTERN5=debug={{ .Flags.debug }}" >> `+outputFile,
 			`echo "PATTERN6=clean={{ printf "%t" .Flags.clean }}" >> `+outputFile,
 		),
 	}
@@ -429,22 +431,22 @@ func TestCustomCommandIntegration_BooleanFlagTemplatePatterns(t *testing.T) {
 	output, err := os.ReadFile(outputFile)
 	require.NoError(t, err, "Should be able to read output file")
 	outputStr := string(output)
-	t.Logf("Output with defaults (verbose=false, clean=true):\n%s", outputStr)
+	t.Logf("Output with defaults (debug=false, clean=true):\n%s", outputStr)
 
-	// Pattern 1: {{ if .Flags.verbose }} - should be empty since verbose=false.
-	assert.Contains(t, outputStr, "PATTERN1=\n", "Pattern 1: if should produce empty when verbose=false")
+	// Pattern 1: {{ if .Flags.debug }} - should be empty since debug=false.
+	assert.Contains(t, outputStr, "PATTERN1=\n", "Pattern 1: if should produce empty when debug=false")
 
-	// Pattern 2: Inline conditional - should not have "with verbose".
-	assert.Contains(t, outputStr, "PATTERN2=Building\n", "Pattern 2: inline if should not append when verbose=false")
+	// Pattern 2: Inline conditional - should not have "with debug".
+	assert.Contains(t, outputStr, "PATTERN2=Building\n", "Pattern 2: inline if should not append when debug=false")
 
 	// Pattern 3: if/else - clean=true so should be CLEAN_ON.
 	assert.Contains(t, outputStr, "PATTERN3=CLEAN_ON", "Pattern 3: if/else should produce CLEAN_ON when clean=true")
 
-	// Pattern 4: if not - verbose=false so "not .Flags.verbose" is true.
-	assert.Contains(t, outputStr, "PATTERN4=QUIET_MODE", "Pattern 4: if not should produce QUIET_MODE when verbose=false")
+	// Pattern 4: if not - debug=false so "not .Flags.debug" is true.
+	assert.Contains(t, outputStr, "PATTERN4=QUIET_MODE", "Pattern 4: if not should produce QUIET_MODE when debug=false")
 
 	// Pattern 5: Direct boolean value - should be "false".
-	assert.Contains(t, outputStr, "PATTERN5=verbose=false", "Pattern 5: direct value should render as 'false'")
+	assert.Contains(t, outputStr, "PATTERN5=debug=false", "Pattern 5: direct value should render as 'false'")
 
 	// Pattern 6: printf %t - should be "true".
 	assert.Contains(t, outputStr, "PATTERN6=clean=true", "Pattern 6: printf should render as 'true'")
@@ -453,31 +455,31 @@ func TestCustomCommandIntegration_BooleanFlagTemplatePatterns(t *testing.T) {
 	err = os.WriteFile(outputFile, []byte{}, 0o644)
 	require.NoError(t, err)
 
-	// Test 2: Execute with verbose=true and clean=false (via flags).
-	RootCmd.SetArgs([]string{"test-template-patterns", "--verbose", "--clean=false"})
+	// Test 2: Execute with debug=true and clean=false (via flags).
+	RootCmd.SetArgs([]string{"test-template-patterns", "--debug", "--clean=false"})
 	err = RootCmd.Execute()
 	require.NoError(t, err, "Custom command execution with flags should succeed")
 
-	// Read and verify output with verbose=true, clean=false.
+	// Read and verify output with debug=true, clean=false.
 	output, err = os.ReadFile(outputFile)
 	require.NoError(t, err)
 	outputStr = string(output)
-	t.Logf("Output with flags (verbose=true, clean=false):\n%s", outputStr)
+	t.Logf("Output with flags (debug=true, clean=false):\n%s", outputStr)
 
-	// Pattern 1: {{ if .Flags.verbose }} - should have VERBOSE_ON.
-	assert.Contains(t, outputStr, "PATTERN1=VERBOSE_ON", "Pattern 1: if should produce VERBOSE_ON when verbose=true")
+	// Pattern 1: {{ if .Flags.debug }} - should have DEBUG_ON.
+	assert.Contains(t, outputStr, "PATTERN1=DEBUG_ON", "Pattern 1: if should produce DEBUG_ON when debug=true")
 
-	// Pattern 2: Inline conditional - should have "with verbose".
-	assert.Contains(t, outputStr, "PATTERN2=Building with verbose", "Pattern 2: inline if should append when verbose=true")
+	// Pattern 2: Inline conditional - should have "with debug".
+	assert.Contains(t, outputStr, "PATTERN2=Building with debug", "Pattern 2: inline if should append when debug=true")
 
 	// Pattern 3: if/else - clean=false so should be CLEAN_OFF.
 	assert.Contains(t, outputStr, "PATTERN3=CLEAN_OFF", "Pattern 3: if/else should produce CLEAN_OFF when clean=false")
 
-	// Pattern 4: if not - verbose=true so "not .Flags.verbose" is false.
-	assert.Contains(t, outputStr, "PATTERN4=\n", "Pattern 4: if not should produce empty when verbose=true")
+	// Pattern 4: if not - debug=true so "not .Flags.debug" is false.
+	assert.Contains(t, outputStr, "PATTERN4=\n", "Pattern 4: if not should produce empty when debug=true")
 
 	// Pattern 5: Direct boolean value - should be "true".
-	assert.Contains(t, outputStr, "PATTERN5=verbose=true", "Pattern 5: direct value should render as 'true'")
+	assert.Contains(t, outputStr, "PATTERN5=debug=true", "Pattern 5: direct value should render as 'true'")
 
 	// Pattern 6: printf %t - should be "false".
 	assert.Contains(t, outputStr, "PATTERN6=clean=false", "Pattern 6: printf should render as 'false'")

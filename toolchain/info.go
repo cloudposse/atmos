@@ -39,7 +39,7 @@ func InfoExec(toolName, outputFormat string) error {
 	installer := NewInstaller()
 
 	// Parse tool name to get owner/repo.
-	owner, repo, err := installer.parseToolSpec(toolName)
+	owner, repo, err := installer.ParseToolSpec(toolName)
 	if err != nil {
 		return fmt.Errorf("failed to resolve tool '%s': %w", toolName, err)
 	}
@@ -55,7 +55,7 @@ func InfoExec(toolName, outputFormat string) error {
 	version := resolveLatestVersion(versionInfo.ResolvedVersion, owner, repo)
 
 	// Find the tool configuration.
-	tool, err := installer.findTool(owner, repo, version)
+	tool, err := installer.FindTool(owner, repo, version)
 	if err != nil {
 		return fmt.Errorf("failed to find tool %s: %w", toolName, err)
 	}
@@ -525,7 +525,7 @@ func getEvaluatedToolYAML(tool *registry.Tool, version string, installer *Instal
 	assetURL := ""
 	var err error
 	if tool.Asset != "" {
-		assetURL, err = installer.buildAssetURL(tool, version)
+		assetURL, err = installer.BuildAssetURL(tool, version)
 		if err != nil {
 			return "", fmt.Errorf("failed to build asset URL: %w", err)
 		}

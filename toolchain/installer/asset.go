@@ -1,4 +1,4 @@
-package toolchain
+package installer
 
 import (
 	"fmt"
@@ -22,9 +22,9 @@ type assetTemplateData struct {
 	Format    string
 }
 
-// buildAssetURL constructs the asset download URL based on tool configuration.
-func (i *Installer) buildAssetURL(tool *registry.Tool, version string) (string, error) {
-	defer perf.Track(nil, "Installer.buildAssetURL")()
+// BuildAssetURL constructs the asset download URL based on tool configuration.
+func (i *Installer) BuildAssetURL(tool *registry.Tool, version string) (string, error) {
+	defer perf.Track(nil, "Installer.BuildAssetURL")()
 
 	switch tool.Type {
 	case "http":
@@ -80,7 +80,7 @@ func buildTemplateData(tool *registry.Tool, version string) *assetTemplateData {
 
 	prefix := tool.VersionPrefix
 	if prefix == "" {
-		prefix = versionPrefix
+		prefix = VersionPrefix
 	}
 
 	releaseVersion := version
@@ -90,11 +90,23 @@ func buildTemplateData(tool *registry.Tool, version string) *assetTemplateData {
 
 	semVer := strings.TrimPrefix(releaseVersion, prefix)
 
+	// Get OS and Arch, applying any replacements from the tool config.
+	osVal := runtime.GOOS
+	archVal := runtime.GOARCH
+	if tool.Replacements != nil {
+		if replacement, ok := tool.Replacements[osVal]; ok {
+			osVal = replacement
+		}
+		if replacement, ok := tool.Replacements[archVal]; ok {
+			archVal = replacement
+		}
+	}
+
 	return &assetTemplateData{
 		Version:   releaseVersion,
 		SemVer:    semVer,
-		OS:        runtime.GOOS,
-		Arch:      runtime.GOARCH,
+		OS:        osVal,
+		Arch:      archVal,
 		RepoOwner: tool.RepoOwner,
 		RepoName:  tool.RepoName,
 		Format:    tool.Format,
@@ -105,7 +117,7 @@ func buildTemplateData(tool *registry.Tool, version string) *assetTemplateData {
 func assetTemplateFuncs() template.FuncMap {
 	return template.FuncMap{
 		"trimV": func(s string) string {
-			return strings.TrimPrefix(s, versionPrefix)
+			return strings.TrimPrefix(s, VersionPrefix)
 		},
 		"trimPrefix": func(pfx, s string) string {
 			return strings.TrimPrefix(s, pfx)
@@ -115,6 +127,20 @@ func assetTemplateFuncs() template.FuncMap {
 		},
 		"replace": func(old, new, s string) string {
 			return strings.ReplaceAll(s, old, new)
+		},
+		// Conditional helpers for platform-specific asset patterns.
+		"eq": func(a, b string) bool {
+			return a == b
+		},
+		"ne": func(a, b string) bool {
+			return a != b
+		},
+		// ternary returns trueVal if condition is true, otherwise falseVal.
+		"ternary": func(condition bool, trueVal, falseVal string) string {
+			if condition {
+				return trueVal
+			}
+			return falseVal
 		},
 	}
 }

@@ -1,4 +1,4 @@
-package toolchain
+package installer
 
 import (
 	"fmt"
@@ -20,7 +20,8 @@ import (
 )
 
 const (
-	versionPrefix               = "v"
+	// VersionPrefix is the standard version prefix for tools.
+	VersionPrefix               = "v"
 	defaultFileWritePermissions = 0o644
 	defaultMkdirPermissions     = 0o755
 	executablePermissionMask    = 0o111 // Mask for checking if file is executable.
@@ -47,7 +48,7 @@ var BuiltinAliases = map[string]string{
 
 // DefaultToolResolver implements ToolResolver using configured aliases and registry search.
 type DefaultToolResolver struct {
-	atmosConfig *schema.AtmosConfiguration
+	AtmosConfig *schema.AtmosConfiguration
 }
 
 func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
@@ -55,8 +56,8 @@ func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 
 	// Step 1: Check if this is an alias in atmos.yaml (user-defined aliases take precedence).
 	// If atmosConfig is available and has aliases configured, resolve the alias first.
-	if d.atmosConfig != nil && len(d.atmosConfig.Toolchain.Aliases) > 0 {
-		if aliasedName, found := d.atmosConfig.Toolchain.Aliases[toolName]; found {
+	if d.AtmosConfig != nil && len(d.AtmosConfig.Toolchain.Aliases) > 0 {
+		if aliasedName, found := d.AtmosConfig.Toolchain.Aliases[toolName]; found {
 			toolName = aliasedName
 		}
 	}
@@ -90,16 +91,71 @@ func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 
 // Installer handles the installation of CLI binaries.
 type Installer struct {
-	registryPath string
-	cacheDir     string
-	binDir       string
-	registries   []string
-	resolver     ToolResolver
+	registryPath     string
+	cacheDir         string
+	binDir           string
+	registries       []string
+	resolver         ToolResolver
+	configuredReg    registry.ToolRegistry // Registry loaded from atmos.yaml config.
+	useConfiguredReg bool                  // Whether to use configured registry vs legacy hardcoded list.
+	registryFactory  RegistryFactory       // Factory for creating Aqua registry instances.
 }
 
-// NewInstallerWithResolver allows injecting a custom ToolResolver (for tests).
-func NewInstallerWithResolver(resolver ToolResolver) *Installer {
-	defer perf.Track(nil, "toolchain.NewInstaller")()
+// RegistryFactory creates registry instances. This allows dependency injection.
+type RegistryFactory interface {
+	NewAquaRegistry() registry.ToolRegistry
+}
+
+// Option is a functional option for configuring the Installer.
+type Option func(*Installer)
+
+// WithBinDir sets the binary installation directory.
+func WithBinDir(binDir string) Option {
+	return func(i *Installer) {
+		i.binDir = binDir
+	}
+}
+
+// WithCacheDir sets the cache directory.
+func WithCacheDir(cacheDir string) Option {
+	return func(i *Installer) {
+		i.cacheDir = cacheDir
+	}
+}
+
+// WithResolver sets the tool resolver.
+func WithResolver(resolver ToolResolver) Option {
+	return func(i *Installer) {
+		i.resolver = resolver
+	}
+}
+
+// WithConfiguredRegistry sets a pre-configured registry.
+func WithConfiguredRegistry(reg registry.ToolRegistry) Option {
+	return func(i *Installer) {
+		i.configuredReg = reg
+		i.useConfiguredReg = true
+	}
+}
+
+// WithRegistryFactory sets the factory for creating registry instances.
+func WithRegistryFactory(factory RegistryFactory) Option {
+	return func(i *Installer) {
+		i.registryFactory = factory
+	}
+}
+
+// defaultRegistryFactory is a no-op factory that returns nil.
+// The actual factory is injected from the toolchain package.
+type defaultRegistryFactory struct{}
+
+func (d *defaultRegistryFactory) NewAquaRegistry() registry.ToolRegistry {
+	return nil
+}
+
+// New creates a new Installer with the given options.
+func New(opts ...Option) *Installer {
+	defer perf.Track(nil, "installer.New")()
 
 	// Use XDG-compliant cache directory.
 	cacheDir, err := xdg.GetXDGCacheDir("toolchain", defaultMkdirPermissions)
@@ -114,36 +170,42 @@ func NewInstallerWithResolver(resolver ToolResolver) *Installer {
 			cacheDir = filepath.Join(homeDir, ".cache", "tools-cache")
 		}
 	}
-	binDir := filepath.Join(GetInstallPath(), "bin")
-	registries := []string{
-		"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs",
-		"./tool-registry",
-	}
-	return &Installer{
+
+	installer := &Installer{
 		registryPath: "./tool-registry",
 		cacheDir:     cacheDir,
-		binDir:       binDir,
-		registries:   registries,
-		resolver:     resolver,
+		registries: []string{
+			"https://raw.githubusercontent.com/aquaproj/aqua-registry/main/pkgs",
+			"./tool-registry",
+		},
+		registryFactory: &defaultRegistryFactory{},
 	}
+
+	// Apply options.
+	for _, opt := range opts {
+		opt(installer)
+	}
+
+	return installer
 }
 
-// NewInstaller uses the default resolver with alias support from atmosConfig.
-func NewInstaller() *Installer {
-	defer perf.Track(nil, "toolchain.NewInstaller")()
+// NewInstallerWithResolver allows injecting a custom ToolResolver (for tests).
+// Deprecated: Use New() with WithResolver() option instead.
+func NewInstallerWithResolver(resolver ToolResolver, binDir string) *Installer {
+	defer perf.Track(nil, "installer.NewInstallerWithResolver")()
 
-	// Get the current atmos config to support alias resolution.
-	return NewInstallerWithResolver(&DefaultToolResolver{
-		atmosConfig: GetAtmosConfig(),
-	})
+	return New(
+		WithResolver(resolver),
+		WithBinDir(binDir),
+	)
 }
 
 // Install installs a tool from the registry.
 func (i *Installer) Install(owner, repo, version string) (string, error) {
-	defer perf.Track(nil, "toolchain.Install")()
+	defer perf.Track(nil, "installer.Install")()
 
 	// Get tool from registry
-	tool, err := i.findTool(owner, repo, version)
+	tool, err := i.FindTool(owner, repo, version)
 	if err != nil {
 		return "", err // Error already enriched in findTool
 	}
@@ -152,7 +214,10 @@ func (i *Installer) Install(owner, repo, version string) (string, error) {
 
 // Helper to handle the rest of the install logic.
 func (i *Installer) installFromTool(tool *registry.Tool, version string) (string, error) {
-	assetURL, err := i.buildAssetURL(tool, version)
+	// Apply platform-specific overrides before building the asset URL.
+	ApplyPlatformOverrides(tool)
+
+	assetURL, err := i.BuildAssetURL(tool, version)
 	if err != nil {
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, err)
 	}
@@ -175,19 +240,58 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 	return binaryPath, nil
 }
 
-// findTool searches for a tool in the registry.
-func (i *Installer) findTool(owner, repo, version string) (*registry.Tool, error) {
-	defer perf.Track(nil, "toolchain.findTool")()
+// FindTool searches for a tool in the registry.
+func (i *Installer) FindTool(owner, repo, version string) (*registry.Tool, error) {
+	defer perf.Track(nil, "installer.FindTool")()
 
-	// Search through all registries
-	for _, registry := range i.registries {
-		tool, err := i.searchRegistry(registry, owner, repo, version)
+	log.Debug("Finding tool in registries",
+		"owner", owner,
+		"repo", repo,
+		"version", version,
+		"useConfiguredReg", i.useConfiguredReg,
+		"hasConfiguredReg", i.configuredReg != nil,
+		"legacyRegistryCount", len(i.registries))
+
+	// Use configured registries from atmos.yaml if available.
+	if i.useConfiguredReg && i.configuredReg != nil {
+		log.Debug("Searching configured registries from atmos.yaml")
+		tool, err := i.configuredReg.GetToolWithVersion(owner, repo, version)
 		if err == nil {
+			log.Debug("Tool found in configured registry",
+				"owner", owner,
+				"repo", repo,
+				"version", version,
+				"toolRegistry", tool.Registry,
+				"toolAsset", tool.Asset)
+			// Ensure RepoOwner and RepoName are set correctly.
+			tool.RepoOwner = owner
+			tool.RepoName = repo
 			return tool, nil
 		}
+		log.Debug("Tool not found in configured registries",
+			"owner", owner,
+			"repo", repo,
+			"version", version,
+			"error", err)
+	} else {
+		log.Debug("No configured registries available, using legacy hardcoded registries",
+			"useConfiguredReg", i.useConfiguredReg,
+			"hasConfiguredReg", i.configuredReg != nil)
 	}
 
-	// Build list of registry names for context
+	// Fallback: Search through legacy hardcoded registries.
+	log.Debug("Falling back to legacy hardcoded registries", "count", len(i.registries))
+	for _, reg := range i.registries {
+		log.Debug("Searching legacy registry", "registry", reg)
+		tool, err := i.searchRegistry(reg, owner, repo, version)
+		if err == nil {
+			log.Debug("Tool found in legacy registry", "registry", reg)
+			return tool, nil
+		}
+		log.Debug("Tool not found in legacy registry", "registry", reg, "error", err)
+	}
+
+	// Build list of registry names for context.
 	registryNames := make([]string, len(i.registries))
 	copy(registryNames, i.registries)
 
@@ -205,23 +309,29 @@ func (i *Installer) findTool(owner, repo, version string) (*registry.Tool, error
 
 // searchRegistry searches a specific registry for a tool.
 // Version is required to apply version-specific overrides from the registry.
-func (i *Installer) searchRegistry(registry, owner, repo, version string) (*registry.Tool, error) {
-	// Try to fetch from Aqua registry for remote registries
-	if strings.HasPrefix(registry, "http") {
-		// Use the Aqua registry implementation
-		ar := NewAquaRegistry()
+func (i *Installer) searchRegistry(reg, owner, repo, version string) (*registry.Tool, error) {
+	// Try to fetch from Aqua registry for remote registries.
+	if strings.HasPrefix(reg, "http") {
+		// Use the injected registry factory.
+		if i.registryFactory == nil {
+			return nil, fmt.Errorf("%w: registry factory not configured", ErrInvalidToolSpec)
+		}
+		ar := i.registryFactory.NewAquaRegistry()
+		if ar == nil {
+			return nil, fmt.Errorf("%w: failed to create Aqua registry", ErrInvalidToolSpec)
+		}
 		tool, err := ar.GetToolWithVersion(owner, repo, version)
 		if err != nil {
 			return nil, err
 		}
-		// Ensure RepoOwner and RepoName are set correctly
+		// Ensure RepoOwner and RepoName are set correctly.
 		tool.RepoOwner = owner
 		tool.RepoName = repo
 		return tool, nil
 	}
 
-	// Try local registry
-	return i.searchLocalRegistry(registry, owner, repo)
+	// Try local registry.
+	return i.searchLocalRegistry(reg, owner, repo)
 }
 
 // searchLocalRegistry searches a local registry for a tool.
@@ -256,9 +366,9 @@ func (i *Installer) loadToolFile(filePath string) (*registry.Tool, error) {
 	return nil, fmt.Errorf("%w: no tools found in %s", ErrToolNotFound, filePath)
 }
 
-// parseToolSpec parses a tool specification (owner/repo or just repo).
-func (i *Installer) parseToolSpec(tool string) (string, string, error) {
-	defer perf.Track(nil, "toolchain.parseToolSpec")()
+// ParseToolSpec parses a tool specification (owner/repo or just repo).
+func (i *Installer) ParseToolSpec(tool string) (string, string, error) {
+	defer perf.Track(nil, "installer.ParseToolSpec")()
 
 	parts := strings.Split(tool, "/")
 	if len(parts) == 2 {
@@ -296,11 +406,16 @@ func (i *Installer) extractAndInstall(tool *registry.Tool, assetPath, version st
 	return binaryPath, nil
 }
 
-// getBinaryPath returns the path to a specific version of a binary.
+// GetBinDir returns the binary installation directory.
+func (i *Installer) GetBinDir() string {
+	return i.binDir
+}
+
+// GetBinaryPath returns the path to a specific version of a binary.
 // If binaryName is provided and non-empty, it will be used directly.
 // Otherwise, it will search the version directory for an executable file,
 // falling back to using the repo name as the binary name.
-func (i *Installer) getBinaryPath(owner, repo, version, binaryName string) string {
+func (i *Installer) GetBinaryPath(owner, repo, version, binaryName string) string {
 	versionDir := filepath.Join(i.binDir, owner, repo, version)
 
 	// If binary name is explicitly provided, use it directly.
@@ -394,7 +509,7 @@ func (i *Installer) FindBinaryPath(owner, repo, version string, binaryName ...st
 	}
 
 	// Try the expected path first (binDir/owner/repo/version/binaryName)
-	expectedPath := i.getBinaryPath(owner, repo, version, name)
+	expectedPath := i.GetBinaryPath(owner, repo, version, name)
 	if _, err := os.Stat(expectedPath); err == nil {
 		return expectedPath, nil
 	}

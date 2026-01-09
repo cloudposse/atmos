@@ -391,6 +391,10 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*registry.Tool, error) {
 			Type:          pkg.Type,
 			BinaryName:    pkg.BinaryName,
 			VersionPrefix: pkg.VersionPrefix,
+			// Copy Aqua-specific fields for nested file extraction and platform overrides.
+			Files:        pkg.Files,
+			Replacements: pkg.Replacements,
+			Overrides:    convertAquaOverrides(pkg.Overrides),
 		}
 		if pkg.BinaryName == "" {
 			tool.Name = pkg.RepoName
@@ -405,6 +409,29 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*registry.Tool, error) {
 	}
 
 	return nil, fmt.Errorf("%w: no tools or packages found in registry file", registry.ErrNoPackagesInRegistry)
+}
+
+// convertAquaOverrides converts Aqua overrides to the internal Override format.
+func convertAquaOverrides(aquaOverrides []registry.AquaOverride) []registry.Override {
+	if len(aquaOverrides) == 0 {
+		return nil
+	}
+	overrides := make([]registry.Override, len(aquaOverrides))
+	for i, ao := range aquaOverrides {
+		overrides[i] = registry.Override{
+			GOOS:         ao.GOOS,
+			GOARCH:       ao.GOARCH,
+			Asset:        ao.Asset,
+			Format:       ao.Format,
+			Files:        ao.Files,
+			Replacements: ao.Replacements,
+		}
+		// If URL is set in Aqua override, use it as Asset (Aqua uses url instead of asset).
+		if ao.URL != "" {
+			overrides[i].Asset = ao.URL
+		}
+	}
+	return overrides
 }
 
 // BuildAssetURL constructs the download URL for a tool version.

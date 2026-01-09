@@ -840,3 +840,176 @@ func TestAquaRegistry_SearchRelevanceScoring(t *testing.T) {
 	firstResult := results[0]
 	assert.Contains(t, firstResult.RepoName, "kubectl")
 }
+
+func TestAquaRegistry_parseRegistryFile_WithFiles(t *testing.T) {
+	ar := NewAquaRegistry()
+
+	// Test parsing packages with files configuration (AWS CLI pattern).
+	data, err := os.ReadFile("testdata/aws-cli-files.yaml")
+	require.NoError(t, err)
+
+	tool, err := ar.parseRegistryFile(data)
+	assert.NoError(t, err)
+	assert.NotNil(t, tool)
+	assert.Equal(t, "aws-cli", tool.Name)
+	assert.Equal(t, "aws", tool.RepoOwner)
+	assert.Equal(t, "aws-cli", tool.RepoName)
+
+	// Verify files config.
+	require.Len(t, tool.Files, 2)
+	assert.Equal(t, "aws", tool.Files[0].Name)
+	assert.Equal(t, "aws/dist/aws", tool.Files[0].Src)
+	assert.Equal(t, "aws_completer", tool.Files[1].Name)
+	assert.Equal(t, "aws/dist/aws_completer", tool.Files[1].Src)
+}
+
+func TestAquaRegistry_parseRegistryFile_WithReplacements(t *testing.T) {
+	ar := NewAquaRegistry()
+
+	// Test parsing packages with replacements (common pattern for arch mapping).
+	data, err := os.ReadFile("testdata/aws-cli-replacements.yaml")
+	require.NoError(t, err)
+
+	tool, err := ar.parseRegistryFile(data)
+	assert.NoError(t, err)
+	assert.NotNil(t, tool)
+
+	// Verify replacements config.
+	require.NotNil(t, tool.Replacements)
+	assert.Len(t, tool.Replacements, 2)
+	assert.Equal(t, "x86_64", tool.Replacements["amd64"])
+	assert.Equal(t, "aarch64", tool.Replacements["arm64"])
+}
+
+func TestAquaRegistry_parseRegistryFile_WithOverrides(t *testing.T) {
+	ar := NewAquaRegistry()
+
+	// Test parsing packages with platform overrides (AWS CLI macOS pattern).
+	data := []byte(`
+packages:
+  - type: http
+    repo_owner: aws
+    repo_name: aws-cli
+    url: https://awscli.amazonaws.com/awscli-exe-{{.OS}}-{{.Arch}}-{{.Version}}.zip
+    format: zip
+    overrides:
+      - goos: darwin
+        url: https://awscli.amazonaws.com/AWSCLIV2-{{.Version}}.{{.Format}}
+        format: pkg
+        files:
+          - name: aws
+            src: aws-cli.pkg/Payload/aws-cli/aws
+          - name: aws_completer
+            src: aws-cli.pkg/Payload/aws-cli/aws_completer
+`)
+
+	tool, err := ar.parseRegistryFile(data)
+	assert.NoError(t, err)
+	assert.NotNil(t, tool)
+
+	// Verify overrides config.
+	require.Len(t, tool.Overrides, 1)
+	override := tool.Overrides[0]
+	assert.Equal(t, "darwin", override.GOOS)
+	assert.Empty(t, override.GOARCH) // Not specified, so empty (wildcard).
+	assert.Equal(t, "https://awscli.amazonaws.com/AWSCLIV2-{{.Version}}.{{.Format}}", override.Asset)
+	assert.Equal(t, "pkg", override.Format)
+
+	// Verify override files.
+	require.Len(t, override.Files, 2)
+	assert.Equal(t, "aws", override.Files[0].Name)
+	assert.Equal(t, "aws-cli.pkg/Payload/aws-cli/aws", override.Files[0].Src)
+}
+
+func TestAquaRegistry_parseRegistryFile_FullAWSCLIPattern(t *testing.T) {
+	ar := NewAquaRegistry()
+
+	// Test parsing the full AWS CLI registry pattern from Aqua.
+	data := []byte(`
+packages:
+  - type: http
+    repo_owner: aws
+    repo_name: aws-cli
+    url: https://awscli.amazonaws.com/awscli-exe-{{.OS}}-{{.Arch}}-{{.Version}}.zip
+    format: zip
+    overrides:
+      - goos: darwin
+        url: https://awscli.amazonaws.com/AWSCLIV2-{{.Version}}.{{.Format}}
+        format: pkg
+        files:
+          - name: aws
+            src: aws-cli.pkg/Payload/aws-cli/aws
+          - name: aws_completer
+            src: aws-cli.pkg/Payload/aws-cli/aws_completer
+    files:
+      - name: aws
+        src: aws/dist/aws
+      - name: aws_completer
+        src: aws/dist/aws_completer
+    replacements:
+      amd64: x86_64
+      arm64: aarch64
+`)
+
+	tool, err := ar.parseRegistryFile(data)
+	assert.NoError(t, err)
+	assert.NotNil(t, tool)
+	assert.Equal(t, "aws-cli", tool.Name)
+	assert.Equal(t, "aws", tool.RepoOwner)
+	assert.Equal(t, "aws-cli", tool.RepoName)
+	assert.Equal(t, "http", tool.Type)
+
+	// Verify all fields parsed correctly.
+	assert.Contains(t, tool.Asset, "awscli-exe-{{.OS}}-{{.Arch}}")
+	assert.Equal(t, "zip", tool.Format)
+
+	// Files.
+	require.Len(t, tool.Files, 2)
+	assert.Equal(t, "aws", tool.Files[0].Name)
+	assert.Equal(t, "aws/dist/aws", tool.Files[0].Src)
+
+	// Replacements.
+	require.Len(t, tool.Replacements, 2)
+	assert.Equal(t, "x86_64", tool.Replacements["amd64"])
+	assert.Equal(t, "aarch64", tool.Replacements["arm64"])
+
+	// Overrides.
+	require.Len(t, tool.Overrides, 1)
+	assert.Equal(t, "darwin", tool.Overrides[0].GOOS)
+	assert.Equal(t, "pkg", tool.Overrides[0].Format)
+	assert.Len(t, tool.Overrides[0].Files, 2)
+}
+
+func TestAquaRegistry_parseRegistryFile_OverrideWithReplacements(t *testing.T) {
+	ar := NewAquaRegistry()
+
+	// Test parsing overrides that have their own replacements.
+	data := []byte(`
+packages:
+  - type: http
+    repo_owner: test
+    repo_name: tool
+    url: https://example.com/tool-{{.OS}}-{{.Arch}}.zip
+    format: zip
+    overrides:
+      - goos: darwin
+        goarch: arm64
+        url: https://example.com/tool-macos-silicon.zip
+        replacements:
+          arm64: silicon
+`)
+
+	tool, err := ar.parseRegistryFile(data)
+	assert.NoError(t, err)
+	assert.NotNil(t, tool)
+
+	// Verify override with both goos and goarch.
+	require.Len(t, tool.Overrides, 1)
+	override := tool.Overrides[0]
+	assert.Equal(t, "darwin", override.GOOS)
+	assert.Equal(t, "arm64", override.GOARCH)
+
+	// Verify override-specific replacements.
+	require.NotNil(t, override.Replacements)
+	assert.Equal(t, "silicon", override.Replacements["arm64"])
+}

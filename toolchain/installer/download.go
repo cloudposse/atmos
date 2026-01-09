@@ -1,4 +1,4 @@
-package toolchain
+package installer
 
 import (
 	"bytes"
@@ -143,17 +143,17 @@ func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL st
 	defer perf.Track(nil, "Installer.tryFallbackVersion")()
 
 	var fallbackVersion string
-	if strings.HasPrefix(version, versionPrefix) {
-		fallbackVersion = strings.TrimPrefix(version, versionPrefix)
+	if strings.HasPrefix(version, VersionPrefix) {
+		fallbackVersion = strings.TrimPrefix(version, VersionPrefix)
 	} else {
-		fallbackVersion = versionPrefix + version
+		fallbackVersion = VersionPrefix + version
 	}
 
 	if fallbackVersion == version {
 		return "", originalErr
 	}
 
-	fallbackURL, buildErr := i.buildAssetURL(tool, fallbackVersion)
+	fallbackURL, buildErr := i.BuildAssetURL(tool, fallbackVersion)
 	if buildErr != nil {
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, buildErr)
 	}

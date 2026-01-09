@@ -49,7 +49,7 @@ func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
 	})
 	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
 	installer := NewInstallerWithResolver(mockResolver)
-	owner, repo, err := installer.parseToolSpec("opentofu")
+	owner, repo, err := installer.ParseToolSpec("opentofu")
 	assert.NoError(t, err)
 	assert.Equal(t, "opentofu", owner)
 	assert.Equal(t, "opentofu", repo)

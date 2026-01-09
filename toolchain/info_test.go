@@ -15,13 +15,13 @@ func TestInfoCommand_AliasResolution(t *testing.T) {
 	installer := NewInstaller()
 
 	// Test with alias
-	owner, repo, err := installer.parseToolSpec("terraform")
+	owner, repo, err := installer.ParseToolSpec("terraform")
 	assert.NoError(t, err)
 	assert.Equal(t, "hashicorp", owner)
 	assert.Equal(t, "terraform", repo)
 
 	// Find the tool configuration (use "latest" as default version)
-	tool, err := installer.findTool(owner, repo, "latest")
+	tool, err := installer.FindTool(owner, repo, "latest")
 	assert.NoError(t, err)
 	assert.NotNil(t, tool)
 	assert.Equal(t, "http", tool.Type)
@@ -34,13 +34,13 @@ func TestInfoCommand_CanonicalOrgRepo(t *testing.T) {
 	installer := NewInstaller()
 
 	// Test with canonical org/repo
-	owner, repo, err := installer.parseToolSpec("hashicorp/terraform")
+	owner, repo, err := installer.ParseToolSpec("hashicorp/terraform")
 	assert.NoError(t, err)
 	assert.Equal(t, "hashicorp", owner)
 	assert.Equal(t, "terraform", repo)
 
 	// Find the tool configuration (use "latest" as default version)
-	tool, err := installer.findTool(owner, repo, "latest")
+	tool, err := installer.FindTool(owner, repo, "latest")
 	assert.NoError(t, err)
 	assert.NotNil(t, tool)
 	assert.Equal(t, "http", tool.Type)
@@ -53,13 +53,13 @@ func TestInfoCommand_GitHubReleaseTool(t *testing.T) {
 	installer := NewInstaller()
 
 	// Test with opentofu (should be in local config)
-	owner, repo, err := installer.parseToolSpec("opentofu")
+	owner, repo, err := installer.ParseToolSpec("opentofu")
 	assert.NoError(t, err)
 	assert.Equal(t, "opentofu", owner)
 	assert.Equal(t, "opentofu", repo)
 
 	// Find the tool configuration (use "latest" as default version)
-	tool, err := installer.findTool(owner, repo, "latest")
+	tool, err := installer.FindTool(owner, repo, "latest")
 	assert.NoError(t, err)
 	assert.NotNil(t, tool)
 	assert.Equal(t, "github_release", tool.Type)
@@ -128,10 +128,10 @@ func TestInfoCommand_CompleteToolConfiguration(t *testing.T) {
 	installer := NewInstaller()
 
 	// Test with terraform (should have complete config from tools.yaml)
-	owner, repo, err := installer.parseToolSpec("terraform")
+	owner, repo, err := installer.ParseToolSpec("terraform")
 	assert.NoError(t, err)
 
-	tool, err := installer.findTool(owner, repo, "1.11.4")
+	tool, err := installer.FindTool(owner, repo, "1.11.4")
 	assert.NoError(t, err)
 	assert.NotNil(t, tool)
 
@@ -193,7 +193,7 @@ func TestInfoCommand_NonExistentTool(t *testing.T) {
 	installer := NewInstaller()
 
 	// Test with a non-existent tool
-	_, err := installer.findTool("nonexistent", "tool", "1.0.0")
+	_, err := installer.FindTool("nonexistent", "tool", "1.0.0")
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrToolNotInRegistry)
 }
@@ -253,12 +253,12 @@ func TestInfoCommand_LocalConfigTools(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			owner, repo, err := installer.parseToolSpec(tc.toolName)
+			owner, repo, err := installer.ParseToolSpec(tc.toolName)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedOwner, owner)
 			assert.Equal(t, tc.expectedRepo, repo)
 
-			tool, err := installer.findTool(owner, repo, "1.0.0")
+			tool, err := installer.FindTool(owner, repo, "1.0.0")
 			assert.NoError(t, err)
 			assert.NotNil(t, tool)
 			assert.Equal(t, tc.expectedType, tool.Type)
@@ -308,14 +308,14 @@ func TestInfoCommand_AquaRegistryTools(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			owner, repo, err := installer.parseToolSpec(tc.toolName)
+			owner, repo, err := installer.ParseToolSpec(tc.toolName)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.expectedOwner, owner)
 			assert.Equal(t, tc.expectedRepo, repo)
 
 			// Note: This may fail if the tool doesn't exist in Aqua registry
 			// We're testing the parsing and resolution logic, not the actual registry lookup
-			tool, err := installer.findTool(owner, repo, "latest")
+			tool, err := installer.FindTool(owner, repo, "latest")
 			if err != nil {
 				// If tool not found in registry, that's okay for this test
 				// We're testing the info command logic, not registry availability
@@ -344,11 +344,11 @@ func TestInfoCommand_VersionConstraints(t *testing.T) {
 	installer := NewInstaller()
 
 	// Test opentofu which has version constraints in local config
-	owner, repo, err := installer.parseToolSpec("opentofu")
+	owner, repo, err := installer.ParseToolSpec("opentofu")
 	assert.NoError(t, err)
 
 	// Test with a version that should match a constraint
-	tool, err := installer.findTool(owner, repo, "1.10.0")
+	tool, err := installer.FindTool(owner, repo, "1.10.0")
 	assert.NoError(t, err)
 	assert.NotNil(t, tool)
 	assert.Equal(t, "github_release", tool.Type)
@@ -390,10 +390,10 @@ func TestInfoCommand_DifferentToolTypes(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			owner, repo, err := installer.parseToolSpec(tc.toolName)
+			owner, repo, err := installer.ParseToolSpec(tc.toolName)
 			assert.NoError(t, err)
 
-			tool, err := installer.findTool(owner, repo, "1.0.0")
+			tool, err := installer.FindTool(owner, repo, "1.0.0")
 			assert.NoError(t, err)
 			assert.NotNil(t, tool)
 			assert.Equal(t, tc.expectedType, tool.Type, tc.description)

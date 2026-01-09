@@ -1,4 +1,4 @@
-package toolchain
+package installer
 
 import (
 	"fmt"
