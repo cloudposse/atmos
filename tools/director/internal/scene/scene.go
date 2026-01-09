@@ -22,15 +22,15 @@ type Scene struct {
 	Enabled       bool              `yaml:"enabled"`
 	Description   string            `yaml:"description"`
 	Tape          string            `yaml:"tape"`
-	Workdir       string            `yaml:"workdir,omitempty"`       // Working directory for VHS (relative to repo root)
+	Workdir       string            `yaml:"workdir,omitempty"` // Working directory for VHS (relative to repo root)
 	Requires      []string          `yaml:"requires"`
 	Outputs       []string          `yaml:"outputs"`
 	Audio         *AudioConfig      `yaml:"audio,omitempty"`
-	Tags          []string          `yaml:"tags,omitempty"`          // Tags for filtering (e.g., "featured")
-	Gallery       *GalleryConfig    `yaml:"gallery,omitempty"`       // Gallery display configuration
-	Prep          []string          `yaml:"prep,omitempty"`          // Shell commands to run before VHS (in workdir)
-	Validate      *ValidationConfig `yaml:"validate,omitempty"`      // Post-render validation rules
-	Status        string            `yaml:"status,omitempty"`        // "published" (default) or "draft"
+	Tags          []string          `yaml:"tags,omitempty"`           // Tags for filtering (e.g., "featured")
+	Gallery       *GalleryConfig    `yaml:"gallery,omitempty"`        // Gallery display configuration
+	Prep          []string          `yaml:"prep,omitempty"`           // Shell commands to run before VHS (in workdir)
+	Validate      *ValidationConfig `yaml:"validate,omitempty"`       // Post-render validation rules
+	Status        string            `yaml:"status,omitempty"`         // "published" (default) or "draft"
 	FeaturedOrder int               `yaml:"featured_order,omitempty"` // Order within featured demos (lower = first)
 }
 
