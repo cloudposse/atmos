@@ -8,6 +8,9 @@ Source ../../scenes/_theme.tape
 Set Width 1400
 Set Height 800
 
+# Enable TrueColor for proper color rendering in VHS
+Env COLORTERM "truecolor"
+
 # Fix prompt (VHS runs with --no-rcs)
 Hide
 Type "PS1='\033[38;2;90;86;224m> \033[0m'"

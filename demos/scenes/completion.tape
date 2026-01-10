@@ -9,6 +9,9 @@ Set Shell zsh
 Set Width 1400
 Set Height 800
 
+# Enable TrueColor for proper color rendering in VHS
+Env COLORTERM "truecolor"
+
 # Fix prompt and source completion (hidden setup)
 Hide
 Type "setopt INTERACTIVE_COMMENTS"

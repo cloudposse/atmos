@@ -11,5 +11,6 @@ Set LineHeight 1.2
 Set TypingSpeed 40ms
 Set Padding 10
 
-# Enable TrueColor for proper color rendering in VHS
-Env COLORTERM "truecolor"
+# NOTE: Env COLORTERM "truecolor" must be added in each tape file
+# AFTER all Set commands (including any Width/Height overrides).
+# VHS ignores Set commands that appear after Env commands.
