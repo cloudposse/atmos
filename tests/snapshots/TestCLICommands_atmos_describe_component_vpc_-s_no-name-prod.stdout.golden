@@ -1,0 +1,186 @@
+{
+  "atmos_cli_config": {
+    "base_path": "./",
+    "components": {
+      "terraform": {
+        "base_path": "components/terraform",
+        "apply_auto_approve": false,
+        "append_user_agent": "Atmos/test (Cloud Posse; +https://atmos.tools)",
+        "deploy_run_init": false,
+        "init_run_reconfigure": false,
+        "auto_generate_backend_file": false,
+        "auto_generate_files": false,
+        "command": "",
+        "shell": {
+          "prompt": ""
+        },
+        "init": {
+          "pass_vars": false
+        },
+        "plan": {
+          "skip_planfile": false
+        },
+        "plugin_cache": true
+      },
+      "helmfile": {
+        "base_path": "",
+        "use_eks": true,
+        "kubeconfig_path": "",
+        "helm_aws_profile_pattern": "",
+        "cluster_name_pattern": "",
+        "command": ""
+      },
+      "packer": {
+        "base_path": "",
+        "command": ""
+      },
+      "list": {
+        "format": "",
+        "columns": null
+      },
+      "Plugins": null
+    },
+    "stacks": {
+      "base_path": "stacks",
+      "included_paths": [
+        "**/*"
+      ],
+      "excluded_paths": [
+        "**/catalog/**"
+      ],
+      "name_pattern": "",
+      "name_template": "",
+      "list": {
+        "format": "",
+        "columns": null
+      },
+      "inherit": {}
+    },
+    "workflows": {
+      "base_path": "",
+      "list": {
+        "format": "",
+        "columns": null
+      }
+    }
+  },
+  "atmos_component": "vpc",
+  "atmos_manifest": "no-name-prod",
+  "atmos_stack": "no-name-prod",
+  "atmos_stack_file": "no-name-prod",
+  "auth": {},
+  "backend": {},
+  "backend_type": "",
+  "cli_args": [
+    "describe",
+    "component"
+  ],
+  "command": "terraform",
+  "component": "vpc",
+  "component_info": {
+    "component_path": "/absolute/path/to/repo/tests/fixtures/scenarios/stack-manifest-name/components/terraform/vpc",
+    "component_type": "terraform",
+    "terraform_config": null
+  },
+  "component_type": "terraform",
+  "deps": [
+    "catalog/base",
+    "no-name-prod"
+  ],
+  "deps_all": [
+    "catalog/base",
+    "no-name-prod"
+  ],
+  "env": {},
+  "generate": {},
+  "hooks": {},
+  "imports": [
+    "catalog/base"
+  ],
+  "inheritance": [],
+  "metadata": {},
+  "overrides": {},
+  "providers": {},
+  "provision": {},
+  "remote_state_backend": {},
+  "remote_state_backend_type": "",
+  "settings": {},
+  "source": {},
+  "sources": {
+    "backend": {},
+    "env": {},
+    "settings": {},
+    "vars": {
+      "cidr": {
+        "final_value": "10.1.0.0/16",
+        "name": "cidr",
+        "stack_dependencies": [
+          {
+            "dependency_type": "inline",
+            "stack_file": "no-name-prod",
+            "stack_file_section": "components.terraform.vars",
+            "variable_value": "10.1.0.0/16"
+          }
+        ]
+      },
+      "enabled": {
+        "final_value": true,
+        "name": "enabled",
+        "stack_dependencies": [
+          {
+            "dependency_type": "import",
+            "stack_file": "catalog/base",
+            "stack_file_section": "components.terraform.vars",
+            "variable_value": true
+          }
+        ]
+      },
+      "environment": {
+        "final_value": "prod",
+        "name": "environment",
+        "stack_dependencies": [
+          {
+            "dependency_type": "inline",
+            "stack_file": "no-name-prod",
+            "stack_file_section": "vars",
+            "variable_value": "prod"
+          }
+        ]
+      },
+      "region": {
+        "final_value": "us-east-1",
+        "name": "region",
+        "stack_dependencies": [
+          {
+            "dependency_type": "import",
+            "stack_file": "catalog/base",
+            "stack_file_section": "vars",
+            "variable_value": "us-east-1"
+          }
+        ]
+      },
+      "stage": {
+        "final_value": "new",
+        "name": "stage",
+        "stack_dependencies": [
+          {
+            "dependency_type": "inline",
+            "stack_file": "no-name-prod",
+            "stack_file_section": "vars",
+            "variable_value": "new"
+          }
+        ]
+      }
+    }
+  },
+  "stack": "no-name-prod",
+  "tf_cli_vars": {},
+  "vars": {
+    "cidr": "10.1.0.0/16",
+    "enabled": true,
+    "environment": "prod",
+    "region": "us-east-1",
+    "stage": "new"
+  },
+  "workspace": "no-name-prod"
+}
