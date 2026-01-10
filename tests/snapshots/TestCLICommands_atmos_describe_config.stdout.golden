@@ -109,6 +109,7 @@
         "enabled": false
       }
     },
+    "experimental": "warn",
     "docs": {
       "max_width": 0,
       "pagination": false

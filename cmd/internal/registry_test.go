@@ -50,6 +50,10 @@ func (m *mockCommandProvider) GetAliases() []CommandAlias {
 	return m.aliases
 }
 
+func (m *mockCommandProvider) IsExperimental() bool {
+	return false
+}
+
 func TestRegister(t *testing.T) {
 	Reset() // Clear registry for clean test
 

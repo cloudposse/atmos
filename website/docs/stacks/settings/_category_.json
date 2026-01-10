@@ -1,7 +1,6 @@
 {
   "label": "settings",
   "className": "command",
-  "position": 12,
   "collapsed": true,
   "collapsible": true,
   "link": {

@@ -94,6 +94,36 @@
   background: rgba(237, 137, 54, 0.25);
 }
 
+.experimentalFeaturesLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 0.5rem;
+  padding: 0.25rem 0.75rem;
+  background: rgba(255, 152, 0, 0.1);
+  color: #e65100;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  vertical-align: middle;
+}
+
+.experimentalFeaturesLink:hover {
+  background: rgba(255, 152, 0, 0.2);
+  text-decoration: none;
+}
+
+:global(html[data-theme='dark']) .experimentalFeaturesLink {
+  background: rgba(255, 152, 0, 0.15);
+  color: #ffb74d;
+}
+
+:global(html[data-theme='dark']) .experimentalFeaturesLink:hover {
+  background: rgba(255, 152, 0, 0.25);
+}
+
 .expandAllButton {
   display: inline-flex;
   align-items: center;
@@ -319,6 +349,26 @@
 :global(html[data-theme='dark']) .featuredLink:hover {
   background: rgba(83, 140, 233, 0.15);
   color: #538ce9;
+}
+
+.featuredLinkExperimental {
+  background: rgba(255, 152, 0, 0.15);
+  color: #e65100;
+}
+
+.featuredLinkExperimental:hover {
+  background: rgba(255, 152, 0, 0.25);
+  color: #e65100;
+}
+
+:global(html[data-theme='dark']) .featuredLinkExperimental {
+  background: rgba(255, 152, 0, 0.2);
+  color: #ffb74d;
+}
+
+:global(html[data-theme='dark']) .featuredLinkExperimental:hover {
+  background: rgba(255, 152, 0, 0.3);
+  color: #ffb74d;
 }
 
 /* Clickable featured card styles */
@@ -1386,6 +1436,24 @@
 
 :global(html[data-theme='dark']) .milestoneLinkDocs:hover {
   background: rgba(104, 211, 145, 0.25);
+}
+
+.milestoneLinkExperimental {
+  background: rgba(255, 152, 0, 0.15);
+  color: #e65100;
+}
+
+.milestoneLinkExperimental:hover {
+  background: rgba(255, 152, 0, 0.25);
+}
+
+:global(html[data-theme='dark']) .milestoneLinkExperimental {
+  background: rgba(255, 152, 0, 0.2);
+  color: #ffb74d;
+}
+
+:global(html[data-theme='dark']) .milestoneLinkExperimental:hover {
+  background: rgba(255, 152, 0, 0.3);
 }
 
 .milestoneQuarter {

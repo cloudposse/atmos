@@ -120,6 +120,11 @@ func (t *TerraformCommandProvider) GetCompatibilityFlags() map[string]compat.Com
 	return AllTerraformCompatFlags()
 }
 
+// IsExperimental returns whether this command is experimental.
+func (t *TerraformCommandProvider) IsExperimental() bool {
+	return false
+}
+
 // flagPrefix is the prefix for CLI flags.
 const flagPrefix = "-"
 
