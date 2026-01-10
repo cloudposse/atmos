@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"strings"
 	"testing"
 
@@ -51,8 +50,7 @@ func TestCustomCommand_FlagNameConflictWithGlobalFlag(t *testing.T) {
 	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 
 	// Verify the error is returned correctly.
-	require.Error(t, err, "Should return error for conflicting flag name")
-	assert.True(t, errors.Is(err, errUtils.ErrReservedFlagName), "Error should be ErrReservedFlagName")
+	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for conflicting flag name")
 
 	// Get the explanation from the error details.
 	details := cockerrors.GetAllDetails(err)
@@ -98,8 +96,7 @@ func TestCustomCommand_FlagShorthandConflictWithGlobalFlag(t *testing.T) {
 	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 
 	// Verify the error is returned correctly.
-	require.Error(t, err, "Should return error for conflicting flag shorthand")
-	assert.True(t, errors.Is(err, errUtils.ErrReservedFlagName), "Error should be ErrReservedFlagName")
+	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for conflicting flag shorthand")
 
 	// Get the explanation from the error details.
 	details := cockerrors.GetAllDetails(err)
@@ -144,8 +141,7 @@ func TestCustomCommand_IdentityFlagConflict(t *testing.T) {
 	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 
 	// Verify the error is returned correctly.
-	require.Error(t, err, "Should return error for conflicting identity flag")
-	assert.True(t, errors.Is(err, errUtils.ErrReservedFlagName), "Error should be ErrReservedFlagName")
+	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for conflicting identity flag")
 
 	// Get the explanation from the error details.
 	details := cockerrors.GetAllDetails(err)
@@ -291,8 +287,7 @@ func TestCustomCommand_NestedFlagConflictWithParent(t *testing.T) {
 	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 
 	// Verify the error is returned correctly.
-	require.Error(t, err, "Should return error for nested flag conflict with parent")
-	assert.True(t, errors.Is(err, errUtils.ErrReservedFlagName), "Error should be ErrReservedFlagName")
+	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for nested flag conflict with parent")
 
 	// Get the explanation from the error details.
 	details := cockerrors.GetAllDetails(err)
@@ -354,8 +349,7 @@ func TestCustomCommand_NestedShorthandConflictWithParent(t *testing.T) {
 	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 
 	// Verify the error is returned correctly.
-	require.Error(t, err, "Should return error for nested shorthand conflict with parent")
-	assert.True(t, errors.Is(err, errUtils.ErrReservedFlagName), "Error should be ErrReservedFlagName")
+	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for nested shorthand conflict with parent")
 
 	// Get the explanation from the error details.
 	details := cockerrors.GetAllDetails(err)
@@ -533,8 +527,7 @@ func TestCustomCommand_ExistingCommandReuseWithNestedConflict(t *testing.T) {
 	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 
 	// Verify the error is returned correctly.
-	require.Error(t, err, "Should return error for nested flag conflict with built-in terraform")
-	assert.True(t, errors.Is(err, errUtils.ErrReservedFlagName), "Error should be ErrReservedFlagName")
+	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for nested flag conflict with built-in terraform")
 
 	// Get the explanation from the error details.
 	details := cockerrors.GetAllDetails(err)
@@ -923,8 +916,7 @@ func TestCustomCommand_DeeplyNestedConflict(t *testing.T) {
 	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 
 	// Verify the error is returned correctly.
-	require.Error(t, err, "Should return error for deep nested flag conflict")
-	assert.True(t, errors.Is(err, errUtils.ErrReservedFlagName), "Error should be ErrReservedFlagName")
+	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for deep nested flag conflict")
 
 	// Get the explanation from the error details.
 	details := cockerrors.GetAllDetails(err)
@@ -983,8 +975,7 @@ func TestCustomCommand_MultipleCommandsWithMixedValidity(t *testing.T) {
 	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 
 	// Verify the error is returned correctly.
-	require.Error(t, err, "Should return error when any command has conflict")
-	assert.True(t, errors.Is(err, errUtils.ErrReservedFlagName), "Error should be ErrReservedFlagName")
+	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName when any command has conflict")
 
 	// Verify that valid-cmd-1 was registered before the error occurred.
 	var validCmd1 *cobra.Command
@@ -1113,6 +1104,131 @@ func TestCustomCommand_VerboseFlagConflict(t *testing.T) {
 	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 
 	// Verify the error is returned correctly.
-	require.Error(t, err, "Should return error for verbose flag conflict")
-	assert.True(t, errors.Is(err, errUtils.ErrReservedFlagName), "Error should be ErrReservedFlagName")
+	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for verbose flag conflict")
+}
+
+// customCommandTestHelper provides shared setup for custom command tests.
+type customCommandTestHelper struct {
+	t           *testing.T
+	atmosConfig schema.AtmosConfiguration
+}
+
+// newCustomCommandTestHelper creates a new test helper with common setup.
+func newCustomCommandTestHelper(t *testing.T) *customCommandTestHelper {
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	_ = NewTestKit(t)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	return &customCommandTestHelper{
+		t:           t,
+		atmosConfig: atmosConfig,
+	}
+}
+
+// processCommand processes a single command and returns the error.
+func (h *customCommandTestHelper) processCommand(cmd *schema.Command) error {
+	h.atmosConfig.Commands = []schema.Command{*cmd}
+	return processCustomCommands(h.atmosConfig, h.atmosConfig.Commands, RootCmd, true)
+}
+
+// TestCustomCommand_DuplicateFlagName tests that duplicate flag names within the same
+// command are detected and return an error.
+func TestCustomCommand_DuplicateFlagName(t *testing.T) {
+	helper := newCustomCommandTestHelper(t)
+
+	testCommand := &schema.Command{
+		Name:        "test-duplicate-flag",
+		Description: "Test command with duplicate flag names",
+		Flags: []schema.CommandFlag{
+			{
+				Name:  "my-flag",
+				Type:  "string",
+				Usage: "First definition of my-flag",
+			},
+			{
+				Name:  "my-flag", // Duplicate!
+				Type:  "bool",
+				Usage: "Second definition of my-flag",
+			},
+		},
+		Steps: stepsFromStrings("echo test"),
+	}
+
+	err := helper.processCommand(testCommand)
+
+	require.ErrorIs(t, err, errUtils.ErrDuplicateFlagRegistration, "Should return ErrDuplicateFlagRegistration for duplicate flag name")
+
+	details := cockerrors.GetAllDetails(err)
+	detailsStr := strings.Join(details, " ")
+	assert.Contains(t, detailsStr, "my-flag", "Error details should mention the duplicate flag")
+	assert.Contains(t, detailsStr, "test-duplicate-flag", "Error details should mention the command name")
+}
+
+// TestCustomCommand_DuplicateShorthand tests that duplicate flag shorthands within
+// the same command are detected and return an error.
+func TestCustomCommand_DuplicateShorthand(t *testing.T) {
+	helper := newCustomCommandTestHelper(t)
+
+	testCommand := &schema.Command{
+		Name:        "test-duplicate-shorthand",
+		Description: "Test command with duplicate flag shorthands",
+		Flags: []schema.CommandFlag{
+			{
+				Name:      "first-flag",
+				Shorthand: "f",
+				Type:      "string",
+				Usage:     "First flag with -f shorthand",
+			},
+			{
+				Name:      "second-flag",
+				Shorthand: "f", // Duplicate shorthand!
+				Type:      "bool",
+				Usage:     "Second flag also trying to use -f",
+			},
+		},
+		Steps: stepsFromStrings("echo test"),
+	}
+
+	err := helper.processCommand(testCommand)
+
+	require.ErrorIs(t, err, errUtils.ErrDuplicateFlagRegistration, "Should return ErrDuplicateFlagRegistration for duplicate shorthand")
+
+	details := cockerrors.GetAllDetails(err)
+	detailsStr := strings.Join(details, " ")
+	assert.Contains(t, detailsStr, "-f", "Error details should mention the duplicate shorthand")
+	assert.Contains(t, detailsStr, "test-duplicate-shorthand", "Error details should mention the command name")
+}
+
+// TestCustomCommand_ShorthandMatchesFlagName tests that a shorthand matching another
+// flag's name is detected as a duplicate.
+func TestCustomCommand_ShorthandMatchesFlagName(t *testing.T) {
+	helper := newCustomCommandTestHelper(t)
+
+	testCommand := &schema.Command{
+		Name:        "test-shorthand-matches-name",
+		Description: "Test shorthand that matches another flag's name",
+		Flags: []schema.CommandFlag{
+			{
+				Name:  "x",
+				Type:  "string",
+				Usage: "A flag named 'x'",
+			},
+			{
+				Name:      "extended",
+				Shorthand: "x", // Shorthand matches the name of the first flag!
+				Type:      "bool",
+				Usage:     "Flag with -x shorthand",
+			},
+		},
+		Steps: stepsFromStrings("echo test"),
+	}
+
+	err := helper.processCommand(testCommand)
+
+	require.ErrorIs(t, err, errUtils.ErrDuplicateFlagRegistration, "Should return ErrDuplicateFlagRegistration when shorthand matches another flag's name")
 }
