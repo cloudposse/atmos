@@ -22,7 +22,7 @@ import (
 func runPublish(ctx context.Context, c *cobra.Command, demosDir string, sceneNames []string, force bool, formatFilter []string) error {
 	// Load .env file if it exists (check current dir first, then demos dir).
 	// Silently ignore if not present in either location.
-	_ = godotenv.Load() // Current directory
+	_ = godotenv.Load() // Current directory.
 
 	// Also try demos directory.
 	envFile := filepath.Join(demosDir, ".env")
