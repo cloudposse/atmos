@@ -165,7 +165,7 @@ export const roadmapConfig = {
       tagline: 'Sane defaults, full configurability',
       description:
         'Too many parameters, too much configuration. Everything should just work out of the box while remaining fully customizable.',
-      progress: 90,
+      progress: 92,
       status: 'in-progress',
       milestones: [
         { label: 'Zero-config terminal output (auto TTY/color)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/settings/terminal', changelog: 'zero-config-terminal-output', version: 'v1.198.0', description: 'Terminal output adapts automatically to your environment—colors when interactive, clean text when piping. Works identically in CI and locally without configuration.', benefits: 'No terminal configuration needed. Output is readable regardless of where commands run—locally, in CI, or piped to files.' },
@@ -191,6 +191,7 @@ export const roadmapConfig = {
         { label: 'Configuration provenance tracking', status: 'shipped', quarter: 'q4-2025', changelog: 'provenance-tracking', version: 'v1.195.0', description: 'Track where every configuration value comes from—which file, which import, which override.', benefits: 'Debug complex inheritance chains. Understand exactly how configuration was assembled.' },
         { label: 'Global environment variables', status: 'shipped', quarter: 'q4-2025', changelog: 'global-env-section', version: 'v1.202.0', description: 'Define environment variables globally in atmos.yaml that apply to all commands.', benefits: 'Set common environment variables once. No repetition across components.' },
         { label: 'Metadata inheritance', status: 'shipped', quarter: 'q4-2025', changelog: 'metadata-inheritance', version: 'v1.201.0', description: 'Metadata section now supports full inheritance from base stacks.', benefits: 'Define metadata patterns once and inherit everywhere. Consistent naming across stacks.' },
+        { label: 'Filename-based stack identity (zero-config)', status: 'shipped', quarter: 'q1-2026', pr: 1934, changelog: 'stack-name-identity', description: 'Stacks are identified by filename when no name, name_template, or name_pattern is configured. Newcomers can get started without any naming configuration.', benefits: 'New users can start immediately without configuring stack naming. Just create stack files and reference them by filename.' },
       ],
       issues: [],
       prs: [
