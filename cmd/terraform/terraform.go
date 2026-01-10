@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"
 	"github.com/cloudposse/atmos/cmd/terraform/generate"
+	"github.com/cloudposse/atmos/cmd/terraform/planfile"
 	"github.com/cloudposse/atmos/cmd/terraform/source"
 	"github.com/cloudposse/atmos/cmd/terraform/workdir"
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -64,6 +65,9 @@ func init() {
 
 	// Add backend subcommand from the backend subpackage.
 	terraformCmd.AddCommand(backend.GetBackendCommand())
+
+	// Add planfile subcommand from the planfile subpackage.
+	terraformCmd.AddCommand(planfile.PlanfileCmd)
 
 	// Add source subcommand from the source subpackage.
 	terraformCmd.AddCommand(source.GetSourceCommand())

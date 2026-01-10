@@ -1,0 +1,135 @@
+---
+title: atmos terraform planfile show
+sidebar_label: show
+sidebar_class_name: command
+sidebar_position: 6
+id: show
+description: Show details and metadata for a stored Terraform planfile.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Display detailed metadata and information about a stored planfile without downloading it. Useful for verifying planfile contents before applying.
+</Intro>
+
+## Usage
+
+```shell
+atmos terraform planfile show <key> [options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`<key>`</dt>
+  <dd>Storage key of the planfile to show (required). Format: `{stack}/{component}/{sha}.tfplan`</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--store`</dt>
+  <dd>Storage backend to use: `local`, `s3`, or `github-artifacts`. Auto-detected from environment.</dd>
+
+  <dt>`--format`</dt>
+  <dd>Output format: `text` (default) or `json`.</dd>
+</dl>
+
+## Examples
+
+### Show planfile details
+
+```shell
+atmos terraform planfile show dev-us-east-1/vpc/abc123.tfplan
+```
+
+### JSON output
+
+```shell
+atmos terraform planfile show dev-us-east-1/vpc/abc123.tfplan --format json
+```
+
+### Show from specific store
+
+```shell
+atmos terraform planfile show dev-us-east-1/vpc/abc123.tfplan --store s3
+```
+
+## Output
+
+### Text format (default)
+
+```
+Planfile: dev-us-east-1/vpc/abc123.tfplan
+Store: s3
+Size: 12.4 KB
+
+Metadata:
+  Stack:       dev-us-east-1
+  Component:   vpc
+  SHA:         abc123def456789
+  Branch:      feature/add-vpc
+  PR:          #42
+  Created:     2024-01-15 10:30:00 UTC
+  Expires:     2024-01-22 10:30:00 UTC
+
+Changes:
+  Has Changes: true
+  Additions:   5 resources
+  Changes:     2 resources
+  Deletions:   1 resource
+  Summary:     5 to add, 2 to change, 1 to destroy
+```
+
+### JSON format
+
+```json
+{
+  "key": "dev-us-east-1/vpc/abc123.tfplan",
+  "store": "s3",
+  "size": 12698,
+  "metadata": {
+    "stack": "dev-us-east-1",
+    "component": "vpc",
+    "sha": "abc123def456789",
+    "branch": "feature/add-vpc",
+    "pr_number": 42,
+    "created_at": "2024-01-15T10:30:00Z",
+    "expires_at": "2024-01-22T10:30:00Z",
+    "has_changes": true,
+    "additions": 5,
+    "changes": 2,
+    "destructions": 1,
+    "plan_summary": "5 to add, 2 to change, 1 to destroy"
+  }
+}
+```
+
+## Use Cases
+
+### Verify before apply
+
+Check planfile contents before applying in a separate CI job:
+
+```shell
+# Verify the planfile exists and has expected changes
+atmos terraform planfile show "$STACK/$COMPONENT/$SHA.tfplan"
+
+# Then apply
+atmos terraform apply $COMPONENT -s $STACK --from-plan=$PLANFILE
+```
+
+### Audit planfile history
+
+Review what changes were planned:
+
+```shell
+atmos terraform planfile list staging | head -5
+atmos terraform planfile show staging/rds/latest.tfplan
+```
+
+## Related
+
+- [`atmos terraform planfile list`](/cli/commands/terraform/planfile/list) - List available planfiles
+- [`atmos terraform planfile download`](/cli/commands/terraform/planfile/download) - Download a planfile
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply a planfile

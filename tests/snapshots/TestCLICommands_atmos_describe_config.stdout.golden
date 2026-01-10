@@ -19,6 +19,9 @@
       "plan": {
         "skip_planfile": false
       },
+      "planfiles": {
+        "default": ""
+      },
       "plugin_cache": true
     },
     "helmfile": {
@@ -233,5 +236,12 @@
     "use_lock_file": false
   },
   "profiles": {},
-  "metadata": {}
+  "metadata": {},
+  "ci": {
+    "output": {},
+    "summary": {},
+    "checks": {},
+    "comments": {},
+    "templates": {}
+  }
 }
