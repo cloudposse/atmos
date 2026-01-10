@@ -482,27 +482,26 @@ func TestExtractGzippedBinary(t *testing.T) {
 }
 
 func TestExtractAndInstallWithRawBinary(t *testing.T) {
-	// Create a temporary directory for testing
-	tempDir := t.TempDir()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir}})
-	installer := New()
+	// Create separate directories for source and destination.
+	srcDir := t.TempDir()
+	binDir := t.TempDir()
+	installer := New(WithBinDir(binDir))
 
-	// Create a mock raw binary file
-	rawBinaryPath := filepath.Join(tempDir, "atmos")
+	// Create a mock raw binary file in the source directory.
+	rawBinaryPath := filepath.Join(srcDir, "atmos")
 	rawBinaryContent := []byte("#!/bin/bash\necho 'atmos binary'")
 	if err := os.WriteFile(rawBinaryPath, rawBinaryContent, defaultMkdirPermissions); err != nil {
 		t.Fatalf("failed to create test binary: %v", err)
 	}
 
-	// Create a mock tool configuration
+	// Create a mock tool configuration.
 	tool := &registry.Tool{
 		Name:     "atmos",
 		RepoName: "atmos",
 		Type:     "http",
 	}
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir}})
-	t.Log("tempDir", tempDir)
-	// Test extractAndInstall with raw binary
+
+	// Test extractAndInstall with raw binary.
 	binaryPath, err := installer.extractAndInstall(tool, rawBinaryPath, "1.0.0")
 	if err != nil {
 		t.Fatalf("extractAndInstall failed: %v", err)
@@ -515,12 +514,11 @@ func TestExtractAndInstallWithRawBinary(t *testing.T) {
 }
 
 func TestExtractAndInstallWithGzippedBinary(t *testing.T) {
-	// Create a temporary directory for testing
+	// Create a temporary directory for testing.
 	tempDir := t.TempDir()
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{ToolsDir: tempDir}})
-	installer := New()
+	installer := New(WithBinDir(tempDir))
 
-	// Create a mock binary content
+	// Create a mock binary content.
 	binaryContent := []byte("#!/bin/bash\necho 'atmos gzipped binary'")
 
 	// Create a gzipped file
