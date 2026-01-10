@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 
@@ -27,7 +26,7 @@ Requires ffprobe to be installed.`,
 director update-duration
 `,
 		RunE: func(c *cobra.Command, args []string) error {
-			ctx := context.Background()
+			ctx := c.Context()
 
 			demosDir, err := findDemosDir()
 			if err != nil {

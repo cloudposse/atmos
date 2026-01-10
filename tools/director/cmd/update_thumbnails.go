@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -43,7 +42,7 @@ director update-thumbnails --scene terraform-plan
 director update-thumbnails --dry-run
 `,
 		RunE: func(c *cobra.Command, args []string) error {
-			ctx := context.Background()
+			ctx := c.Context()
 
 			// Load .env file if it exists.
 			_ = godotenv.Load() // Current directory

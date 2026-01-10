@@ -371,7 +371,7 @@ director publish --force
 director publish --dry-run
 `,
 		RunE: func(c *cobra.Command, args []string) error {
-			ctx := context.Background()
+			ctx := c.Context()
 
 			demosDir, err := findDemosDir()
 			if err != nil {

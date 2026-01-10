@@ -45,7 +45,7 @@ director validate --rendered
 # Shows which scenes are enabled/disabled and any errors
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.Background()
+			ctx := cmd.Context()
 
 			demosDir, err := findDemosDir()
 			if err != nil {

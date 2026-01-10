@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -30,7 +29,7 @@ director install
 director install --force
 `,
 		RunE: func(c *cobra.Command, args []string) error {
-			ctx := context.Background()
+			ctx := c.Context()
 
 			demosDir, err := findDemosDir()
 			if err != nil {

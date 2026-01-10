@@ -68,7 +68,22 @@ Never "dumb down" a tape to make it pass. If a documented command doesn't work, 
 ./tools/director/director render --force
 
 # Full pipeline: render + publish + export manifest
+./tools/director/director render --all --force --publish --export-manifest
+
+# Featured demos only
 ./tools/director/director render --tag featured --force --publish --export-manifest
+```
+
+### Common Workflows
+```bash
+# Regenerate ALL demos, upload to Cloudflare, update manifest
+./tools/director/director render --all --force --publish --export-manifest
+
+# Quick test a single scene without rendering
+./tools/director/director render terraform-plan --test
+
+# Render and publish a single scene
+./tools/director/director render terraform-plan --force --publish --export-manifest
 ```
 
 ### Test Mode (Critical for Validation)
