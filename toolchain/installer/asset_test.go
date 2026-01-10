@@ -296,3 +296,170 @@ func TestBuildAssetURL_UnsupportedType(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported tool type")
 }
+
+func TestBuildAssetURL_GitHubRelease_MissingOwner(t *testing.T) {
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:     "github_release",
+		RepoName: "terraform",
+		// RepoOwner is empty.
+	}
+
+	_, err := installer.BuildAssetURL(tool, "1.5.7")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "RepoOwner and RepoName must be set")
+}
+
+func TestBuildAssetURL_GitHubRelease_MissingName(t *testing.T) {
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:      "github_release",
+		RepoOwner: "hashicorp",
+		// RepoName is empty.
+	}
+
+	_, err := installer.BuildAssetURL(tool, "1.5.7")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "RepoOwner and RepoName must be set")
+}
+
+func TestBuildAssetURL_GitHubRelease_DefaultAssetTemplate(t *testing.T) {
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:      "github_release",
+		RepoOwner: "hashicorp",
+		RepoName:  "terraform",
+		// Asset is empty, should use default template.
+	}
+
+	url, err := installer.BuildAssetURL(tool, "1.5.7")
+	require.NoError(t, err)
+
+	// Default template: {{.RepoName}}_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz
+	assert.Contains(t, url, "https://github.com/hashicorp/terraform/releases/download/v1.5.7/")
+	assert.Contains(t, url, "terraform_v1.5.7_")
+	assert.Contains(t, url, ".tar.gz")
+}
+
+func TestAssetTemplateFuncs(t *testing.T) {
+	funcs := assetTemplateFuncs()
+
+	t.Run("trimV removes v prefix", func(t *testing.T) {
+		fn := funcs["trimV"].(func(string) string)
+		assert.Equal(t, "1.2.3", fn("v1.2.3"))
+		assert.Equal(t, "1.2.3", fn("1.2.3"))
+	})
+
+	t.Run("trimPrefix removes any prefix", func(t *testing.T) {
+		fn := funcs["trimPrefix"].(func(string, string) string)
+		assert.Equal(t, "1.2.3", fn("release-", "release-1.2.3"))
+		assert.Equal(t, "1.2.3", fn("v", "v1.2.3"))
+	})
+
+	t.Run("trimSuffix removes any suffix", func(t *testing.T) {
+		fn := funcs["trimSuffix"].(func(string, string) string)
+		assert.Equal(t, "file", fn(".txt", "file.txt"))
+		assert.Equal(t, "archive", fn(".tar.gz", "archive.tar.gz"))
+	})
+
+	t.Run("replace replaces all occurrences", func(t *testing.T) {
+		fn := funcs["replace"].(func(string, string, string) string)
+		assert.Equal(t, "bar-bar", fn("foo", "bar", "foo-foo"))
+	})
+
+	t.Run("eq compares equality", func(t *testing.T) {
+		fn := funcs["eq"].(func(string, string) bool)
+		assert.True(t, fn("a", "a"))
+		assert.False(t, fn("a", "b"))
+	})
+
+	t.Run("ne compares inequality", func(t *testing.T) {
+		fn := funcs["ne"].(func(string, string) bool)
+		assert.True(t, fn("a", "b"))
+		assert.False(t, fn("a", "a"))
+	})
+
+	t.Run("ternary returns conditional value", func(t *testing.T) {
+		fn := funcs["ternary"].(func(bool, string, string) string)
+		assert.Equal(t, "yes", fn(true, "yes", "no"))
+		assert.Equal(t, "no", fn(false, "yes", "no"))
+	})
+}
+
+func TestExecuteAssetTemplate_TemplateFunctions(t *testing.T) {
+	tool := &registry.Tool{
+		RepoOwner: "test",
+		RepoName:  "test",
+	}
+	data := &assetTemplateData{
+		Version:   "v2.15.0",
+		SemVer:    "2.15.0",
+		OS:        "linux",
+		Arch:      "amd64",
+		RepoOwner: "test",
+		RepoName:  "test",
+	}
+
+	tests := []struct {
+		name     string
+		template string
+		expected string
+	}{
+		{
+			name:     "trimPrefix function",
+			template: "{{trimPrefix \"release-\" .Version}}",
+			expected: "v2.15.0",
+		},
+		{
+			name:     "trimSuffix function",
+			template: "{{trimSuffix \".0\" .SemVer}}",
+			expected: "2.15",
+		},
+		{
+			name:     "replace function",
+			template: "{{replace \"amd64\" \"x86_64\" .Arch}}",
+			expected: "x86_64",
+		},
+		{
+			name:     "eq function true case",
+			template: "{{if eq .OS \"linux\"}}tux{{else}}other{{end}}",
+			expected: "tux",
+		},
+		{
+			name:     "ne function true case",
+			template: "{{if ne .Arch \"arm64\"}}intel{{else}}arm{{end}}",
+			expected: "intel",
+		},
+		{
+			name:     "ternary function",
+			template: "{{ternary (eq .OS \"linux\") \"linux.tar.gz\" \"darwin.tar.gz\"}}",
+			expected: "linux.tar.gz",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := executeAssetTemplate(tt.template, tool, data)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExecuteAssetTemplate_ExecutionError(t *testing.T) {
+	tool := &registry.Tool{
+		RepoOwner: "test",
+		RepoName:  "test",
+	}
+	data := &assetTemplateData{
+		Version: "v1.0.0",
+	}
+
+	// Template that references non-existent field causes execution error.
+	template := "{{.NonExistent.Field}}"
+	_, err := executeAssetTemplate(template, tool, data)
+	require.Error(t, err)
+}
