@@ -3,6 +3,7 @@ package output
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
@@ -653,6 +654,77 @@ func TestGetOutputVariable(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, tt.exists, exists)
 				assert.Equal(t, tt.expected, val)
+			}
+		})
+	}
+}
+
+// TestWrapDescribeError_BreaksErrInvalidComponentChain tests that wrapDescribeError
+// correctly breaks the ErrInvalidComponent chain to prevent component type fallback.
+// This is a regression test for https://github.com/cloudposse/atmos/issues/1030.
+func TestWrapDescribeError_BreaksErrInvalidComponentChain(t *testing.T) {
+	tests := []struct {
+		name            string
+		inputErr        error
+		wantErrDescribe bool
+		wantErrInvalid  bool
+		wantMsgContains string
+	}{
+		{
+			name: "ErrInvalidComponent chain is broken",
+			// Use fmt.Errorf with %w for proper error wrapping (causality chain).
+			inputErr:        fmt.Errorf("component not found: %w", errUtils.ErrInvalidComponent),
+			wantErrDescribe: true,
+			wantErrInvalid:  false, // Chain should be broken
+			wantMsgContains: "component not found",
+		},
+		{
+			name: "wrapped ErrInvalidComponent chain is broken",
+			// Use fmt.Errorf with %w to express "this happened because of that".
+			inputErr:        fmt.Errorf("outer error: %w", errUtils.ErrInvalidComponent),
+			wantErrDescribe: true,
+			wantErrInvalid:  false, // Chain should be broken
+			wantMsgContains: "component",
+		},
+		{
+			name:            "other errors preserve chain",
+			inputErr:        errors.New("network timeout"),
+			wantErrDescribe: false,
+			wantErrInvalid:  false,
+			wantMsgContains: "network timeout",
+		},
+		{
+			name:            "ErrTerraformStateNotProvisioned preserves chain",
+			inputErr:        errUtils.ErrTerraformStateNotProvisioned,
+			wantErrDescribe: false,
+			wantErrInvalid:  false,
+			wantMsgContains: "not provisioned",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := wrapDescribeError("test-comp", "test-stack", tt.inputErr)
+			require.Error(t, result)
+
+			// Check ErrDescribeComponent.
+			if tt.wantErrDescribe {
+				assert.ErrorIs(t, result, errUtils.ErrDescribeComponent,
+					"Expected ErrDescribeComponent in error chain")
+			}
+
+			// Check ErrInvalidComponent - should NOT be in chain for broken cases.
+			if tt.wantErrInvalid {
+				assert.ErrorIs(t, result, errUtils.ErrInvalidComponent,
+					"Expected ErrInvalidComponent in error chain")
+			} else {
+				assert.NotErrorIs(t, result, errUtils.ErrInvalidComponent,
+					"ErrInvalidComponent should NOT be in error chain (chain should be broken)")
+			}
+
+			// Check message content.
+			if tt.wantMsgContains != "" {
+				assert.Contains(t, result.Error(), tt.wantMsgContains)
 			}
 		})
 	}
