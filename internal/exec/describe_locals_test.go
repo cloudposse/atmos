@@ -149,47 +149,47 @@ func TestBuildStackLocalsFromContext(t *testing.T) {
 			localsCtx: &LocalsContext{
 				Global: map[string]any{"key": "value"},
 			},
-			expectKeys: []string{"global", "merged"},
+			expectKeys: []string{"locals"},
 		},
 		{
 			name: "terraform locals",
 			localsCtx: &LocalsContext{
 				Global:             map[string]any{"global_key": "global_value"},
-				Terraform:          map[string]any{"tf_key": "tf_value"},
+				Terraform:          map[string]any{"global_key": "global_value", "tf_key": "tf_value"},
 				HasTerraformLocals: true,
 			},
-			expectKeys: []string{"global", "terraform", "merged"},
+			expectKeys: []string{"locals", "terraform"},
 		},
 		{
 			name: "helmfile locals",
 			localsCtx: &LocalsContext{
 				Global:            map[string]any{"global_key": "global_value"},
-				Helmfile:          map[string]any{"hf_key": "hf_value"},
+				Helmfile:          map[string]any{"global_key": "global_value", "hf_key": "hf_value"},
 				HasHelmfileLocals: true,
 			},
-			expectKeys: []string{"global", "helmfile", "merged"},
+			expectKeys: []string{"locals", "helmfile"},
 		},
 		{
 			name: "packer locals",
 			localsCtx: &LocalsContext{
 				Global:          map[string]any{"global_key": "global_value"},
-				Packer:          map[string]any{"pk_key": "pk_value"},
+				Packer:          map[string]any{"global_key": "global_value", "pk_key": "pk_value"},
 				HasPackerLocals: true,
 			},
-			expectKeys: []string{"global", "packer", "merged"},
+			expectKeys: []string{"locals", "packer"},
 		},
 		{
 			name: "all sections",
 			localsCtx: &LocalsContext{
 				Global:             map[string]any{"global_key": "global_value"},
-				Terraform:          map[string]any{"tf_key": "tf_value"},
-				Helmfile:           map[string]any{"hf_key": "hf_value"},
-				Packer:             map[string]any{"pk_key": "pk_value"},
+				Terraform:          map[string]any{"global_key": "global_value", "tf_key": "tf_value"},
+				Helmfile:           map[string]any{"global_key": "global_value", "hf_key": "hf_value"},
+				Packer:             map[string]any{"global_key": "global_value", "pk_key": "pk_value"},
 				HasTerraformLocals: true,
 				HasHelmfileLocals:  true,
 				HasPackerLocals:    true,
 			},
-			expectKeys: []string{"global", "terraform", "helmfile", "packer", "merged"},
+			expectKeys: []string{"locals", "terraform", "helmfile", "packer"},
 		},
 		{
 			name: "empty global returns empty map",
@@ -205,7 +205,7 @@ func TestBuildStackLocalsFromContext(t *testing.T) {
 				Terraform:          map[string]any{"tf_key": "tf_value"},
 				HasTerraformLocals: false,
 			},
-			expectKeys: []string{"global", "merged"},
+			expectKeys: []string{"locals"},
 		},
 	}
 
@@ -256,7 +256,7 @@ vars:
 		require.NoError(t, err)
 		assert.Equal(t, "valid", result.StackName)
 		assert.NotEmpty(t, result.StackLocals)
-		assert.Contains(t, result.StackLocals, "global")
+		assert.Contains(t, result.StackLocals, "locals")
 		assert.True(t, result.Found)
 	})
 
@@ -471,16 +471,13 @@ func TestGetLocalsForComponentType(t *testing.T) {
 		{
 			name: "returns terraform section when available",
 			stackLocals: map[string]any{
-				"global": map[string]any{
+				"locals": map[string]any{
 					"namespace": "acme",
 				},
 				"terraform": map[string]any{
-					"namespace":      "acme",
-					"backend_bucket": "acme-tfstate",
-				},
-				"merged": map[string]any{
-					"namespace":      "acme",
-					"backend_bucket": "acme-tfstate",
+					"locals": map[string]any{
+						"backend_bucket": "acme-tfstate",
+					},
 				},
 			},
 			componentType: "terraform",
@@ -492,16 +489,13 @@ func TestGetLocalsForComponentType(t *testing.T) {
 		{
 			name: "returns helmfile section when available",
 			stackLocals: map[string]any{
-				"global": map[string]any{
+				"locals": map[string]any{
 					"namespace": "acme",
 				},
 				"helmfile": map[string]any{
-					"namespace":   "acme",
-					"release_dir": "/releases",
-				},
-				"merged": map[string]any{
-					"namespace":   "acme",
-					"release_dir": "/releases",
+					"locals": map[string]any{
+						"release_dir": "/releases",
+					},
 				},
 			},
 			componentType: "helmfile",
@@ -513,16 +507,13 @@ func TestGetLocalsForComponentType(t *testing.T) {
 		{
 			name: "returns packer section when available",
 			stackLocals: map[string]any{
-				"global": map[string]any{
+				"locals": map[string]any{
 					"namespace": "acme",
 				},
 				"packer": map[string]any{
-					"namespace": "acme",
-					"ami_name":  "my-ami",
-				},
-				"merged": map[string]any{
-					"namespace": "acme",
-					"ami_name":  "my-ami",
+					"locals": map[string]any{
+						"ami_name": "my-ami",
+					},
 				},
 			},
 			componentType: "packer",
@@ -532,12 +523,9 @@ func TestGetLocalsForComponentType(t *testing.T) {
 			},
 		},
 		{
-			name: "falls back to merged when section not available",
+			name: "falls back to locals only when section not available",
 			stackLocals: map[string]any{
-				"global": map[string]any{
-					"namespace": "acme",
-				},
-				"merged": map[string]any{
+				"locals": map[string]any{
 					"namespace":   "acme",
 					"environment": "dev",
 				},
@@ -549,9 +537,9 @@ func TestGetLocalsForComponentType(t *testing.T) {
 			},
 		},
 		{
-			name: "falls back to global when merged not available",
+			name: "returns only global locals when section not available",
 			stackLocals: map[string]any{
-				"global": map[string]any{
+				"locals": map[string]any{
 					"namespace": "acme",
 				},
 			},
@@ -569,10 +557,7 @@ func TestGetLocalsForComponentType(t *testing.T) {
 		{
 			name: "handles unknown component type",
 			stackLocals: map[string]any{
-				"global": map[string]any{
-					"namespace": "acme",
-				},
-				"merged": map[string]any{
+				"locals": map[string]any{
 					"namespace": "acme",
 				},
 			},
@@ -682,19 +667,14 @@ func TestExecuteForComponent(t *testing.T) {
 			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
 				return map[string]any{
 					"dev": map[string]any{
-						"global": map[string]any{
+						"locals": map[string]any{
 							"namespace":   "acme",
 							"environment": "dev",
 						},
 						"terraform": map[string]any{
-							"namespace":      "acme",
-							"environment":    "dev",
-							"backend_bucket": "acme-dev-tfstate",
-						},
-						"merged": map[string]any{
-							"namespace":      "acme",
-							"environment":    "dev",
-							"backend_bucket": "acme-dev-tfstate",
+							"locals": map[string]any{
+								"backend_bucket": "acme-dev-tfstate",
+							},
 						},
 					},
 				}, nil
@@ -709,11 +689,14 @@ func TestExecuteForComponent(t *testing.T) {
 		result, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
 		require.NoError(t, err)
 
-		assert.Equal(t, "vpc", result["component"])
-		assert.Equal(t, "dev", result["stack"])
-		assert.Equal(t, "terraform", result["component_type"])
-
-		locals, ok := result["locals"].(map[string]any)
+		// Verify Atmos schema format.
+		components, ok := result["components"].(map[string]any)
+		require.True(t, ok)
+		terraform, ok := components["terraform"].(map[string]any)
+		require.True(t, ok)
+		vpc, ok := terraform["vpc"].(map[string]any)
+		require.True(t, ok)
+		locals, ok := vpc["locals"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "acme", locals["namespace"])
 		assert.Equal(t, "dev", locals["environment"])
@@ -730,16 +713,13 @@ func TestExecuteForComponent(t *testing.T) {
 			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
 				return map[string]any{
 					"prod": map[string]any{
-						"global": map[string]any{
+						"locals": map[string]any{
 							"namespace": "acme",
 						},
 						"helmfile": map[string]any{
-							"namespace":    "acme",
-							"release_name": "my-release",
-						},
-						"merged": map[string]any{
-							"namespace":    "acme",
-							"release_name": "my-release",
+							"locals": map[string]any{
+								"release_name": "my-release",
+							},
 						},
 					},
 				}, nil
@@ -754,11 +734,14 @@ func TestExecuteForComponent(t *testing.T) {
 		result, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
 		require.NoError(t, err)
 
-		assert.Equal(t, "nginx", result["component"])
-		assert.Equal(t, "prod", result["stack"])
-		assert.Equal(t, "helmfile", result["component_type"])
-
-		locals, ok := result["locals"].(map[string]any)
+		// Verify Atmos schema format.
+		components, ok := result["components"].(map[string]any)
+		require.True(t, ok)
+		helmfile, ok := components["helmfile"].(map[string]any)
+		require.True(t, ok)
+		nginx, ok := helmfile["nginx"].(map[string]any)
+		require.True(t, ok)
+		locals, ok := nginx["locals"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "my-release", locals["release_name"])
 	})
@@ -772,10 +755,7 @@ func TestExecuteForComponent(t *testing.T) {
 			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
 				return map[string]any{
 					"dev": map[string]any{
-						"global": map[string]any{
-							"namespace": "acme",
-						},
-						"merged": map[string]any{
+						"locals": map[string]any{
 							"namespace": "acme",
 						},
 					},
@@ -791,8 +771,11 @@ func TestExecuteForComponent(t *testing.T) {
 		result, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
 		require.NoError(t, err)
 
-		// Should default to terraform.
-		assert.Equal(t, "terraform", result["component_type"])
+		// Should default to terraform - check in Atmos schema format.
+		components, ok := result["components"].(map[string]any)
+		require.True(t, ok)
+		_, hasTerraform := components["terraform"]
+		assert.True(t, hasTerraform, "should default to terraform component type")
 	})
 }
 
@@ -808,16 +791,13 @@ func TestExecuteForComponentOutputStructure(t *testing.T) {
 			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
 				return map[string]any{
 					"dev-us-east-1": map[string]any{
-						"global": map[string]any{
+						"locals": map[string]any{
 							"namespace": "acme",
 						},
 						"terraform": map[string]any{
-							"namespace":      "acme",
-							"backend_bucket": "acme-tfstate",
-						},
-						"merged": map[string]any{
-							"namespace":      "acme",
-							"backend_bucket": "acme-tfstate",
+							"locals": map[string]any{
+								"backend_bucket": "acme-tfstate",
+							},
 						},
 					},
 				}, nil
@@ -832,30 +812,23 @@ func TestExecuteForComponentOutputStructure(t *testing.T) {
 		result, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
 		require.NoError(t, err)
 
-		// Verify component output structure.
-		assert.Contains(t, result, "component", "component output should have 'component' key")
-		assert.Contains(t, result, "stack", "component output should have 'stack' key")
-		assert.Contains(t, result, "component_type", "component output should have 'component_type' key")
-		assert.Contains(t, result, "locals", "component output should have 'locals' key")
+		// Verify component output uses Atmos schema format.
+		// Expected: components: { terraform: { vpc: { locals: {...} } } }
+		assert.Contains(t, result, "components", "component output should have 'components' key")
 
-		// Verify values.
-		assert.Equal(t, "vpc", result["component"])
-		assert.Equal(t, "dev-us-east-1", result["stack"])
-		assert.Equal(t, "terraform", result["component_type"])
+		components, ok := result["components"].(map[string]any)
+		require.True(t, ok)
+		terraform, ok := components["terraform"].(map[string]any)
+		require.True(t, ok)
+		vpc, ok := terraform["vpc"].(map[string]any)
+		require.True(t, ok)
+		assert.Contains(t, vpc, "locals", "component output should have 'locals' key")
 
-		// Verify locals are flattened (not nested with global/terraform/merged).
-		locals, ok := result["locals"].(map[string]any)
+		// Verify locals contain merged values.
+		locals, ok := vpc["locals"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "acme", locals["namespace"])
 		assert.Equal(t, "acme-tfstate", locals["backend_bucket"])
-
-		// Verify locals do NOT have nested section keys.
-		_, hasGlobal := locals["global"]
-		_, hasTerraform := locals["terraform"]
-		_, hasMerged := locals["merged"]
-		assert.False(t, hasGlobal, "component locals should NOT have nested 'global' key")
-		assert.False(t, hasTerraform, "component locals should NOT have nested 'terraform' key")
-		assert.False(t, hasMerged, "component locals should NOT have nested 'merged' key")
 	})
 
 	t.Run("component output uses logical stack name", func(t *testing.T) {
@@ -871,10 +844,7 @@ func TestExecuteForComponentOutputStructure(t *testing.T) {
 				// Return logical stack name as key.
 				return map[string]any{
 					"prod-us-west-2": map[string]any{
-						"global": map[string]any{
-							"namespace": "acme",
-						},
-						"merged": map[string]any{
+						"locals": map[string]any{
 							"namespace": "acme",
 						},
 					},
@@ -890,8 +860,13 @@ func TestExecuteForComponentOutputStructure(t *testing.T) {
 		result, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
 		require.NoError(t, err)
 
-		// The output should use the logical stack name from ExecuteDescribeLocals result.
-		assert.Equal(t, "prod-us-west-2", result["stack"])
+		// Verify component output uses Atmos schema format.
+		assert.Contains(t, result, "components")
+		components, ok := result["components"].(map[string]any)
+		require.True(t, ok)
+		terraform, ok := components["terraform"].(map[string]any)
+		require.True(t, ok)
+		assert.Contains(t, terraform, "vpc")
 	})
 }
 
@@ -1077,16 +1052,13 @@ locals:
 			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
 				return map[string]any{
 					"dev": map[string]any{
-						"global": map[string]any{
+						"locals": map[string]any{
 							"namespace": "acme",
 						},
 						"terraform": map[string]any{
-							"namespace":      "acme",
-							"backend_bucket": "acme-dev-tfstate",
-						},
-						"merged": map[string]any{
-							"namespace":      "acme",
-							"backend_bucket": "acme-dev-tfstate",
+							"locals": map[string]any{
+								"backend_bucket": "acme-dev-tfstate",
+							},
 						},
 					},
 				}, nil
@@ -1107,12 +1079,17 @@ locals:
 		err := exec.Execute(atmosConfig, args)
 		require.NoError(t, err)
 
-		// Verify the output structure.
+		// Verify the output structure uses Atmos schema format.
 		result, ok := capturedData.(map[string]any)
 		require.True(t, ok)
-		assert.Equal(t, "vpc", result["component"])
-		assert.Equal(t, "dev", result["stack"])
-		assert.Equal(t, "terraform", result["component_type"])
+		// New format: components: { terraform: { vpc: { locals: {...} } } }
+		components, ok := result["components"].(map[string]any)
+		require.True(t, ok)
+		terraform, ok := components["terraform"].(map[string]any)
+		require.True(t, ok)
+		vpc, ok := terraform["vpc"].(map[string]any)
+		require.True(t, ok)
+		assert.Contains(t, vpc, "locals")
 	})
 
 	t.Run("execute with component but missing stack returns error", func(t *testing.T) {
