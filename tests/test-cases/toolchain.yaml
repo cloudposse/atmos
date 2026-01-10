@@ -209,6 +209,24 @@ tests:
       exit_code: 0
 
   # Error handling tests
+  - name: "atmos toolchain info non-existent tool"
+    enabled: true
+    snapshot: true
+    description: "Verify toolchain info shows error for non-existent tool"
+    workdir: "fixtures/scenarios/toolchain-registry"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "toolchain"
+      - "info"
+      - "non-existent/tool"
+    expect:
+      stderr:
+        - "failed to find tool"
+        - "tool not in registry"
+      exit_code: 2
+
   - name: "atmos toolchain install non-existent tool"
     enabled: true
     snapshot: true

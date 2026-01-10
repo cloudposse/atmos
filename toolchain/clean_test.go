@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	// DefaultMkdirPermissions is the default permission mask for created directories in tests.
+	// Default permission mask for created directories in tests.
 	defaultMkdirPermissions = 0o755
 )
 

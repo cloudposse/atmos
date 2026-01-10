@@ -227,7 +227,7 @@ atmos toolchain install
 The AWS CLI demonstrates Atmos toolchain's advanced features, including platform-specific downloads and nested archive extraction:
 
 ```bash
-# Install AWS CLI v2
+# Install AWS CLI v2 (example version; adjust as needed)
 atmos toolchain install aws/aws-cli@2.15.0
 
 # Or use the alias (if configured)
@@ -239,8 +239,8 @@ atmos toolchain install awscli@2.15.0
 
 The AWS CLI uses different installation methods per platform, which Atmos handles automatically:
 
-- **Linux**: Downloads `awscli-exe-linux-x86_64-{version}.zip`, extracts the `aws` binary from `aws/dist/aws`
-- **macOS**: Downloads `AWSCLIV2-{version}.pkg`, uses `pkgutil --expand-full` to extract from `aws-cli.pkg/Payload/aws-cli/aws`
+- **Linux**: Downloads `awscli-exe-linux-x86_64-{{.Version}}.zip`, extracts the `aws` binary from `aws/dist/aws`
+- **macOS**: Downloads `AWSCLIV2-{{.Version}}.pkg`, uses `pkgutil --expand-full` to extract from `aws-cli.pkg/Payload/aws-cli/aws` (paths may change upstream)
 
 Both `aws` and `aws_completer` binaries are extracted and made available.
 

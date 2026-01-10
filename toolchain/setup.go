@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	// DefaultDirPermissions is the default permission mask for created directories.
+	// Default permission mask for created directories.
 	defaultDirPermissions = 0o755
-	// VersionPrefix is the standard version prefix for tools.
+	// Standard version prefix for tools.
 	versionPrefix = "v"
 )
 
