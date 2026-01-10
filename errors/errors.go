@@ -262,14 +262,17 @@ var (
 	ErrProfileDirNotAccessible = errors.New("profile directory not accessible")
 	ErrProfileInvalidMetadata  = errors.New("invalid profile metadata")
 
-	ErrMissingStack                               = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
-	ErrMissingComponent                           = errors.New("component is required")
-	ErrMissingComponentType                       = errors.New("component type is required")
-	ErrRequiredFlagNotProvided                    = errors.New("required flag not provided")
-	ErrRequiredFlagEmpty                          = errors.New("required flag cannot be empty")
-	ErrInvalidArguments                           = errors.New("invalid arguments")
-	ErrUnknownSubcommand                          = errors.New("unknown subcommand")
-	ErrInvalidComponent                           = errors.New("invalid component")
+	ErrMissingStack            = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
+	ErrMissingComponent        = errors.New("component is required")
+	ErrMissingComponentType    = errors.New("component type is required")
+	ErrRequiredFlagNotProvided = errors.New("required flag not provided")
+	ErrRequiredFlagEmpty       = errors.New("required flag cannot be empty")
+	ErrInvalidArguments        = errors.New("invalid arguments")
+	ErrUnknownSubcommand       = errors.New("unknown subcommand")
+	ErrInvalidComponent        = errors.New("invalid component")
+	// ErrInvalidStack indicates the user provided an identifier that doesn't match
+	// the stack's canonical name (e.g., using filename when explicit name is set).
+	// This differs from ErrStackNotFound which indicates the stack doesn't exist at all.
 	ErrInvalidStack                               = errors.New("invalid stack")
 	ErrInvalidComponentMapType                    = errors.New("invalid component map type")
 	ErrAbstractComponentCantBeProvisioned         = errors.New("abstract component cannot be provisioned")

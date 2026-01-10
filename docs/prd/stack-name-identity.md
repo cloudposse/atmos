@@ -39,14 +39,14 @@ A stack's canonical identifier is determined by the following precedence (highes
 
 ```yaml
 # stacks/legacy-prod.yaml
-name: my-explicit-stack
+name: my-legacy-prod-stack
 vars:
   environment: prod
   stage: ue1
 ```
 
 With `name_template: "{{ .vars.environment }}-{{ .vars.stage }}"` in atmos.yaml:
-- **Valid**: `atmos tf plan vpc -s my-explicit-stack`
+- **Valid**: `atmos tf plan vpc -s my-legacy-prod-stack`
 - **Invalid**: `atmos tf plan vpc -s prod-ue1` (template result ignored)
 - **Invalid**: `atmos tf plan vpc -s legacy-prod` (filename ignored)
 
@@ -103,10 +103,27 @@ $ atmos terraform plan vpc -s my-explicit-stack
 
 ### Invalid Identifier
 
+When using an invalid identifier (e.g., filename when an explicit name is set), Atmos returns a helpful error with suggestions:
+
 ```bash
 $ atmos terraform plan vpc -s legacy-prod
-Error: Could not find the component 'vpc' in the stack 'legacy-prod'.
+
+# Error
+
+**Error:** invalid stack
+
+## Explanation
+
+Stack legacy-prod not found.
+
+## Hints
+
+💡 Did you mean my-legacy-prod-stack?
+
+💡 Run atmos list stacks to see all available stacks.
 ```
+
+The error identifies the issue as an invalid stack (not component) and provides actionable hints.
 
 ### Stack Listing
 
@@ -114,9 +131,9 @@ The `atmos list stacks` command shows only canonical identifiers:
 
 ```bash
 $ atmos list stacks
-my-explicit-stack    # Not 'legacy-prod' or 'prod-ue1'
-prod-ue1             # From template, not filename
-dev                  # Filename (no naming config)
+my-legacy-prod-stack  # Not 'legacy-prod' or 'prod-ue1'
+prod-ue1              # From template, not filename
+dev                   # Filename (no naming config)
 ```
 
 ## Implementation

@@ -30,6 +30,17 @@ const (
 	terraformConfigKey = "terraform_config"
 )
 
+// getStackManifestName extracts the manifest-level 'name' field from a stack section.
+// Returns empty string if the section is not a map or doesn't have a name field.
+func getStackManifestName(stackSection any) string {
+	if section, ok := stackSection.(map[string]any); ok {
+		if nameValue, ok := section[cfg.NameSectionName].(string); ok {
+			return nameValue
+		}
+	}
+	return ""
+}
+
 // ProcessComponentConfig processes component config sections.
 func ProcessComponentConfig(
 	atmosConfig *schema.AtmosConfiguration,
@@ -379,12 +390,7 @@ func findComponentInStacks(
 	for stackName := range stacksMap {
 		// Extract manifest name FIRST (before checking component) for suggestion purposes.
 		// This allows us to suggest correct stack names even when the component isn't found.
-		var stackManifestName string
-		if stackSection, ok := stacksMap[stackName].(map[string]any); ok {
-			if nameValue, ok := stackSection[cfg.NameSectionName].(string); ok {
-				stackManifestName = nameValue
-			}
-		}
+		stackManifestName := getStackManifestName(stacksMap[stackName])
 
 		// Track filename -> canonical name mapping for suggestion purposes.
 		// We do this early so we can suggest correct names even if the component doesn't exist.

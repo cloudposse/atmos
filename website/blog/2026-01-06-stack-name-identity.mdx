@@ -56,10 +56,10 @@ The single identity rule prevents confusion. If you have:
 
 ```yaml
 # stacks/legacy-prod.yaml
-name: "my-legacy-stack"
+name: "my-legacy-prod-stack"
 ```
 
-Only `atmos terraform plan vpc -s my-legacy-stack` works. Using `-s legacy-prod` correctly returns an error because that's not the canonical name.
+Only `atmos terraform plan vpc -s my-legacy-prod-stack` works. Using `-s legacy-prod` correctly returns an error because that's not the canonical name.
 
 ## Migration Notes
 
