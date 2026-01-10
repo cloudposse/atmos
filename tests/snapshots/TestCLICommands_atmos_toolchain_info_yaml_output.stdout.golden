@@ -1,7 +1,7 @@
 type: github_release
 repo_owner: replicatedhq
 repo_name: replicated
-asset: https://github.com/replicatedhq/replicated/releases/download/X.X.X/replicated_X.X.X_darwin_arm64.tar.gz
+asset: https://github.com/replicatedhq/replicated/releases/download/X.X.X/replicated_X.X.X_linux_amd64.tar.gz
 overrides:
     - goos: darwin
       goarch: ""
@@ -10,4 +10,4 @@ overrides:
       files: []
       replacements: {}
 version: X.X.X
-processed_url: https://github.com/replicatedhq/replicated/releases/download/X.X.X/replicated_X.X.X_darwin_arm64.tar.gz
+processed_url: https://github.com/replicatedhq/replicated/releases/download/X.X.X/replicated_X.X.X_linux_amd64.tar.gz
