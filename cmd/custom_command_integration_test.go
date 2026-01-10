@@ -166,8 +166,9 @@ func TestCustomCommandIntegration_IdentityFlagOverride(t *testing.T) {
 	t.Logf("Captured environment variables with --identity flag:\n%s", envVars)
 
 	// Verify that the flag override worked (should see mock-identity-2, not mock-identity).
-	assert.Contains(t, envVars, "ATMOS_IDENTITY=mock-identity-2", "Should use identity from --identity flag (mock-identity-2)")
-	assert.NotContains(t, envVars, "ATMOS_IDENTITY=mock-identity\n", "Should NOT use identity from config (mock-identity)")
+	// Use extractEnvVar for exact line matching to avoid substring false positives.
+	identityValue := extractEnvVar(envVars, "ATMOS_IDENTITY")
+	assert.Equal(t, "mock-identity-2", identityValue, "Should use identity from --identity flag, not the config value")
 }
 
 // TestCustomCommandIntegration_MultipleSteps tests that all steps in a custom command
@@ -265,6 +266,10 @@ func extractEnvVar(envOutput, varName string) string {
 
 // TestCustomCommandIntegration_BooleanFlagDefaults tests that boolean flags with default values
 // are correctly registered and accessible in custom commands.
+//
+// Note: This test uses camelCase flag names (e.g., customDebug) to avoid conflicts with global
+// flags and to allow simple .Flags.name template syntax. For user-facing commands with kebab-case
+// flags (e.g., custom-debug), users can use {{ index .Flags "custom-debug" }} template syntax.
 func TestCustomCommandIntegration_BooleanFlagDefaults(t *testing.T) {
 	if testing.Short() {
 		t.Skipf("Skipping integration test in short mode")

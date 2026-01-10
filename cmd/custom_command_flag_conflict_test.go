@@ -494,6 +494,14 @@ func TestCustomCommand_ExistingCommandReuseWithNestedConflict(t *testing.T) {
 	// Create a test kit to ensure clean RootCmd state.
 	_ = NewTestKit(t)
 
+	// Preconditions: RootCmd must have the built-in terraform command and its stack flag.
+	// This prevents false negatives if the terraform command is ever renamed or removed.
+	tfCmd, _, tfErr := RootCmd.Find([]string{"terraform"})
+	require.NoError(t, tfErr, "Precondition: terraform command must exist")
+	require.NotNil(t, tfCmd, "Precondition: terraform command must be registered")
+	// Check PersistentFlags() since the stack flag is defined directly on terraform, not inherited.
+	require.NotNil(t, tfCmd.PersistentFlags().Lookup("stack"), "Precondition: terraform must have --stack flag")
+
 	// Load atmos configuration.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	require.NoError(t, err)
@@ -927,6 +935,11 @@ func TestCustomCommand_DeeplyNestedConflict(t *testing.T) {
 
 // TestCustomCommand_MultipleCommandsWithMixedValidity tests processing multiple
 // commands where some are valid and some have conflicts.
+//
+// Note: This test documents the current "fail-fast" behavior where valid commands registered
+// before the first error remain registered. This is intentional - configuration errors should
+// be fixed rather than silently ignored. If "all-or-nothing" semantics are desired in the
+// future, a pre-validation pass would be needed before registration.
 func TestCustomCommand_MultipleCommandsWithMixedValidity(t *testing.T) {
 	// Set up test fixture.
 	testDir := "../tests/fixtures/scenarios/complete"
@@ -1109,12 +1122,13 @@ func TestCustomCommand_VerboseFlagConflict(t *testing.T) {
 
 // customCommandTestHelper provides shared setup for custom command tests.
 type customCommandTestHelper struct {
-	t           *testing.T
 	atmosConfig schema.AtmosConfiguration
 }
 
 // newCustomCommandTestHelper creates a new test helper with common setup.
 func newCustomCommandTestHelper(t *testing.T) *customCommandTestHelper {
+	t.Helper()
+
 	testDir := "../tests/fixtures/scenarios/complete"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
 	t.Setenv("ATMOS_BASE_PATH", testDir)
@@ -1125,7 +1139,6 @@ func newCustomCommandTestHelper(t *testing.T) *customCommandTestHelper {
 	require.NoError(t, err)
 
 	return &customCommandTestHelper{
-		t:           t,
 		atmosConfig: atmosConfig,
 	}
 }
