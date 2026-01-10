@@ -2,23 +2,21 @@ replicatedhq/replicated (registry: atmos-inline)
 Type: github_release
 Repository: https://github.com/replicatedhq/replicated
 
-Installed Versions:
-         VERSION                
-────────────────────────────────
-  ✓       X.X.X (default)      
+No versions installed
 
 Available Versions (latest 10):
-                   VERSION           DATE              TITLE            
+                   VERSION           DATE              TITLE
 ────────────────────────────────────────────────────────────────────────
- ●                 X.X.X           YYYY-MM-DD        Changelog        
-                   X.X.X           YYYY-MM-DD        Changelog        
-                   X.X.X           YYYY-MM-DD        Changelog        
-                   X.X.X           YYYY-MM-DD        Changelog        
-                   X.X.X           YYYY-MM-DD        Changelog        
-                   X.X.X           YYYY-MM-DD        Changelog        
-                   X.X.X           YYYY-MM-DD        Changelog        
-                   X.X.X           YYYY-MM-DD        Changelog        
-                   X.X.X           YYYY-MM-DD        Changelog        
-                   X.X.X           YYYY-MM-DD        Changelog        
+                   X.X.X           YYYY-MM-DD        Changelog
+                   X.X.X           YYYY-MM-DD        Changelog
+                   X.X.X           YYYY-MM-DD        Changelog
+                   X.X.X           YYYY-MM-DD        Changelog
+                   X.X.X           YYYY-MM-DD        Changelog
+                   X.X.X           YYYY-MM-DD        Changelog
+                   X.X.X           YYYY-MM-DD        Changelog
+                   X.X.X           YYYY-MM-DD        Changelog
+                   X.X.X           YYYY-MM-DD        Changelog
+                   X.X.X           YYYY-MM-DD        Changelog
+                   X.X.X           YYYY-MM-DD        Changelog
 
 💡 Use atmos toolchain install replicatedhq/replicated@<version> to install
