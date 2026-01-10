@@ -59,7 +59,7 @@ A 3-way merge system for **template updates** in `atmos scaffold` and `atmos ini
 **Dual-strategy approach**:
 
 1. **Text-based merge** - For general files (.tf, .md, .sh, etc.)
-   - Uses `epiclabs-io/diff3` library
+   - Uses `nasdf/diff3` library
    - Line-by-line merge with conflict detection
 
 2. **YAML-aware merge** - For config files (.yaml, .yml)

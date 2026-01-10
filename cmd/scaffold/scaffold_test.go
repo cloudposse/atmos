@@ -22,7 +22,8 @@ func TestNewScaffoldCommandProvider(t *testing.T) {
 	assert.Equal(t, "scaffold", provider.GetName())
 	assert.Equal(t, "Configuration Management", provider.GetGroup())
 	assert.NotNil(t, provider.GetCommand())
-	assert.NotNil(t, provider.GetFlagsBuilder())
+	// Parent scaffold command has no flags; flags belong to generate subcommand.
+	assert.Nil(t, provider.GetFlagsBuilder())
 	assert.Nil(t, provider.GetPositionalArgsBuilder())
 	assert.Nil(t, provider.GetCompatibilityFlags())
 }
@@ -41,8 +42,8 @@ func TestScaffoldCommandProvider_GetFlagsBuilder(t *testing.T) {
 	provider := &ScaffoldCommandProvider{}
 	builder := provider.GetFlagsBuilder()
 
-	assert.NotNil(t, builder)
-	assert.IsType(t, &flags.StandardParser{}, builder)
+	// Parent scaffold command has no flags; flags belong to generate subcommand.
+	assert.Nil(t, builder)
 }
 
 func TestScaffoldCmd_Subcommands(t *testing.T) {
@@ -407,17 +408,27 @@ func TestConvertScaffoldTemplateToConfiguration(t *testing.T) {
 			},
 		},
 		{
-			name:         "template with source",
+			name:         "template with remote source (rejected)",
 			templateName: "remote-template",
 			templateData: map[string]interface{}{
 				"description": "Remote scaffold",
 				"source":      "https://github.com/example/template.git",
 			},
+			expectError: true, // Remote templates are not yet supported.
+			validate:    nil,
+		},
+		{
+			name:         "template with local source",
+			templateName: "local-template",
+			templateData: map[string]interface{}{
+				"description": "Local scaffold",
+				"source":      "./templates/mytemplate",
+			},
 			expectError: false,
 			validate: func(t *testing.T, config templates.Configuration) {
-				assert.Equal(t, "remote-template", config.Name)
+				assert.Equal(t, "local-template", config.Name)
 				assert.Contains(t, config.Description, "source:")
-				assert.Contains(t, config.Description, "github.com")
+				assert.Contains(t, config.Description, "./templates/mytemplate")
 			},
 		},
 		{
@@ -1108,8 +1119,8 @@ func TestExecuteTemplateGeneration_ErrorPath(t *testing.T) {
 		Files: []templates.File{{Path: "test.txt", Content: "content"}},
 	}
 
-	// Test with nil UI to trigger error
-	err := executeTemplateGeneration(config, "/tmp/test", false, false, map[string]interface{}{}, nil)
+	// Test with nil UI to trigger error.
+	err := executeTemplateGeneration(&config, "/tmp/test", false, false, map[string]interface{}{}, nil)
 	assert.Error(t, err)
 }
 

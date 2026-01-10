@@ -30,12 +30,13 @@ Expert in testing Atmos TUI components using Charmbracelet libraries (Bubble Tea
 
 ## Charmbracelet Testing Principles (MANDATORY)
 
-### No Mocking - Direct Testing
+### Prefer Real Bubble Tea Models; Mock External Boundaries When Needed
 
-Charmbracelet philosophy: Test real instances, not mocks.
+For Bubble Tea models, prefer testing real model instances via direct `Update()`/`View()` calls.
+For external dependencies (filesystem, network, time, etc.), follow Atmos conventions: use DI + mockgen-generated mocks.
 
 ```go
-// CORRECT: Direct Update() calls on real models
+// CORRECT: Direct Update() calls on real Bubble Tea models
 func TestSpinnerModel_Update(t *testing.T) {
     s := spinner.New()
     m := spinnerModel{spinner: s, message: "Loading..."}
@@ -48,8 +49,9 @@ func TestSpinnerModel_Update(t *testing.T) {
     }
 }
 
-// WRONG: Mocking or interface-based testing
-type MockSpinner interface { ... }  // Don't do this
+// OK: Mocking external dependencies at boundaries
+type FileSystem interface { ReadFile(path string) ([]byte, error) }
+//go:generate mockgen -source=fs.go -destination=mock_fs_test.go
 ```
 
 ### ANSI Code Handling (MANDATORY)

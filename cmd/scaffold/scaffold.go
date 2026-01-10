@@ -37,12 +37,18 @@ var validPromptTypes = []string{"input", "select", "confirm", "multiselect"}
 // Returns an error if the entry is malformed.
 func validateSetFlag(entry string) error {
 	if !strings.Contains(entry, "=") {
-		return fmt.Errorf("Malformed --set flag ignored (missing '='): %s", entry)
+		return errUtils.Build(errUtils.ErrInvalidFlag).
+			WithExplanationf("Malformed --set flag (missing '='): %s", entry).
+			WithHint("Use the format: --set key=value").
+			Err()
 	}
 
 	parts := strings.SplitN(entry, "=", 2)
 	if strings.TrimSpace(parts[0]) == "" {
-		return fmt.Errorf("Malformed --set flag ignored (empty key): %s", entry)
+		return errUtils.Build(errUtils.ErrInvalidFlag).
+			WithExplanationf("Malformed --set flag (empty key): %s", entry).
+			WithHint("Use the format: --set key=value").
+			Err()
 	}
 
 	return nil
@@ -191,7 +197,7 @@ If a file is specified, validates that specific scaffold.yaml file.`,
 }
 
 func init() {
-	// Create StandardParser for generate subcommand flags
+	// Create StandardParser for generate subcommand flags.
 	scaffoldGenerateParser = flags.NewStandardParser(
 		flags.WithBoolFlag("force", "f", false, "Overwrite existing files"),
 		flags.WithBoolFlag("dry-run", "", false, "Preview changes without writing files"),
@@ -201,20 +207,20 @@ func init() {
 		flags.WithEnvVars("set", "ATMOS_SCAFFOLD_SET"),
 	)
 
-	// Register flags to generate subcommand
+	// Register flags to generate subcommand.
 	scaffoldGenerateParser.RegisterFlags(scaffoldGenerateCmd)
 
-	// Bind to Viper for precedence handling
+	// Bind to Viper for precedence handling.
 	if err := scaffoldGenerateParser.BindToViper(viper.GetViper()); err != nil {
 		log.Debug("Failed to bind scaffold flags to Viper", "error", err)
 	}
 
-	// Add subcommands to scaffold parent
+	// Add subcommands to scaffold parent.
 	scaffoldCmd.AddCommand(scaffoldGenerateCmd)
 	scaffoldCmd.AddCommand(scaffoldListCmd)
 	scaffoldCmd.AddCommand(scaffoldValidateCmd)
 
-	// Register this command with the registry
+	// Register this command with the registry.
 	internal.Register(&ScaffoldCommandProvider{})
 }
 
@@ -241,9 +247,10 @@ func (s *ScaffoldCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
 
-// GetFlagsBuilder returns the flags builder for this command.
+// GetFlagsBuilder returns nil since the parent scaffold command has no flags.
+// Flags (--force, --dry-run, --set) belong to the generate subcommand.
 func (s *ScaffoldCommandProvider) GetFlagsBuilder() flags.Builder {
-	return scaffoldGenerateParser
+	return nil
 }
 
 // GetPositionalArgsBuilder returns nil as this command doesn't use positional args builder.
@@ -284,13 +291,22 @@ func executeScaffoldGenerate(
 		return err
 	}
 
-	// If dry-run mode, render preview and return without writing files
+	// If dry-run mode, render preview and return without writing files.
 	if dryRun {
+		if absTargetDir == "" {
+			return errUtils.Build(errUtils.ErrTargetDirRequired).
+				WithExplanation("Target directory is required when using `--dry-run` flag").
+				WithHint("Specify target directory: `atmos scaffold generate <template> <target>`").
+				WithHint("Or remove `--dry-run` flag to use interactive mode").
+				WithContext("flag", "dry-run").
+				WithExitCode(2).
+				Err()
+		}
 		return renderDryRunPreview(&selectedConfig, absTargetDir, templateVars)
 	}
 
-	// Execute template generation
-	return executeTemplateGeneration(selectedConfig, absTargetDir, force, dryRun, templateVars, scaffoldUI)
+	// Execute template generation.
+	return executeTemplateGeneration(&selectedConfig, absTargetDir, force, dryRun, templateVars, scaffoldUI)
 }
 
 // resolveTargetDirectory converts target directory to absolute path.
@@ -302,6 +318,7 @@ func resolveTargetDirectory(targetDir string) (string, error) {
 	absPath, err := filepath.Abs(targetDir)
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrResolveTargetDirectory).
+			WithCause(err).
 			WithExplanationf("Cannot resolve target directory path: `%s`", targetDir).
 			WithHint("Ensure the path is valid").
 			WithHint("Check that the parent directory exists and is accessible").
@@ -366,7 +383,13 @@ func mergeConfiguredTemplates(configs map[string]templates.Configuration) error 
 
 	templatesMap, ok := templatesData.(map[string]interface{})
 	if !ok {
-		return nil // Invalid format, skip silently
+		return errUtils.Build(errUtils.ErrInvalidScaffoldConfig).
+			WithExplanation("The `scaffold.templates` section is not a valid configuration").
+			WithHint("The `scaffold.templates` section must be a map of template names to configurations").
+			WithExample("```yaml\nscaffold:\n  templates:\n    my-template:\n      description: My template\n      source: ./path\n```").
+			WithContext("config_file", "atmos.yaml").
+			WithExitCode(2).
+			Err()
 	}
 
 	for templateName, templateData := range templatesMap {
@@ -440,7 +463,7 @@ func selectTemplateByName(
 
 // executeTemplateGeneration executes the template generation with the selected configuration.
 func executeTemplateGeneration(
-	selectedConfig templates.Configuration,
+	selectedConfig *templates.Configuration,
 	targetDir string,
 	force bool,
 	dryRun bool,
@@ -454,8 +477,8 @@ func executeTemplateGeneration(
 		return executeTemplateWithoutTargetDir(selectedConfig, force, update, useDefaults, dryRun, templateVars, scaffoldUI)
 	}
 
-	// Target directory provided, use normal Execute
-	return scaffoldUI.Execute(selectedConfig, targetDir, force, update, useDefaults, templateVars)
+	// Target directory provided, use normal Execute.
+	return scaffoldUI.Execute(*selectedConfig, targetDir, force, update, useDefaults, templateVars)
 }
 
 // renderDryRunPreview renders a preview of template files without writing to disk.
@@ -494,7 +517,12 @@ func renderDryRunHeader(selectedConfig *templates.Configuration, targetDir strin
 
 // loadDryRunValues loads configuration values for dry-run preview using defaults.
 func loadDryRunValues(selectedConfig *templates.Configuration, templateVars map[string]interface{}) (map[string]interface{}, error) {
-	mergedValues := templateVars
+	// Create a copy to avoid mutating the caller's map.
+	mergedValues := make(map[string]interface{}, len(templateVars))
+	for k, v := range templateVars {
+		mergedValues[k] = v
+	}
+
 	if !templates.HasScaffoldConfig(selectedConfig.Files) {
 		return mergedValues, nil
 	}
@@ -581,7 +609,7 @@ func printFilePath(targetDir, renderedPath string) error {
 
 // executeTemplateWithoutTargetDir handles template execution when no target directory is provided.
 func executeTemplateWithoutTargetDir(
-	selectedConfig templates.Configuration,
+	selectedConfig *templates.Configuration,
 	force bool,
 	update bool,
 	useDefaults bool,
@@ -590,8 +618,8 @@ func executeTemplateWithoutTargetDir(
 	scaffoldUI *generatorUI.InitUI,
 ) error {
 	if !dryRun {
-		// Interactive mode: use ExecuteWithInteractiveFlow which will prompt for target directory
-		return scaffoldUI.ExecuteWithInteractiveFlow(selectedConfig, "", force, update, useDefaults, templateVars)
+		// Interactive mode: use ExecuteWithInteractiveFlow which will prompt for target directory.
+		return scaffoldUI.ExecuteWithInteractiveFlow(*selectedConfig, "", force, update, useDefaults, templateVars)
 	}
 
 	// Dry-run mode: target directory is required
@@ -604,66 +632,42 @@ func executeTemplateWithoutTargetDir(
 		Err()
 }
 
-// executeScaffoldList lists all available scaffold templates configured in atmos.yaml.
+// executeScaffoldList lists all available scaffold templates (embedded and configured).
 // This logic was moved from internal/exec/scaffold.go to keep command logic in cmd/.
 func executeScaffoldList(_ *cobra.Command) error {
-	// Read scaffold section from atmos.yaml
-	scaffoldSection, err := config.ReadAtmosScaffoldSection(".")
+	// Load all available templates (embedded + atmos.yaml).
+	configs, scaffoldUI, err := loadScaffoldTemplates()
 	if err != nil {
-		return errUtils.Build(errUtils.ErrReadScaffoldConfig).
-			WithExplanation("Failed to read `scaffold` section from `atmos.yaml`").
-			WithHint("Check the `scaffold` section syntax in `atmos.yaml`").
-			WithHint("Run `atmos validate config` to check for errors").
-			WithContext("config_file", "atmos.yaml").
-			WithExitCode(2).
-			Err()
+		return err
 	}
 
-	// Get the templates section
-	templatesData, ok := scaffoldSection["templates"]
-	if !ok {
-		if err := atmosui.Info("No scaffold templates configured in atmos.yaml."); err != nil {
+	// Check if there are any templates.
+	if len(configs) == 0 {
+		if err := atmosui.Info("No scaffold templates available."); err != nil {
 			return err
 		}
-		if err := atmosui.Info("Add a 'scaffold.templates' section to your atmos.yaml to configure available templates."); err != nil {
+		if err := atmosui.Info("Add templates to the 'scaffold.templates' section in atmos.yaml to get started."); err != nil {
 			return err
 		}
 		return nil
 	}
 
-	templatesMap, ok := templatesData.(map[string]interface{})
-	if !ok {
-		return errUtils.Build(errUtils.ErrInvalidScaffoldConfig).
-			WithExplanation("The `scaffold.templates` section is not a valid configuration").
-			WithHint("The `scaffold.templates` section must be a map of template names to configurations").
-			WithExample("```yaml\nscaffold:\n  templates:\n    my-template:\n      description: My template\n      source: ./path\n```").
-			WithExitCode(2).
-			Err()
-	}
-
-	// Check if there are any templates
-	if len(templatesMap) == 0 {
-		if err := atmosui.Info("No scaffold templates configured in atmos.yaml."); err != nil {
-			return err
+	// Build table data from templates.Configuration map.
+	header := []string{"Template", "Description", "Source"}
+	var rows [][]string
+	for name, cfg := range configs {
+		source := "embedded"
+		if cfg.TargetDir != "" {
+			source = "atmos.yaml"
 		}
-		if err := atmosui.Info("Add templates to the 'scaffold.templates' section to get started."); err != nil {
-			return err
+		description := cfg.Description
+		if description == "" {
+			description = "-"
 		}
-		return nil
+		rows = append(rows, []string{name, description, source})
 	}
 
-	// Create generator context
-	genCtx, err := setup.NewGeneratorContext()
-	if err != nil {
-		return errUtils.Build(errUtils.ErrCreateGeneratorContext).
-			WithExplanation("Failed to initialize generator context").
-			WithHint("Check terminal capabilities and I/O permissions").
-			WithExitCode(1).
-			Err()
-	}
-
-	uiInstance := genCtx.UI
-	uiInstance.DisplayScaffoldTemplateTable(templatesMap)
+	scaffoldUI.DisplayTemplateTable(header, rows)
 
 	return nil
 }
@@ -751,8 +755,9 @@ func printValidationSummary(validCount int, errorCount int) error {
 		return errUtils.Build(errUtils.ErrScaffoldValidation).
 			WithExplanationf("%d scaffold file(s) failed validation", errorCount).
 			WithHint("Review the validation errors above and fix the issues").
-			WithHint("Check that all required fields are present: `name`, `prompts`").
-			WithHint("Verify prompt types are valid: `input`, `select`, `confirm`, `multiselect`").
+			WithHint("The `name` field is required in every scaffold.yaml").
+			WithHint("If prompts are defined, each must have `name` and `type` fields").
+			WithHint("Valid prompt types: `input`, `select`, `confirm`, `multiselect`").
 			WithContext("valid_count", validCount).
 			WithContext("error_count", errorCount).
 			WithExitCode(1).
@@ -937,10 +942,20 @@ func convertScaffoldTemplateToConfiguration(name string, templateData interface{
 		config.Description = desc
 	}
 
-	// Extract source (for remote templates)
+	// Extract source (for remote templates).
 	if source, ok := templateMap["source"].(string); ok {
-		// For remote templates, we would need to fetch and process them
-		// For now, create a placeholder that indicates this is a remote template
+		// Remote templates (git::, http://, etc.) are not yet supported.
+		if strings.HasPrefix(source, "git::") || strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") {
+			return templates.Configuration{}, errUtils.Build(errUtils.ErrInvalidTemplateData).
+				WithExplanationf("Remote template source is not yet supported: `%s`", source).
+				WithHint("Use a local path for the template source instead").
+				WithHint("Remote Git templates will be supported in a future release").
+				WithContext("template_name", name).
+				WithContext("source", source).
+				WithExitCode(2).
+				Err()
+		}
+		// For local source paths, store in description for now.
 		config.Description = fmt.Sprintf("%s (source: %s)", config.Description, source)
 	}
 

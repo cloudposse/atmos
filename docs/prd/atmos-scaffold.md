@@ -762,7 +762,7 @@ Location: `website/docs/cli/commands/atmos-scaffold.mdx`
 - `github.com/spf13/viper` - Configuration management
 - `github.com/Masterminds/sprig/v3` - Template functions
 - `github.com/hairyhenderson/gomplate/v3` - Template rendering
-- `gopkg.in/yaml.v2` - YAML parsing (scaffold.yaml)
+- `gopkg.in/yaml.v3` - YAML parsing (scaffold.yaml)
 
 ### Internal Packages
 
