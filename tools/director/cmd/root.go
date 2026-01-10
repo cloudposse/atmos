@@ -62,10 +62,17 @@ director new terraform-apply-basic
 
 // loadEnvFiles loads .env files from standard locations.
 // Files are loaded in order of priority (later files override earlier ones):
-// 1. Current working directory (.env)
-// 2. Demos directory (demos/.env)
+// 1. Directory containing the director binary
+// 2. Current working directory (.env)
+// 3. Demos directory (demos/.env)
 // Errors are silently ignored - .env files are optional.
 func loadEnvFiles() {
+	// Load from director binary's directory.
+	if execPath, err := os.Executable(); err == nil {
+		execDir := filepath.Dir(execPath)
+		_ = godotenv.Load(filepath.Join(execDir, ".env"))
+	}
+
 	// Load from current directory.
 	_ = godotenv.Load()
 
