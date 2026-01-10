@@ -319,16 +319,16 @@ timestamp: {{ now | date "2006-01-02" }}`
 // TestGetSprigFuncMap_CachingBehavior tests that Sprig function map caching works correctly.
 // This validates P7.7.2 optimization: cached Sprig function maps produce consistent results.
 func TestGetSprigFuncMap_CachingBehavior(t *testing.T) {
-	// Call getSprigFuncMap multiple times
-	funcMap1 := getSprigFuncMap()
+	// Call GetSprigFuncMap multiple times
+	funcMap1 := GetSprigFuncMap()
 	require.NotNil(t, funcMap1)
 	require.NotEmpty(t, funcMap1)
 
-	funcMap2 := getSprigFuncMap()
+	funcMap2 := GetSprigFuncMap()
 	require.NotNil(t, funcMap2)
 	require.NotEmpty(t, funcMap2)
 
-	funcMap3 := getSprigFuncMap()
+	funcMap3 := GetSprigFuncMap()
 	require.NotNil(t, funcMap3)
 	require.NotEmpty(t, funcMap3)
 
@@ -376,7 +376,7 @@ func TestGetSprigFuncMap_Concurrent(t *testing.T) {
 			<-start
 
 			// Get cached function map
-			funcMap := getSprigFuncMap()
+			funcMap := GetSprigFuncMap()
 			if funcMap == nil {
 				errors <- assert.AnError
 				return
@@ -470,11 +470,11 @@ func TestGetSprigFuncMap_ConcurrentTemplateProcessing(t *testing.T) {
 // This demonstrates P7.7.2 optimization: after first call, subsequent calls have zero overhead.
 func BenchmarkGetSprigFuncMap(b *testing.B) {
 	// First call to initialize cache
-	_ = getSprigFuncMap()
+	_ = GetSprigFuncMap()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = getSprigFuncMap()
+		_ = GetSprigFuncMap()
 	}
 }
 
