@@ -104,6 +104,8 @@ func NewInitModel(component, stack, subCommand, workspace string, reader io.Read
 //
 //nolint:gocritic // bubbletea models must be passed by value
 func (m InitModel) Init() tea.Cmd {
+	defer perf.Track(nil, "terraform.ui.InitModel.Init")()
+
 	return tea.Batch(
 		m.spinner.Tick,
 		m.readNextLine(),

@@ -45,6 +45,7 @@ var (
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
 	ErrTUIRun                                = errors.New("failed to run TUI")
 	ErrStdoutPipe                            = errors.New("failed to get stdout pipe")
+	ErrStderrPipe                            = errors.New("failed to get stderr pipe")
 	ErrCommandStart                          = errors.New("failed to start command")
 	ErrUIFormatterNotInitialized             = errors.New("ui formatter not initialized")
 	ErrIOContextNotInitialized               = errors.New("global I/O context is nil after initialization")
@@ -78,6 +79,7 @@ var (
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
 	ErrSpinnerUnexpectedModelType            = errors.New("spinner returned unexpected model type")
+	ErrUnexpectedModelType                   = errors.New("unexpected model type")
 
 	// Theme-related errors.
 	ErrThemeNotFound = errors.New("theme not found")

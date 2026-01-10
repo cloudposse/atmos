@@ -182,6 +182,8 @@ func (rt *ResourceTracker) handleRefreshComplete(m *RefreshCompleteMessage) {
 
 // GetResources returns a snapshot of all resources in order.
 func (rt *ResourceTracker) GetResources() []*ResourceOperation {
+	defer perf.Track(nil, "terraform.ui.ResourceTracker.GetResources")()
+
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
 
@@ -222,6 +224,8 @@ func (rt *ResourceTracker) GetDiagnostics() []*DiagnosticMessage {
 
 // GetActiveCount returns the number of resources currently in progress.
 func (rt *ResourceTracker) GetActiveCount() int {
+	defer perf.Track(nil, "terraform.ui.ResourceTracker.GetActiveCount")()
+
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
 
@@ -236,6 +240,8 @@ func (rt *ResourceTracker) GetActiveCount() int {
 
 // GetCompletedCount returns the number of completed resources.
 func (rt *ResourceTracker) GetCompletedCount() int {
+	defer perf.Track(nil, "terraform.ui.ResourceTracker.GetCompletedCount")()
+
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
 
@@ -257,6 +263,8 @@ func (rt *ResourceTracker) GetTotalCount() int {
 
 // GetErrorCount returns the number of failed resources.
 func (rt *ResourceTracker) GetErrorCount() int {
+	defer perf.Track(nil, "terraform.ui.ResourceTracker.GetErrorCount")()
+
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
 

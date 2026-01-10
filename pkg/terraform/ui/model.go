@@ -511,6 +511,8 @@ func (m *Model) GetTracker() *ResourceTracker {
 // LogDiagnostics sends all diagnostics to the Atmos logger at appropriate severity levels.
 // Call this after the TUI completes to display warnings after the completion message.
 func (m *Model) LogDiagnostics() {
+	defer perf.Track(nil, "terraform.ui.Model.LogDiagnostics")()
+
 	for _, diag := range m.tracker.GetDiagnostics() {
 		m.logDiagnostic(diag)
 	}

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -72,10 +74,21 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 		return fmt.Errorf("%w: %w", errUtils.ErrStdoutPipe, err)
 	}
 
-	// Suppress stderr since we parse JSON diagnostics from stdout.
+	// Capture stderr for non-JSON diagnostics (backend errors, plugin failures, etc.).
 	// Terraform outputs human-readable warnings to stderr even with -json flag,
-	// but we route those through the Atmos logger via parsed JSON diagnostics.
-	cmd.Stderr = io.Discard
+	// and some critical errors (Go runtime panics, plugin crashes) only appear on stderr.
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("%w: %w", errUtils.ErrStderrPipe, err)
+	}
+
+	// Stream stderr to logger in background.
+	go func() {
+		scanner := bufio.NewScanner(stderrPipe)
+		for scanner.Scan() {
+			logger.Debug(scanner.Text())
+		}
+	}()
 
 	// Start command.
 	if err := cmd.Start(); err != nil {
@@ -113,7 +126,10 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 	}
 
 	// Check if model has an error.
-	m := finalModel.(Model)
+	m, ok := finalModel.(Model)
+	if !ok {
+		return fmt.Errorf("%w: expected Model, got %T", errUtils.ErrUnexpectedModelType, finalModel)
+	}
 
 	// Log diagnostics after TUI completes (warnings appear after completion message).
 	m.LogDiagnostics()
@@ -328,7 +344,10 @@ func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
 	}
 
 	// Check if model has an error.
-	m := finalModel.(InitModel)
+	m, ok := finalModel.(InitModel)
+	if !ok {
+		return fmt.Errorf("%w: expected InitModel, got %T", errUtils.ErrUnexpectedModelType, finalModel)
+	}
 	if m.GetError() != nil {
 		return m.GetError()
 	}
