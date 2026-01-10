@@ -3,6 +3,8 @@ package toolchain
 import (
 	"path/filepath"
 
+	log "github.com/charmbracelet/log"
+
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/toolchain/installer"
 	"github.com/cloudposse/atmos/toolchain/registry"
@@ -62,9 +64,16 @@ func NewInstaller(opts ...Option) *Installer {
 
 	// Try to load configured registries from atmos.yaml.
 	if config := GetAtmosConfig(); config != nil {
-		if reg, err := NewRegistry(config); err == nil && reg != nil {
+		log.Debug("Loading toolchain registries from atmos.yaml",
+			"registryCount", len(config.Toolchain.Registries))
+		if reg, err := NewRegistry(config); err != nil {
+			log.Warn("Failed to load configured registry from atmos.yaml", "error", err)
+		} else if reg != nil {
+			log.Debug("Successfully loaded configured registry from atmos.yaml")
 			baseOpts = append(baseOpts, WithConfiguredRegistry(reg))
 		}
+	} else {
+		log.Debug("No atmos config available for toolchain registry loading")
 	}
 
 	// User options come last (highest priority).

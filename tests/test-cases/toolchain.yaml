@@ -1,0 +1,206 @@
+# yaml-language-server: $schema=schema.json
+# Tests for toolchain commands with custom inline registry
+
+tests:
+  # Help and usage tests
+  - name: "atmos toolchain --help"
+    enabled: true
+    snapshot: true
+    description: "Verify toolchain help output"
+    workdir: "fixtures/scenarios/toolchain-registry"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "toolchain"
+      - "--help"
+    expect:
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
+      exit_code: 0
+
+  - name: "atmos toolchain install --help"
+    enabled: true
+    snapshot: true
+    description: "Verify toolchain install help output"
+    workdir: "fixtures/scenarios/toolchain-registry"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "toolchain"
+      - "install"
+      - "--help"
+    expect:
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
+      exit_code: 0
+
+  - name: "atmos toolchain info --help"
+    enabled: true
+    snapshot: true
+    description: "Verify toolchain info help output"
+    workdir: "fixtures/scenarios/toolchain-registry"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "toolchain"
+      - "info"
+      - "--help"
+    expect:
+      diff:
+        - "──────────────────────────────────────────────────────────────"
+        - "Update available!"
+        - "Atmos Releases:"
+        - "Install Atmos:"
+      sanitize:
+        "(darwin|linux|windows)/(arm64|amd64|386)": "linux/amd64"
+      exit_code: 0
+
+  # Info command tests - verify registry name is shown correctly
+  # Note: info output goes to stderr (UI channel) per atmos I/O conventions
+  - name: "atmos toolchain info shows atmos-inline registry"
+    enabled: true
+    snapshot: true
+    description: "Verify toolchain info shows atmos-inline registry for tools defined in atmos.yaml"
+    workdir: "fixtures/scenarios/toolchain-registry"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "toolchain"
+      - "info"
+      - "replicatedhq/replicated"
+    expect:
+      stderr:
+        - "atmos-inline"
+        - "github_release"
+        - "replicatedhq/replicated"
+      exit_code: 0
+
+  - name: "atmos toolchain info http type tool"
+    enabled: true
+    snapshot: true
+    description: "Verify toolchain info works for http type tools"
+    workdir: "fixtures/scenarios/toolchain-registry"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "toolchain"
+      - "info"
+      - "aws/aws-cli"
+    expect:
+      stderr:
+        - "atmos-inline"
+        - "http"
+        - "aws/aws-cli"
+      exit_code: 0
+
+  - name: "atmos toolchain info tar.gz format tool"
+    enabled: true
+    snapshot: true
+    description: "Verify toolchain info works for tar.gz format tools"
+    workdir: "fixtures/scenarios/toolchain-registry"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "toolchain"
+      - "info"
+      - "junegunn/fzf"
+    expect:
+      stderr:
+        - "atmos-inline"
+        - "github_release"
+        - "junegunn/fzf"
+      exit_code: 0
+
+  - name: "atmos toolchain info raw format tool"
+    enabled: true
+    snapshot: true
+    description: "Verify toolchain info works for raw format tools"
+    workdir: "fixtures/scenarios/toolchain-registry"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "toolchain"
+      - "info"
+      - "jqlang/jq"
+    expect:
+      stderr:
+        - "atmos-inline"
+        - "http"
+        - "jqlang/jq"
+      exit_code: 0
+
+  - name: "atmos toolchain info yaml output"
+    enabled: true
+    snapshot: true
+    description: "Verify toolchain info yaml output format"
+    workdir: "fixtures/scenarios/toolchain-registry"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "toolchain"
+      - "info"
+      - "replicatedhq/replicated"
+      - "--output"
+      - "yaml"
+    expect:
+      stdout:
+        - "type: github_release"
+        - "repo_owner: replicatedhq"
+        - "repo_name: replicated"
+      exit_code: 0
+
+  # Registry search tests
+  # Note: search output goes to stderr (UI channel)
+  - name: "atmos toolchain registry search"
+    enabled: true
+    snapshot: true
+    description: "Verify toolchain registry search works"
+    workdir: "fixtures/scenarios/toolchain-registry"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "toolchain"
+      - "registry"
+      - "search"
+      - "terraform"
+    expect:
+      stderr:
+        - "hashicorp/terraform"
+      exit_code: 0
+
+  # Error handling tests
+  - name: "atmos toolchain install non-existent tool"
+    enabled: true
+    snapshot: true
+    description: "Verify toolchain install shows error for non-existent tool"
+    workdir: "fixtures/scenarios/toolchain-registry"
+    env:
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    command: "atmos"
+    args:
+      - "toolchain"
+      - "install"
+      - "non-existent/tool@1.0.0"
+    expect:
+      stderr:
+        - "tool not in registry"
+      exit_code: 2

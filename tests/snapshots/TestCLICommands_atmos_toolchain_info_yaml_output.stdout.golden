@@ -1,0 +1,13 @@
+type: github_release
+repo_owner: replicatedhq
+repo_name: replicated
+asset: https://github.com/replicatedhq/replicated/releases/download/v0.124.1/replicated_0.124.1_darwin_arm64.tar.gz
+overrides:
+    - goos: darwin
+      goarch: ""
+      asset: replicated_{{trimV .Version}}_{{.OS}}_all.tar.gz
+      format: ""
+      files: []
+      replacements: {}
+version: v0.124.1
+processed_url: https://github.com/replicatedhq/replicated/releases/download/v0.124.1/replicated_0.124.1_darwin_arm64.tar.gz

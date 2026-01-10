@@ -1,0 +1,9 @@
+# Incorrect Usage
+
+**Error:** The command atmos toolchain info is not valid usage
+
+## Usage Examples:
+
+• Display tool info based on the aqua registry
+
+  $ atmos toolchain info <tool>

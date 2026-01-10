@@ -60,8 +60,11 @@ func InfoExec(toolName, outputFormat string) error {
 		return fmt.Errorf("failed to find tool %s: %w", toolName, err)
 	}
 
-	// Get registry metadata and available versions.
-	registryName := getRegistryName(ctx)
+	// Get registry name from tool (already set by FindTool) and available versions.
+	registryName := tool.Registry
+	if registryName == "" {
+		registryName = getRegistryName(ctx)
+	}
 	availableVersions := getAvailableVersions(owner, repo, defaultVersionLimit)
 
 	// Build context for display.
