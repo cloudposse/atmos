@@ -16,6 +16,7 @@ atmos_cli_config:
         pass_vars: true
       plan:
         skip_planfile: false
+      plugin_cache: true
       ui:
         enabled: false
     helmfile:

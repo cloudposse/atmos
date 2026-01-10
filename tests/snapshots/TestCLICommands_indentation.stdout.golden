@@ -15,6 +15,7 @@ components:
             pass_vars: false
         plan:
             skip_planfile: false
+        plugin_cache: true
         ui:
             enabled: false
     helmfile:
