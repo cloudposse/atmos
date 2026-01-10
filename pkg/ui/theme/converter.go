@@ -125,6 +125,9 @@ func createGlamourStyleFromTheme(t *Theme) *ansi.StyleConfig {
 			Color:  &secondaryColor,
 			Italic: boolPtr(true),
 		},
+		Strikethrough: ansi.StylePrimitive{
+			Color: &t.BrightBlack, // BrightBlack is standard muted/comment color.
+		},
 		HorizontalRule: ansi.StylePrimitive{
 			Color:  &secondaryColor,
 			Format: "\n--------\n",

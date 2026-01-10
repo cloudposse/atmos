@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cloudposse/atmos/pkg/ffmpeg"
+	"github.com/cloudposse/atmos/tools/director/internal/ffmpeg"
 	"github.com/cloudposse/atmos/tools/director/internal/scene"
 	"github.com/cloudposse/atmos/tools/director/internal/toolmgr"
 	"github.com/cloudposse/atmos/tools/director/internal/validation"

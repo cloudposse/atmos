@@ -10,12 +10,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cloudposse/atmos/pkg/ffmpeg"
-	"github.com/cloudposse/atmos/pkg/vhs"
+	"github.com/cloudposse/atmos/tools/director/internal/ffmpeg"
 	"github.com/cloudposse/atmos/tools/director/internal/scene"
+	"github.com/cloudposse/atmos/tools/director/internal/tape"
 	"github.com/cloudposse/atmos/tools/director/internal/toolmgr"
 	"github.com/cloudposse/atmos/tools/director/internal/validation"
-	vhsRenderer "github.com/cloudposse/atmos/tools/director/internal/vhs"
+	"github.com/cloudposse/atmos/tools/director/internal/vhs"
 )
 
 func renderCmd() *cobra.Command {
@@ -30,6 +30,8 @@ func renderCmd() *cobra.Command {
 		tag            string
 		validate       bool
 		includeDrafts  bool
+		testMode       bool
+		verbose        bool
 	)
 
 	cmd := &cobra.Command{
@@ -87,6 +89,12 @@ director render --category vendor --force --publish --export-manifest --validate
 
 # Include draft scenes in rendering (not included by default)
 director render --all --include-drafts
+
+# Test mode: execute commands without rendering (fast validation)
+director render --tag featured --test
+
+# Test specific scene commands
+director render terraform-plan --test
 `,
 		RunE: func(c *cobra.Command, args []string) error {
 			ctx := context.Background()
@@ -193,6 +201,12 @@ director render --all --include-drafts
 				}
 			}
 
+			// If test mode, run commands from tape files without rendering.
+			// --verbose implies --test (no need to specify both).
+			if testMode || verbose {
+				return runTestMode(ctx, c, demosDir, scenesToRender, verbose)
+			}
+
 			// Check if VHS is installed before attempting any renders.
 			if err := vhs.CheckInstalled(); err != nil {
 				return err
@@ -249,7 +263,7 @@ director render --all --include-drafts
 
 			c.Printf("Rendering %d scene(s)...\n\n", len(scenesToRender))
 
-			renderer := vhsRenderer.NewRenderer(demosDir)
+			renderer := vhs.NewRenderer(demosDir)
 			renderer.SetForce(force)
 			renderer.SetSkipSVGFix(noSVGFix)
 			if len(formatFilter) > 0 {
@@ -328,8 +342,10 @@ director render --all --include-drafts
 	cmd.Flags().BoolVar(&noSVGFix, "no-svg-fix", false, "Skip SVG line-height post-processing")
 	cmd.Flags().StringVarP(&category, "category", "c", "", "Render all scenes in a gallery category (e.g., terraform, list, dx)")
 	cmd.Flags().StringVarP(&tag, "tag", "t", "", "Render all scenes with a specific tag (e.g., version, featured)")
-	cmd.Flags().BoolVarP(&validate, "validate", "v", false, "Validate rendered SVG outputs after rendering")
+	cmd.Flags().BoolVar(&validate, "validate", false, "Validate rendered SVG outputs after rendering")
 	cmd.Flags().BoolVar(&includeDrafts, "include-drafts", false, "Include draft scenes (status: draft) in rendering")
+	cmd.Flags().BoolVarP(&testMode, "test", "T", false, "Test mode: execute commands from tape files without rendering")
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Test mode with output: execute commands and show results (implies --test)")
 
 	return cmd
 }
@@ -431,5 +447,99 @@ func runValidation(c *cobra.Command, demosDir string, scenesList *scene.ScenesLi
 		return fmt.Errorf("some scenes failed validation")
 	}
 
+	return nil
+}
+
+// runTestMode executes commands from tape files without rendering.
+// This is useful for validating that demo commands work correctly.
+// Exits on first failure (fail-fast behavior).
+// If verbose is true, shows command output even on success.
+func runTestMode(ctx context.Context, c *cobra.Command, demosDir string, scenes []*scene.Scene, verbose bool) error {
+	c.Printf("Testing %d scene(s)...\n\n", len(scenes))
+
+	for _, sc := range scenes {
+		tapePath := filepath.Join(demosDir, sc.Tape)
+
+		// Resolve workdir.
+		workdir := demosDir
+		if sc.Workdir != "" {
+			workdir = filepath.Join(filepath.Dir(demosDir), sc.Workdir)
+		}
+
+		c.Printf("Testing scene: %s\n", sc.Name)
+		c.Printf("Workdir: %s\n\n", workdir)
+
+		// Run prep commands if any.
+		if len(sc.Prep) > 0 {
+			for _, prep := range sc.Prep {
+				prepCmd := exec.CommandContext(ctx, "bash", "-c", prep)
+				prepCmd.Dir = workdir
+				if err := prepCmd.Run(); err != nil {
+					c.Printf("  ✗ prep: %s\n", prep)
+					c.Printf("    Error: %v\n", err)
+					return fmt.Errorf("prep command failed in scene %s", sc.Name)
+				}
+			}
+		}
+
+		// Parse commands from tape file.
+		commands, err := tape.ParseCommands(tapePath)
+		if err != nil {
+			c.Printf("  ✗ Failed to parse tape: %v\n\n", err)
+			return fmt.Errorf("failed to parse tape for scene %s: %w", sc.Name, err)
+		}
+
+		// Filter to executable commands only.
+		executable := tape.FilterExecutable(commands)
+
+		if len(executable) == 0 {
+			c.Printf("  (no executable commands found)\n\n")
+			continue
+		}
+
+		// Execute commands one at a time, stopping on first failure.
+		for _, cmd := range executable {
+			var result tape.ExecutionResult
+			if verbose {
+				// Direct execution - output goes straight to terminal, no buffering.
+				c.Printf("$ %s\n", cmd.Text)
+				result = tape.ExecuteCommandDirect(ctx, cmd, workdir, nil)
+				if result.Success {
+					c.Printf("\n")
+				}
+			} else {
+				// Buffered execution for non-verbose mode.
+				result = tape.ExecuteCommand(ctx, cmd, workdir, nil)
+				if result.Success {
+					c.Printf("  ✓ %s (%.1fs)\n", cmd.Text, result.Duration.Seconds())
+				}
+			}
+
+			if !result.Success {
+				if !verbose {
+					c.Printf("  ✗ %s (%.1fs)\n", cmd.Text, result.Duration.Seconds())
+				}
+				c.Printf("    Exit code: %d\n", result.ExitCode)
+				if !verbose && result.Stderr != "" {
+					lines := strings.Split(strings.TrimSpace(result.Stderr), "\n")
+					maxLines := 10
+					if len(lines) > maxLines {
+						lines = lines[:maxLines]
+					}
+					for _, line := range lines {
+						c.Printf("    %s\n", line)
+					}
+				}
+				if result.Error != nil {
+					c.Printf("    Error: %v\n", result.Error)
+				}
+				return fmt.Errorf("command failed in scene %s: %s", sc.Name, cmd.Text)
+			}
+		}
+
+		c.Printf("\n")
+	}
+
+	c.Printf("All commands passed!\n")
 	return nil
 }

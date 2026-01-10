@@ -185,6 +185,9 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 			Color:  stringPtr(Purple),
 			Italic: boolPtr(true),
 		},
+		Strikethrough: ansi.StylePrimitive{
+			Color: stringPtr(MutedGray), // Restyle strikethrough as muted gray text.
+		},
 		HorizontalRule: ansi.StylePrimitive{
 			Color:  stringPtr(Purple),
 			Format: "\n--------\n",

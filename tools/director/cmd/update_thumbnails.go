@@ -10,8 +10,8 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 
-	"github.com/cloudposse/atmos/pkg/ffmpeg"
 	"github.com/cloudposse/atmos/tools/director/internal/backend"
+	"github.com/cloudposse/atmos/tools/director/internal/ffmpeg"
 	vhsCache "github.com/cloudposse/atmos/tools/director/internal/vhs"
 )
 

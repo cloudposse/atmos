@@ -67,7 +67,17 @@ Type "# What's affected by my changes?"
 Enter
 Sleep 1s
 
-Type "atmos describe affected --format table"
+Type "atmos list affected"
+Sleep 1.5s
+Enter
+Sleep 4s
+
+# Show terraform outputs
+Type "# What did terraform create?"
+Enter
+Sleep 1s
+
+Type "atmos terraform output vpc -s plat-dev-ue2 --format table"
 Sleep 1.5s
 Enter
 Sleep 4s

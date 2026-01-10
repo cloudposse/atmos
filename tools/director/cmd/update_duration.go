@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cloudposse/atmos/pkg/ffmpeg"
+	"github.com/cloudposse/atmos/tools/director/internal/ffmpeg"
 	vhsCache "github.com/cloudposse/atmos/tools/director/internal/vhs"
 )
 

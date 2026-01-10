@@ -12,8 +12,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/ffmpeg"
-	"github.com/cloudposse/atmos/pkg/vhs"
+	"github.com/cloudposse/atmos/tools/director/internal/ffmpeg"
 	"github.com/cloudposse/atmos/tools/director/internal/scene"
 )
 
@@ -139,7 +138,7 @@ func (r *Renderer) Render(ctx context.Context, sc *scene.Scene) (*RenderResult, 
 		tapeToRender = tempTape
 	}
 
-	if err := vhs.Render(ctx, tapeToRender, workdir, r.cacheDir); err != nil {
+	if err := Render(ctx, tapeToRender, workdir, r.cacheDir); err != nil {
 		return nil, err
 	}
 

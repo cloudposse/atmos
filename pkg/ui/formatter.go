@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -131,6 +132,24 @@ func setColorProfileInternal(profile termenv.Profile) {
 //	ui.SetColorProfile(termenv.Ascii)
 func SetColorProfile(profile termenv.Profile) {
 	setColorProfileInternal(profile)
+}
+
+// GetColorProfile returns the configured termenv color profile.
+// Use this instead of termenv.ColorProfile() to respect atmos's terminal detection.
+// This ensures colors degrade gracefully in terminals that don't support TrueColor
+// (like macOS Terminal.app which only supports 256 colors until macOS Tahoe).
+//
+// The returned profile respects:
+//   - --force-color flag (returns TrueColor for screenshot generation)
+//   - --no-color / NO_COLOR env var (returns Ascii)
+//   - Terminal capabilities detected via COLORTERM env var
+//
+// Example usage:
+//
+//	profile := ui.GetColorProfile()
+//	glamour.WithColorProfile(profile)
+func GetColorProfile() termenv.Profile {
+	return lipgloss.DefaultRenderer().ColorProfile()
 }
 
 // getFormatter returns the global formatter instance.
@@ -706,26 +725,30 @@ func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text strin
 }
 
 // renderToastMarkdown renders markdown with a compact stylesheet for toast messages.
+// Uses the custom markdown renderer with extended syntax support (highlight, badge, admonitions).
 func (f *formatter) renderToastMarkdown(content string) (string, error) {
-	// Build glamour options with compact toast stylesheet
-	var opts []glamour.TermRendererOption
+	// Build custom renderer options.
+	var opts []markdown.CustomRendererOption
 
 	// Enable word wrap for toast messages to respect terminal width.
 	// Note: Glamour adds padding to fill width - we trim it with trimTrailingWhitespace().
 	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
 	if maxWidth == 0 {
-		// Use terminal width if available
+		// Use terminal width if available.
 		termWidth := f.terminal.Width(terminal.Stdout)
 		if termWidth > 0 {
 			maxWidth = termWidth
 		}
 	}
 	if maxWidth > 0 {
-		opts = append(opts, glamour.WithWordWrap(maxWidth))
+		opts = append(opts, markdown.WithWordWrap(maxWidth))
 	}
-	opts = append(opts, glamour.WithPreservedNewLines())
+	opts = append(opts, markdown.WithPreservedNewLines())
 
-	// Get theme-based glamour style and modify it for compact toast rendering
+	// Set color profile using lipgloss's detected profile.
+	opts = append(opts, markdown.WithColorProfile(lipgloss.DefaultRenderer().ColorProfile()))
+
+	// Get theme-based glamour style and apply it.
 	if f.terminal.ColorProfile() != terminal.ColorNone {
 		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
 		if themeName == "" {
@@ -733,24 +756,20 @@ func (f *formatter) renderToastMarkdown(content string) (string, error) {
 		}
 		glamourStyle, err := theme.GetGlamourStyleForTheme(themeName)
 		if err == nil {
-			// Modify the theme style to have zero margins
-			// Parse the existing theme and override margin settings
-			opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
+			opts = append(opts, markdown.WithStylesFromJSONBytes(glamourStyle))
 		}
-	} else {
-		opts = append(opts, glamour.WithStylePath("notty"))
 	}
 
-	renderer, err := glamour.NewTermRenderer(opts...)
+	renderer, err := markdown.NewCustomRenderer(opts...)
 	if err != nil {
-		// Degrade gracefully: return plain content if renderer creation fails
+		// Degrade gracefully: return plain content if renderer creation fails.
 		return content, err
 	}
 	defer renderer.Close()
 
 	rendered, err := renderer.Render(content)
 	if err != nil {
-		// Degrade gracefully: return plain content if rendering fails
+		// Degrade gracefully: return plain content if rendering fails.
 		return content, err
 	}
 

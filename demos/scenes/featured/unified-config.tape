@@ -46,7 +46,7 @@ Type "# Same command, different environment - same tooling"
 Enter
 Sleep 1s
 
-Type "atmos terraform plan vpc -s plat-prod-ue2"
+Type "atmos terraform plan vpc -s plat-prod-uw2"
 Sleep 1.5s
 Enter
 Sleep 4s
@@ -64,7 +64,7 @@ Type "# Stack config drives everything - tools, vars, backends"
 Enter
 Sleep 1s
 
-Type "atmos describe component vpc -s plat-dev-ue2 --format yaml | head -20"
+Type "ATMOS_FORCE_COLOR=true atmos describe component vpc -s plat-dev-ue2 --format yaml | head -20"
 Sleep 1.5s
 Enter
 Sleep 4s

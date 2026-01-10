@@ -10,8 +10,8 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/cloudposse/atmos/pkg/ffmpeg"
 	"github.com/cloudposse/atmos/tools/director/internal/backend"
+	"github.com/cloudposse/atmos/tools/director/internal/ffmpeg"
 	"github.com/cloudposse/atmos/tools/director/internal/scene"
 	vhsCache "github.com/cloudposse/atmos/tools/director/internal/vhs"
 )

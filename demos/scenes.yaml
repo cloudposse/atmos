@@ -139,7 +139,7 @@ scenes:
     enabled: true
     description: "One Config, Every Environment"
     tape: "scenes/featured/unified-config.tape"
-    workdir: "demos/fixtures/acme"
+    workdir: "demos/fixtures/live"
     requires:
       - atmos
       - terraform
@@ -165,7 +165,7 @@ scenes:
     enabled: true
     description: "See Everything"
     tape: "scenes/featured/see-everything.tape"
-    workdir: "demos/fixtures/acme"
+    workdir: "demos/fixtures/live"
     requires:
       - atmos
     outputs:
@@ -190,7 +190,7 @@ scenes:
     enabled: true
     description: "Tools That Just Work"
     tape: "scenes/featured/tools-just-work.tape"
-    workdir: "demos/fixtures/acme"
+    workdir: "demos/fixtures/live"
     requires:
       - atmos
     outputs:
@@ -356,6 +356,31 @@ scenes:
       loop: true
     tags:
       - terraform
+
+  - name: "terraform-output"
+    enabled: true
+    description: "View terraform outputs in various formats"
+    tape: "scenes/terraform/output.tape"
+    workdir: "demos/fixtures/live"
+    requires:
+      - atmos
+      - terraform
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - terraform
+    gallery:
+      category: "terraform"
+      title: "Terraform Output"
+      order: 6
 
   # --- List Commands ---
 

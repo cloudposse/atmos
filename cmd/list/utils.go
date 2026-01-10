@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
 	"github.com/cloudposse/atmos/pkg/pager"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -265,6 +266,8 @@ func handleNoValuesError(err error, componentFilter string, logFunc func(string)
 // If pager is enabled in atmosConfig and TTY is available, the output is displayed in a scrollable pager.
 // Otherwise, the output is written directly to stdout.
 func renderWithPager(atmosConfig *schema.AtmosConfiguration, title string, r *renderer.Renderer, data []map[string]any) error {
+	defer perf.Track(atmosConfig, "list.renderWithPager")()
+
 	// Check if pager is enabled in config.
 	if atmosConfig.Settings.Terminal.IsPagerEnabled() {
 		// Get rendered content as string.

@@ -139,6 +139,11 @@ func NewCustomRenderer(opts ...CustomRendererOption) (*CustomRenderer, error) {
 		// The transformer converts ((muted)) to strikethrough, which glamour
 		// already knows how to render with our muted gray style.
 		extensions.NewMutedExtension().Extend(md)
+
+		// Override the default Linkify email regex with a stricter pattern.
+		// This prevents package references like foo/bar@1.0.0 from being
+		// converted to mailto: links while preserving valid email auto-linking.
+		extensions.NewStrictLinkifyExtension().Extend(md)
 	}
 
 	return &CustomRenderer{glamour: renderer}, nil

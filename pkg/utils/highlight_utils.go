@@ -88,12 +88,22 @@ func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, for
 	// Check if either stdout or stderr is a terminal (provenance goes to stderr)
 	isTerm := isTermPresent || termUtils.IsTTYSupportForStderr()
 
-	// Check if color is explicitly disabled via NoColor flag or Color setting.
-	// NoColor takes precedence (when true, always disable colors).
-	colorDisabled := config.Settings.Terminal.NoColor || !config.Settings.Terminal.Color
+	// Check if color is forced via ForceColor (ATMOS_FORCE_COLOR)
+	forceColor := config.Settings.Terminal.ForceColor
 
-	// Skip highlighting if not in a terminal, disabled, or colors are disabled
-	if !isTerm || !GetHighlightSettings(config).Enabled || colorDisabled {
+	// Check if color is explicitly disabled via NoColor flag.
+	// NoColor takes precedence over everything, including ForceColor.
+	if config.Settings.Terminal.NoColor {
+		return code, nil
+	}
+
+	// Skip highlighting if syntax highlighting is disabled in settings.
+	if !GetHighlightSettings(config).Enabled {
+		return code, nil
+	}
+
+	// Skip highlighting if not in a terminal, unless ForceColor is set.
+	if !isTerm && !forceColor {
 		return code, nil
 	}
 

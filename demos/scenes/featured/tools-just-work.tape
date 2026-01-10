@@ -44,7 +44,7 @@ Type "# Install everything you need in one command"
 Enter
 Sleep 1s
 
-Type "atmos toolchain install opentofu tflint kubectl helm"
+Type "atmos toolchain install"
 Sleep 1.5s
 Enter
 Sleep 5s
@@ -68,15 +68,15 @@ Sleep 1.5s
 Enter
 Sleep 4s
 
-# Show stack dependencies drive tool installation
-Type "# Stack dependencies auto-install required tools"
+# Show where tools are installed
+Type "# Tools installed and managed by atmos"
 Enter
 Sleep 1s
 
-Type "cat .tool-versions"
+Type "atmos toolchain which opentofu/opentofu"
 Sleep 1.5s
 Enter
-Sleep 3s
+Sleep 2s
 
 Type "# One tool to rule them all"
 Enter

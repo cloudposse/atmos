@@ -17,6 +17,7 @@ Show
 
 # Dependencies
 Require atmos
+Require jq
 
 # Scene starts
 Type "# Search for tools in the Atmos registry"

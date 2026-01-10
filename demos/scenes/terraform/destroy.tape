@@ -24,15 +24,15 @@ Type "# Destroy infrastructure for a component"
 Enter
 Sleep 1s
 
-Type "atmos terraform destroy vpc -s plat-dev-ue2"
+Type "atmos terraform destroy vpc -s plat-dev-ue2 -auto-approve"
 Sleep 2s
 Enter
-Sleep 3s
+Sleep 5s
 
 # Capture screenshot
 Screenshot terraform-destroy.png
 
-Type "# Safely tear down resources with confirmation"
+Type "# Quickly tear down resources without confirmation"
 Enter
 Sleep 1s
 

@@ -104,11 +104,14 @@ demos/
    ./build/director render my-feature
    ```
 
-4. **Commit only the tape file:**
+4. **Commit the scene index and tape file:**
    ```bash
    git add demos/scenes.yaml demos/scenes/my-feature.tape
    git commit -m "feat: add my-feature demo"
    ```
+
+   Note: When adding a new scene, commit both `scenes.yaml` and the tape file.
+   When modifying an existing scene, you only need to commit the tape file.
 
 CI will automatically generate and deploy the GIF to GitHub Pages.
 
@@ -130,10 +133,23 @@ This means:
 
 ### Storage
 
+The demo system uses a multi-backend storage architecture:
+
+**Primary Backends (configured in `defaults.yaml`):**
+- **Cloudflare Stream** - Publishes MP4 videos with streaming optimization
+- **Cloudflare R2** - Publishes GIF/PNG/SVG/MP3 assets for fast global delivery
+
+**Source Control:**
 - **Source files** (`.tape`) committed to main repo
-- **Generated assets** (`.gif`, `.png`) deployed to gh-pages branch
-- **gh-pages branch** uses orphan mode (no history bloat)
-- **Accessible at** `https://cloudposse.github.io/atmos/demos/{scene}.gif`
+- **Generated assets** cached locally in `.cache/` (gitignored)
+
+**Fallback:**
+- **GitHub Pages** (`gh-pages` branch) provides legacy/fallback hosting
+- Assets accessible at `https://cloudposse.github.io/atmos/demos/{scene}.gif`
+
+**Cache Validation:**
+- `metadata.json` tracks tape file hashes and published asset states
+- Used to determine which scenes need re-rendering or re-publishing
 
 ## Dependencies
 
