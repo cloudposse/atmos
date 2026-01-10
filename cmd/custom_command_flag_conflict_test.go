@@ -487,3 +487,632 @@ func TestGetReservedFlagNamesFor(t *testing.T) {
 	// Should NOT include random names.
 	assert.False(t, reserved["random-flag"], "random-flag should NOT be reserved")
 }
+
+// TestCustomCommand_ExistingCommandReuseWithNestedConflict tests that when a custom command
+// reuses an existing built-in command (like terraform), nested subcommands still can't
+// define flags that conflict with the built-in command's flags.
+func TestCustomCommand_ExistingCommandReuseWithNestedConflict(t *testing.T) {
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a custom command that reuses "terraform" (built-in command name)
+	// with a nested subcommand that tries to define --stack (which terraform has).
+	terraformCommand := schema.Command{
+		Name:        "terraform", // This will reuse the existing terraform command.
+		Description: "Custom terraform subcommands",
+		Commands: []schema.Command{
+			{
+				Name:        "custom-provision",
+				Description: "Custom provision subcommand",
+				Flags: []schema.CommandFlag{
+					{
+						Name:      "stack", // Conflicts with terraform's --stack flag.
+						Shorthand: "s",     // Also conflicts with terraform's -s shorthand.
+						Type:      "string",
+						Usage:     "This conflicts with terraform's stack flag",
+					},
+				},
+				Steps: stepsFromStrings("echo provision"),
+			},
+		},
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{terraformCommand}
+
+	// Process custom commands - should return error for the nested conflict.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+
+	// Verify the error is returned correctly.
+	require.Error(t, err, "Should return error for nested flag conflict with built-in terraform")
+	assert.True(t, errors.Is(err, errUtils.ErrReservedFlagName), "Error should be ErrReservedFlagName")
+
+	// Get the explanation from the error details.
+	details := cockerrors.GetAllDetails(err)
+	detailsStr := strings.Join(details, " ")
+	assert.Contains(t, detailsStr, "stack", "Error details should mention the conflicting flag name")
+	assert.Contains(t, detailsStr, "custom-provision", "Error details should mention the custom subcommand name")
+}
+
+// TestCustomCommand_BoolFlagWithStringDefault tests that bool flags handle
+// non-bool default values gracefully (they should be treated as false).
+func TestCustomCommand_BoolFlagWithStringDefault(t *testing.T) {
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a custom command with a bool flag that has a non-bool default.
+	testCommand := schema.Command{
+		Name:        "test-bool-string-default",
+		Description: "Test bool flag with string default",
+		Flags: []schema.CommandFlag{
+			{
+				Name:    "my-bool",
+				Type:    "bool",
+				Usage:   "A bool flag with string default",
+				Default: "not-a-bool", // This should be treated as false.
+			},
+		},
+		Steps: stepsFromStrings("echo test"),
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	// Process custom commands - should succeed (default falls back to false).
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err, "Should succeed even with non-bool default for bool flag")
+
+	// Find and verify the custom command.
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-bool-string-default" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	// Verify the flag has default value of false.
+	myBool := customCmd.PersistentFlags().Lookup("my-bool")
+	require.NotNil(t, myBool, "my-bool should be registered")
+	assert.Equal(t, "false", myBool.DefValue, "Default should be false for non-bool default")
+}
+
+// TestCustomCommand_FlagDefaultTypeConversions tests that flags handle various default value types.
+// This is a table-driven test that covers: string flags with bool defaults, bool flags with true defaults.
+func TestCustomCommand_FlagDefaultTypeConversions(t *testing.T) {
+	tests := []struct {
+		name            string
+		commandName     string
+		flagName        string
+		flagType        string
+		flagDefault     any
+		expectedDefault string
+	}{
+		{
+			name:            "string_flag_with_bool_default",
+			commandName:     "test-string-bool-default",
+			flagName:        "my-string",
+			flagType:        "string",
+			flagDefault:     true, // Non-string default should be treated as empty string.
+			expectedDefault: "",
+		},
+		{
+			name:            "bool_flag_with_true_default",
+			commandName:     "test-bool-true-default",
+			flagName:        "enabled",
+			flagType:        "bool",
+			flagDefault:     true,
+			expectedDefault: "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up test fixture.
+			testDir := "../tests/fixtures/scenarios/complete"
+			t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+			t.Setenv("ATMOS_BASE_PATH", testDir)
+
+			// Create a test kit to ensure clean RootCmd state.
+			_ = NewTestKit(t)
+
+			// Load atmos configuration.
+			atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+			require.NoError(t, err)
+
+			// Create a custom command with the specified flag configuration.
+			testCommand := schema.Command{
+				Name:        tt.commandName,
+				Description: "Test command for " + tt.name,
+				Flags: []schema.CommandFlag{
+					{
+						Name:    tt.flagName,
+						Type:    tt.flagType,
+						Usage:   "Test flag",
+						Default: tt.flagDefault,
+					},
+				},
+				Steps: stepsFromStrings("echo test"),
+			}
+
+			// Add the test command to the config.
+			atmosConfig.Commands = []schema.Command{testCommand}
+
+			// Process custom commands - should succeed.
+			err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+			require.NoError(t, err, "Should succeed processing command")
+
+			// Find and verify the custom command.
+			var customCmd *cobra.Command
+			for _, cmd := range RootCmd.Commands() {
+				if cmd.Name() == tt.commandName {
+					customCmd = cmd
+					break
+				}
+			}
+			require.NotNil(t, customCmd, "Custom command should be registered")
+
+			// Verify the flag has the expected default value.
+			flag := customCmd.PersistentFlags().Lookup(tt.flagName)
+			require.NotNil(t, flag, "Flag should be registered")
+			assert.Equal(t, tt.expectedDefault, flag.DefValue, "Default value mismatch")
+		})
+	}
+}
+
+// TestCustomCommand_EmptyFlagsList tests that commands with no flags are processed correctly.
+func TestCustomCommand_EmptyFlagsList(t *testing.T) {
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a custom command with no flags.
+	testCommand := schema.Command{
+		Name:        "test-no-flags",
+		Description: "Test command with no flags",
+		Flags:       []schema.CommandFlag{}, // Empty flags list.
+		Steps:       stepsFromStrings("echo no flags"),
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	// Process custom commands - should succeed.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err, "Should succeed with empty flags list")
+
+	// Find and verify the custom command.
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-no-flags" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	// Verify it still has the identity flag (added automatically).
+	identityFlag := customCmd.PersistentFlags().Lookup("identity")
+	require.NotNil(t, identityFlag, "identity flag should still be added automatically")
+}
+
+// TestCustomCommand_ContainerCommandWithSubcommands tests commands that have
+// no steps but have subcommands (container commands).
+func TestCustomCommand_ContainerCommandWithSubcommands(t *testing.T) {
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a container command (no steps, only subcommands).
+	containerCommand := schema.Command{
+		Name:        "test-container",
+		Description: "Container command with no steps",
+		// No Steps field - this is a container command.
+		Commands: []schema.Command{
+			{
+				Name:        "sub1",
+				Description: "First subcommand",
+				Steps:       stepsFromStrings("echo sub1"),
+			},
+			{
+				Name:        "sub2",
+				Description: "Second subcommand",
+				Steps:       stepsFromStrings("echo sub2"),
+			},
+		},
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{containerCommand}
+
+	// Process custom commands - should succeed.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err, "Should succeed with container command")
+
+	// Find and verify the container command.
+	var containerCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-container" {
+			containerCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, containerCmd, "Container command should be registered")
+
+	// Verify subcommands are registered.
+	subCmds := containerCmd.Commands()
+	assert.Len(t, subCmds, 2, "Container should have 2 subcommands")
+
+	subCmdNames := make([]string, len(subCmds))
+	for i, cmd := range subCmds {
+		subCmdNames[i] = cmd.Name()
+	}
+	assert.Contains(t, subCmdNames, "sub1", "sub1 should be registered")
+	assert.Contains(t, subCmdNames, "sub2", "sub2 should be registered")
+}
+
+// TestCustomCommand_DeeplyNestedCommands tests commands nested 3+ levels deep.
+func TestCustomCommand_DeeplyNestedCommands(t *testing.T) {
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a deeply nested command structure (3 levels).
+	level1Command := schema.Command{
+		Name:        "level1",
+		Description: "Level 1 command",
+		Flags: []schema.CommandFlag{
+			{Name: "l1-flag", Type: "string", Usage: "Level 1 flag"},
+		},
+		Commands: []schema.Command{
+			{
+				Name:        "level2",
+				Description: "Level 2 command",
+				Flags: []schema.CommandFlag{
+					{Name: "l2-flag", Type: "string", Usage: "Level 2 flag"},
+				},
+				Commands: []schema.Command{
+					{
+						Name:        "level3",
+						Description: "Level 3 command",
+						Flags: []schema.CommandFlag{
+							{Name: "l3-flag", Type: "string", Usage: "Level 3 flag"},
+						},
+						Steps: stepsFromStrings("echo level3"),
+					},
+				},
+			},
+		},
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{level1Command}
+
+	// Process custom commands - should succeed.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err, "Should succeed with deeply nested commands")
+
+	// Find and verify level1.
+	var l1Cmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "level1" {
+			l1Cmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, l1Cmd, "Level 1 command should be registered")
+	assert.NotNil(t, l1Cmd.PersistentFlags().Lookup("l1-flag"), "l1-flag should exist")
+
+	// Find level2.
+	var l2Cmd *cobra.Command
+	for _, cmd := range l1Cmd.Commands() {
+		if cmd.Name() == "level2" {
+			l2Cmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, l2Cmd, "Level 2 command should be registered")
+	assert.NotNil(t, l2Cmd.PersistentFlags().Lookup("l2-flag"), "l2-flag should exist")
+
+	// Verify level2 inherits level1's flag.
+	assert.NotNil(t, l2Cmd.InheritedFlags().Lookup("l1-flag"), "l2 should inherit l1-flag")
+
+	// Find level3.
+	var l3Cmd *cobra.Command
+	for _, cmd := range l2Cmd.Commands() {
+		if cmd.Name() == "level3" {
+			l3Cmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, l3Cmd, "Level 3 command should be registered")
+	assert.NotNil(t, l3Cmd.PersistentFlags().Lookup("l3-flag"), "l3-flag should exist")
+
+	// Verify level3 inherits both level1 and level2 flags.
+	assert.NotNil(t, l3Cmd.InheritedFlags().Lookup("l1-flag"), "l3 should inherit l1-flag")
+	assert.NotNil(t, l3Cmd.InheritedFlags().Lookup("l2-flag"), "l3 should inherit l2-flag")
+}
+
+// TestCustomCommand_DeeplyNestedConflict tests that flag conflicts are detected
+// at any level of nesting (e.g., level 3 conflict with level 1 flag).
+func TestCustomCommand_DeeplyNestedConflict(t *testing.T) {
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a deeply nested command structure where level3 conflicts with level1.
+	level1Command := schema.Command{
+		Name:        "deep-conflict-test",
+		Description: "Level 1 command",
+		Flags: []schema.CommandFlag{
+			{Name: "ancestor-flag", Type: "string", Usage: "Flag on ancestor"},
+		},
+		Commands: []schema.Command{
+			{
+				Name:        "level2",
+				Description: "Level 2 command",
+				Commands: []schema.Command{
+					{
+						Name:        "level3",
+						Description: "Level 3 command that conflicts with level 1",
+						Flags: []schema.CommandFlag{
+							{Name: "ancestor-flag", Type: "bool", Usage: "Conflicts with level1"}, // Conflict!
+						},
+						Steps: stepsFromStrings("echo level3"),
+					},
+				},
+			},
+		},
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{level1Command}
+
+	// Process custom commands - should return error.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+
+	// Verify the error is returned correctly.
+	require.Error(t, err, "Should return error for deep nested flag conflict")
+	assert.True(t, errors.Is(err, errUtils.ErrReservedFlagName), "Error should be ErrReservedFlagName")
+
+	// Get the explanation from the error details.
+	details := cockerrors.GetAllDetails(err)
+	detailsStr := strings.Join(details, " ")
+	assert.Contains(t, detailsStr, "ancestor-flag", "Error details should mention the conflicting flag")
+	assert.Contains(t, detailsStr, "level3", "Error details should mention the command name")
+}
+
+// TestCustomCommand_MultipleCommandsWithMixedValidity tests processing multiple
+// commands where some are valid and some have conflicts.
+func TestCustomCommand_MultipleCommandsWithMixedValidity(t *testing.T) {
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create multiple commands - first valid, second has conflict.
+	commands := []schema.Command{
+		{
+			Name:        "valid-cmd-1",
+			Description: "First valid command",
+			Flags: []schema.CommandFlag{
+				{Name: "valid-flag-1", Type: "string", Usage: "Valid flag"},
+			},
+			Steps: stepsFromStrings("echo valid1"),
+		},
+		{
+			Name:        "invalid-cmd",
+			Description: "Command with conflict",
+			Flags: []schema.CommandFlag{
+				{Name: "mask", Type: "bool", Usage: "Conflicts with global mask"}, // Conflict!
+			},
+			Steps: stepsFromStrings("echo invalid"),
+		},
+		{
+			Name:        "valid-cmd-2",
+			Description: "Second valid command (won't be processed due to earlier error)",
+			Flags: []schema.CommandFlag{
+				{Name: "valid-flag-2", Type: "string", Usage: "Valid flag"},
+			},
+			Steps: stepsFromStrings("echo valid2"),
+		},
+	}
+
+	// Add the test commands to the config.
+	atmosConfig.Commands = commands
+
+	// Process custom commands - should return error for the invalid command.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+
+	// Verify the error is returned correctly.
+	require.Error(t, err, "Should return error when any command has conflict")
+	assert.True(t, errors.Is(err, errUtils.ErrReservedFlagName), "Error should be ErrReservedFlagName")
+
+	// Verify that valid-cmd-1 was registered before the error occurred.
+	var validCmd1 *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "valid-cmd-1" {
+			validCmd1 = cmd
+			break
+		}
+	}
+	require.NotNil(t, validCmd1, "First valid command should be registered before error")
+
+	// Verify that valid-cmd-2 was NOT registered (processing stopped at error).
+	var validCmd2 *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "valid-cmd-2" {
+			validCmd2 = cmd
+			break
+		}
+	}
+	assert.Nil(t, validCmd2, "Second valid command should NOT be registered after error")
+}
+
+// TestCustomCommand_RequiredFlagMarking tests that required flags are marked correctly.
+func TestCustomCommand_RequiredFlagMarking(t *testing.T) {
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a custom command with required and optional flags.
+	testCommand := schema.Command{
+		Name:        "test-required-flags",
+		Description: "Test command with required and optional flags",
+		Flags: []schema.CommandFlag{
+			{
+				Name:     "required-flag",
+				Type:     "string",
+				Usage:    "This flag is required",
+				Required: true,
+			},
+			{
+				Name:     "optional-flag",
+				Type:     "string",
+				Usage:    "This flag is optional",
+				Required: false,
+			},
+		},
+		Steps: stepsFromStrings("echo test"),
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	// Process custom commands - should succeed.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err, "Should succeed with required flags")
+
+	// Find and verify the custom command.
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-required-flags" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	// Verify required flag annotation.
+	requiredFlag := customCmd.PersistentFlags().Lookup("required-flag")
+	require.NotNil(t, requiredFlag, "required-flag should be registered")
+	// Check if the flag has required annotation.
+	annotations := requiredFlag.Annotations
+	_, hasRequired := annotations[cobra.BashCompOneRequiredFlag]
+	assert.True(t, hasRequired, "required-flag should have required annotation")
+
+	// Verify optional flag has no required annotation.
+	optionalFlag := customCmd.PersistentFlags().Lookup("optional-flag")
+	require.NotNil(t, optionalFlag, "optional-flag should be registered")
+	if optionalFlag.Annotations != nil {
+		_, hasRequired = optionalFlag.Annotations[cobra.BashCompOneRequiredFlag]
+		assert.False(t, hasRequired, "optional-flag should NOT have required annotation")
+	}
+}
+
+// TestCustomCommand_VerboseFlagConflict tests that the verbose flag (-v) is correctly
+// detected as a conflict since it's a global flag.
+func TestCustomCommand_VerboseFlagConflict(t *testing.T) {
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a custom command with verbose flag (conflicts with global -v).
+	testCommand := schema.Command{
+		Name:        "test-verbose-conflict",
+		Description: "Test command with verbose flag conflict",
+		Flags: []schema.CommandFlag{
+			{
+				Name:      "verbose",
+				Shorthand: "v",
+				Type:      "bool",
+				Usage:     "This conflicts with global verbose flag",
+			},
+		},
+		Steps: stepsFromStrings("echo test"),
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	// Process custom commands - should return error.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+
+	// Verify the error is returned correctly.
+	require.Error(t, err, "Should return error for verbose flag conflict")
+	assert.True(t, errors.Is(err, errUtils.ErrReservedFlagName), "Error should be ErrReservedFlagName")
+}
