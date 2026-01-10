@@ -102,8 +102,8 @@ components:
         bucket: "{{ .locals.backend_bucket }}"
 ```
 
-:::note
-Component-level locals (defined inside individual component definitions) are **not supported**. Only global and component-type scopes are implemented. Use global or section-level locals instead.
+:::tip Component-Level Locals
+Components can also define their own `locals:` section. Component-level locals inherit from global and section-level locals, and also support inheritance from base components via `metadata.inherits`. See the [describe locals command](/cli/commands/describe/locals) for inspecting component-level locals.
 :::
 
 ## Scope Inheritance (Within a File)
@@ -114,12 +114,16 @@ Within a single file, locals follow this inheritance chain:
 Global locals
     ↓
 Component-type locals (terraform/helmfile/packer)
+    ↓
+Component-level locals (inside component definitions)
 ```
 
 Each level can:
 - Access locals from parent scopes
 - Define new locals
 - Override parent locals with new values
+
+Component-level locals also inherit from base components via `metadata.inherits` or `component` attribute.
 
 ### Example
 

@@ -248,7 +248,7 @@ func (ctx *LocalsContext) GetForComponentType(componentType string) map[string]a
 }
 
 // ResolveComponentLocals resolves locals from a config section and merges with parent locals.
-// Note: Component-level locals are not currently supported. This function is not used.
+// This is used for component-level locals which inherit from stack-level locals and base components.
 func ResolveComponentLocals(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,

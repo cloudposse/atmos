@@ -32,7 +32,7 @@ that would be available to that component (global + component-type-specific).`,
   atmos describe locals --format json
 
   # Query specific values
-  atmos describe locals --query '.["deploy/dev"].merged.namespace'`,
+  atmos describe locals --query '.["deploy/dev"].locals.namespace'`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.MaximumNArgs(1),
 	RunE: getRunnableDescribeLocalsCmd(getRunnableDescribeLocalsCmdProps{
