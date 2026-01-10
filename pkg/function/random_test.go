@@ -100,17 +100,17 @@ func TestNewRandomFunction(t *testing.T) {
 	assert.Nil(t, fn.Aliases())
 }
 
-func TestGenerateRandom(t *testing.T) {
+func TestGenerateRandomNumber(t *testing.T) {
 	// Test basic range.
 	for i := 0; i < 100; i++ {
-		result, err := generateRandom(0, 100)
+		result, err := generateRandomNumber(0, 100)
 		require.NoError(t, err)
 		assert.GreaterOrEqual(t, result, 0)
 		assert.LessOrEqual(t, result, 100)
 	}
 
 	// Test error case.
-	_, err := generateRandom(100, 50)
+	_, err := generateRandomNumber(100, 50)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, ErrInvalidArguments))
 }

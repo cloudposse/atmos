@@ -1,0 +1,68 @@
+---
+title: "atmos::env"
+sidebar_position: 1
+sidebar_label: "atmos::env"
+sidebar_class_name: command
+description: Retrieve environment variables in HCL stack configurations
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `atmos::env` function retrieves environment variables and assigns them to values in HCL stack configurations.
+</Intro>
+
+## Usage
+
+```hcl
+// Get environment variable (returns null if not set)
+region = atmos::env("AWS_REGION")
+
+// Get environment variable with default value
+region = atmos::env("AWS_REGION us-east-1")
+```
+
+## Arguments
+
+<dl>
+    <dt>`env-var-name`</dt>
+    <dd>Environment variable name</dd>
+
+    <dt>`default-value`</dt>
+    <dd>(Optional) Default value to use if the environment variable is not set</dd>
+</dl>
+
+## Examples
+
+```hcl
+stack {
+  components {
+    terraform {
+      component "vpc" {
+        vars {
+          // Simple environment variable
+          region = atmos::env("AWS_REGION")
+
+          // With default value
+          environment = atmos::env("ENVIRONMENT development")
+
+          // Default with spaces (use quotes)
+          app_name = atmos::env("APP_NAME \"My Application\"")
+        }
+      }
+    }
+  }
+}
+```
+
+## Resolution Order
+
+The `atmos::env` function follows this resolution order when looking up environment variable values:
+
+1. **Stack manifest `env:` sections** - Checks the component's merged `env:` section (which includes values from globals, imports, base components, and the component itself)
+2. **OS environment variables** - Falls back to operating system environment variables if not found in stack manifests
+3. **Default value** - Uses the provided default value if the variable is not found in either location
+
+## See Also
+
+- [!env (YAML)](/functions/yaml/env) - YAML equivalent
