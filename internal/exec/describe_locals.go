@@ -98,18 +98,17 @@ func (d *describeLocalsExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 }
 
 // executeForComponent gets the locals for a specific component in a stack.
+// Component-level locals are merged with stack-level locals (component locals take precedence).
 func (d *describeLocalsExec) executeForComponent(
 	atmosConfig *schema.AtmosConfiguration,
 	args *DescribeLocalsArgs,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.DescribeLocalsExec.executeForComponent")()
 
-	// Stack is required when component is specified.
 	if args.FilterByStack == "" {
 		return nil, errUtils.ErrStackRequiredWithComponent
 	}
 
-	// Use ExecuteDescribeComponent to get component info (including type).
 	componentSection, err := d.executeDescribeComponent(&ExecuteDescribeComponentParams{
 		Component:            args.Component,
 		Stack:                args.FilterByStack,
@@ -120,23 +119,44 @@ func (d *describeLocalsExec) executeForComponent(
 		return nil, fmt.Errorf("failed to describe component %s in stack %s: %w", args.Component, args.FilterByStack, err)
 	}
 
-	// Get the component type from the component section.
-	componentType := "terraform" // Default to terraform.
-	if ct, ok := componentSection["component_type"].(string); ok && ct != "" {
-		componentType = ct
-	}
+	componentType := getComponentType(componentSection)
+	componentLocals := extractComponentLocals(componentSection)
 
-	// Now get the locals for the stack and return the merged locals for this component type.
 	stackLocals, err := d.executeDescribeLocals(atmosConfig, args.FilterByStack)
 	if err != nil {
 		return nil, err
 	}
 
-	// Find the stack in the results.
+	return buildComponentLocalsResult(args, stackLocals, componentType, componentLocals)
+}
+
+// getComponentType extracts the component type from a component section, defaulting to terraform.
+func getComponentType(componentSection map[string]any) string {
+	if ct, ok := componentSection["component_type"].(string); ok && ct != "" {
+		return ct
+	}
+	return "terraform"
+}
+
+// extractComponentLocals extracts the locals section from a component section.
+func extractComponentLocals(componentSection map[string]any) map[string]any {
+	if cl, ok := componentSection[cfg.LocalsSectionName].(map[string]any); ok {
+		return cl
+	}
+	return nil
+}
+
+// buildComponentLocalsResult builds the result map for component locals query.
+func buildComponentLocalsResult(
+	args *DescribeLocalsArgs,
+	stackLocals map[string]any,
+	componentType string,
+	componentLocals map[string]any,
+) (map[string]any, error) {
 	for stackName, localsData := range stackLocals {
 		if localsMap, ok := localsData.(map[string]any); ok {
-			// Get the component-type-specific merged locals.
-			result := getLocalsForComponentType(localsMap, componentType)
+			stackTypeLocals := getLocalsForComponentType(localsMap, componentType)
+			result := mergeLocals(stackTypeLocals, componentLocals)
 			return map[string]any{
 				"component":      args.Component,
 				"stack":          stackName,
@@ -146,7 +166,33 @@ func (d *describeLocalsExec) executeForComponent(
 		}
 	}
 
+	if len(componentLocals) > 0 {
+		return map[string]any{
+			"component":      args.Component,
+			"stack":          args.FilterByStack,
+			"component_type": componentType,
+			"locals":         componentLocals,
+		}, nil
+	}
+
 	return nil, fmt.Errorf("%w: %s", errUtils.ErrStackHasNoLocals, args.FilterByStack)
+}
+
+// mergeLocals merges two locals maps, with the second map taking precedence.
+func mergeLocals(base, override map[string]any) map[string]any {
+	result := make(map[string]any, len(base)+len(override))
+
+	// Copy base locals.
+	for k, v := range base {
+		result[k] = v
+	}
+
+	// Override with component-level locals.
+	for k, v := range override {
+		result[k] = v
+	}
+
+	return result
 }
 
 // getLocalsForComponentType extracts the appropriate merged locals for a component type.

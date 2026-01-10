@@ -1348,6 +1348,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentEnv map[string]any
 	var baseComponentAuth map[string]any
 	var baseComponentDependencies map[string]any
+	var baseComponentLocals map[string]any
 	var baseComponentProviders map[string]any
 	var baseComponentHooks map[string]any
 	var baseComponentGenerate map[string]any
@@ -1481,6 +1482,13 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		if baseComponentLocalsSection, baseComponentLocalsSectionExist := baseComponentMap[cfg.LocalsSectionName]; baseComponentLocalsSectionExist {
+			baseComponentLocals, ok = baseComponentLocalsSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: '%s.locals' in the stack '%s'", errUtils.ErrInvalidComponentLocals, baseComponent, stack)
+			}
+		}
+
 		if baseComponentProvidersSection, baseComponentProvidersSectionExist := baseComponentMap[cfg.ProvidersSectionName]; baseComponentProvidersSectionExist {
 			baseComponentProviders, ok = baseComponentProvidersSection.(map[string]any)
 			if !ok {
@@ -1588,6 +1596,13 @@ func processBaseComponentConfigInternal(
 			return err
 		}
 		baseComponentConfig.BaseComponentDependencies = merged
+
+		// Base component `locals` (for template processing, not passed to terraform/helmfile).
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentLocals, baseComponentLocals})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentLocals = merged
 
 		// Base component `metadata` (when metadata inheritance is enabled).
 		// Merge all metadata fields except 'inherits' and 'type'.

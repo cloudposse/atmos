@@ -317,6 +317,7 @@ var (
 	ErrInvalidHooksSection                    = errors.New("invalid 'hooks' section in the file")
 	ErrInvalidTerraformHooksSection           = errors.New("invalid 'terraform.hooks' section in the file")
 	ErrInvalidComponentVars                   = errors.New("invalid component vars section")
+	ErrInvalidComponentLocals                 = errors.New("invalid component locals section")
 	ErrInvalidComponentSettings               = errors.New("invalid component settings section")
 	ErrInvalidComponentEnv                    = errors.New("invalid component env section")
 	ErrInvalidComponentProviders              = errors.New("invalid component providers section")

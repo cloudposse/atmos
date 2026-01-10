@@ -169,8 +169,7 @@ Within a single file, locals are resolved in this order (inner scopes can refere
 
 1. **Global locals** → resolved first, available everywhere in the file
 2. **Component-type locals** (terraform/helmfile/packer) → can reference global locals
-
-**Note:** Component-level locals (inside individual component definitions) are NOT supported. Only global and component-type scopes are implemented.
+3. **Component-level locals** → can reference global and component-type locals, and inherit from base components
 
 ```yaml
 locals:
@@ -183,10 +182,61 @@ terraform:
 components:
   terraform:
     vpc:
+      locals:
+        component_val: "{{ .locals.tf_val }}-vpc"  # Results in "global-terraform-vpc"
       vars:
-        # Uses merged locals (global + terraform section)
-        name: "{{ .locals.tf_val }}-vpc"  # Results in "global-terraform-vpc"
+        # Uses merged locals (global + terraform section + component)
+        name: "{{ .locals.component_val }}"
 ```
+
+### Component-Level Locals Inheritance
+
+Unlike file-scoped locals (which do NOT inherit across file boundaries), component-level locals **do** inherit from base components via `component` attribute or `metadata.inherits`, similar to how `vars` work.
+
+```yaml
+components:
+  terraform:
+    vpc/base:
+      metadata:
+        type: abstract
+      locals:
+        vpc_type: "standard"
+        cidr_prefix: "10.0"
+      vars:
+        name: "{{ .locals.vpc_type }}-vpc"
+
+    vpc/prod:
+      metadata:
+        inherits:
+          - vpc/base
+      locals:
+        # Overrides base component's vpc_type
+        vpc_type: "production"
+        # Adds new local
+        environment: "prod"
+      vars:
+        # Uses inherited cidr_prefix from base, overridden vpc_type
+        cidr: "{{ .locals.cidr_prefix }}.0.0/16"
+        tags:
+          env: "{{ .locals.environment }}"
+```
+
+**Inheritance hierarchy for component-level locals:**
+
+```
+Base Component Locals → Component Locals (component-level takes precedence)
+```
+
+**Full locals resolution order for a component:**
+
+```
+Global Locals → Section Locals → Base Component Locals → Component Locals
+```
+
+This means a component can:
+- Reference global and section-level locals defined in the same file
+- Inherit locals from base components via `metadata.inherits` or `component` attribute
+- Override inherited locals with its own definitions
 
 ## Behavior Clarifications
 
@@ -1808,6 +1858,8 @@ The following features have been implemented:
 - ✅ File-scoped locals (not inherited across imports)
 - ✅ Global-level locals (stack file root)
 - ✅ Section-level locals (terraform, helmfile, packer sections)
+- ✅ Component-level locals (inside component definitions)
+- ✅ Component-level locals inheritance (via `metadata.inherits` and `component` attribute)
 - ✅ Locals referencing other locals
 - ✅ Topological sorting for dependency resolution
 - ✅ Circular dependency detection with clear error messages
@@ -1823,17 +1875,20 @@ The following features have been implemented:
 
 #### Implementation Files
 - `internal/exec/stack_processor_locals.go` - LocalsContext and extraction
-- `internal/exec/describe_locals.go` - DescribeLocalsExec implementation
+- `internal/exec/stack_processor_process_stacks_helpers.go` - ComponentLocals and BaseComponentLocals fields
+- `internal/exec/stack_processor_process_stacks_helpers_extraction.go` - Component locals extraction
+- `internal/exec/stack_processor_process_stacks_helpers_inheritance.go` - Component locals inheritance
+- `internal/exec/stack_processor_utils.go` - Base component locals extraction and merging
+- `internal/exec/stack_processor_merge.go` - Component locals merging in final output
+- `internal/exec/describe_locals.go` - DescribeLocalsExec implementation with component locals
 - `cmd/describe_locals.go` - CLI command definition
 - `pkg/locals/resolver.go` - Dependency resolution with cycle detection
-- `errors/errors.go` - Sentinel errors for locals
+- `pkg/schema/schema.go` - BaseComponentLocals field in BaseComponentConfig
+- `errors/errors.go` - Sentinel errors for locals (including ErrInvalidComponentLocals)
 
 ### Not Yet Implemented
 
 The following features from the PRD are planned but not yet implemented:
-
-#### Component-Level Locals
-Component-level locals (inside individual component definitions) are parsed but not resolved during the initial template pass. This is because component-level locals require per-component scoping that cannot be handled in a single template pass. Users should use global or section-level locals instead.
 
 #### `ATMOS_DEBUG_LOCALS` Environment Variable
 Verbose logging during stack processing has not been implemented.

@@ -843,3 +843,106 @@ func TestDescribeLocalsDifferentOutputStructures(t *testing.T) {
 	assert.False(t, hasComponent, "stack output should NOT have 'component' key")
 	assert.False(t, hasComponentType, "stack output should NOT have 'component_type' key")
 }
+
+// =============================================================================
+// Component-Level Locals Tests
+// =============================================================================
+// These tests verify that component-level locals work correctly, including
+// inheritance from base components via metadata.inherits.
+//
+// Note: Component-level locals are stored and inherited, but they are NOT
+// available for {{ .locals.X }} template resolution within the same file.
+// Only file-level locals (global + section) are available during template
+// processing. Component-level locals appear in the final component output
+// and can be used by downstream tooling.
+
+// TestComponentLevelLocals tests component-level locals functionality using table-driven tests.
+func TestComponentLevelLocals(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-component-level")
+
+	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		component      string
+		expectedVars   map[string]string
+		expectedLocals map[string]string
+	}{
+		{
+			name:      "standalone component with component-level locals",
+			component: "standalone",
+			expectedVars: map[string]string{
+				"name":   "acme-dev-standalone",
+				"bucket": "acme-dev-tfstate",
+			},
+			expectedLocals: map[string]string{
+				"standalone_value": "standalone-only",
+				"computed_ref":     "acme-dev",
+			},
+		},
+		{
+			name:      "component inheriting with locals override",
+			component: "vpc/dev",
+			expectedVars: map[string]string{
+				"name":        "acme-dev-vpc",
+				"bucket":      "acme-dev-tfstate",
+				"description": "acme-dev-vpc-dev",
+			},
+			expectedLocals: map[string]string{
+				"cidr_prefix": "10.0",
+				"vpc_type":    "development",
+				"extra_tag":   "dev-only",
+			},
+		},
+		{
+			name:      "component inheriting without locals override",
+			component: "vpc/standard",
+			expectedVars: map[string]string{
+				"name":        "acme-dev-vpc",
+				"description": "acme-dev-vpc-standard",
+			},
+			expectedLocals: map[string]string{
+				"vpc_type":    "standard",
+				"cidr_prefix": "10.0",
+			},
+		},
+		{
+			name:      "component with component attribute",
+			component: "vpc/custom",
+			expectedVars: map[string]string{
+				"prefix": "acme-dev",
+			},
+			expectedLocals: map[string]string{
+				"custom_local": "custom-value",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+				Component:            tt.component,
+				Stack:                "dev-us-east-1",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			// Verify vars.
+			vars, ok := result["vars"].(map[string]any)
+			require.True(t, ok, "vars should be a map")
+			for key, expected := range tt.expectedVars {
+				assert.Equal(t, expected, vars[key], "vars[%s] mismatch", key)
+			}
+
+			// Verify locals.
+			locals, hasLocals := result["locals"].(map[string]any)
+			require.True(t, hasLocals, "component should have locals in output")
+			for key, expected := range tt.expectedLocals {
+				assert.Equal(t, expected, locals[key], "locals[%s] mismatch", key)
+			}
+		})
+	}
+}

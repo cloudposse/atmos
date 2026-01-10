@@ -57,6 +57,7 @@ vars:
 1. **Locals extraction** - Raw YAML is now parsed to extract `locals:` sections before template processing
 2. **Template context** - Resolved locals are added to the template context so `{{ .locals.* }}` references work
 3. **Section override tracking** - Section-specific locals (in `terraform:`, `helmfile:`, `packer:`) correctly override global locals
+4. **Component-level locals** - Components can now define their own `locals:` section that inherits from base components
 
 ### New Command: `atmos describe locals`
 
@@ -154,6 +155,26 @@ components:
 
 All documented locals features now function correctly:
 
+### Component-Level Locals with Inheritance
+
+```yaml
+components:
+  terraform:
+    vpc/base:
+      locals:
+        vpc_type: "standard"
+        cidr_prefix: "10.0"
+
+    vpc/prod:
+      metadata:
+        inherits:
+          - vpc/base
+      locals:
+        vpc_type: "production"  # Overrides base
+      vars:
+        cidr: "{{ .locals.cidr_prefix }}.0.0/16"  # Inherited from base
+```
+
 ### Locals Referencing Other Locals
 
 ```yaml
@@ -195,7 +216,7 @@ components:
 
 ## Supported Scopes
 
-Locals can be defined at two levels:
+Locals can be defined at three levels:
 
 ```yaml
 # Global locals (root level) - available throughout the file
@@ -211,10 +232,49 @@ terraform:
 components:
   terraform:
     vpc:
+      # Component-level locals - inherit from global and section, plus base components
+      locals:
+        vpc_type: "production"
       vars:
-        # Uses merged locals (global + terraform section)
+        # Uses merged locals (global + terraform section + component)
         bucket: "{{ .locals.backend_bucket }}"
+        type: "{{ .locals.vpc_type }}"
 ```
+
+### Component-Level Locals Inheritance
+
+Component-level locals support inheritance from base components via `metadata.inherits` or `component` attribute, similar to how `vars` work:
+
+```yaml
+components:
+  terraform:
+    vpc/base:
+      metadata:
+        type: abstract
+      locals:
+        vpc_type: "standard"
+        cidr_prefix: "10.0"
+
+    vpc/prod:
+      metadata:
+        inherits:
+          - vpc/base
+      locals:
+        # Overrides base component's vpc_type
+        vpc_type: "production"
+      vars:
+        # Uses inherited cidr_prefix from base, overridden vpc_type
+        cidr: "{{ .locals.cidr_prefix }}.0.0/16"
+        name: "{{ .locals.vpc_type }}-vpc"
+```
+
+**Full locals resolution order for a component:**
+
+```
+Global Locals → Section Locals → Base Component Locals → Component Locals
+```
+
+**Note:** File-scoped locals (global and section-level) do NOT inherit across file boundaries. Only component-level locals inherit from base components.
 
 ## Upgrade
 
