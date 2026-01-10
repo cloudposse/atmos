@@ -827,9 +827,6 @@ var (
 	ErrBackendConfigEmpty                 = errors.New("backend config is empty for the component")
 	ErrBackendTypeEmptyAfterRender        = errors.New("backend type is empty after rendering for the component")
 
-	// Subcommand errors.
-	ErrUnknownSubcommand = errors.New("unknown subcommand")
-
 	// Working directory errors.
 	ErrWorkingDirNotFound     = errors.New("working directory does not exist")
 	ErrWorkingDirAccessFailed = errors.New("failed to access working directory")
