@@ -148,6 +148,8 @@ func installSingleToolSpec(toolSpec string, setAsDefault, _ bool) error {
 
 // parseToolSpecs parses command-line tool specs into toolInfo structs.
 func parseToolSpecs(installer *Installer, toolSpecs []string) []toolInfo {
+	defer perf.Track(nil, "toolchain.parseToolSpecs")()
+
 	var toolList []toolInfo
 	for _, spec := range toolSpecs {
 		info, ok := parseToolSpec(installer, spec)
@@ -160,6 +162,8 @@ func parseToolSpecs(installer *Installer, toolSpecs []string) []toolInfo {
 
 // parseToolSpec parses a single tool specification into toolInfo.
 func parseToolSpec(installer *Installer, spec string) (toolInfo, bool) {
+	defer perf.Track(nil, "toolchain.parseToolSpec")()
+
 	tool, version, err := ParseToolVersionArg(spec)
 	if err != nil {
 		_ = ui.Errorf("Invalid tool spec `%s`: %v", spec, err)
@@ -211,7 +215,9 @@ func installMultipleTools(toolSpecs []string, setAsDefault, reinstallFlag bool) 
 			installedCount++
 			// Update .tool-versions for each successfully installed tool.
 			toolName := fmt.Sprintf("%s/%s", tool.owner, tool.repo)
-			_ = updateToolVersionsFile(toolName, tool.version, setAsDefault)
+			if err := updateToolVersionsFile(toolName, tool.version, setAsDefault); err != nil {
+				_ = ui.Warningf("Failed to update .tool-versions for `%s@%s`: %v", toolName, tool.version, err)
+			}
 		case "failed":
 			failedCount++
 		case "skipped":

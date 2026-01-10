@@ -2,9 +2,12 @@ package tape
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Command represents an extracted command from a VHS tape file.
@@ -25,9 +28,11 @@ var sleepRegex = regexp.MustCompile(`^\s*Sleep\s+[\d.]+(?:ms|s)\s*$`)
 // Sleep directives between Type and Enter are allowed.
 // Comments (lines starting with #) are marked but included for context.
 func ParseCommands(tapePath string) ([]Command, error) {
+	defer perf.Track(nil, "tape.ParseCommands")()
+
 	file, err := os.Open(tapePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open tape file %s: %w", tapePath, err)
 	}
 	defer file.Close()
 
@@ -79,7 +84,7 @@ func ParseCommands(tapePath string) ([]Command, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read tape file %s: %w", tapePath, err)
 	}
 
 	return commands, nil

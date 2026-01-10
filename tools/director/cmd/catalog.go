@@ -378,13 +378,17 @@ director render --tag version --force
 			sort.Strings(tagNames)
 
 			// Move "featured" to front if present.
-			sortedTags := make([]string, 0, len(tagNames))
+			var sortedTags []string
+			hasFeatured := false
 			for _, t := range tagNames {
 				if t == "featured" {
-					sortedTags = append([]string{t}, sortedTags...)
+					hasFeatured = true
 				} else {
 					sortedTags = append(sortedTags, t)
 				}
+			}
+			if hasFeatured {
+				sortedTags = append([]string{"featured"}, sortedTags...)
 			}
 
 			// Print tags.

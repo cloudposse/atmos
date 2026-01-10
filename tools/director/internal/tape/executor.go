@@ -7,12 +7,16 @@ import (
 	"os"
 	"os/exec"
 	"time"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // ExecuteCommandDirect runs a command with stdout/stderr connected directly to the terminal.
 // No buffering, no capturing - just raw execution. Returns only success/failure and duration.
 // When connected to a real TTY, we let the subprocess detect it naturally for proper color support.
 func ExecuteCommandDirect(ctx context.Context, cmd Command, workdir string, env []string) ExecutionResult {
+	defer perf.Track(nil, "tape.ExecuteCommandDirect")()
+
 	start := time.Now()
 
 	shellCmd := exec.CommandContext(ctx, "bash", "-c", cmd.Text)
@@ -65,6 +69,8 @@ type ExecutionResult struct {
 // Commands are executed in the specified workdir with the given environment.
 // Each command is run through the shell to support pipes and redirects.
 func ExecuteCommands(ctx context.Context, commands []Command, workdir string, env []string) []ExecutionResult {
+	defer perf.Track(nil, "tape.ExecuteCommands")()
+
 	results := make([]ExecutionResult, 0, len(commands))
 
 	for _, cmd := range commands {
@@ -85,6 +91,8 @@ func ExecuteCommand(ctx context.Context, cmd Command, workdir string, env []stri
 // If stdout/stderr writers are provided, output is streamed directly to them.
 // The result still contains exit code and duration but not the buffered output.
 func ExecuteCommandStreaming(ctx context.Context, cmd Command, workdir string, env []string, stdout, stderr io.Writer) ExecutionResult {
+	defer perf.Track(nil, "tape.ExecuteCommandStreaming")()
+
 	return executeCommandInternal(ctx, cmd, workdir, env, stdout, stderr)
 }
 

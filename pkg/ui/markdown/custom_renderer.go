@@ -11,6 +11,7 @@ import (
 	"github.com/muesli/termenv"
 	"github.com/yuin/goldmark"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui/markdown/extensions"
 )
 
@@ -87,32 +88,51 @@ func WithStylesFromJSONBytes(jsonBytes []byte) CustomRendererOption {
 // This integrates cleanly with glamour's ANSI renderer since it already knows
 // how to handle Strikethrough (styled as muted gray in our config).
 func NewCustomRenderer(opts ...CustomRendererOption) (*CustomRenderer, error) {
-	// Default configuration.
-	cfg := &customRendererConfig{
-		wordWrap:     defaultWidth,
-		colorProfile: termenv.TrueColor, // Default to TrueColor for best output.
-	}
+	defer perf.Track(nil, "markdown.NewCustomRenderer")()
 
-	// Apply options.
+	cfg := newDefaultConfig()
 	for _, opt := range opts {
 		opt(cfg)
 	}
 
-	// Build glamour options.
+	glamourOpts, err := buildGlamourOptions(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	renderer, err := glamour.NewTermRenderer(glamourOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extend glamour with custom extensions.
+	extendGlamourWithCustomExtensions(renderer)
+
+	return &CustomRenderer{glamour: renderer}, nil
+}
+
+// newDefaultConfig creates a customRendererConfig with default values.
+func newDefaultConfig() *customRendererConfig {
+	return &customRendererConfig{
+		wordWrap:     defaultWidth,
+		colorProfile: termenv.TrueColor,
+	}
+}
+
+// buildGlamourOptions builds glamour renderer options from config.
+func buildGlamourOptions(cfg *customRendererConfig) ([]glamour.TermRendererOption, error) {
 	glamourOpts := []glamour.TermRendererOption{
 		glamour.WithWordWrap(cfg.wordWrap),
 		glamour.WithColorProfile(cfg.colorProfile),
 		glamour.WithEmoji(),
 	}
 
-	// Add styles if provided.
 	if cfg.styles != nil {
 		styleBytes, err := json.Marshal(cfg.styles)
 		if err == nil {
 			glamourOpts = append(glamourOpts, glamour.WithStylesFromJSONBytes(styleBytes))
 		}
 	} else {
-		// Use built-in default style.
 		defaultStyleBytes, err := getBuiltinDefaultStyle()
 		if err != nil {
 			return nil, err
@@ -120,33 +140,23 @@ func NewCustomRenderer(opts ...CustomRendererOption) (*CustomRenderer, error) {
 		glamourOpts = append(glamourOpts, glamour.WithStylesFromJSONBytes(defaultStyleBytes))
 	}
 
-	// Add preserve newlines if requested.
 	if cfg.preserveNewLines {
 		glamourOpts = append(glamourOpts, glamour.WithPreservedNewLines())
 	}
 
-	// Create glamour renderer.
-	renderer, err := glamour.NewTermRenderer(glamourOpts...)
-	if err != nil {
-		return nil, err
-	}
+	return glamourOpts, nil
+}
 
-	// Access glamour's internal goldmark via reflection to add our extensions.
-	// This is necessary because glamour doesn't expose its goldmark instance.
+// extendGlamourWithCustomExtensions adds custom goldmark extensions to the renderer.
+func extendGlamourWithCustomExtensions(renderer *glamour.TermRenderer) {
 	md := getGlamourGoldmark(renderer)
-	if md != nil {
-		// Add our custom muted extension (parser + AST transformer).
-		// The transformer converts ((muted)) to strikethrough, which glamour
-		// already knows how to render with our muted gray style.
-		extensions.NewMutedExtension().Extend(md)
-
-		// Override the default Linkify email regex with a stricter pattern.
-		// This prevents package references like foo/bar@1.0.0 from being
-		// converted to mailto: links while preserving valid email auto-linking.
-		extensions.NewStrictLinkifyExtension().Extend(md)
+	if md == nil {
+		return
 	}
-
-	return &CustomRenderer{glamour: renderer}, nil
+	// Add muted extension (converts ((text)) to strikethrough).
+	extensions.NewMutedExtension().Extend(md)
+	// Add strict linkify (prevents foo/bar@1.0.0 from becoming mailto: links).
+	extensions.NewStrictLinkifyExtension().Extend(md)
 }
 
 // getGlamourGoldmark extracts the internal goldmark.Markdown from a glamour.TermRenderer.
