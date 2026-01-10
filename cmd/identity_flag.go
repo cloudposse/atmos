@@ -61,18 +61,10 @@ func GetIdentityFromFlags(cmd *cobra.Command, osArgs []string) string {
 // normalizeIdentityValue converts boolean false representations to the disabled sentinel value.
 // Recognizes: false, False, FALSE, 0, no, No, NO, off, Off, OFF.
 // All other values are returned unchanged.
+//
+// Deprecated: Use cfg.NormalizeIdentityValue() instead. This wrapper exists for backward compatibility.
 func normalizeIdentityValue(value string) string {
-	if value == "" {
-		return ""
-	}
-
-	// Check if value represents boolean false.
-	switch strings.ToLower(value) {
-	case "false", "0", "no", "off":
-		return cfg.IdentityFlagDisabledValue
-	default:
-		return value
-	}
+	return cfg.NormalizeIdentityValue(value)
 }
 
 // extractIdentityFromArgs manually parses os.Args to find --identity flag and its value.

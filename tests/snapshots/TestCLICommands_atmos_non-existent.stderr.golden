@@ -23,6 +23,7 @@ Valid subcommands are:
 • support
 • terraform
 • tf
+• tf-custom
 • theme
 • toolchain
 • validate
