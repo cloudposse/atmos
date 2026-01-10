@@ -7,16 +7,16 @@ No versions installed
 Available Versions (latest 10):
     VERSION  DATE        TITLE                                          
 ────────────────────────────────────────────────────────────────────────
-    0.67.0   2025-11-16  0.67.0                                         
-    0.66.1   2025-10-26  0.66.1                                         
-    0.66.0   2025-10-12  When the result list is updated, move the      
+    X.X.X   YYYY-MM-DD  X.X.X                                         
+    X.X.X   YYYY-MM-DD  X.X.X                                         
+    X.X.X   YYYY-MM-DD  When the result list is updated, move the      
                          cursor to the item with the best score         
-    0.65.2   2025-08-31  0.65.2                                         
-    0.65.1   2025-08-03  0.65.1                                         
-    0.65.0   2025-07-27  0.65.0                                         
-    0.64.0   2025-07-06  0.64.0                                         
-    0.63.0   2025-06-27  0.63.0                                         
-    0.62.0   2025-05-04  Screenshot                                     
-    0.61.3   2025-04-22  0.61.3                                         
+    X.X.X   YYYY-MM-DD  X.X.X                                         
+    X.X.X   YYYY-MM-DD  X.X.X                                         
+    X.X.X   YYYY-MM-DD  X.X.X                                         
+    X.X.X   YYYY-MM-DD  X.X.X                                         
+    X.X.X   YYYY-MM-DD  X.X.X                                         
+    X.X.X   YYYY-MM-DD  Screenshot                                     
+    X.X.X   YYYY-MM-DD  X.X.X                                         
 
 💡 Use atmos toolchain install junegunn/fzf@<version> to install
