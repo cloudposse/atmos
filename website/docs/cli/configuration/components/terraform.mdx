@@ -42,6 +42,9 @@ components:
     # Generate backend.tf.json from stack configuration
     auto_generate_backend_file: true
 
+    # Generate files from the `generate` section before terraform commands
+    auto_generate_files: false
+
     # Init command options
     init:
       pass_vars: false
@@ -118,6 +121,14 @@ components:
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE`
     **Command-line flag:** `--auto-generate-backend-file`
     **Default:** `true`
+  </dd>
+
+  <dt>`auto_generate_files`</dt>
+  <dd>
+    When `true`, Atmos generates files from the [`generate`](/stacks/generate) section in stack configuration before running Terraform commands.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_FILES`
+    **Default:** `false`
   </dd>
 
   <dt>`init.pass_vars`</dt>
@@ -208,6 +219,7 @@ backend.tf.json
   {type: 'link', href: '/cli/commands/terraform/shell', label: 'atmos terraform shell', description: 'Open an interactive shell'},
   {type: 'link', href: '/cli/commands/terraform/generate/backends', label: 'atmos terraform generate backends', description: 'Generate backend configuration files'},
   {type: 'link', href: '/cli/commands/terraform/generate/varfiles', label: 'atmos terraform generate varfiles', description: 'Generate variable files'},
+  {type: 'link', href: '/cli/commands/terraform/generate/files', label: 'atmos terraform generate files', description: 'Generate auxiliary configuration files'},
 ]} />
 
 ## Related
@@ -216,3 +228,4 @@ backend.tf.json
 - [Stack Configuration](/cli/configuration/stacks)
 - [Terraform Components](/components/terraform)
 - [Terraform Backend](/stacks/backend)
+- [Generate Terraform Files](/stacks/generate)

@@ -33,6 +33,11 @@ const (
 	maxLogValueLen = 100
 )
 
+// wrapDescribeError wraps an error from DescribeComponent using the shared helper.
+func wrapDescribeError(component, stack string, err error) error {
+	return errUtils.WrapComponentDescribeError(component, stack, err, "component")
+}
+
 // terraformOutputsCache caches terraform outputs by stack-component slug.
 var terraformOutputsCache = sync.Map{}
 
@@ -249,7 +254,7 @@ func (e *Executor) GetOutput(
 	})
 	if err != nil {
 		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
-		return nil, false, fmt.Errorf("failed to describe component %s in stack %s: %w", component, stack, err)
+		return nil, false, wrapDescribeError(component, stack, err)
 	}
 
 	// Check for static remote state backend.
@@ -323,7 +328,7 @@ func (e *Executor) fetchAndCacheOutputs(
 		ProcessYamlFunctions: true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to describe component %s in stack %s: %w", component, stack, err)
+		return nil, wrapDescribeError(component, stack, err)
 	}
 
 	// Check for static remote state backend.

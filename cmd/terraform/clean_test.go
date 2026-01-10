@@ -116,3 +116,78 @@ func TestCleanCommandArgs(t *testing.T) {
 	err = cleanCmd.Args(cleanCmd, []string{"arg1", "arg2"})
 	assert.Error(t, err, "clean command should reject more than 1 argument")
 }
+
+// TestCleanCommandDescription verifies the clean command has proper descriptions.
+func TestCleanCommandDescription(t *testing.T) {
+	t.Run("short description is meaningful", func(t *testing.T) {
+		assert.NotEmpty(t, cleanCmd.Short)
+		assert.Contains(t, cleanCmd.Short, "Clean")
+	})
+
+	t.Run("long description explains use cases", func(t *testing.T) {
+		assert.Contains(t, cleanCmd.Long, "state")
+		assert.Contains(t, cleanCmd.Long, "artifacts")
+	})
+}
+
+// TestCleanCommandFlagTypes verifies that clean flags have correct types.
+func TestCleanCommandFlagTypes(t *testing.T) {
+	// All clean-specific flags are bool flags.
+	boolFlags := []string{"everything", "force", "skip-lock-file", "cache"}
+
+	for _, flagName := range boolFlags {
+		flag := cleanCmd.Flags().Lookup(flagName)
+		require.NotNil(t, flag, "%s flag should exist", flagName)
+		assert.Equal(t, "bool", flag.Value.Type(), "%s should be a bool flag", flagName)
+	}
+}
+
+// TestCleanCommandFlagShorthands verifies that clean flags have correct shorthands.
+func TestCleanCommandFlagShorthands(t *testing.T) {
+	tests := []struct {
+		flag      string
+		shorthand string
+	}{
+		{"force", "f"},
+		{"everything", ""},     // No shorthand.
+		{"skip-lock-file", ""}, // No shorthand.
+		{"cache", ""},          // No shorthand.
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.flag+" shorthand", func(t *testing.T) {
+			flag := cleanCmd.Flags().Lookup(tt.flag)
+			require.NotNil(t, flag)
+			assert.Equal(t, tt.shorthand, flag.Shorthand)
+		})
+	}
+}
+
+// TestCleanParserRegistry verifies the clean parser registry is correctly set up.
+func TestCleanParserRegistry(t *testing.T) {
+	registry := cleanParser.Registry()
+	require.NotNil(t, registry)
+
+	// Verify all expected flags exist.
+	expectedFlags := []string{"everything", "force", "skip-lock-file", "cache"}
+
+	for _, flagName := range expectedFlags {
+		t.Run(flagName+" in registry", func(t *testing.T) {
+			assert.True(t, registry.Has(flagName))
+			flagInfo := registry.Get(flagName)
+			assert.NotNil(t, flagInfo)
+		})
+	}
+}
+
+// TestCleanCommandUsage verifies the command usage string.
+func TestCleanCommandUsage(t *testing.T) {
+	assert.Equal(t, "clean <component>", cleanCmd.Use)
+}
+
+// TestCleanCommandIsSubcommand verifies clean is properly attached to terraform.
+func TestCleanCommandIsSubcommand(t *testing.T) {
+	parent := cleanCmd.Parent()
+	assert.NotNil(t, parent)
+	assert.Equal(t, "terraform", parent.Name())
+}

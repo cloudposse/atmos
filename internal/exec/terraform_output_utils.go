@@ -75,7 +75,11 @@ func (a *authContextWrapper) Logout(ctx context.Context, identityName string, de
 func (a *authContextWrapper) GetChain() []string {
 	defer perf.Track(nil, "exec.authContextWrapper.GetChain")()
 
-	panic("authContextWrapper.GetChain should not be called")
+	// Return empty slice instead of panicking.
+	// This wrapper doesn't track the authentication chain; it only propagates auth context.
+	// When used in resolveAuthManagerForNestedComponent, an empty chain means
+	// no inherited identity, so the component will use its own defaults.
+	return []string{}
 }
 
 func (a *authContextWrapper) ListIdentities() []string {

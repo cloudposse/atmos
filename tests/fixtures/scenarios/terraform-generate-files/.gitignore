@@ -1,0 +1,12 @@
+# Atmos generated files
+locals.tf
+metadata.json
+config.yaml
+bucket_config.tf
+README.md
+
+# Terraform files
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl

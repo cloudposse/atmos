@@ -166,8 +166,9 @@ func TestCustomCommandIntegration_IdentityFlagOverride(t *testing.T) {
 	t.Logf("Captured environment variables with --identity flag:\n%s", envVars)
 
 	// Verify that the flag override worked (should see mock-identity-2, not mock-identity).
-	assert.Contains(t, envVars, "ATMOS_IDENTITY=mock-identity-2", "Should use identity from --identity flag (mock-identity-2)")
-	assert.NotContains(t, envVars, "ATMOS_IDENTITY=mock-identity\n", "Should NOT use identity from config (mock-identity)")
+	// Use extractEnvVar for exact line matching to avoid substring false positives.
+	identityValue := extractEnvVar(envVars, "ATMOS_IDENTITY")
+	assert.Equal(t, "mock-identity-2", identityValue, "Should use identity from --identity flag, not the config value")
 }
 
 // TestCustomCommandIntegration_MultipleSteps tests that all steps in a custom command
@@ -265,6 +266,10 @@ func extractEnvVar(envOutput, varName string) string {
 
 // TestCustomCommandIntegration_BooleanFlagDefaults tests that boolean flags with default values
 // are correctly registered and accessible in custom commands.
+//
+// Note: This test uses camelCase flag names (e.g., customDebug) to avoid conflicts with global
+// flags and to allow simple .Flags.name template syntax. For user-facing commands with kebab-case
+// flags (e.g., custom-debug), users can use {{ index .Flags "custom-debug" }} template syntax.
 func TestCustomCommandIntegration_BooleanFlagDefaults(t *testing.T) {
 	if testing.Short() {
 		t.Skipf("Skipping integration test in short mode")
@@ -287,15 +292,16 @@ func TestCustomCommandIntegration_BooleanFlagDefaults(t *testing.T) {
 	outputFile := filepath.Join(tmpDir, "bool-flag-output.txt")
 
 	// Create a custom command with boolean flags that have various default values.
+	// Note: Using "customDebug" instead of "verbose" since "verbose" is a global flag.
 	testCommand := schema.Command{
 		Name:        "test-bool-defaults",
 		Description: "Test boolean flag defaults",
 		Flags: []schema.CommandFlag{
 			{
-				Name:      "verbose",
-				Shorthand: "v",
+				Name:      "customDebug",
+				Shorthand: "d",
 				Type:      "bool",
-				Usage:     "Enable verbose output",
+				Usage:     "Enable customDebug output",
 				Default:   false, // Explicit false default.
 			},
 			{
@@ -306,14 +312,14 @@ func TestCustomCommandIntegration_BooleanFlagDefaults(t *testing.T) {
 				Default:   true, // Default to true.
 			},
 			{
-				Name:  "dry-run",
+				Name:  "dryrun",
 				Type:  "bool",
 				Usage: "Perform dry run",
 				// No default - should default to false.
 			},
 		},
 		Steps: stepsFromStrings(
-			"echo verbose={{ .Flags.verbose }} force={{ .Flags.force }} dry-run={{ index .Flags \"dry-run\" }} > " + outputFile,
+			"echo customDebug={{ .Flags.customDebug }} force={{ .Flags.force }} dryrun={{ .Flags.dryrun }} > " + outputFile,
 		),
 	}
 
@@ -335,17 +341,17 @@ func TestCustomCommandIntegration_BooleanFlagDefaults(t *testing.T) {
 	require.NotNil(t, customCmd, "Custom command should be registered")
 
 	// Verify flags are registered with correct defaults.
-	verboseFlag := customCmd.PersistentFlags().Lookup("verbose")
-	require.NotNil(t, verboseFlag, "verbose flag should be registered")
-	assert.Equal(t, "false", verboseFlag.DefValue, "verbose should default to false")
+	customDebugFlag := customCmd.PersistentFlags().Lookup("customDebug")
+	require.NotNil(t, customDebugFlag, "customDebug flag should be registered")
+	assert.Equal(t, "false", customDebugFlag.DefValue, "customDebug should default to false")
 
 	forceFlag := customCmd.PersistentFlags().Lookup("force")
 	require.NotNil(t, forceFlag, "force flag should be registered")
 	assert.Equal(t, "true", forceFlag.DefValue, "force should default to true")
 
-	dryRunFlag := customCmd.PersistentFlags().Lookup("dry-run")
-	require.NotNil(t, dryRunFlag, "dry-run flag should be registered")
-	assert.Equal(t, "false", dryRunFlag.DefValue, "dry-run should default to false when no default specified")
+	dryrunFlag := customCmd.PersistentFlags().Lookup("dryrun")
+	require.NotNil(t, dryrunFlag, "dryrun flag should be registered")
+	assert.Equal(t, "false", dryrunFlag.DefValue, "dryrun should default to false when no default specified")
 }
 
 // TestCustomCommandIntegration_BooleanFlagTemplatePatterns tests that boolean flags
@@ -372,15 +378,16 @@ func TestCustomCommandIntegration_BooleanFlagTemplatePatterns(t *testing.T) {
 	outputFile := filepath.Join(tmpDir, "template-patterns-output.txt")
 
 	// Create a custom command that tests various template patterns with boolean flags.
+	// Note: Using "customDebug" instead of "verbose" since "verbose" is a global flag.
 	testCommand := schema.Command{
 		Name:        "test-template-patterns",
 		Description: "Test boolean flag template patterns",
 		Flags: []schema.CommandFlag{
 			{
-				Name:      "verbose",
-				Shorthand: "v",
+				Name:      "customDebug",
+				Shorthand: "d",
 				Type:      "bool",
-				Usage:     "Enable verbose output",
+				Usage:     "Enable customDebug output",
 				Default:   false,
 			},
 			{
@@ -392,12 +399,13 @@ func TestCustomCommandIntegration_BooleanFlagTemplatePatterns(t *testing.T) {
 		},
 		Steps: stepsFromStrings(
 			// Test multiple patterns in a single step that writes to file.
-			`echo "PATTERN1={{ if .Flags.verbose }}VERBOSE_ON{{ end }}" >> `+outputFile,
-			`echo "PATTERN2=Building{{ if .Flags.verbose }} with verbose{{ end }}" >> `+outputFile,
+			// Using .Flags.customDebug (no hyphens) so we can use simple dot notation.
+			`echo "PATTERN1={{ if .Flags.customDebug }}DEBUG_ON{{ end }}" >> `+outputFile,
+			`echo "PATTERN2=Building{{ if .Flags.customDebug }} with debug{{ end }}" >> `+outputFile,
 			`echo "PATTERN3={{ if .Flags.clean }}CLEAN_ON{{ else }}CLEAN_OFF{{ end }}" >> `+outputFile,
-			`echo "PATTERN4={{ if not .Flags.verbose }}QUIET_MODE{{ end }}" >> `+outputFile,
-			`echo "PATTERN5=verbose={{ .Flags.verbose }}" >> `+outputFile,
-			`echo "PATTERN6=clean={{ printf "%t" .Flags.clean }}" >> `+outputFile,
+			`echo "PATTERN4={{ if not .Flags.customDebug }}QUIET_MODE{{ end }}" >> `+outputFile,
+			`echo "PATTERN5=customDebug={{ .Flags.customDebug }}" >> `+outputFile,
+			"echo \"PATTERN6=clean={{ printf \"%t\" .Flags.clean }}\" >> "+outputFile,
 		),
 	}
 
@@ -418,7 +426,7 @@ func TestCustomCommandIntegration_BooleanFlagTemplatePatterns(t *testing.T) {
 	}
 	require.NotNil(t, customCmd, "Custom command should be registered")
 
-	// Test 1: Execute with default values (verbose=false, clean=true).
+	// Test 1: Execute with default values (customDebug=false, clean=true).
 	// IMPORTANT: Must use RootCmd.SetArgs() + Execute() to properly initialize Cobra's flag merging.
 	// Calling cmd.Run() directly bypasses flag initialization and causes "flag not defined" errors.
 	RootCmd.SetArgs([]string{"test-template-patterns"})
@@ -429,22 +437,22 @@ func TestCustomCommandIntegration_BooleanFlagTemplatePatterns(t *testing.T) {
 	output, err := os.ReadFile(outputFile)
 	require.NoError(t, err, "Should be able to read output file")
 	outputStr := string(output)
-	t.Logf("Output with defaults (verbose=false, clean=true):\n%s", outputStr)
+	t.Logf("Output with defaults (customDebug=false, clean=true):\n%s", outputStr)
 
-	// Pattern 1: {{ if .Flags.verbose }} - should be empty since verbose=false.
-	assert.Contains(t, outputStr, "PATTERN1=\n", "Pattern 1: if should produce empty when verbose=false")
+	// Pattern 1: {{ if .Flags.customDebug }} - should be empty since customDebug=false.
+	assert.Contains(t, outputStr, "PATTERN1=\n", "Pattern 1: if should produce empty when customDebug=false")
 
-	// Pattern 2: Inline conditional - should not have "with verbose".
-	assert.Contains(t, outputStr, "PATTERN2=Building\n", "Pattern 2: inline if should not append when verbose=false")
+	// Pattern 2: Inline conditional - should not have "with customDebug".
+	assert.Contains(t, outputStr, "PATTERN2=Building\n", "Pattern 2: inline if should not append when customDebug=false")
 
 	// Pattern 3: if/else - clean=true so should be CLEAN_ON.
 	assert.Contains(t, outputStr, "PATTERN3=CLEAN_ON", "Pattern 3: if/else should produce CLEAN_ON when clean=true")
 
-	// Pattern 4: if not - verbose=false so "not .Flags.verbose" is true.
-	assert.Contains(t, outputStr, "PATTERN4=QUIET_MODE", "Pattern 4: if not should produce QUIET_MODE when verbose=false")
+	// Pattern 4: if not - customDebug=false so "not .Flags.customDebug" is true.
+	assert.Contains(t, outputStr, "PATTERN4=QUIET_MODE", "Pattern 4: if not should produce QUIET_MODE when customDebug=false")
 
 	// Pattern 5: Direct boolean value - should be "false".
-	assert.Contains(t, outputStr, "PATTERN5=verbose=false", "Pattern 5: direct value should render as 'false'")
+	assert.Contains(t, outputStr, "PATTERN5=customDebug=false", "Pattern 5: direct value should render as 'false'")
 
 	// Pattern 6: printf %t - should be "true".
 	assert.Contains(t, outputStr, "PATTERN6=clean=true", "Pattern 6: printf should render as 'true'")
@@ -453,31 +461,31 @@ func TestCustomCommandIntegration_BooleanFlagTemplatePatterns(t *testing.T) {
 	err = os.WriteFile(outputFile, []byte{}, 0o644)
 	require.NoError(t, err)
 
-	// Test 2: Execute with verbose=true and clean=false (via flags).
-	RootCmd.SetArgs([]string{"test-template-patterns", "--verbose", "--clean=false"})
+	// Test 2: Execute with customDebug=true and clean=false (via flags).
+	RootCmd.SetArgs([]string{"test-template-patterns", "--customDebug", "--clean=false"})
 	err = RootCmd.Execute()
 	require.NoError(t, err, "Custom command execution with flags should succeed")
 
-	// Read and verify output with verbose=true, clean=false.
+	// Read and verify output with customDebug=true, clean=false.
 	output, err = os.ReadFile(outputFile)
 	require.NoError(t, err)
 	outputStr = string(output)
-	t.Logf("Output with flags (verbose=true, clean=false):\n%s", outputStr)
+	t.Logf("Output with flags (customDebug=true, clean=false):\n%s", outputStr)
 
-	// Pattern 1: {{ if .Flags.verbose }} - should have VERBOSE_ON.
-	assert.Contains(t, outputStr, "PATTERN1=VERBOSE_ON", "Pattern 1: if should produce VERBOSE_ON when verbose=true")
+	// Pattern 1: {{ if .Flags.customDebug }} - should have DEBUG_ON.
+	assert.Contains(t, outputStr, "PATTERN1=DEBUG_ON", "Pattern 1: if should produce DEBUG_ON when customDebug=true")
 
-	// Pattern 2: Inline conditional - should have "with verbose".
-	assert.Contains(t, outputStr, "PATTERN2=Building with verbose", "Pattern 2: inline if should append when verbose=true")
+	// Pattern 2: Inline conditional - should have "with debug".
+	assert.Contains(t, outputStr, "PATTERN2=Building with debug", "Pattern 2: inline if should append when customDebug=true")
 
 	// Pattern 3: if/else - clean=false so should be CLEAN_OFF.
 	assert.Contains(t, outputStr, "PATTERN3=CLEAN_OFF", "Pattern 3: if/else should produce CLEAN_OFF when clean=false")
 
-	// Pattern 4: if not - verbose=true so "not .Flags.verbose" is false.
-	assert.Contains(t, outputStr, "PATTERN4=\n", "Pattern 4: if not should produce empty when verbose=true")
+	// Pattern 4: if not - customDebug=true so "not .Flags.customDebug" is false.
+	assert.Contains(t, outputStr, "PATTERN4=\n", "Pattern 4: if not should produce empty when customDebug=true")
 
 	// Pattern 5: Direct boolean value - should be "true".
-	assert.Contains(t, outputStr, "PATTERN5=verbose=true", "Pattern 5: direct value should render as 'true'")
+	assert.Contains(t, outputStr, "PATTERN5=customDebug=true", "Pattern 5: direct value should render as 'true'")
 
 	// Pattern 6: printf %t - should be "false".
 	assert.Contains(t, outputStr, "PATTERN6=clean=false", "Pattern 6: printf should render as 'false'")

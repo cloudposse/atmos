@@ -22,6 +22,7 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.ComponentOverridesProviders = make(map[string]any, componentOverridesCapacity)
 		result.ComponentOverridesHooks = make(map[string]any, componentOverridesCapacity)
+		result.ComponentOverridesGenerate = make(map[string]any, componentOverridesCapacity)
 	}
 
 	i, ok := opts.ComponentMap[cfg.OverridesSectionName]
@@ -100,6 +101,17 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 				return fmt.Errorf("%w: 'components.%s.%s.overrides.hooks' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesHooks, opts.ComponentType, opts.Component, opts.StackName)
 			}
 			result.ComponentOverridesHooks = componentOverridesHooks
+		}
+	}
+
+	// Terraform-specific: extract generate overrides.
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := componentOverrides[cfg.GenerateSectionName]; ok {
+			componentOverridesGenerate, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.overrides.generate' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesGenerate, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentOverridesGenerate = componentOverridesGenerate
 		}
 	}
 

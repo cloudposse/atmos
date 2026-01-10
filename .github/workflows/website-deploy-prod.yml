@@ -71,11 +71,14 @@ jobs:
           aws s3 sync . s3://${{ env.S3_BUCKET_NAME }} --delete
           aws s3 ls s3://${{ env.S3_BUCKET_NAME }} --recursive --human-readable --summarize
 
-      - name: ReIndex with Algolia
-        env:
-          ALGOLIA_SCRAPER_API_KEY: ${{ secrets.ALGOLIA_SCRAPER_API_KEY }}
-        run: |
-          ./website/algolia/reindex.sh
+      - name: Trigger Algolia Crawler
+        uses: algolia/algoliasearch-crawler-github-actions@v1
+        with:
+          crawler-user-id: ${{ secrets.ALGOLIA_CRAWLER_USER_ID }}
+          crawler-api-key: ${{ secrets.ALGOLIA_CRAWLER_API_KEY }}
+          algolia-app-id: ${{ env.ALGOLIA_APP_ID }}
+          algolia-api-key: ${{ secrets.ALGOLIA_API_KEY }}
+          site-url: 'https://${{ env.DEPLOYMENT_HOST }}'
 
       - name: Trigger ReIndexing of atmos.tools and docs.cloudposse.com Docs
         run: |
