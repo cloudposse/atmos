@@ -323,14 +323,14 @@ func ExecuteWorkflow(
 
 		// Prepare environment variables: start with system env + global env from atmos.yaml.
 		// If identity is specified, also authenticate and add credentials.
-		stepEnv, err := prepareStepEnvironment(stepIdentity, step.Name, authManager, atmosConfig.Env)
+		stepEnv, err := prepareStepEnvironment(stepIdentity, step.Name, authManager, atmosConfig.GetCaseSensitiveEnvVars())
 		if err != nil {
 			return err
 		}
 		switch commandType {
 		case "shell":
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			err = ExecuteShell(command, commandName, ".", stepEnv, dryRun)
+			err = ExecuteShell(&atmosConfig, command, commandName, ".", stepEnv, dryRun)
 		case "atmos":
 			args := strings.Fields(command)
 
