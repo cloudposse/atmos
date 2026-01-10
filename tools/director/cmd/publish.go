@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
@@ -20,17 +19,7 @@ import (
 // and the render command (when --publish flag is used).
 // formatFilter limits which formats to publish (nil means all formats).
 func runPublish(ctx context.Context, c *cobra.Command, demosDir string, sceneNames []string, force bool, formatFilter []string) error {
-	// Load .env file if it exists (check current dir first, then demos dir).
-	// Silently ignore if not present in either location.
-	_ = godotenv.Load() // Current directory.
-
-	// Also try demos directory.
-	envFile := filepath.Join(demosDir, ".env")
-	if _, err := os.Stat(envFile); err == nil {
-		if err := godotenv.Load(envFile); err != nil {
-			fmt.Printf("Warning: Failed to load .env file: %v\n", err)
-		}
-	}
+	// Note: .env files are loaded at startup in root.go.
 
 	// Load defaults.yaml to get backend configuration.
 	defaultsFile := filepath.Join(demosDir, "defaults.yaml")
@@ -406,12 +395,7 @@ director publish --dry-run
 
 // runPublishDryRun shows what would be uploaded without actually uploading.
 func runPublishDryRun(ctx context.Context, c *cobra.Command, demosDir string, sceneNames []string, force bool) error {
-	// Load .env file if it exists.
-	_ = godotenv.Load()
-	envFile := filepath.Join(demosDir, ".env")
-	if _, err := os.Stat(envFile); err == nil {
-		_ = godotenv.Load(envFile)
-	}
+	// Note: .env files are loaded at startup in root.go.
 
 	// Load defaults.yaml to get backend configuration.
 	defaultsFile := filepath.Join(demosDir, "defaults.yaml")

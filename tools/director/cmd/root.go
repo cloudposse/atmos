@@ -3,13 +3,19 @@ package cmd
 import (
 	"context"
 	"os"
+	"path/filepath"
 
 	"github.com/charmbracelet/fang"
+	"github.com/joho/godotenv"
 	"github.com/spf13/cobra"
 )
 
 // Execute runs the root command with Fang styling.
 func Execute() error {
+	// Load .env files (silently ignore if not present).
+	// Priority: current directory, then demos directory.
+	loadEnvFiles()
+
 	root := &cobra.Command{
 		Use:   "director",
 		Short: "Demo scene management for Atmos VHS videos",
@@ -52,4 +58,20 @@ director new terraform-apply-basic
 		root,
 		fang.WithNotifySignal(os.Interrupt), // Handle Ctrl+C gracefully
 	)
+}
+
+// loadEnvFiles loads .env files from standard locations.
+// Files are loaded in order of priority (later files override earlier ones):
+// 1. Current working directory (.env)
+// 2. Demos directory (demos/.env)
+// Errors are silently ignored - .env files are optional.
+func loadEnvFiles() {
+	// Load from current directory.
+	_ = godotenv.Load()
+
+	// Try to find and load from demos directory.
+	if demosDir, err := findDemosDir(); err == nil {
+		envFile := filepath.Join(demosDir, ".env")
+		_ = godotenv.Load(envFile)
+	}
 }
