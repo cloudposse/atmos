@@ -10,9 +10,12 @@ Set FontFamily "FiraCode Nerd Font"
 Set FontSize 14
 Set LineHeight 1.0
 Set Padding 10
-Set Width 1400
-Set Height 800
+Set Width 1200
+Set Height 600
 Set TypingSpeed 80ms
+
+# Enable TrueColor for proper color rendering in VHS
+Env COLORTERM "truecolor"
 
 # Fix prompt
 Hide
@@ -39,6 +42,8 @@ Sleep 1.5s
 Enter
 Sleep 3s
 
+Enter
+Sleep 0.5s
 # Install multiple tools
 Type "# Install everything you need in one command"
 Enter
@@ -49,15 +54,19 @@ Sleep 1.5s
 Enter
 Sleep 5s
 
-# Capture screenshot
-Screenshot featured-tools-just-work.png
-
+Enter
+Sleep 0.5s
 # Show what's installed
 Type "atmos toolchain list"
 Sleep 1.5s
 Enter
 Sleep 3s
 
+# Capture screenshot showing toolchain list output
+Screenshot featured-tools-just-work.png
+
+Enter
+Sleep 0.5s
 # Show tools work automatically with terraform commands
 Type "# Tools work automatically - no PATH juggling"
 Enter
@@ -68,6 +77,9 @@ Sleep 1.5s
 Enter
 Sleep 4s
 
+# Clear screen after terraform plan
+Ctrl+L
+Sleep 0.5s
 # Show where tools are installed
 Type "# Tools installed and managed by atmos"
 Enter
@@ -78,6 +90,8 @@ Sleep 1.5s
 Enter
 Sleep 2s
 
+Enter
+Sleep 0.5s
 Type "# One tool to rule them all"
 Enter
 Sleep 2s

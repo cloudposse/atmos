@@ -10,3 +10,6 @@ Set FontSize 14
 Set LineHeight 1.2
 Set TypingSpeed 40ms
 Set Padding 10
+
+# Enable TrueColor for proper color rendering in VHS
+Env COLORTERM "truecolor"

@@ -10,9 +10,12 @@ Set FontFamily "FiraCode Nerd Font"
 Set FontSize 14
 Set LineHeight 1.0
 Set Padding 10
-Set Width 1400
-Set Height 800
+Set Width 1200
+Set Height 600
 Set TypingSpeed 80ms
+
+# Enable TrueColor for proper color rendering in VHS
+Env COLORTERM "truecolor"
 
 # Fix prompt
 Hide
@@ -39,9 +42,8 @@ Sleep 1.5s
 Enter
 Sleep 4s
 
-# Capture screenshot
-Screenshot featured-see-everything.png
-
+Enter
+Sleep 0.5s
 # Show components
 Type "# What components are available?"
 Enter
@@ -52,6 +54,8 @@ Sleep 1.5s
 Enter
 Sleep 3s
 
+Enter
+Sleep 0.5s
 # Show vars across environments
 Type "# Compare vars across all environments"
 Enter
@@ -62,6 +66,12 @@ Sleep 1.5s
 Enter
 Sleep 4s
 
+# Capture screenshot showing vars table
+Screenshot featured-see-everything.png
+
+# Clear screen to reduce visual clutter
+Ctrl+L
+Sleep 0.5s
 # Show what changed
 Type "# What's affected by my changes?"
 Enter
@@ -72,6 +82,9 @@ Sleep 1.5s
 Enter
 Sleep 4s
 
+# Clear screen to reduce visual clutter
+Ctrl+L
+Sleep 0.5s
 # Show terraform outputs
 Type "# What did terraform create?"
 Enter
@@ -82,6 +95,8 @@ Sleep 1.5s
 Enter
 Sleep 4s
 
+Enter
+Sleep 0.5s
 Type "# No more hunting through directories"
 Enter
 Sleep 2s

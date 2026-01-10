@@ -70,7 +70,7 @@ backend:
   r2:
     bucket_name: "cplive-cf-use1-prod-atmos-assets"
     prefix: "demos/"
-    base_url: "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev"
+    base_url: "https://assets.cloudposse.com"
     # Credentials loaded from environment variables:
     # - CLOUDFLARE_ACCOUNT_ID
     # - CLOUDFLARE_R2_ACCESS_KEY_ID

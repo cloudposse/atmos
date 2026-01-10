@@ -10,9 +10,12 @@ Set FontFamily "FiraCode Nerd Font"
 Set FontSize 14
 Set LineHeight 1.0
 Set Padding 10
-Set Width 1400
-Set Height 800
+Set Width 1200
+Set Height 600
 Set TypingSpeed 80ms
+
+# Enable TrueColor for proper color rendering in VHS
+Env COLORTERM "truecolor"
 
 # Fix prompt
 Hide
@@ -39,9 +42,9 @@ Sleep 1.5s
 Enter
 Sleep 4s
 
-# Capture screenshot at plan output
-Screenshot featured-unified-config.png
-
+# Clear screen to reduce visual clutter
+Ctrl+L
+Sleep 0.5s
 Type "# Same command, different environment - same tooling"
 Enter
 Sleep 1s
@@ -51,6 +54,9 @@ Sleep 1.5s
 Enter
 Sleep 4s
 
+# Clear screen after terraform plan
+Ctrl+L
+Sleep 0.5s
 Type "# OpenTofu installed automatically, no tfenv needed"
 Enter
 Sleep 1s
@@ -60,15 +66,22 @@ Sleep 1.5s
 Enter
 Sleep 3s
 
+# Capture screenshot showing toolchain list output
+Screenshot featured-unified-config.png
+
+Enter
+Sleep 0.5s
 Type "# Stack config drives everything - tools, vars, backends"
 Enter
 Sleep 1s
 
-Type "ATMOS_FORCE_COLOR=true atmos describe component vpc -s plat-dev-ue2 --format yaml | head -20"
+Type "atmos describe component vpc -s plat-dev-ue2 --provenance"
 Sleep 1.5s
 Enter
 Sleep 4s
 
+Enter
+Sleep 0.5s
 Type "# One config. Every environment. Just works."
 Enter
 Sleep 2s

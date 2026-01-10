@@ -14,6 +14,14 @@ interface CloudflareStreamProps {
   onEnded?: () => void;
 }
 
+// Build the src URL with HLS optimization parameters.
+// These improve video startup quality by hinting at available bandwidth.
+function buildOptimizedSrc(videoId: string): string {
+  // clientBandwidthHint tells the player to assume good bandwidth and start with higher quality.
+  // Value is in Kbps - 5000 = 5Mbps which should select 1080p on good connections.
+  return `${videoId}?clientBandwidthHint=5000`;
+}
+
 export function CloudflareStream({
   src,
   controls = true,
@@ -28,6 +36,9 @@ export function CloudflareStream({
 }: CloudflareStreamProps) {
   const streamRef = useRef<StreamPlayerApi | undefined>(undefined);
   const [hasInteracted, setHasInteracted] = useState(false);
+
+  // Build optimized src with HLS parameters.
+  const optimizedSrc = buildOptimizedSrc(src);
 
   // Update loop behavior based on interaction state.
   useEffect(() => {
@@ -71,7 +82,7 @@ export function CloudflareStream({
   return (
     <div className={className}>
       <Stream
-        src={src}
+        src={optimizedSrc}
         controls={controls}
         autoplay={autoplay}
         muted={muted}

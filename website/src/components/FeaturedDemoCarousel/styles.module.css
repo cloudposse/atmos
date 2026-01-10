@@ -112,7 +112,89 @@ html[data-theme="dark"] .title {
 .svgPlayer {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  overflow: hidden;
+}
+
+/* Scale the inlined SVG to fit the container */
+/* Use !important to override inline SVG width/height attributes */
+.svgPlayer svg {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Container for SVG with controls */
+.svgContainer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* Poster container with play button overlay */
+.posterContainer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+/* Play overlay for poster */
+.playOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  transition: background 0.2s ease;
+}
+
+.posterContainer:hover .playOverlay {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.playIcon {
+  width: 72px;
+  height: 72px;
+  color: white;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+/* Control overlay for playing SVG - appears on hover */
+.controlOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.2s ease;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.svgContainer:hover .controlOverlay {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* When paused, always show the overlay */
+.controlOverlay.paused {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.controlIcon {
+  width: 56px;
+  height: 56px;
+  color: white;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
 /* Placeholder for missing video */
