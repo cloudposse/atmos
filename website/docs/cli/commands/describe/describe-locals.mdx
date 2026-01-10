@@ -33,7 +33,10 @@ atmos describe locals [component] [options]
 ```
 
 When called without arguments, it shows all locals organized by stack.
-When a component is specified with `--stack`, it shows the merged locals that would be **available to** that component (global + component-type-specific). The component argument determines which section-specific locals to include (e.g., `terraform:` locals for a Terraform component), but the locals themselves come from the stack manifest file, not the component definition.
+When a component is specified with `--stack`, it shows the merged locals that would be **available to** that component. This includes:
+- **Global locals** from the stack manifest file
+- **Section-specific locals** (e.g., `terraform:` locals for a Terraform component)
+- **Component-level locals** defined in the component itself (including inherited from base components)
 
 :::tip
 Run `atmos describe locals --help` to see all the available options
@@ -71,7 +74,7 @@ atmos describe locals --query '.["deploy/dev"].merged.namespace'
 
 <dl>
   <dt>`component` <em>(optional)</em></dt>
-  <dd>The name of a component. When specified with `--stack`, shows the merged locals that would be <strong>available to</strong> that component. Atmos determines the component's type (terraform, helmfile, or packer) and merges the global locals with the corresponding section-specific locals from the stack manifest file. The locals come from the file, not the component definition itself.</dd>
+  <dd>The name of a component. When specified with `--stack`, shows the merged locals that would be <strong>available to</strong> that component. Atmos determines the component's type (terraform, helmfile, or packer) and merges: (1) global locals, (2) section-specific locals from the stack manifest, and (3) component-level locals defined in the component itself (including those inherited from base components via <code>metadata.inherits</code>).</dd>
 </dl>
 
 ## Flags
@@ -142,7 +145,7 @@ deploy/dev:
 
 ### Component-Specific Output
 
-When a component is specified with `--stack`, the output shows the locals that would be **available to** that component during template processing. The output includes the component name, stack, component type, and the merged locals:
+When a component is specified with `--stack`, the output shows the locals that would be **available to** that component. The output includes the component name, stack, component type, and the merged locals:
 
 <Terminal title="atmos describe locals vpc -s prod-ue2">
 ```yaml
@@ -156,13 +159,17 @@ locals:
   name_prefix: acme-prod
   namespace: acme
   tf_specific: terraform-only
+  vpc_type: production
 ```
 </Terminal>
 
-The `component_type` field shows how Atmos determined which section-specific locals to include. Since `vpc` is a Terraform component, Atmos merged the global locals with the `terraform:` section locals from the stack manifest file.
+The `component_type` field shows how Atmos determined which section-specific locals to include. Since `vpc` is a Terraform component, Atmos merged:
+1. Global locals from the stack manifest
+2. `terraform:` section locals from the stack manifest
+3. Component-level locals from the `vpc` component definition (including any inherited from base components)
 
-:::note
-The locals shown come from the **stack manifest file**, not the component definition. The component argument only determines which section-specific locals (terraform/helmfile/packer) to merge with the global locals.
+:::tip Component-Level Locals
+If the component defines its own `locals:` section (or inherits locals from a base component via `metadata.inherits`), those are included in the output and take precedence over stack-level locals.
 :::
 
 ## How Locals Work
@@ -203,6 +210,46 @@ terraform:
     namespace: terraform-acme
     backend_bucket: "{{ .locals.namespace }}-tfstate"
 ```
+
+### Component-Level Locals
+
+Components can define their own `locals:` section. Component-level locals are merged with stack-level locals (global + section-specific) and take precedence. Component-level locals also support inheritance from base components via `metadata.inherits`:
+
+```yaml
+components:
+  terraform:
+    # Base component with component-level locals
+    vpc/base:
+      metadata:
+        type: abstract
+      locals:
+        vpc_type: standard
+        cidr_prefix: "10.0"
+
+    # Component inheriting locals from base
+    vpc/prod:
+      metadata:
+        inherits:
+          - vpc/base
+      locals:
+        # Overrides vpc_type from base component
+        vpc_type: production
+      vars:
+        # Uses inherited cidr_prefix from base
+        cidr: "{{ .locals.cidr_prefix }}.0.0/16"
+```
+
+The full locals resolution order for a component is:
+
+```
+Global Locals → Section Locals → Base Component Locals → Component Locals
+```
+
+Later values override earlier ones. When you run `atmos describe locals vpc/prod -s dev`, the output shows the final merged result.
+
+:::note
+Component-level locals appear in the final component output but are NOT available during `{{ .locals.* }}` template processing in the same stack manifest file. Only file-level locals (global + section) are available during template resolution within the file.
+:::
 
 ### File-Scoped Behavior
 
