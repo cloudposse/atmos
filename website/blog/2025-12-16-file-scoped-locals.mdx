@@ -144,10 +144,11 @@ This keeps locals truly local, preventing unexpected interactions between files.
 
 ### Multi-Level Scopes
 
-Locals can be defined at two levels, with the inner scope inheriting from the outer:
+Locals can be defined at three levels, with inner scopes inheriting from outer:
 
 1. **Global** (stack file root) - Available throughout the file
 2. **Component-type** (`terraform`, `helmfile`, `packer` sections) - Inherits from global
+3. **Component-level** (inside component definitions) - Inherits from global + component-type, and from base components via `metadata.inherits`
 
 ```yaml
 # Global locals
@@ -179,16 +180,16 @@ atmos describe locals vpc -s prod-ue2
 
 <Terminal title="atmos describe locals vpc -s prod-ue2">
 ```yaml
-component: vpc
-stack: prod-ue2
-component_type: terraform
-locals:
-  namespace: acme
-  environment: prod
-  stage: us-east-1
-  name_prefix: acme-prod
-  full_name: acme-prod-us-east-1
-  backend_bucket: acme-prod-tfstate
+components:
+  terraform:
+    vpc:
+      locals:
+        namespace: acme
+        environment: prod
+        stage: us-east-1
+        name_prefix: acme-prod
+        full_name: acme-prod-us-east-1
+        backend_bucket: acme-prod-tfstate
 ```
 </Terminal>
 
@@ -202,13 +203,16 @@ atmos describe locals vpc -s prod-ue2 --format json
 
 ```json
 {
-  "component": "vpc",
-  "stack": "prod-ue2",
-  "component_type": "terraform",
-  "locals": {
-    "namespace": "acme",
-    "environment": "prod",
-    "name_prefix": "acme-prod"
+  "components": {
+    "terraform": {
+      "vpc": {
+        "locals": {
+          "namespace": "acme",
+          "environment": "prod",
+          "name_prefix": "acme-prod"
+        }
+      }
+    }
   }
 }
 ```
@@ -223,15 +227,12 @@ atmos describe locals
 
 ```yaml
 prod-ue2:
-  global:
+  locals:
     namespace: acme
     environment: prod
   terraform:
-    backend_bucket: acme-prod-tfstate
-  merged:
-    namespace: acme
-    environment: prod
-    backend_bucket: acme-prod-tfstate
+    locals:
+      backend_bucket: acme-prod-tfstate
 ```
 
 ## Why File-Scoped?

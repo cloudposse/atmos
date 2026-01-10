@@ -195,7 +195,7 @@ Locals are extracted and merged in order of specificity:
 
 Section locals can override global locals with the same key.
 
-**Note**: Component-level locals are NOT supported in the initial template pass because they require per-component scoping that can't be handled in a single template pass. This is a known limitation for future enhancement.
+**Note**: Component-level locals are resolved after file-scoped locals and can reference both global and section-specific locals. They also support inheritance from base components via `metadata.inherits` or `component` attribute.
 
 ## Design Intent: File-Scoped Isolation
 
@@ -216,7 +216,7 @@ This is explicitly stated in the PRD:
 global → component-type (terraform/helmfile/packer)
 ```
 
-**Note:** Component-level locals (inside individual component definitions) are NOT supported. Only global and component-type scopes are implemented.
+**Note:** Component-level locals (inside individual component definitions) ARE supported and can inherit from base components via `metadata.inherits` or `component` attribute.
 
 Example:
 ```yaml
@@ -508,29 +508,36 @@ atmos describe locals --file locals.yaml
 
 ### Output Structure
 
-The command outputs locals organized by:
-- **global**: Root-level locals defined in the stack file
-- **terraform**: Terraform section-specific locals (if defined)
-- **helmfile**: Helmfile section-specific locals (if defined)
-- **packer**: Packer section-specific locals (if defined)
-- **merged**: All locals merged together (global first, then sections)
+The command outputs locals using Atmos schema format:
+- **locals**: Root-level locals defined in the stack file
+- **terraform/helmfile/packer**: Section-specific locals nested under `{ locals: }` (if defined)
 
-Example output:
+For component queries, output uses schema format: `components: { terraform: { component-name: { locals: } } }`
+
+Example stack output:
 ```yaml
 deploy/dev:
-  global:
+  locals:
     environment: dev
     namespace: acme
     name_prefix: acme-dev
   terraform:
-    backend_bucket: acme-dev-tfstate
-    tf_specific: terraform-only
-  merged:
-    environment: dev
-    namespace: acme
-    name_prefix: acme-dev
-    backend_bucket: acme-dev-tfstate
-    tf_specific: terraform-only
+    locals:
+      backend_bucket: acme-dev-tfstate
+      tf_specific: terraform-only
+```
+
+Example component output:
+```yaml
+components:
+  terraform:
+    vpc:
+      locals:
+        environment: dev
+        namespace: acme
+        name_prefix: acme-dev
+        backend_bucket: acme-dev-tfstate
+        tf_specific: terraform-only
 ```
 
 ### Implementation
@@ -612,11 +619,11 @@ cd tests/fixtures/scenarios/locals-logical-names
 
 # With component argument - shows merged locals for component's type
 ../../../../build/atmos describe locals vpc -s dev-us-east-1
-# Expected output structure: { component, stack, component_type, locals }
+# Expected output structure: { components: { terraform: { vpc: { locals } } } }
 
 # Helmfile component (tests helmfile section locals)
 ../../../../build/atmos describe locals nginx -s prod-us-west-2
-# Expected: component_type = "helmfile", includes helmfile-specific locals
+# Expected: { components: { helmfile: { nginx: { locals } } } } with helmfile-specific locals
 
 # Different output formats
 ../../../../build/atmos describe locals --stack dev-us-east-1 --format yaml
@@ -627,7 +634,7 @@ cd tests/fixtures/scenarios/locals-logical-names
 cat /tmp/locals-output.yaml
 
 # With query (yq expression)
-../../../../build/atmos describe locals --stack dev-us-east-1 --query '.global.namespace'
+../../../../build/atmos describe locals --stack dev-us-east-1 --query '."dev-us-east-1".locals.namespace'
 # Expected: "acme"
 ```
 
@@ -751,27 +758,31 @@ Verify the output structure differences between stack and component queries.
 ```bash
 cd tests/fixtures/scenarios/locals-logical-names
 
-# Stack query - returns organized by scopes
+# Stack query - returns Atmos schema format
 ../../../../build/atmos describe locals --stack dev-us-east-1 --format json
 
 # Expected structure:
 # {
 #   "dev-us-east-1": {
-#     "global": { ... },
-#     "terraform": { ... },
-#     "merged": { ... }
+#     "locals": { ... },
+#     "terraform": {
+#       "locals": { ... }
+#     }
 #   }
 # }
 
-# Component query - returns flattened for component's type
+# Component query - returns Atmos schema format
 ../../../../build/atmos describe locals vpc -s dev-us-east-1 --format json
 
 # Expected structure:
 # {
-#   "component": "vpc",
-#   "stack": "dev-us-east-1",
-#   "component_type": "terraform",
-#   "locals": { ... }
+#   "components": {
+#     "terraform": {
+#       "vpc": {
+#         "locals": { ... }
+#       }
+#     }
+#   }
 # }
 ```
 

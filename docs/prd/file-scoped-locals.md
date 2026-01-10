@@ -301,15 +301,17 @@ locals:
   derived: "{{ .vars.base }}-extended"  # Works if vars.base is static
 ```
 
-**Component inheritance (`metadata.inherits`)**: Locals are NOT inherited through component inheritance—they are purely file-scoped
+**Component inheritance (`metadata.inherits`)**: File-scoped locals (global and section-level) are NOT inherited across file boundaries via imports. However, **component-level locals** DO inherit from base components via `metadata.inherits` or `component` attribute, similar to how `vars` work.
 ```yaml
 # catalog/base.yaml
 locals:
-  base_local: "value"  # Only available in THIS file
+  base_local: "value"  # File-scoped - only available in THIS file
 
 components:
   terraform:
     base-vpc:
+      locals:
+        vpc_type: "standard"  # Component-level - inherited by child components
       vars:
         name: "{{ .locals.base_local }}"  # Works - same file
 
@@ -320,9 +322,14 @@ components:
       metadata:
         inherits:
           - base-vpc
+      locals:
+        # ✅ vpc_type is inherited from base-vpc component-level locals
+        vpc_type: "production"  # Override inherited value
       vars:
-        # ❌ Error - base_local is not available (was in catalog/base.yaml)
+        # ❌ Error - base_local is not available (file-scoped to catalog/base.yaml)
         # name: "{{ .locals.base_local }}"
+        # ✅ Works - uses component-level locals
+        type: "{{ .locals.vpc_type }}"
 ```
 
 ## Implementation Considerations
@@ -382,9 +389,10 @@ components:
 Resolution order:
 1. Resolve global locals (scope 1)
 2. Resolve terraform locals with global locals in context (scope 2)
-3. Merge global + terraform locals for use in component templates
+3. Resolve component-level locals with global + section locals in context (scope 3)
+4. Merge all scopes for use in component templates
 
-**Note:** Component-level locals (scope 3 in original design) are NOT supported.
+Component-level locals support inheritance from base components via `metadata.inherits` or `component` attribute.
 
 ### Template Context
 
@@ -1589,28 +1597,26 @@ atmos describe locals vpc -s prod-us-east-1
 atmos describe locals vpc -s prod-us-east-1 --format json
 ```
 
-**Example output:**
+**Example output (stack query without component):**
 ```yaml
-# Locals for component "vpc" in stack "prod-us-east-1"
-# Resolution order: global → terraform → component
-
-global:
-  region: "us-east-1"
-  account_id: "123456789012"
-
-terraform:
-  state_bucket: "terraform-state-123456789012"
-
-merged:
-  region: "us-east-1"
-  account_id: "123456789012"
-  state_bucket: "terraform-state-123456789012"
+plat-ue2-prod:
+  locals:
+    region: us-east-2
+    account_id: "123456789012"
+    environment: prod
+  terraform:
+    locals:
+      state_bucket: terraform-state-123456789012
+      state_key_prefix: plat-ue2-prod
 ```
+
+The output follows the Atmos stack manifest schema format, showing global `locals:` and section-specific locals under `terraform: { locals: }`.
 
 #### Key Features
 
-1. **Scope separation**: Clearly shows global, component-type, and component scopes
-2. **Merged view**: Shows the final resolved locals available to templates
+1. **Atmos schema format**: Output matches the structure of stack manifest files
+2. **Scope separation**: Stack output shows global `locals:` and section-specific `terraform: { locals: }` separately
+3. **Merged component locals**: Component output shows the final merged locals available to the component
 
 #### Optional: `ATMOS_DEBUG_LOCALS` Environment Variable
 
@@ -1689,44 +1695,44 @@ atmos describe locals vpc -s plat-ue2-prod --format yaml
 atmos describe locals vpc -s plat-ue2-prod --format json
 ```
 
-**Example output (stack query):**
+**Example output (stack query without component):**
 ```yaml
 plat-ue2-prod:
-  global:
+  locals:
     region: us-east-2
     account_id: "123456789012"
     environment: prod
   terraform:
-    state_bucket: terraform-state-123456789012
-    state_key_prefix: plat-ue2-prod
-  merged:
-    region: us-east-2
-    account_id: "123456789012"
-    environment: prod
-    state_bucket: terraform-state-123456789012
-    state_key_prefix: plat-ue2-prod
+    locals:
+      state_bucket: terraform-state-123456789012
+      state_key_prefix: plat-ue2-prod
 ```
+
+The output follows the Atmos stack manifest schema format, showing global `locals:` and section-specific locals under `terraform: { locals: }`.
 
 **Example output (component query):**
 ```yaml
-component: vpc
-stack: plat-ue2-prod
-component_type: terraform
-locals:
-  region: us-east-2
-  account_id: "123456789012"
-  environment: prod
-  state_bucket: terraform-state-123456789012
-  state_key_prefix: plat-ue2-prod
+components:
+  terraform:
+    vpc:
+      locals:
+        region: us-east-2
+        account_id: "123456789012"
+        environment: prod
+        state_bucket: terraform-state-123456789012
+        state_key_prefix: plat-ue2-prod
 ```
+
+The component output also follows Atmos schema format, showing the merged locals that would be available to the component during template processing.
 
 **Key Design Decisions:**
 
-1. **Scope separation**: Clearly shows global, component-type, and component scopes
-2. **Merged view**: The `merged` field shows final resolved locals available to templates
-3. **JSON for tooling**: Full metadata in JSON format for programmatic access
-4. **Consistent with other describe commands**: Same flags (`-s`, `--format`) as `atmos describe component`
-5. **Stack name flexibility**: Accepts both logical stack names and file paths
+1. **Atmos schema format**: Output uses the same structure as stack manifest files
+2. **Scope separation**: Stack output shows global `locals:` and section-specific locals separately
+3. **Merged component view**: Component output shows all merged locals (global + section + component-level)
+4. **JSON for tooling**: Full metadata in JSON format for programmatic access
+5. **Consistent with other describe commands**: Same flags (`-s`, `--format`) as `atmos describe component`
+6. **Stack name flexibility**: Accepts both logical stack names and file paths
 
 **Implementation Notes:**
 
@@ -1870,7 +1876,7 @@ The following features have been implemented:
 - ✅ Filter by stack: `atmos describe locals --stack prod`
 - ✅ Filter by component in stack: `atmos describe locals vpc -s prod`
 - ✅ JSON output format: `atmos describe locals --format json`
-- ✅ Query support: `atmos describe locals --query '.merged.namespace'`
+- ✅ Query support: `atmos describe locals --query '."stack-name".locals.namespace'`
 - ✅ File output: `atmos describe locals --file output.yaml`
 
 #### Implementation Files
@@ -1933,15 +1939,15 @@ terraform:
 
 Running `atmos describe locals vpc -s deploy/prod` (where `vpc` is a Terraform component) returns:
 ```yaml
-component: vpc
-stack: deploy/prod
-component_type: terraform
-locals:
-  namespace: acme
-  backend_bucket: acme-tfstate
+components:
+  terraform:
+    vpc:
+      locals:
+        namespace: acme
+        backend_bucket: acme-tfstate
 ```
 
-The locals come from the **stack manifest file**, not the `vpc` component definition. The component only determines which section-specific locals (terraform/helmfile/packer) to merge.
+The output uses Atmos schema format. The locals shown are merged from: (1) global locals, (2) section-specific locals from the stack manifest, and (3) component-level locals defined in the component itself (including those inherited from base components). The component argument determines the component type (terraform/helmfile/packer) for section-specific locals merging.
 
 #### File-Scoped Isolation
 

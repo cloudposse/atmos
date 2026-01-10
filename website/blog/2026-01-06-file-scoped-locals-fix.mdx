@@ -87,46 +87,43 @@ The `--stack` flag accepts either a **stack manifest file path** (e.g., `deploy/
 
 #### Component-Specific Locals
 
-When specifying a component with the `--stack` flag, the command shows the merged locals that would be **available to** that component during template processing. The component argument determines which section-specific locals to include (e.g., `terraform:` locals for a Terraform component), but the locals themselves come from the stack manifest file, not the component definition:
+When specifying a component with the `--stack` flag, the command shows the merged locals that would be **available to** that component during template processing. This includes global locals, section-specific locals (for the component's type), and component-level locals (including inherited from base components):
 
 ```bash
 atmos describe locals vpc -s prod
 ```
 
 ```yaml
-component: vpc
-stack: prod
-component_type: terraform
-locals:
-  namespace: acme
-  environment: prod
-  backend_bucket: acme-prod-tfstate
+components:
+  terraform:
+    vpc:
+      locals:
+        namespace: acme
+        environment: prod
+        backend_bucket: acme-prod-tfstate
 ```
 
-The `component_type` field shows how Atmos determined which section-specific locals to merge with global locals.
+The output uses Atmos schema format, matching the structure of stack manifest files.
 
 #### Stack-Level Output
 
-Without a component argument, the output is organized by scope:
+Without a component argument, the output follows Atmos schema format:
 
 ```yaml
 deploy/dev:
-  global:
+  locals:
     namespace: acme
     environment: dev
     name_prefix: acme-dev
   terraform:
-    backend_bucket: acme-dev-tfstate
-  merged:
-    namespace: acme
-    environment: dev
-    name_prefix: acme-dev
-    backend_bucket: acme-dev-tfstate
+    locals:
+      backend_bucket: acme-dev-tfstate
 ```
 
-- **global** - Root-level locals from the stack file
-- **terraform/helmfile/packer** - Section-specific locals (only shown if defined)
-- **merged** - All locals merged together (global first, then sections)
+- **locals** - Global locals defined at root level of the stack file
+- **terraform/helmfile/packer** - Section-specific locals nested under `{ locals: }` (only shown if defined)
+
+The output matches the structure of stack manifest files, making it easy to compare with your source configuration.
 
 ### Section-Specific Locals
 
