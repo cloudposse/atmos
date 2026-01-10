@@ -19,7 +19,7 @@ type ScaffoldUI interface {
 	// Interactive prompts - for collecting user input.
 	PromptForTemplate(configs map[string]templates.Configuration) (templates.Configuration, error)
 	PromptForTargetDirectory(defaultDir string) (string, error)
-	PromptForValue(prompt PromptConfig, defaultValue interface{}) (interface{}, error)
+	PromptForValue(prompt *PromptConfig, defaultValue interface{}) (interface{}, error)
 
 	// Complex rendering - for structured output.
 	RenderTemplateList(configs map[string]templates.Configuration) error

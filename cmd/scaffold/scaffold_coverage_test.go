@@ -239,9 +239,9 @@ func TestExecuteTemplateGenerationErrors(t *testing.T) {
 		},
 	}
 
-	// Test with empty target directory (should use interactive flow)
-	err := executeTemplateGeneration(selectedConfig, "", false, false, map[string]interface{}{}, nil)
-	// This will error because UI is nil, but that's expected in test
+	// Test with empty target directory (should use interactive flow).
+	err := executeTemplateGeneration(&selectedConfig, "", false, false, map[string]interface{}{}, nil)
+	// This will error because UI is nil, but that's expected in test.
 	assert.Error(t, err)
 }
 

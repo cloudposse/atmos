@@ -270,6 +270,8 @@ func WithEnvVars(flagName string, envVars ...string) Option {
 			f.EnvVars = envVars
 		case *StringSliceFlag:
 			f.EnvVars = envVars
+		case *StringMapFlag:
+			f.EnvVars = envVars
 		}
 	}
 }

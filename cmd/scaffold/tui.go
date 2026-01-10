@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/templates"
 	generatorUI "github.com/cloudposse/atmos/pkg/generator/ui"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
+)
+
+// Terminal/table width constants.
+const (
+	defaultTableWidth = 80
 )
 
 // ProductionUI implements ScaffoldUI using real UI components.
@@ -56,7 +62,17 @@ func (ui *ProductionUI) Writeln(message string) error {
 func (ui *ProductionUI) PromptForTemplate(configs map[string]templates.Configuration) (templates.Configuration, error) {
 	selectedName, err := ui.initUI.PromptForTemplate("scaffold", configs)
 	if err != nil {
+		// Check if user cancelled the selection.
+		if errors.Is(err, huh.ErrUserAborted) {
+			return templates.Configuration{}, errUtils.Build(errUtils.ErrPromptFailed).
+				WithCause(err).
+				WithExplanation("User cancelled template selection").
+				WithContext("mode", "interactive").
+				Err()
+		}
+		// For other errors, assume TTY issue.
 		return templates.Configuration{}, errUtils.Build(errUtils.ErrTTYRequired).
+			WithCause(err).
 			WithExplanation("Interactive prompt requires a TTY (terminal)").
 			WithHint("Use non-interactive mode: atmos scaffold generate <template> <target>").
 			WithContext("mode", "interactive").
@@ -80,7 +96,7 @@ func (ui *ProductionUI) PromptForTargetDirectory(defaultDir string) (string, err
 	return ui.initUI.PromptForTargetDirectory(nil, map[string]interface{}{"default_dir": defaultDir})
 }
 
-func (ui *ProductionUI) PromptForValue(prompt PromptConfig, defaultValue interface{}) (interface{}, error) {
+func (ui *ProductionUI) PromptForValue(prompt *PromptConfig, defaultValue interface{}) (interface{}, error) {
 	// Implementation depends on prompt type.
 	switch prompt.Type {
 	case "input":
@@ -101,7 +117,7 @@ func (ui *ProductionUI) PromptForValue(prompt PromptConfig, defaultValue interfa
 }
 
 // promptForInput prompts the user for text input using huh.
-func (ui *ProductionUI) promptForInput(prompt PromptConfig, defaultValue interface{}) (interface{}, error) {
+func (ui *ProductionUI) promptForInput(prompt *PromptConfig, defaultValue interface{}) (interface{}, error) {
 	defStr := ""
 	if defaultValue != nil {
 		defStr = fmt.Sprintf("%v", defaultValue)
@@ -136,7 +152,7 @@ func (ui *ProductionUI) promptForInput(prompt PromptConfig, defaultValue interfa
 }
 
 // promptForConfirm prompts the user for confirmation using huh.
-func (ui *ProductionUI) promptForConfirm(prompt PromptConfig, defaultValue interface{}) (interface{}, error) {
+func (ui *ProductionUI) promptForConfirm(prompt *PromptConfig, defaultValue interface{}) (interface{}, error) {
 	defBool := false
 	if defaultValue != nil {
 		if b, ok := defaultValue.(bool); ok {
@@ -172,7 +188,7 @@ func (ui *ProductionUI) promptForConfirm(prompt PromptConfig, defaultValue inter
 }
 
 // promptForSelect prompts the user to select one option using huh.
-func (ui *ProductionUI) promptForSelect(prompt PromptConfig, defaultValue interface{}) (interface{}, error) {
+func (ui *ProductionUI) promptForSelect(prompt *PromptConfig, defaultValue interface{}) (interface{}, error) {
 	options := ui.extractOptions(prompt.Options)
 	if len(options) == 0 {
 		return nil, errUtils.Build(errUtils.ErrScaffoldInvalidPrompt).
@@ -212,7 +228,7 @@ func (ui *ProductionUI) promptForSelect(prompt PromptConfig, defaultValue interf
 }
 
 // promptForMultiselect prompts the user to select multiple options using huh.
-func (ui *ProductionUI) promptForMultiselect(prompt PromptConfig, defaultValue interface{}) (interface{}, error) {
+func (ui *ProductionUI) promptForMultiselect(prompt *PromptConfig, defaultValue interface{}) (interface{}, error) {
 	options := ui.extractOptions(prompt.Options)
 	if len(options) == 0 {
 		return nil, errUtils.Build(errUtils.ErrScaffoldInvalidPrompt).
@@ -302,7 +318,7 @@ func (ui *ProductionUI) RenderTemplateList(configs map[string]templates.Configur
 	if err := atmosui.Writef("%-30s %s\n", header[0], header[1]); err != nil {
 		return err
 	}
-	if err := atmosui.Writeln(strings.Repeat("-", 80)); err != nil {
+	if err := atmosui.Writeln(strings.Repeat("-", defaultTableWidth)); err != nil {
 		return err
 	}
 

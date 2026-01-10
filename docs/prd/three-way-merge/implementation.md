@@ -748,7 +748,7 @@ atmos init --update --dry-run
 **Goal**: Replace `pkg/generator/merge` with proper 3-way merge for text files.
 
 **Tasks**:
-- [ ] Add `github.com/epiclabs-io/diff3` dependency
+- [ ] Add `github.com/nasdf/diff3` dependency
 - [ ] Implement `TextMerger` wrapper with conflict detection
 - [ ] Add threshold checking and configurable strategies
 - [ ] Write 20+ test cases for text merging
@@ -865,20 +865,7 @@ atmos init --update --dry-run
 
 ### Go Libraries for 3-Way Merge
 
-**Recommended: epiclabs-io/diff3** (Pure Go, actively maintained):
-```go
-import "github.com/epiclabs-io/diff3"
-
-result, err := diff3.Merge(baseReader, oursReader, theirsReader, detailed, "ours", "theirs")
-```
-- Most actively maintained (commit November 15, 2024 - 5 days ago!)
-- Pure Go implementation, no CGO
-- Feature-rich API (streams, conflict detection, labels)
-- 3 contributors (lower bus factor than alternatives)
-- Zero open issues (responsive maintenance)
-- Repository: https://github.com/epiclabs-io/diff3
-
-**Alternative: nasdf/diff3** (simpler API if needed):
+**Recommended for Phase 1: nasdf/diff3** (simple, academically sound):
 ```go
 import "github.com/nasdf/diff3"
 
@@ -887,7 +874,20 @@ merged := diff3.Merge(base, ours, theirs)
 - Based on academic paper (formal correctness)
 - Simpler API (single function)
 - Stable v1.0.0 release
+- Pure Go, no external dependencies
 - Repository: https://github.com/nasdf/diff3
+
+**Alternative: epiclabs-io/diff3** (more features if needed):
+```go
+import "github.com/epiclabs-io/diff3"
+
+result, err := diff3.Merge(baseReader, oursReader, theirsReader, detailed, "ours", "theirs")
+```
+- Most actively maintained (commit November 15, 2024)
+- Pure Go implementation, no CGO
+- Feature-rich API (streams, conflict detection, labels)
+- Zero open issues (responsive maintenance)
+- Repository: https://github.com/epiclabs-io/diff3
 
 **For reference: git merge-file** (not recommended - requires git binary):
 ```bash
