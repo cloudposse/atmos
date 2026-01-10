@@ -146,9 +146,8 @@ func getContrastTextColor(bgColor string) string {
 	luminance := 0.2126*rLinear + 0.7152*gLinear + 0.0722*bLinear
 
 	// Use black text for light backgrounds (luminance > 0.5), white for dark backgrounds.
-	const blackText = "#000000"
 	if luminance > 0.5 {
-		return blackText // Black text for light backgrounds.
+		return theme.ColorBlack // Black text for light backgrounds.
 	}
 	return theme.ColorWhite // White text for dark backgrounds.
 }

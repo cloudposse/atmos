@@ -14,7 +14,7 @@ import (
 // ConfirmApply prompts the user to confirm applying changes.
 func ConfirmApply() (bool, error) {
 	// Check TTY availability before showing prompt.
-	if !term.IsTTYSupportForStdout() {
+	if !term.IsTTYSupportForStdout() || !term.IsTTYSupportForStdin() {
 		return false, errUtils.ErrStreamingNotSupported
 	}
 
@@ -41,7 +41,7 @@ func ConfirmApply() (bool, error) {
 // ConfirmDestroy prompts the user to confirm destroying resources.
 func ConfirmDestroy() (bool, error) {
 	// Check TTY availability before showing prompt.
-	if !term.IsTTYSupportForStdout() {
+	if !term.IsTTYSupportForStdout() || !term.IsTTYSupportForStdin() {
 		return false, errUtils.ErrStreamingNotSupported
 	}
 
