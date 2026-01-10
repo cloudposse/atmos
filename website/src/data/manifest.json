@@ -128,30 +128,30 @@
       "featured_order": 1,
       "formats": {
         "gif": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/featured/featured-unified-config.gif",
+          "url": "https://assets.cloudposse.com/demos/featured/featured-unified-config.gif",
           "type": "r2"
         },
         "mp3": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/featured/featured-unified-config.mp3",
+          "url": "https://assets.cloudposse.com/demos/featured/featured-unified-config.mp3",
           "type": "r2"
         },
         "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/35cda4ad750c3ea4cfa852fc7596503a/watch",
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/d05a423bfd06f9e18229f178e031eb2e/watch",
           "type": "stream",
-          "uid": "35cda4ad750c3ea4cfa852fc7596503a",
+          "uid": "d05a423bfd06f9e18229f178e031eb2e",
           "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
           "all_uids": [
-            "35cda4ad750c3ea4cfa852fc7596503a"
+            "d05a423bfd06f9e18229f178e031eb2e"
           ],
-          "duration": 21.48,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/35cda4ad750c3ea4cfa852fc7596503a/thumbnails/thumbnail.jpg"
+          "duration": 33.04,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/d05a423bfd06f9e18229f178e031eb2e/thumbnails/thumbnail.jpg"
         },
         "png": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/featured/featured-unified-config.png",
+          "url": "https://assets.cloudposse.com/demos/featured/featured-unified-config.png",
           "type": "r2"
         },
         "svg": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/featured/featured-unified-config.svg",
+          "url": "https://assets.cloudposse.com/demos/featured/featured-unified-config.svg",
           "type": "r2"
         }
       }
@@ -168,30 +168,31 @@
       "featured_order": 2,
       "formats": {
         "gif": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/featured/featured-see-everything.gif",
+          "url": "https://assets.cloudposse.com/demos/featured/featured-see-everything.gif",
           "type": "r2"
         },
         "mp3": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/featured/featured-see-everything.mp3",
+          "url": "https://assets.cloudposse.com/demos/featured/featured-see-everything.mp3",
           "type": "r2"
         },
         "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/ee3c1cef119b41aaeea9134550b68152/watch",
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5e380849de91295aa0e8b206ed30871e/watch",
           "type": "stream",
-          "uid": "ee3c1cef119b41aaeea9134550b68152",
+          "uid": "5e380849de91295aa0e8b206ed30871e",
           "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
           "all_uids": [
+            "5e380849de91295aa0e8b206ed30871e",
             "ee3c1cef119b41aaeea9134550b68152"
           ],
           "duration": 22.2,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/ee3c1cef119b41aaeea9134550b68152/thumbnails/thumbnail.jpg"
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5e380849de91295aa0e8b206ed30871e/thumbnails/thumbnail.jpg"
         },
         "png": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/featured/featured-see-everything.png",
+          "url": "https://assets.cloudposse.com/demos/featured/featured-see-everything.png",
           "type": "r2"
         },
         "svg": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/featured/featured-see-everything.svg",
+          "url": "https://assets.cloudposse.com/demos/featured/featured-see-everything.svg",
           "type": "r2"
         }
       }
@@ -208,30 +209,31 @@
       "featured_order": 3,
       "formats": {
         "gif": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/featured/featured-tools-just-work.gif",
+          "url": "https://assets.cloudposse.com/demos/featured/featured-tools-just-work.gif",
           "type": "r2"
         },
         "mp3": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/featured/featured-tools-just-work.mp3",
+          "url": "https://assets.cloudposse.com/demos/featured/featured-tools-just-work.mp3",
           "type": "r2"
         },
         "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/2e9d43ffe323a8850775fe800fbfd2da/watch",
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/299b9dfaa2cb5e55514bb62baebd2366/watch",
           "type": "stream",
-          "uid": "2e9d43ffe323a8850775fe800fbfd2da",
+          "uid": "299b9dfaa2cb5e55514bb62baebd2366",
           "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
           "all_uids": [
+            "299b9dfaa2cb5e55514bb62baebd2366",
             "2e9d43ffe323a8850775fe800fbfd2da"
           ],
           "duration": 31.08,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/2e9d43ffe323a8850775fe800fbfd2da/thumbnails/thumbnail.jpg"
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/299b9dfaa2cb5e55514bb62baebd2366/thumbnails/thumbnail.jpg"
         },
         "png": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/featured/featured-tools-just-work.png",
+          "url": "https://assets.cloudposse.com/demos/featured/featured-tools-just-work.png",
           "type": "r2"
         },
         "svg": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/featured/featured-tools-just-work.svg",
+          "url": "https://assets.cloudposse.com/demos/featured/featured-tools-just-work.svg",
           "type": "r2"
         }
       }
@@ -350,11 +352,11 @@
       "order": 2,
       "formats": {
         "mp3": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/list/list-components.mp3",
+          "url": "https://assets.cloudposse.com/demos/list/list-components.mp3",
           "type": "r2"
         },
         "svg": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/list/list-components.svg",
+          "url": "https://assets.cloudposse.com/demos/list/list-components.svg",
           "type": "r2"
         }
       }
@@ -439,15 +441,15 @@
       "order": 1,
       "formats": {
         "mp3": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/vendor/vendor-pull.mp3",
+          "url": "https://assets.cloudposse.com/demos/vendor/vendor-pull.mp3",
           "type": "r2"
         },
         "png": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/vendor/vendor-pull.png",
+          "url": "https://assets.cloudposse.com/demos/vendor/vendor-pull.png",
           "type": "r2"
         },
         "svg": {
-          "url": "https://pub-8d78f78d39d84f67bb56033cc41b9476.r2.dev/demos/vendor/vendor-pull.svg",
+          "url": "https://assets.cloudposse.com/demos/vendor/vendor-pull.svg",
           "type": "r2"
         }
       }
