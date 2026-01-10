@@ -67,7 +67,7 @@ atmos describe locals vpc -s prod -f json
 atmos describe locals --file locals.yaml
 
 # Query specific values (note: stack key is the file path, not logical name)
-atmos describe locals --query '.["deploy/dev"].merged.namespace'
+atmos describe locals --query '.["deploy/dev"].locals.namespace'
 ```
 
 ## Arguments
@@ -95,31 +95,30 @@ atmos describe locals --query '.["deploy/dev"].merged.namespace'
 
 ## Output
 
-The command outputs locals organized by stack, with each stack containing the following sections:
+The command outputs locals in **Atmos schema format**, matching the structure of stack manifest files. Each stack contains:
 
 <dl>
-  <dt>`global`</dt>
+  <dt>`locals`</dt>
   <dd>Root-level locals defined at the top of the stack manifest file.</dd>
 
-  <dt>`terraform`</dt>
-  <dd>Locals defined within the `terraform:` section (only shown if explicitly defined).</dd>
+  <dt>`terraform.locals`</dt>
+  <dd>Locals defined within the `terraform:` section (only shown if explicitly defined). Contains only section-specific locals, not merged with global.</dd>
 
-  <dt>`helmfile`</dt>
-  <dd>Locals defined within the `helmfile:` section (only shown if explicitly defined).</dd>
+  <dt>`helmfile.locals`</dt>
+  <dd>Locals defined within the `helmfile:` section (only shown if explicitly defined). Contains only section-specific locals, not merged with global.</dd>
 
-  <dt>`packer`</dt>
-  <dd>Locals defined within the `packer:` section (only shown if explicitly defined).</dd>
-
-  <dt>`merged`</dt>
-  <dd>All locals merged together. Global locals are applied first, then section-specific locals override them. This represents what is available during template processing.</dd>
+  <dt>`packer.locals`</dt>
+  <dd>Locals defined within the `packer:` section (only shown if explicitly defined). Contains only section-specific locals, not merged with global.</dd>
 </dl>
+
+This schema-compliant format makes it easy to compare with your source stack manifests and use the output programmatically.
 
 ## Example Output
 
 <Terminal title="atmos describe locals --stack deploy/dev">
 ```yaml
 deploy/dev:
-  global:
+  locals:
     environment: dev
     namespace: acme
     name_prefix: acme-dev
@@ -128,45 +127,38 @@ deploy/dev:
       Environment: dev
       Namespace: acme
   terraform:
-    backend_bucket: acme-dev-tfstate
-    tf_specific: terraform-only
-  merged:
-    backend_bucket: acme-dev-tfstate
-    environment: dev
-    full_name: acme-dev-us-east-1
-    name_prefix: acme-dev
-    namespace: acme
-    tags:
-      Environment: dev
-      Namespace: acme
-    tf_specific: terraform-only
+    locals:
+      backend_bucket: acme-dev-tfstate
+      tf_specific: terraform-only
 ```
 </Terminal>
+
+The output follows the same structure as stack manifest files, making it easy to understand which locals are defined where.
 
 ### Component-Specific Output
 
-When a component is specified with `--stack`, the output shows the locals that would be **available to** that component. The output includes the component name, stack, component type, and the merged locals:
+When a component is specified with `--stack`, the output shows the merged locals that would be **available to** that component, using Atmos schema format:
 
 <Terminal title="atmos describe locals vpc -s prod-ue2">
 ```yaml
-component: vpc
-stack: prod-ue2
-component_type: terraform
-locals:
-  backend_bucket: acme-prod-tfstate
-  environment: prod
-  full_name: acme-prod-us-east-1
-  name_prefix: acme-prod
-  namespace: acme
-  tf_specific: terraform-only
-  vpc_type: production
+components:
+  terraform:
+    vpc:
+      locals:
+        backend_bucket: acme-prod-tfstate
+        environment: prod
+        full_name: acme-prod-us-east-1
+        name_prefix: acme-prod
+        namespace: acme
+        tf_specific: terraform-only
+        vpc_type: production
 ```
 </Terminal>
 
-The `component_type` field shows how Atmos determined which section-specific locals to include. Since `vpc` is a Terraform component, Atmos merged:
-1. Global locals from the stack manifest
-2. `terraform:` section locals from the stack manifest
-3. Component-level locals from the `vpc` component definition (including any inherited from base components)
+The output shows the merged locals from all sources:
+1. Global locals from the stack manifest (`locals:`)
+2. Section-specific locals from the stack manifest (`terraform.locals:`)
+3. Component-level locals from the component definition (including inherited from base components)
 
 :::tip Component-Level Locals
 If the component defines its own `locals:` section (or inherits locals from a base component via `metadata.inherits`), those are included in the output and take precedence over stack-level locals.

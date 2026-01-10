@@ -147,35 +147,45 @@ func extractComponentLocals(componentSection map[string]any) map[string]any {
 }
 
 // buildComponentLocalsResult builds the result map for component locals query.
+// Output format matches Atmos stack manifest schema:
+//
+//	components:
+//	  terraform:
+//	    vpc:
+//	      locals:
+//	        foo: 123
 func buildComponentLocalsResult(
 	args *DescribeLocalsArgs,
 	stackLocals map[string]any,
 	componentType string,
 	componentLocals map[string]any,
 ) (map[string]any, error) {
-	for stackName, localsData := range stackLocals {
+	for _, localsData := range stackLocals {
 		if localsMap, ok := localsData.(map[string]any); ok {
 			stackTypeLocals := getLocalsForComponentType(localsMap, componentType)
-			result := mergeLocals(stackTypeLocals, componentLocals)
-			return map[string]any{
-				"component":      args.Component,
-				"stack":          stackName,
-				"component_type": componentType,
-				"locals":         result,
-			}, nil
+			mergedLocals := mergeLocals(stackTypeLocals, componentLocals)
+			return buildComponentSchemaOutput(args.Component, componentType, mergedLocals), nil
 		}
 	}
 
 	if len(componentLocals) > 0 {
-		return map[string]any{
-			"component":      args.Component,
-			"stack":          args.FilterByStack,
-			"component_type": componentType,
-			"locals":         componentLocals,
-		}, nil
+		return buildComponentSchemaOutput(args.Component, componentType, componentLocals), nil
 	}
 
 	return nil, fmt.Errorf("%w: %s", errUtils.ErrStackHasNoLocals, args.FilterByStack)
+}
+
+// buildComponentSchemaOutput creates the Atmos schema-compliant output for component locals.
+func buildComponentSchemaOutput(component, componentType string, locals map[string]any) map[string]any {
+	return map[string]any{
+		"components": map[string]any{
+			componentType: map[string]any{
+				component: map[string]any{
+					cfg.LocalsSectionName: locals,
+				},
+			},
+		},
+	}
 }
 
 // mergeLocals merges two locals maps, with the second map taking precedence.
@@ -196,22 +206,27 @@ func mergeLocals(base, override map[string]any) map[string]any {
 }
 
 // getLocalsForComponentType extracts the appropriate merged locals for a component type.
+// Input format is Atmos schema: locals: {...}, terraform: {locals: {...}}, etc.
 func getLocalsForComponentType(stackLocals map[string]any, componentType string) map[string]any {
-	// If there are section-specific locals, use them (they already include global).
-	if sectionLocals, ok := stackLocals[componentType].(map[string]any); ok {
-		return sectionLocals
+	result := make(map[string]any)
+
+	// Start with global locals (root-level "locals:" key).
+	if globalLocals, ok := stackLocals[cfg.LocalsSectionName].(map[string]any); ok {
+		for k, v := range globalLocals {
+			result[k] = v
+		}
 	}
 
-	// Fall back to merged or global.
-	if merged, ok := stackLocals["merged"].(map[string]any); ok {
-		return merged
+	// Merge section-specific locals (e.g., "terraform: locals:").
+	if sectionMap, ok := stackLocals[componentType].(map[string]any); ok {
+		if sectionLocals, ok := sectionMap[cfg.LocalsSectionName].(map[string]any); ok {
+			for k, v := range sectionLocals {
+				result[k] = v
+			}
+		}
 	}
 
-	if global, ok := stackLocals["global"].(map[string]any); ok {
-		return global
-	}
-
-	return map[string]any{}
+	return result
 }
 
 // stackFileLocalsResult holds the result of processing a stack file for locals.
@@ -317,8 +332,15 @@ func processStackFileForLocals(
 	}, nil
 }
 
-// buildStackLocalsFromContext converts a LocalsContext to a map suitable for output.
+// buildStackLocalsFromContext converts a LocalsContext to a map using Atmos schema format.
 // Returns an empty map if localsCtx is nil or has no locals.
+// Output format matches Atmos stack manifest schema:
+//
+//	locals:
+//	  foo: 123
+//	terraform:
+//	  locals:
+//	    xyz: 123
 func buildStackLocalsFromContext(localsCtx *LocalsContext) map[string]any {
 	stackLocals := make(map[string]any)
 
@@ -326,29 +348,51 @@ func buildStackLocalsFromContext(localsCtx *LocalsContext) map[string]any {
 		return stackLocals
 	}
 
+	// Global locals go under root "locals:" key.
 	if len(localsCtx.Global) > 0 {
-		stackLocals["global"] = localsCtx.Global
+		stackLocals[cfg.LocalsSectionName] = localsCtx.Global
 	}
 
+	// Section-specific locals go under "terraform: locals:", "helmfile: locals:", etc.
 	if localsCtx.HasTerraformLocals && len(localsCtx.Terraform) > 0 {
-		stackLocals["terraform"] = localsCtx.Terraform
+		stackLocals["terraform"] = map[string]any{
+			cfg.LocalsSectionName: getSectionOnlyLocals(localsCtx.Terraform, localsCtx.Global),
+		}
 	}
 
 	if localsCtx.HasHelmfileLocals && len(localsCtx.Helmfile) > 0 {
-		stackLocals["helmfile"] = localsCtx.Helmfile
+		stackLocals["helmfile"] = map[string]any{
+			cfg.LocalsSectionName: getSectionOnlyLocals(localsCtx.Helmfile, localsCtx.Global),
+		}
 	}
 
 	if localsCtx.HasPackerLocals && len(localsCtx.Packer) > 0 {
-		stackLocals["packer"] = localsCtx.Packer
-	}
-
-	// Add merged view for convenience.
-	merged := localsCtx.MergeForTemplateContext()
-	if len(merged) > 0 {
-		stackLocals["merged"] = merged
+		stackLocals["packer"] = map[string]any{
+			cfg.LocalsSectionName: getSectionOnlyLocals(localsCtx.Packer, localsCtx.Global),
+		}
 	}
 
 	return stackLocals
+}
+
+// getSectionOnlyLocals extracts locals that are unique to a section (not inherited from global).
+// Since section locals are already merged with global, we need to extract only the section-specific ones.
+func getSectionOnlyLocals(sectionLocals, globalLocals map[string]any) map[string]any {
+	result := make(map[string]any)
+	for k, v := range sectionLocals {
+		// Include if key doesn't exist in global, or if value differs from global.
+		if globalVal, exists := globalLocals[k]; !exists || !valuesEqual(v, globalVal) {
+			result[k] = v
+		}
+	}
+	return result
+}
+
+// valuesEqual compares two values for equality.
+func valuesEqual(a, b any) bool {
+	// Simple equality check - works for primitives.
+	// For complex types, we'd need deep comparison, but for locals this is usually sufficient.
+	return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
 }
 
 // deriveStackFileName extracts the stack file name from the absolute path.

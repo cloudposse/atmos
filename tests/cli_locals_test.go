@@ -301,7 +301,7 @@ func TestLocalsNotInFinalOutput(t *testing.T) {
 }
 
 // TestDescribeLocals verifies that the describe locals command correctly extracts
-// locals from all stack files and presents them in a structured format.
+// locals from all stack files and presents them in Atmos schema format.
 func TestDescribeLocals(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals")
 
@@ -318,18 +318,20 @@ func TestDescribeLocals(t *testing.T) {
 	devLocals, ok := result["deploy/dev"].(map[string]any)
 	require.True(t, ok, "should have deploy/dev stack")
 
-	// Check global locals.
-	globalLocals, ok := devLocals["global"].(map[string]any)
-	require.True(t, ok, "should have global locals")
-	assert.Equal(t, "dev", globalLocals["environment"], "environment should be 'dev'")
-	assert.Equal(t, "acme", globalLocals["namespace"], "namespace should be 'acme'")
-	assert.Equal(t, "acme-dev", globalLocals["name_prefix"], "name_prefix should be 'acme-dev'")
+	// Check root-level locals (Atmos schema format).
+	locals, ok := devLocals["locals"].(map[string]any)
+	require.True(t, ok, "should have locals section")
+	assert.Equal(t, "dev", locals["environment"], "environment should be 'dev'")
+	assert.Equal(t, "acme", locals["namespace"], "namespace should be 'acme'")
+	assert.Equal(t, "acme-dev", locals["name_prefix"], "name_prefix should be 'acme-dev'")
 
-	// Check merged locals.
-	mergedLocals, ok := devLocals["merged"].(map[string]any)
-	require.True(t, ok, "should have merged locals")
-	assert.Equal(t, "acme-dev-tfstate", mergedLocals["backend_bucket"],
-		"merged should include terraform section locals")
+	// Check terraform section locals (Atmos schema format: terraform.locals).
+	terraform, ok := devLocals["terraform"].(map[string]any)
+	require.True(t, ok, "should have terraform section")
+	tfLocals, ok := terraform["locals"].(map[string]any)
+	require.True(t, ok, "should have terraform.locals section")
+	assert.Equal(t, "acme-dev-tfstate", tfLocals["backend_bucket"],
+		"terraform.locals should include backend_bucket")
 }
 
 // TestDescribeLocalsWithFilter verifies that the describe locals command
@@ -350,10 +352,10 @@ func TestDescribeLocalsWithFilter(t *testing.T) {
 	prodLocals, ok := result["deploy/prod"].(map[string]any)
 	require.True(t, ok, "should have deploy/prod stack")
 
-	// Check global locals.
-	globalLocals, ok := prodLocals["global"].(map[string]any)
-	require.True(t, ok, "should have global locals")
-	assert.Equal(t, "prod", globalLocals["environment"], "environment should be 'prod'")
+	// Check root-level locals (Atmos schema format).
+	locals, ok := prodLocals["locals"].(map[string]any)
+	require.True(t, ok, "should have locals section")
+	assert.Equal(t, "prod", locals["environment"], "environment should be 'prod'")
 }
 
 // TestLocalsDeepImportChain verifies that file-scoped locals work correctly
@@ -465,21 +467,21 @@ func TestLocalsDescribeLocalsDeepChain(t *testing.T) {
 	finalLocals, ok := result["final"].(map[string]any)
 	require.True(t, ok, "should have 'final' stack locals (derived from name_template)")
 
-	// Check global locals show this file's own locals.
-	globalLocals, ok := finalLocals["global"].(map[string]any)
-	require.True(t, ok, "should have global locals")
-	assert.Equal(t, "from-final-stack", globalLocals["final_local"],
+	// Check root-level locals (Atmos schema format).
+	locals, ok := finalLocals["locals"].(map[string]any)
+	require.True(t, ok, "should have locals section")
+	assert.Equal(t, "from-final-stack", locals["final_local"],
 		"final_local should be from this file")
-	assert.Equal(t, "final-value", globalLocals["shared_key"],
+	assert.Equal(t, "final-value", locals["shared_key"],
 		"shared_key should be from this file, not inherited")
 
 	// The mixin files define locals but those should NOT appear here.
 	// Each file's locals are independent.
-	_, hasBaseLocal := globalLocals["base_local"]
+	_, hasBaseLocal := locals["base_local"]
 	assert.False(t, hasBaseLocal, "base_local should NOT be present - it's in base mixin")
-	_, hasLayer1Local := globalLocals["layer1_local"]
+	_, hasLayer1Local := locals["layer1_local"]
 	assert.False(t, hasLayer1Local, "layer1_local should NOT be present - it's in layer1 mixin")
-	_, hasLayer2Local := globalLocals["layer2_local"]
+	_, hasLayer2Local := locals["layer2_local"]
 	assert.False(t, hasLayer2Local, "layer2_local should NOT be present - it's in layer2 mixin")
 }
 
@@ -494,36 +496,37 @@ func TestDescribeLocalsForComponent(t *testing.T) {
 
 	// Test getting locals for a terraform component.
 	t.Run("returns locals for terraform component", func(t *testing.T) {
-		// Get locals for mock/instance-1 component in deploy/dev stack.
-		// Note: ExecuteDescribeLocals uses the file path as the stack name key.
+		// Get locals for deploy/dev stack.
 		stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/dev")
 		require.NoError(t, err)
 		require.NotNil(t, stackLocals)
 
-		// Verify the structure has the expected locals.
+		// Verify the structure has the expected locals (Atmos schema format).
 		devLocals, ok := stackLocals["deploy/dev"].(map[string]any)
 		require.True(t, ok, "should have deploy/dev stack")
 
-		// Check terraform section has the terraform-specific locals.
-		terraformLocals, ok := devLocals["terraform"].(map[string]any)
-		require.True(t, ok, "should have terraform section locals")
+		// Check root-level locals.
+		locals, ok := devLocals["locals"].(map[string]any)
+		require.True(t, ok, "should have locals section")
+		assert.Equal(t, "acme", locals["namespace"], "should have namespace")
+		assert.Equal(t, "dev", locals["environment"], "should have environment")
 
-		// Verify terraform-specific locals include the backend_bucket.
-		assert.Equal(t, "acme-dev-tfstate", terraformLocals["backend_bucket"],
-			"terraform locals should include backend_bucket")
-		assert.Equal(t, "terraform-only", terraformLocals["tf_specific"],
-			"terraform locals should include tf_specific")
+		// Check terraform section has section-specific locals.
+		terraform, ok := devLocals["terraform"].(map[string]any)
+		require.True(t, ok, "should have terraform section")
+		tfLocals, ok := terraform["locals"].(map[string]any)
+		require.True(t, ok, "should have terraform.locals section")
 
-		// Verify global locals are also available in terraform section.
-		assert.Equal(t, "acme", terraformLocals["namespace"],
-			"terraform locals should include global namespace")
-		assert.Equal(t, "dev", terraformLocals["environment"],
-			"terraform locals should include global environment")
+		// Verify terraform-specific locals (only section-specific, not merged).
+		assert.Equal(t, "acme-dev-tfstate", tfLocals["backend_bucket"],
+			"terraform.locals should include backend_bucket")
+		assert.Equal(t, "terraform-only", tfLocals["tf_specific"],
+			"terraform.locals should include tf_specific")
 	})
 }
 
 // TestDescribeLocalsForComponentOutput tests the full output structure
-// when describing locals for a specific component.
+// when describing locals for a specific component (Atmos schema format).
 func TestDescribeLocalsForComponentOutput(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals")
 
@@ -531,27 +534,31 @@ func TestDescribeLocalsForComponentOutput(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get locals filtered by stack file path.
-	// Note: ExecuteDescribeLocals uses the file path as the stack name key.
 	stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/dev")
 	require.NoError(t, err)
 	require.Len(t, stackLocals, 1, "should have exactly one stack")
 
-	// The component would see the terraform section locals.
 	devLocals, ok := stackLocals["deploy/dev"].(map[string]any)
 	require.True(t, ok)
 
-	// Check merged locals.
-	mergedLocals, ok := devLocals["merged"].(map[string]any)
-	require.True(t, ok, "should have merged locals")
+	// Check root-level locals (Atmos schema format).
+	locals, ok := devLocals["locals"].(map[string]any)
+	require.True(t, ok, "should have locals section")
 
-	// Merged should have all locals from global and terraform sections.
-	assert.Equal(t, "acme", mergedLocals["namespace"])
-	assert.Equal(t, "dev", mergedLocals["environment"])
-	assert.Equal(t, "us-east-1", mergedLocals["stage"])
-	assert.Equal(t, "acme-dev", mergedLocals["name_prefix"])
-	assert.Equal(t, "acme-dev-us-east-1", mergedLocals["full_name"])
-	assert.Equal(t, "acme-dev-tfstate", mergedLocals["backend_bucket"])
-	assert.Equal(t, "terraform-only", mergedLocals["tf_specific"])
+	// Root locals should have global locals.
+	assert.Equal(t, "acme", locals["namespace"])
+	assert.Equal(t, "dev", locals["environment"])
+	assert.Equal(t, "us-east-1", locals["stage"])
+	assert.Equal(t, "acme-dev", locals["name_prefix"])
+	assert.Equal(t, "acme-dev-us-east-1", locals["full_name"])
+
+	// Check terraform section has terraform-specific locals.
+	terraform, ok := devLocals["terraform"].(map[string]any)
+	require.True(t, ok, "should have terraform section")
+	tfLocals, ok := terraform["locals"].(map[string]any)
+	require.True(t, ok, "should have terraform.locals section")
+	assert.Equal(t, "acme-dev-tfstate", tfLocals["backend_bucket"])
+	assert.Equal(t, "terraform-only", tfLocals["tf_specific"])
 }
 
 // TestDescribeLocalsForComponentInProdStack tests locals for a component
@@ -563,7 +570,6 @@ func TestDescribeLocalsForComponentInProdStack(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get locals for prod stack using the file path.
-	// Note: ExecuteDescribeLocals uses the file path as the stack name key.
 	stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/prod")
 	require.NoError(t, err)
 	require.Len(t, stackLocals, 1, "should have exactly one stack")
@@ -571,14 +577,20 @@ func TestDescribeLocalsForComponentInProdStack(t *testing.T) {
 	prodLocals, ok := stackLocals["deploy/prod"].(map[string]any)
 	require.True(t, ok)
 
-	// Check terraform section locals for prod.
-	terraformLocals, ok := prodLocals["terraform"].(map[string]any)
-	require.True(t, ok, "should have terraform section locals")
+	// Check root-level locals (Atmos schema format).
+	locals, ok := prodLocals["locals"].(map[string]any)
+	require.True(t, ok, "should have locals section")
 
 	// Verify prod-specific values.
-	assert.Equal(t, "acme", terraformLocals["namespace"])
-	assert.Equal(t, "prod", terraformLocals["environment"])
-	assert.Equal(t, "acme-prod-tfstate", terraformLocals["backend_bucket"],
+	assert.Equal(t, "acme", locals["namespace"])
+	assert.Equal(t, "prod", locals["environment"])
+
+	// Check terraform section has terraform-specific locals.
+	terraform, ok := prodLocals["terraform"].(map[string]any)
+	require.True(t, ok, "should have terraform section")
+	tfLocals, ok := terraform["locals"].(map[string]any)
+	require.True(t, ok, "should have terraform.locals section")
+	assert.Equal(t, "acme-prod-tfstate", tfLocals["backend_bucket"],
 		"prod should have prod-specific backend_bucket")
 }
 
@@ -613,20 +625,20 @@ func TestDescribeLocalsWithLogicalStackName(t *testing.T) {
 	assert.True(t, hasDevLogical, "should have dev-us-east-1 stack (logical name)")
 	assert.True(t, hasProdLogical, "should have prod-us-west-2 stack (logical name)")
 
-	// Verify locals content for dev stack.
+	// Verify locals content for dev stack (Atmos schema format).
 	if hasDevLogical {
-		global, ok := devLocals["global"].(map[string]any)
-		require.True(t, ok, "dev stack should have global locals")
-		assert.Equal(t, "acme", global["namespace"])
-		assert.Equal(t, "acme-dev", global["env_prefix"])
+		locals, ok := devLocals["locals"].(map[string]any)
+		require.True(t, ok, "dev stack should have locals section")
+		assert.Equal(t, "acme", locals["namespace"])
+		assert.Equal(t, "acme-dev", locals["env_prefix"])
 	}
 
-	// Verify locals content for prod stack.
+	// Verify locals content for prod stack (Atmos schema format).
 	if hasProdLogical {
-		global, ok := prodLocals["global"].(map[string]any)
-		require.True(t, ok, "prod stack should have global locals")
-		assert.Equal(t, "acme", global["namespace"])
-		assert.Equal(t, "acme-prod", global["env_prefix"])
+		locals, ok := prodLocals["locals"].(map[string]any)
+		require.True(t, ok, "prod stack should have locals section")
+		assert.Equal(t, "acme", locals["namespace"])
+		assert.Equal(t, "acme-prod", locals["env_prefix"])
 	}
 }
 
@@ -647,9 +659,9 @@ func TestDescribeLocalsFilterByLogicalStackName(t *testing.T) {
 	devLocals, ok := result["dev-us-east-1"].(map[string]any)
 	require.True(t, ok, "should have dev-us-east-1 stack")
 
-	global, ok := devLocals["global"].(map[string]any)
+	locals, ok := devLocals["locals"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "acme", global["namespace"])
+	assert.Equal(t, "acme", locals["namespace"])
 }
 
 // TestDescribeLocalsFilterByFilePath tests filtering by file path when logical names are available.
@@ -669,12 +681,13 @@ func TestDescribeLocalsFilterByFilePath(t *testing.T) {
 	prodLocals, ok := result["prod-us-west-2"].(map[string]any)
 	require.True(t, ok, "should have prod-us-west-2 stack (returned with logical name)")
 
-	global, ok := prodLocals["global"].(map[string]any)
+	locals, ok := prodLocals["locals"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "acme-prod", global["env_prefix"])
+	assert.Equal(t, "acme-prod", locals["env_prefix"])
 }
 
 // TestDescribeLocalsOutputStructureStack tests the output structure when querying stacks (no component).
+// Output follows Atmos schema format: locals:, terraform: {locals:}, helmfile: {locals:}, etc.
 func TestDescribeLocalsOutputStructureStack(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals-logical-names")
 
@@ -688,32 +701,35 @@ func TestDescribeLocalsOutputStructureStack(t *testing.T) {
 	prodLocals, ok := result["prod-us-west-2"].(map[string]any)
 	require.True(t, ok)
 
-	// Verify stack output structure has the expected sections.
-	_, hasGlobal := prodLocals["global"]
+	// Verify stack output structure has Atmos schema format.
+	_, hasLocals := prodLocals["locals"]
 	_, hasTerraform := prodLocals["terraform"]
 	_, hasHelmfile := prodLocals["helmfile"]
-	_, hasMerged := prodLocals["merged"]
 
-	assert.True(t, hasGlobal, "stack output should have 'global' section")
+	assert.True(t, hasLocals, "stack output should have 'locals' section (root-level locals)")
 	assert.True(t, hasTerraform, "stack output should have 'terraform' section")
 	assert.True(t, hasHelmfile, "stack output should have 'helmfile' section (prod has helmfile locals)")
-	assert.True(t, hasMerged, "stack output should have 'merged' section")
 
-	// Verify terraform section has correct merged locals.
+	// Verify root-level locals.
+	locals, ok := prodLocals["locals"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme", locals["namespace"])
+
+	// Verify terraform section has nested locals (terraform.locals).
 	terraform, ok := prodLocals["terraform"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "acme-prod-tfstate", terraform["backend_bucket"])
-	assert.Equal(t, "terraform-specific-prod", terraform["tf_only"])
-	// terraform section should also include global locals (merged).
-	assert.Equal(t, "acme", terraform["namespace"])
+	tfLocals, ok := terraform["locals"].(map[string]any)
+	require.True(t, ok, "terraform section should have nested locals")
+	assert.Equal(t, "acme-prod-tfstate", tfLocals["backend_bucket"])
+	assert.Equal(t, "terraform-specific-prod", tfLocals["tf_only"])
 
-	// Verify helmfile section has correct merged locals.
+	// Verify helmfile section has nested locals (helmfile.locals).
 	helmfile, ok := prodLocals["helmfile"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "acme-prod-release", helmfile["release_name"])
-	assert.Equal(t, "helmfile-specific-prod", helmfile["hf_only"])
-	// helmfile section should also include global locals (merged).
-	assert.Equal(t, "acme", helmfile["namespace"])
+	hfLocals, ok := helmfile["locals"].(map[string]any)
+	require.True(t, ok, "helmfile section should have nested locals")
+	assert.Equal(t, "acme-prod-release", hfLocals["release_name"])
+	assert.Equal(t, "helmfile-specific-prod", hfLocals["hf_only"])
 }
 
 // TestDescribeLocalsOutputStructureComponent tests the output structure when querying for a component.
@@ -730,12 +746,18 @@ func TestDescribeLocalsOutputStructureComponent(t *testing.T) {
 	devLocals, ok := stackLocals["dev-us-east-1"].(map[string]any)
 	require.True(t, ok)
 
-	// Verify terraform section locals (what vpc component would see).
+	// Verify root-level locals.
+	locals, ok := devLocals["locals"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme", locals["namespace"], "root locals should include namespace")
+
+	// Verify terraform section locals (Atmos schema: terraform.locals).
 	terraform, ok := devLocals["terraform"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "acme", terraform["namespace"], "terraform locals should include global namespace")
-	assert.Equal(t, "acme-dev-tfstate", terraform["backend_bucket"])
-	assert.Equal(t, "terraform-specific-dev", terraform["tf_only"])
+	tfLocals, ok := terraform["locals"].(map[string]any)
+	require.True(t, ok, "terraform section should have nested locals")
+	assert.Equal(t, "acme-dev-tfstate", tfLocals["backend_bucket"])
+	assert.Equal(t, "terraform-specific-dev", tfLocals["tf_only"])
 }
 
 // TestDescribeLocalsComponentWithLogicalStackName tests component argument with logical stack name.
@@ -782,10 +804,12 @@ func TestDescribeLocalsComponentWithFilePath(t *testing.T) {
 	prodLocals, ok := result["prod-us-west-2"].(map[string]any)
 	require.True(t, ok, "should have prod-us-west-2 stack (returned with logical name)")
 
-	// Verify terraform section locals.
+	// Verify terraform section locals (Atmos schema: terraform.locals).
 	terraform, ok := prodLocals["terraform"].(map[string]any)
 	require.True(t, ok)
-	assert.Equal(t, "acme-prod-tfstate", terraform["backend_bucket"])
+	tfLocals, ok := terraform["locals"].(map[string]any)
+	require.True(t, ok, "terraform section should have nested locals")
+	assert.Equal(t, "acme-prod-tfstate", tfLocals["backend_bucket"])
 }
 
 // TestDescribeLocalsHelmfileComponent tests locals for helmfile component type.
@@ -802,21 +826,25 @@ func TestDescribeLocalsHelmfileComponent(t *testing.T) {
 	prodLocals, ok := stackLocals["prod-us-west-2"].(map[string]any)
 	require.True(t, ok)
 
-	// Verify helmfile section locals (what nginx component would see).
+	// Verify helmfile section locals (Atmos schema: helmfile.locals).
 	helmfile, ok := prodLocals["helmfile"].(map[string]any)
 	require.True(t, ok)
+	hfLocals, ok := helmfile["locals"].(map[string]any)
+	require.True(t, ok, "helmfile section should have nested locals")
 
-	// Helmfile section should have helmfile-specific locals.
-	assert.Equal(t, "acme-prod-release", helmfile["release_name"])
-	assert.Equal(t, "helmfile-specific-prod", helmfile["hf_only"])
+	// Helmfile section should have helmfile-specific locals only.
+	assert.Equal(t, "acme-prod-release", hfLocals["release_name"])
+	assert.Equal(t, "helmfile-specific-prod", hfLocals["hf_only"])
 
-	// Plus global locals merged in.
-	assert.Equal(t, "acme", helmfile["namespace"])
-	assert.Equal(t, "acme-prod", helmfile["env_prefix"])
+	// Global locals are in root "locals:" section, not merged into helmfile.locals.
+	locals, ok := prodLocals["locals"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme", locals["namespace"])
+	assert.Equal(t, "acme-prod", locals["env_prefix"])
 }
 
-// TestDescribeLocalsDifferentOutputStructures verifies that stack queries and component queries
-// return different output structures as documented.
+// TestDescribeLocalsDifferentOutputStructures verifies that stack queries return
+// Atmos schema format output.
 func TestDescribeLocalsDifferentOutputStructures(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals-logical-names")
 
@@ -827,15 +855,19 @@ func TestDescribeLocalsDifferentOutputStructures(t *testing.T) {
 	stackResult, err := exec.ExecuteDescribeLocals(&atmosConfig, "dev-us-east-1")
 	require.NoError(t, err)
 
-	// Stack output: map keyed by stack name containing {global, terraform/helmfile/packer, merged}.
+	// Stack output: map keyed by stack name containing Atmos schema format.
 	devLocals, ok := stackResult["dev-us-east-1"].(map[string]any)
 	require.True(t, ok, "stack result should have stack name as key")
 
-	// Verify stack output has section keys.
+	// Verify stack output has Atmos schema format (locals:, terraform: {locals:}, etc.).
+	_, hasLocals := devLocals["locals"]
+	assert.True(t, hasLocals, "stack output should have 'locals' key (root-level locals)")
+
+	// Stack output should NOT have the old format keys.
 	_, hasGlobal := devLocals["global"]
 	_, hasMerged := devLocals["merged"]
-	assert.True(t, hasGlobal, "stack output should have 'global' key")
-	assert.True(t, hasMerged, "stack output should have 'merged' key")
+	assert.False(t, hasGlobal, "stack output should NOT have 'global' key (old format)")
+	assert.False(t, hasMerged, "stack output should NOT have 'merged' key (old format)")
 
 	// Stack output should NOT have component-specific keys.
 	_, hasComponent := devLocals["component"]
