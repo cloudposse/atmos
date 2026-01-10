@@ -579,6 +579,20 @@ func (mr *MockAuthManagerMockRecorder) GetIdentities() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIdentities", reflect.TypeOf((*MockAuthManager)(nil).GetIdentities))
 }
 
+// GetIdentityDisplayName mocks base method.
+func (m *MockAuthManager) GetIdentityDisplayName(lowercaseKey string) string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetIdentityDisplayName", lowercaseKey)
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetIdentityDisplayName indicates an expected call of GetIdentityDisplayName.
+func (mr *MockAuthManagerMockRecorder) GetIdentityDisplayName(lowercaseKey any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIdentityDisplayName", reflect.TypeOf((*MockAuthManager)(nil).GetIdentityDisplayName), lowercaseKey)
+}
+
 // GetIntegration mocks base method.
 func (m *MockAuthManager) GetIntegration(integrationName string) (*schema.Integration, error) {
 	m.ctrl.T.Helper()
