@@ -1,0 +1,39 @@
+tests:
+  - name: atmos_terraform_plan_diff_no_diff
+    enabled: true
+    description: "Ensure 'atmos terraform plan diff' command executes without errors and files are present."
+    workdir: "fixtures/scenarios/atmos-terraform-plan-diff"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan-diff"
+      - "mycomponent"
+      - "-s"
+      - "prod"
+      - "--orig"
+      - "old.planfile"
+      - "--new"
+      - "new-no-diff.planfile"
+    expect:
+      stdout:
+        - "The planfiles are identical"
+      exit_code: 0
+  - name: atmos_terraform_plan_diff_with_diff
+    enabled: true
+    description: "Ensure 'atmos terraform plan diff' command executes without errors and files are present."
+    workdir: "fixtures/scenarios/atmos-terraform-plan-diff"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan-diff"
+      - "mycomponent"
+      - "-s"
+      - "prod"
+      - "--orig"
+      - "old.planfile"
+      - "--new"
+      - "new-diff.planfile"
+    expect:
+      stderr:
+        - "files have differences"
+      exit_code: 2
