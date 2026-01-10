@@ -53,6 +53,17 @@ func extractRequiredProviders(componentSection map[string]any) map[string]map[st
 	return result
 }
 
+// getStackManifestName extracts the manifest-level 'name' field from a stack section.
+// Returns empty string if the section is not a map or doesn't have a name field.
+func getStackManifestName(stackSection any) string {
+	if section, ok := stackSection.(map[string]any); ok {
+		if nameValue, ok := section[cfg.NameSectionName].(string); ok {
+			return nameValue
+		}
+	}
+	return ""
+}
+
 // ProcessComponentConfig processes component config sections.
 func ProcessComponentConfig(
 	atmosConfig *schema.AtmosConfiguration,
@@ -386,7 +397,9 @@ func processStackContextPrefix(
 			return err
 		}
 	default:
-		return errUtils.ErrMissingStackNameTemplateAndPattern
+		// No name_template or name_pattern configured - use filename as identity.
+		// This enables zero-config stack naming for newcomers.
+		configAndStacksInfo.ContextPrefix = stackName
 	}
 
 	configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
@@ -395,18 +408,31 @@ func processStackContextPrefix(
 }
 
 // findComponentInStacks searches for a component across all stacks and returns matching stacks.
-// Returns the count of found stacks, list of stack names, and the config info for the found component.
+// Returns the count of found stacks, list of stack names, config info for the found component,
+// and a map of filename->canonicalName for stacks where the canonical name differs from the filename.
 func findComponentInStacks(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stacksMap map[string]any,
 	authManager auth.AuthManager,
-) (int, []string, schema.ConfigAndStacksInfo) {
+) (int, []string, schema.ConfigAndStacksInfo, map[string]string) {
 	foundStackCount := 0
 	var foundStacks []string
 	var foundConfigAndStacksInfo schema.ConfigAndStacksInfo
+	// Track filename -> canonical name mappings for suggestion purposes.
+	stackNameMappings := make(map[string]string)
 
 	for stackName := range stacksMap {
+		// Extract manifest name FIRST (before checking component) for suggestion purposes.
+		// This allows us to suggest correct stack names even when the component isn't found.
+		stackManifestName := getStackManifestName(stacksMap[stackName])
+
+		// Track filename -> canonical name mapping for suggestion purposes.
+		// We do this early so we can suggest correct names even if the component doesn't exist.
+		if stackManifestName != "" && stackManifestName != stackName {
+			stackNameMappings[stackName] = stackManifestName
+		}
+
 		// Check if we've found the component in the stack.
 		err := ProcessComponentConfig(
 			atmosConfig,
@@ -425,9 +451,41 @@ func findComponentInStacks(
 			continue
 		}
 
-		// Check if we've found the stack.
-		if configAndStacksInfo.Stack == configAndStacksInfo.ContextPrefix {
+		// Determine the canonical stack name using single-identity rule.
+		// Each stack has exactly ONE valid identifier based on precedence:
+		// 1. Explicit 'name' field in manifest (highest priority)
+		// 2. Generated name from name_template or name_pattern (via ContextPrefix)
+		// 3. Stack filename (only if nothing else is configured)
+		//
+		// See docs/prd/stack-name-identity.md for the full specification.
+		var canonicalStackName string
+		switch {
+		case stackManifestName != "":
+			// Priority 1: Explicit name from manifest.
+			canonicalStackName = stackManifestName
+		case configAndStacksInfo.ContextPrefix != "" && configAndStacksInfo.ContextPrefix != stackName:
+			// Priority 2/3: Generated from name_template or name_pattern.
+			// Only use if ContextPrefix differs from filename (indicates template/pattern was applied).
+			canonicalStackName = configAndStacksInfo.ContextPrefix
+		default:
+			// Priority 4: Filename (when nothing else is configured).
+			canonicalStackName = stackName
+		}
+
+		// Also track template/pattern-based canonical names (for stacks without explicit name).
+		if canonicalStackName != stackName && stackManifestName == "" {
+			stackNameMappings[stackName] = canonicalStackName
+		}
+
+		// Check if user's requested stack matches the canonical name.
+		stackMatches := configAndStacksInfo.Stack == canonicalStackName
+
+		if stackMatches {
 			configAndStacksInfo.StackFile = stackName
+			// Set StackManifestName if the stack has an explicit name.
+			if stackManifestName != "" {
+				configAndStacksInfo.StackManifestName = stackManifestName
+			}
 			foundConfigAndStacksInfo = *configAndStacksInfo
 			foundStackCount++
 			foundStacks = append(foundStacks, stackName)
@@ -441,7 +499,7 @@ func findComponentInStacks(
 		}
 	}
 
-	return foundStackCount, foundStacks, foundConfigAndStacksInfo
+	return foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings
 }
 
 // ProcessStacks processes stack config.
@@ -520,7 +578,7 @@ func ProcessStacks(
 			return configAndStacksInfo, err
 		}
 	} else {
-		foundStackCount, foundStacks, foundConfigAndStacksInfo := findComponentInStacks(
+		foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings := findComponentInStacks(
 			atmosConfig,
 			&configAndStacksInfo,
 			stacksMap,
@@ -581,7 +639,7 @@ func ProcessStacks(
 				// Update ComponentFromArg with resolved name and retry the loop.
 				configAndStacksInfo.ComponentFromArg = resolvedComponent
 
-				foundStackCount, foundStacks, foundConfigAndStacksInfo = findComponentInStacks(
+				foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings = findComponentInStacks(
 					atmosConfig,
 					&configAndStacksInfo,
 					stacksMap,
@@ -596,6 +654,17 @@ func ProcessStacks(
 
 		// If still not found after path resolution attempt (or if path resolution was skipped), return error.
 		if foundStackCount == 0 {
+			// Check if the user provided a filename that has a different canonical name.
+			// This helps users who try to use the filename when the stack has an explicit name.
+			if canonicalName, found := stackNameMappings[configAndStacksInfo.Stack]; found {
+				return configAndStacksInfo,
+					errUtils.Build(errUtils.ErrInvalidStack).
+						WithExplanation(fmt.Sprintf("Stack `%s` not found.", configAndStacksInfo.Stack)).
+						WithHint(fmt.Sprintf("Did you mean `%s`?", canonicalName)).
+						WithHint("Run `atmos list stacks` to see all available stacks.").
+						Err()
+			}
+
 			cliConfigYaml := ""
 
 			if atmosConfig.Logs.Level == u.LogLevelTrace {
