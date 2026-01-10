@@ -165,7 +165,7 @@
     },
     "components": {
       "title": "components",
-      "description": "Components section",
+      "description": "Components section. Supports built-in types (terraform, helmfile, packer) and custom component types defined in custom commands.",
       "oneOf": [
         {
           "type": "string",
@@ -173,7 +173,6 @@
         },
         {
           "type": "object",
-          "additionalProperties": true,
           "properties": {
             "terraform": {
               "$ref": "#/definitions/terraform_components"
@@ -183,6 +182,63 @@
             },
             "packer": {
               "$ref": "#/definitions/packer_components"
+            }
+          },
+          "additionalProperties": {
+            "$ref": "#/definitions/custom_components"
+          },
+          "required": []
+        }
+      ]
+    },
+    "custom_components": {
+      "title": "custom_components",
+      "description": "Custom component type section. Custom component types are defined in custom commands using the 'component.type' field.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/custom_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "custom_component_manifest": {
+      "title": "custom_component_manifest",
+      "description": "Custom component manifest. Custom components support vars, env, settings, and metadata sections.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             }
           },
           "required": []

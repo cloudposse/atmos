@@ -203,6 +203,7 @@ type DescribeComponentResult struct {
 type ExecuteDescribeComponentParams struct {
 	Component            string
 	Stack                string
+	ComponentType        string // Optional: if set, only try this component type.
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
@@ -217,6 +218,7 @@ func ExecuteDescribeComponent(params *ExecuteDescribeComponentParams) (map[strin
 		AtmosConfig:          nil,
 		Component:            params.Component,
 		Stack:                params.Stack,
+		ComponentType:        params.ComponentType,
 		ProcessTemplates:     params.ProcessTemplates,
 		ProcessYamlFunctions: params.ProcessYamlFunctions,
 		Skip:                 params.Skip,
@@ -376,10 +378,11 @@ type DescribeComponentContextParams struct {
 	AtmosConfig          *schema.AtmosConfiguration
 	Component            string
 	Stack                string
+	ComponentType        string // Optional: if set, only try this component type.
 	ProcessTemplates     bool
 	ProcessYamlFunctions bool
 	Skip                 []string
-	AuthManager          auth.AuthManager // Optional: Auth manager for credential management
+	AuthManager          auth.AuthManager // Optional: Auth manager for credential management.
 }
 
 // componentTypeProcessParams contains parameters for tryProcessWithComponentType.
@@ -401,7 +404,7 @@ func tryProcessWithComponentType(params *componentTypeProcessParams) (schema.Con
 	return result, err
 }
 
-// detectComponentType tries to detect component type (Terraform, Helmfile, or Packer).
+// detectComponentType tries to detect component type (Terraform, Helmfile, Packer, or custom).
 func detectComponentType(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
@@ -414,6 +417,12 @@ func detectComponentType(
 		processYamlFunctions: params.ProcessYamlFunctions,
 		skip:                 params.Skip,
 		authManager:          params.AuthManager,
+	}
+
+	// If a specific component type is provided, use it directly.
+	if params.ComponentType != "" {
+		baseParams.componentType = params.ComponentType
+		return tryProcessWithComponentType(&baseParams)
 	}
 
 	// Try Terraform.
