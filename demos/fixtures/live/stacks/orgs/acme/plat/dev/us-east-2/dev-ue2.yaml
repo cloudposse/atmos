@@ -1,0 +1,11 @@
+# Platform Dev US-East-2 Stack
+import:
+  - orgs/acme/plat/_defaults
+  - catalog/vpc
+  - mixins/region/us-east-2
+  - mixins/stage/dev
+
+vars:
+  tags:
+    Environment: dev
+    Region: us-east-2

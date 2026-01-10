@@ -46,6 +46,21 @@ const (
 
 	// VideoMiddlePercent is the middle fallback position.
 	VideoMiddlePercent = 0.5
+
+	// FfmpegOverwriteFlag is the flag to overwrite output files without asking.
+	ffmpegOverwriteFlag = "-y"
+
+	// FfmpegCmd is the ffmpeg command name.
+	ffmpegCmd = "ffmpeg"
+
+	// FfprobeCmd is the ffprobe command name.
+	ffprobeCmd = "ffprobe"
+
+	// FfmpegInputFlag is the input file flag.
+	ffmpegInputFlag = "-i"
+
+	// FfmpegFormatFlag is the format flag.
+	ffmpegFormatFlag = "-f"
 )
 
 // CheckInstalled verifies that FFmpeg and FFprobe are available in the system PATH.
@@ -65,7 +80,7 @@ func CheckInstalled() error {
 func GetVideoDuration(ctx context.Context, videoPath string) (float64, error) {
 	defer perf.Track(nil, "ffmpeg.GetVideoDuration")()
 
-	cmd := exec.CommandContext(ctx, "ffprobe",
+	cmd := exec.CommandContext(ctx, ffprobeCmd,
 		"-v", "error",
 		"-show_entries", "format=duration",
 		"-of", "default=noprint_wrappers=1:nokey=1",
@@ -110,11 +125,11 @@ func ConvertGIFToMP4(ctx context.Context, gifPath, mp4Path string) error {
 		"-c:v", "libx264",
 		"-preset", "medium",
 		"-crf", "23",
-		"-y", // Overwrite output
+		ffmpegOverwriteFlag, // Overwrite output
 		mp4Path,
 	}
 
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	cmd := exec.CommandContext(ctx, ffmpegCmd, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -147,7 +162,7 @@ func MergeAudioWithVideo(ctx context.Context, videoPath, audioPath, outputPath s
 
 	// Build FFmpeg command.
 	args := []string{
-		"-i", videoPath,
+		ffmpegInputFlag, videoPath,
 	}
 
 	// Add audio looping if enabled.
@@ -164,11 +179,11 @@ func MergeAudioWithVideo(ctx context.Context, videoPath, audioPath, outputPath s
 		"-c:v", "copy", // Copy video codec (no re-encoding)
 		"-c:a", "aac", // Encode audio as AAC
 		"-f", "mp4", // Explicitly specify output format (for .tmp extension)
-		"-y", // Overwrite output file
+		ffmpegOverwriteFlag, // Overwrite output file
 		outputPath,
 	)
 
-	cmd := exec.CommandContext(ctx, "ffmpeg", args...)
+	cmd := exec.CommandContext(ctx, ffmpegCmd, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -190,6 +205,8 @@ type FrameColorInfo struct {
 // FindMostColorfulFrame analyzes a video and finds the frame with the most colors.
 // It samples frames at regular intervals and returns the timestamp of the most colorful one.
 // SampleCount determines how many frames to analyze (more = slower but more accurate).
+//
+//nolint:revive // Function length justified: sequential video analysis workflow.
 func FindMostColorfulFrame(ctx context.Context, videoPath string, sampleCount int) (float64, error) {
 	defer perf.Track(nil, "ffmpeg.FindMostColorfulFrame")()
 
@@ -219,11 +236,12 @@ func FindMostColorfulFrame(ctx context.Context, videoPath string, sampleCount in
 		framePath := filepath.Join(tempDir, fmt.Sprintf("frame_%03d.png", i))
 
 		// Extract frame at this timestamp.
-		extractCmd := exec.CommandContext(ctx, "ffmpeg",
+		//nolint:gosec // intentional subprocess call for frame extraction.
+		extractCmd := exec.CommandContext(ctx, ffmpegCmd,
 			"-ss", fmt.Sprintf("%.3f", timestamp),
-			"-i", videoPath,
+			ffmpegInputFlag, videoPath,
 			"-vframes", "1",
-			"-y",
+			ffmpegOverwriteFlag,
 			framePath,
 		)
 		if err := extractCmd.Run(); err != nil {
@@ -260,8 +278,9 @@ func FindMostColorfulFrame(ctx context.Context, videoPath string, sampleCount in
 func analyzeFrameColors(ctx context.Context, framePath string) (float64, error) {
 	// Use ffprobe to get frame info with signalstats filter for color analysis.
 	// We'll use the entropy of the histogram as a proxy for color richness.
-	cmd := exec.CommandContext(ctx, "ffprobe",
-		"-f", "lavfi",
+	//nolint:gosec // intentional subprocess call for video analysis.
+	cmd := exec.CommandContext(ctx, ffprobeCmd,
+		ffmpegFormatFlag, "lavfi",
 		"-i", fmt.Sprintf("movie=%s,signalstats=stat=tout+vrep+brng", framePath),
 		"-show_entries", "frame_tags",
 		"-of", "default=noprint_wrappers=1",
@@ -292,10 +311,10 @@ func analyzeFrameColors(ctx context.Context, framePath string) (float64, error) 
 // analyzeFrameHistogram uses ffmpeg's histogram filter to estimate color richness.
 func analyzeFrameHistogram(ctx context.Context, framePath string) (float64, error) {
 	// Use ffmpeg to generate histogram data.
-	cmd := exec.CommandContext(ctx, "ffmpeg",
-		"-i", framePath,
+	cmd := exec.CommandContext(ctx, ffmpegCmd,
+		ffmpegInputFlag, framePath,
 		"-vf", "format=rgb24,histogram=display_mode=overlay:level_height=50",
-		"-f", "null",
+		ffmpegFormatFlag, "null",
 		"-",
 	)
 
@@ -322,9 +341,10 @@ func GetFrameSaturation(ctx context.Context, videoPath string, timestamp float64
 	defer perf.Track(nil, "ffmpeg.GetFrameSaturation")()
 
 	// Use ffprobe with select filter to analyze specific frame.
-	cmd := exec.CommandContext(ctx, "ffprobe",
-		"-f", "lavfi",
-		"-i", fmt.Sprintf("movie=%s:seek_point=%.3f,signalstats", videoPath, timestamp),
+	//nolint:gosec // intentional subprocess call for video analysis.
+	cmd := exec.CommandContext(ctx, ffprobeCmd,
+		ffmpegFormatFlag, "lavfi",
+		ffmpegInputFlag, fmt.Sprintf("movie=%s:seek_point=%.3f,signalstats", videoPath, timestamp),
 		"-show_entries", "frame_tags=lavfi.signalstats.SATAVG",
 		"-of", "default=noprint_wrappers=1:nokey=1",
 		"-read_intervals", "%+#1", // Only read 1 frame.
@@ -351,6 +371,8 @@ func GetFrameSaturation(ctx context.Context, videoPath string, timestamp float64
 // FindBestThumbnailTime analyzes video and finds the best thumbnail timestamp.
 // For terminal recordings, this looks for frames with the most visual content
 // (colored text, progress bars, formatted output) rather than empty prompts.
+//
+//nolint:revive,funlen // Function length justified: sequential video analysis workflow.
 func FindBestThumbnailTime(ctx context.Context, videoPath string) (float64, error) {
 	defer perf.Track(nil, "ffmpeg.FindBestThumbnailTime")()
 
@@ -393,11 +415,12 @@ func FindBestThumbnailTime(ctx context.Context, videoPath string) (float64, erro
 		framePath := filepath.Join(tempDir, fmt.Sprintf("frame_%03d.png", i))
 
 		// Extract frame at this timestamp.
-		extractCmd := exec.CommandContext(ctx, "ffmpeg",
+		//nolint:gosec // intentional subprocess call for frame extraction.
+		extractCmd := exec.CommandContext(ctx, ffmpegCmd,
 			"-ss", fmt.Sprintf("%.3f", timestamp),
-			"-i", videoPath,
+			ffmpegInputFlag, videoPath,
 			"-vframes", "1",
-			"-y",
+			ffmpegOverwriteFlag,
 			framePath,
 		)
 		if err := extractCmd.Run(); err != nil {
@@ -435,11 +458,13 @@ func FindBestThumbnailTime(ctx context.Context, videoPath string) (float64, erro
 
 // DetectSceneChanges finds timestamps where significant scene changes occur.
 func DetectSceneChanges(ctx context.Context, videoPath string) ([]float64, error) {
+	defer perf.Track(nil, "ffmpeg.DetectSceneChanges")()
+
 	// Use ffmpeg's scene detection filter.
-	cmd := exec.CommandContext(ctx, "ffmpeg",
-		"-i", videoPath,
+	cmd := exec.CommandContext(ctx, ffmpegCmd,
+		ffmpegInputFlag, videoPath,
 		"-vf", "select='gt(scene,0.3)',showinfo",
-		"-f", "null",
+		ffmpegFormatFlag, "null",
 		"-",
 	)
 

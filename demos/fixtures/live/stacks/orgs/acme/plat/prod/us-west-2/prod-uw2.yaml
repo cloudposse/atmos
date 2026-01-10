@@ -1,0 +1,11 @@
+# Platform Prod US-West-2 Stack
+import:
+  - orgs/acme/plat/_defaults
+  - catalog/vpc
+  - mixins/region/us-west-2
+  - mixins/stage/prod
+
+vars:
+  tags:
+    Environment: prod
+    Region: us-west-2

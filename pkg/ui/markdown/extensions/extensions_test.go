@@ -7,10 +7,48 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 )
+
+// inlineParserTestable defines the interface for testable inline parsers.
+type inlineParserTestable interface {
+	parser.InlineParser
+}
+
+// parserTestCase defines test inputs for inline parser tests.
+type parserTestCase struct {
+	name          string
+	input         string
+	expectNil     bool
+	checkNodeType func(ast.Node) bool // optional type check
+}
+
+// runInlineParserTests runs common parser tests for any inline parser.
+func runInlineParserTests(t *testing.T, p inlineParserTestable, trigger byte, cases []parserTestCase) {
+	t.Helper()
+
+	t.Run("Trigger returns expected byte", func(t *testing.T) {
+		assert.Equal(t, []byte{trigger}, p.Trigger())
+	})
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := text.NewReader([]byte(tc.input))
+			result := p.Parse(nil, reader, nil)
+			if tc.expectNil {
+				assert.Nil(t, result)
+			} else {
+				require.NotNil(t, result)
+				if tc.checkNodeType != nil {
+					assert.True(t, tc.checkNodeType(result))
+				}
+			}
+		})
+	}
+}
 
 func TestHighlightExtension(t *testing.T) {
 	md := goldmark.New(
@@ -91,36 +129,11 @@ func TestHighlightDelimiterProcessor(t *testing.T) {
 }
 
 func TestHighlightParser(t *testing.T) {
-	p := &highlightParser{}
-
-	t.Run("Trigger returns equals byte", func(t *testing.T) {
-		assert.Equal(t, []byte{'='}, p.Trigger())
-	})
-
-	t.Run("Parse returns nil for short input", func(t *testing.T) {
-		reader := text.NewReader([]byte("="))
-		result := p.Parse(nil, reader, nil)
-		assert.Nil(t, result)
-	})
-
-	t.Run("Parse returns nil for non-highlight", func(t *testing.T) {
-		reader := text.NewReader([]byte("=abc"))
-		result := p.Parse(nil, reader, nil)
-		assert.Nil(t, result)
-	})
-
-	t.Run("Parse returns nil for unclosed highlight", func(t *testing.T) {
-		reader := text.NewReader([]byte("==unclosed"))
-		result := p.Parse(nil, reader, nil)
-		assert.Nil(t, result)
-	})
-
-	t.Run("Parse returns Highlight for valid syntax", func(t *testing.T) {
-		reader := text.NewReader([]byte("==text=="))
-		result := p.Parse(nil, reader, nil)
-		require.NotNil(t, result)
-		_, ok := result.(*Highlight)
-		assert.True(t, ok)
+	runInlineParserTests(t, &highlightParser{}, '=', []parserTestCase{
+		{name: "short input", input: "=", expectNil: true},
+		{name: "non-highlight", input: "=abc", expectNil: true},
+		{name: "unclosed highlight", input: "==unclosed", expectNil: true},
+		{name: "valid syntax", input: "==text==", expectNil: false, checkNodeType: func(n ast.Node) bool { _, ok := n.(*Highlight); return ok }},
 	})
 }
 
@@ -451,35 +464,139 @@ func TestMuted_Dump(t *testing.T) {
 }
 
 func TestMutedParser(t *testing.T) {
-	p := &mutedParser{}
-
-	t.Run("Trigger returns paren byte", func(t *testing.T) {
-		assert.Equal(t, []byte{'('}, p.Trigger())
+	runInlineParserTests(t, &mutedParser{}, '(', []parserTestCase{
+		{name: "short input", input: "(", expectNil: true},
+		{name: "single paren", input: "(normal)", expectNil: true},
+		{name: "unclosed muted", input: "((unclosed", expectNil: true},
+		{name: "valid syntax", input: "((text))", expectNil: false, checkNodeType: func(n ast.Node) bool { _, ok := n.(*Muted); return ok }},
 	})
+}
 
-	t.Run("Parse returns nil for short input", func(t *testing.T) {
-		reader := text.NewReader([]byte("("))
-		result := p.Parse(nil, reader, nil)
-		assert.Nil(t, result)
-	})
+func TestStrictEmailRegexp(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		matches bool
+	}{
+		// Valid emails should match.
+		{
+			name:    "simple email",
+			input:   "user@example.com",
+			matches: true,
+		},
+		{
+			name:    "email with subdomain",
+			input:   "support@mail.company.org",
+			matches: true,
+		},
+		{
+			name:    "email with plus",
+			input:   "user+tag@example.com",
+			matches: true,
+		},
+		{
+			name:    "email with dots in local part",
+			input:   "first.last@example.com",
+			matches: true,
+		},
+		// Package references should NOT match.
+		{
+			name:    "package with org/repo@version",
+			input:   "replicatedhq/replicated@0.124.1",
+			matches: false,
+		},
+		{
+			name:    "package with simple path",
+			input:   "foo/bar@1.0.0",
+			matches: false,
+		},
+		{
+			name:    "npm scoped package",
+			input:   "@scope/package@2.0.0",
+			matches: false,
+		},
+		{
+			name:    "go module with path",
+			input:   "github.com/user/repo@v1.2.3",
+			matches: false,
+		},
+		// Edge cases.
+		{
+			name:    "no TLD",
+			input:   "user@localhost",
+			matches: false,
+		},
+		{
+			name:    "just at sign",
+			input:   "@",
+			matches: false,
+		},
+	}
 
-	t.Run("Parse returns nil for single paren", func(t *testing.T) {
-		reader := text.NewReader([]byte("(normal)"))
-		result := p.Parse(nil, reader, nil)
-		assert.Nil(t, result)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			match := StrictEmailRegexp.MatchString(tt.input)
+			assert.Equal(t, tt.matches, match, "input: %s", tt.input)
+		})
+	}
+}
 
-	t.Run("Parse returns nil for unclosed muted", func(t *testing.T) {
-		reader := text.NewReader([]byte("((unclosed"))
-		result := p.Parse(nil, reader, nil)
-		assert.Nil(t, result)
-	})
+func TestStrictLinkifyExtension(t *testing.T) {
+	// Create markdown with GFM (includes default Linkify) then override with strict version.
+	md := goldmark.New(
+		goldmark.WithExtensions(
+			extension.GFM,
+			NewStrictLinkifyExtension(),
+		),
+	)
 
-	t.Run("Parse returns Muted for valid syntax", func(t *testing.T) {
-		reader := text.NewReader([]byte("((text))"))
-		result := p.Parse(nil, reader, nil)
-		require.NotNil(t, result)
-		_, ok := result.(*Muted)
-		assert.True(t, ok)
-	})
+	tests := []struct {
+		name           string
+		input          string
+		mustContain    string
+		mustNotContain string
+	}{
+		{
+			name:        "valid email gets linked",
+			input:       "Contact user@example.com for help",
+			mustContain: "mailto:user@example.com",
+		},
+		{
+			name:           "package reference stays plain text",
+			input:          "Install failed replicatedhq/replicated@0.124.1",
+			mustContain:    "replicatedhq/replicated@0.124.1",
+			mustNotContain: "mailto:",
+		},
+		{
+			name:           "simple package reference",
+			input:          "Use foo/bar@1.0.0",
+			mustContain:    "foo/bar@1.0.0",
+			mustNotContain: "mailto:",
+		},
+		{
+			name:           "npm scoped package",
+			input:          "Install @scope/package@2.0.0",
+			mustContain:    "@scope/package@2.0.0",
+			mustNotContain: "mailto:",
+		},
+		{
+			name:           "go module path",
+			input:          "Use github.com/user/repo@v1.2.3",
+			mustContain:    "github.com/user/repo@v1.2.3",
+			mustNotContain: "mailto:",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			err := md.Convert([]byte(tt.input), &buf)
+			assert.NoError(t, err)
+			output := buf.String()
+			assert.Contains(t, output, tt.mustContain, "output: %s", output)
+			if tt.mustNotContain != "" {
+				assert.NotContains(t, output, tt.mustNotContain, "output: %s", output)
+			}
+		})
+	}
 }

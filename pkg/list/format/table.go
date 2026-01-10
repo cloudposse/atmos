@@ -369,7 +369,7 @@ func joinItems(items []string) string {
 	result := ""
 	for i, item := range items {
 		if i > 0 {
-			result += "\n"
+			result += fmtNewline
 		}
 		// Truncate individual items if they're too long.
 		if len(item) > MaxColumnWidth {
@@ -754,7 +754,7 @@ func padToWidth(s string, width int) string {
 				padded[i] = line
 			}
 		}
-		return strings.Join(padded, "\n")
+		return strings.Join(padded, fmtNewline)
 	}
 
 	// Single line: pad if needed.
@@ -858,7 +858,7 @@ func CreateStyledTable(header []string, rows [][]string) string {
 		})
 
 	// Add blank lines before and after the table for visual separation.
-	return "\n" + t.String() + "\n" + utils.GetLineEnding()
+	return fmtNewline + t.String() + fmtNewline + utils.GetLineEnding()
 }
 
 // Format implements the Formatter interface for TableFormatter.
