@@ -30,8 +30,8 @@ tests:
     expect:
       exit_code: 0
       tty:
-        # Check block warning message
-        - "Check block assertion failed"
+        # Check block warning message (formatted by formatDiagnosticMessage)
+        - "check failed"
         - "warning_threshold.*exceeds safe limit"
 
   # Test error diagnostics from Terraform precondition
@@ -59,8 +59,8 @@ tests:
     expect:
       exit_code: 1
       tty:
-        # Precondition error message
-        - "Resource precondition failed"
+        # Precondition error message (formatted by formatDiagnosticMessage)
+        - "precondition failed"
         - "trigger_error is true"
 
   # Test warning without TTY (fallback mode)
@@ -83,7 +83,7 @@ tests:
     expect:
       exit_code: 0
       stdout:
-        - "Check block assertion failed"
+        - "check failed"
         - "warning_threshold.*exceeds safe limit"
 
   # Test error without TTY (fallback mode)
@@ -106,5 +106,5 @@ tests:
     expect:
       exit_code: 1
       stderr:
-        - "Resource precondition failed"
+        - "precondition failed"
         - "trigger_error is true"

@@ -19,6 +19,7 @@
       "plan": {
         "skip_planfile": false
       },
+      "plugin_cache": true,
       "ui": {
         "enabled": false
       }
