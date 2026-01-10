@@ -6,6 +6,7 @@ import (
 
 	"github.com/samber/lo"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -59,7 +60,7 @@ func componentFunc(
 		AuthManager:          authMgr,
 	})
 	if err != nil {
-		return nil, err
+		return nil, errUtils.WrapComponentDescribeError(component, stack, err, "atmos.Component")
 	}
 
 	// Process Terraform remote state.
@@ -81,7 +82,7 @@ func componentFunc(
 			}
 			terraformOutputs, err = tfoutput.ExecuteWithSections(atmosConfig, component, stack, sections, authContext)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("atmos.Component(%s, %s) failed to get terraform outputs: %w", component, stack, err)
 			}
 		}
 
