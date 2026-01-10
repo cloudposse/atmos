@@ -69,10 +69,32 @@ func WithStackValidation(check bool) AtmosValidateOption {
 // by querying RootCmd.PersistentFlags() at runtime. This ensures we always have the
 // current set of reserved flags without maintaining a static list.
 func getGlobalFlagNames() map[string]bool {
+	return getReservedFlagNamesFor(RootCmd)
+}
+
+// getReservedFlagNamesFor returns a set of all reserved flag names and shorthands
+// for a given parent command. This includes:
+// 1. The parent command's own persistent flags
+// 2. Flags inherited from ancestor commands (via InheritedFlags)
+// 3. The hardcoded "identity" flag that gets added to every custom command
+//
+// This function is used to validate that child commands don't define flags
+// that would conflict with their parent's flags at any level of nesting.
+func getReservedFlagNamesFor(parent *cobra.Command) map[string]bool {
 	reserved := make(map[string]bool)
 
-	// Query all persistent flags from RootCmd dynamically.
-	RootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+	// Query persistent flags from the parent command.
+	parent.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+		reserved[f.Name] = true
+		if f.Shorthand != "" {
+			reserved[f.Shorthand] = true
+		}
+	})
+
+	// Query inherited flags from ancestor commands.
+	// InheritedFlags() returns flags that are inherited from parent commands
+	// but not defined on this command itself.
+	parent.InheritedFlags().VisitAll(func(f *pflag.Flag) {
 		reserved[f.Name] = true
 		if f.Shorthand != "" {
 			reserved[f.Shorthand] = true
@@ -134,14 +156,15 @@ func processCustomCommands(
 			customCommand.PersistentFlags().String("identity", "", "Identity to use for authentication (overrides identity in command config)")
 			AddIdentityCompletion(customCommand)
 
-			// Get reserved flag names by querying RootCmd's persistent flags.
-			reservedFlags := getGlobalFlagNames()
+			// Get reserved flag names by querying the parent command's persistent and inherited flags.
+			// This ensures we detect conflicts with both global flags and parent custom command flags.
+			reservedFlags := getReservedFlagNamesFor(parentCommand)
 
-			// Validate flags don't conflict with global/reserved flags.
+			// Validate flags don't conflict with global/reserved flags or parent command flags.
 			for _, flag := range commandConfig.Flags {
 				if reservedFlags[flag.Name] {
 					return errUtils.Build(errUtils.ErrReservedFlagName).
-						WithExplanation(fmt.Sprintf("Custom command '%s' defines flag '--%s' which conflicts with a global flag", commandConfig.Name, flag.Name)).
+						WithExplanation(fmt.Sprintf("Custom command '%s' defines flag '--%s' which conflicts with a reserved or parent command flag", commandConfig.Name, flag.Name)).
 						WithHint("Rename the flag in your atmos.yaml to avoid conflicts with reserved flag names").
 						WithContext("command", commandConfig.Name).
 						WithContext("flag", flag.Name).
@@ -149,7 +172,7 @@ func processCustomCommands(
 				}
 				if flag.Shorthand != "" && reservedFlags[flag.Shorthand] {
 					return errUtils.Build(errUtils.ErrReservedFlagName).
-						WithExplanation(fmt.Sprintf("Custom command '%s' defines flag shorthand '-%s' which conflicts with a global flag shorthand", commandConfig.Name, flag.Shorthand)).
+						WithExplanation(fmt.Sprintf("Custom command '%s' defines flag shorthand '-%s' which conflicts with a reserved or parent command flag shorthand", commandConfig.Name, flag.Shorthand)).
 						WithHint("Change the shorthand in your atmos.yaml to avoid conflicts with reserved flag shorthands").
 						WithContext("command", commandConfig.Name).
 						WithContext("shorthand", flag.Shorthand).
