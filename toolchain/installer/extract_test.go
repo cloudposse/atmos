@@ -235,7 +235,8 @@ func TestValidatePath(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.Contains(t, result, tt.filename)
+				// Use filepath.FromSlash to convert forward slashes to OS-appropriate separators.
+				assert.Contains(t, result, filepath.FromSlash(tt.filename))
 			}
 		})
 	}

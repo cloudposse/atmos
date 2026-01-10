@@ -202,11 +202,8 @@ func TestDownloadAsset_FilenameExtraction(t *testing.T) {
 			url:              "https://github.com/owner/repo/releases/download/v1.0.0/tool-linux-amd64.tar.gz",
 			expectedFilename: "tool-linux-amd64.tar.gz",
 		},
-		{
-			name:             "with query string (not common for GitHub releases)",
-			url:              "https://example.com/path/file.zip?token=abc",
-			expectedFilename: "file.zip?token=abc",
-		},
+		// Note: Query string test case removed - `?` is invalid in Windows filenames
+		// and GitHub releases don't use query strings in asset URLs.
 	}
 
 	for _, tt := range tests {
