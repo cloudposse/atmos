@@ -68,9 +68,9 @@ func getRunnableDescribeLocalsCmd(
 		// Check Atmos configuration.
 		g.checkAtmosConfig()
 
-		// Pass nil for args since we handle the component positional arg ourselves.
-		// This avoids potential misclassification by ProcessCommandLineArgs.
-		info, err := g.processCommandLineArgs("", cmd, nil, nil)
+		// Pass args to ensure config-selection flags (--base-path, --config, etc.) are parsed.
+		// The component positional arg is extracted separately below.
+		info, err := g.processCommandLineArgs("", cmd, args, nil)
 		if err != nil {
 			return err
 		}
@@ -151,18 +151,19 @@ func setCliArgsForDescribeLocalsCli(flags *pflag.FlagSet, args *exec.DescribeLoc
 func init() {
 	describeLocalsCmd.DisableFlagParsing = false
 
-	describeLocalsCmd.PersistentFlags().StringP("stack", "s", "",
+	// Use Flags() instead of PersistentFlags() since this command has no subcommands.
+	describeLocalsCmd.Flags().StringP("stack", "s", "",
 		"Filter by a specific stack\n"+
 			"The filter supports names of the top-level stack manifests (including subfolder paths), and `atmos` stack names (derived from the context vars)\n"+
 			"Note: YAML parse errors are reported when filtering by stack; otherwise they are silently skipped during batch processing",
 	)
 	AddStackCompletion(describeLocalsCmd)
 
-	describeLocalsCmd.PersistentFlags().StringP("format", "f", "yaml", "Specify the output format (`yaml` is default)")
+	describeLocalsCmd.Flags().StringP("format", "f", "yaml", "Specify the output format (`yaml` is default)")
 
-	describeLocalsCmd.PersistentFlags().String("file", "", "Write the result to file")
+	describeLocalsCmd.Flags().String("file", "", "Write the result to file")
 
-	describeLocalsCmd.PersistentFlags().StringP("query", "q", "", "Query the result using `yq` expression")
+	describeLocalsCmd.Flags().StringP("query", "q", "", "Query the result using `yq` expression")
 
 	describeCmd.AddCommand(describeLocalsCmd)
 }

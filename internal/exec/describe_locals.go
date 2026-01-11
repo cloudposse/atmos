@@ -163,13 +163,26 @@ func buildComponentLocalsResult(
 	componentType string,
 	componentLocals map[string]any,
 ) (map[string]any, error) {
-	// Look up by the specific stack name to avoid non-deterministic map iteration.
+	// ExecuteDescribeLocals already filters by stack, so stackLocals should have at most one entry.
+	// The key may be the logical stack name (e.g., "prod-us-west-2") which differs from
+	// args.FilterByStack (e.g., "deploy/prod"). Try direct lookup first, then fall back to
+	// using the single entry if present.
+	var localsMap map[string]any
+
 	if localsData, exists := stackLocals[args.FilterByStack]; exists {
-		if localsMap, ok := localsData.(map[string]any); ok {
-			stackTypeLocals := getLocalsForComponentType(localsMap, componentType)
-			mergedLocals := mergeLocals(stackTypeLocals, componentLocals)
-			return buildComponentSchemaOutput(args.Component, componentType, mergedLocals), nil
+		localsMap, _ = localsData.(map[string]any)
+	} else if len(stackLocals) == 1 {
+		// Single entry after filtering - use it regardless of key name.
+		for _, localsData := range stackLocals {
+			localsMap, _ = localsData.(map[string]any)
+			break
 		}
+	}
+
+	if localsMap != nil {
+		stackTypeLocals := getLocalsForComponentType(localsMap, componentType)
+		mergedLocals := mergeLocals(stackTypeLocals, componentLocals)
+		return buildComponentSchemaOutput(args.Component, componentType, mergedLocals), nil
 	}
 
 	if len(componentLocals) > 0 {
@@ -275,6 +288,10 @@ func ExecuteDescribeLocals(
 	filterByStack string,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExecuteDescribeLocals")()
+
+	// Normalize path separators for Windows compatibility.
+	// deriveStackFileName returns forward-slash paths, so we need to match that format.
+	filterByStack = filepath.ToSlash(filterByStack)
 
 	finalLocalsMap := make(map[string]any)
 	stackFound := false

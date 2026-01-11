@@ -1115,3 +1115,626 @@ locals:
 		assert.ErrorIs(t, err, errUtils.ErrStackRequiredWithComponent)
 	})
 }
+
+func TestGetComponentType(t *testing.T) {
+	tests := []struct {
+		name             string
+		componentSection map[string]any
+		expected         string
+	}{
+		{
+			name:             "returns terraform for terraform type",
+			componentSection: map[string]any{"component_type": "terraform"},
+			expected:         "terraform",
+		},
+		{
+			name:             "returns helmfile for helmfile type",
+			componentSection: map[string]any{"component_type": "helmfile"},
+			expected:         "helmfile",
+		},
+		{
+			name:             "returns packer for packer type",
+			componentSection: map[string]any{"component_type": "packer"},
+			expected:         "packer",
+		},
+		{
+			name:             "defaults to terraform when not set",
+			componentSection: map[string]any{},
+			expected:         "terraform",
+		},
+		{
+			name:             "defaults to terraform for nil map",
+			componentSection: nil,
+			expected:         "terraform",
+		},
+		{
+			name:             "defaults to terraform for non-string type",
+			componentSection: map[string]any{"component_type": 123},
+			expected:         "terraform",
+		},
+		{
+			name:             "defaults to terraform for empty string",
+			componentSection: map[string]any{"component_type": ""},
+			expected:         "terraform",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getComponentType(tt.componentSection)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExtractComponentLocals(t *testing.T) {
+	tests := []struct {
+		name             string
+		componentSection map[string]any
+		expected         map[string]any
+	}{
+		{
+			name: "extracts locals from component section",
+			componentSection: map[string]any{
+				"locals": map[string]any{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			},
+			expected: map[string]any{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+		{
+			name:             "returns nil when no locals",
+			componentSection: map[string]any{},
+			expected:         nil,
+		},
+		{
+			name:             "returns nil for nil section",
+			componentSection: nil,
+			expected:         nil,
+		},
+		{
+			name: "returns nil when locals is not a map",
+			componentSection: map[string]any{
+				"locals": "not a map",
+			},
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractComponentLocals(tt.componentSection)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildComponentSchemaOutput(t *testing.T) {
+	tests := []struct {
+		name          string
+		component     string
+		componentType string
+		locals        map[string]any
+	}{
+		{
+			name:          "builds terraform component output",
+			component:     "vpc",
+			componentType: "terraform",
+			locals:        map[string]any{"namespace": "acme"},
+		},
+		{
+			name:          "builds helmfile component output",
+			component:     "nginx",
+			componentType: "helmfile",
+			locals:        map[string]any{"release": "v1"},
+		},
+		{
+			name:          "builds output with empty locals",
+			component:     "test",
+			componentType: "terraform",
+			locals:        map[string]any{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildComponentSchemaOutput(tt.component, tt.componentType, tt.locals)
+
+			// Verify structure: components -> componentType -> component -> locals.
+			components, ok := result["components"].(map[string]any)
+			require.True(t, ok)
+			typeSection, ok := components[tt.componentType].(map[string]any)
+			require.True(t, ok)
+			compSection, ok := typeSection[tt.component].(map[string]any)
+			require.True(t, ok)
+			assert.Contains(t, compSection, "locals")
+		})
+	}
+}
+
+func TestMergeLocals(t *testing.T) {
+	tests := []struct {
+		name     string
+		base     map[string]any
+		override map[string]any
+		expected map[string]any
+	}{
+		{
+			name:     "merges two maps",
+			base:     map[string]any{"key1": "value1"},
+			override: map[string]any{"key2": "value2"},
+			expected: map[string]any{"key1": "value1", "key2": "value2"},
+		},
+		{
+			name:     "override takes precedence",
+			base:     map[string]any{"key": "base"},
+			override: map[string]any{"key": "override"},
+			expected: map[string]any{"key": "override"},
+		},
+		{
+			name:     "deep merges nested maps",
+			base:     map[string]any{"nested": map[string]any{"a": 1, "b": 2}},
+			override: map[string]any{"nested": map[string]any{"b": 3, "c": 4}},
+			expected: map[string]any{"nested": map[string]any{"a": 1, "b": 3, "c": 4}},
+		},
+		{
+			name:     "handles nil base",
+			base:     nil,
+			override: map[string]any{"key": "value"},
+			expected: map[string]any{"key": "value"},
+		},
+		{
+			name:     "handles nil override",
+			base:     map[string]any{"key": "value"},
+			override: nil,
+			expected: map[string]any{"key": "value"},
+		},
+		{
+			name:     "handles both nil",
+			base:     nil,
+			override: nil,
+			expected: map[string]any{},
+		},
+		{
+			name:     "handles empty maps",
+			base:     map[string]any{},
+			override: map[string]any{},
+			expected: map[string]any{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mergeLocals(tt.base, tt.override)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestValidateFilteredLocalsResult(t *testing.T) {
+	tests := []struct {
+		name          string
+		filterByStack string
+		stackFound    bool
+		localsMap     map[string]any
+		expectError   bool
+		expectedErr   error
+	}{
+		{
+			name:          "no filter returns nil",
+			filterByStack: "",
+			stackFound:    false,
+			localsMap:     map[string]any{},
+			expectError:   false,
+		},
+		{
+			name:          "filter with found stack and locals returns nil",
+			filterByStack: "dev",
+			stackFound:    true,
+			localsMap:     map[string]any{"dev": map[string]any{}},
+			expectError:   false,
+		},
+		{
+			name:          "filter with not found stack returns error",
+			filterByStack: "nonexistent",
+			stackFound:    false,
+			localsMap:     map[string]any{},
+			expectError:   true,
+			expectedErr:   errUtils.ErrStackNotFound,
+		},
+		{
+			name:          "filter with found stack but no locals returns error",
+			filterByStack: "dev",
+			stackFound:    true,
+			localsMap:     map[string]any{},
+			expectError:   true,
+			expectedErr:   errUtils.ErrStackHasNoLocals,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateFilteredLocalsResult(tt.filterByStack, tt.stackFound, tt.localsMap)
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.ErrorIs(t, err, tt.expectedErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestParseStackFileYAML(t *testing.T) {
+	tempDir := t.TempDir()
+
+	t.Run("parses valid YAML", func(t *testing.T) {
+		validYAML := `
+locals:
+  key: value
+`
+		validFile := filepath.Join(tempDir, "valid.yaml")
+		err := os.WriteFile(validFile, []byte(validYAML), 0o644)
+		require.NoError(t, err)
+
+		result, err := parseStackFileYAML(validFile, false)
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Contains(t, result, "locals")
+	})
+
+	t.Run("returns error for file not found", func(t *testing.T) {
+		_, err := parseStackFileYAML("/nonexistent/file.yaml", false)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
+	})
+
+	t.Run("returns nil for invalid YAML when not filtering", func(t *testing.T) {
+		invalidYAML := `invalid: yaml: [broken`
+		invalidFile := filepath.Join(tempDir, "invalid.yaml")
+		err := os.WriteFile(invalidFile, []byte(invalidYAML), 0o644)
+		require.NoError(t, err)
+
+		result, err := parseStackFileYAML(invalidFile, false)
+		require.NoError(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns error for invalid YAML when filtering", func(t *testing.T) {
+		invalidYAML := `invalid: yaml: [broken`
+		invalidFile := filepath.Join(tempDir, "invalid_filter.yaml")
+		err := os.WriteFile(invalidFile, []byte(invalidYAML), 0o644)
+		require.NoError(t, err)
+
+		_, err = parseStackFileYAML(invalidFile, true)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
+	})
+
+	t.Run("returns nil for empty file", func(t *testing.T) {
+		emptyFile := filepath.Join(tempDir, "empty.yaml")
+		err := os.WriteFile(emptyFile, []byte(""), 0o644)
+		require.NoError(t, err)
+
+		result, err := parseStackFileYAML(emptyFile, false)
+		require.NoError(t, err)
+		assert.Nil(t, result)
+	})
+}
+
+func TestStackMatchesFilter(t *testing.T) {
+	tests := []struct {
+		name          string
+		filterByStack string
+		stackFileName string
+		stackName     string
+		expected      bool
+	}{
+		{
+			name:          "empty filter matches all",
+			filterByStack: "",
+			stackFileName: "deploy/dev",
+			stackName:     "dev",
+			expected:      true,
+		},
+		{
+			name:          "matches by filename",
+			filterByStack: "deploy/dev",
+			stackFileName: "deploy/dev",
+			stackName:     "dev-us-east-1",
+			expected:      true,
+		},
+		{
+			name:          "matches by derived name",
+			filterByStack: "dev-us-east-1",
+			stackFileName: "deploy/dev",
+			stackName:     "dev-us-east-1",
+			expected:      true,
+		},
+		{
+			name:          "no match",
+			filterByStack: "prod",
+			stackFileName: "deploy/dev",
+			stackName:     "dev-us-east-1",
+			expected:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stackMatchesFilter(tt.filterByStack, tt.stackFileName, tt.stackName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetSectionOnlyLocals(t *testing.T) {
+	tests := []struct {
+		name          string
+		sectionLocals map[string]any
+		globalLocals  map[string]any
+		expected      map[string]any
+	}{
+		{
+			name:          "returns section-only keys",
+			sectionLocals: map[string]any{"global": "value", "section_only": "value2"},
+			globalLocals:  map[string]any{"global": "value"},
+			expected:      map[string]any{"section_only": "value2"},
+		},
+		{
+			name:          "returns empty when all keys are global",
+			sectionLocals: map[string]any{"global": "value"},
+			globalLocals:  map[string]any{"global": "value"},
+			expected:      map[string]any{},
+		},
+		{
+			name:          "returns all when no global",
+			sectionLocals: map[string]any{"key1": "value1", "key2": "value2"},
+			globalLocals:  map[string]any{},
+			expected:      map[string]any{"key1": "value1", "key2": "value2"},
+		},
+		{
+			name:          "handles nil section",
+			sectionLocals: nil,
+			globalLocals:  map[string]any{"key": "value"},
+			expected:      map[string]any{},
+		},
+		{
+			name:          "handles nil global",
+			sectionLocals: map[string]any{"key": "value"},
+			globalLocals:  nil,
+			expected:      map[string]any{"key": "value"},
+		},
+		{
+			name:          "excludes keys with same value",
+			sectionLocals: map[string]any{"same": "value", "different": "new"},
+			globalLocals:  map[string]any{"same": "value", "different": "old"},
+			expected:      map[string]any{"different": "new"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getSectionOnlyLocals(tt.sectionLocals, tt.globalLocals)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestValuesEqual(t *testing.T) {
+	tests := []struct {
+		name     string
+		a        any
+		b        any
+		expected bool
+	}{
+		{
+			name:     "equal strings",
+			a:        "value",
+			b:        "value",
+			expected: true,
+		},
+		{
+			name:     "different strings",
+			a:        "value1",
+			b:        "value2",
+			expected: false,
+		},
+		{
+			name:     "equal ints",
+			a:        123,
+			b:        123,
+			expected: true,
+		},
+		{
+			name:     "different ints",
+			a:        123,
+			b:        456,
+			expected: false,
+		},
+		{
+			name:     "equal maps",
+			a:        map[string]any{"key": "value"},
+			b:        map[string]any{"key": "value"},
+			expected: true,
+		},
+		{
+			name:     "different maps",
+			a:        map[string]any{"key": "value1"},
+			b:        map[string]any{"key": "value2"},
+			expected: false,
+		},
+		{
+			name:     "equal slices",
+			a:        []any{1, 2, 3},
+			b:        []any{1, 2, 3},
+			expected: true,
+		},
+		{
+			name:     "different slices",
+			a:        []any{1, 2, 3},
+			b:        []any{1, 2, 4},
+			expected: false,
+		},
+		{
+			name:     "nil values",
+			a:        nil,
+			b:        nil,
+			expected: true,
+		},
+		{
+			name:     "one nil",
+			a:        "value",
+			b:        nil,
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := valuesEqual(tt.a, tt.b)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetExplicitStackName(t *testing.T) {
+	tests := []struct {
+		name            string
+		stackSectionMap map[string]any
+		expected        string
+	}{
+		{
+			name:            "returns explicit name",
+			stackSectionMap: map[string]any{"name": "my-stack"},
+			expected:        "my-stack",
+		},
+		{
+			name:            "returns empty for missing name",
+			stackSectionMap: map[string]any{},
+			expected:        "",
+		},
+		{
+			name:            "returns empty for nil map",
+			stackSectionMap: nil,
+			expected:        "",
+		},
+		{
+			name:            "returns empty for non-string name",
+			stackSectionMap: map[string]any{"name": 123},
+			expected:        "",
+		},
+		{
+			name:            "returns empty string name as-is",
+			stackSectionMap: map[string]any{"name": ""},
+			expected:        "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getExplicitStackName(tt.stackSectionMap)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestBuildComponentLocalsResult(t *testing.T) {
+	t.Run("direct key lookup succeeds", func(t *testing.T) {
+		args := &DescribeLocalsArgs{
+			Component:     "vpc",
+			FilterByStack: "dev",
+		}
+		stackLocals := map[string]any{
+			"dev": map[string]any{
+				"locals": map[string]any{"namespace": "acme"},
+			},
+		}
+
+		result, err := buildComponentLocalsResult(args, stackLocals, "terraform", nil)
+		require.NoError(t, err)
+		assert.Contains(t, result, "components")
+	})
+
+	t.Run("single entry fallback when key differs", func(t *testing.T) {
+		args := &DescribeLocalsArgs{
+			Component:     "vpc",
+			FilterByStack: "deploy/prod",
+		}
+		// Key is logical name, not file path.
+		stackLocals := map[string]any{
+			"prod-us-west-2": map[string]any{
+				"locals": map[string]any{"namespace": "acme"},
+			},
+		}
+
+		result, err := buildComponentLocalsResult(args, stackLocals, "terraform", nil)
+		require.NoError(t, err)
+		assert.Contains(t, result, "components")
+	})
+
+	t.Run("uses component locals when stack has no locals", func(t *testing.T) {
+		args := &DescribeLocalsArgs{
+			Component:     "vpc",
+			FilterByStack: "dev",
+		}
+		componentLocals := map[string]any{"component_key": "value"}
+
+		result, err := buildComponentLocalsResult(args, map[string]any{}, "terraform", componentLocals)
+		require.NoError(t, err)
+
+		components, ok := result["components"].(map[string]any)
+		require.True(t, ok)
+		terraform, ok := components["terraform"].(map[string]any)
+		require.True(t, ok)
+		vpc, ok := terraform["vpc"].(map[string]any)
+		require.True(t, ok)
+		locals, ok := vpc["locals"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "value", locals["component_key"])
+	})
+
+	t.Run("returns error when no locals available", func(t *testing.T) {
+		args := &DescribeLocalsArgs{
+			Component:     "vpc",
+			FilterByStack: "dev",
+		}
+
+		_, err := buildComponentLocalsResult(args, map[string]any{}, "terraform", nil)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrStackHasNoLocals)
+	})
+}
+
+func TestExecuteDescribeLocalsWindowsPathNormalization(t *testing.T) {
+	// Test that Windows-style paths are normalized.
+	tempDir := t.TempDir()
+
+	devYAML := `
+locals:
+  namespace: acme
+`
+	// Create nested directory structure.
+	deployDir := filepath.Join(tempDir, "deploy")
+	err := os.MkdirAll(deployDir, 0o755)
+	require.NoError(t, err)
+
+	devFile := filepath.Join(deployDir, "dev.yaml")
+	err = os.WriteFile(devFile, []byte(devYAML), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		StacksBaseAbsolutePath:        tempDir,
+		StackConfigFilesAbsolutePaths: []string{devFile},
+	}
+
+	// Use forward slashes (as would be normalized from Windows backslashes).
+	result, err := ExecuteDescribeLocals(atmosConfig, "deploy/dev")
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+	assert.Contains(t, result, "deploy/dev")
+}
