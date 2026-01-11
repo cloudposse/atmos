@@ -157,7 +157,7 @@ jobs:
 
       # https://github.com/helmfile/helmfile-action
       - name: Install Helmfile
-        uses: helmfile/helmfile-action@v2.0.5
+        uses: helmfile/helmfile-action@v2.1.0
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         with:
           helm-version: ${{ env.HELM_VERSION }}
@@ -195,7 +195,7 @@ jobs:
       # Enable this after merging test-cases
       # Only seems to work with remote schema files
       #- name: Validate YAML Schema for Test Cases
-      #  uses: InoUno/yaml-ls-check@v1.4.0
+      #  uses: InoUno/yaml-ls-check@v1.5.1
       #  with:
       #    root: "tests/test-cases"
       #    schemaMapping: |
@@ -235,7 +235,7 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - uses: hadolint/hadolint-action@v3.1.0
+      - uses: hadolint/hadolint-action@v3.3.0
         id: hadolint
         with:
           dockerfile: Dockerfile
@@ -584,7 +584,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate YAML Schema for Stacks
-        uses: InoUno/yaml-ls-check@v1.4.0
+        uses: InoUno/yaml-ls-check@v1.5.1
         with:
           root: "examples/${{ matrix.demo-folder }}/stacks"
           schemaMapping: |
