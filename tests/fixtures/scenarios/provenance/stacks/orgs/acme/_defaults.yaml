@@ -1,0 +1,14 @@
+# Organization defaults for acme (depth 2 in import chain).
+import:
+  - mixins/stage/dev
+
+vars:
+  tenant: acme
+  namespace: acme
+
+components:
+  terraform:
+    myapp:
+      vars:
+        tags:
+          tenant: acme

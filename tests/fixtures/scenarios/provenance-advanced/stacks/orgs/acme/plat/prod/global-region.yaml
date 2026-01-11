@@ -1,0 +1,3 @@
+import:
+  - orgs/acme/plat/prod/_defaults
+  - mixins/region/global-region

@@ -1,0 +1,14 @@
+# Minimal atmos configuration for provenance testing.
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "orgs/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.tenant }}-{{ .vars.stage }}-{{ .vars.region }}"

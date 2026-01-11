@@ -1,0 +1,4 @@
+vars:
+  tenant: core
+
+# Other defaults for the `core` tenant/OU

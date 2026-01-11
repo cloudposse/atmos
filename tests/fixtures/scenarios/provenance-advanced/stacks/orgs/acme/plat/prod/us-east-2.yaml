@@ -1,0 +1,5 @@
+import:
+  - orgs/acme/plat/prod/_defaults
+  - mixins/region/us-east-2
+  # Override the `vpc` component configuration for `prod` by importing the `catalog/vpc/prod` manifest
+  - catalog/vpc/prod
