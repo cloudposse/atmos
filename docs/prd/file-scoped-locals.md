@@ -223,13 +223,13 @@ components:
 
 **Inheritance hierarchy for component-level locals:**
 
-```
+```text
 Base Component Locals → Component Locals (component-level takes precedence)
 ```
 
 **Full locals resolution order for a component:**
 
-```
+```text
 Global Locals → Section Locals → Base Component Locals → Component Locals
 ```
 

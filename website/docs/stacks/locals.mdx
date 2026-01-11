@@ -74,7 +74,7 @@ terraform:
 
 ### Using Locals in Components
 
-Components can reference merged locals (global + component-type) in their `vars`:
+Components can reference merged locals (global + component-type) in their `vars`. When the same key is defined at multiple scopes, later scopes take precedence: component-type locals override global locals, and component-level locals override both.
 
 ```yaml
 # stacks/orgs/acme/plat/prod/us-east-1.yaml
@@ -124,6 +124,14 @@ Each level can:
 - Override parent locals with new values
 
 Component-level locals also inherit from base components via `metadata.inherits` or `component` attribute.
+
+:::note Precedence
+When the same key exists at multiple levels, the most specific scope wins. For terraform components, the full precedence chain is:
+
+**Global → Terraform Section → Base Component → Component**
+
+This means component-level locals override section-level, which override global locals.
+:::
 
 ### Example
 

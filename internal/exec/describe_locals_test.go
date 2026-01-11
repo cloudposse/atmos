@@ -255,7 +255,8 @@ vars:
 	})
 
 	t.Run("file not found", func(t *testing.T) {
-		_, err := processStackFileForLocals(atmosConfig, "/nonexistent/file.yaml", "")
+		missingFile := filepath.Join(tempDir, "does-not-exist.yaml")
+		_, err := processStackFileForLocals(atmosConfig, missingFile, "")
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
 		assert.Contains(t, err.Error(), "failed to read stack file")
@@ -1307,7 +1308,8 @@ locals:
 	})
 
 	t.Run("returns error for file not found", func(t *testing.T) {
-		_, err := parseStackFileYAML("/nonexistent/file.yaml", false)
+		missingFile := filepath.Join(tempDir, "does-not-exist.yaml")
+		_, err := parseStackFileYAML(missingFile, false)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
 	})

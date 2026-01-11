@@ -195,6 +195,13 @@ func (ctx *LocalsContext) MergeForComponentType(componentType string) map[string
 
 // MergeForTemplateContext merges all locals into a single flat map for template processing.
 // Global locals are copied first, then section-specific locals override if explicitly defined.
+//
+// Precedence (later overrides earlier): Global → Terraform → Helmfile → Packer.
+//
+// Note: In practice, overlapping keys across sections is uncommon because components are
+// single-typed (a component is either terraform, helmfile, or packer, not multiple).
+// For component-specific processing, use MergeForComponentType instead, which only merges
+// the relevant section for the component's type.
 func (ctx *LocalsContext) MergeForTemplateContext() map[string]any {
 	defer perf.Track(nil, "exec.LocalsContext.MergeForTemplateContext")()
 
@@ -210,6 +217,7 @@ func (ctx *LocalsContext) MergeForTemplateContext() map[string]any {
 	}
 
 	// Merge section-specific locals only if explicitly defined.
+	// Precedence: terraform → helmfile → packer (last wins for overlapping keys).
 	ctx.mergeSectionLocals(result, ctx.Terraform, ctx.HasTerraformLocals)
 	ctx.mergeSectionLocals(result, ctx.Helmfile, ctx.HasHelmfileLocals)
 	ctx.mergeSectionLocals(result, ctx.Packer, ctx.HasPackerLocals)

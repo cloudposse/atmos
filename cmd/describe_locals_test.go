@@ -173,7 +173,7 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 		// Pass component without --stack flag.
 		err := runFunc(cmd, []string{"vpc"})
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrStackRequired)
+		assert.ErrorIs(t, err, errUtils.ErrStackRequiredWithComponent)
 	})
 
 	// Table-driven tests for error cases to avoid code duplication.
@@ -219,6 +219,10 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 
 			runFunc := getRunnableDescribeLocalsCmd(props)
 			cmd := &cobra.Command{}
+			cmd.Flags().String("stack", "", "")
+			cmd.Flags().String("format", "", "")
+			cmd.Flags().String("file", "", "")
+			cmd.Flags().String("query", "", "")
 
 			err := runFunc(cmd, []string{})
 

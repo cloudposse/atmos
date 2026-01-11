@@ -229,22 +229,19 @@ func mergeLocals(base, override map[string]any) map[string]any {
 
 // getLocalsForComponentType extracts the appropriate merged locals for a component type.
 // Input format is Atmos schema: locals: {...}, terraform: {locals: {...}}, etc.
+// Uses mergeLocals for consistent deep-merge semantics with nested maps.
 func getLocalsForComponentType(stackLocals map[string]any, componentType string) map[string]any {
 	result := make(map[string]any)
 
 	// Start with global locals (root-level "locals:" key).
 	if globalLocals, ok := stackLocals[cfg.LocalsSectionName].(map[string]any); ok {
-		for k, v := range globalLocals {
-			result[k] = v
-		}
+		result = mergeLocals(result, globalLocals)
 	}
 
 	// Merge section-specific locals (e.g., "terraform: locals:").
 	if sectionMap, ok := stackLocals[componentType].(map[string]any); ok {
 		if sectionLocals, ok := sectionMap[cfg.LocalsSectionName].(map[string]any); ok {
-			for k, v := range sectionLocals {
-				result[k] = v
-			}
+			result = mergeLocals(result, sectionLocals)
 		}
 	}
 

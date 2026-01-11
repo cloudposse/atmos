@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -140,17 +141,16 @@ func TestLocalsDescribeStacks(t *testing.T) {
 	assert.Equal(t, "dev", vars["bar"], "bar should be resolved")
 }
 
-// TestLocalsCircularDependency verifies that circular locals don't crash the system.
-// When locals have a cycle, the resolver should log an error and continue without locals.
+// TestLocalsCircularDependency verifies that circular locals produce a clear error.
+// Circular dependencies in locals are a stack misconfiguration and should fail with a helpful error.
 func TestLocalsCircularDependency(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals-circular")
 
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Get all stacks - should succeed even with circular locals.
-	// The circular locals are logged as a debug warning but processing continues.
-	result, err := exec.ExecuteDescribeStacks(
+	// Get all stacks - should fail due to circular locals.
+	_, err = exec.ExecuteDescribeStacks(
 		&atmosConfig,
 		"",    // filterByStack
 		nil,   // components
@@ -164,41 +164,10 @@ func TestLocalsCircularDependency(t *testing.T) {
 		nil,   // authManager
 	)
 
-	// Should not error - circular locals are handled gracefully.
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.NotEmpty(t, result, "should have at least one stack")
-
-	// Find a stack that contains the mock component.
-	var foundStack map[string]any
-	for _, stackData := range result {
-		stack, ok := stackData.(map[string]any)
-		if !ok {
-			continue
-		}
-		components, ok := stack["components"].(map[string]any)
-		if !ok {
-			continue
-		}
-		terraform, ok := components["terraform"].(map[string]any)
-		if !ok {
-			continue
-		}
-		if _, exists := terraform["mock"]; exists {
-			foundStack = stack
-			break
-		}
-	}
-	require.NotNil(t, foundStack, "should find a stack with mock component")
-
-	components, ok := foundStack["components"].(map[string]any)
-	require.True(t, ok, "components should be a map")
-	terraform, ok := components["terraform"].(map[string]any)
-	require.True(t, ok, "terraform section should be a map")
-
-	// The mock component should exist.
-	_, ok = terraform["mock"].(map[string]any)
-	require.True(t, ok, "mock component should exist")
+	// Should error - circular locals are a stack misconfiguration.
+	require.Error(t, err, "circular dependency in locals should produce an error")
+	assert.ErrorIs(t, err, errUtils.ErrLocalsCircularDep, "error should be ErrLocalsCircularDep")
+	assert.Contains(t, err.Error(), "circular dependency", "error message should mention circular dependency")
 }
 
 // TestLocalsFileScoped verifies that locals are file-scoped and NOT inherited across imports.

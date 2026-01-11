@@ -48,7 +48,14 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	// so parsing succeeds even with unresolved templates.
 	var rawConfig map[string]any
 	if err := yaml.Unmarshal([]byte(yamlContent), &rawConfig); err != nil {
-		return nil, fmt.Errorf("%w: failed to parse YAML for locals extraction: %w", errUtils.ErrInvalidStackManifest, err)
+		// Provide a helpful hint if the file might contain Go template directives
+		// that aren't valid YAML. Files with .yaml.tmpl extension are processed
+		// as templates first, which allows non-YAML-valid Go template syntax.
+		hint := ""
+		if !strings.HasSuffix(filePath, u.TemplateExtension) {
+			hint = " (hint: if this file contains Go template directives, rename it to .yaml.tmpl)"
+		}
+		return nil, fmt.Errorf("%w: failed to parse YAML for locals extraction%s: %w", errUtils.ErrInvalidStackManifest, hint, err)
 	}
 
 	if rawConfig == nil {
@@ -80,6 +87,13 @@ func extractAndAddLocalsToContext(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.extractAndAddLocalsToContext")()
 
+	// Enforce file-scoped locals: clear any inherited locals from parent context.
+	// Locals are file-scoped and should NOT inherit across file boundaries.
+	// This ensures that each file only has access to its own locals.
+	if context != nil {
+		delete(context, "locals")
+	}
+
 	resolvedLocals, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
 	if localsErr != nil {
 		// For template files (.tmpl), YAML parse errors are expected since the raw content
@@ -89,11 +103,17 @@ func extractAndAddLocalsToContext(
 			log.Trace("Skipping locals extraction for template file with invalid YAML", "file", relativeFilePath, "error", localsErr)
 			return context, nil
 		}
-		// Circular dependencies in locals are handled gracefully - log a warning and continue
-		// without locals. This allows the rest of the stack to be processed.
+		// Circular dependencies in locals are a stack misconfiguration error.
+		// Return a helpful error with hints on how to fix it.
 		if stderrors.Is(localsErr, errUtils.ErrLocalsCircularDep) {
-			log.Warn("Circular dependency in locals, skipping locals resolution", "file", relativeFilePath, "error", localsErr)
-			return context, nil
+			return context, errUtils.Build(errUtils.ErrLocalsCircularDep).
+				WithCause(localsErr).
+				WithContext("file", relativeFilePath).
+				WithHintf("Fix the circular dependency in '%s'", relativeFilePath).
+				WithHint("Ensure locals don't reference each other in a cycle").
+				WithHintf("Use 'atmos describe locals --stack %s' to inspect locals", relativeFilePath).
+				WithExitCode(1).
+				Err()
 		}
 		return context, localsErr
 	}

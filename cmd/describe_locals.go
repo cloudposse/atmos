@@ -99,6 +99,9 @@ func getRunnableDescribeLocalsCmd(
 
 		// Fail fast if --stack is not specified (required).
 		if describeArgs.FilterByStack == "" {
+			if describeArgs.Component != "" {
+				return errUtils.ErrStackRequiredWithComponent
+			}
 			return errUtils.ErrStackRequired
 		}
 
@@ -149,8 +152,6 @@ func setCliArgsForDescribeLocalsCli(flags *pflag.FlagSet, args *exec.DescribeLoc
 }
 
 func init() {
-	describeLocalsCmd.DisableFlagParsing = false
-
 	// Use Flags() instead of PersistentFlags() since this command has no subcommands.
 	describeLocalsCmd.Flags().StringP("stack", "s", "",
 		"Filter by a specific stack\n"+
