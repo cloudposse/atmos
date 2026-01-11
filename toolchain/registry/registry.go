@@ -56,7 +56,7 @@ type SearchTotalProvider interface {
 	GetLastSearchTotal() int
 }
 
-//go:generate go run go.uber.org/mock/mockgen@latest -destination=mock_registry_test.go -package=registry github.com/cloudposse/atmos/toolchain/registry ToolRegistry
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=mock_registry_test.go -package=registry github.com/cloudposse/atmos/toolchain/registry ToolRegistry
 
 // ToolRegistry defines the interface for tool metadata registries.
 // This abstraction allows multiple registry implementations (Aqua, custom URL-based, etc.)

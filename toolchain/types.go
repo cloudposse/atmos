@@ -1,6 +1,6 @@
 package toolchain
 
-//go:generate go run go.uber.org/mock/mockgen@latest -destination=mock_registry_test.go -package=toolchain github.com/cloudposse/atmos/toolchain/registry ToolRegistry
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=mock_registry_test.go -package=toolchain github.com/cloudposse/atmos/toolchain/registry ToolRegistry
 
 import (
 	"path/filepath"
@@ -50,8 +50,8 @@ func (r *realRegistryFactory) NewAquaRegistry() registry.ToolRegistry {
 
 // NewInstaller creates a new Installer with the given options.
 // This is a wrapper around installer.New() for backward compatibility.
-// It automatically injects the real registry factory and loads registries
-// from atmos.yaml configuration.
+// It automatically injects the real registry factory and loads registries.
+// Configuration is read from atmos.yaml.
 func NewInstaller(opts ...Option) *Installer {
 	defer perf.Track(nil, "toolchain.NewInstaller")()
 
