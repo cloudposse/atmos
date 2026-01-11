@@ -638,15 +638,15 @@
           "type": "r2"
         },
         "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/51dbd192728c83e74bbe31945855be3f/watch",
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/fdce685d86116c8044619deaf82185be/watch",
           "type": "stream",
-          "uid": "51dbd192728c83e74bbe31945855be3f",
+          "uid": "fdce685d86116c8044619deaf82185be",
           "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
           "all_uids": [
-            "51dbd192728c83e74bbe31945855be3f"
+            "fdce685d86116c8044619deaf82185be"
           ],
-          "duration": 10.92,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/51dbd192728c83e74bbe31945855be3f/thumbnails/thumbnail.jpg"
+          "duration": 12.24,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/fdce685d86116c8044619deaf82185be/thumbnails/thumbnail.jpg"
         },
         "png": {
           "url": "https://assets.cloudposse.com/demos/config/config-describe-affected.png",

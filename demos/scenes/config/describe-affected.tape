@@ -26,11 +26,11 @@ Type "# Find components affected by changes"
 Enter
 Sleep 1s
 
-Type "# Compare HEAD against main branch"
+Type "# Filter to a single component using --query"
 Enter
 Sleep 2s
 
-Type "atmos describe affected --ref main"
+Type `atmos describe affected --ref main --query '[.[] | select(.component == "vpc")]'`
 Sleep 2s
 Enter
 Sleep 3s
@@ -38,16 +38,16 @@ Sleep 3s
 # Capture screenshot
 Screenshot config-describe-affected.png
 
-Type "# Get affected stacks for CI/CD pipelines"
+Type "# Output as JSON for CI/CD pipelines"
 Enter
 Sleep 2s
 
-Type "atmos describe affected --ref main --format json"
+Type `atmos describe affected --ref main --format json --query '[.[] | select(.component == "vpc")] | .[0]'`
 Sleep 2s
 Enter
 Sleep 3s
 
-Type "# Deploy only what changed"
+Type "# Query filtering reduces output to what you need"
 Enter
 Sleep 1s
 
