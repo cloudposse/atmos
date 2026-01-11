@@ -9,10 +9,13 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // ConfirmApply prompts the user to confirm applying changes.
 func ConfirmApply() (bool, error) {
+	defer perf.Track(nil, "ui.ConfirmApply")()
+
 	// Check TTY availability before showing prompt.
 	if !term.IsTTYSupportForStdout() || !term.IsTTYSupportForStdin() {
 		return false, errUtils.ErrStreamingNotSupported
@@ -40,6 +43,8 @@ func ConfirmApply() (bool, error) {
 
 // ConfirmDestroy prompts the user to confirm destroying resources.
 func ConfirmDestroy() (bool, error) {
+	defer perf.Track(nil, "ui.ConfirmDestroy")()
+
 	// Check TTY availability before showing prompt.
 	if !term.IsTTYSupportForStdout() || !term.IsTTYSupportForStdin() {
 		return false, errUtils.ErrStreamingNotSupported
