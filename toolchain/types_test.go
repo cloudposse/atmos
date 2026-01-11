@@ -91,6 +91,10 @@ func TestWithRegistryFactory(t *testing.T) {
 }
 
 func TestRealRegistryFactory_NewAquaRegistry(t *testing.T) {
+	// Set XDG_CACHE_HOME to temp dir to avoid writing to real user cache
+	// and ensure hermetic, reproducible test behavior.
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+
 	factory := &realRegistryFactory{}
 	reg := factory.NewAquaRegistry()
 	assert.NotNil(t, reg)

@@ -79,42 +79,73 @@ func TestIsGzipMime(t *testing.T) {
 }
 
 func TestIsBinaryMime(t *testing.T) {
-	tests := []struct {
-		name     string
-		mimeType string
-		expected bool
-	}{
-		{
-			name:     "octet-stream is binary",
-			mimeType: "application/octet-stream",
-			expected: true,
-		},
-		{
-			name:     "executable is binary",
-			mimeType: "application/x-executable",
-			expected: true,
-		},
-		{
-			name:     "zip is not binary",
-			mimeType: "application/zip",
-			expected: false,
-		},
-	}
+	t.Run("octet-stream is binary", func(t *testing.T) {
+		// Create a file with random binary content that will be detected as octet-stream.
+		// Using bytes that don't match any known magic bytes.
+		tmpDir := t.TempDir()
+		tmpFile := filepath.Join(tmpDir, "binary")
+		// Random binary data that doesn't match known file signatures.
+		binaryData := []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09}
+		require.NoError(t, os.WriteFile(tmpFile, binaryData, 0o755))
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create temp file with appropriate content.
-			tmpDir := t.TempDir()
-			tmpFile := filepath.Join(tmpDir, "test")
-			require.NoError(t, os.WriteFile(tmpFile, []byte("test"), 0o644))
+		mime, err := mimetype.DetectFile(tmpFile)
+		require.NoError(t, err)
 
-			mime, err := mimetype.DetectFile(tmpFile)
-			require.NoError(t, err)
+		// Verify this is detected as octet-stream (unknown binary).
+		assert.Equal(t, "application/octet-stream", mime.String(), "Random binary should be octet-stream")
 
-			// The test validates the function logic, even if mime detection differs.
-			_ = isBinaryMime(mime)
-		})
-	}
+		// Verify isBinaryMime returns true for octet-stream.
+		result := isBinaryMime(mime)
+		assert.True(t, result, "octet-stream should be detected as binary")
+	})
+
+	t.Run("zip is not binary", func(t *testing.T) {
+		// Create a valid zip file.
+		tmpDir := t.TempDir()
+		tmpFile := filepath.Join(tmpDir, "test.zip")
+		createTestZipArchive(t, tmpFile, map[string]string{"file.txt": "content"})
+
+		mime, err := mimetype.DetectFile(tmpFile)
+		require.NoError(t, err)
+
+		// Verify zip is not treated as binary.
+		result := isBinaryMime(mime)
+		assert.False(t, result, "Zip file should not be detected as binary, got MIME: %s", mime.String())
+	})
+
+	t.Run("gzip is not binary", func(t *testing.T) {
+		// Create a gzip file.
+		tmpDir := t.TempDir()
+		tmpFile := filepath.Join(tmpDir, "test.gz")
+		f, err := os.Create(tmpFile)
+		require.NoError(t, err)
+		gw := gzip.NewWriter(f)
+		_, err = gw.Write([]byte("test content"))
+		require.NoError(t, err)
+		require.NoError(t, gw.Close())
+		require.NoError(t, f.Close())
+
+		mime, err := mimetype.DetectFile(tmpFile)
+		require.NoError(t, err)
+
+		// Verify gzip is not treated as binary.
+		result := isBinaryMime(mime)
+		assert.False(t, result, "Gzip file should not be detected as binary, got MIME: %s", mime.String())
+	})
+
+	t.Run("text is not binary", func(t *testing.T) {
+		// Create a plain text file.
+		tmpDir := t.TempDir()
+		tmpFile := filepath.Join(tmpDir, "test.txt")
+		require.NoError(t, os.WriteFile(tmpFile, []byte("hello world"), 0o644))
+
+		mime, err := mimetype.DetectFile(tmpFile)
+		require.NoError(t, err)
+
+		// Verify text is not treated as binary.
+		result := isBinaryMime(mime)
+		assert.False(t, result, "Text file should not be detected as binary, got MIME: %s", mime.String())
+	})
 }
 
 func TestIsTarGzFile(t *testing.T) {
