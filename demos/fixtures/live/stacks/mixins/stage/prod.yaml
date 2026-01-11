@@ -1,0 +1,11 @@
+# Prod Stage Mixin
+vars:
+  stage: prod
+  tags:
+    Stage: prod
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.1.0.0/16"

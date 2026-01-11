@@ -254,7 +254,7 @@ func TestWriteToFile(t *testing.T) {
 
 func TestSupportedFormats(t *testing.T) {
 	// Verify all expected formats are in the list.
-	expectedFormats := []string{"json", "yaml", "hcl", "env", "dotenv", "bash", "csv", "tsv"}
+	expectedFormats := []string{"json", "yaml", "hcl", "env", "dotenv", "bash", "csv", "tsv", "table"}
 	assert.Equal(t, expectedFormats, SupportedFormats)
 }
 
@@ -274,6 +274,7 @@ func TestFormatConstants(t *testing.T) {
 	assert.Equal(t, Format("bash"), FormatBash)
 	assert.Equal(t, Format("csv"), FormatCSV)
 	assert.Equal(t, Format("tsv"), FormatTSV)
+	assert.Equal(t, Format("table"), FormatTable)
 }
 
 func TestDefaultFileMode(t *testing.T) {

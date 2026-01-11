@@ -82,7 +82,7 @@ type defaultInstaller struct{}
 func (d *defaultInstaller) Install(toolSpec string, force, allowPrereleases bool) error {
 	defer perf.Track(nil, "version.defaultInstaller.Install")()
 
-	return toolchain.RunInstall(toolSpec, force, allowPrereleases)
+	return toolchain.RunInstall([]string{toolSpec}, force, allowPrereleases)
 }
 
 // CheckAndReexec checks if version.use is configured and re-executes with the specified version.

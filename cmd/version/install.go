@@ -40,5 +40,5 @@ func runInstall(cmd *cobra.Command, args []string) error {
 
 	// Delegate to toolchain installer.
 	// The built-in alias "atmos" -> "cloudposse/atmos" handles the resolution.
-	return toolchain.RunInstall(toolSpec, false, false)
+	return toolchain.RunInstall([]string{toolSpec}, false, false)
 }

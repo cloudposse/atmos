@@ -13,7 +13,7 @@ import (
 )
 
 // InstallFunc is the function signature for installing a tool.
-type InstallFunc func(toolSpec string, setAsDefault, reinstallFlag bool) error
+type InstallFunc func(toolSpecs []string, setAsDefault, reinstallFlag bool) error
 
 // Installer handles automatic tool installation.
 type Installer struct {
@@ -104,7 +104,7 @@ func (i *Installer) ensureTool(tool string, version string) error {
 
 	// Install missing tool.
 	toolSpec := fmt.Sprintf("%s@%s", tool, version)
-	if err := i.installFunc(toolSpec, false, false); err != nil {
+	if err := i.installFunc([]string{toolSpec}, false, false); err != nil {
 		return fmt.Errorf("%w: failed to install %s: %w", errUtils.ErrToolInstall, toolSpec, err)
 	}
 

@@ -64,7 +64,7 @@ func TestNewInstaller(t *testing.T) {
 
 	t.Run("applies options", func(t *testing.T) {
 		mockRes := &mockResolver{}
-		mockInstall := func(string, bool, bool) error { return nil }
+		mockInstall := func([]string, bool, bool) error { return nil }
 		mockFileExists := func(string) bool { return true }
 
 		inst := NewInstaller(nil,
@@ -114,7 +114,7 @@ func TestEnsureTools(t *testing.T) {
 					},
 				}
 				installCalled := false
-				installFunc := func(string, bool, bool) error {
+				installFunc := func([]string, bool, bool) error {
 					installCalled = true
 					return nil
 				}
@@ -138,8 +138,8 @@ func TestEnsureTools(t *testing.T) {
 						return "hashicorp", "terraform", nil
 					},
 				}
-				installFunc := func(toolSpec string, _, _ bool) error {
-					if toolSpec != "hashicorp/terraform@1.10.0" {
+				installFunc := func(toolSpecs []string, _, _ bool) error {
+					if len(toolSpecs) != 1 || toolSpecs[0] != "hashicorp/terraform@1.10.0" {
 						return errUnexpectedToolSpec
 					}
 					return nil
@@ -162,7 +162,7 @@ func TestEnsureTools(t *testing.T) {
 						return "hashicorp", "terraform", nil
 					},
 				}
-				installFunc := func(string, bool, bool) error {
+				installFunc := func([]string, bool, bool) error {
 					return errInstallFailed
 				}
 				fileExists := func(path string) bool {
@@ -190,7 +190,7 @@ func TestEnsureTools(t *testing.T) {
 					},
 				}
 				installCount := 0
-				installFunc := func(string, bool, bool) error {
+				installFunc := func([]string, bool, bool) error {
 					installCount++
 					return nil
 				}
@@ -219,7 +219,7 @@ func TestEnsureTools(t *testing.T) {
 						return "", "", errInvalidTool
 					},
 				}
-				installFunc := func(string, bool, bool) error {
+				installFunc := func([]string, bool, bool) error {
 					return errInstallFailed
 				}
 				fileExists := func(path string) bool {
@@ -559,7 +559,7 @@ func TestEnsureTool(t *testing.T) {
 				return "hashicorp", "terraform", nil
 			},
 		}
-		installFunc := func(string, bool, bool) error {
+		installFunc := func([]string, bool, bool) error {
 			installCalled = true
 			return nil
 		}
@@ -586,8 +586,10 @@ func TestEnsureTool(t *testing.T) {
 				return "hashicorp", "terraform", nil
 			},
 		}
-		installFunc := func(toolSpec string, _, _ bool) error {
-			installedSpec = toolSpec
+		installFunc := func(toolSpecs []string, _, _ bool) error {
+			if len(toolSpecs) > 0 {
+				installedSpec = toolSpecs[0]
+			}
 			return nil
 		}
 		fileExists := func(path string) bool {
@@ -613,8 +615,10 @@ func TestEnsureTool(t *testing.T) {
 				return "hashicorp", "terraform", nil
 			},
 		}
-		installFunc := func(toolSpec string, _, _ bool) error {
-			calledSpec = toolSpec
+		installFunc := func(toolSpecs []string, _, _ bool) error {
+			if len(toolSpecs) > 0 {
+				calledSpec = toolSpecs[0]
+			}
 			return errInstallFailed
 		}
 		fileExists := func(path string) bool {

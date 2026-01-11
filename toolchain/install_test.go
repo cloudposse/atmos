@@ -86,7 +86,7 @@ func TestRunInstallWithNoArgs(t *testing.T) {
 
 	// Test that runInstall with no arguments doesn't error
 	// This prevents regression where the function might error when no specific tool is provided
-	err = RunInstall("", false, false)
+	err = RunInstall(nil, false, false)
 	assert.NoError(t, err)
 }
 
@@ -111,7 +111,7 @@ func TestRunInstall_WithValidToolSpec(t *testing.T) {
 	}()
 
 	// Test installing a specific tool with version
-	err = RunInstall("terraform@1.11.4", false, false)
+	err = RunInstall([]string{"terraform@1.11.4"}, false, false)
 	assert.NoError(t, err)
 
 	// Verify the tool was added to .tool-versions (it uses DefaultToolVersionsFilePath which is .tool-versions in HOME)
@@ -145,7 +145,7 @@ func TestRunInstall_WithSetAsDefault(t *testing.T) {
 	}()
 
 	// Test installing with setAsDefault=true
-	err = RunInstall("terraform@1.11.4", true, false)
+	err = RunInstall([]string{"terraform@1.11.4"}, true, false)
 	assert.NoError(t, err)
 
 	// Verify the new version is first (default) in .tool-versions (uses DefaultToolVersionsFilePath)
@@ -177,7 +177,7 @@ func TestRunInstall_WithInvalidToolSpec(t *testing.T) {
 	}()
 
 	// Test with invalid tool spec (no version)
-	err = RunInstall("nonexistent-tool", false, false)
+	err = RunInstall([]string{"nonexistent-tool"}, false, false)
 	assert.Error(t, err)
 }
 
@@ -202,7 +202,7 @@ func TestRunInstall_WithCanonicalFormat(t *testing.T) {
 	}()
 
 	// Test installing with canonical owner/repo@version format
-	err = RunInstall("hashicorp/terraform@1.11.4", false, false)
+	err = RunInstall([]string{"hashicorp/terraform@1.11.4"}, false, false)
 	assert.NoError(t, err)
 
 	// Verify the tool was added to .tool-versions (uses DefaultToolVersionsFilePath)
@@ -243,7 +243,7 @@ func TestRunInstall_WithLatestKeyword(t *testing.T) {
 
 	// Test installing with "latest" version
 	// This should resolve to the actual latest version from the registry
-	err = RunInstall("terraform@latest", false, false)
+	err = RunInstall([]string{"terraform@latest"}, false, false)
 	assert.NoError(t, err)
 
 	// Verify a version was added (we can't predict the exact version, but it should be there)
@@ -277,6 +277,6 @@ func TestRunInstall_Reinstall(t *testing.T) {
 	}()
 
 	// Test reinstalling all tools from .tool-versions
-	err = RunInstall("", false, true)
+	err = RunInstall(nil, false, true)
 	assert.NoError(t, err)
 }

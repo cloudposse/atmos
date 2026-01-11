@@ -114,7 +114,9 @@ func markInstalled(installer *Installer, owner, repo string, versions []string) 
 }
 
 func selectStyles() (lipgloss.Style, lipgloss.Style) {
-	profile := termenv.ColorProfile()
+	// Use ui.GetColorProfile() instead of termenv.ColorProfile() to respect
+	// atmos's terminal detection (handles Terminal.app 256-color limitation).
+	profile := ui.GetColorProfile()
 	if profile == termenv.ANSI256 || profile == termenv.TrueColor {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("15")), // white
 			lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // gray

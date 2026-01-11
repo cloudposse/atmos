@@ -29,6 +29,9 @@ const (
 
 	// sourceKey is used as a logging key for the source.
 	sourceKey = "source"
+
+	// GitDirName is the name of git directory to skip during copy operations.
+	gitDirName = ".git"
 )
 
 // PrefixCopyContext groups parameters for prefix-based copy operations.
@@ -174,7 +177,7 @@ func (fc *FileCopier) shouldIncludePath(info os.FileInfo, relPath string, includ
 
 // shouldSkipEntry determines whether to skip a file/directory based on its relative path to baseDir.
 func shouldSkipEntry(info os.FileInfo, srcPath, baseDir string, excluded, included []string) bool {
-	if info.Name() == ".git" {
+	if info.Name() == gitDirName {
 		return true
 	}
 	relPath, err := filepath.Rel(baseDir, srcPath)
@@ -282,7 +285,7 @@ func processPrefixEntry(entry os.DirEntry, ctx *PrefixCopyContext) error {
 		return errors.Join(errUtils.ErrStatFile, fmt.Errorf("getting info for %q: %w", srcPath, err))
 	}
 
-	if entry.Name() == ".git" {
+	if entry.Name() == gitDirName {
 		log.Debug("Skipping .git directory", logKeyPath, fullRelPath)
 		return nil
 	}
@@ -471,7 +474,26 @@ func copyToTargetWithPatterns(
 	// If no inclusion or exclusion patterns are defined, use the cp library.
 	if len(s.IncludedPaths) == 0 && len(s.ExcludedPaths) == 0 {
 		log.Debug("No inclusion or exclusion patterns defined; using cp.Copy for fast copy")
-		return cp.Copy(sourceDir, finalTarget)
+		copyOptions := cp.Options{
+			// Skip .git directories from source to avoid copying git metadata.
+			Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+				if filepath.Base(src) == gitDirName {
+					return true, nil
+				}
+				return false, nil
+			},
+			// OnDirExists handles existing directories at the destination.
+			// If the destination already has a .git directory (from a previous vendor run),
+			// we need to leave it untouched to avoid permission errors on git packfiles
+			// which often have restrictive permissions.
+			OnDirExists: func(src, dest string) cp.DirExistsAction {
+				if filepath.Base(dest) == gitDirName {
+					return cp.Untouchable
+				}
+				return cp.Merge
+			},
+		}
+		return cp.Copy(sourceDir, finalTarget, copyOptions)
 	}
 	// Process each inclusion pattern.
 	for _, pattern := range s.IncludedPaths {

@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -80,17 +81,32 @@ func runBubbleTeaSpinner(message string) *tea.Program {
 	return p
 }
 
-// RunInstall installs the specified tool (owner/repo@version or alias@version).
-// If toolSpec is empty, installs all tools from .tool-versions file.
+// RunInstall installs the specified tools (owner/repo@version or alias@version).
+// If toolSpecs is empty, installs all tools from .tool-versions file.
+// If toolSpecs has one element, installs that single tool with progress.
+// If toolSpecs has multiple elements, installs all with batch progress and summary.
 // The setAsDefault parameter controls whether to set the installed version as default.
 // The reinstallFlag parameter forces reinstallation even if already installed.
-func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
+func RunInstall(toolSpecs []string, setAsDefault, reinstallFlag bool) error {
 	defer perf.Track(nil, "toolchain.Install")()
 
-	if toolSpec == "" {
+	// No args: install from .tool-versions file.
+	if len(toolSpecs) == 0 {
 		return installFromToolVersions(GetToolVersionsFilePath(), reinstallFlag)
 	}
 
+	// Single tool: use original single-tool flow with full progress.
+	if len(toolSpecs) == 1 {
+		return installSingleToolSpec(toolSpecs[0], setAsDefault, reinstallFlag)
+	}
+
+	// Multiple tools: use batch installation with progress bar and summary.
+	return installMultipleTools(toolSpecs, setAsDefault, reinstallFlag)
+}
+
+// installSingleToolSpec installs a single tool specification with full progress display.
+// Note: reinstallFlag is accepted for API consistency but handled by InstallSingleTool internally.
+func installSingleToolSpec(toolSpec string, setAsDefault, _ bool) error {
 	tool, version, err := ParseToolVersionArg(toolSpec)
 	if err != nil {
 		return err
@@ -128,6 +144,90 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 
 	// Update .tool-versions file.
 	return updateToolVersionsFile(tool, version, setAsDefault)
+}
+
+// parseToolSpecs parses command-line tool specs into toolInfo structs.
+func parseToolSpecs(installer *Installer, toolSpecs []string) []toolInfo {
+	defer perf.Track(nil, "toolchain.parseToolSpecs")()
+
+	var toolList []toolInfo
+	for _, spec := range toolSpecs {
+		info, ok := parseToolSpec(installer, spec)
+		if ok {
+			toolList = append(toolList, info)
+		}
+	}
+	return toolList
+}
+
+// parseToolSpec parses a single tool specification into toolInfo.
+func parseToolSpec(installer *Installer, spec string) (toolInfo, bool) {
+	defer perf.Track(nil, "toolchain.parseToolSpec")()
+
+	tool, version, err := ParseToolVersionArg(spec)
+	if err != nil {
+		_ = ui.Errorf("Invalid tool spec `%s`: %v", spec, err)
+		return toolInfo{}, false
+	}
+
+	// Resolve version if not specified.
+	if version == "" {
+		lookupResult, err := resolveVersionFromToolVersions(tool, spec)
+		if err != nil {
+			_ = ui.Errorf("Failed to resolve version for `%s`: %v", spec, err)
+			return toolInfo{}, false
+		}
+		tool = lookupResult.tool
+		version = lookupResult.version
+	}
+
+	owner, repo, err := installer.parseToolSpec(tool)
+	if err != nil {
+		_ = ui.Errorf("Invalid tool `%s`: %v", tool, err)
+		return toolInfo{}, false
+	}
+
+	return toolInfo{version: version, owner: owner, repo: repo}, true
+}
+
+// installMultipleTools installs multiple tool specifications with batch progress.
+func installMultipleTools(toolSpecs []string, setAsDefault, reinstallFlag bool) error {
+	installer := NewInstaller()
+	toolList := parseToolSpecs(installer, toolSpecs)
+
+	if len(toolList) == 0 {
+		return ErrNoValidTools
+	}
+
+	// Use existing batch installation infrastructure.
+	spinner := bspinner.New()
+	spinner.Spinner = bspinner.Dot
+	styles := theme.GetCurrentStyles()
+	spinner.Style = styles.Spinner
+	progressBar := progress.New(progress.WithDefaultGradient())
+
+	var installedCount, failedCount, alreadyInstalledCount int
+
+	for i, tool := range toolList {
+		result, err := installOrSkipTool(installer, tool, reinstallFlag)
+		switch result {
+		case "installed":
+			installedCount++
+			// Update .tool-versions for each successfully installed tool.
+			toolName := fmt.Sprintf("%s/%s", tool.owner, tool.repo)
+			if err := updateToolVersionsFile(toolName, tool.version, setAsDefault); err != nil {
+				_ = ui.Warningf("Failed to update .tool-versions for `%s@%s`: %v", toolName, tool.version, err)
+			}
+		case "failed":
+			failedCount++
+		case "skipped":
+			alreadyInstalledCount++
+		}
+		showProgress(&spinner, &progressBar, tool, progressState{index: i, total: len(toolList), result: result, err: err})
+	}
+
+	printSummary(installedCount, failedCount, alreadyInstalledCount, len(toolList))
+	return nil
 }
 
 func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressBar bool) error {
@@ -255,21 +355,30 @@ func showProgress(
 	tool toolInfo,
 	state progressState,
 ) {
+	// Strategy: Status messages scroll up normally, progress bar updates in place at bottom.
+	// 1. Clear current line (where progress bar was)
+	// 2. Print status message with newline (scrolls up, cursor on new line)
+	// 3. Print progress bar on current line (no newline, overwrites itself each frame)
+
+	// Clear the progress bar line first.
+	_ = ui.Write(terminal.EscResetLine)
+
+	// Print status message (with newline - this becomes a permanent line that scrolls up).
 	switch state.result {
 	case "skipped":
-		_ = ui.Successf("Skipped `%s/%s@%s` (already installed)", tool.owner, tool.repo, tool.version)
+		_ = ui.Successf("Skipped `%s/%s@%s` ((already installed))", tool.owner, tool.repo, tool.version)
 	case "installed":
 		_ = ui.Successf("Installed `%s/%s@%s`", tool.owner, tool.repo, tool.version)
 	case "failed":
 		_ = ui.Errorf("Install failed %s/%s@%s: %v", tool.owner, tool.repo, tool.version, state.err)
 	}
 
+	// Show animated progress bar on current line (EscResetLine overwrites each frame).
 	percent := float64(state.index+1) / float64(state.total)
 	bar := progressBar.ViewAs(percent)
 
-	// Show animated progress bar
 	for j := 0; j < spinnerAnimationFrames; j++ {
-		_ = ui.Writef("\r%s %s", spinner.View(), bar)
+		_ = ui.Writef("%s%s %s", terminal.EscResetLine, spinner.View(), bar)
 		spin, _ := spinner.Update(bspinner.TickMsg{})
 		spinner = &spin
 		time.Sleep(50 * time.Millisecond)
@@ -277,6 +386,8 @@ func showProgress(
 }
 
 func printSummary(installed, failed, skipped, total int) {
+	// Clear the progress bar line before printing summary.
+	_ = ui.Write(terminal.EscResetLine)
 	_ = ui.Writeln("")
 
 	switch {
@@ -284,9 +395,11 @@ func printSummary(installed, failed, skipped, total int) {
 		_ = ui.Success("No tools to install")
 	case failed == 0 && skipped == 0:
 		_ = ui.Successf("Installed **%d** tools", installed)
+		_ = ui.Writeln("")
 		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
 	case failed == 0 && skipped > 0:
 		_ = ui.Successf("Installed **%d** tools, skipped **%d**", installed, skipped)
+		_ = ui.Writeln("")
 		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
 	case failed > 0 && skipped == 0:
 		_ = ui.Errorf("Installed %d tools, failed %d", installed, failed)

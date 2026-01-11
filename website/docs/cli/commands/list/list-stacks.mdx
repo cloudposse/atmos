@@ -8,10 +8,13 @@ description: Use this command to list all Stack configurations or stacks for a s
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
 Use this command to list all stacks in your Atmos configuration, optionally filtering by component. View stacks in multiple formats including tables, JSON, YAML, or hierarchical trees with import provenance to understand configuration inheritance.
 </Intro>
+
+<DemoVideo id="list-stacks" title="atmos list stacks" showCaption={false} />
 
 <Screengrab title="atmos list stacks --help" slug="atmos-list-stacks--help" />
 
@@ -184,10 +187,14 @@ stacks:
     columns:
       - name: Stack
         value: "{{ .stack }}"
-      - name: Components
-        value: "{{ .components | len }} components"
-      - name: File
-        value: "{{ .file }}"
+      - name: Namespace
+        value: "{{ .vars.namespace }}"
+      - name: Tenant
+        value: "{{ .vars.tenant }}"
+      - name: Environment
+        value: "{{ .vars.environment }}"
+      - name: Stage
+        value: "{{ .vars.stage }}"
 ```
 
 :::note
@@ -199,9 +206,20 @@ Column configuration for stacks is under the `stacks.list.columns` section in at
 Column `value` fields support Go template syntax with access to:
 
 - `.stack` - Stack name
-- `.components` - Array of components in the stack
+- `.vars` - Stack variables from component configuration (access fields via `.vars.fieldname`)
+  - `.vars.namespace` - Namespace variable
+  - `.vars.tenant` - Tenant variable
+  - `.vars.environment` - Environment variable
+  - `.vars.stage` - Stage variable
+  - `.vars.<any>` - Any other variable defined in your stack's vars section
+- `.components` - Map of components in the stack
 - `.file` - Stack configuration file path
-- `.vars` - Stack-level variables (if available)
+
+:::tip
+Variables are extracted from the first component in each stack. Since all components in a stack typically share
+the same stack-level variables (namespace, tenant, environment, stage), this provides consistent access to
+stack metadata regardless of which components are defined.
+:::
 
 ### Template Functions
 
@@ -211,12 +229,14 @@ Columns support template functions for data transformation:
 stacks:
   list:
     columns:
-      - name: Stack (Upper)
-        value: "{{ .stack | upper }}"
-      - name: Component Count
-        value: "{{ .components | len }}"
-      - name: Short File
-        value: "{{ .file | truncate 40 }}"
+      - name: Stack
+        value: "{{ .stack }}"
+      - name: Namespace
+        value: "{{ .vars.namespace | upper }}"
+      - name: Region
+        value: "{{ .vars.region }}"
+      - name: Env
+        value: "{{ .vars.stage | upper }}"
 ```
 
 Available functions:
@@ -226,6 +246,7 @@ Available functions:
 - `join` - Join array elements with delimiter
 - `toString` - Convert value to string
 - `ternary` - Conditional expression
+- `get`, `getOr`, `has` - Safe map access (e.g., `{{ get .vars "region" }}`)
 
 ### Override Columns via CLI
 
