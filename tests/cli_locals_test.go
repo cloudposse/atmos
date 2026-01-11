@@ -301,32 +301,29 @@ func TestLocalsNotInFinalOutput(t *testing.T) {
 }
 
 // TestDescribeLocals verifies that the describe locals command correctly extracts
-// locals from all stack files and presents them in Atmos schema format.
+// locals from a stack file and presents them in direct Atmos schema format.
 func TestDescribeLocals(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals")
 
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Get all locals.
-	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "")
+	// Get locals for the dev stack (--stack is required).
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/dev")
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.NotEmpty(t, result, "should have at least one stack with locals")
+	require.NotEmpty(t, result, "should have locals")
 
-	// Verify we got locals for the dev stack.
-	devLocals, ok := result["deploy/dev"].(map[string]any)
-	require.True(t, ok, "should have deploy/dev stack")
-
+	// Result is now in direct format (no stack name wrapper).
 	// Check root-level locals (Atmos schema format).
-	locals, ok := devLocals["locals"].(map[string]any)
+	locals, ok := result["locals"].(map[string]any)
 	require.True(t, ok, "should have locals section")
 	assert.Equal(t, "dev", locals["environment"], "environment should be 'dev'")
 	assert.Equal(t, "acme", locals["namespace"], "namespace should be 'acme'")
 	assert.Equal(t, "acme-dev", locals["name_prefix"], "name_prefix should be 'acme-dev'")
 
 	// Check terraform section locals (Atmos schema format: terraform.locals).
-	terraform, ok := devLocals["terraform"].(map[string]any)
+	terraform, ok := result["terraform"].(map[string]any)
 	require.True(t, ok, "should have terraform section")
 	tfLocals, ok := terraform["locals"].(map[string]any)
 	require.True(t, ok, "should have terraform.locals section")
@@ -335,25 +332,21 @@ func TestDescribeLocals(t *testing.T) {
 }
 
 // TestDescribeLocalsWithFilter verifies that the describe locals command
-// correctly filters by stack name.
+// correctly returns locals for a specific stack.
 func TestDescribeLocalsWithFilter(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals")
 
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Get locals filtered by stack.
+	// Get locals for prod stack (direct format).
 	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/prod")
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Len(t, result, 1, "should have exactly one stack")
 
-	// Verify we got locals for the prod stack only.
-	prodLocals, ok := result["deploy/prod"].(map[string]any)
-	require.True(t, ok, "should have deploy/prod stack")
-
+	// Result is now in direct format (no stack name wrapper).
 	// Check root-level locals (Atmos schema format).
-	locals, ok := prodLocals["locals"].(map[string]any)
+	locals, ok := result["locals"].(map[string]any)
 	require.True(t, ok, "should have locals section")
 	assert.Equal(t, "prod", locals["environment"], "environment should be 'prod'")
 }
@@ -456,19 +449,16 @@ func TestLocalsDescribeLocalsDeepChain(t *testing.T) {
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Get all locals.
-	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "")
+	// Get locals for the final stack (--stack is required).
+	// The fixture has name_template: "{{ .vars.stage }}" and vars.stage: "final",
+	// so the derived stack name is "final" (not "deploy/final").
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "final")
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// Verify we got locals for the final stack.
-	// The fixture has name_template: "{{ .vars.stage }}" and vars.stage: "final",
-	// so the derived stack name is "final" (not "deploy/final").
-	finalLocals, ok := result["final"].(map[string]any)
-	require.True(t, ok, "should have 'final' stack locals (derived from name_template)")
-
+	// Result is now in direct format (no stack name wrapper).
 	// Check root-level locals (Atmos schema format).
-	locals, ok := finalLocals["locals"].(map[string]any)
+	locals, ok := result["locals"].(map[string]any)
 	require.True(t, ok, "should have locals section")
 	assert.Equal(t, "from-final-stack", locals["final_local"],
 		"final_local should be from this file")
@@ -486,33 +476,30 @@ func TestLocalsDescribeLocalsDeepChain(t *testing.T) {
 }
 
 // TestDescribeLocalsForComponent tests that describe locals command correctly
-// returns locals for a specific component in a stack.
-// This tests the `atmos describe locals <component> -s <stack>` functionality.
+// returns locals for a specific stack.
+// This tests the `atmos describe locals -s <stack>` functionality.
 func TestDescribeLocalsForComponent(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals")
 
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Test getting locals for a terraform component.
+	// Test getting locals for a stack.
 	t.Run("returns locals for terraform component", func(t *testing.T) {
-		// Get locals for deploy/dev stack.
-		stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/dev")
+		// Get locals for deploy/dev stack (direct format).
+		result, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/dev")
 		require.NoError(t, err)
-		require.NotNil(t, stackLocals)
+		require.NotNil(t, result)
 
-		// Verify the structure has the expected locals (Atmos schema format).
-		devLocals, ok := stackLocals["deploy/dev"].(map[string]any)
-		require.True(t, ok, "should have deploy/dev stack")
-
+		// Result is now in direct format (no stack name wrapper).
 		// Check root-level locals.
-		locals, ok := devLocals["locals"].(map[string]any)
+		locals, ok := result["locals"].(map[string]any)
 		require.True(t, ok, "should have locals section")
 		assert.Equal(t, "acme", locals["namespace"], "should have namespace")
 		assert.Equal(t, "dev", locals["environment"], "should have environment")
 
 		// Check terraform section has section-specific locals.
-		terraform, ok := devLocals["terraform"].(map[string]any)
+		terraform, ok := result["terraform"].(map[string]any)
 		require.True(t, ok, "should have terraform section")
 		tfLocals, ok := terraform["locals"].(map[string]any)
 		require.True(t, ok, "should have terraform.locals section")
@@ -526,23 +513,21 @@ func TestDescribeLocalsForComponent(t *testing.T) {
 }
 
 // TestDescribeLocalsForComponentOutput tests the full output structure
-// when describing locals for a specific component (Atmos schema format).
+// when describing locals for a specific stack (direct Atmos schema format).
 func TestDescribeLocalsForComponentOutput(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals")
 
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Get locals filtered by stack file path.
-	stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/dev")
+	// Get locals for stack (direct format).
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/dev")
 	require.NoError(t, err)
-	require.Len(t, stackLocals, 1, "should have exactly one stack")
+	require.NotNil(t, result)
 
-	devLocals, ok := stackLocals["deploy/dev"].(map[string]any)
-	require.True(t, ok)
-
+	// Result is now in direct format (no stack name wrapper).
 	// Check root-level locals (Atmos schema format).
-	locals, ok := devLocals["locals"].(map[string]any)
+	locals, ok := result["locals"].(map[string]any)
 	require.True(t, ok, "should have locals section")
 
 	// Root locals should have global locals.
@@ -553,7 +538,7 @@ func TestDescribeLocalsForComponentOutput(t *testing.T) {
 	assert.Equal(t, "acme-dev-us-east-1", locals["full_name"])
 
 	// Check terraform section has terraform-specific locals.
-	terraform, ok := devLocals["terraform"].(map[string]any)
+	terraform, ok := result["terraform"].(map[string]any)
 	require.True(t, ok, "should have terraform section")
 	tfLocals, ok := terraform["locals"].(map[string]any)
 	require.True(t, ok, "should have terraform.locals section")
@@ -561,24 +546,22 @@ func TestDescribeLocalsForComponentOutput(t *testing.T) {
 	assert.Equal(t, "terraform-only", tfLocals["tf_specific"])
 }
 
-// TestDescribeLocalsForComponentInProdStack tests locals for a component
-// in the prod stack to ensure different stacks have independent locals.
+// TestDescribeLocalsForComponentInProdStack tests locals for the prod stack
+// to ensure different stacks have independent locals.
 func TestDescribeLocalsForComponentInProdStack(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals")
 
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Get locals for prod stack using the file path.
-	stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/prod")
+	// Get locals for prod stack (direct format).
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/prod")
 	require.NoError(t, err)
-	require.Len(t, stackLocals, 1, "should have exactly one stack")
+	require.NotNil(t, result)
 
-	prodLocals, ok := stackLocals["deploy/prod"].(map[string]any)
-	require.True(t, ok)
-
+	// Result is now in direct format (no stack name wrapper).
 	// Check root-level locals (Atmos schema format).
-	locals, ok := prodLocals["locals"].(map[string]any)
+	locals, ok := result["locals"].(map[string]any)
 	require.True(t, ok, "should have locals section")
 
 	// Verify prod-specific values.
@@ -586,7 +569,7 @@ func TestDescribeLocalsForComponentInProdStack(t *testing.T) {
 	assert.Equal(t, "prod", locals["environment"])
 
 	// Check terraform section has terraform-specific locals.
-	terraform, ok := prodLocals["terraform"].(map[string]any)
+	terraform, ok := result["terraform"].(map[string]any)
 	require.True(t, ok, "should have terraform section")
 	tfLocals, ok := terraform["locals"].(map[string]any)
 	require.True(t, ok, "should have terraform.locals section")
@@ -601,45 +584,37 @@ func TestDescribeLocalsForComponentInProdStack(t *testing.T) {
 // values (not templates), allowing name_template to derive logical stack names.
 
 // TestDescribeLocalsWithLogicalStackName tests that ExecuteDescribeLocals
-// correctly derives and returns logical stack names when configured.
+// correctly resolves logical stack names when configured.
 func TestDescribeLocalsWithLogicalStackName(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals-logical-names")
 
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Get all locals - should use derived logical stack names as keys.
-	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "")
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.NotEmpty(t, result)
-
 	// The fixture has name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
 	// dev.yaml has vars: {environment: dev, stage: us-east-1} -> "dev-us-east-1"
-	// prod.yaml has vars: {environment: prod, stage: us-west-2} -> "prod-us-west-2"
 
-	// Verify we got the logical stack names as keys.
-	devLocals, hasDevLogical := result["dev-us-east-1"].(map[string]any)
-	prodLocals, hasProdLogical := result["prod-us-west-2"].(map[string]any)
+	// Get locals for dev stack using logical name (direct format).
+	devResult, err := exec.ExecuteDescribeLocals(&atmosConfig, "dev-us-east-1")
+	require.NoError(t, err)
+	require.NotNil(t, devResult)
 
-	assert.True(t, hasDevLogical, "should have dev-us-east-1 stack (logical name)")
-	assert.True(t, hasProdLogical, "should have prod-us-west-2 stack (logical name)")
+	// Verify locals content for dev stack (direct format).
+	locals, ok := devResult["locals"].(map[string]any)
+	require.True(t, ok, "dev stack should have locals section")
+	assert.Equal(t, "acme", locals["namespace"])
+	assert.Equal(t, "acme-dev", locals["env_prefix"])
 
-	// Verify locals content for dev stack (Atmos schema format).
-	if hasDevLogical {
-		locals, ok := devLocals["locals"].(map[string]any)
-		require.True(t, ok, "dev stack should have locals section")
-		assert.Equal(t, "acme", locals["namespace"])
-		assert.Equal(t, "acme-dev", locals["env_prefix"])
-	}
+	// Get locals for prod stack using logical name (direct format).
+	prodResult, err := exec.ExecuteDescribeLocals(&atmosConfig, "prod-us-west-2")
+	require.NoError(t, err)
+	require.NotNil(t, prodResult)
 
-	// Verify locals content for prod stack (Atmos schema format).
-	if hasProdLogical {
-		locals, ok := prodLocals["locals"].(map[string]any)
-		require.True(t, ok, "prod stack should have locals section")
-		assert.Equal(t, "acme", locals["namespace"])
-		assert.Equal(t, "acme-prod", locals["env_prefix"])
-	}
+	// Verify locals content for prod stack (direct format).
+	prodLocals, ok := prodResult["locals"].(map[string]any)
+	require.True(t, ok, "prod stack should have locals section")
+	assert.Equal(t, "acme", prodLocals["namespace"])
+	assert.Equal(t, "acme-prod", prodLocals["env_prefix"])
 }
 
 // TestDescribeLocalsFilterByLogicalStackName tests filtering by logical stack name.
@@ -649,17 +624,13 @@ func TestDescribeLocalsFilterByLogicalStackName(t *testing.T) {
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Filter by logical stack name "dev-us-east-1".
+	// Get locals using logical stack name "dev-us-east-1" (direct format).
 	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "dev-us-east-1")
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Len(t, result, 1, "should have exactly one stack when filtering by logical name")
 
-	// Verify we got the dev stack.
-	devLocals, ok := result["dev-us-east-1"].(map[string]any)
-	require.True(t, ok, "should have dev-us-east-1 stack")
-
-	locals, ok := devLocals["locals"].(map[string]any)
+	// Result is now in direct format (no stack name wrapper).
+	locals, ok := result["locals"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "acme", locals["namespace"])
 }
@@ -671,23 +642,19 @@ func TestDescribeLocalsFilterByFilePath(t *testing.T) {
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Filter by file path "deploy/prod" - should still work.
+	// Get locals using file path "deploy/prod" (direct format).
 	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/prod")
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Len(t, result, 1, "should have exactly one stack when filtering by file path")
 
-	// The result key is the logical name even when filtering by file path.
-	prodLocals, ok := result["prod-us-west-2"].(map[string]any)
-	require.True(t, ok, "should have prod-us-west-2 stack (returned with logical name)")
-
-	locals, ok := prodLocals["locals"].(map[string]any)
+	// Result is now in direct format (no stack name wrapper).
+	locals, ok := result["locals"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "acme-prod", locals["env_prefix"])
 }
 
 // TestDescribeLocalsOutputStructureStack tests the output structure when querying stacks (no component).
-// Output follows Atmos schema format: locals:, terraform: {locals:}, helmfile: {locals:}, etc.
+// Output follows direct Atmos schema format: locals:, terraform: {locals:}, helmfile: {locals:}, etc.
 func TestDescribeLocalsOutputStructureStack(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals-logical-names")
 
@@ -696,27 +663,25 @@ func TestDescribeLocalsOutputStructureStack(t *testing.T) {
 
 	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "prod-us-west-2")
 	require.NoError(t, err)
-	require.Len(t, result, 1)
+	require.NotNil(t, result)
 
-	prodLocals, ok := result["prod-us-west-2"].(map[string]any)
-	require.True(t, ok)
-
-	// Verify stack output structure has Atmos schema format.
-	_, hasLocals := prodLocals["locals"]
-	_, hasTerraform := prodLocals["terraform"]
-	_, hasHelmfile := prodLocals["helmfile"]
+	// Result is now in direct format (no stack name wrapper).
+	// Verify output structure has Atmos schema format.
+	_, hasLocals := result["locals"]
+	_, hasTerraform := result["terraform"]
+	_, hasHelmfile := result["helmfile"]
 
 	assert.True(t, hasLocals, "stack output should have 'locals' section (root-level locals)")
 	assert.True(t, hasTerraform, "stack output should have 'terraform' section")
 	assert.True(t, hasHelmfile, "stack output should have 'helmfile' section (prod has helmfile locals)")
 
 	// Verify root-level locals.
-	locals, ok := prodLocals["locals"].(map[string]any)
+	locals, ok := result["locals"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "acme", locals["namespace"])
 
 	// Verify terraform section has nested locals (terraform.locals).
-	terraform, ok := prodLocals["terraform"].(map[string]any)
+	terraform, ok := result["terraform"].(map[string]any)
 	require.True(t, ok)
 	tfLocals, ok := terraform["locals"].(map[string]any)
 	require.True(t, ok, "terraform section should have nested locals")
@@ -724,7 +689,7 @@ func TestDescribeLocalsOutputStructureStack(t *testing.T) {
 	assert.Equal(t, "terraform-specific-prod", tfLocals["tf_only"])
 
 	// Verify helmfile section has nested locals (helmfile.locals).
-	helmfile, ok := prodLocals["helmfile"].(map[string]any)
+	helmfile, ok := result["helmfile"].(map[string]any)
 	require.True(t, ok)
 	hfLocals, ok := helmfile["locals"].(map[string]any)
 	require.True(t, ok, "helmfile section should have nested locals")
@@ -732,27 +697,26 @@ func TestDescribeLocalsOutputStructureStack(t *testing.T) {
 	assert.Equal(t, "helmfile-specific-prod", hfLocals["hf_only"])
 }
 
-// TestDescribeLocalsOutputStructureComponent tests the output structure when querying for a component.
+// TestDescribeLocalsOutputStructureComponent tests the output structure when querying for a stack.
 func TestDescribeLocalsOutputStructureComponent(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals-logical-names")
 
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Get all locals for the stack.
-	stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "dev-us-east-1")
+	// Get locals for the stack (direct format).
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "dev-us-east-1")
 	require.NoError(t, err)
+	require.NotNil(t, result)
 
-	devLocals, ok := stackLocals["dev-us-east-1"].(map[string]any)
-	require.True(t, ok)
-
+	// Result is now in direct format (no stack name wrapper).
 	// Verify root-level locals.
-	locals, ok := devLocals["locals"].(map[string]any)
+	locals, ok := result["locals"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "acme", locals["namespace"], "root locals should include namespace")
 
 	// Verify terraform section locals (Atmos schema: terraform.locals).
-	terraform, ok := devLocals["terraform"].(map[string]any)
+	terraform, ok := result["terraform"].(map[string]any)
 	require.True(t, ok)
 	tfLocals, ok := terraform["locals"].(map[string]any)
 	require.True(t, ok, "terraform section should have nested locals")
@@ -794,18 +758,14 @@ func TestDescribeLocalsComponentWithFilePath(t *testing.T) {
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Verify ExecuteDescribeLocals accepts file path "deploy/prod" as filter.
+	// Verify ExecuteDescribeLocals accepts file path "deploy/prod" as filter (direct format).
 	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "deploy/prod")
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Len(t, result, 1, "should have exactly one stack when filtering by file path")
 
-	// The result key is the logical name even when filtering by file path.
-	prodLocals, ok := result["prod-us-west-2"].(map[string]any)
-	require.True(t, ok, "should have prod-us-west-2 stack (returned with logical name)")
-
+	// Result is now in direct format (no stack name wrapper).
 	// Verify terraform section locals (Atmos schema: terraform.locals).
-	terraform, ok := prodLocals["terraform"].(map[string]any)
+	terraform, ok := result["terraform"].(map[string]any)
 	require.True(t, ok)
 	tfLocals, ok := terraform["locals"].(map[string]any)
 	require.True(t, ok, "terraform section should have nested locals")
@@ -819,15 +779,14 @@ func TestDescribeLocalsHelmfileComponent(t *testing.T) {
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Get locals for prod stack which has helmfile locals.
-	stackLocals, err := exec.ExecuteDescribeLocals(&atmosConfig, "prod-us-west-2")
+	// Get locals for prod stack which has helmfile locals (direct format).
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "prod-us-west-2")
 	require.NoError(t, err)
+	require.NotNil(t, result)
 
-	prodLocals, ok := stackLocals["prod-us-west-2"].(map[string]any)
-	require.True(t, ok)
-
+	// Result is now in direct format (no stack name wrapper).
 	// Verify helmfile section locals (Atmos schema: helmfile.locals).
-	helmfile, ok := prodLocals["helmfile"].(map[string]any)
+	helmfile, ok := result["helmfile"].(map[string]any)
 	require.True(t, ok)
 	hfLocals, ok := helmfile["locals"].(map[string]any)
 	require.True(t, ok, "helmfile section should have nested locals")
@@ -837,41 +796,39 @@ func TestDescribeLocalsHelmfileComponent(t *testing.T) {
 	assert.Equal(t, "helmfile-specific-prod", hfLocals["hf_only"])
 
 	// Global locals are in root "locals:" section, not merged into helmfile.locals.
-	locals, ok := prodLocals["locals"].(map[string]any)
+	locals, ok := result["locals"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "acme", locals["namespace"])
 	assert.Equal(t, "acme-prod", locals["env_prefix"])
 }
 
 // TestDescribeLocalsDifferentOutputStructures verifies that stack queries return
-// Atmos schema format output.
+// direct Atmos schema format output.
 func TestDescribeLocalsDifferentOutputStructures(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals-logical-names")
 
 	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
 
-	// Stack query output structure.
-	stackResult, err := exec.ExecuteDescribeLocals(&atmosConfig, "dev-us-east-1")
+	// Stack query output structure (direct format).
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "dev-us-east-1")
 	require.NoError(t, err)
+	require.NotNil(t, result)
 
-	// Stack output: map keyed by stack name containing Atmos schema format.
-	devLocals, ok := stackResult["dev-us-east-1"].(map[string]any)
-	require.True(t, ok, "stack result should have stack name as key")
-
-	// Verify stack output has Atmos schema format (locals:, terraform: {locals:}, etc.).
-	_, hasLocals := devLocals["locals"]
+	// Result is now in direct format (no stack name wrapper).
+	// Verify output has Atmos schema format (locals:, terraform: {locals:}, etc.).
+	_, hasLocals := result["locals"]
 	assert.True(t, hasLocals, "stack output should have 'locals' key (root-level locals)")
 
 	// Stack output should NOT have the old format keys.
-	_, hasGlobal := devLocals["global"]
-	_, hasMerged := devLocals["merged"]
+	_, hasGlobal := result["global"]
+	_, hasMerged := result["merged"]
 	assert.False(t, hasGlobal, "stack output should NOT have 'global' key (old format)")
 	assert.False(t, hasMerged, "stack output should NOT have 'merged' key (old format)")
 
 	// Stack output should NOT have component-specific keys.
-	_, hasComponent := devLocals["component"]
-	_, hasComponentType := devLocals["component_type"]
+	_, hasComponent := result["component"]
+	_, hasComponentType := result["component_type"]
 	assert.False(t, hasComponent, "stack output should NOT have 'component' key")
 	assert.False(t, hasComponentType, "stack output should NOT have 'component_type' key")
 }

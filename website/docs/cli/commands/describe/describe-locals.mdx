@@ -11,11 +11,11 @@ import Intro from '@site/src/components/Intro'
 
 <Intro>
 Use this command to display the [locals](/stacks/locals) defined in Atmos stack manifests.
-This is useful for debugging and understanding how locals are configured across your stacks.
+This is useful for debugging and understanding how locals are configured in a specific stack.
 </Intro>
 
-:::info Understanding Stack Resolution
-When you specify `--stack`, Atmos resolves it to a stack manifest file and returns **only the locals defined in that file** (not inherited from imports). The `--stack` flag accepts either:
+:::info Stack Flag Required
+The `--stack` flag is **required**. Atmos resolves it to a stack manifest file and returns **only the locals defined in that file** (not inherited from imports). The `--stack` flag accepts either:
 - A **logical stack name** derived from your `atmos.yaml` naming pattern (e.g., `prod-us-east-1`)
 - A **stack manifest file path** (e.g., `deploy/prod`)
 
@@ -29,11 +29,11 @@ Both resolve to the same underlying file. Locals are file-scoped, so the output 
 Execute the `describe locals` command like this:
 
 ```shell
-atmos describe locals [component] [options]
+atmos describe locals [component] -s <stack> [options]
 ```
 
-When called without arguments, it shows all locals organized by stack.
-When a component is specified with `--stack`, it shows the merged locals that would be **available to** that component. This includes:
+The `--stack` flag is required. When called with just `--stack`, it shows the locals defined in that stack manifest file.
+When a component is also specified, it shows the merged locals that would be **available to** that component. This includes:
 - **Global locals** from the stack manifest file
 - **Section-specific locals** (e.g., `terraform:` locals for a Terraform component)
 - **Component-level locals** defined in the component itself (including inherited from base components)
@@ -45,9 +45,6 @@ Run `atmos describe locals --help` to see all the available options
 ## Examples
 
 ```shell
-# Show locals for all stacks
-atmos describe locals
-
 # Show locals for a specific stack (using file path)
 atmos describe locals --stack deploy/dev
 
@@ -60,14 +57,14 @@ atmos describe locals vpc -s prod
 atmos describe locals eks --stack prod-us-east-1
 
 # Output as JSON
-atmos describe locals --format json
+atmos describe locals -s dev --format json
 atmos describe locals vpc -s prod -f json
 
 # Write to file
-atmos describe locals --file locals.yaml
+atmos describe locals -s dev --file locals.yaml
 
-# Query specific values (note: stack key is the file path, not logical name)
-atmos describe locals --query '.["deploy/dev"].locals.namespace'
+# Query specific values
+atmos describe locals -s deploy/dev --query '.locals.namespace'
 ```
 
 ## Arguments
@@ -80,8 +77,8 @@ atmos describe locals --query '.["deploy/dev"].locals.namespace'
 ## Flags
 
 <dl>
-  <dt>`--stack` / `-s` <em>(optional, required with component)</em></dt>
-  <dd>Filter by a specific stack. Accepts two formats: (1) <strong>Stack manifest file path</strong> - direct path relative to your stacks directory (e.g., <code>deploy/dev</code>, <code>prod</code>), or (2) <strong>Logical stack name</strong> - the derived name based on your <code>atmos.yaml</code> naming pattern (e.g., <code>prod-us-east-1</code>). Atmos resolves either format to the underlying stack manifest file and returns only the locals defined in that file. Required when a component argument is provided.</dd>
+  <dt>`--stack` / `-s` <em>(required)</em></dt>
+  <dd>Specify the stack to show locals for. Accepts two formats: (1) <strong>Stack manifest file path</strong> - direct path relative to your stacks directory (e.g., <code>deploy/dev</code>, <code>prod</code>), or (2) <strong>Logical stack name</strong> - the derived name based on your <code>atmos.yaml</code> naming pattern (e.g., <code>prod-us-east-1</code>). Atmos resolves either format to the underlying stack manifest file and returns only the locals defined in that file.</dd>
 
   <dt>`--format` / `-f` <em>(optional)</em></dt>
   <dd>Output format: `yaml` or `json` (`yaml` is default).</dd>
@@ -117,23 +114,22 @@ This schema-compliant format makes it easy to compare with your source stack man
 
 <Terminal title="atmos describe locals --stack deploy/dev">
 ```yaml
-deploy/dev:
+locals:
+  environment: dev
+  namespace: acme
+  name_prefix: acme-dev
+  full_name: acme-dev-us-east-1
+  tags:
+    Environment: dev
+    Namespace: acme
+terraform:
   locals:
-    environment: dev
-    namespace: acme
-    name_prefix: acme-dev
-    full_name: acme-dev-us-east-1
-    tags:
-      Environment: dev
-      Namespace: acme
-  terraform:
-    locals:
-      backend_bucket: acme-dev-tfstate
-      tf_specific: terraform-only
+    backend_bucket: acme-dev-tfstate
+    tf_specific: terraform-only
 ```
 </Terminal>
 
-The output follows the same structure as stack manifest files, making it easy to understand which locals are defined where.
+The output follows the same structure as stack manifest files, making it easy to understand which locals are defined where. This format can be directly used as a valid stack manifest file (e.g., `atmos describe locals -s dev --file locals.yaml`).
 
 ### Component-Specific Output
 

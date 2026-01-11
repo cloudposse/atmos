@@ -1590,6 +1590,9 @@ Since locals are file-scoped and not visible in `atmos describe component`, we p
 #### The `atmos describe locals` Command
 
 ```bash
+# Show locals for a specific stack
+atmos describe locals --stack prod-us-east-1
+
 # Show all locals for a component in a stack
 atmos describe locals vpc -s prod-us-east-1
 
@@ -1597,20 +1600,21 @@ atmos describe locals vpc -s prod-us-east-1
 atmos describe locals vpc -s prod-us-east-1 --format json
 ```
 
+**Note:** The `--stack` flag is required. Locals are file-scoped, so a specific stack must be specified.
+
 **Example output (stack query without component):**
 ```yaml
-plat-ue2-prod:
+locals:
+  region: us-east-2
+  account_id: "123456789012"
+  environment: prod
+terraform:
   locals:
-    region: us-east-2
-    account_id: "123456789012"
-    environment: prod
-  terraform:
-    locals:
-      state_bucket: terraform-state-123456789012
-      state_key_prefix: plat-ue2-prod
+    state_bucket: terraform-state-123456789012
+    state_key_prefix: plat-ue2-prod
 ```
 
-The output follows the Atmos stack manifest schema format, showing global `locals:` and section-specific locals under `terraform: { locals: }`.
+The output follows the Atmos stack manifest schema format in direct format. This can be redirected to a file and used as a valid stack manifest.
 
 #### Key Features
 
@@ -1675,40 +1679,38 @@ Hint: Check for typos in local variable names.
 
 ### The `atmos describe locals` Command
 
-List the resolved locals for a component in a stack:
+Display the resolved locals for a specific stack:
 
 ```bash
-# Show locals for a component in a stack
-atmos describe locals vpc -s plat-ue2-prod
-
-# Show locals for all stacks
-atmos describe locals
-
-# Filter by stack (logical name or file path)
+# Show locals for a stack (logical name or file path)
 atmos describe locals --stack plat-ue2-prod
 atmos describe locals --stack deploy/prod
 
+# Show locals for a component in a stack
+atmos describe locals vpc -s plat-ue2-prod
+
 # Output as YAML (default)
-atmos describe locals vpc -s plat-ue2-prod --format yaml
+atmos describe locals -s plat-ue2-prod --format yaml
 
 # Output as JSON
-atmos describe locals vpc -s plat-ue2-prod --format json
+atmos describe locals -s plat-ue2-prod --format json
 ```
+
+**Note:** The `--stack` flag is required. Locals are file-scoped, so a specific stack must be specified.
 
 **Example output (stack query without component):**
 ```yaml
-plat-ue2-prod:
+locals:
+  region: us-east-2
+  account_id: "123456789012"
+  environment: prod
+terraform:
   locals:
-    region: us-east-2
-    account_id: "123456789012"
-    environment: prod
-  terraform:
-    locals:
-      state_bucket: terraform-state-123456789012
-      state_key_prefix: plat-ue2-prod
+    state_bucket: terraform-state-123456789012
+    state_key_prefix: plat-ue2-prod
 ```
 
-The output follows the Atmos stack manifest schema format, showing global `locals:` and section-specific locals under `terraform: { locals: }`.
+The output is in direct stack manifest format - it can be redirected to a file and used as valid YAML.
 
 **Example output (component query):**
 ```yaml
@@ -1872,12 +1874,11 @@ The following features have been implemented:
 - ✅ Integration with template processing (`{{ .locals.* }}`)
 
 #### `atmos describe locals` Command
-- ✅ Show all locals across stacks: `atmos describe locals`
-- ✅ Filter by stack: `atmos describe locals --stack prod`
-- ✅ Filter by component in stack: `atmos describe locals vpc -s prod`
-- ✅ JSON output format: `atmos describe locals --format json`
-- ✅ Query support: `atmos describe locals --query '."stack-name".locals.namespace'`
-- ✅ File output: `atmos describe locals --file output.yaml`
+- ✅ Show locals for a stack: `atmos describe locals --stack prod` (required)
+- ✅ Show locals for a component in stack: `atmos describe locals vpc -s prod`
+- ✅ JSON output format: `atmos describe locals -s prod --format json`
+- ✅ Query support: `atmos describe locals -s prod --query '.locals.namespace'`
+- ✅ File output: `atmos describe locals -s prod --file output.yaml`
 
 #### Implementation Files
 - `internal/exec/stack_processor_locals.go` - LocalsContext and extraction

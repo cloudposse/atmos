@@ -62,6 +62,11 @@ func NewDescribeLocalsExec() DescribeLocalsExec {
 func (d *describeLocalsExec) Execute(atmosConfig *schema.AtmosConfiguration, args *DescribeLocalsArgs) error {
 	defer perf.Track(atmosConfig, "exec.DescribeLocalsExec.Execute")()
 
+	// Stack is required.
+	if args.FilterByStack == "" {
+		return errUtils.ErrStackRequired
+	}
+
 	var res any
 	var err error
 
@@ -72,7 +77,7 @@ func (d *describeLocalsExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 			return err
 		}
 	} else {
-		// Get locals for all stacks.
+		// Get locals for the specified stack.
 		finalLocalsMap, err := d.executeDescribeLocals(atmosConfig, args.FilterByStack)
 		if err != nil {
 			return err
@@ -108,8 +113,9 @@ func (d *describeLocalsExec) executeForComponent(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.DescribeLocalsExec.executeForComponent")()
 
+	// Stack is validated in Execute(), but double-check for safety.
 	if args.FilterByStack == "" {
-		return nil, errUtils.ErrStackRequiredWithComponent
+		return nil, errUtils.ErrStackRequired
 	}
 
 	componentSection, err := d.executeDescribeComponent(&ExecuteDescribeComponentParams{
@@ -163,24 +169,10 @@ func buildComponentLocalsResult(
 	componentType string,
 	componentLocals map[string]any,
 ) (map[string]any, error) {
-	// ExecuteDescribeLocals already filters by stack, so stackLocals should have at most one entry.
-	// The key may be the logical stack name (e.g., "prod-us-west-2") which differs from
-	// args.FilterByStack (e.g., "deploy/prod"). Try direct lookup first, then fall back to
-	// using the single entry if present.
-	var localsMap map[string]any
-
-	if localsData, exists := stackLocals[args.FilterByStack]; exists {
-		localsMap, _ = localsData.(map[string]any)
-	} else if len(stackLocals) == 1 {
-		// Single entry after filtering - use it regardless of key name.
-		for _, localsData := range stackLocals {
-			localsMap, _ = localsData.(map[string]any)
-			break
-		}
-	}
-
-	if localsMap != nil {
-		stackTypeLocals := getLocalsForComponentType(localsMap, componentType)
+	// stackLocals is now in direct format (locals:, terraform:, etc.) without stack name wrapper.
+	// Merge stack-level locals with component-level locals.
+	if len(stackLocals) > 0 {
+		stackTypeLocals := getLocalsForComponentType(stackLocals, componentType)
 		mergedLocals := mergeLocals(stackTypeLocals, componentLocals)
 		return buildComponentSchemaOutput(args.Component, componentType, mergedLocals), nil
 	}
@@ -266,23 +258,9 @@ type stackFileLocalsResult struct {
 	Found       bool           // Whether the stack matched the filter (even if no locals).
 }
 
-// validateFilteredLocalsResult checks if the filtered result is valid.
-// Returns an error if filtering was requested but no stack was found or stack has no locals.
-func validateFilteredLocalsResult(filterByStack string, stackFound bool, localsMap map[string]any) error {
-	if filterByStack == "" {
-		return nil
-	}
-	if !stackFound {
-		return fmt.Errorf("%w: %s", errUtils.ErrStackNotFound, filterByStack)
-	}
-	if len(localsMap) == 0 {
-		return fmt.Errorf("%w: %s", errUtils.ErrStackHasNoLocals, filterByStack)
-	}
-	return nil
-}
-
-// ExecuteDescribeLocals processes stack manifests and returns the locals for all stacks.
+// ExecuteDescribeLocals processes stack manifests and returns the locals for the specified stack.
 // It reads the raw YAML files directly since locals are stripped during normal stack processing.
+// The output format matches the stack manifest schema (locals at root level).
 func ExecuteDescribeLocals(
 	atmosConfig *schema.AtmosConfiguration,
 	filterByStack string,
@@ -293,8 +271,8 @@ func ExecuteDescribeLocals(
 	// deriveStackFileName returns forward-slash paths, so we need to match that format.
 	filterByStack = filepath.ToSlash(filterByStack)
 
-	finalLocalsMap := make(map[string]any)
 	stackFound := false
+	var stackLocals map[string]any
 
 	// Process each stack config file directly.
 	for _, filePath := range atmosConfig.StackConfigFilesAbsolutePaths {
@@ -306,22 +284,20 @@ func ExecuteDescribeLocals(
 		// Track if we found a matching stack (even with no locals).
 		if result.Found {
 			stackFound = true
+			stackLocals = result.StackLocals
+			break // Found the matching stack, no need to continue.
 		}
-
-		// Skip if no locals or filtered out.
-		if result.StackName == "" || len(result.StackLocals) == 0 {
-			continue
-		}
-
-		finalLocalsMap[result.StackName] = result.StackLocals
 	}
 
-	// Validate the result when filtering.
-	if err := validateFilteredLocalsResult(filterByStack, stackFound, finalLocalsMap); err != nil {
-		return nil, err
+	// Validate the result.
+	if !stackFound {
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrStackNotFound, filterByStack)
+	}
+	if len(stackLocals) == 0 {
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrStackHasNoLocals, filterByStack)
 	}
 
-	return finalLocalsMap, nil
+	return stackLocals, nil
 }
 
 // parseStackFileYAML reads and parses a stack file's YAML content.

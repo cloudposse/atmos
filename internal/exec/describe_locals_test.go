@@ -330,26 +330,32 @@ locals:
 		StackConfigFilesAbsolutePaths: []string{devFile, prodFile},
 	}
 
-	t.Run("returns all stacks", func(t *testing.T) {
-		result, err := ExecuteDescribeLocals(atmosConfig, "")
-		require.NoError(t, err)
-		assert.Len(t, result, 2)
-		assert.Contains(t, result, "dev")
-		assert.Contains(t, result, "prod")
-	})
-
-	t.Run("filters by stack", func(t *testing.T) {
+	t.Run("returns locals for dev stack in direct format", func(t *testing.T) {
 		result, err := ExecuteDescribeLocals(atmosConfig, "dev")
 		require.NoError(t, err)
-		assert.Len(t, result, 1)
-		assert.Contains(t, result, "dev")
+		// Result should be direct format: locals: {...}
+		assert.Contains(t, result, "locals")
+		locals, ok := result["locals"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "acme", locals["namespace"])
+		assert.Equal(t, "dev", locals["environment"])
 	})
 
-	t.Run("empty config returns empty map", func(t *testing.T) {
-		emptyConfig := &schema.AtmosConfiguration{}
-		result, err := ExecuteDescribeLocals(emptyConfig, "")
+	t.Run("returns locals for prod stack in direct format", func(t *testing.T) {
+		result, err := ExecuteDescribeLocals(atmosConfig, "prod")
 		require.NoError(t, err)
-		assert.Empty(t, result)
+		// Result should be direct format: locals: {...}
+		assert.Contains(t, result, "locals")
+		locals, ok := result["locals"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "acme", locals["namespace"])
+		assert.Equal(t, "prod", locals["environment"])
+	})
+
+	t.Run("returns error for nonexistent stack", func(t *testing.T) {
+		_, err := ExecuteDescribeLocals(atmosConfig, "nonexistent")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrStackNotFound)
 	})
 }
 
@@ -579,7 +585,7 @@ func TestGetLocalsForComponentType(t *testing.T) {
 }
 
 func TestExecuteForComponent(t *testing.T) {
-	t.Run("requires stack when component is specified", func(t *testing.T) {
+	t.Run("requires stack", func(t *testing.T) {
 		exec := &describeLocalsExec{}
 
 		args := &DescribeLocalsArgs{
@@ -589,7 +595,7 @@ func TestExecuteForComponent(t *testing.T) {
 
 		_, err := exec.executeForComponent(&schema.AtmosConfiguration{}, args)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrStackRequiredWithComponent)
+		assert.ErrorIs(t, err, errUtils.ErrStackRequired)
 	})
 
 	t.Run("returns error when component not found", func(t *testing.T) {
@@ -667,16 +673,15 @@ func TestExecuteForComponent(t *testing.T) {
 				}, nil
 			},
 			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
+				// New direct format (no stack name wrapper).
 				return map[string]any{
-					"dev": map[string]any{
+					"locals": map[string]any{
+						"namespace":   "acme",
+						"environment": "dev",
+					},
+					"terraform": map[string]any{
 						"locals": map[string]any{
-							"namespace":   "acme",
-							"environment": "dev",
-						},
-						"terraform": map[string]any{
-							"locals": map[string]any{
-								"backend_bucket": "acme-dev-tfstate",
-							},
+							"backend_bucket": "acme-dev-tfstate",
 						},
 					},
 				}, nil
@@ -713,15 +718,14 @@ func TestExecuteForComponent(t *testing.T) {
 				}, nil
 			},
 			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
+				// New direct format (no stack name wrapper).
 				return map[string]any{
-					"prod": map[string]any{
+					"locals": map[string]any{
+						"namespace": "acme",
+					},
+					"helmfile": map[string]any{
 						"locals": map[string]any{
-							"namespace": "acme",
-						},
-						"helmfile": map[string]any{
-							"locals": map[string]any{
-								"release_name": "my-release",
-							},
+							"release_name": "my-release",
 						},
 					},
 				}, nil
@@ -755,11 +759,10 @@ func TestExecuteForComponent(t *testing.T) {
 				return map[string]any{}, nil
 			},
 			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
+				// New direct format (no stack name wrapper).
 				return map[string]any{
-					"dev": map[string]any{
-						"locals": map[string]any{
-							"namespace": "acme",
-						},
+					"locals": map[string]any{
+						"namespace": "acme",
 					},
 				}, nil
 			},
@@ -791,15 +794,14 @@ func TestExecuteForComponentOutputStructure(t *testing.T) {
 				}, nil
 			},
 			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
+				// New direct format (no stack name wrapper).
 				return map[string]any{
-					"dev-us-east-1": map[string]any{
+					"locals": map[string]any{
+						"namespace": "acme",
+					},
+					"terraform": map[string]any{
 						"locals": map[string]any{
-							"namespace": "acme",
-						},
-						"terraform": map[string]any{
-							"locals": map[string]any{
-								"backend_bucket": "acme-tfstate",
-							},
+							"backend_bucket": "acme-tfstate",
 						},
 					},
 				}, nil
@@ -833,7 +835,7 @@ func TestExecuteForComponentOutputStructure(t *testing.T) {
 		assert.Equal(t, "acme-tfstate", locals["backend_bucket"])
 	})
 
-	t.Run("component output uses logical stack name", func(t *testing.T) {
+	t.Run("component output works with direct format", func(t *testing.T) {
 		exec := &describeLocalsExec{
 			executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
 				// Filter should be "deploy/prod" (file path).
@@ -843,12 +845,10 @@ func TestExecuteForComponentOutputStructure(t *testing.T) {
 				}, nil
 			},
 			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
-				// Return logical stack name as key.
+				// New direct format (no stack name wrapper).
 				return map[string]any{
-					"prod-us-west-2": map[string]any{
-						"locals": map[string]any{
-							"namespace": "acme",
-						},
+					"locals": map[string]any{
+						"namespace": "acme",
 					},
 				}, nil
 			},
@@ -873,7 +873,20 @@ func TestExecuteForComponentOutputStructure(t *testing.T) {
 }
 
 func TestDescribeLocalsExecExecute(t *testing.T) {
-	t.Run("execute without query", func(t *testing.T) {
+	t.Run("execute requires stack", func(t *testing.T) {
+		exec := &describeLocalsExec{}
+
+		args := &DescribeLocalsArgs{
+			Format: "yaml",
+			// FilterByStack is empty - should error.
+		}
+
+		err := exec.Execute(&schema.AtmosConfiguration{}, args)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrStackRequired)
+	})
+
+	t.Run("execute with stack", func(t *testing.T) {
 		// Create a temporary directory for test files.
 		tempDir := t.TempDir()
 
@@ -900,7 +913,8 @@ locals:
 		}
 
 		args := &DescribeLocalsArgs{
-			Format: "yaml",
+			Format:        "yaml",
+			FilterByStack: "dev",
 		}
 
 		err = exec.Execute(atmosConfig, args)
@@ -933,8 +947,9 @@ locals:
 		}
 
 		args := &DescribeLocalsArgs{
-			Format: "yaml",
-			Query:  ".dev.merged.namespace",
+			Format:        "yaml",
+			FilterByStack: "dev",
+			Query:         ".dev.locals.namespace",
 		}
 
 		err = exec.Execute(atmosConfig, args)
@@ -968,51 +983,9 @@ locals:
 		}
 
 		args := &DescribeLocalsArgs{
-			Format: "json",
-			File:   outputFile,
-		}
-
-		err = exec.Execute(atmosConfig, args)
-		require.NoError(t, err)
-	})
-
-	t.Run("execute with stack filter", func(t *testing.T) {
-		tempDir := t.TempDir()
-
-		devYAML := `
-locals:
-  namespace: acme
-  environment: dev
-`
-		devFile := filepath.Join(tempDir, "dev.yaml")
-		err := os.WriteFile(devFile, []byte(devYAML), 0o644)
-		require.NoError(t, err)
-
-		prodYAML := `
-locals:
-  namespace: acme
-  environment: prod
-`
-		prodFile := filepath.Join(tempDir, "prod.yaml")
-		err = os.WriteFile(prodFile, []byte(prodYAML), 0o644)
-		require.NoError(t, err)
-
-		atmosConfig := &schema.AtmosConfiguration{
-			StacksBaseAbsolutePath:        tempDir,
-			StackConfigFilesAbsolutePaths: []string{devFile, prodFile},
-		}
-
-		exec := &describeLocalsExec{
-			executeDescribeLocals: ExecuteDescribeLocals,
-			isTTYSupportForStdout: func() bool { return false },
-			printOrWriteToFile: func(ac *schema.AtmosConfiguration, format string, file string, data any) error {
-				return nil
-			},
-		}
-
-		args := &DescribeLocalsArgs{
-			Format:        "yaml",
+			Format:        "json",
 			FilterByStack: "dev",
+			File:          outputFile,
 		}
 
 		err = exec.Execute(atmosConfig, args)
@@ -1034,7 +1007,8 @@ locals:
 		}
 
 		args := &DescribeLocalsArgs{
-			Format: "yaml",
+			Format:        "yaml",
+			FilterByStack: "dev",
 		}
 
 		err := exec.Execute(atmosConfig, args)
@@ -1052,15 +1026,14 @@ locals:
 				}, nil
 			},
 			executeDescribeLocals: func(ac *schema.AtmosConfiguration, filterByStack string) (map[string]any, error) {
+				// New direct format (no stack name wrapper).
 				return map[string]any{
-					"dev": map[string]any{
+					"locals": map[string]any{
+						"namespace": "acme",
+					},
+					"terraform": map[string]any{
 						"locals": map[string]any{
-							"namespace": "acme",
-						},
-						"terraform": map[string]any{
-							"locals": map[string]any{
-								"backend_bucket": "acme-dev-tfstate",
-							},
+							"backend_bucket": "acme-dev-tfstate",
 						},
 					},
 				}, nil
@@ -1112,7 +1085,7 @@ locals:
 
 		err := exec.Execute(atmosConfig, args)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrStackRequiredWithComponent)
+		assert.ErrorIs(t, err, errUtils.ErrStackRequired)
 	})
 }
 
@@ -1315,60 +1288,6 @@ func TestMergeLocals(t *testing.T) {
 	}
 }
 
-func TestValidateFilteredLocalsResult(t *testing.T) {
-	tests := []struct {
-		name          string
-		filterByStack string
-		stackFound    bool
-		localsMap     map[string]any
-		expectError   bool
-		expectedErr   error
-	}{
-		{
-			name:          "no filter returns nil",
-			filterByStack: "",
-			stackFound:    false,
-			localsMap:     map[string]any{},
-			expectError:   false,
-		},
-		{
-			name:          "filter with found stack and locals returns nil",
-			filterByStack: "dev",
-			stackFound:    true,
-			localsMap:     map[string]any{"dev": map[string]any{}},
-			expectError:   false,
-		},
-		{
-			name:          "filter with not found stack returns error",
-			filterByStack: "nonexistent",
-			stackFound:    false,
-			localsMap:     map[string]any{},
-			expectError:   true,
-			expectedErr:   errUtils.ErrStackNotFound,
-		},
-		{
-			name:          "filter with found stack but no locals returns error",
-			filterByStack: "dev",
-			stackFound:    true,
-			localsMap:     map[string]any{},
-			expectError:   true,
-			expectedErr:   errUtils.ErrStackHasNoLocals,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateFilteredLocalsResult(tt.filterByStack, tt.stackFound, tt.localsMap)
-			if tt.expectError {
-				assert.Error(t, err)
-				assert.ErrorIs(t, err, tt.expectedErr)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
 func TestParseStackFileYAML(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -1434,13 +1353,6 @@ func TestStackMatchesFilter(t *testing.T) {
 		stackName     string
 		expected      bool
 	}{
-		{
-			name:          "empty filter matches all",
-			filterByStack: "",
-			stackFileName: "deploy/dev",
-			stackName:     "dev",
-			expected:      true,
-		},
 		{
 			name:          "matches by filename",
 			filterByStack: "deploy/dev",
@@ -1644,15 +1556,14 @@ func TestGetExplicitStackName(t *testing.T) {
 }
 
 func TestBuildComponentLocalsResult(t *testing.T) {
-	t.Run("direct key lookup succeeds", func(t *testing.T) {
+	t.Run("direct format with locals succeeds", func(t *testing.T) {
 		args := &DescribeLocalsArgs{
 			Component:     "vpc",
 			FilterByStack: "dev",
 		}
+		// New direct format (no stack name wrapper).
 		stackLocals := map[string]any{
-			"dev": map[string]any{
-				"locals": map[string]any{"namespace": "acme"},
-			},
+			"locals": map[string]any{"namespace": "acme"},
 		}
 
 		result, err := buildComponentLocalsResult(args, stackLocals, "terraform", nil)
@@ -1660,21 +1571,34 @@ func TestBuildComponentLocalsResult(t *testing.T) {
 		assert.Contains(t, result, "components")
 	})
 
-	t.Run("single entry fallback when key differs", func(t *testing.T) {
+	t.Run("direct format with section-specific locals", func(t *testing.T) {
 		args := &DescribeLocalsArgs{
 			Component:     "vpc",
 			FilterByStack: "deploy/prod",
 		}
-		// Key is logical name, not file path.
+		// New direct format with terraform section.
 		stackLocals := map[string]any{
-			"prod-us-west-2": map[string]any{
-				"locals": map[string]any{"namespace": "acme"},
+			"locals": map[string]any{"namespace": "acme"},
+			"terraform": map[string]any{
+				"locals": map[string]any{"backend_bucket": "acme-tfstate"},
 			},
 		}
 
 		result, err := buildComponentLocalsResult(args, stackLocals, "terraform", nil)
 		require.NoError(t, err)
 		assert.Contains(t, result, "components")
+
+		// Verify merged locals include both global and terraform-specific.
+		components, ok := result["components"].(map[string]any)
+		require.True(t, ok)
+		terraform, ok := components["terraform"].(map[string]any)
+		require.True(t, ok)
+		vpc, ok := terraform["vpc"].(map[string]any)
+		require.True(t, ok)
+		locals, ok := vpc["locals"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "acme", locals["namespace"])
+		assert.Equal(t, "acme-tfstate", locals["backend_bucket"])
 	})
 
 	t.Run("uses component locals when stack has no locals", func(t *testing.T) {
@@ -1735,6 +1659,9 @@ locals:
 	// Use forward slashes (as would be normalized from Windows backslashes).
 	result, err := ExecuteDescribeLocals(atmosConfig, "deploy/dev")
 	require.NoError(t, err)
-	assert.Len(t, result, 1)
-	assert.Contains(t, result, "deploy/dev")
+	// Result should be in direct format (locals: {...}).
+	assert.Contains(t, result, "locals")
+	locals, ok := result["locals"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme", locals["namespace"])
 }

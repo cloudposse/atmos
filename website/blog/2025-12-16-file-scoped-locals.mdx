@@ -217,23 +217,24 @@ atmos describe locals vpc -s prod-ue2 --format json
 }
 ```
 
-### Show All Locals Across Stacks
+### Show Locals for a Stack
 
-Without a component argument, show all locals organized by stack:
+With the `--stack` flag (required), show locals for the specified stack:
 
 ```bash
-atmos describe locals
+atmos describe locals --stack prod-ue2
 ```
 
 ```yaml
-prod-ue2:
+locals:
+  namespace: acme
+  environment: prod
+terraform:
   locals:
-    namespace: acme
-    environment: prod
-  terraform:
-    locals:
-      backend_bucket: acme-prod-tfstate
+    backend_bucket: acme-prod-tfstate
 ```
+
+The output is in direct stack manifest format - it can be redirected to a file and used as valid YAML.
 
 ## Why File-Scoped?
 

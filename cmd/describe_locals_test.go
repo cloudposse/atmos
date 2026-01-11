@@ -15,7 +15,7 @@ import (
 )
 
 func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
-	t.Run("successful execution", func(t *testing.T) {
+	t.Run("successful execution with stack", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 
 		checkAtmosConfigCalled := false
@@ -53,6 +53,9 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 		cmd.Flags().String("format", "", "")
 		cmd.Flags().String("file", "", "")
 		cmd.Flags().String("query", "", "")
+
+		// Stack is required.
+		require.NoError(t, cmd.Flags().Set("stack", "dev"))
 
 		err := runFunc(cmd, []string{})
 		require.NoError(t, err)
@@ -109,7 +112,39 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 		assert.Equal(t, "prod", capturedArgs.FilterByStack)
 	})
 
-	t.Run("component without stack returns error", func(t *testing.T) {
+	t.Run("missing stack returns error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockExec := exec.NewMockDescribeLocalsExec(ctrl)
+		// No expectation set - Execute should not be called.
+
+		props := getRunnableDescribeLocalsCmdProps{
+			checkAtmosConfig: func(opts ...AtmosValidateOption) {},
+			processCommandLineArgs: func(componentType string, cmd *cobra.Command, args []string, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+				return schema.ConfigAndStacksInfo{}, nil
+			},
+			initCliConfig: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+				return schema.AtmosConfiguration{}, nil
+			},
+			validateStacks: func(atmosConfig *schema.AtmosConfiguration) error {
+				return nil
+			},
+			newDescribeLocalsExecFactory: func() exec.DescribeLocalsExec { return mockExec },
+		}
+
+		runFunc := getRunnableDescribeLocalsCmd(props)
+		cmd := &cobra.Command{}
+		cmd.Flags().String("stack", "", "")
+		cmd.Flags().String("format", "", "")
+		cmd.Flags().String("file", "", "")
+		cmd.Flags().String("query", "", "")
+
+		// Call without --stack flag (required).
+		err := runFunc(cmd, []string{})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrStackRequired)
+	})
+
+	t.Run("missing stack with component returns error", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockExec := exec.NewMockDescribeLocalsExec(ctrl)
 		// No expectation set - Execute should not be called.
@@ -138,7 +173,7 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 		// Pass component without --stack flag.
 		err := runFunc(cmd, []string{"vpc"})
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrStackRequiredWithComponent)
+		assert.ErrorIs(t, err, errUtils.ErrStackRequired)
 	})
 
 	// Table-driven tests for error cases to avoid code duplication.
@@ -232,6 +267,9 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 		cmd.Flags().String("file", "", "")
 		cmd.Flags().String("query", "", "")
 
+		// Stack is required.
+		require.NoError(t, cmd.Flags().Set("stack", "dev"))
+
 		err := runFunc(cmd, []string{})
 		assert.ErrorIs(t, err, expectedErr)
 	})
@@ -304,7 +342,7 @@ func TestDescribeLocalsCmd(t *testing.T) {
 	_ = NewTestKit(t)
 
 	t.Run("command has expected properties", func(t *testing.T) {
-		assert.Equal(t, "locals [component]", describeLocalsCmd.Use)
+		assert.Equal(t, "locals [component] -s <stack>", describeLocalsCmd.Use)
 		assert.NotEmpty(t, describeLocalsCmd.Short)
 		assert.NotEmpty(t, describeLocalsCmd.Long)
 		assert.NotEmpty(t, describeLocalsCmd.Example)

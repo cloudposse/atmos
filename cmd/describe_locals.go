@@ -15,27 +15,27 @@ import (
 
 // describeLocalsCmd describes locals for stacks.
 var describeLocalsCmd = &cobra.Command{
-	Use:   "locals [component]",
+	Use:   "locals [component] -s <stack>",
 	Short: "Display locals from Atmos stack manifests",
 	Long: `This command displays the locals defined in Atmos stack manifests.
 
-When called without arguments, it shows all locals organized by stack.
-When a component is specified with --stack, it shows the merged locals
-that would be available to that component (global + component-type-specific).`,
-	Example: `  # Show all locals
-  atmos describe locals
-
-  # Show locals for a specific stack
+When called with --stack, it shows the locals defined in that stack manifest file.
+When a component is also specified, it shows the merged locals that would be
+available to that component (global + section-specific + component-level).`,
+	Example: `  # Show locals for a specific stack
   atmos describe locals --stack deploy/dev
+
+  # Show locals for a specific stack (using logical stack name)
+  atmos describe locals -s prod-us-east-1
 
   # Show locals for a component in a stack
   atmos describe locals vpc -s prod
 
   # Output as JSON
-  atmos describe locals --format json
+  atmos describe locals --stack dev --format json
 
   # Query specific values
-  atmos describe locals --query '.["deploy/dev"].locals.namespace'`,
+  atmos describe locals -s deploy/dev --query '.["deploy/dev"].locals.namespace'`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: getRunnableDescribeLocalsCmd(getRunnableDescribeLocalsCmdProps{
 		checkAtmosConfig:             checkAtmosConfig,
@@ -97,9 +97,9 @@ func getRunnableDescribeLocalsCmd(
 			return err
 		}
 
-		// Fail fast if component is specified without --stack.
-		if describeArgs.Component != "" && describeArgs.FilterByStack == "" {
-			return errUtils.ErrStackRequiredWithComponent
+		// Fail fast if --stack is not specified (required).
+		if describeArgs.FilterByStack == "" {
+			return errUtils.ErrStackRequired
 		}
 
 		// Create executor lazily to avoid init-time side effects.

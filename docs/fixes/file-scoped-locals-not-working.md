@@ -493,17 +493,20 @@ The `atmos describe locals` command was added to help users inspect and debug th
 ### Usage
 
 ```bash
-# Show locals for all stacks
-atmos describe locals
-
-# Show locals for a specific stack
+# Show locals for a specific stack (--stack is required)
 atmos describe locals --stack deploy/dev
 
+# Show locals for a specific stack (using logical stack name)
+atmos describe locals -s prod-us-east-1
+
+# Show locals for a component in a stack
+atmos describe locals vpc -s prod
+
 # Output as JSON
-atmos describe locals --format json
+atmos describe locals -s deploy/dev --format json
 
 # Write to file
-atmos describe locals --file locals.yaml
+atmos describe locals -s deploy/dev --file locals.yaml
 ```
 
 ### Output Structure
@@ -514,17 +517,16 @@ The command outputs locals using Atmos schema format:
 
 For component queries, output uses schema format: `components: { terraform: { component-name: { locals: } } }`
 
-Example stack output:
+Example stack output (direct format - valid stack manifest YAML):
 ```yaml
-deploy/dev:
+locals:
+  environment: dev
+  namespace: acme
+  name_prefix: acme-dev
+terraform:
   locals:
-    environment: dev
-    namespace: acme
-    name_prefix: acme-dev
-  terraform:
-    locals:
-      backend_bucket: acme-dev-tfstate
-      tf_specific: terraform-only
+    backend_bucket: acme-dev-tfstate
+    tf_specific: terraform-only
 ```
 
 Example component output:
@@ -608,13 +610,10 @@ Test all variations of the `describe locals` command.
 ```bash
 cd tests/fixtures/scenarios/locals-logical-names
 
-# Show locals for ALL stacks
-../../../../build/atmos describe locals
-
-# Filter by stack (logical name)
+# Show locals for a stack (using logical name)
 ../../../../build/atmos describe locals --stack dev-us-east-1
 
-# Filter by stack (file path)
+# Show locals for a stack (using file path)
 ../../../../build/atmos describe locals --stack deploy/prod
 
 # With component argument - shows merged locals for component's type
@@ -634,7 +633,7 @@ cd tests/fixtures/scenarios/locals-logical-names
 cat /tmp/locals-output.yaml
 
 # With query (yq expression)
-../../../../build/atmos describe locals --stack dev-us-east-1 --query '."dev-us-east-1".locals.namespace'
+../../../../build/atmos describe locals --stack dev-us-east-1 --query '.locals.namespace'
 # Expected: "acme"
 ```
 
@@ -758,16 +757,14 @@ Verify the output structure differences between stack and component queries.
 ```bash
 cd tests/fixtures/scenarios/locals-logical-names
 
-# Stack query - returns Atmos schema format
+# Stack query - returns direct format (valid stack manifest YAML)
 ../../../../build/atmos describe locals --stack dev-us-east-1 --format json
 
 # Expected structure:
 # {
-#   "dev-us-east-1": {
-#     "locals": { ... },
-#     "terraform": {
-#       "locals": { ... }
-#     }
+#   "locals": { ... },
+#   "terraform": {
+#     "locals": { ... }
 #   }
 # }
 
