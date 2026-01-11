@@ -88,7 +88,11 @@ func NewInstaller(opts ...Option) *Installer {
 func NewInstallerWithResolver(resolver ToolResolver, binDir string) *Installer {
 	defer perf.Track(nil, "toolchain.NewInstallerWithResolver")()
 
-	return installer.NewInstallerWithResolver(resolver, binDir)
+	// Delegate to NewInstaller to ensure realRegistryFactory injection.
+	return NewInstaller(
+		WithResolver(resolver),
+		WithBinDir(binDir),
+	)
 }
 
 // WithBinDir sets the binary installation directory.
