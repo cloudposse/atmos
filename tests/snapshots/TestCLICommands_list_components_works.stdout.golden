@@ -1,0 +1,12 @@
+<no value>	plat-ue2-dev	vpc	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
+<no value>	plat-uw2-prod	vpc	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
+<no value>	plat-ue2-staging	vpc	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
+<no value>	plat-ue2-prod	vpc	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
+<no value>	plat-uw2-dev	vpc	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
+<no value>	plat-uw2-staging	vpc	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
+<no value>	plat-ue2-dev	vpc-flow-logs-bucket	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
+<no value>	plat-uw2-prod	vpc-flow-logs-bucket	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
+<no value>	plat-ue2-staging	vpc-flow-logs-bucket	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
+<no value>	plat-ue2-prod	vpc-flow-logs-bucket	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
+<no value>	plat-uw2-dev	vpc-flow-logs-bucket	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
+<no value>	plat-uw2-staging	vpc-flow-logs-bucket	terraform	<no value>	<no value>	<no value>	<no value>	<no value>

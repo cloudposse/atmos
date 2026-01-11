@@ -1,0 +1,4 @@
+Atmos component from argument: vpc
+ATMOS_COMPONENT: vpc
+Atmos stack: plat-ue2-dev
+Terraform component: vpc
