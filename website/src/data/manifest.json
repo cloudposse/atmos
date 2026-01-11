@@ -629,16 +629,32 @@
       "title": "Describe Affected",
       "order": 2,
       "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/config/config-describe-affected.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/config/config-describe-affected.mp3",
+          "type": "r2"
+        },
         "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/0885a9fc356071260a7d7b4fb22f352a/watch",
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/32a11b99f7181c698e396f75aecac01a/watch",
           "type": "stream",
-          "uid": "0885a9fc356071260a7d7b4fb22f352a",
+          "uid": "32a11b99f7181c698e396f75aecac01a",
           "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
           "all_uids": [
-            "0885a9fc356071260a7d7b4fb22f352a"
+            "32a11b99f7181c698e396f75aecac01a"
           ],
-          "duration": 13.28,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/0885a9fc356071260a7d7b4fb22f352a/thumbnails/thumbnail.jpg?time=12.0s"
+          "duration": 11.44,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/32a11b99f7181c698e396f75aecac01a/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/config/config-describe-affected.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/config/config-describe-affected.svg",
+          "type": "r2"
         }
       }
     },
