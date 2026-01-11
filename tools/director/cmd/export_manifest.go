@@ -45,14 +45,38 @@ type Manifest struct {
 	Scenes    []ManifestScene `json:"scenes"`
 }
 
+// loadExistingManifest loads the existing manifest file if it exists.
+// Returns nil if the file doesn't exist or path is stdout.
+func loadExistingManifest(path string) (*Manifest, error) {
+	if path == "" || path == "-" {
+		return nil, nil
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil // No existing manifest.
+		}
+		return nil, err
+	}
+
+	var manifest Manifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return nil, err
+	}
+	return &manifest, nil
+}
+
 // runExportManifest is the shared export logic that can be called from both the export command
 // and the render command (when --export-manifest flag is used).
 func runExportManifest(demosDir string) error {
-	return runExportManifestWithOptions(demosDir, "", false, false)
+	return runExportManifestWithOptions(demosDir, "", false, false, false)
 }
 
 // runExportManifestWithOptions exports the manifest with configurable options.
-func runExportManifestWithOptions(demosDir string, output string, pretty bool, includeDrafts bool) error {
+// When replace is false (default), existing manifest entries are preserved if they
+// have formats and the cache doesn't have updated PublicURLs for that scene.
+func runExportManifestWithOptions(demosDir string, output string, pretty bool, includeDrafts bool, replace bool) error {
 	// Load cache metadata.
 	cacheDir := filepath.Join(demosDir, ".cache")
 	cache, err := vhsCache.LoadCache(cacheDir)
@@ -65,6 +89,28 @@ func runExportManifestWithOptions(demosDir string, output string, pretty bool, i
 	scenesList, err := scene.LoadScenes(scenesFile)
 	if err != nil {
 		return fmt.Errorf("failed to load scenes: %w", err)
+	}
+
+	// Determine output path early (needed for loading existing manifest).
+	outputPath := output
+	if outputPath == "" {
+		repoRoot := filepath.Dir(demosDir)
+		outputPath = filepath.Join(repoRoot, "website", "src", "data", "manifest.json")
+	}
+
+	// Load existing manifest for in-place updates (unless --replace is set).
+	var existingScenes map[string]ManifestScene
+	if !replace && outputPath != "-" {
+		existing, err := loadExistingManifest(outputPath)
+		if err != nil {
+			return fmt.Errorf("failed to load existing manifest: %w", err)
+		}
+		if existing != nil {
+			existingScenes = make(map[string]ManifestScene)
+			for _, s := range existing.Scenes {
+				existingScenes[s.Name] = s
+			}
+		}
 	}
 
 	// Build manifest.
@@ -87,10 +133,14 @@ func runExportManifestWithOptions(demosDir string, output string, pretty bool, i
 		}
 
 		sceneHash, exists := cache.Scenes[sc.Name]
-		isPublished := exists && sceneHash.PublicURLs != nil
+		isPublishedInCache := exists && sceneHash.PublicURLs != nil
 
-		// Skip scenes without gallery config that aren't published.
-		if !isPublished && sc.Gallery == nil {
+		// Check existing manifest for this scene.
+		existingScene, existsInManifest := existingScenes[sc.Name]
+		hasExistingFormats := existsInManifest && len(existingScene.Formats) > 0
+
+		// Skip scenes without gallery config that aren't published (in cache or existing manifest).
+		if !isPublishedInCache && !hasExistingFormats && sc.Gallery == nil {
 			continue
 		}
 
@@ -109,13 +159,22 @@ func runExportManifestWithOptions(demosDir string, output string, pretty bool, i
 			manifestScene.Order = sc.Gallery.Order
 		}
 
-		// If scene isn't published yet, add it as a placeholder and continue.
-		if !isPublished {
-			manifest.Scenes = append(manifest.Scenes, manifestScene)
+		// Priority: cache > existing manifest > placeholder
+		// 1. If scene is published in cache, use cache data (latest).
+		// 2. Else if scene has formats in existing manifest, preserve them.
+		// 3. Else add as placeholder.
+		if !isPublishedInCache {
+			if hasExistingFormats {
+				// Preserve existing manifest entry (don't lose published data).
+				manifest.Scenes = append(manifest.Scenes, existingScene)
+			} else {
+				// Add as placeholder.
+				manifest.Scenes = append(manifest.Scenes, manifestScene)
+			}
 			continue
 		}
 
-		// Add each published format.
+		// Add each published format from cache.
 		for format, url := range sceneHash.PublicURLs {
 			manifestFormat := ManifestFormat{
 				URL: url,
@@ -168,16 +227,6 @@ func runExportManifestWithOptions(demosDir string, output string, pretty bool, i
 		return fmt.Errorf("failed to marshal manifest: %w", err)
 	}
 
-	// Determine output path.
-	outputPath := output
-	if outputPath == "" {
-		// Default to website/src/data/manifest.json relative to demos dir.
-		// demos dir is at the repo root under "demos/", so we need to go up
-		// and into website/src/data/.
-		repoRoot := filepath.Dir(demosDir)
-		outputPath = filepath.Join(repoRoot, "website", "src", "data", "manifest.json")
-	}
-
 	// Write to stdout or file.
 	if outputPath == "-" {
 		fmt.Println(string(jsonData))
@@ -196,6 +245,7 @@ func exportManifestCmd() *cobra.Command {
 		pretty        bool
 		output        string
 		includeDrafts bool
+		replace       bool
 	)
 
 	cmd := &cobra.Command{
@@ -207,14 +257,22 @@ Reads cache metadata and scenes configuration to build a JSON manifest
 that includes public URLs, video UIDs, and backend information for each
 rendered demo scene.
 
+By default, updates the existing manifest in-place: scenes with formats
+in the existing manifest are preserved unless newer data exists in the
+local cache. This allows incremental updates without losing previously
+published scenes. Use --replace to replace the entire manifest.
+
 By default, draft scenes (status: draft) are excluded from the manifest.
 Use --include-drafts to include them.
 
 By default, writes to website/src/data/manifest.json. Use --output to
 specify a different path, or --output=- to write to stdout.`,
 		Example: `
-# Export manifest to default location (website/src/data/manifest.json)
+# Export manifest to default location (updates in-place by default)
 director export manifest
+
+# Replace entire manifest instead of updating in-place
+director export manifest --replace
 
 # Export manifest to stdout
 director export manifest --output=-
@@ -234,13 +292,14 @@ director export manifest --include-drafts
 				return err
 			}
 
-			return runExportManifestWithOptions(demosDir, output, pretty, includeDrafts)
+			return runExportManifestWithOptions(demosDir, output, pretty, includeDrafts, replace)
 		},
 	}
 
 	cmd.Flags().BoolVar(&pretty, "pretty", false, "Pretty-print JSON output")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file path (default: website/src/data/manifest.json, use - for stdout)")
 	cmd.Flags().BoolVar(&includeDrafts, "include-drafts", false, "Include draft scenes (status: draft) in the manifest")
+	cmd.Flags().BoolVar(&replace, "replace", false, "Replace entire manifest instead of updating in-place")
 
 	return cmd
 }

@@ -4,7 +4,7 @@ Output toolchain.mp4
 Output toolchain.svg
 
 # VHS Configuration
-Source _theme.tape
+Source ../../scenes/_theme.tape
 Set Width 1400
 Set Height 800
 
