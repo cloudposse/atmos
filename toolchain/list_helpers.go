@@ -93,13 +93,13 @@ func buildToolRows(toolVersions *ToolVersions, installer *Installer) []toolRow {
 // resolveToolInfo resolves owner, repo, and alias for a tool name.
 func resolveToolInfo(toolName string, toolVersions *ToolVersions, installer *Installer) (toolIdentity, error) {
 	// Use existing infrastructure to resolve tool.
-	resolvedKey, _, found := LookupToolVersion(toolName, toolVersions, installer.resolver)
+	resolvedKey, _, found := LookupToolVersion(toolName, toolVersions, installer.GetResolver())
 	if !found {
 		return toolIdentity{}, fmt.Errorf("%w: %s", ErrToolNotFound, toolName)
 	}
 
 	// Get owner/repo from resolved key.
-	owner, repo, err := installer.resolver.Resolve(resolvedKey)
+	owner, repo, err := installer.GetResolver().Resolve(resolvedKey)
 	if err != nil {
 		return toolIdentity{}, err
 	}

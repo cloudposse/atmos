@@ -113,7 +113,7 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 
 	// Parse tool specification to get owner/repo.
 	installer := NewInstaller()
-	owner, repo, err := installer.parseToolSpec(tool)
+	owner, repo, err := installer.ParseToolSpec(tool)
 	if err != nil {
 		return fmt.Errorf("%w: %s. Expected format: owner/repo or tool name", ErrInvalidToolSpec, tool)
 	}
@@ -215,7 +215,7 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 func buildToolList(installer *Installer, toolVersions *ToolVersions) []toolInfo {
 	var toolList []toolInfo
 	for toolName, versions := range toolVersions.Tools {
-		owner, repo, err := installer.parseToolSpec(toolName)
+		owner, repo, err := installer.ParseToolSpec(toolName)
 		if err != nil {
 			continue
 		}

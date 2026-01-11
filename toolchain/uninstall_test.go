@@ -18,14 +18,13 @@ func TestUninstallCleansUpLatestFile_Present(t *testing.T) {
 		tempDir := t.TempDir()
 		t.Setenv("HOME", tempDir)
 
-		installer := NewInstaller()
-		installer.binDir = tempDir
+		installer := NewInstallerWithBinDir(tempDir)
 		owner := "hashicorp"
 		repo := "terraform"
 		actualVersion := "1.9.8"
 
 		// Simulate install: create versioned binary and latest file
-		binaryPath := installer.getBinaryPath(owner, repo, actualVersion, "")
+		binaryPath := installer.GetBinaryPath(owner, repo, actualVersion, "")
 		versionDir := filepath.Dir(binaryPath)
 		err := os.MkdirAll(versionDir, defaultMkdirPermissions)
 		require.NoError(t, err)
@@ -61,8 +60,7 @@ func TestUninstallCleansUpLatestFile_Present(t *testing.T) {
 		tempDir := t.TempDir()
 		t.Setenv("HOME", tempDir)
 
-		installer := NewInstaller()
-		installer.binDir = tempDir
+		installer := NewInstallerWithBinDir(tempDir)
 		owner := "hashicorp"
 		repo := "terraform"
 		actualVersion := "1.9.8"
@@ -101,8 +99,7 @@ func TestUninstallCleansUpLatestFile_Missing(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 
-	installer := NewInstaller()
-	installer.binDir = tempDir
+	installer := NewInstallerWithBinDir(tempDir)
 	owner := "hashicorp"
 	repo := "terraform"
 	actualVersion := "1.9.8"
@@ -150,24 +147,23 @@ func TestUninstallWithNoArgs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create mock installed binaries
-	installer := NewInstaller()
-	installer.binDir = tempDir
+	installer := NewInstallerWithBinDir(tempDir)
 
 	// Create terraform binaries
-	terraformPath1 := installer.getBinaryPath("hashicorp", "terraform", "1.11.4", "")
+	terraformPath1 := installer.GetBinaryPath("hashicorp", "terraform", "1.11.4", "")
 	err = os.MkdirAll(filepath.Dir(terraformPath1), defaultMkdirPermissions)
 	require.NoError(t, err)
 	err = os.WriteFile(terraformPath1, []byte("mock terraform 1.11.4"), defaultMkdirPermissions)
 	require.NoError(t, err)
 
-	terraformPath2 := installer.getBinaryPath("hashicorp", "terraform", "1.9.8", "")
+	terraformPath2 := installer.GetBinaryPath("hashicorp", "terraform", "1.9.8", "")
 	err = os.MkdirAll(filepath.Dir(terraformPath2), defaultMkdirPermissions)
 	require.NoError(t, err)
 	err = os.WriteFile(terraformPath2, []byte("mock terraform 1.9.8"), defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	// Create helm binary
-	helmPath := installer.getBinaryPath("helm", "helm", "3.17.4", "")
+	helmPath := installer.GetBinaryPath("helm", "helm", "3.17.4", "")
 	err = os.MkdirAll(filepath.Dir(helmPath), defaultMkdirPermissions)
 	require.NoError(t, err)
 	err = os.WriteFile(helmPath, []byte("mock helm 3.17.4"), defaultMkdirPermissions)
@@ -213,18 +209,17 @@ func TestRunUninstallWithNoArgs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create mock installed binaries so uninstall has something to work with
-	installer := NewInstaller()
-	installer.binDir = tempDir
+	installer := NewInstallerWithBinDir(tempDir)
 
 	// Create terraform binary
-	terraformPath := installer.getBinaryPath("hashicorp", "terraform", "1.11.4", "")
+	terraformPath := installer.GetBinaryPath("hashicorp", "terraform", "1.11.4", "")
 	err = os.MkdirAll(filepath.Dir(terraformPath), defaultMkdirPermissions)
 	require.NoError(t, err)
 	err = os.WriteFile(terraformPath, []byte("mock terraform 1.11.4"), defaultMkdirPermissions)
 	require.NoError(t, err)
 
 	// Create helm binary
-	helmPath := installer.getBinaryPath("helm", "helm", "3.17.4", "")
+	helmPath := installer.GetBinaryPath("helm", "helm", "3.17.4", "")
 	err = os.MkdirAll(filepath.Dir(helmPath), defaultMkdirPermissions)
 	require.NoError(t, err)
 	err = os.WriteFile(helmPath, []byte("mock helm 3.17.4"), defaultMkdirPermissions)
@@ -400,7 +395,7 @@ func TestUninstallAllVersionsOfTool(t *testing.T) {
 		{
 			name: "Single version installed",
 			setupFunc: func(t *testing.T, installer *Installer, owner, repo string) {
-				toolDir := filepath.Join(installer.binDir, owner, repo)
+				toolDir := filepath.Join(installer.GetBinDir(), owner, repo)
 				versionDir := filepath.Join(toolDir, "1.0.0")
 				require.NoError(t, os.MkdirAll(versionDir, defaultMkdirPermissions))
 				binaryPath := filepath.Join(versionDir, repo)
@@ -413,7 +408,7 @@ func TestUninstallAllVersionsOfTool(t *testing.T) {
 		{
 			name: "Multiple versions installed",
 			setupFunc: func(t *testing.T, installer *Installer, owner, repo string) {
-				toolDir := filepath.Join(installer.binDir, owner, repo)
+				toolDir := filepath.Join(installer.GetBinDir(), owner, repo)
 				for _, version := range []string{"1.0.0", "1.1.0", "2.0.0"} {
 					versionDir := filepath.Join(toolDir, version)
 					require.NoError(t, os.MkdirAll(versionDir, defaultMkdirPermissions))
@@ -435,8 +430,7 @@ func TestUninstallAllVersionsOfTool(t *testing.T) {
 			t.Setenv("HOME", tempDir)
 			SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{}})
 
-			installer := NewInstaller()
-			installer.binDir = tempDir
+			installer := NewInstallerWithBinDir(tempDir)
 
 			tt.setupFunc(t, installer, tt.owner, tt.repo)
 
@@ -447,7 +441,7 @@ func TestUninstallAllVersionsOfTool(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				// Verify tool directory is removed
-				toolDir := filepath.Join(installer.binDir, tt.owner, tt.repo)
+				toolDir := filepath.Join(installer.GetBinDir(), tt.owner, tt.repo)
 				_, statErr := os.Stat(toolDir)
 				if !os.IsNotExist(statErr) {
 					// Some versions might remain, but they should all be cleaned up

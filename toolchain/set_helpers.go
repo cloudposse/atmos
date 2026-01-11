@@ -21,7 +21,7 @@ type toolSpec struct {
 
 // resolveToolName resolves a tool name or alias to owner/repo format.
 func resolveToolName(toolName string, installer *Installer) (toolSpec, error) {
-	owner, repo, err := installer.parseToolSpec(toolName)
+	owner, repo, err := installer.ParseToolSpec(toolName)
 	if err != nil {
 		return toolSpec{}, fmt.Errorf("invalid tool name: %w", err)
 	}
@@ -34,7 +34,7 @@ func resolveToolName(toolName string, installer *Installer) (toolSpec, error) {
 
 // validateToolForInteractiveSelection validates that a tool supports interactive version selection.
 func validateToolForInteractiveSelection(installer *Installer, owner, repo string) error {
-	tool, err := installer.findTool(owner, repo, "")
+	tool, err := installer.FindTool(owner, repo, "")
 	if err != nil {
 		return fmt.Errorf("failed to find tool configuration: %w", err)
 	}

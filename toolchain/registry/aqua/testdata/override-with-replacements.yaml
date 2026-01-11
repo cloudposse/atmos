@@ -1,0 +1,12 @@
+packages:
+  - type: http
+    repo_owner: test
+    repo_name: tool
+    url: https://example.com/tool-{{.OS}}-{{.Arch}}.zip
+    format: zip
+    overrides:
+      - goos: darwin
+        goarch: arm64
+        url: https://example.com/tool-macos-silicon.zip
+        replacements:
+          arm64: silicon
