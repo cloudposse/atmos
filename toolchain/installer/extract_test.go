@@ -69,11 +69,9 @@ func TestIsGzipMime(t *testing.T) {
 			mime, err := mimetype.DetectFile(tmpFile)
 			require.NoError(t, err)
 
-			// For gzip test, verify detection works.
-			if tt.expected {
-				result := isGzipMime(mime)
-				assert.True(t, result, "Expected gzip mime to be detected")
-			}
+			// Verify isGzipMime returns expected result for all cases.
+			result := isGzipMime(mime)
+			assert.Equal(t, tt.expected, result, "isGzipMime(%s) should return %v", tt.name, tt.expected)
 		})
 	}
 }

@@ -1,13 +1,11 @@
 package toolchain
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudposse/atmos/toolchain/registry"
+	"go.uber.org/mock/gomock"
 )
 
 func TestNewInstaller(t *testing.T) {
@@ -78,8 +76,9 @@ func TestWithResolver(t *testing.T) {
 }
 
 func TestWithConfiguredRegistry(t *testing.T) {
-	// Create a mock registry that implements all required methods.
-	mockRegistry := &mockToolRegistryForTypes{}
+	// Create a mock registry using the generated mock.
+	ctrl := gomock.NewController(t)
+	mockRegistry := NewMockToolRegistry(ctrl)
 	opt := WithConfiguredRegistry(mockRegistry)
 	assert.NotNil(t, opt)
 }
@@ -108,35 +107,4 @@ func TestBuiltinAliases(t *testing.T) {
 	// Currently, BuiltinAliases only contains "atmos" -> "cloudposse/atmos".
 	_, exists := BuiltinAliases["atmos"]
 	assert.True(t, exists, "Expected builtin alias 'atmos' to exist")
-}
-
-// mockToolRegistryForTypes implements registry.ToolRegistry for testing.
-type mockToolRegistryForTypes struct{}
-
-func (m *mockToolRegistryForTypes) GetTool(owner, repo string) (*registry.Tool, error) {
-	return nil, nil
-}
-
-func (m *mockToolRegistryForTypes) GetToolWithVersion(owner, repo, version string) (*registry.Tool, error) {
-	return nil, nil
-}
-
-func (m *mockToolRegistryForTypes) GetLatestVersion(owner, repo string) (string, error) {
-	return "1.0.0", nil
-}
-
-func (m *mockToolRegistryForTypes) LoadLocalConfig(configPath string) error {
-	return nil
-}
-
-func (m *mockToolRegistryForTypes) Search(ctx context.Context, query string, opts ...registry.SearchOption) ([]*registry.Tool, error) {
-	return nil, nil
-}
-
-func (m *mockToolRegistryForTypes) ListAll(ctx context.Context, opts ...registry.ListOption) ([]*registry.Tool, error) {
-	return nil, nil
-}
-
-func (m *mockToolRegistryForTypes) GetMetadata(ctx context.Context) (*registry.RegistryMetadata, error) {
-	return &registry.RegistryMetadata{Name: "mock"}, nil
 }

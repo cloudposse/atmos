@@ -1,5 +1,7 @@
 package toolchain
 
+//go:generate go run go.uber.org/mock/mockgen@latest -destination=mock_registry_test.go -package=toolchain github.com/cloudposse/atmos/toolchain/registry ToolRegistry
+
 import (
 	"path/filepath"
 
