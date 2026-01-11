@@ -68,7 +68,9 @@ func getRunnableDescribeLocalsCmd(
 		// Check Atmos configuration.
 		g.checkAtmosConfig()
 
-		info, err := g.processCommandLineArgs("", cmd, args, nil)
+		// Pass nil for args since we handle the component positional arg ourselves.
+		// This avoids potential misclassification by ProcessCommandLineArgs.
+		info, err := g.processCommandLineArgs("", cmd, nil, nil)
 		if err != nil {
 			return err
 		}
@@ -113,28 +115,28 @@ func setCliArgsForDescribeLocalsCli(flags *pflag.FlagSet, args *exec.DescribeLoc
 	if flags.Changed("stack") {
 		args.FilterByStack, err = flags.GetString("stack")
 		if err != nil {
-			return fmt.Errorf("read --stack: %w", err)
+			return fmt.Errorf("%w: read --stack: %w", errUtils.ErrInvalidFlag, err)
 		}
 	}
 
 	if flags.Changed("format") {
 		args.Format, err = flags.GetString("format")
 		if err != nil {
-			return fmt.Errorf("read --format: %w", err)
+			return fmt.Errorf("%w: read --format: %w", errUtils.ErrInvalidFlag, err)
 		}
 	}
 
 	if flags.Changed("file") {
 		args.File, err = flags.GetString("file")
 		if err != nil {
-			return fmt.Errorf("read --file: %w", err)
+			return fmt.Errorf("%w: read --file: %w", errUtils.ErrInvalidFlag, err)
 		}
 	}
 
 	if flags.Changed("query") {
 		args.Query, err = flags.GetString("query")
 		if err != nil {
-			return fmt.Errorf("read --query: %w", err)
+			return fmt.Errorf("%w: read --query: %w", errUtils.ErrInvalidFlag, err)
 		}
 	}
 
@@ -151,7 +153,8 @@ func init() {
 
 	describeLocalsCmd.PersistentFlags().StringP("stack", "s", "",
 		"Filter by a specific stack\n"+
-			"The filter supports names of the top-level stack manifests (including subfolder paths), and `atmos` stack names (derived from the context vars)",
+			"The filter supports names of the top-level stack manifests (including subfolder paths), and `atmos` stack names (derived from the context vars)\n"+
+			"Note: YAML parse errors are reported when filtering by stack; otherwise they are silently skipped during batch processing",
 	)
 	AddStackCompletion(describeLocalsCmd)
 

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -137,7 +138,7 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 		// Pass component without --stack flag.
 		err := runFunc(cmd, []string{"vpc"})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "stack")
+		assert.ErrorIs(t, err, errUtils.ErrStackRequiredWithComponent)
 	})
 
 	// Table-driven tests for error cases to avoid code duplication.

@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -162,7 +163,8 @@ func buildComponentLocalsResult(
 	componentType string,
 	componentLocals map[string]any,
 ) (map[string]any, error) {
-	for _, localsData := range stackLocals {
+	// Look up by the specific stack name to avoid non-deterministic map iteration.
+	if localsData, exists := stackLocals[args.FilterByStack]; exists {
 		if localsMap, ok := localsData.(map[string]any); ok {
 			stackTypeLocals := getLocalsForComponentType(localsMap, componentType)
 			mergedLocals := mergeLocals(stackTypeLocals, componentLocals)
@@ -190,18 +192,31 @@ func buildComponentSchemaOutput(component, componentType string, locals map[stri
 	}
 }
 
-// mergeLocals merges two locals maps, with the second map taking precedence.
+// mergeLocals deep-merges base and override locals maps.
+// This uses the same deep-merge semantics as vars, settings, and other Atmos sections,
+// so nested maps (e.g., tags: {env: dev, team: platform}) are recursively merged
+// rather than entirely replaced.
 func mergeLocals(base, override map[string]any) map[string]any {
-	result := make(map[string]any, len(base)+len(override))
-
-	// Copy base locals.
-	for k, v := range base {
-		result[k] = v
+	if base == nil {
+		base = make(map[string]any)
+	}
+	if override == nil {
+		return base
 	}
 
-	// Override with component-level locals.
-	for k, v := range override {
-		result[k] = v
+	// Use pkg/merge for consistent deep-merge behavior with the rest of Atmos.
+	// MergeWithOptions handles deep copying internally to avoid pointer mutation.
+	result, err := m.MergeWithOptions(nil, []map[string]any{base, override}, false, false)
+	if err != nil {
+		// On merge error, fall back to shallow merge for robustness.
+		log.Trace("Deep-merge failed, falling back to shallow merge", "error", err)
+		result = make(map[string]any, len(base)+len(override))
+		for k, v := range base {
+			result[k] = v
+		}
+		for k, v := range override {
+			result[k] = v
+		}
 	}
 
 	return result
