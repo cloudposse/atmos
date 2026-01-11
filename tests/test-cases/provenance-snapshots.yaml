@@ -32,8 +32,8 @@ tests:
   - name: describe component provenance advanced
     enabled: true
     snapshot: true
-    description: "Test provenance output with complex multi-level imports (quickstart-advanced style)"
-    workdir: "fixtures/scenarios/provenance-advanced"
+    description: "Test provenance output with complex multi-level imports (quick-start-advanced)"
+    workdir: "../examples/quick-start-advanced"
     command: "atmos"
     args:
       - "describe"

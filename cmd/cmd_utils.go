@@ -16,7 +16,6 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/samber/lo"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -63,49 +62,6 @@ func WithStackValidation(check bool) AtmosValidateOption {
 	return func(cfg *ValidateConfig) {
 		cfg.CheckStack = check
 	}
-}
-
-// getGlobalFlagNames returns a set of all global persistent flag names and shorthands.
-// It also includes reserved names like "identity".
-// It queries RootCmd at runtime so the set stays current without maintaining a static list.
-func getGlobalFlagNames() map[string]bool {
-	return getReservedFlagNamesFor(RootCmd)
-}
-
-// getReservedFlagNamesFor returns a set of all reserved flag names and shorthands.
-// For a given parent command, this includes:
-// 1. The parent command's own persistent flags.
-// 2. Flags inherited from ancestor commands (via InheritedFlags).
-// 3. The hardcoded "identity" flag that gets added to every custom command.
-//
-// This function is used to validate that child commands don't define flags that
-// would conflict with their parent's flags at any level of nesting.
-func getReservedFlagNamesFor(parent *cobra.Command) map[string]bool {
-	reserved := make(map[string]bool)
-
-	// Query persistent flags from the parent command.
-	parent.PersistentFlags().VisitAll(func(f *pflag.Flag) {
-		reserved[f.Name] = true
-		if f.Shorthand != "" {
-			reserved[f.Shorthand] = true
-		}
-	})
-
-	// Query inherited flags from ancestor commands.
-	// InheritedFlags() returns flags that are inherited from parent commands
-	// but not defined on this command itself.
-	parent.InheritedFlags().VisitAll(func(f *pflag.Flag) {
-		reserved[f.Name] = true
-		if f.Shorthand != "" {
-			reserved[f.Shorthand] = true
-		}
-	})
-
-	// Also include the hardcoded "identity" flag that gets added to every custom command.
-	// This prevents user-defined flags from conflicting with it.
-	reserved["identity"] = true
-
-	return reserved
 }
 
 // processCustomCommands registers custom commands defined in the Atmos configuration onto the given parent Cobra command.
@@ -156,12 +112,9 @@ func processCustomCommands(
 			customCommand.PersistentFlags().String("identity", "", "Identity to use for authentication (overrides identity in command config)")
 			AddIdentityCompletion(customCommand)
 
-			// Get reserved flag names by querying the parent command's persistent and inherited flags.
-			// This ensures we detect conflicts with both global flags and parent custom command flags.
-			reservedFlags := getReservedFlagNamesFor(parentCommand)
-
-			// Validate flags don't conflict with global/reserved flags or parent command flags,
-			// and detect duplicate flag names/shorthands within the same command config.
+			// Validate flags for duplicates and type conflicts.
+			// Custom commands can declare flags that already exist (globally or on parent),
+			// but only if the types match (inheritance). Type mismatches are errors.
 			seen := make(map[string]bool)
 			for _, flag := range commandConfig.Flags {
 				// Detect duplicates within the same command config early.
@@ -175,22 +128,44 @@ func processCustomCommands(
 				}
 				seen[flag.Name] = true
 
-				if reservedFlags[flag.Name] {
-					return errUtils.Build(errUtils.ErrReservedFlagName).
-						WithExplanation(fmt.Sprintf("Custom command '%s' defines flag '--%s' which conflicts with a reserved or parent command flag", commandConfig.Name, flag.Name)).
-						WithHint("Rename the flag in your atmos.yaml to avoid conflicts with reserved flag names").
-						WithContext("command", commandConfig.Name).
-						WithContext("flag", flag.Name).
-						Err()
+				// Check if this flag already exists on parent or globally.
+				// If it exists, verify types match (inheritance allowed).
+				// If types don't match, error (can't redefine with different type).
+				// Check both Flags() (local flags), PersistentFlags(), and InheritedFlags().
+				existingFlag := parentCommand.Flags().Lookup(flag.Name)
+				if existingFlag == nil {
+					existingFlag = parentCommand.PersistentFlags().Lookup(flag.Name)
 				}
-				if flag.Shorthand != "" && reservedFlags[flag.Shorthand] {
-					return errUtils.Build(errUtils.ErrReservedFlagName).
-						WithExplanation(fmt.Sprintf("Custom command '%s' defines flag shorthand '-%s' which conflicts with a reserved or parent command flag shorthand", commandConfig.Name, flag.Shorthand)).
-						WithHint("Change the shorthand in your atmos.yaml to avoid conflicts with reserved flag shorthands").
-						WithContext("command", commandConfig.Name).
-						WithContext("shorthand", flag.Shorthand).
-						Err()
+				if existingFlag == nil {
+					existingFlag = parentCommand.InheritedFlags().Lookup(flag.Name)
 				}
+
+				if existingFlag != nil {
+					// Flag exists - check type compatibility.
+					customFlagType := flag.Type
+					if customFlagType == "" || customFlagType == "string" {
+						customFlagType = "string"
+					}
+
+					existingFlagType := existingFlag.Value.Type()
+					// Normalize type names for comparison.
+					// pflag types: "string", "bool", "int", etc.
+					if existingFlagType != customFlagType {
+						return errUtils.Build(errUtils.ErrReservedFlagName).
+							WithExplanation(fmt.Sprintf("Custom command '%s' declares flag '--%s' with type '%s', but it already exists with type '%s'",
+								commandConfig.Name, flag.Name, customFlagType, existingFlagType)).
+							WithHint("Either use the existing flag type, or rename your flag to avoid conflicts").
+							WithContext("command", commandConfig.Name).
+							WithContext("flag", flag.Name).
+							WithContext("declared_type", customFlagType).
+							WithContext("existing_type", existingFlagType).
+							Err()
+					}
+					// Types match - this flag will be inherited, skip further validation.
+					continue
+				}
+
+				// Flag doesn't exist yet - validate shorthand for new flags only.
 				if flag.Shorthand != "" {
 					if seen[flag.Shorthand] {
 						return errUtils.Build(errUtils.ErrDuplicateFlagRegistration).
@@ -201,11 +176,44 @@ func processCustomCommands(
 							Err()
 					}
 					seen[flag.Shorthand] = true
+
+					// Check if shorthand conflicts with existing flags.
+					existingByShorthand := parentCommand.Flags().ShorthandLookup(flag.Shorthand)
+					if existingByShorthand == nil {
+						existingByShorthand = parentCommand.PersistentFlags().ShorthandLookup(flag.Shorthand)
+					}
+					if existingByShorthand == nil {
+						existingByShorthand = parentCommand.InheritedFlags().ShorthandLookup(flag.Shorthand)
+					}
+					if existingByShorthand != nil {
+						return errUtils.Build(errUtils.ErrReservedFlagName).
+							WithExplanation(fmt.Sprintf("Custom command '%s' defines flag shorthand '-%s' which conflicts with existing flag '--%s'",
+								commandConfig.Name, flag.Shorthand, existingByShorthand.Name)).
+							WithHint("Change the shorthand in your atmos.yaml to avoid conflicts").
+							WithContext("command", commandConfig.Name).
+							WithContext("shorthand", flag.Shorthand).
+							WithContext("existing_flag", existingByShorthand.Name).
+							Err()
+					}
 				}
 			}
 
 			// Process and add flags to the command.
+			// Skip flags that are inherited from parent command chain.
 			for _, flag := range commandConfig.Flags {
+				// Skip flags that already exist on parent or globally (inherited).
+				existingFlag := parentCommand.Flags().Lookup(flag.Name)
+				if existingFlag == nil {
+					existingFlag = parentCommand.PersistentFlags().Lookup(flag.Name)
+				}
+				if existingFlag == nil {
+					existingFlag = parentCommand.InheritedFlags().Lookup(flag.Name)
+				}
+				if existingFlag != nil {
+					// Flag exists and type was validated above - skip registration (inherit).
+					continue
+				}
+
 				if flag.Type == "bool" {
 					defaultVal := false
 					if flag.Default != nil {

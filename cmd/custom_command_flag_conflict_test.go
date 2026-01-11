@@ -29,15 +29,16 @@ func TestCustomCommand_FlagNameConflictWithGlobalFlag(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	require.NoError(t, err)
 
-	// Create a custom command with a flag that conflicts with the global --mask flag.
+	// Create a custom command with a flag that has the same name as global --mask
+	// but DIFFERENT type (string instead of bool). This should error.
 	testCommand := schema.Command{
 		Name:        "test-flag-conflict",
-		Description: "Test command with conflicting flag name",
+		Description: "Test command with type-conflicting flag name",
 		Flags: []schema.CommandFlag{
 			{
 				Name:  "mask",
-				Type:  "bool",
-				Usage: "This conflicts with global --mask flag",
+				Type:  "string", // Global mask is bool - type mismatch!
+				Usage: "This conflicts with global --mask flag (different type)",
 			},
 		},
 		Steps: stepsFromStrings("echo test"),
@@ -46,17 +47,18 @@ func TestCustomCommand_FlagNameConflictWithGlobalFlag(t *testing.T) {
 	// Add the test command to the config.
 	atmosConfig.Commands = []schema.Command{testCommand}
 
-	// Process custom commands - should return error, not panic.
+	// Process custom commands - should return error for type mismatch.
 	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 
 	// Verify the error is returned correctly.
-	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for conflicting flag name")
+	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for type mismatch")
 
 	// Get the explanation from the error details.
 	details := cockerrors.GetAllDetails(err)
 	detailsStr := strings.Join(details, " ")
 	assert.Contains(t, detailsStr, "mask", "Error details should mention the conflicting flag name")
 	assert.Contains(t, detailsStr, "test-flag-conflict", "Error details should mention the command name")
+	assert.Contains(t, detailsStr, "type", "Error details should mention type mismatch")
 }
 
 // TestCustomCommand_FlagShorthandConflictWithGlobalFlag tests that custom commands with flag
@@ -105,8 +107,8 @@ func TestCustomCommand_FlagShorthandConflictWithGlobalFlag(t *testing.T) {
 	assert.Contains(t, detailsStr, "test-shorthand-conflict", "Error details should mention the command name")
 }
 
-// TestCustomCommand_IdentityFlagConflict tests that custom commands cannot define
-// an --identity flag since it's reserved for runtime identity override.
+// TestCustomCommand_IdentityFlagConflict tests that custom commands can declare
+// they need --identity flag (with matching type), but cannot redefine it with different type.
 func TestCustomCommand_IdentityFlagConflict(t *testing.T) {
 	// Set up test fixture.
 	testDir := "../tests/fixtures/scenarios/complete"
@@ -120,15 +122,16 @@ func TestCustomCommand_IdentityFlagConflict(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	require.NoError(t, err)
 
-	// Create a custom command that tries to define its own --identity flag.
+	// Create a custom command that tries to redefine identity flag with DIFFERENT type.
+	// The identity flag added to custom commands is always string type.
 	testCommand := schema.Command{
 		Name:        "test-identity-conflict",
-		Description: "Test command trying to redefine identity flag",
+		Description: "Test command trying to redefine identity flag with wrong type",
 		Flags: []schema.CommandFlag{
 			{
 				Name:  "identity",
-				Type:  "string",
-				Usage: "This conflicts with reserved identity flag",
+				Type:  "bool", // Wrong type! Identity is string.
+				Usage: "This conflicts with reserved identity flag (type mismatch)",
 			},
 		},
 		Steps: stepsFromStrings("echo test"),
@@ -137,16 +140,17 @@ func TestCustomCommand_IdentityFlagConflict(t *testing.T) {
 	// Add the test command to the config.
 	atmosConfig.Commands = []schema.Command{testCommand}
 
-	// Process custom commands - should return error, not panic.
+	// Process custom commands - should return error for type mismatch.
 	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 
 	// Verify the error is returned correctly.
-	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for conflicting identity flag")
+	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for type mismatch on identity flag")
 
 	// Get the explanation from the error details.
 	details := cockerrors.GetAllDetails(err)
 	detailsStr := strings.Join(details, " ")
 	assert.Contains(t, detailsStr, "identity", "Error details should mention the identity flag")
+	assert.Contains(t, detailsStr, "type", "Error details should mention type mismatch")
 }
 
 // TestCustomCommand_ValidFlagsNoConflict tests that custom commands with valid,
@@ -212,31 +216,14 @@ func TestCustomCommand_ValidFlagsNoConflict(t *testing.T) {
 }
 
 // TestGetGlobalFlagNames tests that getGlobalFlagNames returns the expected reserved flags.
-func TestGetGlobalFlagNames(t *testing.T) {
-	// Create a test kit to ensure clean RootCmd state with global flags registered.
-	_ = NewTestKit(t)
-
-	// Get the reserved flag names.
-	reserved := getGlobalFlagNames()
-
-	// Log all reserved flags for debugging.
-	t.Logf("Reserved flags: %v", reserved)
-
-	// Verify that known global flags are in the reserved set.
-	assert.True(t, reserved["chdir"], "chdir should be reserved")
-	assert.True(t, reserved["C"], "C (chdir shorthand) should be reserved")
-	assert.True(t, reserved["mask"], "mask should be reserved")
-	assert.True(t, reserved["identity"], "identity should be reserved")
-	assert.True(t, reserved["no-color"], "no-color should be reserved")
-
-	// Verify that random names are not reserved.
-	assert.False(t, reserved["my-custom-flag"], "my-custom-flag should NOT be reserved")
-	assert.False(t, reserved["xyz"], "xyz should NOT be reserved")
-}
+// TestGetGlobalFlagNames was removed.
+// The implementation no longer uses a pre-computed set of reserved flags.
+// Instead, flags are validated dynamically by checking if they already exist
+// on parent commands, allowing inheritance when types match.
 
 // TestCustomCommand_NestedFlagConflictWithParent tests that nested custom commands
-// cannot define flags that conflict with their parent custom command's persistent flags.
-// This addresses the CodeRabbit review comment about validating flags at each recursion level.
+// cannot redefine flags with different types than their parent's flags.
+// Child can declare same flag with same type (inheritance), but different type is an error.
 func TestCustomCommand_NestedFlagConflictWithParent(t *testing.T) {
 	// Set up test fixture.
 	testDir := "../tests/fixtures/scenarios/complete"
@@ -262,16 +249,16 @@ func TestCustomCommand_NestedFlagConflictWithParent(t *testing.T) {
 				Usage:     "A flag defined on the parent command",
 			},
 		},
-		// Define a nested child command that tries to redefine the same flag.
+		// Define a nested child command that tries to redefine the same flag with DIFFERENT type.
 		Commands: []schema.Command{
 			{
 				Name:        "child",
-				Description: "Child command trying to redefine parent's flag",
+				Description: "Child command trying to redefine parent's flag with different type",
 				Flags: []schema.CommandFlag{
 					{
-						Name:  "parent-flag", // Conflicts with parent's --parent-flag.
-						Type:  "bool",
-						Usage: "This conflicts with parent's flag",
+						Name:  "parent-flag", // Same name as parent's flag.
+						Type:  "bool",        // But different type (parent is string)!
+						Usage: "This conflicts with parent's flag (type mismatch)",
 					},
 				},
 				Steps: stepsFromStrings("echo child"),
@@ -283,17 +270,18 @@ func TestCustomCommand_NestedFlagConflictWithParent(t *testing.T) {
 	// Add the test command to the config.
 	atmosConfig.Commands = []schema.Command{parentCommand}
 
-	// Process custom commands - should return error for the nested conflict.
+	// Process custom commands - should return error for type mismatch.
 	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 
 	// Verify the error is returned correctly.
-	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for nested flag conflict with parent")
+	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for type mismatch")
 
 	// Get the explanation from the error details.
 	details := cockerrors.GetAllDetails(err)
 	detailsStr := strings.Join(details, " ")
 	assert.Contains(t, detailsStr, "parent-flag", "Error details should mention the conflicting flag name")
 	assert.Contains(t, detailsStr, "child", "Error details should mention the child command name")
+	assert.Contains(t, detailsStr, "type", "Error details should mention type mismatch")
 }
 
 // TestCustomCommand_NestedShorthandConflictWithParent tests that nested custom commands
@@ -444,47 +432,14 @@ func TestCustomCommand_NestedValidFlags(t *testing.T) {
 	require.NotNil(t, inheritedFlag, "parent-flag should be inherited by child")
 }
 
-// TestGetReservedFlagNamesFor tests that getReservedFlagNamesFor correctly returns
-// flags from both the command itself and its ancestors.
-func TestGetReservedFlagNamesFor(t *testing.T) {
-	// Create a test kit to ensure clean RootCmd state.
-	_ = NewTestKit(t)
-
-	// Create a parent command with some persistent flags.
-	parentCmd := &cobra.Command{
-		Use:   "parent",
-		Short: "Parent command",
-	}
-	parentCmd.PersistentFlags().String("parent-option", "", "Parent's option")
-	parentCmd.PersistentFlags().StringP("another-option", "a", "", "Another option")
-
-	// Add parent to RootCmd so it inherits global flags.
-	RootCmd.AddCommand(parentCmd)
-	defer RootCmd.RemoveCommand(parentCmd)
-
-	// Get reserved flags for the parent command.
-	reserved := getReservedFlagNamesFor(parentCmd)
-
-	// Should include parent's own persistent flags.
-	assert.True(t, reserved["parent-option"], "parent-option should be reserved")
-	assert.True(t, reserved["another-option"], "another-option should be reserved")
-	assert.True(t, reserved["a"], "shorthand 'a' should be reserved")
-
-	// Should include inherited global flags from RootCmd.
-	assert.True(t, reserved["chdir"], "chdir (inherited) should be reserved")
-	assert.True(t, reserved["C"], "C (inherited shorthand) should be reserved")
-	assert.True(t, reserved["mask"], "mask (inherited) should be reserved")
-
-	// Should include the hardcoded identity flag.
-	assert.True(t, reserved["identity"], "identity should be reserved")
-
-	// Should NOT include random names.
-	assert.False(t, reserved["random-flag"], "random-flag should NOT be reserved")
-}
+// TestGetReservedFlagNamesFor was removed.
+// The implementation no longer uses a pre-computed set of reserved flags.
+// Instead, flags are validated dynamically by checking if they already exist
+// on parent commands, allowing inheritance when types match.
 
 // TestCustomCommand_ExistingCommandReuseWithNestedConflict tests that when a custom command
-// reuses an existing built-in command (like terraform), nested subcommands still can't
-// define flags that conflict with the built-in command's flags.
+// reuses an existing built-in command (like terraform), nested subcommands can declare they
+// need the same flags (inheritance), but cannot redefine them with different types.
 func TestCustomCommand_ExistingCommandReuseWithNestedConflict(t *testing.T) {
 	// Set up test fixture.
 	testDir := "../tests/fixtures/scenarios/complete"
@@ -507,7 +462,7 @@ func TestCustomCommand_ExistingCommandReuseWithNestedConflict(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a custom command that reuses "terraform" (built-in command name)
-	// with a nested subcommand that tries to define --stack (which terraform has).
+	// with a nested subcommand that tries to redefine --stack with DIFFERENT type.
 	terraformCommand := schema.Command{
 		Name:        "terraform", // This will reuse the existing terraform command.
 		Description: "Custom terraform subcommands",
@@ -517,10 +472,10 @@ func TestCustomCommand_ExistingCommandReuseWithNestedConflict(t *testing.T) {
 				Description: "Custom provision subcommand",
 				Flags: []schema.CommandFlag{
 					{
-						Name:      "stack", // Conflicts with terraform's --stack flag.
-						Shorthand: "s",     // Also conflicts with terraform's -s shorthand.
-						Type:      "string",
-						Usage:     "This conflicts with terraform's stack flag",
+						Name:      "stack", // Same name as terraform's --stack flag.
+						Shorthand: "s",     // Same shorthand.
+						Type:      "bool",  // But different type! Terraform's stack is string.
+						Usage:     "This conflicts with terraform's stack flag (type mismatch)",
 					},
 				},
 				Steps: stepsFromStrings("echo provision"),
@@ -953,7 +908,7 @@ func TestCustomCommand_MultipleCommandsWithMixedValidity(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	require.NoError(t, err)
 
-	// Create multiple commands - first valid, second has conflict.
+	// Create multiple commands - first valid, second has type conflict.
 	commands := []schema.Command{
 		{
 			Name:        "valid-cmd-1",
@@ -965,9 +920,9 @@ func TestCustomCommand_MultipleCommandsWithMixedValidity(t *testing.T) {
 		},
 		{
 			Name:        "invalid-cmd",
-			Description: "Command with conflict",
+			Description: "Command with type mismatch",
 			Flags: []schema.CommandFlag{
-				{Name: "mask", Type: "bool", Usage: "Conflicts with global mask"}, // Conflict!
+				{Name: "mask", Type: "string", Usage: "Type mismatch - global mask is bool"}, // Type conflict!
 			},
 			Steps: stepsFromStrings("echo invalid"),
 		},
@@ -1095,16 +1050,16 @@ func TestCustomCommand_VerboseFlagConflict(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	require.NoError(t, err)
 
-	// Create a custom command with verbose flag (conflicts with global -v).
+	// Create a custom command with verbose flag but DIFFERENT type (type mismatch).
 	testCommand := schema.Command{
 		Name:        "test-verbose-conflict",
-		Description: "Test command with verbose flag conflict",
+		Description: "Test command with verbose flag type mismatch",
 		Flags: []schema.CommandFlag{
 			{
 				Name:      "verbose",
 				Shorthand: "v",
-				Type:      "bool",
-				Usage:     "This conflicts with global verbose flag",
+				Type:      "string", // Global verbose is bool - type mismatch!
+				Usage:     "This conflicts with global verbose flag (different type)",
 			},
 		},
 		Steps: stepsFromStrings("echo test"),
@@ -1113,11 +1068,11 @@ func TestCustomCommand_VerboseFlagConflict(t *testing.T) {
 	// Add the test command to the config.
 	atmosConfig.Commands = []schema.Command{testCommand}
 
-	// Process custom commands - should return error.
+	// Process custom commands - should return error for type mismatch.
 	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
 
 	// Verify the error is returned correctly.
-	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for verbose flag conflict")
+	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for type mismatch")
 }
 
 // customCommandTestHelper provides shared setup for custom command tests.
