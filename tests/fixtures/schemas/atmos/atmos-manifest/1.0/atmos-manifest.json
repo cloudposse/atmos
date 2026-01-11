@@ -765,7 +765,7 @@
     },
     "locals": {
       "title": "locals",
-      "description": "File-scoped local variables for use within templates. Locals are resolved before other sections and can reference each other within the same file. Unlike vars and settings, locals do NOT inherit across file boundaries.",
+      "description": "Local variables for use within templates. At file level (global, terraform, helmfile, packer sections), locals are file-scoped and do NOT inherit across file boundaries. At component level, locals inherit from base components (via 'component' attribute or 'metadata.inherits') similar to vars, with component-level locals taking precedence. Locals can reference each other within the same scope.",
       "oneOf": [
         {
           "type": "string",

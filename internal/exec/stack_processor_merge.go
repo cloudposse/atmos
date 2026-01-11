@@ -225,6 +225,22 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
+	// Merge locals (base component locals + component locals).
+	// Component locals take precedence over base component locals.
+	// Note: Locals are used for template processing, not passed to terraform/helmfile.
+	var finalComponentLocals map[string]any
+	if len(result.BaseComponentLocals) > 0 || len(result.ComponentLocals) > 0 {
+		finalComponentLocals, err = m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				result.BaseComponentLocals,
+				result.ComponentLocals,
+			})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Build final component map.
 	comp := map[string]any{
 		cfg.VarsSectionName:        finalComponentVars,
@@ -240,6 +256,11 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	// Add dependencies if present.
 	if len(finalComponentDependencies) > 0 {
 		comp[cfg.DependenciesSectionName] = finalComponentDependencies
+	}
+
+	// Add locals if present (for template processing, not passed to terraform/helmfile).
+	if len(finalComponentLocals) > 0 {
+		comp[cfg.LocalsSectionName] = finalComponentLocals
 	}
 
 	// Terraform-specific: process backends and add Terraform-specific fields.
