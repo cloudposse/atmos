@@ -158,7 +158,9 @@ func (s *GitBaseStorage) GetMergeBase(ref1, ref2 string) (string, error) {
 	}
 
 	if len(ancestors) == 0 {
-		return "", fmt.Errorf("no common ancestor found between %q and %q", ref1, ref2)
+		return "", errUtils.Build(errUtils.ErrNoCommonAncestor).
+			WithExplanationf("No common ancestor found between %q and %q", ref1, ref2).
+			Err()
 	}
 
 	// Return the first (most recent) common ancestor

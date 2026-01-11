@@ -18,6 +18,8 @@ func NewProductionTemplateExecutor(genCtx *setup.GeneratorContext) TemplateExecu
 }
 
 // Generate executes the template generation.
+//
+//nolint:gocritic // hugeParam: interface signature requires value type for compatibility
 func (e *ProductionTemplateExecutor) Generate(
 	config templates.Configuration,
 	targetDir string,

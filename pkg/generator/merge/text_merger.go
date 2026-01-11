@@ -7,6 +7,7 @@ import (
 
 	"github.com/epiclabs-io/diff3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -74,8 +75,10 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 		changePercentage := m.calculateChangePercentage(base, ours, theirs)
 
 		if changePercentage > m.thresholdPercent {
-			return nil, fmt.Errorf("too many changes detected (%d%% changes, threshold: %d%%). %d conflicts found. Use --force to overwrite or manually merge",
-				changePercentage, m.thresholdPercent, conflictCount)
+			return nil, errUtils.Build(errUtils.ErrMergeThresholdExceeded).
+				WithExplanationf("Too many changes detected (%d%% changes, threshold: %d%%). %d conflicts found", changePercentage, m.thresholdPercent, conflictCount).
+				WithHint("Use --force to overwrite or manually merge").
+				Err()
 		}
 	}
 

@@ -20,6 +20,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
+// Default threshold and permission constants.
+const (
+	defaultMergeThreshold = 50    // Default 50% threshold for 3-way merges
+	dirPermissions        = 0o755 // Default directory permissions
+	maxValuePreviewLen    = 200   // Maximum length for value previews in logs
+)
+
 // File represents a file to be processed by the templating engine.
 // It contains the file path (which can itself be a template), the content,
 // whether the content should be processed as a template, and the file permissions.
@@ -61,7 +68,7 @@ func NewProcessor() *Processor {
 	defer perf.Track(nil, "engine.NewProcessor")()
 
 	return &Processor{
-		merger: merge.NewThreeWayMerger(50), // Default 50% threshold
+		merger: merge.NewThreeWayMerger(defaultMergeThreshold), // Default 50% threshold
 	}
 }
 
@@ -124,6 +131,8 @@ func (p *Processor) ProcessTemplate(content string, targetPath string, scaffoldC
 }
 
 // ProcessTemplateWithDelimiters processes Go templates in file content with custom delimiters.
+//
+//nolint:revive // function-length: template processing requires multiple setup steps
 func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) (string, error) {
 	defer perf.Track(nil, "engine.Processor.ProcessTemplateWithDelimiters")()
 
@@ -216,6 +225,8 @@ func (p *Processor) Merge(base, ours, theirs, fileName string) (*merge.MergeResu
 //  6. Writes the final content to disk with specified permissions
 //
 // Returns FileSkippedError if the file is intentionally skipped (not considered an error).
+//
+//nolint:revive // argument-limit: file processing requires multiple configuration parameters
 func (p *Processor) ProcessFile(file File, targetPath string, force, update bool, scaffoldConfig interface{}, userValues map[string]interface{}) error {
 	defer perf.Track(nil, "engine.Processor.ProcessFile")()
 
@@ -344,7 +355,7 @@ func (p *Processor) processFilePath(filePath, targetPath string, scaffoldConfig 
 // ensureDirectory creates the directory for the given file path if it doesn't exist.
 func ensureDirectory(fullPath string) error {
 	dir := filepath.Dir(fullPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, dirPermissions); err != nil {
 		return errUtils.Build(errUtils.ErrDirectoryCreation).
 			WithExplanationf("Failed to create directory: `%s`", dir).
 			WithHint("Check directory permissions").
@@ -364,6 +375,8 @@ func fileExists(path string) bool {
 }
 
 // handleExistingFile handles the case where the target file already exists.
+//
+//nolint:revive // argument-limit: file handling requires all context parameters
 func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, force, update bool, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) error {
 	// Check flags
 	if !force && !update {
@@ -408,6 +421,8 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 }
 
 // writeNewFile processes the file content and writes it to disk.
+//
+//nolint:revive // argument-limit: file writing requires full context for template processing
 func (p *Processor) writeNewFile(file File, fullPath, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) error {
 	// Process content as template if needed
 	content, err := p.processFileContent(file, targetPath, scaffoldConfig, userValues, delimiters)
@@ -449,7 +464,7 @@ func (p *Processor) processFileContent(file File, targetPath string, scaffoldCon
 			WithHint("Verify all variables are defined").
 			WithHint("Use `--set key=value` to provide missing variables").
 			WithContext("file_path", file.Path).
-			WithContext("content_preview", truncateString(content, 200)).
+			WithContext("content_preview", truncateString(content, maxValuePreviewLen)).
 			WithContext("user_values", fmt.Sprintf("%+v", userValues)).
 			WithExitCode(1).
 			Err()
@@ -464,7 +479,7 @@ func (p *Processor) processFileContent(file File, targetPath string, scaffoldCon
 			WithHint("Use `--set key=value` to provide missing variables").
 			WithExample("```bash\natmos scaffold generate my-template ./target --set project_name=myapp\n```").
 			WithContext("file_path", file.Path).
-			WithContext("content_preview", truncateString(processedContent, 200)).
+			WithContext("content_preview", truncateString(processedContent, maxValuePreviewLen)).
 			WithExitCode(2).
 			Err()
 	}
@@ -473,6 +488,8 @@ func (p *Processor) processFileContent(file File, targetPath string, scaffoldCon
 }
 
 // mergeFile attempts a 3-way merge for existing files.
+//
+//nolint:revive,funlen // function-length: merge logic requires detailed error handling
 func (p *Processor) mergeFile(existingPath string, file File, targetPath string) error {
 	// Read existing file content (user's version - "ours")
 	existingContent, err := os.ReadFile(existingPath)
@@ -487,10 +504,7 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 	}
 
 	// Determine base content for 3-way merge
-	baseContent, shouldSkip, err := p.determineBaseContent(file, existingPath)
-	if err != nil {
-		return err
-	}
+	baseContent, shouldSkip := p.determineBaseContent(file, existingPath)
 	if shouldSkip {
 		return nil
 	}
@@ -557,32 +571,32 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 }
 
 // determineBaseContent determines the base content for 3-way merge.
-// Returns (baseContent, shouldSkip, error).
-// shouldSkip is true when the file is user-added and should not be merged.
-func (p *Processor) determineBaseContent(file File, existingPath string) (string, bool, error) {
+// Returns (baseContent, shouldSkip).
+// ShouldSkip is true when the file is user-added and should not be merged.
+func (p *Processor) determineBaseContent(file File, existingPath string) (string, bool) {
 	if p.gitStorage == nil {
-		// No git storage - use template content as base (legacy behavior)
-		return file.Content, false, nil
+		// No git storage - use template content as base (legacy behavior).
+		return file.Content, false
 	}
 
-	// Try to load base content from git
+	// Try to load base content from git.
 	relativePath, err := filepath.Rel(p.targetPath, existingPath)
 	if err != nil {
-		relativePath = file.Path // Fallback to template path
+		relativePath = file.Path // Fallback to template path.
 	}
 
 	gitBase, found, err := p.gitStorage.LoadBase(relativePath)
 	switch {
 	case err != nil:
-		// Git error - fall back to template content as base
-		return file.Content, false, nil
+		// Git error - fall back to template content as base.
+		return file.Content, false
 	case found:
-		// Use git version as base
-		return gitBase, false, nil
+		// Use git version as base.
+		return gitBase, false
 	default:
-		// File doesn't exist in base ref
-		// This is a user-added file - skip merge, don't touch it
-		return "", true, nil
+		// File doesn't exist in base ref.
+		// This is a user-added file - skip merge, don't touch it.
+		return "", true
 	}
 }
 
@@ -648,7 +662,7 @@ func (p *Processor) ValidateNoUnprocessedTemplates(content string) error {
 	defer perf.Track(nil, "engine.Processor.ValidateNoUnprocessedTemplates")()
 
 	if p.ContainsUnprocessedTemplates(content) {
-		return fmt.Errorf("generated content contains unprocessed template syntax: %s", truncateString(content, 200))
+		return fmt.Errorf("%w: %s", errUtils.ErrUnprocessedTemplate, truncateString(content, maxValuePreviewLen))
 	}
 	return nil
 }
@@ -658,7 +672,7 @@ func (p *Processor) ValidateNoUnprocessedTemplatesWithDelimiters(content string,
 	defer perf.Track(nil, "engine.Processor.ValidateNoUnprocessedTemplatesWithDelimiters")()
 
 	if p.ContainsUnprocessedTemplatesWithDelimiters(content, delimiters) {
-		return fmt.Errorf("generated content contains unprocessed template syntax with delimiters %v: %s", delimiters, truncateString(content, 200))
+		return fmt.Errorf("%w (delimiters %v): %s", errUtils.ErrUnprocessedTemplate, delimiters, truncateString(content, maxValuePreviewLen))
 	}
 	return nil
 }

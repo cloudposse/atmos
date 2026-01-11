@@ -91,7 +91,7 @@ func TestHasTemplateMagicComment(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := hasTemplateMagicComment(tt.content, 10)
+			result := hasTemplateMagicComment(tt.content)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -269,7 +269,7 @@ metadata:
 data:
   key: {{.value}}
 `
-		isTemplate := hasTemplateMagicComment(content, 10)
+		isTemplate := hasTemplateMagicComment(content)
 		assert.True(t, isTemplate)
 
 		stripped := stripTemplateMagicComment(content)
@@ -284,7 +284,7 @@ data:
     "template": "{{value}}"
   }
 }`
-		isTemplate := hasTemplateMagicComment(content, 10)
+		isTemplate := hasTemplateMagicComment(content)
 		assert.False(t, isTemplate)
 	})
 
@@ -297,7 +297,7 @@ data:
 		}
 
 		for _, content := range testCases {
-			isTemplate := hasTemplateMagicComment(content, 10)
+			isTemplate := hasTemplateMagicComment(content)
 			assert.True(t, isTemplate, "Should detect template in: %s", content)
 
 			stripped := stripTemplateMagicComment(content)

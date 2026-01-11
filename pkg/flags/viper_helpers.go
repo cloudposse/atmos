@@ -58,6 +58,8 @@ func bindFlagToViper(v *viper.Viper, viperKey string, flag Flag) error {
 //
 // Key validation: Keys must be non-empty after trimming whitespace.
 // Malformed pairs (missing "=" or empty key) are silently skipped.
+//
+//nolint:gocognit,revive // complex parsing logic handling multiple input formats
 func ParseStringMap(v *viper.Viper, key string) map[string]string {
 	defer perf.Track(nil, "flags.ParseStringMap")()
 

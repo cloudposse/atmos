@@ -1,10 +1,10 @@
 package merge
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -64,7 +64,9 @@ func (m *ThreeWayMerger) MergeWithStrategy(base, ours, theirs string, strategy M
 		merger := NewTextMerger(m.thresholdPercent)
 		return merger.Merge(base, ours, theirs)
 	default:
-		return nil, fmt.Errorf("unknown merge strategy: %v", strategy)
+		return nil, errUtils.Build(errUtils.ErrUnknownMergeStrategy).
+			WithExplanationf("Unknown merge strategy: %v", strategy).
+			Err()
 	}
 }
 

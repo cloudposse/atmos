@@ -7,7 +7,13 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+// Constants for YAML merging.
+const (
+	maxChangePercentage = 100 // Maximum change percentage when parsing fails
 )
 
 // YAMLMerger handles 3-way merging of YAML files with structure awareness.
@@ -82,8 +88,10 @@ func (m *YAMLMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	if len(conflicts.conflicts) > 0 && m.thresholdPercent > 0 {
 		changePercentage := m.calculateYAMLChangePercentage(base, ours, theirs, len(conflicts.conflicts))
 		if changePercentage > m.thresholdPercent {
-			return nil, fmt.Errorf("too many YAML conflicts detected (%d%% changes, threshold: %d%%). %d conflicts found. Use --force to overwrite or manually merge",
-				changePercentage, m.thresholdPercent, len(conflicts.conflicts))
+			return nil, errUtils.Build(errUtils.ErrMergeThresholdExceeded).
+				WithExplanationf("Too many YAML conflicts detected (%d%% changes, threshold: %d%%). %d conflicts found", changePercentage, m.thresholdPercent, len(conflicts.conflicts)).
+				WithHint("Use --force to overwrite or manually merge").
+				Err()
 		}
 	}
 
@@ -118,6 +126,8 @@ func (c *conflictTracker) addConflict(path string) {
 }
 
 // mergeNodes recursively merges YAML nodes.
+//
+//nolint:revive // cyclomatic: 3-way merge requires handling multiple node states
 func (m *YAMLMerger) mergeNodes(base, ours, theirs *yaml.Node, path string, conflicts *conflictTracker) (*yaml.Node, error) {
 	// If all three are identical, return any of them
 	if nodesEqual(base, ours) && nodesEqual(base, theirs) {
@@ -178,6 +188,8 @@ func (m *YAMLMerger) mergeDocuments(base, ours, theirs *yaml.Node, path string, 
 }
 
 // mergeMappings merges mapping (object) nodes with key-level intelligence.
+//
+//nolint:gocognit,revive,cyclop,funlen // inherently complex 3-way merge algorithm
 func (m *YAMLMerger) mergeMappings(base, ours, theirs *yaml.Node, path string, conflicts *conflictTracker) (*yaml.Node, error) {
 	// Detect mapping vs non-mapping kind mismatches before building key maps.
 	// If any of base/ours/theirs is not a MappingNode while another is,
@@ -291,7 +303,7 @@ func (m *YAMLMerger) mergeMappings(base, ours, theirs *yaml.Node, path string, c
 }
 
 // mergeSequences merges sequence (array) nodes.
-func (m *YAMLMerger) mergeSequences(base, ours, theirs *yaml.Node, path string, conflicts *conflictTracker) (*yaml.Node, error) {
+func (m *YAMLMerger) mergeSequences(_, ours, theirs *yaml.Node, path string, conflicts *conflictTracker) (*yaml.Node, error) {
 	// For sequences, if they differ, it's a conflict
 	// We prefer ours (user's version) unless they're identical
 	if !nodesEqual(ours, theirs) {
@@ -352,15 +364,6 @@ func buildKeyMap(node *yaml.Node) map[string]*yaml.Node {
 	return result
 }
 
-// createKeyNode creates a new scalar node for a map key.
-func createKeyNode(key string) *yaml.Node {
-	return &yaml.Node{
-		Kind:  yaml.ScalarNode,
-		Tag:   "!!str",
-		Value: key,
-	}
-}
-
 // createEmptyNodeOfKind creates an empty placeholder node matching the given node's kind.
 func createEmptyNodeOfKind(node *yaml.Node) *yaml.Node {
 	placeholder := &yaml.Node{
@@ -380,6 +383,8 @@ func createEmptyNodeOfKind(node *yaml.Node) *yaml.Node {
 }
 
 // nodesEqual checks if two YAML nodes are structurally equal.
+//
+//nolint:gocognit,revive,cyclop // recursive node comparison requires switch over node types
 func nodesEqual(a, b *yaml.Node) bool {
 	if a == nil && b == nil {
 		return true
@@ -421,11 +426,11 @@ func nodesEqual(a, b *yaml.Node) bool {
 }
 
 // calculateYAMLChangePercentage calculates change percentage for YAML conflicts.
-func (m *YAMLMerger) calculateYAMLChangePercentage(base, ours, theirs string, conflictCount int) int {
+func (m *YAMLMerger) calculateYAMLChangePercentage(base, _, _ string, conflictCount int) int {
 	// Count total keys in base as rough measure of content size
 	var baseNode yaml.Node
 	if err := yaml.Unmarshal([]byte(base), &baseNode); err != nil {
-		return 100 // If we can't parse, assume high change
+		return maxChangePercentage // If we can't parse, assume high change
 	}
 
 	totalKeys := countKeys(&baseNode)

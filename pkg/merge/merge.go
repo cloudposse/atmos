@@ -48,7 +48,10 @@ func (m *ThreeWayMerger) Merge(existingContent, newContent, fileName string) (st
 
 	// If there are too many changes, refuse to merge.
 	if changeCount > m.maxChanges {
-		return "", fmt.Errorf("too many changes detected (%d changes). Use --force to overwrite or manually merge", changeCount)
+		return "", errUtils.Build(errUtils.ErrMergeThresholdExceeded).
+			WithExplanationf("Too many changes detected (%d changes)", changeCount).
+			WithHint("Use --force to overwrite or manually merge").
+			Err()
 	}
 
 	// Apply the diff to create a merged result.
