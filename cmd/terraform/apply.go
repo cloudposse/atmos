@@ -34,8 +34,8 @@ For complete Terraform/OpenTofu documentation, see:
 			return err
 		}
 
-		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		// Parse base terraform options with command context for UI flag detection.
+		opts := ParseTerraformRunOptions(v, cmd)
 
 		// Apply-specific flags (from-plan, planfile) flow through the
 		// legacy ProcessCommandLineArgs which sets info.UseTerraformPlan, info.PlanFile.

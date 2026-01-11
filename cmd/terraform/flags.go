@@ -62,6 +62,13 @@ func registerExecutionFlags(registry *flags.FlagRegistry) {
 		Description: "Customize User-Agent string in Terraform provider requests (sets TF_APPEND_USER_AGENT)",
 		EnvVars:     []string{"ATMOS_APPEND_USER_AGENT"},
 	})
+	registry.Register(&flags.BoolFlag{
+		Name:        "ui",
+		Shorthand:   "",
+		Default:     false,
+		Description: "Enable streaming UI mode for real-time resource status display",
+		EnvVars:     []string{"ATMOS_TERRAFORM_UI"},
+	})
 }
 
 // BackendExecutionFlags returns flags for commands that generate backend files or run init.

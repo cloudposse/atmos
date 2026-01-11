@@ -11,4 +11,5 @@ const (
 	IconWarning     = "⚠" // Warning indicator.
 	IconInfo        = "ℹ" // Information indicator.
 	IconColorBlock  = "█" // Color palette block character.
+	IconRefresh     = "↻" // Refresh/recreate indicator.
 )

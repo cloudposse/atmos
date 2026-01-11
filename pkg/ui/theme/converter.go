@@ -137,8 +137,8 @@ func createGlamourStyleFromTheme(t *Theme) *ansi.StyleConfig {
 		},
 		Code: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Color:  &accentColor,
 				Prefix: " ",
+				Color:  &accentColor,
 				Bold:   boolPtr(true),
 			},
 			Margin: uintPtr(0),
