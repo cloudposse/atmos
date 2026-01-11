@@ -260,54 +260,62 @@ func TestMetadataStorage_Save(t *testing.T) {
 	}
 }
 
-func TestNewInitMetadata(t *testing.T) {
-	templateName := "simple"
-	templateVersion := "1.0.0"
-	templateSource := "embedded"
-	baseRef := "main"
-	variables := map[string]string{
-		"project_name": "test-project",
-		"author":       "test-author",
+func TestNewMetadata(t *testing.T) {
+	tests := []struct {
+		name            string
+		templateName    string
+		templateVersion string
+		templateSource  string
+		baseRef         string
+		variables       map[string]string
+		createMetadata  func(name, version, source, ref string, vars map[string]string) *GenerationMetadata
+		expectedCommand string
+	}{
+		{
+			name:            "init metadata",
+			templateName:    "simple",
+			templateVersion: "1.0.0",
+			templateSource:  "embedded",
+			baseRef:         "main",
+			variables: map[string]string{
+				"project_name": "test-project",
+				"author":       "test-author",
+			},
+			createMetadata:  NewInitMetadata,
+			expectedCommand: "atmos init",
+		},
+		{
+			name:            "scaffold metadata",
+			templateName:    "component",
+			templateVersion: "2.0.0",
+			templateSource:  "atmos.yaml",
+			baseRef:         "v1.0",
+			variables: map[string]string{
+				"component_name": "vpc",
+				"namespace":      "core",
+			},
+			createMetadata:  NewScaffoldMetadata,
+			expectedCommand: "atmos scaffold generate",
+		},
 	}
 
-	metadata := NewInitMetadata(templateName, templateVersion, templateSource, baseRef, variables)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			metadata := tt.createMetadata(tt.templateName, tt.templateVersion, tt.templateSource, tt.baseRef, tt.variables)
 
-	assert.NotNil(t, metadata)
-	assert.Equal(t, 1, metadata.Version)
-	assert.Equal(t, "atmos init", metadata.Command)
-	assert.Equal(t, templateName, metadata.Template.Name)
-	assert.Equal(t, templateVersion, metadata.Template.Version)
-	assert.Equal(t, templateSource, metadata.Template.Source)
-	assert.Equal(t, baseRef, metadata.BaseRef)
-	assert.Equal(t, variables, metadata.Variables)
-	assert.Empty(t, metadata.Files)
-	assert.Equal(t, "git", metadata.StorageType)
-	assert.False(t, metadata.GeneratedAt.IsZero())
-}
-
-func TestNewScaffoldMetadata(t *testing.T) {
-	templateName := "component"
-	templateVersion := "2.0.0"
-	templateSource := "atmos.yaml"
-	baseRef := "v1.0"
-	variables := map[string]string{
-		"component_name": "vpc",
-		"namespace":      "core",
+			assert.NotNil(t, metadata)
+			assert.Equal(t, 1, metadata.Version)
+			assert.Equal(t, tt.expectedCommand, metadata.Command)
+			assert.Equal(t, tt.templateName, metadata.Template.Name)
+			assert.Equal(t, tt.templateVersion, metadata.Template.Version)
+			assert.Equal(t, tt.templateSource, metadata.Template.Source)
+			assert.Equal(t, tt.baseRef, metadata.BaseRef)
+			assert.Equal(t, tt.variables, metadata.Variables)
+			assert.Empty(t, metadata.Files)
+			assert.Equal(t, "git", metadata.StorageType)
+			assert.False(t, metadata.GeneratedAt.IsZero())
+		})
 	}
-
-	metadata := NewScaffoldMetadata(templateName, templateVersion, templateSource, baseRef, variables)
-
-	assert.NotNil(t, metadata)
-	assert.Equal(t, 1, metadata.Version)
-	assert.Equal(t, "atmos scaffold generate", metadata.Command)
-	assert.Equal(t, templateName, metadata.Template.Name)
-	assert.Equal(t, templateVersion, metadata.Template.Version)
-	assert.Equal(t, templateSource, metadata.Template.Source)
-	assert.Equal(t, baseRef, metadata.BaseRef)
-	assert.Equal(t, variables, metadata.Variables)
-	assert.Empty(t, metadata.Files)
-	assert.Equal(t, "git", metadata.StorageType)
-	assert.False(t, metadata.GeneratedAt.IsZero())
 }
 
 func TestGenerationMetadata_AddFile(t *testing.T) {

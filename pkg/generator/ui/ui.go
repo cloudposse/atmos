@@ -1,3 +1,4 @@
+//nolint:revive // file-length-limit: UI orchestration requires cohesive component
 package ui
 
 import (
@@ -15,6 +16,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/filesystem"
 	tmpl "github.com/cloudposse/atmos/pkg/generator/templates"
@@ -23,6 +25,40 @@ import (
 	"github.com/cloudposse/atmos/pkg/project/config"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
+)
+
+// UI layout constants.
+const (
+	// Terminal and table width defaults.
+	defaultTerminalWidth = 80
+	tableMargin          = 20
+	tableBorderPadding   = 6
+	tableBorderSpacing   = 8
+
+	// Column widths for configuration summary table.
+	settingColumnMinWidth = 12
+	valueColumnMinWidth   = 45
+	sourceColumnMinWidth  = 12
+
+	// Column widths for template table.
+	nameColumnMinWidth    = 20
+	sourceColumnWidth     = 30
+	versionColumnMinWidth = 15
+	descColumnMinWidth    = 40
+
+	// File permissions.
+	dirPermissions = 0o755
+
+	// Template type identifiers.
+	templateTypeScaffold = "scaffold"
+
+	// UI symbols and strings.
+	bulletSymbol         = "•"
+	skippedText          = "(skipped)"
+	currentDirPrefix     = "./"
+	newlineStr           = "\n"
+	fileStatusFormat     = "  %s %s %s\n"
+	failedWriteBlankLine = "Failed to write blank line"
 )
 
 // truncateString truncates a string to the specified length and adds "..." if truncated.
@@ -39,10 +75,12 @@ type spinnerModel struct {
 	message string
 }
 
+//nolint:gocritic // bubbletea models must be passed by value
 func (m spinnerModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
+//nolint:gocritic // bubbletea models must be passed by value
 func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -61,6 +99,7 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
+//nolint:gocritic // bubbletea models must be passed by value
 func (m spinnerModel) View() string {
 	return fmt.Sprintf("\r%s %s", m.spinner.View(), m.message)
 }
@@ -102,7 +141,7 @@ func (ui *InitUI) SetThreshold(thresholdPercent int) {
 func (ui *InitUI) GetTerminalWidth() int {
 	width := ui.term.Width(terminal.Stdout)
 	if width == 0 {
-		return 80 // fallback width
+		return defaultTerminalWidth
 	}
 	return width
 }
@@ -115,7 +154,7 @@ func (ui *InitUI) writeOutput(format string, args ...interface{}) {
 // colorSource returns a colored string for the given source value.
 func (ui *InitUI) colorSource(source string) string {
 	switch source {
-	case "scaffold":
+	case templateTypeScaffold:
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("#0000FF")).Render("scaffold") // Blue
 	case "flag":
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Render("flag") // Red
@@ -134,20 +173,29 @@ func (ui *InitUI) flushOutput() {
 }
 
 // Execute runs the initialization process with UI.
+//
+//nolint:revive // argument-limit: public API maintains compatibility
 func (ui *InitUI) Execute(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, cmdTemplateValues map[string]interface{}) error {
 	return ui.ExecuteWithBaseRef(embedsConfig, targetPath, force, update, useDefaults, "", cmdTemplateValues)
 }
 
 // ExecuteWithBaseRef runs the initialization process with UI and specified base ref.
+//
+//nolint:revive // argument-limit: public API maintains compatibility
 func (ui *InitUI) ExecuteWithBaseRef(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}) error {
 	return ui.ExecuteWithDelimiters(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues, []string{"{{", "}}"})
 }
 
 // ExecuteWithDelimiters runs the initialization process with UI and custom delimiters.
+//
+//nolint:revive // argument-limit: public API maintains compatibility
 func (ui *InitUI) ExecuteWithDelimiters(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}, delimiters []string) error {
 	// Defensive validation: target directory cannot be empty
 	if targetPath == "" {
-		return fmt.Errorf("internal error: target directory cannot be empty - use ExecuteWithInteractiveFlow for prompting")
+		return errUtils.Build(errUtils.ErrTargetDirRequired).
+			WithExplanation("Target directory cannot be empty").
+			WithHint("Use ExecuteWithInteractiveFlow for prompting").
+			Err()
 	}
 
 	// Early validation: check if target directory exists and handle appropriately
@@ -178,8 +226,10 @@ func (ui *InitUI) ExecuteWithDelimiters(embedsConfig tmpl.Configuration, targetP
 	return ui.executeWithCommandValues(embedsConfig, targetPath, force, update, make(map[string]interface{}))
 }
 
-// ExecuteWithInteractiveFlow provides a unified flow for both init and scaffold commands
+// ExecuteWithInteractiveFlow provides a unified flow for both init and scaffold commands.
 // This ensures both commands have identical behavior - the only difference is the source of templates.
+//
+//nolint:gocritic,revive // hugeParam: public API signature
 func (ui *InitUI) ExecuteWithInteractiveFlow(
 	embedsConfig tmpl.Configuration,
 	targetPath string,
@@ -190,6 +240,8 @@ func (ui *InitUI) ExecuteWithInteractiveFlow(
 }
 
 // ExecuteWithInteractiveFlowAndBaseRef provides a unified flow with base ref support.
+//
+//nolint:gocognit,gocritic,revive // complex orchestration function, public API signature
 func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRef(
 	embedsConfig tmpl.Configuration,
 	targetPath string,
@@ -218,7 +270,9 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRef(
 			}
 
 			if scaffoldConfigFile == nil {
-				return fmt.Errorf("%s not found in configuration", config.ScaffoldConfigFileName)
+				return errUtils.Build(errUtils.ErrScaffoldConfigMissing).
+					WithExplanationf("%s not found in configuration", config.ScaffoldConfigFileName).
+					Err()
 			}
 
 			// Load the scaffold configuration from content
@@ -253,59 +307,25 @@ func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRef(
 	return ui.ExecuteWithBaseRef(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues)
 }
 
-// promptForTargetDirectoryWithValues prompts for target directory with evaluated template values.
-func (ui *InitUI) promptForTargetDirectoryWithValues(config tmpl.Configuration, mergedValues map[string]interface{}) (string, error) {
-	// Generate suggested directory name based on template and values
-	suggestedDir := ui.generateSuggestedDirectoryWithValues(config, mergedValues)
-	targetPath := suggestedDir
-
-	// Form to get target directory with smart default
-	pathForm := huh.NewForm(
-		huh.NewGroup(
-			huh.NewInput().
-				Title("Target directory").
-				Description(fmt.Sprintf("Where should the files be created? (suggested: %s)", suggestedDir)).
-				Placeholder(suggestedDir).
-				Value(&targetPath).
-				Validate(func(s string) error {
-					if s == "" {
-						return nil // Empty is OK, will use suggested default
-					}
-					return nil
-				}),
-		),
-	)
-
-	err := pathForm.Run()
-	if err != nil {
-		return "", err
-	}
-
-	// Use suggested directory if empty
-	if targetPath == "" {
-		targetPath = suggestedDir
-	}
-
-	return targetPath, nil
-}
-
 // generateSuggestedDirectoryWithValues generates a suggested directory name using template values.
 func (ui *InitUI) generateSuggestedDirectoryWithValues(config tmpl.Configuration, mergedValues map[string]interface{}) string {
 	// If we have merged values, try to use them for a better suggestion
 	if mergedValues != nil {
 		if name, ok := mergedValues["name"].(string); ok && name != "" {
-			return "./" + name
+			return currentDirPrefix + name
 		}
 		if projectName, ok := mergedValues["project_name"].(string); ok && projectName != "" {
-			return "./" + projectName
+			return currentDirPrefix + projectName
 		}
 	}
 
 	// Fallback to the original logic
-	return "./" + filepath.Base(config.Name)
+	return currentDirPrefix + filepath.Base(config.Name)
 }
 
 // executeWithCommandValues processes files using command-line template values.
+//
+//nolint:revive // function-length: file processing loop with error handling
 func (ui *InitUI) executeWithCommandValues(embedsConfig tmpl.Configuration, targetPath string, force, update bool, cmdTemplateValues map[string]interface{}) error {
 	// For now, use the existing processFile method but this should be refactored
 	// to use the templating processor properly
@@ -328,14 +348,14 @@ func (ui *InitUI) executeWithCommandValues(embedsConfig tmpl.Configuration, targ
 			skipErr := &engine.FileSkippedError{}
 			if errors.As(err, &skipErr) {
 				// File was intentionally skipped
-				ui.writeOutput("  %s %s %s\n",
-					ui.grayStyle.Render("•"),
+				ui.writeOutput(fileStatusFormat,
+					ui.grayStyle.Render(bulletSymbol),
 					skipErr.Path,
-					ui.grayStyle.Render("(skipped)"))
+					ui.grayStyle.Render(skippedText))
 			} else {
 				// Actual error occurred
 				errorCount++
-				ui.writeOutput("  %s %s %s\n",
+				ui.writeOutput(fileStatusFormat,
 					ui.errorStyle.Render(ui.xMark),
 					file.Path,
 					ui.grayStyle.Render(fmt.Sprintf("(error: %v)", err)))
@@ -349,84 +369,13 @@ func (ui *InitUI) executeWithCommandValues(embedsConfig tmpl.Configuration, targ
 	}
 
 	// Print summary
-	ui.writeOutput("\n")
+	ui.writeOutput(newlineStr)
 	if errorCount > 0 {
 		ui.writeOutput("Initialized %d files. Failed to initialize %d files.\n", successCount, errorCount)
 		ui.flushOutput()
-		return fmt.Errorf("failed to initialize %d files", errorCount)
-	} else {
-		ui.writeOutput("Initialized %d files.\n", successCount)
-	}
-
-	// Flush all output before rendering README
-	ui.flushOutput()
-
-	// Only render README if all files were successful
-	if embedsConfig.README != "" {
-		if err := ui.renderREADME(embedsConfig.README, targetPath); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// executeWithUserConfig processes files using user configuration.
-func (ui *InitUI) executeWithUserConfig(embedsConfig tmpl.Configuration, targetPath string, force, update bool, userConfig *config.Config) error {
-	// For now, use the existing processFileWithConfig method but this should be refactored
-	// to use the templating processor properly
-	var successCount, errorCount int
-	for _, file := range embedsConfig.Files {
-		// Process the file with user configuration using templating processor
-		// Convert tmpl.File to engine.File
-		templatingFile := engine.File{
-			Path:        file.Path,
-			Content:     file.Content,
-			IsTemplate:  file.IsTemplate,
-			Permissions: file.Permissions,
-		}
-
-		// Load dynamic user values from the scaffold template directory
-		userValues, loadErr := config.LoadUserValues(targetPath)
-		if loadErr != nil {
-			// If no user values file exists, create empty map
-			userValues = make(map[string]interface{})
-		}
-
-		err := ui.processor.ProcessFile(templatingFile, targetPath, force, update, nil, userValues)
-
-		// Display result using proper UI output
-		if err != nil {
-			// Check if this is a FileSkippedError
-			skipErr := &engine.FileSkippedError{}
-			if errors.As(err, &skipErr) {
-				// File was intentionally skipped
-				ui.writeOutput("  %s %s %s\n",
-					ui.grayStyle.Render("•"),
-					skipErr.Path,
-					ui.grayStyle.Render("(skipped)"))
-			} else {
-				// Actual error occurred
-				errorCount++
-				ui.writeOutput("  %s %s %s\n",
-					ui.errorStyle.Render(ui.xMark),
-					file.Path,
-					ui.grayStyle.Render(fmt.Sprintf("(error: %v)", err)))
-			}
-		} else {
-			successCount++
-			ui.writeOutput("  %s %s\n",
-				ui.successStyle.Render(ui.checkmark),
-				file.Path)
-		}
-	}
-
-	// Print summary
-	ui.writeOutput("\n")
-	if errorCount > 0 {
-		ui.writeOutput("Initialized %d files. Failed to initialize %d files.\n", successCount, errorCount)
-		ui.flushOutput()
-		return fmt.Errorf("failed to initialize %d files", errorCount)
+		return errUtils.Build(errUtils.ErrInitializationPartialFailure).
+			WithExplanationf("Failed to initialize %d files", errorCount).
+			Err()
 	} else {
 		ui.writeOutput("Initialized %d files.\n", successCount)
 	}
@@ -509,6 +458,8 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 }
 
 // executeWithSetup handles any scaffold configuration with interactive prompts.
+//
+//nolint:gocognit,revive,cyclop,funlen // complex orchestration function with multiple setup phases
 func (ui *InitUI) executeWithSetup(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}, delimiters []string) error {
 	// Find the scaffold.yaml file in the configuration
 	var scaffoldConfigFile *tmpl.File
@@ -520,11 +471,13 @@ func (ui *InitUI) executeWithSetup(embedsConfig tmpl.Configuration, targetPath s
 	}
 
 	if scaffoldConfigFile == nil {
-		return fmt.Errorf("%s not found in rich-project configuration", config.ScaffoldConfigFileName)
+		return errUtils.Build(errUtils.ErrScaffoldConfigMissing).
+			WithExplanationf("%s not found in rich-project configuration", config.ScaffoldConfigFileName).
+			Err()
 	}
 
 	// Create directory if needed
-	if err := os.MkdirAll(targetPath, 0o755); err != nil {
+	if err := os.MkdirAll(targetPath, dirPermissions); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
@@ -575,10 +528,10 @@ func (ui *InitUI) executeWithSetup(embedsConfig tmpl.Configuration, targetPath s
 		// Check if the rendered path should be skipped
 		if ui.processor.ShouldSkipFile(renderedPath) {
 			// File was intentionally skipped
-			ui.writeOutput("  %s %s %s\n",
-				ui.grayStyle.Render("•"),
+			ui.writeOutput(fileStatusFormat,
+				ui.grayStyle.Render(bulletSymbol),
 				file.Path,
-				ui.grayStyle.Render("(skipped)"))
+				ui.grayStyle.Render(skippedText))
 			continue
 		}
 
@@ -598,15 +551,15 @@ func (ui *InitUI) executeWithSetup(embedsConfig tmpl.Configuration, targetPath s
 			skipErr := &engine.FileSkippedError{}
 			if errors.As(err, &skipErr) {
 				// File was intentionally skipped
-				ui.writeOutput("  %s %s %s\n",
-					ui.grayStyle.Render("•"),
+				ui.writeOutput(fileStatusFormat,
+					ui.grayStyle.Render(bulletSymbol),
 					skipErr.Path,
-					ui.grayStyle.Render("(skipped)"))
+					ui.grayStyle.Render(skippedText))
 			} else {
 				// Actual error occurred
 				errorCount++
 				failedFiles = append(failedFiles, file.Path)
-				ui.writeOutput("  %s %s %s\n",
+				ui.writeOutput(fileStatusFormat,
 					ui.errorStyle.Render(ui.xMark),
 					renderedPath,
 					ui.grayStyle.Render(fmt.Sprintf("(error: %v)", err)))
@@ -620,12 +573,14 @@ func (ui *InitUI) executeWithSetup(embedsConfig tmpl.Configuration, targetPath s
 	}
 
 	// Print summary
-	ui.writeOutput("\n")
+	ui.writeOutput(newlineStr)
 	if errorCount > 0 {
 		ui.writeOutput("Generated %d files. Failed to generate %d files.\n", successCount, errorCount)
 		// Don't render README if there were errors - flush output and return error immediately
 		ui.flushOutput()
-		return fmt.Errorf("failed to generate files: %s", strings.Join(failedFiles, ", "))
+		return errUtils.Build(errUtils.ErrScaffoldGeneration).
+			WithExplanationf("Failed to generate files: %s", strings.Join(failedFiles, ", ")).
+			Err()
 	} else {
 		ui.writeOutput("Generated %d files.\n", successCount)
 	}
@@ -713,9 +668,9 @@ type columnWidths struct {
 // It ensures minimum widths and adds padding for readability.
 func (ui *InitUI) calculateColumnWidths(rows [][]string) columnWidths {
 	widths := columnWidths{
-		setting: 12, // Minimum width for setting names
-		value:   45, // Minimum width for values
-		source:  12, // Minimum width for sources
+		setting: settingColumnMinWidth, // Minimum width for setting names
+		value:   valueColumnMinWidth,   // Minimum width for values
+		source:  sourceColumnMinWidth,  // Minimum width for sources
 	}
 
 	// Find the maximum content width for each column
@@ -742,7 +697,7 @@ func (ui *InitUI) calculateColumnWidths(rows [][]string) columnWidths {
 }
 
 // applyTableStyles applies consistent styling to the table including colors and borders.
-func applyTableStyles(t table.Model) {
+func applyTableStyles(t *table.Model) {
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.RoundedBorder()).
@@ -772,7 +727,7 @@ func (ui *InitUI) prepareTableRows(rows [][]string) []table.Row {
 }
 
 // displayConfigurationTable displays configuration data in a formatted table.
-func (ui *InitUI) displayConfigurationTable(header []string, rows [][]string) {
+func (ui *InitUI) displayConfigurationTable(_ []string, rows [][]string) {
 	// Don't display table if there are no rows to show
 	if len(rows) == 0 {
 		return
@@ -781,16 +736,16 @@ func (ui *InitUI) displayConfigurationTable(header []string, rows [][]string) {
 	// Get terminal width with fallback
 	width := ui.term.Width(terminal.Stdout)
 	if width == 0 {
-		width = 80
+		width = defaultTerminalWidth
 	}
-	tableWidth := width - 20 // Leave margin
+	tableWidth := width - tableMargin // Leave margin
 
 	// Prepare table data
 	tableRows := ui.prepareTableRows(rows)
 	widths := ui.calculateColumnWidths(rows)
 
 	// Calculate total width needed
-	totalContentWidth := widths.setting + widths.value + widths.source + 6 // +6 for borders
+	totalContentWidth := widths.setting + widths.value + widths.source + tableBorderPadding // for borders
 	if totalContentWidth > tableWidth {
 		tableWidth = totalContentWidth
 	}
@@ -809,26 +764,28 @@ func (ui *InitUI) displayConfigurationTable(header []string, rows [][]string) {
 	)
 
 	// Apply styling
-	applyTableStyles(t)
+	applyTableStyles(&t)
 
 	// Print the table
-	ui.writeOutput("\n")
+	ui.writeOutput(newlineStr)
 	ui.writeOutput("CONFIGURATION SUMMARY\n")
-	ui.writeOutput("\n")
+	ui.writeOutput(newlineStr)
 	ui.writeOutput("%s\n", t.View())
-	ui.writeOutput("\n")
+	ui.writeOutput(newlineStr)
 }
 
 // DisplayTemplateTable displays template data in a formatted table.
+//
+//nolint:gocognit,revive,funlen // complex table rendering with dynamic column widths
 func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 	// Get terminal width
 	width := ui.term.Width(terminal.Stdout)
 	if width == 0 {
-		width = 80 // fallback width
+		width = defaultTerminalWidth // fallback width
 	}
 
 	// Calculate table width (leave some margin)
-	tableWidth := width - 20
+	tableWidth := width - tableMargin
 
 	// Convert rows to table.Row format
 	var tableRows []table.Row
@@ -837,10 +794,10 @@ func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 	}
 
 	// Calculate column widths based on content
-	nameWidth := 20    // Minimum width for template names
-	sourceWidth := 30  // Minimum width for source
-	versionWidth := 15 // Minimum width for version
-	descWidth := 40    // Minimum width for descriptions
+	nameWidth := nameColumnMinWidth       // Minimum width for template names
+	sourceWidth := sourceColumnWidth      // Minimum width for source
+	versionWidth := versionColumnMinWidth // Minimum width for version
+	descWidth := descColumnMinWidth       // Minimum width for descriptions
 
 	// Find the maximum content width for each column
 	for _, row := range rows {
@@ -867,7 +824,7 @@ func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 	descWidth += 2
 
 	// Calculate total table width needed
-	totalContentWidth := nameWidth + sourceWidth + versionWidth + descWidth + 8 // +8 for borders and spacing
+	totalContentWidth := nameWidth + sourceWidth + versionWidth + descWidth + tableBorderSpacing // for borders and spacing
 
 	// If content is wider than screen, use content width; otherwise use screen width
 	if totalContentWidth > tableWidth {
@@ -907,24 +864,26 @@ func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 
 	// Write the table to UI channel.
 	if err := atmosui.Writeln(""); err != nil {
-		log.Trace("Failed to write blank line", "error", err)
+		log.Trace(failedWriteBlankLine, "error", err)
 	}
 	if err := atmosui.Writeln("Available Scaffold Templates"); err != nil {
 		log.Trace("Failed to write table header", "error", err)
 	}
 	if err := atmosui.Writeln(""); err != nil {
-		log.Trace("Failed to write blank line", "error", err)
+		log.Trace(failedWriteBlankLine, "error", err)
 	}
 	if err := atmosui.Writeln(t.View()); err != nil {
 		log.Trace("Failed to write table", "error", err)
 	}
 	if err := atmosui.Writeln(""); err != nil {
-		log.Trace("Failed to write blank line", "error", err)
+		log.Trace(failedWriteBlankLine, "error", err)
 	}
 }
 
-// PromptForTemplate prompts the user to select a template from available options
+// PromptForTemplate prompts the user to select a template from available options.
 // This works for both init (embeds) and scaffold (local/remote) templates.
+//
+//nolint:gocognit,revive,cyclop,funlen // complex TUI component with multiple template type handlers
 func (ui *InitUI) PromptForTemplate(templateType string, templates interface{}) (string, error) {
 	var options []huh.Option[string]
 	var templateNames []string
@@ -946,7 +905,7 @@ func (ui *InitUI) PromptForTemplate(templateType string, templates interface{}) 
 			}
 		}
 
-	case "scaffold":
+	case templateTypeScaffold:
 		// Handle scaffold templates from atmos.yaml
 		if templatesMap, ok := templates.(map[string]interface{}); ok {
 			for templateName, templateConfig := range templatesMap {
@@ -977,7 +936,9 @@ func (ui *InitUI) PromptForTemplate(templateType string, templates interface{}) 
 	}
 
 	if len(options) == 0 {
-		return "", fmt.Errorf("no templates available")
+		return "", errUtils.Build(errUtils.ErrScaffoldTemplatesNotAvailable).
+			WithExplanation("No templates available").
+			Err()
 	}
 
 	var selectedTemplate string
@@ -1000,7 +961,7 @@ func (ui *InitUI) PromptForTemplate(templateType string, templates interface{}) 
 
 	// Display selected template details
 	if err := atmosui.Writeln(""); err != nil {
-		log.Trace("Failed to write blank line", "error", err)
+		log.Trace(failedWriteBlankLine, "error", err)
 	}
 	descStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240")).
@@ -1010,7 +971,7 @@ func (ui *InitUI) PromptForTemplate(templateType string, templates interface{}) 
 		log.Trace("Failed to write template selection", "error", err)
 	}
 	if err := atmosui.Writeln(""); err != nil {
-		log.Trace("Failed to write blank line", "error", err)
+		log.Trace(failedWriteBlankLine, "error", err)
 	}
 
 	return selectedTemplate, nil
@@ -1058,25 +1019,25 @@ func (ui *InitUI) generateSuggestedDirectoryWithTemplateInfo(templateInfo interf
 	// If we have merged values, try to use them for a better suggestion
 	if mergedValues != nil {
 		if name, ok := mergedValues["name"].(string); ok && name != "" {
-			return "./" + name
+			return currentDirPrefix + name
 		}
 		if projectName, ok := mergedValues["project_name"].(string); ok && projectName != "" {
-			return "./" + projectName
+			return currentDirPrefix + projectName
 		}
 	}
 
 	// Try to extract name from template info
 	switch info := templateInfo.(type) {
 	case tmpl.Configuration:
-		return "./" + filepath.Base(info.Name)
+		return currentDirPrefix + filepath.Base(info.Name)
 	case map[string]interface{}:
 		if name, ok := info["name"].(string); ok && name != "" {
-			return "./" + name
+			return currentDirPrefix + name
 		}
 	}
 
 	// Fallback
-	return "./new-project"
+	return currentDirPrefix + "new-project"
 }
 
 // DisplayScaffoldTemplateTable displays scaffold templates in a table format.

@@ -795,6 +795,13 @@ var (
 	ErrScaffoldTemplatesNotAvailable = errors.New("scaffold templates not available")
 	ErrScaffoldLoadConfig            = errors.New("failed to load scaffold configuration")
 	ErrInvalidTemplateData           = errors.New("invalid template data")
+	ErrMergeThresholdExceeded        = errors.New("merge threshold exceeded")
+	ErrNoCommonAncestor              = errors.New("no common ancestor found")
+	ErrUnknownMergeStrategy          = errors.New("unknown merge strategy")
+	ErrGeneratorFieldRequired        = errors.New("field is required")
+	ErrScaffoldConfigMissing         = errors.New("scaffold configuration not found")
+	ErrInitializationPartialFailure  = errors.New("initialization partially failed")
+	ErrInvalidScaffoldSection        = errors.New("invalid scaffold section")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")

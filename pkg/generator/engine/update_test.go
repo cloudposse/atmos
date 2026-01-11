@@ -12,25 +12,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestProcessorWithGitStorage tests the full update workflow with git storage.
-func TestProcessorWithGitStorage(t *testing.T) {
-	// Create a temporary directory for our git repo
+// gitTestRepo holds common test repository setup.
+type gitTestRepo struct {
+	tmpDir     string
+	configPath string
+	processor  *Processor
+}
+
+// setupGitTestRepo creates a git repository with an initial commit and user modifications.
+func setupGitTestRepo(t *testing.T, fileName, initialContent, userContent string) *gitTestRepo {
+	t.Helper()
+
 	tmpDir := t.TempDir()
 
-	// Initialize git repository
+	// Initialize git repository.
 	repo, err := git.PlainInit(tmpDir, false)
 	require.NoError(t, err)
 
 	worktree, err := repo.Worktree()
 	require.NoError(t, err)
 
-	// Create initial file and commit (this is the "base")
-	initialContent := "# Config\nversion: 1.0\nname: test\n"
-	configPath := filepath.Join(tmpDir, "config.yaml")
+	// Create initial file and commit (this is the "base").
+	configPath := filepath.Join(tmpDir, fileName)
 	err = os.WriteFile(configPath, []byte(initialContent), 0o644)
 	require.NoError(t, err)
 
-	_, err = worktree.Add("config.yaml")
+	_, err = worktree.Add(fileName)
 	require.NoError(t, err)
 
 	_, err = worktree.Commit("Initial commit", &git.CommitOptions{
@@ -41,17 +48,30 @@ func TestProcessorWithGitStorage(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// User modifies the file (adds custom section)
-	userContent := "# Config\nversion: 1.0\nname: test\n\n# User's custom section\ncustom: value\n"
+	// User modifies the file.
 	err = os.WriteFile(configPath, []byte(userContent), 0o644)
 	require.NoError(t, err)
 
-	// Create processor and setup git storage
+	// Create processor and setup git storage.
 	processor := NewProcessor()
 	err = processor.SetupGitStorage(tmpDir, "HEAD")
 	require.NoError(t, err)
 
-	// Simulate template update (new version adds a new section)
+	return &gitTestRepo{
+		tmpDir:     tmpDir,
+		configPath: configPath,
+		processor:  processor,
+	}
+}
+
+// TestProcessorWithGitStorage tests the full update workflow with git storage.
+func TestProcessorWithGitStorage(t *testing.T) {
+	initialContent := "# Config\nversion: 1.0\nname: test\n"
+	userContent := "# Config\nversion: 1.0\nname: test\n\n# User's custom section\ncustom: value\n"
+
+	testRepo := setupGitTestRepo(t, "config.yaml", initialContent, userContent)
+
+	// Simulate template update (new version adds a new section).
 	templateFile := File{
 		Path:        "config.yaml",
 		Content:     "# Config\nversion: 2.0\nname: test\n\n# New feature from template\nfeature: enabled\n",
@@ -59,18 +79,18 @@ func TestProcessorWithGitStorage(t *testing.T) {
 		Permissions: 0o644,
 	}
 
-	// Process file in update mode
-	err = processor.ProcessFile(templateFile, tmpDir, false, true, nil, nil)
+	// Process file in update mode.
+	err := testRepo.processor.ProcessFile(templateFile, testRepo.tmpDir, false, true, nil, nil)
 	require.NoError(t, err)
 
-	// Read result
-	mergedContent, err := os.ReadFile(configPath)
+	// Read result.
+	mergedContent, err := os.ReadFile(testRepo.configPath)
 	require.NoError(t, err)
 
 	merged := string(mergedContent)
 
-	// Verify merge results
-	// Should have: new version (from template), user's custom section, and new feature
+	// Verify merge results.
+	// Should have: new version (from template), user's custom section, and new feature.
 	assert.Contains(t, merged, "version: 2.0", "Should have new version from template")
 	assert.Contains(t, merged, "custom: value", "Should preserve user's custom section")
 	assert.Contains(t, merged, "feature: enabled", "Should have new feature from template")
@@ -175,63 +195,31 @@ func TestProcessorWithoutGitStorage(t *testing.T) {
 
 // TestProcessorWithGitStorage_TemplateFile tests merging with template processing (IsTemplate=true).
 func TestProcessorWithGitStorage_TemplateFile(t *testing.T) {
-	// Create a temporary directory for our git repo
-	tmpDir := t.TempDir()
-
-	// Initialize git repository
-	repo, err := git.PlainInit(tmpDir, false)
-	require.NoError(t, err)
-
-	worktree, err := repo.Worktree()
-	require.NoError(t, err)
-
-	// Create initial file and commit (this is the "base")
 	initialContent := "# Config\nversion: 1.0\n"
-	configPath := filepath.Join(tmpDir, "config.yaml")
-	err = os.WriteFile(configPath, []byte(initialContent), 0o644)
-	require.NoError(t, err)
-
-	_, err = worktree.Add("config.yaml")
-	require.NoError(t, err)
-
-	_, err = worktree.Commit("Initial commit", &git.CommitOptions{
-		Author: &object.Signature{
-			Name:  "Test",
-			Email: "test@example.com",
-		},
-	})
-	require.NoError(t, err)
-
-	// User modifies the file (adds custom section)
 	userContent := "# Config\nversion: 1.0\ncustom: user-value\n"
-	err = os.WriteFile(configPath, []byte(userContent), 0o644)
-	require.NoError(t, err)
 
-	// Create processor and setup git storage
-	processor := NewProcessor()
-	err = processor.SetupGitStorage(tmpDir, "HEAD")
-	require.NoError(t, err)
+	testRepo := setupGitTestRepo(t, "config.yaml", initialContent, userContent)
 
-	// Template file with IsTemplate=true
-	// Using simple Go template syntax that doesn't require variables
+	// Template file with IsTemplate=true.
+	// Using simple Go template syntax that doesn't require variables.
 	templateFile := File{
 		Path:        "config.yaml",
 		Content:     "# Config\nversion: 2.0\nfeature: enabled\n",
-		IsTemplate:  true, // This will trigger template processing code path
+		IsTemplate:  true, // This will trigger template processing code path.
 		Permissions: 0o644,
 	}
 
-	// Process file in update mode
-	err = processor.ProcessFile(templateFile, tmpDir, false, true, nil, nil)
+	// Process file in update mode.
+	err := testRepo.processor.ProcessFile(templateFile, testRepo.tmpDir, false, true, nil, nil)
 	require.NoError(t, err)
 
-	// Read result
-	mergedContent, err := os.ReadFile(configPath)
+	// Read result.
+	mergedContent, err := os.ReadFile(testRepo.configPath)
 	require.NoError(t, err)
 
 	merged := string(mergedContent)
 
-	// Verify merge results
+	// Verify merge results.
 	assert.Contains(t, merged, "version: 2.0", "Should have new version from template")
 	assert.Contains(t, merged, "custom: user-value", "Should preserve user's custom value")
 	assert.Contains(t, merged, "feature: enabled", "Should have new feature from template")
@@ -239,44 +227,12 @@ func TestProcessorWithGitStorage_TemplateFile(t *testing.T) {
 
 // TestProcessorWithGitStorage_MergeConflict tests conflict detection.
 func TestProcessorWithGitStorage_MergeConflict(t *testing.T) {
-	// Create a temporary directory for our git repo
-	tmpDir := t.TempDir()
-
-	// Initialize git repository
-	repo, err := git.PlainInit(tmpDir, false)
-	require.NoError(t, err)
-
-	worktree, err := repo.Worktree()
-	require.NoError(t, err)
-
-	// Create initial file and commit (this is the "base")
 	initialContent := "setting: original\n"
-	configPath := filepath.Join(tmpDir, "config.yaml")
-	err = os.WriteFile(configPath, []byte(initialContent), 0o644)
-	require.NoError(t, err)
-
-	_, err = worktree.Add("config.yaml")
-	require.NoError(t, err)
-
-	_, err = worktree.Commit("Initial commit", &git.CommitOptions{
-		Author: &object.Signature{
-			Name:  "Test",
-			Email: "test@example.com",
-		},
-	})
-	require.NoError(t, err)
-
-	// User modifies the same setting
 	userContent := "setting: user-change\n"
-	err = os.WriteFile(configPath, []byte(userContent), 0o644)
-	require.NoError(t, err)
 
-	// Create processor and setup git storage
-	processor := NewProcessor()
-	err = processor.SetupGitStorage(tmpDir, "HEAD")
-	require.NoError(t, err)
+	testRepo := setupGitTestRepo(t, "config.yaml", initialContent, userContent)
 
-	// Template also modifies the same setting (conflict!)
+	// Template also modifies the same setting (conflict!).
 	templateFile := File{
 		Path:        "config.yaml",
 		Content:     "setting: template-change\n",
@@ -284,13 +240,13 @@ func TestProcessorWithGitStorage_MergeConflict(t *testing.T) {
 		Permissions: 0o644,
 	}
 
-	// Process file in update mode - should detect conflict
-	err = processor.ProcessFile(templateFile, tmpDir, false, true, nil, nil)
+	// Process file in update mode - should detect conflict.
+	err := testRepo.processor.ProcessFile(templateFile, testRepo.tmpDir, false, true, nil, nil)
 
-	// Should error due to conflict or merge failure
+	// Should error due to conflict or merge failure.
 	assert.Error(t, err)
 	// The error could be either "merge conflict" (if conflicts detected after merge)
-	// or "three-way merge failed" (if merge fails during execution)
+	// or "three-way merge failed" (if merge fails during execution).
 	errorMsg := err.Error()
 	assert.True(t,
 		strings.Contains(errorMsg, "merge conflict") || strings.Contains(errorMsg, "three-way merge failed"),

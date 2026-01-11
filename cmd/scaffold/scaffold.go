@@ -1,3 +1,4 @@
+//nolint:revive // file-length-limit: scaffold command has many interconnected functions
 package scaffold
 
 import (
@@ -462,6 +463,8 @@ func selectTemplateByName(
 }
 
 // executeTemplateGeneration executes the template generation with the selected configuration.
+//
+//nolint:revive // argument-limit: requires all generation context
 func executeTemplateGeneration(
 	selectedConfig *templates.Configuration,
 	targetDir string,
@@ -608,6 +611,8 @@ func printFilePath(targetDir, renderedPath string) error {
 }
 
 // executeTemplateWithoutTargetDir handles template execution when no target directory is provided.
+//
+//nolint:revive // argument-limit: requires all generation context for interactive mode
 func executeTemplateWithoutTargetDir(
 	selectedConfig *templates.Configuration,
 	force bool,
@@ -832,6 +837,8 @@ func findScaffoldFilesInDirectory(path string, scaffoldPaths []string) ([]string
 }
 
 // validateScaffoldFile validates a single scaffold.yaml file.
+//
+//nolint:revive,funlen // function-length: validation logic with detailed error messages
 func validateScaffoldFile(scaffoldPath string) error {
 	// Read scaffold file
 	scaffoldData, err := os.ReadFile(scaffoldPath)

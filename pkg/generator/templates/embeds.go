@@ -12,6 +12,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	// MagicCommentMaxLines is the number of lines to scan for atmos:template magic comments.
+	magicCommentMaxLines = 10
+	// DefaultFilePermissions is the default permission for generated files.
+	defaultFilePermissions = 0o644
+)
+
 // Configuration represents a template configuration loaded from the embedded filesystem.
 // It contains metadata about a scaffold template including its name, description, and
 // the collection of files to be generated. Key fields:
@@ -158,11 +165,11 @@ func loadConfiguration(templatePath string) (*Configuration, error) {
 var templateMagicCommentPattern = regexp.MustCompile(`(?i)(?:^|//|#|/\*|<!--)\s*atmos:template\s*(?:\*/|-->)?`)
 
 // hasTemplateMagicComment checks if the content contains an atmos:template magic comment
-// in the first maxLines lines of the file.
-func hasTemplateMagicComment(content string, maxLines int) bool {
+// in the first magicCommentMaxLines lines of the file.
+func hasTemplateMagicComment(content string) bool {
 	lines := strings.Split(content, "\n")
-	if len(lines) > maxLines {
-		lines = lines[:maxLines]
+	if len(lines) > magicCommentMaxLines {
+		lines = lines[:magicCommentMaxLines]
 	}
 
 	for _, line := range lines {
@@ -282,11 +289,11 @@ func processFileEntry(templatePath, filePath, entryName string) ([]File, error) 
 	// This avoids false positives from files that incidentally contain "{{"
 	// (e.g., JSON, code examples, documentation) while allowing explicit
 	// template marking via magic comments.
-	isTemplate := strings.HasSuffix(entryName, ".tmpl") || hasTemplateMagicComment(contentStr, 10)
+	isTemplate := strings.HasSuffix(entryName, ".tmpl") || hasTemplateMagicComment(contentStr)
 
 	// Strip the magic comment from the content if present
 	// This ensures it doesn't appear in generated output
-	if hasTemplateMagicComment(contentStr, 10) {
+	if hasTemplateMagicComment(contentStr) {
 		contentStr = stripTemplateMagicComment(contentStr)
 	}
 
@@ -295,7 +302,7 @@ func processFileEntry(templatePath, filePath, entryName string) ([]File, error) 
 		Content:     contentStr,
 		IsDirectory: false,
 		IsTemplate:  isTemplate,
-		Permissions: 0o644,
+		Permissions: defaultFilePermissions,
 	}
 
 	return []File{file}, nil

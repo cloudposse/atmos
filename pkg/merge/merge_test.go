@@ -814,8 +814,8 @@ func TestThreeWayMerge_TooManyChanges(t *testing.T) {
 		t.Fatal("Expected error for too many changes")
 	}
 
-	if !strings.Contains(err.Error(), "too many changes detected") {
-		t.Errorf("Expected error about too many changes, got: %v", err)
+	if !errors.Is(err, errUtils.ErrMergeThresholdExceeded) {
+		t.Errorf("Expected ErrMergeThresholdExceeded, got: %v", err)
 	}
 }
 

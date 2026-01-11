@@ -14,14 +14,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/generator/types"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Color constants for consistent styling using lipgloss named colors.
@@ -36,6 +38,9 @@ const (
 
 // ScaffoldConfigFileName is the name of the scaffold configuration file.
 const ScaffoldConfigFileName = "scaffold.yaml"
+
+// dirPermissions is the file mode for creating directories.
+const dirPermissions = 0o755
 
 // ScaffoldConfigDir is the directory name for user scaffold configuration.
 const ScaffoldConfigDir = ".atmos"
@@ -67,6 +72,8 @@ type Config map[string]interface{}
 
 // LoadScaffoldConfigFromContent loads scaffold configuration from YAML content.
 func LoadScaffoldConfigFromContent(content string) (*ScaffoldConfig, error) {
+	defer perf.Track(nil, "config.LoadScaffoldConfigFromContent")()
+
 	var scaffoldConfig ScaffoldConfig
 	if err := yaml.Unmarshal([]byte(content), &scaffoldConfig); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal scaffold config: %w", err)
@@ -77,6 +84,8 @@ func LoadScaffoldConfigFromContent(content string) (*ScaffoldConfig, error) {
 
 // LoadScaffoldConfigFromFile loads scaffold configuration schema from the specified YAML file using Viper, returning a pointer to ScaffoldConfig and an error on read or unmarshal failures.
 func LoadScaffoldConfigFromFile(configPath string) (*ScaffoldConfig, error) {
+	defer perf.Track(nil, "config.LoadScaffoldConfigFromFile")()
+
 	// Create a new Viper instance for this specific config file
 	v := viper.New()
 	v.SetConfigFile(configPath)
@@ -98,6 +107,8 @@ func LoadScaffoldConfigFromFile(configPath string) (*ScaffoldConfig, error) {
 
 // LoadUserValues loads user values from the .atmos/scaffold.yaml file within the provided scaffoldPath and returns them as a map along with any error encountered; returns an empty map and nil error if the file does not exist; returns a wrapped error on read or unmarshal failures.
 func LoadUserValues(scaffoldPath string) (map[string]interface{}, error) {
+	defer perf.Track(nil, "config.LoadUserValues")()
+
 	// Create .atmos directory path
 	atmosDir := filepath.Join(scaffoldPath, ScaffoldConfigDir)
 	valuesPath := filepath.Join(atmosDir, ScaffoldConfigFileName)
@@ -128,23 +139,29 @@ func LoadUserValues(scaffoldPath string) (map[string]interface{}, error) {
 
 // SaveUserValues saves the provided values to the .atmos/scaffold.yaml file within scaffoldPath using the new format structure and returns an error on failure.
 func SaveUserValues(scaffoldPath string, values map[string]interface{}) error {
+	defer perf.Track(nil, "config.SaveUserValues")()
+
 	// Always save with new format structure, even if template_id is empty
 	return SaveUserConfig(scaffoldPath, "", values)
 }
 
 // SaveUserConfig saves user configuration with the provided templateID and values to scaffoldPath and returns an error on failure.
 func SaveUserConfig(scaffoldPath string, templateID string, values map[string]interface{}) error {
+	defer perf.Track(nil, "config.SaveUserConfig")()
+
 	return SaveUserConfigWithBaseRef(scaffoldPath, templateID, "", values)
 }
 
 // SaveUserConfigWithBaseRef saves user configuration with the provided templateID, baseRef, and values to scaffoldPath and returns an error on failure.
 func SaveUserConfigWithBaseRef(scaffoldPath string, templateID string, baseRef string, values map[string]interface{}) error {
+	defer perf.Track(nil, "config.SaveUserConfigWithBaseRef")()
+
 	// Create .atmos directory path
 	atmosDir := filepath.Join(scaffoldPath, ScaffoldConfigDir)
 	valuesPath := filepath.Join(atmosDir, ScaffoldConfigFileName)
 
 	// Ensure the .atmos directory exists
-	if err := os.MkdirAll(atmosDir, 0o755); err != nil {
+	if err := os.MkdirAll(atmosDir, dirPermissions); err != nil {
 		return fmt.Errorf("failed to create .atmos directory: %w", err)
 	}
 
@@ -179,6 +196,8 @@ func SaveUserConfigWithBaseRef(scaffoldPath string, templateID string, baseRef s
 
 // LoadUserConfig loads user configuration from .atmos/scaffold.yaml within the specified scaffoldPath, returning a pointer to UserConfig and an error; returns nil, nil if the config file does not exist.
 func LoadUserConfig(scaffoldPath string) (*UserConfig, error) {
+	defer perf.Track(nil, "config.LoadUserConfig")()
+
 	atmosDir := filepath.Join(scaffoldPath, ScaffoldConfigDir)
 	valuesPath := filepath.Join(atmosDir, ScaffoldConfigFileName)
 
@@ -204,11 +223,13 @@ func LoadUserConfig(scaffoldPath string) (*UserConfig, error) {
 
 // DeepMerge merges scaffold configuration defaults with user values.
 func DeepMerge(scaffoldConfig *ScaffoldConfig, userValues map[string]interface{}) map[string]interface{} {
+	defer perf.Track(nil, "config.DeepMerge")()
+
 	merged := make(map[string]interface{})
 
 	// Start with scaffold defaults
-	for key, field := range scaffoldConfig.Fields {
-		merged[key] = field.Default
+	for key := range scaffoldConfig.Fields {
+		merged[key] = scaffoldConfig.Fields[key].Default
 	}
 
 	// Override with user values
@@ -221,7 +242,9 @@ func DeepMerge(scaffoldConfig *ScaffoldConfig, userValues map[string]interface{}
 
 // GetConfigPath returns the path where the config directory should be stored based on the user's home directory and returns an error if the user home directory cannot be determined.
 func GetConfigPath() (string, error) {
-	homeDir, err := os.UserHomeDir()
+	defer perf.Track(nil, "config.GetConfigPath")()
+
+	homeDir, err := homedir.Dir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get user home directory: %w", err)
 	}
@@ -231,6 +254,8 @@ func GetConfigPath() (string, error) {
 
 // PromptForScaffoldConfig prompts the user for scaffold configuration values using a dynamic form built from the provided ScaffoldConfig; userValues supplies initial values and is populated with results; returns an error on failure.
 func PromptForScaffoldConfig(scaffoldConfig *ScaffoldConfig, userValues map[string]interface{}) error {
+	defer perf.Track(nil, "config.PromptForScaffoldConfig")()
+
 	// Initialize form values with user values and defaults
 	formValues := initializeFormValues(scaffoldConfig, userValues)
 
@@ -253,9 +278,9 @@ func initializeFormValues(scaffoldConfig *ScaffoldConfig, userValues map[string]
 	formValues := make(map[string]interface{})
 
 	// Set defaults from scaffold config
-	for key, field := range scaffoldConfig.Fields {
-		if field.Default != nil {
-			formValues[key] = field.Default
+	for key := range scaffoldConfig.Fields {
+		if scaffoldConfig.Fields[key].Default != nil {
+			formValues[key] = scaffoldConfig.Fields[key].Default
 		}
 	}
 
@@ -277,7 +302,11 @@ type fieldItem struct {
 // Returns the form and value getters for extracting values after submission.
 func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]interface{}) (*huh.Form, map[string]func() interface{}) {
 	// Should we run in accessible mode?
-	accessible, _ := strconv.ParseBool(os.Getenv("ACCESSIBLE"))
+	// Note: ACCESSIBLE is a standard environment variable used by the huh form library
+	// to enable accessible mode for screen readers. Using viper for consistency.
+	v := viper.New()
+	_ = v.BindEnv("ACCESSIBLE")
+	accessible := v.GetBool("ACCESSIBLE")
 
 	// Group fields by type
 	basicFields, configFields, advancedFields := groupFieldsByType(scaffoldConfig)
@@ -310,7 +339,8 @@ func buildConfigForm(scaffoldConfig *ScaffoldConfig, formValues map[string]inter
 func groupFieldsByType(scaffoldConfig *ScaffoldConfig) ([]fieldItem, []fieldItem, []fieldItem) {
 	var basicFields, configFields, advancedFields []fieldItem
 
-	for key, field := range scaffoldConfig.Fields {
+	for key := range scaffoldConfig.Fields {
+		field := scaffoldConfig.Fields[key]
 		item := fieldItem{key: key, field: field}
 		switch field.Type {
 		case "input", "text":
@@ -331,10 +361,10 @@ func groupFieldsByType(scaffoldConfig *ScaffoldConfig) ([]fieldItem, []fieldItem
 func createFormGroup(items []fieldItem, formValues map[string]interface{}, valueGetters map[string]func() interface{}) *huh.Group {
 	var groupFields []huh.Field
 
-	for _, item := range items {
-		field, getter := createField(item.key, item.field, formValues)
+	for i := range items {
+		field, getter := createField(items[i].key, items[i].field, formValues)
 		groupFields = append(groupFields, field)
-		valueGetters[item.key] = getter
+		valueGetters[items[i].key] = getter
 	}
 
 	return huh.NewGroup(groupFields...)
@@ -356,8 +386,10 @@ func extractFormValues(userValues map[string]interface{}, valueGetters map[strin
 	}
 }
 
-// createField creates a huh field based on the field definition
+// createField creates a huh field based on the field definition.
 // It returns the field and a function to get the updated value.
+//
+//nolint:gocognit,revive,cyclop,funlen // complex TUI field factory handling multiple field types
 func createField(key string, field FieldDefinition, values map[string]interface{}) (huh.Field, func() interface{}) {
 	// Get current value or default
 	currentValue := values[key]
@@ -380,7 +412,7 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 		if field.Required {
 			input = input.Validate(func(s string) error {
 				if s == "" {
-					return fmt.Errorf("%s is required", field.Label)
+					return fmt.Errorf("%w: %s", errUtils.ErrGeneratorFieldRequired, field.Label)
 				}
 				return nil
 			})
@@ -408,7 +440,7 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 		if field.Required {
 			selectField = selectField.Validate(func(s string) error {
 				if s == "" {
-					return fmt.Errorf("%s is required", field.Label)
+					return fmt.Errorf("%w: %s", errUtils.ErrGeneratorFieldRequired, field.Label)
 				}
 				return nil
 			})
@@ -444,7 +476,7 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 		if field.Required {
 			multiSelect = multiSelect.Validate(func(s []string) error {
 				if len(s) == 0 {
-					return fmt.Errorf("at least one %s is required", field.Label)
+					return fmt.Errorf("%w: at least one %s", errUtils.ErrGeneratorFieldRequired, field.Label)
 				}
 				return nil
 			})
@@ -477,31 +509,36 @@ func createField(key string, field FieldDefinition, values map[string]interface{
 
 // GetConfigurationSummary returns table rows and header representing scaffold configuration, merged values, and their sources.
 func GetConfigurationSummary(scaffoldConfig *ScaffoldConfig, mergedValues map[string]interface{}, valueSources map[string]string) ([][]string, []string) {
+	defer perf.Track(nil, "config.GetConfigurationSummary")()
+
 	// Prepare table rows
 	var rows [][]string
 	for key := range scaffoldConfig.Fields {
-		if value, exists := mergedValues[key]; exists {
-			var valueStr string
-			switch v := value.(type) {
-			case []string:
-				valueStr = strings.Join(v, ", ")
-			case bool:
-				valueStr = fmt.Sprintf("%t", v)
-			default:
-				valueStr = fmt.Sprintf("%v", v)
-			}
-
-			source := valueSources[key]
-			if source == "" {
-				source = "default"
-			}
-
-			rows = append(rows, []string{
-				key,
-				valueStr,
-				source,
-			})
+		value, exists := mergedValues[key]
+		if !exists {
+			continue
 		}
+
+		var valueStr string
+		switch v := value.(type) {
+		case []string:
+			valueStr = strings.Join(v, ", ")
+		case bool:
+			valueStr = fmt.Sprintf("%t", v)
+		default:
+			valueStr = fmt.Sprintf("%v", v)
+		}
+
+		source := valueSources[key]
+		if source == "" {
+			source = "default"
+		}
+
+		rows = append(rows, []string{
+			key,
+			valueStr,
+			source,
+		})
 	}
 
 	header := []string{"Setting", "Value", "Source"}
@@ -510,6 +547,8 @@ func GetConfigurationSummary(scaffoldConfig *ScaffoldConfig, mergedValues map[st
 
 // ReadScaffoldConfig reads scaffold configuration from atmos.yaml at the provided targetPath; returns an empty map and nil error when the file does not exist; returns a wrapped error when reading or parsing fails.
 func ReadScaffoldConfig(targetPath string) (map[string]interface{}, error) {
+	defer perf.Track(nil, "config.ReadScaffoldConfig")()
+
 	configPath := filepath.Join(targetPath, "atmos.yaml")
 
 	// Check if atmos.yaml exists
@@ -537,6 +576,8 @@ func ReadScaffoldConfig(targetPath string) (map[string]interface{}, error) {
 // this functionality will be integrated into the main atmos configuration handling
 // system which has robust support for reading and validating atmos.yaml files.
 func ReadAtmosScaffoldSection(targetPath string) (map[string]interface{}, error) {
+	defer perf.Track(nil, "config.ReadAtmosScaffoldSection")()
+
 	configPath := filepath.Join(targetPath, "atmos.yaml")
 
 	// Check if atmos.yaml exists
@@ -562,7 +603,9 @@ func ReadAtmosScaffoldSection(targetPath string) (map[string]interface{}, error)
 
 	scaffoldMap, ok := scaffoldSection.(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("scaffold section is not a valid configuration")
+		return nil, errUtils.Build(errUtils.ErrInvalidScaffoldSection).
+			WithExplanation("Scaffold section is not a valid configuration").
+			Err()
 	}
 
 	return scaffoldMap, nil
@@ -570,6 +613,8 @@ func ReadAtmosScaffoldSection(targetPath string) (map[string]interface{}, error)
 
 // HasScaffoldConfig checks if a configuration contains a scaffold.yaml file.
 func HasScaffoldConfig(files []types.File) bool {
+	defer perf.Track(nil, "config.HasScaffoldConfig")()
+
 	for _, file := range files {
 		if file.Path == ScaffoldConfigFileName {
 			return true
@@ -580,6 +625,8 @@ func HasScaffoldConfig(files []types.File) bool {
 
 // HasUserConfig checks if a scaffold template directory at the specified scaffoldPath contains a user configuration file, returning true if the file exists.
 func HasUserConfig(scaffoldPath string) bool {
+	defer perf.Track(nil, "config.HasUserConfig")()
+
 	userConfigPath := filepath.Join(scaffoldPath, ScaffoldConfigDir, ScaffoldConfigFileName)
 	_, err := os.Stat(userConfigPath)
 	return err == nil

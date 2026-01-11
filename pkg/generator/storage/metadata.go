@@ -11,6 +11,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// File permission constants.
+const (
+	dirPermissions  = 0o755 // Directory permissions for metadata directories
+	filePermissions = 0o600 // File permissions for metadata files (user read/write only)
+)
+
 // GenerationMetadata tracks what was generated from a template.
 // This is stored in .atmos/init/metadata.yaml (for init) or
 // .atmos/scaffold/metadata.yaml (for scaffold) to enable updates.
@@ -88,7 +94,7 @@ func (s *MetadataStorage) Save(metadata *GenerationMetadata) error {
 
 	// Ensure parent directory exists
 	dir := filepath.Dir(s.metadataPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, dirPermissions); err != nil {
 		return fmt.Errorf("failed to create metadata directory %s: %w", dir, err)
 	}
 
@@ -98,8 +104,8 @@ func (s *MetadataStorage) Save(metadata *GenerationMetadata) error {
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	// Write to file
-	if err := os.WriteFile(s.metadataPath, data, 0o644); err != nil {
+	// Write to file with restricted permissions for security (metadata contains template info).
+	if err := os.WriteFile(s.metadataPath, data, filePermissions); err != nil {
 		return fmt.Errorf("failed to write metadata file %s: %w", s.metadataPath, err)
 	}
 

@@ -121,10 +121,7 @@ func (g *ScaffoldGenerator) Validate(opts ValidateOptions) error {
 	}
 
 	// Validate all files.
-	results, err := g.validateAllScaffoldFiles(scaffoldPaths)
-	if err != nil {
-		return err
-	}
+	results := g.validateAllScaffoldFiles(scaffoldPaths)
 
 	// Render results.
 	if err := g.ui.RenderValidationResults(results); err != nil {
@@ -180,6 +177,8 @@ func (g *ScaffoldGenerator) selectTemplate(
 }
 
 // executeGeneration executes the actual template generation.
+//
+//nolint:gocritic // hugeParam: interface-compatible signature
 func (g *ScaffoldGenerator) executeGeneration(
 	config templates.Configuration,
 	targetDir string,
@@ -256,7 +255,7 @@ func (g *ScaffoldGenerator) determineScaffoldPathsToValidate(path string) ([]str
 }
 
 // validateAllScaffoldFiles validates multiple scaffold files.
-func (g *ScaffoldGenerator) validateAllScaffoldFiles(scaffoldPaths []string) ([]ValidationResult, error) {
+func (g *ScaffoldGenerator) validateAllScaffoldFiles(scaffoldPaths []string) []ValidationResult {
 	results := make([]ValidationResult, 0, len(scaffoldPaths))
 
 	for _, scaffoldPath := range scaffoldPaths {
@@ -277,5 +276,5 @@ func (g *ScaffoldGenerator) validateAllScaffoldFiles(scaffoldPaths []string) ([]
 		}
 	}
 
-	return results, nil
+	return results
 }
