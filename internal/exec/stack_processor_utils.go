@@ -2,6 +2,7 @@ package exec
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -57,32 +58,48 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	// Use ProcessStackLocals which handles global and section-level scopes.
 	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: failed to process stack locals: %w", errUtils.ErrInvalidStackManifest, err)
 	}
 
 	return localsCtx.MergeForTemplateContext(), nil
 }
 
 // extractAndAddLocalsToContext extracts locals from YAML and adds them to the template context.
-// Returns the updated context (or original if extraction fails).
+// Returns the updated context and any error encountered during locals extraction.
+// Note: The "locals" key in context is reserved for file-scoped locals and will override
+// any user-provided "locals" key in the import context.
+// For template files (.tmpl), YAML parse errors are logged and the function continues
+// without locals, since template files may contain Go template syntax that isn't valid YAML
+// until after template processing.
 func extractAndAddLocalsToContext(
 	atmosConfig *schema.AtmosConfiguration,
 	yamlContent string,
 	filePath string,
 	relativeFilePath string,
 	context map[string]any,
-) map[string]any {
+) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.extractAndAddLocalsToContext")()
 
 	resolvedLocals, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
 	if localsErr != nil {
-		// Log at Debug level so users can discover locals syntax errors during development.
-		log.Debug("Failed to extract locals from file", "file", relativeFilePath, "error", localsErr)
-		return context
+		// For template files (.tmpl), YAML parse errors are expected since the raw content
+		// may contain Go template syntax that isn't valid YAML until after processing.
+		// Log the error and continue without locals - template processing will happen next.
+		if strings.HasSuffix(filePath, u.TemplateExtension) {
+			log.Trace("Skipping locals extraction for template file with invalid YAML", "file", relativeFilePath, "error", localsErr)
+			return context, nil
+		}
+		// Circular dependencies in locals are handled gracefully - log a warning and continue
+		// without locals. This allows the rest of the stack to be processed.
+		if stderrors.Is(localsErr, errUtils.ErrLocalsCircularDep) {
+			log.Warn("Circular dependency in locals, skipping locals resolution", "file", relativeFilePath, "error", localsErr)
+			return context, nil
+		}
+		return context, localsErr
 	}
 
 	if len(resolvedLocals) == 0 {
-		return context
+		return context, nil
 	}
 
 	// Add resolved locals to the template context.
@@ -92,7 +109,7 @@ func extractAndAddLocalsToContext(
 	context["locals"] = resolvedLocals
 	log.Trace("Extracted and resolved locals", "file", relativeFilePath, "count", len(resolvedLocals))
 
-	return context
+	return context, nil
 }
 
 // stackProcessResult holds the result of processing a single stack in parallel.
@@ -499,7 +516,14 @@ func processYAMLConfigFileWithContextInternal(
 	//         vars:
 	//           name: "{{ .locals.name_prefix }}"
 	if !skipTemplatesProcessingInImports {
-		context = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
+		var localsErr error
+		context, localsErr = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
+		if localsErr != nil {
+			if mergeContext != nil {
+				return nil, nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest '%s'", relativeFilePath))
+			}
+			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("stack manifest '%s': %w", relativeFilePath, localsErr)
+		}
 	}
 
 	stackManifestTemplatesProcessed := stackYamlConfig

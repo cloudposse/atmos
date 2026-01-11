@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -33,14 +36,13 @@ that would be available to that component (global + component-type-specific).`,
 
   # Query specific values
   atmos describe locals --query '.["deploy/dev"].locals.namespace'`,
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Args:               cobra.MaximumNArgs(1),
+	Args: cobra.MaximumNArgs(1),
 	RunE: getRunnableDescribeLocalsCmd(getRunnableDescribeLocalsCmdProps{
-		checkAtmosConfig:       checkAtmosConfig,
-		processCommandLineArgs: exec.ProcessCommandLineArgs,
-		initCliConfig:          cfg.InitCliConfig,
-		validateStacks:         exec.ValidateStacks,
-		newDescribeLocalsExec:  exec.NewDescribeLocalsExec(),
+		checkAtmosConfig:             checkAtmosConfig,
+		processCommandLineArgs:       exec.ProcessCommandLineArgs,
+		initCliConfig:                cfg.InitCliConfig,
+		validateStacks:               exec.ValidateStacks,
+		newDescribeLocalsExecFactory: exec.NewDescribeLocalsExec,
 	}),
 }
 
@@ -52,9 +54,9 @@ type getRunnableDescribeLocalsCmdProps struct {
 		args []string,
 		additionalArgsAndFlags []string,
 	) (schema.ConfigAndStacksInfo, error)
-	initCliConfig         func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
-	validateStacks        func(atmosConfig *schema.AtmosConfiguration) error
-	newDescribeLocalsExec exec.DescribeLocalsExec
+	initCliConfig                func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
+	validateStacks               func(atmosConfig *schema.AtmosConfiguration) error
+	newDescribeLocalsExecFactory func() exec.DescribeLocalsExec
 }
 
 func getRunnableDescribeLocalsCmd(
@@ -93,7 +95,14 @@ func getRunnableDescribeLocalsCmd(
 			return err
 		}
 
-		err = g.newDescribeLocalsExec.Execute(&atmosConfig, describeArgs)
+		// Fail fast if component is specified without --stack.
+		if describeArgs.Component != "" && describeArgs.FilterByStack == "" {
+			return errUtils.ErrStackRequiredWithComponent
+		}
+
+		// Create executor lazily to avoid init-time side effects.
+		executor := g.newDescribeLocalsExecFactory()
+		err = executor.Execute(&atmosConfig, describeArgs)
 		return err
 	}
 }
@@ -104,28 +113,28 @@ func setCliArgsForDescribeLocalsCli(flags *pflag.FlagSet, args *exec.DescribeLoc
 	if flags.Changed("stack") {
 		args.FilterByStack, err = flags.GetString("stack")
 		if err != nil {
-			return err
+			return fmt.Errorf("read --stack: %w", err)
 		}
 	}
 
 	if flags.Changed("format") {
 		args.Format, err = flags.GetString("format")
 		if err != nil {
-			return err
+			return fmt.Errorf("read --format: %w", err)
 		}
 	}
 
 	if flags.Changed("file") {
 		args.File, err = flags.GetString("file")
 		if err != nil {
-			return err
+			return fmt.Errorf("read --file: %w", err)
 		}
 	}
 
 	if flags.Changed("query") {
 		args.Query, err = flags.GetString("query")
 		if err != nil {
-			return err
+			return fmt.Errorf("read --query: %w", err)
 		}
 	}
 

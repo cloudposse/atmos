@@ -341,6 +341,25 @@ components:
 
 Use `locals` for intermediate computations and `vars` for values that need to be passed to your components.
 
+## Template Processing Behavior
+
+When a file defines locals, template processing is automatically enabled for that file. This means any `{{ ... }}` syntax in the file will be processed as Go templates.
+
+:::warning Conflicting Template Syntax
+If your YAML files contain non-Atmos template syntax (such as Helm's `{{ ... }}`), adding locals will cause those templates to be processed incorrectly. To prevent this, you can disable template processing for specific imports:
+
+```yaml
+import:
+  - path: catalog/helm-values
+    skip_templates_processing: true  # Preserves {{ ... }} syntax as literal text
+```
+
+This is useful when importing files that contain:
+- Helm chart values with Go template syntax
+- Other templating systems that use `{{ }}`
+- Literal strings that happen to contain template-like patterns
+:::
+
 ## Best Practices
 
 1. **Use for Repetition:** If you find yourself repeating the same value or expression, extract it to a local.

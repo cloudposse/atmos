@@ -15,60 +15,54 @@ import (
 )
 
 func TestDeriveStackFileName(t *testing.T) {
-	tests := []struct {
-		name           string
-		stacksBasePath string
-		filePath       string
-		expected       string
-	}{
-		{
-			name:           "simple file path",
-			stacksBasePath: "/path/to/stacks",
-			filePath:       "/path/to/stacks/dev.yaml",
-			expected:       "dev",
-		},
-		{
-			name:           "nested file path",
-			stacksBasePath: "/path/to/stacks",
-			filePath:       "/path/to/stacks/deploy/dev.yaml",
-			expected:       "deploy/dev",
-		},
-		{
-			name:           "deeply nested file path",
-			stacksBasePath: "/path/to/stacks",
-			filePath:       "/path/to/stacks/org/team/deploy/dev.yaml",
-			expected:       "org/team/deploy/dev",
-		},
-		{
-			name:           "empty base path falls back to filename",
-			stacksBasePath: "",
-			filePath:       "/path/to/stacks/deploy/dev.yaml",
-			expected:       "dev",
-		},
-		{
-			name:           "yml extension",
-			stacksBasePath: "/path/to/stacks",
-			filePath:       "/path/to/stacks/prod.yml",
-			expected:       "prod",
-		},
-		{
-			name:           "file path not under base path returns relative path",
-			stacksBasePath: "/path/to/stacks",
-			filePath:       "/other/location/dev.yaml",
-			expected:       "../../../other/location/dev",
-		},
-	}
+	// Use t.TempDir() for OS-neutral paths.
+	tempDir := t.TempDir()
+	stacksBase := filepath.Join(tempDir, "stacks")
+	otherDir := filepath.Join(tempDir, "other", "location")
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			atmosConfig := &mockAtmosConfig{
-				stacksBaseAbsolutePath: tt.stacksBasePath,
-			}
+	t.Run("simple file path", func(t *testing.T) {
+		atmosConfig := &mockAtmosConfig{stacksBaseAbsolutePath: stacksBase}
+		filePath := filepath.Join(stacksBase, "dev.yaml")
+		result := deriveStackFileName(atmosConfig.toSchema(), filePath)
+		assert.Equal(t, "dev", result)
+	})
 
-			result := deriveStackFileName(atmosConfig.toSchema(), tt.filePath)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+	t.Run("nested file path", func(t *testing.T) {
+		atmosConfig := &mockAtmosConfig{stacksBaseAbsolutePath: stacksBase}
+		filePath := filepath.Join(stacksBase, "deploy", "dev.yaml")
+		result := deriveStackFileName(atmosConfig.toSchema(), filePath)
+		assert.Equal(t, "deploy/dev", result)
+	})
+
+	t.Run("deeply nested file path", func(t *testing.T) {
+		atmosConfig := &mockAtmosConfig{stacksBaseAbsolutePath: stacksBase}
+		filePath := filepath.Join(stacksBase, "org", "team", "deploy", "dev.yaml")
+		result := deriveStackFileName(atmosConfig.toSchema(), filePath)
+		assert.Equal(t, "org/team/deploy/dev", result)
+	})
+
+	t.Run("empty base path falls back to filename", func(t *testing.T) {
+		atmosConfig := &mockAtmosConfig{stacksBaseAbsolutePath: ""}
+		filePath := filepath.Join(stacksBase, "deploy", "dev.yaml")
+		result := deriveStackFileName(atmosConfig.toSchema(), filePath)
+		assert.Equal(t, "dev", result)
+	})
+
+	t.Run("yml extension", func(t *testing.T) {
+		atmosConfig := &mockAtmosConfig{stacksBaseAbsolutePath: stacksBase}
+		filePath := filepath.Join(stacksBase, "prod.yml")
+		result := deriveStackFileName(atmosConfig.toSchema(), filePath)
+		assert.Equal(t, "prod", result)
+	})
+
+	t.Run("file path not under base path returns relative path", func(t *testing.T) {
+		atmosConfig := &mockAtmosConfig{stacksBaseAbsolutePath: stacksBase}
+		filePath := filepath.Join(otherDir, "dev.yaml")
+		result := deriveStackFileName(atmosConfig.toSchema(), filePath)
+		// Result is normalized with forward slashes and contains ".." to traverse up.
+		assert.Contains(t, result, "..")
+		assert.Contains(t, result, "dev")
+	})
 }
 
 func TestDeriveStackName(t *testing.T) {
@@ -297,6 +291,14 @@ vars:
 		assert.Empty(t, result.StackName)
 		assert.Empty(t, result.StackLocals)
 		assert.False(t, result.Found)
+	})
+
+	t.Run("filter matching invalid YAML returns error", func(t *testing.T) {
+		// When filtering by a stack that has YAML errors, return error instead of silently skipping.
+		_, err := processStackFileForLocals(atmosConfig, invalidFile, "invalid")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidStackManifest)
+		assert.Contains(t, err.Error(), "failed to parse YAML")
 	})
 }
 

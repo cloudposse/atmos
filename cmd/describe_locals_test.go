@@ -7,37 +7,25 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// mockDescribeLocalsExec is a mock implementation of DescribeLocalsExec for testing.
-type mockDescribeLocalsExec struct {
-	executeFunc func(atmosConfig *schema.AtmosConfiguration, args *exec.DescribeLocalsArgs) error
-}
-
-func (m *mockDescribeLocalsExec) Execute(atmosConfig *schema.AtmosConfiguration, args *exec.DescribeLocalsArgs) error {
-	if m.executeFunc != nil {
-		return m.executeFunc(atmosConfig, args)
-	}
-	return nil
-}
-
 func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 	t.Run("successful execution", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+
 		checkAtmosConfigCalled := false
 		processCommandLineArgsCalled := false
 		initCliConfigCalled := false
 		validateStacksCalled := false
-		executeCalled := false
 
-		mockExec := &mockDescribeLocalsExec{
-			executeFunc: func(atmosConfig *schema.AtmosConfiguration, args *exec.DescribeLocalsArgs) error {
-				executeCalled = true
-				return nil
-			},
-		}
+		mockExec := exec.NewMockDescribeLocalsExec(ctrl)
+		mockExec.EXPECT().
+			Execute(gomock.Any(), gomock.Any()).
+			Return(nil)
 
 		props := getRunnableDescribeLocalsCmdProps{
 			checkAtmosConfig: func(opts ...AtmosValidateOption) {
@@ -55,7 +43,7 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 				validateStacksCalled = true
 				return nil
 			},
-			newDescribeLocalsExec: mockExec,
+			newDescribeLocalsExecFactory: func() exec.DescribeLocalsExec { return mockExec },
 		}
 
 		runFunc := getRunnableDescribeLocalsCmd(props)
@@ -72,18 +60,20 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 		assert.True(t, processCommandLineArgsCalled, "processCommandLineArgs should be called")
 		assert.True(t, initCliConfigCalled, "initCliConfig should be called")
 		assert.True(t, validateStacksCalled, "validateStacks should be called")
-		assert.True(t, executeCalled, "execute should be called")
 	})
 
 	t.Run("successful execution with component argument", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+
 		var capturedArgs *exec.DescribeLocalsArgs
 
-		mockExec := &mockDescribeLocalsExec{
-			executeFunc: func(atmosConfig *schema.AtmosConfiguration, args *exec.DescribeLocalsArgs) error {
+		mockExec := exec.NewMockDescribeLocalsExec(ctrl)
+		mockExec.EXPECT().
+			Execute(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ *schema.AtmosConfiguration, args *exec.DescribeLocalsArgs) error {
 				capturedArgs = args
 				return nil
-			},
-		}
+			})
 
 		props := getRunnableDescribeLocalsCmdProps{
 			checkAtmosConfig: func(opts ...AtmosValidateOption) {},
@@ -96,7 +86,7 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 			validateStacks: func(atmosConfig *schema.AtmosConfiguration) error {
 				return nil
 			},
-			newDescribeLocalsExec: mockExec,
+			newDescribeLocalsExecFactory: func() exec.DescribeLocalsExec { return mockExec },
 		}
 
 		runFunc := getRunnableDescribeLocalsCmd(props)
@@ -106,11 +96,48 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 		cmd.Flags().String("file", "", "")
 		cmd.Flags().String("query", "", "")
 
+		// Set stack flag (required when component is specified).
+		require.NoError(t, cmd.Flags().Set("stack", "prod"))
+
 		// Pass component as positional argument.
 		err := runFunc(cmd, []string{"vpc"})
 		require.NoError(t, err)
 
+		require.NotNil(t, capturedArgs)
 		assert.Equal(t, "vpc", capturedArgs.Component)
+		assert.Equal(t, "prod", capturedArgs.FilterByStack)
+	})
+
+	t.Run("component without stack returns error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mockExec := exec.NewMockDescribeLocalsExec(ctrl)
+		// No expectation set - Execute should not be called.
+
+		props := getRunnableDescribeLocalsCmdProps{
+			checkAtmosConfig: func(opts ...AtmosValidateOption) {},
+			processCommandLineArgs: func(componentType string, cmd *cobra.Command, args []string, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+				return schema.ConfigAndStacksInfo{}, nil
+			},
+			initCliConfig: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+				return schema.AtmosConfiguration{}, nil
+			},
+			validateStacks: func(atmosConfig *schema.AtmosConfiguration) error {
+				return nil
+			},
+			newDescribeLocalsExecFactory: func() exec.DescribeLocalsExec { return mockExec },
+		}
+
+		runFunc := getRunnableDescribeLocalsCmd(props)
+		cmd := &cobra.Command{}
+		cmd.Flags().String("stack", "", "")
+		cmd.Flags().String("format", "", "")
+		cmd.Flags().String("file", "", "")
+		cmd.Flags().String("query", "", "")
+
+		// Pass component without --stack flag.
+		err := runFunc(cmd, []string{"vpc"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "stack")
 	})
 
 	// Table-driven tests for error cases to avoid code duplication.
@@ -136,6 +163,10 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 
 	for _, tt := range errorTests {
 		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockExec := exec.NewMockDescribeLocalsExec(ctrl)
+			// No expectation set - Execute should not be called for these error cases.
+
 			props := getRunnableDescribeLocalsCmdProps{
 				checkAtmosConfig: func(opts ...AtmosValidateOption) {},
 				processCommandLineArgs: func(componentType string, cmd *cobra.Command, args []string, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
@@ -147,7 +178,7 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 				validateStacks: func(atmosConfig *schema.AtmosConfiguration) error {
 					return tt.validateStacksErr
 				},
-				newDescribeLocalsExec: &mockDescribeLocalsExec{},
+				newDescribeLocalsExecFactory: func() exec.DescribeLocalsExec { return mockExec },
 			}
 
 			runFunc := getRunnableDescribeLocalsCmd(props)
@@ -171,12 +202,13 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 	}
 
 	t.Run("execute error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+
 		expectedErr := errors.New("execute error")
-		mockExec := &mockDescribeLocalsExec{
-			executeFunc: func(atmosConfig *schema.AtmosConfiguration, args *exec.DescribeLocalsArgs) error {
-				return expectedErr
-			},
-		}
+		mockExec := exec.NewMockDescribeLocalsExec(ctrl)
+		mockExec.EXPECT().
+			Execute(gomock.Any(), gomock.Any()).
+			Return(expectedErr)
 
 		props := getRunnableDescribeLocalsCmdProps{
 			checkAtmosConfig: func(opts ...AtmosValidateOption) {},
@@ -189,7 +221,7 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 			validateStacks: func(atmosConfig *schema.AtmosConfiguration) error {
 				return nil
 			},
-			newDescribeLocalsExec: mockExec,
+			newDescribeLocalsExecFactory: func() exec.DescribeLocalsExec { return mockExec },
 		}
 
 		runFunc := getRunnableDescribeLocalsCmd(props)

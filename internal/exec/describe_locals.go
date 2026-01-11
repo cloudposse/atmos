@@ -1,9 +1,11 @@
 package exec
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -236,6 +238,21 @@ type stackFileLocalsResult struct {
 	Found       bool           // Whether the stack matched the filter (even if no locals).
 }
 
+// validateFilteredLocalsResult checks if the filtered result is valid.
+// Returns an error if filtering was requested but no stack was found or stack has no locals.
+func validateFilteredLocalsResult(filterByStack string, stackFound bool, localsMap map[string]any) error {
+	if filterByStack == "" {
+		return nil
+	}
+	if !stackFound {
+		return fmt.Errorf("%w: %s", errUtils.ErrStackNotFound, filterByStack)
+	}
+	if len(localsMap) == 0 {
+		return fmt.Errorf("%w: %s", errUtils.ErrStackHasNoLocals, filterByStack)
+	}
+	return nil
+}
+
 // ExecuteDescribeLocals processes stack manifests and returns the locals for all stacks.
 // It reads the raw YAML files directly since locals are stripped during normal stack processing.
 func ExecuteDescribeLocals(
@@ -267,12 +284,42 @@ func ExecuteDescribeLocals(
 		finalLocalsMap[result.StackName] = result.StackLocals
 	}
 
-	// If filtering and no stack was found, return specific error.
-	if filterByStack != "" && !stackFound {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrStackNotFound, filterByStack)
+	// Validate the result when filtering.
+	if err := validateFilteredLocalsResult(filterByStack, stackFound, finalLocalsMap); err != nil {
+		return nil, err
 	}
 
 	return finalLocalsMap, nil
+}
+
+// parseStackFileYAML reads and parses a stack file's YAML content.
+// Returns the raw config, or nil if the file should be skipped.
+// If filterMatchesFileName is true, parse errors return an error; otherwise they are logged and skipped.
+func parseStackFileYAML(filePath string, filterMatchesFileName bool) (map[string]any, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, errors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to read stack file %s: %w", filePath, err))
+	}
+
+	var rawConfig map[string]any
+	if err := yaml.Unmarshal(content, &rawConfig); err != nil {
+		if filterMatchesFileName {
+			return nil, errors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to parse YAML in %s: %w", filePath, err))
+		}
+		log.Warn("Skipping file with YAML parse error", "file", filePath, "error", err)
+		return nil, nil //nolint:nilnil // nil config signals skip without error
+	}
+
+	return rawConfig, nil
+}
+
+// stackMatchesFilter checks if a stack matches the filter criteria.
+// Returns true if no filter is specified or if the filter matches either the filename or derived name.
+func stackMatchesFilter(filterByStack, stackFileName, stackName string) bool {
+	if filterByStack == "" {
+		return true
+	}
+	return filterByStack == stackFileName || filterByStack == stackName
 }
 
 // processStackFileForLocals reads a stack file and extracts its locals.
@@ -282,25 +329,16 @@ func processStackFileForLocals(
 	filePath string,
 	filterByStack string,
 ) (*stackFileLocalsResult, error) {
-	// Read the raw YAML file.
-	content, err := os.ReadFile(filePath)
+	stackFileName := deriveStackFileName(atmosConfig, filePath)
+	filterMatchesFileName := filterByStack != "" && filterByStack == stackFileName
+
+	rawConfig, err := parseStackFileYAML(filePath, filterMatchesFileName)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read stack file %s: %w", errUtils.ErrInvalidStackManifest, filePath, err)
+		return nil, err
 	}
-
-	// Parse the YAML to extract structure.
-	// Unmarshal errors indicate malformed YAML, log at warn level for visibility.
-	var rawConfig map[string]any
-	if err := yaml.Unmarshal(content, &rawConfig); err != nil {
-		log.Warn("Skipping file with YAML parse error", "file", filePath, "error", err)
-	}
-
 	if rawConfig == nil {
 		return &stackFileLocalsResult{}, nil
 	}
-
-	// Derive stack name from the file path.
-	stackFileName := deriveStackFileName(atmosConfig, filePath)
 
 	// Extract vars for stack name derivation.
 	var varsSection map[string]any
@@ -308,26 +346,21 @@ func processStackFileForLocals(
 		varsSection = vs
 	}
 
-	// Derive stack name using same logic as describe stacks.
 	stackName := deriveStackName(atmosConfig, stackFileName, varsSection, rawConfig)
 
 	// Apply filter if specified.
-	if filterByStack != "" && filterByStack != stackFileName && filterByStack != stackName {
+	if !stackMatchesFilter(filterByStack, stackFileName, stackName) {
 		return &stackFileLocalsResult{}, nil
 	}
 
-	// Extract locals from the raw config.
 	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath)
 	if err != nil {
 		return &stackFileLocalsResult{Found: true}, fmt.Errorf("failed to process locals for stack %s: %w", stackFileName, err)
 	}
 
-	// Build locals entry for this stack.
-	stackLocals := buildStackLocalsFromContext(localsCtx)
-
 	return &stackFileLocalsResult{
 		StackName:   stackName,
-		StackLocals: stackLocals,
+		StackLocals: buildStackLocalsFromContext(localsCtx),
 		Found:       true,
 	}, nil
 }
@@ -355,19 +388,19 @@ func buildStackLocalsFromContext(localsCtx *LocalsContext) map[string]any {
 
 	// Section-specific locals go under "terraform: locals:", "helmfile: locals:", etc.
 	if localsCtx.HasTerraformLocals && len(localsCtx.Terraform) > 0 {
-		stackLocals["terraform"] = map[string]any{
+		stackLocals[cfg.TerraformSectionName] = map[string]any{
 			cfg.LocalsSectionName: getSectionOnlyLocals(localsCtx.Terraform, localsCtx.Global),
 		}
 	}
 
 	if localsCtx.HasHelmfileLocals && len(localsCtx.Helmfile) > 0 {
-		stackLocals["helmfile"] = map[string]any{
+		stackLocals[cfg.HelmfileSectionName] = map[string]any{
 			cfg.LocalsSectionName: getSectionOnlyLocals(localsCtx.Helmfile, localsCtx.Global),
 		}
 	}
 
 	if localsCtx.HasPackerLocals && len(localsCtx.Packer) > 0 {
-		stackLocals["packer"] = map[string]any{
+		stackLocals[cfg.PackerSectionName] = map[string]any{
 			cfg.LocalsSectionName: getSectionOnlyLocals(localsCtx.Packer, localsCtx.Global),
 		}
 	}
@@ -388,11 +421,9 @@ func getSectionOnlyLocals(sectionLocals, globalLocals map[string]any) map[string
 	return result
 }
 
-// valuesEqual compares two values for equality.
+// valuesEqual compares two values for deep equality.
 func valuesEqual(a, b any) bool {
-	// Simple equality check - works for primitives.
-	// For complex types, we'd need deep comparison, but for locals this is usually sufficient.
-	return fmt.Sprintf("%v", a) == fmt.Sprintf("%v", b)
+	return reflect.DeepEqual(a, b)
 }
 
 // deriveStackFileName extracts the stack file name from the absolute path.

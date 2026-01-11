@@ -228,23 +228,11 @@ func (ctx *LocalsContext) mergeSectionLocals(result, sectionLocals map[string]an
 }
 
 // GetForComponentType returns the appropriate locals for a given component type.
+// This is an alias for MergeForComponentType for API compatibility.
 func (ctx *LocalsContext) GetForComponentType(componentType string) map[string]any {
 	defer perf.Track(nil, "exec.LocalsContext.GetForComponentType")()
 
-	if ctx == nil {
-		return nil
-	}
-
-	switch componentType {
-	case cfg.TerraformSectionName:
-		return ctx.Terraform
-	case cfg.HelmfileSectionName:
-		return ctx.Helmfile
-	case cfg.PackerSectionName:
-		return ctx.Packer
-	default:
-		return ctx.Global
-	}
+	return ctx.MergeForComponentType(componentType)
 }
 
 // ResolveComponentLocals resolves locals from a config section and merges with parent locals.
