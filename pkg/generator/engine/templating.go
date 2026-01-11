@@ -172,6 +172,7 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 	tmpl, err := template.New("init").Delims(delimiters[0], delimiters[1]).Funcs(funcs).Parse(content)
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrTemplateExecution).
+			WithCause(err).
 			WithExplanation("Failed to parse template syntax").
 			WithHint("Check for syntax errors in template expressions").
 			WithHint("Verify delimiters match your configuration").
@@ -185,6 +186,7 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 	if err := tmpl.Execute(&result, templateData); err != nil {
 		// Add detailed debugging information for template execution errors
 		return "", errUtils.Build(errUtils.ErrTemplateExecution).
+			WithCause(err).
 			WithExplanation("Failed to execute template").
 			WithHint("Check that all referenced variables are defined").
 			WithHint("Verify template functions are valid").
@@ -368,10 +370,10 @@ func ensureDirectory(fullPath string) error {
 	return nil
 }
 
-// fileExists checks if a file exists at the given path.
+// fileExists checks if a file (not directory) exists at the given path.
 func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 // handleExistingFile handles the case where the target file already exists.

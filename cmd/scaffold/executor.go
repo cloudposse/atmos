@@ -8,13 +8,11 @@ import (
 )
 
 // ProductionTemplateExecutor implements TemplateExecutor using the real template engine.
-type ProductionTemplateExecutor struct {
-	genCtx *setup.GeneratorContext
-}
+type ProductionTemplateExecutor struct{}
 
 // NewProductionTemplateExecutor creates a new production template executor.
-func NewProductionTemplateExecutor(genCtx *setup.GeneratorContext) TemplateExecutor {
-	return &ProductionTemplateExecutor{genCtx: genCtx}
+func NewProductionTemplateExecutor(_ *setup.GeneratorContext) TemplateExecutor {
+	return &ProductionTemplateExecutor{}
 }
 
 // Generate executes the template generation.

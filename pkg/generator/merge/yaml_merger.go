@@ -2,7 +2,6 @@ package merge
 
 import (
 	"bytes"
-	"fmt"
 	"reflect"
 
 	"gopkg.in/yaml.v3"
@@ -59,6 +58,8 @@ func NewYAMLMerger(thresholdPercent int) *YAMLMerger {
 //   - theirs: The template's YAML version (with template updates)
 //
 // Returns the merged YAML content or an error if conflicts exceed threshold.
+//
+//nolint:revive,funlen // function-length: rich error handling with static errors requires additional lines
 func (m *YAMLMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	defer perf.Track(nil, "merge.YAMLMerger.Merge")()
 
@@ -66,22 +67,38 @@ func (m *YAMLMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	var baseNode, oursNode, theirsNode yaml.Node
 
 	if err := yaml.Unmarshal([]byte(base), &baseNode); err != nil {
-		return nil, fmt.Errorf("failed to parse base YAML: %w", err)
+		return nil, errUtils.Build(errUtils.ErrScaffoldParseYAML).
+			WithCause(err).
+			WithExplanation("Failed to parse base YAML").
+			WithHint("Check YAML syntax in the base version").
+			Err()
 	}
 
 	if err := yaml.Unmarshal([]byte(ours), &oursNode); err != nil {
-		return nil, fmt.Errorf("failed to parse ours YAML: %w", err)
+		return nil, errUtils.Build(errUtils.ErrScaffoldParseYAML).
+			WithCause(err).
+			WithExplanation("Failed to parse user's YAML").
+			WithHint("Check YAML syntax in the current file").
+			Err()
 	}
 
 	if err := yaml.Unmarshal([]byte(theirs), &theirsNode); err != nil {
-		return nil, fmt.Errorf("failed to parse theirs YAML: %w", err)
+		return nil, errUtils.Build(errUtils.ErrScaffoldParseYAML).
+			WithCause(err).
+			WithExplanation("Failed to parse template YAML").
+			WithHint("Check YAML syntax in the template").
+			Err()
 	}
 
 	// Perform structure-aware merge
 	conflicts := &conflictTracker{conflicts: make([]string, 0)}
 	mergedNode, err := m.mergeNodes(&baseNode, &oursNode, &theirsNode, "", conflicts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to merge YAML structures: %w", err)
+		return nil, errUtils.Build(errUtils.ErrThreeWayMerge).
+			WithCause(err).
+			WithExplanation("Failed to merge YAML structures").
+			WithHint("Check for incompatible changes between versions").
+			Err()
 	}
 
 	// Check if conflicts exceed threshold
@@ -101,11 +118,18 @@ func (m *YAMLMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	encoder.SetIndent(2)
 
 	if err := encoder.Encode(mergedNode); err != nil {
-		return nil, fmt.Errorf("failed to encode merged YAML: %w", err)
+		return nil, errUtils.Build(errUtils.ErrEncode).
+			WithCause(err).
+			WithExplanation("Failed to encode merged YAML").
+			WithHint("This may indicate corrupted merge output").
+			Err()
 	}
 
 	if err := encoder.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close YAML encoder: %w", err)
+		return nil, errUtils.Build(errUtils.ErrEncode).
+			WithCause(err).
+			WithExplanation("Failed to close YAML encoder").
+			Err()
 	}
 
 	return &MergeResult{
