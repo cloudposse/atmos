@@ -131,11 +131,10 @@ func processCustomCommands(
 				// Check if this flag already exists on parent or globally.
 				// If it exists, verify types match (inheritance allowed).
 				// If types don't match, error (can't redefine with different type).
-				// Check both Flags() (local flags), PersistentFlags(), and InheritedFlags().
-				existingFlag := parentCommand.Flags().Lookup(flag.Name)
-				if existingFlag == nil {
-					existingFlag = parentCommand.PersistentFlags().Lookup(flag.Name)
-				}
+				// Only check PersistentFlags() and InheritedFlags() - NOT Flags().
+				// Local flags (Flags()) on the parent are NOT inherited by subcommands,
+				// so they shouldn't block subcommands from defining the same flag.
+				existingFlag := parentCommand.PersistentFlags().Lookup(flag.Name)
 				if existingFlag == nil {
 					existingFlag = parentCommand.InheritedFlags().Lookup(flag.Name)
 				}
@@ -179,11 +178,10 @@ func processCustomCommands(
 					}
 					seen[flag.Shorthand] = true
 
-					// Check if shorthand conflicts with existing flags.
-					existingByShorthand := parentCommand.Flags().ShorthandLookup(flag.Shorthand)
-					if existingByShorthand == nil {
-						existingByShorthand = parentCommand.PersistentFlags().ShorthandLookup(flag.Shorthand)
-					}
+					// Check if shorthand conflicts with existing persistent/inherited flags.
+					// Only check PersistentFlags() and InheritedFlags() - NOT Flags().
+					// Local flags (Flags()) on the parent are NOT inherited by subcommands.
+					existingByShorthand := parentCommand.PersistentFlags().ShorthandLookup(flag.Shorthand)
 					if existingByShorthand == nil {
 						existingByShorthand = parentCommand.InheritedFlags().ShorthandLookup(flag.Shorthand)
 					}
@@ -205,11 +203,10 @@ func processCustomCommands(
 			// Process and add flags to the command.
 			// Skip flags that are inherited from parent command chain.
 			for _, flag := range commandConfig.Flags {
-				// Skip flags that already exist on parent or globally (inherited).
-				existingFlag := parentCommand.Flags().Lookup(flag.Name)
-				if existingFlag == nil {
-					existingFlag = parentCommand.PersistentFlags().Lookup(flag.Name)
-				}
+				// Skip flags that already exist as persistent/inherited (not local).
+				// Local flags (Flags()) on the parent are NOT inherited by subcommands,
+				// so we should register the flag even if a local flag with the same name exists.
+				existingFlag := parentCommand.PersistentFlags().Lookup(flag.Name)
 				if existingFlag == nil {
 					existingFlag = parentCommand.InheritedFlags().Lookup(flag.Name)
 				}

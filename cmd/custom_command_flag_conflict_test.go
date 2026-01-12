@@ -1200,3 +1200,61 @@ func TestCustomCommand_ShorthandMatchesFlagName(t *testing.T) {
 
 	require.ErrorIs(t, err, errUtils.ErrDuplicateFlagRegistration, "Should return ErrDuplicateFlagRegistration when shorthand matches another flag's name")
 }
+
+// TestCustomCommand_VersionFlagAllowed tests that custom commands can define their own
+// --version flag since --version is now a local flag on RootCmd (not persistent).
+// This is important for tools like `atmos toolchain install --version 1.0.0`.
+func TestCustomCommand_VersionFlagAllowed(t *testing.T) {
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a custom command with --version flag (string type).
+	// This should work because --version is not a persistent global flag anymore.
+	// Note: We don't use -v shorthand because that conflicts with global --verbose flag.
+	testCommand := schema.Command{
+		Name:        "install",
+		Description: "Install a tool with specific version",
+		Flags: []schema.CommandFlag{
+			{
+				Name:        "version",
+				Shorthand:   "V", // Use uppercase V to avoid conflict with --verbose (-v)
+				Type:        "string",
+				Usage:       "Version to install",
+				Description: "Specify the version of the tool to install",
+			},
+		},
+		Steps: stepsFromStrings("echo Installing version"),
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	// Process custom commands - should succeed since --version is not inherited.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err, "Custom command should be able to define --version flag since it's not a persistent global flag")
+
+	// Find and verify the custom command.
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "install" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom 'install' command should be registered")
+
+	// Verify --version flag is registered on the custom command.
+	versionFlag := customCmd.PersistentFlags().Lookup("version")
+	require.NotNil(t, versionFlag, "--version flag should be registered on custom command")
+	assert.Equal(t, "V", versionFlag.Shorthand, "Shorthand should be 'V'")
+	assert.Equal(t, "string", versionFlag.Value.Type(), "Flag type should be string")
+}
