@@ -171,7 +171,7 @@ func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, pref
 			// Multi-line rendering: show key on first line, then each value line.
 			// No arrow separator for multi-line values.
 			// No symbol - only color-coded key.
-			b.WriteString(fmt.Sprintf("      %s  %s%s\n",
+			b.WriteString(fmt.Sprintf("     %s  %s%s\n",
 				treeCont,
 				keyStyle.Render(paddedKey),
 				forcesReplacementAnnotation,
@@ -207,7 +207,7 @@ func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, pref
 			// Pad old value for consistent column alignment.
 			paddedOldVal := fmt.Sprintf("%-*s", maxOldValWidth, fc.oldVal)
 
-			b.WriteString(fmt.Sprintf("      %s  %s %s  %s  %s%s\n",
+			b.WriteString(fmt.Sprintf("     %s  %s %s  %s  %s%s\n",
 				treeCont,
 				keyStyle.Render(paddedKey),
 				dimStyle.Render(paddedOldVal),
@@ -251,9 +251,9 @@ func renderMultilineDiff(b *strings.Builder, before, after string, prefix string
 		}
 		if symbol == "" {
 			// No marker for unchanged lines.
-			b.WriteString(fmt.Sprintf("      %s    %s\n", treeCont, truncateLine(line)))
+			b.WriteString(fmt.Sprintf("     %s    %s\n", treeCont, truncateLine(line)))
 		} else {
-			b.WriteString(fmt.Sprintf("      %s  %s %s\n", treeCont, style.Render(symbol), truncateLine(line)))
+			b.WriteString(fmt.Sprintf("     %s  %s %s\n", treeCont, style.Render(symbol), truncateLine(line)))
 		}
 	}
 
@@ -332,7 +332,7 @@ func renderMultilineValue(b *strings.Builder, content, prefix string, showTreeLi
 			line = line[:maxLineWidth-3] + "..."
 		}
 		// Output: tree continuation + symbol + line content.
-		b.WriteString(fmt.Sprintf("      %s  %s %s\n",
+		b.WriteString(fmt.Sprintf("     %s  %s %s\n",
 			treeCont,
 			symbolStyle.Render(symbol),
 			line,
