@@ -194,7 +194,6 @@ func runMainLogic() {
 			return nil
 		},
 	)
-
 	if err != nil {
 		er.PrintErrors(errors, config)
 		errUtils.Exit(1)

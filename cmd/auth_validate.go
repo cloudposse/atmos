@@ -51,7 +51,6 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 			return validationErr
 		},
 	)
-
 	if err != nil {
 		u.PrintfMarkdown("**❌ Authentication configuration validation failed:**\n")
 		u.PrintfMarkdown("%s\n", validationErr.Error())
