@@ -71,6 +71,30 @@ func TestAuthContextWrapper_AuthenticateProvider(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
 }
 
+// TestAuthContextWrapper_GetChain_NoLongerPanics is a regression test for Issue #1921.
+// When !terraform.output processes a component with auth configured, it creates an authContextWrapper
+// to propagate auth context. If the nested component has its own auth config with a default identity,
+// resolveAuthManagerForNestedComponent calls GetChain() on the parentAuthManager to inherit the identity.
+// Previously, GetChain() panicked, causing the reported bug. Now it returns an empty slice.
+func TestAuthContextWrapper_GetChain_NoLongerPanics(t *testing.T) {
+	authContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			Profile: "test-profile",
+			Region:  "us-east-1",
+		},
+	}
+
+	wrapper := newAuthContextWrapper(authContext)
+	require.NotNil(t, wrapper)
+
+	// This should NOT panic (was the bug in #1921).
+	require.NotPanics(t, func() {
+		chain := wrapper.GetChain()
+		// Should return empty slice, indicating no inherited identity chain.
+		assert.Empty(t, chain)
+	})
+}
+
 func TestAuthContextWrapper_PanicMethods(t *testing.T) {
 	wrapper := &authContextWrapper{
 		stackInfo: &schema.ConfigAndStacksInfo{},
@@ -112,10 +136,11 @@ func TestAuthContextWrapper_PanicMethods(t *testing.T) {
 		_ = wrapper.Logout(ctx, "test", false)
 	})
 
-	// Test that GetChain panics.
-	assert.Panics(t, func() {
-		_ = wrapper.GetChain()
-	})
+	// Test that GetChain returns empty slice (no panic).
+	// Fixed in #1921: GetChain is called by resolveAuthManagerForNestedComponent,
+	// so it must not panic. An empty slice means no inherited identity.
+	chain := wrapper.GetChain()
+	assert.Empty(t, chain, "GetChain should return empty slice")
 
 	// Test that ListIdentities panics.
 	assert.Panics(t, func() {
