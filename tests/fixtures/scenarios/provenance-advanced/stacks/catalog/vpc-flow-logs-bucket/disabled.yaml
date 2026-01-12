@@ -1,0 +1,8 @@
+import:
+  - catalog/vpc-flow-logs-bucket/defaults
+
+components:
+  terraform:
+    vpc-flow-logs-bucket:
+      vars:
+        enabled: false

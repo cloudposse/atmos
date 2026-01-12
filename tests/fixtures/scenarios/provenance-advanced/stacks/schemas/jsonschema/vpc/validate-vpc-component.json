@@ -1,0 +1,30 @@
+{
+  "$id": "vpc-component",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "vpc component validation",
+  "description": "JSON Schema for the 'vpc' Atmos component.",
+  "type": "object",
+  "properties": {
+    "vars": {
+      "type": "object",
+      "properties": {
+        "region": {
+          "type": "string"
+        },
+        "ipv4_primary_cidr_block": {
+          "type": "string",
+          "pattern": "^([0-9]{1,3}\\.){3}[0-9]{1,3}(/([0-9]|[1-2][0-9]|3[0-2]))?$"
+        },
+        "map_public_ip_on_launch": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true,
+      "required": [
+        "region",
+        "ipv4_primary_cidr_block",
+        "map_public_ip_on_launch"
+      ]
+    }
+  }
+}

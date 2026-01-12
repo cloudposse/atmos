@@ -1,0 +1,5 @@
+vars:
+  region: us-east-2
+  environment: gbl
+
+# Other defaults for the `global` region

@@ -1,0 +1,11 @@
+import:
+  # Import the `uw2` manifest with `vpc` configuration for `us-west-2` region
+  - catalog/vpc/uw2
+  # All accounts (stages) in `us-west-2` region will have the `vpc-flow-logs-bucket` component
+  - catalog/vpc-flow-logs-bucket/defaults
+
+vars:
+  region: us-west-2
+  environment: uw2
+
+# Other defaults for the `us-west-2` region

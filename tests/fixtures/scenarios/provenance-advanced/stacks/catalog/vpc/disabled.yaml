@@ -1,0 +1,8 @@
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      vars:
+        enabled: false

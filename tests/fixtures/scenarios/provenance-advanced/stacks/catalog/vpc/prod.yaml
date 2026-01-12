@@ -1,0 +1,8 @@
+components:
+  terraform:
+    vpc:
+      vars:
+        ipv4_primary_cidr_block: 10.8.0.0/18
+        # In `prod`, don't map public IPs on launch
+        # Override `map_public_ip_on_launch` from the defaults
+        map_public_ip_on_launch: false

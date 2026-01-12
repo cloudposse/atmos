@@ -1,0 +1,4 @@
+vars:
+  stage: prod
+
+# Other defaults for the `prod` stage/account
