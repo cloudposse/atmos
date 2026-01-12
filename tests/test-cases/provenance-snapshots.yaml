@@ -14,7 +14,7 @@ tests:
     args:
       - "describe"
       - "component"
-      - "myapp"
+      - "mock"
       - "-s"
       - "acme-dev-us-east-1"
       - "--provenance"
@@ -50,3 +50,6 @@ tests:
         - "○ \\[2\\]"  # Inherited from depth 2
         - "vars:"  # Should have vars section
         - "enabled: true"
+      diff:
+        # Ignore lines with variable whitespace alignment in provenance comments
+        - "provisioned_by_user:.*#"

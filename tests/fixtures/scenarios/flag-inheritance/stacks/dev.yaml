@@ -4,6 +4,6 @@ vars:
 
 components:
   terraform:
-    echo:
+    mock:
       vars:
         message: "hello"

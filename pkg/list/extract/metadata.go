@@ -5,6 +5,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -12,8 +13,15 @@ import (
 // - Gray (●) if enabled: false (disabled).
 // - Red (●) if locked: true.
 // - Green (●) if enabled: true and not locked.
+// When output is piped (non-TTY), returns the semantic status text instead.
 func getStatusIndicator(enabled, locked bool) string {
 	const statusDot = "●"
+
+	// Check if stdout is a TTY - if not, return semantic status text.
+	term := terminal.New()
+	if !term.IsTTY(terminal.Stdout) {
+		return getStatusText(enabled, locked)
+	}
 
 	switch {
 	case locked:

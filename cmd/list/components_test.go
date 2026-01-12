@@ -410,7 +410,7 @@ func TestBuildComponentSorters(t *testing.T) {
 		{
 			name:      "Empty sort (default)",
 			sortSpec:  "",
-			expectLen: 1, // Default sort by component ascending
+			expectLen: 2, // Default sort by stack ascending, then component ascending
 		},
 		{
 			name:      "Single sort field ascending",

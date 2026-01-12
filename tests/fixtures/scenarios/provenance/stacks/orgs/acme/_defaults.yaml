@@ -8,7 +8,7 @@ vars:
 
 components:
   terraform:
-    myapp:
+    mock:
       vars:
         tags:
           tenant: acme

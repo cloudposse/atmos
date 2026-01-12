@@ -7,7 +7,7 @@ vars:
 
 components:
   terraform:
-    myapp:
+    mock:
       vars:
         region: us-east-1
         tags:

@@ -1,12 +1,12 @@
-<no value>	plat-ue2-dev	vpc	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
-<no value>	plat-uw2-prod	vpc	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
-<no value>	plat-ue2-staging	vpc	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
-<no value>	plat-ue2-prod	vpc	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
-<no value>	plat-uw2-dev	vpc	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
-<no value>	plat-uw2-staging	vpc	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
-<no value>	plat-ue2-dev	vpc-flow-logs-bucket	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
-<no value>	plat-uw2-prod	vpc-flow-logs-bucket	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
-<no value>	plat-ue2-staging	vpc-flow-logs-bucket	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
-<no value>	plat-ue2-prod	vpc-flow-logs-bucket	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
-<no value>	plat-uw2-dev	vpc-flow-logs-bucket	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
-<no value>	plat-uw2-staging	vpc-flow-logs-bucket	terraform	<no value>	<no value>	<no value>	<no value>	<no value>
+enabled	plat-ue2-dev	vpc	terraform	plat	ue2	dev	us-east-2	vpc
+enabled	plat-ue2-dev	vpc-flow-logs-bucket	terraform	plat	ue2	dev	us-east-2	vpc-flow-logs-bucket
+enabled	plat-ue2-prod	vpc	terraform	plat	ue2	prod	us-east-2	vpc
+enabled	plat-ue2-prod	vpc-flow-logs-bucket	terraform	plat	ue2	prod	us-east-2	vpc-flow-logs-bucket
+enabled	plat-ue2-staging	vpc	terraform	plat	ue2	staging	us-east-2	vpc
+enabled	plat-ue2-staging	vpc-flow-logs-bucket	terraform	plat	ue2	staging	us-east-2	vpc-flow-logs-bucket
+enabled	plat-uw2-dev	vpc	terraform	plat	uw2	dev	us-west-2	vpc
+enabled	plat-uw2-dev	vpc-flow-logs-bucket	terraform	plat	uw2	dev	us-west-2	vpc-flow-logs-bucket
+enabled	plat-uw2-prod	vpc	terraform	plat	uw2	prod	us-west-2	vpc
+enabled	plat-uw2-prod	vpc-flow-logs-bucket	terraform	plat	uw2	prod	us-west-2	vpc-flow-logs-bucket
+enabled	plat-uw2-staging	vpc	terraform	plat	uw2	staging	us-west-2	vpc
+enabled	plat-uw2-staging	vpc-flow-logs-bucket	terraform	plat	uw2	staging	us-west-2	vpc-flow-logs-bucket

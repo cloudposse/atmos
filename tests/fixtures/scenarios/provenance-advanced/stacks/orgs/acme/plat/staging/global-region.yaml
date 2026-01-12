@@ -1,3 +1,0 @@
-import:
-  - orgs/acme/plat/staging/_defaults
-  - mixins/region/global-region

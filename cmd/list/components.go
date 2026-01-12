@@ -308,8 +308,9 @@ func buildComponentSorters(sortSpec string) ([]*listSort.Sorter, error) {
 	defer perf.Track(nil, "list.components.buildComponentSorters")()
 
 	if sortSpec == "" {
-		// Default sort: by component ascending.
+		// Default sort: by stack ascending, then component ascending for deterministic output.
 		return []*listSort.Sorter{
+			listSort.NewSorter("Stack", listSort.Ascending),
 			listSort.NewSorter("Component", listSort.Ascending),
 		}, nil
 	}
