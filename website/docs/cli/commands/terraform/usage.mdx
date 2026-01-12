@@ -5,7 +5,6 @@ sidebar_class_name: command
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import DocCardList from '@theme/DocCardList'
-import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
@@ -16,34 +15,35 @@ Use these subcommands to interact with Terraform and OpenTofu.
 
 <Screengrab title="atmos terraform --help" slug="atmos-terraform--help" />
 
-Atmos Terraform/OpenTofu commands fall into two categories:
-
-  - Single-Component: Run Terraform for one component at a time
-
-  - Multi-Component (Filtered/Bulk): Run Terraform across multiple components using stack names, selectors, or change detection
-
 Atmos supports all Terraform and OpenTofu commands and options described in
 [Terraform CLI Overview](https://developer.hashicorp.com/terraform/cli/commands)
 and [OpenTofu Basic CLI Features](https://opentofu.org/docs/cli/commands/).
-
-In addition, for the Single-Component commands, the `component` argument and `stack` flag are required to generate
-variables and backend config for the component in the stack.
 
 :::note Disambiguation
 The term "Terraform" is used in this documentation to refer to generic concepts such as providers, modules, stacks, the
 HCL-based domain-specific language and its interpreter. Atmos works with [OpenTofu](/components/terraform).
 :::
 
-## Single-Component Commands Usage
+## Command Modes
 
-Use single-component commands when you want to execute Terraform operations on one component at a time, offering precise control over individual resources.
+Atmos Terraform commands operate in two modes:
+
+- **Single-Component**: Execute Terraform for one component at a time with precise control
+- **Multi-Component**: Execute Terraform across multiple components using filters (`--all`, `--affected`, `--components`, `--query`)
+
+## Single-Component Usage
+
+Use single-component commands when you want to execute Terraform operations on one component at a time.
+
 <Terminal>
 ```shell
-# Execute `terraform <command>` on a `component` in a `stack`
 atmos terraform <command> <component> -s <stack> [options]
-atmos terraform <command> <component> --stack <stack> [options]
 ```
 </Terminal>
+
+The `component` argument and `--stack` flag are required to generate variables and backend config for the component in the stack.
+
+See individual command pages for detailed options: [plan](/cli/commands/terraform/plan), [apply](/cli/commands/terraform/apply), [deploy](/cli/commands/terraform/deploy), [destroy](/cli/commands/terraform/destroy).
 
 ### Path-Based Component Resolution
 
@@ -80,787 +80,64 @@ Path-based resolution only works when the component path resolves to a **single 
 For example, if both `station/1` and `station/2` reference `components/terraform/weather`:
 ```bash
 cd components/terraform/weather
-atmos terraform plan . --stack dev  # ❌ Error: ambiguous - which component?
+atmos terraform plan . --stack dev  # Error: ambiguous - which component?
 ```
 
 Instead, you must use the unique component names:
 ```bash
-atmos terraform plan station/1 --stack dev  # ✓ Explicit and unambiguous
-atmos terraform plan station/2 --stack dev  # ✓ Explicit and unambiguous
+atmos terraform plan station/1 --stack dev  # Explicit and unambiguous
+atmos terraform plan station/2 --stack dev  # Explicit and unambiguous
 ```
 :::
 
-## Multi-Component Commands (Bulk Operations) Usage
+## Multi-Component Usage
 
-Use multi-component commands to run Terraform operations across multiple components simultaneously. You can target components by stack, selector, query, or change detection—often making this approach more efficient than using Atmos workflows for certain use cases.
+Use multi-component commands to run Terraform operations across multiple components simultaneously. You can target components by stack, selector, query, or change detection.
 
 <Terminal>
 ```shell
-# Execute `terraform <command>` on all components in the stack `prod`
-atmos terraform <command> --stack prod
-
-# Execute `terraform <command>` on components `component-1` and `component-2` in all stacks
-atmos terraform <command> --components component-1,component-2
-
-# Execute `terraform <command>` on components `component-1` and `component-2` in the stack `prod`
-atmos terraform <command> --stack prod --components component-1,component-2
-
-# Execute `terraform <command>` on all components in all stacks
+# Execute on all components in all stacks
 atmos terraform <command> --all
 
-# Execute `terraform <command>` on all components in the stack `prod`
-atmos terraform <command> --all --stack prod
+# Execute on all components in a specific stack
+atmos terraform <command> --stack prod
 
-# Execute `terraform <command>` on all the directly affected components in all stacks in dependency order
-# (if component dependencies are configured)
+# Execute on specific components
+atmos terraform <command> --components vpc,eks
+
+# Execute on affected components (based on git changes)
 atmos terraform <command> --affected
 
-# Execute `terraform <command>` on all the directly affected components in the `prod` stack in dependency order
-# (if component dependencies are configured)
-atmos terraform <command> --affected --stack prod
-
-# Execute `terraform <command>` on all the directly affected components in all stacks in dependency order.
-# For each directly affected component, detect the dependent components and process them in dependency order, recursively.
-# Dependents are components that are indirectly affected, meaning that nothing in the current branch modifies their code
-# or configs, but they are configured as dependencies of the components that are modified
-atmos terraform <command> --affected --include-dependents
-
-# Execute `terraform <command>` on all the directly affected components in the `prod` stack in dependency order.
-# For each directly affected component, detect the dependent components and process them in dependency order, recursively.
-atmos terraform <command> --affected --include-dependents --stack prod
-
-# Execute `terraform <command>` on all components that have `vars.tags.team == "data"`, in all stacks
-atmos terraform <command> --query '.vars.tags.team == "data"'
-
-# Execute `terraform <command>` on all components that have `vars.tags.team == "eks"`, in the stack `prod`
-atmos terraform <command> --query '.vars.tags.team == "eks"' --stack prod
-
-# Execute `terraform <command>` on all components that have `settings.context.account_id == 12345`, in all stacks
-atmos terraform <command> --query '.settings.context.account_id == 12345'
+# Execute on components matching a query
+atmos terraform <command> --query '.vars.tags.team == "eks"'
 ```
 </Terminal>
 
-<br />
+All multi-component flags can be combined with `--dry-run` to preview what would be executed without making changes.
 
-## Additions and differences from native Terraform and OpenTofu
+See individual command pages for detailed multi-component examples and flags: [plan](/cli/commands/terraform/plan#multi-component-operations), [apply](/cli/commands/terraform/apply#multi-component-operations), [deploy](/cli/commands/terraform/deploy#multi-component-operations), [destroy](/cli/commands/terraform/destroy#multi-component-operations).
 
-- before executing other `terraform` commands, Atmos runs `terraform init`
+## Differences from Native Terraform
 
-- you can skip over atmos calling `terraform init` if you know your project is already in a good working state by using the `--skip-init` flag like
-  so `atmos terraform <command> <component> -s <stack> --skip-init`
+Atmos enhances the standard Terraform CLI with several conveniences:
 
-- `atmos terraform deploy` command executes `terraform apply -auto-approve` (sets `-auto-approve` flag when running `terraform apply`)
+- **Automatic initialization**: Atmos runs `terraform init` before executing other commands. Use `--skip-init` to skip this step.
 
-- `atmos terraform deploy` command supports `--deploy-run-init=true|false` flag to enable/disable running `terraform init` before executing the
-  command
+- **Deploy command**: `atmos terraform deploy` executes `terraform apply -auto-approve` for automated deployments.
 
-- `atmos terraform apply` and `atmos terraform deploy` commands support `--from-plan` flag. If the flag is specified, the commands will use
-  the planfile previously generated by `atmos terraform plan` command instead of generating a new planfile,
-  e.g. `atmos terraform apply <component> -s <stack> --from-plan`. Note that in this case, the planfile name is in the format supported by Atmos and
-  is saved to the component's folder. See [Terraform Planfiles](/components/terraform/planfiles) for comprehensive planfile documentation
+- **Planfile support**: The `--from-plan` and `--planfile` flags enable two-stage plan/apply workflows. See [Terraform Planfiles](/components/terraform/planfiles).
 
-- `atmos terraform apply` and `atmos terraform deploy` commands support `--planfile` flag to specify the path to a planfile.
-  The `--planfile` flag should be used instead of the planfile argument in the native `terraform apply <planfile>` command.
-  For example, you can execute the command `atmos terraform plan <component> -s <stack> -out=<FILE>`, which will save the generated plan to a
-  file on disk, and then execute the command `atmos terraform apply <component> -s <stack> --planfile <FILE>` to apply the previously generated
-  planfile. Learn more in the [terraform apply](/cli/commands/terraform/apply) documentation
+- **Terraform Cloud compatibility**: Use `--skip-planfile` with `terraform plan` when using Terraform Cloud, which doesn't support local plan files.
 
-- `atmos terraform plan` command accepts a `--skip-planfile` flag to skip writing the plan to a file. If the flag is set to `true`
-  (e.g., `atmos terraform plan <component> -s <stack> --skip-planfile=true`), Atmos will not pass the `-out` flag to Terraform
-  when executing the command. Set it to `true` when using Terraform Cloud since the `-out` flag is not supported.
-  Terraform Cloud automatically stores plans in its backend and can't store it in a local file. See [terraform plan](/cli/commands/terraform/plan) for details
-
-- `atmos terraform clean` command deletes the `.terraform` folder, `.terraform.lock.hcl` lock file, and the previously generated `planfile`
-  and `varfile` for the specified component and stack. Use the `--skip-lock-file` flag to skip deleting the `.terraform.lock.hcl` file.
-  It deletes all local Terraform state files and directories
-  (including [`terraform.tfstate.d`](https://developer.hashicorp.com/terraform/cli/workspaces#workspace-internals)
-  used for local state) for a component in a stack.
-  The `--force` flag bypasses the safety confirmation prompt and forces the deletion. Use with caution.
-
-  :::warning
-  The `clean` command performs destructive operations that can lead to permanent state loss, if not using remote backends.
-  Always ensure you have remote state configured in your components before proceeding.
-  :::
-
-- `atmos terraform workspace` command first runs `terraform init -reconfigure`, then `terraform workspace select`, and if the workspace was not
-  created before, it then runs `terraform workspace new`
-
-- `atmos terraform import` command searches for `region` in the variables for the specified component and stack, and if it finds it,
-  sets `AWS_REGION=<region>` ENV var before executing the command
-
-- `atmos terraform generate backend` command generates a backend config file for an Atmos component in a stack
-
-- `atmos terraform generate backends` command generates backend config files for all Atmos components in all stacks
-
-- `atmos terraform generate varfile` command generates a varfile for an Atmos component in a stack
-
-- `atmos terraform generate varfiles` command generates varfiles for all Atmos components in all stacks
-
-- `atmos terraform plan-diff` command compares two Terraform plans and shows the differences between them. It takes an original plan file (`--orig`) and optionally a new plan file (`--new`). If the new plan file is not provided, it will generate one by running `terraform plan` with the current configuration.
-
-- `atmos terraform shell` command configures an environment for an Atmos component in a stack and starts a new shell allowing executing all native
-  terraform commands inside the shell
-
-- double-dash `--` can be used to signify the end of the options for Atmos and the start of the additional native arguments and flags for
-  the `terraform` commands. For example:
-    - `atmos terraform plan <component> -s <stack> -- -refresh=false`
-    - `atmos terraform apply <component> -s <stack> -- -lock=false`
-
-<br />
+- **Native flag passthrough**: Use `--` to pass flags directly to Terraform:
+  ```shell
+  atmos terraform plan vpc -s dev -- -refresh=false
+  atmos terraform apply vpc -s dev -- -lock=false
+  ```
 
 :::tip
-Run `atmos terraform --help` to see all the available options
+Run `atmos terraform --help` to see all available options.
 :::
-
-## Examples
-
-### Component Name Examples
-
-<Terminal>
-```shell
-atmos terraform plan test/test-component-override-3 -s tenant1-ue2-dev
-atmos terraform plan test/test-component-override-3 -s tenant1-ue2-dev --skip-lock-file
-atmos terraform plan test/test-component-override-2 -s tenant1-ue2-dev --redirect-stderr /dev/stdout
-atmos terraform plan test/test-component-override -s tenant1-ue2-dev --redirect-stderr ./errors.txt
-
-atmos terraform apply test/test-component-override-3 -s tenant1-ue2-dev
-atmos terraform apply test/test-component-override-2 -s tenant1-ue2-dev --redirect-stderr /dev/stdout
-atmos terraform apply test/test-component-override -s tenant1-ue2-dev --redirect-stderr ./errors.txt
-
-atmos terraform destroy test/test-component-override-3 -s tenant1-ue2-dev
-atmos terraform destroy test/test-component-override-2 -s tenant1-ue2-dev --redirect-stderr /dev/stdout
-atmos terraform destroy test/test-component-override -s tenant1-ue2-dev --redirect-stderr /dev/null
-
-atmos terraform init test/test-component-override-3 -s tenant1-ue2-dev
-```
-</Terminal>
-
-### Path-Based Examples
-
-<Terminal>
-```shell
-# Navigate to component directory and use current directory
-cd components/terraform/vpc
-atmos terraform plan . -s dev
-atmos terraform apply . -s dev
-
-# Use relative path from components/terraform directory
-cd components/terraform
-atmos terraform plan ./vpc -s dev
-atmos terraform apply ./infra/security-group -s prod
-
-# Use from project root with relative path
-atmos terraform plan components/terraform/vpc -s dev
-
-# Combine with other flags
-cd components/terraform/vpc
-atmos terraform plan . -s dev --skip-init
-atmos terraform apply . -s dev -- -auto-approve
-atmos terraform destroy . -s dev --dry-run
-```
-</Terminal>
-
-### Clean Examples
-
-<Terminal>
-```shell
-# Clean all components (with confirmation)
-atmos terraform clean
-
-# Clean a specific component
-atmos terraform clean vpc
-
-# Clean a specific component in a stack
-atmos terraform clean vpc --stack dev
-
-# Clean without confirmation prompt
-atmos terraform clean --force
-atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
-
-atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
-atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev --redirect-stderr /dev/null
-atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev --redirect-stderr /dev/stdout
-atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev --redirect-stderr ./errors.txt
-
-atmos terraform plan test/test-component -s tenant1-ue2-dev -- -refresh=false -lock=false
-
-atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent "Acme/1.0 (Build 1234; arm64)"
-```
-</Terminal>
-
-## Arguments
-
-<dl>
-    <dt>`component` <em>(required for Single-Component commands)</em></dt>
-    <dd>
-        Atmos Terraform/OpenTofu component name or filesystem path.<br/><br/>
-        Supports both:
-        <ul>
-            <li>Component names: <code>vpc</code>, <code>infra/vpc</code>, <code>test/test-component</code></li>
-            <li>Filesystem paths: <code>.</code> (current directory), <code>./vpc</code>, <code>components/terraform/vpc</code></li>
-        </ul>
-        When using paths, Atmos automatically resolves the path to the component name based on your stack configuration.
-        See <a href="#path-based-component-resolution">Path-Based Component Resolution</a> above.
-    </dd>
-</dl>
-
-## Flags
-
-<dl>
-    <dt>`--stack` <em>(alias `-s`)</em> <em>(required for Single-Component commands)</em></dt>
-    <dd>
-        Atmos stack.
-
-        ```shell
-        atmos terraform plan <component> --stack <stack>
-        atmos terraform apply --all -s <stack>
-        ```
-    </dd>
-
-    <dt>`--dry-run` <em>(optional)</em></dt>
-    <dd>
-        Dry run.
-        Simulate the command without making any changes.
-
-        ```shell
-        atmos terraform <command> <component> -s <stack> --dry-run
-        atmos terraform <command> --all --dry-run
-        atmos terraform <command> --affected --dry-run
-        ```
-    </dd>
-
-    <dt>`--redirect-stderr` <em>(optional)</em></dt>
-    <dd>
-        File descriptor to redirect `stderr` to.
-
-        Errors can be redirected to any file or any standard file descriptor (including `/dev/null`).
-    </dd>
-
-    <dt>`--append-user-agent` <em>(optional)</em></dt>
-    <dd>
-        Append a custom User-Agent to Terraform requests.
-
-        Can also be set using the `ATMOS_COMPONENTS_TERRAFORM_APPEND_USER_AGENT` environment variable.
-    </dd>
-
-    <dt>`--skip-init` <em>(optional)</em></dt>
-    <dd>
-        Skip running `terraform init` before executing terraform commands.
-
-        ```shell
-        atmos terraform apply <component> -s <stack> --skip-init
-        ```
-    </dd>
-
-    <dt>`--skip-planfile` <em>(optional)</em></dt>
-    <dd>
-        Skip writing the plan to a file.
-        If the flag is set to `true`, Atmos will not pass the `-out` flag to Terraform
-        when executing `terraform plan` commands. Set it to `true` when using Terraform Cloud since the `-out` flag is not supported.
-        Terraform Cloud automatically stores plans in its backend and can't store it in a local file
-
-        ```shell
-        atmos terraform plan <component> -s <stack> --skip-planfile=true
-        ```
-    </dd>
-
-    <dt>`--process-templates` <em>(optional)</em></dt>
-    <dd>
-        Enable/disable Go template processing in Atmos stack manifests when executing terraform commands.
-
-        If the flag is not passed, template processing is enabled by default.
-
-        ```shell
-        atmos terraform plan <component> -s <stack> --process-templates=false
-        ```
-    </dd>
-
-    <dt>`--process-functions` <em>(optional)</em></dt>
-    <dd>
-        Enable/disable YAML functions processing in Atmos stack manifests<br/>when executing terraform commands.
-
-        If the flag is not passed, YAML function processing is enabled by default.
-
-        ```shell
-        atmos terraform plan <component> -s <stack> --process-functions=false
-        ```
-    </dd>
-
-    <dt>`--skip` <em>(optional)</em></dt>
-    <dd>
-        Skip processing a specific Atmos YAML function in Atmos stacks manifests when executing terraform commands.
-
-        To specify more than one function, use multiple `--skip` flags, or separate the functions with a comma.
-
-        ```shell
-        atmos terraform plan <component> -s <stack> --skip=eval --skip=include
-        atmos terraform apply <component> -s <stack> --skip=terraform.output,include
-        ```
-    </dd>
-
-    <dt>`--components` <em>(optional)</em></dt>
-    <dd>
-        Execute the command on the specified components in all stacks or in a specific stack.
-
-        ```shell
-        atmos terraform plan --components <component-1>
-        atmos terraform plan --components <component-1>,<component-2>
-        atmos terraform apply --components <component-1> --components <component-2>
-        atmos terraform apply --components <component-1>,<component-2> --stack <stack> --logs-level=Debug
-        ```
-    </dd>
-
-    <dt>`--all` <em>(optional)</em></dt>
-    <dd>
-        Execute the command on all components in all stacks or in a specific stack.
-
-        ```shell
-        atmos terraform plan --all
-        atmos terraform apply --all --stack <stack>
-        atmos terraform apply --all --dry-run
-        atmos terraform deploy --all --logs-level=Debug
-        ```
-    </dd>
-
-    <dt>`--query` <em>(optional)</em></dt>
-    <dd>
-        Execute the command on the components filtered by a [YQ](https://mikefarah.gitbook.io/yq) expression, in all stacks or in a specific stack.
-
-        __NOTE__: All Atmos sections are available in the expression, e.g. `vars`, `locals`, `settings`, `env`, `metadata`, `backend`, etc.
-
-        ```shell
-        atmos terraform plan --query '.vars.tags.team == "data"'
-        atmos terraform apply --query '.vars.tags.team == "eks"' --stack <stack>
-        atmos terraform apply --query '.settings.context.account_id == 12345'
-        atmos terraform deploy --query '.vars.tags.team == "data"' --dry-run --logs-level=Debug
-        ```
-    </dd>
-
-    <dt>`--affected` <em>(optional)</em></dt>
-    <dd>
-        Execute the command on all the directly affected components, in all stacks or in a specific stack,
-        in dependency order (if [component dependencies](/stacks/settings/depends_on) are configured).
-
-        __NOTE__: When using the `--affected` flag, Atmos supports all the flags from the [`atmos describe affected`](/cli/commands/describe/affected) CLI command.
-
-        ```shell
-        atmos terraform plan --affected
-        atmos terraform apply --affected --stack <stack>
-        atmos terraform apply --affected --dry-run
-        atmos terraform apply --affected --clone-target-ref=true
-        atmos terraform deploy --affected --include-dependents
-        atmos terraform apply --affected --include-dependents --dry-run --logs-level=Debug
-        ```
-    </dd>
-
-    <dt>`--include-dependents` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
-    <dd>
-        For each directly affected component, detect the dependent components and process them in dependency order, recursively.
-        Dependents are components that are indirectly affected, meaning that nothing in the current branch modifies their code
-        or configs, but they are configured as [dependencies](/stacks/settings/depends_on) of the components that are modified.
-
-        ```shell
-        atmos terraform plan --affected --include-dependents --logs-level=Debug
-        atmos terraform apply --affected --include-dependents --dry-run
-        atmos terraform apply --affected --include-dependents --stack prod --dry-run
-        ```
-    </dd>
-
-    <dt>`--ref` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
-    <dd>
-        [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch.
-
-        If the reference is a branch, the command will compare the current working branch with the branch.
-
-        If the reference is a tag, the command will compare the current working branch with the tag.
-
-        If the flags are not provided, the ref will be set automatically to the head to the default branch (`refs/remotes/origin/HEAD` Git ref, usually the `main` branch)
-    </dd>
-
-    <dt>`--sha` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
-    <dd>
-        Git commit SHA with which to compare the current working branch
-    </dd>
-
-    <dt>`--ssh-key` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
-    <dd>
-        Path to PEM-encoded private key to clone private repos using SSH
-    </dd>
-
-    <dt>`--ssh-key-password` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
-    <dd>
-        Encryption password for the PEM-encoded private key if the key contains a password-encrypted PEM block
-    </dd>
-
-    <dt>`--repo-path` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
-    <dd>
-        Path to the already cloned target repository with which to compare the current branch. Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`
-    </dd>
-
-    <dt>`--clone-target-ref` <em>(optional; can only be used in conjunction with the `--affected` flag)</em></dt>
-    <dd>
-        Clone the target reference with which to compare the current branch.
-
-        ```shell
-        atmos terraform plan --affected --clone-target-ref=true
-        atmos terraform deploy --affected --clone-target-ref=true --dry-run
-        atmos terraform apply --affected --clone-target-ref=true --dry-run --logs-level=Debug
-        ```
-
-        If the flag is not passed or set to `false` (default), the target reference will be checked out instead.
-        This requires that the target reference is already cloned by Git, and the information about it exists in the `.git` directory
-    </dd>
-
-    <dt>`--identity` <em>(alias `-i`)</em> <em>(optional)</em></dt>
-    <dd>
-        Specify the identity to authenticate before running Terraform commands. This flag has four modes:
-
-        - **With identity name** (`--identity admin`): Use the specified identity
-        - **Without value** (`--identity`): Show interactive selector to choose identity
-        - **With `false`** (`--identity=false`): Disable Atmos authentication and use AWS SDK defaults
-        - **Omitted**: Use the default identity configured in `atmos.yaml`, or prompt if no default is set
-
-        ```shell
-        # Use specific identity
-        atmos terraform plan <component> -s <stack> --identity admin
-
-        # Interactively select identity
-        atmos terraform apply <component> -s <stack> --identity
-
-        # Disable authentication (use AWS SDK defaults)
-        atmos terraform plan <component> -s <stack> --identity=false
-
-        # Use default identity (or prompt if none configured)
-        atmos terraform plan <component> -s <stack>
-        ```
-
-        When set to `false` (or `0`, `no`, `off`), Atmos skips identity authentication entirely and uses standard cloud provider SDK credential resolution (e.g., environment variables, shared credentials file, instance metadata, OIDC). This is useful in CI/CD environments using external authentication mechanisms.
-
-        See [Disabling Authentication](/cli/configuration/auth#disabling-authentication) for more details.
-
-        **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
-    </dd>
-
-</dl>
-
-:::note
-
-All native Terraform/OpenTofu flags are supported.
-
-:::
-
-## Multi-Component Commands (Bulk Operations) Examples
-
-Let's assume that we have the following Atmos stack manifests in the `prod` and `nonprod` stacks,
-with [dependencies between the components](/stacks/settings/depends_on):
-
-<File title="`prod` and `nonprod` stacks">
-```yaml
-components:
-  terraform:
-    vpc:
-      vars:
-        tags:
-          # Team `network` manages the `vpc` component
-          team: network
-    eks/cluster:
-      vars:
-        tags:
-          # Team `eks` manages the `eks/cluster` component
-          team: eks
-      settings:
-        depends_on:
-          # `eks/cluster` depends on the `vpc` component
-          1:
-            component: vpc
-    eks/external-dns:
-      vars:
-        tags:
-          # Team `eks` manages the `eks/external-dns` component
-          team: eks
-      settings:
-        depends_on:
-          # `eks/external-dns` depends on the `eks/cluster` component
-          1:
-            component: eks/cluster
-    eks/karpenter:
-      vars:
-        tags:
-          # Team `eks` manages the `eks/karpenter` component
-          team: eks
-      settings:
-        depends_on:
-          # `eks/karpenter` depends on the `eks/cluster` component
-          1:
-            component: eks/cluster
-    eks/karpenter-node-pool:
-      vars:
-        tags:
-          # Team `eks` manages the `eks/karpenter-node-pool` component
-          team: eks
-      settings:
-        # `eks/karpenter-node-pool` depends on the `eks/cluster` and `eks/karpenter` components
-        depends_on:
-          1:
-            component: eks/cluster
-          2:
-            component: eks/karpenter
-    eks/istio/base:
-      vars:
-        tags:
-          # Team `istio` manages the `eks/istio/base` component
-          team: istio
-      settings:
-        # `eks/istio/base` depends on the `eks/cluster` component
-        depends_on:
-          1:
-            component: eks/cluster
-    eks/istio/istiod:
-      vars:
-        tags:
-          # Team `istio` manages the `eks/istio/istiod` component
-          team: istio
-      settings:
-        # `eks/istio/istiod` depends on the `eks/cluster` and `eks/istio/base` components
-        depends_on:
-          1:
-            component: eks/cluster
-          2:
-            component: eks/istio/base
-    eks/istio/test-app:
-      vars:
-        tags:
-          # Team `istio` manages the `eks/istio/test-app` component
-          team: istio
-      settings:
-        # `eks/istio/test-app` depends on the `eks/cluster`, `eks/istio/istiod` and `eks/istio/base` components
-        depends_on:
-          1:
-            component: eks/cluster
-          2:
-            component: eks/istio/istiod
-          3:
-            component: eks/istio/base
-```
-</File>
-
-Let's run the following Multi-Component commands in `dry-run` mode and review the output to understand what each command executes:
-
-<Terminal title="atmos terraform apply --all --dry-run">
-```shell
-# Execute the `terraform apply` command on all components in all stacks
-
-> atmos terraform apply --all --dry-run
-
-Executing command="atmos terraform apply vpc -s nonprod"
-Executing command="atmos terraform apply eks/cluster -s nonprod"
-Executing command="atmos terraform apply eks/external-dns -s nonprod"
-Executing command="atmos terraform apply eks/istio/base -s nonprod"
-Executing command="atmos terraform apply eks/istio/istiod -s nonprod"
-Executing command="atmos terraform apply eks/istio/test-app -s nonprod"
-Executing command="atmos terraform apply eks/karpenter -s nonprod"
-Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod"
-
-Executing command="atmos terraform apply vpc -s prod"
-Executing command="atmos terraform apply eks/cluster -s prod"
-Executing command="atmos terraform apply eks/external-dns -s prod"
-Executing command="atmos terraform apply eks/istio/base -s prod"
-Executing command="atmos terraform apply eks/istio/istiod -s prod"
-Executing command="atmos terraform apply eks/istio/test-app -s prod"
-Executing command="atmos terraform apply eks/karpenter -s prod"
-Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
-```
-</Terminal>
-
-<Terminal title="atmos terraform apply --all --stack prod --dry-run">
-```shell
-# Execute the `terraform apply` command on all components in the `prod` stack
-
-> atmos terraform apply --all --stack prod --dry-run
-
-Executing command="atmos terraform apply vpc -s prod"
-Executing command="atmos terraform apply eks/cluster -s prod"
-Executing command="atmos terraform apply eks/external-dns -s prod"
-Executing command="atmos terraform apply eks/istio/base -s prod"
-Executing command="atmos terraform apply eks/istio/istiod -s prod"
-Executing command="atmos terraform apply eks/istio/test-app -s prod"
-Executing command="atmos terraform apply eks/karpenter -s prod"
-Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
-```
-</Terminal>
-
-<Terminal title="atmos terraform apply --stack prod --dry-run">
-```shell
-# Execute the `terraform apply` command on all components in the `prod` stack
-
-> atmos terraform apply --stack prod --dry-run
-
-Executing command="atmos terraform apply vpc -s prod"
-Executing command="atmos terraform apply eks/cluster -s prod"
-Executing command="atmos terraform apply eks/external-dns -s prod"
-Executing command="atmos terraform apply eks/istio/base -s prod"
-Executing command="atmos terraform apply eks/istio/istiod -s prod"
-Executing command="atmos terraform apply eks/istio/test-app -s prod"
-Executing command="atmos terraform apply eks/karpenter -s prod"
-Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
-```
-</Terminal>
-
-<Terminal title="atmos terraform apply --components vpc,eks/cluster --dry-run">
-```shell
-# Execute the `terraform apply` command on the `vpc` and `eks/cluster` components
-# in all stacks.
-
-> atmos terraform apply --components vpc,eks/cluster --dry-run
-
-Executing command="atmos terraform apply vpc -s nonprod"
-Executing command="atmos terraform apply eks/cluster -s nonprod"
-
-Executing command="atmos terraform apply vpc -s prod"
-Executing command="atmos terraform apply eks/cluster -s prod"
-```
-</Terminal>
-
-<Terminal title="atmos terraform apply --stack prod --components vpc,eks/cluster --dry-run">
-```shell
-# Execute the `terraform apply` command on the `vpc` and `eks/cluster` components
-# in the `prod` stack.
-
-> atmos terraform apply --stack prod --components vpc,eks/cluster --dry-run
-
-Executing command="atmos terraform apply vpc -s prod"
-Executing command="atmos terraform apply eks/cluster -s prod"
-```
-</Terminal>
-
-<Terminal title="atmos terraform apply --query '.vars.tags.team == &quot;eks&quot;' --dry-run">
-```shell
-# Execute the `terraform apply` command on the components filtered by the query expression,
-# in all stacks.
-
-> atmos terraform apply --query '.vars.tags.team == "eks"' --dry-run
-
-Skipping the component because the query criteria not satisfied command="atmos terraform apply vpc -s nonprod" query=".vars.tags.team == \"eks\""
-Executing command="atmos terraform apply eks/cluster -s nonprod"
-Executing command="atmos terraform apply eks/external-dns -s nonprod"
-Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/base -s nonprod" query=".vars.tags.team == \"eks\""
-Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/istiod -s nonprod" query=".vars.tags.team == \"eks\""
-Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/test-app -s nonprod" query=".vars.tags.team == \"eks\""
-Executing command="atmos terraform apply eks/karpenter -s nonprod"
-Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod"
-
-Skipping the component because the query criteria not satisfied command="atmos terraform apply vpc -s prod" query=".vars.tags.team == \"eks\""
-Executing command="atmos terraform apply eks/cluster -s prod"
-Executing command="atmos terraform apply eks/external-dns -s prod"
-Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/base -s prod" query=".vars.tags.team == \"eks\""
-Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/istiod -s prod" query=".vars.tags.team == \"eks\""
-Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/test-app -s prod" query=".vars.tags.team == \"eks\""
-Executing command="atmos terraform apply eks/karpenter -s prod"
-Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
-```
-</Terminal>
-
-<Terminal title="atmos terraform apply --query '.vars.tags.team == &quot;eks&quot;' --stack prod --dry-run">
-```shell
-# Execute the `terraform apply` command on the components filtered by the query expression,
-# in the `prod` stack.
-
-> atmos terraform apply --query '.vars.tags.team == "eks"' --stack prod --dry-run
-
-Skipping the component because the query criteria not satisfied command="atmos terraform apply vpc -s prod" query=".vars.tags.team == \"eks\""
-Executing command="atmos terraform apply eks/cluster -s prod"
-Executing command="atmos terraform apply eks/external-dns -s prod"
-Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/base -s prod" query=".vars.tags.team == \"eks\""
-Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/istiod -s prod" query=".vars.tags.team == \"eks\""
-Skipping the component because the query criteria not satisfied command="atmos terraform apply eks/istio/test-app -s prod" query=".vars.tags.team == \"eks\""
-Executing command="atmos terraform apply eks/karpenter -s prod"
-Executing command="atmos terraform apply eks/karpenter-node-pool -s prod"
-```
-</Terminal>
-
-<Terminal title="atmos terraform apply --affected --dry-run">
-```shell
-# Execute the `terraform apply` command on all components affected by the changes
-# in the current branch, in all stacks, in dependency order.
-# Assume that the components `vpc` and `eks/cluster` in all stacks are affected (e.g. just added).
-
-> atmos terraform apply --affected --dry-run
-
-Executing command="atmos terraform apply vpc -s nonprod"
-Executing command="atmos terraform apply eks/cluster -s nonprod"
-
-Executing command="atmos terraform apply vpc -s prod"
-Executing command="atmos terraform apply eks/cluster -s prod"
-```
-</Terminal>
-
-<Terminal title="atmos terraform apply --affected --stack prod --dry-run">
-```shell
-# Execute the `terraform apply` command on all components affected by the changes
-# in the current branch, in the `prod` stack, in dependency order.
-# Assume that the components `vpc` and `eks/cluster` in the `prod` stack are affected (e.g. just added).
-
-> atmos terraform apply --affected --stack prod --dry-run
-
-Executing command="atmos terraform apply vpc -s prod"
-Executing command="atmos terraform apply eks/cluster -s prod"
-```
-</Terminal>
-
-<Terminal title="atmos terraform apply --affected --include-dependents --dry-run">
-```shell
-# Execute the `terraform apply` command on all the components affected by the changes
-# in the current branch, in all stacks.
-# For each directly affected component, detect the dependent components and process
-# them in dependency order, recursively.
-# Dependents are components that are indirectly affected, meaning that nothing in the
-# current branch modifies their code or configs, but they are configured as
-# dependencies of the components that are modified.
-
-> atmos terraform apply --affected --include-dependents --dry-run
-
-Executing command="atmos terraform apply vpc -s nonprod"
-Executing command="atmos terraform apply eks/cluster -s nonprod" dependency of component=vpc in stack=nonprod
-Executing command="atmos terraform apply eks/karpenter -s nonprod" dependency of component=eks/cluster in stack=nonprod
-Executing command="atmos terraform apply eks/karpenter-node-pool -s nonprod" dependency of component=eks/karpenter in stack=nonprod
-Executing command="atmos terraform apply eks/external-dns -s nonprod" dependency of component=eks/cluster in stack=nonprod
-Executing command="atmos terraform apply eks/istio/base -s nonprod" dependency of component=eks/cluster in stack=nonprod
-Executing command="atmos terraform apply eks/istio/istiod -s nonprod" dependency of component=eks/istio/base in stack=nonprod
-Executing command="atmos terraform apply eks/istio/test-app -s nonprod" dependency of component=eks/istio/istiod in stack=nonprod
-
-Executing command="atmos terraform apply vpc -s prod"
-Executing command="atmos terraform apply eks/cluster -s prod" dependency of component=vpc in stack=prod
-Executing command="atmos terraform apply eks/external-dns -s prod" dependency of component=eks/cluster in stack=prod
-Executing command="atmos terraform apply eks/istio/base -s prod" dependency of component=eks/cluster in stack=prod
-Executing command="atmos terraform apply eks/istio/istiod -s prod" dependency of component=eks/istio/base in stack=prod
-Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/istio/istiod in stack=prod
-Executing command="atmos terraform apply eks/karpenter -s prod" dependency of component=eks/cluster in stack=prod
-Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" dependency of component=eks/karpenter in stack=prod
-```
-</Terminal>
-
-<Terminal title="atmos terraform apply --affected --stack prod --include-dependents --dry-run">
-```shell
-# Execute the `terraform apply` command on all the components affected by the changes
-# in the current branch, in the `prod` stack.
-# For each directly affected component, detect the dependent components and process
-# them in dependency order, recursively.
-# Dependents are components that are indirectly affected, meaning that nothing in the
-# current branch modifies their code or configs, but they are configured as
-# dependencies of the components that are modified.
-
-> atmos terraform apply --affected --stack prod --include-dependents --dry-run
-
-Executing command="atmos terraform apply vpc -s prod"
-Executing command="atmos terraform apply eks/cluster -s prod" dependency of component=vpc in stack=prod
-Executing command="atmos terraform apply eks/external-dns -s prod" dependency of component=eks/cluster in stack=prod
-Executing command="atmos terraform apply eks/istio/base -s prod" dependency of component=eks/cluster in stack=prod
-Executing command="atmos terraform apply eks/istio/istiod -s prod" dependency of component=eks/istio/base in stack=prod
-Executing command="atmos terraform apply eks/istio/test-app -s prod" dependency of component=eks/istio/istiod in stack=prod
-Executing command="atmos terraform apply eks/karpenter -s prod" dependency of component=eks/cluster in stack=prod
-Executing command="atmos terraform apply eks/karpenter-node-pool -s prod" dependency of component=eks/karpenter in stack=prod
-```
-</Terminal>
 
 <ActionCard title="Configure Terraform" ctaText="Learn More" ctaLink="/cli/configuration/components/terraform">
   Learn how to configure Terraform components in your `atmos.yaml`, including backends, workspaces, and provider generation.
