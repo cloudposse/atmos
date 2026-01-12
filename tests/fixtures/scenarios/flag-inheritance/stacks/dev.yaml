@@ -1,0 +1,9 @@
+# Minimal stack for flag inheritance tests
+vars:
+  stage: dev
+
+components:
+  terraform:
+    echo:
+      vars:
+        message: "hello"

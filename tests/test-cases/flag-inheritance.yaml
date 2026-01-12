@@ -202,7 +202,95 @@ tests:
         - "enabled: true"
 
   # ============================================
-  # GROUP 6: List Commands
+  # GROUP 6: Custom Command with --verbose Flag
+  # This is the scenario that led to the flag inheritance fix.
+  # Custom commands should be able to declare they need --verbose
+  # (a global flag) and inherit it without error.
+  # Uses dedicated test fixture: fixtures/scenarios/flag-inheritance
+  # ============================================
+
+  - name: echo info help shows verbose flag
+    enabled: true
+    snapshot: true
+    description: "Custom 'echo info' command should show --verbose flag inherited from global"
+    workdir: "fixtures/scenarios/flag-inheritance"
+    command: "atmos"
+    args:
+      - "echo"
+      - "info"
+      - "--help"
+    expect:
+      exit_code: 0
+      stdout:
+        - "verbose"
+        - "-v"
+
+  - name: echo info runs without verbose
+    enabled: true
+    snapshot: true
+    description: "Custom 'echo info' command should run without --verbose flag"
+    workdir: "fixtures/scenarios/flag-inheritance"
+    command: "atmos"
+    args:
+      - "echo"
+      - "info"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Info: This is a basic message"
+
+  - name: echo info runs with verbose flag
+    enabled: true
+    snapshot: true
+    description: "Custom 'echo info' command should run with --verbose flag"
+    workdir: "fixtures/scenarios/flag-inheritance"
+    command: "atmos"
+    args:
+      - "echo"
+      - "info"
+      - "--verbose"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Info: This is a basic message"
+        - "Verbose: Additional details enabled"
+
+  - name: deploy component help shows stack flag
+    enabled: true
+    snapshot: true
+    description: "Custom 'deploy component' should show --stack flag"
+    workdir: "fixtures/scenarios/flag-inheritance"
+    command: "atmos"
+    args:
+      - "deploy"
+      - "component"
+      - "--help"
+    expect:
+      exit_code: 0
+      stdout:
+        - "stack"
+        - "-s"
+
+  - name: deploy component runs with stack flag
+    enabled: true
+    snapshot: true
+    description: "Custom 'deploy component' should read --stack flag value"
+    workdir: "fixtures/scenarios/flag-inheritance"
+    command: "atmos"
+    args:
+      - "deploy"
+      - "component"
+      - "echo"
+      - "-s"
+      - "dev"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Deploying component: echo"
+        - "To stack: dev"
+
+  # ============================================
+  # GROUP 7: List Commands
   # Verify list commands work in this example
   # ============================================
 
