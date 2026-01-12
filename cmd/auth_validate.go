@@ -42,19 +42,17 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 	validator := validation.NewValidator()
 
 	// Validate auth configuration with spinner
-	var validationErr error
 	err = spinner.ExecWithSpinner(
 		"Validating authentication configuration...",
 		"Authentication configuration is valid",
 		func() error {
-			validationErr = validator.ValidateAuthConfig(&atmosConfig.Auth)
-			return validationErr
+			return validator.ValidateAuthConfig(&atmosConfig.Auth)
 		},
 	)
 	if err != nil {
 		u.PrintfMarkdown("**❌ Authentication configuration validation failed:**\n")
-		u.PrintfMarkdown("%s\n", validationErr.Error())
-		return validationErr
+		u.PrintfMarkdown("%s\n", err.Error())
+		return err
 	}
 
 	// Output final result to stdout for scripts/pipelines

@@ -195,7 +195,11 @@ func runMainLogic() {
 		},
 	)
 	if err != nil {
-		er.PrintErrors(errors, config)
+		if len(errors) > 0 {
+			er.PrintErrors(errors, config)
+		} else {
+			log.Error("Validation failed", "error", err)
+		}
 		errUtils.Exit(1)
 	}
 
