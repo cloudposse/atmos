@@ -1643,7 +1643,7 @@ The component output also follows Atmos schema format, showing the merged locals
 #### Implementation Notes
 
 The command follows the existing `describe` command pattern:
-- Located in `cmd/describe/describe_locals.go`
+- Located in `cmd/describe_locals.go`
 - Uses `CommandProvider` pattern from `cmd/internal/registry.go`
 - Business logic in `internal/exec/describe_locals.go`
 - Reuses `ProcessStackLocals()` from `internal/exec/stack_processor_locals.go`
