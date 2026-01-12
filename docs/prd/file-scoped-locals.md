@@ -233,6 +233,11 @@ Base Component Locals → Component Locals (component-level takes precedence)
 Global Locals → Section Locals → Base Component Locals → Component Locals
 ```
 
+**Precedence rules for name conflicts (later overrides earlier):**
+- Component locals override base component locals
+- Base component locals override section-specific locals
+- Section-specific locals override global locals
+
 This means a component can:
 - Reference global and section-level locals defined in the same file
 - Inherit locals from base components via `metadata.inherits` or `component` attribute
@@ -331,6 +336,10 @@ components:
         # ✅ Works - uses component-level locals
         type: "{{ .locals.vpc_type }}"
 ```
+
+**Note:** Template syntax `{{ .locals.* }}` is the same for all local types. To determine if a local is file-scoped or component-level when debugging template failures:
+- Check if it's defined under `components.terraform.COMPONENT.locals` (component-level, inheritable)
+- Check if it's defined at root level or in terraform/helmfile/packer sections (file-scoped, not inheritable)
 
 ## Implementation Considerations
 
@@ -1614,7 +1623,7 @@ terraform:
     state_key_prefix: plat-ue2-prod
 ```
 
-The output follows the Atmos stack manifest schema format in direct format. This can be redirected to a file and used as a valid stack manifest.
+**Output format:** The output uses the same YAML structure as Atmos stack manifest files, meaning you can copy the output directly into a stack manifest. The structure matches the schema defined in `pkg/datafetcher/schema/stacks/`.
 
 **Example output (component query):**
 ```yaml
@@ -1884,7 +1893,8 @@ When you specify a component with the `--stack` flag, you're asking: *"What loca
 The component argument does **not** mean the locals come from the component definition. Instead:
 1. Atmos determines the component's type (terraform, helmfile, or packer)
 2. Atmos merges the global locals with the corresponding section-specific locals
-3. The result shows what `{{ .locals.* }}` references would resolve to for that component
+3. Atmos includes component-level locals (including those inherited from base components)
+4. The result shows what `{{ .locals.* }}` references would resolve to for that component
 
 **Example:**
 ```yaml
