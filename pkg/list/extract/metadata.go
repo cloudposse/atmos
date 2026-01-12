@@ -15,11 +15,20 @@ import (
 // - Green (●) if enabled: true and not locked.
 // When output is piped (non-TTY), returns the semantic status text instead.
 func getStatusIndicator(enabled, locked bool) string {
+	// Check if stdout is a TTY.
+	term := terminal.New()
+	isTTY := term.IsTTY(terminal.Stdout)
+
+	return getStatusIndicatorWithTTY(enabled, locked, isTTY)
+}
+
+// getStatusIndicatorWithTTY is the internal implementation that accepts the TTY state.
+// This allows testing both TTY and non-TTY code paths.
+func getStatusIndicatorWithTTY(enabled, locked, isTTY bool) string {
 	const statusDot = "●"
 
-	// Check if stdout is a TTY - if not, return semantic status text.
-	term := terminal.New()
-	if !term.IsTTY(terminal.Stdout) {
+	// If not a TTY, return semantic status text for machine-readable output.
+	if !isTTY {
 		return getStatusText(enabled, locked)
 	}
 

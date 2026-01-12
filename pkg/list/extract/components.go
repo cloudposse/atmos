@@ -2,6 +2,7 @@ package extract
 
 import (
 	"fmt"
+	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	perf "github.com/cloudposse/atmos/pkg/perf"
@@ -15,6 +16,7 @@ const (
 	// Field names for component data.
 	fieldComponent       = "component"
 	fieldComponentFolder = "component_folder"
+	fieldMetadata        = "metadata"
 )
 
 // Components transforms stacksMap into structured component data.
@@ -89,9 +91,9 @@ func enrichComponentWithMetadata(comp map[string]any, componentData any) {
 		return
 	}
 
-	metadata, hasMetadata := compMap["metadata"].(map[string]any)
+	metadata, hasMetadata := compMap[fieldMetadata].(map[string]any)
 	if hasMetadata {
-		comp["metadata"] = metadata
+		comp[fieldMetadata] = metadata
 		extractMetadataFields(comp, metadata)
 	} else {
 		setDefaultMetadataFields(comp)
@@ -183,6 +185,107 @@ func getStringWithDefault(m map[string]any, key string, defaultValue string) str
 		return val
 	}
 	return defaultValue
+}
+
+// UniqueComponents extracts deduplicated components from all stacks.
+// Returns unique component names with aggregated metadata (stack count, types).
+// This is the original behavior of "list components" - showing unique component definitions.
+// The stackPattern parameter is an optional glob pattern to filter which stacks to consider.
+func UniqueComponents(stacksMap map[string]any, stackPattern string) ([]map[string]any, error) {
+	defer perf.Track(nil, "list.extract.UniqueComponents")()
+
+	if stacksMap == nil {
+		return nil, errUtils.ErrStackNotFound
+	}
+
+	// Use a map to deduplicate by component name + type combination.
+	// Key: "componentName:componentType" (e.g., "vpc:terraform").
+	seen := make(map[string]map[string]any)
+
+	for stackName, stackData := range stacksMap {
+		// Apply stack filter if provided.
+		if stackPattern != "" {
+			matched, err := filepath.Match(stackPattern, stackName)
+			if err != nil || !matched {
+				continue
+			}
+		}
+
+		stackMap, ok := stackData.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		componentsMap, ok := stackMap["components"].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		// Process each component type.
+		extractUniqueComponentType("terraform", componentsMap, seen)
+		extractUniqueComponentType("helmfile", componentsMap, seen)
+		extractUniqueComponentType("packer", componentsMap, seen)
+	}
+
+	// Convert map to slice.
+	var components []map[string]any
+	for _, comp := range seen {
+		components = append(components, comp)
+	}
+
+	return components, nil
+}
+
+// extractUniqueComponentType extracts unique components of a specific type.
+func extractUniqueComponentType(componentType string, componentsMap map[string]any, seen map[string]map[string]any) {
+	typeComponents, ok := componentsMap[componentType].(map[string]any)
+	if !ok {
+		return
+	}
+
+	for componentName, componentData := range typeComponents {
+		key := componentName + ":" + componentType
+
+		// If we haven't seen this component, add it.
+		if _, exists := seen[key]; !exists {
+			comp := map[string]any{
+				fieldComponent: componentName,
+				"type":         componentType,
+				"stack_count":  0,
+			}
+
+			// Extract metadata from first occurrence.
+			enrichUniqueComponentMetadata(comp, componentData)
+			seen[key] = comp
+		}
+
+		// Increment stack count.
+		if count, ok := seen[key]["stack_count"].(int); ok {
+			seen[key]["stack_count"] = count + 1
+		}
+	}
+}
+
+// enrichUniqueComponentMetadata adds metadata fields to a unique component.
+func enrichUniqueComponentMetadata(comp map[string]any, componentData any) {
+	compMap, ok := componentData.(map[string]any)
+	if !ok {
+		setDefaultMetadataFields(comp)
+		return
+	}
+
+	metadata, hasMetadata := compMap[fieldMetadata].(map[string]any)
+	if hasMetadata {
+		comp[fieldMetadata] = metadata
+		extractMetadataFields(comp, metadata)
+	} else {
+		setDefaultMetadataFields(comp)
+	}
+
+	// Extract component_folder for column templates.
+	if folder, ok := compMap[fieldComponentFolder].(string); ok {
+		comp[fieldComponentFolder] = folder
+	}
 }
 
 // ComponentsForStack extracts components for a specific stack only.

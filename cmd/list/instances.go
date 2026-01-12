@@ -72,7 +72,7 @@ var instancesCmd = &cobra.Command{
 }
 
 // columnsCompletionForInstances provides dynamic tab completion for --columns flag.
-// Returns column names from atmos.yaml components.list.columns configuration.
+// Returns column names from atmos.yaml list.instances.columns or components.list.columns configuration.
 func columnsCompletionForInstances(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// Load atmos configuration.
 	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
@@ -85,7 +85,16 @@ func columnsCompletionForInstances(cmd *cobra.Command, args []string, toComplete
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	// Extract column names from atmos.yaml configuration.
+	// Check new config path: list.instances.columns.
+	if len(atmosConfig.List.Instances.Columns) > 0 {
+		var columnNames []string
+		for _, col := range atmosConfig.List.Instances.Columns {
+			columnNames = append(columnNames, col.Name)
+		}
+		return columnNames, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	// Backward compatibility: check old config path components.list.columns.
 	if len(atmosConfig.Components.List.Columns) > 0 {
 		var columnNames []string
 		for _, col := range atmosConfig.Components.List.Columns {
