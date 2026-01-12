@@ -152,13 +152,15 @@ func processCustomCommands(
 					// pflag types: "string", "bool", "int", etc.
 					if existingFlagType != customFlagType {
 						return errUtils.Build(errUtils.ErrReservedFlagName).
-							WithExplanation(fmt.Sprintf("Custom command '%s' declares flag '--%s' with type '%s', but it already exists with type '%s'",
+							WithExplanation(fmt.Sprintf("Custom command '%s' in atmos.yaml declares flag '--%s' with type '%s', but it already exists with type '%s'",
 								commandConfig.Name, flag.Name, customFlagType, existingFlagType)).
+							WithHint("Check the 'commands' section in atmos.yaml").
 							WithHint("Either use the existing flag type, or rename your flag to avoid conflicts").
 							WithContext("command", commandConfig.Name).
 							WithContext("flag", flag.Name).
 							WithContext("declared_type", customFlagType).
 							WithContext("existing_type", existingFlagType).
+							WithContext("config_path", fmt.Sprintf("commands.%s.flags", commandConfig.Name)).
 							Err()
 					}
 					// Types match - this flag will be inherited, skip further validation.
@@ -187,12 +189,14 @@ func processCustomCommands(
 					}
 					if existingByShorthand != nil {
 						return errUtils.Build(errUtils.ErrReservedFlagName).
-							WithExplanation(fmt.Sprintf("Custom command '%s' defines flag shorthand '-%s' which conflicts with existing flag '--%s'",
+							WithExplanation(fmt.Sprintf("Custom command '%s' in atmos.yaml defines flag shorthand '-%s' which conflicts with existing flag '--%s'",
 								commandConfig.Name, flag.Shorthand, existingByShorthand.Name)).
-							WithHint("Change the shorthand in your atmos.yaml to avoid conflicts").
+							WithHint("Check the 'commands' section in atmos.yaml").
+							WithHint("Change the shorthand to avoid conflicts").
 							WithContext("command", commandConfig.Name).
 							WithContext("shorthand", flag.Shorthand).
 							WithContext("existing_flag", existingByShorthand.Name).
+							WithContext("config_path", fmt.Sprintf("commands.%s.flags", commandConfig.Name)).
 							Err()
 					}
 				}
