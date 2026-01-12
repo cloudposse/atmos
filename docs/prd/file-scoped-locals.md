@@ -1616,11 +1616,37 @@ terraform:
 
 The output follows the Atmos stack manifest schema format in direct format. This can be redirected to a file and used as a valid stack manifest.
 
-#### Key Features
+**Example output (component query):**
+```yaml
+components:
+  terraform:
+    vpc:
+      locals:
+        region: us-east-2
+        account_id: "123456789012"
+        environment: prod
+        state_bucket: terraform-state-123456789012
+        state_key_prefix: plat-ue2-prod
+```
 
-1. **Atmos schema format**: Output matches the structure of stack manifest files
-2. **Scope separation**: Stack output shows global `locals:` and section-specific `terraform: { locals: }` separately
-3. **Merged component locals**: Component output shows the final merged locals available to the component
+The component output also follows Atmos schema format, showing the merged locals that would be available to the component during template processing.
+
+#### Key Design Decisions
+
+1. **Atmos schema format**: Output uses the same structure as stack manifest files
+2. **Scope separation**: Stack output shows global `locals:` and section-specific locals separately
+3. **Merged component view**: Component output shows all merged locals (global + section + component-level)
+4. **JSON for tooling**: Full metadata in JSON format for programmatic access
+5. **Consistent with other describe commands**: Same flags (`-s`, `--format`) as `atmos describe component`
+6. **Stack name flexibility**: Accepts both logical stack names and file paths
+
+#### Implementation Notes
+
+The command follows the existing `describe` command pattern:
+- Located in `cmd/describe/describe_locals.go`
+- Uses `CommandProvider` pattern from `cmd/internal/registry.go`
+- Business logic in `internal/exec/describe_locals.go`
+- Reuses `ProcessStackLocals()` from `internal/exec/stack_processor_locals.go`
 
 #### Optional: `ATMOS_DEBUG_LOCALS` Environment Variable
 
@@ -1676,73 +1702,6 @@ Hint: Check for typos in local variable names.
 - Clear error messages showing available locals on failure
 - Typo detection with "did you mean?" suggestions
 - `atmos describe locals` command to inspect resolved locals
-
-### The `atmos describe locals` Command
-
-Display the resolved locals for a specific stack:
-
-```bash
-# Show locals for a stack (logical name or file path)
-atmos describe locals --stack plat-ue2-prod
-atmos describe locals --stack deploy/prod
-
-# Show locals for a component in a stack
-atmos describe locals vpc -s plat-ue2-prod
-
-# Output as YAML (default)
-atmos describe locals -s plat-ue2-prod --format yaml
-
-# Output as JSON
-atmos describe locals -s plat-ue2-prod --format json
-```
-
-**Note:** The `--stack` flag is required. Locals are file-scoped, so a specific stack must be specified.
-
-**Example output (stack query without component):**
-```yaml
-locals:
-  region: us-east-2
-  account_id: "123456789012"
-  environment: prod
-terraform:
-  locals:
-    state_bucket: terraform-state-123456789012
-    state_key_prefix: plat-ue2-prod
-```
-
-The output is in direct stack manifest format - it can be redirected to a file and used as valid YAML.
-
-**Example output (component query):**
-```yaml
-components:
-  terraform:
-    vpc:
-      locals:
-        region: us-east-2
-        account_id: "123456789012"
-        environment: prod
-        state_bucket: terraform-state-123456789012
-        state_key_prefix: plat-ue2-prod
-```
-
-The component output also follows Atmos schema format, showing the merged locals that would be available to the component during template processing.
-
-**Key Design Decisions:**
-
-1. **Atmos schema format**: Output uses the same structure as stack manifest files
-2. **Scope separation**: Stack output shows global `locals:` and section-specific locals separately
-3. **Merged component view**: Component output shows all merged locals (global + section + component-level)
-4. **JSON for tooling**: Full metadata in JSON format for programmatic access
-5. **Consistent with other describe commands**: Same flags (`-s`, `--format`) as `atmos describe component`
-6. **Stack name flexibility**: Accepts both logical stack names and file paths
-
-**Implementation Notes:**
-
-The command follows the existing `describe` command pattern:
-- Located in `cmd/describe/describe_locals.go`
-- Uses `CommandProvider` pattern from `cmd/internal/registry.go`
-- Business logic in `internal/exec/describe_locals.go`
-- Reuses `ProcessStackLocals()` from `internal/exec/stack_processor_locals.go`
 
 ### Component Registry Integration
 

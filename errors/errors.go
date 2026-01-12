@@ -93,7 +93,6 @@ var (
 	ErrWorkflowNameRequired       = errors.New("workflow name is required")
 	ErrInvalidStackConfiguration  = errors.New("invalid stack configuration")
 	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
-	ErrStackRequiredWithComponent = errors.New("--stack flag is required when specifying a component")
 	ErrStackRequired              = errors.New("--stack flag is required")
 	ErrStackHasNoLocals           = errors.New("stack has no locals defined")
 

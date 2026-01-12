@@ -13,6 +13,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+const stackFlagName = "stack"
+
 // describeLocalsCmd describes locals for stacks.
 var describeLocalsCmd = &cobra.Command{
 	Use:   "locals [component] -s <stack>",
@@ -65,6 +67,13 @@ func getRunnableDescribeLocalsCmd(
 	return func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "cmd.describeLocals")()
 
+		// Fail fast: check --stack before expensive init operations.
+		// Cobra has already parsed flags by the time RunE is called.
+		stackFlag, _ := cmd.Flags().GetString(stackFlagName)
+		if stackFlag == "" {
+			return errUtils.ErrStackRequired
+		}
+
 		// Check Atmos configuration.
 		g.checkAtmosConfig()
 
@@ -97,14 +106,6 @@ func getRunnableDescribeLocalsCmd(
 			return err
 		}
 
-		// Fail fast if --stack is not specified (required).
-		if describeArgs.FilterByStack == "" {
-			if describeArgs.Component != "" {
-				return errUtils.ErrStackRequiredWithComponent
-			}
-			return errUtils.ErrStackRequired
-		}
-
 		// Create executor lazily to avoid init-time side effects.
 		executor := g.newDescribeLocalsExecFactory()
 		err = executor.Execute(&atmosConfig, describeArgs)
@@ -115,8 +116,8 @@ func getRunnableDescribeLocalsCmd(
 func setCliArgsForDescribeLocalsCli(flags *pflag.FlagSet, args *exec.DescribeLocalsArgs) error {
 	var err error
 
-	if flags.Changed("stack") {
-		args.FilterByStack, err = flags.GetString("stack")
+	if flags.Changed(stackFlagName) {
+		args.FilterByStack, err = flags.GetString(stackFlagName)
 		if err != nil {
 			return fmt.Errorf("%w: read --stack: %w", errUtils.ErrInvalidFlag, err)
 		}
@@ -153,10 +154,10 @@ func setCliArgsForDescribeLocalsCli(flags *pflag.FlagSet, args *exec.DescribeLoc
 
 func init() {
 	// Use Flags() instead of PersistentFlags() since this command has no subcommands.
-	describeLocalsCmd.Flags().StringP("stack", "s", "",
-		"Filter by a specific stack\n"+
-			"The filter supports names of the top-level stack manifests (including subfolder paths), and `atmos` stack names (derived from the context vars)\n"+
-			"Note: YAML parse errors are reported when filtering by stack; otherwise they are silently skipped during batch processing",
+	describeLocalsCmd.Flags().StringP(stackFlagName, "s", "",
+		"Stack to display locals for (required)\n"+
+			"Supports top-level stack manifest names (including subfolder paths) and logical stack names (derived from context vars)\n"+
+			"Parse errors in the matched stack are reported; errors in other stacks are skipped during the search",
 	)
 	AddStackCompletion(describeLocalsCmd)
 

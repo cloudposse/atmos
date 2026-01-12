@@ -117,15 +117,26 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 		mockExec := exec.NewMockDescribeLocalsExec(ctrl)
 		// No expectation set - Execute should not be called.
 
+		// Track if expensive operations are called (they should NOT be).
+		checkAtmosConfigCalled := false
+		processCommandLineArgsCalled := false
+		initCliConfigCalled := false
+		validateStacksCalled := false
+
 		props := getRunnableDescribeLocalsCmdProps{
-			checkAtmosConfig: func(opts ...AtmosValidateOption) {},
+			checkAtmosConfig: func(opts ...AtmosValidateOption) {
+				checkAtmosConfigCalled = true
+			},
 			processCommandLineArgs: func(componentType string, cmd *cobra.Command, args []string, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+				processCommandLineArgsCalled = true
 				return schema.ConfigAndStacksInfo{}, nil
 			},
 			initCliConfig: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+				initCliConfigCalled = true
 				return schema.AtmosConfiguration{}, nil
 			},
 			validateStacks: func(atmosConfig *schema.AtmosConfiguration) error {
+				validateStacksCalled = true
 				return nil
 			},
 			newDescribeLocalsExecFactory: func() exec.DescribeLocalsExec { return mockExec },
@@ -142,6 +153,12 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 		err := runFunc(cmd, []string{})
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrStackRequired)
+
+		// Verify fail-fast: expensive operations should NOT be called.
+		assert.False(t, checkAtmosConfigCalled, "checkAtmosConfig should not be called when --stack is missing")
+		assert.False(t, processCommandLineArgsCalled, "processCommandLineArgs should not be called when --stack is missing")
+		assert.False(t, initCliConfigCalled, "initCliConfig should not be called when --stack is missing")
+		assert.False(t, validateStacksCalled, "validateStacks should not be called when --stack is missing")
 	})
 
 	t.Run("missing stack with component returns error", func(t *testing.T) {
@@ -149,15 +166,26 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 		mockExec := exec.NewMockDescribeLocalsExec(ctrl)
 		// No expectation set - Execute should not be called.
 
+		// Track if expensive operations are called (they should NOT be).
+		checkAtmosConfigCalled := false
+		processCommandLineArgsCalled := false
+		initCliConfigCalled := false
+		validateStacksCalled := false
+
 		props := getRunnableDescribeLocalsCmdProps{
-			checkAtmosConfig: func(opts ...AtmosValidateOption) {},
+			checkAtmosConfig: func(opts ...AtmosValidateOption) {
+				checkAtmosConfigCalled = true
+			},
 			processCommandLineArgs: func(componentType string, cmd *cobra.Command, args []string, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+				processCommandLineArgsCalled = true
 				return schema.ConfigAndStacksInfo{}, nil
 			},
 			initCliConfig: func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+				initCliConfigCalled = true
 				return schema.AtmosConfiguration{}, nil
 			},
 			validateStacks: func(atmosConfig *schema.AtmosConfiguration) error {
+				validateStacksCalled = true
 				return nil
 			},
 			newDescribeLocalsExecFactory: func() exec.DescribeLocalsExec { return mockExec },
@@ -173,7 +201,13 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 		// Pass component without --stack flag.
 		err := runFunc(cmd, []string{"vpc"})
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrStackRequiredWithComponent)
+		assert.ErrorIs(t, err, errUtils.ErrStackRequired)
+
+		// Verify fail-fast: expensive operations should NOT be called.
+		assert.False(t, checkAtmosConfigCalled, "checkAtmosConfig should not be called when --stack is missing")
+		assert.False(t, processCommandLineArgsCalled, "processCommandLineArgs should not be called when --stack is missing")
+		assert.False(t, initCliConfigCalled, "initCliConfig should not be called when --stack is missing")
+		assert.False(t, validateStacksCalled, "validateStacks should not be called when --stack is missing")
 	})
 
 	// Table-driven tests for error cases to avoid code duplication.
@@ -223,6 +257,9 @@ func TestGetRunnableDescribeLocalsCmd(t *testing.T) {
 			cmd.Flags().String("format", "", "")
 			cmd.Flags().String("file", "", "")
 			cmd.Flags().String("query", "", "")
+
+			// Set --stack flag to pass fail-fast check and reach the error cases.
+			require.NoError(t, cmd.Flags().Set("stack", "dev"))
 
 			err := runFunc(cmd, []string{})
 
