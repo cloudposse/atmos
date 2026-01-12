@@ -198,6 +198,9 @@ func runMainLogic() {
 		er.PrintErrors(errors, config)
 		errUtils.Exit(1)
 	}
+
+	// Output final result to stdout for scripts/pipelines
+	fmt.Println("No errors found")
 }
 
 func checkVersion(config config.Config) error {

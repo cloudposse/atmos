@@ -57,6 +57,8 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 		return validationErr
 	}
 
+	// Output final result to stdout for scripts/pipelines
+	u.PrintfMarkdown("**✅ Authentication configuration is valid**\n")
 	return nil
 }
 
