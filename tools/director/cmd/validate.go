@@ -14,35 +14,59 @@ import (
 	"github.com/cloudposse/atmos/tools/director/internal/scene"
 	"github.com/cloudposse/atmos/tools/director/internal/toolmgr"
 	"github.com/cloudposse/atmos/tools/director/internal/validation"
+	"github.com/cloudposse/atmos/tools/director/internal/vhs"
 )
 
 func validateCmd() *cobra.Command {
-	var rendered bool
+	var (
+		rendered      bool
+		tapes         bool
+		all           bool
+		category      string
+		tag           string
+		includeDrafts bool
+	)
 
 	cmd := &cobra.Command{
-		Use:   "validate",
+		Use:   "validate [scene-names...]",
 		Short: "Validate scenes and rendered outputs",
 		Long: `Validate all scenes defined in scenes.yaml.
 
-Checks:
+Default validation checks:
 - Tape files exist
 - Audio files exist (if configured)
 - Required dependencies are installed (atmos, terraform, etc.)
 - FFmpeg is available (if any scene uses audio)
-- VHS can parse the tape files
+
+With --tapes flag:
+- Validates tape file syntax using VHS validate
+- Catches parsing errors before rendering (e.g., unquoted paths)
 
 With --rendered flag:
 - Validates rendered SVG outputs against error patterns
 - Checks must_not_match patterns (e.g., "Error: ")
 - Checks must_match patterns (e.g., expected output)`,
 		Example: `
-# Validate all scenes configuration
+# Validate all enabled scenes configuration
 director validate
+
+# Validate tape file syntax for all enabled scenes
+director validate --tapes
+
+# Validate tapes for specific scenes
+director validate terraform-plan describe-stacks --tapes
+
+# Validate tapes by tag
+director validate --tag featured --tapes
+
+# Validate tapes by category
+director validate --category terraform --tapes
+
+# Validate all scenes (including disabled)
+director validate --all --tapes
 
 # Validate rendered SVG outputs for errors
 director validate --rendered
-
-# Shows which scenes are enabled/disabled and any errors
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -63,6 +87,13 @@ director validate --rendered
 				return validateRenderedOutputs(cmd, demosDir, scenesList)
 			}
 
+			// If --tapes flag is set, validate tape file syntax.
+			if tapes {
+				// Filter scenes using the same logic as render command.
+				scenesToValidate := filterScenes(scenesList, args, tag, category, all, includeDrafts)
+				return validateTapeSyntax(ctx, cmd, demosDir, scenesToValidate)
+			}
+
 			// Otherwise, run the existing scene configuration validation.
 			return validateSceneConfig(ctx, cmd, demosDir, scenesList)
 		},
@@ -70,8 +101,135 @@ director validate --rendered
 
 	cmd.Flags().BoolVar(&rendered, "rendered", false,
 		"Validate rendered SVG outputs for errors (checks for Error:, command not found, etc.)")
+	cmd.Flags().BoolVar(&tapes, "tapes", false,
+		"Validate tape file syntax using VHS validate (catches parsing errors)")
+	cmd.Flags().BoolVar(&all, "all", false,
+		"Include all scenes (including disabled) - use with --tapes")
+	cmd.Flags().StringVarP(&category, "category", "c", "",
+		"Filter by gallery category (e.g., terraform, list) - use with --tapes")
+	cmd.Flags().StringVarP(&tag, "tag", "t", "",
+		"Filter by tag (e.g., featured, version) - use with --tapes")
+	cmd.Flags().BoolVar(&includeDrafts, "include-drafts", false,
+		"Include draft scenes (status: draft) - use with --tapes")
 
 	return cmd
+}
+
+// filterScenes filters scenes based on args, tag, category, and other flags.
+// This mirrors the filtering logic in render command.
+func filterScenes(scenesList *scene.ScenesList, args []string, tag, category string, all, includeDrafts bool) []*scene.Scene {
+	var filtered []*scene.Scene
+
+	if len(args) > 0 {
+		// Filter by specific scene names.
+		requestedNames := make(map[string]bool)
+		for _, name := range args {
+			requestedNames[name] = true
+		}
+		for _, sc := range scenesList.Scenes {
+			if requestedNames[sc.Name] {
+				filtered = append(filtered, sc)
+			}
+		}
+	} else if tag != "" {
+		// Filter by tag.
+		for _, sc := range scenesList.Scenes {
+			if sc.IsDraft() && !includeDrafts {
+				continue
+			}
+			if sc.HasTag(tag) && (all || sc.Enabled) {
+				filtered = append(filtered, sc)
+			}
+		}
+	} else if category != "" {
+		// Filter by category.
+		for _, sc := range scenesList.Scenes {
+			if sc.IsDraft() && !includeDrafts {
+				continue
+			}
+			if sc.GetCategory() == category && (all || sc.Enabled) {
+				filtered = append(filtered, sc)
+			}
+		}
+	} else {
+		// All enabled (or all if --all flag).
+		for _, sc := range scenesList.Scenes {
+			if sc.IsDraft() && !includeDrafts {
+				continue
+			}
+			if all || sc.Enabled {
+				filtered = append(filtered, sc)
+			}
+		}
+	}
+
+	return filtered
+}
+
+// validateTapeSyntax validates tape file syntax using VHS validate.
+func validateTapeSyntax(ctx context.Context, cmd *cobra.Command, demosDir string, scenes []*scene.Scene) error {
+	// Check VHS is installed.
+	if err := vhs.CheckInstalled(); err != nil {
+		return err
+	}
+
+	cmd.Printf("Validating tape syntax for %d scene(s)...\n\n", len(scenes))
+
+	hasErrors := false
+	passCount := 0
+
+	for _, sc := range scenes {
+		tapeFile := filepath.Join(demosDir, sc.Tape)
+
+		// Check tape file exists first.
+		if _, err := os.Stat(tapeFile); os.IsNotExist(err) {
+			cmd.Printf("✗ %s: tape file not found: %s\n", sc.Name, sc.Tape)
+			hasErrors = true
+			continue
+		}
+
+		// Resolve workdir the same way as render does.
+		workdir := demosDir
+		if sc.Workdir != "" {
+			workdir = filepath.Join(filepath.Dir(demosDir), sc.Workdir)
+		}
+
+		// Preprocess tape to inline Source directives.
+		tempTape, err := vhs.PreprocessTape(tapeFile)
+		if err != nil {
+			cmd.Printf("✗ %s: failed to preprocess tape: %v\n", sc.Name, err)
+			hasErrors = true
+			continue
+		}
+
+		// Validate preprocessed tape syntax from workdir.
+		if err := vhs.ValidateTape(ctx, tempTape, workdir); err != nil {
+			os.Remove(tempTape)
+			cmd.Printf("✗ %s\n", sc.Name)
+			// Indent the error output.
+			lines := strings.Split(err.Error(), "\n")
+			for _, line := range lines {
+				if line != "" {
+					cmd.Printf("    %s\n", line)
+				}
+			}
+			hasErrors = true
+		} else {
+			os.Remove(tempTape)
+			cmd.Printf("✓ %s\n", sc.Name)
+			passCount++
+		}
+	}
+
+	cmd.Println()
+	cmd.Printf("Passed: %d/%d\n", passCount, len(scenes))
+
+	if hasErrors {
+		return fmt.Errorf("tape validation failed")
+	}
+
+	cmd.Println("All tapes validated successfully!")
+	return nil
 }
 
 // validateSceneConfig validates scene configuration (tape files, audio, dependencies).

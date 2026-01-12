@@ -40,6 +40,10 @@ type SceneHash struct {
 	Duration      float64 `json:"duration,omitempty"`       // Duration in seconds.
 	ThumbnailTime float64 `json:"thumbnail_time,omitempty"` // Thumbnail timestamp in seconds.
 
+	// SVG metadata.
+	SVGDuration      float64 `json:"svg_duration,omitempty"`       // SVG animation duration in seconds.
+	SVGThumbnailTime float64 `json:"svg_thumbnail_time,omitempty"` // Best frame time for SVG thumbnail.
+
 	// Stream-specific metadata for gallery components.
 	StreamUID       string `json:"stream_uid,omitempty"`       // Video UID from Cloudflare Stream (latest).
 	StreamSubdomain string `json:"stream_subdomain,omitempty"` // customer-xxx.cloudflarestream.com.

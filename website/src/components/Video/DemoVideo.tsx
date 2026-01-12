@@ -47,10 +47,11 @@ function makeResponsiveSvg(svgContent: string): string {
   const height = rootSvgMatch[2];
 
   // Add viewBox to the root SVG element to preserve aspect ratio when scaled.
-  // Replace the opening tag to include viewBox and set dimensions to 100%.
+  // Replace the opening tag to include viewBox. Remove height to let SVG scale naturally.
+  // With viewBox + width="100%", the SVG will maintain aspect ratio automatically.
   let result = svgContent.replace(
     /<svg\s+xmlns="([^"]*)"\s+width="\d+"\s+height="\d+"/,
-    `<svg xmlns="$1" viewBox="0 0 ${width} ${height}" width="100%" height="100%"`
+    `<svg xmlns="$1" viewBox="0 0 ${width} ${height}" width="100%"`
   );
 
   return result;

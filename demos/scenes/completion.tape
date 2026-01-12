@@ -4,7 +4,7 @@ Output completion.mp4
 Output completion.svg
 
 # VHS Configuration
-Source _theme.tape
+Source "_theme.tape"
 Set Shell zsh
 Set Width 1400
 Set Height 800
@@ -12,11 +12,13 @@ Set Height 800
 # Enable TrueColor for proper color rendering in VHS
 Env COLORTERM "truecolor"
 
-# Fix prompt and source completion (hidden setup)
+# Fix prompt (VHS runs with --no-rcs)
+Env PS1 "\033[38;2;90;86;224m> \033[0m"
+
+# Source completion (hidden setup)
 Hide
-Type "setopt INTERACTIVE_COMMENTS"
 Enter
-Type "PS1=$'\\e[38;2;90;86;224m> \\e[0m'"
+Type "setopt INTERACTIVE_COMMENTS"
 Enter
 Type "autoload -U compinit && compinit"
 Enter

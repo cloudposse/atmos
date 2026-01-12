@@ -4,7 +4,8 @@ Output terraform-output.mp4
 Output terraform-output.svg
 
 # VHS Configuration
-Source ../../scenes/_theme.tape
+Source "../../scenes/_theme.tape"
+Set Shell bash
 Set Width 1400
 Set Height 800
 
@@ -12,8 +13,15 @@ Set Height 800
 Env COLORTERM "truecolor"
 
 # Fix prompt (VHS runs with --no-rcs)
+Env PS1 "\033[38;2;90;86;224m> \033[0m"
+
+# Setup for GitHub Actions demo
+Env GITHUB_OUTPUT "/tmp/github_output"
+
+# Clean up from previous runs
 Hide
-Type "PS1='\033[38;2;90;86;224m> \033[0m'"
+Enter
+Type "rm -f /tmp/github_output"
 Enter
 Ctrl+L
 Show
@@ -41,6 +49,29 @@ Sleep 1s
 
 Type "atmos terraform output vpc -s plat-dev-ue2 --format env"
 Sleep 2s
+Enter
+Sleep 3s
+
+Type "# Use uppercase keys for shell conventions"
+Enter
+Sleep 1s
+
+Type "atmos terraform output vpc -s plat-dev-ue2 --format env --uppercase"
+Sleep 2s
+Enter
+Sleep 3s
+
+Type "# Write directly to GitHub Actions output"
+Enter
+Sleep 1s
+
+Type "atmos terraform output vpc -s plat-dev-ue2 --format env --uppercase --output-file=\$GITHUB_OUTPUT"
+Sleep 2s
+Enter
+Sleep 2s
+
+Type "cat \$GITHUB_OUTPUT"
+Sleep 1s
 Enter
 Sleep 3s
 

@@ -4,7 +4,7 @@ Output toolchain-env.mp4
 Output toolchain-env.svg
 
 # VHS Configuration
-Source _theme.tape
+Source "_theme.tape"
 Set Width 1400
 Set Height 800
 
@@ -12,8 +12,9 @@ Set Height 800
 Env COLORTERM "truecolor"
 
 # Fix prompt (VHS runs with --no-rcs)
+Env PS1 "\033[38;2;90;86;224m> \033[0m"
+
 Hide
-Type "PS1='\033[38;2;90;86;224m> \033[0m'"
 Enter
 Ctrl+L
 Show
@@ -56,7 +57,7 @@ Sleep 2s
 Enter
 Sleep 3s
 
-Type "# Add to your shell: eval \"$(atmos toolchain env)\""
+Type "# Add to your shell profile to use these paths"
 Enter
 Sleep 1s
 

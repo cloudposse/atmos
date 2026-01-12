@@ -192,6 +192,22 @@
   object-fit: cover;
 }
 
+/* SVG thumbnail - static preview showing best frame */
+.svgThumbnail {
+  width: 100%;
+  height: 100%;
+  transition: transform 0.3s ease;
+}
+
+.svgThumbnail svg {
+  width: 100%;
+  height: 100%;
+}
+
+.card:hover .svgThumbnail {
+  transform: scale(1.05);
+}
+
 .playButton {
   position: absolute;
   top: 50%;

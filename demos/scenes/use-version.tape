@@ -4,7 +4,7 @@ Output use-version.mp4
 Output use-version.svg
 
 # VHS Configuration
-Source _theme.tape
+Source "_theme.tape"
 Set Width 1400
 Set Height 800
 
@@ -12,8 +12,9 @@ Set Height 800
 Env COLORTERM "truecolor"
 
 # Fix prompt (VHS runs with --no-rcs)
+Env PS1 "\033[38;2;90;86;224m> \033[0m"
+
 Hide
-Type "PS1='\033[38;2;90;86;224m> \033[0m'"
 Enter
 Ctrl+L
 Show

@@ -2,7 +2,3 @@
 vars:
   region: us-west-2
   environment: uw2
-  availability_zones:
-    - us-west-2a
-    - us-west-2b
-    - us-west-2c

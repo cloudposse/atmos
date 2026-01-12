@@ -84,6 +84,10 @@ Never "dumb down" a tape to make it pass. If a documented command doesn't work, 
 
 # Render and publish a single scene
 ./tools/director/director render terraform-plan --force --publish --export-manifest
+
+# Publish already-rendered scene (no re-render)
+./tools/director/director publish terraform-plan
+./tools/director/director export manifest
 ```
 
 ### Test Mode (Critical for Validation)
@@ -112,17 +116,56 @@ Never "dumb down" a tape to make it pass. If a documented command doesn't work, 
 - `--test` / `-T` - Run commands, show pass/fail only (buffered)
 - `--verbose` / `-v` - Run commands with streaming output to terminal (implies --test)
 
+### Publish Demos (Without Re-rendering)
+```bash
+# Publish all rendered demos from .cache
+./tools/director/director publish
+
+# Publish specific scenes
+./tools/director/director publish terraform-plan describe-stacks
+
+# Force re-upload (ignore cache)
+./tools/director/director publish --force
+
+# Dry run (show what would be uploaded)
+./tools/director/director publish --dry-run
+```
+
+**Note:** Use `publish` directly when scenes are already rendered in `.cache/`.
+Use `render --publish` when you need to render AND publish in one step.
+
+### Validate Tapes
+```bash
+# Validate tape syntax for all enabled scenes
+./tools/director/director validate --tapes
+
+# Validate by tag
+./tools/director/director validate --tag featured --tapes
+
+# Validate by category
+./tools/director/director validate --category terraform --tapes
+
+# Validate specific scenes
+./tools/director/director validate terraform-plan describe-stacks --tapes
+
+# Validate all scenes (including disabled)
+./tools/director/director validate --all --tapes
+```
+
+**Note:** Always validate tapes before rendering to catch syntax errors early.
+VHS 0.11.1+ requires quoted paths in `Source` directives.
+
 ### Other Commands
 ```bash
 # List scenes
 ./tools/director/director list
 ./tools/director/director list --published
 
-# Validate rendered SVGs
-./tools/director/director render --validate
+# Validate rendered SVGs for error patterns
+./tools/director/director validate --rendered
 
 # Export manifest
-./tools/director/director export-manifest
+./tools/director/director export manifest
 ```
 
 ## Directory Structure

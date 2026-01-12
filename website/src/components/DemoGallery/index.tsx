@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Stream, StreamPlayerApi } from '@cloudflare/stream-react';
 import { DemoVideo } from '../Video';
+import { SvgThumbnail } from '../SvgThumbnail';
 import { demoCategories, getDemoAssetUrls, getManifestData, getDemoById, FEATURED_DEMOS } from '../../data/demos';
 import styles from './styles.module.css';
 
@@ -16,12 +17,15 @@ interface DemoCardProps {
 }
 
 function DemoCard({ demo, onClick }: DemoCardProps): JSX.Element {
-  const { png, streamUid, svg } = getDemoAssetUrls(demo.id);
+  const { png, streamUid, svg, svgThumbnailTime } = getDemoAssetUrls(demo.id);
   const manifestData = getManifestData(demo.id);
   const videoUid = streamUid || manifestData?.formats?.mp4?.uid;
 
   // Prefer SVG over video for hover preview.
   const useSvgPreview = !!svg;
+
+  // Use frozen SVG as thumbnail if available.
+  const useFrozenSvgThumbnail = !!svg && svgThumbnailTime != null && svgThumbnailTime > 0;
 
   const [isHovered, setIsHovered] = useState(false);
   const [hasBeenHovered, setHasBeenHovered] = useState(false);
@@ -78,8 +82,19 @@ function DemoCard({ demo, onClick }: DemoCardProps): JSX.Element {
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      <div className={`${styles.thumbnail} ${!png ? styles.noThumbnail : ''}`}>
-        {png && <img src={png} alt={demo.title} loading="lazy" />}
+      <div className={`${styles.thumbnail} ${!png && !useFrozenSvgThumbnail ? styles.noThumbnail : ''}`}>
+        {/* SVG thumbnail (preferred over PNG) */}
+        {useFrozenSvgThumbnail && !isHovered && (
+          <SvgThumbnail
+            src={svg}
+            freezeTime={svgThumbnailTime}
+            alt={demo.title}
+            className={styles.svgThumbnail}
+          />
+        )}
+
+        {/* PNG thumbnail fallback */}
+        {!useFrozenSvgThumbnail && png && <img src={png} alt={demo.title} loading="lazy" />}
 
         {/* SVG preview on hover (preferred) */}
         {useSvgPreview && (

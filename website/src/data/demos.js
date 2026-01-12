@@ -25,6 +25,7 @@ const categoryDefinitions = [
   { id: 'auth', title: 'Authentication', description: 'Secure credential management for cloud providers' },
   { id: 'config', title: 'Configuration & Validation', description: 'Advanced configuration features and validation' },
   { id: 'flagship', title: 'End-to-End Workflows', description: 'Complete workflows showcasing Atmos capabilities' },
+  { id: 'demo-stacks', title: 'Demo Stacks', description: 'Learn Atmos with our example stacks repository' },
 ];
 
 // Build a lookup map from manifest for quick access
@@ -121,6 +122,9 @@ export function getDemoAssetUrls(demoId) {
   // SVG duration (for timer-based advancement)
   const svgDuration = svgFormat?.duration || mp4Format?.duration || null;
 
+  // SVG thumbnail time (for frozen thumbnail display)
+  const svgThumbnailTime = svgFormat?.thumbnail_time || null;
+
   return {
     gif: hasFormats ? `${DEMO_ASSETS_BASE_URL}/${demoId}.gif` : null,
     png: thumbnail,
@@ -128,6 +132,7 @@ export function getDemoAssetUrls(demoId) {
     svg: svgUrl,
     mp3: mp3Url,
     svgDuration: svgDuration,
+    svgThumbnailTime: svgThumbnailTime,
     thumbnail: thumbnail,
     streamUid: mp4Format?.uid || null,
   };

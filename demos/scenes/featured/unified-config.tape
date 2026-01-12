@@ -18,8 +18,9 @@ Set TypingSpeed 80ms
 Env COLORTERM "truecolor"
 
 # Fix prompt
+Env PS1 "\033[38;2;90;86;224m> \033[0m"
+
 Hide
-Type "PS1='\033[38;2;90;86;224m> \033[0m'"
 Enter
 Ctrl+L
 Show

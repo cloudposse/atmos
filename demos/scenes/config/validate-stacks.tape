@@ -4,7 +4,7 @@ Output config-validate-stacks.mp4
 Output config-validate-stacks.svg
 
 # VHS Configuration
-Source ../../scenes/_theme.tape
+Source "../../scenes/_theme.tape"
 Set Width 1400
 Set Height 800
 
@@ -12,8 +12,9 @@ Set Height 800
 Env COLORTERM "truecolor"
 
 # Fix prompt (VHS runs with --no-rcs)
+Env PS1 "\033[38;2;90;86;224m> \033[0m"
+
 Hide
-Type "PS1='\033[38;2;90;86;224m> \033[0m'"
 Enter
 Ctrl+L
 Show

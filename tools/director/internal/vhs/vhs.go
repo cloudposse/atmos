@@ -34,16 +34,33 @@ func CheckSVGSupport() error {
 	return nil
 }
 
+// ValidateTape runs VHS validate on a tape file to check for syntax errors.
+// The tapeFile should be an absolute path to a preprocessed tape (with Source directives inlined).
+// VHS runs from workdir so commands execute in the correct directory.
+// Returns nil if the tape is valid, or an error with VHS validation output.
+func ValidateTape(ctx context.Context, tapeFile, workdir string) error {
+	// Run VHS validate from workdir. Tape file must be absolute path.
+	cmd := exec.CommandContext(ctx, "vhs", "validate", tapeFile)
+	cmd.Dir = workdir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("tape validation failed:\n%s", string(output))
+	}
+	return nil
+}
+
 // Render executes VHS to render a tape file.
-// Workdir is where VHS starts the shell (the scene's working directory).
+// The tapeFile should be an absolute path to a preprocessed tape (with Source directives inlined).
+// VHS runs from workdir so commands execute in the correct directory.
 // OutputDir is where VHS writes output files (passed as VHS_OUTPUT_DIR env var).
 // Stdout and stderr are piped to the process's stdout/stderr for user visibility.
 func Render(ctx context.Context, tapeFile, workdir, outputDir string) error {
+	// Run VHS from workdir. Tape file must be absolute path.
 	cmd := exec.CommandContext(ctx, "vhs", tapeFile)
-	// VHS runs from workdir so the shell starts there (no cd commands needed).
-	// VHS_OUTPUT_DIR env var is used by tape files for Output directives.
 	cmd.Dir = workdir
-	cmd.Env = append(os.Environ(), "VHS_OUTPUT_DIR="+outputDir)
+	cmd.Env = append(os.Environ(),
+		"VHS_OUTPUT_DIR="+outputDir,
+	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

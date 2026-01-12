@@ -18,8 +18,9 @@ Set TypingSpeed 80ms
 Env COLORTERM "truecolor"
 
 # Fix prompt
+Env PS1 "\033[38;2;90;86;224m> \033[0m"
+
 Hide
-Type "PS1='\033[38;2;90;86;224m> \033[0m'"
 Enter
 Ctrl+L
 Show
@@ -36,23 +37,11 @@ Type "# After: See everything at a glance"
 Enter
 Sleep 2s
 
-# Show stacks
-Type "atmos list stacks --format tree"
+# Show instances (components in stacks)
+Type "atmos list instances --format tree"
 Sleep 1.5s
 Enter
 Sleep 4s
-
-Enter
-Sleep 0.5s
-# Show components
-Type "# What components are available?"
-Enter
-Sleep 1s
-
-Type "atmos list components"
-Sleep 1.5s
-Enter
-Sleep 3s
 
 Enter
 Sleep 0.5s

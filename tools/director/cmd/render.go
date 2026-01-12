@@ -212,6 +212,32 @@ director render terraform-plan --test
 				return err
 			}
 
+			// Validate all tape files before rendering to catch syntax errors early.
+			// This prevents wasting time on a long render only to fail on a bad tape.
+			// Preprocessing inlines Source directives so VHS can run from workdir.
+			c.Printf("Validating %d tape(s)...\n", len(scenesToRender))
+			for _, sc := range scenesToRender {
+				tapeFile := filepath.Join(demosDir, sc.Tape)
+				// Resolve workdir the same way as render does.
+				workdir := demosDir
+				if sc.Workdir != "" {
+					workdir = filepath.Join(filepath.Dir(demosDir), sc.Workdir)
+				}
+				// Preprocess tape to inline Source directives.
+				tempTape, err := vhs.PreprocessTape(tapeFile)
+				if err != nil {
+					c.Printf("✗ %s: failed to preprocess: %v\n", sc.Name, err)
+					return fmt.Errorf("tape preprocessing failed for %s: %w", sc.Name, err)
+				}
+				if err := vhs.ValidateTape(ctx, tempTape, workdir); err != nil {
+					os.Remove(tempTape)
+					c.Printf("✗ %s: %s\n", sc.Name, sc.Tape)
+					return fmt.Errorf("tape validation failed for %s: %w", sc.Name, err)
+				}
+				os.Remove(tempTape)
+			}
+			c.Printf("All tapes valid.\n\n")
+
 			// Check if any scene uses audio and needs FFmpeg.
 			needsFFmpeg := false
 			for _, sc := range scenesToRender {
@@ -278,7 +304,7 @@ director render terraform-plan --test
 				result, err := renderer.Render(ctx, sc)
 				if err != nil {
 					c.Printf("FAILED\n  Error: %v\n", err)
-					continue
+					return err
 				}
 
 				if result.Cached {
@@ -354,6 +380,13 @@ director render terraform-plan --test
 func runPreRenderHooks(ctx context.Context, c *cobra.Command, hooks []string, workdir string) error {
 	c.Printf("Running pre-render hooks...\n")
 
+	// Check if running in Conductor workspace - disable VCS stamping.
+	var extraEnv []string
+	if os.Getenv("CONDUCTOR_WORKSPACE_PATH") != "" {
+		extraEnv = append(extraEnv, "GOFLAGS=-buildvcs=false")
+		c.Printf("  (Conductor workspace detected, setting GOFLAGS=-buildvcs=false)\n")
+	}
+
 	for i, cmdStr := range hooks {
 		c.Printf("  [%d/%d] %s\n", i+1, len(hooks), cmdStr)
 
@@ -361,6 +394,9 @@ func runPreRenderHooks(ctx context.Context, c *cobra.Command, hooks []string, wo
 		cmd.Dir = workdir
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+		if len(extraEnv) > 0 {
+			cmd.Env = append(os.Environ(), extraEnv...)
+		}
 
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("hook %d failed (%s): %w", i+1, cmdStr, err)

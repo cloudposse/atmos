@@ -34,9 +34,10 @@ type ManifestFormat struct {
 	Subdomain string   `json:"subdomain,omitempty"`
 	AllUIDs   []string `json:"all_uids,omitempty"` // All UIDs for graceful transitions.
 
-	// Video metadata.
-	Duration  float64 `json:"duration,omitempty"`  // Duration in seconds.
-	Thumbnail string  `json:"thumbnail,omitempty"` // Thumbnail URL.
+	// Video/SVG metadata.
+	Duration      float64 `json:"duration,omitempty"`       // Duration in seconds.
+	Thumbnail     string  `json:"thumbnail,omitempty"`      // Thumbnail URL.
+	ThumbnailTime float64 `json:"thumbnail_time,omitempty"` // Best frame time for thumbnail (SVG animation-delay).
 }
 
 // Manifest represents the exported gallery manifest.
@@ -207,6 +208,16 @@ func runExportManifestWithOptions(demosDir string, output string, pretty bool, i
 			} else {
 				// This is an R2 file.
 				manifestFormat.Type = "r2"
+
+				// Add SVG-specific metadata.
+				if format == "svg" {
+					if sceneHash.SVGDuration > 0 {
+						manifestFormat.Duration = sceneHash.SVGDuration
+					}
+					if sceneHash.SVGThumbnailTime > 0 {
+						manifestFormat.ThumbnailTime = sceneHash.SVGThumbnailTime
+					}
+				}
 			}
 
 			manifestScene.Formats[format] = manifestFormat

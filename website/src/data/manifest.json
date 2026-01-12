@@ -34,16 +34,32 @@
       "title": "Describe Component",
       "order": 2,
       "formats": {
+        "gif": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-component.gif",
+          "type": "r2"
+        },
+        "mp3": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-component.mp3",
+          "type": "r2"
+        },
         "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5427b0dcbffac66486f2f951558e0c19/watch",
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/01906465acea38a11ea705fde3c2d23b/watch",
           "type": "stream",
-          "uid": "5427b0dcbffac66486f2f951558e0c19",
+          "uid": "01906465acea38a11ea705fde3c2d23b",
           "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
           "all_uids": [
-            "5427b0dcbffac66486f2f951558e0c19"
+            "01906465acea38a11ea705fde3c2d23b"
           ],
-          "duration": 13.16,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5427b0dcbffac66486f2f951558e0c19/thumbnails/thumbnail.jpg?time=11.1s"
+          "duration": 8.64,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/01906465acea38a11ea705fde3c2d23b/thumbnails/thumbnail.jpg"
+        },
+        "png": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-component.png",
+          "type": "r2"
+        },
+        "svg": {
+          "url": "https://assets.cloudposse.com/demos/demo-stacks/demo-stacks-component.svg",
+          "type": "r2"
         }
       }
     },
@@ -176,16 +192,15 @@
           "type": "r2"
         },
         "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5e380849de91295aa0e8b206ed30871e/watch",
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/87c01839ee503d0f64c75da361a1be71/watch",
           "type": "stream",
-          "uid": "5e380849de91295aa0e8b206ed30871e",
+          "uid": "87c01839ee503d0f64c75da361a1be71",
           "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
           "all_uids": [
-            "5e380849de91295aa0e8b206ed30871e",
-            "ee3c1cef119b41aaeea9134550b68152"
+            "87c01839ee503d0f64c75da361a1be71"
           ],
-          "duration": 22.2,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/5e380849de91295aa0e8b206ed30871e/thumbnails/thumbnail.jpg"
+          "duration": 31.68,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/87c01839ee503d0f64c75da361a1be71/thumbnails/thumbnail.jpg"
         },
         "png": {
           "url": "https://assets.cloudposse.com/demos/featured/featured-see-everything.png",
@@ -193,7 +208,9 @@
         },
         "svg": {
           "url": "https://assets.cloudposse.com/demos/featured/featured-see-everything.svg",
-          "type": "r2"
+          "type": "r2",
+          "duration": 31.68,
+          "thumbnail_time": 16.19652733118971
         }
       }
     },
@@ -366,15 +383,15 @@
           "type": "r2"
         },
         "mp4": {
-          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/9c30c40e466f8a4757bf9482e001c54c/watch",
+          "url": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/aad72222791fa7ae02871b7fc8d830d5/watch",
           "type": "stream",
-          "uid": "9c30c40e466f8a4757bf9482e001c54c",
+          "uid": "aad72222791fa7ae02871b7fc8d830d5",
           "subdomain": "customer-8i3c8t6z9xqdm8lv.cloudflarestream.com",
           "all_uids": [
-            "9c30c40e466f8a4757bf9482e001c54c"
+            "aad72222791fa7ae02871b7fc8d830d5"
           ],
-          "duration": 12.88,
-          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/9c30c40e466f8a4757bf9482e001c54c/thumbnails/thumbnail.jpg"
+          "duration": 20.24,
+          "thumbnail": "https://customer-8i3c8t6z9xqdm8lv.cloudflarestream.com/aad72222791fa7ae02871b7fc8d830d5/thumbnails/thumbnail.jpg"
         },
         "png": {
           "url": "https://assets.cloudposse.com/demos/terraform/terraform-output.png",
@@ -382,7 +399,9 @@
         },
         "svg": {
           "url": "https://assets.cloudposse.com/demos/terraform/terraform-output.svg",
-          "type": "r2"
+          "type": "r2",
+          "duration": 20.22,
+          "thumbnail_time": 18.730580357142856
         }
       }
     },

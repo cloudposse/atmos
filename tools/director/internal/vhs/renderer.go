@@ -127,16 +127,14 @@ func (r *Renderer) Render(ctx context.Context, sc *scene.Scene) (*RenderResult, 
 		}
 	}
 
-	// If format filter is set, create a temporary tape file with only the requested outputs.
-	tapeToRender := tapeFile
-	if len(r.formatFilter) > 0 {
-		tempTape, err := r.createFilteredTape(tapeFile, sc.Name, effectiveOutputs)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create filtered tape: %w", err)
-		}
-		defer os.Remove(tempTape)
-		tapeToRender = tempTape
+	// Always preprocess the tape to inline Source directives.
+	// This allows VHS to run from workdir since the tape becomes self-contained.
+	tempTape, err := r.createFilteredTape(tapeFile, sc.Name, effectiveOutputs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to preprocess tape: %w", err)
 	}
+	defer os.Remove(tempTape)
+	tapeToRender := tempTape
 
 	if err := Render(ctx, tapeToRender, workdir, r.cacheDir); err != nil {
 		return nil, err
@@ -170,6 +168,20 @@ func (r *Renderer) Render(ctx context.Context, sc *scene.Scene) (*RenderResult, 
 	// Update cache with new hash and duration.
 	if err := r.cache.UpdateScene(sc.Name, tapeFile, audioFile, outputFiles, duration); err != nil {
 		return nil, fmt.Errorf("failed to update cache: %w", err)
+	}
+
+	// Extract and store SVG metadata if SVG was rendered.
+	if r.containsFormat(effectiveOutputs, "svg") {
+		svgPath := filepath.Join(r.cacheDir, fmt.Sprintf("%s.svg", sc.Name))
+		if svgMeta, err := findBestSVGThumbnailTime(svgPath); err == nil && svgMeta != nil {
+			// Update cache with SVG metadata.
+			if sceneHash, exists := r.cache.Scenes[sc.Name]; exists {
+				sceneHash.SVGDuration = svgMeta.Duration
+				sceneHash.SVGThumbnailTime = svgMeta.ThumbnailTime
+				r.cache.Scenes[sc.Name] = sceneHash
+				fmt.Printf("  SVG thumbnail time: %.1fs (duration: %.1fs)\n", svgMeta.ThumbnailTime, svgMeta.Duration)
+			}
+		}
 	}
 
 	// Save cache metadata.
@@ -271,8 +283,8 @@ func (r *Renderer) processFilteredTape(tapeFile, baseDir, sceneName string, allo
 
 	// Regex to match Output directives: "Output scenename.format".
 	outputRegex := regexp.MustCompile(`^Output\s+` + regexp.QuoteMeta(sceneName) + `\.(\w+)\s*$`)
-	// Regex to match Source directives: "Source path/to/file.tape".
-	sourceRegex := regexp.MustCompile(`^Source\s+(.+?)\s*$`)
+	// Regex to match Source directives: "Source path/to/file.tape" or Source "path/to/file.tape".
+	sourceRegex := regexp.MustCompile(`^Source\s+"?([^"]+)"?\s*$`)
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -326,8 +338,8 @@ func (r *Renderer) inlineSourceFile(sourcePath, baseDir string, out *os.File) er
 	}
 	defer file.Close()
 
-	// Regex to match Source directives.
-	sourceRegex := regexp.MustCompile(`^Source\s+(.+?)\s*$`)
+	// Regex to match Source directives (handles both quoted and unquoted paths).
+	sourceRegex := regexp.MustCompile(`^Source\s+"?([^"]+)"?\s*$`)
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -625,6 +637,162 @@ func fixSVGLineHeight(svgPath string, fontSize, lineHeight float64) error {
 	return nil
 }
 
+// fixSVGBackgroundColor replaces the terminal background color in SVG files.
+// VHS renders with #1a1a1a but video encoding shifts this to #1e1d2e.
+// This post-processing ensures SVGs match the MP4 appearance.
+func fixSVGBackgroundColor(svgPath string) error {
+	content, err := os.ReadFile(svgPath)
+	if err != nil {
+		return fmt.Errorf("failed to read SVG: %w", err)
+	}
+
+	// Replace VHS theme background with video-matching color.
+	fixed := strings.ReplaceAll(string(content), "#1a1a1a", "#1e1d2e")
+
+	return os.WriteFile(svgPath, []byte(fixed), 0o644)
+}
+
+// SVGMetadata contains extracted metadata from an SVG animation.
+type SVGMetadata struct {
+	Duration      float64 // Animation duration in seconds.
+	ThumbnailTime float64 // Best frame time for thumbnail (color + content score).
+}
+
+// findBestSVGThumbnailTime analyzes SVG animation frames to find the best thumbnail frame.
+// It scores frames based on color diversity (60%) and content density (40%).
+// Returns the best timestamp and the total animation duration.
+func findBestSVGThumbnailTime(svgPath string) (*SVGMetadata, error) {
+	content, err := os.ReadFile(svgPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read SVG: %w", err)
+	}
+
+	svg := string(content)
+
+	// Extract animation duration from CSS: animation: slide Xs step-end ...
+	durationRe := regexp.MustCompile(`animation:\s*slide\s+([\d.]+)s`)
+	durationMatch := durationRe.FindStringSubmatch(svg)
+	duration := 0.0
+	if len(durationMatch) > 1 {
+		duration, _ = strconv.ParseFloat(durationMatch[1], 64)
+	}
+
+	if duration == 0 {
+		return &SVGMetadata{Duration: 0, ThumbnailTime: 0}, nil
+	}
+
+	// Find all frame groups: <g transform="translate(X,0)">...</g>
+	// Each frame represents a different point in time.
+	frameRe := regexp.MustCompile(`<g transform="translate\((\d+),0\)">(.*?)</g>`)
+	frames := frameRe.FindAllStringSubmatch(svg, -1)
+
+	if len(frames) == 0 {
+		// Fallback to 80% of duration.
+		return &SVGMetadata{Duration: duration, ThumbnailTime: duration * 0.8}, nil
+	}
+
+	// Color classes used in VHS SVGs (from theme).
+	colorClasses := []string{"r", "g", "y", "b", "m", "c", "p", "w"}
+
+	// Regex to count tspan elements (each represents a text segment).
+	tspanRe := regexp.MustCompile(`<tspan[^>]*>`)
+
+	type scoredFrame struct {
+		index        int
+		colorCount   int
+		contentCount int // Number of tspan elements (text density).
+	}
+	scoredFrames := make([]scoredFrame, 0, len(frames))
+
+	for i, frame := range frames {
+		if len(frame) < 3 {
+			continue
+		}
+		content := frame[2]
+
+		// Count unique color classes in this frame.
+		colorCount := 0
+		for _, cls := range colorClasses {
+			// Check for class="X" or class="t X" patterns.
+			if strings.Contains(content, fmt.Sprintf(`class="%s"`, cls)) ||
+				strings.Contains(content, fmt.Sprintf(`class="t %s"`, cls)) ||
+				strings.Contains(content, fmt.Sprintf(` %s"`, cls)) {
+				colorCount++
+			}
+		}
+
+		// Count tspan elements as a proxy for content density.
+		contentCount := len(tspanRe.FindAllString(content, -1))
+
+		scoredFrames = append(scoredFrames, scoredFrame{index: i, colorCount: colorCount, contentCount: contentCount})
+	}
+
+	if len(scoredFrames) == 0 {
+		return &SVGMetadata{Duration: duration, ThumbnailTime: duration * 0.8}, nil
+	}
+
+	// Find max values for normalization.
+	maxColors := 0
+	maxContent := 0
+	for _, f := range scoredFrames {
+		if f.colorCount > maxColors {
+			maxColors = f.colorCount
+		}
+		if f.contentCount > maxContent {
+			maxContent = f.contentCount
+		}
+	}
+
+	// Score function: combines color diversity and content density.
+	// Color diversity is weighted slightly higher (0.6) since colorful frames are visually appealing.
+	// Content density (0.4) ensures we pick frames with substantial visible output.
+	scoreFrame := func(f scoredFrame) float64 {
+		colorScore := 0.0
+		if maxColors > 0 {
+			colorScore = float64(f.colorCount) / float64(maxColors)
+		}
+		contentScore := 0.0
+		if maxContent > 0 {
+			contentScore = float64(f.contentCount) / float64(maxContent)
+		}
+		return colorScore*0.6 + contentScore*0.4
+	}
+
+	// Find frame with highest combined score.
+	bestFrame := scoredFrames[0]
+	bestScore := scoreFrame(bestFrame)
+	for _, f := range scoredFrames {
+		score := scoreFrame(f)
+		if score > bestScore {
+			bestScore = score
+			bestFrame = f
+		}
+	}
+
+	// If best frame is at the beginning (probably just prompt) or has low content,
+	// prefer a frame around 75-85% of the animation where output is typically visible.
+	// This handles demos with monochrome output (like list-stacks) or slow-typing demos.
+	if bestFrame.index < len(scoredFrames)/4 || bestFrame.contentCount < maxContent/2 {
+		// Find frames in the 75-85% range with at least as good a score.
+		targetStart := int(float64(len(scoredFrames)) * 0.75)
+		targetEnd := int(float64(len(scoredFrames)) * 0.85)
+		for _, f := range scoredFrames {
+			if f.index >= targetStart && f.index <= targetEnd && scoreFrame(f) >= bestScore*0.8 {
+				bestFrame = f
+				break
+			}
+		}
+	}
+
+	// Calculate timestamp for best frame.
+	thumbnailTime := float64(bestFrame.index) / float64(len(frames)) * duration
+
+	return &SVGMetadata{
+		Duration:      duration,
+		ThumbnailTime: thumbnailTime,
+	}, nil
+}
+
 // postProcessSVG applies post-processing fixes to SVG files.
 func (r *Renderer) postProcessSVG(svgPath string) error {
 	// Default values matching the tape theme settings.
@@ -645,5 +813,10 @@ func (r *Renderer) postProcessSVG(svgPath string) error {
 	}
 
 	fmt.Printf("  Post-processing SVG line height: %s\n", filepath.Base(svgPath))
-	return fixSVGLineHeight(svgPath, fontSize, lineHeight)
+	if err := fixSVGLineHeight(svgPath, fontSize, lineHeight); err != nil {
+		return err
+	}
+
+	fmt.Printf("  Post-processing SVG background color: %s\n", filepath.Base(svgPath))
+	return fixSVGBackgroundColor(svgPath)
 }
