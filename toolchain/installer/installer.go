@@ -232,6 +232,9 @@ func (i *Installer) Install(owner, repo, version string) (string, error) {
 
 // Helper to handle the rest of the install logic.
 func (i *Installer) installFromTool(tool *registry.Tool, version string) (string, error) {
+	// Set version on tool so extraction functions can use it for template expansion.
+	tool.Version = version
+
 	// Apply platform-specific overrides before building the asset URL.
 	ApplyPlatformOverrides(tool)
 

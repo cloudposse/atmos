@@ -944,3 +944,63 @@ func TestInstaller_extractFilesFromDir(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+// TestExpandFileSrcTemplate tests the template expansion for file source paths.
+// REGRESSION TEST: This test would have caught the helm bug where {{.OS}}-{{.Arch}}/helm
+// was not being expanded, causing "file not found in archive: {{.OS}}-{{.Arch}}/helm".
+func TestExpandFileSrcTemplate(t *testing.T) {
+	installer := &Installer{}
+
+	t.Run("expands OS and Arch templates", func(t *testing.T) {
+		tool := &registry.Tool{
+			Version: "3.16.3",
+		}
+
+		result, err := installer.expandFileSrcTemplate("{{.OS}}-{{.Arch}}/helm", tool)
+		require.NoError(t, err)
+
+		// Should contain actual OS and Arch values, not template syntax.
+		assert.NotContains(t, result, "{{.OS}}")
+		assert.NotContains(t, result, "{{.Arch}}")
+		// Should contain darwin or linux (depending on test platform).
+		assert.Contains(t, result, "/helm")
+	})
+
+	t.Run("passes through non-template paths", func(t *testing.T) {
+		tool := &registry.Tool{
+			Version: "1.0.0",
+		}
+
+		result, err := installer.expandFileSrcTemplate("bin/mytool", tool)
+		require.NoError(t, err)
+		assert.Equal(t, "bin/mytool", result)
+	})
+
+	t.Run("expands trimV function", func(t *testing.T) {
+		tool := &registry.Tool{
+			Version:       "v1.2.3",
+			VersionPrefix: "v",
+		}
+
+		result, err := installer.expandFileSrcTemplate("tool-{{trimV .Version}}/binary", tool)
+		require.NoError(t, err)
+		assert.Equal(t, "tool-1.2.3/binary", result)
+	})
+
+	t.Run("applies replacements", func(t *testing.T) {
+		tool := &registry.Tool{
+			Version: "1.0.0",
+			Replacements: map[string]string{
+				"darwin": "macos",
+				"amd64":  "x86_64",
+			},
+		}
+
+		result, err := installer.expandFileSrcTemplate("{{.OS}}-{{.Arch}}/tool", tool)
+		require.NoError(t, err)
+
+		// On darwin/amd64, should get macos-x86_64/tool.
+		// On other platforms, different values but still expanded.
+		assert.NotContains(t, result, "{{")
+	})
+}
