@@ -379,6 +379,13 @@ func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 		env[envVar.Key] = envVar.Value
 	}
 
+	// Include region ONLY if explicitly configured (not default fallback).
+	// This enables users to reference AWS_REGION via !env in stack configurations.
+	if i.region != "" {
+		env["AWS_REGION"] = i.region
+		env["AWS_DEFAULT_REGION"] = i.region
+	}
+
 	// Add environment variables from identity config.
 	for _, envVar := range i.config.Env {
 		env[envVar.Key] = envVar.Value

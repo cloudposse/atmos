@@ -186,6 +186,13 @@ func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 		}
 	}
 
+	// Include region ONLY if explicitly configured in principal (not default fallback).
+	// This enables users to reference AWS_REGION via !env in stack configurations.
+	if region, ok := i.config.Principal["region"].(string); ok && region != "" {
+		env["AWS_REGION"] = region
+		env["AWS_DEFAULT_REGION"] = region
+	}
+
 	// Add environment variables from identity config.
 	for _, envVar := range i.config.Env {
 		env[envVar.Key] = envVar.Value
