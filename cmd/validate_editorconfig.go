@@ -203,8 +203,6 @@ func runMainLogic() {
 		}
 		errUtils.Exit(1)
 	}
-
-	ui.Success("No errors found")
 }
 
 func checkVersion(config config.Config) error {
