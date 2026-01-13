@@ -87,10 +87,6 @@ func TestBuildDownloadError(t *testing.T) {
 		statusCode int
 	}{
 		{
-			name:       "404 not found error",
-			statusCode: http.StatusNotFound,
-		},
-		{
 			name:       "403 forbidden error",
 			statusCode: http.StatusForbidden,
 		},
@@ -112,8 +108,25 @@ func TestBuildDownloadError(t *testing.T) {
 			assert.Error(t, err)
 			// The error wraps ErrDownloadFailed sentinel error.
 			assert.ErrorIs(t, err, errUtils.ErrDownloadFailed)
+			// Non-404 errors should NOT include ErrHTTP404.
+			assert.NotErrorIs(t, err, ErrHTTP404, "Only 404 should include ErrHTTP404")
 		})
 	}
+}
+
+func TestBuildDownloadError_404IncludesErrHTTP404(t *testing.T) {
+	// CRITICAL: This test prevents the 404 detection regression.
+	// The version fallback mechanism depends on isHTTP404() detecting 404 errors.
+	url := "https://example.com/asset.tar.gz"
+	err := buildDownloadError(url, http.StatusNotFound)
+
+	assert.Error(t, err)
+	// Must include BOTH error sentinels for the fallback mechanism to work.
+	assert.ErrorIs(t, err, ErrHTTP404, "404 errors must include ErrHTTP404 for version fallback")
+	assert.ErrorIs(t, err, errUtils.ErrDownloadFailed, "404 errors must include ErrDownloadFailed")
+
+	// Verify isHTTP404 correctly detects the error.
+	assert.True(t, isHTTP404(err), "isHTTP404 must detect 404 errors from buildDownloadError")
 }
 
 func TestIsHTTP404(t *testing.T) {

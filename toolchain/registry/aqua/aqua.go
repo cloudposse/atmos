@@ -466,18 +466,23 @@ func (ar *AquaRegistry) BuildAssetURL(tool *registry.Tool, version string) (stri
 }
 
 // resolveVersionStrings determines the release version and semver based on tool config.
+// Following Aqua behavior: version_prefix defaults to empty, not "v".
+// Templates use {{trimV .Version}} or {{.SemVer}} when they need the version without prefix.
 func resolveVersionStrings(tool *registry.Tool, version string) (releaseVersion, semVer string) {
+	// Use version_prefix only if explicitly set in registry definition.
+	// This matches Aqua's behavior where version_prefix defaults to empty.
 	prefix := tool.VersionPrefix
-	if prefix == "" {
-		prefix = versionPrefix
-	}
 
 	releaseVersion = version
-	if !strings.HasPrefix(releaseVersion, prefix) {
+	if prefix != "" && !strings.HasPrefix(releaseVersion, prefix) {
 		releaseVersion = prefix + releaseVersion
 	}
 
-	semVer = strings.TrimPrefix(releaseVersion, prefix)
+	// SemVer is the version without any prefix.
+	semVer = version
+	if prefix != "" {
+		semVer = strings.TrimPrefix(releaseVersion, prefix)
+	}
 	return releaseVersion, semVer
 }
 

@@ -350,14 +350,15 @@ func TestAquaRegistry_BuildAssetURL_GitHubRelease(t *testing.T) {
 	ar := NewAquaRegistry()
 
 	// Use .SemVer for version without prefix in asset filename.
-	// .Version = v1.0.0 (full tag for URL), .SemVer = 1.0.0 (for filename).
+	// With VersionPrefix: "v", .Version = v1.0.0 (full tag for URL), .SemVer = 1.0.0 (for filename).
 	tool := &registry.Tool{
-		Name:      "test-tool",
-		Type:      "github_release",
-		RepoOwner: "test",
-		RepoName:  "tool",
-		Asset:     "tool-{{.SemVer}}-{{.OS}}-{{.Arch}}.zip",
-		Format:    "zip",
+		Name:          "test-tool",
+		Type:          "github_release",
+		RepoOwner:     "test",
+		RepoName:      "tool",
+		Asset:         "tool-{{.SemVer}}-{{.OS}}-{{.Arch}}.zip",
+		Format:        "zip",
+		VersionPrefix: "v", // Explicitly set so .SemVer strips it.
 	}
 
 	url, err := ar.BuildAssetURL(tool, "1.0.0")

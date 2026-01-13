@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -27,9 +28,17 @@ type installResult struct {
 }
 
 // startSpinner starts a spinner with the given message.
-// Spinner is only started if we're in a TTY environment.
+// Spinner is only started if we're in a TTY environment and debug logging is disabled.
 func (sc *spinnerControl) start(message string) {
 	if !sc.showingSpinner {
+		return
+	}
+
+	// Don't start spinner when debug logging is enabled - it suppresses log output.
+	// Debug logs go to stderr, and Bubble Tea's TUI also controls stderr, causing
+	// log messages to be hidden or garbled.
+	if log.GetLevel() <= log.DebugLevel {
+		log.Debug("Spinner disabled during debug logging", "message", message)
 		return
 	}
 
