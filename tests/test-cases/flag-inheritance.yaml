@@ -33,7 +33,7 @@ tests:
         - "-s"
       diff:
         # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
-        - "👽 test (darwin|linux)/(arm64|amd64)"
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
 
   - name: terraform provision help shows inherited stack flag
     enabled: true
@@ -52,7 +52,7 @@ tests:
         - "-s"
       diff:
         # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
-        - "👽 test (darwin|linux)/(arm64|amd64)"
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
 
   - name: show component help shows inherited stack flag
     enabled: true
@@ -71,7 +71,7 @@ tests:
         - "-s"
       diff:
         # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
-        - "👽 test (darwin|linux)/(arm64|amd64)"
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
 
   # ============================================
   # GROUP 2: Built-in Command Help Output
@@ -93,7 +93,7 @@ tests:
         - "stack"
       diff:
         # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
-        - "👽 test (darwin|linux)/(arm64|amd64)"
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
 
   - name: describe component help shows stack flag
     enabled: true
@@ -112,7 +112,7 @@ tests:
         - "-s"
       diff:
         # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
-        - "👽 test (darwin|linux)/(arm64|amd64)"
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
 
   # ============================================
   # GROUP 3: Custom Command Execution
@@ -157,7 +157,7 @@ tests:
         - "Atmos"
       diff:
         # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
-        - "👽 Atmos .* on (darwin|linux)/(arm64|amd64)"
+        - "👽 Atmos .* on (darwin|linux|windows)/(arm64|amd64)"
 
   - name: help flag works
     enabled: true
@@ -174,7 +174,7 @@ tests:
         - "atmos"
       diff:
         # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
-        - "👽 test (darwin|linux)/(arm64|amd64)"
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
 
   # ============================================
   # GROUP 5: Describe Component with Flags
@@ -250,7 +250,7 @@ tests:
         - "-v"
       diff:
         # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
-        - "👽 test (darwin|linux)/(arm64|amd64)"
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
 
   - name: echo info runs without verbose
     enabled: true
@@ -299,7 +299,7 @@ tests:
         - "-s"
       diff:
         # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
-        - "👽 test (darwin|linux)/(arm64|amd64)"
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
 
   - name: deploy component runs with stack flag
     enabled: true

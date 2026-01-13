@@ -2,6 +2,7 @@ package extract
 
 import (
 	"fmt"
+	"path"
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -205,7 +206,11 @@ func UniqueComponents(stacksMap map[string]any, stackPattern string) ([]map[stri
 	for stackName, stackData := range stacksMap {
 		// Apply stack filter if provided.
 		if stackPattern != "" {
-			matched, err := filepath.Match(stackPattern, stackName)
+			// Stack names are slash-separated; normalize for cross-platform matching.
+			// Use path.Match (not filepath.Match) to ensure consistent behavior on Windows.
+			name := filepath.ToSlash(stackName)
+			pattern := filepath.ToSlash(stackPattern)
+			matched, err := path.Match(pattern, name)
 			if err != nil || !matched {
 				continue
 			}

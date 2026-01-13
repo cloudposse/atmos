@@ -799,7 +799,7 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 		// Cache hit - but check if we need positions and don't have them.
 		// This can happen if the file was first parsed without provenance tracking,
 		// then later requested with provenance enabled.
-		if atmosConfig != nil && atmosConfig.TrackProvenance && len(positions) == 0 {
+		if atmosConfig.TrackProvenance && len(positions) == 0 {
 			// Need to re-parse with position tracking.
 			// Force a cache miss to re-parse and update the cache with positions.
 			found = false
