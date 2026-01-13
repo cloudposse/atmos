@@ -93,6 +93,8 @@ var (
 	ErrWorkflowNameRequired       = errors.New("workflow name is required")
 	ErrInvalidStackConfiguration  = errors.New("invalid stack configuration")
 	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
+	ErrStackRequired              = errors.New("--stack flag is required")
+	ErrStackHasNoLocals           = errors.New("stack has no locals defined")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -315,6 +317,7 @@ var (
 	ErrInvalidHooksSection                        = errors.New("invalid 'hooks' section in the file")
 	ErrInvalidTerraformHooksSection               = errors.New("invalid 'terraform.hooks' section in the file")
 	ErrInvalidComponentVars                       = errors.New("invalid component vars section")
+	ErrInvalidComponentLocals                     = errors.New("invalid component locals section")
 	ErrInvalidComponentSettings                   = errors.New("invalid component settings section")
 	ErrInvalidComponentEnv                        = errors.New("invalid component env section")
 	ErrInvalidComponentProviders                  = errors.New("invalid component providers section")

@@ -22,6 +22,7 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 	result.BaseComponentAuth = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentMetadata = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentDependencies = make(map[string]any, componentSmallMapCapacity)
+	result.BaseComponentLocals = make(map[string]any, componentSmallMapCapacity)
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentRequiredProviders = make(map[string]any, componentSmallMapCapacity)
@@ -201,6 +202,7 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentAuth = baseComponentConfig.BaseComponentAuth
 	result.BaseComponentMetadata = baseComponentConfig.BaseComponentMetadata
 	result.BaseComponentDependencies = baseComponentConfig.BaseComponentDependencies
+	result.BaseComponentLocals = baseComponentConfig.BaseComponentLocals
 	result.BaseComponentName = baseComponentConfig.FinalBaseComponentName
 	result.BaseComponentCommand = baseComponentConfig.BaseComponentCommand
 	*componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain

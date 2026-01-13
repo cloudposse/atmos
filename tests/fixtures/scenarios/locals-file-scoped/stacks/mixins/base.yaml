@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# This mixin defines locals that should NOT be inherited by files that import it.
+# Locals are file-scoped and should not cross file boundaries.
+locals:
+  mixin_namespace: "mixin-ns"
+  mixin_env: "mixin-env"
+  mixin_computed: "{{ .locals.mixin_namespace }}-{{ .locals.mixin_env }}"
+
+# These vars WILL be inherited (normal Atmos behavior).
+vars:
+  inherited_var: "from-mixin"
