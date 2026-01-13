@@ -130,11 +130,8 @@ func collectAllAliases(rootCmd *cobra.Command, configuredAliases schema.CommandA
 		})
 	}
 
-	// Sort by type (built-in first), then by alias name.
+	// Sort alphabetically by alias name for easy discovery.
 	sort.Slice(allAliases, func(i, j int) bool {
-		if allAliases[i].Type != allAliases[j].Type {
-			return allAliases[i].Type == aliasTypeBuiltIn
-		}
 		return allAliases[i].Alias < allAliases[j].Alias
 	})
 

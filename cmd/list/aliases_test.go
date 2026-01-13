@@ -237,8 +237,10 @@ func TestCollectAllAliases(t *testing.T) {
 	// Should have at least 3 aliases (1 built-in + 2 configured).
 	assert.GreaterOrEqual(t, len(allAliases), 3)
 
-	// Built-in should come first.
-	assert.Equal(t, aliasTypeBuiltIn, allAliases[0].Type)
+	// Aliases should be sorted alphabetically.
+	for i := 1; i < len(allAliases); i++ {
+		assert.LessOrEqual(t, allAliases[i-1].Alias, allAliases[i].Alias, "Aliases should be sorted alphabetically")
+	}
 
 	// Verify configured aliases are present.
 	foundLs := false
