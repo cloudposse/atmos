@@ -348,7 +348,8 @@ func TestVersionFlagParsing(t *testing.T) {
 			_ = NewTestKit(t)
 
 			// Reset flag states before each test - need to reset both value and Changed state.
-			versionFlag := RootCmd.PersistentFlags().Lookup("version")
+			// Note: --version is a LOCAL flag (not persistent), so use Flags() not PersistentFlags().
+			versionFlag := RootCmd.Flags().Lookup("version")
 			if versionFlag != nil {
 				versionFlag.Value.Set("false")
 				versionFlag.Changed = false
@@ -383,7 +384,8 @@ func TestVersionFlagExecutionPath(t *testing.T) {
 		{
 			name: "version subcommand works normally without deep exit",
 			setup: func() {
-				versionFlag := RootCmd.PersistentFlags().Lookup("version")
+				// Note: --version is a LOCAL flag (not persistent), so use Flags() not PersistentFlags().
+				versionFlag := RootCmd.Flags().Lookup("version")
 				if versionFlag != nil {
 					versionFlag.Value.Set("false")
 					versionFlag.Changed = false
