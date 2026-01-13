@@ -133,3 +133,48 @@ func indexOf(s, substr string) int {
 	}
 	return -1
 }
+
+// TestAliasesFormatFlag tests that the format flag is registered.
+func TestAliasesFormatFlag(t *testing.T) {
+	formatFlag := aliasesCmd.Flags().Lookup("format")
+	assert.NotNil(t, formatFlag, "Expected format flag to exist")
+	assert.Equal(t, "", formatFlag.DefValue)
+	assert.Equal(t, "f", formatFlag.Shorthand)
+}
+
+// TestAliasesToData tests the aliasesToData conversion function.
+func TestAliasesToData(t *testing.T) {
+	aliases := schema.CommandAliases{
+		"zulu":  "last command",
+		"alpha": "first command",
+		"mike":  "middle command",
+	}
+
+	data := aliasesToData(aliases)
+
+	// Should have 3 entries.
+	assert.Len(t, data, 3)
+
+	// Should be sorted alphabetically.
+	assert.Equal(t, "alpha", data[0]["alias"])
+	assert.Equal(t, "first command", data[0]["command"])
+	assert.Equal(t, "mike", data[1]["alias"])
+	assert.Equal(t, "middle command", data[1]["command"])
+	assert.Equal(t, "zulu", data[2]["alias"])
+	assert.Equal(t, "last command", data[2]["command"])
+}
+
+// TestAliasesOptionsFormat tests that AliasesOptions includes Format field.
+func TestAliasesOptionsFormat(t *testing.T) {
+	opts := &AliasesOptions{
+		Format: "json",
+	}
+	assert.Equal(t, "json", opts.Format)
+}
+
+// TestAliasesExamples tests that the command examples include format flag usage.
+func TestAliasesExamples(t *testing.T) {
+	assert.Contains(t, aliasesCmd.Example, "atmos list aliases")
+	assert.Contains(t, aliasesCmd.Example, "--format json")
+	assert.Contains(t, aliasesCmd.Example, "--format yaml")
+}

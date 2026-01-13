@@ -12,6 +12,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
+	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/renderer"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -26,21 +29,26 @@ var aliasesParser *flags.StandardParser
 // AliasesOptions contains parsed flags for the aliases command.
 type AliasesOptions struct {
 	global.Flags
+	Format string
 }
 
 // aliasesCmd lists configured command aliases.
 var aliasesCmd = &cobra.Command{
-	Use:     "aliases",
-	Short:   "List configured command aliases",
-	Long:    "Display all command aliases configured in atmos.yaml.",
-	Example: "atmos list aliases",
-	Args:    cobra.NoArgs,
-	RunE:    executeListAliases,
+	Use:   "aliases",
+	Short: "List configured command aliases",
+	Long:  "Display all command aliases configured in atmos.yaml.",
+	Example: "atmos list aliases\n" +
+		"atmos list aliases --format json\n" +
+		"atmos list aliases --format yaml",
+	Args: cobra.NoArgs,
+	RunE: executeListAliases,
 }
 
 func init() {
-	// Create parser with aliases-specific flags using functional options.
-	aliasesParser = flags.NewStandardParser()
+	// Create parser with aliases-specific flags using flag wrappers.
+	aliasesParser = NewListParser(
+		WithFormatFlag,
+	)
 
 	// Register flags.
 	aliasesParser.RegisterFlags(aliasesCmd)
@@ -60,13 +68,14 @@ func executeListAliases(cmd *cobra.Command, args []string) error {
 	}
 
 	opts := &AliasesOptions{
-		Flags: flags.ParseGlobalFlags(cmd, v),
+		Flags:  flags.ParseGlobalFlags(cmd, v),
+		Format: v.GetString("format"),
 	}
 
 	return executeListAliasesWithOptions(opts)
 }
 
-func executeListAliasesWithOptions(_ *AliasesOptions) error {
+func executeListAliasesWithOptions(opts *AliasesOptions) error {
 	// Load atmos configuration.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
@@ -80,7 +89,56 @@ func executeListAliasesWithOptions(_ *AliasesOptions) error {
 		return nil
 	}
 
+	// Use renderer for non-table formats (json, yaml, csv, tsv).
+	if opts.Format != "" && opts.Format != "table" {
+		return renderAliasesWithFormat(aliases, opts.Format)
+	}
+
 	return displayAliases(aliases)
+}
+
+// renderAliasesWithFormat renders aliases using the list renderer infrastructure.
+func renderAliasesWithFormat(aliases schema.CommandAliases, outputFormat string) error {
+	// Convert aliases map to []map[string]any for renderer.
+	data := aliasesToData(aliases)
+
+	// Define columns for aliases.
+	columns := []column.Config{
+		{Name: "Alias", Value: "{{ .alias }}"},
+		{Name: "Command", Value: "{{ .command }}"},
+	}
+
+	// Build column selector.
+	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
+	if err != nil {
+		return fmt.Errorf("error creating column selector: %w", err)
+	}
+
+	// Create renderer with format and execute.
+	r := renderer.New(nil, selector, nil, format.Format(outputFormat), "")
+
+	return r.Render(data)
+}
+
+// aliasesToData converts aliases map to []map[string]any for the renderer.
+func aliasesToData(aliases schema.CommandAliases) []map[string]any {
+	// Sort aliases by name for consistent output.
+	sortedNames := make([]string, 0, len(aliases))
+	for name := range aliases {
+		sortedNames = append(sortedNames, name)
+	}
+	sort.Strings(sortedNames)
+
+	// Convert to data format.
+	data := make([]map[string]any, 0, len(aliases))
+	for _, name := range sortedNames {
+		data = append(data, map[string]any{
+			"alias":   name,
+			"command": aliases[name],
+		})
+	}
+
+	return data
 }
 
 // displayAliases formats and displays the aliases to the terminal.
