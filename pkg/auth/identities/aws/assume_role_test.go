@@ -84,6 +84,44 @@ func TestAssumeRoleIdentity_Environment(t *testing.T) {
 	assert.Equal(t, "role", env["AWS_PROFILE"])
 }
 
+func TestAssumeRoleIdentity_Environment_WithRegion(t *testing.T) {
+	// When region is set on the identity, Environment should include AWS_REGION and AWS_DEFAULT_REGION.
+	i := &assumeRoleIdentity{
+		name:   "role",
+		region: "eu-west-1",
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+			Via:       &schema.IdentityVia{Provider: "test-provider"},
+		},
+	}
+	env, err := i.Environment()
+	assert.NoError(t, err)
+	// Should include region vars when explicitly configured.
+	assert.Equal(t, "eu-west-1", env["AWS_REGION"])
+	assert.Equal(t, "eu-west-1", env["AWS_DEFAULT_REGION"])
+}
+
+func TestAssumeRoleIdentity_Environment_WithoutRegion(t *testing.T) {
+	// When region is NOT set, Environment should NOT include AWS_REGION (no default fallback).
+	i := &assumeRoleIdentity{
+		name:   "role",
+		region: "", // No region set
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+			Via:       &schema.IdentityVia{Provider: "test-provider"},
+		},
+	}
+	env, err := i.Environment()
+	assert.NoError(t, err)
+	// Should NOT include region vars when not explicitly configured.
+	_, hasRegion := env["AWS_REGION"]
+	_, hasDefaultRegion := env["AWS_DEFAULT_REGION"]
+	assert.False(t, hasRegion, "AWS_REGION should not be set when region is not explicitly configured")
+	assert.False(t, hasDefaultRegion, "AWS_DEFAULT_REGION should not be set when region is not explicitly configured")
+}
+
 func TestAssumeRoleIdentity_BuildAssumeRoleInput(t *testing.T) {
 	// External ID and duration should be set when provided.
 	i := &assumeRoleIdentity{name: "role", config: &schema.Identity{

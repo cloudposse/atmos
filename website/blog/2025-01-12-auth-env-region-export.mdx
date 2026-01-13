@@ -1,0 +1,57 @@
+---
+slug: auth-env-region-export
+title: "AWS Region Now Exported by atmos auth env"
+authors: [osterman]
+tags: [enhancement]
+---
+
+The `atmos auth env` command now exports `AWS_REGION` and `AWS_DEFAULT_REGION`
+when region is configured in your identity or provider settings.
+
+{/* truncate */}
+
+## What Changed
+
+Previously, `atmos auth env` only exported credential file paths:
+- `AWS_SHARED_CREDENTIALS_FILE`
+- `AWS_CONFIG_FILE`
+- `AWS_PROFILE`
+
+Now it also exports region when configured:
+- `AWS_REGION`
+- `AWS_DEFAULT_REGION`
+
+## Why This Matters
+
+You can now use `!env AWS_REGION` in your stack configurations after sourcing
+auth environment variables, enabling consistent region configuration across
+your infrastructure.
+
+## How to Use It
+
+Source the auth environment in your shell:
+
+```bash
+eval $(atmos auth env --identity my-identity)
+
+# AWS_REGION is now available
+echo $AWS_REGION
+```
+
+Reference it in stack configs:
+
+```yaml
+vars:
+  region: !env AWS_REGION
+```
+
+## Important Notes
+
+- Region is only exported when **explicitly configured** in your identity or provider
+- No default region is assumed - if you don't configure region, it won't be exported
+- This is purely additive and doesn't break existing scripts
+
+## Get Involved
+
+Found an issue or have a feature request?
+[Open an issue on GitHub](https://github.com/cloudposse/atmos/issues).
