@@ -10,8 +10,8 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // authValidateCmd validates the auth configuration.
@@ -29,7 +29,7 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 	// Get verbose flag
 	verbose := viper.GetBool("auth.validate.verbose")
 	if verbose {
-		u.PrintfMarkdown("**Validating authentication configuration...**\n")
+		ui.Info("Validating authentication configuration...")
 	}
 
 	// Load atmos config
@@ -41,7 +41,7 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 	// Create validator
 	validator := validation.NewValidator()
 
-	// Validate auth configuration with spinner
+	// Validate auth configuration with spinner.
 	err = spinner.ExecWithSpinner(
 		"Validating authentication configuration...",
 		"Authentication configuration is valid",
@@ -50,13 +50,12 @@ func executeAuthValidateCommand(cmd *cobra.Command, args []string) error {
 		},
 	)
 	if err != nil {
-		u.PrintfMarkdown("**❌ Authentication configuration validation failed:**\n")
-		u.PrintfMarkdown("%s\n", err.Error())
+		ui.Error(fmt.Sprintf("Authentication configuration validation failed: %v", err))
 		return err
 	}
 
-	// Output final result to stdout for scripts/pipelines
-	u.PrintfMarkdown("**✅ Authentication configuration is valid**\n")
+	// Output final result to stdout for scripts/pipelines.
+	ui.Success("Authentication configuration is valid")
 	return nil
 }
 
