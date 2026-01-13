@@ -1,3 +1,204 @@
+/* Inline Code in Slides */
+.slide-inline-code {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.85em;
+  padding: 0.15rem 0.4rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: var(--ifm-color-emphasis-700);
+}
+
+html[data-theme='light'] .slide-inline-code {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--ifm-color-emphasis-800);
+}
+
+/* Status Badges */
+.slide-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  margin-left: 0.5rem;
+  white-space: nowrap;
+  vertical-align: middle;
+  position: relative;
+  top: -0.15em;
+}
+
+.slide-badge--shipped {
+  background: rgba(104, 211, 145, 0.2);
+  color: #68d391;
+}
+
+.slide-badge--in-progress {
+  background: rgba(83, 140, 233, 0.2);
+  color: #538ce9;
+}
+
+.slide-badge--planned {
+  background: rgba(160, 174, 192, 0.2);
+  color: #a0aec0;
+}
+
+html[data-theme='light'] .slide-badge--shipped {
+  background: rgba(56, 161, 105, 0.15);
+  color: #2f855a;
+}
+
+html[data-theme='light'] .slide-badge--in-progress {
+  background: rgba(30, 91, 184, 0.15);
+  color: #1e5bb8;
+}
+
+html[data-theme='light'] .slide-badge--planned {
+  background: rgba(113, 128, 150, 0.15);
+  color: #4a5568;
+}
+
+/* Link Badges */
+.slide-link-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 0.1rem 0.4rem;
+  margin-left: 0.4rem;
+  border-radius: 4px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  background: rgba(83, 140, 233, 0.15);
+  color: #538ce9;
+}
+
+.slide-link-badge:hover {
+  background: rgba(83, 140, 233, 0.25);
+  text-decoration: none;
+  color: #538ce9;
+}
+
+.slide-link-badge--docs {
+  background: rgba(104, 211, 145, 0.15);
+  color: #68d391;
+}
+
+.slide-link-badge--docs:hover {
+  background: rgba(104, 211, 145, 0.25);
+  color: #68d391;
+}
+
+html[data-theme='light'] .slide-link-badge {
+  background: rgba(30, 91, 184, 0.1);
+  color: #1e5bb8;
+}
+
+html[data-theme='light'] .slide-link-badge:hover {
+  background: rgba(30, 91, 184, 0.2);
+  color: #1e5bb8;
+}
+
+html[data-theme='light'] .slide-link-badge--docs {
+  background: rgba(56, 161, 105, 0.1);
+  color: #38a169;
+}
+
+html[data-theme='light'] .slide-link-badge--docs:hover {
+  background: rgba(56, 161, 105, 0.2);
+  color: #38a169;
+}
+
+/* Milestone List (no bullets, styled checkmarks) */
+.slide-milestone-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+  text-align: left;
+}
+
+.slide-milestone-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+  font-size: 1.1rem;
+  line-height: 1.5;
+}
+
+.slide-milestone-list li:last-child {
+  margin-bottom: 0;
+}
+
+/* Status Icons */
+.slide-status-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+  width: 1.25rem;
+  text-align: center;
+}
+
+.slide-status-icon--shipped {
+  color: #68d391;
+}
+
+.slide-status-icon--in-progress {
+  color: #538ce9;
+}
+
+.slide-status-icon--planned {
+  color: #a0aec0;
+}
+
+html[data-theme='light'] .slide-status-icon--shipped {
+  color: #38a169;
+}
+
+html[data-theme='light'] .slide-status-icon--in-progress {
+  color: #1e5bb8;
+}
+
+html[data-theme='light'] .slide-status-icon--planned {
+  color: #718096;
+}
+
+/* Progress Bar for Slides */
+.slide-progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem 0;
+}
+
+.slide-progress-bar__track {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.slide-progress-bar__fill {
+  height: 100%;
+  background: linear-gradient(90deg, #68d391, #38a169);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.slide-progress-bar__label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ifm-color-emphasis-600);
+  min-width: 3rem;
+}
+
+html[data-theme='light'] .slide-progress-bar__track {
+  background: rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
 /* SlideTitle */
 .slide-title {
   font-size: 2.5rem;
@@ -233,6 +434,75 @@ html[data-theme='dark'] .slide-subtitle {
   .slide-image img {
     border-radius: 4px;
   }
+}
+
+/* Pagination Dots */
+.slide-pagination-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.slide-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.slide-dot:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.slide-dot--active {
+  background: #538ce9;
+  transform: scale(1.2);
+}
+
+html[data-theme='light'] .slide-dot {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+html[data-theme='light'] .slide-dot:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+html[data-theme='light'] .slide-dot--active {
+  background: #1e5bb8;
+}
+
+/* Paginated Milestones Container */
+.slide-paginated-milestones {
+  position: relative;
+  min-height: 220px;
+  padding-bottom: 2rem;
+  width: 100%;
+}
+
+.slide-paginated-milestones .slide-pagination-dots {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+}
+
+/* Keyboard Hint */
+.slide-pagination-hint {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-left: 0.75rem;
+  font-family: var(--ifm-font-family-monospace);
+}
+
+html[data-theme='light'] .slide-pagination-hint {
+  color: rgba(0, 0, 0, 0.4);
 }
 
 /* Mobile Portrait Fullscreen - use smaller font sizes for narrow viewports */
