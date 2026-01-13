@@ -64,8 +64,10 @@ stacks/
 │   ├── cost-savings/
 │   │   ├── eks.yaml           # Spot instances, smaller nodes
 │   │   └── rds.yaml           # Reserved instances, smaller types
-│   └── blue-green/
-│       └── alb.yaml           # Dual target groups
+│   ├── blue/
+│   │   └── alb.yaml           # Target blue deployment
+│   └── green/
+│       └── alb.yaml           # Target green deployment
 ├── catalog/
 │   └── ...
 ├── ue2-dev.yaml
@@ -231,13 +233,13 @@ Features can also be specified or overridden at runtime:
 
 ```bash
 # Add feature at runtime
-atmos terraform plan vpc -s ue2-prod --feature blue-green
+atmos terraform plan vpc -s ue2-prod --feature blue
 
 # Multiple features
 atmos terraform plan vpc -s ue2-prod --feature hipaa,cost-savings
 
 # Override stack-declared features entirely
-atmos terraform plan vpc -s ue2-prod --features-override blue-green
+atmos terraform plan vpc -s ue2-prod --features-override green
 ```
 
 ### Environment Variable
@@ -412,7 +414,8 @@ Available features:
   hipaa         HIPAA compliance configuration
   pci-dss       PCI-DSS compliance configuration
   cost-savings  Cost optimization settings
-  blue-green    Blue-green deployment support
+  blue          Target blue deployment
+  green         Target green deployment
 ```
 
 ### Describe Feature
@@ -513,8 +516,11 @@ features:
 ### 4. Deployment Strategies
 
 ```bash
-# Enable blue-green for a specific deployment
-atmos terraform apply eks -s ue2-prod --feature blue-green
+# Deploy to blue target group
+atmos terraform apply eks -s ue2-prod --feature blue
+
+# Switch traffic to green
+atmos terraform apply eks -s ue2-prod --feature green
 ```
 
 ### 5. Temporary Toggles
