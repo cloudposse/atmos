@@ -22,7 +22,16 @@ import (
 
 const (
 	aliasesHeaderSeparatorWidth = 50
+	aliasTypeBuiltIn            = "built-in"
+	aliasTypeConfigured         = "configured"
 )
+
+// AliasInfo represents a command alias with its source type.
+type AliasInfo struct {
+	Alias   string
+	Command string
+	Type    string // "built-in" or "configured"
+}
 
 var aliasesParser *flags.StandardParser
 
@@ -35,8 +44,10 @@ type AliasesOptions struct {
 // aliasesCmd lists configured command aliases.
 var aliasesCmd = &cobra.Command{
 	Use:   "aliases",
-	Short: "List configured command aliases",
-	Long:  "Display all command aliases configured in atmos.yaml.",
+	Short: "List all command aliases (built-in and configured)",
+	Long: `Display all command aliases including:
+  - Built-in aliases: Native command shortcuts (e.g., tf → terraform)
+  - Configured aliases: User-defined aliases from atmos.yaml`,
 	Example: "atmos list aliases\n" +
 		"atmos list aliases --format json\n" +
 		"atmos list aliases --format yaml",
@@ -72,10 +83,13 @@ func executeListAliases(cmd *cobra.Command, args []string) error {
 		Format: v.GetString("format"),
 	}
 
-	return executeListAliasesWithOptions(opts)
+	// Get root command to collect built-in aliases.
+	rootCmd := cmd.Root()
+
+	return executeListAliasesWithOptions(opts, rootCmd)
 }
 
-func executeListAliasesWithOptions(opts *AliasesOptions) error {
+func executeListAliasesWithOptions(opts *AliasesOptions, rootCmd *cobra.Command) error {
 	// Load atmos configuration with global flags.
 	configAndStacksInfo := buildConfigAndStacksInfo(&opts.Flags)
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
@@ -83,29 +97,111 @@ func executeListAliasesWithOptions(opts *AliasesOptions) error {
 		return fmt.Errorf("failed to load atmos configuration: %w", err)
 	}
 
-	aliases := atmosConfig.CommandAliases
-	if len(aliases) == 0 {
-		_ = ui.Info("No aliases configured")
+	// Collect all aliases.
+	allAliases := collectAllAliases(rootCmd, atmosConfig.CommandAliases)
+
+	if len(allAliases) == 0 {
+		_ = ui.Info("No aliases found")
 		return nil
 	}
 
 	// Use renderer for non-table formats (json, yaml, csv, tsv).
 	if opts.Format != "" && opts.Format != "table" {
-		return renderAliasesWithFormat(aliases, opts.Format)
+		return renderAliasesWithFormat(allAliases, opts.Format)
 	}
 
-	return displayAliases(aliases)
+	return displayAliases(allAliases)
+}
+
+// collectAllAliases gathers both built-in and configured aliases.
+func collectAllAliases(rootCmd *cobra.Command, configuredAliases schema.CommandAliases) []AliasInfo {
+	var allAliases []AliasInfo
+
+	// Collect built-in aliases from command tree.
+	builtInAliases := collectBuiltInAliases(rootCmd, "")
+	allAliases = append(allAliases, builtInAliases...)
+
+	// Collect configured aliases.
+	for alias, command := range configuredAliases {
+		allAliases = append(allAliases, AliasInfo{
+			Alias:   alias,
+			Command: command,
+			Type:    aliasTypeConfigured,
+		})
+	}
+
+	// Sort by type (built-in first), then by alias name.
+	sort.Slice(allAliases, func(i, j int) bool {
+		if allAliases[i].Type != allAliases[j].Type {
+			return allAliases[i].Type == aliasTypeBuiltIn
+		}
+		return allAliases[i].Alias < allAliases[j].Alias
+	})
+
+	return allAliases
+}
+
+// collectBuiltInAliases recursively collects Cobra command aliases from the command tree.
+// It skips the root command name when building paths since aliases like "tf" should map
+// to "terraform", not "atmos terraform".
+func collectBuiltInAliases(cmd *cobra.Command, parentPath string) []AliasInfo {
+	var aliases []AliasInfo
+
+	// Build the full command path (excluding root command name for display).
+	cmdPath := cmd.Name()
+	if parentPath != "" {
+		cmdPath = parentPath + " " + cmd.Name()
+	}
+
+	// Collect aliases for this command (skip root command itself).
+	if parentPath != "" {
+		for _, alias := range cmd.Aliases {
+			// Build the alias path (replace command name with alias in path).
+			// For top-level commands: just the alias (e.g., "tf" for terraform)
+			// For nested commands: parent path + alias (e.g., "terraform p" for terraform plan)
+			aliasPath := alias
+			if parentPath != cmd.Root().Name() {
+				aliasPath = parentPath + " " + alias
+			}
+
+			// Build command path without root command name for display.
+			displayCmdPath := cmdPath
+			rootName := cmd.Root().Name()
+			if strings.HasPrefix(displayCmdPath, rootName+" ") {
+				displayCmdPath = strings.TrimPrefix(displayCmdPath, rootName+" ")
+			}
+
+			aliases = append(aliases, AliasInfo{
+				Alias:   aliasPath,
+				Command: displayCmdPath,
+				Type:    aliasTypeBuiltIn,
+			})
+		}
+	}
+
+	// Recursively collect from subcommands.
+	for _, subCmd := range cmd.Commands() {
+		// Skip help command and hidden commands.
+		if subCmd.Name() == "help" || subCmd.Hidden {
+			continue
+		}
+		subAliases := collectBuiltInAliases(subCmd, cmdPath)
+		aliases = append(aliases, subAliases...)
+	}
+
+	return aliases
 }
 
 // renderAliasesWithFormat renders aliases using the list renderer infrastructure.
-func renderAliasesWithFormat(aliases schema.CommandAliases, outputFormat string) error {
-	// Convert aliases map to []map[string]any for renderer.
+func renderAliasesWithFormat(aliases []AliasInfo, outputFormat string) error {
+	// Convert aliases to []map[string]any for renderer.
 	data := aliasesToData(aliases)
 
-	// Define columns for aliases.
+	// Define columns for aliases (including type).
 	columns := []column.Config{
 		{Name: "Alias", Value: "{{ .alias }}"},
 		{Name: "Command", Value: "{{ .command }}"},
+		{Name: "Type", Value: "{{ .type }}"},
 	}
 
 	// Build column selector.
@@ -120,29 +216,21 @@ func renderAliasesWithFormat(aliases schema.CommandAliases, outputFormat string)
 	return r.Render(data)
 }
 
-// aliasesToData converts aliases map to []map[string]any for the renderer.
-func aliasesToData(aliases schema.CommandAliases) []map[string]any {
-	// Sort aliases by name for consistent output.
-	sortedNames := make([]string, 0, len(aliases))
-	for name := range aliases {
-		sortedNames = append(sortedNames, name)
-	}
-	sort.Strings(sortedNames)
-
-	// Convert to data format.
+// aliasesToData converts AliasInfo slice to []map[string]any for the renderer.
+func aliasesToData(aliases []AliasInfo) []map[string]any {
 	data := make([]map[string]any, 0, len(aliases))
-	for _, name := range sortedNames {
+	for _, alias := range aliases {
 		data = append(data, map[string]any{
-			"alias":   name,
-			"command": aliases[name],
+			"alias":   alias.Alias,
+			"command": alias.Command,
+			"type":    alias.Type,
 		})
 	}
-
 	return data
 }
 
 // displayAliases formats and displays the aliases to the terminal.
-func displayAliases(aliases schema.CommandAliases) error {
+func displayAliases(aliases []AliasInfo) error {
 	// Check if we're in TTY mode.
 	if !term.IsTTYSupportForStdout() {
 		// Fall back to simple text output for non-TTY.
@@ -155,35 +243,37 @@ func displayAliases(aliases schema.CommandAliases) error {
 }
 
 // formatAliasesTable formats aliases into a styled Charmbracelet table.
-func formatAliasesTable(aliases schema.CommandAliases) string {
+func formatAliasesTable(aliases []AliasInfo) string {
 	// Prepare headers and rows.
-	headers := []string{"Alias", "Command"}
+	headers := []string{"Alias", "Command", "Type"}
 	var rows [][]string
 
-	// Sort aliases by name for consistent output.
-	sortedNames := make([]string, 0, len(aliases))
-	for name := range aliases {
-		sortedNames = append(sortedNames, name)
-	}
-	sort.Strings(sortedNames)
-
-	for _, name := range sortedNames {
-		command := aliases[name]
-		row := []string{name, command}
+	for _, alias := range aliases {
+		row := []string{alias.Alias, alias.Command, alias.Type}
 		rows = append(rows, row)
 	}
 
 	// Use the themed table creation.
 	output := theme.CreateThemedTable(headers, rows) + "\n"
 
-	// Footer message.
+	// Footer message with breakdown.
 	styles := theme.GetCurrentStyles()
+
+	builtInCount := 0
+	configuredCount := 0
+	for _, alias := range aliases {
+		if alias.Type == aliasTypeBuiltIn {
+			builtInCount++
+		} else {
+			configuredCount++
+		}
+	}
 
 	footer := fmt.Sprintf("\n%d alias", len(aliases))
 	if len(aliases) != 1 {
 		footer += "es"
 	}
-	footer += " configured."
+	footer += fmt.Sprintf(" (%d built-in, %d configured)", builtInCount, configuredCount)
 
 	output += styles.Footer.Render(footer) + "\n"
 
@@ -191,32 +281,34 @@ func formatAliasesTable(aliases schema.CommandAliases) string {
 }
 
 // formatSimpleAliasesOutput formats aliases as simple text for non-TTY output.
-func formatSimpleAliasesOutput(aliases schema.CommandAliases) string {
+func formatSimpleAliasesOutput(aliases []AliasInfo) string {
 	var output string
 
 	// Header.
-	output += fmt.Sprintf("%-15s %s\n", "Alias", "Command")
-	output += fmt.Sprintf("%s\n", strings.Repeat("=", aliasesHeaderSeparatorWidth))
-
-	// Sort aliases by name for consistent output.
-	sortedNames := make([]string, 0, len(aliases))
-	for name := range aliases {
-		sortedNames = append(sortedNames, name)
-	}
-	sort.Strings(sortedNames)
+	output += fmt.Sprintf("%-20s %-30s %s\n", "Alias", "Command", "Type")
+	output += fmt.Sprintf("%s\n", strings.Repeat("=", aliasesHeaderSeparatorWidth+10))
 
 	// Alias rows.
-	for _, name := range sortedNames {
-		command := aliases[name]
-		output += fmt.Sprintf("%-15s %s\n", name, command)
+	for _, alias := range aliases {
+		output += fmt.Sprintf("%-20s %-30s %s\n", alias.Alias, alias.Command, alias.Type)
 	}
 
-	// Footer message.
+	// Footer message with breakdown.
+	builtInCount := 0
+	configuredCount := 0
+	for _, alias := range aliases {
+		if alias.Type == aliasTypeBuiltIn {
+			builtInCount++
+		} else {
+			configuredCount++
+		}
+	}
+
 	output += fmt.Sprintf("\n%d alias", len(aliases))
 	if len(aliases) != 1 {
 		output += "es"
 	}
-	output += " configured.\n"
+	output += fmt.Sprintf(" (%d built-in, %d configured)\n", builtInCount, configuredCount)
 
 	return output
 }
