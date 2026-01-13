@@ -99,11 +99,12 @@ export const PaginatedMilestones = ({ milestones, itemsPerPage = 4 }) => {
   const [currentPage, setCurrentPage] = useState(0);
   const containerRef = useRef(null);
 
-  // Sort: featured first, then shipped, then in-progress
+  // Sort: featured first, then shipped, then in-progress, then planned
   const sorted = [
     ...milestones.filter(m => m.category === 'featured'),
     ...milestones.filter(m => m.category !== 'featured' && m.status === 'shipped'),
     ...milestones.filter(m => m.status === 'in-progress' && m.category !== 'featured'),
+    ...milestones.filter(m => m.status === 'planned' && m.category !== 'featured'),
   ].filter((m, i, arr) => arr.findIndex(x => x.label === m.label) === i); // dedupe
 
   // Chunk into pages
