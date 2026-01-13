@@ -440,6 +440,18 @@ type TerraformUI struct {
 	// Enabled enables the streaming TUI mode for plan/apply/init/refresh commands.
 	// When enabled, terraform output is streamed in real-time with a progress display.
 	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+
+	// Compact controls line padding between resource branches.
+	// true (default) = no blank lines, false = add blank lines for readability.
+	Compact *bool `yaml:"compact" json:"compact" mapstructure:"compact"`
+
+	// ShowAttributeBar controls the vertical "quote" line for attribute content.
+	// true = show ┃ bar alongside attributes, false (default) = clean indentation only.
+	ShowAttributeBar *bool `yaml:"show_attribute_bar" json:"show_attribute_bar" mapstructure:"show_attribute_bar"`
+
+	// MaxLines controls collapsing large JSON values in attribute rendering.
+	// 0 (default) = show all lines like Terraform, >0 = collapse after N lines.
+	MaxLines int `yaml:"max_lines" json:"max_lines" mapstructure:"max_lines"`
 }
 
 type TerraformInit struct {

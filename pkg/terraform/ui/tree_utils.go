@@ -10,7 +10,9 @@ import (
 	"golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -169,4 +171,71 @@ func parseHexComponent(hex string) (int64, error) {
 		}
 	}
 	return result, nil
+}
+
+// isComplexValue returns true if the value is a map or array (JSON-like).
+func isComplexValue(v interface{}) bool {
+	if v == nil {
+		return false
+	}
+	switch v.(type) {
+	case map[string]interface{}, []interface{}:
+		return true
+	default:
+		return false
+	}
+}
+
+// collapseIfNeeded collapses lines if maxLines is set.
+// Default (maxLines <= 0): show all lines like Terraform.
+func collapseIfNeeded(lines []string, maxLines int) []string {
+	if maxLines <= 0 || len(lines) <= maxLines {
+		return lines // Show all (default behavior).
+	}
+
+	// When collapsing, show first 60% + last 30%.
+	showHead := maxLines * 6 / 10
+	showTail := maxLines * 3 / 10
+	if showHead < 1 {
+		showHead = 1
+	}
+	if showTail < 1 {
+		showTail = 1
+	}
+
+	// Ensure we don't exceed array bounds.
+	if showHead+showTail >= len(lines) {
+		return lines
+	}
+
+	result := make([]string, 0, showHead+showTail+1)
+	result = append(result, lines[:showHead]...)
+	result = append(result, fmt.Sprintf("    ... (%d lines omitted) ...",
+		len(lines)-showHead-showTail))
+	result = append(result, lines[len(lines)-showTail:]...)
+	return result
+}
+
+// formatComplexValue formats a complex value (map/array) as pretty-printed JSON lines.
+// Uses existing utility functions for consistent formatting across Atmos.
+func formatComplexValue(v interface{}, atmosConfig *schema.AtmosConfiguration) []string {
+	if v == nil {
+		return nil
+	}
+
+	// Use existing JSON formatter (3-space indentation).
+	jsonStr, err := utils.ConvertToJSON(v)
+	if err != nil {
+		return []string{fmt.Sprintf("%v", v)}
+	}
+
+	// Apply syntax highlighting if TTY and atmosConfig available.
+	if atmosConfig != nil {
+		highlighted, err := utils.HighlightCodeWithConfig(atmosConfig, jsonStr, "json")
+		if err == nil {
+			jsonStr = highlighted
+		}
+	}
+
+	return strings.Split(jsonStr, "\n")
 }
