@@ -45,29 +45,50 @@ This declaratively says "this stack has HIPAA compliance and cost optimization e
 
 ### Directory Structure
 
-Features live in `stacks/features/` (configurable). Features are similar to mixins - they provide reusable configuration that can be applied across stacks. Good examples include versioned component configurations (like EKS versions), compliance requirements, and deployment strategies.
+Features live in `stacks/features/` (configurable). Features are similar to mixins - they provide reusable configuration that can be applied across stacks. **Features can be nested using directory paths**, enabling logical organization by category.
 
 ```
 stacks/
 ├── features/
-│   ├── eks-1.29/
-│   │   └── eks.yaml           # EKS 1.29 configuration
-│   ├── eks-1.30/
-│   │   └── eks.yaml           # EKS 1.30 configuration
-│   ├── eks-1.31/
-│   │   └── eks.yaml           # EKS 1.31 configuration
-│   ├── hipaa/
-│   │   ├── vpc.yaml           # VPC hardening
-│   │   ├── rds.yaml           # Encryption, audit logging
-│   │   ├── eks.yaml           # Pod security, network policies
-│   │   └── _defaults.yaml     # Feature-wide defaults
-│   ├── cost-savings/
-│   │   ├── eks.yaml           # Spot instances, smaller nodes
-│   │   └── rds.yaml           # Reserved instances, smaller types
-│   ├── blue/
-│   │   └── alb.yaml           # Target blue deployment
-│   └── green/
-│       └── alb.yaml           # Target green deployment
+│   ├── versions/
+│   │   ├── eks/
+│   │   │   ├── 1.29/
+│   │   │   │   └── eks.yaml
+│   │   │   ├── 1.30/
+│   │   │   │   └── eks.yaml
+│   │   │   └── 1.31/
+│   │   │       └── eks.yaml
+│   │   ├── rds/
+│   │   │   ├── postgres-15/
+│   │   │   │   └── rds.yaml
+│   │   │   └── postgres-16/
+│   │   │       └── rds.yaml
+│   │   └── grafana/
+│   │       ├── 10.0/
+│   │       │   └── grafana.yaml
+│   │       └── 11.0/
+│   │           └── grafana.yaml
+│   ├── compliance/
+│   │   ├── hipaa/
+│   │   │   ├── vpc.yaml
+│   │   │   ├── rds.yaml
+│   │   │   └── eks.yaml
+│   │   ├── pci-dss/
+│   │   │   └── ...
+│   │   └── sox/
+│   │       └── ...
+│   ├── deployment/
+│   │   ├── blue/
+│   │   │   └── alb.yaml
+│   │   └── green/
+│   │       └── alb.yaml
+│   └── sizing/
+│       ├── small/
+│       │   └── defaults.yaml
+│       ├── medium/
+│       │   └── defaults.yaml
+│       └── large/
+│           └── defaults.yaml
 ├── catalog/
 │   └── ...
 ├── ue2-dev.yaml
@@ -75,15 +96,23 @@ stacks/
 └── ue2-prod.yaml
 ```
 
+**Feature paths use forward slashes** to reference nested features:
+- `versions/eks/1.30`
+- `compliance/hipaa`
+- `deployment/blue`
+- `sizing/medium`
+
 ### Stack Declaration
 
-Stacks declare features they want enabled:
+Stacks declare features they want enabled using path notation:
 
 ```yaml
 # stacks/ue2-prod.yaml
 features:
-  - eks-1.30
-  - hipaa
+  - versions/eks/1.30
+  - versions/rds/postgres-16
+  - compliance/hipaa
+  - sizing/large
 
 import:
   - catalog/eks
@@ -100,8 +129,9 @@ components:
 ```yaml
 # stacks/ue2-dev.yaml
 features:
-  - eks-1.31      # Dev runs latest EKS version
-  - cost-savings
+  - versions/eks/1.31      # Dev runs latest EKS version
+  - versions/rds/postgres-16
+  - sizing/small           # Smaller resources for dev
 
 import:
   - catalog/eks
@@ -116,7 +146,7 @@ Features can provide context that is accessible via the `.features` template var
 **Feature providing context:**
 
 ```yaml
-# stacks/features/eks-1.30/eks.yaml
+# stacks/features/versions/eks/1.30/eks.yaml
 features:
   eks_version: "1.30"
   eks_ami_type: "AL2_x86_64"
@@ -129,7 +159,7 @@ components:
 ```
 
 ```yaml
-# stacks/features/eks-1.31/eks.yaml
+# stacks/features/versions/eks/1.31/eks.yaml
 features:
   eks_version: "1.31"
   eks_ami_type: "AL2023_x86_64_STANDARD"
@@ -161,15 +191,15 @@ When multiple features are enabled, their `features` blocks are deep merged in d
 ```yaml
 # stacks/ue2-prod.yaml
 features:
-  - eks-1.30       # Provides: features.eks_version = "1.30"
-  - hipaa          # Provides: features.compliance_framework = "hipaa"
-  - cost-savings   # Provides: features.instance_type = "t3.medium"
+  - versions/eks/1.30       # Provides: features.eks_version = "1.30"
+  - compliance/hipaa        # Provides: features.compliance_framework = "hipaa"
+  - sizing/large            # Provides: features.instance_type = "m5.xlarge"
 ```
 
 The resulting `.features` context contains all merged values:
 - `.features.eks_version` = `"1.30"`
 - `.features.compliance_framework` = `"hipaa"`
-- `.features.instance_type` = `"t3.medium"`
+- `.features.instance_type` = `"m5.xlarge"`
 
 ### Parameterized Features
 
@@ -178,11 +208,11 @@ Features can also accept explicit parameters via map syntax:
 ```yaml
 # stacks/ue2-prod.yaml
 features:
-  - eks-1.30
-  - retention-policy:
+  - versions/eks/1.30
+  - policies/retention:
       days: 90
       archive_after: 30
-  - scaling:
+  - scaling/autoscale:
       min: 2
       max: 10
 ```
@@ -227,29 +257,31 @@ features:
   - cost-savings # Loaded second, overrides hipaa where conflicts exist
 ```
 
-### CLI Flag Override
+### CLI Flag
 
-Features can also be specified or overridden at runtime:
+Features can be specified at runtime using the `--features` flag, which replaces stack-declared features:
 
 ```bash
-# Add feature at runtime
-atmos terraform plan vpc -s ue2-prod --feature blue
+# Single feature - replaces stack features
+atmos terraform plan vpc -s ue2-prod --features deployment/blue
 
-# Multiple features
-atmos terraform plan vpc -s ue2-prod --feature hipaa,cost-savings
+# Multiple features - replaces stack features with this list
+atmos terraform plan vpc -s ue2-prod --features compliance/hipaa,deployment/blue
 
-# Override stack-declared features entirely
-atmos terraform plan vpc -s ue2-prod --features-override green
+# Explicit control over all features
+atmos terraform plan vpc -s ue2-prod --features versions/eks/1.30,compliance/hipaa,sizing/large
 ```
+
+Note: `--feature` is an alias for `--features`. Both accept a single value or comma-separated list.
 
 ### Environment Variable
 
 ```bash
-# Additive - adds to stack-declared features
-export ATMOS_FEATURE=blue-green
+# Set features via environment variable (replaces stack features)
+export ATMOS_FEATURES=deployment/blue
 
-# Override - replaces stack-declared features
-export ATMOS_FEATURES_OVERRIDE=blue-green
+# Multiple features
+export ATMOS_FEATURES=compliance/hipaa,deployment/green
 ```
 
 ### Profile-Based Default Features
@@ -260,54 +292,52 @@ Atmos profiles can define features that are automatically enabled when the profi
 # profiles/ci/features.yaml
 features:
   defaults:
-    - cost-savings      # Always enable cost savings in CI
-    - fast-iteration    # Faster builds for CI
+    - sizing/small           # Smaller resources for CI
+    - observability/minimal  # Minimal logging in CI
 
 # profiles/production/features.yaml
 features:
   defaults:
-    - hipaa             # Production requires HIPAA compliance
-    - high-availability # Production requires HA
-    - enhanced-monitoring
+    - compliance/hipaa       # Production requires HIPAA compliance
+    - reliability/ha         # Production requires HA
+    - observability/full     # Full monitoring in production
 ```
 
 **Usage:**
 
 ```bash
-# CI profile automatically enables cost-savings and fast-iteration features
+# CI profile automatically enables sizing/small, observability/minimal
 atmos terraform plan vpc -s ue2-dev --profile ci
 
-# Production profile automatically enables hipaa, high-availability, enhanced-monitoring
+# Production profile automatically enables compliance, reliability, monitoring
 atmos terraform apply vpc -s ue2-prod --profile production
 
-# Override profile defaults with explicit features
-atmos terraform plan vpc -s ue2-prod --profile production --features-override blue-green
+# Override profile and stack features with explicit list
+atmos terraform plan vpc -s ue2-prod --profile production --features deployment/green
 ```
 
 **Precedence for feature activation:**
 
-1. `--features-override` CLI flag (replaces all other features)
-2. `--feature` CLI flag (additive)
-3. `ATMOS_FEATURES_OVERRIDE` environment variable (replaces all other features)
-4. `ATMOS_FEATURE` environment variable (additive)
-5. Stack-declared `features` list
-6. Profile-declared `features.defaults` list (from active profile)
+1. `--features` CLI flag (replaces all below)
+2. `ATMOS_FEATURES` environment variable (replaces all below)
+3. Stack-declared `features` list (extends profile defaults)
+4. Profile-declared `features.defaults` list (baseline)
 
 **Benefits:**
 
-- **Environment consistency**: CI profiles ensure dev/test environments use cost-saving features
+- **Environment consistency**: CI profiles ensure dev/test environments use appropriate features
 - **Compliance enforcement**: Production profiles can mandate compliance features
 - **Reduced repetition**: Common feature sets are defined once in the profile
-- **Layered control**: Stack-level features extend profile defaults; CLI can override both
+- **Explicit control**: CLI flag gives full control when needed
 
 ## Feature File Format
 
 Feature files are standard Atmos stack configuration with an optional `features` block for context:
 
 ```yaml
-# stacks/features/eks-1.30/eks.yaml
+# stacks/features/versions/eks/1.30/eks.yaml
 metadata:
-  name: eks-1.30
+  name: versions/eks/1.30
   description: "EKS 1.30 cluster configuration"
 
 # Context provided to templates via .features
@@ -329,7 +359,7 @@ components:
 ```
 
 ```yaml
-# stacks/features/hipaa/rds.yaml
+# stacks/features/compliance/hipaa/rds.yaml
 features:
   compliance_framework: hipaa
   audit_logging: required
@@ -351,7 +381,7 @@ components:
 ```
 
 ```yaml
-# stacks/features/cost-savings/eks.yaml
+# stacks/features/sizing/small/defaults.yaml
 features:
   instance_type: "t3.medium"
   use_spot: true
@@ -371,9 +401,9 @@ components:
 Features use the standard `metadata` block (same pattern as components):
 
 ```yaml
-# stacks/features/eks-1.31/eks.yaml
+# stacks/features/versions/eks/1.31/eks.yaml
 metadata:
-  name: eks-1.31
+  name: versions/eks/1.31
   description: "EKS 1.31 with AL2023 AMI support"
 
 features:
@@ -408,24 +438,31 @@ stacks:
 $ atmos feature list
 
 Available features:
-  eks-1.29      EKS 1.29 cluster configuration
-  eks-1.30      EKS 1.30 cluster configuration
-  eks-1.31      EKS 1.31 with AL2023 AMI support
-  hipaa         HIPAA compliance configuration
-  pci-dss       PCI-DSS compliance configuration
-  cost-savings  Cost optimization settings
-  blue          Target blue deployment
-  green         Target green deployment
+  compliance/hipaa           HIPAA compliance configuration
+  compliance/pci-dss         PCI-DSS compliance configuration
+  compliance/sox             SOX compliance configuration
+  deployment/blue            Target blue deployment
+  deployment/green           Target green deployment
+  sizing/small               Small resource profile (dev/test)
+  sizing/medium              Medium resource profile
+  sizing/large               Large resource profile (production)
+  versions/eks/1.29          EKS 1.29 cluster configuration
+  versions/eks/1.30          EKS 1.30 cluster configuration
+  versions/eks/1.31          EKS 1.31 with AL2023 AMI support
+  versions/grafana/10.0      Grafana 10.0 configuration
+  versions/grafana/11.0      Grafana 11.0 configuration
+  versions/rds/postgres-15   PostgreSQL 15 configuration
+  versions/rds/postgres-16   PostgreSQL 16 configuration
 ```
 
 ### Describe Feature
 
 ```bash
-$ atmos describe feature eks-1.30
+$ atmos describe feature versions/eks/1.30
 
 # Outputs valid stack YAML format
 metadata:
-  name: eks-1.30
+  name: versions/eks/1.30
   description: "EKS 1.30 cluster configuration"
 
 features:
@@ -453,22 +490,28 @@ $ atmos describe stacks ue2-prod --format yaml
 
 ## Use Cases
 
-### 1. Versioned Components (EKS, RDS, etc.)
+### 1. Versioned Components (EKS, RDS, Grafana, etc.)
 
 Features are ideal for managing component versions across environments:
 
 ```yaml
 # stacks/ue2-dev.yaml
 features:
-  - eks-1.31      # Dev runs latest version
+  - versions/eks/1.31          # Dev runs latest EKS
+  - versions/rds/postgres-16   # Dev runs latest PostgreSQL
+  - versions/grafana/11.0      # Dev runs latest Grafana
 
 # stacks/ue2-staging.yaml
 features:
-  - eks-1.30      # Staging mirrors prod
+  - versions/eks/1.30          # Staging mirrors prod
+  - versions/rds/postgres-16
+  - versions/grafana/10.0
 
 # stacks/ue2-prod.yaml
 features:
-  - eks-1.30      # Prod on stable version
+  - versions/eks/1.30          # Prod on stable EKS version
+  - versions/rds/postgres-16
+  - versions/grafana/10.0
 ```
 
 Components can reference version-specific settings via `.features`:
@@ -488,9 +531,9 @@ components:
 ```yaml
 # stacks/ue2-prod.yaml
 features:
-  - eks-1.30
-  - hipaa
-  - sox
+  - versions/eks/1.30
+  - compliance/hipaa
+  - compliance/sox
 ```
 
 All components automatically get compliance-required settings. The `.features` context includes:
@@ -502,35 +545,35 @@ All components automatically get compliance-required settings. The `.features` c
 ```yaml
 # stacks/ue2-dev.yaml
 features:
-  - eks-1.31
-  - cost-savings
-  - fast-iteration  # Fewer replicas, faster deploys
+  - versions/eks/1.31
+  - sizing/small
+  - observability/minimal
 
 # stacks/ue2-prod.yaml
 features:
-  - eks-1.30
-  - high-availability
-  - enhanced-monitoring
+  - versions/eks/1.30
+  - sizing/large
+  - observability/full
 ```
 
 ### 4. Deployment Strategies
 
 ```bash
 # Deploy to blue target group
-atmos terraform apply eks -s ue2-prod --feature blue
+atmos terraform apply eks -s ue2-prod --feature deployment/blue
 
 # Switch traffic to green
-atmos terraform apply eks -s ue2-prod --feature green
+atmos terraform apply eks -s ue2-prod --feature deployment/green
 ```
 
 ### 5. Temporary Toggles
 
 ```bash
 # Debug mode for troubleshooting
-atmos terraform plan vpc -s ue2-prod --feature debug-logging
+atmos terraform plan vpc -s ue2-prod --feature observability/debug
 
 # Test EKS upgrade without changing stack file
-atmos terraform plan eks -s ue2-prod --feature eks-1.31
+atmos terraform plan eks -s ue2-prod --feature versions/eks/1.31
 ```
 
 ### 6. Customer/Tenant Specific
@@ -538,10 +581,10 @@ atmos terraform plan eks -s ue2-prod --feature eks-1.31
 ```yaml
 # stacks/acme-corp/prod.yaml
 features:
-  - eks-1.30
-  - enterprise
-  - dedicated-resources
-  - custom-domain
+  - versions/eks/1.30
+  - tiers/enterprise
+  - resources/dedicated
+  - networking/custom-domain
 ```
 
 ### 7. Profile-Based Environment Defaults
@@ -550,9 +593,8 @@ features:
 # profiles/ci/features.yaml
 features:
   defaults:
-    - cost-savings
-    - fast-iteration
-    - debug-logging
+    - sizing/small
+    - observability/debug
 
 # profiles/production/features.yaml
 features:
@@ -571,6 +613,48 @@ atmos terraform apply vpc -s ue2-prod --profile production
 ```
 
 This pattern ensures environment-appropriate features are always enabled without requiring every stack to declare them.
+
+### 8. Affected Workflows with Features
+
+Features integrate with Atmos affected functionality for CI/CD pipelines:
+
+```bash
+# List affected stacks with their features
+atmos list affected --columns stack,component,features
+
+# Describe affected with feature details
+atmos describe affected --include-settings
+
+# Plan all affected components with a feature override
+atmos terraform plan --affected --feature blue
+
+# Apply to affected components targeting green deployment
+atmos terraform apply --affected --feature green
+```
+
+**Detecting feature-related changes:**
+
+```bash
+# When stacks/features/eks-1.31/eks.yaml is modified:
+$ atmos list affected
+
+STACK        COMPONENT  AFFECTED_BY
+ue2-dev      eks        feature:eks-1.31
+ue2-staging  eks        feature:eks-1.31
+
+# When ue2-prod.yaml adds a new feature:
+$ atmos list affected
+
+STACK        COMPONENT  AFFECTED_BY
+ue2-prod     vpc        feature-activation:hipaa
+ue2-prod     rds        feature-activation:hipaa
+ue2-prod     eks        feature-activation:hipaa
+```
+
+This enables CI/CD pipelines to:
+- Detect when feature changes affect specific stacks
+- Apply feature overrides during deployment (e.g., blue-green)
+- Track feature-related drift across environments
 
 ## Comparison
 
@@ -603,8 +687,8 @@ Same merge behavior, same file format, same everything - just with CLI control a
 |--------|----------|----------|
 | Target | CLI/Atmos behavior | Stack/component config |
 | Directory | `profiles/` | `stacks/features/` |
-| Flag | `--profile` | `--feature` |
-| Env var | `ATMOS_PROFILE` | `ATMOS_FEATURE` |
+| Flag | `--profile` | `--features` |
+| Env var | `ATMOS_PROFILE` | `ATMOS_FEATURES` |
 
 ## Requirements
 
@@ -626,15 +710,15 @@ Same merge behavior, same file format, same everything - just with CLI control a
 
 **FR2.1**: Features MUST be activated via `features` list in stack configuration.
 
-**FR2.2**: Features MUST be activated via `--feature` CLI flag (StringSlice flag).
+**FR2.2**: Features MUST be activated via `--features` CLI flag (StringSlice flag, replaces stack/profile features).
 
-**FR2.3**: Features MUST be activated via `ATMOS_FEATURE` environment variable (comma-separated).
+**FR2.3**: Features MUST be activated via `ATMOS_FEATURES` environment variable (comma-separated, replaces stack/profile features).
 
-**FR2.4**: CLI flag MUST take precedence over environment variable.
+**FR2.4**: Precedence MUST be: CLI flag > environment variable > stack declaration > profile defaults.
 
-**FR2.5**: Stack-declared features MUST be applied unless overridden with `--features-override`.
+**FR2.5**: When no features are specified via CLI or env var, stack and profile features MUST be used.
 
-**FR2.6**: When no features are specified, Atmos MUST behave identically to current behavior.
+**FR2.6**: When no features are specified anywhere, Atmos MUST behave identically to current behavior.
 
 #### FR3: Feature Merging
 
@@ -678,13 +762,11 @@ Same merge behavior, same file format, same everything - just with CLI control a
 
 **FR6.3**: Stack-declared features MUST extend (not replace) profile-declared default features.
 
-**FR6.4**: CLI `--feature` flag MUST be additive to both profile and stack features.
+**FR6.4**: CLI `--features` flag MUST replace all features (profile, stack, and env var).
 
-**FR6.5**: CLI `--features-override` flag MUST replace all features (profile, stack, and env var).
+**FR6.5**: Multiple active profiles MUST have their default features merged (left-to-right precedence).
 
-**FR6.6**: Multiple active profiles MUST have their default features merged (left-to-right precedence).
-
-**FR6.7**: Profile default features MUST be resolved before stack features in the merge order.
+**FR6.6**: Profile default features MUST be resolved before stack features in the merge order.
 
 ### Technical Requirements
 
@@ -700,13 +782,11 @@ Same merge behavior, same file format, same everything - just with CLI control a
 
 #### TR2: CLI Flag Implementation
 
-**TR2.1**: Add `--feature` flag to terraform/helmfile commands.
+**TR2.1**: Add `--features` flag to terraform/helmfile commands (with `--feature` as alias).
 
-**TR2.2**: Add `--features-override` flag to terraform/helmfile commands.
+**TR2.2**: Use `pkg/flags/` infrastructure for flag parsing.
 
-**TR2.3**: Use `pkg/flags/` infrastructure for flag parsing.
-
-**TR2.4**: Bind `ATMOS_FEATURE` and `ATMOS_FEATURES_OVERRIDE` environment variables.
+**TR2.3**: Bind `ATMOS_FEATURES` environment variable.
 
 #### TR3: Feature Loading
 
@@ -744,7 +824,40 @@ Same merge behavior, same file format, same everything - just with CLI control a
 
 **TR6.4**: Tests MUST verify profile-based feature activation with single and multiple profiles.
 
-**TR6.5**: Tests MUST verify precedence: CLI override > CLI additive > env override > env additive > stack > profile.
+**TR6.5**: Tests MUST verify precedence: CLI flag > env var > stack > profile.
+
+#### FR7: Affected Integration
+
+**FR7.1**: `atmos describe affected` MUST include active features in its change detection scope.
+
+**FR7.2**: `atmos describe affected` output MUST include a `features` field showing resolved features for each affected component/stack.
+
+**FR7.3**: `atmos list affected` MUST display active features when present (e.g., via `--columns features` or default columns).
+
+**FR7.4**: `atmos terraform <subcommand> --affected` MUST respect the `--features` flag.
+
+**FR7.5**: When `--features` is passed with `--affected`, the feature configuration MUST be applied to all affected components.
+
+**FR7.6**: Feature changes (additions, removals, modifications to feature files) MUST be detected as changes that affect stacks using those features.
+
+**FR7.7**: The affected output MUST distinguish between:
+- Component/stack changes
+- Feature file changes that affect the component/stack
+- Feature activation changes (feature added/removed from stack's `features` list)
+
+#### TR7: Affected Integration
+
+**TR7.1**: The affected detection logic in `internal/exec/describe_affected.go` MUST be extended to track feature file changes.
+
+**TR7.2**: Feature resolution MUST occur before affected calculation to determine feature scope.
+
+**TR7.3**: The `--features` flag on terraform commands with `--affected` MUST be validated and applied consistently.
+
+**TR7.4**: Tests MUST verify that modifying a feature file marks all stacks using that feature as affected.
+
+**TR7.5**: Tests MUST verify that `--affected` with `--features` applies the feature to all affected components.
+
+**TR7.6**: Performance MUST remain acceptable when combining `--affected` with features (no N×M explosion).
 
 ## Implementation Plan
 
@@ -756,8 +869,8 @@ Same merge behavior, same file format, same everything - just with CLI control a
 3. Implement feature directory discovery
 4. Implement feature configuration loading and merging
 5. Integrate feature loading into stack resolution pipeline
-6. Add `--feature` CLI flag to terraform/helmfile commands
-7. Add `ATMOS_FEATURE` environment variable support
+6. Add `--features` CLI flag to terraform/helmfile commands (with `--feature` alias)
+7. Add `ATMOS_FEATURES` environment variable support
 8. Add `features.defaults` field to profile schema
 9. Integrate profile default features into feature resolution pipeline
 
@@ -782,22 +895,36 @@ Same merge behavior, same file format, same everything - just with CLI control a
 - Updated describe stacks output
 - CLI integration tests
 
-### Phase 3: Advanced Features
+### Phase 3: Affected Integration
+
+**Tasks:**
+1. Extend `describe affected` to track feature file changes
+2. Add `features` field to affected output
+3. Update `list affected` to display features column
+4. Add `--features` flag support to terraform commands with `--affected`
+5. Implement feature change detection (additions, removals, modifications)
+6. Add `AFFECTED_BY` categorization for feature-related changes
+
+**Deliverables:**
+- Feature change detection in `internal/exec/describe_affected.go`
+- Updated affected output schema with features
+- `--features` flag integration with `--affected`
+- Unit tests for feature-aware affected detection
+
+### Phase 4: Advanced Features
 
 **Tasks:**
 1. Implement parameterized features with templating
 2. Add feature metadata support
-3. Implement `--features-override` flag
-4. Add feature validation (requires/conflicts)
-5. Add feature composition validation
+3. Add feature validation (requires/conflicts)
+4. Add feature composition validation
 
 **Deliverables:**
 - Parameterized feature support
 - Feature metadata rendering
-- Override functionality
 - Validation rules
 
-### Phase 4: Documentation
+### Phase 5: Documentation
 
 **Tasks:**
 1. Create feature configuration examples
@@ -821,12 +948,7 @@ Same merge behavior, same file format, same everything - just with CLI control a
    - **Recommendation**: After imports, before stack-level config
 
 3. **Negative features**: Support `features: [!debug-logging]` to explicitly disable?
-   - **Recommendation**: Defer to Phase 3, consider `features_disabled` list instead
-
-4. **CLI parameters**: How to pass feature parameters via `--feature` flag?
-   - **Option A**: JSON-ish syntax: `--feature "retention-policy:{days:90}"`
-   - **Option B**: Dot notation: `--feature retention-policy --feature-var retention-policy.days=90`
-   - **Recommendation**: Option A for simplicity, Option B for complex cases
+   - **Recommendation**: Defer to Phase 4, consider `features_disabled` list instead
 
 ## Success Metrics
 
