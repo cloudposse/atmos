@@ -22,7 +22,7 @@ export const roadmapConfig = {
     'One tool to orchestrate your entire infrastructure lifecycle — as convenient as PaaS, but as flexible as Terraform, sitting on top of the tools you know and love.',
 
   theme: {
-    title: 'From Fragmented to Unified',
+    title: 'Reducing Tool Fatigue',
     description:
       'Atmos is consolidating the sprawl of infrastructure tooling into a cohesive, discoverable, zero-config experience that works identically locally and in CI.',
   },

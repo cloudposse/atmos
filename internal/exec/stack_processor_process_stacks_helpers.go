@@ -53,6 +53,7 @@ type ComponentProcessorResult struct {
 	ComponentEnv               map[string]any
 	ComponentMetadata          map[string]any
 	ComponentDependencies      map[string]any
+	ComponentLocals            map[string]any // Component-level locals for template processing.
 	ComponentCommand           string
 	ComponentOverrides         map[string]any
 	ComponentOverridesVars     map[string]any
@@ -67,6 +68,7 @@ type ComponentProcessorResult struct {
 	BaseComponentAuth          map[string]any
 	BaseComponentMetadata      map[string]any
 	BaseComponentDependencies  map[string]any
+	BaseComponentLocals        map[string]any // Base component locals for inheritance.
 	BaseComponentCommand       string
 	ComponentInheritanceChain  []string
 	BaseComponents             []string

@@ -5,7 +5,6 @@ sidebar_class_name: command
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import DocCardList from '@theme/DocCardList'
-import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
@@ -16,34 +15,35 @@ Use these subcommands to interact with Terraform and OpenTofu.
 
 <Screengrab title="atmos terraform --help" slug="atmos-terraform--help" />
 
-Atmos Terraform/OpenTofu commands fall into two categories:
-
-  - Single-Component: Run Terraform for one component at a time
-
-  - Multi-Component (Filtered/Bulk): Run Terraform across multiple components using stack names, selectors, or change detection
-
 Atmos supports all Terraform and OpenTofu commands and options described in
 [Terraform CLI Overview](https://developer.hashicorp.com/terraform/cli/commands)
 and [OpenTofu Basic CLI Features](https://opentofu.org/docs/cli/commands/).
-
-In addition, for the Single-Component commands, the `component` argument and `stack` flag are required to generate
-variables and backend config for the component in the stack.
 
 :::note Disambiguation
 The term "Terraform" is used in this documentation to refer to generic concepts such as providers, modules, stacks, the
 HCL-based domain-specific language and its interpreter. Atmos works with [OpenTofu](/components/terraform).
 :::
 
-## Single-Component Commands Usage
+## Command Modes
 
-Use single-component commands when you want to execute Terraform operations on one component at a time, offering precise control over individual resources.
+Atmos Terraform commands operate in two modes:
+
+- **Single-Component**: Execute Terraform for one component at a time with precise control
+- **Multi-Component**: Execute Terraform across multiple components using filters (`--all`, `--affected`, `--components`, `--query`)
+
+## Single-Component Usage
+
+Use single-component commands when you want to execute Terraform operations on one component at a time.
+
 <Terminal>
 ```shell
-# Execute `terraform <command>` on a `component` in a `stack`
 atmos terraform <command> <component> -s <stack> [options]
-atmos terraform <command> <component> --stack <stack> [options]
 ```
 </Terminal>
+
+The `component` argument and `--stack` flag are required to generate variables and backend config for the component in the stack.
+
+See individual command pages for detailed options: [plan](/cli/commands/terraform/plan), [apply](/cli/commands/terraform/apply), [deploy](/cli/commands/terraform/deploy), [destroy](/cli/commands/terraform/destroy).
 
 ### Path-Based Component Resolution
 
@@ -72,144 +72,72 @@ This automatically resolves the path to the component name configured in your st
 - Must be inside a component directory under the configured base path
 - Must specify `--stack` flag
 - Component must exist in the specified stack configuration
-- **The component path must resolve to a unique component name** - If multiple components in the stack reference the same component path, you must use the unique component name instead of the path
 
-:::warning Path Resolution Limitation
-Path-based resolution only works when the component path resolves to a **single unique component** in the stack.
+:::tip Interactive Component Selection
+When a component path matches multiple components in the stack, Atmos prompts you to select which one to use in interactive terminals.
 
 For example, if both `station/1` and `station/2` reference `components/terraform/weather`:
 ```bash
 cd components/terraform/weather
-atmos terraform plan . --stack dev  # ❌ Error: ambiguous - which component?
+atmos terraform plan . --stack dev
+# Atmos displays: "Component path '.' matches multiple instances in stack 'dev'"
+# Select which component instance to use: station/1, station/2
 ```
 
-Instead, you must use the unique component names:
+In non-interactive mode (CI/CD), use the explicit component name to avoid ambiguity:
 ```bash
-atmos terraform plan station/1 --stack dev  # ✓ Explicit and unambiguous
-atmos terraform plan station/2 --stack dev  # ✓ Explicit and unambiguous
+atmos terraform plan station/1 --stack dev  # Explicit and unambiguous
+atmos terraform plan station/2 --stack dev  # Explicit and unambiguous
 ```
 :::
 
-## Multi-Component Commands (Bulk Operations) Usage
+## Multi-Component Usage
 
-Use multi-component commands to run Terraform operations across multiple components simultaneously. You can target components by stack, selector, query, or change detection—often making this approach more efficient than using Atmos workflows for certain use cases.
+Use multi-component commands to run Terraform operations across multiple components simultaneously. You can target components by stack, selector, query, or change detection.
 
 <Terminal>
 ```shell
-# Execute `terraform <command>` on all components in the stack `prod`
-atmos terraform <command> --stack prod
-
-# Execute `terraform <command>` on components `component-1` and `component-2` in all stacks
-atmos terraform <command> --components component-1,component-2
-
-# Execute `terraform <command>` on components `component-1` and `component-2` in the stack `prod`
-atmos terraform <command> --stack prod --components component-1,component-2
-
-# Execute `terraform <command>` on all components in all stacks
+# Execute on all components in all stacks
 atmos terraform <command> --all
 
-# Execute `terraform <command>` on all components in the stack `prod`
-atmos terraform <command> --all --stack prod
+# Execute on all components in a specific stack
+atmos terraform <command> --stack prod
 
-# Execute `terraform <command>` on all the directly affected components in all stacks in dependency order
-# (if component dependencies are configured)
+# Execute on specific components
+atmos terraform <command> --components vpc,eks
+
+# Execute on affected components (based on git changes)
 atmos terraform <command> --affected
 
-# Execute `terraform <command>` on all the directly affected components in the `prod` stack in dependency order
-# (if component dependencies are configured)
-atmos terraform <command> --affected --stack prod
-
-# Execute `terraform <command>` on all the directly affected components in all stacks in dependency order.
-# For each directly affected component, detect the dependent components and process them in dependency order, recursively.
-# Dependents are components that are indirectly affected, meaning that nothing in the current branch modifies their code
-# or configs, but they are configured as dependencies of the components that are modified
-atmos terraform <command> --affected --include-dependents
-
-# Execute `terraform <command>` on all the directly affected components in the `prod` stack in dependency order.
-# For each directly affected component, detect the dependent components and process them in dependency order, recursively.
-atmos terraform <command> --affected --include-dependents --stack prod
-
-# Execute `terraform <command>` on all components that have `vars.tags.team == "data"`, in all stacks
-atmos terraform <command> --query '.vars.tags.team == "data"'
-
-# Execute `terraform <command>` on all components that have `vars.tags.team == "eks"`, in the stack `prod`
-atmos terraform <command> --query '.vars.tags.team == "eks"' --stack prod
-
-# Execute `terraform <command>` on all components that have `settings.context.account_id == 12345`, in all stacks
-atmos terraform <command> --query '.settings.context.account_id == 12345'
+# Execute on components matching a query
+atmos terraform <command> --query '.vars.tags.team == "eks"'
 ```
 </Terminal>
 
-<br />
+All multi-component flags can be combined with `--dry-run` to preview what would be executed without making changes.
 
-## Additions and differences from native Terraform and OpenTofu
+See individual command pages for detailed multi-component examples and flags: [plan](/cli/commands/terraform/plan#multi-component-operations), [apply](/cli/commands/terraform/apply#multi-component-operations), [deploy](/cli/commands/terraform/deploy#multi-component-operations).
 
-- before executing other `terraform` commands, Atmos runs `terraform init`
+## Differences from Native Terraform
 
-- you can skip over atmos calling `terraform init` if you know your project is already in a good working state by using the `--skip-init` flag like
-  so `atmos terraform <command> <component> -s <stack> --skip-init`
+Atmos enhances the standard Terraform CLI with several conveniences:
 
-- `atmos terraform deploy` command executes `terraform apply -auto-approve` (sets `-auto-approve` flag when running `terraform apply`)
+- **Automatic initialization**: Atmos runs `terraform init` before executing other commands. Use `--skip-init` to skip this step.
 
-- `atmos terraform deploy` command supports `--deploy-run-init=true|false` flag to enable/disable running `terraform init` before executing the
-  command
+- **Deploy command**: `atmos terraform deploy` executes `terraform apply -auto-approve` for automated deployments.
 
-- `atmos terraform apply` and `atmos terraform deploy` commands support `--from-plan` flag. If the flag is specified, the commands will use
-  the planfile previously generated by `atmos terraform plan` command instead of generating a new planfile,
-  e.g. `atmos terraform apply <component> -s <stack> --from-plan`. Note that in this case, the planfile name is in the format supported by Atmos and
-  is saved to the component's folder. See [Terraform Planfiles](/components/terraform/planfiles) for comprehensive planfile documentation
+- **Planfile support**: The `--from-plan` and `--planfile` flags enable two-stage plan/apply workflows. See [Terraform Planfiles](/components/terraform/planfiles).
 
-- `atmos terraform apply` and `atmos terraform deploy` commands support `--planfile` flag to specify the path to a planfile.
-  The `--planfile` flag should be used instead of the planfile argument in the native `terraform apply <planfile>` command.
-  For example, you can execute the command `atmos terraform plan <component> -s <stack> -out=<FILE>`, which will save the generated plan to a
-  file on disk, and then execute the command `atmos terraform apply <component> -s <stack> --planfile <FILE>` to apply the previously generated
-  planfile. Learn more in the [terraform apply](/cli/commands/terraform/apply) documentation
+- **Terraform Cloud compatibility**: Use `--skip-planfile` with `terraform plan` when using Terraform Cloud, which doesn't support local plan files.
 
-- `atmos terraform plan` command accepts a `--skip-planfile` flag to skip writing the plan to a file. If the flag is set to `true`
-  (e.g., `atmos terraform plan <component> -s <stack> --skip-planfile=true`), Atmos will not pass the `-out` flag to Terraform
-  when executing the command. Set it to `true` when using Terraform Cloud since the `-out` flag is not supported.
-  Terraform Cloud automatically stores plans in its backend and can't store it in a local file. See [terraform plan](/cli/commands/terraform/plan) for details
-
-- `atmos terraform clean` command deletes the `.terraform` folder, `.terraform.lock.hcl` lock file, and the previously generated `planfile`
-  and `varfile` for the specified component and stack. Use the `--skip-lock-file` flag to skip deleting the `.terraform.lock.hcl` file.
-  It deletes all local Terraform state files and directories
-  (including [`terraform.tfstate.d`](https://developer.hashicorp.com/terraform/cli/workspaces#workspace-internals)
-  used for local state) for a component in a stack.
-  The `--force` flag bypasses the safety confirmation prompt and forces the deletion. Use with caution.
-
-  :::warning
-  The `clean` command performs destructive operations that can lead to permanent state loss, if not using remote backends.
-  Always ensure you have remote state configured in your components before proceeding.
-  :::
-
-- `atmos terraform workspace` command first runs `terraform init -reconfigure`, then `terraform workspace select`, and if the workspace was not
-  created before, it then runs `terraform workspace new`
-
-- `atmos terraform import` command searches for `region` in the variables for the specified component and stack, and if it finds it,
-  sets `AWS_REGION=<region>` ENV var before executing the command
-
-- `atmos terraform generate backend` command generates a backend config file for an Atmos component in a stack
-
-- `atmos terraform generate backends` command generates backend config files for all Atmos components in all stacks
-
-- `atmos terraform generate varfile` command generates a varfile for an Atmos component in a stack
-
-- `atmos terraform generate varfiles` command generates varfiles for all Atmos components in all stacks
-
-- `atmos terraform plan-diff` command compares two Terraform plans and shows the differences between them. It takes an original plan file (`--orig`) and optionally a new plan file (`--new`). If the new plan file is not provided, it will generate one by running `terraform plan` with the current configuration.
-
-- `atmos terraform shell` command configures an environment for an Atmos component in a stack and starts a new shell allowing executing all native
-  terraform commands inside the shell
-
-- double-dash `--` can be used to signify the end of the options for Atmos and the start of the additional native arguments and flags for
-  the `terraform` commands. For example:
-    - `atmos terraform plan <component> -s <stack> -- -refresh=false`
-    - `atmos terraform apply <component> -s <stack> -- -lock=false`
-
-<br />
+- **Native flag passthrough**: Use `--` to pass flags directly to Terraform:
+  ```shell
+  atmos terraform plan vpc -s dev -- -refresh=false
+  atmos terraform apply vpc -s dev -- -lock=false
+  ```
 
 :::tip
-Run `atmos terraform --help` to see all the available options
+Run `atmos terraform --help` to see all available options.
 :::
 
 ## Examples
