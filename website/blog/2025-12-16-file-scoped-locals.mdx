@@ -144,11 +144,11 @@ This keeps locals truly local, preventing unexpected interactions between files.
 
 ### Multi-Level Scopes
 
-Locals can be defined at three levels, each inheriting from its parent:
+Locals can be defined at three levels, with inner scopes inheriting from outer:
 
 1. **Global** (stack file root) - Available throughout the file
 2. **Component-type** (`terraform`, `helmfile`, `packer` sections) - Inherits from global
-3. **Component** (individual component) - Inherits from component-type
+3. **Component-level** (inside component definitions) - Inherits from global + component-type, and from base components via `metadata.inherits`
 
 ```yaml
 # Global locals
@@ -161,15 +161,13 @@ terraform:
   locals:
     backend_bucket: "{{ .locals.namespace }}-{{ .locals.environment }}-tfstate"
 
-  components:
-    terraform:
-      vpc:
-        # Component-level locals (inherit from terraform scope)
-        locals:
-          component_name: vpc
-          full_name: "{{ .locals.namespace }}-{{ .locals.component_name }}"
-        vars:
-          name: "{{ .locals.full_name }}"
+components:
+  terraform:
+    vpc:
+      vars:
+        # Uses merged locals (global + terraform section)
+        name: "{{ .locals.namespace }}-{{ .locals.environment }}-vpc"
+        bucket: "{{ .locals.backend_bucket }}"
 ```
 
 ## Inspecting Locals with `atmos describe locals`
@@ -182,39 +180,16 @@ atmos describe locals vpc -s prod-ue2
 
 <Terminal title="atmos describe locals vpc -s prod-ue2">
 ```yaml
-namespace: acme
-environment: prod
-stage: us-east-1
-name_prefix: acme-prod
-full_name: acme-prod-us-east-1
-backend_bucket: acme-prod-tfstate
-component_name: vpc
-tags:
-  Environment: prod
-  Namespace: acme
-```
-</Terminal>
-
-### Provenance Tracking
-
-Add `--provenance` to see exactly where each local was defined:
-
-```bash
-atmos describe locals vpc -s prod-ue2 --provenance
-```
-
-<Terminal title="atmos describe locals vpc -s prod-ue2 --provenance">
-```yaml
-namespace: acme           # ● [1] stacks/prod/us-east-1.yaml:4
-environment: prod         # ● [1] stacks/prod/us-east-1.yaml:5
-stage: us-east-1         # ● [1] stacks/prod/us-east-1.yaml:6
-name_prefix: acme-prod   # ● [1] stacks/prod/us-east-1.yaml:7 (computed)
-full_name: acme-prod-us-east-1  # ● [1] stacks/prod/us-east-1.yaml:8 (computed)
-backend_bucket: acme-prod-tfstate  # ○ [2] terraform section:12 (computed)
-component_name: vpc      # ○ [3] component section:18
-tags:                    # ● [1] stacks/prod/us-east-1.yaml:9
-  Environment: prod      # ● [1] stacks/prod/us-east-1.yaml:10 (computed)
-  Namespace: acme        # ● [1] stacks/prod/us-east-1.yaml:11 (computed)
+components:
+  terraform:
+    vpc:
+      locals:
+        namespace: acme
+        environment: prod
+        stage: us-east-1
+        name_prefix: acme-prod
+        full_name: acme-prod-us-east-1
+        backend_bucket: acme-prod-tfstate
 ```
 </Terminal>
 
@@ -228,18 +203,38 @@ atmos describe locals vpc -s prod-ue2 --format json
 
 ```json
 {
-  "locals": {
-    "namespace": "acme",
-    "environment": "prod",
-    "name_prefix": "acme-prod"
-  },
-  "metadata": {
-    "component": "vpc",
-    "stack": "prod-ue2",
-    "component_type": "terraform"
+  "components": {
+    "terraform": {
+      "vpc": {
+        "locals": {
+          "namespace": "acme",
+          "environment": "prod",
+          "name_prefix": "acme-prod"
+        }
+      }
+    }
   }
 }
 ```
+
+### Show Locals for a Stack
+
+With the `--stack` flag (required), show locals for the specified stack:
+
+```bash
+atmos describe locals --stack prod-ue2
+```
+
+```yaml
+locals:
+  namespace: acme
+  environment: prod
+terraform:
+  locals:
+    backend_bucket: acme-prod-tfstate
+```
+
+The output is in direct stack manifest format - it can be redirected to a file and used as valid YAML.
 
 ## Why File-Scoped?
 
@@ -296,13 +291,15 @@ terraform:
   # Terraform-specific - only used by terraform components
   locals:
     state_bucket: "{{ .locals.namespace }}-tfstate"
+    vpc_name: "{{ .locals.namespace }}-vpc"
 
-  components:
-    terraform:
-      vpc:
-        # Component-specific - only used by this component
-        locals:
-          vpc_name: "{{ .locals.namespace }}-vpc"
+components:
+  terraform:
+    vpc:
+      vars:
+        # Uses merged locals (global + terraform section)
+        name: "{{ .locals.vpc_name }}"
+        bucket: "{{ .locals.state_bucket }}"
 ```
 
 ## Get Started
