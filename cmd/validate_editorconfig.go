@@ -15,6 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -175,7 +176,7 @@ func runMainLogic() {
 	}
 
 	var filePaths []string
-	var errors []er.ValidationErrors
+	var validationErrors []er.ValidationErrors
 
 	err := spinner.ExecWithSpinner(
 		"Validating EditorConfig...",
@@ -184,27 +185,26 @@ func runMainLogic() {
 			var err error
 			filePaths, err = files.GetFiles(config)
 			if err != nil {
-				return err
+				return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEditorConfigGetFiles, err)
 			}
-			errors = validation.ProcessValidation(filePaths, config)
+			validationErrors = validation.ProcessValidation(filePaths, config)
 			log.Debug("Files checked", "count", len(filePaths))
-			if er.GetErrorCount(errors) != 0 {
-				return fmt.Errorf("EditorConfig validation failed")
+			if er.GetErrorCount(validationErrors) != 0 {
+				return errUtils.ErrEditorConfigValidationFailed
 			}
 			return nil
 		},
 	)
 	if err != nil {
-		if len(errors) > 0 {
-			er.PrintErrors(errors, config)
+		if len(validationErrors) > 0 {
+			er.PrintErrors(validationErrors, config)
 		} else {
-			log.Error("Validation failed", "error", err)
+			ui.Error(fmt.Sprintf("Validation failed: %v", err))
 		}
 		errUtils.Exit(1)
 	}
 
-	// Output final result to stdout for scripts/pipelines.
-	fmt.Println("No errors found")
+	ui.Success("No errors found")
 }
 
 func checkVersion(config config.Config) error {
@@ -212,8 +212,8 @@ func checkVersion(config config.Config) error {
 		return nil
 	}
 	if config.Version != version.Version {
-		return fmt.Errorf("version mismatch: binary=%s, config=%s",
-			version.Version, config.Version)
+		return fmt.Errorf("%w: binary=%s, config=%s",
+			errUtils.ErrEditorConfigVersionMismatch, version.Version, config.Version)
 	}
 
 	return nil
