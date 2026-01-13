@@ -244,7 +244,7 @@ func registerLoggingFlags(registry *FlagRegistry) {
 	registry.Register(&StringFlag{
 		Name:        "logs-level",
 		Shorthand:   "",
-		Default:     "Info",
+		Default:     "Warning",
 		Description: "Logs level (Trace, Debug, Info, Warning, Off)",
 		EnvVars:     []string{"ATMOS_LOGS_LEVEL"},
 	})
