@@ -336,7 +336,7 @@ func renderMultilineDiffSimple(b *strings.Builder, before, after, indent string,
 
 	// Truncate helper.
 	truncateLine := func(line string) string {
-		if len(line) > maxWidth {
+		if maxWidth > 3 && len(line) > maxWidth {
 			return line[:maxWidth-3] + "..."
 		}
 		return line
@@ -382,7 +382,7 @@ func renderMultilineValueSimple(b *strings.Builder, content, indent, symbol stri
 	lines := strings.Split(content, "\n")
 
 	for _, line := range lines {
-		if len(line) > maxWidth {
+		if maxWidth > 3 && len(line) > maxWidth {
 			line = line[:maxWidth-3] + "..."
 		}
 		b.WriteString(fmt.Sprintf("%s%s %s\n", indent, symbolStyle.Render(symbol), line))
