@@ -1,6 +1,6 @@
 import React from 'react';
 
-interface DemoVideoProps {
+export interface DemoVideoProps {
   /** Demo video ID - matches scene name in demos/scenes.yaml. */
   id: string;
   /** Title for accessibility. */
@@ -19,11 +19,8 @@ interface DemoVideoProps {
  * Usage:
  *   <DemoVideo id="atmos-workflow" title="Atmos Workflow" showCaption />
  */
-export default function DemoVideo({
-  id,
-  title,
-  showCaption = true,
-}: DemoVideoProps): JSX.Element | null {
+export default function DemoVideo(props: DemoVideoProps): JSX.Element | null {
+  void props;
   // Placeholder: return null until demo infrastructure is added.
   // When implemented, this will:
   // 1. Look up the scene in demos/scenes.yaml by id

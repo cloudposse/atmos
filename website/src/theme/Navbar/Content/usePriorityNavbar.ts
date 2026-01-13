@@ -75,18 +75,36 @@ export function usePriorityNavbar(
 
     // Measure item widths on first pass (when all items are visible).
     // Cache them for subsequent calculations.
-    if (itemWidthsRef.current.length !== items.length) {
+    // Re-measure if any items have zero width or are missing.
+    const cachedNeedsInit =
+      itemWidthsRef.current.length !== items.length ||
+      itemWidthsRef.current.some((w) => w === 0) ||
+      items.some((el) => !el);
+
+    if (cachedNeedsInit) {
       const widths: number[] = [];
+      let allMeasured = true;
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         if (item) {
           // Get scroll width for accurate measurement even if overflow:hidden.
-          widths[i] = item.scrollWidth || item.getBoundingClientRect().width;
+          const w = item.scrollWidth || item.getBoundingClientRect().width;
+          widths[i] = w;
+          if (!w) allMeasured = false;
         } else {
           widths[i] = 0;
+          allMeasured = false;
         }
       }
       itemWidthsRef.current = widths;
+
+      // If we couldn't measure everything yet, try again next frame.
+      if (!allMeasured) {
+        setIsReady(false);
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(calculateVisibleItems);
+        return;
+      }
     }
 
     // Get available width for left items.
@@ -108,13 +126,9 @@ export function usePriorityNavbar(
       availableWidth = containerRect.width;
     }
 
-    // Calculate how many items fit.
+    // Calculate how many items fit using cached widths (all non-zero now).
     const cachedWidths = itemWidthsRef.current;
-
-    // Filter out zero-width items (hidden or not yet rendered).
-    const measuredItems = cachedWidths
-      .map((width, index) => ({ width, index }))
-      .filter(({ width }) => width > 0);
+    const measuredItems = cachedWidths.map((width, index) => ({ width, index }));
     const measuredCount = measuredItems.length;
 
     let totalWidth = 0;
