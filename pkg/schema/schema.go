@@ -97,6 +97,8 @@ type AtmosConfiguration struct {
 	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
 	Profiles        ProfilesConfig      `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
 	Metadata        ConfigMetadata      `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+	// List holds command-specific list configurations (list.components, list.instances, list.stacks).
+	List TopLevelListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -1072,4 +1074,19 @@ type ListColumnConfig struct {
 	Name  string `yaml:"name" json:"name" mapstructure:"name"`
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
 	Width int    `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`
+}
+
+// TopLevelListConfig holds command-specific list configurations.
+// This is a top-level configuration that separates settings for different list commands.
+type TopLevelListConfig struct {
+	// Components configures the "atmos list components" command output.
+	// Shows unique component definitions (deduplicated across stacks).
+	Components ListConfig `yaml:"components,omitempty" json:"components,omitempty" mapstructure:"components"`
+
+	// Instances configures the "atmos list instances" command output.
+	// Shows component instances (one entry per component+stack pair).
+	Instances ListConfig `yaml:"instances,omitempty" json:"instances,omitempty" mapstructure:"instances"`
+
+	// Stacks configures the "atmos list stacks" command output.
+	Stacks ListConfig `yaml:"stacks,omitempty" json:"stacks,omitempty" mapstructure:"stacks"`
 }
