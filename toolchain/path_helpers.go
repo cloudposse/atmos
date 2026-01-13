@@ -25,7 +25,7 @@ func buildPathEntries(toolVersions *ToolVersions, installer *Installer, relative
 
 		version := versions[0] // Default version.
 
-		// Resolve tool name to owner/repo using parseToolSpec for consistency.
+		// Resolve tool name to owner/repo using ParseToolSpec for consistency.
 		owner, repo, err := installer.ParseToolSpec(toolName)
 		if err != nil {
 			// Skip tools that can't be resolved.

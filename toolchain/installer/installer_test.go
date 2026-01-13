@@ -96,24 +96,13 @@ func TestParseToolSpec(t *testing.T) {
 			owner, repo, err := installer.ParseToolSpec(tt.tool)
 
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("parseToolSpec() expected error but got none")
-				}
+				assert.Error(t, err, "parseToolSpec() expected error")
 				return
 			}
 
-			if err != nil {
-				t.Errorf("parseToolSpec() unexpected error: %v", err)
-				return
-			}
-
-			if owner != tt.wantOwner {
-				t.Errorf("parseToolSpec() owner = %v, want %v", owner, tt.wantOwner)
-			}
-
-			if repo != tt.wantRepo {
-				t.Errorf("parseToolSpec() repo = %v, want %v", repo, tt.wantRepo)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantOwner, owner)
+			assert.Equal(t, tt.wantRepo, repo)
 		})
 	}
 }
@@ -191,9 +180,7 @@ func TestGetBinaryPath(t *testing.T) {
 	path := installer.GetBinaryPath("suzuki-shunsuke", "github-comment", "v6.3.4", "")
 	expected := filepath.Join(binDir, "suzuki-shunsuke", "github-comment", "v6.3.4", "github-comment")
 
-	if path != expected {
-		t.Errorf("GetBinaryPath() = %v, want %v", path, expected)
-	}
+	assert.Equal(t, expected, path, "GetBinaryPath() mismatch")
 }
 
 func TestFindTool(t *testing.T) {
@@ -210,40 +197,16 @@ func TestNewInstaller(t *testing.T) {
 			"helmfile":  {"helmfile", "helmfile"},
 		},
 	}
-	customRegistries := []string{"mock-remote-registry", "mock-local-registry"}
-	installer := &Installer{
-		binDir:     "./.tools/bin",
-		registries: customRegistries,
-		resolver:   mockResolver,
-	}
+	tmpDir := t.TempDir()
+	installer := New(
+		WithBinDir(tmpDir),
+		WithResolver(mockResolver),
+	)
 
-	if installer.binDir != "./.tools/bin" {
-		t.Errorf("New() binDir = %v, want ./.tools/bin", installer.binDir)
-	}
-
-	if len(installer.registries) == 0 {
-		t.Error("New() registries is empty")
-	}
-
-	// Check that custom registries are set
-	foundRemote := false
-	foundLocal := false
-	for _, registry := range installer.registries {
-		if registry == "mock-remote-registry" {
-			foundRemote = true
-		}
-		if registry == "mock-local-registry" {
-			foundLocal = true
-		}
-	}
-
-	if !foundRemote {
-		t.Error("New() missing remote registry")
-	}
-
-	if !foundLocal {
-		t.Error("New() missing local registry")
-	}
+	assert.Equal(t, tmpDir, installer.binDir, "binDir should match")
+	assert.NotNil(t, installer.resolver, "resolver should be set")
+	assert.NotEmpty(t, installer.registries, "registries should not be empty")
+	assert.NotEmpty(t, installer.cacheDir, "cacheDir should be set by default")
 }
 
 func TestResolveToolName(t *testing.T) {
@@ -317,24 +280,13 @@ func TestResolveToolName(t *testing.T) {
 			owner, repo, err := installer.GetResolver().Resolve(tt.toolName)
 
 			if tt.wantErr {
-				if err == nil {
-					t.Errorf("resolveToolName() expected error but got none")
-				}
+				assert.Error(t, err, "resolveToolName() expected error")
 				return
 			}
 
-			if err != nil {
-				t.Errorf("resolveToolName() unexpected error: %v", err)
-				return
-			}
-
-			if owner != tt.wantOwner {
-				t.Errorf("resolveToolName() owner = %v, want %v", owner, tt.wantOwner)
-			}
-
-			if repo != tt.wantRepo {
-				t.Errorf("resolveToolName() repo = %v, want %v", repo, tt.wantRepo)
-			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantOwner, owner)
+			assert.Equal(t, tt.wantRepo, repo)
 		})
 	}
 }

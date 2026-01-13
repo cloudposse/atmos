@@ -174,7 +174,16 @@ func installExtractedBinary(src, dst string) error {
 
 // extractFilesFromDir extracts files from the extracted archive using the Files config.
 // The binaryPath parameter specifies the destination for the primary binary.
-// For multiple files, additional binaries are placed in the same directory.
+//
+// File placement convention:
+//   - The FIRST file in tool.Files is treated as the primary binary and is installed
+//     to binaryPath. This matches the Aqua registry convention where the first file
+//     entry represents the main executable.
+//   - ADDITIONAL files (index > 0) are placed in the same directory as the primary
+//     binary, using their configured Name as the filename.
+//
+// This convention allows tools with multiple binaries (e.g., a main CLI plus helpers)
+// to be installed correctly while maintaining a consistent installation path.
 func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *registry.Tool) error {
 	if len(tool.Files) == 0 {
 		return fmt.Errorf("%w: no files configured for extraction", ErrFileOperation)

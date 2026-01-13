@@ -2,11 +2,11 @@ packages:
   - type: http
     repo_owner: aws
     repo_name: aws-cli
-    url: https://awscli.amazonaws.com/awscli-exe-{{.OS}}-{{.Arch}}-{{.Version}}.zip
+    url: https://awscli.amazonaws.com/awscli-exe-{{.OS}}-{{.Arch}}-{{trimV .Version}}.zip
     format: zip
     overrides:
       - goos: darwin
-        url: https://awscli.amazonaws.com/AWSCLIV2-{{.Version}}.{{.Format}}
+        url: https://awscli.amazonaws.com/AWSCLIV2-{{trimV .Version}}.{{.Format}}
         format: pkg
         files:
           - name: aws

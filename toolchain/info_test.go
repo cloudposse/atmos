@@ -185,9 +185,6 @@ func TestInfoCommand_YAMLOutputFormat(t *testing.T) {
 	assert.NotContains(t, yamlData, "{{.Arch}}")
 }
 
-func TestInfoCommand_TableOutputFormat(t *testing.T) {
-}
-
 func TestInfoCommand_NonExistentTool(t *testing.T) {
 	// Test that info command handles non-existent tools gracefully
 	installer := NewInstaller()
@@ -411,29 +408,40 @@ func TestInfoCommand_EdgeCases(t *testing.T) {
 	installer := NewInstaller()
 
 	t.Run("tool with files", func(t *testing.T) {
-		// Test tool with files configuration
-		// 		tool := &registry.Tool{
-		// 			Type:      "github_release",
-		// 			RepoOwner: "test",
-		// 			RepoName:  "tool-with-files",
-		// 			Files: []registry.File{
-		// 				{Name: "binary", Src: "tool"},
-		// 				{Name: "config", Src: "config.yaml"},
-		// 			},
-		// 		}
+		// Test tool with files configuration.
+		tool := &registry.Tool{
+			Type:      "github_release",
+			RepoOwner: "test",
+			RepoName:  "tool-with-files",
+			Files: []registry.File{
+				{Name: "binary", Src: "tool"},
+				{Name: "config", Src: "config.yaml"},
+			},
+		}
+
+		yamlData, err := getEvaluatedToolYAML(tool, "1.0.0", installer)
+		assert.NoError(t, err)
+		assert.Contains(t, yamlData, "type: github_release")
+		assert.Contains(t, yamlData, "repo_owner: test")
+		assert.Contains(t, yamlData, "repo_name: tool-with-files")
 	})
 
 	t.Run("tool with overrides", func(t *testing.T) {
-		// Test tool with platform overrides
-		// 		tool := &registry.Tool{
-		// 			Type:      "github_release",
-		// 			RepoOwner: "test",
-		// 			RepoName:  "tool-with-overrides",
-		// 			Overrides: []registry.Override{
-		// 				{GOOS: "darwin", GOARCH: "arm64", Asset: "tool-darwin-arm64"},
-		// 				{GOOS: "linux", GOARCH: "amd64", Asset: "tool-linux-amd64"},
-		// 			},
-		// 		}
+		// Test tool with platform overrides.
+		tool := &registry.Tool{
+			Type:      "github_release",
+			RepoOwner: "test",
+			RepoName:  "tool-with-overrides",
+			Overrides: []registry.Override{
+				{GOOS: "darwin", GOARCH: "arm64", Asset: "tool-darwin-arm64"},
+				{GOOS: "linux", GOARCH: "amd64", Asset: "tool-linux-amd64"},
+			},
+		}
+
+		yamlData, err := getEvaluatedToolYAML(tool, "1.0.0", installer)
+		assert.NoError(t, err)
+		assert.Contains(t, yamlData, "type: github_release")
+		assert.Contains(t, yamlData, "repo_owner: test")
 	})
 
 	t.Run("tool with empty fields", func(t *testing.T) {

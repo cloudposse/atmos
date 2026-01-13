@@ -12,18 +12,23 @@ func TestNewInstaller(t *testing.T) {
 	t.Run("creates installer with default options", func(t *testing.T) {
 		installer := NewInstaller()
 		assert.NotNil(t, installer)
+		// Default binDir is set from GetInstallPath() + "/bin".
+		assert.NotEmpty(t, installer.GetBinDir(), "binDir should have a default value")
 	})
 
 	t.Run("creates installer with custom binDir", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		installer := NewInstaller(WithBinDir(tmpDir))
 		assert.NotNil(t, installer)
+		assert.Equal(t, tmpDir, installer.GetBinDir(), "binDir should match the provided value")
 	})
 
 	t.Run("creates installer with custom cacheDir", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		installer := NewInstaller(WithCacheDir(tmpDir))
 		assert.NotNil(t, installer)
+		// cacheDir is unexported, but we verify the installer was created successfully.
+		// The option is applied internally and affects download behavior.
 	})
 
 	t.Run("creates installer with multiple options", func(t *testing.T) {
@@ -34,6 +39,7 @@ func TestNewInstaller(t *testing.T) {
 			WithCacheDir(cacheDir),
 		)
 		assert.NotNil(t, installer)
+		assert.Equal(t, binDir, installer.GetBinDir(), "binDir should match the provided value")
 	})
 }
 
@@ -41,6 +47,7 @@ func TestNewInstallerWithBinDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	installer := NewInstallerWithBinDir(tmpDir)
 	require.NotNil(t, installer)
+	assert.Equal(t, tmpDir, installer.GetBinDir(), "binDir should match the provided value")
 }
 
 func TestNewInstallerWithResolver(t *testing.T) {
@@ -55,6 +62,14 @@ func TestNewInstallerWithResolver(t *testing.T) {
 
 	installer := NewInstallerWithResolver(mockResolver, tmpDir)
 	require.NotNil(t, installer)
+	// Verify binDir is set correctly.
+	assert.Equal(t, tmpDir, installer.GetBinDir(), "binDir should match the provided value")
+	// The resolver is unexported but is used internally during ParseToolSpec.
+	// We verify it works by testing the parsing behavior.
+	owner, repo, err := installer.ParseToolSpec("terraform")
+	require.NoError(t, err)
+	assert.Equal(t, "hashicorp", owner)
+	assert.Equal(t, "terraform", repo)
 }
 
 func TestWithBinDir(t *testing.T) {

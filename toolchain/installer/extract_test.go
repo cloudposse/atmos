@@ -497,6 +497,7 @@ func TestExtractDir(t *testing.T) {
 		tmpDir := t.TempDir()
 		targetPath := filepath.Join(tmpDir, "newdir")
 
+		// Mode -1 is invalid as file mode bits must be non-negative.
 		header := &tar.Header{Mode: -1}
 		err := extractDir(targetPath, header)
 		assert.Error(t, err)

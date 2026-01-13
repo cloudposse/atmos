@@ -561,4 +561,28 @@ func TestAtmosRegistry_OverridesSupport(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, tool.Overrides)
 	})
+
+	t.Run("malformed override entries are silently skipped", func(t *testing.T) {
+		// Test that malformed override entries (non-map) are skipped without error.
+		toolsConfig := map[string]any{
+			"owner/tool": map[string]any{
+				"type":  "github_release",
+				"asset": "tool-{{.OS}}-{{.Arch}}.tar.gz",
+				"overrides": []any{
+					"not-a-map",                      // Invalid: string instead of map.
+					123,                              // Invalid: int instead of map.
+					map[string]any{"goos": "darwin"}, // Valid override.
+				},
+			},
+		}
+
+		reg, err := NewAtmosRegistry(toolsConfig)
+		require.NoError(t, err)
+
+		tool, err := reg.GetTool("owner", "tool")
+		require.NoError(t, err)
+		// Only the valid override should be parsed.
+		require.Len(t, tool.Overrides, 1)
+		assert.Equal(t, "darwin", tool.Overrides[0].GOOS)
+	})
 }
