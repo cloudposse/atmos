@@ -76,8 +76,8 @@ func executeListAliases(cmd *cobra.Command, args []string) error {
 }
 
 func executeListAliasesWithOptions(opts *AliasesOptions) error {
-	// Load atmos configuration.
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	// Load atmos configuration with global flags.
+	configAndStacksInfo := buildConfigAndStacksInfo(&opts.Flags)
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return fmt.Errorf("failed to load atmos configuration: %w", err)

@@ -520,3 +520,28 @@ func TestCustomRenderer_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+// TestGetGlamourGoldmark_ReflectionStability tests that getGlamourGoldmark can
+// successfully extract the internal goldmark.Markdown instance from glamour.TermRenderer.
+// This test serves as a canary for glamour version upgrades - if glamour changes its
+// internal structure, this test will fail and alert us to update getGlamourGoldmark.
+func TestGetGlamourGoldmark_ReflectionStability(t *testing.T) {
+	// Create a glamour.TermRenderer using the same setup as NewCustomRenderer.
+	renderer, err := NewCustomRenderer()
+	require.NoError(t, err)
+
+	// The fact that NewCustomRenderer succeeded with custom extensions means
+	// getGlamourGoldmark returned a valid goldmark.Markdown instance.
+	// Verify by testing that admonition syntax is rendered correctly.
+	input := `> [!NOTE]
+> This should be rendered as an admonition.`
+
+	output, err := renderer.Render(input)
+	require.NoError(t, err)
+
+	// The output should contain "Note" label from admonition processing.
+	// If getGlamourGoldmark failed, the extension wouldn't be added and
+	// this would render as a regular blockquote without the "Note" label.
+	stripped := stripANSIForTest(output)
+	assert.Contains(t, stripped, "Note", "Expected admonition label; getGlamourGoldmark may have failed")
+}

@@ -1050,10 +1050,7 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentKind 
 	case cfg.HelmfileSectionName:
 		return atmosConfig.Components.Helmfile.BasePath
 	case cfg.PackerSectionName:
-		if atmosConfig.Components.Packer.BasePath != "" {
-			return atmosConfig.Components.Packer.BasePath
-		}
-		return "components/packer"
+		return atmosConfig.Components.Packer.BasePath
 	default:
 		return ""
 	}

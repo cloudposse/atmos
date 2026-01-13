@@ -42,10 +42,9 @@ demos/audio/
 /bin
 
 # Nix
-.envrc
 .direnv/
 
-# Environment files
+# Environment files (except .envrc which is tracked for Nix)
 .env*
 !.envrc
 

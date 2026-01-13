@@ -46,6 +46,7 @@ export function usePriorityNavbar(
 
   // Start with all items visible to allow measurement.
   const [visibleCount, setVisibleCount] = useState(totalItems);
+  const [measuredItemCount, setMeasuredItemCount] = useState(totalItems);
   const [isMobile, setIsMobile] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
@@ -109,19 +110,25 @@ export function usePriorityNavbar(
 
     // Calculate how many items fit.
     const cachedWidths = itemWidthsRef.current;
+
+    // Filter out zero-width items (hidden or not yet rendered).
+    const measuredItems = cachedWidths
+      .map((width, index) => ({ width, index }))
+      .filter(({ width }) => width > 0);
+    const measuredCount = measuredItems.length;
+
     let totalWidth = 0;
     let fitCount = 0;
 
-    for (let i = 0; i < cachedWidths.length; i++) {
-      const itemWidth = cachedWidths[i];
-      if (itemWidth === 0) continue;
+    for (let i = 0; i < measuredItems.length; i++) {
+      const { width: itemWidth } = measuredItems[i];
 
       // Add gap for items after the first.
-      const widthWithGap = i > 0 ? itemWidth + gap : itemWidth;
+      const widthWithGap = fitCount > 0 ? itemWidth + gap : itemWidth;
 
       // If there will be overflow, reserve space for the toggle.
       const wouldOverflow = totalWidth + widthWithGap > availableWidth;
-      const needsToggle = i < totalItems - 1 && wouldOverflow;
+      const needsToggle = i < measuredCount - 1 && wouldOverflow;
 
       // Check if this item fits (with toggle space if needed).
       const spaceNeeded = needsToggle
@@ -142,6 +149,7 @@ export function usePriorityNavbar(
     }
 
     setVisibleCount(fitCount);
+    setMeasuredItemCount(measuredCount);
     setIsReady(true);
   }, [containerRef, itemRefs, totalItems, toggleWidth, gap, mobileBreakpoint]);
 
@@ -194,7 +202,7 @@ export function usePriorityNavbar(
 
   return {
     visibleCount,
-    hasOverflow: visibleCount < totalItems && !isMobile,
+    hasOverflow: visibleCount < measuredItemCount && !isMobile,
     isMobile,
     isReady,
   };

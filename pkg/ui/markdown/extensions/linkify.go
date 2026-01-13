@@ -65,6 +65,7 @@ func (t *packageRefTransformer) Transform(node *ast.Document, reader text.Reader
 		// Valid emails cannot contain "/" so this is safe.
 		if strings.Contains(url, "/") {
 			nodesToReplace = append(nodesToReplace, autoLink)
+			return ast.WalkContinue, nil
 		}
 
 		// Also check if domain part looks like a version (e.g., @1.0.0).
