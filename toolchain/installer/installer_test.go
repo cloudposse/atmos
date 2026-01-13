@@ -961,3 +961,53 @@ func TestMoveFile_InvalidDestinationPath(t *testing.T) {
 	err = MoveFile(srcPath, dstPath)
 	assert.Error(t, err)
 }
+
+// TestDefaultRegistryFactory tests that defaultRegistryFactory returns nil.
+func TestDefaultRegistryFactory(t *testing.T) {
+	factory := &defaultRegistryFactory{}
+	reg := factory.NewAquaRegistry()
+	assert.Nil(t, reg, "defaultRegistryFactory should return nil")
+}
+
+// TestNewWithOptions tests the New() function with various options.
+func TestNewWithOptions(t *testing.T) {
+	t.Run("creates installer with default options", func(t *testing.T) {
+		installer := New()
+		assert.NotNil(t, installer)
+		assert.NotEmpty(t, installer.cacheDir)
+		assert.NotNil(t, installer.registryFactory)
+		assert.NotNil(t, installer.resolver)
+	})
+
+	t.Run("creates installer with custom binDir", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		installer := New(WithBinDir(tmpDir))
+		assert.NotNil(t, installer)
+		assert.Equal(t, tmpDir, installer.binDir)
+	})
+
+	t.Run("creates installer with custom cacheDir", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		installer := New(WithCacheDir(tmpDir))
+		assert.NotNil(t, installer)
+		assert.Equal(t, tmpDir, installer.cacheDir)
+	})
+
+	t.Run("creates installer with custom resolver", func(t *testing.T) {
+		mockResolver := &mockToolResolver{
+			mapping: map[string][2]string{
+				"test": {"owner", "repo"},
+			},
+		}
+		installer := New(WithResolver(mockResolver))
+		assert.NotNil(t, installer)
+		assert.Equal(t, mockResolver, installer.resolver)
+	})
+
+	t.Run("creates installer with custom registry factory", func(t *testing.T) {
+		factory := &defaultRegistryFactory{}
+		installer := New(WithRegistryFactory(factory))
+		assert.NotNil(t, installer)
+		assert.Equal(t, factory, installer.registryFactory)
+	})
+}

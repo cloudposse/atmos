@@ -522,3 +522,424 @@ func createTestZipArchive(t *testing.T, zipPath string, files map[string]string)
 		require.NoError(t, err)
 	}
 }
+
+// createTestTarGzArchive creates a tar.gz file with the given files.
+func createTestTarGzArchive(t *testing.T, tarGzPath string, files map[string]string) {
+	t.Helper()
+
+	f, err := os.Create(tarGzPath)
+	require.NoError(t, err)
+	defer f.Close()
+
+	gw := gzip.NewWriter(f)
+	defer gw.Close()
+
+	tw := tar.NewWriter(gw)
+	defer tw.Close()
+
+	for name, content := range files {
+		hdr := &tar.Header{
+			Name: name,
+			Mode: 0o755,
+			Size: int64(len(content)),
+		}
+		require.NoError(t, tw.WriteHeader(hdr))
+		_, err = tw.Write([]byte(content))
+		require.NoError(t, err)
+	}
+}
+
+func TestMoveFile(t *testing.T) {
+	t.Run("moves file successfully", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		src := filepath.Join(tmpDir, "source.txt")
+		dst := filepath.Join(tmpDir, "dest", "target.txt")
+
+		require.NoError(t, os.WriteFile(src, []byte("content"), 0o644))
+
+		err := MoveFile(src, dst)
+		assert.NoError(t, err)
+
+		// Source should not exist.
+		_, err = os.Stat(src)
+		assert.True(t, os.IsNotExist(err))
+
+		// Destination should exist with correct content.
+		content, err := os.ReadFile(dst)
+		assert.NoError(t, err)
+		assert.Equal(t, "content", string(content))
+	})
+
+	t.Run("creates target directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		src := filepath.Join(tmpDir, "source.txt")
+		dst := filepath.Join(tmpDir, "deep", "nested", "dir", "target.txt")
+
+		require.NoError(t, os.WriteFile(src, []byte("content"), 0o644))
+
+		err := MoveFile(src, dst)
+		assert.NoError(t, err)
+
+		// Verify destination exists.
+		_, err = os.Stat(dst)
+		assert.NoError(t, err)
+	})
+}
+
+func TestExtractTarGz_Function(t *testing.T) {
+	t.Run("extracts tar.gz file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		tarGzPath := filepath.Join(tmpDir, "test.tar.gz")
+		destDir := filepath.Join(tmpDir, "extracted")
+
+		createTestTarGzArchive(t, tarGzPath, map[string]string{
+			"file1.txt": "content1",
+			"file2.txt": "content2",
+		})
+
+		err := ExtractTarGz(tarGzPath, destDir)
+		assert.NoError(t, err)
+
+		// Verify extracted files.
+		content1, err := os.ReadFile(filepath.Join(destDir, "file1.txt"))
+		assert.NoError(t, err)
+		assert.Equal(t, "content1", string(content1))
+
+		content2, err := os.ReadFile(filepath.Join(destDir, "file2.txt"))
+		assert.NoError(t, err)
+		assert.Equal(t, "content2", string(content2))
+	})
+
+	t.Run("returns error for invalid file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		invalidPath := filepath.Join(tmpDir, "nonexistent.tar.gz")
+		destDir := filepath.Join(tmpDir, "extracted")
+
+		err := ExtractTarGz(invalidPath, destDir)
+		assert.Error(t, err)
+	})
+}
+
+func TestInstaller_extractZip(t *testing.T) {
+	t.Run("extracts zip and finds binary", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		zipPath := filepath.Join(tmpDir, "test.zip")
+		binDir := filepath.Join(tmpDir, "bin")
+		binaryPath := filepath.Join(binDir, "mytool")
+
+		// Create zip with binary.
+		createTestZipArchive(t, zipPath, map[string]string{
+			"mytool": "#!/bin/sh\necho hello",
+		})
+
+		installer := &Installer{}
+		tool := &registry.Tool{Name: "mytool"}
+
+		err := installer.extractZip(zipPath, binaryPath, tool)
+		assert.NoError(t, err)
+
+		// Verify binary was extracted.
+		_, err = os.Stat(binaryPath)
+		assert.NoError(t, err)
+	})
+
+	t.Run("extracts zip with Files config", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		zipPath := filepath.Join(tmpDir, "test.zip")
+		binDir := filepath.Join(tmpDir, "bin")
+		binaryPath := filepath.Join(binDir, "primary")
+
+		// Create zip with multiple files.
+		createTestZipArchive(t, zipPath, map[string]string{
+			"subdir/primary":   "#!/bin/sh\nprimary",
+			"subdir/secondary": "#!/bin/sh\nsecondary",
+		})
+
+		installer := &Installer{}
+		tool := &registry.Tool{
+			Files: []registry.File{
+				{Name: "primary", Src: "subdir/primary"},
+			},
+		}
+
+		err := installer.extractZip(zipPath, binaryPath, tool)
+		assert.NoError(t, err)
+
+		// Verify primary binary was extracted.
+		_, err = os.Stat(binaryPath)
+		assert.NoError(t, err)
+	})
+}
+
+func TestInstaller_extractTarGz(t *testing.T) {
+	t.Run("extracts tar.gz and finds binary", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		tarGzPath := filepath.Join(tmpDir, "test.tar.gz")
+		binDir := filepath.Join(tmpDir, "bin")
+		binaryPath := filepath.Join(binDir, "mytool")
+
+		// Create tar.gz with binary.
+		createTestTarGzArchive(t, tarGzPath, map[string]string{
+			"mytool": "#!/bin/sh\necho hello",
+		})
+
+		installer := &Installer{}
+		tool := &registry.Tool{Name: "mytool"}
+
+		err := installer.extractTarGz(tarGzPath, binaryPath, tool)
+		assert.NoError(t, err)
+
+		// Verify binary was extracted.
+		_, err = os.Stat(binaryPath)
+		assert.NoError(t, err)
+	})
+}
+
+func TestInstaller_extractGzip(t *testing.T) {
+	t.Run("extracts gzip-compressed binary", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		gzPath := filepath.Join(tmpDir, "binary.gz")
+		binaryPath := filepath.Join(tmpDir, "binary")
+
+		// Create gzip file.
+		f, err := os.Create(gzPath)
+		require.NoError(t, err)
+		gw := gzip.NewWriter(f)
+		_, err = gw.Write([]byte("#!/bin/sh\necho hello"))
+		require.NoError(t, err)
+		require.NoError(t, gw.Close())
+		require.NoError(t, f.Close())
+
+		installer := &Installer{}
+		err = installer.extractGzip(gzPath, binaryPath)
+		assert.NoError(t, err)
+
+		// Verify binary was extracted.
+		content, err := os.ReadFile(binaryPath)
+		assert.NoError(t, err)
+		assert.Equal(t, "#!/bin/sh\necho hello", string(content))
+	})
+}
+
+func TestInstaller_copyFile(t *testing.T) {
+	t.Run("copies file content", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		src := filepath.Join(tmpDir, "source")
+		dst := filepath.Join(tmpDir, "dest")
+
+		require.NoError(t, os.WriteFile(src, []byte("binary content"), 0o755))
+
+		installer := &Installer{}
+		err := installer.copyFile(src, dst)
+		assert.NoError(t, err)
+
+		// Verify content was copied.
+		content, err := os.ReadFile(dst)
+		assert.NoError(t, err)
+		assert.Equal(t, "binary content", string(content))
+
+		// Source should still exist.
+		_, err = os.Stat(src)
+		assert.NoError(t, err)
+	})
+}
+
+func TestInstaller_extractByExtension(t *testing.T) {
+	t.Run("handles zip extension", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		zipPath := filepath.Join(tmpDir, "test.zip")
+		binDir := filepath.Join(tmpDir, "bin")
+		binaryPath := filepath.Join(binDir, "mytool")
+
+		createTestZipArchive(t, zipPath, map[string]string{
+			"mytool": "#!/bin/sh\necho hello",
+		})
+
+		installer := &Installer{}
+		tool := &registry.Tool{Name: "mytool"}
+
+		err := installer.extractByExtension(zipPath, binaryPath, tool)
+		assert.NoError(t, err)
+	})
+
+	t.Run("handles tar.gz extension", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		tarGzPath := filepath.Join(tmpDir, "test.tar.gz")
+		binDir := filepath.Join(tmpDir, "bin")
+		binaryPath := filepath.Join(binDir, "mytool")
+
+		createTestTarGzArchive(t, tarGzPath, map[string]string{
+			"mytool": "#!/bin/sh\necho hello",
+		})
+
+		installer := &Installer{}
+		tool := &registry.Tool{Name: "mytool"}
+
+		err := installer.extractByExtension(tarGzPath, binaryPath, tool)
+		assert.NoError(t, err)
+	})
+
+	t.Run("handles gz extension", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		gzPath := filepath.Join(tmpDir, "binary.gz")
+		binaryPath := filepath.Join(tmpDir, "binary")
+
+		// Create gzip file.
+		f, err := os.Create(gzPath)
+		require.NoError(t, err)
+		gw := gzip.NewWriter(f)
+		_, err = gw.Write([]byte("#!/bin/sh\necho hello"))
+		require.NoError(t, err)
+		require.NoError(t, gw.Close())
+		require.NoError(t, f.Close())
+
+		installer := &Installer{}
+		tool := &registry.Tool{Name: "binary"}
+
+		err = installer.extractByExtension(gzPath, binaryPath, tool)
+		assert.NoError(t, err)
+	})
+
+	t.Run("copies unknown extension as binary", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		src := filepath.Join(tmpDir, "binary.unknown")
+		dst := filepath.Join(tmpDir, "binary")
+
+		require.NoError(t, os.WriteFile(src, []byte("binary content"), 0o755))
+
+		installer := &Installer{}
+		tool := &registry.Tool{Name: "binary"}
+
+		err := installer.extractByExtension(src, dst, tool)
+		assert.NoError(t, err)
+
+		content, err := os.ReadFile(dst)
+		assert.NoError(t, err)
+		assert.Equal(t, "binary content", string(content))
+	})
+}
+
+func TestInstaller_simpleExtract(t *testing.T) {
+	t.Run("extracts zip by magic bytes", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		zipPath := filepath.Join(tmpDir, "test.data") // No .zip extension.
+		binDir := filepath.Join(tmpDir, "bin")
+		binaryPath := filepath.Join(binDir, "mytool")
+
+		createTestZipArchive(t, zipPath, map[string]string{
+			"mytool": "#!/bin/sh\necho hello",
+		})
+
+		installer := &Installer{}
+		tool := &registry.Tool{Name: "mytool"}
+
+		err := installer.simpleExtract(zipPath, binaryPath, tool)
+		assert.NoError(t, err)
+
+		// Verify binary was extracted.
+		_, err = os.Stat(binaryPath)
+		assert.NoError(t, err)
+	})
+
+	t.Run("extracts gzip by magic bytes", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		gzPath := filepath.Join(tmpDir, "binary.data") // No .gz extension.
+		binaryPath := filepath.Join(tmpDir, "binary")
+
+		// Create gzip file.
+		f, err := os.Create(gzPath)
+		require.NoError(t, err)
+		gw := gzip.NewWriter(f)
+		_, err = gw.Write([]byte("#!/bin/sh\necho hello"))
+		require.NoError(t, err)
+		require.NoError(t, gw.Close())
+		require.NoError(t, f.Close())
+
+		installer := &Installer{}
+		tool := &registry.Tool{Name: "binary"}
+
+		err = installer.simpleExtract(gzPath, binaryPath, tool)
+		assert.NoError(t, err)
+
+		// Verify binary was extracted.
+		content, err := os.ReadFile(binaryPath)
+		assert.NoError(t, err)
+		assert.Equal(t, "#!/bin/sh\necho hello", string(content))
+	})
+
+	t.Run("copies binary by magic bytes", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		src := filepath.Join(tmpDir, "binary.data")
+		dst := filepath.Join(tmpDir, "binary")
+
+		// Write binary data (octet-stream).
+		binaryData := []byte{0x00, 0x01, 0x02, 0x03, 0x04}
+		require.NoError(t, os.WriteFile(src, binaryData, 0o755))
+
+		installer := &Installer{}
+		tool := &registry.Tool{Name: "binary"}
+
+		err := installer.simpleExtract(src, dst, tool)
+		assert.NoError(t, err)
+
+		content, err := os.ReadFile(dst)
+		assert.NoError(t, err)
+		assert.Equal(t, binaryData, content)
+	})
+}
+
+func TestInstaller_extractFilesFromDir(t *testing.T) {
+	t.Run("extracts files using Files config", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		srcDir := filepath.Join(tmpDir, "src")
+		binDir := filepath.Join(tmpDir, "bin")
+		binaryPath := filepath.Join(binDir, "primary")
+
+		require.NoError(t, os.MkdirAll(srcDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(srcDir, "primary"), []byte("primary content"), 0o755))
+
+		installer := &Installer{}
+		tool := &registry.Tool{
+			Files: []registry.File{
+				{Name: "primary", Src: "primary"},
+			},
+		}
+
+		err := installer.extractFilesFromDir(srcDir, binaryPath, tool)
+		assert.NoError(t, err)
+
+		content, err := os.ReadFile(binaryPath)
+		assert.NoError(t, err)
+		assert.Equal(t, "primary content", string(content))
+	})
+
+	t.Run("returns error for empty Files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		binDir := filepath.Join(tmpDir, "bin")
+		binaryPath := filepath.Join(binDir, "primary")
+
+		installer := &Installer{}
+		tool := &registry.Tool{
+			Files: []registry.File{},
+		}
+
+		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool)
+		assert.Error(t, err)
+	})
+
+	t.Run("returns error for missing source file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		binDir := filepath.Join(tmpDir, "bin")
+		binaryPath := filepath.Join(binDir, "primary")
+
+		installer := &Installer{}
+		tool := &registry.Tool{
+			Files: []registry.File{
+				{Name: "primary", Src: "nonexistent"},
+			},
+		}
+
+		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool)
+		assert.Error(t, err)
+	})
+}
