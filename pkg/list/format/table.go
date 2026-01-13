@@ -858,7 +858,8 @@ func CreateStyledTable(header []string, rows [][]string) string {
 		})
 
 	// Add blank lines before and after the table for visual separation.
-	return fmtNewline + t.String() + fmtNewline + utils.GetLineEnding()
+	lineEnding := utils.GetLineEnding()
+	return lineEnding + t.String() + lineEnding + lineEnding
 }
 
 // Format implements the Formatter interface for TableFormatter.

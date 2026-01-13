@@ -153,8 +153,14 @@ func extendGlamourWithCustomExtensions(renderer *glamour.TermRenderer) {
 	if md == nil {
 		return
 	}
-	// Add muted extension (converts ((text)) to strikethrough).
+	// Add admonition extension (converts > [!NOTE] etc. to styled callouts).
+	extensions.NewAdmonitionExtension().Extend(md)
+	// Add muted extension (converts ((text)) to muted gray text).
 	extensions.NewMutedExtension().Extend(md)
+	// Add highlight extension (converts ==text== to highlighted text).
+	extensions.NewHighlightExtension().Extend(md)
+	// Add badge extension (converts [!BADGE text] to styled badges).
+	extensions.NewBadgeExtension().Extend(md)
 	// Add strict linkify (prevents foo/bar@1.0.0 from becoming mailto: links).
 	extensions.NewStrictLinkifyExtension().Extend(md)
 }
@@ -162,6 +168,7 @@ func extendGlamourWithCustomExtensions(renderer *glamour.TermRenderer) {
 // getGlamourGoldmark extracts the internal goldmark.Markdown from a glamour.TermRenderer.
 // This uses reflection because glamour doesn't expose its internal goldmark instance.
 // Returns nil if the reflection fails (e.g., if glamour's internal structure changes).
+// Tested against glamour v0.10.0 - revisit if glamour is upgraded.
 func getGlamourGoldmark(renderer *glamour.TermRenderer) goldmark.Markdown {
 	val := reflect.ValueOf(renderer).Elem()
 	mdField := val.FieldByName("md")

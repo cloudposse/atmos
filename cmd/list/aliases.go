@@ -30,13 +30,12 @@ type AliasesOptions struct {
 
 // aliasesCmd lists configured command aliases.
 var aliasesCmd = &cobra.Command{
-	Use:   "aliases",
-	Short: "List configured command aliases",
-	Long:  "Display all command aliases configured in atmos.yaml.",
-	Example: "atmos list aliases\n" +
-		"atmos list aliases --format json",
-	Args: cobra.NoArgs,
-	RunE: executeListAliases,
+	Use:     "aliases",
+	Short:   "List configured command aliases",
+	Long:    "Display all command aliases configured in atmos.yaml.",
+	Example: "atmos list aliases",
+	Args:    cobra.NoArgs,
+	RunE:    executeListAliases,
 }
 
 func init() {

@@ -16,7 +16,7 @@ import (
 )
 
 // singleQuoteEscape is the escape sequence for single quotes in shell literals.
-// Transforms ' to '\" which ends the string, adds escaped quote, reopens string.
+// Shell technique: end string, add escaped quote, reopen string (see constant value).
 const singleQuoteEscape = `'\''`
 
 // defaultFmt is the default format verb for generic value formatting.

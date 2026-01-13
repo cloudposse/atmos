@@ -374,7 +374,7 @@ func TestAdmonitionParser(t *testing.T) {
 }
 
 func TestAdmonitionStyles(t *testing.T) {
-	// Verify all admonition types have styles defined.
+	// Verify all admonition types have styles and colors defined.
 	expectedTypes := []AdmonitionType{
 		AdmonitionNote,
 		AdmonitionWarning,
@@ -387,7 +387,9 @@ func TestAdmonitionStyles(t *testing.T) {
 		assert.True(t, ok, "style should be defined for type %q", adType)
 		assert.NotEmpty(t, style.icon, "icon should be defined for %q", adType)
 		assert.NotEmpty(t, style.label, "label should be defined for %q", adType)
-		assert.NotEmpty(t, style.color, "color should be defined for %q", adType)
+		// Verify color is defined in the separate color map.
+		_, colorOk := admonitionColors[adType]
+		assert.True(t, colorOk, "color should be defined for %q", adType)
 	}
 }
 
