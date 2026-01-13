@@ -35,11 +35,9 @@ components:
     mock/primary:
       metadata:
         component: mock
-      locals:
-        instance_id: "primary"
-        app_name: "{{ .locals.name_prefix }}-mock-{{ .locals.instance_id }}"
       vars:
-        foo: "{{ .locals.app_name }}"
+        # Use global and terraform-scope locals.
+        app_name: "{{ .locals.name_prefix }}-mock-primary"
         bar: "{{ .locals.environment }}"
-        baz: "{{ .locals.instance_id }}"
+        bucket: "{{ .locals.backend_bucket }}"
         tags: "{{ .locals.tags }}"
