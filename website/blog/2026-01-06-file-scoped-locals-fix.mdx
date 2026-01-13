@@ -1,0 +1,305 @@
+---
+slug: file-scoped-locals-fix
+title: 'Fixed: File-Scoped Locals Now Resolve Templates Correctly'
+authors:
+  - aknysh
+tags:
+  - bugfix
+date: 2026-01-06T00:00:00.000Z
+---
+
+The file-scoped locals feature introduced in v1.203.0 now correctly resolves `{{ .locals.* }}` templates in stack configurations.
+Previously, locals were defined but not integrated into the template processing pipeline, causing templates to remain unresolved.
+
+<!--truncate-->
+
+## The Problem
+
+When using file-scoped locals as documented, templates referencing locals were not being resolved:
+
+```yaml
+# stacks/prod.yaml
+locals:
+  namespace: acme
+  environment: prod
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+
+components:
+  terraform:
+    myapp:
+      vars:
+        name: "{{ .locals.name_prefix }}-myapp"
+        stage: "{{ .locals.environment }}"
+```
+
+Running `atmos describe component` showed raw template strings instead of resolved values:
+
+```yaml
+# Before fix - templates not resolved
+vars:
+  name: "{{ .locals.name_prefix }}-myapp"
+  stage: "{{ .locals.environment }}"
+```
+
+## The Fix
+
+Atmos now correctly resolves locals before template processing. The same configuration now produces the expected output:
+
+```yaml
+# After fix - templates resolved correctly
+vars:
+  name: "acme-prod-myapp"
+  stage: "prod"
+```
+
+### What Changed
+
+1. **Locals extraction** - Raw YAML is now parsed to extract `locals:` sections before template processing
+2. **Template context** - Resolved locals are added to the template context so `{{ .locals.* }}` references work
+3. **Section override tracking** - Section-specific locals (in `terraform:`, `helmfile:`, `packer:`) correctly override global locals
+4. **Component-level locals** - Components can now define their own `locals:` section that inherits from base components
+
+### New Command: `atmos describe locals`
+
+A new command has been added to help inspect and debug locals configurations:
+
+```bash
+# Show locals for a specific stack (using file path)
+atmos describe locals --stack deploy/dev
+
+# Show locals for a specific stack (using logical stack name from atmos.yaml)
+atmos describe locals --stack prod-us-east-1
+
+# Show locals available to a specific component in a stack
+atmos describe locals vpc -s prod
+
+# Output as JSON
+atmos describe locals -s dev --format json
+
+# Write to file
+atmos describe locals -s dev --file locals.yaml
+```
+
+**Note:** The `--stack` flag is required. Locals are file-scoped, so a specific stack must be specified.
+
+The `--stack` flag accepts either a **stack manifest file path** (e.g., `deploy/dev`) or a **logical stack name** derived from your `atmos.yaml` naming pattern (e.g., `prod-us-east-1`). Both resolve to the same underlying file, and locals are returned from that file only.
+
+#### Component-Specific Locals
+
+When specifying a component with the `--stack` flag, the command shows the merged locals that would be **available to** that component during template processing. This includes global locals, section-specific locals (for the component's type), and component-level locals (including inherited from base components):
+
+```bash
+atmos describe locals vpc -s prod
+```
+
+```yaml
+components:
+  terraform:
+    vpc:
+      locals:
+        namespace: acme
+        environment: prod
+        backend_bucket: acme-prod-tfstate
+```
+
+The output uses Atmos schema format, matching the structure of stack manifest files.
+
+#### Stack-Level Output
+
+Without a component argument, the output is in direct stack manifest format:
+
+```yaml
+locals:
+  namespace: acme
+  environment: dev
+  name_prefix: acme-dev
+terraform:
+  locals:
+    backend_bucket: acme-dev-tfstate
+```
+
+- **locals** - Global locals defined at root level of the stack file
+- **terraform/helmfile/packer** - Section-specific locals nested under `{ locals: }` (only shown if defined)
+
+The output is in direct stack manifest format - it can be redirected to a file and used as valid YAML (e.g., `atmos describe locals -s dev --file locals.yaml`).
+
+### Section-Specific Locals
+
+Locals can be defined at multiple levels, with later scopes overriding earlier ones:
+
+```yaml
+# Global locals
+locals:
+  namespace: "global-acme"
+
+terraform:
+  # Terraform-scope locals override global
+  locals:
+    namespace: "terraform-acme"
+    backend_bucket: "{{ .locals.namespace }}-tfstate"
+
+components:
+  terraform:
+    myapp:
+      vars:
+        # Uses terraform-scope value: "terraform-acme-tfstate"
+        bucket: "{{ .locals.backend_bucket }}"
+```
+
+## Features That Work
+
+All documented locals features now function correctly:
+
+### Component-Level Locals with Inheritance
+
+```yaml
+components:
+  terraform:
+    vpc/base:
+      locals:
+        vpc_type: "standard"
+        cidr_prefix: "10.0"
+
+    vpc/prod:
+      metadata:
+        inherits:
+          - vpc/base
+      locals:
+        vpc_type: "production"  # Overrides base
+      vars:
+        cidr: "{{ .locals.cidr_prefix }}.0.0/16"  # Inherited from base
+```
+
+### Locals Referencing Other Locals
+
+```yaml
+locals:
+  namespace: acme
+  environment: prod
+  # Resolved in dependency order
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+  full_name: "{{ .locals.name_prefix }}-us-east-1"
+```
+
+### Circular Dependency Detection
+
+Atmos detects circular dependencies and logs them gracefully:
+
+```yaml
+# This triggers a circular dependency warning
+locals:
+  a: "{{ .locals.b }}"
+  b: "{{ .locals.a }}"
+```
+
+### Complex Values
+
+Maps and nested structures work as expected:
+
+```yaml
+locals:
+  common_tags:
+    Environment: "{{ .locals.environment }}"
+    Namespace: "{{ .locals.namespace }}"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        tags: "{{ .locals.common_tags }}"
+```
+
+## Supported Scopes
+
+Locals can be defined at three levels:
+
+```yaml
+# Global locals (root level) - available throughout the file
+locals:
+  namespace: acme
+  environment: prod
+
+# Section-level locals (terraform/helmfile/packer) - inherit from global
+terraform:
+  locals:
+    backend_bucket: "{{ .locals.namespace }}-{{ .locals.environment }}-tfstate"
+
+components:
+  terraform:
+    vpc:
+      # Component-level locals - inherit from global and section, plus base components
+      locals:
+        vpc_type: "production"
+      vars:
+        # Uses merged locals (global + terraform section + component)
+        bucket: "{{ .locals.backend_bucket }}"
+        type: "{{ .locals.vpc_type }}"
+```
+
+### Component-Level Locals Inheritance
+
+Component-level locals support inheritance from base components via `metadata.inherits` or `component` attribute, similar to how `vars` work:
+
+```yaml
+components:
+  terraform:
+    vpc/base:
+      metadata:
+        type: abstract
+      locals:
+        vpc_type: "standard"
+        cidr_prefix: "10.0"
+
+    vpc/prod:
+      metadata:
+        inherits:
+          - vpc/base
+      locals:
+        # Overrides base component's vpc_type
+        vpc_type: "production"
+      vars:
+        # Uses inherited cidr_prefix from base, overridden vpc_type
+        cidr: "{{ .locals.cidr_prefix }}.0.0/16"
+        name: "{{ .locals.vpc_type }}-vpc"
+```
+
+**Full locals resolution order for a component:**
+
+```
+Global Locals → Section Locals → Base Component Locals → Component Locals
+```
+
+**Note:** File-scoped locals (global and section-level) do NOT inherit across file boundaries. Only component-level locals inherit from base components.
+
+## Upgrade
+
+Upgrade Atmos to get this fix. No configuration changes are required.
+Your existing `locals:` definitions will automatically start working.
+
+:::note Reserved Context Key
+The `locals` key in template context is now reserved for file-scoped locals. If you previously used a `locals` key in import context (via the `context:` parameter), it will be overridden by file-scoped locals when present. This is unlikely to affect existing configurations since the `locals` feature is new.
+:::
+
+:::warning Template Processing with Locals
+When a file defines locals, template processing is automatically enabled. If your YAML files contain non-Atmos template syntax (e.g., Helm's `{{ ... }}`), use `skip_templates_processing: true` in the import to preserve literal syntax:
+
+```yaml
+import:
+  - path: catalog/helm-values
+    skip_templates_processing: true
+```
+:::
+
+```bash
+# View locals for a specific stack
+atmos describe locals -s prod
+
+# Verify locals are resolving correctly in component output
+atmos describe component myapp -s prod --format yaml
+```
+
+## References
+
+- [GitHub Issue #1933](https://github.com/cloudposse/atmos/issues/1933)
+- [File-Scoped Locals Documentation](/stacks/locals)
+- [Original Feature Announcement](/changelog/file-scoped-locals)

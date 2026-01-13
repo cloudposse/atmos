@@ -77,6 +77,4 @@ GLOBAL FLAGS
 
       --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
 
-      --version                 Display the Atmos CLI version
-
 

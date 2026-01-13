@@ -243,5 +243,19 @@
     "checks": {},
     "comments": {},
     "templates": {}
+  },
+  "list": {
+    "components": {
+      "format": "",
+      "columns": null
+    },
+    "instances": {
+      "format": "",
+      "columns": null
+    },
+    "stacks": {
+      "format": "",
+      "columns": null
+    }
   }
 }

@@ -303,6 +303,66 @@ func TestGetInstanceColumns(t *testing.T) {
 			columnsFlag: []string{"InvalidSpec"},
 			expectErr:   true,
 		},
+		{
+			name: "new list.instances.columns config takes precedence over deprecated components.list.columns",
+			atmosConfig: &schema.AtmosConfiguration{
+				List: schema.TopLevelListConfig{
+					Instances: schema.ListConfig{
+						Columns: []schema.ListColumnConfig{
+							{Name: "NewConfigStack", Value: "{{ .stack }}", Width: 20},
+							{Name: "NewConfigComponent", Value: "{{ .component }}", Width: 30},
+						},
+					},
+				},
+				Components: schema.Components{
+					List: schema.ListConfig{
+						Columns: []schema.ListColumnConfig{
+							{Name: "OldConfigColumn", Value: "{{ .old }}"},
+						},
+					},
+				},
+			},
+			columnsFlag: nil,
+			expected: []column.Config{
+				{Name: "NewConfigStack", Value: "{{ .stack }}", Width: 20},
+				{Name: "NewConfigComponent", Value: "{{ .component }}", Width: 30},
+			},
+			expectErr: false,
+		},
+		{
+			name: "new list.instances.columns config used when no deprecated config",
+			atmosConfig: &schema.AtmosConfiguration{
+				List: schema.TopLevelListConfig{
+					Instances: schema.ListConfig{
+						Columns: []schema.ListColumnConfig{
+							{Name: "InstanceColumn", Value: "{{ .instance }}"},
+						},
+					},
+				},
+			},
+			columnsFlag: nil,
+			expected: []column.Config{
+				{Name: "InstanceColumn", Value: "{{ .instance }}"},
+			},
+			expectErr: false,
+		},
+		{
+			name: "CLI flag takes precedence over new list.instances.columns config",
+			atmosConfig: &schema.AtmosConfiguration{
+				List: schema.TopLevelListConfig{
+					Instances: schema.ListConfig{
+						Columns: []schema.ListColumnConfig{
+							{Name: "ConfigColumn", Value: "{{ .config }}"},
+						},
+					},
+				},
+			},
+			columnsFlag: []string{"FlagColumn={{ .flag }}"},
+			expected: []column.Config{
+				{Name: "FlagColumn", Value: "{{ .flag }}"},
+			},
+			expectErr: false,
+		},
 	}
 
 	for _, tc := range tests {

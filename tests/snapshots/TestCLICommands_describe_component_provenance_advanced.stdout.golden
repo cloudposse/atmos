@@ -1,0 +1,46 @@
+# Provenance Legend:                           
+#   ● [1] Defined in parent stack              
+#   ○ [N] Inherited/imported (N=2+ levels deep)
+#   ∴ Computed/templated                       
+                                               
+# Stack: orgs/acme/plat/dev/us-east-2
+                                     
+import:                                           # ○ [3] orgs/acme/plat/_defaults.yaml:2
+  - catalog/vpc-flow-logs-bucket/defaults         # ○ [3] orgs/acme/plat/_defaults.yaml:2
+  - catalog/vpc/defaults                          # ○ [3] orgs/acme/plat/_defaults.yaml:3
+  - catalog/vpc/dev                               # ● [1] orgs/acme/plat/dev/us-east-2.yaml:5
+  - catalog/vpc/ue2                               # ○ [2] mixins/region/us-east-2.yaml:3
+  - mixins/region/us-east-2                       # ● [1] orgs/acme/plat/dev/us-east-2.yaml:3
+  - mixins/stage/dev                              # ○ [2] orgs/acme/plat/dev/_defaults.yaml:3
+  - mixins/tenant/plat                            # ○ [3] orgs/acme/plat/_defaults.yaml:3
+  - orgs/acme/_defaults                           # ○ [3] orgs/acme/plat/_defaults.yaml:2
+  - orgs/acme/plat/_defaults                      # ○ [2] orgs/acme/plat/dev/_defaults.yaml:2
+  - orgs/acme/plat/dev/_defaults                  # ● [1] orgs/acme/plat/dev/us-east-2.yaml:2
+settings:                                         # ○ [4] catalog/vpc/defaults.yaml:10
+  templates:                                      # ○ [4] orgs/acme/_defaults.yaml:7
+    settings:                                     # ○ [4] orgs/acme/_defaults.yaml:9
+      gomplate:                                   # ○ [4] orgs/acme/_defaults.yaml:12
+        datasources: {}                           # ○ [4] orgs/acme/_defaults.yaml:14
+        timeout: 5                                # ○ [4] orgs/acme/_defaults.yaml:12
+      sprig: {}                                   # ○ [4] orgs/acme/_defaults.yaml:9
+vars:                                             # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:9
+  enabled: true                                   # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:9
+  environment: ue2                                # ○ [2] mixins/region/us-east-2.yaml:9
+  force_destroy: true                             # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:12
+  lifecycle_rule_enabled: false                   # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:13
+  name: vpc-flow-logs                             # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:10
+  namespace: acme                                 # ○ [4] orgs/acme/_defaults.yaml:2
+  region: us-east-2                               # ○ [2] mixins/region/us-east-2.yaml:8
+  stage: dev                                      # ○ [3] mixins/stage/dev.yaml:2
+  tags:                                           # ○ [4] orgs/acme/_defaults.yaml:20
+    atmos_component: vpc-flow-logs-bucket         # ○ [4] orgs/acme/_defaults.yaml:20
+    atmos_component_description: >-               # ○ [4] orgs/acme/_defaults.yaml:29
+      Vpc-Flow-Logs-Bucket component "vpc-flow-logs" provisioned in the stack "plat-ue2-dev"
+    atmos_manifest: orgs/acme/plat/dev/us-east-2  # ○ [4] orgs/acme/_defaults.yaml:22
+    atmos_stack: plat-ue2-dev                     # ○ [4] orgs/acme/_defaults.yaml:21
+    provisioned_by_user: user              # ○ [4] orgs/acme/_defaults.yaml:27
+    terraform_component: vpc-flow-logs-bucket     # ○ [4] orgs/acme/_defaults.yaml:24
+    terraform_workspace: plat-ue2-dev             # ○ [4] orgs/acme/_defaults.yaml:23
+  tenant: plat                                    # ○ [4] mixins/tenant/plat.yaml:2
+  traffic_type: ALL                               # ○ [3] catalog/vpc-flow-logs-bucket/defaults.yaml:11
+

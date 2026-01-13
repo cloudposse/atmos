@@ -340,6 +340,11 @@ linters:
           - forbidigo
         path: ^cmd/terraform/planfile/
         text: "os\\.Getenv"
+      # schema.go is a core configuration struct file that's expected to be large.
+      - linters:
+          - revive
+        path: pkg/schema/schema\.go$
+        text: "file-length-limit"
     paths:
       - experiments/.*
       - third_party$

@@ -1,0 +1,355 @@
+# yaml-language-server: $schema=schema.json
+
+# Tests for flag inheritance in custom commands.
+# These tests verify that custom commands can declare flags that already exist
+# on parent commands, and that the flags are properly inherited.
+#
+# Key behaviors tested:
+# - Custom commands can declare --stack (same type as parent) and inherit it
+# - Custom commands show inherited flags in their help output
+# - Custom commands can actually read inherited flag values
+# - Type mismatches are rejected with clear error messages
+
+tests:
+  # ============================================
+  # GROUP 1: Custom Command Help Output
+  # Verify that inherited flags appear in help
+  # ============================================
+
+  - name: tf plan help shows inherited stack flag
+    enabled: true
+    snapshot: true
+    description: "Custom 'tf plan' command should show --stack flag inherited from terraform"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "tf"
+      - "plan"
+      - "--help"
+    expect:
+      exit_code: 0
+      stdout:
+        - "stack"
+        - "-s"
+      diff:
+        # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
+
+  - name: terraform provision help shows inherited stack flag
+    enabled: true
+    snapshot: true
+    description: "Custom 'terraform provision' command should show --stack flag"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "provision"
+      - "--help"
+    expect:
+      exit_code: 0
+      stdout:
+        - "stack"
+        - "-s"
+      diff:
+        # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
+
+  - name: show component help shows inherited stack flag
+    enabled: true
+    snapshot: true
+    description: "Custom 'show component' command should show --stack flag"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "show"
+      - "component"
+      - "--help"
+    expect:
+      exit_code: 0
+      stdout:
+        - "stack"
+        - "-s"
+      diff:
+        # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
+
+  # ============================================
+  # GROUP 2: Built-in Command Help Output
+  # Verify that terraform still shows its flags
+  # ============================================
+
+  - name: terraform help shows stack flag
+    enabled: true
+    snapshot: true
+    description: "Built-in terraform command should show --stack flag"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "--help"
+    expect:
+      exit_code: 0
+      stdout:
+        - "stack"
+      diff:
+        # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
+
+  - name: describe component help shows stack flag
+    enabled: true
+    snapshot: true
+    description: "Built-in describe component command should show --stack flag"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "--help"
+    expect:
+      exit_code: 0
+      stdout:
+        - "stack"
+        - "-s"
+      diff:
+        # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
+
+  # ============================================
+  # GROUP 3: Custom Command Execution
+  # Verify that custom commands can read flag values
+  # ============================================
+
+  - name: show component reads stack flag value
+    enabled: true
+    snapshot: true
+    description: "Custom 'show component' command should read --stack flag value correctly"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "show"
+      - "component"
+      - "vpc"
+      - "-s"
+      - "plat-ue2-dev"
+    expect:
+      exit_code: 1  # Expected to fail on backend.bucket, but flag reading works
+      stdout:
+        - "Atmos component from argument: vpc"
+        - "Atmos stack: plat-ue2-dev"
+        - "Terraform component: vpc"
+
+  # ============================================
+  # GROUP 4: Global Flags Still Work
+  # Verify that global flags are accessible
+  # ============================================
+
+  - name: version command works
+    enabled: true
+    snapshot: true
+    description: "Version command should work (global flags not broken)"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "version"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Atmos"
+      diff:
+        # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
+        - "👽 Atmos .* on (darwin|linux|windows)/(arm64|amd64)"
+
+  - name: help flag works
+    enabled: true
+    snapshot: true
+    description: "Global --help flag should work"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "--help"
+    expect:
+      exit_code: 0
+      stdout:
+        - "USAGE"
+        - "atmos"
+      diff:
+        # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
+
+  # ============================================
+  # GROUP 5: Describe Component with Flags
+  # Verify built-in commands with flags work
+  # ============================================
+
+  - name: describe component with stack flag
+    enabled: true
+    snapshot: true
+    description: "Describe component should work with --stack flag"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "vpc"
+      - "-s"
+      - "plat-ue2-dev"
+      - "--format"
+      - "yaml"
+    expect:
+      exit_code: 0
+      stdout:
+        - "component: vpc"
+        - "vars:"
+        - "tenant: plat"
+
+  - name: describe component with provenance and stack
+    enabled: true
+    snapshot: true
+    description: "Describe component with --provenance should work with --stack"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "vpc-flow-logs-bucket"
+      - "-s"
+      - "plat-ue2-dev"
+      - "--provenance"
+    expect:
+      exit_code: 0
+      stdout:
+        - "# Provenance Legend:"
+        - "vars:"
+        - "enabled: true"
+      diff:
+        # Ignore lines with variable whitespace alignment in provenance comments
+        - "provisioned_by_user:.*#"
+
+  # ============================================
+  # GROUP 6: Custom Command with --verbose Flag
+  # This is the scenario that led to the flag inheritance fix.
+  # Custom commands should be able to declare they need --verbose
+  # (a global flag) and inherit it without error.
+  # Uses dedicated test fixture: fixtures/scenarios/flag-inheritance
+  # ============================================
+
+  - name: echo info help shows verbose flag
+    enabled: true
+    snapshot: true
+    description: "Custom 'echo info' command should show --verbose flag inherited from global"
+    workdir: "fixtures/scenarios/flag-inheritance"
+    command: "atmos"
+    args:
+      - "echo"
+      - "info"
+      - "--help"
+    expect:
+      exit_code: 0
+      stdout:
+        - "verbose"
+        - "-v"
+      diff:
+        # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
+
+  - name: echo info runs without verbose
+    enabled: true
+    snapshot: true
+    description: "Custom 'echo info' command should run without --verbose flag"
+    workdir: "fixtures/scenarios/flag-inheritance"
+    command: "atmos"
+    args:
+      - "echo"
+      - "info"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Info: This is a basic message"
+
+  - name: echo info runs with verbose flag
+    enabled: true
+    snapshot: true
+    description: "Custom 'echo info' command should run with --verbose flag"
+    workdir: "fixtures/scenarios/flag-inheritance"
+    command: "atmos"
+    args:
+      - "echo"
+      - "info"
+      - "--verbose"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Info: This is a basic message"
+        - "Verbose: Additional details enabled"
+
+  - name: deploy component help shows stack flag
+    enabled: true
+    snapshot: true
+    description: "Custom 'deploy component' should show --stack flag"
+    workdir: "fixtures/scenarios/flag-inheritance"
+    command: "atmos"
+    args:
+      - "deploy"
+      - "component"
+      - "--help"
+    expect:
+      exit_code: 0
+      stdout:
+        - "stack"
+        - "-s"
+      diff:
+        # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
+        - "👽 test (darwin|linux|windows)/(arm64|amd64)"
+
+  - name: deploy component runs with stack flag
+    enabled: true
+    snapshot: true
+    description: "Custom 'deploy component' should read --stack flag value"
+    workdir: "fixtures/scenarios/flag-inheritance"
+    command: "atmos"
+    args:
+      - "deploy"
+      - "component"
+      - "echo"
+      - "-s"
+      - "dev"
+    expect:
+      exit_code: 0
+      stdout:
+        - "Deploying component: echo"
+        - "To stack: dev"
+
+  # ============================================
+  # GROUP 7: List Commands
+  # Verify list commands work in this example
+  # ============================================
+
+  - name: list stacks works
+    enabled: true
+    snapshot: true
+    description: "List stacks should work in quick-start-advanced"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+    expect:
+      exit_code: 0
+      stdout:
+        - "plat-ue2-dev"
+        - "plat-ue2-prod"
+
+  - name: list components works
+    enabled: true
+    snapshot: true
+    description: "List components should work in quick-start-advanced"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "list"
+      - "components"
+    expect:
+      exit_code: 0
+      stdout:
+        - "vpc"
+        - "vpc-flow-logs-bucket"

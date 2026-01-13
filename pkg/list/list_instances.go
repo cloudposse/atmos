@@ -227,6 +227,7 @@ func sortInstances(instances []schema.Instance) []schema.Instance {
 
 // getInstanceColumns returns column configuration from CLI flag, atmos.yaml, or defaults.
 // Returns error if CLI flag parsing fails.
+// Precedence: CLI flag > list.instances.columns > components.list.columns (deprecated) > defaults.
 func getInstanceColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) ([]column.Config, error) {
 	// If --columns flag is provided, parse it and return.
 	if len(columnsFlag) > 0 {
@@ -237,7 +238,21 @@ func getInstanceColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []st
 		return columns, nil
 	}
 
-	// Check if custom columns are configured in atmos.yaml.
+	// Check new config path: list.instances.columns.
+	if len(atmosConfig.List.Instances.Columns) > 0 {
+		columns := make([]column.Config, len(atmosConfig.List.Instances.Columns))
+		for i, col := range atmosConfig.List.Instances.Columns {
+			columns[i] = column.Config{
+				Name:  col.Name,
+				Value: col.Value,
+				Width: col.Width,
+			}
+		}
+		return columns, nil
+	}
+
+	// Backward compatibility: check old config path components.list.columns.
+	// This is deprecated but supported for existing configurations.
 	if len(atmosConfig.Components.List.Columns) > 0 {
 		columns := make([]column.Config, len(atmosConfig.Components.List.Columns))
 		for i, col := range atmosConfig.Components.List.Columns {

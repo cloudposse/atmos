@@ -32,7 +32,6 @@ Valid subcommands are:
 • plan-diff
 • planfile
 • providers
-• provision
 • refresh
 • shell
 • show

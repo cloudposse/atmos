@@ -270,7 +270,7 @@ func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, fil
 
 	// Extract positions if provenance tracking is enabled.
 	var positions PositionMap
-	if atmosConfig.TrackProvenance {
+	if atmosConfig != nil && atmosConfig.TrackProvenance {
 		positions = ExtractYAMLPositions(&parsedNode, true)
 	}
 
@@ -296,14 +296,20 @@ func handleCacheMiss(atmosConfig *schema.AtmosConfiguration, file string, input 
 	// Double-check: another goroutine may have cached it while we waited for the lock.
 	node, positions, found := getCachedParsedYAML(file, input)
 	if found {
-		// Another goroutine cached it while we waited - cache hit!
-		parsedYAMLCacheStats.Lock()
-		parsedYAMLCacheStats.hits++
-		parsedYAMLCacheStats.Unlock()
-		return node, positions, nil
+		// Check if we need positions but the cached entry lacks them.
+		// This can happen if the file was first parsed without provenance tracking.
+		needsPositions := atmosConfig != nil && atmosConfig.TrackProvenance && len(positions) == 0
+		if !needsPositions {
+			// Another goroutine cached it while we waited - valid cache hit!
+			parsedYAMLCacheStats.Lock()
+			parsedYAMLCacheStats.hits++
+			parsedYAMLCacheStats.Unlock()
+			return node, positions, nil
+		}
+		// Fall through to re-parse with position tracking.
 	}
 
-	// Still not in cache - we're the first goroutine to parse this file.
+	// Still not in cache (or needs re-parsing for positions).
 	// Track cache miss.
 	parsedYAMLCacheStats.Lock()
 	parsedYAMLCacheStats.misses++
@@ -790,11 +796,22 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	// Try to get cached parsed YAML first (fast path with read lock).
 	node, positions, found := getCachedParsedYAML(file, input)
 	if found {
-		// Cache hit on first check.
-		parsedYAMLCacheStats.Lock()
-		parsedYAMLCacheStats.hits++
-		parsedYAMLCacheStats.Unlock()
-	} else {
+		// Cache hit - but check if we need positions and don't have them.
+		// This can happen if the file was first parsed without provenance tracking,
+		// then later requested with provenance enabled.
+		if atmosConfig.TrackProvenance && len(positions) == 0 {
+			// Need to re-parse with position tracking.
+			// Force a cache miss to re-parse and update the cache with positions.
+			found = false
+		} else {
+			// Valid cache hit.
+			parsedYAMLCacheStats.Lock()
+			parsedYAMLCacheStats.hits++
+			parsedYAMLCacheStats.Unlock()
+		}
+	}
+
+	if !found {
 		// Cache miss - use per-key locking to prevent multiple goroutines
 		// from parsing the same file simultaneously.
 		var err error

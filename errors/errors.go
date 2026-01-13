@@ -70,6 +70,7 @@ var (
 	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
 	ErrInvalidOffset                         = errors.New("offset must be >= 0")
 	ErrDuplicateFlagRegistration             = errors.New("duplicate flag registration")
+	ErrReservedFlagName                      = errors.New("reserved flag name")
 	ErrInvalidSinceDate                      = errors.New("invalid date format for --since")
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
@@ -92,6 +93,8 @@ var (
 	ErrWorkflowNameRequired       = errors.New("workflow name is required")
 	ErrInvalidStackConfiguration  = errors.New("invalid stack configuration")
 	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
+	ErrStackRequired              = errors.New("--stack flag is required")
+	ErrStackHasNoLocals           = errors.New("stack has no locals defined")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -261,14 +264,18 @@ var (
 	ErrProfileDirNotAccessible = errors.New("profile directory not accessible")
 	ErrProfileInvalidMetadata  = errors.New("invalid profile metadata")
 
-	ErrMissingStack                               = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
-	ErrMissingComponent                           = errors.New("component is required")
-	ErrMissingComponentType                       = errors.New("component type is required")
-	ErrRequiredFlagNotProvided                    = errors.New("required flag not provided")
-	ErrRequiredFlagEmpty                          = errors.New("required flag cannot be empty")
-	ErrInvalidArguments                           = errors.New("invalid arguments")
-	ErrUnknownSubcommand                          = errors.New("unknown subcommand")
-	ErrInvalidComponent                           = errors.New("invalid component")
+	ErrMissingStack            = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
+	ErrMissingComponent        = errors.New("component is required")
+	ErrMissingComponentType    = errors.New("component type is required")
+	ErrRequiredFlagNotProvided = errors.New("required flag not provided")
+	ErrRequiredFlagEmpty       = errors.New("required flag cannot be empty")
+	ErrInvalidArguments        = errors.New("invalid arguments")
+	ErrUnknownSubcommand       = errors.New("unknown subcommand")
+	ErrInvalidComponent        = errors.New("invalid component")
+	// ErrInvalidStack indicates the user provided an identifier that doesn't match
+	// the stack's canonical name (e.g., using filename when explicit name is set).
+	// This differs from ErrStackNotFound which indicates the stack doesn't exist at all.
+	ErrInvalidStack                               = errors.New("invalid stack")
 	ErrInvalidComponentMapType                    = errors.New("invalid component map type")
 	ErrAbstractComponentCantBeProvisioned         = errors.New("abstract component cannot be provisioned")
 	ErrLockedComponentCantBeProvisioned           = errors.New("locked component cannot be provisioned")
@@ -310,6 +317,7 @@ var (
 	ErrInvalidHooksSection                    = errors.New("invalid 'hooks' section in the file")
 	ErrInvalidTerraformHooksSection           = errors.New("invalid 'terraform.hooks' section in the file")
 	ErrInvalidComponentVars                   = errors.New("invalid component vars section")
+	ErrInvalidComponentLocals                 = errors.New("invalid component locals section")
 	ErrInvalidComponentSettings               = errors.New("invalid component settings section")
 	ErrInvalidComponentEnv                    = errors.New("invalid component env section")
 	ErrInvalidComponentProviders              = errors.New("invalid component providers section")

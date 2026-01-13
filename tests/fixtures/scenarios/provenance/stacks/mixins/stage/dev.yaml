@@ -1,0 +1,15 @@
+# Stage mixin for dev environment (depth 2 in import chain).
+import:
+  - catalog/mock/defaults
+
+vars:
+  stage: dev
+  environment: development
+
+components:
+  terraform:
+    mock:
+      vars:
+        environment: development
+        tags:
+          stage: dev

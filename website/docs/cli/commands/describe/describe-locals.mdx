@@ -1,0 +1,283 @@
+---
+title: atmos describe locals
+sidebar_label: locals
+sidebar_class_name: command
+id: locals
+description: Use this command to display the locals defined in Atmos stack manifests.
+---
+import Terminal from '@site/src/components/Terminal'
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to display the [locals](/stacks/locals) defined in Atmos stack manifests.
+This is useful for debugging and understanding how locals are configured in a specific stack.
+</Intro>
+
+:::info Stack Flag Required
+The `--stack` flag is **required**. Atmos resolves it to a stack manifest file and returns **only the locals defined in that file** (not inherited from imports). The `--stack` flag accepts either:
+- A **logical stack name** derived from your `atmos.yaml` naming pattern (e.g., `prod-us-east-1`)
+- A **stack manifest file path** (e.g., `deploy/prod`)
+
+Both resolve to the same underlying file. Locals are file-scoped, so the output reflects what's defined in that specific manifest.
+:::
+
+<Screengrab title="atmos describe locals --help" slug="atmos-describe-locals--help" />
+
+## Usage
+
+Execute the `describe locals` command like this:
+
+```shell
+atmos describe locals [component] -s <stack> [options]
+```
+
+The `--stack` flag is required. When called with just `--stack`, it shows the locals defined in that stack manifest file.
+When a component is also specified, it shows the merged locals that would be **available to** that component. This includes:
+- **Global locals** from the stack manifest file
+- **Section-specific locals** (e.g., `terraform:` locals for a Terraform component)
+- **Component-level locals** defined in the component itself (including inherited from base components)
+
+:::tip
+Run `atmos describe locals --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+# Show locals for a specific stack (using file path)
+atmos describe locals --stack deploy/dev
+
+# Show locals for a specific stack (using logical stack name derived from atmos.yaml)
+atmos describe locals -s prod-us-east-1
+
+# Show locals available to a specific component in a stack
+# The component determines which section-specific locals to merge (terraform/helmfile/packer)
+atmos describe locals vpc -s prod
+atmos describe locals eks --stack prod-us-east-1
+
+# Output as JSON
+atmos describe locals -s dev --format json
+atmos describe locals vpc -s prod -f json
+
+# Write to file
+atmos describe locals -s dev --file locals.yaml
+
+# Query specific values
+atmos describe locals -s deploy/dev --query '.locals.namespace'
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(optional)</em></dt>
+  <dd>The name of a component. When specified with `--stack`, shows the merged locals that would be <strong>available to</strong> that component. Atmos determines the component's type (terraform, helmfile, or packer) and merges: (1) global locals, (2) section-specific locals from the stack manifest, and (3) component-level locals defined in the component itself (including those inherited from base components via <code>metadata.inherits</code>).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s` <em>(required)</em></dt>
+  <dd>Specify the stack to show locals for. Accepts two formats: (1) <strong>Stack manifest file path</strong> - direct path relative to your stacks directory (e.g., <code>deploy/dev</code>, <code>prod</code>), or (2) <strong>Logical stack name</strong> - the derived name based on your <code>atmos.yaml</code> naming pattern (e.g., <code>prod-us-east-1</code>). Atmos resolves either format to the underlying stack manifest file and returns only the locals defined in that file.</dd>
+
+  <dt>`--format` / `-f` <em>(optional)</em></dt>
+  <dd>Output format: `yaml` or `json` (`yaml` is default).</dd>
+
+  <dt>`--file` <em>(optional)</em></dt>
+  <dd>If specified, write the result to the file.</dd>
+
+  <dt>`--query` / `-q` <em>(optional)</em></dt>
+  <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe locals --query <yq-expression>`<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
+</dl>
+
+## Output
+
+The command outputs locals in **Atmos schema format**, matching the structure of stack manifest files. Each stack contains:
+
+<dl>
+  <dt>`locals`</dt>
+  <dd>Root-level locals defined at the top of the stack manifest file.</dd>
+
+  <dt>`terraform.locals`</dt>
+  <dd>Locals defined within the `terraform:` section (only shown if explicitly defined). Contains only section-specific locals, not merged with global.</dd>
+
+  <dt>`helmfile.locals`</dt>
+  <dd>Locals defined within the `helmfile:` section (only shown if explicitly defined). Contains only section-specific locals, not merged with global.</dd>
+
+  <dt>`packer.locals`</dt>
+  <dd>Locals defined within the `packer:` section (only shown if explicitly defined). Contains only section-specific locals, not merged with global.</dd>
+</dl>
+
+This schema-compliant format makes it easy to compare with your source stack manifests and use the output programmatically.
+
+## Example Output
+
+<Terminal title="atmos describe locals --stack deploy/dev">
+```yaml
+locals:
+  environment: dev
+  namespace: acme
+  name_prefix: acme-dev
+  full_name: acme-dev-us-east-1
+  tags:
+    Environment: dev
+    Namespace: acme
+terraform:
+  locals:
+    backend_bucket: acme-dev-tfstate
+    tf_specific: terraform-only
+```
+</Terminal>
+
+The output follows the same structure as stack manifest files, making it easy to understand which locals are defined where. This format can be directly used as a valid stack manifest file (e.g., `atmos describe locals -s dev --file locals.yaml`).
+
+### Component-Specific Output
+
+When a component is specified with `--stack`, the output shows the merged locals that would be **available to** that component, using Atmos schema format:
+
+<Terminal title="atmos describe locals vpc -s prod-ue2">
+```yaml
+components:
+  terraform:
+    vpc:
+      locals:
+        backend_bucket: acme-prod-tfstate
+        environment: prod
+        full_name: acme-prod-us-east-1
+        name_prefix: acme-prod
+        namespace: acme
+        tf_specific: terraform-only
+        vpc_type: production
+```
+</Terminal>
+
+The output shows the merged locals from all sources:
+1. Global locals from the stack manifest (`locals:`)
+2. Section-specific locals from the stack manifest (`terraform.locals:`)
+3. Component-level locals from the component definition (including inherited from base components)
+
+:::tip Component-Level Locals
+If the component defines its own `locals:` section (or inherits locals from a base component via `metadata.inherits`), those are included in the output and take precedence over stack-level locals.
+:::
+
+## How Locals Work
+
+Locals are file-scoped variables that can reference each other and are resolved before template processing. They provide a way to define computed values that can be used throughout the stack manifest.
+
+### Defining Locals
+
+```yaml
+# stacks/deploy/dev.yaml
+locals:
+  namespace: acme
+  environment: dev
+  # Locals can reference other locals
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+  backend_bucket: "{{ .locals.name_prefix }}-tfstate"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # Use locals in component vars
+        name: "{{ .locals.name_prefix }}-vpc"
+        bucket: "{{ .locals.backend_bucket }}"
+```
+
+### Section-Specific Locals
+
+Locals can be defined at section level (terraform, helmfile, packer) to override global locals:
+
+```yaml
+locals:
+  namespace: global-acme
+
+terraform:
+  locals:
+    # Overrides global namespace for terraform components
+    namespace: terraform-acme
+    backend_bucket: "{{ .locals.namespace }}-tfstate"
+```
+
+### Component-Level Locals
+
+Components can define their own `locals:` section. Component-level locals are merged with stack-level locals (global + section-specific) and take precedence. Component-level locals also support inheritance from base components via `metadata.inherits`:
+
+```yaml
+components:
+  terraform:
+    # Base component with component-level locals
+    vpc/base:
+      metadata:
+        type: abstract
+      locals:
+        vpc_type: standard
+        cidr_prefix: "10.0"
+
+    # Component inheriting locals from base
+    vpc/prod:
+      metadata:
+        inherits:
+          - vpc/base
+      locals:
+        # Overrides vpc_type from base component
+        vpc_type: production
+      vars:
+        # Uses inherited cidr_prefix from base
+        cidr: "{{ .locals.cidr_prefix }}.0.0/16"
+```
+
+The full locals resolution order for a component is:
+
+```
+Global Locals → Section Locals → Base Component Locals → Component Locals
+```
+
+Later values override earlier ones. When you run `atmos describe locals vpc/prod -s dev`, the output shows the final merged result.
+
+:::note
+Component-level locals appear in the final component output but are NOT available during `{{ .locals.* }}` template processing in the same stack manifest file. Only file-level locals (global + section) are available during template resolution within the file.
+:::
+
+### File-Scoped Behavior
+
+Locals are **file-scoped** and are NOT inherited across imports. Each stack manifest file can only access its own locally defined `locals` section. This prevents unintended side effects from imported files.
+
+This is a key design principle: when you run `atmos describe locals --stack deploy/dev`, you get **only** the locals defined in the `deploy/dev.yaml` file itself, regardless of what files it imports. The `--stack` flag accepts either:
+- The file path (`deploy/dev`)
+- The logical stack name derived from your naming pattern (e.g., `dev-us-east-1`)
+
+Both resolve to the same file and return the same locals.
+
+```yaml
+# mixins/base.yaml
+locals:
+  mixin_value: "from-mixin"  # NOT available to importing files
+
+# stacks/deploy/dev.yaml
+import:
+  - mixins/base
+
+locals:
+  file_value: "from-file"  # Available in this file
+
+components:
+  terraform:
+    myapp:
+      vars:
+        value: "{{ .locals.file_value }}"       # Works: "from-file"
+        mixin: "{{ .locals.mixin_value }}"      # Does NOT work: "<no value>"
+```
+
+:::note
+Regular `vars` ARE inherited across imports (normal Atmos behavior). Only `locals` are file-scoped.
+:::
+
+## Related Commands
+
+- [`atmos describe component`](/cli/commands/describe/component) - Describe a component's full configuration including resolved locals
+- [`atmos describe stacks`](/cli/commands/describe/stacks) - Describe all stacks and their configurations
+
+## Related Documentation
+
+- [File-Scoped Locals](/stacks/locals) - Learn more about defining and using locals in stack manifests
