@@ -1,0 +1,76 @@
+---
+slug: list-and-toolchain-enhancements
+title: "List Command Query Syntax and Multi-Tool Installation"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+New query syntax for `atmos list components` and support for installing multiple tools at once with `atmos toolchain install`.
+
+<!--truncate-->
+
+## What Changed
+
+### Simplified Query Syntax for List Commands
+
+The `atmos list components` command now supports a simplified query syntax that makes filtering components more intuitive:
+
+```bash
+# Filter by stack pattern
+atmos list components plat-ue2-dev
+
+# Filter by component name
+atmos list components vpc
+
+# Combine filters
+atmos list components vpc plat-ue2-dev
+```
+
+This replaces the need for verbose `--stack` flags in many common cases.
+
+### New `atmos list aliases` Subcommand
+
+View all configured CLI command aliases in your `atmos.yaml`:
+
+```bash
+atmos list aliases
+```
+
+This helps you discover shortcuts configured in your project.
+
+### Multi-Tool Installation
+
+Install multiple tools in a single command:
+
+```bash
+atmos toolchain install opentofu tflint kubectl helm
+```
+
+Previously, each tool required a separate `atmos toolchain install` invocation. Now you can batch installations with a progress summary.
+
+## Why This Matters
+
+- **Faster Workflows**: Query syntax reduces typing for common list operations
+- **Better Discoverability**: The aliases command helps teams discover configured shortcuts
+- **Streamlined Setup**: Multi-tool installation speeds up environment bootstrapping
+
+## How to Use It
+
+Update to the latest version of Atmos:
+
+```bash
+atmos version install latest
+```
+
+Then try the new features:
+
+```bash
+# Explore the simplified query syntax
+atmos list components --help
+
+# View your configured aliases
+atmos list aliases
+
+# Install your toolchain in one command
+atmos toolchain install opentofu terraform-docs tflint
+```
