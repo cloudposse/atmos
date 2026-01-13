@@ -215,6 +215,12 @@ func processCustomCommands(
 					continue
 				}
 
+				// Get flag description, preferring Description over Usage for backward compatibility.
+				flagUsage := flag.Description
+				if flagUsage == "" {
+					flagUsage = flag.Usage
+				}
+
 				if flag.Type == "bool" {
 					defaultVal := false
 					if flag.Default != nil {
@@ -223,9 +229,9 @@ func processCustomCommands(
 						}
 					}
 					if flag.Shorthand != "" {
-						customCommand.PersistentFlags().BoolP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
+						customCommand.PersistentFlags().BoolP(flag.Name, flag.Shorthand, defaultVal, flagUsage)
 					} else {
-						customCommand.PersistentFlags().Bool(flag.Name, defaultVal, flag.Usage)
+						customCommand.PersistentFlags().Bool(flag.Name, defaultVal, flagUsage)
 					}
 				} else {
 					defaultVal := ""
@@ -235,9 +241,9 @@ func processCustomCommands(
 						}
 					}
 					if flag.Shorthand != "" {
-						customCommand.PersistentFlags().StringP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
+						customCommand.PersistentFlags().StringP(flag.Name, flag.Shorthand, defaultVal, flagUsage)
 					} else {
-						customCommand.PersistentFlags().String(flag.Name, defaultVal, flag.Usage)
+						customCommand.PersistentFlags().String(flag.Name, defaultVal, flagUsage)
 					}
 				}
 

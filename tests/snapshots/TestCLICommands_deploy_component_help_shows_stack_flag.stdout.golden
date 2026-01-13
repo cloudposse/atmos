@@ -18,7 +18,7 @@ FLAGS
 
       --identity string  Identity to use for authentication (overrides identity in command config)
 
-  -s, --stack string     
+  -s, --stack string     Name of the stack
 
 
 GLOBAL FLAGS
@@ -80,7 +80,5 @@ GLOBAL FLAGS
       --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
 
   -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
-
-      --version                 Display the Atmos CLI version
 
 

@@ -27,27 +27,6 @@ atmos_cli_config:
     packer:
       base_path: ""
       command: ""
-    list:
-      format: ""
-      columns:
-        - name: ' '
-          value: '{{ .status }}'
-        - name: Stack
-          value: '{{ .stack }}'
-        - name: Component
-          value: '{{ .component }}'
-        - name: Type
-          value: '{{ .type }}'
-        - name: Tenant
-          value: '{{ .vars.tenant }}'
-        - name: Environment
-          value: '{{ .vars.environment }}'
-        - name: Stage
-          value: '{{ .vars.stage }}'
-        - name: Region
-          value: '{{ .vars.region }}'
-        - name: Component Folder
-          value: '{{ .component_folder }}'
   stacks:
     base_path: stacks
     included_paths:

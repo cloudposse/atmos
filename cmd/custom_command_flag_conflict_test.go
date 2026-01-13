@@ -1258,3 +1258,251 @@ func TestCustomCommand_VersionFlagAllowed(t *testing.T) {
 	assert.Equal(t, "V", versionFlag.Shorthand, "Shorthand should be 'V'")
 	assert.Equal(t, "string", versionFlag.Value.Type(), "Flag type should be string")
 }
+
+// TestCustomCommand_FlagInheritanceWithMatchingType tests that custom commands can declare
+// flags that already exist on parent commands when the types match.
+// The flag should be inherited (not re-registered) and accessible to the command.
+func TestCustomCommand_FlagInheritanceWithMatchingType(t *testing.T) {
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a custom command that declares --mask flag with SAME type as global (bool).
+	// This should succeed - the flag is inherited, not re-registered.
+	testCommand := schema.Command{
+		Name:        "test-inherit-mask",
+		Description: "Test command inheriting global --mask flag",
+		Flags: []schema.CommandFlag{
+			{
+				Name:  "mask",
+				Type:  "bool", // Same type as global --mask (bool).
+				Usage: "This should inherit the global --mask flag",
+			},
+		},
+		Steps: stepsFromStrings("echo test"),
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	// Process custom commands - should succeed since types match.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err, "Custom command should be able to declare flag with matching type (inheritance)")
+
+	// Find and verify the custom command.
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-inherit-mask" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	// Verify --mask flag is accessible via inherited flags (not local).
+	inheritedMask := customCmd.InheritedFlags().Lookup("mask")
+	require.NotNil(t, inheritedMask, "--mask flag should be inherited from global")
+	assert.Equal(t, "bool", inheritedMask.Value.Type(), "Inherited flag type should be bool")
+
+	// Verify the flag was NOT re-registered as a local persistent flag.
+	localMask := customCmd.PersistentFlags().Lookup("mask")
+	assert.Nil(t, localMask, "--mask should NOT be re-registered as local persistent flag")
+}
+
+// TestCustomCommand_FlagInheritanceWithMatchingTypeString tests that custom commands can
+// inherit string-type flags that match parent commands.
+func TestCustomCommand_FlagInheritanceWithMatchingTypeString(t *testing.T) {
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a custom command that declares --chdir flag with SAME type as global (string).
+	testCommand := schema.Command{
+		Name:        "test-inherit-chdir",
+		Description: "Test command inheriting global --chdir flag",
+		Flags: []schema.CommandFlag{
+			{
+				Name:  "chdir",
+				Type:  "string", // Same type as global --chdir (string).
+				Usage: "This should inherit the global --chdir flag",
+			},
+		},
+		Steps: stepsFromStrings("echo test"),
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	// Process custom commands - should succeed since types match.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err, "Custom command should be able to declare string flag with matching type")
+
+	// Find and verify the custom command.
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-inherit-chdir" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	// Verify --chdir flag is accessible via inherited flags.
+	inheritedChdir := customCmd.InheritedFlags().Lookup("chdir")
+	require.NotNil(t, inheritedChdir, "--chdir flag should be inherited from global")
+	assert.Equal(t, "string", inheritedChdir.Value.Type(), "Inherited flag type should be string")
+}
+
+// TestCustomCommand_FlagInheritanceVerboseBool tests that custom commands can declare
+// they need --verbose flag with matching bool type.
+func TestCustomCommand_FlagInheritanceVerboseBool(t *testing.T) {
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a custom command that declares --verbose flag with SAME type as global (bool).
+	testCommand := schema.Command{
+		Name:        "test-inherit-verbose",
+		Description: "Test command inheriting global --verbose flag",
+		Flags: []schema.CommandFlag{
+			{
+				Name:      "verbose",
+				Shorthand: "v", // Same shorthand as global.
+				Type:      "bool",
+				Usage:     "This should inherit the global --verbose flag",
+			},
+		},
+		Steps: stepsFromStrings("echo test"),
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	// Process custom commands - should succeed since types match.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err, "Custom command should be able to declare --verbose with matching type")
+
+	// Find and verify the custom command.
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-inherit-verbose" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	// Verify --verbose flag is accessible via inherited flags.
+	inheritedVerbose := customCmd.InheritedFlags().Lookup("verbose")
+	require.NotNil(t, inheritedVerbose, "--verbose flag should be inherited from global")
+	assert.Equal(t, "bool", inheritedVerbose.Value.Type(), "Inherited flag type should be bool")
+}
+
+// TestCustomCommand_NestedFlagInheritanceWithMatchingType tests that nested custom commands
+// can inherit flags from their parent custom command when types match.
+func TestCustomCommand_NestedFlagInheritanceWithMatchingType(t *testing.T) {
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a parent command with a custom flag.
+	parentCommand := schema.Command{
+		Name:        "parent-with-flag",
+		Description: "Parent command with custom flag",
+		Flags: []schema.CommandFlag{
+			{
+				Name:      "parent-option",
+				Shorthand: "p",
+				Type:      "string",
+				Usage:     "A flag defined on the parent command",
+			},
+		},
+		// Define a nested child command that declares the SAME flag with SAME type.
+		Commands: []schema.Command{
+			{
+				Name:        "child-inherits",
+				Description: "Child command that inherits parent's flag",
+				Flags: []schema.CommandFlag{
+					{
+						Name:      "parent-option", // Same name as parent's flag.
+						Shorthand: "p",             // Same shorthand.
+						Type:      "string",        // Same type - should inherit!
+						Usage:     "This should inherit from parent",
+					},
+				},
+				Steps: stepsFromStrings("echo child"),
+			},
+		},
+		Steps: stepsFromStrings("echo parent"),
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{parentCommand}
+
+	// Process custom commands - should succeed since types match.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err, "Nested command should be able to inherit parent's flag with matching type")
+
+	// Find parent command.
+	var parentCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "parent-with-flag" {
+			parentCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, parentCmd, "Parent command should be registered")
+
+	// Find child command.
+	var childCmd *cobra.Command
+	for _, cmd := range parentCmd.Commands() {
+		if cmd.Name() == "child-inherits" {
+			childCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, childCmd, "Child command should be registered")
+
+	// Verify parent has the flag as persistent.
+	parentFlag := parentCmd.PersistentFlags().Lookup("parent-option")
+	require.NotNil(t, parentFlag, "Parent should have --parent-option as persistent flag")
+
+	// Verify child inherits the flag (not re-registered locally).
+	inheritedFlag := childCmd.InheritedFlags().Lookup("parent-option")
+	require.NotNil(t, inheritedFlag, "Child should inherit --parent-option from parent")
+
+	localFlag := childCmd.PersistentFlags().Lookup("parent-option")
+	assert.Nil(t, localFlag, "Child should NOT have --parent-option as local persistent flag")
+}

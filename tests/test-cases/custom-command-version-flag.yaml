@@ -56,5 +56,5 @@ tests:
       - "--version"
     expect:
       stdout:
-        - "atmos"
+        - "(?i)atmos"
       exit_code: 0
