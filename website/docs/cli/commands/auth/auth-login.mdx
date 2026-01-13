@@ -8,10 +8,13 @@ description: Authenticate to cloud providers using an identity defined in atmos.
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
 Authenticate with a configured identity using SSO, SAML, OIDC, or static credentials. Atmos retrieves and caches short-lived credentials so they can be reused until expiration, avoiding repeated logins for each command.
 </Intro>
+
+<DemoVideo id="auth-login" title="atmos auth login" showCaption={false} />
 
 <Screengrab title="atmos auth login --help" slug="atmos-auth-login--help" />
 

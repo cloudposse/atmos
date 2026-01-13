@@ -218,6 +218,7 @@ func getVendorColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []stri
 	return []column.Config{
 		{Name: "Component", Value: "{{ .component }}"},
 		{Name: "Type", Value: "{{ .type }}"},
+		{Name: "Tags", Value: "{{ .tags }}"},
 		{Name: "Manifest", Value: "{{ .manifest }}"},
 		{Name: "Folder", Value: "{{ .folder }}"},
 	}

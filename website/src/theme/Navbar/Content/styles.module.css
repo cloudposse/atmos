@@ -1,5 +1,5 @@
 /*
-Hide color mode toggle in small viewports
+Hide color mode toggle in small viewports.
  */
 @media (max-width: 996px) {
   .colorModeToggle {
@@ -8,9 +8,73 @@ Hide color mode toggle in small viewports
 }
 
 /*
-Restore some Infima style that broke with CSS Cascade Layers
+Restore some Infima style that broke with CSS Cascade Layers.
 See https://github.com/facebook/docusaurus/pull/11142
  */
 :global(.navbar__items--right) > :last-child {
   padding-right: 0;
+}
+
+/* ========================================
+   Priority Navigation Styles
+   ======================================== */
+
+/* Container for left navbar items with priority navigation. */
+.priorityContainer {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0; /* Allow shrinking. */
+  overflow: hidden; /* Hide overflow during measurement. */
+}
+
+/* During initial measurement, keep all items visible for accurate measurement. */
+.priorityContainerMeasuring {
+  overflow: visible;
+}
+
+/* Individual priority item wrapper. */
+.priorityItem {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  /* Slide animation for entering/exiting. */
+  transition:
+    opacity 0.2s ease-out,
+    transform 0.2s ease-out,
+    max-width 0.2s ease-out;
+  max-width: 200px; /* Reasonable max for animation. */
+  overflow: hidden;
+}
+
+/* Hidden item (in overflow). */
+.priorityItemHidden {
+  opacity: 0;
+  max-width: 0;
+  transform: translateX(-10px);
+  pointer-events: none;
+  /* Faster exit animation. */
+  transition:
+    opacity 0.15s ease-in,
+    transform 0.15s ease-in,
+    max-width 0.15s ease-in;
+}
+
+/* ========================================
+   Sidebar Toggle Override
+   ======================================== */
+
+/* Force the sidebar toggle to be visible when rendered (overrides Infima default). */
+.sidebarToggle :global(.navbar__toggle) {
+  display: flex;
+}
+
+/* ========================================
+   Mobile Mode Adjustments
+   ======================================== */
+
+@media (max-width: 996px) {
+  .priorityContainer {
+    display: none; /* Hide priority container in mobile - items are in sidebar. */
+  }
 }

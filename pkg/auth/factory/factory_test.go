@@ -78,7 +78,7 @@ func TestNewProvider_Factory(t *testing.T) {
 		{
 			name:         "mock-aws-provider",
 			providerName: "mock-aws",
-			config:       &schema.Provider{Kind: "mock-aws"},
+			config:       &schema.Provider{Kind: "mock/aws"},
 			expectError:  false,
 		},
 		{
@@ -180,7 +180,7 @@ func TestNewIdentity_Factory(t *testing.T) {
 		{
 			name:         "mock-aws-identity",
 			identityName: "mock-aws",
-			config:       &schema.Identity{Kind: "mock-aws"},
+			config:       &schema.Identity{Kind: "mock/aws"},
 			expectError:  false,
 		},
 		{

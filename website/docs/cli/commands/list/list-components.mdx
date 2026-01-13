@@ -7,10 +7,13 @@ description: Use this command to list Atmos components
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
 Use this command to list all components in your Atmos configuration, optionally filtering by stack. View components in multiple output formats including tables, JSON, YAML, and CSV.
 </Intro>
+
+<DemoVideo id="list-components" title="atmos list components" showCaption={false} />
 
 <Screengrab title="atmos list components --help" slug="atmos-list-components--help" />
 
@@ -105,6 +108,38 @@ atmos list components --sort component:asc
 atmos list components --sort "stack:asc,component:desc"
 ```
 
+Query with YQ expressions:
+```shell
+# Simplified syntax - just use select() directly
+atmos list components --query 'select(.locked == true)'
+
+# Filter to only terraform components
+atmos list components --query 'select(.kind == "terraform")'
+
+# Get components in prod stacks
+atmos list components --query 'select(.stack | test("prod"))'
+
+# Get components by name
+atmos list components --query 'select(.component == "vpc")'
+
+# Output query results as JSON
+atmos list components --query 'select(.kind == "terraform")' --format json
+
+# You can also use the verbose syntax if preferred
+atmos list components --query '[.[] | select(.locked == true)]'
+```
+
+:::tip Simplified Query Syntax
+Atmos automatically normalizes YQ queries for convenience:
+
+- `select(.locked == true)` → automatically becomes `[.[] | select(.locked == true)]`
+- `.[] | select(...)` → automatically wrapped in `[...]` to prevent YAML parsing issues
+
+This means you can write simple `select()` expressions without worrying about the verbose syntax.
+
+**Note:** Scalar extraction queries like `.[].component` are not supported. Use `atmos describe component --query` for field extraction, or use `select(...)` to filter components.
+:::
+
 ## Flags
 
 <dl>
@@ -131,6 +166,9 @@ atmos list components --sort "stack:asc,component:desc"
 
   <dt>`--sort`</dt>
   <dd>Sort by column:order (e.g., `component:asc,stack:desc`). Multiple sort columns separated by comma.<br/>Environment variable: `ATMOS_LIST_SORT`</dd>
+
+  <dt>`--query` / `-q`</dt>
+  <dd>Filter results using YQ expressions. Supports simplified syntax like `select(.locked == true)` which is automatically normalized. See the [YQ documentation](https://mikefarah.gitbook.io/yq) for expression syntax.<br/>Environment variable: `ATMOS_LIST_QUERY`</dd>
 
   <dt>`--identity` / `-i` <em>(optional)</em></dt>
   <dd>Authenticate with a specific identity before listing components.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list components --identity my-aws-identity`<br/><br/>Environment variable: `ATMOS_IDENTITY`</dd>
@@ -160,13 +198,13 @@ components:
     format: table
     columns:
       - name: Component
-        value: "{{ .atmos_component }}"
+        value: "{{ .component }}"
       - name: Stack
-        value: "{{ .atmos_stack }}"
+        value: "{{ .stack }}"
+      - name: Kind
+        value: "{{ .kind }}"
       - name: Type
-        value: "{{ .atmos_component_type }}"
-      - name: Enabled
-        value: "{{ .enabled }}"
+        value: "{{ .type }}"
       - name: Description
         value: "{{ .metadata.description }}"
 ```
@@ -175,17 +213,46 @@ components:
 
 Column `value` fields support Go template syntax with access to:
 
-- `.atmos_component` - Atmos component name
-- `.atmos_stack` - Stack name
-- `.atmos_component_type` - Component type (`terraform`, `helmfile`, etc.)
-- `.component` - Terraform/Helmfile component path
-- `.vars` - All component variables (e.g., `.vars.region`, `.vars.tenant`)
-- `.settings` - Component settings
-- `.metadata` - Component metadata (e.g., `.metadata.description`, `.metadata.component`)
-- `.env` - Environment variables
-- `.enabled` - Whether component is enabled (boolean)
-- `.locked` - Whether component is locked (boolean)
-- `.abstract` - Whether component is abstract (boolean)
+<dl>
+  <dt>`.component`</dt>
+  <dd>Component name</dd>
+
+  <dt>`.stack`</dt>
+  <dd>Stack name</dd>
+
+  <dt>`.kind`</dt>
+  <dd>Component runner type (`terraform`, `helmfile`, `packer`)</dd>
+
+  <dt>`.type`</dt>
+  <dd>Component type from metadata (`real` or `abstract`)</dd>
+
+  <dt>`.component_path`</dt>
+  <dd>Filesystem path to the component source directory</dd>
+
+  <dt>`.status`</dt>
+  <dd>Colored status indicator (● green=enabled, red=locked, gray=disabled)</dd>
+
+  <dt>`.status_text`</dt>
+  <dd>Status as text (`enabled`, `disabled`, `locked`)</dd>
+
+  <dt>`.enabled`</dt>
+  <dd>Whether component is enabled (boolean)</dd>
+
+  <dt>`.locked`</dt>
+  <dd>Whether component is locked (boolean)</dd>
+
+  <dt>`.vars`</dt>
+  <dd>All component variables (e.g., `.vars.region`, `.vars.tenant`)</dd>
+
+  <dt>`.settings`</dt>
+  <dd>Component settings</dd>
+
+  <dt>`.metadata`</dt>
+  <dd>Full metadata map (e.g., `.metadata.description`, `.metadata.component`)</dd>
+
+  <dt>`.data`</dt>
+  <dd>Full component data for advanced templates</dd>
+</dl>
 
 ### Template Functions
 
@@ -196,7 +263,7 @@ components:
   list:
     columns:
       - name: Component (Upper)
-        value: "{{ .atmos_component | upper }}"
+        value: "{{ .component | upper }}"
       - name: Region
         value: "{{ .vars.region | default \"N/A\" }}"
       - name: Status
