@@ -208,16 +208,15 @@ func TestCollectBuiltInAliases(t *testing.T) {
 	assert.True(t, foundHf, "Should find 'hf' alias for 'helmfile'")
 
 	// Verify nested alias exists.
-	// The nested command "plan" has alias "p" under "atmos terraform".
-	// Since parent path is "atmos terraform" (not just root name), alias becomes "atmos terraform p".
+	// The nested command "plan" has alias "p" under "terraform".
+	// Alias paths exclude root command name, so it's "terraform p" not "atmos terraform p".
 	foundPlan := false
 	for _, a := range aliases {
-		// Look for any alias containing "p" that maps to something with "plan".
-		if a.Alias == "atmos terraform p" && a.Command == "terraform plan" {
+		if a.Alias == "terraform p" && a.Command == "terraform plan" {
 			foundPlan = true
 		}
 	}
-	assert.True(t, foundPlan, "Should find nested alias 'atmos terraform p' for 'terraform plan'")
+	assert.True(t, foundPlan, "Should find nested alias 'terraform p' for 'terraform plan'")
 }
 
 // TestCollectAllAliases tests the collectAllAliases function.

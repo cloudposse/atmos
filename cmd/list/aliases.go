@@ -138,6 +138,43 @@ func collectAllAliases(rootCmd *cobra.Command, configuredAliases schema.CommandA
 	return allAliases
 }
 
+// stripRootPrefix removes the root command name prefix from a path.
+// Example: "atmos describe dependents" -> "describe dependents".
+func stripRootPrefix(path, rootName string) string {
+	prefix := rootName + " "
+	if strings.HasPrefix(path, prefix) {
+		return strings.TrimPrefix(path, prefix)
+	}
+	return path
+}
+
+// collectCommandAliases collects aliases for a single command.
+func collectCommandAliases(cmd *cobra.Command, parentPath, cmdPath, rootName string) []AliasInfo {
+	var aliases []AliasInfo
+
+	for _, alias := range cmd.Aliases {
+		// Build the alias path (replace command name with alias in path).
+		// For top-level commands: just the alias (e.g., "tf" for terraform)
+		// For nested commands: parent path (without root) + alias (e.g., "describe dependants")
+		aliasPath := alias
+		if parentPath != rootName {
+			parentPathWithoutRoot := stripRootPrefix(parentPath, rootName)
+			aliasPath = parentPathWithoutRoot + " " + alias
+		}
+
+		// Build command path without root command name for display.
+		displayCmdPath := stripRootPrefix(cmdPath, rootName)
+
+		aliases = append(aliases, AliasInfo{
+			Alias:   aliasPath,
+			Command: displayCmdPath,
+			Type:    aliasTypeBuiltIn,
+		})
+	}
+
+	return aliases
+}
+
 // collectBuiltInAliases recursively collects Cobra command aliases from the command tree.
 // It skips the root command name when building paths since aliases like "tf" should map
 // to "terraform", not "atmos terraform".
@@ -152,28 +189,8 @@ func collectBuiltInAliases(cmd *cobra.Command, parentPath string) []AliasInfo {
 
 	// Collect aliases for this command (skip root command itself).
 	if parentPath != "" {
-		for _, alias := range cmd.Aliases {
-			// Build the alias path (replace command name with alias in path).
-			// For top-level commands: just the alias (e.g., "tf" for terraform)
-			// For nested commands: parent path + alias (e.g., "terraform p" for terraform plan)
-			aliasPath := alias
-			if parentPath != cmd.Root().Name() {
-				aliasPath = parentPath + " " + alias
-			}
-
-			// Build command path without root command name for display.
-			displayCmdPath := cmdPath
-			rootName := cmd.Root().Name()
-			if strings.HasPrefix(displayCmdPath, rootName+" ") {
-				displayCmdPath = strings.TrimPrefix(displayCmdPath, rootName+" ")
-			}
-
-			aliases = append(aliases, AliasInfo{
-				Alias:   aliasPath,
-				Command: displayCmdPath,
-				Type:    aliasTypeBuiltIn,
-			})
-		}
+		rootName := cmd.Root().Name()
+		aliases = collectCommandAliases(cmd, parentPath, cmdPath, rootName)
 	}
 
 	// Recursively collect from subcommands.
@@ -250,8 +267,8 @@ func formatAliasesTable(aliases []AliasInfo) string {
 		rows = append(rows, row)
 	}
 
-	// Use the themed table creation.
-	output := theme.CreateThemedTable(headers, rows) + "\n"
+	// Use minimal table with left-aligned columns (CreateThemedTable right-aligns column 0).
+	output := theme.CreateMinimalTable(headers, rows) + "\n"
 
 	// Footer message with breakdown.
 	styles := theme.GetCurrentStyles()
