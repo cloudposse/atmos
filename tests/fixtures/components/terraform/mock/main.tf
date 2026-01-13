@@ -3,6 +3,31 @@ variable "stage" {
   default = "nonprod"
 }
 
+variable "enabled" {
+  type    = bool
+  default = true
+}
+
+variable "name" {
+  type    = string
+  default = ""
+}
+
+variable "environment" {
+  type    = string
+  default = ""
+}
+
+variable "region" {
+  type    = string
+  default = ""
+}
+
+variable "message" {
+  type    = string
+  default = ""
+}
+
 variable "foo" {
   type    = string
   default = "foo"
