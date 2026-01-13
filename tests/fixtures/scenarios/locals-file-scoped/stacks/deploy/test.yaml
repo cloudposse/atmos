@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+import:
+  - mixins/base
+
+# This file's own locals - these SHOULD be available.
+locals:
+  file_namespace: "file-ns"
+  file_env: "file-env"
+  file_computed: "{{ .locals.file_namespace }}-{{ .locals.file_env }}"
+
+vars:
+  stage: "test"
+
+components:
+  terraform:
+    test-component:
+      metadata:
+        component: mock
+      vars:
+        # This should resolve to the file's own local.
+        own_local: "{{ .locals.file_computed }}"
