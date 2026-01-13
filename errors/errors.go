@@ -375,7 +375,7 @@ var (
 	ErrGenerationFailed      = errors.New("generation failed")
 	ErrGeneratorWriteFailed  = errors.New("failed to write generated file")
 	ErrMissingWorkingDir     = errors.New("working directory is required")
-	ErrMissingProviderSource = errors.New("required_provider missing 'source' field")
+	ErrMissingProviderSource = errors.New("required_providers entry missing 'source' field")
 
 	// List command errors.
 	ErrInvalidStackPattern         = errors.New("invalid stack pattern")
