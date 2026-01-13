@@ -15,6 +15,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const OidcTimeout = 10
@@ -85,7 +86,7 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 		return nil, err
 	}
 
-	log.Info("GitHub OIDC authentication successful", "provider", p.name)
+	_ = ui.Successf("GitHub OIDC authentication successful for provider %s", p.name)
 
 	// Return the JWT token as credentials (used by downstream identities).
 	return &types.OIDCCredentials{

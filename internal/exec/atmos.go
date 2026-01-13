@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/samber/lo"
 
 	tui "github.com/cloudposse/atmos/internal/tui/atmos"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -147,7 +147,7 @@ func ExecuteAtmosCmd() error {
 			return err
 		}
 
-		log.Info("Validated successfully", "component", selectedComponent, "stack", selectedStack)
+		_ = ui.Successf("Validated %s in %s", selectedComponent, selectedStack)
 		return nil
 	}
 

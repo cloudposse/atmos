@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -168,7 +169,7 @@ func runMainLogic() {
 
 	if config.DryRun {
 		for _, file := range filePaths {
-			log.Info(file)
+			_ = data.Writeln(file)
 		}
 		return
 	}
