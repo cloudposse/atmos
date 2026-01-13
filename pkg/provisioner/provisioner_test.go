@@ -313,6 +313,11 @@ func TestProvisionWithParams_BackendTypeValidation(t *testing.T) {
 						"bucket": "test-bucket",
 						"region": "us-west-2",
 					},
+					"provision": map[string]any{
+						"backend": map[string]any{
+							"enabled": true,
+						},
+					},
 				}, nil
 			}
 

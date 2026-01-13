@@ -145,7 +145,10 @@ func ParseCommonFlags(cmd *cobra.Command, parser *flags.StandardParser) (*Common
 	}
 
 	if opts.Stack == "" {
-		return nil, errUtils.ErrRequiredFlagNotProvided
+		return nil, errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+			WithExplanation("--stack flag is required").
+			WithHint("Specify a stack with --stack or -s flag").
+			Err()
 	}
 
 	return opts, nil

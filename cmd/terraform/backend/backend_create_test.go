@@ -10,7 +10,7 @@ func TestCreateCmd_Structure(t *testing.T) {
 	testCommandStructure(t, commandTestParams{
 		cmd:           createCmd,
 		parser:        createParser,
-		expectedUse:   "<component>",
+		expectedUse:   "create <component>",
 		expectedShort: "Provision backend infrastructure",
 		requiredFlags: []string{},
 	})

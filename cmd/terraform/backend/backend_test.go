@@ -37,14 +37,13 @@ func TestGetBackendCommand(t *testing.T) {
 	assert.GreaterOrEqual(t, len(subcommands), 5, "should have at least 5 subcommands")
 
 	// Verify specific subcommands exist by checking Use field prefix.
-	// Note: createCmd.Use is "<component>" but all others start with their command name.
 	subcommandUses := make(map[string]bool)
 	for _, sub := range subcommands {
 		subcommandUses[sub.Use] = true
 	}
 
 	// Verify we have the expected commands by their Use patterns.
-	assert.True(t, subcommandUses["<component>"], "should have create subcommand (Use: '<component>')")
+	assert.True(t, subcommandUses["create <component>"], "should have create subcommand")
 	assert.True(t, subcommandUses["list"], "should have list subcommand")
 	assert.True(t, subcommandUses["describe <component>"], "should have describe subcommand")
 	assert.True(t, subcommandUses["update <component>"], "should have update subcommand")

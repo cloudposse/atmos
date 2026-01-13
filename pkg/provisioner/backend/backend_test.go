@@ -181,7 +181,8 @@ func TestProvisionBackend_NoProvisioningConfiguration(t *testing.T) {
 	}
 
 	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
-	require.NoError(t, err, "Should return nil when no provisioning configuration exists")
+	require.Error(t, err, "Should return error when no provisioning configuration exists")
+	assert.ErrorIs(t, err, errUtils.ErrProvisioningNotConfigured)
 }
 
 func TestProvisionBackend_NoBackendProvisioningConfiguration(t *testing.T) {
@@ -203,7 +204,8 @@ func TestProvisionBackend_NoBackendProvisioningConfiguration(t *testing.T) {
 	}
 
 	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
-	require.NoError(t, err, "Should return nil when no backend provisioning configuration exists")
+	require.Error(t, err, "Should return error when no backend provisioning configuration exists")
+	assert.ErrorIs(t, err, errUtils.ErrProvisioningNotConfigured)
 }
 
 func TestProvisionBackend_ProvisioningDisabled(t *testing.T) {
@@ -225,14 +227,15 @@ func TestProvisionBackend_ProvisioningDisabled(t *testing.T) {
 	}
 
 	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
-	require.NoError(t, err, "Should return nil when provisioning is disabled")
+	require.Error(t, err, "Should return error when provisioning is explicitly disabled")
+	assert.ErrorIs(t, err, errUtils.ErrProvisioningNotConfigured)
 }
 
 func TestProvisionBackend_ProvisioningEnabledMissingField(t *testing.T) {
 	ctx := context.Background()
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	// Component config with backend block but no enabled field (defaults to false).
+	// Component config with backend block but no enabled field (treated as not enabled).
 	componentConfig := map[string]any{
 		"backend_type": "s3",
 		"backend": map[string]any{
@@ -245,7 +248,8 @@ func TestProvisionBackend_ProvisioningEnabledMissingField(t *testing.T) {
 	}
 
 	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
-	require.NoError(t, err, "Should return nil when enabled field is missing")
+	require.Error(t, err, "Should return error when enabled field is missing")
+	assert.ErrorIs(t, err, errUtils.ErrProvisioningNotConfigured)
 }
 
 func TestProvisionBackend_MissingBackendConfiguration(t *testing.T) {
@@ -565,26 +569,31 @@ func TestProvisionBackend_EnabledWrongType(t *testing.T) {
 		name            string
 		enabledValue    any
 		shouldProvision bool
+		shouldError     bool
 	}{
 		{
 			name:            "enabled is string 'true'",
 			enabledValue:    "true",
-			shouldProvision: false, // Type assertion fails, treated as not enabled
+			shouldProvision: false, // Type assertion fails, treated as not enabled.
+			shouldError:     true,
 		},
 		{
 			name:            "enabled is int 1",
 			enabledValue:    1,
-			shouldProvision: false, // Type assertion fails, treated as not enabled
+			shouldProvision: false, // Type assertion fails, treated as not enabled.
+			shouldError:     true,
 		},
 		{
 			name:            "enabled is true",
 			enabledValue:    true,
 			shouldProvision: true,
+			shouldError:     false,
 		},
 		{
 			name:            "enabled is false",
 			enabledValue:    false,
 			shouldProvision: false,
+			shouldError:     true,
 		},
 	}
 
@@ -615,7 +624,12 @@ func TestProvisionBackend_EnabledWrongType(t *testing.T) {
 			}
 
 			err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
-			require.NoError(t, err)
+			if tt.shouldError {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrProvisioningNotConfigured)
+			} else {
+				require.NoError(t, err)
+			}
 			assert.Equal(t, tt.shouldProvision, provisionerCalled)
 		})
 	}

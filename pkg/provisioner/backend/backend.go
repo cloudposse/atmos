@@ -102,17 +102,26 @@ func ProvisionBackend(
 	// Check if provisioning is enabled.
 	provision, ok := componentConfig["provision"].(map[string]any)
 	if !ok {
-		return nil // No provisioning configuration
+		return errUtils.Build(errUtils.ErrProvisioningNotConfigured).
+			WithExplanation("No 'provision' configuration found for this component").
+			WithHint("Add 'provision.backend.enabled: true' to the component's stack configuration").
+			Err()
 	}
 
 	backend, ok := provision["backend"].(map[string]any)
 	if !ok {
-		return nil // No backend provisioning configuration
+		return errUtils.Build(errUtils.ErrProvisioningNotConfigured).
+			WithExplanation("No 'provision.backend' configuration found for this component").
+			WithHint("Add 'provision.backend.enabled: true' to the component's stack configuration").
+			Err()
 	}
 
 	enabled, ok := backend["enabled"].(bool)
 	if !ok || !enabled {
-		return nil // Provisioning not enabled
+		return errUtils.Build(errUtils.ErrProvisioningNotConfigured).
+			WithExplanation("Backend provisioning is not enabled for this component").
+			WithHint("Set 'provision.backend.enabled: true' in the component's stack configuration").
+			Err()
 	}
 
 	// Get backend configuration.

@@ -10,7 +10,7 @@ import (
 var createParser *flags.StandardParser
 
 var createCmd = &cobra.Command{
-	Use:     "<component>",
+	Use:     "create <component>",
 	Short:   "Provision backend infrastructure",
 	Long:    `Create or update S3 backend with secure defaults (versioning, encryption, public access blocking). This operation is idempotent.`,
 	Example: `  atmos terraform backend create vpc --stack dev`,
