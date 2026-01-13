@@ -175,10 +175,52 @@ func parseOptionalFields(tool *registry.Tool, config map[string]any) {
 		tool.BinaryName = binaryName
 		tool.Name = binaryName
 	}
+	if versionPrefix, ok := config["version_prefix"].(string); ok {
+		tool.VersionPrefix = versionPrefix
+	}
+	// Parse replacements map (e.g., darwin->macos, amd64->x86_64).
+	if replacementsRaw, ok := config["replacements"].(map[string]any); ok {
+		tool.Replacements = parseReplacements(replacementsRaw)
+	}
 	// Parse platform-specific overrides.
 	if overridesRaw, ok := config["overrides"].([]any); ok {
 		tool.Overrides = parseOverrides(overridesRaw)
 	}
+	// Parse files configuration for extraction.
+	if filesRaw, ok := config["files"].([]any); ok {
+		tool.Files = parseFiles(filesRaw)
+	}
+}
+
+// parseReplacements parses the replacements map (e.g., darwin->macos).
+func parseReplacements(replacementsRaw map[string]any) map[string]string {
+	replacements := make(map[string]string)
+	for key, value := range replacementsRaw {
+		if strValue, ok := value.(string); ok {
+			replacements[key] = strValue
+		}
+	}
+	return replacements
+}
+
+// parseFiles parses the files configuration for extraction.
+func parseFiles(filesRaw []any) []registry.File {
+	var files []registry.File
+	for _, fileRaw := range filesRaw {
+		fileMap, ok := fileRaw.(map[string]any)
+		if !ok {
+			continue
+		}
+		file := registry.File{}
+		if name, ok := fileMap["name"].(string); ok {
+			file.Name = name
+		}
+		if src, ok := fileMap["src"].(string); ok {
+			file.Src = src
+		}
+		files = append(files, file)
+	}
+	return files
 }
 
 // parseOverrides parses platform-specific override configurations.

@@ -586,3 +586,116 @@ func TestAtmosRegistry_OverridesSupport(t *testing.T) {
 		assert.Equal(t, "darwin", tool.Overrides[0].GOOS)
 	})
 }
+
+// TestAtmosRegistry_FilesReplacementsVersionPrefix tests parsing of files, replacements, and version_prefix.
+// REGRESSION TEST: This test ensures inline atmos registries support all fields needed for tools like replicated.
+func TestAtmosRegistry_FilesReplacementsVersionPrefix(t *testing.T) {
+	t.Run("parses files configuration", func(t *testing.T) {
+		// Test the replicated pattern with files.
+		toolsConfig := map[string]any{
+			"replicatedhq/replicated": map[string]any{
+				"type":   "github_release",
+				"asset":  "replicated_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz",
+				"format": "tar.gz",
+				"files": []any{
+					map[string]any{
+						"name": "replicated",
+						"src":  "replicated",
+					},
+				},
+			},
+		}
+
+		reg, err := NewAtmosRegistry(toolsConfig)
+		require.NoError(t, err)
+
+		tool, err := reg.GetTool("replicatedhq", "replicated")
+		require.NoError(t, err)
+		require.Len(t, tool.Files, 1, "files should be parsed")
+		assert.Equal(t, "replicated", tool.Files[0].Name)
+		assert.Equal(t, "replicated", tool.Files[0].Src)
+	})
+
+	t.Run("parses replacements map", func(t *testing.T) {
+		toolsConfig := map[string]any{
+			"owner/tool": map[string]any{
+				"type":  "github_release",
+				"asset": "tool_{{.OS}}_{{.Arch}}.tar.gz",
+				"replacements": map[string]any{
+					"darwin": "macos",
+					"amd64":  "x86_64",
+				},
+			},
+		}
+
+		reg, err := NewAtmosRegistry(toolsConfig)
+		require.NoError(t, err)
+
+		tool, err := reg.GetTool("owner", "tool")
+		require.NoError(t, err)
+		require.NotNil(t, tool.Replacements, "replacements should be parsed")
+		assert.Equal(t, "macos", tool.Replacements["darwin"])
+		assert.Equal(t, "x86_64", tool.Replacements["amd64"])
+	})
+
+	t.Run("parses version_prefix", func(t *testing.T) {
+		toolsConfig := map[string]any{
+			"owner/tool": map[string]any{
+				"type":           "github_release",
+				"asset":          "tool_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz",
+				"version_prefix": "v",
+			},
+		}
+
+		reg, err := NewAtmosRegistry(toolsConfig)
+		require.NoError(t, err)
+
+		tool, err := reg.GetTool("owner", "tool")
+		require.NoError(t, err)
+		assert.Equal(t, "v", tool.VersionPrefix, "version_prefix should be parsed")
+	})
+
+	t.Run("parses all optional fields together", func(t *testing.T) {
+		// Test the complete replicated-like pattern.
+		toolsConfig := map[string]any{
+			"replicatedhq/replicated": map[string]any{
+				"type":           "github_release",
+				"asset":          `replicated_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz`,
+				"format":         "tar.gz",
+				"version_prefix": "v",
+				"replacements": map[string]any{
+					"darwin": "darwin_all",
+				},
+				"files": []any{
+					map[string]any{
+						"name": "replicated",
+						"src":  "replicated",
+					},
+				},
+				"overrides": []any{
+					map[string]any{
+						"goos":  "darwin",
+						"asset": `replicated_{{trimV .Version}}_darwin_all.tar.gz`,
+					},
+				},
+			},
+		}
+
+		reg, err := NewAtmosRegistry(toolsConfig)
+		require.NoError(t, err)
+
+		tool, err := reg.GetTool("replicatedhq", "replicated")
+		require.NoError(t, err)
+
+		// Verify all fields are parsed.
+		assert.Equal(t, "github_release", tool.Type)
+		assert.Equal(t, "tar.gz", tool.Format)
+		assert.Equal(t, "v", tool.VersionPrefix)
+		require.Len(t, tool.Files, 1)
+		assert.Equal(t, "replicated", tool.Files[0].Name)
+		require.NotNil(t, tool.Replacements)
+		assert.Equal(t, "darwin_all", tool.Replacements["darwin"])
+		require.Len(t, tool.Overrides, 1)
+		assert.Equal(t, "darwin", tool.Overrides[0].GOOS)
+	})
+}
