@@ -187,10 +187,12 @@ func (ar *AquaRegistry) GetToolWithVersion(owner, repo, version string) (*regist
 
 // versionOverride holds version override data from Aqua registry.
 type versionOverride struct {
-	VersionConstraint string `yaml:"version_constraint"`
-	Asset             string `yaml:"asset"`
-	URL               string `yaml:"url"` // Alternative to Asset for http type tools.
-	Format            string `yaml:"format"`
+	VersionConstraint string                  `yaml:"version_constraint"`
+	Asset             string                  `yaml:"asset"`
+	URL               string                  `yaml:"url"` // Alternative to Asset for http type tools.
+	Format            string                  `yaml:"format"`
+	Replacements      map[string]string       `yaml:"replacements"`
+	Overrides         []registry.AquaOverride `yaml:"overrides"`
 	Files             []struct {
 		Name string `yaml:"name"`
 	} `yaml:"files"`
@@ -210,17 +212,33 @@ func applyVersionOverride(tool *registry.Tool, override *versionOverride, versio
 	if len(override.Files) > 0 {
 		tool.Name = override.Files[0].Name
 	}
-	log.Debug("Applied version override", "version", version, "constraint", override.VersionConstraint, "asset", tool.Asset, "format", tool.Format)
+	// Apply replacements from version override (replaces base replacements).
+	if len(override.Replacements) > 0 {
+		tool.Replacements = override.Replacements
+	}
+	// Apply overrides from version override (replaces base overrides).
+	if len(override.Overrides) > 0 {
+		tool.Overrides = convertAquaOverrides(override.Overrides)
+	}
+	log.Debug("Applied version override", "version", version, "constraint", override.VersionConstraint, "asset", tool.Asset, "format", tool.Format, "replacements", tool.Replacements)
 }
 
 // registryPackage holds package data from Aqua registry file.
+// This struct must include all fields that need to be preserved when resolving version overrides.
 type registryPackage struct {
-	Type             string            `yaml:"type"`
-	RepoOwner        string            `yaml:"repo_owner"`
-	RepoName         string            `yaml:"repo_name"`
-	URL              string            `yaml:"url"`
-	Description      string            `yaml:"description"`
-	VersionOverrides []versionOverride `yaml:"version_overrides"`
+	Type             string                  `yaml:"type"`
+	RepoOwner        string                  `yaml:"repo_owner"`
+	RepoName         string                  `yaml:"repo_name"`
+	Asset            string                  `yaml:"asset"` // Used by github_release types.
+	URL              string                  `yaml:"url"`   // Used by http types.
+	Format           string                  `yaml:"format"`
+	BinaryName       string                  `yaml:"binary_name"`
+	Description      string                  `yaml:"description"`
+	VersionPrefix    string                  `yaml:"version_prefix"`
+	Replacements     map[string]string       `yaml:"replacements"`
+	Overrides        []registry.AquaOverride `yaml:"overrides"`
+	Files            []registry.File         `yaml:"files"`
+	VersionOverrides []versionOverride       `yaml:"version_overrides"`
 }
 
 // resolveVersionOverrides fetches the full registry file and resolves version-specific overrides.
@@ -236,13 +254,31 @@ func (ar *AquaRegistry) resolveVersionOverrides(sourceURL, version string) (*reg
 		return nil, err
 	}
 
+	// Determine asset pattern: prefer Asset (github_release), fall back to URL (http type).
+	asset := pkgDef.Asset
+	if asset == "" {
+		asset = pkgDef.URL
+	}
+
+	// Determine binary name.
+	name := pkgDef.BinaryName
+	if name == "" {
+		name = pkgDef.RepoName
+	}
+
 	tool := &registry.Tool{
-		Name:      pkgDef.RepoName,
-		Type:      pkgDef.Type,
-		RepoOwner: pkgDef.RepoOwner,
-		RepoName:  pkgDef.RepoName,
-		Asset:     pkgDef.URL,
-		SourceURL: sourceURL,
+		Name:          name,
+		Type:          pkgDef.Type,
+		RepoOwner:     pkgDef.RepoOwner,
+		RepoName:      pkgDef.RepoName,
+		Asset:         asset,
+		Format:        pkgDef.Format,
+		BinaryName:    pkgDef.BinaryName,
+		VersionPrefix: pkgDef.VersionPrefix,
+		Replacements:  pkgDef.Replacements,
+		Overrides:     convertAquaOverrides(pkgDef.Overrides),
+		Files:         pkgDef.Files,
+		SourceURL:     sourceURL,
 	}
 
 	selectedIdx := findMatchingOverride(pkgDef.VersionOverrides, version)
