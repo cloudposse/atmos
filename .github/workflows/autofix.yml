@@ -37,7 +37,7 @@ jobs:
           go-version-file: go.mod
       - run: go mod tidy
 
-      # gofumpt
+      # gofumpt (installed via aqua from aqua/aqua.yaml)
       - name: Get changed Go files
         id: changed-files
         uses: tj-actions/changed-files@e7b157b1c4ad44acfc8d9be14b8cd8f5058636e3 # v45.0.6

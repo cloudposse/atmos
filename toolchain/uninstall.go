@@ -92,7 +92,7 @@ func RunUninstall(toolSpec string) error {
 
 // parseToolSpecLenient parses a tool spec with lenient fallback for uninstall operations.
 func parseToolSpecLenient(installer *Installer, tool string) (owner, repo string) {
-	owner, repo, err := installer.parseToolSpec(tool)
+	owner, repo, err := installer.ParseToolSpec(tool)
 	if err != nil {
 		// For uninstall operations, be more lenient with tool names
 		// If the tool resolver fails, assume the tool name is the repo name
@@ -113,7 +113,7 @@ func uninstallToolVersion(installer *Installer, owner, repo, version string) err
 	actualVersion, err := installer.ReadLatestFile(owner, repo)
 	if err != nil {
 		// If the latest file does not exist, return error (test expects this)
-		latestFilePath := filepath.Join(installer.binDir, owner, repo, latestVersion)
+		latestFilePath := filepath.Join(installer.GetBinDir(), owner, repo, latestVersion)
 		return errUtils.Build(errUtils.ErrLatestFileNotFound).
 			WithExplanationf("Tool `%s/%s@latest` is not installed", owner, repo).
 			WithHint("Install with `atmos toolchain install "+repo+"@latest`").
@@ -130,9 +130,9 @@ func uninstallToolVersion(installer *Installer, owner, repo, version string) err
 // uninstallLatestVersion uninstalls the "latest" version and cleans up the latest file.
 func uninstallLatestVersion(installer *Installer, owner, repo, version string) error {
 	// Check if the versioned binary exists
-	binaryPath := installer.getBinaryPath(owner, repo, version, "")
-	latestFilePath := filepath.Join(installer.binDir, owner, repo, latestVersion)
-	toolDir := filepath.Join(installer.binDir, owner, repo)
+	binaryPath := installer.GetBinaryPath(owner, repo, version, "")
+	latestFilePath := filepath.Join(installer.GetBinDir(), owner, repo, latestVersion)
+	toolDir := filepath.Join(installer.GetBinDir(), owner, repo)
 
 	if _, statErr := os.Stat(binaryPath); os.IsNotExist(statErr) {
 		// Binary does not exist, but latest file does: delete latest file and return success
@@ -284,7 +284,7 @@ func collectInstalledTools(toolVersions *ToolVersions, installer *Installer) []u
 	var installedTools []uninstallToolInfo
 	for tool, versions := range toolVersions.Tools {
 		for _, version := range versions {
-			owner, repo, err := installer.parseToolSpec(tool)
+			owner, repo, err := installer.ParseToolSpec(tool)
 			if err != nil {
 				_ = ui.Warningf("Skipping invalid tool specification: %s", tool)
 				continue
@@ -384,7 +384,7 @@ func getVersionsToUninstall(toolDir string) ([]string, error) {
 }
 
 func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error {
-	toolDir := filepath.Join(installer.binDir, owner, repo)
+	toolDir := filepath.Join(installer.GetBinDir(), owner, repo)
 
 	// Check if the tool directory exists.
 	if _, err := os.Stat(toolDir); os.IsNotExist(err) {
