@@ -21,7 +21,7 @@ func PullCommand(cfg *Config) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "pull <component>",
+		Use:   "pull [component]",
 		Short: fmt.Sprintf("Vendor %s component source from source configuration", cfg.TypeLabel),
 		Long: fmt.Sprintf(`Vendor a %s component source based on source configuration.
 
@@ -29,13 +29,18 @@ This command downloads the component source from the URI specified in the source
 and places it in the appropriate component directory. The source can be any go-getter
 compatible URI (git, s3, http, oci, etc.).
 
-If the component is already vendored, it will be skipped unless --force is specified.`, cfg.TypeLabel),
+If the component is already vendored, it will be skipped unless --force is specified.
+
+If component is not specified, prompts interactively for selection.`, cfg.TypeLabel),
 		Example: fmt.Sprintf(`  # Vendor component source (downloads if missing or outdated)
   atmos %s source pull vpc --stack dev
 
   # Force re-vendor even if up-to-date
-  atmos %s source pull vpc --stack dev --force`, cfg.ComponentType, cfg.ComponentType),
-		Args: cobra.ExactArgs(1),
+  atmos %s source pull vpc --stack dev --force
+
+  # Interactive: prompts for component and stack
+  atmos %s source pull`, cfg.ComponentType, cfg.ComponentType, cfg.ComponentType),
+		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executePull(cmd, args, cfg, parser)
 		},
@@ -54,12 +59,29 @@ If the component is already vendored, it will be skipped unless --force is speci
 func executePull(cmd *cobra.Command, args []string, cfg *Config, parser *flags.StandardParser) error {
 	defer perf.Track(nil, fmt.Sprintf("source.%s.pull.RunE", cfg.ComponentType))()
 
-	component := args[0]
-
 	// Parse flags without validation.
 	v := viper.GetViper()
 	if err := parser.BindFlagsToViper(cmd, v); err != nil {
 		return err
+	}
+
+	// Get component from args or prompt.
+	var component string
+	if len(args) > 0 {
+		component = args[0]
+	} else {
+		var err error
+		component, err = PromptForComponent(cmd)
+		if err := HandlePromptError(err, "component"); err != nil {
+			return err
+		}
+	}
+
+	// Validate component is provided.
+	if component == "" {
+		return errUtils.Build(errUtils.ErrInvalidPositionalArgs).
+			WithExplanation("component argument is required").
+			Err()
 	}
 
 	stack := v.GetString("stack")

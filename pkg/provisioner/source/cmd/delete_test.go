@@ -24,7 +24,7 @@ func TestDeleteCommand(t *testing.T) {
 	cmd := DeleteCommand(cfg)
 
 	require.NotNil(t, cmd)
-	assert.Equal(t, "delete <component>", cmd.Use)
+	assert.Equal(t, "delete [component]", cmd.Use)
 	assert.Contains(t, cmd.Short, "Terraform")
 }
 

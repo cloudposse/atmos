@@ -16,6 +16,20 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// PromptForComponent shows an interactive selector for component selection.
+// Lists all terraform components that have source configured.
+func PromptForComponent(cmd *cobra.Command) (string, error) {
+	defer perf.Track(nil, "source.cmd.PromptForComponent")()
+
+	return flags.PromptForPositionalArg(
+		"component",
+		"Choose a component",
+		ComponentArgCompletion,
+		cmd,
+		nil,
+	)
+}
+
 // PromptForStack shows an interactive selector for stack selection.
 // If component is provided, filters stacks to only those containing the component with source configured.
 func PromptForStack(cmd *cobra.Command, component string) (string, error) {
@@ -50,6 +64,19 @@ func HandlePromptError(err error, name string) error {
 		return nil // Fall through to validation.
 	}
 	return err
+}
+
+// ComponentArgCompletion provides shell completion for the component positional argument.
+// Lists all terraform components that have source configured.
+func ComponentArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) == 0 {
+		output, err := listComponentsWithSource()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		return output, cobra.ShellCompDirectiveNoFileComp
+	}
+	return nil, cobra.ShellCompDirectiveNoFileComp
 }
 
 // StackFlagCompletion provides shell completion for the --stack flag.
@@ -170,4 +197,56 @@ func stackHasAnySource(stackData any) bool {
 		}
 	}
 	return false
+}
+
+// listComponentsWithSource returns all terraform components that have source configured in any stack.
+func listComponentsWithSource() ([]string, error) {
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return nil, err
+	}
+
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Collect unique component names with source from all stacks.
+	componentSet := make(map[string]struct{})
+	for _, stackData := range stacksMap {
+		collectComponentsWithSource(stackData, componentSet)
+	}
+
+	componentsList := make([]string, 0, len(componentSet))
+	for name := range componentSet {
+		componentsList = append(componentsList, name)
+	}
+	sort.Strings(componentsList)
+	return componentsList, nil
+}
+
+// collectComponentsWithSource extracts terraform components with source from a stack.
+func collectComponentsWithSource(stackData any, componentSet map[string]struct{}) {
+	stackMap, ok := stackData.(map[string]any)
+	if !ok {
+		return
+	}
+	components, ok := stackMap["components"].(map[string]any)
+	if !ok {
+		return
+	}
+	terraform, ok := components["terraform"].(map[string]any)
+	if !ok {
+		return
+	}
+	for componentName, componentData := range terraform {
+		componentMap, ok := componentData.(map[string]any)
+		if !ok {
+			continue
+		}
+		if source.HasSource(componentMap) {
+			componentSet[componentName] = struct{}{}
+		}
+	}
 }

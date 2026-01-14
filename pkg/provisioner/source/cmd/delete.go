@@ -26,15 +26,19 @@ func DeleteCommand(config *Config) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "delete <component>",
+		Use:   "delete [component]",
 		Short: fmt.Sprintf("Remove vendored %s source directory", config.TypeLabel),
 		Long: fmt.Sprintf(`Delete the vendored source directory for a %s component.
 
 This command removes the component directory that was created by 'atmos %s source pull'.
-Requires --force flag for safety.`, config.TypeLabel, config.ComponentType),
+
+If component is not specified, prompts interactively for selection.`, config.TypeLabel, config.ComponentType),
 		Example: fmt.Sprintf(`  # Delete vendored source
-  atmos %s source delete vpc --stack dev --force`, config.ComponentType),
-		Args: cobra.ExactArgs(1),
+  atmos %s source delete vpc --stack dev --force
+
+  # Interactive: prompts for component and stack
+  atmos %s source delete`, config.ComponentType, config.ComponentType),
+		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executeDelete(cmd, args, config, parser)
 		},
@@ -60,7 +64,24 @@ type deleteOptions struct {
 func executeDelete(cmd *cobra.Command, args []string, config *Config, parser *flags.StandardParser) error {
 	defer perf.Track(nil, fmt.Sprintf("source.%s.delete.RunE", config.ComponentType))()
 
-	component := args[0]
+	// Get component from args or prompt.
+	var component string
+	if len(args) > 0 {
+		component = args[0]
+	} else {
+		var err error
+		component, err = PromptForComponent(cmd)
+		if err := HandlePromptError(err, "component"); err != nil {
+			return err
+		}
+	}
+
+	// Validate component is provided.
+	if component == "" {
+		return errUtils.Build(errUtils.ErrInvalidPositionalArgs).
+			WithExplanation("component argument is required").
+			Err()
+	}
 
 	// Parse flags and get delete options (with prompting).
 	deleteOpts, err := parseDeleteFlags(cmd, parser, component)
