@@ -94,7 +94,8 @@ func runBubbleTeaSpinner(message string) *tea.Program {
 // The setAsDefault parameter controls whether to set the installed version as default.
 // The reinstallFlag parameter forces reinstallation even if already installed.
 // The showHint parameter controls whether to show the PATH export hint message.
-func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint bool) error {
+// The showProgressBar parameter controls whether to show spinner and success messages.
+func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint, showProgressBar bool) error {
 	defer perf.Track(nil, "toolchain.Install")()
 
 	if toolSpec == "" {
@@ -141,7 +142,7 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint bool) err
 	// Handle "latest" keyword - pass it to InstallSingleTool which will resolve it.
 	err = InstallSingleTool(owner, repo, version, InstallOptions{
 		IsLatest:        version == "latest",
-		ShowProgressBar: true,
+		ShowProgressBar: showProgressBar,
 		ShowHint:        showHint,
 	})
 	if err != nil {

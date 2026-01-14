@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -76,7 +77,7 @@ func TestNewInstaller(t *testing.T) {
 
 	t.Run("applies options", func(t *testing.T) {
 		mockRes := &mockResolver{}
-		mockInstall := func(string, bool, bool, bool) error { return nil }
+		mockInstall := func(string, bool, bool, bool, bool) error { return nil }
 		mockFileExists := func(string) bool { return true }
 
 		inst := NewInstaller(nil,
@@ -126,7 +127,7 @@ func TestEnsureTools(t *testing.T) {
 					},
 				}
 				installCalled := false
-				installFunc := func(string, bool, bool, bool) error {
+				installFunc := func(string, bool, bool, bool, bool) error {
 					installCalled = true
 					return nil
 				}
@@ -152,7 +153,7 @@ func TestEnsureTools(t *testing.T) {
 						return "hashicorp", "terraform", nil
 					},
 				}
-				installFunc := func(toolSpec string, _, _, _ bool) error {
+				installFunc := func(toolSpec string, _, _, _, _ bool) error {
 					if toolSpec != "hashicorp/terraform@1.10.0" {
 						return errUnexpectedToolSpec
 					}
@@ -178,7 +179,7 @@ func TestEnsureTools(t *testing.T) {
 						return "hashicorp", "terraform", nil
 					},
 				}
-				installFunc := func(string, bool, bool, bool) error {
+				installFunc := func(string, bool, bool, bool, bool) error {
 					return errInstallFailed
 				}
 				finder := &mockBinaryPathFinder{
@@ -208,7 +209,7 @@ func TestEnsureTools(t *testing.T) {
 					},
 				}
 				installCount := 0
-				installFunc := func(string, bool, bool, bool) error {
+				installFunc := func(string, bool, bool, bool, bool) error {
 					installCount++
 					return nil
 				}
@@ -239,7 +240,7 @@ func TestEnsureTools(t *testing.T) {
 						return "", "", errInvalidTool
 					},
 				}
-				installFunc := func(string, bool, bool, bool) error {
+				installFunc := func(string, bool, bool, bool, bool) error {
 					return errInstallFailed
 				}
 				finder := &mockBinaryPathFinder{
@@ -272,7 +273,9 @@ func TestEnsureTools(t *testing.T) {
 			if tt.wantErr {
 				require.Error(t, err)
 				if tt.errIs != nil {
-					assert.ErrorIs(t, err, tt.errIs)
+					// Use cockroachdb/errors.Is() because our error builder uses Mark()
+					// which only works with cockroachdb/errors.Is(), not standard errors.Is().
+					assert.True(t, cockroachErrors.Is(err, tt.errIs), "expected error %v in chain, got: %v", tt.errIs, err)
 				}
 			} else {
 				require.NoError(t, err)
@@ -676,7 +679,7 @@ func runDuplicateInstallTest(t *testing.T, tc *duplicateInstallTestCase) {
 		},
 	}
 
-	installFunc := func(toolSpec string, _, _, _ bool) error {
+	installFunc := func(toolSpec string, _, _, _, _ bool) error {
 		installCalls++
 		binaryPath := filepath.Join(binDir, tc.binaryName)
 		return os.WriteFile(binaryPath, []byte("#!/bin/sh\necho "+tc.binaryName), 0o755)
@@ -710,7 +713,7 @@ func TestEnsureTool(t *testing.T) {
 				return "hashicorp", "terraform", nil
 			},
 		}
-		installFunc := func(string, bool, bool, bool) error {
+		installFunc := func(string, bool, bool, bool, bool) error {
 			installCalled = true
 			return nil
 		}
@@ -739,7 +742,7 @@ func TestEnsureTool(t *testing.T) {
 				return "hashicorp", "terraform", nil
 			},
 		}
-		installFunc := func(toolSpec string, _, _, _ bool) error {
+		installFunc := func(toolSpec string, _, _, _, _ bool) error {
 			installedSpec = toolSpec
 			return nil
 		}
@@ -768,7 +771,7 @@ func TestEnsureTool(t *testing.T) {
 				return "hashicorp", "terraform", nil
 			},
 		}
-		installFunc := func(toolSpec string, _, _, _ bool) error {
+		installFunc := func(toolSpec string, _, _, _, _ bool) error {
 			calledSpec = toolSpec
 			return errInstallFailed
 		}
@@ -786,7 +789,9 @@ func TestEnsureTool(t *testing.T) {
 
 		err := inst.ensureTool("terraform", "1.10.0")
 		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrToolInstall)
+		// Use cockroachdb/errors.Is() because our error builder uses Mark()
+		// which only works with cockroachdb/errors.Is(), not standard errors.Is().
+		assert.True(t, cockroachErrors.Is(err, errUtils.ErrToolInstall), "expected ErrToolInstall in chain, got: %v", err)
 		assert.Equal(t, "terraform@1.10.0", calledSpec, "install should be called with correct tool spec")
 	})
 }

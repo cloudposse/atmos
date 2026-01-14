@@ -14,7 +14,8 @@ import (
 
 // InstallFunc is the function signature for installing a tool.
 // The showHint parameter controls whether to show the PATH export hint message.
-type InstallFunc func(toolSpec string, setAsDefault, reinstallFlag, showHint bool) error
+// The showProgressBar parameter controls whether to show spinner and success messages.
+type InstallFunc func(toolSpec string, setAsDefault, reinstallFlag, showHint, showProgressBar bool) error
 
 // BinaryPathFinder finds installed tool binaries.
 // This interface allows testing without the full toolchain installer.
@@ -127,9 +128,9 @@ func (i *Installer) ensureTool(tool string, version string) error {
 		return nil
 	}
 
-	// Install missing tool. Pass showHint=false to suppress PATH hint for dependency installs.
+	// Install missing tool. Pass showHint=false to suppress PATH hint, showProgressBar=true for spinner.
 	toolSpec := fmt.Sprintf("%s@%s", tool, version)
-	if err := i.installFunc(toolSpec, false, false, false); err != nil {
+	if err := i.installFunc(toolSpec, false, false, false, true); err != nil {
 		return errUtils.Build(errUtils.ErrToolInstall).
 			WithCause(err).
 			WithExplanationf("Failed to install %s", toolSpec).

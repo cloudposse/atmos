@@ -57,8 +57,8 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	reinstall := v.GetBool("reinstall")
 	defaultVersion := v.GetBool("default")
 
-	// Show PATH hint when running toolchain install directly.
-	return toolchain.RunInstall(toolSpec, defaultVersion, reinstall, true)
+	// Show PATH hint and progress bar when running toolchain install directly.
+	return toolchain.RunInstall(toolSpec, defaultVersion, reinstall, true, true)
 }
 
 // InstallCommandProvider implements the CommandProvider interface.
