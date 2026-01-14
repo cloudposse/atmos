@@ -666,6 +666,7 @@ var (
 	ErrBucketRequired            = errors.New("backend.bucket is required")
 	ErrRegionRequired            = errors.New("backend.region is required")
 	ErrBackendNotFound           = errors.New("backend configuration not found")
+	ErrBackendTypeRequired       = errors.New("backend_type is required")
 	ErrProvisioningNotConfigured = errors.New("provisioning not configured")
 	ErrCreateNotImplemented      = errors.New("create not implemented for backend type")
 	ErrDeleteNotImplemented      = errors.New("delete not implemented for backend type")
