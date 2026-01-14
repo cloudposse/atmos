@@ -1,0 +1,24 @@
+# Development stack demonstrating component-level tool dependencies.
+#
+# This stack shows how to declare tool dependencies at the component level.
+# When running `atmos terraform plan mock -s dev`, Atmos will:
+# 1. Resolve the opentofu dependency constraint (^1.10.0)
+# 2. Install opentofu if not already present
+# 3. Add it to PATH before executing the component
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    mock:
+      metadata:
+        component: mock
+      # Component-level tool dependencies.
+      # These dependencies are resolved and installed before component execution.
+      # The constraint ^1.10.0 means any 1.10.x version (>= 1.10.0, < 2.0.0).
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+      vars:
+        message: "Hello from toolchain demo"

@@ -4,6 +4,7 @@
 # 1. Inline registry for custom tool definitions
 # 2. Official Aqua registry as fallback for standard tools
 # 3. Automatic tool installation for custom commands and workflows
+# 4. Component-level tool dependencies (e.g., opentofu per component)
 
 # Base path for resolving relative paths (current directory)
 # This ensures paths like "stacks" and "workflows" are relative to this directory
@@ -70,13 +71,24 @@ toolchain:
 #   atmos toolchain install terraform    # Resolves from aqua-public
 #   atmos toolchain list                 # Shows all installed tools
 
-# Stacks configuration (minimal - this example doesn't use stacks)
-# An empty stacks folder satisfies the requirement without any stack files
+# Components configuration for terraform.
+# The mock component demonstrates component-level tool dependencies.
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+# Stacks configuration.
+# Stack files in stacks/deploy/ define component configurations.
 stacks:
   base_path: "stacks"
   included_paths:
-    - "**/*"
+    - "deploy/**/*"
   excluded_paths: []
+  name_pattern: "{stage}"
 
 # Workflows configuration
 workflows:
