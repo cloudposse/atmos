@@ -468,3 +468,35 @@ func TestLoadToolVersionsDependencies(t *testing.T) {
 		})
 	}
 }
+
+// TestLoadToolVersionsDependencies_DirectoryError tests that a directory at the
+// .tool-versions path returns an error (not os.IsNotExist, but still an error).
+func TestLoadToolVersionsDependencies_DirectoryError(t *testing.T) {
+	// Create temp directory for test.
+	tmpDir := t.TempDir()
+	toolVersionsPath := filepath.Join(tmpDir, ".tool-versions")
+
+	// Save original toolchain config and restore after test.
+	origConfig := toolchain.GetAtmosConfig()
+	t.Cleanup(func() {
+		toolchain.SetAtmosConfig(origConfig)
+	})
+
+	// Create a directory instead of a file - this will cause a read error
+	// that is NOT os.IsNotExist, triggering the error return path.
+	err := os.MkdirAll(toolVersionsPath, 0o755)
+	require.NoError(t, err)
+
+	// Configure toolchain to use our test path.
+	testConfig := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile: toolVersionsPath,
+		},
+	}
+	toolchain.SetAtmosConfig(testConfig)
+
+	// Should return an error because we can't read a directory as a file.
+	_, err = LoadToolVersionsDependencies(&schema.AtmosConfiguration{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to load .tool-versions")
+}

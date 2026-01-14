@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/gabriel-vasile/mimetype"
@@ -943,6 +944,191 @@ func TestInstaller_extractFilesFromDir(t *testing.T) {
 		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool)
 		assert.Error(t, err)
 	})
+}
+
+// TestInstaller_extractGzipOrTarGz tests the gzip vs tar.gz dispatch logic.
+func TestInstaller_extractGzipOrTarGz(t *testing.T) {
+	t.Run("extracts tar.gz file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		tarGzPath := filepath.Join(tmpDir, "test.tar.gz")
+		binDir := filepath.Join(tmpDir, "bin")
+		binaryPath := filepath.Join(binDir, "mytool")
+
+		createTestTarGzArchive(t, tarGzPath, map[string]string{
+			"mytool": "#!/bin/sh\necho hello",
+		})
+
+		// Get the mime type.
+		mime, err := mimetype.DetectFile(tarGzPath)
+		require.NoError(t, err)
+
+		installer := &Installer{}
+		tool := &registry.Tool{Name: "mytool"}
+
+		err = installer.extractGzipOrTarGz(tarGzPath, binaryPath, tool, mime)
+		assert.NoError(t, err)
+
+		// Verify binary was extracted.
+		_, err = os.Stat(binaryPath)
+		assert.NoError(t, err)
+	})
+
+	t.Run("extracts single gzip-compressed binary", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		// Use .gz extension (not .tar.gz) to trigger the gzip path.
+		gzPath := filepath.Join(tmpDir, "binary.gz")
+		binaryPath := filepath.Join(tmpDir, "binary")
+
+		// Create gzip file (not tar.gz, just a single compressed binary).
+		f, err := os.Create(gzPath)
+		require.NoError(t, err)
+		gw := gzip.NewWriter(f)
+		_, err = gw.Write([]byte("#!/bin/sh\necho hello"))
+		require.NoError(t, err)
+		require.NoError(t, gw.Close())
+		require.NoError(t, f.Close())
+
+		// Get the mime type.
+		mime, err := mimetype.DetectFile(gzPath)
+		require.NoError(t, err)
+
+		installer := &Installer{}
+		tool := &registry.Tool{Name: "binary"}
+
+		err = installer.extractGzipOrTarGz(gzPath, binaryPath, tool, mime)
+		assert.NoError(t, err)
+
+		// Verify binary was extracted.
+		content, err := os.ReadFile(binaryPath)
+		assert.NoError(t, err)
+		assert.Equal(t, "#!/bin/sh\necho hello", string(content))
+	})
+}
+
+// TestInstaller_extractByMimeType tests dispatch by MIME type.
+func TestInstaller_extractByMimeType(t *testing.T) {
+	t.Run("handles tar MIME type", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		tarGzPath := filepath.Join(tmpDir, "test.tar.gz")
+		binDir := filepath.Join(tmpDir, "bin")
+		binaryPath := filepath.Join(binDir, "mytool")
+
+		createTestTarGzArchive(t, tarGzPath, map[string]string{
+			"mytool": "#!/bin/sh\necho hello",
+		})
+
+		// Get the mime type.
+		mime, err := mimetype.DetectFile(tarGzPath)
+		require.NoError(t, err)
+
+		installer := &Installer{}
+		tool := &registry.Tool{Name: "mytool"}
+
+		err = installer.extractByMimeType(tarGzPath, binaryPath, tool, mime)
+		assert.NoError(t, err)
+
+		// Verify binary was extracted.
+		_, err = os.Stat(binaryPath)
+		assert.NoError(t, err)
+	})
+}
+
+// TestExtractEntry tests tar entry extraction edge cases.
+func TestExtractEntry(t *testing.T) {
+	t.Run("handles directory type", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		destDir := filepath.Join(tmpDir, "dest")
+		require.NoError(t, os.MkdirAll(destDir, 0o755))
+
+		header := &tar.Header{
+			Name:     "subdir/",
+			Typeflag: tar.TypeDir,
+			Mode:     0o755,
+		}
+
+		err := extractEntry(nil, header, destDir)
+		assert.NoError(t, err)
+
+		// Verify directory was created.
+		info, err := os.Stat(filepath.Join(destDir, "subdir"))
+		assert.NoError(t, err)
+		assert.True(t, info.IsDir())
+	})
+
+	t.Run("handles path traversal attempt", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		destDir := filepath.Join(tmpDir, "dest")
+		require.NoError(t, os.MkdirAll(destDir, 0o755))
+
+		header := &tar.Header{
+			Name:     "../../../etc/passwd",
+			Typeflag: tar.TypeReg,
+			Mode:     0o644,
+		}
+
+		err := extractEntry(nil, header, destDir)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("skips unknown type with warning", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		destDir := filepath.Join(tmpDir, "dest")
+		require.NoError(t, os.MkdirAll(destDir, 0o755))
+
+		header := &tar.Header{
+			Name:     "symlink",
+			Typeflag: tar.TypeSymlink, // Symlink is an unknown/unhandled type.
+			Mode:     0o755,
+		}
+
+		// Should not return error for unknown types (just skip them).
+		err := extractEntry(nil, header, destDir)
+		assert.NoError(t, err)
+	})
+}
+
+// TestExtractFile tests file extraction error cases.
+func TestExtractFile(t *testing.T) {
+	t.Run("handles mode out of range", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "file")
+
+		// Create a tar reader with test data.
+		header := &tar.Header{
+			Name: "file",
+			Mode: -1, // Invalid mode.
+		}
+
+		err := extractFile(nil, path, header)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
+// TestInstaller_extractPkg_NonDarwin tests that .pkg extraction fails on non-macOS.
+func TestInstaller_extractPkg_NonDarwin(t *testing.T) {
+	// This test is only meaningful on non-Darwin platforms.
+	// On Darwin, it would actually try to extract (which we don't want in tests).
+	// We skip on Darwin since .pkg extraction is supported there.
+	if runtime.GOOS == "darwin" {
+		t.Skip("Skipping on Darwin - .pkg extraction is supported")
+	}
+
+	tmpDir := t.TempDir()
+	pkgPath := filepath.Join(tmpDir, "test.pkg")
+	binaryPath := filepath.Join(tmpDir, "binary")
+
+	// Create a dummy file (doesn't need to be a real .pkg).
+	require.NoError(t, os.WriteFile(pkgPath, []byte("dummy"), 0o644))
+
+	installer := &Installer{}
+	tool := &registry.Tool{Name: "mytool"}
+
+	err := installer.extractPkg(pkgPath, binaryPath, tool)
+	// On non-Darwin, should return unsupported error.
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrUnsupportedFormat)
 }
 
 // TestExpandFileSrcTemplate tests the template expansion for file source paths.

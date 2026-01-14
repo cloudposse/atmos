@@ -13,7 +13,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -28,18 +27,26 @@ type Executor struct {
 	runner       CommandRunner
 	authProvider AuthProvider
 	ui           UIProvider
+	depProvider  DependencyProvider
 }
 
 // NewExecutor creates a new Executor with the given dependencies.
 // Nil dependencies are handled gracefully: runner is required for command execution,
-// authProvider can be nil if no authentication is needed, and ui can be nil to
-// disable user-facing output (messages and errors will be silently skipped).
+// authProvider can be nil if no authentication is needed, ui can be nil to
+// disable user-facing output, and depProvider can be nil to skip toolchain integration.
 func NewExecutor(runner CommandRunner, authProvider AuthProvider, ui UIProvider) *Executor {
 	return &Executor{
 		runner:       runner,
 		authProvider: authProvider,
 		ui:           ui,
+		depProvider:  nil, // Will be set per-execute based on AtmosConfig.
 	}
+}
+
+// WithDependencyProvider sets a custom DependencyProvider (primarily for testing).
+func (e *Executor) WithDependencyProvider(provider DependencyProvider) *Executor {
+	e.depProvider = provider
+	return e
 }
 
 // Execute runs a workflow with the given options.
@@ -226,10 +233,14 @@ func (e *Executor) prepareStepEnvironment(ctx context.Context, stepIdentity, ste
 func (e *Executor) ensureToolchainDependencies(params *WorkflowParams) error {
 	defer perf.Track(params.AtmosConfig, "workflow.Executor.ensureToolchainDependencies")()
 
-	resolver := dependencies.NewResolver(params.AtmosConfig)
+	// Use injected provider or create default.
+	provider := e.depProvider
+	if provider == nil {
+		provider = NewDefaultDependencyProvider(params.AtmosConfig)
+	}
 
 	// Load project-wide tools from .tool-versions.
-	toolVersionsDeps, err := dependencies.LoadToolVersionsDependencies(params.AtmosConfig)
+	toolVersionsDeps, err := provider.LoadToolVersionsDependencies()
 	if err != nil {
 		return errUtils.Build(errUtils.ErrDependencyResolution).
 			WithCause(err).
@@ -238,7 +249,7 @@ func (e *Executor) ensureToolchainDependencies(params *WorkflowParams) error {
 	}
 
 	// Get workflow-specific dependencies.
-	workflowDeps, err := resolver.ResolveWorkflowDependencies(params.WorkflowDefinition)
+	workflowDeps, err := provider.ResolveWorkflowDependencies(params.WorkflowDefinition)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrDependencyResolution).
 			WithCause(err).
@@ -247,7 +258,7 @@ func (e *Executor) ensureToolchainDependencies(params *WorkflowParams) error {
 	}
 
 	// Merge: .tool-versions as base, workflow deps override.
-	deps, err := dependencies.MergeDependencies(toolVersionsDeps, workflowDeps)
+	deps, err := provider.MergeDependencies(toolVersionsDeps, workflowDeps)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrDependencyResolution).
 			WithCause(err).
@@ -262,8 +273,7 @@ func (e *Executor) ensureToolchainDependencies(params *WorkflowParams) error {
 	log.Debug("Installing workflow dependencies", "workflow", params.Workflow, "tools", deps)
 
 	// Install missing tools.
-	installer := dependencies.NewInstaller(params.AtmosConfig)
-	if err := installer.EnsureTools(deps); err != nil {
+	if err := provider.EnsureTools(deps); err != nil {
 		return errUtils.Build(errUtils.ErrToolInstall).
 			WithCause(err).
 			WithExplanationf("Failed to install dependencies for workflow '%s'", params.Workflow).
@@ -271,7 +281,7 @@ func (e *Executor) ensureToolchainDependencies(params *WorkflowParams) error {
 	}
 
 	// Update PATH to include installed tools.
-	if err := dependencies.UpdatePathForTools(params.AtmosConfig, deps); err != nil {
+	if err := provider.UpdatePathForTools(deps); err != nil {
 		return errUtils.Build(errUtils.ErrDependencyResolution).
 			WithCause(err).
 			WithExplanationf("Failed to update PATH for workflow '%s'", params.Workflow).
