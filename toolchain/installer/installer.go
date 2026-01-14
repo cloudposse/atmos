@@ -141,6 +141,19 @@ func WithResolver(resolver ToolResolver) Option {
 	}
 }
 
+// WithAtmosConfig sets the AtmosConfig on the default resolver for alias resolution.
+// This must be called after the installer is created to update the default resolver.
+func WithAtmosConfig(config *schema.AtmosConfiguration) Option {
+	defer perf.Track(nil, "installer.WithAtmosConfig")()
+
+	return func(i *Installer) {
+		// If using the default resolver, update its AtmosConfig.
+		if resolver, ok := i.resolver.(*DefaultToolResolver); ok {
+			resolver.AtmosConfig = config
+		}
+	}
+}
+
 // WithConfiguredRegistry sets a pre-configured registry.
 func WithConfiguredRegistry(reg registry.ToolRegistry) Option {
 	defer perf.Track(nil, "installer.WithConfiguredRegistry")()

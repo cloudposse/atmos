@@ -16,6 +16,12 @@ toolchain:
   # Use short tool names (aliases), not org/repo format
   versions_file: .tool-versions
 
+  # Aliases map short names to full tool specifications (owner/repo)
+  # This allows .tool-versions to use short names like "jq" instead of "jqlang/jq"
+  aliases:
+    jq: jqlang/jq
+    yq: mikefarah/yq
+
   # Multiple registries demonstrating priority-based tool resolution
   registries:
     # Inline registry (highest priority)
@@ -25,11 +31,19 @@ toolchain:
       type: atmos
       priority: 150
       tools:
-        # Example 1: Simple GitHub release tool
-        stedolan/jq:
+        # Example 1: jq - JSON processor
+        # jq moved from stedolan/jq to jqlang/jq
+        # Version tags use "jq-" prefix (e.g., jq-1.7.1)
+        # macOS binaries use "macos" not "darwin"
+        jqlang/jq:
           type: github_release
           url: "jq-{{.OS}}-{{.Arch}}"
           binary_name: jq
+          version_prefix: "jq-"
+          overrides:
+            - goos: darwin
+              replacements:
+                darwin: macos
 
         # Example 2: Tool with archive format
         mikefarah/yq:
@@ -62,7 +76,7 @@ toolchain:
 
 # Tool Resolution Workflow:
 # 1. Check my-inline-tools registry first (priority 150)
-#    - stedolan/jq, mikefarah/yq, example/custom-tool defined inline
+#    - jqlang/jq, mikefarah/yq, example/custom-tool defined inline
 # 2. Check custom-local registry (priority 100)
 #    - jq, yq defined in separate file for demonstration
 # 3. Check aqua-public registry (priority 10)
@@ -70,7 +84,7 @@ toolchain:
 # 4. Error if tool not found in any configured registry
 #
 # Testing This Configuration:
-#   atmos toolchain install stedolan/jq  # Resolves from inline registry
+#   atmos toolchain install jqlang/jq    # Resolves from inline registry
 #   atmos toolchain install terraform    # Resolves from aqua-public
 #   atmos toolchain list                 # Shows all installed tools
 #   atmos toolchain which jq             # Shows jq path from inline registry
@@ -83,6 +97,14 @@ toolchain:
 # - priority:     - Higher numbers checked first
 # - GitHub URLs:  - Automatically converted (tree → raw, blob → raw)
 
+# Stacks configuration (minimal - just to isolate from parent atmos.yaml)
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths: []
+  name_pattern: "{tenant}-{environment}-{stage}"
+
 # Workflows configuration
 # Workflows demonstrate how toolchain tools are automatically available
 workflows:
@@ -91,7 +113,7 @@ workflows:
 # Custom Commands
 # These commands demonstrate different ways to use toolchain integration.
 commands:
-  - name: toolchain-demo
+  - name: demo
     description: Demonstrate toolchain integration with custom commands
     commands:
       # Example 1: Implicit dependencies from .tool-versions

@@ -79,10 +79,15 @@ toolchain:
       type: atmos
       priority: 150
       tools:
-        stedolan/jq:
+        jqlang/jq:
           type: github_release
           url: "jq-{{.OS}}-{{.Arch}}"
           binary_name: jq
+          version_prefix: "jq-"
+          overrides:
+            - goos: darwin
+              replacements:
+                darwin: macos
         mikefarah/yq:
           type: github_release
           url: "yq_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"

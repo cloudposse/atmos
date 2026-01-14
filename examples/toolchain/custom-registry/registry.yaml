@@ -3,12 +3,18 @@
 ---
 packages:
   # jq - Command-line JSON processor
+  # Note: jq moved from stedolan/jq to jqlang/jq
   - type: github_release
-    repo_owner: stedolan
+    repo_owner: jqlang
     repo_name: jq
     url: "jq-{{.OS}}-{{.Arch}}"
     description: Command-line JSON processor
     binary_name: jq
+    version_prefix: "jq-"
+    overrides:
+      - goos: darwin
+        replacements:
+          darwin: macos
 
   # yq - YAML/JSON/XML processor
   - type: github_release
