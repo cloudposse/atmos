@@ -16,7 +16,7 @@ components:
         component: mock
       # Component-level tool dependencies.
       # These dependencies are resolved and installed before component execution.
-      # The constraint ^1.10.0 means any 1.10.x version (>= 1.10.0, < 2.0.0).
+      # The constraint ^1.10.0 means any compatible version (>= 1.10.0, < 2.0.0).
       dependencies:
         tools:
           opentofu: "^1.10.0"

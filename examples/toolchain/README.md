@@ -257,7 +257,7 @@ Tools defined in `.tool-versions` are automatically available in custom commands
 
 This example includes a `.tool-versions` file defining project-wide tool defaults:
 
-```
+```text
 jq 1.7.1
 yq 4.45.1
 ```

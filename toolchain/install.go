@@ -283,6 +283,9 @@ func showProgress(
 	tool toolInfo,
 	state progressState,
 ) {
+	// Clear progress bar line before printing status (same pattern as uninstall).
+	resetLine()
+
 	switch state.result {
 	case "skipped":
 		_ = ui.Successf("Skipped `%s/%s@%s` (already installed)", tool.owner, tool.repo, tool.version)
@@ -295,9 +298,9 @@ func showProgress(
 	percent := float64(state.index+1) / float64(state.total)
 	bar := progressBar.ViewAs(percent)
 
-	// Show animated progress bar
+	// Show animated progress bar using helper (handles TTY detection).
 	for j := 0; j < spinnerAnimationFrames; j++ {
-		_ = ui.Writef("\r%s %s", spinner.View(), bar)
+		printProgressBar(fmt.Sprintf("%s %s", spinner.View(), bar))
 		spin, _ := spinner.Update(bspinner.TickMsg{})
 		spinner = &spin
 		time.Sleep(50 * time.Millisecond)
@@ -305,6 +308,8 @@ func showProgress(
 }
 
 func printSummary(installed, failed, skipped, total int, showHint bool) {
+	// Clear progress bar line before printing summary.
+	resetLine()
 	_ = ui.Writeln("")
 
 	if total == 0 {

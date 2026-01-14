@@ -53,6 +53,7 @@ toolchain:
           url: "yq_{{.OS}}_{{.Arch}}"
           format: tar.gz
           binary_name: yq
+          version_prefix: "v"
 
     # Official Aqua public registry (fallback)
     # Contains 1000+ popular development tools
