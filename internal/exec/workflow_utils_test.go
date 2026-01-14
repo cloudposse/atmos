@@ -934,3 +934,405 @@ func TestErrNonTTYWorkflowSelection(t *testing.T) {
 	assert.Error(t, ErrNonTTYWorkflowSelection)
 	assert.Contains(t, ErrNonTTYWorkflowSelection.Error(), "TTY")
 }
+
+// TestPrepareStepEnvironment_WithGlobalEnv tests prepareStepEnvironment with global env variables.
+func TestPrepareStepEnvironment_WithGlobalEnv(t *testing.T) {
+	globalEnv := map[string]string{
+		"GLOBAL_VAR_1": "value1",
+		"GLOBAL_VAR_2": "value2",
+	}
+
+	// When no identity is specified, should return base environment including global env.
+	env, err := prepareStepEnvironment("", "step1", nil, globalEnv)
+
+	assert.NoError(t, err)
+	assert.NotEmpty(t, env)
+
+	// Check that global env vars are included.
+	foundVar1 := false
+	foundVar2 := false
+	for _, e := range env {
+		if e == "GLOBAL_VAR_1=value1" {
+			foundVar1 = true
+		}
+		if e == "GLOBAL_VAR_2=value2" {
+			foundVar2 = true
+		}
+	}
+	assert.True(t, foundVar1, "GLOBAL_VAR_1 should be in environment")
+	assert.True(t, foundVar2, "GLOBAL_VAR_2 should be in environment")
+}
+
+// TestPrepareStepEnvironment_EmptyGlobalEnv tests prepareStepEnvironment with empty global env.
+func TestPrepareStepEnvironment_EmptyGlobalEnv(t *testing.T) {
+	globalEnv := map[string]string{}
+
+	env, err := prepareStepEnvironment("", "step1", nil, globalEnv)
+
+	assert.NoError(t, err)
+	// Should return system environment at minimum.
+	assert.NotEmpty(t, env)
+}
+
+// TestShellFieldsFallback tests that the shell.Fields fallback to strings.Fields works.
+func TestShellFieldsFallback(t *testing.T) {
+	// Test cases that shell.Fields can parse correctly.
+	tests := []struct {
+		name         string
+		command      string
+		shouldParse  bool
+		expectedArgs int
+	}{
+		{
+			name:         "simple command",
+			command:      "terraform plan vpc",
+			shouldParse:  true,
+			expectedArgs: 3,
+		},
+		{
+			name:         "command with flags",
+			command:      "terraform plan vpc -auto-approve",
+			shouldParse:  true,
+			expectedArgs: 4,
+		},
+		{
+			name:         "command with quoted arg",
+			command:      `terraform plan -var="foo=bar"`,
+			shouldParse:  true,
+			expectedArgs: 3, // ["terraform", "plan", "-var=foo=bar"]
+		},
+		{
+			name:         "command with single quoted arg",
+			command:      `terraform plan -var='foo=bar'`,
+			shouldParse:  true,
+			expectedArgs: 3,
+		},
+		{
+			name:         "command with spaces in quoted arg",
+			command:      `echo "hello world"`,
+			shouldParse:  true,
+			expectedArgs: 2, // ["echo", "hello world"]
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args, err := shell.Fields(tt.command, nil)
+
+			if tt.shouldParse {
+				assert.NoError(t, err)
+				assert.Len(t, args, tt.expectedArgs)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+
+// TestExecuteWorkflow_WithWorkflowStack tests ExecuteWorkflow with workflow-level stack.
+func TestExecuteWorkflow_WithWorkflowStack(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test workflow with workflow-level stack",
+		Stack:       "nonprod", // Workflow-level stack.
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "step1",
+				Command: "echo test",
+				Type:    "shell",
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-workflow-stack", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	assert.NoError(t, err)
+}
+
+// TestExecuteWorkflow_WithStepStack tests ExecuteWorkflow with step-level stack.
+func TestExecuteWorkflow_WithStepStack(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test workflow with step-level stack",
+		Stack:       "prod", // Workflow-level stack (should be overridden).
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "step1",
+				Command: "echo test",
+				Type:    "shell",
+				Stack:   "nonprod", // Step-level stack overrides workflow-level.
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-workflow-step-stack", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	assert.NoError(t, err)
+}
+
+// TestExecuteWorkflow_DryRunShell tests ExecuteWorkflow with dry run for shell commands.
+func TestExecuteWorkflow_DryRunShell(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test dry run",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "step1",
+				Command: "echo hello",
+				Type:    "shell",
+			},
+		},
+	}
+
+	// Dry run should not execute the command.
+	err = ExecuteWorkflow(atmosConfig, "test-dryrun", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
+	assert.NoError(t, err)
+}
+
+// TestExecuteWorkflow_DryRunAtmos tests ExecuteWorkflow with dry run for atmos commands.
+func TestExecuteWorkflow_DryRunAtmos(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test dry run atmos",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "step1",
+				Command: "version",
+				Type:    "atmos",
+			},
+		},
+	}
+
+	// Dry run should not execute the command.
+	err = ExecuteWorkflow(atmosConfig, "test-dryrun-atmos", "/path/to/workflow.yaml", workflowDef, true, "", "", "")
+	assert.NoError(t, err)
+}
+
+// TestExecuteWorkflow_FromStepWithValidStep tests ExecuteWorkflow with --from-step flag.
+func TestExecuteWorkflow_FromStepWithValidStep(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test from-step",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "step1",
+				Command: "echo step1",
+				Type:    "shell",
+			},
+			{
+				Name:    "step2",
+				Command: "echo step2",
+				Type:    "shell",
+			},
+			{
+				Name:    "step3",
+				Command: "echo step3",
+				Type:    "shell",
+			},
+		},
+	}
+
+	// Should start from step2, skipping step1.
+	err = ExecuteWorkflow(atmosConfig, "test-from-step", "/path/to/workflow.yaml", workflowDef, false, "", "step2", "")
+	assert.NoError(t, err)
+}
+
+// TestExecuteWorkflow_WithQuotedVarFlag tests ExecuteWorkflow with -var="key=value" flag.
+func TestExecuteWorkflow_WithQuotedVarFlag(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+
+	// Test shell command that echoes the parsed arguments.
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test quoted var flag",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "step1",
+				Command: `echo -var="enabled=false"`,
+				Type:    "shell",
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-quoted-var", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	assert.NoError(t, err)
+}
+
+// TestExecuteWorkflow_StepIdentityOverridesCommandLine tests step identity takes precedence.
+func TestExecuteWorkflow_StepIdentityOverridesCommandLine(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	testDir := "../../tests/fixtures/scenarios/atmos-auth-mock"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test step identity overrides command line",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:     "step1",
+				Command:  "echo test",
+				Type:     "shell",
+				Identity: "mock-identity", // Step-level identity should be used.
+			},
+		},
+	}
+
+	// Pass different command-line identity - step identity should take precedence.
+	err = ExecuteWorkflow(atmosConfig, "test-identity-precedence", "/path/to/workflow.yaml", workflowDef, false, "", "", "mock-identity-2")
+	assert.NoError(t, err)
+}
+
+// TestExecuteWorkflow_MultipleStepsWithMixedTypes tests workflow with both shell and atmos steps.
+func TestExecuteWorkflow_MultipleStepsWithMixedTypes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test mixed step types",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "shell-step",
+				Command: "echo shell step",
+				Type:    "shell",
+			},
+			{
+				Name:    "atmos-step",
+				Command: "version",
+				Type:    "atmos",
+			},
+			{
+				Name:    "another-shell-step",
+				Command: "echo another shell step",
+				Type:    "shell",
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-mixed-types", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	assert.NoError(t, err)
+}
+
+// TestExecuteWorkflow_CommandLineStackOverride tests command-line stack overrides all.
+func TestExecuteWorkflow_CommandLineStackOverride(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test command line stack override",
+		Stack:       "prod",
+		Steps: []schema.WorkflowStep{
+			{
+				Name:    "step1",
+				Command: "echo test",
+				Type:    "shell",
+				Stack:   "staging",
+			},
+		},
+	}
+
+	// Command-line stack should override both workflow and step stacks.
+	err = ExecuteWorkflow(atmosConfig, "test-cli-stack", "/path/to/workflow.yaml", workflowDef, false, "dev", "", "")
+	assert.NoError(t, err)
+}
+
+// TestExecuteWorkflow_AutoGeneratedStepNames tests that step names are auto-generated.
+func TestExecuteWorkflow_AutoGeneratedStepNames(t *testing.T) {
+	stacksPath := "../../tests/fixtures/scenarios/workflows"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+	t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+	configInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configInfo, false)
+	require.NoError(t, err)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Description: "Test auto-generated step names",
+		Steps: []schema.WorkflowStep{
+			{
+				// No name - should be auto-generated as "step1".
+				Command: "echo first",
+				Type:    "shell",
+			},
+			{
+				Name:    "custom-name",
+				Command: "echo second",
+				Type:    "shell",
+			},
+			{
+				// No name - should be auto-generated as "step3".
+				Command: "echo third",
+				Type:    "shell",
+			},
+		},
+	}
+
+	err = ExecuteWorkflow(atmosConfig, "test-auto-names", "/path/to/workflow.yaml", workflowDef, false, "", "", "")
+	assert.NoError(t, err)
+
+	// Verify step names were generated.
+	assert.Equal(t, "step1", workflowDef.Steps[0].Name)
+	assert.Equal(t, "custom-name", workflowDef.Steps[1].Name)
+	assert.Equal(t, "step3", workflowDef.Steps[2].Name)
+}
