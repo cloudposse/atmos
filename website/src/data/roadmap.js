@@ -22,7 +22,7 @@ export const roadmapConfig = {
     'One tool to orchestrate your entire infrastructure lifecycle — as convenient as PaaS, but as flexible as Terraform, sitting on top of the tools you know and love.',
 
   theme: {
-    title: 'From Fragmented to Unified',
+    title: 'Reducing Tool Fatigue',
     description:
       'Atmos is consolidating the sprawl of infrastructure tooling into a cohesive, discoverable, zero-config experience that works identically locally and in CI.',
   },
@@ -165,7 +165,7 @@ export const roadmapConfig = {
       tagline: 'Sane defaults, full configurability',
       description:
         'Too many parameters, too much configuration. Everything should just work out of the box while remaining fully customizable.',
-      progress: 90,
+      progress: 92,
       status: 'in-progress',
       milestones: [
         { label: 'Zero-config terminal output (auto TTY/color)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/settings/terminal', changelog: 'zero-config-terminal-output', version: 'v1.198.0', description: 'Terminal output adapts automatically to your environment—colors when interactive, clean text when piping. Works identically in CI and locally without configuration.', benefits: 'No terminal configuration needed. Output is readable regardless of where commands run—locally, in CI, or piped to files.' },
@@ -191,6 +191,7 @@ export const roadmapConfig = {
         { label: 'Configuration provenance tracking', status: 'shipped', quarter: 'q4-2025', changelog: 'provenance-tracking', version: 'v1.195.0', description: 'Track where every configuration value comes from—which file, which import, which override.', benefits: 'Debug complex inheritance chains. Understand exactly how configuration was assembled.' },
         { label: 'Global environment variables', status: 'shipped', quarter: 'q4-2025', changelog: 'global-env-section', version: 'v1.202.0', description: 'Define environment variables globally in atmos.yaml that apply to all commands.', benefits: 'Set common environment variables once. No repetition across components.' },
         { label: 'Metadata inheritance', status: 'shipped', quarter: 'q4-2025', changelog: 'metadata-inheritance', version: 'v1.201.0', description: 'Metadata section now supports full inheritance from base stacks.', benefits: 'Define metadata patterns once and inherit everywhere. Consistent naming across stacks.' },
+        { label: 'Filename-based stack identity (zero-config)', status: 'shipped', quarter: 'q1-2026', pr: 1934, changelog: 'stack-name-identity', description: 'Stacks are identified by filename when no name, name_template, or name_pattern is configured. Newcomers can get started without any naming configuration.', benefits: 'New users can start immediately without configuring stack naming. Just create stack files and reference them by filename.' },
       ],
       issues: [],
       prs: [
@@ -286,7 +287,7 @@ export const roadmapConfig = {
       tagline: 'Purpose-built engine with retry and resilience',
       description:
         'Terraform users expect to declare module sources inline. The source provisioner brings this pattern to stack configuration—declare where components come from and let vendoring handle the rest with retries, concurrency, and graceful failure recovery.',
-      progress: 60,
+      progress: 83,
       status: 'in-progress',
       milestones: [
         { label: 'Retry with exponential backoff', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/vendor/vendor-pull', description: 'Automatic retries with increasing delays for transient network failures and rate limits.', category: 'featured', priority: 'high', benefits: 'Vendoring succeeds despite flaky networks or GitHub rate limits. CI doesn\'t fail on transient errors.' },
@@ -294,6 +295,7 @@ export const roadmapConfig = {
         { label: 'Vendor registry pattern migration', status: 'in-progress', quarter: 'q4-2025', pr: 1889, description: 'Refactoring vendoring to use a pluggable registry pattern for different source types.', benefits: 'Add new source types (OCI, custom registries) without modifying core vendoring code.' },
         { label: 'Just-in-time vendoring', status: 'shipped', quarter: 'q4-2025', pr: 1877, changelog: 'terraform-source-provisioner', docs: '/cli/commands/terraform/source/source', description: 'Automatically vendor components on first use—no separate vendor step needed.', category: 'featured', priority: 'high', benefits: 'Reference a component and deploy. No manual vendor step or CI job required.' },
         { label: 'Component workdir provisioning', status: 'shipped', quarter: 'q4-2025', pr: 1876, changelog: 'component-workdir-isolation', description: 'Isolated working directories for each component instance with `atmos terraform workdir` commands to manage them—eliminating conflicts when multiple instances share the same component source.', benefits: 'Enables concurrent component execution and just-in-time vendoring. Multiple component instances no longer conflict by overwriting each other in the same directory. Use list, describe, show, and clean subcommands to inspect and manage workdirs.' },
+        { label: 'Source provisioner UX improvements', status: 'shipped', quarter: 'q1-2026', changelog: 'source-provisioner-ux', description: 'Spinner feedback during auto-provisioning and interactive confirmation prompts for delete operations.', benefits: 'Better visual feedback during vendoring operations. Interactive delete confirmation improves safety without requiring --force in TTY environments.' },
       ],
       issues: [],
       prs: [
@@ -385,15 +387,16 @@ export const roadmapConfig = {
       progress: 100,
       status: 'shipped',
       milestones: [
+        { label: 'Ask AI conversational search', status: 'shipped', quarter: 'q1-2026', changelog: 'ask-ai-search', description: 'Conversational documentation search powered by Algolia DocSearch v4 and ChatGPT. Ask natural language questions and get intelligent, contextual answers.', category: 'featured', priority: 'high', benefits: 'Find answers faster with natural language queries. No need to guess the right keywords.' },
         { label: 'Changelog introduction', status: 'shipped', quarter: 'q4-2025', docs: '/changelog', description: 'Detailed changelogs for every release with feature announcements and migration guides.', category: 'featured', priority: 'high', benefits: 'Know exactly what changed in each release. Plan upgrades with full visibility into breaking changes.' },
+        { label: 'New learning section', status: 'shipped', quarter: 'q4-2025', docs: '/learn/concepts-overview', changelog: 'documentation-reorganization', description: 'Step-by-step tutorials for getting started with Atmos from scratch.', category: 'featured', priority: 'high', benefits: 'New users have a clear path from zero to productive. Concepts build on each other logically.' },
+        { label: 'Added migration guides', status: 'shipped', quarter: 'q4-2025', docs: '/migration/terragrunt', changelog: 'migration-guides', description: 'Detailed guides for migrating from Terragrunt, Terraform workspaces, and native Terraform to Atmos.', category: 'featured', priority: 'high', benefits: 'Migrate from your current tool with step-by-step guidance. Understand the mapping between concepts.' },
+        { label: 'Roadmap', status: 'shipped', quarter: 'q4-2025', docs: '/roadmap', changelog: 'product-roadmap', description: 'Public roadmap showing past accomplishments and future plans.', category: 'featured', priority: 'high', benefits: 'See what\'s coming and plan accordingly. Understand the direction of the project.' },
         { label: 'Every `atmos.yaml` section documented', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration', description: 'Complete reference for every configuration option in atmos.yaml with examples and defaults.', category: 'featured', priority: 'high', benefits: 'Find the exact option you need without reading source code. Every setting has examples.' },
         { label: 'Every CLI command documented', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands', description: 'Comprehensive documentation for every CLI command with usage examples and screenshots.', category: 'featured', priority: 'high', benefits: 'Learn any command from its documentation. Screenshots show exactly what to expect.' },
         { label: 'Cross-linking commands to configs', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration', description: 'Navigate from any command to its related configuration and vice versa.', category: 'featured', priority: 'high', benefits: 'Jump between commands and their configuration options. Understand how settings affect behavior.' },
         { label: 'Design patterns refresh', status: 'shipped', quarter: 'q3-2025', docs: '/design-patterns', description: 'Updated design patterns with real-world examples for common infrastructure scenarios.', category: 'featured', priority: 'high', benefits: 'Apply proven patterns instead of inventing solutions. Learn from real-world examples.' },
         { label: 'Versioning strategy docs', status: 'shipped', quarter: 'q3-2025', docs: '/design-patterns/version-management', changelog: 'comprehensive-version-management-documentation', version: 'v1.199.0', description: 'Complete guide to version management including component versioning and upgrade strategies.', category: 'featured', priority: 'high', benefits: 'Upgrade components safely with a clear strategy. Understand version compatibility.' },
-        { label: 'New learning section', status: 'shipped', quarter: 'q4-2025', docs: '/learn/concepts-overview', changelog: 'documentation-reorganization', description: 'Step-by-step tutorials for getting started with Atmos from scratch.', category: 'featured', priority: 'high', benefits: 'New users have a clear path from zero to productive. Concepts build on each other logically.' },
-        { label: 'Added migration guides', status: 'shipped', quarter: 'q4-2025', docs: '/migration/terragrunt', changelog: 'migration-guides', description: 'Detailed guides for migrating from Terragrunt, Terraform workspaces, and native Terraform to Atmos.', category: 'featured', priority: 'high', benefits: 'Migrate from your current tool with step-by-step guidance. Understand the mapping between concepts.' },
-        { label: 'Roadmap', status: 'shipped', quarter: 'q4-2025', docs: '/roadmap', changelog: 'product-roadmap', description: 'Public roadmap showing past accomplishments and future plans.', category: 'featured', priority: 'high', benefits: 'See what\'s coming and plan accordingly. Understand the direction of the project.' },
       ],
       issues: [],
       prs: [],

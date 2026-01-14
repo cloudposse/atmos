@@ -15,6 +15,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+const (
+	// Permission mask for created directories in tests (defaultMkdirPermissions).
+	defaultMkdirPermissions = 0o755
+)
+
 // verifyPermissionErrorOutput verifies output when permission errors occur.
 func verifyPermissionErrorOutput(t *testing.T, output, expectedOutput, cacheDir string) {
 	t.Helper()

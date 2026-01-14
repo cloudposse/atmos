@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -171,17 +170,10 @@ func getIdentityFromCommand(cmd *cobra.Command) string {
 // normalizeIdentityValue converts boolean false representations to the disabled sentinel value.
 // Recognizes: false, False, FALSE, 0, no, No, NO, off, Off, OFF.
 // All other values are returned unchanged.
+//
+// Deprecated: Use cfg.NormalizeIdentityValue() instead. This wrapper exists for backward compatibility.
 func normalizeIdentityValue(value string) string {
-	if value == "" {
-		return ""
-	}
-
-	switch strings.ToLower(value) {
-	case "false", "0", "no", "off":
-		return cfg.IdentityFlagDisabledValue
-	default:
-		return value
-	}
+	return cfg.NormalizeIdentityValue(value)
 }
 
 // createAuthManagerForList creates an AuthManager for list commands.

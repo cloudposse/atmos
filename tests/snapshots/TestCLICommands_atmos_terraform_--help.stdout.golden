@@ -49,7 +49,6 @@ AVAILABLE COMMANDS
       plan                Show changes required by the current configuration
       plan-diff           Compare two Terraform plans and show the differences
       providers           Show the providers required for this configuration
-      provision           This command provisions terraform components
       refresh             Update the state to match remote systems
       shell               Configure an environment for an Atmos component and start a new shell
       show                Show the current state or a saved plan
@@ -170,8 +169,6 @@ GLOBAL FLAGS
       --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
 
   -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
-
-      --version                 Display the Atmos CLI version
 
 
 COMPATIBILITY FLAGS

@@ -337,7 +337,7 @@ const config = {
         [
             'docusaurus-plugin-sentry',
             {
-              DSN: 'b022344b0e7cc96f803033fff3b377ee@o56155.ingest.us.sentry.io/4507472203087872',
+              DSN: 'https://b022344b0e7cc96f803033fff3b377ee@o56155.ingest.us.sentry.io/4507472203087872',
             },
         ],
         [
@@ -496,7 +496,15 @@ const config = {
                 appId: process.env.ALGOLIA_APP_ID || '32YOERUX83',
                 apiKey: process.env.ALGOLIA_SEARCH_API_KEY || '557985309adf0e4df9dcf3cb29c61928', // this is SEARCH ONLY API key and is not sensitive information
                 indexName: process.env.ALGOLIA_INDEX_NAME || 'atmos.tools',
-                contextualSearch: false
+                contextualSearch: false,
+                // DocSearch v4 Ask AI integration
+                // https://docsearch.algolia.com/docs/v4/askai/
+                askAi: {
+                    assistantId: process.env.ALGOLIA_ASKAI_ASSISTANT_ID || 'xzgtsIXZSf7V',
+                    appId: process.env.ALGOLIA_APP_ID || '32YOERUX83',
+                    apiKey: process.env.ALGOLIA_SEARCH_API_KEY || '557985309adf0e4df9dcf3cb29c61928',
+                    indexName: process.env.ALGOLIA_INDEX_NAME || 'atmos.tools',
+                }
             },
             zoom: {
                 selector: '.markdown :not(em) > img',

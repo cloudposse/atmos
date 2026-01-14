@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/toolchain/installer"
 )
 
 func TestDefaultToolResolver_AliasResolution(t *testing.T) {
@@ -90,8 +91,8 @@ func TestDefaultToolResolver_AliasResolution(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a resolver with the test aliases.
-			resolver := &DefaultToolResolver{
-				atmosConfig: &schema.AtmosConfiguration{
+			resolver := &installer.DefaultToolResolver{
+				AtmosConfig: &schema.AtmosConfiguration{
 					Toolchain: schema.Toolchain{
 						Aliases: tt.aliases,
 					},
@@ -115,8 +116,8 @@ func TestDefaultToolResolver_AliasResolution(t *testing.T) {
 
 func TestDefaultToolResolver_AliasResolution_NoConfig(t *testing.T) {
 	// Test that resolver works when atmosConfig is nil.
-	resolver := &DefaultToolResolver{
-		atmosConfig: nil,
+	resolver := &installer.DefaultToolResolver{
+		AtmosConfig: nil,
 	}
 
 	// Should handle gracefully and parse owner/repo format directly.
@@ -131,8 +132,8 @@ func TestDefaultToolResolver_AliasChaining(t *testing.T) {
 	// If "myshort" -> "mymedium" and "mymedium" -> "owner/repo",
 	// "myshort" should resolve to "mymedium" (the first alias value), not "owner/repo".
 	// This is the expected behavior - aliases are not transitive.
-	resolver := &DefaultToolResolver{
-		atmosConfig: &schema.AtmosConfiguration{
+	resolver := &installer.DefaultToolResolver{
+		AtmosConfig: &schema.AtmosConfiguration{
 			Toolchain: schema.Toolchain{
 				Aliases: map[string]string{
 					"myshort":  "mymedium",
@@ -157,8 +158,8 @@ func TestDefaultToolResolver_AliasChaining(t *testing.T) {
 
 func TestDefaultToolResolver_AliasWithSlash(t *testing.T) {
 	// Test that if an alias value contains a slash, it's treated as owner/repo.
-	resolver := &DefaultToolResolver{
-		atmosConfig: &schema.AtmosConfiguration{
+	resolver := &installer.DefaultToolResolver{
+		AtmosConfig: &schema.AtmosConfiguration{
 			Toolchain: schema.Toolchain{
 				Aliases: map[string]string{
 					"myalias": "custom/tool",

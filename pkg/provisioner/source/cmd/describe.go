@@ -20,15 +20,20 @@ func DescribeCommand(cfg *Config) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "describe <component>",
+		Use:   "describe [component]",
 		Short: fmt.Sprintf("Show source configuration for a %s component", cfg.TypeLabel),
 		Long: fmt.Sprintf(`Display the source configuration for a %s component.
 
 This command shows the source URI, version, and any path filters configured
-for the component. Output matches the stack manifest schema format.`, cfg.TypeLabel),
+for the component. Output matches the stack manifest schema format.
+
+If component is not specified, prompts interactively for selection.`, cfg.TypeLabel),
 		Example: fmt.Sprintf(`  # Describe source configuration
-  atmos %s source describe vpc --stack dev`, cfg.ComponentType),
-		Args: cobra.ExactArgs(1),
+  atmos %s source describe vpc --stack dev
+
+  # Interactive: prompts for component and stack
+  atmos %s source describe`, cfg.ComponentType, cfg.ComponentType),
+		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executeDescribe(cmd, args, cfg, parser)
 		},
@@ -47,8 +52,6 @@ for the component. Output matches the stack manifest schema format.`, cfg.TypeLa
 func executeDescribe(cmd *cobra.Command, args []string, cfg *Config, parser *flags.StandardParser) error {
 	defer perf.Track(nil, fmt.Sprintf("source.%s.describe.RunE", cfg.ComponentType))()
 
-	component := args[0]
-
 	// Parse flags.
 	v := viper.GetViper()
 	if err := parser.BindFlagsToViper(cmd, v); err != nil {
@@ -57,7 +60,37 @@ func executeDescribe(cmd *cobra.Command, args []string, cfg *Config, parser *fla
 			Err()
 	}
 
+	// Get component from args or prompt.
+	var component string
+	if len(args) > 0 {
+		component = args[0]
+	} else {
+		var promptErr error
+		component, promptErr = PromptForComponent(cmd)
+		if err := HandlePromptError(promptErr, "component"); err != nil {
+			return err
+		}
+	}
+
+	// Validate component is provided.
+	if component == "" {
+		return errUtils.Build(errUtils.ErrInvalidPositionalArgs).
+			WithExplanation("component argument is required").
+			Err()
+	}
+
 	stack := v.GetString("stack")
+
+	// Prompt for stack if not provided.
+	if stack == "" {
+		var promptErr error
+		stack, promptErr = PromptForStack(cmd, component)
+		if err := HandlePromptError(promptErr, "stack"); err != nil {
+			return err
+		}
+	}
+
+	// Validate stack is provided.
 	if stack == "" {
 		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
 			WithExplanation("--stack flag is required").

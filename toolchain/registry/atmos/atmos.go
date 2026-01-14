@@ -175,6 +175,36 @@ func parseOptionalFields(tool *registry.Tool, config map[string]any) {
 		tool.BinaryName = binaryName
 		tool.Name = binaryName
 	}
+	// Parse platform-specific overrides.
+	if overridesRaw, ok := config["overrides"].([]any); ok {
+		tool.Overrides = parseOverrides(overridesRaw)
+	}
+}
+
+// parseOverrides parses platform-specific override configurations.
+func parseOverrides(overridesRaw []any) []registry.Override {
+	var overrides []registry.Override
+	for _, overrideRaw := range overridesRaw {
+		overrideMap, ok := overrideRaw.(map[string]any)
+		if !ok {
+			continue
+		}
+		override := registry.Override{}
+		if goos, ok := overrideMap["goos"].(string); ok {
+			override.GOOS = goos
+		}
+		if goarch, ok := overrideMap["goarch"].(string); ok {
+			override.GOARCH = goarch
+		}
+		if asset, ok := overrideMap["asset"].(string); ok {
+			override.Asset = asset
+		}
+		if format, ok := overrideMap["format"].(string); ok {
+			override.Format = format
+		}
+		overrides = append(overrides, override)
+	}
+	return overrides
 }
 
 // GetTool fetches tool metadata from inline definitions.
