@@ -634,3 +634,217 @@ func TestProvisionBackend_EnabledWrongType(t *testing.T) {
 		})
 	}
 }
+
+// TestGetBackendExists_NotFound tests GetBackendExists when no function is registered.
+func TestGetBackendExists_NotFound(t *testing.T) {
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	existsFunc := GetBackendExists("nonexistent")
+	assert.Nil(t, existsFunc)
+}
+
+// TestRegisterAndGetBackendExists tests registering and retrieving exists functions.
+func TestRegisterAndGetBackendExists(t *testing.T) {
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	mockExistsFunc := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (bool, error) {
+		return true, nil
+	}
+
+	RegisterBackendExists("s3", mockExistsFunc)
+
+	existsFunc := GetBackendExists("s3")
+	assert.NotNil(t, existsFunc)
+
+	// Verify it returns the correct function.
+	exists, err := existsFunc(context.Background(), nil, nil, nil)
+	assert.NoError(t, err)
+	assert.True(t, exists)
+}
+
+// TestBackendExists_NoRegisteredFunction tests BackendExists when no function is registered.
+func TestBackendExists_NoRegisteredFunction(t *testing.T) {
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+	backendConfig := map[string]any{"bucket": "test"}
+
+	// When no exists checker is registered, assume backend doesn't exist.
+	exists, err := BackendExists(ctx, atmosConfig, "unregistered", backendConfig, nil)
+	assert.NoError(t, err)
+	assert.False(t, exists)
+}
+
+// TestBackendExists_FunctionReturnsTrue tests BackendExists when function returns true.
+func TestBackendExists_FunctionReturnsTrue(t *testing.T) {
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	mockExistsFunc := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (bool, error) {
+		return true, nil
+	}
+
+	RegisterBackendExists("s3", mockExistsFunc)
+
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+	backendConfig := map[string]any{"bucket": "test"}
+
+	exists, err := BackendExists(ctx, atmosConfig, "s3", backendConfig, nil)
+	assert.NoError(t, err)
+	assert.True(t, exists)
+}
+
+// TestBackendExists_FunctionReturnsFalse tests BackendExists when function returns false.
+func TestBackendExists_FunctionReturnsFalse(t *testing.T) {
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	mockExistsFunc := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (bool, error) {
+		return false, nil
+	}
+
+	RegisterBackendExists("s3", mockExistsFunc)
+
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+	backendConfig := map[string]any{"bucket": "test"}
+
+	exists, err := BackendExists(ctx, atmosConfig, "s3", backendConfig, nil)
+	assert.NoError(t, err)
+	assert.False(t, exists)
+}
+
+// TestBackendExists_FunctionReturnsError tests BackendExists when function returns error.
+func TestBackendExists_FunctionReturnsError(t *testing.T) {
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	mockExistsFunc := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (bool, error) {
+		return false, errors.New("access denied")
+	}
+
+	RegisterBackendExists("s3", mockExistsFunc)
+
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+	backendConfig := map[string]any{"bucket": "test"}
+
+	exists, err := BackendExists(ctx, atmosConfig, "s3", backendConfig, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "access denied")
+	assert.False(t, exists)
+}
+
+// TestGetBackendName_NotFound tests GetBackendName when no function is registered.
+func TestGetBackendName_NotFound(t *testing.T) {
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	nameFunc := GetBackendName("nonexistent")
+	assert.Nil(t, nameFunc)
+}
+
+// TestRegisterAndGetBackendName tests registering and retrieving name functions.
+func TestRegisterAndGetBackendName(t *testing.T) {
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	mockNameFunc := func(backendConfig map[string]any) string {
+		if bucket, ok := backendConfig["bucket"].(string); ok {
+			return bucket
+		}
+		return ""
+	}
+
+	RegisterBackendName("s3", mockNameFunc)
+
+	nameFunc := GetBackendName("s3")
+	assert.NotNil(t, nameFunc)
+
+	// Verify it returns the correct name.
+	name := nameFunc(map[string]any{"bucket": "my-bucket"})
+	assert.Equal(t, "my-bucket", name)
+}
+
+// TestBackendName_NoRegisteredFunction tests BackendName when no function is registered.
+func TestBackendName_NoRegisteredFunction(t *testing.T) {
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	backendConfig := map[string]any{"bucket": "test"}
+
+	name := BackendName("unregistered", backendConfig)
+	assert.Equal(t, "unknown", name)
+}
+
+// TestBackendName_FunctionReturnsName tests BackendName when function returns a name.
+func TestBackendName_FunctionReturnsName(t *testing.T) {
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	mockNameFunc := func(backendConfig map[string]any) string {
+		if bucket, ok := backendConfig["bucket"].(string); ok {
+			return bucket
+		}
+		return ""
+	}
+
+	RegisterBackendName("s3", mockNameFunc)
+
+	backendConfig := map[string]any{"bucket": "my-terraform-state"}
+
+	name := BackendName("s3", backendConfig)
+	assert.Equal(t, "my-terraform-state", name)
+}
+
+// TestBackendName_FunctionReturnsEmpty tests BackendName when function returns empty string.
+func TestBackendName_FunctionReturnsEmpty(t *testing.T) {
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	mockNameFunc := func(backendConfig map[string]any) string {
+		return ""
+	}
+
+	RegisterBackendName("s3", mockNameFunc)
+
+	backendConfig := map[string]any{"bucket": "my-bucket"}
+
+	name := BackendName("s3", backendConfig)
+	assert.Equal(t, "unknown", name)
+}
+
+// TestBackendName_MultipleTypes tests BackendName with multiple registered types.
+func TestBackendName_MultipleTypes(t *testing.T) {
+	ResetRegistryForTesting()
+	t.Cleanup(ResetRegistryForTesting)
+
+	s3NameFunc := func(backendConfig map[string]any) string {
+		if bucket, ok := backendConfig["bucket"].(string); ok {
+			return bucket
+		}
+		return ""
+	}
+
+	gcsNameFunc := func(backendConfig map[string]any) string {
+		if bucket, ok := backendConfig["bucket"].(string); ok {
+			return "gcs-" + bucket
+		}
+		return ""
+	}
+
+	RegisterBackendName("s3", s3NameFunc)
+	RegisterBackendName("gcs", gcsNameFunc)
+
+	s3Config := map[string]any{"bucket": "my-s3-bucket"}
+	gcsConfig := map[string]any{"bucket": "my-gcs-bucket"}
+
+	assert.Equal(t, "my-s3-bucket", BackendName("s3", s3Config))
+	assert.Equal(t, "gcs-my-gcs-bucket", BackendName("gcs", gcsConfig))
+	assert.Equal(t, "unknown", BackendName("azurerm", map[string]any{}))
+}
