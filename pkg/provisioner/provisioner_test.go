@@ -176,7 +176,8 @@ func TestProvisionWithParams_BackendProvisioningFailure(t *testing.T) {
 
 	err := ProvisionWithParams(params)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "backend provisioning failed")
+	// The spinner passes through the original error from the backend provisioner.
+	assert.Contains(t, err.Error(), "provisioning failed")
 	assert.Contains(t, err.Error(), "bucket already exists in another account")
 }
 
