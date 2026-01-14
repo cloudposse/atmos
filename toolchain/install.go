@@ -3,12 +3,14 @@ package toolchain
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -115,7 +117,17 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 	installer := NewInstaller()
 	owner, repo, err := installer.ParseToolSpec(tool)
 	if err != nil {
-		return fmt.Errorf("%w: %s. Expected format: owner/repo or tool alias", ErrInvalidToolSpec, tool)
+		// Check if this looks like a short name (no slash) - suggest adding an alias.
+		if !strings.Contains(tool, "/") {
+			return errUtils.Build(errUtils.ErrInvalidToolSpec).
+				WithCause(err).
+				WithExplanationf("Tool `%s` is not a valid tool specification", tool).
+				WithHintf("Add an alias in atmos.yaml: toolchain.aliases.%s: owner/repo", tool).
+				WithHint("Or use full format: owner/repo (e.g., hashicorp/terraform)").
+				WithHint("See https://atmos.tools/cli/commands/toolchain/aliases for configuring aliases").
+				Err()
+		}
+		return err
 	}
 
 	// Handle "latest" keyword - pass it to InstallSingleTool which will resolve it.
