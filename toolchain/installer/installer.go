@@ -153,6 +153,8 @@ func WithAtmosConfig(config *schema.AtmosConfiguration) Option {
 		// If using the default resolver, update its AtmosConfig.
 		if resolver, ok := i.resolver.(*DefaultToolResolver); ok {
 			resolver.AtmosConfig = config
+		} else {
+			log.Debug("WithAtmosConfig skipped: resolver is not DefaultToolResolver")
 		}
 	}
 }

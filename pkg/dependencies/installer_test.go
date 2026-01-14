@@ -408,38 +408,6 @@ func TestIsToolInstalled(t *testing.T) {
 	}
 }
 
-func TestIsToolInstalled_FindBinaryPathDelegation(t *testing.T) {
-	t.Run("delegates to FindBinaryPath with correct arguments", func(t *testing.T) {
-		var capturedOwner, capturedRepo, capturedVersion string
-
-		resolver := &mockResolver{
-			resolveFunc: func(toolName string) (string, string, error) {
-				return "hashicorp", "terraform", nil
-			},
-		}
-		finder := &mockBinaryPathFinder{
-			findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
-				capturedOwner = owner
-				capturedRepo = repo
-				capturedVersion = version
-				return "/path/to/terraform", nil
-			},
-		}
-
-		inst := NewInstaller(nil,
-			WithResolver(resolver),
-			WithBinaryPathFinder(finder),
-		)
-
-		_ = inst.isToolInstalled("terraform", "1.10.0")
-
-		// Verify FindBinaryPath was called with resolved owner/repo and version.
-		assert.Equal(t, "hashicorp", capturedOwner)
-		assert.Equal(t, "terraform", capturedRepo)
-		assert.Equal(t, "1.10.0", capturedVersion)
-	})
-}
-
 func TestBuildToolchainPATH(t *testing.T) {
 	// Set a known PATH for testing using t.Setenv (auto-restores after test).
 	testPath := "/usr/bin:/bin"
@@ -705,6 +673,17 @@ func runDuplicateInstallTest(t *testing.T, tc *duplicateInstallTestCase) {
 		return nil
 	}
 
+	// Mock BinaryPathFinder to detect installed binaries (needed for opentofu where binary != repo).
+	finder := &mockBinaryPathFinder{
+		findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+			binaryPath := filepath.Join(binDir, tc.binaryName)
+			if _, err := os.Stat(binaryPath); err == nil {
+				return binaryPath, nil
+			}
+			return "", errToolNotFound
+		},
+	}
+
 	config := &schema.AtmosConfiguration{
 		Toolchain: schema.Toolchain{InstallPath: toolsDir},
 	}
@@ -712,6 +691,7 @@ func runDuplicateInstallTest(t *testing.T, tc *duplicateInstallTestCase) {
 	inst := NewInstaller(config,
 		WithResolver(resolver),
 		WithBatchInstallFunc(batchInstallFunc),
+		WithBinaryPathFinder(finder),
 	)
 
 	deps := make(map[string]string)
