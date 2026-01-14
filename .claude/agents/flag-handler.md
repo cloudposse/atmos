@@ -742,7 +742,20 @@ When implementing complex commands, coordinate with other agents:
 
 **PRDs:** `docs/prd/flag-handling/` (unified-flag-parsing.md, strongly-typed-builder-pattern.md, global-flags-pattern.md), `docs/prd/command-registry-pattern.md`
 
-**Reference:** `cmd/version/version.go` (with flags), `cmd/about/about.go` (simple), `cmd/internal/command.go` (interface)
+**Additional PRDs:**
+- `docs/prd/flag-handling/README.md` - Overview of flag handling architecture
+- `docs/prd/flag-handling/command-registry-colocation.md` - Registry colocation
+- `docs/prd/flag-handling/type-safe-positional-arguments.md` - Positional args handling
+- `docs/prd/flag-handling/default-values-pattern.md` - Default value handling
+
+**Core Patterns:**
+- `CLAUDE.md` - Core development patterns (error handling, I/O, comment style)
+
+**Reference Implementations:**
+- `cmd/version/version.go` - Command with flags
+- `cmd/about/about.go` - Simple command
+- `cmd/terraform/backend/backend_create.go` - Command with flag and positional arg prompting
+- `cmd/internal/command.go` - CommandProvider interface
 
 ## Key Principle
 
