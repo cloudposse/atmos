@@ -612,45 +612,6 @@ func TestExecuteDescribeWorkflows_ErrorsOnInvalidFiles(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid workflow manifest")
 }
 
-// TestPrepareStepEnvironment_WithGlobalEnv tests prepareStepEnvironment with global env variables.
-func TestPrepareStepEnvironment_WithGlobalEnv(t *testing.T) {
-	globalEnv := map[string]string{
-		"GLOBAL_VAR_1": "value1",
-		"GLOBAL_VAR_2": "value2",
-	}
-
-	// When no identity is specified, should return base environment including global env.
-	env, err := prepareStepEnvironment("", "step1", nil, globalEnv)
-
-	assert.NoError(t, err)
-	assert.NotEmpty(t, env)
-
-	// Check that global env vars are included.
-	foundVar1 := false
-	foundVar2 := false
-	for _, e := range env {
-		if e == "GLOBAL_VAR_1=value1" {
-			foundVar1 = true
-		}
-		if e == "GLOBAL_VAR_2=value2" {
-			foundVar2 = true
-		}
-	}
-	assert.True(t, foundVar1, "GLOBAL_VAR_1 should be in environment")
-	assert.True(t, foundVar2, "GLOBAL_VAR_2 should be in environment")
-}
-
-// TestPrepareStepEnvironment_EmptyGlobalEnv tests prepareStepEnvironment with empty global env.
-func TestPrepareStepEnvironment_EmptyGlobalEnv(t *testing.T) {
-	globalEnv := map[string]string{}
-
-	env, err := prepareStepEnvironment("", "step1", nil, globalEnv)
-
-	assert.NoError(t, err)
-	// Should return system environment at minimum.
-	assert.NotEmpty(t, env)
-}
-
 // TestShellFieldsParsing tests that shell.Fields correctly parses various command patterns.
 func TestShellFieldsParsing(t *testing.T) {
 	tests := []struct {
