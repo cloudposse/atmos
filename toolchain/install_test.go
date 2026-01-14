@@ -7,22 +7,22 @@ import (
 
 	"github.com/charmbracelet/bubbles/progress"
 	bspinner "github.com/charmbracelet/bubbles/spinner"
-
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Add a mock ToolResolver for tests.
 
-// newMockSpinner creates a spinner model for testing.
-func newMockSpinner() *bspinner.Model {
+// newTestSpinner creates a spinner model for testing.
+func newTestSpinner() *bspinner.Model {
 	s := bspinner.New()
 	return &s
 }
 
-// newMockProgressBar creates a progress bar model for testing.
-func newMockProgressBar() *progress.Model {
+// newTestProgressBar creates a progress bar model for testing.
+func newTestProgressBar() *progress.Model {
 	p := progress.New()
 	return &p
 }
@@ -546,8 +546,8 @@ func TestBuildToolList(t *testing.T) {
 // TestShowProgress tests the showProgress function.
 func TestShowProgress(t *testing.T) {
 	// Create mock spinner and progress bar
-	spinner := newMockSpinner()
-	progressBar := newMockProgressBar()
+	spinner := newTestSpinner()
+	progressBar := newTestProgressBar()
 
 	tests := []struct {
 		name   string
@@ -587,6 +587,10 @@ func TestShowProgress(t *testing.T) {
 }
 
 // TestRunInstallBatch tests the RunInstallBatch function.
+// TODO: Refactor installMultipleTools to accept Installer interface for better testability.
+// Currently, installMultipleTools creates Installer directly (line 383 of install.go),
+// which blocks dependency injection and makes unit tests with mocks impossible.
+// See ToolInstaller interface in set_test.go for reference pattern.
 func TestRunInstallBatch(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -606,6 +610,12 @@ func TestRunInstallBatch(t *testing.T) {
 			reinstallFlag: false,
 			wantErr:       false,
 		},
+		{
+			name:          "single tool delegates to RunInstall",
+			toolSpecs:     []string{"terraform@1.11.4"},
+			reinstallFlag: false,
+			wantErr:       false, // Delegates to single-tool flow.
+		},
 	}
 
 	for _, tt := range tests {
@@ -618,4 +628,14 @@ func TestRunInstallBatch(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestInstallMultipleTools_InvalidSpecs tests installMultipleTools with invalid tool specs.
+func TestInstallMultipleTools_InvalidSpecs(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	// Test with all invalid specs - should return nil (no valid tools to install).
+	err := installMultipleTools([]string{"invalid-spec-no-version", "another-bad-spec"}, false)
+	assert.NoError(t, err)
 }

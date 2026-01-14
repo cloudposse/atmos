@@ -23,6 +23,7 @@ func TestNewDefaultDependencyProvider(t *testing.T) {
 // TestDefaultDependencyProvider_LoadToolVersionsDependencies tests loading .tool-versions file.
 func TestDefaultDependencyProvider_LoadToolVersionsDependencies(t *testing.T) {
 	tempDir := t.TempDir()
+	t.Chdir(tempDir) // Change to temp dir so .tool-versions is found.
 
 	// Create a .tool-versions file.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
@@ -40,6 +41,11 @@ func TestDefaultDependencyProvider_LoadToolVersionsDependencies(t *testing.T) {
 	// Should not error (returns empty map if file doesn't exist or is empty).
 	assert.NoError(t, err)
 	assert.NotNil(t, deps)
+	// Verify parsed content if file was found.
+	if len(deps) > 0 {
+		assert.Equal(t, "1.11.4", deps["terraform"])
+		assert.Equal(t, "1.10.0", deps["opentofu"])
+	}
 }
 
 // TestDefaultDependencyProvider_LoadToolVersionsDependencies_NoFile tests when .tool-versions doesn't exist.

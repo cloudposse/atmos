@@ -1494,10 +1494,11 @@ func TestEnsureWorkflowToolchainDependencies_WithWorkflowDeps(t *testing.T) {
 
 	// Should succeed (may fail to install if network is unavailable, but that's expected).
 	path, err := ensureWorkflowToolchainDependencies(atmosConfig, workflowDef)
-	// We don't assert on error because installation might fail in CI without network.
-	// The important thing is the code path is exercised.
-	_ = path
-	_ = err
+	// If installation succeeded, path should be non-empty.
+	if err == nil {
+		assert.NotEmpty(t, path, "expected non-empty PATH when tools are installed")
+	}
+	// Error is acceptable in CI without network - code path is exercised either way.
 }
 
 // TestEnsureWorkflowToolchainDependencies_NilWorkflowDef tests with nil workflow definition.
@@ -1544,6 +1545,7 @@ func TestEnsureWorkflowToolchainDependencies_EmptyWorkflowDef(t *testing.T) {
 func TestEnsureWorkflowToolchainDependencies_WithToolVersionsFile(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
+	t.Chdir(tempDir) // Ensure we read the test's .tool-versions, not the project's.
 
 	// Create a .tool-versions file.
 	toolVersionsPath := filepath.Join(tempDir, ".tool-versions")
@@ -1570,8 +1572,10 @@ func TestEnsureWorkflowToolchainDependencies_WithToolVersionsFile(t *testing.T) 
 	}
 
 	// Should try to install tools from .tool-versions.
-	// We don't assert on error because installation might fail in CI without network.
 	path, err := ensureWorkflowToolchainDependencies(atmosConfig, workflowDef)
-	_ = path
-	_ = err
+	// If installation succeeded, path should be non-empty.
+	if err == nil {
+		assert.NotEmpty(t, path, "expected non-empty PATH when tools are installed")
+	}
+	// Error is acceptable in CI without network - code path is exercised either way.
 }
