@@ -199,7 +199,7 @@ func getWorkflowColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []st
 	// Default columns for workflows.
 	return []column.Config{
 		{Name: "File", Value: "{{ .file }}"},
-		{Name: "Workflow", Value: "{{ .name }}"},
+		{Name: "Workflow", Value: "{{ .workflow }}"},
 		{Name: "Description", Value: "{{ .description }}"},
 		{Name: "Steps", Value: "{{ .steps }}"},
 	}
